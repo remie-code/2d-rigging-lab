@@ -14,24 +14,33 @@
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | `scenarios/` 直下の入口地図 | 更新済み |
+| [_map.md](_map.md) | `scenarios/` 直下の入口地図 | 2026-05-25 公式資料レビュー反映済み |
 
 ## 直下のディレクトリ
 
 | Path | Role | Status |
 |------|------|--------|
-| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメインACに対応する精緻化シナリオ | Domain 01-12 ドラフト作成済み。Domain 15-25 新規Open Stackドメイン起草済み |
+| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメインACに対応する精緻化シナリオ | Domain 201-225 対応ファイル作成済み。公式Cubism資料レビューを反映し、不足シナリオを追加済み |
+
+## 現在の焦点
+
+| 項目 | 状態 |
+|------|------|
+| Domain 201-225 対応 | すべてのDomain ACに対応するシナリオファイルが存在 |
+| 公式資料レビュー | Editor / SDK / Core / export / runtime / viewer関連資料を参考調査し、追加シナリオと下層 `_map.md` にURLを記録 |
+| Cubism互換の扱い | 公式資料は参考資料。Open Stack の正は concept と AC / scenario。`.moc3`互換出力や`.cmo3`復元は初期成功条件にしない |
+| AC変更候補 | 下層 [02_DomainAcceptanceCriteria/_map.md](02_DomainAcceptanceCriteria/_map.md) に記録 |
 
 ## 次の行動
 
-1. Domain 15-25 のシナリオを Open Model Format / Runtime / Viewer / Validator の最小仕様へ落とす
-2. Domain 01-10, 12 の既存シナリオから旧Cubism互換前提を除去する
-3. Domain 13-14 のシナリオ化方針を決める
+1. 下層 `_map.md` のAC変更候補を、必要に応じて Salamander / ユーザー判断へ回す
+2. MVP仕様化時に Open Model Format / Runtime / Viewer / Validator の具体schema・APIへ落とす
+3. 将来細分化候補を優先度付けする
 
 ## 未決事項
 
 | 項目 | 状態 |
 |------|------|
-| シナリオIDの採番規則 | 仮に既存 Domain 01-12 の接頭辞を継続 |
-| Cubism参照操作と Open Stack期待結果の見出し構成 | Domain 01-12 で試作済み。Open Stack前提で再確認中 |
-| 新規 Domain 15-25 のシナリオ粒度 | 既存例に合わせて各Domain 5シナリオ程度で起草済み |
+| シナリオIDの正式採番規則 | 既存接頭辞を継続。Domain 13-14 は `SC-AI` / `SC-WF` を採用 |
+| Cubism参照操作と Open Stack期待結果の見出し構成 | 既存文体を維持。公式事実とOpen Stack判断を分離する |
+| 公式資料レビューを別レポート化するか | 今回は下層 `_map.md` と追加シナリオ内URL記録で十分と判断し、独立reportは作成しない |

@@ -7,7 +7,7 @@
 
 このファイルは、`AC-FORMAT` を Open Live2D Stack の正となる Open Model Format と Open Model Package の検証シナリオへ降ろす。
 
-`.cmo3` 復元や `.moc3` 互換出力は初期成功条件にしない。Cubism の各形式は参照オラクルとして扱えるが、このシナリオの正は Open Model Format 自身の仕様、package、validation、runtime 読み込みである。
+`.cmo3` 復元や `.moc3` 互換出力は初期成功条件にしない。Cubism の各形式は参考資料として扱えるが、このシナリオの正は Open Model Format 自身の仕様、package、validation、runtime 読み込みである。
 
 ## 1. リポジトリ事実
 

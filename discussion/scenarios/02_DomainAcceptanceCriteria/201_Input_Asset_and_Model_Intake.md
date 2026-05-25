@@ -87,7 +87,7 @@ Cubism Editor で直接再現できるものは「Cubism参照操作」として
 
 - AC-IN-001: 入力素材を受け取れること
 - AC-IN-002: 素材を編集可能な内部表現へ変換できること
-- AC-IN-003: 入力由来情報を保持できること
+- AC-IN-006: 入力由来情報と欠落情報を保持できること
 
 ## SC-IN-002: レイヤー構造付きPSDを受け取り、パーツ構造と描画要素として立ち上げられる
 
@@ -119,7 +119,7 @@ Cubism Editor で直接再現できるものは「Cubism参照操作」として
 
 - AC-IN-001: 入力素材を受け取れること
 - AC-IN-002: 素材を編集可能な内部表現へ変換できること
-- AC-IN-003: 入力由来情報を保持できること
+- AC-IN-006: 入力由来情報と欠落情報を保持できること
 
 ## SC-IN-003: PSD作成上の問題を検出し、受け入れ可否と保持できない情報を区別できる
 
@@ -150,7 +150,7 @@ Cubism Editor で直接再現できるものは「Cubism参照操作」として
 
 - AC-IN-001: 入力素材を受け取れること
 - AC-IN-002: 素材を編集可能な内部表現へ変換できること
-- AC-IN-003: 入力由来情報を保持できること
+- AC-IN-006: 入力由来情報と欠落情報を保持できること
 
 ## SC-IN-004: 既存の `.cmo3` を参照資料として受け取り、独立読み書き非要求を明示できる
 
@@ -245,7 +245,7 @@ Cubism Editor で直接再現できるものは「Cubism参照操作」として
 
 - AC-IN-001: 入力素材を受け取れること
 - AC-IN-002: 素材を編集可能な内部表現へ変換できること
-- AC-IN-003: 入力由来情報を保持できること
+- AC-IN-006: 入力由来情報と欠落情報を保持できること
 
 ## SC-IN-007: Texture Atlas 相当のテクスチャ配置と package metadata を保持し、Open Model Package 出力前に検証できる
 
@@ -276,4 +276,40 @@ Cubism Editor で直接再現できるものは「Cubism参照操作」として
 ### 検証するACの項目
 
 - AC-IN-002: 入力素材を Open Model Format の制作対象へ変換できること
+- AC-IN-006: 入力由来情報と欠落情報を保持できること
+
+## SC-IN-008: 既存 Open Model Package を読み込み、制作・表示・検証対象として観測できる
+
+### Given: 前提条件
+
+- 既存の Open Model Package `Avatar_OpenPackage_A/` が存在する。
+- package には、Open Model Format のモデル本体、texture、package metadata、parameter、keyform、physics、motion、expression に相当する関連資産が含まれる。
+- package は、別ツールまたは過去バージョンの Open Editor で作成されたものである。
+- Open Editor、Open Viewer、Open Package Validator が利用できる。
+
+### When: Open Stack実用操作
+
+1. ユーザーが Open Editor で `Avatar_OpenPackage_A/` を開く。
+2. ユーザーが model structure、texture 参照、parameter、keyform、physics、motion、expression、metadata を確認する。
+3. ユーザーが Open Viewer で同じ package を読み込み、parameter 操作による runtime preview を確認する。
+4. ユーザーが Open Package Validator を実行し、schema、参照解決、runtime load、metadata の検証結果を確認する。
+5. ユーザーが読み込み元 package と読み込み後の編集対象の対応関係を確認する。
+
+### Then: Open Stack期待結果
+
+- Open Stack は、既存 Open Model Package を入力として読み込める。
+- model format 本体、texture、関連設定、metadata の参照関係を制作・表示・検証対象として観測できる。
+- 読み込んだ package は、Open Editor で編集可能な対象として扱え、Open Viewer で runtime preview できる。
+- Validator は、package の必須資産、任意資産、未対応資産、欠落参照を区別して報告できる。
+- 旧バージョンまたは別ツール由来の package である場合、互換変換、保持できた情報、欠落または推定した情報を区別できる。
+
+### 参照資料
+
+- 公式参考: [Data for Embedded Use](https://docs.live2d.com/en/cubism-editor-manual/export-moc3-motion3-files/)
+- 公式参考: [Loading Models and Motion](https://docs.live2d.com/en/cubism-editor-manual/load-model-and-motion/)
+- 公式参考: [About Models (Web)](https://docs.live2d.com/en/cubism-sdk-manual/model-web/)
+
+### 検証するACの項目
+
+- AC-IN-003: Open Model Package を読み込めること
 - AC-IN-006: 入力由来情報と欠落情報を保持できること

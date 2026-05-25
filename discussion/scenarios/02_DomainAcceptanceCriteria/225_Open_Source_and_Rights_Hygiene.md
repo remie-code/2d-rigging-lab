@@ -91,7 +91,7 @@ Open Stack は、Cubism SDK/Core、公式サンプル、商用モデル、propri
 
 1. reviewer が MVP AC、Domain AC、シナリオ、tutorial の完了条件を確認する。
 2. reviewer が `.moc3` 出力や `.cmo3` 復元を初期成功条件として要求していないか確認する。
-3. reviewer が Cubism形式に触れる記述が参照オラクル、調査、移行支援として分離されているか確認する。
+3. reviewer が Cubism形式に触れる記述が参考資料、調査、移行支援として分離されているか確認する。
 
 ### Then: Open Stack期待結果
 

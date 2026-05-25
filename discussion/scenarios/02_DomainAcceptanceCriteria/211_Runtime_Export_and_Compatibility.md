@@ -7,7 +7,7 @@
 
 このファイルは、`AC-EXPORT` を「Open Model Package を出力し、Open Runtime / Viewer / Validator で利用可能であることを確認する」シナリオへ降ろす。
 
-Cubism Editor / Cubism Viewer / Cubism SDK の出力資産は、参照オラクルとして扱う。
+Cubism Editor / Cubism Viewer / Cubism SDK の出力資産は、参考資料として扱う。
 
 ただし、このシナリオの正は `.moc3` / `.model3.json` 互換ではない。正は Open Model Format と Open Runtime / Viewer / Validator による読み込み・評価・表示・検証である。
 
@@ -162,6 +162,50 @@ Cubism Editor / Cubism Viewer / Cubism SDK の出力資産は、参照オラク�
 
 - AC-EXPORT-005
 - AC-EXPORT-003
+
+## SC-EXPORT-006: Cubism互換出力を初期成功条件から除外して検証できる
+
+### Given: 前提条件
+
+- `RiggedAvatar_A` は Open Model Format 上で編集済みである。
+- Open Model Package 出力、Open Viewer 読み込み、Open Runtime 評価、Open Package Validator 検証が利用できる。
+- 比較用として、Cubism の組み込み用データが `.moc3`、`.model3.json`、texture、任意の sidecar JSON を持つことは公式参考事実として把握している。
+- この検証では、`.moc3`、`.model3.json`、Cubism Viewer、VTube Studio 互換を Pass 条件にしない方針が決まっている。
+
+### When: Cubism参照操作
+
+1. Cubism では、組み込み用出力として `.moc3`、`.model3.json`、texture、必要に応じて `.physics3.json` や `.motion3.json` などを揃える。
+2. Cubism Viewer では、`.moc3` または `.model3.json` を読み込み、関連する motion、expression、physics などを確認する。
+3. Cubism SDK では、`.model3.json` から参照を取得し、`.moc3` から runtime model を作成する。
+
+### When: Open Stack実用操作
+
+1. ユーザーが `RiggedAvatar_A` を Open Model Package として出力する。
+2. ユーザーが Open Package Validator を実行し、schema、asset reference、runtime load、parameter 操作、metadata を検証する。
+3. ユーザーが Open Viewer で出力 package を読み込み、主要 parameter 値で表示を確認する。
+4. ユーザーが Cubism互換出力の有無を確認し、存在しない場合の扱いを validation report に記録する。
+5. 比較用 Cubism package がある場合、参考差分として `.model3.json` の資産構成や loading flow との違いを記録する。
+
+### Then: Open Stack期待結果
+
+- Open Model Package が Open Runtime / Viewer / Validator で読み込み・評価・表示できれば、`.moc3` または `.model3.json` が存在しなくても初期成功条件は満たせる。
+- Cubism互換出力の未対応状態は、`Fail` ではなく `Not applicable`、`Deferred`、または将来互換候補として区別して報告される。
+- Open Stack の出力検証では、Open Model Format の意味論、runtime state、描画結果、validation result が正として扱われる。
+- Cubism package との違いは、公式仕様への不一致ではなく、参考事実、設計判断が必要な差分、未決事項として分離して記録される。
+- ユーザーやAIエージェントは、Cubism互換の有無と Open Stack としての出力成立性を混同せずに確認できる。
+
+### 参照資料
+
+- 公式参考: [Data for Embedded Use](https://docs.live2d.com/en/cubism-editor-manual/export-moc3-motion3-files/)
+- 公式参考: [Loading Models and Motion](https://docs.live2d.com/en/cubism-editor-manual/load-model-and-motion/)
+- 公式参考: [About Models (Web)](https://docs.live2d.com/en/cubism-sdk-manual/model-web/)
+- 公式参考: [Cubism Core](https://docs.live2d.com/en/cubism-sdk-manual/cubism-core/)
+
+### 検証するACの項目
+
+- AC-EXPORT-001: Open Model Package を出力できること
+- AC-EXPORT-003: Open Runtime / Viewer で読み込み・表示・操作できることを検証できること
+- AC-EXPORT-006: Cubism 互換出力を初期成功条件にしないこと
 
 ## 5. 未決事項
 

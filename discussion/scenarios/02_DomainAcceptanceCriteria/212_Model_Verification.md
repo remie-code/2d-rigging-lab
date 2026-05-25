@@ -403,6 +403,49 @@ Then では「何を観測できれば合否判断を支援できるか」を書
 - AC-VERIFY-004: 破綻を検出できること
 - AC-VERIFY-005: ACまたはシナリオに基づき合否判断できること
 
+## SC-VERIFY-011: 検証結果を AI-readable report として出力できる
+
+### Given: 前提条件
+
+- `RiggedAvatar_A.openpackage` に対して、構造棚卸し、runtime state inspection、差分検証、破綻検出、シナリオ合否判断が実行済みである。
+- 検証結果には、少なくとも1件の `Pass`、1件の `Fail`、1件の `Needs review`、1件の `Not applicable` が含まれる。
+- 例として、欠落 texture、存在しない clipping mask 参照、parameter 中間値でのメッシュ潰れ、Cubism互換出力の非対象項目が含まれる。
+- AIエージェントが後続レビューまたは修復提案に利用できる report 出力を要求している。
+
+### When: Cubism参照・実用操作
+
+1. Cubism では、Texture Atlas、Clipping Mask、Deformer validation、Viewer読み込み、MOC3整合性検証などを個別に確認する。
+2. 検証者は、公式資料で確認できる事実と、作品固有の見た目判断、Open StackのAC/シナリオ基準を分けて記録する。
+
+### When: Open Stack実用操作
+
+1. ユーザーまたはAIエージェントが Open Package Validator で `RiggedAvatar_A.openpackage` を検証する。
+2. ユーザーまたはAIエージェントが Open Viewer の runtime state inspection 結果を report に含める。
+3. ユーザーまたはAIエージェントが、対象シナリオID、AC ID、対象ID、観測証拠、影響範囲、修復候補を含む AI-readable report を出力する。
+4. AIエージェントが report を読み取り、Fail と Needs review の対象を抽出する。
+
+### Then: Open Stack期待結果
+
+- report は、`Pass`、`Fail`、`Needs review`、`Not applicable` などの状態を機械処理可能な形で保持する。
+- 各検証項目には、check ID、対象ID、対象種別、関連AC、関連シナリオ、根拠、観測値、期待値、影響範囲が含まれる。
+- `Fail` と `Needs review` には、修復候補、必要な人間確認、再検証手順が含まれる。
+- Cubism公式資料に基づく参考事実、Open Stack の設計判断、未決事項、作品意図に依存する判断が混同されない。
+- AIエージェントは report から、対象を安定IDで選択し、修復提案または追加レビューを開始できる。
+
+### 参照資料
+
+- 公式参考: [Clipping Mask](https://docs.live2d.com/en/cubism-editor-manual/clipping-mask/)
+- 公式参考: [Edit Texture Atlas](https://docs.live2d.com/en/cubism-editor-manual/texture-atlas-edit/)
+- 公式参考: [Verify model integrity](https://docs.live2d.com/cubism-sdk-manual/moc3-consistency/)
+- 公式参考: [Cubism Core API Reference](https://docs.live2d.com/en/cubism-sdk-manual/cubism-core-api-reference/)
+
+### 検証するACの項目
+
+- AC-VERIFY-003: 操作前後の差分を観測できること
+- AC-VERIFY-004: 破綻を検出または検証支援できること
+- AC-VERIFY-005: ACまたはシナリオに基づき合否判断できること
+- AC-VERIFY-006: 検証結果を AI-readable report として出力できること
+
 ## 5. 未決事項
 
 - メッシュ潰れのFail閾値を、三角形面積、辺長比、頂点交差、見た目上の穴、またはレンダリング差分のどれで定義するか。

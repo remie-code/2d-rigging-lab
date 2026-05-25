@@ -190,3 +190,41 @@
 ### 検証するACの項目
 
 - AC-DEF-005: 変形構造を検証可能であること
+
+## SC-DEF-006: 変形制御構造とパラメータ接続を検証できる
+
+### 前提条件
+
+- 頭部の大域変形制御構造 `Rot_Head_Z` が存在する。
+- 左目の局所変形制御構造 `Warp_EyeL_Blink` が存在する。
+- `Warp_EyeL_Blink` は `ParamEyeLOpen` のキー状態に応じて目の開閉形状を変える想定である。
+- `Rot_Head_Z` は `ParamAngleZ` のキー状態に応じて頭部傾きを変える想定である。
+- 検証用に、存在しない parameter ID、重複接続、または古い parameter ID を参照する変形制御構造を作れる。
+
+### Cubism参照操作
+
+1. Parameter palette で `ParamEyeLOpen` と `ParamAngleZ` のID、範囲、キー有無を確認する。
+2. 対象デフォーマを選択し、どの parameter のどのキー状態で変形が設定されているかを確認する。
+3. `ParamEyeLOpen = 0`, `0.5`, `1` を切り替え、`Warp_EyeL_Blink` の変形が目周辺へだけ反映されることを確認する。
+4. `ParamAngleZ = -30`, `0`, `30` を切り替え、`Rot_Head_Z` の変形が頭部全体へ反映されることを確認する。
+5. 存在しない parameter ID、重複した接続、または古い parameter ID への参照がある場合、対象変形制御構造と影響範囲を確認する。
+
+### Open Stack期待結果
+
+- 各変形制御構造について、接続先 parameter、keyform、対象描画要素、影響範囲を観測できる。
+- `Warp_EyeL_Blink` が `ParamEyeLOpen` に接続され、目周辺の局所変形として評価されることを確認できる。
+- `Rot_Head_Z` が `ParamAngleZ` に接続され、頭部の大域回転として評価されることを確認できる。
+- 存在しない parameter ID、重複接続、参照切れ、接続先と影響範囲の不整合を validation warning または Fail として報告できる。
+- 検証結果には、対象デフォーマID、parameter ID、keyform、影響を受ける drawable、runtime state への影響、修復候補が含まれる。
+
+### 参照資料
+
+- 公式参考: [About Deformers](https://docs.live2d.com/en/cubism-editor-manual/deformer/)
+- 公式参考: [About Parameters](https://docs.live2d.com/en/cubism-editor-manual/parameter/)
+- 公式参考: [Parameter Operation](https://docs.live2d.com/en/cubism-sdk-manual/parameters/)
+
+### 検証するACの項目
+
+- AC-DEF-001: 変形制御構造を持てること
+- AC-DEF-004: 変形制御構造の階層を管理できること
+- AC-DEF-005: 変形構造を検証可能であること
