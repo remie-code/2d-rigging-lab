@@ -20,11 +20,15 @@
 |------|------|--------|
 | [cmo3-moc3-format-spec/](cmo3-moc3-format-spec/) | `.cmo3` と `.moc3` の仕様公開状況、読み書き実装可能性、リスク調査 | レポート作成済み |
 | [cubism-sdk-runtime-structure/](cubism-sdk-runtime-structure/) | Cubism SDK/Coreで `.moc3` をロードした後に観測できるランタイム構造の調査 | レポート作成済み |
+| [deformer-structure-technology/](deformer-structure-technology/) | Open Stack の deformer 相当構造を設計するための Cubism参照・変形アルゴリズム・MVP推奨案調査 | レポート作成済み |
+| [viewer-preview-reference/](viewer-preview-reference/) | Open Stack の Editor preview / Viewer 設計に向けた Cubism参照機能とMVP推奨案調査 | レポート作成済み |
 
 ## 次の行動
 
 1. Cubism SDK for Web を使ったローカル実ロード実験の範囲を決める
 2. 調査結果を受けて `SC-IN-004` の扱いをユーザーと決める
+3. deformer相当構造の技術調査結果を設計議論へ反映する
+4. Viewer / Preview 参照機能の調査結果を設計議論へ反映する
 
 ## 未決事項
 

@@ -26,9 +26,9 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 | GUI Editor操作モデル | 操作モデルだけでなく、画面仕様として何を決めるべきかを深掘り予定 |
 | Drawable / Mesh / Texture / Part | 詳細は設計側に委任。ただしMVP採否は作業量ではなく将来変更回避を基準にする |
 | Parameter / Keyform | デフォルトと標準parameterは Cubism Editor の標準を強く参考にする方針 |
-| Deformer相当構造 | ドメイン技術調査が必要 |
-| Runtime評価セマンティクス | ユーザーの解像度を上げるため、別途議論フェーズを設ける |
-| Viewer / Preview | Cubism Editor / Viewer ができることを調査する候補 |
+| Deformer相当構造 | 調査済み。MVPでは `rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、deformer local rest space bind、parent-before-child評価を暫定採用 |
+| Runtime評価セマンティクス | Deformer評価順序は暫定合意済み。全体Runtime評価、snapshot粒度、diagnostics severity は追加議論が必要 |
+| Viewer / Preview | 調査済み。Shared Runtime evaluation core共有、Editor-only state と runtime-visible state の分離を暫定採用 |
 | Validator / Acceptance Runner | 解析的に判定可能な不可解状態の検出を中心にする |
 | AI Agent Interface | 専用の議論フェーズが必要 |
 
@@ -44,8 +44,8 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 | 項目 | 状態 |
 |------|------|
 | AI Agent は Editor に接続するか、package に対して外部処理するか | 技術スタックと合わせて要議論 |
-| Runtime は Editor preview と Viewer で同一実装にするか | 品質特性を検討し、あるべき姿を採用する |
+| Runtime は Editor preview と Viewer で同一実装にするか | Shared Runtime evaluation core を共有する方向で暫定合意。loader境界は未決 |
 | GUI Editor の画面仕様としてどの項目を決めるか | 要深掘り |
-| Deformer相当構造の技術的正体 | 要調査 |
-| Runtime評価セマンティクスの設計判断 | 要議論 |
+| Deformer相当構造の技術的正体 | 調査済み。設計判断へ反映中 |
+| Runtime評価セマンティクスの設計判断 | Deformer周辺は暫定合意済み。Runtime全体は要議論 |
 | AI Agent Interface の責務と境界 | 要議論 |

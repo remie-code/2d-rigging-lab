@@ -45,6 +45,25 @@
 - MVPでは、解析的に判定可能な不可解状態を検出できることを中心にする。
 - 例: 表示されているのに texture atlas に配置されていない要素がある、など。
 
+### 2.7 Deformer相当構造
+
+- deformer相当構造に関する調査レポートは、設計時の参考資料として十分と判断する。
+- MVPでは、rotation相当を pivot付き2D transform / affine node とする方向を採用する。
+- MVPでは、warp相当を 2D control lattice deformation node とする方向を採用する。
+- warp補間は `bilinear-grid-v1` から始める方針とする。
+- ただし、Open Model Package には `interpolationMethod` または同等の evaluator version を持たせ、将来 Bezier / bicubic などの補間方式を追加できるようにする。
+- warp の bind space は、暫定的に deformer local rest space を第一候補とする。
+- 評価順序は、parameter 値を決め、keyform補間で各deformer状態を決め、deformer treeを親から子へ評価し、drawable mesh、clipping / mask、opacity / visibility / draw order を解決する方向を採用する。
+
+### 2.8 Viewer / Preview
+
+- Viewer / Preview に関する調査レポートは、設計時の参考資料として十分と判断する。
+- Editor と Viewer は同一アプリ内機能とする方針を維持する。
+- Editor preview と Viewer は、同じ Shared Runtime evaluation core を共有する方向を採用する。
+- ただし、Editor preview は制作中の dirty authoring state、selection、lock、hide、overlay、warning を扱う制作支援面とする。
+- Viewer は保存済み Open Model Package を runtime として読み込み、parameter操作、runtime snapshot、diagnostics、package load確認を行う確認面とする。
+- Editor-only production support state と runtime-visible model state を混同しないことを設計原則にする。
+
 ## 3. 委任範囲
 
 | 項目 | 委任内容 |
@@ -57,8 +76,8 @@
 
 | 項目 | 理由 |
 |------|------|
-| Deformer相当構造の技術的正体 | ユーザーはドメインに明るくなく、標準的な線形変換の範囲内かもしれないが、適当な構造を作るべきではないため |
-| Viewer / Preview のCubism参照機能 | Cubism Editor / Viewer が何を確認・検証できるかを把握してから、Open Stack の Viewer / Preview 設計へ落とすため |
+| Deformer相当構造の技術的正体 | 調査済み。`discussion/reports/deformer-structure-technology/` を参照 |
+| Viewer / Preview のCubism参照機能 | 調査済み。`discussion/reports/viewer-preview-reference/` を参照 |
 
 ## 5. 要議論事項
 
@@ -69,14 +88,21 @@
 | GUI Editor画面仕様 | 操作モデルに加えて、画面領域、パネル、canvas、properties、timeline外のpreview、warning表示など、何を設計完了条件にするか決める |
 | AI Agent Interface | GUIの代替ではなく、GUI制作を補助・検証・修復するための責務と境界を議論する |
 
-## 6. 次に分解すべき設計成果物候補
+## 6. 参考調査レポート
+
+| Topic | Reports | Design use |
+|-------|---------|------------|
+| Deformer相当構造 | `discussion/reports/deformer-structure-technology/` | MVP deformer の種類、補間方式、bind space、評価順序の設計判断に使う |
+| Viewer / Preview | `discussion/reports/viewer-preview-reference/` | Editor preview / Viewer / Shared Runtime / Validator-AI bridge の境界設計に使う |
+
+## 7. 次に分解すべき設計成果物候補
 
 - MVP architecture decision record
 - Open Model Package design brief
 - GUI Editor screen specification checklist
 - Parameter / Keyform defaults and standard parameter policy
-- Deformer technical research report
+- Deformer design decision record
 - Runtime evaluation semantics explainer
-- Viewer / Preview capability research
+- Viewer / Preview boundary design
 - Validator MVP profile design
 - AI Agent Interface discussion brief
