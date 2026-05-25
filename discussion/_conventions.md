@@ -19,6 +19,9 @@ discussion/
   concept/              # コンセプト、スコープ、方針変更メモ
     _map.md
     *.md
+  design/               # 設計論点、設計判断、未決事項、設計検証観点
+    _map.md
+    *.md
   acceptance-criteria/  # Salamander が起草し、ユーザー合意で更新されるAC体系
     _map.md
     02_DomainAcceptanceCriteria/
@@ -72,6 +75,7 @@ discussion/
 | Path | Role | Owner | Notes |
 |---|---|---|---|
 | `concept/` | プロジェクトのコンセプト、スコープ、方針変更、未決の根本問い | Undine | ユーザー合意に基づき更新する |
+| `design/` | Open Live2D Stack の設計論点、設計判断、未決事項、調査待ち、検証観点 | Undine / Gnome / Sylph | Undine が議論と地図を管理し、Gnome/Sylph が実装・レビュー時に参照する |
 | `acceptance-criteria/` | 受け入れ基準。後続作業のオラクル | Salamander / Undine | 原則はSalamander起草。ユーザーの明示指示がある場合はUndineが再編・更新する |
 | `scenarios/` | ACを検証可能な具体シナリオへ精緻化したもの | Undine | Gnome/Sylph は原則参照のみ |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
