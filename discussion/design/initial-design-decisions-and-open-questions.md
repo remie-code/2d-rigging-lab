@@ -89,13 +89,14 @@
 |------|------|
 | Deformer相当構造の技術的正体 | 調査済み。`discussion/reports/deformer-structure-technology/` を参照 |
 | Viewer / Preview のCubism参照機能 | 調査済み。`discussion/reports/viewer-preview-reference/` を参照 |
+| Runtime評価セマンティクスのSDK/Core参照 | 調査済み。`discussion/reports/runtime-evaluation-semantics-reference/` を参照 |
 
 ## 5. 要議論事項
 
 | 項目 | 論点 |
 |------|------|
 | AI Agent 接続方式 | Editorに接続するのか、packageに対して外部処理するのか。技術スタックと合わせて検討する |
-| Runtime評価セマンティクス | ユーザーの解像度を上げたうえで、評価順序、state snapshot、diagnostics、invalid modelの扱いを決める |
+| Runtime評価セマンティクス | SDK/Core参照調査済み。ユーザーの解像度を上げたうえで、MVP評価pipeline、state snapshot、diagnostics、invalid modelの扱いを決める |
 | GUI Editor画面仕様 | 操作モデルに加えて、画面領域、パネル、canvas、properties、timeline外のpreview、warning表示など、何を設計完了条件にするか決める |
 | AI Agent Interface | GUIの代替ではなく、GUI制作を補助・検証・修復するための責務と境界を議論する |
 
@@ -106,6 +107,7 @@
 | Deformer相当構造 | `discussion/reports/deformer-structure-technology/` | MVP deformer の種類、補間方式、bind space、評価順序の設計判断に使う |
 | Viewer / Preview | `discussion/reports/viewer-preview-reference/` | Editor preview / Viewer / Shared Runtime / Validator-AI bridge の境界設計に使う |
 | AI Agent 接続方式 | `discussion/design/ai-agent-connection-and-technology-stack.md` | 技術スタック、3層AI連携、shared operation core 方針の設計判断に使う |
+| Runtime評価セマンティクス | `discussion/reports/runtime-evaluation-semantics-reference/` | Cubism SDK/Core の runtime update flow、入力layer、snapshot、diagnosticsを参考に、Open Stack MVP runtime pipelineを設計する |
 
 ## 7. 次に分解すべき設計成果物候補
 

@@ -28,7 +28,7 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 | Drawable / Mesh / Texture / Part | 詳細は設計側に委任。ただしMVP採否は作業量ではなく将来変更回避を基準にする |
 | Parameter / Keyform | デフォルトと標準parameterは Cubism Editor の標準を強く参考にする方針 |
 | Deformer相当構造 | 調査済み。MVPでは `rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、deformer local rest space bind、parent-before-child評価を暫定採用 |
-| Runtime評価セマンティクス | Deformer評価順序は暫定合意済み。全体Runtime評価、snapshot粒度、diagnostics severity は追加議論が必要 |
+| Runtime評価セマンティクス | SDK/Core参照調査済み。全体Runtime評価pipeline、snapshot粒度、diagnostics severity はユーザー判断待ち |
 | Viewer / Preview | 調査済み。Shared Runtime evaluation core共有、Editor-only state と runtime-visible state の分離を暫定採用 |
 | Validator / Acceptance Runner | 解析的に判定可能な不可解状態の検出を中心にする |
 | AI Agent Interface | File-level / GUI-level / Structured API-level の3層連携方針を記録済み。具体API方式は未決 |
@@ -37,7 +37,7 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 
 1. `initial-design-decisions-and-open-questions.md` の未決論点から、次に議論する項目を選ぶ。
 2. GUI Editor の画面仕様として決めるべき項目を棚卸しする。
-3. Runtime評価セマンティクスの説明・議論フェーズを設ける。
+3. Runtime評価セマンティクスの調査レポートをもとに、説明・議論フェーズを設ける。
 4. AI Agent接続方式を operation core / REST / WebSocket / MCP / desktop shell の具体設計へ落とす。
 
 ## 未決事項
@@ -48,5 +48,5 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 | Runtime は Editor preview と Viewer で同一実装にするか | Shared Runtime evaluation core を共有する方向で暫定合意。loader境界は未決 |
 | GUI Editor の画面仕様としてどの項目を決めるか | 要深掘り |
 | Deformer相当構造の技術的正体 | 調査済み。設計判断へ反映中 |
-| Runtime評価セマンティクスの設計判断 | Deformer周辺は暫定合意済み。Runtime全体は要議論 |
+| Runtime評価セマンティクスの設計判断 | SDK/Core参照調査済み。MVP採用範囲、snapshot既定粒度、diagnostics severity は要議論 |
 | AI Agent Interface の責務と境界 | 要議論 |

@@ -22,6 +22,7 @@
 | [cubism-sdk-runtime-structure/](cubism-sdk-runtime-structure/) | Cubism SDK/Coreで `.moc3` をロードした後に観測できるランタイム構造の調査 | レポート作成済み |
 | [deformer-structure-technology/](deformer-structure-technology/) | Open Stack の deformer 相当構造を設計するための Cubism参照・変形アルゴリズム・MVP推奨案調査 | レポート作成済み |
 | [viewer-preview-reference/](viewer-preview-reference/) | Open Stack の Editor preview / Viewer 設計に向けた Cubism参照機能とMVP推奨案調査 | レポート作成済み |
+| [runtime-evaluation-semantics-reference/](runtime-evaluation-semantics-reference/) | Open Stack の Runtime評価セマンティクス設計に向けた Cubism SDK/Core 参照調査 | レポート作成済み |
 
 ## 次の行動
 
@@ -29,6 +30,7 @@
 2. 調査結果を受けて `SC-IN-004` の扱いをユーザーと決める
 3. deformer相当構造の技術調査結果を設計議論へ反映する
 4. Viewer / Preview 参照機能の調査結果を設計議論へ反映する
+5. Runtime評価セマンティクスのSDK/Core参照調査結果を設計議論へ反映する
 
 ## 未決事項
 
