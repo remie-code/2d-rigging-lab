@@ -16,12 +16,13 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 |------|------|--------|
 | [_map.md](_map.md) | `design/` 直下の入口地図 | 作成済み |
 | [initial-design-decisions-and-open-questions.md](initial-design-decisions-and-open-questions.md) | MVP更新後の設計10項目に対するユーザー判断、委任範囲、要調査・要議論事項 | Draft |
+| [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) | AI Agent 接続方式と Web-first TypeScript 技術スタック方針 | Draft / user-aligned |
 
 ## 現在の設計焦点
 
 | 項目 | 状態 |
 |------|------|
-| MVP縦切りアーキテクチャ | Editor と Viewer は同一アプリ内機能にする方針。AI Agent 接続方式は技術スタックと合わせて要議論 |
+| MVP縦切りアーキテクチャ | Editor と Viewer は同一アプリ内機能にする方針。AI Agent 接続方式と技術スタック方針は初期整理済み |
 | Open Model Package | Operation log は組み込む方向。詳細構成は保守性を重視して設計側に委任 |
 | GUI Editor操作モデル | 操作モデルだけでなく、画面仕様として何を決めるべきかを深掘り予定 |
 | Drawable / Mesh / Texture / Part | 詳細は設計側に委任。ただしMVP採否は作業量ではなく将来変更回避を基準にする |
@@ -30,20 +31,20 @@ MVPは GUI Editor 必須の Authoring-to-Runtime 一周へ再定義済みであ�
 | Runtime評価セマンティクス | Deformer評価順序は暫定合意済み。全体Runtime評価、snapshot粒度、diagnostics severity は追加議論が必要 |
 | Viewer / Preview | 調査済み。Shared Runtime evaluation core共有、Editor-only state と runtime-visible state の分離を暫定採用 |
 | Validator / Acceptance Runner | 解析的に判定可能な不可解状態の検出を中心にする |
-| AI Agent Interface | 専用の議論フェーズが必要 |
+| AI Agent Interface | File-level / GUI-level / Structured API-level の3層連携方針を記録済み。具体API方式は未決 |
 
 ## 次の行動
 
 1. `initial-design-decisions-and-open-questions.md` の未決論点から、次に議論する項目を選ぶ。
-2. AI Agent 接続方式を、技術スタック候補と合わせて検討する。
-3. GUI Editor の画面仕様として決めるべき項目を棚卸しする。
-4. Runtime評価セマンティクスの説明・議論フェーズを設ける。
+2. GUI Editor の画面仕様として決めるべき項目を棚卸しする。
+3. Runtime評価セマンティクスの説明・議論フェーズを設ける。
+4. AI Agent接続方式を operation core / REST / WebSocket / MCP / desktop shell の具体設計へ落とす。
 
 ## 未決事項
 
 | 項目 | 状態 |
 |------|------|
-| AI Agent は Editor に接続するか、package に対して外部処理するか | 技術スタックと合わせて要議論 |
+| AI Agent は Editor に接続するか、package に対して外部処理するか | 3層連携方針は合意済み。MVPで採用する具体接続方式は未決 |
 | Runtime は Editor preview と Viewer で同一実装にするか | Shared Runtime evaluation core を共有する方向で暫定合意。loader境界は未決 |
 | GUI Editor の画面仕様としてどの項目を決めるか | 要深掘り |
 | Deformer相当構造の技術的正体 | 調査済み。設計判断へ反映中 |

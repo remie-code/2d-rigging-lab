@@ -64,6 +64,17 @@
 - Viewer は保存済み Open Model Package を runtime として読み込み、parameter操作、runtime snapshot、diagnostics、package load確認を行う確認面とする。
 - Editor-only production support state と runtime-visible model state を混同しないことを設計原則にする。
 
+### 2.9 AI Agent 接続方式と技術スタック
+
+- AI Agent 接続方式は、技術スタックと合わせて検討する。
+- MVPの第一候補技術スタックは Web-first TypeScript とする。
+- AI連携は File-level、GUI-level、Structured API-level の3層で考える。
+- Open Model Package がAI-readableであれば、Codexなどによるファイル直接編集が最下層のAI連携になる。
+- Web-first GUIであれば、PlaywrightなどによるGUI操作が第二層のAI連携になる。
+- REST / WebSocket / MCP / in-process command bus などによる構造化operationを第三層のAI連携として設計する。
+- 編集処理の正はGUIイベントハンドラではなく、shared operation core / model core / validator core に置く。
+- 詳細は [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) を参照する。
+
 ## 3. 委任範囲
 
 | 項目 | 委任内容 |
@@ -94,6 +105,7 @@
 |-------|---------|------------|
 | Deformer相当構造 | `discussion/reports/deformer-structure-technology/` | MVP deformer の種類、補間方式、bind space、評価順序の設計判断に使う |
 | Viewer / Preview | `discussion/reports/viewer-preview-reference/` | Editor preview / Viewer / Shared Runtime / Validator-AI bridge の境界設計に使う |
+| AI Agent 接続方式 | `discussion/design/ai-agent-connection-and-technology-stack.md` | 技術スタック、3層AI連携、shared operation core 方針の設計判断に使う |
 
 ## 7. 次に分解すべき設計成果物候補
 
