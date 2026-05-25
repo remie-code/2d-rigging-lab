@@ -1,0 +1,9 @@
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
+[agents]
+max_threads = 20
+max_depth = 3
+
+[features]
+goals = true
