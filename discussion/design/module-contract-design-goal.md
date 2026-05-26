@@ -92,6 +92,28 @@ MVP実装は、規模と責務の性質からサブエージェント並列化�
 
 この分離がない場合、Editor-only state が Runtime / Viewer / Validator に混入し、MVPの設計原則を壊す。
 
+### 3.3.1 Source asset import
+
+MVPの source asset import は PSD primary とする。split PNG は fallback / debug / compatibility 入口として扱う。
+
+PSDについては、Adobeが第三者向けに Photoshop File Formats Specification を公開しており、PSD / PSB native file format の構造は公式仕様として参照できる。したがって、PSD読み込み仕様が存在しないことはMVP設計上のブロッカーではない。
+
+ただし、その仕様はデータ形式を説明するものであり、Photoshopの全機能の描画・解釈を完全に再現するSDKではない。そのため、MVPでは「Photoshop完全互換」ではなく、Live2D系素材制作に必要な PSD import profile を定義し、PSD parser / adapter を他moduleから隔離する。
+
+参照:
+
+- [Adobe Photoshop File Formats Specification](https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/)
+- [Photoshop file formats overview](https://helpx.adobe.com/photoshop/desktop/save-and-export/export-files-to-different-formats/photoshop-file-formats-overview.html)
+
+設計で固定すること:
+
+- PSD source asset DTO と provenance の形
+- PSD layer tree / group / layer name / bounds / visibility / opacity / raster pixel data / mask の取り込み境界
+- PSD layer から drawable / part / texture / provenance への mapping
+- unsupported PSD feature の diagnostic と repair candidate
+- split PNG fallback の provenance とPSD importとの差分
+- PSD parser / adapter の候補、責務境界、差し替え可能性
+
 ### 3.4 Operation contract
 
 `operation-core` は、GUI操作、AI structured command、migration、repair candidate適用の共通入口である。
@@ -113,12 +135,14 @@ MVP実装は、規模と責務の性質からサブエージェント並列化�
 
 初期候補:
 
-- `importSourceAsset`
+- `importPsdSourceAsset`
+- `importSplitPngSourceAsset`
 - `createDrawable`
 - `generateMesh`
 - `moveMeshVertex`
 - `createParameter`
 - `addKeyform`
+- `addKeyformGrid2d`
 - `createRotation2dDeformer`
 - `createWarpLattice2dDeformer`
 - `bindDeformerChild`
@@ -150,6 +174,8 @@ evaluateRuntime(
 - deterministic comparison rule
 - disabled future layers の表現
 - diagnostics phase と severity
+- Cubism Editor 準拠の1軸 keyform / `parameter-grid-2d-v1` / 親子デフォーマ階層の評価規則
+- 3軸以上を同一対象に割り当てた場合の validator diagnostic
 
 ### 3.6 Validator and diagnostics contract
 
@@ -169,12 +195,23 @@ Validator は、Editor warning、Viewer diagnostics、AI-readable report、Accep
 
 Web-first GUI は、AI Agent が Playwright 等で検証できるように構造化された観測面を持つ必要がある。
 
+Structured API の口一覧は、先に固定endpointとして決め打ちしない。次の設計では、ユースケースシナリオをAI操作目線でレビューし、AI Agentが実際の画面やスクリーンショットを見ながら作業する場合に必要な観測口・操作口・検証口を逆算する。
+
+代表シナリオとして、スクリーンショットを参照しながら、選択中または指定されたデフォーマに対してパラメータを設定する操作を必ず分析する。
+
 設計で固定すること:
 
 - UI event と operation type の対応
 - canvas操作を operation payload へ変換する規則
+- Editor semantic state API: `getEditorState`、`getSelection`、`getCanvasViewport`、`hitTestCanvas` など
+- Operation command API: `dryRunOperation`、`commitOperation`、`getOperationLog` など
+- Runtime / Validator read API: `inspectModel`、`validatePackage`、`getRuntimeSnapshot` など
+- 各API口を必要とするユースケースシナリオと操作step
+- transport-independent contract と、HTTP JSON / WebSocket / MCP などのadapter候補の分離
 - stable `data-testid` または role / label 命名規則
-- GUI authoring evidence の記録形式
+- GUI authoring evidence の記録形式。operation log を必須証拠とし、Playwright trace / screenshot / session metadata は補助証拠とする
+- `source: "gui"` または同等のfieldを持つ operation log entry
+- GUI操作証拠、validation report、runtime snapshot の対応
 - AI dry-run 結果を表示する画面
 - repair candidate 承認UIの境界
 
@@ -185,7 +222,12 @@ Web-first GUI は、AI Agent が Playwright 等で検証できるように構造
 必要なfixture候補:
 
 - minimal valid package
+- PSD import happy path package
+- PSD unsupported layer package
+- split PNG fallback import package
 - basic tutorial-like package with eye / mouth / hair / face angle
+- Angle X / Y の同一デフォーマ2軸 keyform grid package
+- 親子デフォーマ階層で斜め方向を表現する package
 - invalid missing texture package
 - invalid deformer cycle package
 - invalid mask reference package
@@ -230,12 +272,12 @@ Web-first GUI は、AI Agent が Playwright 等で検証できるように構造
 |---|---|
 | `module-boundaries.md` | module責務、所有state、禁止依存、public API一覧 |
 | `typescript-contracts.md` | shared ID、DTO、graph、snapshot、diagnostic、diff のTS型案 |
-| `package-file-format-contract.md` | package内JSONファイルとTS DTOの対応 |
-| `operation-contracts.md` | operation request/response/precondition/diff/log entry |
+| `package-file-format-contract.md` | package内JSONファイル、PSD source asset / provenance、TS DTOの対応 |
+| `operation-contracts.md` | `importPsdSourceAsset` を含む operation request/response/precondition/diff/log entry |
 | `runtime-core-contract.md` | runtime評価API、normalized graph、snapshot、evaluator version |
 | `validator-contract.md` | check registry、profiles、report schema、repair candidate |
-| `gui-operation-contract.md` | UI event -> operation mapping、screen state、test id、GUI evidence |
-| `ai-command-contract.md` | AI command schema、dry-run、diff、approval、revalidation |
+| `gui-operation-contract.md` | UI event -> operation mapping、Editor semantic state、selection、hit-test、screen state、test id、GUI evidence |
+| `ai-command-contract.md` | シナリオから導出したAI command schema、observe/inspect/hit-test/dry-run/commit/validate/snapshot/evidence、approval、revalidation |
 | `fixtures-and-contract-tests.md` | fixture一覧、expected snapshot/report/diff、contract test方針 |
 | `traceability-matrix.md` | AC / scenario / module / API / fixture の対応 |
 
@@ -250,29 +292,30 @@ Web-first GUI は、AI Agent が Playwright 等で検証できるように構造
 - JSON Schema / Zod / TypeScript type のどれをsource of truthにするか
 - ID生成方式と branded type の実装方針
 - package DTO と internal graph の変換責務
+- PSD import profile と parser / adapter の隔離境界
 - runtime numeric precision と epsilon policy
 - coordinate system
 - operation log entry の最小必須項目
-- GUI authoring evidence の必須証拠
+- GUI authoring evidence の operation log schema と補助証拠の保存方針
+- ユースケースシナリオに基づく Structured API の口一覧と transport-independent contract
 - validation check ID のregistry管理方法
 - fixture命名と expected output の保存場所
 - subagentごとのwrite ownership境界
 
 これらを曖昧にしたまま並列実装すると、型は似ているが互換しないモジュールが増える。
 
-## 7. 次の /goal に向けた論点
+## 7. 次の /goal で必ず実施する検討
 
-次の `/goal` 指示文を作る前に、少なくとも次を決める。
+次の `/goal` では、少なくとも次を実施する。
 
-1. 設計成果物は文書のみか、`packages/contracts` の型スケッチまで作るか。
-2. TypeScript contract のsource of truthを何にするか。
-3. 既存 `mvp-authoring-runtime` Draftを上書き具体化するか、`module-contracts/` のような下位ディレクトリを作るか。
-4. 出力ファイルのテンプレートを先に固定するか。
-5. サブエージェントレビューを含める場合、何をレビュー基準にするか。
+1. ユースケースシナリオをAI操作目線でレビューし、必要な Structured API の口一覧を導出する。
+2. 代表例として、スクリーンショットを見ながらデフォーマへパラメータを設定する操作を分析する。
+3. 導出した口を Editor semantic state API、Operation command API、Runtime / Validator read API に分ける。
+4. MVP必須、MVP任意、post-MVP のtransport adapter候補を分類する。
 
 ## 8. 現時点の推奨
 
-現時点では、既存Draftを破棄せず、`discussion/design/mvp-authoring-runtime/` 配下に module contract 設計の下位成果物を追加するのがよい。
+現時点では、既存Draftを破棄せず、`discussion/design/module-contracts/` 配下に module contract 設計の成果物を追加するのがよい。
 
 次の設計フェーズでは、上位ACとシナリオから逆算して、TypeScript module boundary、shared contracts、operation contract、runtime contract、validator contract、GUI operation contract、AI command contract、fixture / contract test を具体化する。
 
