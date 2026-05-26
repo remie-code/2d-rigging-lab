@@ -1,0 +1,285 @@
+# Validator Contract
+
+> 状態: Draft / Review ready
+> 出力先: discussion/design/module-contracts/validator-contract.md
+> 主な読者: validator-core implementer / editor-ui implementer / ai-interface implementer / acceptance reviewer
+> 主な所有module: `validator-core`
+> Source of truth: zod
+> 根拠: [../mvp-authoring-runtime/04-validator-acceptance-runner-design.md](../mvp-authoring-runtime/04-validator-acceptance-runner-design.md), [typescript-contracts.md](typescript-contracts.md), [runtime-core-contract.md](runtime-core-contract.md), [../../scenarios/03_MVP_Acceptance_Criteria.md](../../scenarios/03_MVP_Acceptance_Criteria.md)
+
+## Purpose and Scope
+
+This document fixes the validator contract for schema, package reference, model semantic, runtime load, representative evaluation, GUI authoring evidence, and AI-readable report checks.
+
+It covers:
+
+- check ID naming and registry,
+- validation profiles,
+- severity/status vocabulary,
+- validation report schema,
+- repair candidate schema,
+- relation between Editor warnings, Viewer diagnostics, Acceptance Runner, and AI reports.
+
+It does not define UI rendering of diagnostics, automatic repair algorithms, or commercial art quality metrics.
+
+## Basis Separation
+
+### Repository Facts
+
+- MVP AC requires package schema, asset reference, rights/provenance, texture/drawable/part, mesh, draw order, mask, parameter, keyform, deformer, runtime load test, and representative parameter evaluation.
+- `SC-MVP-005` requires script-only generated packages to fail or be classified as auxiliary fixtures when GUI authoring evidence is absent.
+
+### Prior Design Decisions
+
+- Validator report is an external boundary DTO with Zod as source of truth.
+- GUI operation log is required evidence; Playwright trace/screenshot/session metadata are supplemental.
+- Diagnostics vocabulary is shared by Editor warnings, Viewer diagnostics, Validator reports, AI diffs, and Acceptance Runner.
+
+### Assumptions
+
+- Editor warning profile is a subset or incremental profile of validator-core.
+- Acceptance Runner can be implemented as a validator profile plus evidence aggregation for MVP.
+
+## Contract Summary
+
+| Contract | Owner module | Consumers | Source of truth | Artifact |
+|----------|--------------|-----------|-----------------|----------|
+| Check registry | `validator-core` | all diagnostics consumers | table + zod ID format | registry |
+| Validation profiles | `validator-core` | editor/viewer/AI/acceptance | zod | profile DTO |
+| Validation report | `validator-core` | editor, viewer, AI, fixtures | zod | JSON report |
+| Repair candidate | `validator-core` + `operation-core` | AI, diagnostics UI | zod | candidate DTO |
+| Acceptance evidence classification | `validator-core` | MVP reviewer | zod + table | report section |
+
+## TypeScript / Zod Sketches
+
+## Check ID Naming
+
+Check IDs use lowercase dot-separated namespaces:
+
+```text
+pkg.schema.requiredFileMissing
+asset.psd.unsupportedFeature
+rights.provenanceMissing
+ref.drawableTextureMissing
+mesh.triangleIndexOutOfRange
+keyform.grid2dMissingKey
+deformer.cycle
+mask.sourceMissing
+runtime.loadBlocking
+evidence.guiOperationLogMissing
+```
+
+## Check Registry
+
+| Check ID | Phase | Severity default | Profile behavior | Related AC |
+|----------|-------|------------------|------------------|------------|
+| `pkg.schema.requiredFileMissing` | package_schema | blocking | all: fail | AC-MVP-013 |
+| `asset.psd.unsupportedFeature` | source_import | warning | strict: needs_review/fail by feature | AC-MVP-003 |
+| `rights.provenanceMissing` | rights | error | acceptance: fail | AC-MVP-002 |
+| `ref.drawableTextureMissing` | reference | error | acceptance: fail if visible drawable | AC-MVP-004 |
+| `mesh.triangleIndexOutOfRange` | mesh_semantic | blocking | all: fail | AC-MVP-005 |
+| `mesh.degenerateTriangle` | mesh_semantic | warning | strict: fail or needs_review | AC-MVP-005 |
+| `runtime.parameterClamped` | parameter_resolution | warning | strict: fail for invalid external input tests | AC-MVP-012 |
+| `keyform.missingEndpoint` | keyform_semantic | warning | strict: fail when target requires interpolation | AC-MVP-008 |
+| `keyform.grid2dMissingKey` | keyform_sampling | error | strict: fail | AC-PARAM-005 |
+| `keyform.grid2dDuplicateKey` | keyform_sampling | blocking | all: fail | AC-PARAM-005 |
+| `keyform.tooManyParametersForMvp` | keyform_semantic | warning | acceptance: needs_review | AC-MVP-010 |
+| `deformer.cycle` | deformer_semantic | blocking | all: fail | AC-MVP-009 |
+| `deformer.childOutsideWarpDomain` | deformer_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
+| `mask.sourceMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
+| `mask.opacityZeroSource` | mask_resolution | warning | strict: needs_review | AC-MVP-007 |
+| `runtime.loadBlocking` | runtime_load | blocking | all: fail | AC-MVP-012 |
+| `runtime.drawListEmpty` | runtime_load | blocking | acceptance: fail | AC-MVP-012 |
+| `ai.dryRunMutatedPackage` | ai_evidence | blocking | acceptance: fail | AC-MVP-014 |
+| `evidence.guiOperationLogMissing` | acceptance_evidence | blocking | acceptance: fail | AC-MVP-001 |
+| `evidence.playwrightSupplementMissing` | acceptance_evidence | info | acceptance: pass with note | SC-MVP-005 |
+
+## Validation Profiles
+
+| Profile | Purpose | Inputs | Blocking behavior |
+|---------|---------|--------|-------------------|
+| `editorIncremental` | fast authoring warnings while editing | dirty authoring graph, target IDs | warns; blocks only destructive invalid commits |
+| `viewer` | saved package load/inspect diagnostics | package + runtime snapshot | blocks non-loadable package |
+| `strict` | full package validation | package + representative runtime eval | fails on blocking/error |
+| `acceptance` | MVP scenario evidence | operation log, reports, snapshots, package, supplemental evidence | fails missing GUI evidence or blocking checks |
+| `aiDryRun` | AI proposed operation review | baseline/temp graph, diffs, report | blocks mutation without approval or target ambiguity |
+
+## Severity / Status
+
+```ts
+import { z } from "zod";
+import {
+  CheckStatusSchema,
+  SeveritySchema,
+  DiagnosticSchema,
+  ValidationReportIdSchema,
+  PackageIdSchema,
+  OperationIdSchema,
+  RuntimeSnapshotIdSchema,
+  RepairCandidateIdSchema,
+  ModelDiffSchema,
+  RuntimeDiffSchema,
+  ValidationDiffSchema,
+  ValidationProfileSchema,
+} from "./contracts";
+
+export const ValidationSummarySchema = z.object({
+  status: CheckStatusSchema,
+  highestSeverity: SeveritySchema,
+  counts: z.record(SeveritySchema, z.number().int().nonnegative()),
+});
+```
+
+Severity describes impact. Status describes outcome in a profile. They must remain separate.
+
+## Report Schema
+
+```ts
+export const ValidationCheckResultSchema = DiagnosticSchema.extend({
+  targetPath: z.string().optional(),
+  impact: z.string(),
+  repairCandidateIds: z.array(RepairCandidateIdSchema).default([]),
+  snapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
+  operationIds: z.array(OperationIdSchema).default([]),
+});
+
+export const RepairCandidateSchema = z.object({
+  schemaVersion: z.literal("repair-candidate-v1"),
+  candidateId: RepairCandidateIdSchema,
+  createdBy: z.enum(["validator", "ai", "human"]),
+  problemCheckIds: z.array(z.string()),
+  targetIds: z.array(z.string()),
+  rationale: z.string(),
+  operationDraft: z.object({
+    operationType: z.string(),
+    payload: z.object({}).passthrough(),
+  }),
+  expectedModelDiff: ModelDiffSchema.optional(),
+  expectedRuntimeDiff: RuntimeDiffSchema.optional(),
+  expectedValidationDiff: ValidationDiffSchema.optional(),
+  risk: z.enum(["low", "medium", "high", "unknown"]),
+  requiresUserApproval: z.literal(true),
+  provenance: z.object({
+    sourceReportId: ValidationReportIdSchema.optional(),
+    sourceOperationIds: z.array(OperationIdSchema).default([]),
+  }),
+  revalidationSteps: z.array(z.string()),
+});
+export type RepairCandidateDto = z.infer<typeof RepairCandidateSchema>;
+
+export const ValidationReportSchema = z.object({
+  schemaVersion: z.literal("validation-report-v1"),
+  reportId: ValidationReportIdSchema,
+  createdAt: z.string().datetime(),
+  packageId: PackageIdSchema,
+  packageRevision: z.number().int().nonnegative(),
+  packageHash: z.string().optional(),
+  validatorVersion: z.string(),
+  profile: ValidationProfileSchema,
+  relatedScenarios: z.array(z.string()).default([]),
+  summary: ValidationSummarySchema,
+  checks: z.array(ValidationCheckResultSchema),
+  repairCandidates: z.array(RepairCandidateSchema).default([]),
+  evidence: z.object({
+    operationLogPresent: z.boolean(),
+    operationLogPath: z.string().optional(),
+    runtimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
+    supplementalGuiEvidenceRefs: z.array(z.string()).default([]),
+  }),
+});
+export type ValidationReportDto = z.infer<typeof ValidationReportSchema>;
+```
+
+## Diagram Requirements
+
+The validation flow diagrams define phase order and profile-specific call paths. Report schemas and check registry tables remain the source of truth.
+
+## Validation Phase Flow
+
+```mermaid
+flowchart TB
+  schema[Schema validation] --> refs[Package reference validation]
+  refs --> semantic[Model semantic validation]
+  semantic --> runtimeLoad[Runtime load test]
+  runtimeLoad --> representative[Representative parameter evaluation]
+  representative --> evidence[GUI / AI evidence validation]
+  evidence --> report[ValidationReportDto]
+```
+
+## Profile-specific Report Flow
+
+```mermaid
+sequenceDiagram
+  participant Editor as editor-ui
+  participant Viewer as viewer-ui
+  participant Validator as validator-core
+  participant Runtime as runtime-core
+  participant AI as ai-interface
+
+  Editor->>Validator: validateAuthoringGraph(editorIncremental)
+  Validator-->>Editor: inline diagnostics
+  Viewer->>Validator: validatePackage(viewer)
+  Validator->>Runtime: load/evaluate summary
+  Validator-->>Viewer: viewer diagnostics
+  AI->>Validator: validate dry-run candidate(aiDryRun)
+  Validator->>Runtime: targeted/full snapshot
+  Validator-->>AI: report + repair candidates
+```
+
+## Editor Warning / Viewer Diagnostics / Acceptance Runner Relation
+
+| Consumer | Uses | Must include |
+|----------|------|--------------|
+| Editor warnings | `editorIncremental` checks | check ID, target ID, jump target, severity |
+| Viewer diagnostics | `viewer` profile | runtime load diagnostics, package references, snapshot ID |
+| AI-readable report | `strict` or `aiDryRun` | stable IDs, diff refs, repair candidates, provenance |
+| Acceptance Runner | `acceptance` profile | GUI operation log evidence, AC/scenario links, pass/fail status |
+
+## Traceability
+
+| Requirement | Contract element | Verification |
+|-------------|------------------|--------------|
+| AC-MVP-005, SC-MESH-006 | mesh checks | `invalid-mesh-triangle` expected report |
+| AC-MVP-007, SC-DRAW-005, SC-PART-004 | mask checks | `invalid-mask-reference` expected report |
+| AC-MVP-009, SC-DEF-006 | deformer checks | `invalid-deformer-cycle`, `parent-child-deformer-diagonal` |
+| AC-MVP-013, SC-MVP-004 | `ValidationReportDto` | all validation fixtures |
+| AC-MVP-014, SC-AGENT-005 | `RepairCandidateDto` | `ai-repair-dry-run` |
+| AC-MVP-001, SC-MVP-005 | `evidence.guiOperationLogMissing` | script-only fixture classification |
+
+## Verification and Fixtures
+
+| Fixture / Test | Purpose | Expected artifact |
+|----------------|---------|-------------------|
+| `minimal-valid-package` | no blocking diagnostics | pass validation report |
+| `psd-unsupported-layer` | unsupported PSD layer diagnostic | report with `asset.psd.unsupportedFeature` |
+| `invalid-missing-texture` | visible drawable missing texture | fail report |
+| `invalid-deformer-cycle` | deformer hierarchy cycle | blocking report |
+| `invalid-mask-reference` | missing mask source/target | fail report |
+| `script-generated-minimal` | viewer-loadable but no GUI evidence | acceptance fail / auxiliary fixture status |
+| `ai-repair-dry-run` | repair candidate and validation diff | report + candidate |
+
+## Open Questions
+
+| Question | Impact | Status |
+|----------|--------|--------|
+| Exact warning-to-fail thresholds for commercial quality checks | can-defer | MVP focuses structural checks |
+| Whether `mask.opacityZeroSource` is warning or error in strict profile | can-defer | default warning; acceptance may need review |
+| Whether Acceptance Runner is separate package | can-defer | report/evidence contract stable either way |
+
+## Handoff Checklist
+
+- [x] Public API / DTO が示されている
+- [x] Source of truth が契約ごとに明記されている
+- [x] 依存方向、処理順序、状態遷移が必要な箇所に Mermaid 図がある
+- [x] AC / scenario traceability がある
+- [x] Fixture または expected output がある
+- [x] 未決事項が implementation-blocking / can-defer に分かれている
+
+## Review Requirements
+
+Review this file for:
+
+- check ID coverage against MVP AC and scenarios,
+- severity/status separation,
+- GUI operation log evidence as required MVP evidence,
+- repair candidate consistency with operation-core and AI contracts.

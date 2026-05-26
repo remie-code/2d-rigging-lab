@@ -1,0 +1,495 @@
+# Operation Contracts
+
+> 状態: Draft / Review ready
+> 出力先: discussion/design/module-contracts/operation-contracts.md
+> 主な読者: operation-core implementer / editor-ui implementer / ai-interface implementer
+> 主な所有module: `operation-core`
+> Source of truth: zod
+> 根拠: [module-boundaries.md](module-boundaries.md), [package-file-format-contract.md](package-file-format-contract.md), [../mvp-authoring-runtime/00-mvp-vertical-slice-architecture.md](../mvp-authoring-runtime/00-mvp-vertical-slice-architecture.md), [../mvp-authoring-runtime/05-ai-agent-interface-design.md](../mvp-authoring-runtime/05-ai-agent-interface-design.md)
+
+## Purpose and Scope
+
+This document fixes the mutating operation contract shared by GUI, AI structured commands, migration, import, and validator repair proposals.
+
+It covers:
+
+- operation registry,
+- common request/response envelope,
+- preconditions,
+- dry-run vs commit behavior,
+- operation log entry,
+- undo/redo policy,
+- model/runtime/validation diff outputs,
+- required PSD and split PNG import operations,
+- keyform, deformer, mask, draw order, and rights operations.
+
+It does not implement mutation algorithms or UI event handlers.
+
+## Basis Separation
+
+### Repository Facts
+
+- MVP requires GUI authoring operations to be evidence via operation log.
+- AI dry-run must not overwrite package files before approval.
+- Validator repair candidates must be proposals until explicitly committed.
+
+### Prior Design Decisions
+
+- GUI and AI edits must pass through operation-core.
+- Operation log is the required GUI authoring evidence.
+- Operation requests/responses/log entries are external boundary DTOs, so Zod is the source of truth.
+
+### Assumptions
+
+- Operation-core works against an `AuthoringGraph` session and returns diffs plus generated report/snapshot references.
+- Drag gestures may be compressed into a single committed operation while raw samples remain supplemental GUI evidence.
+
+## Contract Summary
+
+| Contract | Owner module | Consumers | Source of truth | Artifact |
+|----------|--------------|-----------|-----------------|----------|
+| Operation request/response | `operation-core` | editor, AI, migration | zod | DTO |
+| Operation log entry | `operation-core` | validator, AI, acceptance runner | zod | JSONL entry |
+| Operation registry | `operation-core` | editor, AI, tests | zod + table | operation schemas |
+| Dry-run/commit lifecycle | `operation-core` | AI, GUI preview, validator | zod + Mermaid | state/sequence |
+| Undo/redo policy | `operation-core` | editor UI | typescript internal, log DTO external | API |
+
+## Operation Registry
+
+| Operation | Payload | Preconditions | Produces | Related AC / scenario |
+|-----------|---------|---------------|----------|-----------------------|
+| `importPsdSourceAsset` | PSD file ref, import profile, rights/provenance | package open, source file readable | source asset diff, drawable/part/texture candidates, diagnostics | AC-MVP-003, SC-IN-002 |
+| `importSplitPngSourceAsset` | split PNG manifest, placement metadata | package open, files readable | source asset diff, drawable candidates, fallback warning | AC-MVP-003 |
+| `createDrawable` | source layer/texture/part refs | source asset exists | drawable + mesh placeholder diff | AC-MVP-004 |
+| `generateMesh` | drawable ID, method, density hints | drawable/texture exists | mesh diff, validation diagnostics | AC-MVP-005 |
+| `moveMeshVertex` | mesh ID, vertex IDs, delta or absolute positions, keyform scope | mesh exists, vertex IDs exist | model diff, runtime diff | SC-AGENT-002 |
+| `createParameter` | display name, range, standard alias | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
+| `addKeyform` | target, parameter, key value, target state | parameter and target exist | keyform diff, runtime diff | SC-PARAM-002 |
+| `addKeyformGrid2d` | target, two parameters, grid coordinates, key states | exactly two parameters; target exists | `parameter-grid-2d-v1` keyform diff | SC-PARAM-004 |
+| `createRotation2dDeformer` | part, children, pivot/rest transform | children exist and not cyclic | deformer diff | SC-DEF-002 |
+| `createWarpLattice2dDeformer` | part, children, domain, rows/cols | rows/cols valid, children exist | deformer diff | SC-DEF-001 |
+| `bindDeformerChild` | parent deformer, child drawable/deformer | no cycle | hierarchy diff | SC-DEF-003 |
+| `setMaskRelation` | mask sources, targets | drawable refs exist | mask diff, validation diagnostics | AC-MVP-007 |
+| `setDrawOrder` | drawable order changes | drawable refs exist | draw order diff | AC-MVP-006 |
+| `setRuntimeVisibility` | drawable/part visibility | target exists | drawable/part diff | AC-MVP-006 |
+| `setRightsMetadata` | asset/rights/provenance fields | asset exists | rights/provenance diff | AC-MVP-002 |
+
+## TypeScript / Zod Sketches
+
+```ts
+import { z } from "zod";
+import {
+  ActorSchema,
+  DiagnosticSchema,
+  ModelDiffSchema,
+  RuntimeDiffSchema,
+  ValidationDiffSchema,
+  OperationIdSchema,
+  TransactionIdSchema,
+  RuntimeSnapshotIdSchema,
+  ValidationReportIdSchema,
+  SourceAssetIdSchema,
+  DrawableIdSchema,
+  MeshIdSchema,
+  VertexIdSchema,
+  ParameterIdSchema,
+  DeformerIdSchema,
+  PartIdSchema,
+  MaskRelationIdSchema,
+  ProvenanceIdSchema,
+  SurfaceSchema,
+  TargetRefSchema,
+  Vec2Schema,
+  RectSchema,
+} from "./contracts";
+
+export const OperationTypeSchema = z.enum([
+  "importPsdSourceAsset",
+  "importSplitPngSourceAsset",
+  "createDrawable",
+  "generateMesh",
+  "moveMeshVertex",
+  "createParameter",
+  "addKeyform",
+  "addKeyformGrid2d",
+  "createRotation2dDeformer",
+  "createWarpLattice2dDeformer",
+  "bindDeformerChild",
+  "setMaskRelation",
+  "setDrawOrder",
+  "setRuntimeVisibility",
+  "setRightsMetadata",
+]);
+export type OperationType = z.infer<typeof OperationTypeSchema>;
+
+export const ImportPsdSourceAssetPayloadSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema.optional(),
+  fileRef: z.object({
+    packageRelativePath: z.string(),
+    contentHash: z.string().optional(),
+  }),
+  importProfile: z.literal("live2d-psd-profile-v1"),
+  requestedLayerRoles: z.record(z.string(), z.enum(["editableLayer", "guideImage", "referenceOnly"])).default({}),
+  rights: z.object({
+    creator: z.string(),
+    license: z.string(),
+    redistributionAllowed: z.boolean(),
+    aiUsed: z.boolean(),
+  }),
+});
+
+export const StatePatchValueSchema = z.union([
+  z.number().finite(),
+  z.boolean(),
+  z.string(),
+  Vec2Schema,
+  RectSchema,
+  z.array(Vec2Schema),
+  z.record(z.string(), z.number().finite()),
+]);
+
+export const AddKeyformGrid2dPayloadSchema = z.object({
+  target: TargetRefSchema,
+  targetProperty: z.string(),
+  parameterX: ParameterIdSchema,
+  parameterY: ParameterIdSchema,
+  evaluator: z.literal("parameter-grid-2d-v1"),
+  interpolation: z.literal("bilinear-grid-v1"),
+  clampPolicy: z.literal("clamp-to-parameter-range"),
+  keys: z.array(z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    statePatch: StatePatchValueSchema,
+  })).min(1),
+});
+
+export const MoveMeshVertexPayloadSchema = z.object({
+  meshId: MeshIdSchema,
+  vertexDeltas: z.array(z.object({
+    vertexId: VertexIdSchema,
+    delta: Vec2Schema,
+  })).min(1),
+  keyformScope: z.object({
+    parameterId: ParameterIdSchema,
+    keyValue: z.number().finite(),
+  }).optional(),
+  intent: z.string().max(500),
+});
+
+export const SplitPngSourceAssetPayloadSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema.optional(),
+  manifestPath: z.string(),
+  importProfile: z.literal("split-png-fallback-v1"),
+  defaultPartId: PartIdSchema.optional(),
+  placementPolicy: z.enum(["use-metadata", "origin-with-warning"]),
+});
+
+export const CreateDrawablePayloadSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema,
+  sourceLayerId: z.string().optional(),
+  textureId: z.string().optional(),
+  partId: PartIdSchema,
+  displayName: z.string(),
+  initialBounds: RectSchema.optional(),
+});
+
+export const GenerateMeshPayloadSchema = z.object({
+  drawableId: DrawableIdSchema,
+  method: z.enum(["manual-empty", "auto-grid-v1", "auto-outline-v1"]),
+  densityHint: z.enum(["low", "medium", "high"]).optional(),
+});
+
+export const CreateParameterPayloadSchema = z.object({
+  displayName: z.string(),
+  standardAlias: z.string().optional(),
+  min: z.number().finite(),
+  max: z.number().finite(),
+  default: z.number().finite(),
+  recommendedUiStep: z.number().positive(),
+});
+
+export const KeyformStatePatchSchema = z.object({
+  propertyPath: z.string(),
+  value: StatePatchValueSchema,
+  valueSchemaHint: z.string().optional(),
+});
+
+export const AddKeyformPayloadSchema = z.object({
+  target: TargetRefSchema,
+  targetProperty: z.string(),
+  parameterId: ParameterIdSchema,
+  keyValue: z.number().finite(),
+  interpolation: z.literal("linear-1d-v1"),
+  statePatch: KeyformStatePatchSchema,
+});
+
+export const CreateRotation2dDeformerPayloadSchema = z.object({
+  partId: PartIdSchema,
+  displayName: z.string(),
+  childDrawableIds: z.array(DrawableIdSchema).default([]),
+  childDeformerIds: z.array(DeformerIdSchema).default([]),
+  pivot: Vec2Schema,
+  restAngleDegrees: z.number().finite(),
+});
+
+export const CreateWarpLattice2dDeformerPayloadSchema = z.object({
+  partId: PartIdSchema,
+  displayName: z.string(),
+  childDrawableIds: z.array(DrawableIdSchema).default([]),
+  childDeformerIds: z.array(DeformerIdSchema).default([]),
+  domainBounds: RectSchema,
+  latticeColumns: z.number().int().min(2),
+  latticeRows: z.number().int().min(2),
+  interpolationMethod: z.literal("bilinear-grid-v1"),
+});
+
+export const BindDeformerChildPayloadSchema = z.object({
+  parentDeformerId: DeformerIdSchema,
+  child: TargetRefSchema,
+});
+
+export const SetMaskRelationPayloadSchema = z.object({
+  maskRelationId: MaskRelationIdSchema.optional(),
+  maskDrawableIds: z.array(DrawableIdSchema).min(1),
+  targetDrawableIds: z.array(DrawableIdSchema).min(1),
+  enabled: z.boolean(),
+});
+
+export const SetDrawOrderPayloadSchema = z.object({
+  entries: z.array(z.object({
+    drawableId: DrawableIdSchema,
+    baseDrawOrder: z.number().int(),
+  })).min(1),
+});
+
+export const SetRuntimeVisibilityPayloadSchema = z.object({
+  target: TargetRefSchema,
+  runtimeVisibility: z.boolean(),
+});
+
+export const SetRightsMetadataPayloadSchema = z.object({
+  assetId: z.string(),
+  rightsStatus: z.enum(["cleared", "needs_review", "blocked"]),
+  license: z.string(),
+  redistributionAllowed: z.boolean(),
+  provenanceId: ProvenanceIdSchema.optional(),
+});
+
+export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
+  z.object({ operationType: z.literal("importPsdSourceAsset"), payload: ImportPsdSourceAssetPayloadSchema }),
+  z.object({ operationType: z.literal("importSplitPngSourceAsset"), payload: SplitPngSourceAssetPayloadSchema }),
+  z.object({ operationType: z.literal("createDrawable"), payload: CreateDrawablePayloadSchema }),
+  z.object({ operationType: z.literal("generateMesh"), payload: GenerateMeshPayloadSchema }),
+  z.object({ operationType: z.literal("moveMeshVertex"), payload: MoveMeshVertexPayloadSchema }),
+  z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),
+  z.object({ operationType: z.literal("addKeyform"), payload: AddKeyformPayloadSchema }),
+  z.object({ operationType: z.literal("addKeyformGrid2d"), payload: AddKeyformGrid2dPayloadSchema }),
+  z.object({ operationType: z.literal("createRotation2dDeformer"), payload: CreateRotation2dDeformerPayloadSchema }),
+  z.object({ operationType: z.literal("createWarpLattice2dDeformer"), payload: CreateWarpLattice2dDeformerPayloadSchema }),
+  z.object({ operationType: z.literal("bindDeformerChild"), payload: BindDeformerChildPayloadSchema }),
+  z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),
+  z.object({ operationType: z.literal("setDrawOrder"), payload: SetDrawOrderPayloadSchema }),
+  z.object({ operationType: z.literal("setRuntimeVisibility"), payload: SetRuntimeVisibilityPayloadSchema }),
+  z.object({ operationType: z.literal("setRightsMetadata"), payload: SetRightsMetadataPayloadSchema }),
+]);
+export type OperationPayloadDto = z.infer<typeof OperationPayloadSchema>;
+
+export const OperationPreconditionResultSchema = z.object({
+  ok: z.boolean(),
+  diagnostics: z.array(DiagnosticSchema),
+  checkedTargetRefs: z.array(TargetRefSchema).default([]),
+});
+
+export const OperationRequestSchema = z.object({
+  schemaVersion: z.literal("operation-request-v1"),
+  operationId: OperationIdSchema.optional(),
+  actor: ActorSchema,
+  surface: SurfaceSchema,
+  dryRun: z.boolean(),
+  basePackageRevision: z.number().int().nonnegative(),
+  idempotencyKey: z.string().optional(),
+  trace: z.object({
+    relatedAC: z.array(z.string()).default([]),
+    relatedScenarios: z.array(z.string()).default([]),
+  }).default({ relatedAC: [], relatedScenarios: [] }),
+}).and(OperationPayloadSchema);
+export type OperationRequestDto = z.infer<typeof OperationRequestSchema>;
+
+export const OperationResultSchema = z.object({
+  schemaVersion: z.literal("operation-result-v1"),
+  operationId: OperationIdSchema,
+  status: z.enum(["accepted", "rejected", "dry_run", "committed", "rolled_back"]),
+  precondition: z.object({
+    ok: z.boolean(),
+    diagnostics: z.array(DiagnosticSchema),
+  }),
+  modelDiff: ModelDiffSchema.optional(),
+  runtimeDiff: RuntimeDiffSchema.optional(),
+  validationDiff: ValidationDiffSchema.optional(),
+  diagnostics: z.array(DiagnosticSchema).default([]),
+  generatedRuntimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
+  generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
+  reversible: z.boolean(),
+});
+export type OperationResultDto = z.infer<typeof OperationResultSchema>;
+
+export const OperationLogEntrySchema = z.object({
+  schemaVersion: z.literal("operation-log-entry-v1"),
+  operationId: OperationIdSchema,
+  transactionId: TransactionIdSchema,
+  timestamp: z.string().datetime(),
+  actor: ActorSchema,
+  surface: SurfaceSchema,
+  operationType: OperationTypeSchema,
+  targetIds: z.array(z.string()),
+  precondition: OperationPreconditionResultSchema,
+  payload: OperationPayloadSchema,
+  result: OperationResultSchema,
+  provenanceId: ProvenanceIdSchema,
+  validationReportIds: z.array(ValidationReportIdSchema).default([]),
+  runtimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
+  reversible: z.boolean(),
+});
+export type OperationLogEntryDto = z.infer<typeof OperationLogEntrySchema>;
+
+export interface OperationCore {
+  dryRunOperation(request: OperationRequestDto): Promise<OperationResultDto>;
+  commitOperation(request: OperationRequestDto): Promise<OperationResultDto>;
+  undoOperation(operationId: string): Promise<OperationResultDto>;
+  redoOperation(operationId: string): Promise<OperationResultDto>;
+}
+```
+
+## Diagram Requirements
+
+The lifecycle and sequence diagrams define dry-run, approval, commit, and evidence ordering. The Zod schemas above are the DTO source of truth.
+
+## Dry-run and Commit Behavior
+
+```mermaid
+stateDiagram-v2
+  [*] --> Received
+  Received --> PreconditionFailed: invalid request or missing target
+  Received --> DryRunApplying: dryRun=true and preconditions ok
+  Received --> CommitApplying: dryRun=false and approval/preconditions ok
+  DryRunApplying --> DiffGenerated
+  DiffGenerated --> DryRunReturned
+  CommitApplying --> OperationLogged
+  OperationLogged --> RevisionUpdated
+  RevisionUpdated --> CommitReturned
+  PreconditionFailed --> Rejected
+  Rejected --> [*]
+  DryRunReturned --> [*]
+  CommitReturned --> [*]
+```
+
+Dry-run must evaluate the temporary revision and return model/runtime/validation diffs without writing package files or appending a committed log entry. Commit must append `OperationLogEntryDto`, update `packageRevision`, and produce revalidation/snapshot references when the profile requires them.
+
+```mermaid
+sequenceDiagram
+  participant Caller as editor-ui / ai-interface
+  participant Operation as operation-core
+  participant Authoring as authoring-core
+  participant Runtime as runtime-core
+  participant Validator as validator-core
+
+  Caller->>Operation: OperationRequest(dryRun)
+  Operation->>Authoring: clone/apply temporary mutation
+  Operation->>Runtime: evaluate temporary graph
+  Operation->>Validator: validate temporary result
+  Operation-->>Caller: OperationResult with diffs
+  Caller->>Operation: approved commit request
+  Operation->>Authoring: apply mutation
+  Operation->>Runtime: evaluate committed graph
+  Operation->>Validator: validate committed result
+  Operation-->>Caller: committed OperationResult + log entry refs
+```
+
+## Operation Log Entry
+
+`operations/log.jsonl` is the required GUI authoring evidence for MVP candidates.
+
+Minimum evidence fields:
+
+- `operationId`
+- `transactionId`
+- `timestamp`
+- `actor`
+- `surface`
+- `operationType`
+- `targetIds`
+- `payload`
+- `result`
+- `provenanceId`
+- `validationReportIds`
+- `runtimeSnapshotIds`
+- `reversible`
+
+GUI supplemental evidence may point to the operation ID, but operation log remains the contract source of truth.
+
+## Undo / Redo Policy
+
+| Operation class | Reversible | Rule |
+|-----------------|------------|------|
+| pure model edits | yes | inverse operation or snapshot checkpoint allowed |
+| import operations | yes if source asset retained | undo removes created package objects but does not delete source evidence unless explicit cleanup |
+| rights metadata | yes | previous metadata must be restored |
+| migration | conditional | must produce migration report and may require checkpoint |
+| validator repair commit | yes if operation payload supports inverse | never auto-apply without approval |
+
+Undo/redo creates new operation log entries or transaction records. It must not erase prior log evidence.
+
+## Diff Outputs
+
+| Diff | Required for dry-run | Required for commit | Purpose |
+|------|----------------------|---------------------|---------|
+| `modelDiff` | yes | yes | stable ID model changes |
+| `runtimeDiff` | yes for runtime-affecting operations | yes for runtime-affecting operations | preview/viewer/AI comparison |
+| `validationDiff` | yes for AI/repair/acceptance profiles | yes for acceptance profiles | detect new/resolved diagnostics |
+
+## Traceability
+
+| Requirement | Contract element | Verification |
+|-------------|------------------|--------------|
+| AC-MVP-001, SC-MVP-005 | `OperationLogEntryDto.surface = "gui"` | `tutorial-like-authoring` operation log |
+| AC-MVP-003, SC-IN-002, SC-IN-003 | `importPsdSourceAsset` | `psd-import-happy-path`, `psd-unsupported-layer` |
+| AC-MVP-008, SC-PARAM-002 | `createParameter`, `addKeyform` | `tutorial-like-authoring` |
+| AC-PARAM-005, SC-PARAM-004 | `addKeyformGrid2d` | `angle-xy-grid-2d` |
+| AC-MVP-009, SC-DEF-001, SC-DEF-003 | deformer operations | `parent-child-deformer-diagonal` |
+| AC-MVP-014, SC-AGENT-002 | dry-run operation result with diffs | `ai-repair-dry-run` |
+
+## Verification and Fixtures
+
+| Fixture / Test | Purpose | Expected artifact |
+|----------------|---------|-------------------|
+| `psd-import-happy-path` | `importPsdSourceAsset` creates source/drawable/part/texture candidates | operation result + model diff |
+| `angle-xy-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
+| `out-of-range-parameter-dry-run` | dry-run clamps/warns without committing | operation result + validation diff |
+| `ai-repair-dry-run` | AI repair candidate returns diffs and no package mutation | dry-run result, repair candidate |
+| `tutorial-like-authoring` | GUI operation evidence covers MVP authoring steps | JSONL operation log |
+
+## Open Questions
+
+| Question | Impact | Status |
+|----------|--------|--------|
+| Raw drag sample storage format | can-defer | committed operation is source of truth; raw samples are supplemental GUI evidence |
+| Exact undo implementation strategy | can-defer | reversible contract fixed; implementation can choose inverse op or checkpoint |
+| Whether import operations emit all drawable candidates or require explicit `createDrawable` per layer | can-defer | result must expose candidates and provenance either way |
+
+## Handoff Checklist
+
+- [x] Public API / DTO が示されている
+- [x] Source of truth が契約ごとに明記されている
+- [x] 依存方向、処理順序、状態遷移が必要な箇所に Mermaid 図がある
+- [x] AC / scenario traceability がある
+- [x] Fixture または expected output がある
+- [x] 未決事項が implementation-blocking / can-defer に分かれている
+
+## Review Requirements
+
+Review this file for:
+
+- operation-core as the only mutation boundary,
+- dry-run not mutating package state,
+- operation log sufficiency as GUI authoring evidence,
+- payload coverage for PSD import, `parameter-grid-2d-v1`, and parent/child deformers.
