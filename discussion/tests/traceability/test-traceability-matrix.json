@@ -1,0 +1,2183 @@
+{
+  "schemaVersion": "test-traceability-matrix-v1",
+  "status": "p0-design-draft",
+  "scope": {
+    "track": "Private 2D Rigging Lab / Prototype",
+    "writesImplementationCode": false,
+    "artifactPathStatus": "planned",
+    "oraclePolicy": "Use project-defined contracts, operation logs, snapshots, diffs, validator reports, GUI semantic evidence, rights/provenance metadata, and demo-safe preflight only. Do not use external proprietary format, SDK/Core, viewer matching, physics compatibility, or existing third-party model oracles."
+  },
+  "sourcePaths": [
+    "discussion/tests/test_basis.md",
+    "discussion/_conventions.md",
+    "discussion/concept/modified_concept.md",
+    "discussion/acceptance-criteria/03_MVP_Acceptance_Criteria.md",
+    "discussion/acceptance-criteria/02_DomainAcceptanceCriteria/",
+    "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+    "discussion/scenarios/02_DomainAcceptanceCriteria/",
+    "discussion/design/module-contracts/"
+  ],
+  "activeScenarioPolicy": {
+    "included": [
+      "Current or Accepted Private Prototype scenario files",
+      "Minimum Open Dynamics v1 current MVP scenario",
+      "Current documentation baseline scenarios",
+      "Accepted demo/proposal hygiene track scenarios",
+      "SC-SAMPLE-001 private rights-clean fixture scenario"
+    ],
+    "excludedScenarioIds": [
+      "SC-ANIM-001",
+      "SC-ANIM-002",
+      "SC-SDK-001",
+      "SC-VTUBER-001",
+      "SC-API-001",
+      "SC-SAMPLE-002"
+    ],
+    "excludedReason": "Optional or Future-only scenarios are not P0 gates unless the source file explicitly marks a current private fixture or hygiene boundary."
+  },
+  "fieldEnums": {
+    "automationLevel": [
+      "auto",
+      "hybrid",
+      "manual"
+    ],
+    "gate": [
+      "mvp-blocking",
+      "warning",
+      "optional"
+    ]
+  },
+  "tests": [
+    {
+      "testId": "TC-GUI-AUTHORING-001",
+      "title": "GUI authoring entrance evidence",
+      "mvpAcIds": [
+        "AC-MVP-001",
+        "AC-MVP-010",
+        "AC-MVP-011"
+      ],
+      "scenarioIds": [
+        "SC-MVP-001",
+        "SC-MVP-002",
+        "SC-WF-001"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "createProject",
+        "importPsdSourceAsset",
+        "createDrawable",
+        "generateMesh",
+        "createParameter",
+        "addKeyform",
+        "commitOperation",
+        "savePackage"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-GUI-AUTHORING-001/gui-evidence.json",
+        "discussion/tests/evidence/TC-GUI-AUTHORING-001/operation-log.jsonl",
+        "discussion/tests/evidence/TC-GUI-AUTHORING-001/validation-report.json"
+      ],
+      "oracle": "GUI semantic evidence and committed operation log prove the package was authored through the private GUI workflow.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "editor-ui",
+      "supportingModules": [
+        "operation-core",
+        "validator-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "gui-authoring-surface",
+        "operation-log-entry",
+        "acceptance-evidence"
+      ]
+    },
+    {
+      "testId": "TC-IN-PSD-IMPORT-001",
+      "title": "Layered character import and provenance",
+      "mvpAcIds": [
+        "AC-MVP-002",
+        "AC-MVP-003",
+        "AC-MVP-004"
+      ],
+      "scenarioIds": [
+        "SC-MVP-001",
+        "SC-IN-001"
+      ],
+      "fixture": "psd-import-happy-path",
+      "operationFlow": [
+        "importPsdSourceAsset",
+        "mapLayersToParts",
+        "createDrawable",
+        "linkTexture",
+        "writeProvenance"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-IN-PSD-IMPORT-001/source-manifest.json",
+        "discussion/tests/evidence/TC-IN-PSD-IMPORT-001/model-diff.json",
+        "discussion/tests/evidence/TC-IN-PSD-IMPORT-001/validation-report.json"
+      ],
+      "oracle": "layered-character-psd-profile-v1, package DTO schemas, and rights/provenance checks.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "package-format",
+      "supportingModules": [
+        "operation-core",
+        "editor-ui",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "package-directory-layout",
+        "source-manifest",
+        "provenance-rights-dtos"
+      ]
+    },
+    {
+      "testId": "TC-IN-RIGHTS-MISSING-001",
+      "title": "Missing rights and provenance rejection",
+      "mvpAcIds": [
+        "AC-MVP-002",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-IN-002"
+      ],
+      "fixture": "rights-provenance-missing",
+      "operationFlow": [
+        "importSourceAsset",
+        "validatePackage",
+        "classifyRightsStatus"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-IN-RIGHTS-MISSING-001/validation-report.json",
+        "discussion/tests/evidence/TC-IN-RIGHTS-MISSING-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator must emit rights.provenanceMissing or equivalent blocking rights/provenance diagnostic.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "validation-report",
+        "check-registry",
+        "provenance-rights-dtos"
+      ]
+    },
+    {
+      "testId": "TC-IN-ROUNDTRIP-001",
+      "title": "Project-defined package round trip",
+      "mvpAcIds": [
+        "AC-MVP-011",
+        "AC-MVP-012",
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-MVP-003",
+        "SC-IN-003",
+        "SC-EXPORT-001",
+        "SC-EXPORT-002",
+        "SC-FORMAT-001",
+        "SC-FORMAT-002"
+      ],
+      "fixture": "minimal-valid-package",
+      "operationFlow": [
+        "readPackage",
+        "normalizePackage",
+        "writePackage",
+        "reloadPackage",
+        "evaluateRuntimeFrame",
+        "compareRoundTrip"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-IN-ROUNDTRIP-001/package-roundtrip-report.json",
+        "discussion/tests/evidence/TC-IN-ROUNDTRIP-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-IN-ROUNDTRIP-001/package-diff.json"
+      ],
+      "oracle": "Project-defined package layout, stable IDs, package hash, and runtime snapshot equivalence.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "package-format",
+      "supportingModules": [
+        "runtime-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "package-parse-load-write",
+        "package-versioning",
+        "runtime-snapshot-dto"
+      ]
+    },
+    {
+      "testId": "TC-IN-UNSUPPORTED-BOUNDARY-001",
+      "title": "Unsupported input boundary",
+      "mvpAcIds": [
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-MVP-006",
+        "SC-IN-004"
+      ],
+      "fixture": "unsupported-input-boundary",
+      "operationFlow": [
+        "attemptUnsupportedImport",
+        "validatePackage",
+        "assertNoLoadInspectConvertPath"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-IN-UNSUPPORTED-BOUNDARY-001/unsupported-input-report.json",
+        "discussion/tests/evidence/TC-IN-UNSUPPORTED-BOUNDARY-001/nondependency-scan.json"
+      ],
+      "oracle": "Concept and MVP AC require project-defined inputs only; unsupported proprietary/runtime paths must not become load, inspect, convert, or migration oracles.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "input-boundary",
+        "nondependency-guardrail",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-DRAWABLE-PART-TEXTURE-001",
+      "title": "Drawable part texture references",
+      "mvpAcIds": [
+        "AC-MVP-004"
+      ],
+      "scenarioIds": [
+        "SC-DRAW-001",
+        "SC-PART-001"
+      ],
+      "fixture": "minimal-valid-package",
+      "operationFlow": [
+        "createPart",
+        "createDrawable",
+        "linkTexture",
+        "assignDrawableToPart",
+        "validatePackage"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DRAWABLE-PART-TEXTURE-001/model-diff.json",
+        "discussion/tests/evidence/TC-DRAWABLE-PART-TEXTURE-001/validation-report.json"
+      ],
+      "oracle": "Package graph, drawable, texture, and part references resolve through stable IDs.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "authoring-core",
+      "supportingModules": [
+        "package-format",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "authoring-graph",
+        "drawable-dto",
+        "cross-file-reference-rules"
+      ]
+    },
+    {
+      "testId": "TC-MESH-EDIT-001",
+      "title": "Mesh edit changes runtime state",
+      "mvpAcIds": [
+        "AC-MVP-005"
+      ],
+      "scenarioIds": [
+        "SC-MESH-001"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "generateMesh",
+        "moveMeshVertex",
+        "commitOperation",
+        "evaluateRuntimeFrame"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-MESH-EDIT-001/operation-log.jsonl",
+        "discussion/tests/evidence/TC-MESH-EDIT-001/runtime-diff.json",
+        "discussion/tests/evidence/TC-MESH-EDIT-001/runtime-snapshot.json"
+      ],
+      "oracle": "Mesh DTO and runtime vertex hash change under declared epsilon without blocking diagnostics.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "runtime-core",
+        "editor-ui"
+      ],
+      "contractSurfaces": [
+        "operation-catalog",
+        "runtime-diff-dto",
+        "mesh-dto"
+      ]
+    },
+    {
+      "testId": "TC-MESH-INVALID-001",
+      "title": "Invalid mesh diagnostics",
+      "mvpAcIds": [
+        "AC-MVP-005",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-MESH-002"
+      ],
+      "fixture": "invalid-mesh-triangle",
+      "operationFlow": [
+        "loadFixture",
+        "validatePackage",
+        "assertMeshDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-MESH-INVALID-001/validation-report.json",
+        "discussion/tests/evidence/TC-MESH-INVALID-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator must report triangle index or degenerate triangle diagnostics against mesh targets.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "check-registry",
+        "validation-report",
+        "mesh-validation"
+      ]
+    },
+    {
+      "testId": "TC-COMPOSITION-MASK-DRAWORDER-001",
+      "title": "Composition mask and draw order",
+      "mvpAcIds": [
+        "AC-MVP-006",
+        "AC-MVP-007"
+      ],
+      "scenarioIds": [
+        "SC-DRAW-002",
+        "SC-PART-002",
+        "SC-DEF-003"
+      ],
+      "fixture": "invalid-mask-reference",
+      "operationFlow": [
+        "setDrawOrder",
+        "setRuntimeVisibility",
+        "setMaskRelation",
+        "evaluateRuntimeFrame",
+        "validatePackage"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-COMPOSITION-MASK-DRAWORDER-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-COMPOSITION-MASK-DRAWORDER-001/validation-report.json"
+      ],
+      "oracle": "Runtime snapshot and mask diagnostics distinguish editor-only state from runtime-visible composition state.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "runtime-snapshot-dto",
+        "mask-reference-rules",
+        "draw-order-dto"
+      ]
+    },
+    {
+      "testId": "TC-PARAM-PRESET-001",
+      "title": "Parameter range alias and semantic role",
+      "mvpAcIds": [
+        "AC-MVP-008"
+      ],
+      "scenarioIds": [
+        "SC-PARAM-001",
+        "SC-PARAM-006"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "createParameter",
+        "setParameterRange",
+        "setProjectPresetAlias",
+        "inspectModel"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-PARAM-PRESET-001/operation-log.jsonl",
+        "discussion/tests/evidence/TC-PARAM-PRESET-001/model-inspection.json"
+      ],
+      "oracle": "Parameter DTO preserves range, default, current value, semantic role, and project preset alias.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "package-format",
+        "ai-interface"
+      ],
+      "contractSurfaces": [
+        "parameter-dto",
+        "operation-request-response",
+        "inspect-model-command"
+      ]
+    },
+    {
+      "testId": "TC-KEYFORM-INTERPOLATION-001",
+      "title": "Keyform interpolation sequence",
+      "mvpAcIds": [
+        "AC-MVP-008",
+        "AC-MVP-010"
+      ],
+      "scenarioIds": [
+        "SC-PARAM-002",
+        "SC-PARAM-005"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "addKeyform",
+        "editKeyformState",
+        "evaluateRuntimeFrameAtValues",
+        "compareRuntimeSnapshots"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-KEYFORM-INTERPOLATION-001/runtime-snapshot-sequence.json",
+        "discussion/tests/evidence/TC-KEYFORM-INTERPOLATION-001/runtime-diff.json"
+      ],
+      "oracle": "Runtime keyform interpolation and multi-parameter effective state match package semantics within epsilon.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "operation-core"
+      ],
+      "contractSurfaces": [
+        "keyform-semantics",
+        "runtime-snapshot-dto",
+        "runtime-diff-dto"
+      ]
+    },
+    {
+      "testId": "TC-PARAM-GRID-2D-001",
+      "title": "Manual two-axis face grid",
+      "mvpAcIds": [
+        "AC-MVP-010",
+        "AC-MVP-012"
+      ],
+      "scenarioIds": [
+        "SC-PARAM-003",
+        "SC-PARAM-004",
+        "SC-FACE-003"
+      ],
+      "fixture": "manual-face-grid-2d",
+      "operationFlow": [
+        "addKeyformGrid2d",
+        "evaluateGridCorners",
+        "evaluateGridDiagonal",
+        "compareVertexHashes"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-PARAM-GRID-2D-001/runtime-snapshot-sequence.json",
+        "discussion/tests/evidence/TC-PARAM-GRID-2D-001/validation-report.json"
+      ],
+      "oracle": "parameter-grid-2d-v1 evaluator and declared epsilon produce deterministic manual face grid snapshots.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "parameter-grid-2d-v1",
+        "runtime-snapshot-sequence",
+        "epsilon-policy"
+      ]
+    },
+    {
+      "testId": "TC-KEYFORM-INVALID-001",
+      "title": "Invalid keyform diagnostics",
+      "mvpAcIds": [
+        "AC-MVP-008",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-PARAM-007"
+      ],
+      "fixture": "keyform-missing-endpoint",
+      "operationFlow": [
+        "loadFixture",
+        "validatePackage",
+        "assertKeyformDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-KEYFORM-INVALID-001/validation-report.json",
+        "discussion/tests/evidence/TC-KEYFORM-INVALID-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator must classify missing endpoint or invalid grid keyform evidence by target keyform ID.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "operation-core"
+      ],
+      "contractSurfaces": [
+        "check-registry",
+        "keyform-validation",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-RIG-WARP-001",
+      "title": "Warp rig control binding",
+      "mvpAcIds": [
+        "AC-MVP-009",
+        "AC-MVP-010"
+      ],
+      "scenarioIds": [
+        "SC-MVP-002",
+        "SC-DEF-001"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "createWarpLattice2dRigControl",
+        "bindRigControlTarget",
+        "connectParameter",
+        "evaluateRuntimeFrame"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-RIG-WARP-001/operation-log.jsonl",
+        "discussion/tests/evidence/TC-RIG-WARP-001/targeted-runtime-snapshot.json"
+      ],
+      "oracle": "Rig control target graph, parameter binding, and evaluated drawable state are present in operation log and snapshot.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "runtime-core",
+        "editor-ui"
+      ],
+      "contractSurfaces": [
+        "rig-control-operation",
+        "targeted-runtime-snapshot",
+        "gui-operation-evidence"
+      ]
+    },
+    {
+      "testId": "TC-RIG-ROTATION-HIERARCHY-001",
+      "title": "Rotation hierarchy evaluation",
+      "mvpAcIds": [
+        "AC-MVP-009",
+        "AC-MVP-010"
+      ],
+      "scenarioIds": [
+        "SC-DEF-002",
+        "SC-BODY-001"
+      ],
+      "fixture": "parent-child-rigControl-diagonal",
+      "operationFlow": [
+        "createRotation2dRigControl",
+        "bindRigControlChild",
+        "evaluateParentBeforeChild",
+        "compareRuntimeDiff"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-RIG-ROTATION-HIERARCHY-001/targeted-runtime-snapshot.json",
+        "discussion/tests/evidence/TC-RIG-ROTATION-HIERARCHY-001/runtime-diff.json"
+      ],
+      "oracle": "Parent-before-child runtime evaluation order and child drawable bounds/hash change are deterministic.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "parent-before-child-evaluation",
+        "runtime-diff-dto",
+        "targeted-runtime-snapshot"
+      ]
+    },
+    {
+      "testId": "TC-RIG-INVALID-CYCLE-001",
+      "title": "Rig hierarchy cycle rejection",
+      "mvpAcIds": [
+        "AC-MVP-009",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DEF-002"
+      ],
+      "fixture": "invalid-rigControl-cycle",
+      "operationFlow": [
+        "loadFixture",
+        "validatePackage",
+        "assertRigControlCycleDiagnostic"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-RIG-INVALID-CYCLE-001/validation-report.json",
+        "discussion/tests/evidence/TC-RIG-INVALID-CYCLE-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator rejects rig control hierarchy cycles and produces no successful topological evaluation order.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "rig-control-validation",
+        "check-registry",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-FACE-EXPRESSION-001",
+      "title": "Face expression authoring",
+      "mvpAcIds": [
+        "AC-MVP-010"
+      ],
+      "scenarioIds": [
+        "SC-FACE-001",
+        "SC-FACE-002"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "createParameter",
+        "addEyeBrowMouthKeyforms",
+        "evaluateRepresentativeValues",
+        "captureSnapshotSummary"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-FACE-EXPRESSION-001/runtime-snapshot-sequence.json",
+        "discussion/tests/evidence/TC-FACE-EXPRESSION-001/gui-evidence.json"
+      ],
+      "oracle": "Project-defined face parameters change drawable state and remain observable through GUI evidence and runtime snapshots.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "editor-ui",
+      "supportingModules": [
+        "runtime-core",
+        "operation-core"
+      ],
+      "contractSurfaces": [
+        "gui-operation-evidence",
+        "runtime-snapshot-sequence",
+        "parameter-dto"
+      ]
+    },
+    {
+      "testId": "TC-BODY-SECONDARY-AUTHORING-001",
+      "title": "Body posture and joint area authoring",
+      "mvpAcIds": [
+        "AC-MVP-010"
+      ],
+      "scenarioIds": [
+        "SC-BODY-001",
+        "SC-BODY-002",
+        "SC-BODY-003"
+      ],
+      "fixture": "tutorial-like-authoring",
+      "operationFlow": [
+        "createBodyParameters",
+        "createArmOrBodyRigControl",
+        "setJointAreaValidationTargets",
+        "previewMotion"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-BODY-SECONDARY-AUTHORING-001/gui-evidence.json",
+        "discussion/tests/evidence/TC-BODY-SECONDARY-AUTHORING-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-BODY-SECONDARY-AUTHORING-001/validation-report.json"
+      ],
+      "oracle": "Body and joint-area authoring evidence proves editable posture and seam-risk reporting without treating joint areas as runtime solvers.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "editor-ui",
+      "supportingModules": [
+        "operation-core",
+        "validator-core",
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "gui-authoring-surface",
+        "joint-area-validation",
+        "runtime-snapshot-dto"
+      ]
+    },
+    {
+      "testId": "TC-DYN-GROUP-AUTHORING-001",
+      "title": "Minimum dynamics group authoring",
+      "mvpAcIds": [
+        "AC-MVP-010",
+        "AC-MVP-012"
+      ],
+      "scenarioIds": [
+        "SC-DYN-001",
+        "SC-BODY-003"
+      ],
+      "fixture": "minimal-dynamics-hairSway",
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "bindDynamicsOutput",
+        "setDynamicsSettings",
+        "savePackage"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-GROUP-AUTHORING-001/model-diff.json",
+        "discussion/tests/evidence/TC-DYN-GROUP-AUTHORING-001/validation-report.json"
+      ],
+      "oracle": "Minimum Open Dynamics v1 package contract: authored drivers, one computed output parameter per group, fixed settings, reset policy.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "package-format",
+        "runtime-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "dynamics-file-dto",
+        "operation-catalog",
+        "dynamics-validation"
+      ]
+    },
+    {
+      "testId": "TC-DYN-DETERMINISM-001",
+      "title": "Deterministic dynamics preview and viewer sequence",
+      "mvpAcIds": [
+        "AC-MVP-010",
+        "AC-MVP-012"
+      ],
+      "scenarioIds": [
+        "SC-DYN-002",
+        "SC-RUNTIME-001",
+        "SC-RUNTIME-002"
+      ],
+      "fixture": "dynamics-reset-determinism",
+      "operationFlow": [
+        "createInitialRuntimeState",
+        "runDynamicsPreviewSequence",
+        "evaluateViewerSequence",
+        "compareStateSequences"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-DETERMINISM-001/runtime-state-sequence-a.json",
+        "discussion/tests/evidence/TC-DYN-DETERMINISM-001/runtime-state-sequence-b.json",
+        "discussion/tests/evidence/TC-DYN-DETERMINISM-001/runtime-diff.json"
+      ],
+      "oracle": "scalarDampedFollowV1, explicit RuntimeStateDto, fixed timestep, input frame hash, and epsilon policy produce repeatable sequence evidence.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "validator-core",
+        "viewer-ui",
+        "editor-ui"
+      ],
+      "contractSurfaces": [
+        "evaluateRuntimeSequence",
+        "runtime-state-dto",
+        "runtime-state-sequence-artifact"
+      ]
+    },
+    {
+      "testId": "TC-DYN-FIXED-STEP-REPLAY-001",
+      "title": "Fixed-step RuntimeState replay evidence",
+      "mvpAcIds": [
+        "AC-MVP-012",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-002",
+        "SC-DYN-003"
+      ],
+      "fixture": "dynamics-fixed-step-replay",
+      "operationFlow": [
+        "loadInitialRuntimeState",
+        "evaluateRuntimeSequence",
+        "assertInitialAndPostFrameStates",
+        "validateRuntimeStateEvidence"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-FIXED-STEP-REPLAY-001/initial.runtime-state.json",
+        "discussion/tests/evidence/TC-DYN-FIXED-STEP-REPLAY-001/expected.runtime-state-sequence.json",
+        "discussion/tests/evidence/TC-DYN-FIXED-STEP-REPLAY-001/validation-report.json"
+      ],
+      "oracle": "Runtime state sequence must have states[0] initial and states[i+1] post-frame semantics with no state length or timestep mismatch.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "runtime-state-sequence-artifact",
+        "runtime-evaluation-context",
+        "dynamics-timestep-policy"
+      ]
+    },
+    {
+      "testId": "TC-DYN-VALIDATION-001",
+      "title": "Dynamics validator diagnostics",
+      "mvpAcIds": [
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-003"
+      ],
+      "fixture": "invalid-dynamics-cycle",
+      "operationFlow": [
+        "loadDynamicsInvalidSet",
+        "validatePackage",
+        "assertDynamicsDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-VALIDATION-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-VALIDATION-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator reports missing driver/output, duplicate output target, dependency cycle, clamp, unstable state, or reset diagnostics with stable target IDs.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "dynamics-check-registry",
+        "validation-report",
+        "repair-candidate-boundary"
+      ]
+    },
+    {
+      "testId": "TC-DYN-DEMO-SAFE-001",
+      "title": "Dynamics demo-safe capture",
+      "mvpAcIds": [
+        "AC-MVP-015"
+      ],
+      "scenarioIds": [
+        "SC-DYN-004"
+      ],
+      "fixture": "demo-safe-dynamics-capture",
+      "operationFlow": [
+        "runDemoSafePreflight",
+        "filterCaptureState",
+        "captureViewerScene"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-DEMO-SAFE-001/demo-preflight-report.json",
+        "discussion/tests/evidence/TC-DYN-DEMO-SAFE-001/allowed-capture-state.json"
+      ],
+      "oracle": "Demo-safe preflight permits high-level secondary motion output while hiding internal solver and package details.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "viewer-ui",
+      "supportingModules": [
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "demo-safe-preflight",
+        "viewer-state",
+        "capture-allow-list"
+      ]
+    },
+    {
+      "testId": "TC-RUNTIME-LOAD-SNAPSHOT-001",
+      "title": "Runtime load and non-empty renderer input",
+      "mvpAcIds": [
+        "AC-MVP-012"
+      ],
+      "scenarioIds": [
+        "SC-MVP-003",
+        "SC-RUNTIME-001",
+        "SC-RUNTIME-002",
+        "SC-VIEWER-001"
+      ],
+      "fixture": "minimal-valid-package",
+      "operationFlow": [
+        "readPackage",
+        "createInitialRuntimeState",
+        "evaluateRuntimeFrame",
+        "buildRendererInput",
+        "assertNonEmptyDrawList"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-RUNTIME-LOAD-SNAPSHOT-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-RUNTIME-LOAD-SNAPSHOT-001/renderer-input.json"
+      ],
+      "oracle": "Runtime snapshot and renderer input prove non-empty project-defined model display without hidden mutable dynamics state.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "renderer-adapter",
+        "viewer-ui",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "evaluateRuntimeFrame",
+        "runtime-snapshot-dto",
+        "renderer-input"
+      ]
+    },
+    {
+      "testId": "TC-VIEWER-PARAM-VALIDATION-001",
+      "title": "Viewer parameter operation and validation display",
+      "mvpAcIds": [
+        "AC-MVP-012",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-VIEWER-002"
+      ],
+      "fixture": "manual-face-grid-2d",
+      "operationFlow": [
+        "openViewer",
+        "listParameters",
+        "setParameterValue",
+        "getRuntimeSnapshot",
+        "showValidationReport"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-VIEWER-PARAM-VALIDATION-001/viewer-state.json",
+        "discussion/tests/evidence/TC-VIEWER-PARAM-VALIDATION-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-VIEWER-PARAM-VALIDATION-001/validation-report.json"
+      ],
+      "oracle": "Viewer state exposes parameter ranges/current values and links snapshot diagnostics to the validation report.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "viewer-ui",
+      "supportingModules": [
+        "runtime-core",
+        "validator-core",
+        "renderer-adapter"
+      ],
+      "contractSurfaces": [
+        "viewer-state",
+        "parameter-control",
+        "validation-report-display"
+      ]
+    },
+    {
+      "testId": "TC-VALIDATOR-SCHEMA-ASSET-001",
+      "title": "Validator schema asset and runtime checks",
+      "mvpAcIds": [
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-VALIDATOR-001",
+        "SC-VALIDATOR-002"
+      ],
+      "fixture": "invalid-missing-texture",
+      "operationFlow": [
+        "loadFixture",
+        "validateSchema",
+        "validateReferences",
+        "validateRuntimeLoad",
+        "writeReport"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-VALIDATOR-SCHEMA-ASSET-001/validation-report.json",
+        "discussion/tests/evidence/TC-VALIDATOR-SCHEMA-ASSET-001/expected-diagnostics.json"
+      ],
+      "oracle": "Validator check registry and report schema classify package schema, asset reference, mesh/runtime, and report evidence.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "package-format",
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "check-registry",
+        "validation-profiles",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-VERIFY-DIFF-JUDGMENT-001",
+      "title": "Verification diff and acceptance judgment",
+      "mvpAcIds": [
+        "AC-MVP-013",
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-VERIFY-001",
+        "SC-VERIFY-002"
+      ],
+      "fixture": "ai-repair-dry-run",
+      "operationFlow": [
+        "inspectModel",
+        "getRuntimeSnapshot",
+        "validatePackage",
+        "getDiff",
+        "aggregateAcceptanceResult"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-VERIFY-DIFF-JUDGMENT-001/model-inspection.json",
+        "discussion/tests/evidence/TC-VERIFY-DIFF-JUDGMENT-001/runtime-diff.json",
+        "discussion/tests/evidence/TC-VERIFY-DIFF-JUDGMENT-001/acceptance-result.json"
+      ],
+      "oracle": "Acceptance runner aggregates model structure, runtime state, validation report, and diffs into pass/fail/needs_review evidence.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "ai-interface",
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "acceptance-evidence-classification",
+        "model-runtime-validation-diff",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-AI-INSPECT-REPORT-001",
+      "title": "AI inspect and validation report read",
+      "mvpAcIds": [
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-MVP-004",
+        "SC-AI-001",
+        "SC-AGENT-001"
+      ],
+      "fixture": "ai-repair-dry-run",
+      "operationFlow": [
+        "inspectModel",
+        "getRuntimeSnapshot",
+        "validatePackage",
+        "explainValidationReport"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-INSPECT-REPORT-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-INSPECT-REPORT-001/validation-report.json",
+        "discussion/tests/evidence/TC-AI-INSPECT-REPORT-001/runtime-snapshot.json"
+      ],
+      "oracle": "AI command contract returns structured observations and report references without mutating the package.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "ai-interface",
+      "supportingModules": [
+        "runtime-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "ai-command-envelope",
+        "runtime-validator-read-api",
+        "command-transcript"
+      ]
+    },
+    {
+      "testId": "TC-AI-DRYRUN-REPAIR-001",
+      "title": "AI dry-run repair candidate",
+      "mvpAcIds": [
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-MVP-004",
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "fixture": "ai-repair-dry-run",
+      "operationFlow": [
+        "inspectTarget",
+        "dryRunOperation",
+        "getDiff",
+        "createRepairCandidate",
+        "rerunValidation"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-DRYRUN-REPAIR-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-DRYRUN-REPAIR-001/model-diff.json",
+        "discussion/tests/evidence/TC-AI-DRYRUN-REPAIR-001/repair-candidate.json",
+        "discussion/tests/evidence/TC-AI-DRYRUN-REPAIR-001/validation-diff.json"
+      ],
+      "oracle": "Dry-run must leave package revision unchanged until approved and link repair candidate to validation evidence.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "ai-interface",
+      "supportingModules": [
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "operation-command-api",
+        "approval-boundary",
+        "repair-candidate"
+      ]
+    },
+    {
+      "testId": "TC-AI-PROVENANCE-DEMO-001",
+      "title": "AI provenance and demo-safe support",
+      "mvpAcIds": [
+        "AC-MVP-014",
+        "AC-MVP-015"
+      ],
+      "scenarioIds": [
+        "SC-AI-003"
+      ],
+      "fixture": "ai-repair-dry-run",
+      "operationFlow": [
+        "readProvenance",
+        "readDemoSafeReport",
+        "suggestMetadataRepair",
+        "dryRunOperation"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-PROVENANCE-DEMO-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-PROVENANCE-DEMO-001/provenance-diff.json",
+        "discussion/tests/evidence/TC-AI-PROVENANCE-DEMO-001/demo-preflight-report.json"
+      ],
+      "oracle": "AI assistance can classify provenance/demo-safe issues through structured reports and dry-run metadata repair.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "ai-interface",
+      "supportingModules": [
+        "validator-core",
+        "operation-core"
+      ],
+      "contractSurfaces": [
+        "ai-command-envelope",
+        "provenance-diff",
+        "demo-safe-preflight"
+      ]
+    },
+    {
+      "testId": "TC-AI-AUDIT-LOG-001",
+      "title": "AI operation audit log",
+      "mvpAcIds": [
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-AI-004"
+      ],
+      "fixture": "ai-repair-dry-run",
+      "operationFlow": [
+        "dryRunOperation",
+        "commitOperationWithApproval",
+        "getOperationLog",
+        "compareActorProvenance"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-AUDIT-LOG-001/operation-log.jsonl",
+        "discussion/tests/evidence/TC-AI-AUDIT-LOG-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-AUDIT-LOG-001/provenance-report.json"
+      ],
+      "oracle": "Operation log distinguishes human and AI-assisted actions and records approval/provenance boundaries.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "ai-interface"
+      ],
+      "contractSurfaces": [
+        "operation-log-entry",
+        "approval-boundary",
+        "provenance-tracking"
+      ]
+    },
+    {
+      "testId": "TC-GUI-SEMANTIC-EVIDENCE-001",
+      "title": "GUI semantic hit-test evidence",
+      "mvpAcIds": [
+        "AC-MVP-001",
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-AGENT-001",
+        "SC-AGENT-002"
+      ],
+      "fixture": "gui-hit-test-rigControl",
+      "operationFlow": [
+        "getEditorState",
+        "getSelection",
+        "hitTestCanvas",
+        "dryRunOperation",
+        "writeGuiEvidence"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-GUI-SEMANTIC-EVIDENCE-001/gui-evidence.json",
+        "discussion/tests/evidence/TC-GUI-SEMANTIC-EVIDENCE-001/hit-test-results.json",
+        "discussion/tests/evidence/TC-GUI-SEMANTIC-EVIDENCE-001/operation-dry-run.json"
+      ],
+      "oracle": "GUI tests use stable semantic target IDs and operation payloads, not raw pixels, as primary evidence.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "editor-ui",
+      "supportingModules": [
+        "ai-interface",
+        "operation-core"
+      ],
+      "contractSurfaces": [
+        "editor-semantic-state",
+        "hit-test-dto",
+        "gui-operation-evidence"
+      ]
+    },
+    {
+      "testId": "TC-SAMPLE-PRIVATE-FIXTURE-001",
+      "title": "Private rights-clean fixture policy",
+      "mvpAcIds": [
+        "AC-MVP-002"
+      ],
+      "scenarioIds": [
+        "SC-SAMPLE-001"
+      ],
+      "fixture": "psd-import-happy-path",
+      "operationFlow": [
+        "readFixtureManifest",
+        "validateRightsMetadata",
+        "validateExpectedArtifacts"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-SAMPLE-PRIVATE-FIXTURE-001/fixture-manifest-report.json",
+        "discussion/tests/evidence/TC-SAMPLE-PRIVATE-FIXTURE-001/rights-report.json"
+      ],
+      "oracle": "Private fixtures must be rights-clean, provenance-linked, and not depend on external proprietary samples.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "fixtures-contract-tests",
+      "supportingModules": [
+        "validator-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "fixture-manifest",
+        "expected-artifacts",
+        "provenance-rights-dtos"
+      ]
+    },
+    {
+      "testId": "TC-DEMO-PREFLIGHT-001",
+      "title": "Demo-safe preflight",
+      "mvpAcIds": [
+        "AC-MVP-015"
+      ],
+      "scenarioIds": [
+        "SC-MVP-005",
+        "SC-WF-002",
+        "SC-HYGIENE-001"
+      ],
+      "fixture": "demo-safe-preflight",
+      "operationFlow": [
+        "runDemoSafePreflight",
+        "scanCaptureSurface",
+        "redactInternalFields",
+        "writeCaptureAllowList"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DEMO-PREFLIGHT-001/demo-preflight-report.json",
+        "discussion/tests/evidence/TC-DEMO-PREFLIGHT-001/redacted-fields.json",
+        "discussion/tests/evidence/TC-DEMO-PREFLIGHT-001/allowed-capture-state.json"
+      ],
+      "oracle": "Demo-safe preflight separates private implementation details from the streaming/demo surface and checks rights visibility.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "viewer-ui",
+        "ai-interface"
+      ],
+      "contractSurfaces": [
+        "demo-safe-preflight",
+        "capture-allow-list",
+        "redaction-report"
+      ]
+    },
+    {
+      "testId": "TC-HYGIENE-BOUNDARY-001",
+      "title": "Hygiene proposal and future subset boundary",
+      "mvpAcIds": [
+        "AC-MVP-015",
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-HYGIENE-002",
+        "SC-HYGIENE-003"
+      ],
+      "fixture": "proposal-boundary-review",
+      "operationFlow": [
+        "classifyArtifactTrack",
+        "scanForImplementationClaims",
+        "verifyFutureSubsetSeparation"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-HYGIENE-BOUNDARY-001/hygiene-boundary-report.json",
+        "discussion/tests/evidence/TC-HYGIENE-BOUNDARY-001/track-classification.json"
+      ],
+      "oracle": "Proposal and future-public materials must stay separate from MVP private implementation and avoid compatibility or internal-schema claims.",
+      "automationLevel": "manual",
+      "gate": "warning",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "fixtures-contract-tests"
+      ],
+      "contractSurfaces": [
+        "track-classification",
+        "demo-proposal-hygiene",
+        "nondependency-guardrail"
+      ]
+    },
+    {
+      "testId": "TC-DOC-BASELINE-001",
+      "title": "Discussion baseline restoration",
+      "mvpAcIds": [
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-DOC-001",
+        "SC-DOC-002"
+      ],
+      "fixture": "discussion-doc-baseline",
+      "operationFlow": [
+        "readDiscussionMap",
+        "readConcept",
+        "readMvpAc",
+        "assertPrivatePrototypeBaseline"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DOC-BASELINE-001/contract-doc-lint-report.json",
+        "discussion/tests/evidence/TC-DOC-BASELINE-001/source-baseline-report.json"
+      ],
+      "oracle": "Discussion docs must restore the current Private Prototype baseline, MVP boundaries, and traceable source paths.",
+      "automationLevel": "auto",
+      "gate": "warning",
+      "ownerModule": "fixtures-contract-tests",
+      "supportingModules": [
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "contract-doc-lint",
+        "discussion-source-map",
+        "baseline-policy"
+      ]
+    },
+    {
+      "testId": "TC-NONDEPENDENCY-GUARDRAIL-001",
+      "title": "Nondependency guardrail scan",
+      "mvpAcIds": [
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-MVP-006",
+        "SC-WF-002",
+        "SC-IN-004"
+      ],
+      "fixture": "nondependency-guardrail-scan",
+      "operationFlow": [
+        "scanPackageManifest",
+        "scanFixtureMetadata",
+        "scanDemoSurface",
+        "assertNoForbiddenOracle"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-NONDEPENDENCY-GUARDRAIL-001/nondependency-scan.json",
+        "discussion/tests/evidence/TC-NONDEPENDENCY-GUARDRAIL-001/acceptance-result.json"
+      ],
+      "oracle": "MVP success cannot depend on external proprietary formats, SDK/Core, viewer matching, physics compatibility, or existing third-party models.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "fixtures-contract-tests"
+      ],
+      "contractSurfaces": [
+        "nondependency-guardrail",
+        "acceptance-evidence",
+        "fixture-metadata-scan"
+      ]
+    },
+    {
+      "testId": "TC-SCRIPT-ONLY-REJECTION-001",
+      "title": "Script-only package cannot satisfy MVP",
+      "mvpAcIds": [
+        "AC-MVP-001",
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-MVP-006"
+      ],
+      "fixture": "script-generated-minimal",
+      "operationFlow": [
+        "loadScriptGeneratedPackage",
+        "validateAcceptanceEvidence",
+        "assertGuiEvidenceMissingFailsMvp"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-SCRIPT-ONLY-REJECTION-001/acceptance-result.json",
+        "discussion/tests/evidence/TC-SCRIPT-ONLY-REJECTION-001/validation-report.json"
+      ],
+      "oracle": "A package with no GUI operation log or GUI evidence cannot satisfy the MVP even if runtime load succeeds.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "operation-core",
+        "editor-ui"
+      ],
+      "contractSurfaces": [
+        "acceptance-evidence",
+        "gui-operation-log-required",
+        "validation-report"
+      ]
+    },
+    {
+      "testId": "TC-CONTRACT-SURFACE-LINT-001",
+      "title": "Traceability lint",
+      "mvpAcIds": [
+        "AC-MVP-013",
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-VERIFY-001",
+        "SC-AGENT-001"
+      ],
+      "fixture": "traceability-lint",
+      "operationFlow": [
+        "readTraceabilityJson",
+        "verifyMvpAcCoverage",
+        "verifyScenarioCoverage",
+        "verifyModuleSurfaceCoverage",
+        "verifyNoSpaceIds"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-CONTRACT-SURFACE-LINT-001/traceability-lint-report.json"
+      ],
+      "oracle": "Every P0 test entry has fixture, operation flow, artifact, oracle, automation, gate, owner module, and no machine-readable ID spaces.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "fixtures-contract-tests",
+      "supportingModules": [
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "traceability-lint",
+        "module-surface-coverage",
+        "id-policy"
+      ]
+    }
+  ],
+  "coverage": {
+    "mvpAcceptanceCriteria": [
+      {
+        "acId": "AC-MVP-001",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-SCRIPT-ONLY-REJECTION-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-002",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-003",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-004",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-005",
+        "testIds": [
+          "TC-MESH-EDIT-001",
+          "TC-MESH-INVALID-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-006",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-007",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-008",
+        "testIds": [
+          "TC-PARAM-PRESET-001",
+          "TC-KEYFORM-INTERPOLATION-001",
+          "TC-KEYFORM-INVALID-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-009",
+        "testIds": [
+          "TC-RIG-WARP-001",
+          "TC-RIG-ROTATION-HIERARCHY-001",
+          "TC-RIG-INVALID-CYCLE-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-010",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-KEYFORM-INTERPOLATION-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-RIG-WARP-001",
+          "TC-RIG-ROTATION-HIERARCHY-001",
+          "TC-FACE-EXPRESSION-001",
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-DETERMINISM-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-011",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-012",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-013",
+        "testIds": [
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-MESH-INVALID-001",
+          "TC-KEYFORM-INVALID-001",
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-VALIDATION-001",
+          "TC-VALIDATOR-SCHEMA-ASSET-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001",
+          "TC-CONTRACT-SURFACE-LINT-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-014",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-AUDIT-LOG-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-CONTRACT-SURFACE-LINT-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-015",
+        "testIds": [
+          "TC-DYN-DEMO-SAFE-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      },
+      {
+        "acId": "AC-MVP-016",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001",
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-HYGIENE-BOUNDARY-001",
+          "TC-DOC-BASELINE-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001",
+          "TC-SCRIPT-ONLY-REJECTION-001"
+        ]
+      }
+    ],
+    "activeScenarios": [
+      {
+        "scenarioId": "SC-MVP-001",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-IN-PSD-IMPORT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MVP-002",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-RIG-WARP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MVP-003",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MVP-004",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-DRYRUN-REPAIR-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MVP-005",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MVP-006",
+        "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
+        "testIds": [
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001",
+          "TC-SCRIPT-ONLY-REJECTION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-IN-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/201_Input_Asset_and_Model_Intake.md",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-IN-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/201_Input_Asset_and_Model_Intake.md",
+        "testIds": [
+          "TC-IN-RIGHTS-MISSING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-IN-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/201_Input_Asset_and_Model_Intake.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-IN-004",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/201_Input_Asset_and_Model_Intake.md",
+        "testIds": [
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DRAW-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/202_Drawable_Structure.md",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DRAW-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/202_Drawable_Structure.md",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MESH-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/203_Mesh_Structure.md",
+        "testIds": [
+          "TC-MESH-EDIT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-MESH-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/203_Mesh_Structure.md",
+        "testIds": [
+          "TC-MESH-INVALID-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DEF-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/204_Deformation_Control_Structure.md",
+        "testIds": [
+          "TC-RIG-WARP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DEF-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/204_Deformation_Control_Structure.md",
+        "testIds": [
+          "TC-RIG-ROTATION-HIERARCHY-001",
+          "TC-RIG-INVALID-CYCLE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DEF-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/204_Deformation_Control_Structure.md",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-PARAM-PRESET-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-KEYFORM-INTERPOLATION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-004",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-005",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-KEYFORM-INTERPOLATION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-006",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-PARAM-PRESET-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PARAM-007",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
+        "testIds": [
+          "TC-KEYFORM-INVALID-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PART-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/206_Part_Visibility_and_Composition_Semantics.md",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-PART-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/206_Part_Visibility_and_Composition_Semantics.md",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-FACE-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/207_Facial_Motion_Modeling.md",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-FACE-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/207_Facial_Motion_Modeling.md",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-FACE-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/207_Facial_Motion_Modeling.md",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-BODY-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/208_Body_and_Secondary_Motion_Modeling.md",
+        "testIds": [
+          "TC-RIG-ROTATION-HIERARCHY-001",
+          "TC-BODY-SECONDARY-AUTHORING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-BODY-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/208_Body_and_Secondary_Motion_Modeling.md",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-BODY-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/208_Body_and_Secondary_Motion_Modeling.md",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DYN-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/209_Physics_and_Dynamic_Behavior.md",
+        "testIds": [
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DYN-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/209_Physics_and_Dynamic_Behavior.md",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DYN-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/209_Physics_and_Dynamic_Behavior.md",
+        "testIds": [
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-VALIDATION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DYN-004",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/209_Physics_and_Dynamic_Behavior.md",
+        "testIds": [
+          "TC-DYN-DEMO-SAFE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-EXPORT-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/211_Runtime_Export_and_Compatibility.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-EXPORT-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/211_Runtime_Export_and_Compatibility.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VERIFY-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/212_Model_Verification.md",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001",
+          "TC-CONTRACT-SURFACE-LINT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VERIFY-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/212_Model_Verification.md",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AI-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/213_AI-native_Operation.md",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AI-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/213_AI-native_Operation.md",
+        "testIds": [
+          "TC-AI-DRYRUN-REPAIR-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AI-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/213_AI-native_Operation.md",
+        "testIds": [
+          "TC-AI-PROVENANCE-DEMO-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AI-004",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/213_AI-native_Operation.md",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-WF-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/214_Workflow_Replacement.md",
+        "testIds": [
+          "TC-GUI-AUTHORING-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-WF-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/214_Workflow_Replacement.md",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-HYGIENE-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-FORMAT-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/215_Open_Model_Format.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-FORMAT-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/215_Open_Model_Format.md",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-RUNTIME-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/216_Open_Runtime_Core.md",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-RUNTIME-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/216_Open_Runtime_Core.md",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VIEWER-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/218_Open_Viewer.md",
+        "testIds": [
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VIEWER-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/218_Open_Viewer.md",
+        "testIds": [
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VALIDATOR-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/220_Open_Package_Validator.md",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-VALIDATOR-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/220_Open_Package_Validator.md",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AGENT-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/222_Open_AI_Agent_Interface.md",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-CONTRACT-SURFACE-LINT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-AGENT-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/222_Open_AI_Agent_Interface.md",
+        "testIds": [
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-SAMPLE-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/223_Open_Sample_Model_Set.md",
+        "testIds": [
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DOC-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/224_Documentation_Tutorial_AC_System.md",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-DOC-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/224_Documentation_Tutorial_AC_System.md",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-HYGIENE-001",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/225_Open_Source_and_Rights_Hygiene.md",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-HYGIENE-002",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/225_Open_Source_and_Rights_Hygiene.md",
+        "testIds": [
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      },
+      {
+        "scenarioId": "SC-HYGIENE-003",
+        "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/225_Open_Source_and_Rights_Hygiene.md",
+        "testIds": [
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      }
+    ],
+    "moduleContractSurfaces": [
+      {
+        "surfaceId": "shared-dto-vocabulary",
+        "ownerModule": "contracts",
+        "sourcePath": "discussion/design/module-contracts/typescript-contracts.md",
+        "testIds": [
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-VALIDATOR-SCHEMA-ASSET-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "surfaceId": "package-parse-load-write",
+        "ownerModule": "package-format",
+        "sourcePath": "discussion/design/module-contracts/package-file-format-contract.md",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "surfaceId": "dirty-authoring-graph",
+        "ownerModule": "authoring-core",
+        "sourcePath": "discussion/design/module-contracts/module-boundaries.md",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001",
+          "TC-GUI-AUTHORING-001"
+        ]
+      },
+      {
+        "surfaceId": "operation-boundary",
+        "ownerModule": "operation-core",
+        "sourcePath": "discussion/design/module-contracts/operation-contracts.md",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-MESH-EDIT-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-AUDIT-LOG-001"
+        ]
+      },
+      {
+        "surfaceId": "runtime-evaluation",
+        "ownerModule": "runtime-core",
+        "sourcePath": "discussion/design/module-contracts/runtime-core-contract.md",
+        "testIds": [
+          "TC-RUNTIME-LOAD-SNAPSHOT-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-PARAM-GRID-2D-001"
+        ]
+      },
+      {
+        "surfaceId": "validator-report",
+        "ownerModule": "validator-core",
+        "sourcePath": "discussion/design/module-contracts/validator-contract.md",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001",
+          "TC-DYN-VALIDATION-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001",
+          "TC-DEMO-PREFLIGHT-001"
+        ]
+      },
+      {
+        "surfaceId": "renderer-input",
+        "ownerModule": "renderer-adapter",
+        "sourcePath": "discussion/design/module-contracts/module-boundaries.md",
+        "testIds": [
+          "TC-RUNTIME-LOAD-SNAPSHOT-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "surfaceId": "gui-semantic-state",
+        "ownerModule": "editor-ui",
+        "sourcePath": "discussion/design/module-contracts/gui-operation-contract.md",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "surfaceId": "viewer-inspection",
+        "ownerModule": "viewer-ui",
+        "sourcePath": "discussion/design/module-contracts/module-boundaries.md",
+        "testIds": [
+          "TC-RUNTIME-LOAD-SNAPSHOT-001",
+          "TC-VIEWER-PARAM-VALIDATION-001",
+          "TC-DYN-DEMO-SAFE-001"
+        ]
+      },
+      {
+        "surfaceId": "ai-command-boundary",
+        "ownerModule": "ai-interface",
+        "sourcePath": "discussion/design/module-contracts/ai-command-contract.md",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "surfaceId": "fixtures-and-contract-tests",
+        "ownerModule": "fixtures-contract-tests",
+        "sourcePath": "discussion/design/module-contracts/fixtures-and-contract-tests.md",
+        "testIds": [
+          "TC-SAMPLE-PRIVATE-FIXTURE-001",
+          "TC-DOC-BASELINE-001",
+          "TC-CONTRACT-SURFACE-LINT-001"
+        ]
+      }
+    ]
+  },
+  "remainingIssues": [
+    "Fixture files and expected artifacts are planned only; this deliverable does not create fixture packages or runner outputs.",
+    "Exact visual-review thresholds remain hybrid/manual until capture and semantic snapshot runners exist.",
+    "Optional/Future-only scenarios are intentionally excluded from P0 gates and should be reintroduced only after scope is reopened."
+  ]
+}
