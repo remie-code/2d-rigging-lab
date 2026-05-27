@@ -176,7 +176,7 @@ AI or Playwright may use screenshots for visual context, but must use `getEditor
 | Dynamics panel | create group | `createDynamicsGroup` | operation log + diagnostics | `dynamics.group.create` |
 | Dynamics panel | bind driver parameter | `bindDynamicsDriver` | operation log + validation diagnostics | `dynamics.driver.bind` |
 | Dynamics panel | bind computed output parameter | `bindDynamicsOutput` | operation log + validation diagnostics | `dynamics.output.bind` |
-| Dynamics panel | set stiffness / damping / response / amplitude limit | `setDynamicsSettings` | operation log + targeted snapshot | `dynamics.settings.set` |
+| Dynamics panel | set stiffness / damping / velocity/amplitude limits | `setDynamicsSettings` | operation log + targeted snapshot | `dynamics.settings.set` |
 | Dynamics panel | preview reset | `resetDynamicsPreviewState` | preview evidence + runtime snapshot, no package mutation | `dynamics.preview.reset` |
 | RigControl panel | create rotation rig control | `createRotation2dRigControl` | operation log | `rigControl.rotation.create` |
 | RigControl panel | create warp lattice | `createWarpLattice2dRigControl` | operation log | `rigControl.warp.create` |
@@ -217,9 +217,10 @@ Minimum Open Dynamics v1 editing is first-class in MVP:
 - The UI must expose a dynamics group list with enable/disable.
 - The UI must expose driver parameter selector, limited to authoredInput parameters.
 - The UI must expose output parameter selector, limited to computedDynamics parameters.
-- The UI must expose stiffness, damping, response, amplitude limit, reset policy, preview start/stop/reset, simple output graph, current driver/output values, and validator warnings.
+- The UI must expose stiffness, damping, max velocity, max amplitude, output min/max, reset policy, preview start/stop/reset, simple output graph, current driver/output values, and validator warnings.
+- If the UI exposes `response`, it is a UI-only preset or derived description that writes concrete stiffness/damping/limit values; it is not saved as runtime evaluator input.
 - Preview reset uses `resetDynamicsPreviewState` and does not mutate package files.
-- The surface uses Open Dynamics, secondary motion, driver parameter, computed output parameter, damping, stiffness, response, reset policy, and output limit language.
+- The surface uses Open Dynamics, secondary motion, driver parameter, computed output parameter, damping, stiffness, reset policy, max velocity, max amplitude, and output limit language.
 - The surface must not use Cubism Physics, physics3, pendulum, Live2D physics, or Cubism Physics group terminology.
 
 ## Stable Test ID / Role / Label Policy

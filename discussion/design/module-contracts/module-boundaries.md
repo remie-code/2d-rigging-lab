@@ -17,7 +17,7 @@ It blocks implementation confusion for:
 - ownership of authoring state, runtime-visible state, editor-only state, operation logs, validation reports, runtime snapshots, and fixture expected outputs.
 - forbidden dependencies that would make GUI, AI, runtime, and validator implementations disagree.
 
-MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, project-defined model package save/reload, Minimum Open Dynamics v1, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, Cubism Physics compatibility, animation timeline, direct mesh physics, full physics, and production renderer optimization.
+MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, project-defined model package save/reload, Minimum Open Dynamics v1, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, Cubism Physics compatibility, animation timeline, direct vertex physics, direct rigControl physics output, full physics, and production renderer optimization.
 
 ## Basis Separation
 
@@ -64,7 +64,7 @@ MVP scope includes GUI authoring, PSD primary import, split PNG fallback import,
 | `package-format` | package file layout, DTO parsing, schema validation, package hash, PSD/split PNG provenance mapping, `model/dynamics.json` | dirty editor UI state beyond `editor-state.json`, renderer internals | `readPackage`, `writePackage`, `parsePackageDto`, `normalizePackage` | editor, viewer, validator, AI |
 | `authoring-core` | `AuthoringGraph`, editor-visible model state, dirty revision, undo model state | DOM, HTTP, raw PSD parser, renderer handles | `createAuthoringSession`, `applyCommittedOperation`, `toRuntimeGraph` | editor, operation |
 | `operation-core` | operation registry, preconditions, dry-run, commit, undo/redo, operation log entries | canvas event details, transport details, renderer handles | `dryRunOperation`, `commitOperation`, `undoOperation`, `redoOperation` | editor, AI, migration |
-| `runtime-core` | `NormalizedRuntimeGraph`, authored/computed/effective parameter evaluation, Minimum Open Dynamics v1, keyform/rig control evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntime`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
+| `runtime-core` | `NormalizedRuntimeGraph`, authored/computed/effective parameter evaluation, explicit `RuntimeStateDto`, Minimum Open Dynamics v1, keyform/rig control evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntimeFrame`, `evaluateRuntimeSequence`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
 | `validator-core` | check registry, profiles, validation report, repair candidate contracts | GUI workflow replacement, renderer drawing, transport details | `validatePackage`, `validateAuthoringGraph`, `validateRuntimeSnapshot` | editor, viewer, AI, acceptance |
 | `renderer-adapter` | canvas/WebGL binding, texture handles, viewport presentation | package schema, operation mutation, validator policy | `renderSnapshot`, `createRendererBackend` | editor preview, viewer |
 | `editor-ui` | panels, canvas modes, selection, lock, editor hide, active tool, stable test IDs, GUI evidence | package mutation bypassing operation-core, runtime internals | UI event handlers, semantic state API | human, Playwright, AI observe |

@@ -71,8 +71,9 @@ It does not implement mutation algorithms or UI event handlers.
 | `deleteDynamicsGroup` | dynamics group ID | group exists; no required output-only dependency remains | dynamics group diff | SC-DYN-001 |
 | `bindDynamicsDriver` | group ID, authoredInput parameter, scale/offset/invert | parameter exists and `valueSource="authoredInput"` | dynamics driver diff | SC-DYN-001 |
 | `bindDynamicsOutput` | group ID, computedDynamics parameter, range/clamp | parameter exists and `valueSource="computedDynamics"` | dynamics output diff | SC-DYN-001 |
-| `setDynamicsSettings` | stiffness, damping, response, amplitude/velocity limits | group exists; settings finite and stable | dynamics settings diff | SC-DYN-003 |
+| `setDynamicsSettings` | stiffness, damping, amplitude/velocity limits | group exists; settings finite and stable | dynamics settings diff | SC-DYN-003 |
 | `resetDynamicsPreviewState` | group IDs or all groups, reason | preview/runtime session exists | runtime state reset evidence, no package mutation | SC-DYN-002 |
+| `runDynamicsPreviewSequence` | authored parameter frames, initial RuntimeStateDto, fixed timestep, targets | runtime graph exists; no package mutation | snapshot sequence + final RuntimeStateDto + runtime diff evidence | SC-DYN-002 |
 | `createRotation2dRigControl` | part, children, pivot/rest transform | children exist and not cyclic | rig control diff | SC-DEF-002 |
 | `createWarpLattice2dRigControl` | part, children, domain, rows/cols | rows/cols valid, children exist | rig control diff | SC-DEF-001 |
 | `bindRigControlChild` | parent rig control, child drawable/rig control | no cycle | hierarchy diff | SC-DEF-003 |
@@ -127,6 +128,7 @@ export const OperationTypeSchema = z.enum([
   "bindDynamicsOutput",
   "setDynamicsSettings",
   "resetDynamicsPreviewState",
+  "runDynamicsPreviewSequence",
   "createRotation2dRigControl",
   "createWarpLattice2dRigControl",
   "bindRigControlChild",
@@ -190,7 +192,6 @@ export const CreateDynamicsGroupPayloadSchema = z.object({
   settings: z.object({
     stiffness: z.number().finite().nonnegative(),
     damping: z.number().finite().nonnegative(),
-    response: z.number().finite().positive(),
     maxVelocity: z.number().finite().positive().optional(),
     maxAmplitude: z.number().finite().positive().optional(),
   }),
@@ -231,7 +232,6 @@ export const SetDynamicsSettingsPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   stiffness: z.number().finite().nonnegative(),
   damping: z.number().finite().nonnegative(),
-  response: z.number().finite().positive(),
   maxVelocity: z.number().finite().positive().optional(),
   maxAmplitude: z.number().finite().positive().optional(),
 });
@@ -239,6 +239,21 @@ export const SetDynamicsSettingsPayloadSchema = z.object({
 export const ResetDynamicsPreviewStatePayloadSchema = z.object({
   dynamicsGroupIds: z.array(DynamicsGroupIdSchema).optional(),
   reason: z.enum(["packageLoad", "manualCommand", "previewRestart", "largeInputJump", "validationRunStart", "demoCaptureStart"]),
+});
+
+export const RuntimeStatePayloadSchema = z.object({
+  schemaVersion: z.literal("runtime-state-v1"),
+}).passthrough();
+
+export const RunDynamicsPreviewSequencePayloadSchema = z.object({
+  authoredParameterFrames: z.array(z.record(ParameterIdSchema, z.number().finite())).min(1),
+  initialState: RuntimeStatePayloadSchema.optional(),
+  initialStateRef: z.string().optional(),
+  fixedStepMs: z.number().positive().default(16.6666667),
+  maxSubSteps: z.number().int().min(1).max(16).default(4),
+  resetReason: z.enum(["previewRestart", "validationRunStart", "demoCaptureStart"]).optional(),
+  targetIds: z.array(z.string()).default([]),
+  detail: z.enum(["summary", "targeted", "full"]).default("targeted"),
 });
 
 export const MoveMeshVertexPayloadSchema = z.object({
@@ -377,6 +392,7 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("bindDynamicsOutput"), payload: BindDynamicsOutputPayloadSchema }),
   z.object({ operationType: z.literal("setDynamicsSettings"), payload: SetDynamicsSettingsPayloadSchema }),
   z.object({ operationType: z.literal("resetDynamicsPreviewState"), payload: ResetDynamicsPreviewStatePayloadSchema }),
+  z.object({ operationType: z.literal("runDynamicsPreviewSequence"), payload: RunDynamicsPreviewSequencePayloadSchema }),
   z.object({ operationType: z.literal("createRotation2dRigControl"), payload: CreateRotation2dRigControlPayloadSchema }),
   z.object({ operationType: z.literal("createWarpLattice2dRigControl"), payload: CreateWarpLattice2dRigControlPayloadSchema }),
   z.object({ operationType: z.literal("bindRigControlChild"), payload: BindRigControlChildPayloadSchema }),
@@ -448,10 +464,24 @@ export type OperationLogEntryDto = z.infer<typeof OperationLogEntrySchema>;
 export interface OperationCore {
   dryRunOperation(request: OperationRequestDto): Promise<OperationResultDto>;
   commitOperation(request: OperationRequestDto): Promise<OperationResultDto>;
+  runDynamicsPreviewSequence(request: OperationRequestDto): Promise<OperationResultDto>;
   undoOperation(operationId: string): Promise<OperationResultDto>;
   redoOperation(operationId: string): Promise<OperationResultDto>;
 }
 ```
+
+## Dynamics Reset Reason Mapping
+
+`resetDynamicsPreviewState` and `runDynamicsPreviewSequence` are runtime / preview evidence commands. They do not mutate package files and do not change package `resetPolicy`.
+
+| Runtime reason | Package reset policy relationship | Operation behavior |
+|----------------|-----------------------------------|--------------------|
+| `packageLoad` | applies `reset-on-load` | initialize runtime state after package load |
+| `manualCommand` | applies `reset-on-manual-command` | explicit reset command evidence |
+| `previewRestart` | session reset; treated like manual preview reset | reset preview state only |
+| `largeInputJump` | applies `reset-on-large-input-jump` | reset after detected authored input jump |
+| `validationRunStart` | validator-only reset | deterministic validation sequence start |
+| `demoCaptureStart` | demo-only reset | deterministic and visually stable capture start |
 
 ## Diagram Requirements
 
@@ -558,7 +588,7 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 |----------------|---------|-------------------|
 | `psd-import-happy-path` | `importPsdSourceAsset` creates source/drawable/part/texture candidates | operation result + model diff |
 | `manual-face-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
-| `minimal-dynamics-hairSway` | Dynamics group creation, driver/output binding, settings update, preview reset | operation log + snapshot sequence |
+| `minimal-dynamics-hairSway` | Dynamics group creation, driver/output binding, settings update, preview reset, preview sequence run | operation log + snapshot sequence + final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | dry-run clamps/warns without committing | operation result + validation diff |
 | `ai-repair-dry-run` | AI repair candidate returns diffs and no package mutation | dry-run result, repair candidate |
 | `tutorial-like-authoring` | GUI operation evidence covers MVP authoring steps | JSONL operation log |

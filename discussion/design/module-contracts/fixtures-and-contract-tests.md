@@ -83,8 +83,10 @@ export const ContractFixtureIdSchema = z.enum([
   "invalid-dynamics-missing-driver",
   "invalid-dynamics-missing-output",
   "invalid-dynamics-cycle",
+  "invalid-dynamics-output-target-duplicate",
   "dynamics-output-range-clamp",
   "dynamics-reset-determinism",
+  "dynamics-fixed-step-replay",
   "demo-safe-dynamics-capture",
   "invalid-mesh-triangle",
   "invalid-missing-texture",
@@ -141,8 +143,10 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-dynamics-missing-driver` | dynamics group missing valid authoredInput driver | validation fail report | package-format, validator-core |
 | `invalid-dynamics-missing-output` | dynamics group missing computedDynamics output | validation fail report | package-format, validator-core |
 | `invalid-dynamics-cycle` | computed output used as dynamics driver or group dependency | blocking validation report | runtime-core, validator-core |
+| `invalid-dynamics-output-target-duplicate` | two groups target the same computedDynamics output parameter | validation fail report | package-format, validator-core |
 | `dynamics-output-range-clamp` | output clamp and range diagnostics | targeted snapshot + validation report | runtime-core, validator-core |
 | `dynamics-reset-determinism` | fixed timestep reset replay equivalence | paired snapshot sequences | runtime-core, validator-core |
+| `dynamics-fixed-step-replay` | explicit RuntimeStateDto accumulator replay over variable delta inputs | snapshot sequence + final RuntimeStateDto | runtime-core, validator-core |
 | `demo-safe-dynamics-capture` | dynamics demo hides unsafe internal names and solver details | demo preflight report | validator-core, viewer-ui |
 | `invalid-mesh-triangle` | triangle index out of range / degenerate triangle | validation fail report with mesh target | validator-core, runtime-core |
 | `invalid-missing-texture` | visible drawable missing texture | validation fail report | package-format, validator-core |
@@ -173,12 +177,14 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-missing-texture` | `ref.drawableTextureMissing` with `severity=error`, target visible drawable ID, acceptance `status=fail` |
 | `invalid-rigControl-cycle` | `rigControl.cycle` with `severity=blocking`, target kind `rigControl`, no successful topological order |
 | `parent-child-out-of-domain` | `rigControl.childOutsideWarpDomain` with `severity=warning`, acceptance `status=needs_review` |
-| `minimal-dynamics-hairSway` | no `dynamics.*` error/blocking diagnostics; output parameter has `valueSource="computedDynamics"` |
+| `minimal-dynamics-hairSway` | no `dynamics.*` error/blocking diagnostics; output parameter has `valueSource="computedDynamics"`; one group has exactly one output |
 | `invalid-dynamics-missing-driver` | `dynamics.driverMissing` or `dynamics.driverMustBeAuthoredInput` with `severity=error` |
 | `invalid-dynamics-missing-output` | `dynamics.outputMissing` or `dynamics.outputMustBeComputedParameter` with `severity=error` |
 | `invalid-dynamics-cycle` | `dynamics.outputUsedAsDriver` or `dynamics.groupCycle` with `severity=blocking` |
-| `dynamics-output-range-clamp` | `dynamics.outputParameterOutOfRange` warning/error and clamped output value |
+| `invalid-dynamics-output-target-duplicate` | `dynamics.outputTargetDuplicate` with `severity=error`, acceptance `status=fail` |
+| `dynamics-output-range-clamp` | `dynamics.outputParameterOutOfRange` warning/error or `dynamics.outputClamped` evidence and clamped output value |
 | `dynamics-reset-determinism` | no `dynamics.nonDeterministicSnapshot`; paired sequence hashes match |
+| `dynamics-fixed-step-replay` | no `runtime.timestepOverflow`; accumulator/final state match expected replay |
 | `demo-safe-dynamics-capture` | `dynamics.demoUnsafeInternalName` absent or warning-only with safe public wording |
 | `invalid-mask-reference` | `mask.sourceMissing` or `mask.drawableMissing` with `severity=blocking`, target mask relation ID |
 | `keyform-grid-overdimension` | `keyform.tooManyParametersForMvp` with `severity=warning`, acceptance `status=needs_review` |
@@ -195,8 +201,9 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `tutorial-like-authoring` | `full` | `eyeOpen`, `mouthOpen`, `hairSway`, `faceYaw`, `facePitch` representative inputs change drawable bounds/hash without blocking diagnostics |
 | `manual-face-grid-2d` | `full` | manual face grid values at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
 | `parent-child-rigControl-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
-| `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives `hairSway` computed output with delayed follow, damping, output clamp, and no direct mesh/rigControl writes |
-| `dynamics-reset-determinism` | `targeted` sequence pair | same initial state, input sequence, and fixedStepMs produce identical dynamics output sequence and state summary |
+| `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives one `hairSway` computed output with delayed follow, damping, output clamp, and no direct mesh/rigControl writes |
+| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, input sequence, and fixedStepMs produce identical dynamics output sequence and state summary |
+| `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
 
 ## Expected Diffs
@@ -207,8 +214,9 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `moveMeshVertex` slice inside `ai-repair-dry-run` | model/runtime/validation diff | vertex field changes include mesh ID and vertex ID; runtime hash changes; validation has no new `blocking` |
 | `out-of-range-parameter-dry-run` | runtime/validation diff | `runtime.parameterClamped` diagnostic added, base package revision unchanged |
 | `parent-child-rigControl-diagonal` | runtime diff | targeted rig control local state and child drawable bounds/hash change |
-| `minimal-dynamics-hairSway` | runtime diff | authored `faceYaw` sequence changes computed `hairSway` and then keyform/rigControl snapshot output |
+| `minimal-dynamics-hairSway` | runtime diff | authored `faceYaw` sequence changes computed `hairSway`; `dynamicsChanges` records output/state deltas before keyform/rigControl snapshot output |
 | `dynamics-reset-determinism` | runtime diff | reset replay has no output/state mismatch |
+| `dynamics-fixed-step-replay` | runtime diff | accumulator and tick changes are reflected in `dynamicsChanges` or associated state evidence |
 | `ai-invalid-mutation` | model/validation diff | package revision changed during dry-run is detected as invalid mutation |
 
 ## Contract Test Matrix

@@ -141,10 +141,25 @@ discussion/
 - Cubism SDK/Core には依存しない。
 - fixture / sample / demo は rights-clean な自作・生成・明示許諾素材のみを使い、既存Cubismモデル、公式サンプル、第三者Live2Dモデル、nizima素材を使わない。
 - 配信デモでは、コード、内部形式、ファイル構造、Cubism形式名、SDK/Core連携、既存モデル読み込みを示唆する画面を出さない。
-- 用語は `project-defined model package`, `rigControl`, `drawable mesh`, `faceYaw`, `facePitch`, `layered-character-psd-profile-v1` など独自/一般語彙を優先する。
+- 用語は `project-defined model package`, `rig control`, `drawable mesh`, `faceYaw`, `facePitch`, `layered-character-psd-profile-v1` など独自/一般語彙を優先する。
 - `Private Prototype`, `Streaming Demo Surface`, `Live2D Feature Proposal`, `Future Public Clean Subset` の4トラックを混同しない。
 
-## 8. ファイル命名
+## 8. Prose and Machine-Readable Naming
+
+自然言語の説明文では `rig control` と書いてよい。ただし、enum value、check ID、fixture ID、test ID、target kind、file identifier、operation IDなどのmachine-readable identifierでは、空白を含めず `rigControl` を使う。
+
+例:
+
+- target kind: `"rigControl"`
+- check ID: `rigControl.cycle`
+- fixture ID: `invalid-rigControl-cycle`
+- operation ID: `rigControl.rotation.create`
+
+Machine-readable identifierでは、`rig<space>control`、`rig<space>control.cycle`、`invalid-rig<space>control-cycle` のような空白入り表記を禁止する。
+
+Dynamics関連のmachine-readable identifierも、`dynamicsGroup`、`computedDynamics`、`scalarDampedFollowV1` を使う。
+
+## 9. ファイル命名
 
 - 既存ファイルの命名は、理由なく変更しない。
 - 新規ファイルは、意味のある英語ケバブケースを基本とする。
@@ -152,7 +167,7 @@ discussion/
 - `_conventions.md` と `_map.md` のようなメタファイルには、先頭アンダースコアを使う。
 - 日本語ファイル名は、既存文脈やユーザー指定がある場合に使用してよい。
 
-## 9. 変更ルール
+## 10. 変更ルール
 
 - `acceptance-criteria/` は後続作業のオラクルであるため、変更時は根拠となるコンセプト、設計判断、ユーザー合意を明示する。
 - ACの追加・変更が必要な場合は、原則としてユーザー合意のうえで行う。

@@ -14,15 +14,15 @@
 |------|------|--------|
 | [_map.md](_map.md) | この module contract design 成果物群の入口地図 | Private baselineへ更新済み |
 | [module-boundaries.md](module-boundaries.md) | module責務、所有state、禁止依存、Future integration boundary、実装分担境界 | Private baseline語彙へ整理済み |
-| [typescript-contracts.md](typescript-contracts.md) | shared branded ID、primitive、diagnostic、diff、DTO index の TypeScript / Zod 契約 | DynamicsGroupId、camelCase CheckId、rigControl/dynamicsGroup target kindへ更新済み |
-| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | `model/dynamics.json`、Dynamics DTO、Parameter.valueSource、1D/2D keyform unionへ更新済み |
-| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | Dynamics operationsとParameter.valueSourceへ更新済み |
-| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、Minimum Open Dynamics v1、parent-before-child rig control、snapshot契約 | authored/computed/effective parameter、fixed timestep、dynamics snapshotへ更新済み |
-| [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | Dynamics check registryとrigControl check IDへ更新済み |
+| [typescript-contracts.md](typescript-contracts.md) | shared branded ID、primitive、diagnostic、diff、DTO index の TypeScript / Zod 契約 | RuntimeStateDto、RuntimeDiff.dynamicsChanges、camelCase CheckId、rigControl/dynamicsGroup target kindへ更新済み |
+| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | `model/dynamics.json`、1 group = 1 output、`ScalarDampedFollowSettingsV1Schema`、Parameter.valueSource、1D/2D keyform unionへ更新済み |
+| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | Dynamics operations、preview sequence、reset reason mappingへ更新済み |
+| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、Minimum Open Dynamics v1、parent-before-child rig control、snapshot契約 | explicit RuntimeStateDto、fixed solver式、accumulator、dynamics snapshot/diffへ更新済み |
+| [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | Dynamics final check registry、requiredGroupMissing、outputTargetDuplicateへ更新済み |
 | [gui-operation-contract.md](gui-operation-contract.md) | UI event -> operation mapping、semantic state、hit-test、GUI evidence契約 | Dynamics panel / preview reset / simple graphへ更新済み |
 | [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | Dynamics preview sequenceと自動physics tuning禁止へ更新済み |
-| [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) | fixture registry、expected validation report/runtime snapshot/diff、contract test方針 | Dynamics fixturesとrigControl fixture名へ更新済み |
-| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | RE3 Dynamics復帰traceabilityへ更新済み |
+| [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) | fixture registry、expected validation report/runtime snapshot/diff、contract test方針 | Dynamics final fixtures、output-target-duplicate、fixed-step-replayへ更新済み |
+| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | RE-FINAL Dynamics確定traceabilityへ更新済み |
 | [review-summary.md](review-summary.md) | 独立レビュー3観点の findings、対応状況、残未決事項分類 | 旧baselineレビューとして参考 |
 
 ## 主要な設計判断の反映先
@@ -34,7 +34,7 @@
 | face yaw / pitch はproject-defined parameterとして扱う。カメラ方向やCubism face turn behaviorの再現とはしない | [runtime-core-contract.md](runtime-core-contract.md), [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md), [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) |
 | GUI authoring evidence は operation log 必須、Playwright trace/screenshot/session metadata は補助 | [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md), [validator-contract.md](validator-contract.md) |
 | AIはassistant / validatorとして扱い、dry-run / diff / repair suggestion / provenanceを中心にする | [ai-command-contract.md](ai-command-contract.md), [operation-contracts.md](operation-contracts.md) |
-| Minimum Open Dynamics v1 はdriver parameterからcomputed output parameterを生成し、通常keyform / rig control評価へ渡す | [package-file-format-contract.md](package-file-format-contract.md), [runtime-core-contract.md](runtime-core-contract.md), [operation-contracts.md](operation-contracts.md), [validator-contract.md](validator-contract.md), [gui-operation-contract.md](gui-operation-contract.md), [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) |
+| Minimum Open Dynamics v1 はdriver parameterからcomputed output parameterを生成し、通常keyform / rig control評価へ渡す。MVPではexplicit RuntimeStateDto、1 group = 1 output、weighted sum、`scalarDampedFollowV1`固定式 | [package-file-format-contract.md](package-file-format-contract.md), [runtime-core-contract.md](runtime-core-contract.md), [operation-contracts.md](operation-contracts.md), [validator-contract.md](validator-contract.md), [gui-operation-contract.md](gui-operation-contract.md), [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) |
 
 ## 参照入口
 

@@ -138,6 +138,7 @@ MVPに含めるもの:
 - project-defined model package。
 - layered character PSD profile / split PNG fallback。
 - drawable、texture、part、mesh、parameter、keyform、rig control、mask、draw order。
+- Minimum Open Dynamics v1。driver parameterからcomputed output parameterを生成し、通常keyform / rig control評価へ渡すparameter-driven deterministic secondary motion。
 - editor preview、保存、再読み込み、viewer表示。
 - validator report。
 - AI assistant の dry-run、diff、repair suggestion。
@@ -156,6 +157,7 @@ MVP外に下げるもの:
 - Cubism形式 import/export。
 - Cubism SDK/Core。
 - 既存Cubismモデル読み込み。
+- direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、AI automatic dynamics tuning。
 
 ## 5. 旧方針との関係
 

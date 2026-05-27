@@ -19,14 +19,14 @@ Domain AC本文はPrivate Prototype baselineへ整理済みである。歴史的
 | [_map.md](_map.md) | `acceptance-criteria/` 直下の入口地図 | Private baselineへ更新済み |
 | [00_RootQuestion.md](00_RootQuestion.md) | プロジェクトで作るものを定義する根本問い | Private 2D Rigging Lab / Prototypeへ更新済み |
 | [01_RootAcceptanceCriteria.md](01_RootAcceptanceCriteria.md) | ルートAC | Private Prototype / Demo and Proposal Hygieneへ更新済み |
-| [03_MVP_Acceptance_Criteria.md](03_MVP_Acceptance_Criteria.md) | MVP AC | Private Authoring-to-Viewer Prototype + Minimum Open Dynamics v1へ更新済み |
+| [03_MVP_Acceptance_Criteria.md](03_MVP_Acceptance_Criteria.md) | MVP AC | Private Authoring-to-Viewer Prototype + Minimum Open Dynamics v1確定版へ更新済み |
 | [判断原則.md](%E5%88%A4%E6%96%AD%E5%8E%9F%E5%89%87.md) | ACに含めるかどうかの判断原則 | Private baselineへ更新済み |
 
 ## 直下のディレクトリ
 
 | Path | Role | Status |
 |------|------|--------|
-| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメイン別AC | DOMAIN-09をCurrent MVP for Minimum Open Dynamics v1へ復帰済み |
+| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメイン別AC | DOMAIN-09をCurrent MVP for Minimum Open Dynamics v1確定版へ更新済み |
 
 ## 次の行動
 

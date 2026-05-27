@@ -158,7 +158,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | SC-PARAM-007 | detect single-key/endpoint-missing keyform | `keyform.missingEndpoint` report |
 | SC-PARAM-004 | `addKeyformGrid2d` for two parameters and 3x3 grid | full snapshot at diagonal/corner points |
 | SC-DYN-001 | `createDynamicsGroup` -> `bindDynamicsDriver` -> `bindDynamicsOutput` -> `setDynamicsSettings` | package diff + validation report |
-| SC-DYN-002 | `resetDynamicsPreviewState` -> run fixed-step authored input sequence in Editor preview and Viewer | matching snapshot sequence |
+| SC-DYN-002 | `resetDynamicsPreviewState` -> `runDynamicsPreviewSequence` with initial RuntimeStateDto -> run fixed-step authored input sequence in Editor preview and Viewer | matching snapshot sequence + final RuntimeStateDto |
 | SC-DYN-003 | validate dynamics graph and sequence | dynamics check report |
 | SC-DYN-004 | demo-safe preflight for secondary motion | demo-safe report |
 | SC-DEF-002 | `createRotation2dRigControl` for head pivot | operation result + snapshot |
@@ -194,8 +194,12 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `rigControl.childOutsideWarpDomain` | AC-DEF-005, SC-DEF-005 | `parent-child-out-of-domain` |
 | `dynamics.driverMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-driver` |
 | `dynamics.outputMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
+| `dynamics.outputTargetDuplicate` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-output-target-duplicate` |
 | `dynamics.driverMustBeAuthoredInput` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-driver` |
 | `dynamics.outputMustBeComputedParameter` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
+| `dynamics.computedParameterProducerMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
+| `dynamics.outputParameterOutOfRange` | AC-PHYS-003, SC-DYN-003 | `dynamics-output-range-clamp` |
+| `dynamics.outputClamped` | AC-PHYS-003, SC-DYN-003 | `dynamics-output-range-clamp` |
 | `dynamics.outputUsedAsDriver` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-cycle` |
 | `dynamics.groupCycle` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-cycle` |
 | `dynamics.nanState` | AC-PHYS-003, SC-DYN-003 | `invalid-dynamics-cycle` |
@@ -204,6 +208,8 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `dynamics.nonDeterministicSnapshot` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
 | `dynamics.resetPolicyMissing` | AC-PHYS-001, SC-DYN-001 | `invalid-dynamics-missing-output` |
 | `dynamics.timestepMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
+| `runtime.timestepOverflow` | AC-PHYS-004, SC-DYN-002 | `dynamics-fixed-step-replay` |
+| `dynamics.requiredGroupMissing` | AC-PHYS-001, SC-DYN-003 | `minimal-dynamics-hairSway` acceptance metadata |
 | `dynamics.demoUnsafeInternalName` | AC-PHYS-006, SC-DYN-004 | `demo-safe-dynamics-capture` |
 | `mask.sourceMissing` | AC-MVP-007, SC-PART-004 | `invalid-mask-reference` |
 | `mask.opacityZeroSource` | AC-MVP-007, SC-DRAW-005 | `invalid-mask-reference` |
@@ -226,8 +232,10 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `invalid-dynamics-missing-driver` | error report | dynamics driver reference/type validation |
 | `invalid-dynamics-missing-output` | error report | dynamics computed output validation |
 | `invalid-dynamics-cycle` | blocking report | dynamics dependency validation |
+| `invalid-dynamics-output-target-duplicate` | error report | one computed output producer rule |
 | `dynamics-output-range-clamp` | clamped output snapshot + diagnostic | dynamics output range validation |
 | `dynamics-reset-determinism` | paired sequence equality report | fixed timestep/reset determinism |
+| `dynamics-fixed-step-replay` | final RuntimeStateDto and snapshot sequence | explicit runtime state replay |
 | `demo-safe-dynamics-capture` | demo preflight report | dynamics demo hygiene |
 | `keyform-grid-invalid` | missing/duplicate grid key validation report | two-axis grid validation |
 | `keyform-missing-endpoint` | endpoint warning/fail validation report | one-axis keyform validation |

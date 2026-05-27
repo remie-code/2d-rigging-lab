@@ -87,7 +87,7 @@
 
 | 項目 | 理由 |
 |------|------|
-| RigControl構造の技術的正体 | 調査済み。`discussion/reports/rig control-structure-technology/` を参照 |
+| RigControl構造の技術的正体 | 調査済み。`discussion/reports/deformer-structure-technology/` を参照 |
 | Viewer / Preview の過去調査資料 | 調査済み。`discussion/reports/viewer-preview-reference/` を参照 |
 | Runtime評価セマンティクスのSDK/Core参照 | 調査済み。`discussion/reports/runtime-evaluation-semantics-reference/` を参照 |
 
@@ -104,7 +104,7 @@
 
 | Topic | Reports | Design use |
 |-------|---------|------------|
-| RigControl構造 | `discussion/reports/rig control-structure-technology/` | MVP rig control の種類、補間方式、bind space、評価順序の設計判断に使う |
+| RigControl構造 | `discussion/reports/deformer-structure-technology/` | private research archive。Active implementation source of truth はproject-defined `rotation2d` / `warpLattice2d` rigControl contract と Minimum Open Dynamics v1 contract |
 | Viewer / Preview | `discussion/reports/viewer-preview-reference/` | Editor preview / Viewer / Shared Runtime / Validator-AI bridge の境界設計に使う |
 | AI Agent 接続方式 | `discussion/design/ai-agent-connection-and-technology-stack.md` | 技術スタック、3層AI連携、shared operation core 方針の設計判断に使う |
 | Runtime評価セマンティクス | `discussion/reports/runtime-evaluation-semantics-reference/` | 過去調査資料として読み、Private Prototype MVP runtime pipeline は独自仕様として設計する |

@@ -366,11 +366,12 @@ export type MeshId = Brand<string, "MeshId">;
 
 ```ts
 export interface RuntimeCore {
-  evaluateRuntime(
+  evaluateRuntimeFrame(
     graph: NormalizedRuntimeGraph,
     input: RuntimeEvaluationInput,
+    previousState: RuntimeStateDto,
     options: RuntimeEvaluationOptions
-  ): RuntimeSnapshot;
+  ): { snapshot: RuntimeSnapshot; nextState: RuntimeStateDto };
 }
 ```
 

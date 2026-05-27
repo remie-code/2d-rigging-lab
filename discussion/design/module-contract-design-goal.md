@@ -156,11 +156,12 @@ PSDについては、Adobeが第三者向けに Photoshop File Formats Specifica
 Runtime core は次のような純粋な境界を持つべきである。
 
 ```ts
-evaluateRuntime(
+evaluateRuntimeFrame(
   graph: NormalizedRuntimeGraph,
   input: RuntimeEvaluationInput,
+  previousState: RuntimeStateDto,
   options: RuntimeEvaluationOptions
-): RuntimeSnapshot
+): { snapshot: RuntimeSnapshot; nextState: RuntimeStateDto }
 ```
 
 設計で固定すること:

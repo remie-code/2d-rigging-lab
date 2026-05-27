@@ -13,7 +13,7 @@
 
 - 接続部はmanual overlap / mask / draw order / authored keyform / joint-area validationとして扱う。
 - MVPの髪・服・小物の揺れは、Minimum Open Dynamics v1でdriver parameterから`hairSway`等のcomputed output parameterを生成し、通常keyform / rig control評価へ渡す。
-- Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
+- Full physics、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
 - 外部ツール固有の接着機能名や物理形式は、MVP仕様にしない。
 
 ### Research Notes
@@ -92,7 +92,9 @@
 - AC-BODY-004
 - AC-BODY-005
 
-## 2. 未決事項
+## 2. 確定したMVP制約と未決事項
 
-- MVPで扱うjoint-area validationの具体的な幾何検査。
 - Minimum Open Dynamics v1のsolverは`scalarDampedFollowV1`のみに絞る。
+- Dynamicsはcomputed output parameterを生成し、mesh vertexやrig control propertyを直接書き換えない。
+- 1 dynamics groupは1 computed output parameterだけを生成する。
+- MVPで扱うjoint-area validationの具体的な幾何検査は未決。

@@ -20,7 +20,7 @@ Hair partのkeyform、`hairSway`等のcomputed output parameter、通常rig cont
 
 ### AC-BODY-004: 衣装・装飾品の可動を定義できること
 
-Cloth、ribbon、accessoryなどの可動は、MVPではproject-defined parameter、Minimum Open Dynamics v1のcomputed output parameter、手動keyform、通常rig controlとして保存できること。Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外である。
+Cloth、ribbon、accessoryなどの可動は、MVPではproject-defined parameter、Minimum Open Dynamics v1のcomputed output parameter、手動keyform、通常rig controlとして保存できること。Full physics、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外である。
 
 ### AC-BODY-005: 身体可動の整合性を検証できること
 

@@ -135,8 +135,8 @@ This scenario must not rely on screenshot pixels alone for target identity.
 | `hitTestCanvas` | Editor semantic state API | `HitTestRequest` | `HitTestResultDto` | no | no |
 | `inspectModel` | Runtime / Validator read API | `InspectModelRequest` | structure DTO | no | no |
 | `inspectTarget` | Runtime / Validator read API | `InspectTargetRequest` | target details | no | no |
-| `getRuntimeSnapshot` | Runtime / Validator read API | `RuntimeEvaluationInput` | `RuntimeSnapshotDto` | no | no |
-| `runDynamicsPreviewSequence` | Runtime / Validator read API | authored parameter sequence + fixed timestep | snapshot sequence summary | no | no |
+| `getRuntimeSnapshot` | Runtime / Validator read API | authored parameter values + previous `RuntimeStateDto` or state ref | `RuntimeSnapshotDto` + next `RuntimeStateDto` or state ref | no | no |
+| `runDynamicsPreviewSequence` | Runtime / Validator read API | authored parameter sequence + initial `RuntimeStateDto` or state ref + fixed timestep | snapshot sequence summary + final `RuntimeStateDto` or state ref | no | no |
 | `validatePackage` | Runtime / Validator read API | `ValidatePackageRequest` | `ValidationReportDto` | no | no |
 | `dryRunOperation` | Operation command API | `OperationRequest(dryRun=true)` | `OperationResultDto` | no | no |
 | `commitOperation` | Operation command API | `OperationRequest(dryRun=false)` | `OperationResultDto` | yes | yes |
@@ -181,6 +181,10 @@ export const AiCommandNameSchema = z.enum([
   "rerunValidation",
 ]);
 
+export const RuntimeStatePayloadSchema = z.object({
+  schemaVersion: z.literal("runtime-state-v1"),
+}).passthrough();
+
 export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("getEditorState"), payload: z.object({ detail: z.enum(["summary", "full"]).default("summary") }) }),
   z.object({ command: z.literal("getSelection"), payload: z.object({ kinds: z.array(z.string()).optional() }) }),
@@ -188,8 +192,8 @@ export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("hitTestCanvas"), payload: z.object({ pointCssPx: z.object({ x: z.number(), y: z.number() }), includeLocked: z.boolean().default(false) }) }),
   z.object({ command: z.literal("inspectModel"), payload: z.object({ includeEditorOnly: z.boolean().default(false), includeRuntimeOnly: z.boolean().default(true) }) }),
   z.object({ command: z.literal("inspectTarget"), payload: z.object({ target: TargetRefSchema, includeReferences: z.boolean().default(true) }) }),
-  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ authoredParameterValues: z.record(z.string(), z.number()).default({}), frameIndex: z.number().int().nonnegative().default(0), deltaTimeMs: z.number().finite().nonnegative().default(16.6666667), fixedStepMs: z.number().positive().default(16.6666667), maxSubSteps: z.number().int().min(1).max(16).default(4), resetDynamics: z.boolean().default(false), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]) }) }),
-  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ authoredParameterFrames: z.array(z.record(z.string(), z.number())).min(1), fixedStepMs: z.number().positive().default(16.6666667), maxSubSteps: z.number().int().min(1).max(16).default(4), resetDynamics: z.boolean().default(true), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]).default("targeted") }) }),
+  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ authoredParameterValues: z.record(z.string(), z.number()).default({}), previousState: RuntimeStatePayloadSchema.optional(), previousStateRef: z.string().optional(), frameIndex: z.number().int().nonnegative().default(0), deltaTimeMs: z.number().finite().nonnegative().default(16.6666667), resetReasons: z.array(z.enum(["packageLoad", "manualCommand", "previewRestart", "largeInputJump", "validationRunStart", "demoCaptureStart"])).default([]), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]) }) }),
+  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ authoredParameterFrames: z.array(z.record(z.string(), z.number())).min(1), initialState: RuntimeStatePayloadSchema.optional(), initialStateRef: z.string().optional(), fixedStepMs: z.number().positive().default(16.6666667), maxSubSteps: z.number().int().min(1).max(16).default(4), resetReason: z.enum(["previewRestart", "validationRunStart", "demoCaptureStart"]).default("validationRunStart"), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]).default("targeted") }) }),
   z.object({ command: z.literal("validatePackage"), payload: z.object({ profile: z.enum(["editorIncremental", "viewer", "strict", "acceptance", "aiDryRun"]), packageRevision: z.number().int().nonnegative().optional() }) }),
   z.object({ command: z.literal("dryRunOperation"), payload: OperationRequestSchema.refine((request) => request.dryRun === true, "dryRunOperation requires dryRun=true") }),
   z.object({ command: z.literal("commitOperation"), payload: z.object({ approvedDryRunCommandId: z.string(), operation: OperationRequestSchema.refine((request) => request.dryRun === false, "commitOperation requires dryRun=false") }) }),
@@ -214,8 +218,8 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("hitTestCanvas"), payload: z.object({ hitTest: HitTestPayloadSchema }) }),
   z.object({ command: z.literal("inspectModel"), payload: z.object({ targets: z.array(TargetRefSchema), editableTargets: z.array(TargetRefSchema).default([]) }) }),
   z.object({ command: z.literal("inspectTarget"), payload: z.object({ target: TargetRefSchema, references: z.array(TargetRefSchema).default([]) }) }),
-  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ snapshotId: RuntimeSnapshotIdSchema, snapshot: RuntimeSnapshotPayloadSchema }) }),
-  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ snapshotIds: z.array(RuntimeSnapshotIdSchema), summary: z.object({ deterministic: z.boolean(), diagnostics: z.array(DiagnosticSchema).default([]) }) }) }),
+  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ snapshotId: RuntimeSnapshotIdSchema, nextState: RuntimeStatePayloadSchema.optional(), nextStateRef: z.string().optional(), snapshot: RuntimeSnapshotPayloadSchema }) }),
+  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ snapshotIds: z.array(RuntimeSnapshotIdSchema), finalState: RuntimeStatePayloadSchema.optional(), finalStateRef: z.string().optional(), summary: z.object({ deterministic: z.boolean(), diagnostics: z.array(DiagnosticSchema).default([]) }) }) }),
   z.object({ command: z.literal("validatePackage"), payload: z.object({ reportId: ValidationReportIdSchema, report: ValidationReportPayloadSchema }) }),
   z.object({ command: z.literal("dryRunOperation"), payload: z.object({ operationResult: OperationResultSchema }) }),
   z.object({ command: z.literal("commitOperation"), payload: z.object({ operationResult: OperationResultSchema }) }),
@@ -282,8 +286,8 @@ These commands are read-only. They may be implemented by `editor-ui` but exposed
 |---------|------|
 | `inspectModel` | returns package/authoring/runtime IDs and editable target graph |
 | `inspectTarget` | returns target detail, references, existing keyform/rig control connections |
-| `getRuntimeSnapshot` | delegates to runtime-core with requested profile/detail |
-| `runDynamicsPreviewSequence` | delegates to runtime-core with authored parameter sequence, fixed timestep, and reset policy; used for deterministic Dynamics preview evidence |
+| `getRuntimeSnapshot` | delegates to `evaluateRuntimeFrame` with previous `RuntimeStateDto` and requested profile/detail |
+| `runDynamicsPreviewSequence` | delegates to `evaluateRuntimeSequence` with authored parameter sequence, initial `RuntimeStateDto`, fixed timestep, and reset reason; used for deterministic Dynamics preview evidence |
 | `validatePackage` | delegates to validator-core profile |
 | `getDiff` | returns model/runtime/validation diff by stable IDs |
 | `createRepairCandidate` | creates proposal only; no package mutation |

@@ -13,7 +13,10 @@
 
 - Current MVPでは、Minimum Open Dynamics v1をproject-defined dynamics groupとして扱う。
 - Dynamics outputはcomputed output parameterに限定し、mesh vertexやrig control propertyを直接変更しない。
-- Runtimeはfixed timestepでDynamicsを評価し、同じpackage、同じinitial state、同じauthored input sequenceならEditor previewとViewerで同じ結果を返す。
+- Runtimeはhidden mutable stateを持たず、previous `RuntimeStateDto` を入力し、`RuntimeSnapshotDto` と next `RuntimeStateDto` を返す。
+- Runtimeはfixed timestepでDynamicsを評価し、同じpackage、同じinitial `RuntimeStateDto`、同じauthored input sequenceならEditor previewとViewerで同じ結果を返す。
+- 1つのdynamics groupは、MVPではちょうど1つのcomputedDynamics output parameterだけを生成する。同じcomputed output parameterへの複数group出力は禁止する。
+- 複数driverはweighted sumで合成する。
 - Cubism Physics互換、`.physics3.json`、外部solver互換、Cubism Viewer一致、Cubism Editor Physics UI再現はMVP成功条件に含めない。
 
 ### Research Notes
@@ -31,13 +34,15 @@
 1. ユーザーがDynamics panelでdynamics groupを追加する。
 2. ユーザーが`faceYaw`、`facePitch`、`bodyAngle`、`headMoveX`などのdriver parameterを選ぶ。
 3. ユーザーが`hairSway`、`clothSway`、`ribbonSwing`、`accessorySwing`などのcomputed output parameterを選ぶ。
-4. ユーザーがstiffness、damping、response、amplitude limit、reset policyを設定する。
+4. ユーザーがstiffness、damping、maxVelocity、maxAmplitude、output min/max、reset policyを設定する。
 
 ### Then
 
 - 設定は`model/dynamics.json`に保存される。
+- 保存されるsolverは`scalarDampedFollowV1`であり、runtime evaluatorのsource of truthに`response`は含めない。GUIでresponseを見せる場合はUI-only preset / derived descriptionとして扱う。
+- Dynamics groupは`output`を1つだけ持つ。複数outputが必要な場合は別groupを作る。
 - Dynamics outputはmesh vertexやrig control propertyを直接変更せず、computed output parameterとして通常keyform / rig control評価へ渡される。
-- 未接続driver、未接続output、範囲外出力、依存cycleはvalidatorがreportする。
+- 未接続driver、未接続output、範囲外出力、output target重複、computed parameter producer欠落、依存cycleはvalidatorがreportする。
 
 ### 検証するAC
 
@@ -49,18 +54,19 @@
 
 ### Given
 
-- Dynamics group、初期state、fixed timestep、authored parameter input sequenceがある。
+- Dynamics group、initial `RuntimeStateDto`、fixed timestep、authored parameter input sequenceがある。
 
 ### When
 
 1. Editor previewで入力列を再生する。
 2. Private viewerで同じ入力列を再生する。
-3. Validatorがsnapshot sequenceを比較する。
+3. Validatorがsnapshot sequenceとnext `RuntimeStateDto` sequenceを比較する。
 
 ### Then
 
 - 同じfixed timestepと初期状態なら、同じcomputed output parameter列が得られる。
 - Runtime snapshotはgroup state、driver値、output値、tick、fixedStepMs、reset状態を含む。
+- Runtime diffは`dynamicsChanges`でposition、velocity、tick、resetCounter、outputParameterIdの差分を説明できる。
 - 非決定的な差分はvalidatorでFailまたはNeeds reviewになる。
 
 ### 検証するAC
@@ -72,7 +78,7 @@
 
 ### Given
 
-- Dynamics groupにはdriver欠落、output欠落、output parameter範囲外、computed outputをdriverに使う依存、過大振幅、不安定設定、NaN stateのいずれかが含まれる。
+- Dynamics groupにはdriver欠落、output欠落、output target重複、output parameter範囲外、computed outputをdriverに使う依存、producer欠落、過大振幅、不安定設定、NaN state、timestep overflowのいずれかが含まれる。
 
 ### When
 
@@ -81,12 +87,13 @@
 ### Then
 
 - Validatorはdynamics check ID、severity、target、repair candidateをreportする。
-- `dynamics.groupCycle`、`dynamics.nanState`、`dynamics.nonDeterministicSnapshot`などの受け入れ不可状態はstrict / acceptance profileでfailまたはblockingになる。
+- `dynamics.outputTargetDuplicate`、`dynamics.computedParameterProducerMissing`、`dynamics.groupCycle`、`dynamics.nanState`、`dynamics.nonDeterministicSnapshot`などの受け入れ不可状態はstrict / acceptance profileでfailまたはblockingになる。
 
 ### 検証するAC
 
 - AC-PHYS-002
-- AC-PHYS-006
+- AC-PHYS-003
+- AC-PHYS-005
 
 ## SC-DYN-004: demo-safeにsecondary motionを見せられる
 
@@ -107,7 +114,10 @@
 
 - AC-PHYS-006
 
-## 2. 未決事項
+## 2. 確定したMVP制約
 
-- MVP solverは`scalarDampedFollowV1`のみにする。
+- MVP solverは`scalarDampedFollowV1`のみ。
+- MVP Dynamicsは1 group = 1 computed output parameter。
+- `response` はruntime evaluator入力ではなく、必要な場合だけUI-only preset / derived descriptionとして扱う。
+- Runtime coreはprevious `RuntimeStateDto`を入力し、snapshotとnext `RuntimeStateDto`を返す。
 - Dynamics GUIはCubism Physics UIを再現せず、Open Dynamics / secondary motion / driver parameter / computed output parameterの語彙で設計する。

@@ -284,6 +284,20 @@ export const RuntimeDiffSchema = z.object({
   beforeSnapshotId: RuntimeSnapshotIdSchema,
   afterSnapshotId: RuntimeSnapshotIdSchema,
   parameterChanges: z.array(FieldChangeSchema).default([]),
+  dynamicsChanges: z.array(z.object({
+    dynamicsGroupId: DynamicsGroupIdSchema,
+    outputParameterId: ParameterIdSchema.optional(),
+    stateChanged: z.boolean(),
+    outputChanged: z.boolean(),
+    positionBefore: z.number().finite().optional(),
+    positionAfter: z.number().finite().optional(),
+    velocityBefore: z.number().finite().optional(),
+    velocityAfter: z.number().finite().optional(),
+    tickBefore: z.number().int().nonnegative().optional(),
+    tickAfter: z.number().int().nonnegative().optional(),
+    resetCounterBefore: z.number().int().nonnegative().optional(),
+    resetCounterAfter: z.number().int().nonnegative().optional(),
+  })).default([]),
   drawableChanges: z.array(z.object({
     drawableId: DrawableIdSchema,
     boundsChanged: z.boolean(),
@@ -294,6 +308,22 @@ export const RuntimeDiffSchema = z.object({
   diagnosticDelta: z.array(DiagnosticSchema).default([]),
 });
 export type RuntimeDiffDto = z.infer<typeof RuntimeDiffSchema>;
+
+export const RuntimeDynamicsGroupStateSchema = z.object({
+  position: z.number().finite(),
+  velocity: z.number().finite(),
+  tick: z.number().int().nonnegative(),
+  resetCounter: z.number().int().nonnegative(),
+});
+
+export const RuntimeStateDtoSchema = z.object({
+  schemaVersion: z.literal("runtime-state-v1"),
+  frameIndex: z.number().int().nonnegative(),
+  fixedStepMs: z.number().positive(),
+  accumulatorMs: z.number().nonnegative(),
+  dynamicsGroups: z.record(DynamicsGroupIdSchema, RuntimeDynamicsGroupStateSchema),
+});
+export type RuntimeStateDto = z.infer<typeof RuntimeStateDtoSchema>;
 
 export const ValidationDiffSchema = z.object({
   schemaVersion: z.literal("validation-diff-v1"),
@@ -318,6 +348,7 @@ export type ValidationDiffDto = z.infer<typeof ValidationDiffSchema>;
 | `ManifestDto`, `GraphDto`, `DrawableDto`, `MeshDto`, `ParameterDto` | [package-file-format-contract.md](package-file-format-contract.md) | zod |
 | `AuthoringGraph`, `EditorSessionState` | [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md) | typescript |
 | `OperationRequestDto`, `OperationResultDto`, `OperationLogEntryDto` | [operation-contracts.md](operation-contracts.md) | zod |
+| `RuntimeStateDto`, `RuntimeSnapshotDto`, `RuntimeDiffDto` | [runtime-core-contract.md](runtime-core-contract.md), this file | zod |
 | `NormalizedRuntimeGraph`, `RuntimeCore` | [runtime-core-contract.md](runtime-core-contract.md) | typescript |
 | `RuntimeSnapshotDto` | [runtime-core-contract.md](runtime-core-contract.md) | zod |
 | `ValidationReportDto`, `RepairCandidateDto` | [validator-contract.md](validator-contract.md) | zod |
@@ -361,6 +392,7 @@ flowchart LR
 | AC-MVP-008, AC-PARAM-006 | `ParameterId`, `semanticRole`, private `projectPresetAlias` fields in downstream DTOs | `tutorial-like-authoring` |
 | AC-MVP-010, AC-PHYS-001 | `DynamicsGroupId`, `TargetKindSchema = "dynamicsGroup"` | `minimal-dynamics-hairSway` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
+| AC-MVP-012, AC-PHYS-004 | `RuntimeStateDtoSchema`, `RuntimeDiffSchema.dynamicsChanges` | `dynamics-fixed-step-replay`, `dynamics-reset-determinism` |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
 | SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |
 

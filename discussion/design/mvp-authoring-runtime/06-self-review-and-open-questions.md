@@ -13,17 +13,19 @@
 - `discussion/design/ai-agent-connection-and-technology-stack.md`
 - `discussion/acceptance-criteria/03_MVP_Acceptance_Criteria.md`
 - `discussion/scenarios/03_MVP_Acceptance_Criteria.md`
-- `discussion/reports/rig control-structure-technology/_map.md`
+- `discussion/reports/deformer-structure-technology/_map.md`
 - `discussion/reports/viewer-preview-reference/_map.md`
 - `discussion/reports/runtime-evaluation-semantics-reference/_map.md`
 
 ### 1.2 追加で反映した参照レポート
 
-- `discussion/reports/rig control-structure-technology/cubism-observable-rig control-semantics.md`
-- `discussion/reports/rig control-structure-technology/open-deformation-algorithm-candidates.md`
-- `discussion/reports/rig control-structure-technology/mvp-rig control-design-recommendation.md`
+- `discussion/reports/deformer-structure-technology/cubism-observable-deformer-semantics.md`
+- `discussion/reports/deformer-structure-technology/open-deformation-algorithm-candidates.md`
+- `discussion/reports/deformer-structure-technology/mvp-deformer-design-recommendation.md`
 - `discussion/reports/viewer-preview-reference/open-stack-viewer-preview-design-implications.md`
 - `discussion/reports/runtime-evaluation-semantics-reference/open-stack-runtime-evaluation-semantics-implications.md`
+
+These reports are private research archive and not implementation source of truth. Active implementation source is the project-defined `rotation2d` / `warpLattice2d` rigControl contract and Minimum Open Dynamics v1 contract.
 
 ## 2. AC Coverage Review
 
@@ -113,7 +115,7 @@
 - zip package、registry、package signing。
 - 第三者形式対応可否確認（MVP外・権利確認前提）。
 - motion / expression asset / full physics / pose の制作・再生。
-- direct mesh physics / cloth simulation / collision / IK / timeline bake。
+- direct vertex physics / direct rigControl physics output / cloth simulation / collision / IK / timeline bake。
 - advanced warp evaluator: Bezier、bicubic、MLS、cage。
 - AI automatic repair apply、複数repair案ランキング、権限モデル。
 - CI batch validator、marketplace certification。

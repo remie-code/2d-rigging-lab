@@ -127,7 +127,7 @@
 - output parameterが同じgroupまたは他groupのdriverに使われている。
 - dynamics group間依存またはcycle。
 - Dynamics stateがNaN / Infinity。
-- stiffness / damping / response / amplitude limitが不安定。
+- stiffness / damping / max velocity / max amplitude / output limitが不安定。
 - fixed timestepやmaxSubStepsがruntime/profileと一致しない。
 - 同じ入力列・同じinitial stateでpreview/viewer snapshotが一致しない。
 - demo-safe画面にCubism Physics、physics3、内部solver詳細を示す名称が出ている。

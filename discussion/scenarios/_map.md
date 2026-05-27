@@ -30,7 +30,7 @@
 | Root/MVPとの関係 | Root/MVP ACが現在baseline。MVP横断とDomain scenarioは更新済み |
 | Cubism参照操作 | private research archiveまたは非対応説明へ分離済み |
 | MVP横断シナリオ | Private Authoring-to-Viewer Prototypeへ更新済み |
-| Dynamics scenario | Minimum Open Dynamics v1のgroup作成、deterministic preview/viewer、validation、demo-safe captureへ更新済み |
+| Dynamics scenario | Minimum Open Dynamics v1のexplicit RuntimeStateDto、1 group = 1 output、validation、demo-safe captureへ更新済み |
 
 ## 次の行動
 

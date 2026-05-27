@@ -31,7 +31,7 @@
 | [concept/](concept/) | コンセプト、スコープ、方針変更メモ | Private baselineとmemo対応完了状態を記録済み |
 | [acceptance-criteria/](acceptance-criteria/) | 受け入れ基準。後続作業のオラクル | Minimum Open Dynamics v1をCurrent MVPへ復帰済み |
 | [scenarios/](scenarios/) | ACを検証可能な具体シナリオへ精緻化するトピック | Dynamics group / deterministic preview / validation / demo-safe scenarioへ更新済み |
-| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | Dynamics復帰contractとreview_002対応記録へ更新済み |
+| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | Dynamics確定版contractとreview_003対応記録へ更新済み |
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
@@ -48,7 +48,8 @@
 | Domain AC / scenario | Domain 201-225をCurrent / Optional / Future分類へ整理済み |
 | Design docs | `design/`配下をPrivate baseline語彙へ整理済み |
 | GPT-5.5 Pro review 001 | `memo/gpt-5.5-pro-review/reveiw_001.md` のP0/P1/P2指摘を分類し、反映可能なものは `discussion/design/gpt-5.5-pro-review-001-response.md` と関連文書へ反映済み |
-| GPT-5.5 Pro review 002 | `memo/gpt-5.5-pro-review/review_002.md` のRE3-001〜RE3-020を分類し、Minimum Open Dynamics v1復帰として `discussion/design/gpt-5.5-pro-review-002-response.md` と関連文書へ反映済み |
+| GPT-5.5 Pro review 002 | `memo/gpt-5.5-pro-review/review_002.md` のRE3-001〜RE3-020を分類し、Minimum Open Dynamics v1復帰として反映済み。Dynamics詳細はreview_003で上書き |
+| GPT-5.5 Pro review 003 | `memo/gpt-5.5-pro-review/review_003.md` のRE-FINAL-001〜RE-FINAL-018を分類し、explicit RuntimeStateDto、1 group = 1 output、weighted sum、solver固定式、validator/fixture/traceability確定版として `discussion/design/gpt-5.5-pro-review-003-response.md` と関連文書へ反映済み |
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 

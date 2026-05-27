@@ -62,7 +62,7 @@ MVPで扱うミニモデルは、商用品質ではなく、制作概念を一�
 - Cubism Viewer compatibility。
 - Cubism Editor UI reproduction。
 - Cubism Physics互換、`.physics3.json` import/export、Cubism Viewer一致、Cubism Editor Physics UI再現。
-- direct mesh physics、cloth simulation、collision、IK、timeline bake、AIによる物理パラメータ自動最適化。
+- direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、AIによる物理パラメータ自動最適化。
 - VTube Studio compatibility。
 - Future SDK。
 - Future integration surface。
@@ -164,12 +164,13 @@ MVPミニモデルは、少なくとも次の可動を制作・保存・再読�
 - 体上下または体傾き。
 - 片腕の回転、上下、または姿勢差分。
 - 髪揺れの最小表現。MVPでは `hairSway` 等のproject-defined scalar parameterに加えて、Minimum Open Dynamics v1 により、顔・体・頭部などのdriver parameterから髪・服・小物用のcomputed output parameterを決定的に生成できること。
+- Dynamics groupはMVPでは1 group = 1 computed output parameterに限定し、同じcomputed output parameterへの複数group出力は禁止すること。複数driverはweighted sumで合成すること。
 - 生成されたoutput parameterは、通常のkeyform / rig control / drawable評価に渡され、Editor previewとPrivate Viewerで同じ入力列に対して同じ結果を返すこと。
 - faceYaw / facePitch の手動authored parameter grid または通常補間。
 
 これらは project-defined stable ID として扱う。外部runtimeやCubism標準parameterとの互換を目的にしない。
 
-Minimum Open Dynamics v1 はMVP成功条件に含める。ただし、MVPではDynamicsがmesh vertexやrigControl propertyを直接変更せず、computed output parameterを生成して通常のkeyform / rigControl評価へ渡す。Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
+Minimum Open Dynamics v1 はMVP成功条件に含める。ただし、MVPではDynamicsがmesh vertexやrigControl propertyを直接変更せず、computed output parameterを生成して通常のkeyform / rigControl評価へ渡す。Full physics、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
 
 ### AC-MVP-011: Editor preview、保存、再読み込みが成立すること
 
@@ -185,7 +186,9 @@ Private Runtime / Viewer は、GUI Editor で保存した project-defined model 
 
 Viewer は、MVPミニモデルの parameter 一覧、範囲、初期値、現在値を表示し、GUI slider または同等の操作で値を変えられること。
 
-parameter 操作の結果として、authored/computed/effective parameter値、Dynamics groupのdriver/output/state、評価済み drawable state、vertex、visibility、opacity、draw order、mask状態、diagnostics が変化し、構造化runtime stateとして取得できること。
+parameter 操作の結果として、authored/computed/effective parameter値、Dynamics groupのdriver/output/state、評価済み drawable state、vertex、visibility、opacity、draw order、mask状態、diagnostics が変化し、構造化runtime snapshotとして取得できること。
+
+Private Runtime / Viewerはhidden mutable dynamics stateを持たず、previous `RuntimeStateDto` を入力し、`RuntimeSnapshotDto` と next `RuntimeStateDto` を返す評価APIで、Editor preview、Viewer、Validatorのdeterministic replayを揃えること。
 
 ### AC-MVP-013: Validator が構造化レポートを出力できること
 
@@ -200,7 +203,7 @@ Validator は、GUI Editor で保存した package に対して、少なくと�
 - clipping / mask 参照。
 - parameter 範囲、初期値、keyform。
 - rig control構造、親子階層、parameter接続。
-- dynamics group / driver / computed output parameter / fixed timestep / reset policy / deterministic snapshot整合性。
+- dynamics group / driver / computed output parameter / fixed timestep / explicit RuntimeStateDto / reset policy / deterministic snapshot / dynamics diff整合性。
 - runtime load test と代表parameter評価。
 - demo-safe capture に出してよい情報と隠すべき情報の分類。
 

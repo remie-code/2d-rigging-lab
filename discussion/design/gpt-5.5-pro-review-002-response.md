@@ -2,6 +2,7 @@
 
 > Source review: `memo/gpt-5.5-pro-review/review_002.md`
 > Scope: `discussion/` only. No implementation code changed.
+> Status: Historical response record; Dynamics details superseded by [gpt-5.5-pro-review-003-response.md](gpt-5.5-pro-review-003-response.md)
 
 ## Decision
 
@@ -14,7 +15,7 @@ It is defined as parameter-driven deterministic secondary motion:
 - feeds ordinary keyform / rig control evaluation;
 - does not directly mutate mesh vertices, rig control properties, drawable state, mask state, or renderer state in MVP.
 
-Cubism Physics compatibility, `.physics3.json` import/export, Cubism Viewer matching, Cubism Editor Physics UI reproduction, direct mesh physics, cloth simulation, collision, IK, timeline bake, production motion integration, and AI automatic physics tuning remain outside MVP.
+Cubism Physics compatibility, `.physics3.json` import/export, Cubism Viewer matching, Cubism Editor Physics UI reproduction, direct vertex physics, direct rigControl physics output, cloth simulation, collision, IK, timeline bake, production motion integration, and AI automatic physics tuning remain outside MVP.
 
 ## RE3 Classification
 

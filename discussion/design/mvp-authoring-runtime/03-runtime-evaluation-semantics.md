@@ -87,6 +87,9 @@ MVP範囲:
 - solverKindは`scalarDampedFollowV1`のみ。
 - Driverは`valueSource="authoredInput"` parameterだけを参照できる。
 - Outputは`valueSource="computedDynamics"` parameterだけへ書き込める。
+- 1 dynamics groupは、MVPではちょうど1つのcomputedDynamics output parameterだけを生成する。
+- 同じcomputed output parameterを複数groupが出力対象にすることは禁止する。
+- 複数driverはweighted sumで決定的に合成する。
 - Output parameterを同じgroupまたは他groupのdriverに使うことは禁止する。
 - Dynamics group間依存は禁止する。
 - Dynamicsはmesh / rig control / drawable / mask / renderer stateを読まない。
@@ -96,6 +99,8 @@ Timestepとreset:
 
 - Dynamicsはfixed timestepで評価する。raw variable deltaTimeをsolverへ直接入れない。
 - 既定値は`fixedStepMs = 16.6666667`、`maxSubSteps = 4`。
+- Runtime coreはhidden mutable stateを持たず、previous `RuntimeStateDto`を入力し、`RuntimeSnapshotDto`とnext `RuntimeStateDto`を返す。
+- `RuntimeStateDto`は`frameIndex`、`fixedStepMs`、`accumulatorMs`、groupごとの`position`、`velocity`、`tick`、`resetCounter`を持つ。
 - Resetはpackage load、user reset command、preview restart、large input jump、validation representative run start、demo capture startで発生できる。
 - 同じpackage、initial dynamics state、authored input sequence、fixedStepMsならEditor previewとViewerは同じoutput sequenceを返す。
 
@@ -283,7 +288,7 @@ Phase:
 
 ## 6. Unsupported Diagnostics
 
-Motion、expression asset、full physics、pose、direct mesh physics、cloth simulation、collision、IK、timeline bakeはMVP外に置く。
+Motion、expression asset、full physics、pose、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bakeはMVP外に置く。
 
 Packageや入力がこれらを含む場合の扱い:
 
@@ -307,7 +312,7 @@ Packageや入力がこれらを含む場合の扱い:
 ## 8. Post-MVPでよい未決事項
 
 - motion / expression / full physics / pose runtime layer。
-- direct mesh physics / cloth simulation / collision / IK / timeline bake。
+- direct vertex physics / direct rigControl physics output / cloth simulation / collision / IK / timeline bake。
 - Bezier / bicubic / MLS / cage evaluator。
 - SDK target specific mask packing。
 - advanced draw order group / sorting layer。

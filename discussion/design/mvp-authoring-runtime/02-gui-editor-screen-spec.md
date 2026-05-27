@@ -123,7 +123,7 @@ Canvasは、runtime snapshotの結果とEditor-only overlayを重ねて表示す
 | Mesh | vertex count、triangle count、bounds、UV、validation summary、regenerate / edit entry |
 | Parameter | stable ID、displayName、semanticRole、private `projectPresetAlias`、min / max / default / current、UI step |
 | Keyform | target property、parameterId、key value、interpolation、composition mode |
-| Dynamics group | stable ID、driver parameter、computed output parameter、stiffness、damping、response、amplitude limit、reset policy、enabled |
+| Dynamics group | stable ID、driver parameter、computed output parameter、stiffness、damping、max velocity、max amplitude、output limit、reset policy、enabled |
 | Rotation rig control | pivot、angle、restAngle、translation、scale、children、parameter connection |
 | Warp rig control | domain bounds、rows / columns、control points、interpolationMethod、children |
 | Mask relation | mask drawables、target drawables、status、diagnostics |
@@ -154,7 +154,7 @@ MVP操作:
 - group enable / disable
 - driver parameter selector。`authoredInput` parameterだけを選べる
 - output parameter selector。`computedDynamics` parameterだけを選べる
-- stiffness / damping / response / amplitude limit
+- stiffness / damping / max velocity / max amplitude / output limit
 - reset policy
 - preview start / stop / reset
 - simple output graph

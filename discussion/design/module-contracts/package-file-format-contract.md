@@ -404,10 +404,9 @@ export const DynamicsOutputSchema = z.object({
   clampPolicy: z.literal("clamp-to-output-range"),
 });
 
-export const ScalarDampedFollowSettingsSchema = z.object({
+export const ScalarDampedFollowSettingsV1Schema = z.object({
   stiffness: z.number().finite().nonnegative(),
   damping: z.number().finite().nonnegative(),
-  response: z.number().finite().positive(),
   maxVelocity: z.number().finite().positive().optional(),
   maxAmplitude: z.number().finite().positive().optional(),
 });
@@ -418,11 +417,25 @@ export const DynamicsGroupSchema = z.object({
   enabled: z.boolean().default(true),
   solverKind: z.literal("scalarDampedFollowV1"),
   drivers: z.array(DynamicsDriverSchema).min(1),
-  outputs: z.array(DynamicsOutputSchema).min(1),
-  settings: ScalarDampedFollowSettingsSchema,
+  output: DynamicsOutputSchema,
+  settings: ScalarDampedFollowSettingsV1Schema,
   resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"]),
 });
 export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
+
+// Dynamics package invariants:
+// - solverKind is fixed to scalarDampedFollowV1 for MVP.
+// - settings is the runtime source of truth and contains stiffness, damping,
+//   optional maxVelocity, and optional maxAmplitude. response is not saved as
+//   runtime evaluator input; GUI may expose it only as a UI-only preset or
+//   derived description.
+// - one dynamics group has exactly one output.
+// - one computedDynamics parameter may be produced by zero or one dynamics
+//   group; duplicate output.targetParameterId values are invalid.
+// - drivers must reference valueSource="authoredInput" parameters.
+// - output.targetParameterId must reference a valueSource="computedDynamics"
+//   parameter.
+// - output.min/output.max must be inside the target parameter range.
 
 export const RigControlSchema = z.discriminatedUnion("kind", [
   z.object({

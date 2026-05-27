@@ -87,12 +87,15 @@ evidence.guiOperationLogMissing
 | `keyform.tooManyParametersForMvp` | keyform_semantic | warning | acceptance: needs_review | AC-MVP-010 |
 | `rigControl.cycle` | rigControl_semantic | blocking | all: fail | AC-MVP-009 |
 | `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
-| `dynamics.groupMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-001 |
+| `dynamics.requiredGroupMissing` | dynamics_semantic | error | acceptance fixture / metadata requiring Dynamics: fail | AC-PHYS-001 |
 | `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
 | `dynamics.outputMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
+| `dynamics.outputTargetDuplicate` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
 | `dynamics.driverMustBeAuthoredInput` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
 | `dynamics.outputMustBeComputedParameter` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
+| `dynamics.computedParameterProducerMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
 | `dynamics.outputParameterOutOfRange` | dynamics_evaluation | error | strict: fail | AC-PHYS-003 |
+| `dynamics.outputClamped` | dynamics_evaluation | warning | strict: needs_review/fail by fixture | AC-PHYS-003 |
 | `dynamics.outputUsedAsDriver` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
 | `dynamics.groupCycle` | dynamics_semantic | blocking | all: fail | AC-PHYS-002 |
 | `dynamics.nanState` | dynamics_evaluation | blocking | all: fail | AC-PHYS-003 |
@@ -101,6 +104,7 @@ evidence.guiOperationLogMissing
 | `dynamics.nonDeterministicSnapshot` | representative_evaluation | error | strict/acceptance: fail | AC-PHYS-004 |
 | `dynamics.resetPolicyMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-001 |
 | `dynamics.timestepMismatch` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
+| `runtime.timestepOverflow` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
 | `dynamics.demoUnsafeInternalName` | demo_preflight | warning | demo profile: needs_review | AC-PHYS-006 |
 | `mask.sourceMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
 | `mask.opacityZeroSource` | mask_resolution | warning | strict: needs_review | AC-MVP-007 |
@@ -109,6 +113,15 @@ evidence.guiOperationLogMissing
 | `ai.dryRunMutatedPackage` | ai_evidence | blocking | acceptance: fail | AC-MVP-014 |
 | `evidence.guiOperationLogMissing` | acceptance_evidence | blocking | acceptance: fail | AC-MVP-001 |
 | `evidence.playwrightSupplementMissing` | acceptance_evidence | info | acceptance: pass with note | SC-MVP-005 |
+
+`dynamics.requiredGroupMissing` is not a general package error. Static models and fixtures that do not require Minimum Open Dynamics v1 remain valid. It fires only when an acceptance fixture requires Dynamics, model metadata declares `dynamicsRequired=true`, or a `computedDynamics` parameter exists without a producer group. The last case must also emit `dynamics.computedParameterProducerMissing`.
+
+Dynamics output validation rules:
+
+- `dynamics.outputTargetDuplicate` fires when more than one group targets the same computed output parameter.
+- `dynamics.outputMustBeComputedParameter` fires when a group writes to `authoredInput` or `debugOverride`.
+- `dynamics.outputParameterOutOfRange` fires when output min/max is outside the target parameter range.
+- `dynamics.outputClamped` is runtime evidence that clamping occurred; it is not by itself a package schema failure unless a fixture/profile requires exact unclamped output.
 
 ## Validation Profiles
 

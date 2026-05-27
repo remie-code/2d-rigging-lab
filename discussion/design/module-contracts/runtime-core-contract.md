@@ -11,7 +11,7 @@
 
 This document fixes the Shared Runtime evaluation core contract:
 
-- pure `evaluateRuntime(...)` API,
+- pure `evaluateRuntimeFrame(...)` / `evaluateRuntimeSequence(...)` API with explicit `RuntimeStateDto` input/output,
 - `NormalizedRuntimeGraph` input shape,
 - parameter input and clamp policy,
 - one-axis keyform semantics,
@@ -52,9 +52,10 @@ It does not define renderer implementation, package file IO, or editor UI state.
 
 | Contract | Owner module | Consumers | Source of truth | Artifact |
 |----------|--------------|-----------|-----------------|----------|
-| `RuntimeCore.evaluateRuntime` | `runtime-core` | editor preview, viewer, validator, AI | typescript | API |
+| `RuntimeCore.evaluateRuntimeFrame` | `runtime-core` | editor preview, viewer, validator, AI | typescript | API |
+| `RuntimeCore.evaluateRuntimeSequence` | `runtime-core` | validator, AI, fixtures | typescript | helper API |
 | `NormalizedRuntimeGraph` | `runtime-core` | runtime evaluator | typescript | internal graph |
-| `RuntimeEvaluationInput/Options` | `runtime-core` | viewer, validator, AI | zod | DTO |
+| `RuntimeEvaluationInput/Options/State` | `runtime-core` | viewer, validator, AI | zod | DTO |
 | `RuntimeSnapshotDto` | `runtime-core` | renderer, validator, AI, fixtures | zod | snapshot JSON |
 | keyform/rig control semantics | `runtime-core` | operation, validator, fixtures | mixed | evaluator contract |
 
@@ -85,11 +86,25 @@ import {
 } from "./contracts";
 
 export interface RuntimeCore {
-  evaluateRuntime(
+  evaluateRuntimeFrame(
     graph: NormalizedRuntimeGraph,
     input: RuntimeEvaluationInputDto,
+    previousState: RuntimeStateDto,
     options: RuntimeEvaluationOptionsDto
-  ): RuntimeSnapshotDto;
+  ): {
+    snapshot: RuntimeSnapshotDto;
+    nextState: RuntimeStateDto;
+  };
+
+  evaluateRuntimeSequence(
+    graph: NormalizedRuntimeGraph,
+    inputs: readonly RuntimeEvaluationInputDto[],
+    initialState: RuntimeStateDto,
+    options: RuntimeEvaluationOptionsDto
+  ): {
+    snapshots: readonly RuntimeSnapshotDto[];
+    finalState: RuntimeStateDto;
+  };
 
   compareRuntimeSnapshots(
     before: RuntimeSnapshotDto,
@@ -142,7 +157,7 @@ export interface NormalizedDynamicsGroup {
     readonly inputOffset: number;
     readonly invert: boolean;
   }[];
-  readonly outputs: readonly {
+  readonly output: {
     readonly outputId: string;
     readonly targetParameterId: ParameterId;
     readonly outputScale: number;
@@ -150,11 +165,10 @@ export interface NormalizedDynamicsGroup {
     readonly min: number;
     readonly max: number;
     readonly clampPolicy: "clamp-to-output-range";
-  }[];
+  };
   readonly settings: {
     readonly stiffness: number;
     readonly damping: number;
-    readonly response: number;
     readonly maxVelocity?: number;
     readonly maxAmplitude?: number;
   };
@@ -214,9 +228,14 @@ export const RuntimeEvaluationInputSchema = z.object({
   schemaVersion: z.literal("runtime-evaluation-input-v1"),
   frameIndex: z.number().int().nonnegative(),
   deltaTimeMs: z.number().finite().nonnegative(),
-  fixedStepMs: z.number().positive().default(16.6666667),
-  maxSubSteps: z.number().int().min(1).max(16).default(4),
-  resetDynamics: z.boolean().default(false),
+  resetReasons: z.array(z.enum([
+    "packageLoad",
+    "manualCommand",
+    "previewRestart",
+    "largeInputJump",
+    "validationRunStart",
+    "demoCaptureStart",
+  ])).default([]),
   authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
   source: z.object({
     surface: z.enum(["preview", "viewer", "validator", "aiDryRun"]),
@@ -247,8 +266,25 @@ export const RuntimeEvaluationOptionsSchema = z.object({
   }),
   epsilonPolicy: EpsilonPolicySchema,
   includeTrace: z.boolean().default(false),
+  maxSubSteps: z.number().int().min(1).max(16).default(4),
 });
 export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOptionsSchema>;
+
+export const RuntimeDynamicsGroupStateSchema = z.object({
+  position: z.number().finite(),
+  velocity: z.number().finite(),
+  tick: z.number().int().nonnegative(),
+  resetCounter: z.number().int().nonnegative(),
+});
+
+export const RuntimeStateDtoSchema = z.object({
+  schemaVersion: z.literal("runtime-state-v1"),
+  frameIndex: z.number().int().nonnegative(),
+  fixedStepMs: z.number().positive(),
+  accumulatorMs: z.number().nonnegative(),
+  dynamicsGroups: z.record(DynamicsGroupIdSchema, RuntimeDynamicsGroupStateSchema),
+});
+export type RuntimeStateDto = z.infer<typeof RuntimeStateDtoSchema>;
 ```
 
 ## Parameter / Keyform Evaluation Semantics
@@ -266,7 +302,7 @@ Evaluation rules:
 1. Initialize each declared parameter to default.
 2. Apply authored input overrides into `authoredParameterValues`.
 3. Clamp authored values to parameter ranges for preview/viewer/AI dry-run and emit `runtime.parameterClamped`.
-4. Evaluate Minimum Open Dynamics v1 from authored values, previous dynamics state, and fixed timestep.
+4. Evaluate Minimum Open Dynamics v1 from authored values, previous `RuntimeStateDto`, fixed timestep, and reset reasons.
 5. Produce and clamp `computedParameterValues` for `computedDynamics` parameters.
 6. Merge authored + computed values into `effectiveParameterValues`; debugOverride may override only in debug profiles and must be trace-visible.
 7. Validator strict may report range violations as fail while still producing diagnostic evidence.
@@ -277,8 +313,12 @@ Evaluation rules:
 
 Minimum Open Dynamics v1 is a parameter-driven deterministic secondary motion layer. It uses `scalarDampedFollowV1` only in MVP.
 
+Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, authored input sequence, fixedStepMs, and options.
+
 Rules:
 
+- One dynamics group produces exactly one computed output parameter in MVP.
+- A computedDynamics parameter may have zero or one producer dynamics group. Duplicate output target parameter IDs across groups are invalid.
 - Drivers may read only parameters whose `valueSource` is `authoredInput`.
 - Outputs may write only parameters whose `valueSource` is `computedDynamics`.
 - Dynamics output parameters cannot be drivers for the same or another dynamics group in MVP.
@@ -287,13 +327,109 @@ Rules:
 - Dynamics must not directly write mesh vertices, rigControl properties, drawable visibility, opacity, draw order, or mask state.
 - Computed output parameters such as `hairSway`, `clothSway`, `ribbonSwing`, and `accessorySwing` feed ordinary keyform and rigControl evaluation.
 
+Driver target computation:
+
+```text
+source = authoredParameterValues[sourceParameterId]
+signed = invert ? -source : source
+contribution = signed * inputScale + inputOffset
+targetInput = sum(contribution for all drivers in declaration order)
+rawTarget = targetInput * output.outputScale + output.outputOffset
+target = clamp(rawTarget, output.min, output.max)
+```
+
+The output range must be inside the target parameter range:
+
+```text
+output.min >= targetParameter.min
+output.max <= targetParameter.max
+```
+
+Solver settings:
+
+```ts
+{
+  stiffness: number;
+  damping: number;
+  maxVelocity?: number;
+  maxAmplitude?: number;
+}
+```
+
+`response` is not runtime evaluator input and must not be saved as solver source of truth. A GUI may expose response only as a UI-only preset or derived description that writes concrete stiffness/damping/limit values.
+
+Fixed `scalarDampedFollowV1` step:
+
+```text
+dt = fixedStepMs / 1000
+acceleration = stiffness * (target - position) - damping * velocity
+velocity = velocity + acceleration * dt
+
+if maxVelocity is set:
+  velocity = clamp(velocity, -maxVelocity, maxVelocity)
+
+position = position + velocity * dt
+
+if maxAmplitude is set:
+  neutral = targetParameter.default
+  position = clamp(position, neutral - maxAmplitude, neutral + maxAmplitude)
+
+position = clamp(position, output.min, output.max)
+position = clamp(position, targetParameter.min, targetParameter.max)
+
+if position was clamped:
+  velocity = 0
+
+computedParameterValues[targetParameterId] = position
+```
+
+Clamp diagnostics:
+
+- `dynamics.outputClamped` is emitted when runtime output, solver position, or final computed value is clamped.
+- `dynamics.outputParameterOutOfRange` is emitted when the declared output range is outside the target parameter range.
+- `dynamics.nanState` is blocking if position, velocity, target, or acceleration becomes NaN/Infinity.
+
+Reset behavior:
+
+```text
+position = currentTarget
+velocity = 0
+tick = 0
+resetCounter += 1
+```
+
+Dynamics reset snaps the group state to the target computed from current driver values. This avoids an artificial initial swing at preview start, validation run start, or demo capture start.
+
+Reset reason mapping:
+
+| Runtime reason | Applies package policy | Notes |
+|----------------|------------------------|-------|
+| `packageLoad` | `reset-on-load` | initial package/runtime load |
+| `manualCommand` | `reset-on-manual-command` | explicit user or operation command |
+| `previewRestart` | session reset | treated as manual preview reset; does not mutate package resetPolicy |
+| `largeInputJump` | `reset-on-large-input-jump` | applies after configured large authored input jump detection |
+| `validationRunStart` | validator-only reset | deterministic validation sequence start |
+| `demoCaptureStart` | demo-only reset | visually stable deterministic capture start |
+
 Timestep policy:
 
 - Runtime uses fixed timestep for Dynamics. Raw variable `deltaTimeMs` is accumulated into fixed steps and is never passed directly to the solver.
 - Default `fixedStepMs` is `16.6666667`.
-- Default `maxSubSteps` is `4`; exceeding it emits `dynamics.timestepMismatch` or profile-specific warning/fail diagnostics.
-- Dynamics state resets on package load, user reset command, preview restart, large input jump, validation representative run start, and demo capture start.
-- Same package, initial dynamics state, authored input sequence, and fixedStepMs must produce the same output sequence in Editor preview and Viewer.
+- Default `maxSubSteps` is `4`.
+- `RuntimeStateDto.accumulatorMs` stores remaining unprocessed time.
+
+```text
+accumulatorMs += deltaTimeMs
+subSteps = floor(accumulatorMs / fixedStepMs)
+actualSubSteps = min(subSteps, maxSubSteps)
+
+for each actual substep:
+  run scalarDampedFollowV1 step
+
+accumulatorMs -= actualSubSteps * fixedStepMs
+```
+
+If `subSteps > maxSubSteps`, interactive preview emits `runtime.timestepOverflow` and processes only `maxSubSteps`; strict validator may fail deterministic replay with `runtime.timestepOverflow` or `dynamics.timestepMismatch`.
 
 ## Project-defined 2-axis Keyform Grid Semantics
 
@@ -420,6 +556,8 @@ export const EvaluatedDynamicsGroupSchema = z.object({
   enabled: z.boolean(),
   solverKind: z.literal("scalarDampedFollowV1"),
   driverValues: z.record(ParameterIdSchema, z.number().finite()),
+  outputParameterId: ParameterIdSchema,
+  outputValue: z.number().finite(),
   outputValues: z.record(ParameterIdSchema, z.number().finite()),
   stateSummary: z.object({
     position: z.number().finite(),
@@ -474,6 +612,25 @@ export const RuntimeSnapshotSchema = z.object({
 export type RuntimeSnapshotDto = z.infer<typeof RuntimeSnapshotSchema>;
 ```
 
+`RuntimeDiffSchema` is defined in [typescript-contracts.md](typescript-contracts.md). Runtime Core must populate `dynamicsChanges` when comparing snapshots or stateful sequence results:
+
+```ts
+dynamicsChanges: Array<{
+  dynamicsGroupId: DynamicsGroupId;
+  outputParameterId?: ParameterId;
+  stateChanged: boolean;
+  outputChanged: boolean;
+  positionBefore?: number;
+  positionAfter?: number;
+  velocityBefore?: number;
+  velocityAfter?: number;
+  tickBefore?: number;
+  tickAfter?: number;
+  resetCounterBefore?: number;
+  resetCounterAfter?: number;
+}>
+```
+
 ## Diagram Requirements
 
 The runtime pipeline diagram fixes evaluation order. Snapshot comparison remains defined by the tables and Zod sketch.
@@ -482,7 +639,7 @@ The runtime pipeline diagram fixes evaluation order. Snapshot comparison remains
 
 ```mermaid
 flowchart TB
-  input[NormalizedRuntimeGraph + RuntimeEvaluationInput] --> params[parameter resolution and clamp]
+  input[NormalizedRuntimeGraph + RuntimeEvaluationInput + previous RuntimeStateDto] --> params[parameter resolution and clamp]
   params --> dynamics[Minimum Open Dynamics v1 computed parameters]
   dynamics --> effective[merge authored + computed effective parameters]
   effective --> future[disabled future layers recorded]
@@ -532,7 +689,7 @@ Preview and Viewer equivalence in MVP can use `summary` for routine checks and `
 
 ## Disabled Future Layers
 
-Motion, expression assets, full physics, pose, timeline, direct mesh physics, cloth simulation, collision, IK, and timeline bake are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
+Motion, expression assets, full physics, pose, timeline, direct vertex physics, direct rigControl physics output, cloth simulation, collision, IK, and timeline bake are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
 
 MVP hair/cloth/accessory sway is represented by Minimum Open Dynamics v1 computed output parameters plus ordinary keyforms and rigControls. Cubism Physics compatibility, `.physics3.json`, external solver compatibility, and Cubism Viewer matching remain outside MVP.
 
