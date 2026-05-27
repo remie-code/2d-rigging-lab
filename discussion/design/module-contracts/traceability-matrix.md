@@ -81,7 +81,8 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | AC-MVP-012 | `viewer-ui`, `runtime-core`, `renderer-adapter` | `RuntimeSnapshotDto`, parameter input | `minimal-valid-package`, `manual-face-grid-2d` | draft-covered |
 | AC-MVP-013 | `validator-core` | `ValidationReportDto`, check registry | all invalid fixtures | draft-covered |
 | AC-MVP-014 | `ai-interface`, `operation-core`, `runtime-core`, `validator-core` | AI command registry, dry-run, diffs, repair candidate | `ai-repair-dry-run`, `ai-screenshot-rig control-parameter` | draft-covered |
-| AC-MVP-015 | all core modules | no Cubism required dependency, disabled future layers | `minimal-valid-package`, `script-generated-minimal` | draft-covered |
+| AC-MVP-015 | `validator-core`, `viewer-ui`, `ai-interface` | demo-safe capture separation, hidden internal names, rights/provenance display filter | `demo-safe-preflight` | draft-covered |
+| AC-MVP-016 | all core modules | no Cubism required dependency, disabled future layers | `minimal-valid-package`, `script-generated-minimal` | draft-covered |
 
 ## Domain AC -> Contract Coverage
 
@@ -144,14 +145,14 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | SC-IN-001 | `importPsdSourceAsset` single-layer profile -> `createDrawable` -> `generateMesh` | source layer mapping + mesh placeholder |
 | SC-IN-002 | PSD import mapping to parts/drawables | source manifest + package diff |
 | SC-IN-003 | PSD unsupported features | diagnostic report |
-| SC-IN-004 | `.cmo3` registered as reference-only proprietary source | can-defer migration note; no MVP success dependency |
-| SC-IN-005 | Cubism runtime package registered as reference/migration-limited input | unsupported future layer diagnostics |
+| SC-IN-004 | `.cmo3` input attempt is rejected or classified as unsupported non-MVP input | no load/inspect/convert/migrate path |
+| SC-IN-005 | Cubism runtime package is not loaded, inspected, registered, converted, or migrated | unsupported input diagnostics only |
 | SC-IN-006 | PSD add/replace keeps source asset correspondence | source manifest revision + provenance diff |
 | SC-IN-007 | texture atlas metadata checked before package output | asset/texture validation report |
 | SC-IN-008 | existing project-defined model package load/inspect | package load report + runtime snapshot |
-| SC-PARAM-001 | `createParameter` with recommended alias and min/default/max | parameter DTO validation |
+| SC-PARAM-001 | `createParameter` with private `projectPresetAlias`, `semanticRole`, and min/default/max | parameter DTO validation |
 | SC-PARAM-005 | evaluate multiple parameter overrides together | runtime snapshot and parameter state |
-| SC-PARAM-006 | inspect recommended parameter alias | model inspection response |
+| SC-PARAM-006 | inspect private `projectPresetAlias` and semantic role | model inspection response |
 | SC-PARAM-007 | detect single-key/endpoint-missing keyform | `keyform.missingEndpoint` report |
 | SC-PARAM-004 | `addKeyformGrid2d` for two parameters and 3x3 grid | full snapshot at diagonal/corner points |
 | SC-DEF-002 | `createRotation2dRigControl` for head pivot | operation result + snapshot |

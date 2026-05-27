@@ -176,7 +176,7 @@ MVP外に下げるもの:
 - Root concept / Root AC / MVP ACをPrivate Prototype baselineへ更新。
 - Domain ACとDomain scenarioをCurrent / Optional / Future分類へ整理。
 - Private Prototypeのactive vocabularyをproject-defined package、private runtime core、private viewer、validator、AI assistantへ統一。
-- 接続部はprivate seam handling / joint-area validation、動的挙動はOpen Dynamics / secondary motion、顔向き風の変化はmanual authored parameter grid、parameter名はproject-defined preset / semantic roleへ整理。
+- 接続部はmanual overlap / mask / draw order / keyform / joint-area validation、動的solverはPrivate Optionalへ分離し、MVPの髪揺れはhairSway等のproject-defined parameter / keyform / rig control、顔向き風の変化はmanual authored parameter grid、parameter名はprojectPresetAlias / semantic roleへ整理。
 - AIはassistant / validator / dry-run / diff / repair suggestionとして整理。
 - Streaming Demo SurfaceとLive2D Feature Proposalの専用文書を追加。
 

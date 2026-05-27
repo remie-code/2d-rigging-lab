@@ -47,6 +47,7 @@
 | Design contract | 旧Live2D名のPSD profileを `layered-character-psd-profile-v1` に置換済み |
 | Domain AC / scenario | Domain 201-225をCurrent / Optional / Future分類へ整理済み |
 | Design docs | `design/`配下をPrivate baseline語彙へ整理済み |
+| GPT-5.5 Pro review 001 | `memo/gpt-5.5-pro-review/reveiw_001.md` のP0/P1/P2指摘を分類し、反映可能なものは `discussion/design/gpt-5.5-pro-review-001-response.md` と関連文書へ反映済み |
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 

@@ -139,12 +139,14 @@ parameter定義を保持する。
 - `parameterId`
 - `displayName`
 - `semanticRole`
+- `projectPresetAlias`
 - `min`
 - `max`
 - `default`
 - `recommendedUiStep`
 
 `semanticRole` はproject-defined preset内の説明・検証用roleであり、外部互換IDではない。
+`projectPresetAlias` はprivate project/editor preset labelであり、Live2D / Cubism / VTube Studio互換parameter IDではない。
 
 ### 2.6 `model/keyforms.json`
 
@@ -160,7 +162,9 @@ keyformを、parameter値に対する target property の評価関数として�
 - `compositionOrder`
 - `keys`
 
-MVP baselineは `linear-1d-v1` とする。顔 face yaw / pitch の斜め方向をどう表すかは実装前未決事項に残す。
+MVP baselineは `linear-1d-v1` と `parameter-grid-2d-v1` の2種類を扱う。
+
+`parameter-grid-2d-v1` は、project-defined scalar parameter space 上で、作者が手動で作成した2軸keyform gridを補間するための evaluator である。これは view direction model、angle-based multi-view synthesis、automatic diagonal generation、Cubism face-turn behavior の再現ではない。
 
 ### 2.7 `model/rig-controls.json`
 

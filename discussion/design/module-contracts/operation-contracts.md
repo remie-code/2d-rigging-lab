@@ -63,7 +63,7 @@ It does not implement mutation algorithms or UI event handlers.
 | `createDrawable` | source layer/texture/part refs | source asset exists | drawable + mesh placeholder diff | AC-MVP-004 |
 | `generateMesh` | drawable ID, method, density hints | drawable/texture exists | mesh diff, validation diagnostics | AC-MVP-005 |
 | `moveMeshVertex` | mesh ID, vertex IDs, delta or absolute positions, keyform scope | mesh exists, vertex IDs exist | model diff, runtime diff | SC-AGENT-002 |
-| `createParameter` | display name, range, recommended alias | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
+| `createParameter` | display name, range, semantic role, private `projectPresetAlias` | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
 | `addKeyform` | target, parameter, key value, target state | parameter and target exist | keyform diff, runtime diff | SC-PARAM-002 |
 | `addKeyformGrid2d` | target, two parameters, grid coordinates, key states | exactly two parameters; target exists | `parameter-grid-2d-v1` keyform diff | SC-PARAM-004 |
 | `createRotation2dRigControl` | part, children, pivot/rest transform | children exist and not cyclic | rig control diff | SC-DEF-002 |
@@ -202,14 +202,21 @@ export const GenerateMeshPayloadSchema = z.object({
   densityHint: z.enum(["low", "medium", "high"]).optional(),
 });
 
+// auto-grid-v1 and auto-outline-v1 are deterministic geometry helpers.
+// They are not ML inference outputs and do not infer Cubism-like control point distributions.
+
 export const CreateParameterPayloadSchema = z.object({
   displayName: z.string(),
-  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "custom"]).optional(),
+  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "dynamics", "custom"]).optional(),
+  projectPresetAlias: z.string().optional(),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
   recommendedUiStep: z.number().positive(),
 });
+
+// projectPresetAlias is a private project/editor preset label.
+// It is not a Live2D / Cubism / VTube Studio compatible parameter ID.
 
 export const KeyformStatePatchSchema = z.object({
   propertyPath: z.string(),

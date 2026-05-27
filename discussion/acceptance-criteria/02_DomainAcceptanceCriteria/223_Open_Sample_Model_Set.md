@@ -21,7 +21,7 @@ Private fixtureは、package load、runtime evaluation、viewer display、valida
 
 ### AC-SAMPLE-003: 機能別fixtureを将来候補として扱えること
 
-Mesh、parameter、face、body、secondary motion、validation failureなどのfixtureは、必要に応じて段階的に追加できること。
+Mesh、parameter、face、body、hairSway keyform、validation failureなどのfixtureは、必要に応じて段階的に追加できること。Full dynamics solver fixtureはPrivate Optional / Post-MVPである。
 
 ### AC-SAMPLE-004: validation failure fixtureを持てること
 

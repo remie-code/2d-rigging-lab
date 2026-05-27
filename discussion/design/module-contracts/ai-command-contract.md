@@ -30,6 +30,31 @@ It covers:
 
 It does not define prompt format, model provider, or external hosted agent authorization.
 
+## AI Negative Requirements
+
+AI assistant must not perform:
+
+- automatic complete rig generation.
+- image-to-rig generation.
+- control point distribution inference.
+- Cubism-like auto-rigging.
+- existing model conversion.
+- third-party model repair.
+- Cubism / Live2D model learning.
+- Cubism model structure reconstruction.
+- rights / legal safety determination.
+
+AI assistant may perform:
+
+- inspect.
+- explain.
+- validate.
+- dry-run operation.
+- diff.
+- repair suggestion.
+- provenance summary.
+- demo-safe classification based on metadata.
+
 ## Basis Separation
 
 ### Repository Facts

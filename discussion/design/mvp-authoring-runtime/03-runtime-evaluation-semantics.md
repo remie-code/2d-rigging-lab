@@ -11,7 +11,8 @@
 - `AC-MVP-009` は、warp / rotation相当rig control、親子階層、parameter接続、runtime評価不能なrig controlの報告を要求する。
 - `AC-MVP-011` は、Editor previewで keyform、rig control、clipping、draw order、part表示状態が制作意図通りに反映されることを要求する。
 - `AC-MVP-012` は、Viewerで parameter操作に応じた評価済みdrawable state、vertex、visibility、opacity、draw order、mask状態、diagnosticsを構造化runtime stateとして取得できることを要求する。
-- `AC-MVP-015` は、Cubism SDK/Core必須依存なしで一周できることを要求する。
+- `AC-MVP-015` は、Demo-safe capture の分離を要求する。
+- `AC-MVP-016` は、Cubism形式、Cubism SDK/Core、既存Cubismモデルを使わずに Authoring-to-Viewer の一周が成立することを要求する。
 
 ### 1.2 公式・参照事実
 
@@ -55,6 +56,7 @@ Parameterは入力値と評価値を分ける。
 | `id` | stable ID |
 | `displayName` | 人間向け名 |
 | `semanticRole` | project-defined preset内の説明・検証用role |
+| `projectPresetAlias` | private project/editor preset label。外部互換parameter IDではない |
 | `min` / `max` / `default` | package定義 |
 | `rawInput` | UI / API / dry-run から受け取った値 |
 | `value` | clamp / normalization 後に評価へ使う値 |
@@ -76,10 +78,11 @@ Keyformは target property の評価関数である。
 MVP baseline:
 
 - `linear-1d-v1`
+- `parameter-grid-2d-v1`
 - target ID
 - target kind
 - target property
-- parameter ID
+- parameter ID / parameter IDs
 - key values
 - key states
 - interpolation evaluator version
@@ -95,7 +98,7 @@ Target property例:
 
 同じ target property に複数writerがある場合は、明示的な `compositionMode` と `compositionOrder` がない限り diagnostic にする。
 
-顔 face yaw / pitch の斜め方向はMVP scenarioが要求するため、`linear-1d-v1` の独立合成で足りるか、`bilinear-parameter-grid-v1` をMVPに含めるかを実装前に決める。
+`parameter-grid-2d-v1` は、project-defined scalar parameter space 上で、作者が手動で作成した2軸keyform gridを補間するための evaluator である。これは view direction model、angle-based multi-view synthesis、automatic diagonal generation、Cubism face-turn behavior の再現ではない。
 
 ### 2.4 RigControl
 
@@ -250,7 +253,7 @@ Phase:
 
 ## 6. Unsupported Diagnostics
 
-Motion、expression asset、full physics、poseはMVP外に置く。
+Motion、expression asset、full physics、pose、full Open Dynamics / dynamics group / secondary motion solverはMVP外に置く。
 
 Packageや入力がこれらを含む場合の扱い:
 
@@ -260,10 +263,11 @@ Packageや入力がこれらを含む場合の扱い:
 - packageがそのfeatureを必須依存として宣言している場合は `warning` または `error`。
 - MVP完了判定では、timeline / motion作成未対応をfailにしない。
 - parameter-driven expression、parameter-driven hair sway相当はMVP内のkeyform / rig controlとして扱い、unsupportedにしない。
+- Open Dynamicsを再開する場合はPrivate Optional / Post-MVPとして、package / operation / runtime / validator contractを追加する。
 
 ## 7. 実装前に決めるべき未決事項
 
-- 顔 face yaw / pitch の斜め方向を `linear-1d-v1` 独立合成で扱うか、`bilinear-parameter-grid-v1` をMVPへ入れるか。
+- `parameter-grid-2d-v1` のGUI編集最小UIとfixture期待値。
 - 同じtarget propertyに複数writerがある場合の `compositionMode` 初期セット。
 - mask sourceが opacity 0 だが visibility true の場合のseverity。
 - missing textureを常に `blocking` とするか、visible drawable単位の `error` として部分表示を許すか。
@@ -271,7 +275,8 @@ Packageや入力がこれらを含む場合の扱い:
 
 ## 8. Post-MVPでよい未決事項
 
-- motion / expression / physics / pose runtime layer。
+- motion / expression / full physics / pose runtime layer。
+- full Open Dynamics / dynamics group / secondary motion solver。
 - Bezier / bicubic / MLS / cage evaluator。
 - SDK target specific mask packing。
 - advanced draw order group / sorting layer。

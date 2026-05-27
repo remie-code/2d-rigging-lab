@@ -120,7 +120,7 @@ Canvasは、runtime snapshotの結果とEditor-only overlayを重ねて表示す
 | Part | displayName、stable ID、runtime visibility方針、child drawables |
 | Drawable | stable ID、texture、mesh、part、opacity、runtime visibility、base draw order、source provenance |
 | Mesh | vertex count、triangle count、bounds、UV、validation summary、regenerate / edit entry |
-| Parameter | stable ID、displayName、semanticRole、min / max / default / current、UI step |
+| Parameter | stable ID、displayName、semanticRole、private `projectPresetAlias`、min / max / default / current、UI step |
 | Keyform | target property、parameterId、key value、interpolation、composition mode |
 | Rotation rig control | pivot、angle、restAngle、translation、scale、children、parameter connection |
 | Warp rig control | domain bounds、rows / columns、control points、interpolationMethod、children |
@@ -246,7 +246,7 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
    顔・体・腕・髪に `rotation2d` または `warpLattice2d` を作り、parameterへ接続する。
 
 8. Face face yaw / pitch
-   顔の左右・上下・斜め方向を確認する。2D keyform evaluator採否が未決の間は、実装前に仕様を確定する。
+   顔の左右・上下・斜め方向を確認する。2D keyform evaluatorは `parameter-grid-2d-v1` としてMVP採用済みであり、実装時はGUI編集導線とfixture期待値を固定する。
 
 9. Preview
    Editor previewで代表parameterを動かし、mesh、mask、draw order、rig control、warningsを確認する。

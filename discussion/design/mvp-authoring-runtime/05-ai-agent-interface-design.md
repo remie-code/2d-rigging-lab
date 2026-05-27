@@ -22,6 +22,7 @@
 - MVPのAI Interfaceは、自然文の魔法ではなく、stable IDと構造化operationを中心にする。
 - Structured APIのtransportは実装時に選べるが、operation schemaはtransport非依存にする。
 - AI Agentによる実変更は、dry-run、diff、validation、ユーザー承認を経てoperation logへcommitする。
+- AI Agentはauto-rigging systemではない。automatic complete rig generation、image-to-rig generation、control point distribution inference、Cubism-like auto-rigging、既存モデル変換、第三者モデル修復、Cubism / Live2D model learning、Cubism model structure reconstruction、rights / legal safety determinationは行わない。
 
 ## 2. 3層方針
 
@@ -43,6 +44,7 @@ AI Agent は project-defined model package のテキストファイル、operati
 - file直接編集は可能だが、正規変更は operation core と Validator再実行で確認する。
 - AIが手でJSONを書き換えた結果は、Validatorを通るまで信頼しない。
 - GUI authoring evidenceの代替にはしない。
+- 既存Cubism / Live2Dモデルの変換、再構築、修復、学習を目的にしない。
 
 ### 2.2 GUI-level AI Connection
 
@@ -59,6 +61,7 @@ GUIが提供すべき観測面:
 
 - Canvas座標クリックだけに依存しない。
 - GUI自動操作は人間制作フローの補助・検証であり、MVPのGUI制作証跡を捏造するために使わない。
+- GUI自動操作はcomplete rig generationやcontrol point distribution inferenceの代替ではない。
 
 ### 2.3 Structured API-level AI Connection
 

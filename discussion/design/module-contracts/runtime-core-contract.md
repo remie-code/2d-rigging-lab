@@ -116,7 +116,8 @@ export interface NormalizedRuntimeGraph {
 export interface NormalizedParameter {
   readonly id: ParameterId;
   readonly displayName: string;
-  readonly semanticRole?: "eye" | "brow" | "mouth" | "face" | "body" | "arm" | "hair" | "custom";
+  readonly semanticRole?: "eye" | "brow" | "mouth" | "face" | "body" | "arm" | "hair" | "dynamics" | "custom";
+  readonly projectPresetAlias?: string;
   readonly min: number;
   readonly max: number;
   readonly default: number;
@@ -236,6 +237,21 @@ face yaw / pitch diagonal expression may be represented by:
 - parent-child rig control hierarchy where one axis is on a parent and another is on a child.
 
 Both must be visible in runtime snapshot and traceability.
+
+### Negative Requirements
+
+`parameter-grid-2d-v1` is not:
+
+- view direction model.
+- output view direction calculation.
+- angle-based multi-view synthesis.
+- influence degree calculation.
+- rotation reference curve evaluation.
+- automatic diagonal face generation.
+- Cubism face-turn behavior reproduction.
+- Cubism parameter semantics.
+
+`faceYaw` and `facePitch` are project-defined scalar parameters. They do not imply camera direction, rendering direction, or view direction.
 
 ## RigControl Evaluation Semantics
 
@@ -415,7 +431,9 @@ Preview and Viewer equivalence in MVP can use `summary` for routine checks and `
 
 ## Disabled Future Layers
 
-Motion, expression assets, full physics, pose, and timeline are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
+Motion, expression assets, full physics, pose, timeline, full Open Dynamics, dynamics group, and secondary motion solver are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
+
+MVP hair/cloth/accessory sway is represented by ordinary project-defined parameters, keyforms, and rig controls. Open Dynamics can be reopened only as Private Optional / Post-MVP after package, operation, runtime, and validator contracts are added.
 
 ## Traceability
 
@@ -425,7 +443,8 @@ Motion, expression assets, full physics, pose, and timeline are represented as d
 | AC-PARAM-005, SC-PARAM-004 | `parameter-grid-2d-v1` | `manual-face-grid-2d` full snapshot |
 | AC-MVP-009, SC-DEF-003 | parent-before-child rig control hierarchy | `parent-child-rig control-diagonal` snapshot |
 | AC-MVP-012, SC-MVP-003 | `RuntimeSnapshotDto` | viewer snapshot expected output |
-| AC-MVP-015 | disabled future layers + no Cubism Core dependency | package/runtime smoke fixture |
+| AC-MVP-015 | demo-safe capture separation, hidden internal names | demo-safe preflight fixture |
+| AC-MVP-016 | disabled future layers + no Cubism Core dependency | package/runtime smoke fixture |
 
 ## Verification and Fixtures
 

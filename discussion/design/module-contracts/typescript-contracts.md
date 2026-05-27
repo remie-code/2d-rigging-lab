@@ -353,7 +353,7 @@ flowchart LR
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-004, AC-DRAW-001 | `DrawableId`, `PartId`, `TextureId`, `MeshId` | `minimal-valid-package` references |
-| AC-MVP-008, AC-PARAM-006 | `ParameterId`, recommended alias fields in downstream DTOs | `tutorial-like-authoring` |
+| AC-MVP-008, AC-PARAM-006 | `ParameterId`, `semanticRole`, private `projectPresetAlias` fields in downstream DTOs | `tutorial-like-authoring` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
 | SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |

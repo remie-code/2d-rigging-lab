@@ -148,11 +148,13 @@ Zod は、TypeScriptの型に似た schema を実行時にも検証できるラ�
 
 face yaw / pitch の斜め方向評価は Private Prototype独自の評価規則として定義する。
 
-公式ドキュメント上の参照事実:
+Historical capability observation, not implementation oracle:
 
 - Cubism Editor では、同一オブジェクトまたは変形制御に X / Y の2軸パラメータを設定し、3 x 3 のキー形状パターンとして扱う説明がある。
 - 親子関係を使うことで、全組み合わせを同一オブジェクトに持たせず、親変形制御と子変形制御に動きを分担して表現する説明がある。
 - 1つのオブジェクトまたは変形制御に過剰な数のパラメータを設定することは避けるべきであり、MVPでも任意N次元のキー形状合成は扱わない。
+
+These observations are not implementation requirements. The Private Prototype does not implement Cubism Editor semantics, UI, file format, or runtime behavior. The active implementation requirement is only the project-defined `parameter-grid-2d-v1` evaluator described below.
 
 参照:
 
@@ -163,7 +165,7 @@ face yaw / pitch の斜め方向評価は Private Prototype独自の評価規則
 
 - MVPでは、1軸キー形状評価に加え、project-defined な2軸キー形状グリッドを扱える contract を用意する。
 - 公開contract上の概念名は `parameter-grid-2d-v1` とする。`bilinear` は補間実装の選択肢であり、Cubism Editor 内部仕様そのものとしては扱わない。
-- 2軸グリッドは、同一対象に Angle X / Angle Y など2つのパラメータを割り当てた場合のキー形状評価を表す。
+- 2軸グリッドは、同一対象に `faceYaw` / `facePitch` などproject-defined scalar parametersを割り当てた場合のキー形状評価を表す。
 - 斜め方向や複合的な動きは、2軸グリッドだけでなく、親子変形制御階層による分担でも表現できるようにする。
 - 親子変形制御の評価順序は parent-before-child とし、子は親変形後の空間に対して評価される。
 - MVPでは任意N次元キー形状グリッドを採用しない。3軸以上を同一対象に割り当てるケースは validator で警告または post-MVP 扱いにする。

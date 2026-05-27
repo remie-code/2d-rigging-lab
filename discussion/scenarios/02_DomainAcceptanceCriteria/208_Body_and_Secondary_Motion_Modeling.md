@@ -5,14 +5,15 @@
 
 ## 0. 目的
 
-このシナリオは、Private Prototypeで身体姿勢、接続部、髪・服・小物のsecondary motionを作成し、private seam handlingとjoint-area validationで検証する。
+このシナリオは、Private Prototypeで身体姿勢、接続部、髪・服・小物の最小揺れ表現を作成し、manual seam handlingとjoint-area validationで検証する。
 
 ## 1. Source-of-Truth
 
 ### Design Decisions
 
-- 接続部はprivate seam handlingとjoint-area validationとして扱う。
-- Secondary motionはproject-defined dynamics groupとして保存する。
+- 接続部はmanual overlap / mask / draw order / authored keyform / joint-area validationとして扱う。
+- MVPの髪・服・小物の揺れは、`hairSway`等のproject-defined parameter、手動keyform、通常rig controlとして保存する。
+- Full Open Dynamics、dynamics group、secondary motion solverはPrivate Optional / Post-MVPとする。
 - 外部ツール固有の接着機能名や物理形式は、MVP仕様にしない。
 
 ### Research Notes
@@ -42,7 +43,7 @@
 - AC-BODY-001
 - AC-BODY-002
 
-## SC-BODY-002: private seam handlingを設定できる
+## SC-BODY-002: manual seam handlingを設定できる
 
 ### Given
 
@@ -50,21 +51,22 @@
 
 ### When
 
-1. ユーザーがjoint areaを指定する。
-2. ユーザーが接続部の補助mesh、mask、overlap、draw orderを調整する。
+1. ユーザーがjoint areaをvalidation annotationとして指定する。
+2. ユーザーが接続部を、手動で作成したoverlap、mask、draw order、keyform、drawable形状で調整する。
 3. Validatorがjoint areaを検査する。
 
 ### Then
 
-- 接続部の補助設定はpackageへ保存される。
+- Packageには、validatorが検査するjoint-area annotationと、通常のmesh/mask/drawOrder/keyformだけが保存される。
 - Validatorは隙間、過剰な重なり、mask不足、draw order不整合をreportする。
-- 接続部の扱いはproject-defined構造で説明できる。
+- Runtimeは、cross-mesh connection solver や connection medium を評価しない。
+- cross-mesh vertex binding、automatic seam solver、seam weight、display-state-specific connection table、runtime-driven part attachment、two-drawable weld / adhere / glue relation はMVPに含めない。
 
 ### 検証するAC
 
 - AC-BODY-003
 
-## SC-BODY-003: hair/cloth/accessoryのsecondary motionを設定できる
+## SC-BODY-003: hair/cloth/accessoryの最小揺れ表現を設定できる
 
 ### Given
 
@@ -72,15 +74,16 @@
 
 ### When
 
-1. ユーザーがsecondary motion groupを作成する。
-2. ユーザーが入力parameter、遅れ、減衰、制限、影響先controlを設定する。
-3. Private runtime coreが評価tickごとにgroup状態を更新する。
+1. ユーザーが`hairSway`等のproject-defined scalar parameterを作成する。
+2. ユーザーが髪・服・小物の手動keyformと通常rig controlを設定する。
+3. Private runtime coreが通常parameter/keyform/rig controlとして評価する。
 
 ### Then
 
-- Secondary motion groupは保存・再読み込みできる。
-- Runtime snapshotはgroup入力、出力、内部状態を含む。
-- 過大な揺れ、未接続target、循環入力はvalidatorで報告される。
+- 髪・服・小物の最小揺れ表現は保存・再読み込みできる。
+- Runtime snapshotはparameter値、keyform評価、rig control評価状態を含む。
+- 過大なkeyform変形、未接続target、rig control循環はvalidatorで報告される。
+- dynamics group、secondary motion solver、tick更新される内部solver stateはMVP成功条件にしない。
 
 ### 検証するAC
 
@@ -91,4 +94,4 @@
 ## 2. 未決事項
 
 - MVPで扱うjoint-area validationの具体的な幾何検査。
-- Secondary motion solverの最小パラメータ。
+- Full Open Dynamics / secondary motion solverを再開するかはPrivate Optional / Post-MVPの別設計。

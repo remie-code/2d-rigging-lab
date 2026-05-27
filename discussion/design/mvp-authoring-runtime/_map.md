@@ -38,6 +38,7 @@ MVPの正は `discussion/acceptance-criteria/03_MVP_Acceptance_Criteria.md` と 
 - Runtime core は package loader、authoring graph adapter、renderer、Editor UI stateから独立させる。
 - Editor warning、Viewer diagnostics、Validator report、AI diff は同じ diagnostics vocabulary と check ID を共有する。
 - AI assistant interface は、ファイル直接編集、GUI操作、構造化operationの3層を持つ。ただし正はoperation core / model core / validator coreであり、GUI操作や自然文応答ではない。
+- `parameter-grid-2d-v1` はMVP採用済み。full Open Dynamics / dynamics group / secondary motion solver はPrivate Optional / Post-MVP。
 
 ## 未決事項の入口
 

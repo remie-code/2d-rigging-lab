@@ -17,7 +17,7 @@ Private viewerは、parameter sliderまたは同等の操作でmodel stateを変
 
 ### AC-VIEWER-003: expression / motion / dynamicsを確認できること
 
-Private viewerは、MVP内のexpression-like composition、manual parameter grid、secondary motionを確認できること。Timelineやproduction motionはMVP外である。
+Private viewerは、MVP内のexpression-like composition、manual parameter grid、hairSway等のparameter/keyform/rig control表現を確認できること。Timeline、production motion、full dynamics solverはMVP外である。
 
 ### AC-VIEWER-004: model structureとruntime stateをinspectできること
 

@@ -33,7 +33,7 @@ Private viewerがproject-defined packageを読み込み、parameter操作、runt
 
 ### Given
 
-- Packageにはparameter、manual face grid、secondary motion、validation reportがある。
+- Packageにはparameter、manual face grid、hairSway keyform、validation reportがある。
 
 ### When
 

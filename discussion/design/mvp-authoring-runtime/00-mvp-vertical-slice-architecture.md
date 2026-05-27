@@ -166,7 +166,7 @@ Editor内警告は Validator core の incremental profile を使う。Acceptance
 - Editor preview が dirty authoring graph を毎回adapter変換するか、incremental normalized graph cacheを持つか。
 - Runtime core の初期backendを CPU TypeScript のみで固定するか、Renderer向けGPU pathと同時に設計するか。
 - Acceptance RunnerがGUI authoring evidenceをどう取得するか。operation log、Playwright trace、Editor session metadataのどれを必須証拠にするか。
-- 顔 face yaw / pitch の斜め方向を `linear-1d-v1` の独立合成で扱うか、2D keyform evaluatorをMVPへ入れるか。
+- `parameter-grid-2d-v1` のGUI編集最小UIとfixture期待値。MVP採用は確定済みであり、未決は操作導線とテスト粒度に限定する。
 
 ## 7. Post-MVPでよい未決事項
 

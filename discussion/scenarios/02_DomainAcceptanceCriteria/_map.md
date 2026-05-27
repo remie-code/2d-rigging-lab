@@ -24,8 +24,8 @@ Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Priv
 | [205_Parameter_and_Keyform_Semantics.md](205_Parameter_and_Keyform_Semantics.md) | パラメータとキーフォームのシナリオ | project-defined presetへ更新済み |
 | [206_Part_Visibility_and_Composition_Semantics.md](206_Part_Visibility_and_Composition_Semantics.md) | パーツ、表示、構成状態のシナリオ | Private Prototypeへ更新済み |
 | [207_Facial_Motion_Modeling.md](207_Facial_Motion_Modeling.md) | 顔可動のシナリオ | manual authored parameter gridへ更新済み |
-| [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | 身体・副次部位可動のシナリオ | private seam handlingへ更新済み |
-| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | 動的挙動のシナリオ | Open Dynamics / secondary motionへ更新済み |
+| [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | 身体・副次部位可動のシナリオ | manual seam + hairSway keyformへ更新済み |
+| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | 動的挙動のシナリオ | Private Optional / Post-MVPへ分類済み |
 | [210_Animation_and_Timeline_Production.md](210_Animation_and_Timeline_Production.md) | アニメーション・タイムライン制作のシナリオ | Optional / current MVP外へ分類済み |
 | [211_Runtime_Export_and_Compatibility.md](211_Runtime_Export_and_Compatibility.md) | package save/runtime readinessのシナリオ | project-defined packageへ更新済み |
 | [212_Model_Verification.md](212_Model_Verification.md) | モデル検証のシナリオ | demo-safe分類を含め更新済み |

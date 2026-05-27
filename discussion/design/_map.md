@@ -20,6 +20,7 @@
 | [initial-design-decisions-and-open-questions.md](initial-design-decisions-and-open-questions.md) | MVP更新前後の設計判断、委任範囲、要調査・要議論事項 | Private baseline語彙へ整理済み |
 | [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) | AI assistant 接続方式と技術スタック方針 | Private baseline語彙へ整理済み |
 | [module-contract-design-decisions.md](module-contract-design-decisions.md) | module contract design の判断ログ | Private baseline語彙へ整理済み。過去判断は参考 |
+| [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) | `memo/gpt-5.5-pro-review/reveiw_001.md` への対応分類と反映結果 | Current response record |
 | [module-contract-design-goal.md](module-contract-design-goal.md) | module contract design の到達目標、要求粒度、トレーサビリティ要求 | Private baseline語彙へ整理済み |
 | [module-contract-output-format-template.md](module-contract-output-format-template.md) | module contract成果物の共通書式・ファイル別テンプレート | 参考 |
 | [module-contracts/](module-contracts/_map.md) | TypeScript + Web 向け contract-first module design 成果物群 | Private baseline語彙へ整理済み |
@@ -35,6 +36,7 @@
 | Runtime / Viewer | private runtime coreをEditor previewとViewerで共有する |
 | Validator | package / runtime / rights / provenance / demo-safe capture を構造化reportにする |
 | AI | auto-riggingではなく assistant / validator として、dry-run、diff、repair suggestion、provenanceを扱う |
+| GPT-5.5 Pro review 001 | P0/P1/P2の反映可能指摘を反映。詳細は [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) |
 | Demo / Proposal | Streaming Demo Surface と Live2D Feature Proposal はprivate実装から分離する。専用文書を追加済み |
 
 ## 次の行動

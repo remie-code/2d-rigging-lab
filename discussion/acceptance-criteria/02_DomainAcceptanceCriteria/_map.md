@@ -22,8 +22,8 @@
 | [205_Parameter_and_Keyform_Semantics.md](205_Parameter_and_Keyform_Semantics.md) | Parameter and Keyform Semantics | Current / project-defined presetへ整理済み |
 | [206_Part_Visibility_and_Composition_Semantics.md](206_Part_Visibility_and_Composition_Semantics.md) | Part, Visibility, and Composition Semantics | Current / Private Prototypeへ整理済み |
 | [207_Facial_Motion_Modeling.md](207_Facial_Motion_Modeling.md) | Facial Motion Modeling | Current / manual authored parameter gridへ整理済み |
-| [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | Body and Secondary Motion Modeling | Current / private seam handlingへ整理済み |
-| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | Open Dynamics and Secondary Motion | Current / secondary motionへ整理済み |
+| [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | Body and Secondary Motion Modeling | Current / manual seam + hairSway keyformへ整理済み |
+| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | Open Dynamics and Secondary Motion | Private Optional / Post-MVPへ分類済み |
 | [210_Animation_and_Timeline_Production.md](210_Animation_and_Timeline_Production.md) | Animation and Timeline Production | Optional / current MVP外へ分類済み |
 | [211_Runtime_Export_and_Compatibility.md](211_Runtime_Export_and_Compatibility.md) | Project Package Save and Runtime Readiness | Current / project-defined packageへ整理済み |
 | [212_Model_Verification.md](212_Model_Verification.md) | Model Verification | Current / demo-safe分類を含め整理済み |

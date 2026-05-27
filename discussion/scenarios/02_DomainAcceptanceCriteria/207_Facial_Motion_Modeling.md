@@ -77,7 +77,7 @@
 
 1. ユーザーがfaceYaw、facePitch、faceRollのparameterを作成する。
 2. ユーザーがmanual authored parameter gridを開く。
-3. ユーザーがgrid cellごとにmesh、draw order、opacity、mask、secondary motion影響を調整する。
+3. ユーザーがgrid cellごとにmesh、draw order、opacity、mask、hairSway等のproject-defined parameter/keyform影響を調整する。
 
 ### Then
 

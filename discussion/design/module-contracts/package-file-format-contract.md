@@ -295,13 +295,17 @@ export type MeshDto = z.infer<typeof MeshSchema>;
 export const ParameterSchema = z.object({
   parameterId: ParameterIdSchema,
   displayName: z.string(),
-  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "custom"]).optional(),
+  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "dynamics", "custom"]).optional(),
+  projectPresetAlias: z.string().optional(),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
   recommendedUiStep: z.number().positive(),
 });
 export type ParameterDto = z.infer<typeof ParameterSchema>;
+
+// projectPresetAlias is a private project/editor preset label.
+// It is not a Live2D / Cubism / VTube Studio compatible parameter ID.
 
 export const PackageStatePatchValueSchema = z.union([
   z.number().finite(),
@@ -509,7 +513,8 @@ flowchart TB
 | AC-IN-006, SC-IN-003 | unsupported/lost source info diagnostics | `psd-unsupported-layer` validation report |
 | AC-MVP-004, AC-DRAW-001 | `DrawableDto`, `MeshDto`, texture refs | `minimal-valid-package` |
 | AC-MVP-011, SC-MVP-003 | package layout + save/reload references | `tutorial-like-authoring` roundtrip |
-| AC-MVP-016, SC-MVP-005 | no Cubism SDK/Core package dependency | package manifest check |
+| AC-MVP-015, SC-MVP-005 | demo-safe capture separation and hidden internal names | demo-safe preflight fixture |
+| AC-MVP-016, SC-MVP-006 | no Cubism SDK/Core package dependency | package manifest check |
 
 ## Verification and Fixtures
 

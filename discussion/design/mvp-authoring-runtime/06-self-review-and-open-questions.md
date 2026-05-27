@@ -36,21 +36,22 @@
 | AC-MVP-005 | mesh構造とmesh validation checksを定義した | `01`, `02`, `03`, `04` |
 | AC-MVP-006 | lock / hide / selectをEditor-only、draw orderをruntime-visibleとして分離した | `02`, `03` |
 | AC-MVP-007 | mask relation、mask UI、mask resolution、mask diagnosticsを定義した | `01`, `02`, `03`, `04` |
-| AC-MVP-008 | parameter、範囲、keyform、`linear-1d-v1`、out-of-range扱いを定義した | `01`, `02`, `03` |
+| AC-MVP-008 | parameter、範囲、keyform、`linear-1d-v1`、`parameter-grid-2d-v1`、out-of-range扱いを定義した | `01`, `02`, `03` |
 | AC-MVP-009 | `rotation2d` / `warpLattice2d`、rig control hierarchy、parameter接続、rig control validationを定義した | `00`, `01`, `02`, `03`, `04` |
 | AC-MVP-010 | 基本制作能力の初心者導線と project-defined parameter を定義した | `02`, `03` |
 | AC-MVP-011 | Editor preview、保存、再読み込み、dirty graph adapterを定義した | `00`, `01`, `02`, `03` |
 | AC-MVP-012 | Viewer、Shared Runtime core、parameter操作、runtime snapshotを定義した | `00`, `03`, `04` |
 | AC-MVP-013 | Validator report、check set、runtime load test、代表parameter評価を定義した | `04` |
 | AC-MVP-014 | File / GUI / Structured API 3層、dry-run、diff、repair、provenance、再検証を定義した | `05` |
-| AC-MVP-015 | Cubism非依存、Cubism関連資料は過去調査・リスク確認扱い、unsupported diagnosticsを定義した | `00`, `03`, `04` |
+| AC-MVP-015 | Demo-safe captureの分離、表示不可情報、capture前検証を定義した | `04`, `05` |
+| AC-MVP-016 | Cubism非依存、Cubism関連資料は過去調査・リスク確認扱い、unsupported diagnosticsを定義した | `00`, `03`, `04` |
 
 ## 3. Scenario Coverage Review
 
 | Scenario | 設計での対応 | 残リスク |
 |---|---|---|
 | SC-MVP-001 | Import、parts/drawables、mesh、lock/hide/select、draw order、mask導線を定義 | PSD importをMVP primaryにするか分割PNG primaryにするか未決 |
-| SC-MVP-002 | 推奨parameter、keyform、rig control、face yaw / pitch導線を定義 | 斜め方向の2D keyform evaluator採否が未決 |
+| SC-MVP-002 | project-defined parameter、keyform、rig control、`parameter-grid-2d-v1`導線を定義 | grid UIの最小操作導線とfixture粒度は実装時に詰める |
 | SC-MVP-003 | package保存、再読み込み、Viewer load、runtime snapshotを定義 | preview/viewer snapshot一致の比較方法が未決 |
 | SC-MVP-004 | Validator report、AI dry-run、diff、repair candidate、revalidationを定義 | structured API transportと承認UIが未決 |
 | SC-MVP-005 | GUI authoring evidenceとAcceptance Runnerで誤判定防止を定義 | GUI evidenceの具体収集形式が未決 |
@@ -95,7 +96,7 @@
 
 | 項目 | なぜ実装前に必要か | 推奨解決 |
 |---|---|---|
-| 顔 face yaw / pitch の斜め方向評価 | SC-MVP-002が斜め方向確認を要求し、runtimeとpreviewの一致に影響する | MVPでは `bilinear-parameter-grid-v1` を入れるか、`linear-1d-v1` 独立合成で足りるかを小さなfixtureで決める |
+| `parameter-grid-2d-v1` のGUI編集最小UI | SC-MVP-002がmanual authored parameter gridを要求し、runtimeとpreviewの一致に影響する | MVP採用は確定済み。実装時は `manual-face-grid-2d` fixtureで編集導線と期待snapshotを固定する |
 | `compositionMode` 初期セット | 同一target propertyの複数writerが未定義だとruntime結果が不安定になる | MVPは `replace` と `additiveDelta`、opacity用 `multiplyOpacity` までに絞る候補 |
 | PSD import vs split PNG primary | import UIとfixture制作のスコープが変わる | MVP primaryは分割PNG + provenance、PSDは受け入れ可能ならoptionalにする候補 |
 | 初期warp lattice解像度 | 初心者導線とruntime evaluatorのfixtureに影響する | 2x2 baseline、顔/髪fixtureで不足なら3x3標準を検討 |
@@ -111,6 +112,7 @@
 - zip package、registry、package signing。
 - 第三者形式対応可否確認（MVP外・権利確認前提）。
 - motion / expression asset / full physics / pose の制作・再生。
+- full Open Dynamics / dynamics group / secondary motion solver。
 - advanced warp evaluator: Bezier、bicubic、MLS、cage。
 - AI automatic repair apply、複数repair案ランキング、権限モデル。
 - CI batch validator、marketplace certification。

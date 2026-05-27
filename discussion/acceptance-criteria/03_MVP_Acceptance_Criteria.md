@@ -132,7 +132,7 @@ Validator は、mask参照先の欠落、循環、無効対象、runtimeで解�
 
 ### AC-MVP-008: parameter、範囲、keyform、補間を制作できること
 
-GUI Editor は、project-defined parameter を作成し、ID、表示名、最小値、最大値、初期値、現在値、semantic role、project preset alias を扱えること。
+GUI Editor は、project-defined parameter を作成し、ID、表示名、最小値、最大値、初期値、現在値、semantic role、`projectPresetAlias` を扱えること。
 
 GUI Editor は、parameter に keyform を追加し、各keyformで drawable、mesh、rig control構造、opacity、visibility などの状態を編集できること。
 
@@ -160,10 +160,12 @@ MVPミニモデルは、少なくとも次の可動を制作・保存・再読�
 - 顔roll。
 - 体上下または体傾き。
 - 片腕の回転、上下、または姿勢差分。
-- 髪揺れまたは secondary motion の最小表現。
+- 髪揺れの最小表現。MVPでは `hairSway` 等のproject-defined scalar parameter、手動keyform、通常rig controlで扱う。
 - faceYaw / facePitch の手動authored parameter grid または通常補間。
 
 これらは project-defined stable ID として扱う。外部runtimeやCubism標準parameterとの互換を目的にしない。
+
+Full Open Dynamics、dynamics group、secondary motion solver は current MVP の成功条件にしない。必要な場合は Private Optional / Post-MVP として、package / operation / runtime / validator contract を追加してから扱う。
 
 ### AC-MVP-011: Editor preview、保存、再読み込みが成立すること
 
@@ -268,10 +270,10 @@ MVPは、次のすべてを満たしたときに完了とする。
 
 - Domain AC / scenarioをPrivate Prototype baselineへ整理。
 - Future SDK、Future integration surface、Future streaming app、public sample distributionはFuture / out of current MVPへ分類。
-- 旧接続固有語をprivate seam handling / joint-area validationへ整理。
-- Physics相当の語彙をOpen Dynamics / secondary motionへ整理。
+- 旧接続固有語をmanual overlap / mask / draw order / keyform / joint-area validationへ整理。
+- Physics相当の語彙はPrivate Optional / Post-MVPへ分離し、MVPではhairSway等のproject-defined parameter / keyform / rig controlへ整理。
 - face yaw / pitchをmanual authored parameter grid文脈へ整理。
-- 旧標準ID語彙をproject-defined parameter preset / semantic roleへ整理。
+- 旧標準ID語彙をprojectPresetAlias / semantic roleへ整理。
 - AIをassistant / validator / dry-run / diff / repair suggestion文脈へ整理。
 - Demo policyとLive2D Feature Proposal templateを追加。
 

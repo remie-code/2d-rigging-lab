@@ -15,14 +15,14 @@
 | [_map.md](_map.md) | この module contract design 成果物群の入口地図 | Private baselineへ更新済み |
 | [module-boundaries.md](module-boundaries.md) | module責務、所有state、禁止依存、Future integration boundary、実装分担境界 | Private baseline語彙へ整理済み |
 | [typescript-contracts.md](typescript-contracts.md) | shared branded ID、primitive、diagnostic、diff、DTO index の TypeScript / Zod 契約 | Private baseline語彙へ整理済み |
-| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | `layered-character-psd-profile-v1`と`semanticRole`へ更新済み |
-| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | `layered-character-psd-profile-v1`と`semanticRole`へ更新済み |
-| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、parent-before-child rig control、snapshot契約 | manual face grid fixture名へ更新済み |
+| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | `projectPresetAlias`とAC-MVP-015/016 traceabilityへ更新済み |
+| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | `projectPresetAlias`とdeterministic mesh helper制約へ更新済み |
+| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、parent-before-child rig control、snapshot契約 | grid negative requirementsとAC-MVP-015/016 traceabilityへ更新済み |
 | [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | Private baseline語彙へ整理済み |
 | [gui-operation-contract.md](gui-operation-contract.md) | UI event -> operation mapping、semantic state、hit-test、GUI evidence契約 | Private baseline語彙へ整理済み |
-| [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | assistant / validator語彙へ整理済み |
+| [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | AI negative requirementsを追加済み |
 | [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) | fixture registry、expected validation report/runtime snapshot/diff、contract test方針 | manual face grid fixture名へ更新済み |
-| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | manual face grid fixture名へ更新済み |
+| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | AC-MVP-015/016とunsupported Cubism input表現へ更新済み |
 | [review-summary.md](review-summary.md) | 独立レビュー3観点の findings、対応状況、残未決事項分類 | 旧baselineレビューとして参考 |
 
 ## 主要な設計判断の反映先
@@ -46,9 +46,9 @@
 
 ## 次の行動候補
 
-1. 実装着手前に`semanticRole`とparameter presetのUI/DTO整合を再確認する。
-2. Future integration boundaryを再開する場合は、transport/API公開範囲を別途reviewする。
-3. Contract testsへ落とすfixture実体を作る。
+1. Contract testsへ落とすfixture実体を作る。
+2. Demo-safe preflight fixtureをvalidator/AI assistantの実装taskへ落とす。
+3. Future integration boundaryを再開する場合は、transport/API公開範囲を別途reviewする。
 
 ## 未決事項
 

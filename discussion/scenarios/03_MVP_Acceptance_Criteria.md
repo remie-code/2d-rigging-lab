@@ -62,7 +62,7 @@
 1. ユーザーがwarp lattice、rotation handle、mask、opacity、draw orderを設定する。
 2. ユーザーがproject-defined parameter presetを作成し、semantic roleを付与する。
 3. ユーザーがfaceYaw、facePitch、faceRoll、eyeOpen、mouthOpen、expressionなどのmanual authored parameter gridを編集する。
-4. ユーザーがhair、cloth、accessoryなどにsecondary motionを設定する。
+4. ユーザーがhair、cloth、accessoryなどに、`hairSway`等のproject-defined parameter、手動keyform、通常rig controlを設定する。
 
 ### Then
 
@@ -81,7 +81,7 @@
 
 ### Given
 
-- Projectにはpart、drawable mesh、rig control、parameter、keyform、secondary motionが登録されている。
+- Projectにはpart、drawable mesh、rig control、parameter、keyform、hairSway等の手動揺れ表現が登録されている。
 
 ### When
 
@@ -94,7 +94,7 @@
 
 - 保存前後でpart、drawable、mesh、rig control、keyform、provenance、validation metadataが保持される。
 - private GUI editor previewとprivate viewerは、同じprivate runtime coreの評価結果を共有する。
-- runtime snapshotは、デバッグ可能なparameter値、drawable transform、draw order、visibility、secondary motion状態を含む。
+- runtime snapshotは、デバッグ可能なparameter値、drawable transform、draw order、visibility、keyform/rig control評価状態を含む。
 
 ### 検証するAC
 
