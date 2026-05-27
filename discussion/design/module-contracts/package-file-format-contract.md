@@ -15,6 +15,8 @@ It unblocks `package-format`, `source import adapter`, `validator-core`, `operat
 
 MVP includes `layered-character-psd-profile-v1` for generic layered character source art. This profile is not a Live2D / Cubism import profile. It does not read, write, infer, or convert Cubism model structures.
 
+MVP includes `Minimum Open Dynamics v1` as parameter-driven deterministic secondary motion. Package dynamics definitions generate computed output parameters; they do not directly mutate mesh vertices or rigControl properties.
+
 The contract does not aim for full Photoshop compatibility, PSB primary support, Cubism `.cmo3` reconstruction, Cubism model loading, Cubism SDK/Core use, or `.moc3` compatibility export.
 
 ## Basis Separation
@@ -65,6 +67,7 @@ MVPAvatar_Clean.openpackage/
     parameters.json
     keyforms.json
     rig-controls.json
+    dynamics.json
     masks.json
     draw-order.json
     editor-state.json
@@ -103,6 +106,7 @@ MVPAvatar_Clean.openpackage/
 | `model/parameters.json` | `ParametersFileDto` | yes | parameter IDs and aliases | semantic + runtime validator |
 | `model/keyforms.json` | `KeyformsFileDto` | yes | target IDs, parameter IDs | semantic + runtime validator |
 | `model/rig-controls.json` | `RigControlsFileDto` | yes | child drawable/rig control IDs | semantic + runtime validator |
+| `model/dynamics.json` | `DynamicsFileDto` | yes | driver authored parameters, computed output parameters, solver settings, reset policy | semantic + runtime validator |
 | `model/masks.json` | `MasksFileDto` | yes | mask/target drawable IDs | semantic + runtime validator |
 | `model/draw-order.json` | `DrawOrderFileDto` | yes | drawable IDs | semantic + runtime validator |
 | `model/editor-state.json` | `EditorStateFileDto` | optional | selection/lock/editor hide | editor profile only |
@@ -135,7 +139,7 @@ MVP PSD import profile:
 | fill, adjustment layer, smart object, text layer, effects, vector shape, complex blend | unsupported or rasterize-required diagnostic |
 | PSB | not MVP primary; can be post-MVP optional import |
 
-PSD is a source asset, not a runtime graph. Runtime core sees only normalized drawables, meshes, rig controls, keyforms, masks, draw order, and textures.
+PSD is a source asset, not a runtime graph. Runtime core sees only normalized drawables, meshes, rig controls, dynamics groups, keyforms, masks, draw order, and textures.
 
 ## Split PNG Fallback Source Asset Contract
 
@@ -195,6 +199,7 @@ import {
   PackageIdSchema,
   PartIdSchema,
   ParameterIdSchema,
+  DynamicsGroupIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
   RigControlIdSchema,
@@ -223,6 +228,7 @@ export const PackageManifestSchema = z.object({
     parameters: z.literal("model/parameters.json"),
     keyforms: z.literal("model/keyforms.json"),
     rigControls: z.literal("model/rig-controls.json"),
+    dynamics: z.literal("model/dynamics.json"),
     masks: z.literal("model/masks.json"),
     drawOrder: z.literal("model/draw-order.json"),
     editorState: z.literal("model/editor-state.json").optional(),
@@ -297,6 +303,7 @@ export const ParameterSchema = z.object({
   displayName: z.string(),
   semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "dynamics", "custom"]).optional(),
   projectPresetAlias: z.string().optional(),
+  valueSource: z.enum(["authoredInput", "computedDynamics", "debugOverride"]).default("authoredInput"),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
@@ -333,25 +340,89 @@ export const ModelGraphSchema = z.object({
 });
 export type ModelGraphDto = z.infer<typeof ModelGraphSchema>;
 
-export const KeyformEvaluatorSchema = z.enum(["linear-1d-v1", "parameter-grid-2d-v1"]);
-export const KeyformSetSchema = z.object({
+export const KeyformTargetSchema = z.object({
+  kind: z.enum(["mesh", "rigControl", "drawable", "opacity", "visibility", "drawOrder"]),
+  id: z.string(),
+  property: z.string(),
+});
+
+export const Linear1dKeyformSetSchema = z.object({
   keyformSetId: KeyformSetIdSchema,
-  target: z.object({
-    kind: z.enum(["mesh", "rig control", "drawable", "opacity", "visibility", "drawOrder"]),
-    id: z.string(),
-    property: z.string(),
-  }),
-  parameterIds: z.array(ParameterIdSchema).min(1).max(2),
-  evaluator: KeyformEvaluatorSchema,
-  interpolation: z.enum(["linear-1d-v1", "bilinear-grid-v1"]),
+  target: KeyformTargetSchema,
+  parameterId: ParameterIdSchema,
+  evaluator: z.literal("linear-1d-v1"),
+  interpolation: z.literal("linear-1d-v1"),
   compositionMode: z.enum(["replace", "additiveDelta", "multiplyOpacity"]),
   compositionOrder: z.number().int(),
   keys: z.array(z.object({
-    coordinates: z.record(ParameterIdSchema, z.number().finite()),
+    value: z.number().finite(),
     statePatch: PackageStatePatchValueSchema,
   })),
 });
+
+export const ParameterGrid2dKeyformSetSchema = z.object({
+  keyformSetId: KeyformSetIdSchema,
+  target: KeyformTargetSchema,
+  parameterX: ParameterIdSchema,
+  parameterY: ParameterIdSchema,
+  evaluator: z.literal("parameter-grid-2d-v1"),
+  interpolation: z.literal("bilinear-grid-v1"),
+  clampPolicy: z.literal("clamp-to-parameter-range"),
+  missingKeyPolicy: z.literal("diagnostic-error"),
+  compositionMode: z.enum(["replace", "additiveDelta"]),
+  compositionOrder: z.number().int(),
+  keys: z.array(z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    statePatch: PackageStatePatchValueSchema,
+  })),
+});
+
+export const KeyformSetSchema = z.discriminatedUnion("evaluator", [
+  Linear1dKeyformSetSchema,
+  ParameterGrid2dKeyformSetSchema,
+]);
 export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
+
+export const DynamicsSolverKindSchema = z.enum(["scalarDampedFollowV1"]);
+
+export const DynamicsDriverSchema = z.object({
+  driverId: z.string(),
+  sourceParameterId: ParameterIdSchema,
+  inputScale: z.number().finite().default(1),
+  inputOffset: z.number().finite().default(0),
+  invert: z.boolean().default(false),
+});
+
+export const DynamicsOutputSchema = z.object({
+  outputId: z.string(),
+  targetParameterId: ParameterIdSchema,
+  outputScale: z.number().finite().default(1),
+  outputOffset: z.number().finite().default(0),
+  min: z.number().finite(),
+  max: z.number().finite(),
+  clampPolicy: z.literal("clamp-to-output-range"),
+});
+
+export const ScalarDampedFollowSettingsSchema = z.object({
+  stiffness: z.number().finite().nonnegative(),
+  damping: z.number().finite().nonnegative(),
+  response: z.number().finite().positive(),
+  maxVelocity: z.number().finite().positive().optional(),
+  maxAmplitude: z.number().finite().positive().optional(),
+});
+
+export const DynamicsGroupSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  displayName: z.string(),
+  enabled: z.boolean().default(true),
+  solverKind: z.literal("scalarDampedFollowV1"),
+  drivers: z.array(DynamicsDriverSchema).min(1),
+  outputs: z.array(DynamicsOutputSchema).min(1),
+  settings: ScalarDampedFollowSettingsSchema,
+  resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"]),
+});
+export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
 
 export const RigControlSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -444,6 +515,7 @@ export const MeshesFileSchema = z.object({ schemaVersion: z.literal("meshes-file
 export const ParametersFileSchema = z.object({ schemaVersion: z.literal("parameters-file-v1"), parameters: z.array(ParameterSchema) });
 export const KeyformsFileSchema = z.object({ schemaVersion: z.literal("keyforms-file-v1"), keyformSets: z.array(KeyformSetSchema) });
 export const RigControlsFileSchema = z.object({ schemaVersion: z.literal("rig-controls-file-v1"), rigControls: z.array(RigControlSchema) });
+export const DynamicsFileSchema = z.object({ schemaVersion: z.literal("dynamics-file-v1"), dynamicsGroups: z.array(DynamicsGroupSchema) });
 export const MasksFileSchema = z.object({ schemaVersion: z.literal("masks-file-v1"), masks: z.array(MaskRelationSchema) });
 export const DrawOrderFileSchema = z.object({ schemaVersion: z.literal("draw-order-file-v1"), entries: z.array(DrawOrderEntrySchema) });
 export const ProvenanceFileSchema = z.object({ schemaVersion: z.literal("provenance-file-v1"), records: z.array(ProvenanceRecordSchema) });
@@ -461,7 +533,10 @@ export const RightsFileSchema = z.object({ schemaVersion: z.literal("rights-file
 | mesh -> drawable | must exist in `drawables.json` | `ref.meshDrawableMissing` |
 | keyform -> parameter | all parameter IDs must exist | `keyform.parameterMissing` |
 | keyform -> target | target ID must exist for target kind | `keyform.targetMissing` |
-| rig control -> child | child drawable/rig control IDs must exist and be acyclic | `rig control.childMissing`, `rig control.cycle` |
+| rigControl -> child | child drawable/rigControl IDs must exist and be acyclic | `rigControl.childMissing`, `rigControl.cycle` |
+| dynamics -> driver | driver parameter must exist and have `valueSource="authoredInput"` | `dynamics.driverMissing`, `dynamics.driverMustBeAuthoredInput` |
+| dynamics -> output | output parameter must exist and have `valueSource="computedDynamics"` | `dynamics.outputMissing`, `dynamics.outputMustBeComputedParameter` |
+| dynamics dependency | computed dynamics output cannot drive dynamics; group dependencies are prohibited | `dynamics.outputUsedAsDriver`, `dynamics.groupCycle` |
 | mask -> drawable | source and target IDs must exist | `mask.drawableMissing` |
 | operation log -> reports/snapshots | referenced generated artifacts may be absent while dirty, but acceptance profile requires them | `evidence.operationArtifactMissing` |
 
@@ -512,6 +587,7 @@ flowchart TB
 | AC-MVP-003, AC-IN-001, AC-IN-002, SC-IN-002 | PSD `SourceManifestDto` and `SourceLayerDto` | `psd-import-happy-path` operation result |
 | AC-IN-006, SC-IN-003 | unsupported/lost source info diagnostics | `psd-unsupported-layer` validation report |
 | AC-MVP-004, AC-DRAW-001 | `DrawableDto`, `MeshDto`, texture refs | `minimal-valid-package` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001 | `model/dynamics.json`, `DynamicsGroupSchema`, `Parameter.valueSource` | `minimal-dynamics-hairSway` |
 | AC-MVP-011, SC-MVP-003 | package layout + save/reload references | `tutorial-like-authoring` roundtrip |
 | AC-MVP-015, SC-MVP-005 | demo-safe capture separation and hidden internal names | demo-safe preflight fixture |
 | AC-MVP-016, SC-MVP-006 | no Cubism SDK/Core package dependency | package manifest check |
@@ -524,6 +600,7 @@ flowchart TB
 | `psd-import-happy-path` | maps PSD groups/layers to parts/drawables/textures/provenance | operation result, package diff |
 | `psd-unsupported-layer` | surfaces smart object/text/effect/fill warnings | validation report with `asset.psd.unsupportedFeature` |
 | `split-png-fallback` | proves fallback import records absent PSD layer tree | provenance and warning report |
+| `minimal-dynamics-hairSway` | proves dynamics group, authored driver, computed output parameter, and fixed solver settings parse | package parse + summary snapshot |
 | `invalid-missing-texture` | proves missing visible texture is detected | validation fail report |
 
 ## Open Questions

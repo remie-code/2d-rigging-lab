@@ -70,6 +70,7 @@ export type VertexId = Brand<string, "VertexId">;
 export type ParameterId = Brand<string, "ParameterId">;
 export type KeyformSetId = Brand<string, "KeyformSetId">;
 export type RigControlId = Brand<string, "RigControlId">;
+export type DynamicsGroupId = Brand<string, "DynamicsGroupId">;
 export type MaskRelationId = Brand<string, "MaskRelationId">;
 export type OperationId = Brand<string, "OperationId">;
 export type TransactionId = Brand<string, "TransactionId">;
@@ -88,6 +89,7 @@ export const VertexIdSchema = z.string().regex(/^vtx_[A-Za-z0-9_-]+$/) as z.ZodT
 export const ParameterIdSchema = z.string().regex(/^param_[A-Za-z0-9_-]+$/) as z.ZodType<ParameterId>;
 export const KeyformSetIdSchema = z.string().regex(/^keyset_[A-Za-z0-9_-]+$/) as z.ZodType<KeyformSetId>;
 export const RigControlIdSchema = z.string().regex(/^rig_[A-Za-z0-9_-]+$/) as z.ZodType<RigControlId>;
+export const DynamicsGroupIdSchema = z.string().regex(/^dyn_[A-Za-z0-9_-]+$/) as z.ZodType<DynamicsGroupId>;
 export const MaskRelationIdSchema = z.string().regex(/^maskrel_[A-Za-z0-9_-]+$/) as z.ZodType<MaskRelationId>;
 export const OperationIdSchema = z.string().regex(/^op_[A-Za-z0-9_-]+$/) as z.ZodType<OperationId>;
 export const TransactionIdSchema = z.string().regex(/^txn_[A-Za-z0-9_-]+$/) as z.ZodType<TransactionId>;
@@ -106,9 +108,11 @@ flowchart LR
   part[PartId] --> drawable
   drawable --> mesh[MeshId]
   parameter[ParameterId] --> keyform[KeyformSetId]
+  parameter --> dynamics[DynamicsGroupId]
+  dynamics --> parameter
   keyform --> drawable
-  keyform --> rig control[RigControlId]
-  rig control --> drawable
+  keyform --> rigControl[RigControlId]
+  rigControl --> drawable
   mask[MaskRelationId] --> drawable
   operation[OperationId] --> source
   operation --> drawable
@@ -162,13 +166,13 @@ export const SurfaceSchema = z.enum([
   "gui",
   "file",
   "structuredApi",
-  "migration",
+  "schemaMigration",
   "validatorRepair",
   "testFixture",
 ]);
 export type Surface = z.infer<typeof SurfaceSchema>;
 
-export const ActorSchema = z.enum(["human", "ai", "importer", "migration", "validatorRepairCandidate", "test"]);
+export const ActorSchema = z.enum(["human", "ai", "importer", "schemaMigration", "validatorRepairCandidate", "test"]);
 export type Actor = z.infer<typeof ActorSchema>;
 
 export const SeveritySchema = z.enum(["info", "warning", "error", "blocking"]);
@@ -193,7 +197,7 @@ Check IDs are strings with dot-separated namespaces. Concrete check registry ent
 
 ```ts
 export type CheckId = Brand<string, "CheckId">;
-export const CheckIdSchema = z.string().regex(/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/) as z.ZodType<CheckId>;
+export const CheckIdSchema = z.string().regex(/^[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/) as z.ZodType<CheckId>;
 
 export const TargetKindSchema = z.enum([
   "package",
@@ -205,7 +209,8 @@ export const TargetKindSchema = z.enum([
   "vertex",
   "parameter",
   "keyformSet",
-  "rig control",
+  "rigControl",
+  "dynamicsGroup",
   "maskRelation",
   "operation",
   "runtimeSnapshot",
@@ -354,6 +359,7 @@ flowchart LR
 |-------------|------------------|--------------|
 | AC-MVP-004, AC-DRAW-001 | `DrawableId`, `PartId`, `TextureId`, `MeshId` | `minimal-valid-package` references |
 | AC-MVP-008, AC-PARAM-006 | `ParameterId`, `semanticRole`, private `projectPresetAlias` fields in downstream DTOs | `tutorial-like-authoring` |
+| AC-MVP-010, AC-PHYS-001 | `DynamicsGroupId`, `TargetKindSchema = "dynamicsGroup"` | `minimal-dynamics-hairSway` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
 | SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |

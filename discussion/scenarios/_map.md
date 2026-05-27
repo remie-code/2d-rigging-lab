@@ -15,13 +15,13 @@
 | Path | Role | Status |
 |------|------|--------|
 | [_map.md](_map.md) | `scenarios/` 直下の入口地図 | Private baselineの注意書きへ更新済み |
-| [03_MVP_Acceptance_Criteria.md](03_MVP_Acceptance_Criteria.md) | Private Authoring-to-Viewer Prototype を検証する横断シナリオ | Private baselineへ更新済み |
+| [03_MVP_Acceptance_Criteria.md](03_MVP_Acceptance_Criteria.md) | Private Authoring-to-Viewer Prototype を検証する横断シナリオ | Minimum Open Dynamics v1込みへ更新済み |
 
 ## 直下のディレクトリ
 
 | Path | Role | Status |
 |------|------|--------|
-| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメインACに対応する精緻化シナリオ | Domain 201-225をCurrent / Optional / Future分類へ整理済み |
+| [02_DomainAcceptanceCriteria/](02_DomainAcceptanceCriteria/) | ドメインACに対応する精緻化シナリオ | DOMAIN-09 Dynamics scenarioをCurrent MVPへ復帰済み |
 
 ## 現在の焦点
 
@@ -30,6 +30,7 @@
 | Root/MVPとの関係 | Root/MVP ACが現在baseline。MVP横断とDomain scenarioは更新済み |
 | Cubism参照操作 | private research archiveまたは非対応説明へ分離済み |
 | MVP横断シナリオ | Private Authoring-to-Viewer Prototypeへ更新済み |
+| Dynamics scenario | Minimum Open Dynamics v1のgroup作成、deterministic preview/viewer、validation、demo-safe captureへ更新済み |
 
 ## 次の行動
 

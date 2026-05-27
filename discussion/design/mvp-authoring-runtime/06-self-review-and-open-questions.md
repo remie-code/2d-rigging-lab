@@ -50,8 +50,8 @@
 
 | Scenario | 設計での対応 | 残リスク |
 |---|---|---|
-| SC-MVP-001 | Import、parts/drawables、mesh、lock/hide/select、draw order、mask導線を定義 | PSD importをMVP primaryにするか分割PNG primaryにするか未決 |
-| SC-MVP-002 | project-defined parameter、keyform、rig control、`parameter-grid-2d-v1`導線を定義 | grid UIの最小操作導線とfixture粒度は実装時に詰める |
+| SC-MVP-001 | Import、parts/drawables、mesh、lock/hide/select、draw order、mask導線を定義 | PSD primary / split PNG fallbackは確定済み。fixture素材作成方法のみ実装時判断 |
+| SC-MVP-002 | project-defined parameter、keyform、rig control、`parameter-grid-2d-v1`、Minimum Open Dynamics v1導線を定義 | grid UIとDynamics preview/reset fixture粒度は実装時に詰める |
 | SC-MVP-003 | package保存、再読み込み、Viewer load、runtime snapshotを定義 | preview/viewer snapshot一致の比較方法が未決 |
 | SC-MVP-004 | Validator report、AI dry-run、diff、repair candidate、revalidationを定義 | structured API transportと承認UIが未決 |
 | SC-MVP-005 | GUI authoring evidenceとAcceptance Runnerで誤判定防止を定義 | GUI evidenceの具体収集形式が未決 |
@@ -91,6 +91,7 @@
 - statusをseverityから分けた。
 - parameter範囲外値はUIでは作らせず、API/file入力はclamp warning、strictではfail候補とした。
 - motion / expression / full physics / poseをMVP外future layerとしてunsupported diagnosticsへ入れた。
+- Minimum Open Dynamics v1はMVPへ復帰し、computed output parameter、fixed timestep、reset policy、dynamics snapshotとして扱う。
 
 ## 5. 実装前に決めるべき未決事項
 
@@ -98,7 +99,7 @@
 |---|---|---|
 | `parameter-grid-2d-v1` のGUI編集最小UI | SC-MVP-002がmanual authored parameter gridを要求し、runtimeとpreviewの一致に影響する | MVP採用は確定済み。実装時は `manual-face-grid-2d` fixtureで編集導線と期待snapshotを固定する |
 | `compositionMode` 初期セット | 同一target propertyの複数writerが未定義だとruntime結果が不安定になる | MVPは `replace` と `additiveDelta`、opacity用 `multiplyOpacity` までに絞る候補 |
-| PSD import vs split PNG primary | import UIとfixture制作のスコープが変わる | MVP primaryは分割PNG + provenance、PSDは受け入れ可能ならoptionalにする候補 |
+| Dynamics preview/reset fixture | Minimum Open Dynamics v1のdeterminism検証に必要 | `minimal-dynamics-hairSway` と `dynamics-reset-determinism` でfixed timestep、reset policy、snapshot sequenceを固定する |
 | 初期warp lattice解像度 | 初心者導線とruntime evaluatorのfixtureに影響する | 2x2 baseline、顔/髪fixtureで不足なら3x3標準を検討 |
 | snapshot一致判定 | Editor previewとViewerの共有core検証に必要 | `full`ではfull vertex、通常はvertex hash + bounds + diagnosticsで比較する候補 |
 | GUI authoring evidence | SC-MVP-005の誤判定防止に必要 | operation logを必須、Playwright trace / session metadataを補助証拠にする候補 |
@@ -112,7 +113,7 @@
 - zip package、registry、package signing。
 - 第三者形式対応可否確認（MVP外・権利確認前提）。
 - motion / expression asset / full physics / pose の制作・再生。
-- full Open Dynamics / dynamics group / secondary motion solver。
+- direct mesh physics / cloth simulation / collision / IK / timeline bake。
 - advanced warp evaluator: Bezier、bicubic、MLS、cage。
 - AI automatic repair apply、複数repair案ランキング、権限モデル。
 - CI batch validator、marketplace certification。

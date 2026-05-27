@@ -51,7 +51,7 @@
 ### When
 
 1. ユーザーがparameter値ごとのkeyformを作成する。
-2. ユーザーがlinear、step、smoothなどの補間を選ぶ。
+2. ユーザーがMVPで採用する`linear-1d-v1`補間を選ぶ。
 3. Private runtime coreが中間値を評価する。
 
 ### Then
@@ -59,6 +59,7 @@
 - Keyformは対象control、parameter値、補間設定を保持する。
 - Runtime snapshotは評価に使ったparameter値と補間結果を確認できる。
 - 欠けたkeyformや不連続が大きい区間はwarningになる。
+- `step`、`smooth`、curve-based interpolationはPost-MVPとする。
 
 ### 検証するAC
 
@@ -72,7 +73,7 @@
 
 ### When
 
-1. ユーザーが2つ以上のparameterをgridとして選ぶ。
+1. ユーザーがちょうど2つのparameterを`parameter-grid-2d-v1`の軸として選ぶ。
 2. ユーザーがgrid cellごとにkeyformを手で調整する。
 3. Editorがgrid全体をpackageへ保存する。
 
@@ -81,35 +82,95 @@
 - Gridはparameter軸、cell、keyform、補間設定を保存する。
 - Runtimeはgrid内の中間状態を評価できる。
 - 未調整cellや過大変形cellはvalidatorが報告する。
+- 3つ以上のparameterを同一gridに割り当てる任意N次元gridはMVP外であり、validator warning / needs_review対象とする。
 
 ### 検証するAC
 
 - AC-PARAM-004
 - AC-PARAM-005
 
-## SC-PARAM-004: 複数parameterの影響を追跡できる
+## SC-PARAM-004: `parameter-grid-2d-v1`を評価できる
 
 ### Given
 
-- 1つのdrawableに複数parameterが作用している。
+- Projectには`faceYaw`と`facePitch`を軸にした`parameter-grid-2d-v1` keyform setがある。
 
 ### When
 
-1. ユーザーがdebug previewを開く。
-2. ユーザーがparameterを動かす。
-3. Editorが影響したcontrol、keyform、drawableを表示する。
+1. ユーザーがgridのcorner、edge、diagonal、centerに相当するparameter値をpreviewする。
+2. Private runtime coreが`bilinear-grid-v1`で中間状態を評価する。
+3. Validatorが欠けたcell、重複cell、過大変形を確認する。
 
 ### Then
 
-- どのparameterがどのcontrolに作用したかを追跡できる。
-- 意図しない同時作用はwarningとして確認できる。
-- AI assistantは影響範囲を説明し、repair suggestionをdry-runで返せる。
+- Runtime snapshotはsampled coordinates、target、keyform set ID、評価結果を含む。
+- 欠けた周辺keyは`keyform.grid2dMissingKey`、重複座標は`keyform.grid2dDuplicateKey`として報告される。
+- 3つ以上のparameterを同一gridに割り当てる任意N次元gridはMVP外である。
 
 ### 検証するAC
 
 - AC-PARAM-007
 
+## SC-PARAM-005: 複数parameter overrideを同時評価できる
+
+### Given
+
+- Projectには`faceYaw`、`facePitch`、`bodyAngle`、`hairSway`など複数parameterがある。
+
+### When
+
+1. ユーザーまたはAI dry-runが複数parameter overrideを同時に指定する。
+2. Private runtime coreがauthored/computed/effective parameterを解決する。
+
+### Then
+
+- Runtime snapshotは同時指定されたparameter値と、影響したkeyform / rig control / dynamics outputを確認できる。
+- MVPでは、同じtarget propertyに複数writerがある場合、compositionModeとcompositionOrderが未定義ならvalidator warningまたはfail候補になる。
+
+### 検証するAC
+
+- AC-PARAM-007
+
+## SC-PARAM-006: projectPresetAliasとsemantic roleをinspectできる
+
+### Given
+
+- Projectにはprivate `projectPresetAlias` と `semanticRole` を持つparameterがある。
+
+### When
+
+1. ユーザーまたはAI assistantがparameterをinspectする。
+2. ValidatorまたはAI assistantがparameterの意味と利用箇所を説明する。
+
+### Then
+
+- `projectPresetAlias` はprivate project/editor preset labelとして返り、外部互換parameter IDとして扱われない。
+- `semanticRole` は説明、検索、validator reportに使える。
+
+### 検証するAC
+
+- AC-PARAM-001
+- AC-PARAM-002
+
+## SC-PARAM-007: single-key / endpoint-missing keyformを検出できる
+
+### Given
+
+- Projectにはsingle-key、endpoint-missing、または必要なdefault keyを欠くkeyformがある。
+
+### When
+
+- ユーザーがValidatorを実行する。
+
+### Then
+
+- Validatorは`keyform.missingEndpoint`をreportし、strict profileではfail候補として扱える。
+- Reportは対象keyform set ID、parameter ID、欠けたendpointを示す。
+
+### 検証するAC
+
+- AC-PARAM-003
+
 ## 2. 未決事項
 
-- MVPで採用する補間種別の最小集合。
-- Parameter gridの保存形式と編集UI。
+- Parameter gridの編集UIの具体レイアウト。

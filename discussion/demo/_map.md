@@ -15,7 +15,7 @@ Demo文書は実装仕様ではない。MVPの正は [../acceptance-criteria/03_
 | Path | Role | Status |
 |------|------|--------|
 | [_map.md](_map.md) | `demo/` 直下の入口地図 | Current |
-| [streaming-demo-policy.md](streaming-demo-policy.md) | Streaming Demo Surfaceで見せてよいもの、避けるもの、preflight、disclaimer | Current baseline policy |
+| [streaming-demo-policy.md](streaming-demo-policy.md) | Streaming Demo Surfaceで見せてよいもの、避けるもの、preflight、disclaimer、Dynamics demo hygiene | Dynamics allowed/avoid追加済み |
 
 ## 次の行動
 

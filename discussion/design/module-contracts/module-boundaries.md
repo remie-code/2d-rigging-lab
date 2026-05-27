@@ -1,4 +1,4 @@
-# Module Boundaries
+﻿# Module Boundaries
 
 > 状態: Draft / Review ready
 > 出力先: discussion/design/module-contracts/module-boundaries.md
@@ -17,7 +17,7 @@ It blocks implementation confusion for:
 - ownership of authoring state, runtime-visible state, editor-only state, operation logs, validation reports, runtime snapshots, and fixture expected outputs.
 - forbidden dependencies that would make GUI, AI, runtime, and validator implementations disagree.
 
-MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, project-defined model package save/reload, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, animation timeline, full physics, and production renderer optimization.
+MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, project-defined model package save/reload, Minimum Open Dynamics v1, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, Cubism Physics compatibility, animation timeline, direct mesh physics, full physics, and production renderer optimization.
 
 ## Basis Separation
 
@@ -61,10 +61,10 @@ MVP scope includes GUI authoring, PSD primary import, split PNG fallback import,
 | Module | Owns | Must not know | Public API | Primary consumers |
 |--------|------|---------------|------------|-------------------|
 | `contracts` | branded IDs, DTO schemas, common enums, diagnostic/diff vocabulary | concrete file IO, DOM, renderer handles | `ids`, DTO schemas, diff/report/snapshot types | all |
-| `package-format` | package file layout, DTO parsing, schema validation, package hash, PSD/split PNG provenance mapping | dirty editor UI state beyond `editor-state.json`, renderer internals | `readPackage`, `writePackage`, `parsePackageDto`, `normalizePackage` | editor, viewer, validator, AI |
+| `package-format` | package file layout, DTO parsing, schema validation, package hash, PSD/split PNG provenance mapping, `model/dynamics.json` | dirty editor UI state beyond `editor-state.json`, renderer internals | `readPackage`, `writePackage`, `parsePackageDto`, `normalizePackage` | editor, viewer, validator, AI |
 | `authoring-core` | `AuthoringGraph`, editor-visible model state, dirty revision, undo model state | DOM, HTTP, raw PSD parser, renderer handles | `createAuthoringSession`, `applyCommittedOperation`, `toRuntimeGraph` | editor, operation |
 | `operation-core` | operation registry, preconditions, dry-run, commit, undo/redo, operation log entries | canvas event details, transport details, renderer handles | `dryRunOperation`, `commitOperation`, `undoOperation`, `redoOperation` | editor, AI, migration |
-| `runtime-core` | `NormalizedRuntimeGraph`, parameter evaluation, keyform/rig control evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntime`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
+| `runtime-core` | `NormalizedRuntimeGraph`, authored/computed/effective parameter evaluation, Minimum Open Dynamics v1, keyform/rig control evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntime`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
 | `validator-core` | check registry, profiles, validation report, repair candidate contracts | GUI workflow replacement, renderer drawing, transport details | `validatePackage`, `validateAuthoringGraph`, `validateRuntimeSnapshot` | editor, viewer, AI, acceptance |
 | `renderer-adapter` | canvas/WebGL binding, texture handles, viewport presentation | package schema, operation mutation, validator policy | `renderSnapshot`, `createRendererBackend` | editor preview, viewer |
 | `editor-ui` | panels, canvas modes, selection, lock, editor hide, active tool, stable test IDs, GUI evidence | package mutation bypassing operation-core, runtime internals | UI event handlers, semantic state API | human, Playwright, AI observe |
@@ -210,7 +210,8 @@ Source-of-truth rule:
 | AC-MVP-001, SC-MVP-001, SC-MVP-005 | `editor-ui -> operation-core -> operation log` boundary | `tutorial-like-authoring` fixture requires GUI operation log |
 | AC-MVP-003, AC-IN-001, SC-IN-002, SC-IN-003 | `package-format` + PSD importer boundary | `psd-import-happy-path`, `psd-unsupported-layer` |
 | AC-MVP-008, AC-PARAM-005, SC-PARAM-004 | `runtime-core` owns `parameter-grid-2d-v1` evaluation | `manual-face-grid-2d` expected snapshot |
-| AC-MVP-009, AC-DEF-004, SC-DEF-003 | `runtime-core` parent-before-child evaluation | `parent-child-rig control-diagonal` expected snapshot |
+| AC-MVP-009, AC-DEF-004, SC-DEF-003 | `runtime-core` parent-before-child evaluation | `parent-child-rigControl-diagonal` expected snapshot |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | `package-format`, `operation-core`, `runtime-core`, `validator-core`, `editor-ui` share Minimum Open Dynamics v1 contract | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
 | AC-MVP-013, AC-VALIDATOR-005, SC-VALIDATOR-005 | `validator-core` report DTO | expected validation reports |
 | AC-MVP-014, AC-AGENT-002, SC-AGENT-002, SC-AI-002 | `ai-interface` calls operation-core, runtime-core, validator-core | `ai-repair-dry-run` expected diff |
 
@@ -223,7 +224,9 @@ Source-of-truth rule:
 | `psd-unsupported-layer` | proves unsupported PSD features do not leak into runtime-core | diagnostic report |
 | `tutorial-like-authoring` | proves GUI operations cover MVP authoring flow | operation log, full snapshot, validation report |
 | `manual-face-grid-2d` | proves `parameter-grid-2d-v1` boundary | targeted/full runtime snapshot |
-| `parent-child-rig control-diagonal` | proves parent-before-child hierarchy | runtime snapshot and runtime diff |
+| `parent-child-rigControl-diagonal` | proves parent-before-child hierarchy | runtime snapshot and runtime diff |
+| `minimal-dynamics-hairSway` | proves dynamics package/runtime/validator boundary | snapshot sequence and validation report |
+| `dynamics-reset-determinism` | proves fixed timestep and reset semantics | paired snapshot sequence |
 | `ai-repair-dry-run` | proves AI does not bypass operation-core | model/runtime/validation diff |
 
 ## Open Questions

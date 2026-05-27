@@ -1,4 +1,4 @@
-# GUI Operation Contract
+﻿# GUI Operation Contract
 
 > 状態: Draft / Review ready
 > 出力先: discussion/design/module-contracts/gui-operation-contract.md
@@ -19,6 +19,7 @@ It covers:
 - UI event to operation mapping,
 - canvas interaction payloads,
 - one-axis and two-axis keyform editing surfaces,
+- Minimum Open Dynamics v1 editing surface,
 - stable test ID / role / label policy,
 - GUI authoring evidence,
 - operation log as required evidence,
@@ -68,6 +69,7 @@ It does not define visual styling or a complete component hierarchy.
 | Canvas | viewport, active canvas mode, hover target, overlays | no |
 | Inspector | selected target details and editable form draft | mixed; commits through operation-core |
 | Parameter/keyform panel | parameter current preview, keyform editing draft | current preview no; parameter/keyform definitions yes after commit |
+| Dynamics panel | group list, driver/output binding draft, settings, preview/reset/simple graph | definitions yes after commit; preview state no |
 | Diagnostics drawer | report/check selection, jump target, repair candidate refs | report artifacts yes |
 | Viewer tab | saved package load state, runtime snapshot | runtime snapshot yes |
 | AI/report tab | dry-run diff, repair candidate, approval state | artifacts yes, approval UI no |
@@ -96,6 +98,7 @@ export const EditorModeSchema = z.enum([
   "warpLatticeEdit",
   "maskEdit",
   "drawOrderEdit",
+  "dynamicsEdit",
   "runtimePreview",
 ]);
 
@@ -122,6 +125,7 @@ export const EditorSemanticStateSchema = z.object({
   lockedIds: z.array(z.string()).default([]),
   editorHiddenIds: z.array(z.string()).default([]),
   currentPreviewParameterValues: z.record(ParameterIdSchema, z.number()).default({}),
+  currentDynamicsPreviewGroupIds: z.array(z.string()).default([]),
   canvasViewport: CanvasViewportSchema,
   lastOperationId: OperationIdSchema.optional(),
   latestRuntimeSnapshotId: RuntimeSnapshotIdSchema.optional(),
@@ -169,9 +173,14 @@ AI or Playwright may use screenshots for visual context, but must use `getEditor
 | Parameter panel | create parameter | `createParameter` | operation log | `parameter.create`, `parameter.row.<id>` |
 | Keyform panel | add one-axis keyform | `addKeyform` | operation log + preview snapshot | `keyform.add.1d` |
 | Keyform grid panel | add face yaw / pitch grid | `addKeyformGrid2d` | operation log + grid snapshot | `keyform.grid2d.add` |
-| RigControl panel | create rotation rig control | `createRotation2dRigControl` | operation log | `rig control.rotation.create` |
-| RigControl panel | create warp lattice | `createWarpLattice2dRigControl` | operation log | `rig control.warp.create` |
-| Project/rig control tree | bind parent/child | `bindRigControlChild` | operation log + hierarchy diff | `rig control.tree.bind` |
+| Dynamics panel | create group | `createDynamicsGroup` | operation log + diagnostics | `dynamics.group.create` |
+| Dynamics panel | bind driver parameter | `bindDynamicsDriver` | operation log + validation diagnostics | `dynamics.driver.bind` |
+| Dynamics panel | bind computed output parameter | `bindDynamicsOutput` | operation log + validation diagnostics | `dynamics.output.bind` |
+| Dynamics panel | set stiffness / damping / response / amplitude limit | `setDynamicsSettings` | operation log + targeted snapshot | `dynamics.settings.set` |
+| Dynamics panel | preview reset | `resetDynamicsPreviewState` | preview evidence + runtime snapshot, no package mutation | `dynamics.preview.reset` |
+| RigControl panel | create rotation rig control | `createRotation2dRigControl` | operation log | `rigControl.rotation.create` |
+| RigControl panel | create warp lattice | `createWarpLattice2dRigControl` | operation log | `rigControl.warp.create` |
+| Project/rig control tree | bind parent/child | `bindRigControlChild` | operation log + hierarchy diff | `rigControl.tree.bind` |
 | Mask panel | set mask relation | `setMaskRelation` | operation log + validation diagnostics | `mask.setRelation` |
 | Draw order panel | reorder drawables | `setDrawOrder` | operation log + snapshot | `drawOrder.reorder` |
 | Inspector | runtime visibility toggle | `setRuntimeVisibility` | operation log | `inspector.runtimeVisibility` |
@@ -188,6 +197,7 @@ Selection, lock, editor hide, active tool, and viewport changes are editor state
 | `warpLatticeEdit` | drag lattice control point | resolves `RigControlId` and control point stable ID |
 | `maskEdit` | click mask source/target | resolves drawable IDs through hit-test and tree selection |
 | `drawOrderEdit` | reorder list or canvas labels | resolves drawable IDs; numeric draw order is explicit |
+| `dynamicsEdit` | adjust driver/output/settings and preview graph | resolves `DynamicsGroupId`, authoredInput driver IDs, and computedDynamics output parameter IDs before operation-core calls |
 | `runtimePreview` | parameter slider | preview-only until keyform or parameter definition is committed |
 
 ## 1-axis and 2-axis Keyform Grid Editing Surface
@@ -199,6 +209,18 @@ face yaw / pitch editing is a first-class `parameter-grid-2d-v1` surface:
 - Grid coordinates must be stored as parameter values, not screen cells.
 - Missing diagonal/corner keys must be visible as validator diagnostics.
 - Parent/child rig control hierarchy remains a valid complementary approach for diagonal expression.
+
+## Dynamics Editing Surface
+
+Minimum Open Dynamics v1 editing is first-class in MVP:
+
+- The UI must expose a dynamics group list with enable/disable.
+- The UI must expose driver parameter selector, limited to authoredInput parameters.
+- The UI must expose output parameter selector, limited to computedDynamics parameters.
+- The UI must expose stiffness, damping, response, amplitude limit, reset policy, preview start/stop/reset, simple output graph, current driver/output values, and validator warnings.
+- Preview reset uses `resetDynamicsPreviewState` and does not mutate package files.
+- The surface uses Open Dynamics, secondary motion, driver parameter, computed output parameter, damping, stiffness, response, reset policy, and output limit language.
+- The surface must not use Cubism Physics, physics3, pendulum, Live2D physics, or Cubism Physics group terminology.
 
 ## Stable Test ID / Role / Label Policy
 
@@ -284,12 +306,14 @@ stateDiagram-v2
   Select --> WarpLatticeEdit: choose warp tool
   Select --> MaskEdit: choose mask tool
   Select --> DrawOrderEdit: choose draw order tool
+  Select --> DynamicsEdit: choose dynamics tool
   Select --> RuntimePreview: preview mode
   MeshEdit --> Select: commit/cancel
   RotationRigControlEdit --> Select: commit/cancel
   WarpLatticeEdit --> Select: commit/cancel
   MaskEdit --> Select: commit/cancel
   DrawOrderEdit --> Select: commit/cancel
+  DynamicsEdit --> Select: commit/cancel
   RuntimePreview --> Select: return to authoring
 ```
 
@@ -306,6 +330,8 @@ stateDiagram-v2
 | draw order | no | yes | package/operation/runtime |
 | mesh rest vertices | no | yes | package/runtime |
 | rig control graph | no | yes | package/runtime |
+| dynamics group definitions | no | yes | package/runtime |
+| dynamics preview state | yes | no | editor preview/runtime session |
 | parameter current preview | mixed temporary | not package default | editor preview/runtime input |
 
 ## Traceability
@@ -316,6 +342,7 @@ stateDiagram-v2
 | AC-MVP-006 | editor-only lock/hide/select separation | GUI state fixture |
 | AC-MVP-008, SC-PARAM-002 | parameter/keyform panel mappings | operation log + runtime snapshot |
 | AC-MVP-010, SC-MVP-002, SC-PARAM-004 | `parameter-grid-2d-v1` GUI surface | `manual-face-grid-2d` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | Dynamics panel and preview/reset/simple graph | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
 | AC-MVP-014, SC-AI-002 | semantic state + hit-test APIs | AI screenshot/rig control parameter scenario |
 | SC-MVP-005 | `evidence.guiOperationLogMissing` prevention | script-only fixture |
 
@@ -325,9 +352,11 @@ stateDiagram-v2
 |----------------|---------|-------------------|
 | `tutorial-like-authoring` | full GUI operation path evidence | operation log, validation report, snapshots |
 | `manual-face-grid-2d` | grid UI maps to `addKeyformGrid2d` | operation entry + expected snapshot |
-| `gui-hit-test-rig control` | hit-test returns `RigControlId` and operation targets | hit-test response fixture |
+| `minimal-dynamics-hairSway` | Dynamics panel maps to group/driver/output/settings/reset operations | operation entries + expected snapshot sequence |
+| `demo-safe-dynamics-capture` | Dynamics UI avoids unsafe Cubism/physics3 solver details | demo preflight report |
+| `gui-hit-test-rigControl` | hit-test returns `RigControlId` and operation targets | hit-test response fixture |
 | `script-generated-minimal` | no GUI log is acceptance fail | acceptance report |
-| `ai-screenshot-rig control-parameter` | screenshot assisted AI uses semantic APIs before operation | command transcript + dry-run diff |
+| `ai-screenshot-rigControl-parameter` | screenshot assisted AI uses semantic APIs before operation | command transcript + dry-run diff |
 
 ## Open Questions
 

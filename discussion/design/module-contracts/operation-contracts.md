@@ -21,7 +21,7 @@ It covers:
 - undo/redo policy,
 - model/runtime/validation diff outputs,
 - required layered character PSD and split PNG import operations,
-- keyform, rig control, mask, draw order, and rights operations.
+- keyform, rig control, Minimum Open Dynamics v1, mask, draw order, and rights operations.
 
 It does not implement mutation algorithms or UI event handlers.
 
@@ -66,6 +66,13 @@ It does not implement mutation algorithms or UI event handlers.
 | `createParameter` | display name, range, semantic role, private `projectPresetAlias` | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
 | `addKeyform` | target, parameter, key value, target state | parameter and target exist | keyform diff, runtime diff | SC-PARAM-002 |
 | `addKeyformGrid2d` | target, two parameters, grid coordinates, key states | exactly two parameters; target exists | `parameter-grid-2d-v1` keyform diff | SC-PARAM-004 |
+| `createDynamicsGroup` | display name, solver kind, reset policy, initial settings | package open; solver kind is `scalarDampedFollowV1` | dynamics group diff | SC-DYN-001 |
+| `updateDynamicsGroup` | group metadata, enabled flag, reset policy | dynamics group exists | dynamics group diff | SC-DYN-001 |
+| `deleteDynamicsGroup` | dynamics group ID | group exists; no required output-only dependency remains | dynamics group diff | SC-DYN-001 |
+| `bindDynamicsDriver` | group ID, authoredInput parameter, scale/offset/invert | parameter exists and `valueSource="authoredInput"` | dynamics driver diff | SC-DYN-001 |
+| `bindDynamicsOutput` | group ID, computedDynamics parameter, range/clamp | parameter exists and `valueSource="computedDynamics"` | dynamics output diff | SC-DYN-001 |
+| `setDynamicsSettings` | stiffness, damping, response, amplitude/velocity limits | group exists; settings finite and stable | dynamics settings diff | SC-DYN-003 |
+| `resetDynamicsPreviewState` | group IDs or all groups, reason | preview/runtime session exists | runtime state reset evidence, no package mutation | SC-DYN-002 |
 | `createRotation2dRigControl` | part, children, pivot/rest transform | children exist and not cyclic | rig control diff | SC-DEF-002 |
 | `createWarpLattice2dRigControl` | part, children, domain, rows/cols | rows/cols valid, children exist | rig control diff | SC-DEF-001 |
 | `bindRigControlChild` | parent rig control, child drawable/rig control | no cycle | hierarchy diff | SC-DEF-003 |
@@ -94,6 +101,7 @@ import {
   VertexIdSchema,
   ParameterIdSchema,
   RigControlIdSchema,
+  DynamicsGroupIdSchema,
   PartIdSchema,
   MaskRelationIdSchema,
   ProvenanceIdSchema,
@@ -112,6 +120,13 @@ export const OperationTypeSchema = z.enum([
   "createParameter",
   "addKeyform",
   "addKeyformGrid2d",
+  "createDynamicsGroup",
+  "updateDynamicsGroup",
+  "deleteDynamicsGroup",
+  "bindDynamicsDriver",
+  "bindDynamicsOutput",
+  "setDynamicsSettings",
+  "resetDynamicsPreviewState",
   "createRotation2dRigControl",
   "createWarpLattice2dRigControl",
   "bindRigControlChild",
@@ -166,6 +181,66 @@ export const AddKeyformGrid2dPayloadSchema = z.object({
   })).min(1),
 });
 
+export const CreateDynamicsGroupPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema.optional(),
+  displayName: z.string(),
+  enabled: z.boolean().default(true),
+  solverKind: z.literal("scalarDampedFollowV1"),
+  resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"]),
+  settings: z.object({
+    stiffness: z.number().finite().nonnegative(),
+    damping: z.number().finite().nonnegative(),
+    response: z.number().finite().positive(),
+    maxVelocity: z.number().finite().positive().optional(),
+    maxAmplitude: z.number().finite().positive().optional(),
+  }),
+});
+
+export const UpdateDynamicsGroupPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  displayName: z.string().optional(),
+  enabled: z.boolean().optional(),
+  resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"]).optional(),
+});
+
+export const DeleteDynamicsGroupPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+});
+
+export const BindDynamicsDriverPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  driverId: z.string().optional(),
+  sourceParameterId: ParameterIdSchema,
+  inputScale: z.number().finite().default(1),
+  inputOffset: z.number().finite().default(0),
+  invert: z.boolean().default(false),
+});
+
+export const BindDynamicsOutputPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  outputId: z.string().optional(),
+  targetParameterId: ParameterIdSchema,
+  outputScale: z.number().finite().default(1),
+  outputOffset: z.number().finite().default(0),
+  min: z.number().finite(),
+  max: z.number().finite(),
+  clampPolicy: z.literal("clamp-to-output-range"),
+});
+
+export const SetDynamicsSettingsPayloadSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  stiffness: z.number().finite().nonnegative(),
+  damping: z.number().finite().nonnegative(),
+  response: z.number().finite().positive(),
+  maxVelocity: z.number().finite().positive().optional(),
+  maxAmplitude: z.number().finite().positive().optional(),
+});
+
+export const ResetDynamicsPreviewStatePayloadSchema = z.object({
+  dynamicsGroupIds: z.array(DynamicsGroupIdSchema).optional(),
+  reason: z.enum(["packageLoad", "manualCommand", "previewRestart", "largeInputJump", "validationRunStart", "demoCaptureStart"]),
+});
+
 export const MoveMeshVertexPayloadSchema = z.object({
   meshId: MeshIdSchema,
   vertexDeltas: z.array(z.object({
@@ -209,6 +284,7 @@ export const CreateParameterPayloadSchema = z.object({
   displayName: z.string(),
   semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "dynamics", "custom"]).optional(),
   projectPresetAlias: z.string().optional(),
+  valueSource: z.enum(["authoredInput", "computedDynamics", "debugOverride"]).default("authoredInput"),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
@@ -294,6 +370,13 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),
   z.object({ operationType: z.literal("addKeyform"), payload: AddKeyformPayloadSchema }),
   z.object({ operationType: z.literal("addKeyformGrid2d"), payload: AddKeyformGrid2dPayloadSchema }),
+  z.object({ operationType: z.literal("createDynamicsGroup"), payload: CreateDynamicsGroupPayloadSchema }),
+  z.object({ operationType: z.literal("updateDynamicsGroup"), payload: UpdateDynamicsGroupPayloadSchema }),
+  z.object({ operationType: z.literal("deleteDynamicsGroup"), payload: DeleteDynamicsGroupPayloadSchema }),
+  z.object({ operationType: z.literal("bindDynamicsDriver"), payload: BindDynamicsDriverPayloadSchema }),
+  z.object({ operationType: z.literal("bindDynamicsOutput"), payload: BindDynamicsOutputPayloadSchema }),
+  z.object({ operationType: z.literal("setDynamicsSettings"), payload: SetDynamicsSettingsPayloadSchema }),
+  z.object({ operationType: z.literal("resetDynamicsPreviewState"), payload: ResetDynamicsPreviewStatePayloadSchema }),
   z.object({ operationType: z.literal("createRotation2dRigControl"), payload: CreateRotation2dRigControlPayloadSchema }),
   z.object({ operationType: z.literal("createWarpLattice2dRigControl"), payload: CreateWarpLattice2dRigControlPayloadSchema }),
   z.object({ operationType: z.literal("bindRigControlChild"), payload: BindRigControlChildPayloadSchema }),
@@ -465,7 +548,8 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 | AC-MVP-003, SC-IN-002, SC-IN-003 | `importPsdSourceAsset` | `psd-import-happy-path`, `psd-unsupported-layer` |
 | AC-MVP-008, SC-PARAM-002 | `createParameter`, `addKeyform` | `tutorial-like-authoring` |
 | AC-PARAM-005, SC-PARAM-004 | `addKeyformGrid2d` | `manual-face-grid-2d` |
-| AC-MVP-009, SC-DEF-001, SC-DEF-003 | rig control operations | `parent-child-rig control-diagonal` |
+| AC-MVP-009, SC-DEF-001, SC-DEF-003 | rig control operations | `parent-child-rigControl-diagonal` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | dynamics operations | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
 | AC-MVP-014, SC-AGENT-002 | dry-run operation result with diffs | `ai-repair-dry-run` |
 
 ## Verification and Fixtures
@@ -474,6 +558,7 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 |----------------|---------|-------------------|
 | `psd-import-happy-path` | `importPsdSourceAsset` creates source/drawable/part/texture candidates | operation result + model diff |
 | `manual-face-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
+| `minimal-dynamics-hairSway` | Dynamics group creation, driver/output binding, settings update, preview reset | operation log + snapshot sequence |
 | `out-of-range-parameter-dry-run` | dry-run clamps/warns without committing | operation result + validation diff |
 | `ai-repair-dry-run` | AI repair candidate returns diffs and no package mutation | dry-run result, repair candidate |
 | `tutorial-like-authoring` | GUI operation evidence covers MVP authoring steps | JSONL operation log |

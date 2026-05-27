@@ -62,12 +62,13 @@
 1. ユーザーがwarp lattice、rotation handle、mask、opacity、draw orderを設定する。
 2. ユーザーがproject-defined parameter presetを作成し、semantic roleを付与する。
 3. ユーザーがfaceYaw、facePitch、faceRoll、eyeOpen、mouthOpen、expressionなどのmanual authored parameter gridを編集する。
-4. ユーザーがhair、cloth、accessoryなどに、`hairSway`等のproject-defined parameter、手動keyform、通常rig controlを設定する。
+4. ユーザーがhair、cloth、accessoryなどに、`hairSway`等のcomputed output parameter、通常keyform、通常rig control、Minimum Open Dynamics v1のdriver/output設定を作成する。
 
 ### Then
 
 - 各rig controlは、親子関係、対象drawable、parameter接続、keyform、補間設定を持つ。
 - face turnは手で作成されたparameter gridとして保存される。
+- Minimum Open Dynamics v1は、authored driver parameterからcomputed output parameterを生成し、通常keyform / rig control評価へ渡す。
 - joint-area validationは、破綻しやすい接続部と隙間をreportできる。
 - AIが自動でrigを完成させることはMVP成功条件にしない。
 
@@ -81,7 +82,7 @@
 
 ### Given
 
-- Projectにはpart、drawable mesh、rig control、parameter、keyform、hairSway等の手動揺れ表現が登録されている。
+- Projectにはpart、drawable mesh、rig control、parameter、keyform、Minimum Open Dynamics v1のdynamics group、`hairSway`等のcomputed output parameterが登録されている。
 
 ### When
 
@@ -94,7 +95,7 @@
 
 - 保存前後でpart、drawable、mesh、rig control、keyform、provenance、validation metadataが保持される。
 - private GUI editor previewとprivate viewerは、同じprivate runtime coreの評価結果を共有する。
-- runtime snapshotは、デバッグ可能なparameter値、drawable transform、draw order、visibility、keyform/rig control評価状態を含む。
+- runtime snapshotは、デバッグ可能なauthored/computed/effective parameter値、dynamics driver/output/state、drawable transform、draw order、visibility、keyform/rig control評価状態を含む。
 
 ### 検証するAC
 
@@ -116,7 +117,7 @@
 
 ### Then
 
-- Validatorはpackage構造、rights/provenance、parameter範囲、mesh/keyform不整合、demo-safe分類をreportする。
+- Validatorはpackage構造、rights/provenance、parameter範囲、mesh/keyform/dynamics不整合、demo-safe分類をreportする。
 - AI assistantは、実ファイルを直接変更する前にdiffとrepair suggestionを返す。
 - AI assistantの提案には、根拠となるvalidation itemと変更対象が結び付いている。
 - 自動採用や不可逆変更はMVP成功条件にしない。

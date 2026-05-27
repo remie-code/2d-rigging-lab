@@ -36,6 +36,7 @@ MVP Editor は、次の領域を持つ。
 | Canvas tool strip | select、pan、mesh、rig control、mask、draw order、preview操作 | 必須 |
 | Right properties inspector | 選択対象のID、名前、参照、数値、rights/provenance、runtime-visible properties編集 | 必須 |
 | Bottom parameter / keyform panel | parameter slider、keyform追加、key value、target property、preview controls | 必須 |
+| Dynamics panel | Minimum Open Dynamics v1のgroup、driver/output、settings、preview/reset/simple graph | 必須 |
 | Diagnostics drawer | Editor warning、Validator subset、target jump、repair candidate入口 | 必須 |
 | Viewer / Runtime tab | 保存済みpackage load、parameter slider、runtime snapshot、diagnostics | 必須 |
 | AI / Report tab | validation report、dry-run diff、repair candidate、provenance、revalidation | MVPでは最小必須 |
@@ -122,6 +123,7 @@ Canvasは、runtime snapshotの結果とEditor-only overlayを重ねて表示す
 | Mesh | vertex count、triangle count、bounds、UV、validation summary、regenerate / edit entry |
 | Parameter | stable ID、displayName、semanticRole、private `projectPresetAlias`、min / max / default / current、UI step |
 | Keyform | target property、parameterId、key value、interpolation、composition mode |
+| Dynamics group | stable ID、driver parameter、computed output parameter、stiffness、damping、response、amplitude limit、reset policy、enabled |
 | Rotation rig control | pivot、angle、restAngle、translation、scale、children、parameter connection |
 | Warp rig control | domain bounds、rows / columns、control points、interpolationMethod、children |
 | Mask relation | mask drawables、target drawables、status、diagnostics |
@@ -141,6 +143,29 @@ MVP操作:
 - interpolation preview
 - keyform missing / out-of-range warning
 - target property別のwriter表示
+
+### 3.5.1 Dynamics Panel
+
+目的: Minimum Open Dynamics v1として、髪・服・小物のsecondary motionをparameter-drivenに設定する。
+
+MVP操作:
+
+- dynamics group一覧
+- group enable / disable
+- driver parameter selector。`authoredInput` parameterだけを選べる
+- output parameter selector。`computedDynamics` parameterだけを選べる
+- stiffness / damping / response / amplitude limit
+- reset policy
+- preview start / stop / reset
+- simple output graph
+- current driver / output values
+- validator warnings
+
+MVPで避けること:
+
+- Cubism Physics UI の再現。
+- Cubism Physics、physics3、Live2D physics、pendulum、Cubism Physics group などの用語。
+- mesh vertexやrig control propertyをDynamicsが直接変更するUI。
 
 初心者向けには、parameter体系を一から作らせず、project-defined parameter presetを提供する。stable IDはproject-defined package内のIDを正とする。
 
@@ -248,10 +273,13 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
 8. Face face yaw / pitch
    顔の左右・上下・斜め方向を確認する。2D keyform evaluatorは `parameter-grid-2d-v1` としてMVP採用済みであり、実装時はGUI編集導線とfixture期待値を固定する。
 
-9. Preview
+9. Dynamics
+   `faceYaw`、`bodyAngle`などのdriver parameterから、`hairSway`、`clothSway`、`ribbonSwing`などのcomputed output parameterを生成するMinimum Open Dynamics v1 groupを作り、preview/reset/simple graphで確認する。
+
+10. Preview
    Editor previewで代表parameterを動かし、mesh、mask、draw order、rig control、warningsを確認する。
 
-10. Save / Viewer / Validate
+11. Save / Viewer / Validate
     project-defined model packageとして保存し、再読み込みし、Viewerでruntime load、parameter操作、runtime snapshot、diagnosticsを確認する。
 
 ## 5. Editor-only State と Runtime-visible State
@@ -269,6 +297,8 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
 | draw order | no | yes | `model/draw-order.json` / keyforms |
 | mesh rest vertices | no | yes | `model/meshes.json` |
 | rig control graph | no | yes | `model/rig-controls.json` |
+| dynamics group definitions | no | yes | `model/dynamics.json` |
+| dynamics preview state | yes | no | preview session / runtime state |
 | parameter current for preview | mixed | no for package default | preview session / snapshot |
 | parameter default / range | no | yes | `model/parameters.json` |
 | diagnostics | mixed | yes as report/snapshot | validation / runtime snapshot |
@@ -283,6 +313,7 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
 - Selection model と multi-select操作の対象。
 - Mesh / rig control / mask / draw order の編集modeとCanvas overlay。
 - Parameter / keyform作成の最短導線。
+- Dynamics panelのgroup / driver / output / settings / preview reset導線。
 - 推奨parameter templateの初期セット。
 - Diagnostics panel の check ID、severity、target jump、repair candidate表示。
 - Save、reload、Viewer open、Validator run、AI dry-runの画面遷移。
@@ -292,14 +323,14 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
 
 - 顔 face yaw / pitch の斜め方向UIを、2本の1D parameter合成で見せるか、2D keyform gridとして見せるか。
 - 初期warp lattice解像度を 2x2 とするか 3x3 とするか。
-- PSD importをMVP必須にするか、分割PNGセットをMVP primary inputにしてPSDをoptionalにするか。
+- `layered-character-psd-profile-v1`をMVP primary import、`split-png-fallback-v1`をfallback / debug / fixture / PSDを持たない素材の互換入口とする判断は確定済み。
 - Canvas上のmask previewを、alpha合成結果まで表示するか、source / target relation overlayに留めるか。
 - Editor warningのうち、blocking状態で操作を止めるものと、警告表示だけにするもの。
 
 ## 8. Post-MVPでよい未決事項
 
 - Animation timeline、motion作成、motion export。
-- expression asset、physics asset、pose assetの制作UI。
+- expression asset、full physics asset、pose assetの制作UI。
 - 外部エディタのpalette配置、メニュー、ショートカット互換。
 - advanced mesh generator、高度な自動提案UI。MVPではassistant / validator / dry-run / diff / repair suggestionに限定する。
 - multi-view、recording、random pose、高度なcomparison preview。

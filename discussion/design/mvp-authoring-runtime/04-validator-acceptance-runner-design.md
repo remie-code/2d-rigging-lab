@@ -11,6 +11,7 @@
 - `AC-MVP-007` は、mask参照先欠落、循環、無効対象、runtimeで解決不能なmaskを構造化して報告できることを要求する。
 - `AC-MVP-009` は、rig controlの親子循環、親子サイズまたは対象範囲不整合、存在しないtarget ID、parameter未接続、runtime評価不能を報告できることを要求する。
 - `AC-MVP-013` は、package schema、format version、必須ファイル、asset reference、rights metadata、provenance、texture / drawable / part、mesh、draw order、mask、parameter、keyform、rig control、runtime load test、代表parameter評価を検証対象にする。
+- `AC-PHYS-001` から `AC-PHYS-006` は、Minimum Open Dynamics v1のdriver/output、fixed timestep、reset policy、deterministic snapshot、demo-safe表示を検証対象にする。
 - `SC-MVP-004` は、validation reportを人間向け表示とAI-readable形式で保存し、AI Agentがreportとmodel structureを読めることを要求する。
 - `SC-MVP-005` は、scriptだけで生成されたpackageや第三者形式対応実験をMVP達成と誤判定しないことを要求する。
 
@@ -35,6 +36,7 @@
 | Model semantic validator | drawable、mesh、part、parameter、keyform、rig control、mask、draw orderの意味的整合を検証する | model graph | semantic diagnostics |
 | Runtime load validator | package loader + Shared Runtime coreで読み込み評価できるか検証する | package + profile | runtime diagnostics, snapshot |
 | Representative parameter evaluator | scenario代表parameter setを評価する | normalized graph + parameter set | runtime snapshots, diffs |
+| Dynamics sequence evaluator | fixed timestepのauthored input sequenceを評価する | normalized graph + dynamics initial state + input sequence | dynamics snapshots, deterministic comparison |
 | Editor warning profile | 制作中に即時表示すべきsubsetを出す | dirty authoring graph | incremental warnings |
 | AI-readable report generator | reportをstable ID、repair candidate、provenance付きで保存する | diagnostics + snapshots + diffs | `*.validation.json` |
 | Acceptance Runner | AC / scenarioに対してMVP完了判定材料を集める | operation log, GUI evidence, package, reports, snapshots | Pass / Fail / Needs review / Not applicable |
@@ -114,6 +116,22 @@
 - child vertexが親warp domain外。
 - unknown interpolation method。
 
+### 3.6.1 Minimum Open Dynamics v1
+
+- dynamics group欠落。
+- driver parameter欠落。
+- output parameter欠落。
+- driverが`authoredInput` parameterではない。
+- outputが`computedDynamics` parameterではない。
+- output parameterが範囲外またはclamp不能。
+- output parameterが同じgroupまたは他groupのdriverに使われている。
+- dynamics group間依存またはcycle。
+- Dynamics stateがNaN / Infinity。
+- stiffness / damping / response / amplitude limitが不安定。
+- fixed timestepやmaxSubStepsがruntime/profileと一致しない。
+- 同じ入力列・同じinitial stateでpreview/viewer snapshotが一致しない。
+- demo-safe画面にCubism Physics、physics3、内部solver詳細を示す名称が出ている。
+
 ### 3.7 Mask
 
 - mask source欠落。
@@ -129,6 +147,7 @@
 - Runtime coreがsnapshotを返せない。
 - representative parameter setでblocking diagnosticsが出る。
 - preview snapshotとviewer snapshotが同じ入力で一致しない。
+- dynamics output sequenceが同じfixed timestep/input sequenceで一致しない。
 - final vertex hash / boundsが非決定的。
 - draw listが空。
 - diagnostics phaseが欠落して原因追跡不能。
@@ -221,7 +240,7 @@ Acceptance Runner は、Validatorの結果に加えて、MVP scenarioの証拠�
 
 - GUI authoring evidenceがあるか。
 - 権利クリーン素材から開始しているか。
-- drawable / texture / part / mesh / parameter / keyform / rig control / mask / draw orderをGUIで編集した証拠があるか。
+- drawable / texture / part / mesh / parameter / keyform / rig control / dynamics / mask / draw orderをGUIで編集した証拠があるか。
 - 保存、再読み込み、Viewer表示、runtime snapshotがあるか。
 - Validator reportがあるか。
 - AI dry-run、model diff、runtime diff、validation diffがあるか。
@@ -244,6 +263,7 @@ Script生成packageは、Viewer表示できても、GUI authoring evidenceがな
 - `warning` を Acceptance Runner で fail候補にする閾値。
 - GUI authoring evidenceとして operation logだけで十分か、Playwright traceやsession metadataも必要か。
 - Representative parameter setの具体値。
+- Dynamics representative input sequence、fixedStepMs、reset policyの具体値。
 - Preview snapshot と Viewer snapshot の一致判定を full vertexで行うか、hash + bounds + diagnosticsで行うか。
 
 ## 8. Post-MVPでよい未決事項

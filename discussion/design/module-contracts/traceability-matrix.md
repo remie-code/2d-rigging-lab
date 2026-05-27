@@ -1,4 +1,4 @@
-# Traceability Matrix
+﻿# Traceability Matrix
 
 > 状態: Draft / Review ready
 > 出力先: discussion/design/module-contracts/traceability-matrix.md
@@ -75,12 +75,12 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | AC-MVP-006 | `editor-ui`, `package-format`, `runtime-core` | editor-only state table, `setDrawOrder`, `setRuntimeVisibility` | `tutorial-like-authoring` | draft-covered |
 | AC-MVP-007 | `operation-core`, `runtime-core`, `validator-core` | `setMaskRelation`, mask snapshot, mask checks | `invalid-mask-reference` | draft-covered |
 | AC-MVP-008 | `operation-core`, `runtime-core` | `createParameter`, `addKeyform`, one-axis evaluator | `tutorial-like-authoring` | draft-covered |
-| AC-MVP-009 | `operation-core`, `runtime-core`, `validator-core` | rig control operations, parent-before-child eval | `parent-child-rig control-diagonal`, `invalid-rig control-cycle` | draft-covered |
-| AC-MVP-010 | `editor-ui`, `runtime-core`, `fixtures-contract-tests` | project-defined params, `parameter-grid-2d-v1` | `tutorial-like-authoring`, `manual-face-grid-2d` | draft-covered |
+| AC-MVP-009 | `operation-core`, `runtime-core`, `validator-core` | rig control operations, parent-before-child eval | `parent-child-rigControl-diagonal`, `invalid-rigControl-cycle` | draft-covered |
+| AC-MVP-010 | `editor-ui`, `runtime-core`, `fixtures-contract-tests` | project-defined params, `parameter-grid-2d-v1`, Minimum Open Dynamics v1 computed output parameters | `tutorial-like-authoring`, `manual-face-grid-2d`, `minimal-dynamics-hairSway` | draft-covered |
 | AC-MVP-011 | `editor-ui`, `package-format`, `runtime-core` | save/reload layout, preview snapshot | `tutorial-like-authoring` | draft-covered |
 | AC-MVP-012 | `viewer-ui`, `runtime-core`, `renderer-adapter` | `RuntimeSnapshotDto`, parameter input | `minimal-valid-package`, `manual-face-grid-2d` | draft-covered |
 | AC-MVP-013 | `validator-core` | `ValidationReportDto`, check registry | all invalid fixtures | draft-covered |
-| AC-MVP-014 | `ai-interface`, `operation-core`, `runtime-core`, `validator-core` | AI command registry, dry-run, diffs, repair candidate | `ai-repair-dry-run`, `ai-screenshot-rig control-parameter` | draft-covered |
+| AC-MVP-014 | `ai-interface`, `operation-core`, `runtime-core`, `validator-core` | AI command registry, dry-run, diffs, repair candidate | `ai-repair-dry-run`, `ai-screenshot-rigControl-parameter` | draft-covered |
 | AC-MVP-015 | `validator-core`, `viewer-ui`, `ai-interface` | demo-safe capture separation, hidden internal names, rights/provenance display filter | `demo-safe-preflight` | draft-covered |
 | AC-MVP-016 | all core modules | no Cubism required dependency, disabled future layers | `minimal-valid-package`, `script-generated-minimal` | draft-covered |
 
@@ -91,16 +91,18 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | AC-IN-001/002/006 | PSD source profile, split PNG fallback, source provenance | `psd-import-happy-path`, `psd-unsupported-layer` |
 | AC-DRAW-001..004 | drawable/part/mask/draw order DTOs and operations | `minimal-valid-package`, `invalid-mask-reference` |
 | AC-MESH-001..004 | mesh DTO, mesh operation, mesh validator checks | `invalid-mesh-triangle`, `ai-repair-dry-run` |
-| AC-DEF-001..005 | rig control operation/graph/runtime/validator contracts | `parent-child-rig control-diagonal`, `invalid-rig control-cycle` |
+| AC-DEF-001..005 | rig control operation/graph/runtime/validator contracts | `parent-child-rigControl-diagonal`, `invalid-rigControl-cycle` |
 | AC-PARAM-001..007 | parameter DTO, one-axis keyform, grid2d evaluator | `tutorial-like-authoring`, `manual-face-grid-2d` |
 | AC-PART-001/002/004 | editor-only/runtime-visible split and draw order | `tutorial-like-authoring` |
 | AC-FACE-001/003/004/007/008 | project-defined params, keyforms, manual face grid | `tutorial-like-authoring`, `manual-face-grid-2d` |
-| AC-BODY-001/002/003/005 | body/arm/hair rig control/keyform flow | `tutorial-like-authoring`, `parent-child-rig control-diagonal` |
+| AC-BODY-001/002/003/005 | body/arm/hair rig control/keyform flow | `tutorial-like-authoring`, `parent-child-rigControl-diagonal` |
+| AC-PHYS-001..006 | Minimum Open Dynamics v1 package/runtime/validator/demo contract | `minimal-dynamics-hairSway`, `invalid-dynamics-cycle`, `dynamics-output-range-clamp`, `dynamics-reset-determinism`, `demo-safe-dynamics-capture` |
 | AC-EXPORT-001/002/004/005/006 | package layout, save/reload, Cubism non-dependency | `minimal-valid-package` |
 | AC-VERIFY-001..006 | inspect, snapshot, diff, AI-readable report | `ai-repair-dry-run` |
-| AC-AI-001..007 | operation command, stable ID, response, provenance | `ai-screenshot-rig control-parameter`, `ai-repair-dry-run` |
+| AC-AI-001..007 | operation command, stable ID, response, provenance | `ai-screenshot-rigControl-parameter`, `ai-repair-dry-run` |
 | AC-FORMAT-001..005 | Zod DTOs, package layout, versioning, refs | `minimal-valid-package` |
 | AC-RUNTIME-001..005 | runtime API, parameter state, snapshot | `minimal-valid-package`, `manual-face-grid-2d` |
+| AC-RUNTIME-001..005 + AC-PHYS-003/004 | fixed timestep dynamics evaluation and snapshot sequence | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
 | AC-VALIDATOR-001..005 | check registry, report schema | all invalid fixtures |
 | AC-API-001/002/004/005 | command grouping and adapter classification | AI command transcript fixtures |
 | AC-AGENT-001..005 | AI inspect/operation/diff/test/repair contracts | `ai-repair-dry-run` |
@@ -116,8 +118,8 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | AC-IN-003 | project-defined model package load path | `minimal-valid-package` | draft-covered |
 | AC-IN-004 | Cubism runtime package excluded from input/analysis scope | no MVP fixture; documented out-of-scope rule | satisfied-by-policy |
 | AC-IN-005 | `.cmo3` independent read/write excluded | no MVP fixture; acceptance non-goal check | draft-covered |
-| AC-DEF-002 | local/global deformation split | `parent-child-rig control-diagonal` | draft-covered |
-| AC-DEF-003 | rotation vs warp distinction | `parent-child-rig control-diagonal` | draft-covered |
+| AC-DEF-002 | local/global deformation split | `parent-child-rigControl-diagonal` | draft-covered |
+| AC-DEF-003 | rotation vs warp distinction | `parent-child-rigControl-diagonal` | draft-covered |
 | AC-PARAM-002 | parameter min/max/default | `tutorial-like-authoring` | draft-covered |
 | AC-PARAM-003 | keyform persistence | `tutorial-like-authoring`, `manual-face-grid-2d` | draft-covered |
 | AC-PARAM-004 | interpolation/intermediate state | `tutorial-like-authoring` | draft-covered |
@@ -138,7 +140,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | Scenario | Operation flow | Runtime / validation output |
 |----------|----------------|-----------------------------|
 | SC-MVP-001 | `importPsdSourceAsset` -> `createDrawable` -> `generateMesh` -> `setDrawOrder` -> `setMaskRelation` | package diff, validation report |
-| SC-MVP-002 | `createParameter` -> `addKeyform` -> rig control operations -> `addKeyformGrid2d` | preview/full snapshots |
+| SC-MVP-002 | `createParameter` -> `addKeyform` -> rig control operations -> `addKeyformGrid2d` -> dynamics operations | preview/full snapshots |
 | SC-MVP-003 | save package -> reload -> viewer `getRuntimeSnapshot` | viewer snapshot, no Cubism dependency |
 | SC-MVP-004 | `validatePackage` -> `inspectModel` -> `dryRunOperation` -> `getDiff` -> `createRepairCandidate` | report + model/runtime/validation diffs |
 | SC-MVP-005 | acceptance validation over package/evidence | `evidence.guiOperationLogMissing` for script-only package |
@@ -155,6 +157,10 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | SC-PARAM-006 | inspect private `projectPresetAlias` and semantic role | model inspection response |
 | SC-PARAM-007 | detect single-key/endpoint-missing keyform | `keyform.missingEndpoint` report |
 | SC-PARAM-004 | `addKeyformGrid2d` for two parameters and 3x3 grid | full snapshot at diagonal/corner points |
+| SC-DYN-001 | `createDynamicsGroup` -> `bindDynamicsDriver` -> `bindDynamicsOutput` -> `setDynamicsSettings` | package diff + validation report |
+| SC-DYN-002 | `resetDynamicsPreviewState` -> run fixed-step authored input sequence in Editor preview and Viewer | matching snapshot sequence |
+| SC-DYN-003 | validate dynamics graph and sequence | dynamics check report |
+| SC-DYN-004 | demo-safe preflight for secondary motion | demo-safe report |
 | SC-DEF-002 | `createRotation2dRigControl` for head pivot | operation result + snapshot |
 | SC-DEF-003 | `bindRigControlChild` then evaluate parent/child | targeted runtime snapshot |
 | SC-DEF-004 | rotation parent plus warp child | parent-before-child runtime snapshot |
@@ -184,8 +190,21 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `keyform.grid2dMissingKey` | AC-PARAM-005, SC-PARAM-004 | `keyform-grid-invalid` |
 | `keyform.grid2dDuplicateKey` | AC-PARAM-005, SC-PARAM-004 | `keyform-grid-invalid` |
 | `keyform.tooManyParametersForMvp` | AC-MVP-010, SC-PARAM-005 | `keyform-grid-overdimension` |
-| `rig control.cycle` | AC-MVP-009, SC-DEF-006 | `invalid-rig control-cycle` |
-| `rig control.childOutsideWarpDomain` | AC-DEF-005, SC-DEF-005 | `parent-child-out-of-domain` |
+| `rigControl.cycle` | AC-MVP-009, SC-DEF-006 | `invalid-rigControl-cycle` |
+| `rigControl.childOutsideWarpDomain` | AC-DEF-005, SC-DEF-005 | `parent-child-out-of-domain` |
+| `dynamics.driverMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-driver` |
+| `dynamics.outputMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
+| `dynamics.driverMustBeAuthoredInput` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-driver` |
+| `dynamics.outputMustBeComputedParameter` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
+| `dynamics.outputUsedAsDriver` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-cycle` |
+| `dynamics.groupCycle` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-cycle` |
+| `dynamics.nanState` | AC-PHYS-003, SC-DYN-003 | `invalid-dynamics-cycle` |
+| `dynamics.unstableSettings` | AC-PHYS-003, SC-DYN-003 | `dynamics-output-range-clamp` |
+| `dynamics.excessiveAmplitude` | AC-PHYS-003, SC-DYN-003 | `dynamics-output-range-clamp` |
+| `dynamics.nonDeterministicSnapshot` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
+| `dynamics.resetPolicyMissing` | AC-PHYS-001, SC-DYN-001 | `invalid-dynamics-missing-output` |
+| `dynamics.timestepMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
+| `dynamics.demoUnsafeInternalName` | AC-PHYS-006, SC-DYN-004 | `demo-safe-dynamics-capture` |
 | `mask.sourceMissing` | AC-MVP-007, SC-PART-004 | `invalid-mask-reference` |
 | `mask.opacityZeroSource` | AC-MVP-007, SC-DRAW-005 | `invalid-mask-reference` |
 | `runtime.loadBlocking` | AC-MVP-012, SC-RUNTIME-001 | `runtime-load-blocking` |
@@ -203,12 +222,19 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `split-png-fallback` | fallback provenance warning | split PNG non-primary compatibility |
 | `tutorial-like-authoring` | GUI operation log, full snapshot, validation report | MVP GUI authoring evidence |
 | `manual-face-grid-2d` | full snapshot at 2D parameter values | manual face grid semantics |
+| `minimal-dynamics-hairSway` | snapshot sequence showing delayed/clamped computed output parameter | Minimum Open Dynamics v1 |
+| `invalid-dynamics-missing-driver` | error report | dynamics driver reference/type validation |
+| `invalid-dynamics-missing-output` | error report | dynamics computed output validation |
+| `invalid-dynamics-cycle` | blocking report | dynamics dependency validation |
+| `dynamics-output-range-clamp` | clamped output snapshot + diagnostic | dynamics output range validation |
+| `dynamics-reset-determinism` | paired sequence equality report | fixed timestep/reset determinism |
+| `demo-safe-dynamics-capture` | demo preflight report | dynamics demo hygiene |
 | `keyform-grid-invalid` | missing/duplicate grid key validation report | two-axis grid validation |
 | `keyform-missing-endpoint` | endpoint warning/fail validation report | one-axis keyform validation |
-| `parent-child-rig control-diagonal` | targeted snapshot/diff | parent-child diagonal expression |
+| `parent-child-rigControl-diagonal` | targeted snapshot/diff | parent-child diagonal expression |
 | `invalid-mesh-triangle` | `mesh.triangleIndexOutOfRange` blocking report | mesh validation |
 | `invalid-missing-texture` | validation fail | asset reference validation |
-| `invalid-rig control-cycle` | blocking report | rig control topology validation |
+| `invalid-rigControl-cycle` | blocking report | rig control topology validation |
 | `invalid-mask-reference` | fail report | mask validation |
 | `rights-provenance-missing` | rights/provenance fail report | rights hygiene validation |
 | `keyform-grid-overdimension` | too-many-parameters needs_review/fail report | MVP grid limitation |
@@ -218,8 +244,8 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `out-of-range-parameter-dry-run` | clamped snapshot + validation diff | external input handling |
 | `ai-repair-dry-run` | command transcript, diffs, repair candidate | AI dry-run/approval |
 | `script-generated-minimal` | acceptance fail for missing GUI operation log | GUI evidence requirement |
-| `gui-hit-test-rig control` | hit-test response with stable `RigControlId` target | GUI semantic target selection |
-| `ai-screenshot-rig control-parameter` | command sequence using screenshot plus semantic APIs | AI observe/inspect/dry-run flow |
+| `gui-hit-test-rigControl` | hit-test response with stable `RigControlId` target | GUI semantic target selection |
+| `ai-screenshot-rigControl-parameter` | command sequence using screenshot plus semantic APIs | AI observe/inspect/dry-run flow |
 
 ## High-level Coverage Overview
 

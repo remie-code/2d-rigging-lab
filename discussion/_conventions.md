@@ -141,7 +141,7 @@ discussion/
 - Cubism SDK/Core には依存しない。
 - fixture / sample / demo は rights-clean な自作・生成・明示許諾素材のみを使い、既存Cubismモデル、公式サンプル、第三者Live2Dモデル、nizima素材を使わない。
 - 配信デモでは、コード、内部形式、ファイル構造、Cubism形式名、SDK/Core連携、既存モデル読み込みを示唆する画面を出さない。
-- 用語は `project-defined model package`, `rig control`, `drawable mesh`, `faceYaw`, `facePitch`, `layered-character-psd-profile-v1` など独自/一般語彙を優先する。
+- 用語は `project-defined model package`, `rigControl`, `drawable mesh`, `faceYaw`, `facePitch`, `layered-character-psd-profile-v1` など独自/一般語彙を優先する。
 - `Private Prototype`, `Streaming Demo Surface`, `Live2D Feature Proposal`, `Future Public Clean Subset` の4トラックを混同しない。
 
 ## 8. ファイル命名

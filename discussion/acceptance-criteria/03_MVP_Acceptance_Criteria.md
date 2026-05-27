@@ -38,6 +38,7 @@ MVPに含めるもの:
 - manual authored parameter grid。
 - rotation2d / warpLattice2d rig control。
 - parent-child rig hierarchy。
+- Minimum Open Dynamics v1。driver parameterから髪・服・小物用computed output parameterを決定的に生成するparameter-driven secondary motion。
 - generic mask / clipping。
 - draw order。
 - editor preview。
@@ -60,6 +61,8 @@ MVPで扱うミニモデルは、商用品質ではなく、制作概念を一�
 - `.model3.json`、`.moc3`、`.cmo3`、`.physics3.json`、`.motion3.json`、`.pose3.json` の検査、読み込み、変換。
 - Cubism Viewer compatibility。
 - Cubism Editor UI reproduction。
+- Cubism Physics互換、`.physics3.json` import/export、Cubism Viewer一致、Cubism Editor Physics UI再現。
+- direct mesh physics、cloth simulation、collision、IK、timeline bake、AIによる物理パラメータ自動最適化。
 - VTube Studio compatibility。
 - Future SDK。
 - Future integration surface。
@@ -160,12 +163,13 @@ MVPミニモデルは、少なくとも次の可動を制作・保存・再読�
 - 顔roll。
 - 体上下または体傾き。
 - 片腕の回転、上下、または姿勢差分。
-- 髪揺れの最小表現。MVPでは `hairSway` 等のproject-defined scalar parameter、手動keyform、通常rig controlで扱う。
+- 髪揺れの最小表現。MVPでは `hairSway` 等のproject-defined scalar parameterに加えて、Minimum Open Dynamics v1 により、顔・体・頭部などのdriver parameterから髪・服・小物用のcomputed output parameterを決定的に生成できること。
+- 生成されたoutput parameterは、通常のkeyform / rig control / drawable評価に渡され、Editor previewとPrivate Viewerで同じ入力列に対して同じ結果を返すこと。
 - faceYaw / facePitch の手動authored parameter grid または通常補間。
 
 これらは project-defined stable ID として扱う。外部runtimeやCubism標準parameterとの互換を目的にしない。
 
-Full Open Dynamics、dynamics group、secondary motion solver は current MVP の成功条件にしない。必要な場合は Private Optional / Post-MVP として、package / operation / runtime / validator contract を追加してから扱う。
+Minimum Open Dynamics v1 はMVP成功条件に含める。ただし、MVPではDynamicsがmesh vertexやrigControl propertyを直接変更せず、computed output parameterを生成して通常のkeyform / rigControl評価へ渡す。Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
 
 ### AC-MVP-011: Editor preview、保存、再読み込みが成立すること
 
@@ -181,7 +185,7 @@ Private Runtime / Viewer は、GUI Editor で保存した project-defined model 
 
 Viewer は、MVPミニモデルの parameter 一覧、範囲、初期値、現在値を表示し、GUI slider または同等の操作で値を変えられること。
 
-parameter 操作の結果として、評価済み drawable state、vertex、visibility、opacity、draw order、mask状態、diagnostics が変化し、構造化runtime stateとして取得できること。
+parameter 操作の結果として、authored/computed/effective parameter値、Dynamics groupのdriver/output/state、評価済み drawable state、vertex、visibility、opacity、draw order、mask状態、diagnostics が変化し、構造化runtime stateとして取得できること。
 
 ### AC-MVP-013: Validator が構造化レポートを出力できること
 
@@ -196,6 +200,7 @@ Validator は、GUI Editor で保存した package に対して、少なくと�
 - clipping / mask 参照。
 - parameter 範囲、初期値、keyform。
 - rig control構造、親子階層、parameter接続。
+- dynamics group / driver / computed output parameter / fixed timestep / reset policy / deterministic snapshot整合性。
 - runtime load test と代表parameter評価。
 - demo-safe capture に出してよい情報と隠すべき情報の分類。
 
@@ -253,7 +258,7 @@ Domain ACは、Private Prototypeを現在baselineとして整理済みである�
 MVPは、次のすべてを満たしたときに完了とする。
 
 1. 権利クリーンな素材から、GUI Editor でMVPミニモデルを制作できる。
-2. GUI Editor で、入力、drawable / texture / part、mesh、draw order、clipping、parameter、keyform、rig control、基本制作能力に含まれる可動を編集できる。
+2. GUI Editor で、入力、drawable / texture / part、mesh、draw order、clipping、parameter、keyform、rig control、Minimum Open Dynamics v1、基本制作能力に含まれる可動を編集できる。
 3. GUI Editor preview で、代表parameterの変化を確認できる。
 4. Project-defined model package として保存し、GUI Editor で再読み込みできる。
 5. Private Runtime / Viewer で読み込み、parameter操作に応じた表示と runtime state を確認できる。
@@ -271,7 +276,7 @@ MVPは、次のすべてを満たしたときに完了とする。
 - Domain AC / scenarioをPrivate Prototype baselineへ整理。
 - Future SDK、Future integration surface、Future streaming app、public sample distributionはFuture / out of current MVPへ分類。
 - 旧接続固有語をmanual overlap / mask / draw order / keyform / joint-area validationへ整理。
-- Physics相当の語彙はPrivate Optional / Post-MVPへ分離し、MVPではhairSway等のproject-defined parameter / keyform / rig controlへ整理。
+- Dynamics相当の語彙はMinimum Open Dynamics v1としてMVPに復帰済み。MVPではparameter-driven deterministic secondary motion、computed output parameter、fixed timestep、reset policy、通常keyform / rig control評価への接続に限定する。
 - face yaw / pitchをmanual authored parameter grid文脈へ整理。
 - 旧標準ID語彙をprojectPresetAlias / semantic roleへ整理。
 - AIをassistant / validator / dry-run / diff / repair suggestion文脈へ整理。

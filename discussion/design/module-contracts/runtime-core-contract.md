@@ -16,6 +16,7 @@ This document fixes the Shared Runtime evaluation core contract:
 - parameter input and clamp policy,
 - one-axis keyform semantics,
 - project-defined `parameter-grid-2d-v1` semantics,
+- Minimum Open Dynamics v1 evaluation before keyform sampling,
 - parent-before-child rig control hierarchy,
 - runtime snapshot DTO,
 - diagnostics phases,
@@ -31,10 +32,12 @@ It does not define renderer implementation, package file IO, or editor UI state.
 - MVP requires Preview and Viewer to share runtime evaluation semantics.
 - Runtime snapshots must expose evaluated drawable state, vertex/bounds/hash, opacity, visibility, draw order, mask state, and diagnostics.
 - face yaw / pitch diagonal behavior is required by `AC-MVP-010`, `SC-MVP-002`, and `SC-PARAM-004`.
+- Minimum Open Dynamics v1 is required for MVP secondary motion and must generate computed output parameters instead of directly changing mesh, rig control, or drawable state.
 
 ### Prior Design Decisions
 
 - `parameter-grid-2d-v1` is MVP contract for two-axis keyform grids.
+- Minimum Open Dynamics v1 is limited to `scalarDampedFollowV1` groups that read authoredInput parameters and write computedDynamics parameters.
 - One-axis keyforms remain a separate evaluator.
 - Parent-before-child rig control evaluation is required.
 - `rotation2d` and `warpLattice2d` are MVP runtime-visible rig control nodes.
@@ -68,6 +71,8 @@ import {
   MeshId,
   ParameterId,
   ParameterIdSchema,
+  DynamicsGroupId,
+  DynamicsGroupIdSchema,
   RigControlId,
   RigControlIdSchema,
   RuntimeSnapshotIdSchema,
@@ -105,6 +110,7 @@ export interface NormalizedRuntimeGraph {
   readonly packageHash?: string;
   readonly coordinateSystem: "canvas-y-down-v1";
   readonly parameters: ReadonlyMap<ParameterId, NormalizedParameter>;
+  readonly dynamicsGroups: ReadonlyMap<DynamicsGroupId, NormalizedDynamicsGroup>;
   readonly drawables: ReadonlyMap<DrawableId, NormalizedDrawable>;
   readonly rigControls: ReadonlyMap<RigControlId, NormalizedRigControlNode>;
   readonly keyformBindings: readonly KeyformBinding[];
@@ -118,9 +124,41 @@ export interface NormalizedParameter {
   readonly displayName: string;
   readonly semanticRole?: "eye" | "brow" | "mouth" | "face" | "body" | "arm" | "hair" | "dynamics" | "custom";
   readonly projectPresetAlias?: string;
+  readonly valueSource: "authoredInput" | "computedDynamics" | "debugOverride";
   readonly min: number;
   readonly max: number;
   readonly default: number;
+}
+
+export interface NormalizedDynamicsGroup {
+  readonly dynamicsGroupId: DynamicsGroupId;
+  readonly displayName: string;
+  readonly enabled: boolean;
+  readonly solverKind: "scalarDampedFollowV1";
+  readonly drivers: readonly {
+    readonly driverId: string;
+    readonly sourceParameterId: ParameterId;
+    readonly inputScale: number;
+    readonly inputOffset: number;
+    readonly invert: boolean;
+  }[];
+  readonly outputs: readonly {
+    readonly outputId: string;
+    readonly targetParameterId: ParameterId;
+    readonly outputScale: number;
+    readonly outputOffset: number;
+    readonly min: number;
+    readonly max: number;
+    readonly clampPolicy: "clamp-to-output-range";
+  }[];
+  readonly settings: {
+    readonly stiffness: number;
+    readonly damping: number;
+    readonly response: number;
+    readonly maxVelocity?: number;
+    readonly maxAmplitude?: number;
+  };
+  readonly resetPolicy: "reset-on-load" | "reset-on-manual-command" | "reset-on-large-input-jump";
 }
 
 export type KeyformBinding =
@@ -130,7 +168,7 @@ export type KeyformBinding =
 export interface Linear1dKeyformBinding {
   readonly evaluator: "linear-1d-v1";
   readonly targetId: string;
-  readonly targetKind: "mesh" | "rig control" | "drawable";
+  readonly targetKind: "mesh" | "rigControl" | "drawable";
   readonly targetProperty: string;
   readonly parameterId: ParameterId;
   readonly keys: readonly OneAxisKey[];
@@ -141,7 +179,7 @@ export interface Linear1dKeyformBinding {
 export interface ParameterGrid2dKeyformBinding {
   readonly evaluator: "parameter-grid-2d-v1";
   readonly targetId: string;
-  readonly targetKind: "mesh" | "rig control" | "drawable";
+  readonly targetKind: "mesh" | "rigControl" | "drawable";
   readonly targetProperty: string;
   readonly parameterX: ParameterId;
   readonly parameterY: ParameterId;
@@ -174,7 +212,12 @@ export type NormalizedRigControlNode =
 ```ts
 export const RuntimeEvaluationInputSchema = z.object({
   schemaVersion: z.literal("runtime-evaluation-input-v1"),
-  parameters: z.record(ParameterIdSchema, z.number().finite()).default({}),
+  frameIndex: z.number().int().nonnegative(),
+  deltaTimeMs: z.number().finite().nonnegative(),
+  fixedStepMs: z.number().positive().default(16.6666667),
+  maxSubSteps: z.number().int().min(1).max(16).default(4),
+  resetDynamics: z.boolean().default(false),
+  authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
   source: z.object({
     surface: z.enum(["preview", "viewer", "validator", "aiDryRun"]),
     operationId: z.string().optional(),
@@ -196,6 +239,7 @@ export const RuntimeEvaluationOptionsSchema = z.object({
   profile: RuntimeEvaluationProfileSchema,
   snapshotDetail: SnapshotDetailSchema,
   evaluatorVersions: z.object({
+    dynamics: z.literal("scalarDampedFollowV1"),
     keyform1d: z.literal("linear-1d-v1"),
     keyformGrid2d: z.literal("parameter-grid-2d-v1"),
     warpLattice: z.literal("bilinear-grid-v1"),
@@ -209,12 +253,47 @@ export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOption
 
 ## Parameter / Keyform Evaluation Semantics
 
+Runtime uses three parameter layers:
+
+| Layer | Meaning |
+|-------|---------|
+| `authoredParameterValues` | Values directly supplied by user, Viewer, Editor preview, API, or AI dry-run. Only parameters with `valueSource="authoredInput"` are accepted here by default. |
+| `computedParameterValues` | Values produced by Minimum Open Dynamics v1. Only parameters with `valueSource="computedDynamics"` may be written here. |
+| `effectiveParameterValues` | Final values used by keyforms, `parameter-grid-2d-v1`, rigControl hierarchy, mesh, opacity, visibility, draw order, and mask evaluation. |
+
+Evaluation rules:
+
 1. Initialize each declared parameter to default.
-2. Apply input overrides.
-3. Clamp out-of-range input for preview/viewer/AI dry-run and emit `runtime.parameterClamped`.
-4. Validator strict may report range violations as fail while still producing diagnostic evidence.
-5. Evaluate one-axis bindings before `parameter-grid-2d-v1` only when `compositionOrder` says so. The order is numeric and deterministic.
-6. Same target property with multiple writers requires explicit `compositionMode` and `compositionOrder`.
+2. Apply authored input overrides into `authoredParameterValues`.
+3. Clamp authored values to parameter ranges for preview/viewer/AI dry-run and emit `runtime.parameterClamped`.
+4. Evaluate Minimum Open Dynamics v1 from authored values, previous dynamics state, and fixed timestep.
+5. Produce and clamp `computedParameterValues` for `computedDynamics` parameters.
+6. Merge authored + computed values into `effectiveParameterValues`; debugOverride may override only in debug profiles and must be trace-visible.
+7. Validator strict may report range violations as fail while still producing diagnostic evidence.
+8. Evaluate one-axis bindings before `parameter-grid-2d-v1` only when `compositionOrder` says so. The order is numeric and deterministic.
+9. Same target property with multiple writers requires explicit `compositionMode` and `compositionOrder`.
+
+## Minimum Open Dynamics v1 Semantics
+
+Minimum Open Dynamics v1 is a parameter-driven deterministic secondary motion layer. It uses `scalarDampedFollowV1` only in MVP.
+
+Rules:
+
+- Drivers may read only parameters whose `valueSource` is `authoredInput`.
+- Outputs may write only parameters whose `valueSource` is `computedDynamics`.
+- Dynamics output parameters cannot be drivers for the same or another dynamics group in MVP.
+- Dynamics group dependencies are prohibited.
+- Dynamics must not read mesh, rigControl, drawable, mask, or renderer state.
+- Dynamics must not directly write mesh vertices, rigControl properties, drawable visibility, opacity, draw order, or mask state.
+- Computed output parameters such as `hairSway`, `clothSway`, `ribbonSwing`, and `accessorySwing` feed ordinary keyform and rigControl evaluation.
+
+Timestep policy:
+
+- Runtime uses fixed timestep for Dynamics. Raw variable `deltaTimeMs` is accumulated into fixed steps and is never passed directly to the solver.
+- Default `fixedStepMs` is `16.6666667`.
+- Default `maxSubSteps` is `4`; exceeding it emits `dynamics.timestepMismatch` or profile-specific warning/fail diagnostics.
+- Dynamics state resets on package load, user reset command, preview restart, large input jump, validation representative run start, and demo capture start.
+- Same package, initial dynamics state, authored input sequence, and fixedStepMs must produce the same output sequence in Editor preview and Viewer.
 
 ## Project-defined 2-axis Keyform Grid Semantics
 
@@ -299,10 +378,12 @@ RigControl rules:
 ```ts
 export const EvaluatedParameterSchema = z.object({
   parameterId: ParameterIdSchema,
-  rawInput: z.number().finite().optional(),
-  value: z.number().finite(),
+  valueSource: z.enum(["authoredInput", "computedDynamics", "debugOverride"]),
+  authoredValue: z.number().finite().optional(),
+  computedValue: z.number().finite().optional(),
+  effectiveValue: z.number().finite(),
   clamped: z.boolean(),
-  source: z.enum(["default", "viewerOverride", "editorPreviewOverride", "operationDryRun"]),
+  source: z.enum(["default", "viewerOverride", "editorPreviewOverride", "operationDryRun", "dynamicsComputed", "debugOverride"]),
 });
 
 export const EvaluatedDrawableSchema = z.object({
@@ -334,6 +415,22 @@ export const EvaluatedRigControlSchema = z.object({
   bounds: RectSchema.optional(),
 }).passthrough();
 
+export const EvaluatedDynamicsGroupSchema = z.object({
+  dynamicsGroupId: DynamicsGroupIdSchema,
+  enabled: z.boolean(),
+  solverKind: z.literal("scalarDampedFollowV1"),
+  driverValues: z.record(ParameterIdSchema, z.number().finite()),
+  outputValues: z.record(ParameterIdSchema, z.number().finite()),
+  stateSummary: z.object({
+    position: z.number().finite(),
+    velocity: z.number().finite(),
+  }),
+  tick: z.number().int().nonnegative(),
+  fixedStepMs: z.number().positive(),
+  resetCounter: z.number().int().nonnegative(),
+  diagnostics: z.array(DiagnosticSchema).default([]),
+});
+
 export const EvaluatedMaskSchema = z.object({
   maskRelationId: z.string(),
   targetDrawableIds: z.array(DrawableIdSchema),
@@ -364,6 +461,7 @@ export const RuntimeSnapshotSchema = z.object({
     evaluatorVersions: z.record(z.string(), z.string()),
   }),
   parameters: z.array(EvaluatedParameterSchema),
+  dynamics: z.array(EvaluatedDynamicsGroupSchema).default([]),
   keyformSamples: z.array(KeyformSampleSchema).default([]),
   rigControls: z.array(EvaluatedRigControlSchema).default([]),
   drawables: z.array(EvaluatedDrawableSchema),
@@ -385,7 +483,9 @@ The runtime pipeline diagram fixes evaluation order. Snapshot comparison remains
 ```mermaid
 flowchart TB
   input[NormalizedRuntimeGraph + RuntimeEvaluationInput] --> params[parameter resolution and clamp]
-  params --> future[disabled future layers recorded]
+  params --> dynamics[Minimum Open Dynamics v1 computed parameters]
+  dynamics --> effective[merge authored + computed effective parameters]
+  effective --> future[disabled future layers recorded]
   future --> keyforms[one-axis and parameter-grid-2d keyform sampling]
   keyforms --> rigControls[parent-before-child rig control evaluation]
   rigControls --> mesh[drawable mesh evaluation]
@@ -400,8 +500,9 @@ flowchart TB
 | Phase | Example checks |
 |-------|----------------|
 | `parameter_resolution` | out-of-range raw input, missing parameter |
+| `dynamics_evaluation` | missing driver/output, output used as driver, unstable setting, non-deterministic output |
 | `keyform_sampling` | missing endpoint, grid2d missing key, duplicate coordinate |
-| `rig control_evaluation` | cycle, missing child, child outside warp domain, NaN transform |
+| `rigControl_evaluation` | cycle, missing child, child outside warp domain, NaN transform |
 | `mesh_evaluation` | triangle out of range, degenerate triangle, NaN vertex |
 | `opacity_visibility` | opacity out of range, editor hide leak |
 | `mask_resolution` | missing mask source, visibility false mask source, zero-area mask |
@@ -424,16 +525,16 @@ Strict fixtures that compare full vertices must specify the epsilon policy used 
 | Snapshot detail | Comparison |
 |-----------------|------------|
 | `summary` | package ID/revision, parameter values, draw list, bounds, vertex hashes, diagnostics |
-| `targeted` | summary + full details for target IDs |
-| `full` | all vertices, masks, rig control states, diagnostics, and trace |
+| `targeted` | summary + full details for target IDs and selected dynamics groups |
+| `full` | all vertices, masks, rig control states, dynamics driver/output/state/diagnostics, and trace |
 
 Preview and Viewer equivalence in MVP can use `summary` for routine checks and `full` for contract tests.
 
 ## Disabled Future Layers
 
-Motion, expression assets, full physics, pose, timeline, full Open Dynamics, dynamics group, and secondary motion solver are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
+Motion, expression assets, full physics, pose, timeline, direct mesh physics, cloth simulation, collision, IK, and timeline bake are represented as disabled future layers in MVP snapshots if package metadata includes them. Presence alone is `info` / `not_applicable`; declaring them as required for MVP rendering is a warning/error by profile.
 
-MVP hair/cloth/accessory sway is represented by ordinary project-defined parameters, keyforms, and rig controls. Open Dynamics can be reopened only as Private Optional / Post-MVP after package, operation, runtime, and validator contracts are added.
+MVP hair/cloth/accessory sway is represented by Minimum Open Dynamics v1 computed output parameters plus ordinary keyforms and rigControls. Cubism Physics compatibility, `.physics3.json`, external solver compatibility, and Cubism Viewer matching remain outside MVP.
 
 ## Traceability
 
@@ -441,7 +542,8 @@ MVP hair/cloth/accessory sway is represented by ordinary project-defined paramet
 |-------------|------------------|--------------|
 | AC-MVP-008, SC-PARAM-003 | one-axis keyform interpolation | `tutorial-like-authoring` snapshot |
 | AC-PARAM-005, SC-PARAM-004 | `parameter-grid-2d-v1` | `manual-face-grid-2d` full snapshot |
-| AC-MVP-009, SC-DEF-003 | parent-before-child rig control hierarchy | `parent-child-rig control-diagonal` snapshot |
+| AC-MVP-009, SC-DEF-003 | parent-before-child rig control hierarchy | `parent-child-rigControl-diagonal` snapshot |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | Minimum Open Dynamics v1 | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
 | AC-MVP-012, SC-MVP-003 | `RuntimeSnapshotDto` | viewer snapshot expected output |
 | AC-MVP-015 | demo-safe capture separation, hidden internal names | demo-safe preflight fixture |
 | AC-MVP-016 | disabled future layers + no Cubism Core dependency | package/runtime smoke fixture |
@@ -452,8 +554,10 @@ MVP hair/cloth/accessory sway is represented by ordinary project-defined paramet
 |----------------|---------|-------------------|
 | `minimal-valid-package` | load graph and produce non-empty snapshot | summary runtime snapshot |
 | `manual-face-grid-2d` | verify diagonal interpolation and key coordinate handling | full runtime snapshot |
-| `parent-child-rig control-diagonal` | verify parent and child axis composition | targeted snapshot + runtime diff |
-| `invalid-rig control-cycle` | cycle blocks deterministic evaluation | validation report + no snapshot or blocking snapshot |
+| `parent-child-rigControl-diagonal` | verify parent and child axis composition | targeted snapshot + runtime diff |
+| `minimal-dynamics-hairSway` | faceYaw input sequence produces delayed/clamped hairSway output | snapshot sequence + runtime diff |
+| `dynamics-reset-determinism` | reset policy and fixed timestep produce identical replay | paired snapshot sequence |
+| `invalid-rigControl-cycle` | cycle blocks deterministic evaluation | validation report + no snapshot or blocking snapshot |
 | `invalid-mask-reference` | mask diagnostics appear in runtime phase | snapshot diagnostics |
 | `out-of-range-parameter-dry-run` | clamp warning and strict validation behavior | dry-run snapshot + report |
 

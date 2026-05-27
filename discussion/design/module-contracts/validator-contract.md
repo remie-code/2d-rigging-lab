@@ -26,7 +26,7 @@ It does not define UI rendering of diagnostics, automatic repair algorithms, or 
 
 ### Repository Facts
 
-- MVP AC requires package schema, asset reference, rights/provenance, texture/drawable/part, mesh, draw order, mask, parameter, keyform, rig control, runtime load test, and representative parameter evaluation.
+- MVP AC requires package schema, asset reference, rights/provenance, texture/drawable/part, mesh, draw order, mask, parameter, keyform, rig control, Minimum Open Dynamics v1, runtime load test, and representative parameter evaluation.
 - `SC-MVP-005` requires script-only generated packages to fail or be classified as auxiliary fixtures when GUI authoring evidence is absent.
 
 ### Prior Design Decisions
@@ -54,7 +54,7 @@ It does not define UI rendering of diagnostics, automatic repair algorithms, or 
 
 ## Check ID Naming
 
-Check IDs use lowercase dot-separated namespaces:
+Check IDs use dot-separated namespaces. Namespace segments start with lowercase letters and may use camelCase to match implementation-facing diagnostics:
 
 ```text
 pkg.schema.requiredFileMissing
@@ -63,7 +63,8 @@ rights.provenanceMissing
 ref.drawableTextureMissing
 mesh.triangleIndexOutOfRange
 keyform.grid2dMissingKey
-rig control.cycle
+rigControl.cycle
+dynamics.driverMissing
 mask.sourceMissing
 runtime.loadBlocking
 evidence.guiOperationLogMissing
@@ -84,8 +85,23 @@ evidence.guiOperationLogMissing
 | `keyform.grid2dMissingKey` | keyform_sampling | error | strict: fail | AC-PARAM-005 |
 | `keyform.grid2dDuplicateKey` | keyform_sampling | blocking | all: fail | AC-PARAM-005 |
 | `keyform.tooManyParametersForMvp` | keyform_semantic | warning | acceptance: needs_review | AC-MVP-010 |
-| `rig control.cycle` | rig control_semantic | blocking | all: fail | AC-MVP-009 |
-| `rig control.childOutsideWarpDomain` | rig control_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
+| `rigControl.cycle` | rigControl_semantic | blocking | all: fail | AC-MVP-009 |
+| `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
+| `dynamics.groupMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-001 |
+| `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
+| `dynamics.outputMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
+| `dynamics.driverMustBeAuthoredInput` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
+| `dynamics.outputMustBeComputedParameter` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
+| `dynamics.outputParameterOutOfRange` | dynamics_evaluation | error | strict: fail | AC-PHYS-003 |
+| `dynamics.outputUsedAsDriver` | dynamics_semantic | error | all: fail | AC-PHYS-002 |
+| `dynamics.groupCycle` | dynamics_semantic | blocking | all: fail | AC-PHYS-002 |
+| `dynamics.nanState` | dynamics_evaluation | blocking | all: fail | AC-PHYS-003 |
+| `dynamics.unstableSettings` | dynamics_semantic | warning | acceptance: needs_review | AC-PHYS-003 |
+| `dynamics.excessiveAmplitude` | dynamics_evaluation | warning | acceptance: needs_review | AC-PHYS-003 |
+| `dynamics.nonDeterministicSnapshot` | representative_evaluation | error | strict/acceptance: fail | AC-PHYS-004 |
+| `dynamics.resetPolicyMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-001 |
+| `dynamics.timestepMismatch` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
+| `dynamics.demoUnsafeInternalName` | demo_preflight | warning | demo profile: needs_review | AC-PHYS-006 |
 | `mask.sourceMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
 | `mask.opacityZeroSource` | mask_resolution | warning | strict: needs_review | AC-MVP-007 |
 | `runtime.loadBlocking` | runtime_load | blocking | all: fail | AC-MVP-012 |
@@ -241,7 +257,8 @@ sequenceDiagram
 |-------------|------------------|--------------|
 | AC-MVP-005, SC-MESH-006 | mesh checks | `invalid-mesh-triangle` expected report |
 | AC-MVP-007, SC-DRAW-005, SC-PART-004 | mask checks | `invalid-mask-reference` expected report |
-| AC-MVP-009, SC-DEF-006 | rig control checks | `invalid-rig control-cycle`, `parent-child-rig control-diagonal` |
+| AC-MVP-009, SC-DEF-006 | rig control checks | `invalid-rigControl-cycle`, `parent-child-rigControl-diagonal` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | dynamics checks | `minimal-dynamics-hairSway`, `invalid-dynamics-cycle`, `dynamics-reset-determinism`, `demo-safe-dynamics-capture` |
 | AC-MVP-013, SC-MVP-004 | `ValidationReportDto` | all validation fixtures |
 | AC-MVP-014, SC-AGENT-005 | `RepairCandidateDto` | `ai-repair-dry-run` |
 | AC-MVP-001, SC-MVP-005 | `evidence.guiOperationLogMissing` | script-only fixture classification |
@@ -253,7 +270,13 @@ sequenceDiagram
 | `minimal-valid-package` | no blocking diagnostics | pass validation report |
 | `psd-unsupported-layer` | unsupported PSD layer diagnostic | report with `asset.psd.unsupportedFeature` |
 | `invalid-missing-texture` | visible drawable missing texture | fail report |
-| `invalid-rig control-cycle` | rig control hierarchy cycle | blocking report |
+| `invalid-rigControl-cycle` | rig control hierarchy cycle | blocking report |
+| `invalid-dynamics-missing-driver` | missing or wrong-source dynamics driver | error report |
+| `invalid-dynamics-missing-output` | missing or wrong-source dynamics output parameter | error report |
+| `invalid-dynamics-cycle` | computed output used as dynamics driver or group dependency | blocking report |
+| `dynamics-output-range-clamp` | output clamp and range diagnostic | report + snapshot |
+| `dynamics-reset-determinism` | fixed timestep replay equality | paired strict report |
+| `demo-safe-dynamics-capture` | demo profile hides unsafe names and solver details | demo preflight report |
 | `invalid-mask-reference` | missing mask source/target | fail report |
 | `script-generated-minimal` | viewer-loadable but no GUI evidence | acceptance fail / auxiliary fixture status |
 | `ai-repair-dry-run` | repair candidate and validation diff | report + candidate |

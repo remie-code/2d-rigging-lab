@@ -1,4 +1,4 @@
-# AI Command Contract
+﻿# AI Command Contract
 
 > 状態: Draft / Review ready
 > 出力先: discussion/design/module-contracts/ai-command-contract.md
@@ -43,6 +43,7 @@ AI assistant must not perform:
 - Cubism / Live2D model learning.
 - Cubism model structure reconstruction.
 - rights / legal safety determination.
+- automatic physics or dynamics parameter tuning.
 
 AI assistant may perform:
 
@@ -54,6 +55,7 @@ AI assistant may perform:
 - repair suggestion.
 - provenance summary.
 - demo-safe classification based on metadata.
+- Dynamics group inspection, dry-run operation proposals, deterministic preview sequence checks, and demo-safe secondary motion explanation.
 
 ## Basis Separation
 
@@ -69,7 +71,7 @@ AI assistant may perform:
 - API categories are Editor semantic state API, Operation command API, and Runtime / Validator read API.
 - Transport-independent contract is the source of truth.
 - HTTP JSON, WebSocket, and MCP are adapters, not source of truth.
-- Representative required scenario: using a screenshot while setting parameters on a selected or specified rig control.
+- Representative required scenario: using a screenshot while setting parameters on a selected or specified rigControl.
 
 ### Assumptions
 
@@ -134,6 +136,7 @@ This scenario must not rely on screenshot pixels alone for target identity.
 | `inspectModel` | Runtime / Validator read API | `InspectModelRequest` | structure DTO | no | no |
 | `inspectTarget` | Runtime / Validator read API | `InspectTargetRequest` | target details | no | no |
 | `getRuntimeSnapshot` | Runtime / Validator read API | `RuntimeEvaluationInput` | `RuntimeSnapshotDto` | no | no |
+| `runDynamicsPreviewSequence` | Runtime / Validator read API | authored parameter sequence + fixed timestep | snapshot sequence summary | no | no |
 | `validatePackage` | Runtime / Validator read API | `ValidatePackageRequest` | `ValidationReportDto` | no | no |
 | `dryRunOperation` | Operation command API | `OperationRequest(dryRun=true)` | `OperationResultDto` | no | no |
 | `commitOperation` | Operation command API | `OperationRequest(dryRun=false)` | `OperationResultDto` | yes | yes |
@@ -168,6 +171,7 @@ export const AiCommandNameSchema = z.enum([
   "inspectModel",
   "inspectTarget",
   "getRuntimeSnapshot",
+  "runDynamicsPreviewSequence",
   "validatePackage",
   "dryRunOperation",
   "commitOperation",
@@ -184,7 +188,8 @@ export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("hitTestCanvas"), payload: z.object({ pointCssPx: z.object({ x: z.number(), y: z.number() }), includeLocked: z.boolean().default(false) }) }),
   z.object({ command: z.literal("inspectModel"), payload: z.object({ includeEditorOnly: z.boolean().default(false), includeRuntimeOnly: z.boolean().default(true) }) }),
   z.object({ command: z.literal("inspectTarget"), payload: z.object({ target: TargetRefSchema, includeReferences: z.boolean().default(true) }) }),
-  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ parameterOverrides: z.record(z.string(), z.number()).default({}), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]) }) }),
+  z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ authoredParameterValues: z.record(z.string(), z.number()).default({}), frameIndex: z.number().int().nonnegative().default(0), deltaTimeMs: z.number().finite().nonnegative().default(16.6666667), fixedStepMs: z.number().positive().default(16.6666667), maxSubSteps: z.number().int().min(1).max(16).default(4), resetDynamics: z.boolean().default(false), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]) }) }),
+  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ authoredParameterFrames: z.array(z.record(z.string(), z.number())).min(1), fixedStepMs: z.number().positive().default(16.6666667), maxSubSteps: z.number().int().min(1).max(16).default(4), resetDynamics: z.boolean().default(true), targetIds: z.array(z.string()).default([]), detail: z.enum(["summary", "targeted", "full"]).default("targeted") }) }),
   z.object({ command: z.literal("validatePackage"), payload: z.object({ profile: z.enum(["editorIncremental", "viewer", "strict", "acceptance", "aiDryRun"]), packageRevision: z.number().int().nonnegative().optional() }) }),
   z.object({ command: z.literal("dryRunOperation"), payload: OperationRequestSchema.refine((request) => request.dryRun === true, "dryRunOperation requires dryRun=true") }),
   z.object({ command: z.literal("commitOperation"), payload: z.object({ approvedDryRunCommandId: z.string(), operation: OperationRequestSchema.refine((request) => request.dryRun === false, "commitOperation requires dryRun=false") }) }),
@@ -210,6 +215,7 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("inspectModel"), payload: z.object({ targets: z.array(TargetRefSchema), editableTargets: z.array(TargetRefSchema).default([]) }) }),
   z.object({ command: z.literal("inspectTarget"), payload: z.object({ target: TargetRefSchema, references: z.array(TargetRefSchema).default([]) }) }),
   z.object({ command: z.literal("getRuntimeSnapshot"), payload: z.object({ snapshotId: RuntimeSnapshotIdSchema, snapshot: RuntimeSnapshotPayloadSchema }) }),
+  z.object({ command: z.literal("runDynamicsPreviewSequence"), payload: z.object({ snapshotIds: z.array(RuntimeSnapshotIdSchema), summary: z.object({ deterministic: z.boolean(), diagnostics: z.array(DiagnosticSchema).default([]) }) }) }),
   z.object({ command: z.literal("validatePackage"), payload: z.object({ reportId: ValidationReportIdSchema, report: ValidationReportPayloadSchema }) }),
   z.object({ command: z.literal("dryRunOperation"), payload: z.object({ operationResult: OperationResultSchema }) }),
   z.object({ command: z.literal("commitOperation"), payload: z.object({ operationResult: OperationResultSchema }) }),
@@ -277,6 +283,7 @@ These commands are read-only. They may be implemented by `editor-ui` but exposed
 | `inspectModel` | returns package/authoring/runtime IDs and editable target graph |
 | `inspectTarget` | returns target detail, references, existing keyform/rig control connections |
 | `getRuntimeSnapshot` | delegates to runtime-core with requested profile/detail |
+| `runDynamicsPreviewSequence` | delegates to runtime-core with authored parameter sequence, fixed timestep, and reset policy; used for deterministic Dynamics preview evidence |
 | `validatePackage` | delegates to validator-core profile |
 | `getDiff` | returns model/runtime/validation diff by stable IDs |
 | `createRepairCandidate` | creates proposal only; no package mutation |
@@ -367,7 +374,8 @@ The approval and module flow diagrams define command ordering and dependency dir
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-014, SC-MVP-004 | dry-run, diff, validation, repair candidate | `ai-repair-dry-run` |
-| AC-AI-002, SC-AI-002 | stable ID target selection | `gui-hit-test-rig control`, `ai-screenshot-rig control-parameter` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | Dynamics inspect, dry-run, preview sequence, validation | `minimal-dynamics-hairSway`, `dynamics-reset-determinism` |
+| AC-AI-002, SC-AI-002 | stable ID target selection | `gui-hit-test-rigControl`, `ai-screenshot-rigControl-parameter` |
 | AC-AGENT-001, SC-AGENT-001 | `inspectModel`, `getRuntimeSnapshot`, `validatePackage` | model inspection fixture |
 | AC-AGENT-002, SC-AGENT-002 | `dryRunOperation`, `commitOperation` approval | repair dry-run fixture |
 | AC-AGENT-003, SC-AGENT-003 | `getDiff` | expected model/runtime/validation diffs |
@@ -378,7 +386,8 @@ The approval and module flow diagrams define command ordering and dependency dir
 | Fixture / Test | Purpose | Expected artifact |
 |----------------|---------|-------------------|
 | `ai-repair-dry-run` | AI dry-run creates candidate and diffs without commit | command transcript, diff, report |
-| `ai-screenshot-rig control-parameter` | screenshot-assisted rig control edit uses semantic APIs | command sequence + operation dry-run |
+| `minimal-dynamics-hairSway` | AI inspects dynamics group and runs deterministic preview sequence | command transcript + snapshot sequence |
+| `ai-screenshot-rigControl-parameter` | screenshot-assisted rig control edit uses semantic APIs | command sequence + operation dry-run |
 | `out-of-range-parameter-dry-run` | AI input outside parameter range returns clamp warning and validation diff | response + snapshot |
 | `script-generated-minimal` | AI/acceptance does not accept no-GUI evidence package as MVP | acceptance report |
 

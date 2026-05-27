@@ -16,11 +16,11 @@ Head、neck、bodyのparent-child relationを保存し、private runtime coreで
 
 ### AC-BODY-003: 髪の可動を定義できること
 
-Hair partのkeyform、`hairSway`等のproject-defined scalar parameter、通常rig controlを保存・評価できること。
+Hair partのkeyform、`hairSway`等のcomputed output parameter、通常rig control、Minimum Open Dynamics v1のdriver/output設定を保存・評価できること。
 
 ### AC-BODY-004: 衣装・装飾品の可動を定義できること
 
-Cloth、ribbon、accessoryなどの可動は、MVPではproject-defined parameter、手動keyform、通常rig controlとして保存できること。Full Open Dynamics、dynamics group、secondary motion solverはPrivate Optional / Post-MVPである。
+Cloth、ribbon、accessoryなどの可動は、MVPではproject-defined parameter、Minimum Open Dynamics v1のcomputed output parameter、手動keyform、通常rig controlとして保存できること。Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外である。
 
 ### AC-BODY-005: 身体可動の整合性を検証できること
 

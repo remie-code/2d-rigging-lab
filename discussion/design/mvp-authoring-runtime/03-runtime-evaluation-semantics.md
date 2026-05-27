@@ -10,7 +10,8 @@
 - `AC-MVP-008` は、parameter、範囲、keyform、補間、slider操作時の連続的な見た目変化を要求する。
 - `AC-MVP-009` は、warp / rotation相当rig control、親子階層、parameter接続、runtime評価不能なrig controlの報告を要求する。
 - `AC-MVP-011` は、Editor previewで keyform、rig control、clipping、draw order、part表示状態が制作意図通りに反映されることを要求する。
-- `AC-MVP-012` は、Viewerで parameter操作に応じた評価済みdrawable state、vertex、visibility、opacity、draw order、mask状態、diagnosticsを構造化runtime stateとして取得できることを要求する。
+- `AC-MVP-012` は、Viewerで parameter操作に応じたauthored/computed/effective parameter、dynamics state、評価済みdrawable state、vertex、visibility、opacity、draw order、mask状態、diagnosticsを構造化runtime stateとして取得できることを要求する。
+- `AC-PHYS-001` から `AC-PHYS-006` は、Minimum Open Dynamics v1のgroup、computed output parameter、fixed timestep、deterministic snapshot、demo-safe表示を要求する。
 - `AC-MVP-015` は、Demo-safe capture の分離を要求する。
 - `AC-MVP-016` は、Cubism形式、Cubism SDK/Core、既存Cubismモデルを使わずに Authoring-to-Viewer の一周が成立することを要求する。
 
@@ -35,21 +36,25 @@ MVP Runtime の評価順序を次で固定する。
 1. Package / dirty authoring graph inputを受け取る。
 2. Schema、manifest、asset reference、rights / provenance の load diagnosticsを作る。
 3. Runtime graphを正規化し、ID table、rig control tree、mask relation、draw order stable orderを解決する。
-4. Parameter base stateを初期化する。
-5. MVP外future layer slotsを無効として記録する。
-6. Keyform samplerを評価する。
-7. RigControl treeを parent-before-child で評価する。
-8. Drawable meshを評価する。
-9. Opacity / visibilityを評価する。
-10. Clipping / maskを解決する。
-11. Draw order と draw listを確定する。
-12. Runtime snapshot と diagnosticsを返す。
+4. Authored parameter stateを初期化し、入力overrideを適用する。
+5. Authored parameter値をparameter範囲へclampする。
+6. Minimum Open Dynamics v1をauthored parameter値、前回dynamics state、fixed timestepで評価する。
+7. Computed output parameter値を生成し、範囲へclampする。
+8. Authored + computed parameterをeffective parameter stateへmergeする。
+9. MVP外future layer slotsを無効として記録する。
+10. Keyform samplerを評価する。
+11. RigControl treeを parent-before-child で評価する。
+12. Drawable meshを評価する。
+13. Opacity / visibilityを評価する。
+14. Clipping / maskを解決する。
+15. Draw order と draw listを確定する。
+16. Runtime snapshot と diagnosticsを返す。
 
 この順序は、Editor preview、Viewer、Validator runtime load test、AI dry-runで共通に使う。
 
 ### 2.2 Parameter
 
-Parameterは入力値と評価値を分ける。
+Parameterは、値の決定者と評価値を分ける。
 
 | Field | 意味 |
 |---|---|
@@ -57,9 +62,11 @@ Parameterは入力値と評価値を分ける。
 | `displayName` | 人間向け名 |
 | `semanticRole` | project-defined preset内の説明・検証用role |
 | `projectPresetAlias` | private project/editor preset label。外部互換parameter IDではない |
+| `valueSource` | `authoredInput`, `computedDynamics`, `debugOverride` |
 | `min` / `max` / `default` | package定義 |
-| `rawInput` | UI / API / dry-run から受け取った値 |
-| `value` | clamp / normalization 後に評価へ使う値 |
+| `authoredParameterValues` | UI / API / dry-run から受け取った直接入力値 |
+| `computedParameterValues` | Dynamicsが生成した値 |
+| `effectiveParameterValues` | clamp / merge 後に評価へ使う値 |
 | `clamped` | raw input が範囲外だったか |
 | `sources` | `default`, `viewerOverride`, `editorPreviewOverride`, `operationDryRun` など |
 
@@ -70,6 +77,27 @@ Parameterは入力値と評価値を分ける。
 - Validator strict / Acceptance Runnerでは、代表parameter評価に必要な範囲外値を `fail` にできる。
 - missing required parameter reference は `blocking` とする。
 - 外部入力にだけ存在する未宣言parameterは `warning` 付き no-op とする。
+
+### 2.2.1 Minimum Open Dynamics v1
+
+Minimum Open Dynamics v1 は、driver parameterからcomputed output parameterを生成するparameter-driven deterministic secondary motionである。
+
+MVP範囲:
+
+- solverKindは`scalarDampedFollowV1`のみ。
+- Driverは`valueSource="authoredInput"` parameterだけを参照できる。
+- Outputは`valueSource="computedDynamics"` parameterだけへ書き込める。
+- Output parameterを同じgroupまたは他groupのdriverに使うことは禁止する。
+- Dynamics group間依存は禁止する。
+- Dynamicsはmesh / rig control / drawable / mask / renderer stateを読まない。
+- Dynamicsはmesh vertex、rig control property、drawable visibility / opacity / draw order、mask stateを直接書き換えない。
+
+Timestepとreset:
+
+- Dynamicsはfixed timestepで評価する。raw variable deltaTimeをsolverへ直接入れない。
+- 既定値は`fixedStepMs = 16.6666667`、`maxSubSteps = 4`。
+- Resetはpackage load、user reset command、preview restart、large input jump、validation representative run start、demo capture startで発生できる。
+- 同じpackage、initial dynamics state、authored input sequence、fixedStepMsならEditor previewとViewerは同じoutput sequenceを返す。
 
 ### 2.3 Keyform
 
@@ -190,6 +218,7 @@ Snapshot必須フィールド:
 - `evaluation.snapshotDetail`
 - `evaluation.evaluatorVersions`
 - `parameters`
+- `dynamics`
 - `keyformSamples`
 - `rig controls`
 - `drawables`
@@ -222,8 +251,9 @@ Phase:
 - `package_load`
 - `graph_normalization`
 - `parameter_resolution`
+- `dynamics_evaluation`
 - `keyform_sampling`
-- `rig control_evaluation`
+- `rigControl_evaluation`
 - `mesh_evaluation`
 - `opacity_visibility`
 - `mask_resolution`
@@ -253,7 +283,7 @@ Phase:
 
 ## 6. Unsupported Diagnostics
 
-Motion、expression asset、full physics、pose、full Open Dynamics / dynamics group / secondary motion solverはMVP外に置く。
+Motion、expression asset、full physics、pose、direct mesh physics、cloth simulation、collision、IK、timeline bakeはMVP外に置く。
 
 Packageや入力がこれらを含む場合の扱い:
 
@@ -262,12 +292,13 @@ Packageや入力がこれらを含む場合の扱い:
 - featureが存在するだけなら `info` または `not_applicable`。
 - packageがそのfeatureを必須依存として宣言している場合は `warning` または `error`。
 - MVP完了判定では、timeline / motion作成未対応をfailにしない。
-- parameter-driven expression、parameter-driven hair sway相当はMVP内のkeyform / rig controlとして扱い、unsupportedにしない。
-- Open Dynamicsを再開する場合はPrivate Optional / Post-MVPとして、package / operation / runtime / validator contractを追加する。
+- parameter-driven expression、parameter-driven hair/cloth/accessory swayはMVP内のkeyform / rig control / Minimum Open Dynamics v1として扱い、unsupportedにしない。
+- Cubism Physics互換、`.physics3.json`、Cubism Viewer一致、Cubism Editor Physics UI再現はunsupported / out-of-scopeとして扱う。
 
 ## 7. 実装前に決めるべき未決事項
 
 - `parameter-grid-2d-v1` のGUI編集最小UIとfixture期待値。
+- Dynamics panelのpreview/reset/simple graphの最小UIと`minimal-dynamics-hairSway` fixture期待値。
 - 同じtarget propertyに複数writerがある場合の `compositionMode` 初期セット。
 - mask sourceが opacity 0 だが visibility true の場合のseverity。
 - missing textureを常に `blocking` とするか、visible drawable単位の `error` として部分表示を許すか。
@@ -276,7 +307,7 @@ Packageや入力がこれらを含む場合の扱い:
 ## 8. Post-MVPでよい未決事項
 
 - motion / expression / full physics / pose runtime layer。
-- full Open Dynamics / dynamics group / secondary motion solver。
+- direct mesh physics / cloth simulation / collision / IK / timeline bake。
 - Bezier / bicubic / MLS / cage evaluator。
 - SDK target specific mask packing。
 - advanced draw order group / sorting layer。

@@ -12,8 +12,8 @@
 ### Design Decisions
 
 - 接続部はmanual overlap / mask / draw order / authored keyform / joint-area validationとして扱う。
-- MVPの髪・服・小物の揺れは、`hairSway`等のproject-defined parameter、手動keyform、通常rig controlとして保存する。
-- Full Open Dynamics、dynamics group、secondary motion solverはPrivate Optional / Post-MVPとする。
+- MVPの髪・服・小物の揺れは、Minimum Open Dynamics v1でdriver parameterから`hairSway`等のcomputed output parameterを生成し、通常keyform / rig control評価へ渡す。
+- Full physics、direct mesh physics、cloth simulation、collision、IK、timeline bake、Cubism Physics互換はMVP外とする。
 - 外部ツール固有の接着機能名や物理形式は、MVP仕様にしない。
 
 ### Research Notes
@@ -74,16 +74,17 @@
 
 ### When
 
-1. ユーザーが`hairSway`等のproject-defined scalar parameterを作成する。
-2. ユーザーが髪・服・小物の手動keyformと通常rig controlを設定する。
-3. Private runtime coreが通常parameter/keyform/rig controlとして評価する。
+1. ユーザーが`hairSway`等のcomputedDynamics parameterを作成する。
+2. ユーザーが`faceYaw`、`facePitch`、`bodyAngle`などのauthoredInput parameterをDynamics driverとして設定する。
+3. ユーザーが髪・服・小物の手動keyformと通常rig controlを`hairSway`等へ接続する。
+4. Private runtime coreがMinimum Open Dynamics v1をfixed timestepで評価し、computed output parameterを通常keyform / rig controlへ渡す。
 
 ### Then
 
 - 髪・服・小物の最小揺れ表現は保存・再読み込みできる。
-- Runtime snapshotはparameter値、keyform評価、rig control評価状態を含む。
-- 過大なkeyform変形、未接続target、rig control循環はvalidatorで報告される。
-- dynamics group、secondary motion solver、tick更新される内部solver stateはMVP成功条件にしない。
+- Runtime snapshotはauthored/computed/effective parameter値、dynamics driver/output/state、keyform評価、rig control評価状態を含む。
+- 過大なkeyform変形、未接続target、rig control循環、dynamics未接続driver/output、非決定的snapshotはvalidatorで報告される。
+- DynamicsはMVPではmesh vertexやrig control propertyを直接変更しない。
 
 ### 検証するAC
 
@@ -94,4 +95,4 @@
 ## 2. 未決事項
 
 - MVPで扱うjoint-area validationの具体的な幾何検査。
-- Full Open Dynamics / secondary motion solverを再開するかはPrivate Optional / Post-MVPの別設計。
+- Minimum Open Dynamics v1のsolverは`scalarDampedFollowV1`のみに絞る。
