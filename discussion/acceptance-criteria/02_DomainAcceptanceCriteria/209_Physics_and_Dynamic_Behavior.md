@@ -28,7 +28,11 @@ Minimum Open Dynamics v1では、dynamics groupはauthoredInput parameterだけ�
 
 Minimum Open Dynamics v1はstateful evaluatorである。Runtime coreはhidden mutable stateを持たず、previous `RuntimeStateDto` を入力し、`RuntimeSnapshotDto` と next `RuntimeStateDto` を返すこと。
 
-同じpackage、同じinitial `RuntimeStateDto`、同じauthored parameter input sequence、同じfixed timestepに対して、private runtime coreは同じdynamics output sequenceを返せること。
+同じpackage、同じinitial `RuntimeStateDto`、同じ`RuntimeSequenceFrameDto[]`、同じfixed timestepに対して、private runtime coreは同じdynamics output sequenceを返せること。
+
+Runtime coreは package load、preview restart、validation run start、demo capture start で initial `RuntimeStateDto` を生成できること。Initial stateは現在のdriver値から計算したcurrent targetに各groupのpositionを合わせ、velocity=0、tick=0、resetCounter=1から始めること。
+
+`RuntimeStateDto` は package identity を持ち、古いpackage state、不足group state、未知group state、timestep mismatchをvalidator / runtime diagnosticで検出できること。
 
 ### AC-PHYS-004: previewとviewerで同じ結果になること
 

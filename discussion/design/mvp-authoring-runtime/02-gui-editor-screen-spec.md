@@ -321,7 +321,7 @@ MVPの制作導線は、2Dキャラクターリギングの基本制作能力を
 
 ## 7. 実装前に決めるべき未決事項
 
-- 顔 face yaw / pitch の斜め方向UIを、2本の1D parameter合成で見せるか、2D keyform gridとして見せるか。
+- `parameter-grid-2d-v1` はMVP runtime evaluatorとして確定済み。未決なのはGUI上で2D keyform gridをどの編集UI表現で扱うかであり、2本の1D parameter表示を補助的に見せてもよいが、MVPの2軸keyform表現は `parameter-grid-2d-v1` を正とする。
 - 初期warp lattice解像度を 2x2 とするか 3x3 とするか。
 - `layered-character-psd-profile-v1`をMVP primary import、`split-png-fallback-v1`をfallback / debug / fixture / PSDを持たない素材の互換入口とする判断は確定済み。
 - Canvas上のmask previewを、alpha合成結果まで表示するか、source / target relation overlayに留めるか。

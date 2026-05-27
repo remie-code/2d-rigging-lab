@@ -99,8 +99,9 @@ Timestepとreset:
 
 - Dynamicsはfixed timestepで評価する。raw variable deltaTimeをsolverへ直接入れない。
 - 既定値は`fixedStepMs = 16.6666667`、`maxSubSteps = 4`。
-- Runtime coreはhidden mutable stateを持たず、previous `RuntimeStateDto`を入力し、`RuntimeSnapshotDto`とnext `RuntimeStateDto`を返す。
-- `RuntimeStateDto`は`frameIndex`、`fixedStepMs`、`accumulatorMs`、groupごとの`position`、`velocity`、`tick`、`resetCounter`を持つ。
+- Runtime coreはhidden mutable stateを持たず、initial `RuntimeStateDto`を生成し、previous `RuntimeStateDto`を入力し、`RuntimeSnapshotDto`とnext `RuntimeStateDto`を返す。
+- `RuntimeStateDto`は`schemaVersion`、`packageId`、`packageRevision`、任意の`packageHash`、`frameIndex`、`fixedStepMs`、`accumulatorMs`、groupごとの`position`、`velocity`、`tick`、`resetCounter`を持つ。
+- Initial group stateは現在のdriver値から計算したcurrent targetへ`position`を合わせ、`velocity=0`、`tick=0`、`resetCounter=1`で始める。
 - Resetはpackage load、user reset command、preview restart、large input jump、validation representative run start、demo capture startで発生できる。
 - 同じpackage、initial dynamics state、authored input sequence、fixedStepMsならEditor previewとViewerは同じoutput sequenceを返す。
 

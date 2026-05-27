@@ -14,7 +14,9 @@
 - Current MVPでは、Minimum Open Dynamics v1をproject-defined dynamics groupとして扱う。
 - Dynamics outputはcomputed output parameterに限定し、mesh vertexやrig control propertyを直接変更しない。
 - Runtimeはhidden mutable stateを持たず、previous `RuntimeStateDto` を入力し、`RuntimeSnapshotDto` と next `RuntimeStateDto` を返す。
-- Runtimeはfixed timestepでDynamicsを評価し、同じpackage、同じinitial `RuntimeStateDto`、同じauthored input sequenceならEditor previewとViewerで同じ結果を返す。
+- Runtimeはfixed timestepでDynamicsを評価し、同じpackage、同じinitial `RuntimeStateDto`、同じ`RuntimeSequenceFrameDto[]`ならEditor previewとViewerで同じ結果を返す。
+- Runtimeはpackage load、preview restart、validation run start、demo capture startでinitial `RuntimeStateDto`を生成できる。Initial group stateはcurrent targetへpositionを合わせ、velocity=0、tick=0、resetCounter=1で始まる。
+- `RuntimeStateDto`はpackage identityを持ち、state mismatch / missing group / unknown group / timestep mismatchをdiagnostic evidenceとして残す。
 - 1つのdynamics groupは、MVPではちょうど1つのcomputedDynamics output parameterだけを生成する。同じcomputed output parameterへの複数group出力は禁止する。
 - 複数driverはweighted sumで合成する。
 - Cubism Physics互換、`.physics3.json`、外部solver互換、Cubism Viewer一致、Cubism Editor Physics UI再現はMVP成功条件に含めない。
@@ -54,18 +56,19 @@
 
 ### Given
 
-- Dynamics group、initial `RuntimeStateDto`、fixed timestep、authored parameter input sequenceがある。
+- Dynamics group、package identity付きinitial `RuntimeStateDto`、fixed timestep、`RuntimeSequenceFrameDto[]`入力列がある。
 
 ### When
 
-1. Editor previewで入力列を再生する。
-2. Private viewerで同じ入力列を再生する。
-3. Validatorがsnapshot sequenceとnext `RuntimeStateDto` sequenceを比較する。
+1. Editor previewで`frames`入力列を再生する。
+2. Private viewerで同じ`frames`入力列を再生する。
+3. Validatorがsnapshot sequence、next `RuntimeStateDto` sequence、final `RuntimeStateDto` evidenceを比較する。
 
 ### Then
 
 - 同じfixed timestepと初期状態なら、同じcomputed output parameter列が得られる。
-- Runtime snapshotはgroup state、driver値、output値、tick、fixedStepMs、reset状態を含む。
+- Runtime snapshotはgroup state、driver値、output値、tick、fixedStepMs、reset状態を含む。`targeted` / `full` detailではrawTarget、clampedTarget、outputClamped、resetApplied、resetReasonsを含められる。
+- Operation/validator evidenceには`initial-runtime-state.json`、`expected-next-runtime-state.json`、`expected-runtime-state-sequence.json`、または `runtime/states/*.runtime-state.json` への参照が残る。
 - Runtime diffは`dynamicsChanges`でposition、velocity、tick、resetCounter、outputParameterIdの差分を説明できる。
 - 非決定的な差分はvalidatorでFailまたはNeeds reviewになる。
 
@@ -119,5 +122,5 @@
 - MVP solverは`scalarDampedFollowV1`のみ。
 - MVP Dynamicsは1 group = 1 computed output parameter。
 - `response` はruntime evaluator入力ではなく、必要な場合だけUI-only preset / derived descriptionとして扱う。
-- Runtime coreはprevious `RuntimeStateDto`を入力し、snapshotとnext `RuntimeStateDto`を返す。
+- Runtime coreはinitial `RuntimeStateDto`を生成でき、previous `RuntimeStateDto`を入力し、snapshotとnext `RuntimeStateDto`を返す。
 - Dynamics GUIはCubism Physics UIを再現せず、Open Dynamics / secondary motion / driver parameter / computed output parameterの語彙で設計する。

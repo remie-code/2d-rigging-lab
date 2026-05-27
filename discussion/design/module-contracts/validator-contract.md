@@ -81,6 +81,9 @@ evidence.guiOperationLogMissing
 | `mesh.triangleIndexOutOfRange` | mesh_semantic | blocking | all: fail | AC-MVP-005 |
 | `mesh.degenerateTriangle` | mesh_semantic | warning | strict: fail or needs_review | AC-MVP-005 |
 | `runtime.parameterClamped` | parameter_resolution | warning | strict: fail for invalid external input tests | AC-MVP-012 |
+| `runtime.statePackageMismatch` | runtime_state | error | strict/acceptance: fail or reset required | AC-PHYS-004 |
+| `runtime.stateMissingDynamicsGroup` | runtime_state | warning | strict: fail when exact replay evidence is required | AC-PHYS-004 |
+| `runtime.stateUnknownDynamicsGroup` | runtime_state | warning | strict: fail when exact replay evidence is required | AC-PHYS-004 |
 | `keyform.missingEndpoint` | keyform_semantic | warning | strict: fail when target requires interpolation | AC-MVP-008 |
 | `keyform.grid2dMissingKey` | keyform_sampling | error | strict: fail | AC-PARAM-005 |
 | `keyform.grid2dDuplicateKey` | keyform_sampling | blocking | all: fail | AC-PARAM-005 |
@@ -122,6 +125,13 @@ Dynamics output validation rules:
 - `dynamics.outputMustBeComputedParameter` fires when a group writes to `authoredInput` or `debugOverride`.
 - `dynamics.outputParameterOutOfRange` fires when output min/max is outside the target parameter range.
 - `dynamics.outputClamped` is runtime evidence that clamping occurred; it is not by itself a package schema failure unless a fixture/profile requires exact unclamped output.
+
+Runtime state validation rules:
+
+- `runtime.statePackageMismatch` fires when `RuntimeStateDto.packageId`, `packageRevision`, or `packageHash` does not match the package graph used for evaluation.
+- `runtime.stateMissingDynamicsGroup` fires when the graph contains a dynamics group that is absent from `previousState.dynamicsGroups`; Runtime may initialize that group from `currentTarget`, but strict replay fixtures must record the reset.
+- `runtime.stateUnknownDynamicsGroup` fires when `previousState.dynamicsGroups` contains a group that is not present in the graph; Runtime ignores that stale group state.
+- `dynamics.timestepMismatch` fires when supplied `RuntimeStateDto.fixedStepMs` differs from the evaluation request timestep in a strict / acceptance replay context.
 
 ## Validation Profiles
 

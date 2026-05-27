@@ -73,7 +73,7 @@ It does not implement mutation algorithms or UI event handlers.
 | `bindDynamicsOutput` | group ID, computedDynamics parameter, range/clamp | parameter exists and `valueSource="computedDynamics"` | dynamics output diff | SC-DYN-001 |
 | `setDynamicsSettings` | stiffness, damping, amplitude/velocity limits | group exists; settings finite and stable | dynamics settings diff | SC-DYN-003 |
 | `resetDynamicsPreviewState` | group IDs or all groups, reason | preview/runtime session exists | runtime state reset evidence, no package mutation | SC-DYN-002 |
-| `runDynamicsPreviewSequence` | authored parameter frames, initial RuntimeStateDto, fixed timestep, targets | runtime graph exists; no package mutation | snapshot sequence + final RuntimeStateDto + runtime diff evidence | SC-DYN-002 |
+| `runDynamicsPreviewSequence` | Runtime sequence frames, initial RuntimeStateDto or state ref, fixed timestep for initial state creation, detail | runtime graph exists; no package mutation | snapshot sequence + final RuntimeStateDto/state ref + runtime diff evidence | SC-DYN-002 |
 | `createRotation2dRigControl` | part, children, pivot/rest transform | children exist and not cyclic | rig control diff | SC-DEF-002 |
 | `createWarpLattice2dRigControl` | part, children, domain, rows/cols | rows/cols valid, children exist | rig control diff | SC-DEF-001 |
 | `bindRigControlChild` | parent rig control, child drawable/rig control | no cycle | hierarchy diff | SC-DEF-003 |
@@ -91,6 +91,9 @@ import {
   DiagnosticSchema,
   ModelDiffSchema,
   RuntimeDiffSchema,
+  RuntimeResetReasonSchema,
+  RuntimeStateDtoSchema,
+  RuntimeSequenceFrameSchema,
   ValidationDiffSchema,
   OperationIdSchema,
   TransactionIdSchema,
@@ -238,21 +241,17 @@ export const SetDynamicsSettingsPayloadSchema = z.object({
 
 export const ResetDynamicsPreviewStatePayloadSchema = z.object({
   dynamicsGroupIds: z.array(DynamicsGroupIdSchema).optional(),
-  reason: z.enum(["packageLoad", "manualCommand", "previewRestart", "largeInputJump", "validationRunStart", "demoCaptureStart"]),
+  reason: RuntimeResetReasonSchema,
 });
 
-export const RuntimeStatePayloadSchema = z.object({
-  schemaVersion: z.literal("runtime-state-v1"),
-}).passthrough();
+export const RuntimeStatePayloadSchema = RuntimeStateDtoSchema;
 
 export const RunDynamicsPreviewSequencePayloadSchema = z.object({
-  authoredParameterFrames: z.array(z.record(ParameterIdSchema, z.number().finite())).min(1),
+  frames: z.array(RuntimeSequenceFrameSchema).min(1),
   initialState: RuntimeStatePayloadSchema.optional(),
   initialStateRef: z.string().optional(),
   fixedStepMs: z.number().positive().default(16.6666667),
   maxSubSteps: z.number().int().min(1).max(16).default(4),
-  resetReason: z.enum(["previewRestart", "validationRunStart", "demoCaptureStart"]).optional(),
-  targetIds: z.array(z.string()).default([]),
   detail: z.enum(["summary", "targeted", "full"]).default("targeted"),
 });
 
@@ -437,6 +436,9 @@ export const OperationResultSchema = z.object({
   validationDiff: ValidationDiffSchema.optional(),
   diagnostics: z.array(DiagnosticSchema).default([]),
   generatedRuntimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
+  generatedRuntimeStateRefs: z.array(z.string()).default([]),
+  finalRuntimeState: RuntimeStatePayloadSchema.optional(),
+  finalRuntimeStateRef: z.string().optional(),
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
   reversible: z.boolean(),
 });
@@ -482,6 +484,14 @@ export interface OperationCore {
 | `largeInputJump` | applies `reset-on-large-input-jump` | reset after detected authored input jump |
 | `validationRunStart` | validator-only reset | deterministic validation sequence start |
 | `demoCaptureStart` | demo-only reset | deterministic and visually stable capture start |
+
+## Runtime State Evidence Policy
+
+`runDynamicsPreviewSequence` uses `frames: RuntimeSequenceFrameDto[]` as the operation and acceptance source of truth. Each frame carries `frameIndex`, `deltaTimeMs`, per-frame `resetReasons`, `authoredParameterValues`, and `targetIds`. Any UI or adapter convenience shape such as `authoredParameterFrames` must be lowered to `frames` before it reaches the operation contract and must not be used as contract-test evidence.
+
+`RuntimeStateDto.fixedStepMs` is the active timestep. `RunDynamicsPreviewSequencePayloadSchema.fixedStepMs` is used only when `operation-core` must call `createInitialRuntimeState` because neither `initialState` nor `initialStateRef` was supplied. If a supplied initial state has a different timestep from the request, `operation-core` must preserve the evidence and surface `dynamics.timestepMismatch` in strict / acceptance profiles.
+
+Sequence operations must return or reference the final state. `OperationResultSchema.generatedRuntimeStateRefs` lists generated state artifacts, and `finalRuntimeState` / `finalRuntimeStateRef` identify the final state after the last frame. Runtime state evidence is generated under `runtime/states/*.runtime-state.json`; it is not an authored package body file.
 
 ## Diagram Requirements
 
@@ -588,7 +598,7 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 |----------------|---------|-------------------|
 | `psd-import-happy-path` | `importPsdSourceAsset` creates source/drawable/part/texture candidates | operation result + model diff |
 | `manual-face-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
-| `minimal-dynamics-hairSway` | Dynamics group creation, driver/output binding, settings update, preview reset, preview sequence run | operation log + snapshot sequence + final RuntimeStateDto |
+| `minimal-dynamics-hairSway` | Dynamics group creation, driver/output binding, settings update, preview reset, preview sequence run | operation log + snapshot sequence + generated runtime state refs + final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | dry-run clamps/warns without committing | operation result + validation diff |
 | `ai-repair-dry-run` | AI repair candidate returns diffs and no package mutation | dry-run result, repair candidate |
 | `tutorial-like-authoring` | GUI operation evidence covers MVP authoring steps | JSONL operation log |

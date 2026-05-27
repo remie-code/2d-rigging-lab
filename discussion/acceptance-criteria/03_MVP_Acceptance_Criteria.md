@@ -190,6 +190,8 @@ parameter 操作の結果として、authored/computed/effective parameter値、
 
 Private Runtime / Viewerはhidden mutable dynamics stateを持たず、previous `RuntimeStateDto` を入力し、`RuntimeSnapshotDto` と next `RuntimeStateDto` を返す評価APIで、Editor preview、Viewer、Validatorのdeterministic replayを揃えること。
 
+Private Runtime / Viewerは、package load、preview restart、validation run start、demo capture start のために initial `RuntimeStateDto` を生成できること。`RuntimeStateDto` は `packageId`、`packageRevision`、任意の `packageHash` を持ち、古いpackage state、不足group state、未知group state、timestep mismatchを構造化diagnosticとして説明できること。
+
 ### AC-MVP-013: Validator が構造化レポートを出力できること
 
 Validator は、GUI Editor で保存した package に対して、少なくとも次を検証できること。
@@ -203,7 +205,7 @@ Validator は、GUI Editor で保存した package に対して、少なくと�
 - clipping / mask 参照。
 - parameter 範囲、初期値、keyform。
 - rig control構造、親子階層、parameter接続。
-- dynamics group / driver / computed output parameter / fixed timestep / explicit RuntimeStateDto / reset policy / deterministic snapshot / dynamics diff整合性。
+- dynamics group / driver / computed output parameter / fixed timestep / explicit RuntimeStateDto / reset policy / deterministic snapshot / runtime state evidence / dynamics diff整合性。
 - runtime load test と代表parameter評価。
 - demo-safe capture に出してよい情報と隠すべき情報の分類。
 
@@ -217,6 +219,7 @@ AI assistant は少なくとも次を実行または取得できること。
 
 - model structure inspection。
 - runtime state snapshot。
+- initial / final RuntimeState evidence refs。
 - validation report 読み込み。
 - 対象IDを指定した編集operationのdry-run。
 - 編集前後の model diff、runtime diff、validation diff。

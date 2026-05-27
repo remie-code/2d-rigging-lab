@@ -158,7 +158,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | SC-PARAM-007 | detect single-key/endpoint-missing keyform | `keyform.missingEndpoint` report |
 | SC-PARAM-004 | `addKeyformGrid2d` for two parameters and 3x3 grid | full snapshot at diagonal/corner points |
 | SC-DYN-001 | `createDynamicsGroup` -> `bindDynamicsDriver` -> `bindDynamicsOutput` -> `setDynamicsSettings` | package diff + validation report |
-| SC-DYN-002 | `resetDynamicsPreviewState` -> `runDynamicsPreviewSequence` with initial RuntimeStateDto -> run fixed-step authored input sequence in Editor preview and Viewer | matching snapshot sequence + final RuntimeStateDto |
+| SC-DYN-002 | `resetDynamicsPreviewState` -> `runDynamicsPreviewSequence` with initial RuntimeStateDto -> run `RuntimeSequenceFrameDto[]` fixed-step input sequence in Editor preview and Viewer | matching snapshot sequence + generated runtime state refs + final RuntimeStateDto |
 | SC-DYN-003 | validate dynamics graph and sequence | dynamics check report |
 | SC-DYN-004 | demo-safe preflight for secondary motion | demo-safe report |
 | SC-DEF-002 | `createRotation2dRigControl` for head pivot | operation result + snapshot |
@@ -207,6 +207,9 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `dynamics.excessiveAmplitude` | AC-PHYS-003, SC-DYN-003 | `dynamics-output-range-clamp` |
 | `dynamics.nonDeterministicSnapshot` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
 | `dynamics.resetPolicyMissing` | AC-PHYS-001, SC-DYN-001 | `invalid-dynamics-missing-output` |
+| `runtime.statePackageMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-fixed-step-replay` stale state case |
+| `runtime.stateMissingDynamicsGroup` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` missing group case |
+| `runtime.stateUnknownDynamicsGroup` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` stale group case |
 | `dynamics.timestepMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
 | `runtime.timestepOverflow` | AC-PHYS-004, SC-DYN-002 | `dynamics-fixed-step-replay` |
 | `dynamics.requiredGroupMissing` | AC-PHYS-001, SC-DYN-003 | `minimal-dynamics-hairSway` acceptance metadata |
@@ -228,14 +231,14 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `split-png-fallback` | fallback provenance warning | split PNG non-primary compatibility |
 | `tutorial-like-authoring` | GUI operation log, full snapshot, validation report | MVP GUI authoring evidence |
 | `manual-face-grid-2d` | full snapshot at 2D parameter values | manual face grid semantics |
-| `minimal-dynamics-hairSway` | snapshot sequence showing delayed/clamped computed output parameter | Minimum Open Dynamics v1 |
+| `minimal-dynamics-hairSway` | snapshot sequence + initial/final runtime state refs showing delayed/clamped computed output parameter | Minimum Open Dynamics v1 |
 | `invalid-dynamics-missing-driver` | error report | dynamics driver reference/type validation |
 | `invalid-dynamics-missing-output` | error report | dynamics computed output validation |
 | `invalid-dynamics-cycle` | blocking report | dynamics dependency validation |
 | `invalid-dynamics-output-target-duplicate` | error report | one computed output producer rule |
 | `dynamics-output-range-clamp` | clamped output snapshot + diagnostic | dynamics output range validation |
-| `dynamics-reset-determinism` | paired sequence equality report | fixed timestep/reset determinism |
-| `dynamics-fixed-step-replay` | final RuntimeStateDto and snapshot sequence | explicit runtime state replay |
+| `dynamics-reset-determinism` | paired snapshot/runtime state sequence equality report | fixed timestep/reset determinism |
+| `dynamics-fixed-step-replay` | initial-runtime-state, expected runtime state sequence, final RuntimeStateDto, and snapshot sequence | explicit runtime state replay |
 | `demo-safe-dynamics-capture` | demo preflight report | dynamics demo hygiene |
 | `keyform-grid-invalid` | missing/duplicate grid key validation report | two-axis grid validation |
 | `keyform-missing-endpoint` | endpoint warning/fail validation report | one-axis keyform validation |

@@ -83,9 +83,28 @@ import {
   RectSchema,
   RuntimeEvaluationProfileSchema,
   SnapshotDetailSchema,
+  RuntimeResetReasonSchema,
+  RuntimeStateDtoSchema,
+  RuntimeSequenceFrameSchema,
 } from "./contracts";
 
+export const RuntimeInitialStateRequestSchema = z.object({
+  packageId: PackageIdSchema,
+  packageRevision: z.number().int().nonnegative(),
+  packageHash: z.string().optional(),
+  frameIndex: z.number().int().nonnegative().default(0),
+  fixedStepMs: z.number().positive().default(16.6666667),
+  authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
+  resetReasons: z.array(RuntimeResetReasonSchema).min(1),
+});
+export type RuntimeInitialStateRequestDto = z.infer<typeof RuntimeInitialStateRequestSchema>;
+
 export interface RuntimeCore {
+  createInitialRuntimeState(
+    graph: NormalizedRuntimeGraph,
+    request: RuntimeInitialStateRequestDto
+  ): RuntimeStateDto;
+
   evaluateRuntimeFrame(
     graph: NormalizedRuntimeGraph,
     input: RuntimeEvaluationInputDto,
@@ -228,14 +247,7 @@ export const RuntimeEvaluationInputSchema = z.object({
   schemaVersion: z.literal("runtime-evaluation-input-v1"),
   frameIndex: z.number().int().nonnegative(),
   deltaTimeMs: z.number().finite().nonnegative(),
-  resetReasons: z.array(z.enum([
-    "packageLoad",
-    "manualCommand",
-    "previewRestart",
-    "largeInputJump",
-    "validationRunStart",
-    "demoCaptureStart",
-  ])).default([]),
+  resetReasons: z.array(RuntimeResetReasonSchema).default([]),
   authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
   source: z.object({
     surface: z.enum(["preview", "viewer", "validator", "aiDryRun"]),
@@ -270,22 +282,24 @@ export const RuntimeEvaluationOptionsSchema = z.object({
 });
 export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOptionsSchema>;
 
-export const RuntimeDynamicsGroupStateSchema = z.object({
-  position: z.number().finite(),
-  velocity: z.number().finite(),
-  tick: z.number().int().nonnegative(),
-  resetCounter: z.number().int().nonnegative(),
-});
-
-export const RuntimeStateDtoSchema = z.object({
-  schemaVersion: z.literal("runtime-state-v1"),
-  frameIndex: z.number().int().nonnegative(),
-  fixedStepMs: z.number().positive(),
-  accumulatorMs: z.number().nonnegative(),
-  dynamicsGroups: z.record(DynamicsGroupIdSchema, RuntimeDynamicsGroupStateSchema),
-});
+// RuntimeStateDtoSchema, RuntimeDynamicsGroupStateSchema,
+// RuntimeResetReasonSchema, and RuntimeSequenceFrameSchema are defined in
+// typescript-contracts.md. Runtime Core owns the semantics below, not a
+// second DTO definition.
 export type RuntimeStateDto = z.infer<typeof RuntimeStateDtoSchema>;
+export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>;
 ```
+
+`RuntimeStateDtoSchema` is defined in [typescript-contracts.md](typescript-contracts.md). This document is the semantic contract for how Runtime Core creates, accepts, repairs, and returns that DTO.
+
+| RuntimeState field | Runtime Core semantic |
+|--------------------|-----------------------|
+| `schemaVersion` | Must be `"runtime-state-v1"`. |
+| `packageId`, `packageRevision`, `packageHash` | State identity for the package graph that produced the state. Used to reject or reset stale state. |
+| `frameIndex` | Last evaluated frame index represented by the state. Initial state uses the request frame or `0`. |
+| `fixedStepMs` | Active Dynamics timestep. See Timestep policy below. |
+| `accumulatorMs` | Unprocessed variable delta carried between fixed substeps. Initial state starts at `0`. |
+| `dynamicsGroups` | One entry per active Dynamics group in the graph. Each group stores `position`, `velocity`, `tick`, and `resetCounter`. |
 
 ## Parameter / Keyform Evaluation Semantics
 
@@ -313,7 +327,35 @@ Evaluation rules:
 
 Minimum Open Dynamics v1 is a parameter-driven deterministic secondary motion layer. It uses `scalarDampedFollowV1` only in MVP.
 
-Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, authored input sequence, fixedStepMs, and options.
+Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, `RuntimeSequenceFrameDto[]`, fixedStepMs, and options.
+
+### Initial RuntimeState Creation
+
+Runtime Core must expose `createInitialRuntimeState(graph, request)` for package load, preview restart, validation run start, and demo capture start. Operation and AI adapters may call the same function before `evaluateRuntimeFrame` / `evaluateRuntimeSequence` when no previous state is supplied.
+
+Inputs:
+
+- current `NormalizedRuntimeGraph`;
+- package identity: `packageId`, `packageRevision`, and optional `packageHash`;
+- `fixedStepMs`;
+- reset reason(s), normally one of `packageLoad`, `previewRestart`, `validationRunStart`, or `demoCaptureStart`;
+- initial `authoredParameterValues` used to compute each group target.
+
+Creation rules:
+
+- `schemaVersion = "runtime-state-v1"`.
+- `frameIndex` is the request frame index, or `0`.
+- `accumulatorMs = 0`.
+- For every active dynamics group, compute `currentTarget` from the current authored driver values and output range.
+- Each group state starts with `position = currentTarget`, `velocity = 0`, `tick = 0`, and `resetCounter = 1`.
+- The initial state must include all dynamics groups in the current graph and no unknown groups.
+
+State compatibility rules:
+
+- If `previousState` is absent, callers must create an initial state before evaluation.
+- If `previousState.packageId`, `packageRevision`, or `packageHash` does not match the graph identity, Runtime emits `runtime.statePackageMismatch`; strict / acceptance profile must fail or require reset before using the stale state.
+- If a graph group is missing from `previousState.dynamicsGroups`, Runtime initializes that group from `currentTarget` and emits `runtime.stateMissingDynamicsGroup`.
+- If `previousState.dynamicsGroups` contains a group not present in the graph, Runtime ignores the unknown state and emits `runtime.stateUnknownDynamicsGroup`; strict profile warns or fails when replay evidence depends on exact state equality.
 
 Rules:
 
@@ -414,6 +456,9 @@ Reset reason mapping:
 Timestep policy:
 
 - Runtime uses fixed timestep for Dynamics. Raw variable `deltaTimeMs` is accumulated into fixed steps and is never passed directly to the solver.
+- `RuntimeStateDto.fixedStepMs` is the active timestep for evaluation.
+- Sequence or operation payload `fixedStepMs` is used only when creating an initial `RuntimeStateDto`.
+- If `initialState` / `previousState` is supplied and its `fixedStepMs` differs from the request `fixedStepMs`, Runtime emits `dynamics.timestepMismatch`; strict / acceptance profile fails when deterministic replay evidence is required.
 - Default `fixedStepMs` is `16.6666667`.
 - Default `maxSubSteps` is `4`.
 - `RuntimeStateDto.accumulatorMs` stores remaining unprocessed time.
@@ -558,7 +603,6 @@ export const EvaluatedDynamicsGroupSchema = z.object({
   driverValues: z.record(ParameterIdSchema, z.number().finite()),
   outputParameterId: ParameterIdSchema,
   outputValue: z.number().finite(),
-  outputValues: z.record(ParameterIdSchema, z.number().finite()),
   stateSummary: z.object({
     position: z.number().finite(),
     velocity: z.number().finite(),
@@ -566,6 +610,13 @@ export const EvaluatedDynamicsGroupSchema = z.object({
   tick: z.number().int().nonnegative(),
   fixedStepMs: z.number().positive(),
   resetCounter: z.number().int().nonnegative(),
+  debug: z.object({
+    rawTarget: z.number().finite().optional(),
+    clampedTarget: z.number().finite().optional(),
+    outputClamped: z.boolean().optional(),
+    resetApplied: z.boolean().optional(),
+    resetReasons: z.array(RuntimeResetReasonSchema).default([]),
+  }).optional(),
   diagnostics: z.array(DiagnosticSchema).default([]),
 });
 
@@ -611,6 +662,8 @@ export const RuntimeSnapshotSchema = z.object({
 });
 export type RuntimeSnapshotDto = z.infer<typeof RuntimeSnapshotSchema>;
 ```
+
+For `targeted` and `full` snapshot detail, each evaluated dynamics group should include `debug.rawTarget`, `debug.clampedTarget`, `debug.outputClamped`, `debug.resetApplied`, and `debug.resetReasons` when the value is relevant to the requested target. `summary` snapshots may omit the `debug` object, but diagnostics must still explain clamping, timestep mismatch, missing state, or reset behavior.
 
 `RuntimeDiffSchema` is defined in [typescript-contracts.md](typescript-contracts.md). Runtime Core must populate `dynamicsChanges` when comparing snapshots or stateful sequence results:
 

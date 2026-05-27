@@ -139,14 +139,14 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `keyform-grid-invalid` | missing/duplicate two-axis grid coordinates | validation fail report | runtime-core, validator-core |
 | `keyform-missing-endpoint` | one-axis keyform lacks required endpoint | validation warning/fail report | operation-core, validator-core |
 | `parent-child-rigControl-diagonal` | parent-child rig control diagonal expression | targeted snapshot, runtime diff | runtime-core, validator-core |
-| `minimal-dynamics-hairSway` | faceYaw authored input drives delayed/clamped hairSway computed output | snapshot sequence, validation report | package-format, runtime-core, validator-core, editor-ui |
+| `minimal-dynamics-hairSway` | faceYaw authored input drives delayed/clamped hairSway computed output | snapshot sequence, runtime state refs, validation report | package-format, runtime-core, validator-core, editor-ui |
 | `invalid-dynamics-missing-driver` | dynamics group missing valid authoredInput driver | validation fail report | package-format, validator-core |
 | `invalid-dynamics-missing-output` | dynamics group missing computedDynamics output | validation fail report | package-format, validator-core |
 | `invalid-dynamics-cycle` | computed output used as dynamics driver or group dependency | blocking validation report | runtime-core, validator-core |
 | `invalid-dynamics-output-target-duplicate` | two groups target the same computedDynamics output parameter | validation fail report | package-format, validator-core |
 | `dynamics-output-range-clamp` | output clamp and range diagnostics | targeted snapshot + validation report | runtime-core, validator-core |
-| `dynamics-reset-determinism` | fixed timestep reset replay equivalence | paired snapshot sequences | runtime-core, validator-core |
-| `dynamics-fixed-step-replay` | explicit RuntimeStateDto accumulator replay over variable delta inputs | snapshot sequence + final RuntimeStateDto | runtime-core, validator-core |
+| `dynamics-reset-determinism` | fixed timestep reset replay equivalence | paired snapshot sequences + runtime state sequences | runtime-core, validator-core |
+| `dynamics-fixed-step-replay` | explicit RuntimeStateDto accumulator replay over variable delta inputs | snapshot sequence + initial/final RuntimeStateDto artifacts | runtime-core, validator-core |
 | `demo-safe-dynamics-capture` | dynamics demo hides unsafe internal names and solver details | demo preflight report | validator-core, viewer-ui |
 | `invalid-mesh-triangle` | triangle index out of range / degenerate triangle | validation fail report with mesh target | validator-core, runtime-core |
 | `invalid-missing-texture` | visible drawable missing texture | validation fail report | package-format, validator-core |
@@ -201,10 +201,18 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `tutorial-like-authoring` | `full` | `eyeOpen`, `mouthOpen`, `hairSway`, `faceYaw`, `facePitch` representative inputs change drawable bounds/hash without blocking diagnostics |
 | `manual-face-grid-2d` | `full` | manual face grid values at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
 | `parent-child-rigControl-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
-| `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives one `hairSway` computed output with delayed follow, damping, output clamp, and no direct mesh/rigControl writes |
-| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, input sequence, and fixedStepMs produce identical dynamics output sequence and state summary |
+| `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives one `hairSway` computed output with delayed follow, damping, output clamp, debug target fields, and no direct mesh/rigControl writes |
+| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, `RuntimeSequenceFrameDto[]`, and fixedStepMs produce identical dynamics output sequence and state summary |
 | `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
+
+## Expected Runtime States
+
+| Fixture | Required state artifacts | Required assertions |
+|---------|--------------------------|---------------------|
+| `minimal-dynamics-hairSway` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-next-runtime-state.json` | initial state package identity matches fixture package; each group starts at currentTarget with velocity=0, tick=0, resetCounter=1 |
+| `dynamics-reset-determinism` | `runtime/states/expected-runtime-state-sequence.json` | paired runs produce byte-stable state sequence under declared evaluator version and epsilon policy |
+| `dynamics-fixed-step-replay` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-runtime-state-sequence.json`, `runtime/states/expected-next-runtime-state.json` | variable `deltaTimeMs` frames update accumulatorMs and final state deterministically; timestep mismatch fixture emits `dynamics.timestepMismatch` |
 
 ## Expected Diffs
 
