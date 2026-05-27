@@ -239,7 +239,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `invalid-dynamics-output-target-duplicate` | error report | one computed output producer rule |
 | `dynamics-output-range-clamp` | clamped output snapshot + diagnostic | dynamics output range validation |
 | `dynamics-reset-determinism` | paired snapshot/runtime state sequence equality report | fixed timestep/reset determinism |
-| `dynamics-fixed-step-replay` | `runtime/states/initial.runtime-state.json`, `runtime/state-sequences/expected.runtime-state-sequence.json`, final RuntimeStateDto, no `runtime.stateSequenceLengthMismatch`, and snapshot sequence | explicit runtime state replay |
+| `dynamics-fixed-step-replay` | `runtime/states/initial.runtime-state.json`, `runtime/state-sequences/expected.runtime-state-sequence.json`, full RuntimeState sequence comparison, no `runtime.stateSequenceLengthMismatch`, and snapshot sequence | explicit runtime state replay |
 | `demo-safe-dynamics-capture` | demo preflight report | dynamics demo hygiene |
 | `keyform-grid-invalid` | missing/duplicate grid key validation report | two-axis grid validation |
 | `keyform-missing-endpoint` | endpoint warning/fail validation report | one-axis keyform validation |

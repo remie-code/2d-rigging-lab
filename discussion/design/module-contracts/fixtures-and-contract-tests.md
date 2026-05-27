@@ -146,7 +146,7 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-dynamics-output-target-duplicate` | two groups target the same computedDynamics output parameter | validation fail report | package-format, validator-core |
 | `dynamics-output-range-clamp` | output clamp and range diagnostics | targeted snapshot + validation report | runtime-core, validator-core |
 | `dynamics-reset-determinism` | fixed timestep reset replay equivalence | paired snapshot sequences + runtime state sequences | runtime-core, validator-core |
-| `dynamics-fixed-step-replay` | explicit RuntimeStateDto accumulator replay over variable delta inputs | snapshot sequence + initial/final RuntimeStateDto artifacts | runtime-core, validator-core |
+| `dynamics-fixed-step-replay` | explicit RuntimeStateDto accumulator replay over variable delta inputs | snapshot sequence + full RuntimeState sequence artifact | runtime-core, validator-core |
 | `demo-safe-dynamics-capture` | dynamics demo hides unsafe internal names and solver details | demo preflight report | validator-core, viewer-ui |
 | `invalid-mesh-triangle` | triangle index out of range / degenerate triangle | validation fail report with mesh target | validator-core, runtime-core |
 | `invalid-missing-texture` | visible drawable missing texture | validation fail report | package-format, validator-core |
@@ -184,7 +184,7 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-dynamics-output-target-duplicate` | `dynamics.outputTargetDuplicate` with `severity=error`, acceptance `status=fail` |
 | `dynamics-output-range-clamp` | `dynamics.outputParameterOutOfRange` warning/error or `dynamics.outputClamped` evidence and clamped output value |
 | `dynamics-reset-determinism` | no `dynamics.nonDeterministicSnapshot`; paired sequence hashes match |
-| `dynamics-fixed-step-replay` | no `runtime.timestepOverflow`; accumulator/final state match expected replay |
+| `dynamics-fixed-step-replay` | no `runtime.timestepOverflow`; accumulator and every RuntimeState sequence entry match expected replay within epsilon |
 | `demo-safe-dynamics-capture` | `dynamics.demoUnsafeInternalName` absent or warning-only with safe public wording |
 | `invalid-mask-reference` | `mask.sourceMissing` or `mask.drawableMissing` with `severity=blocking`, target mask relation ID |
 | `keyform-grid-overdimension` | `keyform.tooManyParametersForMvp` with `severity=warning`, acceptance `status=needs_review` |
@@ -202,8 +202,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `manual-face-grid-2d` | `full` | manual face grid values at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
 | `parent-child-rigControl-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
 | `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives one `hairSway` computed output with delayed follow, damping, output clamp, debug target fields, and no direct mesh/rigControl writes |
-| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, `RuntimeSequenceFrameDto[]`, `RuntimeEvaluationContextDto`, evaluator version summary, and fixedStepMs produce identical dynamics output sequence and state summary |
-| `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and final RuntimeStateDto |
+| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, `RuntimeSequenceFrameDto[]`, `RuntimeEvaluationContextDto`, evaluator version summary, and fixedStepMs produce identical dynamics output sequence and full RuntimeState sequence |
+| `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and full RuntimeState sequence |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
 
 Dynamics sequence fixtures, preview sequence tests, and acceptance runners use `RuntimeSequenceFrameDto[]` as the source-of-truth input. The frame list contains only frame-local input; source surface, operation ID, caller identity, and replay strictness are supplied by explicit `RuntimeEvaluationContextDto` or the surrounding operation/test harness.
@@ -222,7 +222,11 @@ RuntimeState sequence artifacts use initial/post-frame semantics. `states[0]` is
 
 Exact deterministic replay fixtures require `packageHash`, `inputFramesHash` for the canonical `RuntimeSequenceFrameDto[]`, explicit `RuntimeEvaluationContextDto`, `evaluatorVersionSummary`, `fixedStepMs`, and `RuntimeEvaluationContextDto.policy.strictness`, normally `strict` or `acceptance`, unless the fixture explicitly declares hashless replay. If either graph or state hash is missing, the fixture must record `runtime.statePackageHashUnavailable`; acceptance strictness may fail the fixture when exact replay evidence is required.
 
-Exact deterministic replay passes only when the compared artifacts have the same `packageHash`, same `inputFramesHash`, same `runtimeEvaluationContext`, same `evaluatorVersionSummary`, same `fixedStepMs`, the same `states[0]` initial `RuntimeStateDto`, epsilon-equivalent final state at `states[frameCount]`, and no `runtime.stateSequenceLengthMismatch`.
+`inputFramesHash` is `sha256(canonical-json(RuntimeSequenceFrameDto[]))`. Canonical JSON for this hash sorts object keys lexicographically, preserves array order, serializes numbers with the project-defined finite number serialization policy, and excludes timestamps, operation IDs, UI-only fields, and non-frame context fields. `RuntimeEvaluationContextDto` is not included in `inputFramesHash`; it is stored separately as `runtimeEvaluationContext`. Evaluator and solver version information is not included in `inputFramesHash`; it is stored separately as `evaluatorVersionSummary`.
+
+Exact deterministic replay passes only when the compared artifacts have the same `packageHash`, same `inputFramesHash`, same `runtimeEvaluationContext`, same `evaluatorVersionSummary`, same `fixedStepMs`, same `frameCount`, same `states.length`, epsilon-equivalent `states[i]` for every `0 <= i <= frameCount`, and no `runtime.stateSequenceLengthMismatch`.
+
+Final-state-only comparison is not sufficient for exact deterministic replay. If a fixture checks only `states[frameCount]`, it is a smoke test and must not be labeled exact deterministic replay evidence.
 
 ## Expected Diffs
 

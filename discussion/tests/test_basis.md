@@ -443,7 +443,7 @@ Dynamicsのためのstateです。
 * `runtime/states/expected-next.runtime-state.json`
 * `runtime/state-sequences/expected.runtime-state-sequence.json`
 
-sequence artifactでは、`states[0]` がinitial state、`states[i + 1]` がpost-frame stateである。Exact deterministic replayでは `packageHash`、`inputFramesHash`、`runtimeEvaluationContext`、`evaluatorVersionSummary`、`fixedStepMs`、同一initial `RuntimeStateDto`、epsilon内の同一final `RuntimeStateDto`、`runtime.stateSequenceLengthMismatch` がないことを確認する。
+sequence artifactでは、`states[0]` がinitial state、`states[i + 1]` がpost-frame stateである。Exact deterministic replayでは `packageHash`、`inputFramesHash`、`runtimeEvaluationContext`、`evaluatorVersionSummary`、`fixedStepMs`、`frameCount`、`states.length`、全 `states[i]` のepsilon内一致、`runtime.stateSequenceLengthMismatch` がないことを確認する。final stateのみを見る場合はsmoke testであり、exact deterministic replay evidenceではない。
 
 ---
 

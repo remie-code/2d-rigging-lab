@@ -433,6 +433,17 @@ It must not carry source surface, operation ID, caller identity, runtime mode, o
 
 `inputFramesHash`, `runtimeEvaluationContext`, and `evaluatorVersionSummary` are optional so interactive preview artifacts can stay light. Acceptance fixtures and exact deterministic replay fixtures should include all three evidence fields, along with `packageHash`, `fixedStepMs`, and the initial state at `states[0]`.
 
+`inputFramesHash` is `sha256(canonical-json(RuntimeSequenceFrameDto[]))`. Canonical JSON for this hash has the following rules:
+
+- Object keys are sorted lexicographically.
+- Arrays preserve order.
+- Numbers use the project-defined finite number serialization policy.
+- Timestamps, operation IDs, UI-only fields, and non-frame context fields are not included.
+- `RuntimeEvaluationContextDto` is not included in `inputFramesHash`; it is stored separately as `runtimeEvaluationContext`.
+- Evaluator and solver version information is not included in `inputFramesHash`; it is stored separately as `evaluatorVersionSummary`.
+
+This separates evidence responsibilities: `inputFramesHash` proves the frame-local input sequence, `runtimeEvaluationContext` proves the execution context, and `evaluatorVersionSummary` proves evaluator and solver versions.
+
 Runtime evaluation mode is represented by `RuntimeEvaluationContextDto.source.surface` and `RuntimeEvaluationContextDto.policy.strictness`, not by `RuntimeEvaluationOptionsDto.profile`. `RuntimeEvaluationContextSchema.policy` defaults to `{ strictness: "interactive" }`, so `{ source: { surface: "preview" } }` is valid and means interactive preview context.
 
 `RuntimeEvaluationProfileSchema` is deprecated and retained only as a legacy migration note. New operation, AI, runtime, fixture, validator, and acceptance contracts must not use it. It can be removed once legacy `options.profile` and the migration-only `runtime.profileMismatch` diagnostic are no longer accepted or documented.
