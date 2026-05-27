@@ -92,6 +92,7 @@ import {
   ModelDiffSchema,
   RuntimeDiffSchema,
   RuntimeResetReasonSchema,
+  RuntimeStateArtifactRefSchema,
   RuntimeStateDtoSchema,
   RuntimeSequenceFrameSchema,
   ValidationDiffSchema,
@@ -249,7 +250,7 @@ export const RuntimeStatePayloadSchema = RuntimeStateDtoSchema;
 export const RunDynamicsPreviewSequencePayloadSchema = z.object({
   frames: z.array(RuntimeSequenceFrameSchema).min(1),
   initialState: RuntimeStatePayloadSchema.optional(),
-  initialStateRef: z.string().optional(),
+  initialStateRef: RuntimeStateArtifactRefSchema.optional(),
   fixedStepMs: z.number().positive().default(16.6666667),
   maxSubSteps: z.number().int().min(1).max(16).default(4),
   detail: z.enum(["summary", "targeted", "full"]).default("targeted"),
@@ -436,9 +437,9 @@ export const OperationResultSchema = z.object({
   validationDiff: ValidationDiffSchema.optional(),
   diagnostics: z.array(DiagnosticSchema).default([]),
   generatedRuntimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
-  generatedRuntimeStateRefs: z.array(z.string()).default([]),
+  generatedRuntimeStateRefs: z.array(RuntimeStateArtifactRefSchema).default([]),
   finalRuntimeState: RuntimeStatePayloadSchema.optional(),
-  finalRuntimeStateRef: z.string().optional(),
+  finalRuntimeStateRef: RuntimeStateArtifactRefSchema.optional(),
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
   reversible: z.boolean(),
 });
@@ -487,11 +488,15 @@ export interface OperationCore {
 
 ## Runtime State Evidence Policy
 
-`runDynamicsPreviewSequence` uses `frames: RuntimeSequenceFrameDto[]` as the operation and acceptance source of truth. Each frame carries `frameIndex`, `deltaTimeMs`, per-frame `resetReasons`, `authoredParameterValues`, and `targetIds`. Any UI or adapter convenience shape such as `authoredParameterFrames` must be lowered to `frames` before it reaches the operation contract and must not be used as contract-test evidence.
+`runDynamicsPreviewSequence` uses `frames: RuntimeSequenceFrameDto[]` as the operation and acceptance source of truth. Each frame carries only frame-local input: `frameIndex`, `deltaTimeMs`, per-frame `resetReasons`, `authoredParameterValues`, and `targetIds`. Any UI or adapter convenience shape such as `authoredParameterFrames` must be lowered to `frames` before it reaches the operation contract and must not be used as contract-test evidence.
+
+Source surface, operation ID, caller identity, and replay profile are supplied by the surrounding `OperationRequestDto` and the `RuntimeSequenceEvaluationContextDto` passed to Runtime Core. They are not stored on `RuntimeSequenceFrameDto`, which allows the same frame list to be replayed by preview, viewer, validator, acceptance runner, and AI dry-run contexts.
 
 `RuntimeStateDto.fixedStepMs` is the active timestep. `RunDynamicsPreviewSequencePayloadSchema.fixedStepMs` is used only when `operation-core` must call `createInitialRuntimeState` because neither `initialState` nor `initialStateRef` was supplied. If a supplied initial state has a different timestep from the request, `operation-core` must preserve the evidence and surface `dynamics.timestepMismatch` in strict / acceptance profiles.
 
-Sequence operations must return or reference the final state. `OperationResultSchema.generatedRuntimeStateRefs` lists generated state artifacts, and `finalRuntimeState` / `finalRuntimeStateRef` identify the final state after the last frame. Runtime state evidence is generated under `runtime/states/*.runtime-state.json`; it is not an authored package body file.
+Sequence operations must return or reference the final state. `OperationResultSchema.generatedRuntimeStateRefs` lists generated state artifacts, and `finalRuntimeState` / `finalRuntimeStateRef` identify the final state after the last frame. Runtime state evidence refs must match `RuntimeStateArtifactRefSchema` and point to `runtime/states/*.runtime-state.json`.
+
+RuntimeState artifacts may be produced by operation-core, runtime fixtures, validator acceptance runs, and AI dry-run sequence previews. They are generated evidence artifacts, not authored package body files. They may be read as explicit initial state only for deterministic replay, debugging, validation, or demo capture reproduction, and they must not be required for normal authored package loading.
 
 ## Diagram Requirements
 

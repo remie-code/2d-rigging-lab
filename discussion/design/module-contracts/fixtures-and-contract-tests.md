@@ -206,6 +206,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
 
+Dynamics sequence fixtures, preview sequence tests, and acceptance runners use `RuntimeSequenceFrameDto[]` as the source-of-truth input. The frame list contains only frame-local input; source surface, operation ID, caller identity, and replay profile are supplied by `RuntimeSequenceEvaluationContextDto` or the surrounding operation/test harness.
+
 ## Expected Runtime States
 
 | Fixture | Required state artifacts | Required assertions |
@@ -213,6 +215,10 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `minimal-dynamics-hairSway` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-next-runtime-state.json` | initial state package identity matches fixture package; each group starts at currentTarget with velocity=0, tick=0, resetCounter=1 |
 | `dynamics-reset-determinism` | `runtime/states/expected-runtime-state-sequence.json` | paired runs produce byte-stable state sequence under declared evaluator version and epsilon policy |
 | `dynamics-fixed-step-replay` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-runtime-state-sequence.json`, `runtime/states/expected-next-runtime-state.json` | variable `deltaTimeMs` frames update accumulatorMs and final state deterministically; timestep mismatch fixture emits `dynamics.timestepMismatch` |
+
+RuntimeState artifact refs must match `RuntimeStateArtifactRefSchema` and point to generated `runtime/states/*.runtime-state.json` files. RuntimeState artifacts are generated evidence, not authored model source.
+
+Exact deterministic replay fixtures require `packageHash` unless the fixture explicitly declares hashless replay. If either graph or state hash is missing, the fixture must record `runtime.statePackageHashUnavailable`; acceptance profile may fail the fixture when exact replay evidence is required.
 
 ## Expected Diffs
 

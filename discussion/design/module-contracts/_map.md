@@ -14,15 +14,15 @@
 |------|------|--------|
 | [_map.md](_map.md) | この module contract design 成果物群の入口地図 | Private baselineへ更新済み |
 | [module-boundaries.md](module-boundaries.md) | module責務、所有state、禁止依存、Future integration boundary、実装分担境界 | Private baseline語彙へ整理済み |
-| [typescript-contracts.md](typescript-contracts.md) | shared branded ID、primitive、diagnostic、diff、DTO index の TypeScript / Zod 契約 | RuntimeStateDto source of truth、RuntimeSequenceFrameDto、RuntimeDiff.dynamicsChanges、camelCase CheckId、rigControl/dynamicsGroup target kindへ更新済み |
-| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | `model/dynamics.json`、`runtime/states/` generated evidence、1 group = 1 output、1D/2D keyform unionへ更新済み |
-| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | Dynamics operations、`RuntimeSequenceFrameDto[]` preview sequence、final RuntimeState evidenceへ更新済み |
-| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、Minimum Open Dynamics v1、parent-before-child rig control、snapshot契約 | `createInitialRuntimeState`、state identity、fixed timestep ownership、dynamics debug snapshotへ更新済み |
-| [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | RuntimeState identity diagnostics、Dynamics final check registry、requiredGroupMissing、outputTargetDuplicateへ更新済み |
+| [typescript-contracts.md](typescript-contracts.md) | shared branded ID、primitive、diagnostic、diff、DTO index の TypeScript / Zod 契約 | RuntimeSequenceEvaluationContext、RuntimeStateArtifactRef、RuntimeStateDto source of truthへ更新済み |
+| [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | layout tree / tableとも `runtime/states/` generated evidenceへ更新済み |
+| [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | `RuntimeSequenceFrameDto[]` preview sequence、`finalRuntimeState`、RuntimeState artifact refsへ更新済み |
+| [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、Minimum Open Dynamics v1、parent-before-child rig control、snapshot契約 | `evaluateRuntimeSequence(frames, ..., context)`、state hash fallback、initial reset reason rationaleへ更新済み |
+| [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | `runtime.statePackageHashUnavailable`、state identity diagnostics、Dynamics final check registryへ更新済み |
 | [gui-operation-contract.md](gui-operation-contract.md) | UI event -> operation mapping、semantic state、hit-test、GUI evidence契約 | Dynamics panel / preview reset / simple graphへ更新済み |
-| [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | RuntimeState DTO payload、Dynamics preview sequence、final state evidence、自動physics tuning禁止へ更新済み |
-| [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) | fixture registry、expected validation report/runtime snapshot/diff、contract test方針 | RuntimeState expected artifacts、Dynamics final fixtures、output-target-duplicate、fixed-step-replayへ更新済み |
-| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | review_004 RuntimeState evidence traceabilityへ更新済み |
+| [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | AI responseを `finalRuntimeState` / `finalRuntimeStateRef` と RuntimeState artifact refsへ統一済み |
+| [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) | fixture registry、expected validation report/runtime snapshot/diff、contract test方針 | `RuntimeSequenceFrameDto[]` 正本、RuntimeState artifact refs、packageHash replay条件へ更新済み |
+| [traceability-matrix.md](traceability-matrix.md) | AC / scenario / module / API / diagnostic / fixture / expected output の対応 | review_005 RuntimeSequence / RuntimeState artifact traceabilityへ更新済み |
 | [review-summary.md](review-summary.md) | 独立レビュー3観点の findings、対応状況、残未決事項分類 | 旧baselineレビューとして参考 |
 
 ## 主要な設計判断の反映先

@@ -158,7 +158,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | SC-PARAM-007 | detect single-key/endpoint-missing keyform | `keyform.missingEndpoint` report |
 | SC-PARAM-004 | `addKeyformGrid2d` for two parameters and 3x3 grid | full snapshot at diagonal/corner points |
 | SC-DYN-001 | `createDynamicsGroup` -> `bindDynamicsDriver` -> `bindDynamicsOutput` -> `setDynamicsSettings` | package diff + validation report |
-| SC-DYN-002 | `resetDynamicsPreviewState` -> `runDynamicsPreviewSequence` with initial RuntimeStateDto -> run `RuntimeSequenceFrameDto[]` fixed-step input sequence in Editor preview and Viewer | matching snapshot sequence + generated runtime state refs + final RuntimeStateDto |
+| SC-DYN-002 | `resetDynamicsPreviewState` -> `runDynamicsPreviewSequence` with initial RuntimeStateDto -> run `RuntimeSequenceFrameDto[]` fixed-step input sequence in Editor preview and Viewer using `RuntimeSequenceEvaluationContextDto` | matching snapshot sequence + `RuntimeStateArtifactRefSchema` refs + `finalRuntimeState` |
 | SC-DYN-003 | validate dynamics graph and sequence | dynamics check report |
 | SC-DYN-004 | demo-safe preflight for secondary motion | demo-safe report |
 | SC-DEF-002 | `createRotation2dRigControl` for head pivot | operation result + snapshot |
@@ -208,6 +208,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `dynamics.nonDeterministicSnapshot` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |
 | `dynamics.resetPolicyMissing` | AC-PHYS-001, SC-DYN-001 | `invalid-dynamics-missing-output` |
 | `runtime.statePackageMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-fixed-step-replay` stale state case |
+| `runtime.statePackageHashUnavailable` | AC-PHYS-004, SC-DYN-002 | `dynamics-fixed-step-replay` hashless replay case |
 | `runtime.stateMissingDynamicsGroup` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` missing group case |
 | `runtime.stateUnknownDynamicsGroup` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` stale group case |
 | `dynamics.timestepMismatch` | AC-PHYS-004, SC-DYN-002 | `dynamics-reset-determinism` |

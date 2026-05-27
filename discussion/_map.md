@@ -50,7 +50,8 @@
 | GPT-5.5 Pro review 001 | `memo/gpt-5.5-pro-review/reveiw_001.md` のP0/P1/P2指摘を分類し、反映可能なものは `discussion/design/gpt-5.5-pro-review-001-response.md` と関連文書へ反映済み |
 | GPT-5.5 Pro review 002 | `memo/gpt-5.5-pro-review/review_002.md` のRE3-001〜RE3-020を分類し、Minimum Open Dynamics v1復帰として反映済み。Dynamics詳細はreview_003で上書き |
 | GPT-5.5 Pro review 003 | `memo/gpt-5.5-pro-review/review_003.md` のRE-FINAL-001〜RE-FINAL-018を分類し、explicit RuntimeStateDto、1 group = 1 output、weighted sum、solver固定式、validator/fixture/traceability確定版として反映済み。RuntimeState evidence詳細はreview_004で上書き |
-| GPT-5.5 Pro review 004 | `memo/gpt-5.5-pro-review/review_004.md` のP0/P1/P2を分類し、initial RuntimeState生成、`RuntimeSequenceFrameDto[]`、operation final state evidence、`runtime/states/` artifact方針として `discussion/design/gpt-5.5-pro-review-004-response.md` と関連文書へ反映済み |
+| GPT-5.5 Pro review 004 | `memo/gpt-5.5-pro-review/review_004.md` のP0/P1/P2を分類し、initial RuntimeState生成、`RuntimeSequenceFrameDto[]`、operation final state evidence、`runtime/states/` artifact方針として反映済み。RuntimeSequence / artifact ref詳細はreview_005で上書き |
+| GPT-5.5 Pro review 005 | `memo/gpt-5.5-pro-review/review_005.md` のP0/P1/P2を分類し、`evaluateRuntimeSequence(frames, ..., context)`、`RuntimeStateArtifactRefSchema`、AI response命名統一、packageHash fallbackとして反映済み |
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 

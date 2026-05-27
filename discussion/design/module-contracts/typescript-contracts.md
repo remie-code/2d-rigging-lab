@@ -326,6 +326,17 @@ export const RuntimeResetReasonSchema = z.enum([
 ]);
 export type RuntimeResetReason = z.infer<typeof RuntimeResetReasonSchema>;
 
+export const RuntimeSourceSurfaceSchema = z.enum(["preview", "viewer", "validator", "aiDryRun"]);
+export type RuntimeSourceSurface = z.infer<typeof RuntimeSourceSurfaceSchema>;
+
+export const RuntimeSequenceEvaluationProfileSchema = z.enum(["interactive", "strict", "acceptance", "demoSafe"]);
+export type RuntimeSequenceEvaluationProfile = z.infer<typeof RuntimeSequenceEvaluationProfileSchema>;
+
+export const RuntimeStateArtifactRefSchema = z.string().regex(
+  /^runtime\/states\/[A-Za-z0-9_.-]+\.runtime-state\.json$/
+);
+export type RuntimeStateArtifactRef = z.infer<typeof RuntimeStateArtifactRefSchema>;
+
 export const RuntimeStateDtoSchema = z.object({
   schemaVersion: z.literal("runtime-state-v1"),
   packageId: PackageIdSchema,
@@ -347,6 +358,15 @@ export const RuntimeSequenceFrameSchema = z.object({
 });
 export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>;
 
+export const RuntimeSequenceEvaluationContextSchema = z.object({
+  source: z.object({
+    surface: RuntimeSourceSurfaceSchema,
+    operationId: z.string().optional(),
+  }),
+  profile: RuntimeSequenceEvaluationProfileSchema.default("interactive"),
+});
+export type RuntimeSequenceEvaluationContextDto = z.infer<typeof RuntimeSequenceEvaluationContextSchema>;
+
 export const ValidationDiffSchema = z.object({
   schemaVersion: z.literal("validation-diff-v1"),
   beforeReportId: ValidationReportIdSchema,
@@ -363,6 +383,20 @@ export const ValidationDiffSchema = z.object({
 export type ValidationDiffDto = z.infer<typeof ValidationDiffSchema>;
 ```
 
+## Runtime Sequence DTO Ownership
+
+`RuntimeSequenceFrameDto` represents only frame-local input:
+
+- `frameIndex`
+- `deltaTimeMs`
+- `resetReasons`
+- `authoredParameterValues`
+- `targetIds`
+
+It must not carry source surface, operation ID, caller identity, or profile. Sequence execution context is represented by `RuntimeSequenceEvaluationContextDto`, so the same frame list can be reused by preview, viewer, validator, AI dry-run, fixtures, and acceptance runners.
+
+`RuntimeStateArtifactRefSchema` constrains RuntimeState evidence references to generated `runtime/states/*.runtime-state.json` artifacts. These refs must not point to authored package source files.
+
 ## DTO Index
 
 | DTO / Type | Defining contract | Source of truth |
@@ -370,7 +404,7 @@ export type ValidationDiffDto = z.infer<typeof ValidationDiffSchema>;
 | `ManifestDto`, `GraphDto`, `DrawableDto`, `MeshDto`, `ParameterDto` | [package-file-format-contract.md](package-file-format-contract.md) | zod |
 | `AuthoringGraph`, `EditorSessionState` | [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md) | typescript |
 | `OperationRequestDto`, `OperationResultDto`, `OperationLogEntryDto` | [operation-contracts.md](operation-contracts.md) | zod |
-| `RuntimeStateDto`, `RuntimeSequenceFrameDto`, `RuntimeDiffDto` | this file | zod source of truth |
+| `RuntimeStateDto`, `RuntimeSequenceFrameDto`, `RuntimeSequenceEvaluationContextDto`, `RuntimeStateArtifactRef`, `RuntimeDiffDto` | this file | zod source of truth |
 | `NormalizedRuntimeGraph`, `RuntimeCore` | [runtime-core-contract.md](runtime-core-contract.md) | typescript |
 | `RuntimeSnapshotDto` | [runtime-core-contract.md](runtime-core-contract.md) | zod; imports shared RuntimeState / sequence DTOs from this file |
 | `ValidationReportDto`, `RepairCandidateDto` | [validator-contract.md](validator-contract.md) | zod |
@@ -414,7 +448,7 @@ flowchart LR
 | AC-MVP-008, AC-PARAM-006 | `ParameterId`, `semanticRole`, private `projectPresetAlias` fields in downstream DTOs | `tutorial-like-authoring` |
 | AC-MVP-010, AC-PHYS-001 | `DynamicsGroupId`, `TargetKindSchema = "dynamicsGroup"` | `minimal-dynamics-hairSway` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
-| AC-MVP-012, AC-PHYS-004 | `RuntimeStateDtoSchema`, `RuntimeSequenceFrameSchema`, `RuntimeDiffSchema.dynamicsChanges` | `dynamics-fixed-step-replay`, `dynamics-reset-determinism` |
+| AC-MVP-012, AC-PHYS-004 | `RuntimeStateDtoSchema`, `RuntimeSequenceFrameSchema`, `RuntimeSequenceEvaluationContextSchema`, `RuntimeStateArtifactRefSchema`, `RuntimeDiffSchema.dynamicsChanges` | `dynamics-fixed-step-replay`, `dynamics-reset-determinism` |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
 | SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |
 

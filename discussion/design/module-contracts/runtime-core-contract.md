@@ -84,7 +84,9 @@ import {
   RuntimeEvaluationProfileSchema,
   SnapshotDetailSchema,
   RuntimeResetReasonSchema,
+  RuntimeSequenceEvaluationContextSchema,
   RuntimeStateDtoSchema,
+  RuntimeSourceSurfaceSchema,
   RuntimeSequenceFrameSchema,
 } from "./contracts";
 
@@ -117,9 +119,10 @@ export interface RuntimeCore {
 
   evaluateRuntimeSequence(
     graph: NormalizedRuntimeGraph,
-    inputs: readonly RuntimeEvaluationInputDto[],
+    frames: readonly RuntimeSequenceFrameDto[],
     initialState: RuntimeStateDto,
-    options: RuntimeEvaluationOptionsDto
+    options: RuntimeEvaluationOptionsDto,
+    context: RuntimeSequenceEvaluationContextDto
   ): {
     snapshots: readonly RuntimeSnapshotDto[];
     finalState: RuntimeStateDto;
@@ -250,7 +253,7 @@ export const RuntimeEvaluationInputSchema = z.object({
   resetReasons: z.array(RuntimeResetReasonSchema).default([]),
   authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
   source: z.object({
-    surface: z.enum(["preview", "viewer", "validator", "aiDryRun"]),
+    surface: RuntimeSourceSurfaceSchema,
     operationId: z.string().optional(),
   }),
   targetIds: z.array(z.string()).default([]),
@@ -283,11 +286,12 @@ export const RuntimeEvaluationOptionsSchema = z.object({
 export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOptionsSchema>;
 
 // RuntimeStateDtoSchema, RuntimeDynamicsGroupStateSchema,
-// RuntimeResetReasonSchema, and RuntimeSequenceFrameSchema are defined in
-// typescript-contracts.md. Runtime Core owns the semantics below, not a
-// second DTO definition.
+// RuntimeResetReasonSchema, RuntimeSequenceFrameSchema, and
+// RuntimeSequenceEvaluationContextSchema are defined in typescript-contracts.md.
+// Runtime Core owns the semantics below, not a second DTO definition.
 export type RuntimeStateDto = z.infer<typeof RuntimeStateDtoSchema>;
 export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>;
+export type RuntimeSequenceEvaluationContextDto = z.infer<typeof RuntimeSequenceEvaluationContextSchema>;
 ```
 
 `RuntimeStateDtoSchema` is defined in [typescript-contracts.md](typescript-contracts.md). This document is the semantic contract for how Runtime Core creates, accepts, repairs, and returns that DTO.
@@ -300,6 +304,16 @@ export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>
 | `fixedStepMs` | Active Dynamics timestep. See Timestep policy below. |
 | `accumulatorMs` | Unprocessed variable delta carried between fixed substeps. Initial state starts at `0`. |
 | `dynamicsGroups` | One entry per active Dynamics group in the graph. Each group stores `position`, `velocity`, `tick`, and `resetCounter`. |
+
+`RuntimeSequenceFrameDto` is the source-of-truth input for sequence preview, Dynamics sequence tests, acceptance runner playback, and `evaluateRuntimeSequence`. It contains only frame-local input. Runtime Core normalizes each frame into an internal `RuntimeEvaluationInputDto` by combining it with `RuntimeSequenceEvaluationContextDto`.
+
+`RuntimeSequenceEvaluationContextDto` carries sequence-wide execution context:
+
+- `source.surface`
+- `source.operationId`
+- `profile`
+
+Source surface, operation ID, caller identity, and profile must not be duplicated into `RuntimeSequenceFrameDto`. This keeps one frame list reusable across preview, viewer, validator, AI dry-run, fixtures, and acceptance runs.
 
 ## Parameter / Keyform Evaluation Semantics
 
@@ -327,11 +341,13 @@ Evaluation rules:
 
 Minimum Open Dynamics v1 is a parameter-driven deterministic secondary motion layer. It uses `scalarDampedFollowV1` only in MVP.
 
-Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, `RuntimeSequenceFrameDto[]`, fixedStepMs, and options.
+Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, `RuntimeSequenceFrameDto[]`, fixedStepMs, options, and `RuntimeSequenceEvaluationContextDto`.
 
 ### Initial RuntimeState Creation
 
 Runtime Core must expose `createInitialRuntimeState(graph, request)` for package load, preview restart, validation run start, and demo capture start. Operation and AI adapters may call the same function before `evaluateRuntimeFrame` / `evaluateRuntimeSequence` when no previous state is supplied.
+
+`RuntimeInitialStateRequestSchema.resetReasons` requires at least one reason because initial state creation is always an explicit reset boundary. Regular `RuntimeSequenceFrameDto.resetReasons` defaults to `[]` because most frames continue from the previous `RuntimeStateDto` without resetting Dynamics.
 
 Inputs:
 
@@ -353,7 +369,9 @@ Creation rules:
 State compatibility rules:
 
 - If `previousState` is absent, callers must create an initial state before evaluation.
-- If `previousState.packageId`, `packageRevision`, or `packageHash` does not match the graph identity, Runtime emits `runtime.statePackageMismatch`; strict / acceptance profile must fail or require reset before using the stale state.
+- If both `graph.packageHash` and `previousState.packageHash` exist, they must match exactly. Mismatch emits `runtime.statePackageMismatch`; strict / acceptance profile fails or requires reset before using the stale state.
+- If either package hash is missing, Runtime falls back to `packageId + packageRevision` comparison. If either fallback field differs, Runtime emits `runtime.statePackageMismatch`.
+- If package hash is missing but `packageId + packageRevision` match, Runtime emits `runtime.statePackageHashUnavailable`. Interactive profile may treat it as info; strict profile warns; exact deterministic replay fixtures may make missing hash an acceptance failure unless the fixture explicitly declares hashless replay.
 - If a graph group is missing from `previousState.dynamicsGroups`, Runtime initializes that group from `currentTarget` and emits `runtime.stateMissingDynamicsGroup`.
 - If `previousState.dynamicsGroups` contains a group not present in the graph, Runtime ignores the unknown state and emits `runtime.stateUnknownDynamicsGroup`; strict profile warns or fails when replay evidence depends on exact state equality.
 
@@ -636,7 +654,7 @@ export const RuntimeSnapshotSchema = z.object({
   runtimeCoreVersion: z.string(),
   snapshotId: RuntimeSnapshotIdSchema,
   source: z.object({
-    surface: z.enum(["preview", "viewer", "validator", "aiDryRun"]),
+    surface: RuntimeSourceSurfaceSchema,
     operationId: z.string().optional(),
   }),
   packageId: PackageIdSchema,
