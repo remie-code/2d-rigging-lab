@@ -1,14 +1,14 @@
 # MVP Deformer Design Recommendation
 
 > 状態: Preliminary recommendation
-> 対象: Open Live2D Stack MVP の rotation / warp deformer 相当構造
+> 対象: Open 2D Character Rigging Stack MVP の rotation / warp deformer 相当構造
 > 前提: 本レポートは独立した推奨パスであり、`cubism-observable-deformer-semantics.md` と `open-deformation-algorithm-candidates.md` が存在することを仮定しない。
 
 ## 1. 位置付け
 
-このレポートでは、MVP AC とシナリオをオラクルとして、Open Live2D Stack が MVP で露出すべき deformer 相当構造を提案する。
+このレポートでは、MVP AC とシナリオをオラクルとして、Open 2D Character Rigging Stack が MVP で露出すべき deformer 相当構造を提案する。
 
-Cubism 公式資料と一般的な変形アルゴリズムは参考資料であり、Cubism の内部実装や互換出力を Open Live2D Stack の正とはしない。
+Cubism 公式資料と一般的な変形アルゴリズムは参考資料であり、Cubism の内部実装や互換出力を Open 2D Character Rigging Stack の正とはしない。
 
 ## 2. Repository facts
 

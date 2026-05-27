@@ -1,31 +1,23 @@
-﻿# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-06: Part, Visibility, and Composition Semantics
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
 
-## DOMAIN-06: Part, Visibility, and Composition Semantics
+## 問い
 
-### 問い
-
-Live2Dモデルは、どのような部品構造として存在するのか。
-Open Editorは部品、表示、構成状態をどう扱わなければならないか。
+Private Prototypeは、part構造、表示状態、差し替え、compositionをどう保存・評価するべきか。
 
 ### AC-PART-001: パーツ構造を管理できること
 
-Open Editorは、モデルを構成するパーツを管理できること。
-
+Partはstable ID、display name、parent/child relation、所属drawable、lock/hide/select状態を保持できること。
 
 ### AC-PART-002: パーツ単位の表示状態を制御できること
 
-Open Editorは、パーツまたは描画要素単位で表示状態や不透明度を制御できること。
-
+Partとdrawableのvisibility、opacity、draw orderを制作状態とruntime評価状態に分けて扱えること。
 
 ### AC-PART-003: ポーズ・差し替え表現を扱えること
 
-Open Editorは、複数の部品状態を切り替える表現を扱えること。
-
-これには、腕、手、衣装、差分パーツなどの切り替えが含まれる。
-
+表情差分や差し替えはproject-defined compositionとして扱い、外部形式のpose asset互換を成功条件にしないこと。
 
 ### AC-PART-004: 表示状態のランタイム再現性を保持できること
 
-Open Editorは、パーツ表示やポーズ状態が出力後のランタイム利用において再現可能な形で保存・出力できること。
+Private runtime coreとprivate viewerは、同じpackageとparameter入力から同じvisibility、opacity、draw orderを再現できること。

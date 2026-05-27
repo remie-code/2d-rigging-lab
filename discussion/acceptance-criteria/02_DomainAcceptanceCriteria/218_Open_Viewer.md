@@ -1,33 +1,28 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-18: Private Viewer
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is private viewer.
 
-## DOMAIN-18: Open Viewer
+## 問い
 
-### 問い
+Private viewerは、project-defined packageをどう読み込み、表示し、parameter操作とvalidation結果を確認すべきか。
 
-Open Viewer は、モデルが正しく読み込み・表示・操作できることをどう確認するべきか。
+### AC-VIEWER-001: project-defined packageを読み込めること
 
-### AC-VIEWER-001: Open Model Package を読み込めること
+Private viewerは、project-defined model packageを読み込み、private runtime coreで初期表示できること。
 
-Open Viewer は、Open Model Package を読み込み、表示できること。
+### AC-VIEWER-002: parameter操作を提供できること
 
+Private viewerは、parameter sliderまたは同等の操作でmodel stateを変更し、結果を確認できること。
 
-### AC-VIEWER-002: parameter 操作を提供できること
+### AC-VIEWER-003: expression / motion / dynamicsを確認できること
 
-Open Viewer は、parameter slider または同等の操作でモデル状態を変更し、結果を確認できること。
+Private viewerは、MVP内のexpression-like composition、manual parameter grid、secondary motionを確認できること。Timelineやproduction motionはMVP外である。
 
+### AC-VIEWER-004: model structureとruntime stateをinspectできること
 
-### AC-VIEWER-003: expression / motion / physics を確認できること
+Private viewerは、drawable、mesh、part、parameter、draw order、mask、runtime snapshotをinspectできること。
 
-Open Viewer は、expression、motion、physics の適用結果を確認できること。
+### AC-VIEWER-005: validation reportを表示・保存できること
 
-
-### AC-VIEWER-004: model structure と runtime state を inspect できること
-
-Open Viewer は、drawable、mesh、part、parameter、draw order、clipping、runtime state を inspect できること。
-
-
-### AC-VIEWER-005: validation report を表示・保存できること
-
-Open Viewer は、Open Package Validator の結果を表示し、AI-readable report として保存できること。
+Private viewerは、validator reportを表示し、AI assistantが参照できる構造化reportとして保存できること。

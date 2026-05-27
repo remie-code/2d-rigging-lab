@@ -69,7 +69,7 @@ export type MeshId = Brand<string, "MeshId">;
 export type VertexId = Brand<string, "VertexId">;
 export type ParameterId = Brand<string, "ParameterId">;
 export type KeyformSetId = Brand<string, "KeyformSetId">;
-export type DeformerId = Brand<string, "DeformerId">;
+export type RigControlId = Brand<string, "RigControlId">;
 export type MaskRelationId = Brand<string, "MaskRelationId">;
 export type OperationId = Brand<string, "OperationId">;
 export type TransactionId = Brand<string, "TransactionId">;
@@ -87,7 +87,7 @@ export const MeshIdSchema = z.string().regex(/^mesh_[A-Za-z0-9_-]+$/) as z.ZodTy
 export const VertexIdSchema = z.string().regex(/^vtx_[A-Za-z0-9_-]+$/) as z.ZodType<VertexId>;
 export const ParameterIdSchema = z.string().regex(/^param_[A-Za-z0-9_-]+$/) as z.ZodType<ParameterId>;
 export const KeyformSetIdSchema = z.string().regex(/^keyset_[A-Za-z0-9_-]+$/) as z.ZodType<KeyformSetId>;
-export const DeformerIdSchema = z.string().regex(/^def_[A-Za-z0-9_-]+$/) as z.ZodType<DeformerId>;
+export const RigControlIdSchema = z.string().regex(/^rig_[A-Za-z0-9_-]+$/) as z.ZodType<RigControlId>;
 export const MaskRelationIdSchema = z.string().regex(/^maskrel_[A-Za-z0-9_-]+$/) as z.ZodType<MaskRelationId>;
 export const OperationIdSchema = z.string().regex(/^op_[A-Za-z0-9_-]+$/) as z.ZodType<OperationId>;
 export const TransactionIdSchema = z.string().regex(/^txn_[A-Za-z0-9_-]+$/) as z.ZodType<TransactionId>;
@@ -107,8 +107,8 @@ flowchart LR
   drawable --> mesh[MeshId]
   parameter[ParameterId] --> keyform[KeyformSetId]
   keyform --> drawable
-  keyform --> deformer[DeformerId]
-  deformer --> drawable
+  keyform --> rig control[RigControlId]
+  rig control --> drawable
   mask[MaskRelationId] --> drawable
   operation[OperationId] --> source
   operation --> drawable
@@ -205,7 +205,7 @@ export const TargetKindSchema = z.enum([
   "vertex",
   "parameter",
   "keyformSet",
-  "deformer",
+  "rig control",
   "maskRelation",
   "operation",
   "runtimeSnapshot",
@@ -353,10 +353,10 @@ flowchart LR
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-004, AC-DRAW-001 | `DrawableId`, `PartId`, `TextureId`, `MeshId` | `minimal-valid-package` references |
-| AC-MVP-008, AC-PARAM-006 | `ParameterId`, standard alias fields in downstream DTOs | `tutorial-like-authoring` |
+| AC-MVP-008, AC-PARAM-006 | `ParameterId`, recommended alias fields in downstream DTOs | `tutorial-like-authoring` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
-| SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `angle-xy-grid-2d` |
+| SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |
 
 ## Verification and Fixtures
 

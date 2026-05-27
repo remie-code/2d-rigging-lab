@@ -8,32 +8,36 @@
 
 `reports/` は、技術調査、成立性調査、外部仕様・実装状況のレポートを保持するトピックである。
 
+Live2D / Cubism 関連レポートは過去調査・リスク確認用の private research archive であり、Private 2D Rigging Lab / Prototype の仕様・実装・UX根拠としては扱わない。
+
+現在の方針では、Cubism SDK/Core、既存Cubismモデル、`.cmo3`、`.moc3`、`.model3.json`、`.motion3.json`、`.physics3.json`、`.pose3.json` の検査・読み込み・解析・変換・再構築を行わない。
+
 ## 直下のファイル
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | `reports/` 直下の入口地図 | 起草済み |
+| [_map.md](_map.md) | `reports/` 直下の入口地図 | Private baselineへ更新済み |
 
 ## 直下のディレクトリ
 
 | Path | Role | Status |
 |------|------|--------|
-| [cmo3-moc3-format-spec/](cmo3-moc3-format-spec/) | `.cmo3` と `.moc3` の仕様公開状況、読み書き実装可能性、リスク調査 | レポート作成済み |
-| [cubism-sdk-runtime-structure/](cubism-sdk-runtime-structure/) | Cubism SDK/Coreで `.moc3` をロードした後に観測できるランタイム構造の調査 | レポート作成済み |
-| [deformer-structure-technology/](deformer-structure-technology/) | Open Stack の deformer 相当構造を設計するための Cubism参照・変形アルゴリズム・MVP推奨案調査 | レポート作成済み |
-| [viewer-preview-reference/](viewer-preview-reference/) | Open Stack の Editor preview / Viewer 設計に向けた Cubism参照機能とMVP推奨案調査 | レポート作成済み |
-| [runtime-evaluation-semantics-reference/](runtime-evaluation-semantics-reference/) | Open Stack の Runtime評価セマンティクス設計に向けた Cubism SDK/Core 参照調査 | レポート作成済み |
+| [cmo3-moc3-format-spec/](cmo3-moc3-format-spec/) | `.cmo3` と `.moc3` の過去調査。現在はSDK/Core local-use方針をsupersedeし、形式不採用を記録 | Private research archive |
+| [cubism-sdk-runtime-structure/](cubism-sdk-runtime-structure/) | Cubism SDK/Coreで `.moc3` をロードした後に観測できるランタイム構造の過去調査 | Private research archive / implementation sourceではない |
+| [deformer-structure-technology/](deformer-structure-technology/) | 変形構造に関する過去調査とproject-defined設計候補 | Private research archive / 独自語彙への変換が必要 |
+| [viewer-preview-reference/](viewer-preview-reference/) | Editor preview / Viewer 設計に向けた過去参照調査 | Private research archive / UX oracleではない |
+| [runtime-evaluation-semantics-reference/](runtime-evaluation-semantics-reference/) | Runtime評価セマンティクス設計に向けた過去参照調査 | Private research archive / runtime oracleではない |
+| [rights-risk-cleanup/](rights-risk-cleanup/) | 権利・商標・互換誤認リスク整理 | 参考。Demo and Proposal Hygieneへ接続 |
 
 ## 次の行動
 
-1. Cubism SDK for Web を使ったローカル実ロード実験の範囲を決める
-2. 調査結果を受けて `SC-IN-004` の扱いをユーザーと決める
-3. deformer相当構造の技術調査結果を設計議論へ反映する
-4. Viewer / Preview 参照機能の調査結果を設計議論へ反映する
-5. Runtime評価セマンティクスのSDK/Core参照調査結果を設計議論へ反映する
+1. 過去調査レポートを実装agentへ渡す場合は、private research archiveであり実装の正ではないことを明示する。
+2. 過去調査から設計へ反映する場合は、必ず独自語彙・独自データ構造・非互換方針へ変換してから記録する。
+3. 配信デモや提案資料に出す情報は、別途 Streaming Demo Surface / Live2D Feature Proposal 文書で制御する。
 
 ## 未決事項
 
 | 項目 | 状態 |
 |------|------|
-| 調査結果を受けて SC-IN-004 を修正するか | 未決 |
+| 各Cubism参照レポートにsuperseded headerを個別追加するか | follow-up候補 |
+| SC-IN-004など旧intake scenarioをいつ移行するか | follow-up候補 |

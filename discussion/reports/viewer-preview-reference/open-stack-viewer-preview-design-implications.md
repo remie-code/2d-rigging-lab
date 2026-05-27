@@ -1,13 +1,13 @@
 # Open Stack Viewer / Preview Design Implications
 
 > 状態: Preliminary design recommendation  
-> 目的: Open Live2D Stack MVP における Editor preview、Viewer、Shared Runtime、Validator / AI bridge の境界を、Cubism参照レポート完成前でも使える設計推奨として整理する。
+> 目的: Open 2D Character Rigging Stack MVP における Editor preview、Viewer、Shared Runtime、Validator / AI bridge の境界を、Cubism参照レポート完成前でも使える設計推奨として整理する。
 
 ## 1. Official facts
 
 - Cubism公式資料は、Editor tutorial 1-5、Viewer loading、SDK parameter operation、model integrity などを参照対象として挙げられている。
 - Cubism基本チュートリアル6相当の animation mode、timeline、motion作成は、MVP ACでは MVP+1 / 将来候補に置かれている。
-- 公式資料は制作能力や確認能力の参考であり、Open Live2D Stack のオラクルではない。
+- 公式資料は制作能力や確認能力の参考であり、Open 2D Character Rigging Stack のオラクルではない。
 
 ## 2. Repository facts
 
@@ -204,6 +204,6 @@ MVP外に置くべき Cubism-like viewer / preview features:
 - Editor用hide と runtime visibility の命名・保存場所をどう分けるか。
 - Validator MVP profile は Editor warning schema と同一ファイルにするか、将来の独立Validatorを見据えて別profile定義にするか。
 - AI Agent の dry-run operation は Editor preview surface に表示するだけか、Viewerでもruntime diffとして確認できるようにするか。
-- 顔Z、Angle X / Y、髪揺れ相当の標準parameter aliasを、Cubism準拠名に寄せるか Open Stack固有名を正にするか。
+- 顔Z、Angle X / Y、髪揺れ相当の標準parameter aliasを、独自仕様に基づく名に寄せるか Open Stack固有名を正にするか。
 - runtime diagnostics の severity で、MVP fail、warning、needs review、not applicable をどの規則で分けるか。
 - Cubism reference report完成後、どのCubism-like Viewer機能をPost-MVP候補に格上げするか。

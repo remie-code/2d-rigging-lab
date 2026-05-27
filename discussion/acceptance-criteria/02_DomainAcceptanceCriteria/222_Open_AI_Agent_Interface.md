@@ -1,33 +1,28 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-22: AI Assistant Interface
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is AI assistant interface.
 
-## DOMAIN-22: Open AI Agent Interface
+## 問い
 
-### 問い
+AI assistantは、Private Prototypeのmodel structure、operation、diff、validation、repair suggestionをどう扱うべきか。
 
-AIエージェントがモデル制作・編集・検証を行うために、どの構造化インターフェースが必要か。
+### AC-AGENT-001: model structure inspectionを提供できること
 
-### AC-AGENT-001: model structure inspection を提供できること
+AI assistantは、project-defined packageとruntime snapshotからmodel structureを安定IDでinspectできること。
 
-Open AI Agent Interface は、model structure、runtime state、validation result をAIが扱いやすい形で取得できること。
+### AC-AGENT-002: operation commandを提供できること
 
+AI assistantは、編集提案をdry-run operationとして表現できること。
 
-### AC-AGENT-002: operation command を提供できること
+### AC-AGENT-003: diff extractionを提供できること
 
-Open AI Agent Interface は、編集、生成、修復、検証、保存、runtime preview を構造化操作として実行できること。
+AI assistantは、model diff、runtime diff、validation diffを取得し説明できること。
 
+### AC-AGENT-004: scenario-based test executionを提供できること
 
-### AC-AGENT-003: diff extraction を提供できること
+AI assistantは、ACとscenarioに基づく検証手順を支援できること。ただし外部公開automation APIはMVP外である。
 
-Open AI Agent Interface は、操作前後の model diff、runtime diff、validation diff を取得できること。
+### AC-AGENT-005: repair suggestionとprovenance trackingを提供できること
 
-
-### AC-AGENT-004: scenario-based test execution を提供できること
-
-Open AI Agent Interface は、ACやシナリオに基づくテスト実行とレビューを支援できること。
-
-
-### AC-AGENT-005: repair suggestion と provenance tracking を提供できること
-
-Open AI Agent Interface は、失敗理由、修復候補、編集意図、生成由来を追跡できること。
+AI assistantは、repair suggestion、根拠、ユーザー判断、適用結果のprovenanceを記録できること。

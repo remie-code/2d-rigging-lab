@@ -1,33 +1,28 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-25: Demo and Proposal Hygiene
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is Demo and Proposal Hygiene.
 
-## DOMAIN-25: Open Source and Rights Hygiene
+## 問い
 
-### 問い
-
-Open Live2D Stack を Open Source として公開可能にするために、どの権利境界を守るべきか。
+Private Prototypeの素材、画面、ログ、動画、スクリーンショット、提案資料が、互換製品、第三者素材利用、公式提携、SDK/Core利用、モデル変換機能と誤解されないようにするには何が必要か。
 
 ### AC-RIGHTS-001: 再配布できない資産を必須依存にしないこと
 
-Open Live2D Stack は、Cubism SDK/Core、公式サンプル、商用モデルなど、再配布条件に制約がある資産を公開リポジトリの必須依存にしないこと。
+Private Prototype、demo、proposal、fixtureは、既存Cubismモデル、公式サンプル、第三者Live2Dモデル、nizima素材、商用モデルを必須依存にしないこと。
 
+### AC-RIGHTS-002: 素材の権利状態を記録できること
 
-### AC-RIGHTS-002: サンプル資産の権利状態を記録できること
+素材、生成物、編集履歴、demo表示可否、proposal添付可否をrights/provenance metadataとして記録できること。
 
-Open Sample Model Set は、素材、モデル、テクスチャ、音声、モーション、生成物のライセンスと出典を記録できること。
+### AC-RIGHTS-003: proprietary format互換を実装スコープ外にすること
 
+Cubism形式の読み書き、解析、変換、再構築、互換出力を現在MVPの成功条件にしないこと。
 
-### AC-RIGHTS-003: proprietary format 互換を初期成功条件にしないこと
+### AC-RIGHTS-004: demo/proposal向けhygiene ruleを定義できること
 
-`.cmo3`、`.moc3` などの proprietary format 互換は、初期成功条件ではなく、調査・移行・将来拡張として扱うこと。
+配信デモとLive2D Feature Proposalで見せてよいもの、避けるもの、disclaimer、非目標を文書化できること。
 
+### AC-RIGHTS-005: Cubism SDK/Coreに依存しないこと
 
-### AC-RIGHTS-004: contributor 向け権利ルールを定義できること
-
-Open Live2D Stack は、外部貢献者が追加するコード、モデル、素材、ドキュメントの権利条件を確認できる contributor guide を持つこと。
-
-
-### AC-RIGHTS-005: 実験用ローカル依存を公開成果物から分離できること
-
-Cubism SDK/Core などのローカル検証用依存は、`.gitignore`、環境変数、adapter 境界によって公開成果物から分離できること。
+Cubism SDK/Coreは、MVP実装、fixture、demo、validator、private viewerの必須依存にしないこと。

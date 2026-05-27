@@ -1,7 +1,11 @@
 # CMO3 Format Report
 
+> Status: Historical private research archive. Current project policy supersedes the implementation recommendations in this report. The Private 2D Rigging Lab will not inspect, load, parse, convert, or reconstruct `.cmo3`, `.moc3`, `.model3.json`, `.physics3.json`, `.motion3.json`, or `.pose3.json`, and will not use Cubism SDK/Core.
+
 > Research date: 2026-05-24  
 > Scope: Live2D Cubism `.cmo3` format specification availability and practical independent read/write feasibility, with SC-IN-004 impact.
+
+All recommendations below are historical. Current implementation guidance is in [format-feasibility-summary.md](format-feasibility-summary.md).
 
 ## Executive Conclusion
 

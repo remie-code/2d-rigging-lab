@@ -1,44 +1,35 @@
-﻿# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-05: Parameter and Keyform Semantics
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
 
-## DOMAIN-05: Parameter and Keyform Semantics
+## 問い
 
-### 問い
-
-Live2Dモデルにおける「動きの正体」は何か。
-Open Editorは可動仕様をどのように定義し、保持し、再生しなければならないか。
+Private Prototypeは、project-defined parameter、semantic role、keyform、manual authored parameter gridをどう扱うべきか。
 
 ### AC-PARAM-001: 可動軸をパラメータとして定義できること
 
-Open Editorは、モデルの形状・表情・姿勢・表示状態を変化させる可動軸をパラメータとして定義できること。
-
+Project-defined packageは、parameter ID、display name、semantic role、min、max、default、UI stepを保持できること。
 
 ### AC-PARAM-002: パラメータ範囲を持てること
 
-Open Editorは、各パラメータに対して最小値、最大値、既定値などの範囲情報を保持できること。
-
+Parameterは範囲、default、clamp、validation ruleを持ち、範囲外入力を検出できること。
 
 ### AC-PARAM-003: キーフォームを保持できること
 
-Open Editorは、特定のパラメータ値における描画要素または変形制御構造の状態をキーフォームとして保持できること。
-
+Parameter値に対応するkeyformを保持し、target property、補間、provenanceと結び付けられること。
 
 ### AC-PARAM-004: パラメータ値に応じて中間状態を生成できること
 
-Open Editorは、定義済みキーフォーム間の中間状態を生成し、パラメータ値に応じたモデル状態を表示・出力できること。
-
+Private runtime coreは、authorが作成したkeyformと補間に基づいて中間状態を評価できること。
 
 ### AC-PARAM-005: 複数パラメータの組み合わせを扱えること
 
-Open Editorは、複数パラメータが同時に作用するモデル状態を扱えること。
+Manual authored parameter gridを保存し、複数parameterの組み合わせ状態を評価・検証できること。
 
+### AC-PARAM-006: project-defined parameter presetを扱えること
 
-### AC-PARAM-006: 標準的なパラメータ識別子を扱えること
-
-Open Editorは、外部ランタイムや既存ワークフローとの互換性を考慮し、標準的なパラメータ識別子を扱えること。
-
+Presetはproject内の可読性と制作補助のために使い、外部runtime互換IDとして扱わないこと。
 
 ### AC-PARAM-007: パラメータ駆動状態を検証可能であること
 
-Open Editorは、あるパラメータ値におけるモデル状態を観測・比較・検証できること。
+Validatorは、未使用parameter、欠落keyform、過大補間、manual gridの未調整cellをreportできること。

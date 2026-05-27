@@ -9,14 +9,14 @@
 
 - `AC-MVP-005` は、meshのvertex数、uv数、triangle index範囲、重複または退化triangle、texture範囲、drawable参照、保存後整合性を Validator と AI Agent が検証できることを要求する。
 - `AC-MVP-007` は、mask参照先欠落、循環、無効対象、runtimeで解決不能なmaskを構造化して報告できることを要求する。
-- `AC-MVP-009` は、deformerの親子循環、親子サイズまたは対象範囲不整合、存在しないtarget ID、parameter未接続、runtime評価不能を報告できることを要求する。
-- `AC-MVP-013` は、package schema、format version、必須ファイル、asset reference、rights metadata、provenance、texture / drawable / part、mesh、draw order、mask、parameter、keyform、deformer、runtime load test、代表parameter評価を検証対象にする。
+- `AC-MVP-009` は、rig controlの親子循環、親子サイズまたは対象範囲不整合、存在しないtarget ID、parameter未接続、runtime評価不能を報告できることを要求する。
+- `AC-MVP-013` は、package schema、format version、必須ファイル、asset reference、rights metadata、provenance、texture / drawable / part、mesh、draw order、mask、parameter、keyform、rig control、runtime load test、代表parameter評価を検証対象にする。
 - `SC-MVP-004` は、validation reportを人間向け表示とAI-readable形式で保存し、AI Agentがreportとmodel structureを読めることを要求する。
-- `SC-MVP-005` は、scriptだけで生成されたpackageやCubism互換実験をMVP達成と誤判定しないことを要求する。
+- `SC-MVP-005` は、scriptだけで生成されたpackageや第三者形式対応実験をMVP達成と誤判定しないことを要求する。
 
 ### 1.2 公式・参照事実
 
-- Deformer参照レポートは、親子循環、参照切れ、keyform range、NaN、warp foldover、child vertex outside warp domain、preview/runtime snapshot差分を解析的に検出可能な候補としている。
+- RigControl参照レポートは、親子循環、参照切れ、keyform range、NaN、warp foldover、child vertex outside warp domain、preview/runtime snapshot差分を解析的に検出可能な候補としている。
 - Viewer / Preview参照レポートは、Editor warning、Viewer diagnostics、Validator report、AI-readable diffでdiagnostics語彙を共有することを推奨している。
 - Runtime評価セマンティクス参照レポートは、severityを `info`, `warning`, `error`, `blocking` に分け、statusを `pass`, `warning`, `fail`, `needs_review`, `not_applicable` と分ける案を提示している。
 
@@ -32,7 +32,7 @@
 |---|---|---|---|
 | Schema validator | ファイル構造、型、versionを検証する | package files | schema diagnostics |
 | Package validator | manifest、asset reference、ID table、rights/provenanceを検証する | package directory | package diagnostics |
-| Model semantic validator | drawable、mesh、part、parameter、keyform、deformer、mask、draw orderの意味的整合を検証する | model graph | semantic diagnostics |
+| Model semantic validator | drawable、mesh、part、parameter、keyform、rig control、mask、draw orderの意味的整合を検証する | model graph | semantic diagnostics |
 | Runtime load validator | package loader + Shared Runtime coreで読み込み評価できるか検証する | package + profile | runtime diagnostics, snapshot |
 | Representative parameter evaluator | scenario代表parameter setを評価する | normalized graph + parameter set | runtime snapshots, diffs |
 | Editor warning profile | 制作中に即時表示すべきsubsetを出す | dirty authoring graph | incremental warnings |
@@ -62,7 +62,7 @@
 - meshが存在しないdrawableを参照する。
 - keyform target IDが存在しない。
 - mask source / target IDが存在しない。
-- deformer parent / child IDが存在しない。
+- rig control parent / child IDが存在しない。
 
 ### 3.3 Drawable / Texture / Part / Draw Order
 
@@ -97,14 +97,14 @@
 - 同一target propertyに複数writerがあり、compositionMode未定義。
 - interpolation / evaluator versionが不明。
 
-### 3.6 Deformer
+### 3.6 RigControl
 
-- deformer kind不明。
+- rig control kind不明。
 - parent-child cycle。
 - topological sort不能。
-- child drawable / child deformer参照切れ。
-- parameter未接続deformer。
-- empty deformer。
+- child drawable / child rig control参照切れ。
+- parameter未接続rig control。
+- empty rig control。
 - `rotation2d` pivot / angle / scaleがNaNまたはInfinity。
 - `rotation2d` transformがsingularまたは過度に縮退。
 - `warpLattice2d` rows / columnsが最小未満。
@@ -221,7 +221,7 @@ Acceptance Runner は、Validatorの結果に加えて、MVP scenarioの証拠�
 
 - GUI authoring evidenceがあるか。
 - 権利クリーン素材から開始しているか。
-- drawable / texture / part / mesh / parameter / keyform / deformer / mask / draw orderをGUIで編集した証拠があるか。
+- drawable / texture / part / mesh / parameter / keyform / rig control / mask / draw orderをGUIで編集した証拠があるか。
 - 保存、再読み込み、Viewer表示、runtime snapshotがあるか。
 - Validator reportがあるか。
 - AI dry-run、model diff、runtime diff、validation diffがあるか。

@@ -6,9 +6,9 @@
 
 ## 位置付け
 
-この調査トピックは、Open Live2D Stack の deformer 相当構造を設計するために、Cubism Editor の観測可能な deformer semantics、Open実装可能な変形アルゴリズム候補、MVPで採用すべき構造案を分けて調査する。
+この調査トピックは、Open 2D Character Rigging Stack の変形制御を検討した過去調査を保管する。Cubism Editor 関連の記述は歴史的参照・リスク確認に限定し、仕様・実装・UXの根拠にはしない。
 
-Cubism公式資料は参考資料であり、Open Live2D Stack のオラクルではない。内部実装の推測は、公式事実や一般的な計算幾何・画像変形技術と区別して記録する。
+Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack のオラクルではない。内部実装の推測は、公式事実や一般的な計算幾何・画像変形技術と区別して記録する。実装文書では `rig control` / `drawable mesh` などの独自・一般語彙を使う。
 
 ## 直下のファイル
 

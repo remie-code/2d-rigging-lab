@@ -66,7 +66,7 @@
 - 外部から入る、保存する、AIが触る、後から読み直す DTO は Zod schema を正とする。
 - TypeScript型は `z.infer<typeof Schema>` により導出する。
 - `AuthoringGraph`、`NormalizedRuntimeGraph`、evaluator internal state、renderer internal input、UI view state などの内部ドメイン型は TypeScript `type` / `interface` を正とする。
-- JSON Schema は Open Model Package の公開仕様や外部検証に必要だが、MVP module contract design では Zod から生成可能な形、または後続生成対象として扱う。
+- JSON Schema は project-defined model package の公開仕様や外部検証に必要だが、MVP module contract design では Zod から生成可能な形、または後続生成対象として扱う。
 - 各 contract には `sourceOfTruth: zod | typescript | generated-json-schema` を明記する。
 
 この方針により、TypeScript実装者には型安全な設計図を渡しつつ、AIやファイル由来の曖昧なデータは実行時に検証できる。
@@ -79,7 +79,7 @@ Zod は、TypeScriptの型に似た schema を実行時にも検証できるラ�
 
 使うべき場所:
 
-- Open Model Package の `manifest.json` や `model/*.json`
+- project-defined model package の `manifest.json` や `model/*.json`
 - operation log の1行
 - AI command request / response
 - validation report
@@ -133,7 +133,7 @@ Zod は、TypeScriptの型に似た schema を実行時にも検証できるラ�
 |-------------|------|--------|
 | AC / Scenario Traceability Review | AC、シナリオ、contract、operation flow、fixture、expected output の対応を確認する | trace は AC だけで閉じない。シナリオの操作列、期待結果、代表fixture、validation/runtime snapshot に結びつくかを見る |
 | TypeScript / Zod Contract Consistency Review | branded ID、DTO、内部型、Zod schema、sourceOfTruth、module boundary、Mermaid図と表の整合を確認する | 外部境界DTOと内部ドメイン型の混同、重複型、依存方向の矛盾を重点的に見る |
-| Fixture / Verification Review | fixture、expected validation report、expected runtime snapshot、expected diff、contract test方針が十分か確認する | happy path だけでなく invalid texture、deformer cycle、mask invalid、out-of-range dry-run、AI repair dry-run を見る |
+| Fixture / Verification Review | fixture、expected validation report、expected runtime snapshot、expected diff、contract test方針が十分か確認する | happy path だけでなく invalid texture、rig control cycle、mask invalid、out-of-range dry-run、AI repair dry-run を見る |
 
 レビューの運用方針:
 
@@ -144,15 +144,15 @@ Zod は、TypeScriptの型に似た schema を実行時にも検証できるラ�
 - 修正できない論点は `implementation-blocking` または `can-defer` に分類する。
 - レビュー結果と対応状況は `discussion/design/module-contracts/review-summary.md` に記録する。
 
-### 2.7 Angle X / Y の斜め方向評価
+### 2.7 face yaw / pitch の斜め方向評価
 
-Angle X / Y の斜め方向評価は Cubism Editor の仕様に準拠する。
+face yaw / pitch の斜め方向評価は Private Prototype独自の評価規則として定義する。
 
 公式ドキュメント上の参照事実:
 
-- Cubism Editor では、同一オブジェクトまたはデフォーマに X / Y の2軸パラメータを設定し、3 x 3 のキー形状パターンとして扱う説明がある。
-- 親子関係を使うことで、全組み合わせを同一オブジェクトに持たせず、親デフォーマと子デフォーマに動きを分担して表現する説明がある。
-- 1つのオブジェクトまたはデフォーマに過剰な数のパラメータを設定することは避けるべきであり、MVPでも任意N次元のキー形状合成は扱わない。
+- Cubism Editor では、同一オブジェクトまたは変形制御に X / Y の2軸パラメータを設定し、3 x 3 のキー形状パターンとして扱う説明がある。
+- 親子関係を使うことで、全組み合わせを同一オブジェクトに持たせず、親変形制御と子変形制御に動きを分担して表現する説明がある。
+- 1つのオブジェクトまたは変形制御に過剰な数のパラメータを設定することは避けるべきであり、MVPでも任意N次元のキー形状合成は扱わない。
 
 参照:
 
@@ -161,11 +161,11 @@ Angle X / Y の斜め方向評価は Cubism Editor の仕様に準拠する。
 
 設計判断:
 
-- MVPでは、1軸キー形状評価に加え、Cubism Editor 相当の2軸キー形状グリッドを扱える contract を用意する。
+- MVPでは、1軸キー形状評価に加え、project-defined な2軸キー形状グリッドを扱える contract を用意する。
 - 公開contract上の概念名は `parameter-grid-2d-v1` とする。`bilinear` は補間実装の選択肢であり、Cubism Editor 内部仕様そのものとしては扱わない。
 - 2軸グリッドは、同一対象に Angle X / Angle Y など2つのパラメータを割り当てた場合のキー形状評価を表す。
-- 斜め方向や複合的な動きは、2軸グリッドだけでなく、親子デフォーマ階層による分担でも表現できるようにする。
-- 親子デフォーマの評価順序は parent-before-child とし、子は親変形後の空間に対して評価される。
+- 斜め方向や複合的な動きは、2軸グリッドだけでなく、親子変形制御階層による分担でも表現できるようにする。
+- 親子変形制御の評価順序は parent-before-child とし、子は親変形後の空間に対して評価される。
 - MVPでは任意N次元キー形状グリッドを採用しない。3軸以上を同一対象に割り当てるケースは validator で警告または post-MVP 扱いにする。
 
 次の module contract design で明確化すること:
@@ -173,7 +173,7 @@ Angle X / Y の斜め方向評価は Cubism Editor の仕様に準拠する。
 - `KeyformBinding` または同等の型で、1軸評価と2軸グリッド評価を表現できるようにする。
 - `parameter-grid-2d-v1` の key coordinate、欠損keyの扱い、補間method、境界clamp、diagnostic を明示する。
 - GUIでは、1軸 keyform 編集と2軸 keyform grid 編集が operation-core を迂回しないようにする。
-- Fixtures には、Angle X / Y の同一デフォーマ2軸グリッドと、親子デフォーマで斜め方向を表現するケースを含める。
+- Fixtures には、face yaw / pitch の同一変形制御2軸グリッドと、親子変形制御で斜め方向を表現するケースを含める。
 
 ### 2.8 PSD import vs split PNG primary
 
@@ -198,8 +198,8 @@ MVPの source asset import は PSD を primary とする。
 
 - MVPでは、PSDを主要なsource asset formatとして扱う。
 - split PNG は primary ではなく、fallback import、debug fixture、またはPSDを持たない素材の互換入口として扱う。
-- Open Model Package には、PSDそのものを runtime-visible model graph と混同せず、source asset / provenance として記録する。
-- PSD import は、PSDの全機能を完全再現するのではなく、Live2D系の立ち絵モデル制作に必要な layer tree、group、layer name、bounds、visibility、opacity、raster pixel data、mask の扱いをMVP範囲として設計する。
+- project-defined model package には、PSDそのものを runtime-visible model graph と混同せず、source asset / provenance として記録する。
+- PSD import は、PSDの全機能を完全再現するのではなく、2Dキャラクターリギング向けの立ち絵モデル制作に必要な layer tree、group、layer name、bounds、visibility、opacity、raster pixel data、mask の扱いをMVP範囲として設計する。
 - Adjustment layer、smart object、text layer、layer effect、vector shape、complex blend mode などは、MVPで完全解釈しない可能性がある。これらは validator diagnostic または rasterize-required / unsupported-layer として扱う。
 - PSD parser / adapter は package-format または import-adapter の境界に閉じ込め、authoring-core / runtime-core がPSD固有構造へ直接依存しないようにする。
 - PSB はPSDと近い形式だが、MVP primaryには含めない。大容量対応が必要になった時点で optional import として検討する。
@@ -207,7 +207,7 @@ MVPの source asset import は PSD を primary とする。
 次の module contract design で明確化すること:
 
 - `importPsdSourceAsset` operation の request / response / diagnostic。
-- PSD layer tree から Open Model Package の `sourceAssets`、`drawables`、`parts`、`textures`、`provenance` へ落とす mapping。
+- PSD layer tree から project-defined model package の `sourceAssets`、`drawables`、`parts`、`textures`、`provenance` へ落とす mapping。
 - unsupported PSD feature の check ID、severity、repair candidate。
 - split PNG import を fallback として残す場合の provenance と操作差分。
 - PSD happy path fixture と unsupported layer fixture。
@@ -256,7 +256,7 @@ Structured API transport は、先に固定のendpoint一覧を決め打ちし�
 
 - Structured API は、operation command だけでなく、Editor semantic state / selection / canvas hit-test を読む口も必要である。
 - スクリーンショットやPlaywrightは、画面理解とGUI反映確認に使う。
-- 正確な対象特定は、構造化APIで `DeformerId`、`ParameterId`、selection、viewport、hit-test 結果を取得して行う。
+- 正確な対象特定は、構造化APIで `RigControlId`、`ParameterId`、selection、viewport、hit-test 結果を取得して行う。
 - モデル変更は必ず operation-core 経由で dry-run / commit する。
 - commit時は operation log を必ず残し、validation report と runtime snapshot で結果を検証する。
 - transportそのものを source of truth にしない。正は transport-independent command / editor semantic state contract に置く。
@@ -265,7 +265,7 @@ Structured API transport は、先に固定のendpoint一覧を決め打ちし�
 次の module contract design で必ず実施すること:
 
 - ユースケースシナリオを読み、AI Agentが支援・代行しうる操作を抽出する。
-- 代表例として「スクリーンショットを見ながら、選択中または指定されたデフォーマに対してパラメータを設定する」操作を分析する。
+- 代表例として「スクリーンショットを見ながら、選択中または指定された変形制御に対してパラメータを設定する」操作を分析する。
 - 各シナリオについて、必要な `observe`、`inspect`、`hit-test`、`dry-run`、`commit`、`validate`、`snapshot`、`evidence` の口を表にする。
 - API口を少なくとも次の3群に分ける:
   - Editor semantic state API: `getEditorState`、`getSelection`、`getCanvasViewport`、`hitTestCanvas` など。
@@ -299,7 +299,7 @@ Structured API transport は、先に固定のendpoint一覧を決め打ちし�
 - レビュー結果と対応状況を `discussion/design/module-contracts/review-summary.md` に記録する。
 - 各成果物は、上位AC、scenario、参照レポートへの traceability を持つ。
 - module間の齟齬を防ぐため、fixtures と expected output を contract の一部として設計する。
-- Angle X / Y の斜め方向評価は Cubism Editor 準拠とし、1軸 keyform と `parameter-grid-2d-v1`、親子デフォーマ階層の組み合わせとして contract 化する。
+- face yaw / pitch の斜め方向評価は Private Prototype独自の規則とし、1軸 keyform と `parameter-grid-2d-v1`、親子変形制御階層の組み合わせとして contract 化する。
 - 任意N次元キー形状グリッドはMVPでは扱わず、3軸以上を同一対象に割り当てるケースは validator diagnostic として扱う。
 - MVPの source asset import は PSD primary とする。split PNG は fallback / debug / compatibility 入口として扱う。
 - PSD import は全Photoshop機能再現ではなく、layer tree、group、layer name、bounds、visibility、opacity、raster pixel data、mask を中心にcontract化し、unsupported PSD feature は validator diagnostic として扱う。
@@ -308,7 +308,7 @@ Structured API transport は、先に固定のendpoint一覧を決め打ちし�
 - `/goal` 本文には詳細方針を展開しすぎず、この決定ログ、到達目標、出力テンプレート、出力先mapを参照させる。
 - Structured API の口一覧は、ユースケースシナリオをAI操作目線でレビューしたうえで導出する。
 - API口は Editor semantic state API、Operation command API、Runtime / Validator read API に分け、transport-independent contract を正とする。
-- 代表例として、スクリーンショットを見ながらデフォーマへパラメータを設定する操作を分析し、必要な observe / inspect / hit-test / dry-run / commit / validate / snapshot / evidence を明示する。
+- 代表例として、スクリーンショットを見ながら変形制御へパラメータを設定する操作を分析し、必要な observe / inspect / hit-test / dry-run / commit / validate / snapshot / evidence を明示する。
 
 ## 5. Change Log
 
@@ -320,7 +320,7 @@ Structured API transport は、先に固定のendpoint一覧を決め打ちし�
 | 2026-05-26 | module contract design 成果物の共通テンプレートとファイル別テンプレートを `module-contract-output-format-template.md` に定義 |
 | 2026-05-26 | 依存方向、処理順序、状態遷移、artifact flow には Mermaid 図を積極利用する方針をテンプレートへ反映 |
 | 2026-05-26 | サブエージェントレビューは AC / Scenario Traceability、TypeScript / Zod Contract Consistency、Fixture / Verification の3観点で行う方針で合意 |
-| 2026-05-26 | Angle X / Y の斜め方向評価は Cubism Editor 準拠とし、2軸キー形状グリッドと親子デフォーマ階層を contract 化する方針で合意 |
+| 2026-05-26 | face yaw / pitch の斜め方向評価は Private Prototype独自の規則とし、2軸キー形状グリッドと親子変形制御階層を contract 化する方針で合意 |
 | 2026-05-26 | MVPの source asset import は PSD primary とし、split PNG は fallback / debug / compatibility 入口として扱う方針で合意 |
 | 2026-05-26 | GUI authoring evidence は operation log を必須証拠、Playwright trace / screenshot / session metadata を補助証拠とする方針で合意 |
 | 2026-05-26 | `/goal` 指示文は詳細方針を直接展開せず、決定ログ・到達目標・テンプレート・出力先mapを参照させる方針で合意 |

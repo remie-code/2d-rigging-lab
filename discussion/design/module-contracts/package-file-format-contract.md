@@ -9,11 +9,13 @@
 
 ## Purpose and Scope
 
-This document fixes the Open Model Package directory layout, file responsibilities, package DTO schemas, PSD primary source asset profile, split PNG fallback profile, source provenance mapping, cross-file reference rules, version fields, and schema/runtime validation boundary.
+This document fixes the project-defined model package directory layout, file responsibilities, package DTO schemas, layered character PSD primary source asset profile, split PNG fallback profile, source provenance mapping, cross-file reference rules, version fields, and schema/runtime validation boundary.
 
 It unblocks `package-format`, `source import adapter`, `validator-core`, `operation-core`, `editor-ui`, `viewer-ui`, and `ai-interface` implementation.
 
-MVP includes PSD import profile for Live2D-like source art. It does not aim for full Photoshop compatibility, PSB primary support, Cubism `.cmo3` reconstruction, or `.moc3` compatibility export.
+MVP includes `layered-character-psd-profile-v1` for generic layered character source art. This profile is not a Live2D / Cubism import profile. It does not read, write, infer, or convert Cubism model structures.
+
+The contract does not aim for full Photoshop compatibility, PSB primary support, Cubism `.cmo3` reconstruction, Cubism model loading, Cubism SDK/Core use, or `.moc3` compatibility export.
 
 ## Basis Separation
 
@@ -21,7 +23,7 @@ MVP includes PSD import profile for Live2D-like source art. It does not aim for 
 
 - Adobe publishes a Photoshop File Formats Specification for PSD / PSB, but it is a proprietary format specification rather than an open public standard.
 - The specification describes data structures and not complete Photoshop rendering behavior for every layer feature.
-- Cubism-oriented workflows treat PSD layer/group structure as a practical source for model authoring.
+- Layered source art workflows treat PSD layer/group structure as a practical source for model authoring.
 
 ### Repository Facts
 
@@ -62,7 +64,7 @@ MVPAvatar_Clean.openpackage/
     meshes.json
     parameters.json
     keyforms.json
-    deformers.json
+    rig-controls.json
     masks.json
     draw-order.json
     editor-state.json
@@ -95,12 +97,12 @@ MVPAvatar_Clean.openpackage/
 | Package file | DTO / Schema | Required | References | Validated by |
 |--------------|--------------|----------|------------|--------------|
 | `manifest.json` | `PackageManifestDto` | yes | all model/asset/log/report paths | schema + package validator |
-| `model/graph.json` | `ModelGraphDto` | yes | part tree, drawable membership, deformer roots | package + semantic validator |
+| `model/graph.json` | `ModelGraphDto` | yes | part tree, drawable membership, rig control roots | package + semantic validator |
 | `model/drawables.json` | `DrawablesFileDto` | yes | source asset, texture, mesh, part, mask | package + runtime validator |
 | `model/meshes.json` | `MeshesFileDto` | yes | drawable IDs, vertex IDs | semantic + runtime validator |
 | `model/parameters.json` | `ParametersFileDto` | yes | parameter IDs and aliases | semantic + runtime validator |
 | `model/keyforms.json` | `KeyformsFileDto` | yes | target IDs, parameter IDs | semantic + runtime validator |
-| `model/deformers.json` | `DeformersFileDto` | yes | child drawable/deformer IDs | semantic + runtime validator |
+| `model/rig-controls.json` | `RigControlsFileDto` | yes | child drawable/rig control IDs | semantic + runtime validator |
 | `model/masks.json` | `MasksFileDto` | yes | mask/target drawable IDs | semantic + runtime validator |
 | `model/draw-order.json` | `DrawOrderFileDto` | yes | drawable IDs | semantic + runtime validator |
 | `model/editor-state.json` | `EditorStateFileDto` | optional | selection/lock/editor hide | editor profile only |
@@ -111,7 +113,11 @@ MVPAvatar_Clean.openpackage/
 | `validation/reports/*.validation.json` | `ValidationReportDto` | generated | check IDs, targets | report schema |
 | `runtime/snapshots/*.runtime-snapshot.json` | `RuntimeSnapshotDto` | generated | package revision, snapshot IDs | snapshot schema |
 
-## PSD Primary Source Asset Contract
+## Layered Character PSD Primary Source Asset Contract
+
+`layered-character-psd-profile-v1` is a generic layered character art import profile.
+
+It is not a Live2D / Cubism import profile. It does not read `.model3.json`, `.moc3`, `.cmo3`, `.physics3.json`, `.motion3.json`, or `.pose3.json`; it does not infer Cubism authoring structures; and it does not convert Cubism model data into this project-defined package.
 
 MVP PSD import profile:
 
@@ -129,7 +135,7 @@ MVP PSD import profile:
 | fill, adjustment layer, smart object, text layer, effects, vector shape, complex blend | unsupported or rasterize-required diagnostic |
 | PSB | not MVP primary; can be post-MVP optional import |
 
-PSD is a source asset, not a runtime graph. Runtime core sees only normalized drawables, meshes, deformers, keyforms, masks, draw order, and textures.
+PSD is a source asset, not a runtime graph. Runtime core sees only normalized drawables, meshes, rig controls, keyforms, masks, draw order, and textures.
 
 ## Split PNG Fallback Source Asset Contract
 
@@ -191,7 +197,7 @@ import {
   ParameterIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
-  DeformerIdSchema,
+  RigControlIdSchema,
   KeyformSetIdSchema,
   MaskRelationIdSchema,
   OperationIdSchema,
@@ -216,7 +222,7 @@ export const PackageManifestSchema = z.object({
     meshes: z.literal("model/meshes.json"),
     parameters: z.literal("model/parameters.json"),
     keyforms: z.literal("model/keyforms.json"),
-    deformers: z.literal("model/deformers.json"),
+    rigControls: z.literal("model/rig-controls.json"),
     masks: z.literal("model/masks.json"),
     drawOrder: z.literal("model/draw-order.json"),
     editorState: z.literal("model/editor-state.json").optional(),
@@ -253,7 +259,7 @@ export const SourceManifestSchema = z.object({
     kind: SourceAssetKindSchema,
     filePath: z.string(),
     contentHash: z.string(),
-    importProfile: z.enum(["live2d-psd-profile-v1", "split-png-fallback-v1"]),
+    importProfile: z.enum(["layered-character-psd-profile-v1", "split-png-fallback-v1"]),
     layers: z.array(SourceLayerSchema).default([]),
     diagnostics: z.array(z.string()).default([]),
   })),
@@ -289,12 +295,11 @@ export type MeshDto = z.infer<typeof MeshSchema>;
 export const ParameterSchema = z.object({
   parameterId: ParameterIdSchema,
   displayName: z.string(),
-  standardAlias: z.string().optional(),
+  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "custom"]).optional(),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
   recommendedUiStep: z.number().positive(),
-  mvpRole: z.enum(["eye", "brow", "mouth", "angle", "body", "arm", "hair", "custom"]),
 });
 export type ParameterDto = z.infer<typeof ParameterSchema>;
 
@@ -319,7 +324,7 @@ export const ModelGraphSchema = z.object({
     childPartIds: z.array(PartIdSchema).default([]),
     drawableIds: z.array(DrawableIdSchema).default([]),
   })),
-  deformerRootIds: z.array(DeformerIdSchema).default([]),
+  rigControlRootIds: z.array(RigControlIdSchema).default([]),
   stableOrder: z.array(z.string()),
 });
 export type ModelGraphDto = z.infer<typeof ModelGraphSchema>;
@@ -328,7 +333,7 @@ export const KeyformEvaluatorSchema = z.enum(["linear-1d-v1", "parameter-grid-2d
 export const KeyformSetSchema = z.object({
   keyformSetId: KeyformSetIdSchema,
   target: z.object({
-    kind: z.enum(["mesh", "deformer", "drawable", "opacity", "visibility", "drawOrder"]),
+    kind: z.enum(["mesh", "rig control", "drawable", "opacity", "visibility", "drawOrder"]),
     id: z.string(),
     property: z.string(),
   }),
@@ -344,15 +349,15 @@ export const KeyformSetSchema = z.object({
 });
 export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
 
-export const DeformerSchema = z.discriminatedUnion("kind", [
+export const RigControlSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("rotation2d"),
-    deformerId: DeformerIdSchema,
+    rigControlId: RigControlIdSchema,
     displayName: z.string(),
     partId: PartIdSchema,
-    parentId: DeformerIdSchema.optional(),
+    parentId: RigControlIdSchema.optional(),
     childDrawableIds: z.array(DrawableIdSchema).default([]),
-    childDeformerIds: z.array(DeformerIdSchema).default([]),
+    childRigControlIds: z.array(RigControlIdSchema).default([]),
     pivot: Vec2Schema,
     restAngleDegrees: z.number().finite(),
     restTranslation: Vec2Schema,
@@ -361,13 +366,13 @@ export const DeformerSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("warpLattice2d"),
-    deformerId: DeformerIdSchema,
+    rigControlId: RigControlIdSchema,
     displayName: z.string(),
     partId: PartIdSchema,
-    parentId: DeformerIdSchema.optional(),
+    parentId: RigControlIdSchema.optional(),
     childDrawableIds: z.array(DrawableIdSchema).default([]),
-    childDeformerIds: z.array(DeformerIdSchema).default([]),
-    bindSpace: z.literal("deformerLocalRest"),
+    childRigControlIds: z.array(RigControlIdSchema).default([]),
+    bindSpace: z.literal("rigControlLocalRest"),
     domainBounds: RectSchema,
     latticeColumns: z.number().int().min(2),
     latticeRows: z.number().int().min(2),
@@ -376,7 +381,7 @@ export const DeformerSchema = z.discriminatedUnion("kind", [
     enabled: z.boolean(),
   }),
 ]);
-export type DeformerDto = z.infer<typeof DeformerSchema>;
+export type RigControlDto = z.infer<typeof RigControlSchema>;
 
 export const MaskRelationSchema = z.object({
   maskRelationId: MaskRelationIdSchema,
@@ -434,7 +439,7 @@ export const DrawablesFileSchema = z.object({ schemaVersion: z.literal("drawable
 export const MeshesFileSchema = z.object({ schemaVersion: z.literal("meshes-file-v1"), meshes: z.array(MeshSchema) });
 export const ParametersFileSchema = z.object({ schemaVersion: z.literal("parameters-file-v1"), parameters: z.array(ParameterSchema) });
 export const KeyformsFileSchema = z.object({ schemaVersion: z.literal("keyforms-file-v1"), keyformSets: z.array(KeyformSetSchema) });
-export const DeformersFileSchema = z.object({ schemaVersion: z.literal("deformers-file-v1"), deformers: z.array(DeformerSchema) });
+export const RigControlsFileSchema = z.object({ schemaVersion: z.literal("rig-controls-file-v1"), rigControls: z.array(RigControlSchema) });
 export const MasksFileSchema = z.object({ schemaVersion: z.literal("masks-file-v1"), masks: z.array(MaskRelationSchema) });
 export const DrawOrderFileSchema = z.object({ schemaVersion: z.literal("draw-order-file-v1"), entries: z.array(DrawOrderEntrySchema) });
 export const ProvenanceFileSchema = z.object({ schemaVersion: z.literal("provenance-file-v1"), records: z.array(ProvenanceRecordSchema) });
@@ -452,7 +457,7 @@ export const RightsFileSchema = z.object({ schemaVersion: z.literal("rights-file
 | mesh -> drawable | must exist in `drawables.json` | `ref.meshDrawableMissing` |
 | keyform -> parameter | all parameter IDs must exist | `keyform.parameterMissing` |
 | keyform -> target | target ID must exist for target kind | `keyform.targetMissing` |
-| deformer -> child | child drawable/deformer IDs must exist and be acyclic | `deformer.childMissing`, `deformer.cycle` |
+| rig control -> child | child drawable/rig control IDs must exist and be acyclic | `rig control.childMissing`, `rig control.cycle` |
 | mask -> drawable | source and target IDs must exist | `mask.drawableMissing` |
 | operation log -> reports/snapshots | referenced generated artifacts may be absent while dirty, but acceptance profile requires them | `evidence.operationArtifactMissing` |
 
@@ -475,7 +480,7 @@ Migration must go through operation-core or a migration operation adapter. Silen
 |-------|-----------|-------------------|
 | Zod schema parse | field types, enum values, required fields, version literals | cross-file references, runtime evaluability |
 | Package reference validation | file existence, ID table, duplicate IDs, references | parameter-dependent final vertices |
-| Semantic validation | drawable/mesh/keyform/deformer/mask consistency | renderer-specific appearance |
+| Semantic validation | drawable/mesh/keyform/rig control/mask consistency | renderer-specific appearance |
 | Runtime validation | normalized graph load, representative evaluation, snapshot diagnostics | GUI authoring evidence |
 | Acceptance validation | GUI evidence, scenario coverage, report/snapshot/diff presence | commercial art quality |
 
@@ -485,7 +490,7 @@ The PSD layer mapping below is normative for ownership, not a full Photoshop fea
 
 ```mermaid
 flowchart TB
-  PSD[PSD file] --> Profile[live2d-psd-profile-v1]
+  PSD[PSD file] --> Profile[layered-character-psd-profile-v1]
   Profile --> LayerTree[SourceLayerDto tree]
   LayerTree --> Parts[Part tree candidates]
   LayerTree --> Drawables[DrawableDto records]
@@ -504,7 +509,7 @@ flowchart TB
 | AC-IN-006, SC-IN-003 | unsupported/lost source info diagnostics | `psd-unsupported-layer` validation report |
 | AC-MVP-004, AC-DRAW-001 | `DrawableDto`, `MeshDto`, texture refs | `minimal-valid-package` |
 | AC-MVP-011, SC-MVP-003 | package layout + save/reload references | `tutorial-like-authoring` roundtrip |
-| AC-MVP-015, SC-MVP-005 | no Cubism SDK/Core package dependency | package manifest check |
+| AC-MVP-016, SC-MVP-005 | no Cubism SDK/Core package dependency | package manifest check |
 
 ## Verification and Fixtures
 
@@ -520,7 +525,7 @@ flowchart TB
 
 | Question | Impact | Status |
 |----------|--------|--------|
-| Exact PSD parser library | can-defer | parser is an adapter behind `live2d-psd-profile-v1` |
+| Exact PSD parser library | can-defer | parser is an adapter behind `layered-character-psd-profile-v1` |
 | Whether package stores source PSD bytes or only references in all modes | can-defer | MVP fixtures should store local package-contained source assets |
 | Exact JSON Schema generation target | can-defer | Zod schema remains source of truth |
 

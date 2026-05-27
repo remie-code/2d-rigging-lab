@@ -4,7 +4,7 @@
 
 ## 1. 位置付け
 
-このレポートは、Open Live2D Stack が Cubism 内部実装を複製せずに、deformer 相当構造を open / implementable / GUI-editable / runtime-friendly / AI-readable に設計するためのアルゴリズム候補を比較する。
+このレポートは、Open 2D Character Rigging Stack が Cubism 内部実装を複製せずに、deformer 相当構造を open / implementable / GUI-editable / runtime-friendly / AI-readable に設計するためのアルゴリズム候補を比較する。
 
 対象は主に次の2系統である。
 
@@ -25,7 +25,7 @@
 
 ## 3. Official / primary facts
 
-- W3C CSS Transforms Level 1 は、transform-origin を原点へ移動し、transform functions を適用し、原点移動を戻す行列計算を定義している。また、親から子へ変換行列が累積する。これは Open Live2D Stack の runtime 仕様そのものではないが、pivot付き affine transform と階層合成を説明する公開仕様上の根拠として使える。  
+- W3C CSS Transforms Level 1 は、transform-origin を原点へ移動し、transform functions を適用し、原点移動を戻す行列計算を定義している。また、親から子へ変換行列が累積する。これは Open 2D Character Rigging Stack の runtime 仕様そのものではないが、pivot付き affine transform と階層合成を説明する公開仕様上の根拠として使える。
   Source: https://www.w3.org/TR/css-transforms-1/
 - Khronos WebGL 1.0 仕様は、WebGL が ECMAScript から Canvas 経由で使う OpenGL ES ベースの低レベル3D APIであり、頂点・index・texture 等のデータ転送に Typed Array を使うこと、WebGL 1.0 / OpenGL ES 2.0 では double precision floating-point をサポートしないことを示す。deformer runtime は Float32 前提の許容誤差と診断を持つべきである。  
   Source: https://registry.khronos.org/webgl/specs/1.0.0/
@@ -45,7 +45,7 @@
 
 ## 5. Engineering assumptions
 
-- Open Live2D Stack の deformer は、opaque な Cubism互換構造ではなく、`id`、`kind`、`parentId`、`targetIds`、`bounds`、`controlPointIds`、`restState`、`keyformState`、`evaluatorVersion` を持つ、検証可能なデータ構造として設計する。
+- Open 2D Character Rigging Stack の deformer は、opaque な Cubism互換構造ではなく、`id`、`kind`、`parentId`、`targetIds`、`bounds`、`controlPointIds`、`restState`、`keyformState`、`evaluatorVersion` を持つ、検証可能なデータ構造として設計する。
 - Runtime は Editor preview と Viewer で同じ評価セマンティクスを共有する前提にする。CPU / WebGL の差は許容誤差と diagnostics で扱う。
 - Diff と operation log の読みやすさを優先し、基本的には raw matrix だけを保存しない。affine は角度・scale・translation・pivotを一次データにし、matrix は派生値にする。
 - Warp は target mesh vertex を直接書き換えるだけではなく、「deformer の制御データから評価済み vertex を生成できる」構造を保つ。これにより AI Agent が原因、操作、検証結果を追跡できる。
@@ -102,7 +102,7 @@ MVPに入れる必要性は低い。ただし、model format には `interpolati
 
 ### 6.5 Sederberg-Parry Free-Form Deformation
 
-FFD の原典は、3D object を lattice に埋め込み、Bernstein polynomial で自由変形する背景技術である。Open Live2D Stack の 2D warp は、この考え方を「2D制御格子に対象meshをbindする」という形で縮約して使える。
+FFD の原典は、3D object を lattice に埋め込み、Bernstein polynomial で自由変形する背景技術である。Open 2D Character Rigging Stack の 2D warp は、この考え方を「2D制御格子に対象meshをbindする」という形で縮約して使える。
 
 原典のまま trivariate FFD をMVPへ入れる必要はない。3D lattice、volume preservation、任意次数の導関数連続性は、MVPの GUI authoring / validation 範囲を超える。背景としては有用だが、採用対象は 2D grid warp evaluator として再設計する。
 

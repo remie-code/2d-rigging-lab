@@ -1,44 +1,39 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-13: AI Assistant Operation
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
 
-## DOMAIN-13: AI-native Operation
+## 問い
 
-### 問い
+AI assistantは、Private Prototypeの制作・検証をどこまで支援できるべきか。
 
-Open Live2D Stack が AI-native であるとは何か。
-人間向け Editor を単に自動操作することと、何が違うのか。
+## 方針
 
-### AC-AI-001: Stack 全体の中核操作を構造化操作として表現できること
+AIはautomatic complete rig generationではなく、inspect、explain、validate、dry-run、diff、repair suggestion、provenance記録を担うassistant / validatorとして扱う。
 
-Open Live2D Stack は、model format authoring、runtime evaluation、viewer inspection、package validation、VTuber app configuration などの中核操作を、AIエージェントが呼び出せる構造化操作として表現できること。
+### AC-AI-001: 中核操作を構造化操作として表現できること
 
+Editor操作、validator実行、package保存、repair suggestionを構造化operationとして表現できること。
 
 ### AC-AI-002: 操作対象を安定識別できること
 
-Open Live2D Stack は、AIエージェントが drawable、mesh、vertex、deformer相当構造、part、parameter、keyform、motion、expression、physics、package asset、runtime state を安定して識別できること。
-
+AI assistantは、stable IDでpart、drawable、mesh、parameter、keyform、rig control、validation itemを参照できること。
 
 ### AC-AI-003: 操作結果を構造化応答として返せること
 
-Open Live2D Stack は、AIエージェントの操作に対して、成功/失敗、変更内容、影響範囲、警告、validation result、runtime result、修復候補を構造化して返せること。
-
+AI assistantは、説明、diff、validation result、repair candidateを構造化応答で返せること。
 
 ### AC-AI-004: 探索空間をAC・仕様・シナリオで制約できること
 
-Open Live2D Stack は、AC、仕様、シナリオ、validation rule を用いて、AIエージェントの編集・設計・レビューにおける探索空間を制約できること。
-
+AI assistantは、Root/MVP AC、Domain AC、scenario、validator reportに基づいて提案範囲を制約できること。
 
 ### AC-AI-005: AIによるレビューを可能にすること
 
-Open Live2D Stack は、AIエージェントが model structure、runtime state、dynamic behavior、package readiness、rights hygiene をレビューするための観測情報を提供できること。
-
+AI assistantは、model stateやvalidation reportを説明し、根拠付きで問題点を示せること。
 
 ### AC-AI-006: AI操作と人間操作が同じモデル正解に収束すること
 
-Open Live2D Stack は、人間が行う編集とAIエージェントが行う編集が、同じ model format、同じAC体系、同じvalidation ruleに基づいて扱われること。
+AI提案はdry-runとdiffを通し、人間が承認した場合だけpackageへ反映されること。
 
+### AC-AI-007: provenanceを追跡できること
 
-### AC-AI-007: provenance を追跡できること
-
-Open Live2D Stack は、入力、変換、編集、生成、検証、修復提案の由来を provenance として追跡できること。
+AI提案、ユーザー判断、適用結果、関連validation itemを後から追跡できること。

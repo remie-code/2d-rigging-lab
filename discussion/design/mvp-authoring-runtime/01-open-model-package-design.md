@@ -1,7 +1,7 @@
-# Open Model Package Design
+# project-defined model package Design
 
 > 状態: Draft
-> 目的: MVPの Open Model Package について、ファイル構成、stable ID、operation log、versioning / migration、asset / provenance / rights metadata、schema validation と runtime validation の境界を固定する。
+> 目的: MVPの project-defined model package について、ファイル構成、stable ID、operation log、versioning / migration、asset / provenance / rights metadata、schema validation と runtime validation の境界を固定する。
 
 ## 1. 根拠の分離
 
@@ -9,13 +9,13 @@
 
 - `AC-MVP-002` は、入力素材、texture、sample package、validation fixture、AI編集結果について、出典、作成者、ライセンス、生成・編集手順、AI利用有無、再配布可否を provenance として記録できることを要求する。
 - `AC-MVP-004` は、drawable が stable ID、元素材対応、texture参照、初期配置、表示状態、opacity、draw order、part所属を持つことを要求する。
-- `AC-MVP-011` は、保存と再読み込みで素材対応、drawable、texture、part、mesh、parameter、keyform、deformer、clipping、draw order、rights metadata、provenance が保持されることを要求する。
+- `AC-MVP-011` は、保存と再読み込みで素材対応、drawable、texture、part、mesh、parameter、keyform、rig control、clipping、draw order、rights metadata、provenance が保持されることを要求する。
 - `AC-MVP-013` は、package schema、format version、必須ファイル、asset reference、rights metadata、provenance、runtime load testを検証対象にしている。
 - `AC-MVP-014` は、AI Agent が stable ID に基づく inspection、operation dry-run、diff、validation report を扱うことを要求する。
 
 ### 1.2 公式・参照事実
 
-- Deformer参照レポートは、deformer definition、keyform state、operation log、validation reportが同じ stable ID を参照する必要があると整理している。
+- RigControl参照レポートは、rig control definition、keyform state、operation log、validation reportが同じ stable ID を参照する必要があると整理している。
 - Viewer / Preview参照レポートは、Editor-only production support state と runtime-visible model state を混同しないことを強調している。
 - Runtime評価セマンティクス参照レポートは、snapshotに packageRevision、packageHash、authoringRevision、evaluatorVersions を含める案を提示している。
 
@@ -38,7 +38,7 @@ MVPAvatar_Clean.openpackage/
     meshes.json
     parameters.json
     keyforms.json
-    deformers.json
+    rig-controls.json
     masks.json
     draw-order.json
     editor-state.json
@@ -93,7 +93,7 @@ Package全体の入口である。
 
 - part tree
 - drawable membership
-- deformer hierarchy root
+- rig control hierarchy root
 - target bindings
 - stable package order
 - coordinate system
@@ -138,14 +138,13 @@ parameter定義を保持する。
 
 - `parameterId`
 - `displayName`
-- `standardAlias`
+- `semanticRole`
 - `min`
 - `max`
 - `default`
 - `recommendedUiStep`
-- `mvpRole`
 
-`standardAlias` はCubism参考名またはOpen Stack推奨名であり、stable IDではない。
+`semanticRole` はproject-defined preset内の説明・検証用roleであり、外部互換IDではない。
 
 ### 2.6 `model/keyforms.json`
 
@@ -161,21 +160,21 @@ keyformを、parameter値に対する target property の評価関数として�
 - `compositionOrder`
 - `keys`
 
-MVP baselineは `linear-1d-v1` とする。顔 Angle X / Y の斜め方向をどう表すかは実装前未決事項に残す。
+MVP baselineは `linear-1d-v1` とする。顔 face yaw / pitch の斜め方向をどう表すかは実装前未決事項に残す。
 
-### 2.7 `model/deformers.json`
+### 2.7 `model/rig-controls.json`
 
 `rotation2d` と `warpLattice2d` を runtime-visible graph node として保持する。
 
 共通項目:
 
-- `deformerId`
+- `rigControlId`
 - `displayName`
 - `kind`
 - `partId`
 - `parentId`
 - `childDrawableIds`
-- `childDeformerIds`
+- `childRigControlIds`
 - `bindSpace`
 - `enabled`
 
@@ -197,7 +196,7 @@ MVP baselineは `linear-1d-v1` とする。顔 Angle X / Y の斜め方向をど
 - `interpolationMethod`
 - `interpolationVersion`
 
-MVPの既定は `bindSpace: deformerLocalRest` と `interpolationMethod: bilinear-grid-v1` である。
+MVPの既定は `bindSpace: rigControlLocalRest` と `interpolationMethod: bilinear-grid-v1` である。
 
 ### 2.8 `model/masks.json`
 
@@ -249,9 +248,9 @@ Stable ID は、人間向け名、ファイル名、表示順から独立させ�
 | part | `part_` | displayName変更で変えない |
 | drawable | `draw_` | 元レイヤー名やpart変更で変えない |
 | mesh | `mesh_` | drawableに紐づくが、再生成時はoperationで履歴を残す |
-| parameter | `param_` | `ParamAngleX` などのaliasとは別 |
+| parameter | `param_` | `faceYaw` などのaliasとは別 |
 | keyform set | `keyset_` | target property単位で安定化 |
-| deformer | `def_` | hierarchy移動やdisplayName変更で変えない |
+| rig control | `rig_` | hierarchy移動やdisplayName変更で変えない |
 | mask relation | `maskrel_` | mask group最適化で変えない |
 | operation | `op_` | operation logの不変ID |
 | validation report | `val_` | report生成ごとに作る |
@@ -348,9 +347,9 @@ Rights metadataは、MVP sample package、validation fixture、AI編集結果に
 |---|---|---|
 | Schema validation | JSON構造、必須field、型、enum、version、配列長の基本制約 | cross-file参照の存在、runtime評価可能性、見た目品質 |
 | Package reference validation | manifestのfile存在、asset reference、ID table、重複ID、参照切れ | parameter値による評価結果 |
-| Authoring semantic validation | part/drawable/mesh/keyform/deformer/maskの意味的整合、Editor-only state分離 | Renderer固有の描画差 |
-| Runtime validation | normalized graphの評価、parameter range、keyform sampling、deformer graph、mesh final vertex、mask、draw order、diagnostics | GUI操作のしやすさ |
-| Acceptance validation | MVP scenarioの証拠、GUI authoring evidence、代表parameter評価、AI diff | 商用品質、Cubism互換、Post-MVP機能 |
+| Authoring semantic validation | part/drawable/mesh/keyform/rig control/maskの意味的整合、Editor-only state分離 | Renderer固有の描画差 |
+| Runtime validation | normalized graphの評価、parameter range、keyform sampling、rig control graph、mesh final vertex、mask、draw order、diagnostics | GUI操作のしやすさ |
+| Acceptance validation | MVP scenarioの証拠、GUI authoring evidence、代表parameter評価、AI diff | 商用品質、第三者形式対応、Post-MVP機能 |
 
 Schema validation は「読める形」を保証するだけである。MVP達成には Runtime validation と Acceptance validation が必要である。
 
@@ -368,4 +367,4 @@ Schema validation は「読める形」を保証するだけである。MVP達�
 - content-addressed asset store。
 - package signing。
 - collaborative editing用operation CRDT。
-- Cubism互換export向けの追加manifest。
+- 第三者形式連携向けの追加manifest（MVP外・権利確認前提）。

@@ -1,33 +1,32 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-19: Future Streaming App Boundary
 
-# 2. Domain Acceptance Criteria
+> Status: Future / out of current MVP.
+> Filename note: the historical filename is kept for link stability.
 
-## DOMAIN-19: Open VTuber App
+## 問い
 
-### 問い
+将来、配信用アプリやtracking連携を扱う場合、どの境界を別途設計すべきか。
 
-Open Model Format を前提にした配信利用アプリは、何を満たせば成立するのか。
+## 方針
 
-### AC-VTUBER-001: Open Model Package を配信用モデルとして読み込めること
+Current MVPはFuture streaming app、OBS output、tracking app、public app distributionを含まない。Streaming Demo Surfaceはprivate viewer captureで扱い、配信用アプリは将来設計に分離する。
 
-Open VTuber App は、Open Model Package を読み込み、配信利用可能なモデルとして表示できること。
+### AC-VTUBER-001: project-defined packageを配信用modelとして扱う将来境界を検討できること
 
+将来検討時には、private runtime coreと配信用stageの責務境界を設計できること。
 
-### AC-VTUBER-002: tracking input を parameter へ mapping できること
+### AC-VTUBER-002: tracking inputをparameterへmappingする将来境界を検討できること
 
-Open VTuber App は、webcam 等の tracking input を model parameter へ mapping できること。
+将来検討時には、tracking input、calibration、parameter mappingを別設計として扱えること。
 
+### AC-VTUBER-003: smoothingとcalibrationを将来候補として扱えること
 
-### AC-VTUBER-003: smoothing と calibration を扱えること
+将来検討時には、入力値のsmoothing、基準姿勢、感度、範囲補正を設計できること。
 
-Open VTuber App は、入力値の smoothing、基準姿勢、感度、範囲補正を扱えること。
+### AC-VTUBER-004: expression hotkeyとmodel placementを将来候補として扱えること
 
+将来検討時には、expression hotkey、placement、transparent backgroundなどを別途扱えること。
 
-### AC-VTUBER-004: expression hotkey と model placement を扱えること
+### AC-VTUBER-005: 外部APIとAI設定補助を将来候補として扱えること
 
-Open VTuber App は、expression hotkey、model position、scale、rotation、background transparency を扱えること。
-
-
-### AC-VTUBER-005: 外部APIとAI設定補助を提供できること
-
-Open VTuber App は、外部制御APIと、AIエージェントによる設定補助・検証を提供できること。
+将来検討時には、外部制御APIやAI設定補助の公開範囲を別途reviewできること。

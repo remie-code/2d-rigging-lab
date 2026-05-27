@@ -1,34 +1,31 @@
-﻿# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-10: Animation and Timeline Production
 
-# 2. Domain Acceptance Criteria
+> Status: Optional / not required for current MVP.
 
-## DOMAIN-10: Animation and Timeline Production
+## 問い
 
-### 問い
+Private Prototypeは、将来の簡易animationやtimelineをどう扱えるとよいか。
 
-Live2Dモデルにおけるアニメーションとは何か。
-Open Editorは時間軸上のモデル状態変化をどう定義しなければならないか。
+## 方針
+
+Current MVPはauthoring-to-viewerの一周を優先する。Timeline editor、motion asset export、production animation workflowはMVP外であり、必要になった時点で別途設計する。
 
 ### AC-ANIM-001: モデルを時間軸上に配置できること
 
-Open Editorは、作成済みまたは読み込み済みのモデルをアニメーション対象として扱えること。
-
+将来機能として、project-defined packageのparameter stateを時間軸上に配置できること。
 
 ### AC-ANIM-002: タイムライン上でパラメータ変化を記録できること
 
-Open Editorは、時間軸上の特定時点におけるパラメータ値を記録できること。
-
+将来機能として、parameter変化をkeyframe列として記録できること。
 
 ### AC-ANIM-003: キーフレーム間の変化を再生できること
 
-Open Editorは、キーフレーム間の変化を補間し、アニメーションとして再生できること。
-
+将来機能として、private runtime coreでtimeline playbackを確認できること。
 
 ### AC-ANIM-004: モーション資産を出力できること
 
-Open Editorは、作成したアニメーションをランタイムまたは外部利用可能なモーション資産として出力できること。
-
+将来機能として、project-defined motion dataを保存できること。外部形式互換は現在MVP外である。
 
 ### AC-ANIM-005: アニメーション品質を検証できること
 
-Open Editorは、アニメーションの滑らかさ、意図しない急変、物理挙動との整合性を検証できること。
+将来機能として、過大変形、snap、欠落keyframe、runtime再現性をvalidatorで確認できること。

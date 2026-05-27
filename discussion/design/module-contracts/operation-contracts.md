@@ -13,15 +13,15 @@ This document fixes the mutating operation contract shared by GUI, AI structured
 
 It covers:
 
-- operation registry,
+- operation catalog,
 - common request/response envelope,
 - preconditions,
 - dry-run vs commit behavior,
 - operation log entry,
 - undo/redo policy,
 - model/runtime/validation diff outputs,
-- required PSD and split PNG import operations,
-- keyform, deformer, mask, draw order, and rights operations.
+- required layered character PSD and split PNG import operations,
+- keyform, rig control, mask, draw order, and rights operations.
 
 It does not implement mutation algorithms or UI event handlers.
 
@@ -50,25 +50,25 @@ It does not implement mutation algorithms or UI event handlers.
 |----------|--------------|-----------|-----------------|----------|
 | Operation request/response | `operation-core` | editor, AI, migration | zod | DTO |
 | Operation log entry | `operation-core` | validator, AI, acceptance runner | zod | JSONL entry |
-| Operation registry | `operation-core` | editor, AI, tests | zod + table | operation schemas |
+| Operation catalog | `operation-core` | editor, AI, tests | zod + table | operation schemas |
 | Dry-run/commit lifecycle | `operation-core` | AI, GUI preview, validator | zod + Mermaid | state/sequence |
 | Undo/redo policy | `operation-core` | editor UI | typescript internal, log DTO external | API |
 
-## Operation Registry
+## Operation Catalog
 
 | Operation | Payload | Preconditions | Produces | Related AC / scenario |
 |-----------|---------|---------------|----------|-----------------------|
-| `importPsdSourceAsset` | PSD file ref, import profile, rights/provenance | package open, source file readable | source asset diff, drawable/part/texture candidates, diagnostics | AC-MVP-003, SC-IN-002 |
+| `importPsdSourceAsset` | PSD file ref, layered character import profile, rights/provenance | package open, source file readable | source asset diff, drawable/part/texture candidates, diagnostics | AC-MVP-003, SC-IN-002 |
 | `importSplitPngSourceAsset` | split PNG manifest, placement metadata | package open, files readable | source asset diff, drawable candidates, fallback warning | AC-MVP-003 |
 | `createDrawable` | source layer/texture/part refs | source asset exists | drawable + mesh placeholder diff | AC-MVP-004 |
 | `generateMesh` | drawable ID, method, density hints | drawable/texture exists | mesh diff, validation diagnostics | AC-MVP-005 |
 | `moveMeshVertex` | mesh ID, vertex IDs, delta or absolute positions, keyform scope | mesh exists, vertex IDs exist | model diff, runtime diff | SC-AGENT-002 |
-| `createParameter` | display name, range, standard alias | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
+| `createParameter` | display name, range, recommended alias | ID unique, min <= max, default in range | parameter diff | AC-MVP-008 |
 | `addKeyform` | target, parameter, key value, target state | parameter and target exist | keyform diff, runtime diff | SC-PARAM-002 |
 | `addKeyformGrid2d` | target, two parameters, grid coordinates, key states | exactly two parameters; target exists | `parameter-grid-2d-v1` keyform diff | SC-PARAM-004 |
-| `createRotation2dDeformer` | part, children, pivot/rest transform | children exist and not cyclic | deformer diff | SC-DEF-002 |
-| `createWarpLattice2dDeformer` | part, children, domain, rows/cols | rows/cols valid, children exist | deformer diff | SC-DEF-001 |
-| `bindDeformerChild` | parent deformer, child drawable/deformer | no cycle | hierarchy diff | SC-DEF-003 |
+| `createRotation2dRigControl` | part, children, pivot/rest transform | children exist and not cyclic | rig control diff | SC-DEF-002 |
+| `createWarpLattice2dRigControl` | part, children, domain, rows/cols | rows/cols valid, children exist | rig control diff | SC-DEF-001 |
+| `bindRigControlChild` | parent rig control, child drawable/rig control | no cycle | hierarchy diff | SC-DEF-003 |
 | `setMaskRelation` | mask sources, targets | drawable refs exist | mask diff, validation diagnostics | AC-MVP-007 |
 | `setDrawOrder` | drawable order changes | drawable refs exist | draw order diff | AC-MVP-006 |
 | `setRuntimeVisibility` | drawable/part visibility | target exists | drawable/part diff | AC-MVP-006 |
@@ -93,7 +93,7 @@ import {
   MeshIdSchema,
   VertexIdSchema,
   ParameterIdSchema,
-  DeformerIdSchema,
+  RigControlIdSchema,
   PartIdSchema,
   MaskRelationIdSchema,
   ProvenanceIdSchema,
@@ -112,9 +112,9 @@ export const OperationTypeSchema = z.enum([
   "createParameter",
   "addKeyform",
   "addKeyformGrid2d",
-  "createRotation2dDeformer",
-  "createWarpLattice2dDeformer",
-  "bindDeformerChild",
+  "createRotation2dRigControl",
+  "createWarpLattice2dRigControl",
+  "bindRigControlChild",
   "setMaskRelation",
   "setDrawOrder",
   "setRuntimeVisibility",
@@ -128,7 +128,7 @@ export const ImportPsdSourceAssetPayloadSchema = z.object({
     packageRelativePath: z.string(),
     contentHash: z.string().optional(),
   }),
-  importProfile: z.literal("live2d-psd-profile-v1"),
+  importProfile: z.literal("layered-character-psd-profile-v1"),
   requestedLayerRoles: z.record(z.string(), z.enum(["editableLayer", "guideImage", "referenceOnly"])).default({}),
   rights: z.object({
     creator: z.string(),
@@ -137,6 +137,9 @@ export const ImportPsdSourceAssetPayloadSchema = z.object({
     aiUsed: z.boolean(),
   }),
 });
+
+// Generic layered character art import only.
+// This is not a Live2D / Cubism import profile and must not read, infer, or convert Cubism model structures.
 
 export const StatePatchValueSchema = z.union([
   z.number().finite(),
@@ -201,7 +204,7 @@ export const GenerateMeshPayloadSchema = z.object({
 
 export const CreateParameterPayloadSchema = z.object({
   displayName: z.string(),
-  standardAlias: z.string().optional(),
+  semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "custom"]).optional(),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
@@ -223,28 +226,28 @@ export const AddKeyformPayloadSchema = z.object({
   statePatch: KeyformStatePatchSchema,
 });
 
-export const CreateRotation2dDeformerPayloadSchema = z.object({
+export const CreateRotation2dRigControlPayloadSchema = z.object({
   partId: PartIdSchema,
   displayName: z.string(),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
-  childDeformerIds: z.array(DeformerIdSchema).default([]),
+  childRigControlIds: z.array(RigControlIdSchema).default([]),
   pivot: Vec2Schema,
   restAngleDegrees: z.number().finite(),
 });
 
-export const CreateWarpLattice2dDeformerPayloadSchema = z.object({
+export const CreateWarpLattice2dRigControlPayloadSchema = z.object({
   partId: PartIdSchema,
   displayName: z.string(),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
-  childDeformerIds: z.array(DeformerIdSchema).default([]),
+  childRigControlIds: z.array(RigControlIdSchema).default([]),
   domainBounds: RectSchema,
   latticeColumns: z.number().int().min(2),
   latticeRows: z.number().int().min(2),
   interpolationMethod: z.literal("bilinear-grid-v1"),
 });
 
-export const BindDeformerChildPayloadSchema = z.object({
-  parentDeformerId: DeformerIdSchema,
+export const BindRigControlChildPayloadSchema = z.object({
+  parentRigControlId: RigControlIdSchema,
   child: TargetRefSchema,
 });
 
@@ -284,9 +287,9 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),
   z.object({ operationType: z.literal("addKeyform"), payload: AddKeyformPayloadSchema }),
   z.object({ operationType: z.literal("addKeyformGrid2d"), payload: AddKeyformGrid2dPayloadSchema }),
-  z.object({ operationType: z.literal("createRotation2dDeformer"), payload: CreateRotation2dDeformerPayloadSchema }),
-  z.object({ operationType: z.literal("createWarpLattice2dDeformer"), payload: CreateWarpLattice2dDeformerPayloadSchema }),
-  z.object({ operationType: z.literal("bindDeformerChild"), payload: BindDeformerChildPayloadSchema }),
+  z.object({ operationType: z.literal("createRotation2dRigControl"), payload: CreateRotation2dRigControlPayloadSchema }),
+  z.object({ operationType: z.literal("createWarpLattice2dRigControl"), payload: CreateWarpLattice2dRigControlPayloadSchema }),
+  z.object({ operationType: z.literal("bindRigControlChild"), payload: BindRigControlChildPayloadSchema }),
   z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),
   z.object({ operationType: z.literal("setDrawOrder"), payload: SetDrawOrderPayloadSchema }),
   z.object({ operationType: z.literal("setRuntimeVisibility"), payload: SetRuntimeVisibilityPayloadSchema }),
@@ -454,8 +457,8 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 | AC-MVP-001, SC-MVP-005 | `OperationLogEntryDto.surface = "gui"` | `tutorial-like-authoring` operation log |
 | AC-MVP-003, SC-IN-002, SC-IN-003 | `importPsdSourceAsset` | `psd-import-happy-path`, `psd-unsupported-layer` |
 | AC-MVP-008, SC-PARAM-002 | `createParameter`, `addKeyform` | `tutorial-like-authoring` |
-| AC-PARAM-005, SC-PARAM-004 | `addKeyformGrid2d` | `angle-xy-grid-2d` |
-| AC-MVP-009, SC-DEF-001, SC-DEF-003 | deformer operations | `parent-child-deformer-diagonal` |
+| AC-PARAM-005, SC-PARAM-004 | `addKeyformGrid2d` | `manual-face-grid-2d` |
+| AC-MVP-009, SC-DEF-001, SC-DEF-003 | rig control operations | `parent-child-rig control-diagonal` |
 | AC-MVP-014, SC-AGENT-002 | dry-run operation result with diffs | `ai-repair-dry-run` |
 
 ## Verification and Fixtures
@@ -463,7 +466,7 @@ Undo/redo creates new operation log entries or transaction records. It must not 
 | Fixture / Test | Purpose | Expected artifact |
 |----------------|---------|-------------------|
 | `psd-import-happy-path` | `importPsdSourceAsset` creates source/drawable/part/texture candidates | operation result + model diff |
-| `angle-xy-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
+| `manual-face-grid-2d` | `addKeyformGrid2d` is accepted and evaluable | operation log + runtime snapshot |
 | `out-of-range-parameter-dry-run` | dry-run clamps/warns without committing | operation result + validation diff |
 | `ai-repair-dry-run` | AI repair candidate returns diffs and no package mutation | dry-run result, repair candidate |
 | `tutorial-like-authoring` | GUI operation evidence covers MVP authoring steps | JSONL operation log |
@@ -492,4 +495,4 @@ Review this file for:
 - operation-core as the only mutation boundary,
 - dry-run not mutating package state,
 - operation log sufficiency as GUI authoring evidence,
-- payload coverage for PSD import, `parameter-grid-2d-v1`, and parent/child deformers.
+- payload coverage for PSD import, `parameter-grid-2d-v1`, and parent/child rig controls.

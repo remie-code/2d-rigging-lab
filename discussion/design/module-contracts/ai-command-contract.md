@@ -44,7 +44,7 @@ It does not define prompt format, model provider, or external hosted agent autho
 - API categories are Editor semantic state API, Operation command API, and Runtime / Validator read API.
 - Transport-independent contract is the source of truth.
 - HTTP JSON, WebSocket, and MCP are adapters, not source of truth.
-- Representative required scenario: using a screenshot while setting parameters on a selected or specified deformer.
+- Representative required scenario: using a screenshot while setting parameters on a selected or specified rig control.
 
 ### Assumptions
 
@@ -78,19 +78,19 @@ It does not define prompt format, model provider, or external hosted agent autho
 | SC-AGENT-004 | run scenario-based test and save evidence |
 | SC-AGENT-005 | generate repair suggestions with provenance |
 
-## Representative Scenario: Screenshot-assisted Deformer Parameter Setting
+## Representative Scenario: Screenshot-assisted RigControl Parameter Setting
 
-User intent: "Look at the screenshot and set the selected or named deformer to respond to Angle X/Y."
+User intent: "Look at the screenshot and set the selected or named rig control to respond to face yaw / pitch."
 
 Required operation flow:
 
 1. `getEditorState` to obtain mode, selection, current package revision, latest snapshot/report.
 2. `getCanvasViewport` and optional screenshot reference to understand visual context.
-3. `hitTestCanvas` if the deformer was pointed to visually, returning a `DeformerId`.
-4. `inspectModel` or `inspectTarget` for the selected deformer, children, connected parameters, and existing keyforms.
-5. `getSelection` if the user said "selected deformer".
+3. `hitTestCanvas` if the rig control was pointed to visually, returning a `RigControlId`.
+4. `inspectModel` or `inspectTarget` for the selected rig control, children, connected parameters, and existing keyforms.
+5. `getSelection` if the user said "selected rig control".
 6. `dryRunOperation` with `addKeyformGrid2d` or `addKeyform` payload.
-7. `getRuntimeSnapshot` for targeted Angle X/Y values.
+7. `getRuntimeSnapshot` for targeted face yaw / pitch values.
 8. `validatePackage` or `validateDraft` with `aiDryRun` profile.
 9. Present model/runtime/validation diffs and request approval if committing.
 10. `commitOperation` only after approval.
@@ -98,7 +98,7 @@ Required operation flow:
 
 This scenario must not rely on screenshot pixels alone for target identity.
 
-## Command Registry
+## Command Catalog
 
 | Command | Group | Request schema | Response schema | Mutates package | Requires approval |
 |---------|-------|----------------|-----------------|-----------------|-------------------|
@@ -250,7 +250,7 @@ These commands are read-only. They may be implemented by `editor-ui` but exposed
 | Command | Rule |
 |---------|------|
 | `inspectModel` | returns package/authoring/runtime IDs and editable target graph |
-| `inspectTarget` | returns target detail, references, existing keyform/deformer connections |
+| `inspectTarget` | returns target detail, references, existing keyform/rig control connections |
 | `getRuntimeSnapshot` | delegates to runtime-core with requested profile/detail |
 | `validatePackage` | delegates to validator-core profile |
 | `getDiff` | returns model/runtime/validation diff by stable IDs |
@@ -342,7 +342,7 @@ The approval and module flow diagrams define command ordering and dependency dir
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-014, SC-MVP-004 | dry-run, diff, validation, repair candidate | `ai-repair-dry-run` |
-| AC-AI-002, SC-AI-002 | stable ID target selection | `gui-hit-test-deformer`, `ai-screenshot-deformer-parameter` |
+| AC-AI-002, SC-AI-002 | stable ID target selection | `gui-hit-test-rig control`, `ai-screenshot-rig control-parameter` |
 | AC-AGENT-001, SC-AGENT-001 | `inspectModel`, `getRuntimeSnapshot`, `validatePackage` | model inspection fixture |
 | AC-AGENT-002, SC-AGENT-002 | `dryRunOperation`, `commitOperation` approval | repair dry-run fixture |
 | AC-AGENT-003, SC-AGENT-003 | `getDiff` | expected model/runtime/validation diffs |
@@ -353,7 +353,7 @@ The approval and module flow diagrams define command ordering and dependency dir
 | Fixture / Test | Purpose | Expected artifact |
 |----------------|---------|-------------------|
 | `ai-repair-dry-run` | AI dry-run creates candidate and diffs without commit | command transcript, diff, report |
-| `ai-screenshot-deformer-parameter` | screenshot-assisted deformer edit uses semantic APIs | command sequence + operation dry-run |
+| `ai-screenshot-rig control-parameter` | screenshot-assisted rig control edit uses semantic APIs | command sequence + operation dry-run |
 | `out-of-range-parameter-dry-run` | AI input outside parameter range returns clamp warning and validation diff | response + snapshot |
 | `script-generated-minimal` | AI/acceptance does not accept no-GUI evidence package as MVP | acceptance report |
 

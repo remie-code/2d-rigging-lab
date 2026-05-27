@@ -1,33 +1,32 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-17: Future SDK Boundary
 
-# 2. Domain Acceptance Criteria
+> Status: Future / out of current MVP.
+> Filename note: the historical filename is kept for link stability.
 
-## DOMAIN-17: Open SDK
+## 問い
 
-### 問い
+将来、Private Prototypeの一部を外部アプリから利用する場合、どの境界を別途設計すべきか。
 
-外部アプリは Open Runtime をどのように組み込み、制御できるべきか。
+## 方針
 
-### AC-SDK-001: Web / TypeScript SDK を優先して提供できること
+Current MVPはFuture SDKを含まない。SDK、native SDK、game engine plugin、third-party integrationは、Future Public Clean Subsetまたは別途ユーザー判断で再開する。
 
-Open SDK は、初期段階では Web / TypeScript から Open Runtime を利用できるAPIを提供すること。
+### AC-SDK-001: Web / TypeScript SDKを将来候補として扱えること
 
+将来検討時には、private runtime coreの外部利用境界をTypeScript APIとして切り出せるか評価できること。
 
-### AC-SDK-002: model loading API を提供できること
+### AC-SDK-002: model loading APIを将来候補として扱えること
 
-Open SDK は、Open Model Package の読み込み、初期化、解放、エラー取得を扱えること。
+将来検討時には、project-defined packageのload/unload/error boundaryを設計できること。
 
+### AC-SDK-003: parameter control APIを将来候補として扱えること
 
-### AC-SDK-003: parameter control API を提供できること
+将来検討時には、parameter値取得、設定、購読のAPI境界を設計できること。
 
-Open SDK は、parameter 値の取得・設定・範囲確認・更新通知を扱えること。
+### AC-SDK-004: rendering integration APIを将来候補として扱えること
 
+将来検討時には、renderer adapterと外部アプリ描画loopの責務境界を設計できること。
 
-### AC-SDK-004: rendering integration API を提供できること
+### AC-SDK-005: validation / inspection APIを将来候補として扱えること
 
-Open SDK は、アプリ側の描画ループやキャンバスへ Open Runtime を統合できること。
-
-
-### AC-SDK-005: validation / inspection API を提供できること
-
-Open SDK は、runtime state、drawable、parameter、diagnostics を取得する inspection API を提供できること。
+将来検討時には、runtime snapshot、diagnostics、validation reportを外部APIとして出す範囲を再レビューできること。

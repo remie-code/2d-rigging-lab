@@ -1,27 +1,27 @@
 # Runtime Evaluation Semantics
 
 > 状態: Draft
-> 目的: MVP Runtime の parameter -> keyform -> deformer -> drawable mesh -> opacity / visibility -> mask -> draw order -> snapshot / diagnostics の評価pipeline、snapshot粒度、diagnostics severity、invalid model / missing reference / out-of-range parameter / unsupported feature の扱いを固定する。
+> 目的: MVP Runtime の parameter -> keyform -> rig control -> drawable mesh -> opacity / visibility -> mask -> draw order -> snapshot / diagnostics の評価pipeline、snapshot粒度、diagnostics severity、invalid model / missing reference / out-of-range parameter / unsupported feature の扱いを固定する。
 
 ## 1. 根拠の分離
 
 ### 1.1 リポジトリ事実
 
 - `AC-MVP-008` は、parameter、範囲、keyform、補間、slider操作時の連続的な見た目変化を要求する。
-- `AC-MVP-009` は、warp / rotation相当deformer、親子階層、parameter接続、runtime評価不能なdeformerの報告を要求する。
-- `AC-MVP-011` は、Editor previewで keyform、deformer、clipping、draw order、part表示状態が制作意図通りに反映されることを要求する。
+- `AC-MVP-009` は、warp / rotation相当rig control、親子階層、parameter接続、runtime評価不能なrig controlの報告を要求する。
+- `AC-MVP-011` は、Editor previewで keyform、rig control、clipping、draw order、part表示状態が制作意図通りに反映されることを要求する。
 - `AC-MVP-012` は、Viewerで parameter操作に応じた評価済みdrawable state、vertex、visibility、opacity、draw order、mask状態、diagnosticsを構造化runtime stateとして取得できることを要求する。
 - `AC-MVP-015` は、Cubism SDK/Core必須依存なしで一周できることを要求する。
 
 ### 1.2 公式・参照事実
 
-- Runtime評価セマンティクス参照レポートは、parameter操作後にmodel updateを行うruntime layer順序を参考にしつつ、Open Stackでは独自の評価pipelineを明文化する必要があると整理している。
-- Deformer参照レポートは、`rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、`deformerLocalRest` bind、parent-before-child評価をMVP候補としている。
+- Runtime評価セマンティクス参照レポートは、parameter操作後にmodel updateを行うruntime layer順序を参考にしつつ、Private Prototypeでは独自の評価pipelineを明文化する必要があると整理している。
+- RigControl参照レポートは、`rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、`rig controlLocalRest` bind、parent-before-child評価をMVP候補としている。
 - Viewer / Preview参照レポートは、Editor preview と Viewer が同じ Shared Runtime evaluation core と snapshot schema を共有することを推奨している。
 
 ### 1.3 設計仮定
 
-- MVP Runtime は Cubism Core互換を目標にしない。
+- MVP Runtime は Cubism Core の再現を目標にしない。
 - MVP Runtime は deterministic evaluation を優先する。
 - RendererはRuntime snapshotを入力にして描画する。
 
@@ -33,11 +33,11 @@ MVP Runtime の評価順序を次で固定する。
 
 1. Package / dirty authoring graph inputを受け取る。
 2. Schema、manifest、asset reference、rights / provenance の load diagnosticsを作る。
-3. Runtime graphを正規化し、ID table、deformer tree、mask relation、draw order stable orderを解決する。
+3. Runtime graphを正規化し、ID table、rig control tree、mask relation、draw order stable orderを解決する。
 4. Parameter base stateを初期化する。
 5. MVP外future layer slotsを無効として記録する。
 6. Keyform samplerを評価する。
-7. Deformer treeを parent-before-child で評価する。
+7. RigControl treeを parent-before-child で評価する。
 8. Drawable meshを評価する。
 9. Opacity / visibilityを評価する。
 10. Clipping / maskを解決する。
@@ -54,7 +54,7 @@ Parameterは入力値と評価値を分ける。
 |---|---|
 | `id` | stable ID |
 | `displayName` | 人間向け名 |
-| `standardAlias` | Cubism参考名またはOpen Stack推奨名 |
+| `semanticRole` | project-defined preset内の説明・検証用role |
 | `min` / `max` / `default` | package定義 |
 | `rawInput` | UI / API / dry-run から受け取った値 |
 | `value` | clamp / normalization 後に評価へ使う値 |
@@ -88,18 +88,18 @@ Target property例:
 
 - mesh vertex absolute state
 - mesh vertex delta
-- deformer local state
+- rig control local state
 - opacity
 - runtime visibility
 - draw order
 
 同じ target property に複数writerがある場合は、明示的な `compositionMode` と `compositionOrder` がない限り diagnostic にする。
 
-顔 Angle X / Y の斜め方向はMVP scenarioが要求するため、`linear-1d-v1` の独立合成で足りるか、`bilinear-parameter-grid-v1` をMVPに含めるかを実装前に決める。
+顔 face yaw / pitch の斜め方向はMVP scenarioが要求するため、`linear-1d-v1` の独立合成で足りるか、`bilinear-parameter-grid-v1` をMVPに含めるかを実装前に決める。
 
-### 2.4 Deformer
+### 2.4 RigControl
 
-MVP Runtime は次のdeformer nodeを評価する。
+MVP Runtime は次のrig control nodeを評価する。
 
 | Node | 評価 |
 |---|---|
@@ -111,7 +111,7 @@ MVP Runtime は次のdeformer nodeを評価する。
 - parent-before-childでtopological sortする。
 - cycleは `blocking`。
 - missing parent / child は `blocking`。
-- `warpLattice2d` のbind spaceは `deformerLocalRest` をMVP既定とする。
+- `warpLattice2d` のbind spaceは `rig controlLocalRest` をMVP既定とする。
 - undefined interpolation、NaN、Infinityは `blocking` または対象単位の `error` とする。
 - child vertexが親warp domain外へ出る状態は、評価可能なら `warning` とする。
 
@@ -120,7 +120,7 @@ MVP Runtime は次のdeformer nodeを評価する。
 Drawable mesh評価は、rest meshからfinal vertexを作る。
 
 - rest meshは `vertices`, `uvs`, `triangles`, `textureId`, `partId` を持つ。
-- Runtimeはrest vertexへdeformer chainを適用する。
+- Runtimeはrest vertexへrig control chainを適用する。
 - UVはMVPでは変形しない。
 - triangle index範囲外、退化triangle、NaN vertex、missing textureはdiagnosticsにする。
 - Snapshotは既定で vertex count、bounds、hash、sampleを返し、必要時にfull vertex arrayを返す。
@@ -169,8 +169,8 @@ Snapshotは常にfull vertexを返さない。MVPでは3段階にする。
 | Detail | 用途 | 内容 |
 |---|---|---|
 | `summary` | Viewer通常表示、Editor preview通常表示 | parameter state、drawable bounds/hash/sample、draw list、diagnostics summary |
-| `targeted` | 選択対象、AI dry-run、diagnostics jump | summary + target IDsのfull detail、keyform sample、deformer local state |
-| `full` | Validator strict、runtime diff、acceptance evidence | 全drawable vertex、deformer evaluated state、mask details、full diagnostics、trace |
+| `targeted` | 選択対象、AI dry-run、diagnostics jump | summary + target IDsのfull detail、keyform sample、rig control local state |
+| `full` | Validator strict、runtime diff、acceptance evidence | 全drawable vertex、rig control evaluated state、mask details、full diagnostics、trace |
 
 Snapshot必須フィールド:
 
@@ -188,7 +188,7 @@ Snapshot必須フィールド:
 - `evaluation.evaluatorVersions`
 - `parameters`
 - `keyformSamples`
-- `deformers`
+- `rig controls`
 - `drawables`
 - `masks`
 - `drawList`
@@ -220,7 +220,7 @@ Phase:
 - `graph_normalization`
 - `parameter_resolution`
 - `keyform_sampling`
-- `deformer_evaluation`
+- `rig control_evaluation`
 - `mesh_evaluation`
 - `opacity_visibility`
 - `mask_resolution`
@@ -241,10 +241,10 @@ Phase:
 | missing texture for visible drawable | `error` or `blocking` | fail |
 | mesh triangle index out of range | `blocking` for drawable | fail |
 | degenerate triangle | `error` or `warning` | fail or needs_review by profile |
-| deformer cycle | `blocking` | fail |
+| rig control cycle | `blocking` | fail |
 | missing parameter referenced by keyform | `blocking` | fail |
 | out-of-range parameter raw input | clamp + `warning` | fail for strict representative evaluation |
-| empty deformer | `warning` | warning or needs_review |
+| empty rig control | `warning` | warning or needs_review |
 | child vertex outside warp domain | `warning` | warning or needs_review |
 | unknown evaluator version | `blocking` | fail |
 
@@ -259,11 +259,11 @@ Packageや入力がこれらを含む場合の扱い:
 - featureが存在するだけなら `info` または `not_applicable`。
 - packageがそのfeatureを必須依存として宣言している場合は `warning` または `error`。
 - MVP完了判定では、timeline / motion作成未対応をfailにしない。
-- parameter-driven expression、parameter-driven hair sway相当はMVP内のkeyform / deformerとして扱い、unsupportedにしない。
+- parameter-driven expression、parameter-driven hair sway相当はMVP内のkeyform / rig controlとして扱い、unsupportedにしない。
 
 ## 7. 実装前に決めるべき未決事項
 
-- 顔 Angle X / Y の斜め方向を `linear-1d-v1` 独立合成で扱うか、`bilinear-parameter-grid-v1` をMVPへ入れるか。
+- 顔 face yaw / pitch の斜め方向を `linear-1d-v1` 独立合成で扱うか、`bilinear-parameter-grid-v1` をMVPへ入れるか。
 - 同じtarget propertyに複数writerがある場合の `compositionMode` 初期セット。
 - mask sourceが opacity 0 だが visibility true の場合のseverity。
 - missing textureを常に `blocking` とするか、visible drawable単位の `error` として部分表示を許すか。

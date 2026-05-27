@@ -1,6 +1,6 @@
 # Cubism Core / Framework runtime evaluation flow
 
-> 公式 Live2D Cubism SDK / Core 資料から、モデル読み込み、parameter操作、`update`、Drawable state取得、Renderer描画までのruntime評価flowを整理する。Open Live2D Stackの設計オラクルではなく、Open Model Package / Shared Runtime evaluation core / runtime snapshot設計の参考資料として扱う。
+> 公式 Live2D Cubism SDK / Core 資料から、モデル読み込み、parameter操作、`update`、Drawable state取得、Renderer描画までのruntime評価flowを整理する。Open 2D Character Rigging Stackの設計オラクルではなく、Open Model Package / Shared Runtime evaluation core / runtime snapshot設計の参考資料として扱う。
 
 ## 0. 調査範囲と主な出典
 
@@ -174,7 +174,7 @@ Ordered flow:
 - `update`境界では、parameter clamp/repeat、part opacity clamp、keyform/deformer評価、drawable mesh更新、opacity/visibility、draw order/render order、mask解決を一括して観測できるようにする。
 - Snapshot schemaではDrawOrderとRenderOrderを分ける。DrawOrderは制作上の値、RenderOrderは実描画順であり、mask/offscreen導入後に差が出る。
 - Validatorは、Cubism Core由来の観測可能な不変条件を参考にしつつ、Open Model Package独自にmesh index範囲、triangle degeneracy、mask参照、part tree、deformer循環、parameter範囲などを検証する必要がある。
-- MOC3 integrity checkはCubism互換読み込み時の参考であり、Open Stack MVPではOpen Package署名/manifest/hash/schema validationなど、Cubism非依存のintegrity設計が別途必要である。
+- MOC3 integrity checkはCubism形式読み込み検討時の過去参考であり、Open Stack MVPではOpen Package署名/manifest/hash/schema validationなど、Cubism非依存のintegrity設計が別途必要である。
 
 ## 7. Open questions
 
@@ -184,4 +184,4 @@ Ordered flow:
 - Runtime-visible `visibility`を、opacity 0、part opacity、mask結果、explicit visible flagのどこまで含む概念として定義するのか。
 - Offscreen相当をMVPで扱うか。Cubism 5.3+相当のoffscreen stateは強力だが、MVPのmask/draw order設計を複雑にする。
 - Parameter key positionsだけをruntime snapshotに含める価値があるか。Open Stackではauthoring keyform payloadを別に持つため、runtime側に必要な範囲を決める必要がある。
-- Cubism互換インポートを将来行う場合、Coreから観測できないdeformer/keyform authoring情報をどのように「推定不可」としてreportするか。
+- 過去検討ではCubism形式インポート時の推定不可reportが論点だったが、現方針ではCubism形式の読み込み、解析、変換、再構築を行わない。

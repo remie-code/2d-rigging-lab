@@ -6,9 +6,9 @@
 
 ## 位置付け
 
-この調査トピックは、Open Live2D Stack の Runtime評価セマンティクスを設計するために、Live2D Cubism SDK / Core 公式資料から参照できる runtime update / parameter operation / motion / expression / physics / pose / draw data / integrity check の情報を整理する。
+この調査トピックは、Open 2D Character Rigging Stack の Runtime評価セマンティクスを検討した過去調査を保管する。Live2D Cubism SDK / Core 関連の記述は歴史的参照・リスク確認に限定し、仕様・実装・UXの根拠にはしない。
 
-Cubism SDK/Core は参考資料であり、Open Live2D Stack のオラクルではない。`.moc3` 互換や Cubism Core 依存を要求せず、Open Model Package と Shared Runtime evaluation core の設計材料として使う。
+Cubism SDK/Core は参考資料であり、Open 2D Character Rigging Stack のオラクルではない。`.moc3` 互換や Cubism Core 依存を要求せず、Open Model Package と Shared Runtime evaluation core は独自仕様として扱う。
 
 ## 直下のファイル
 

@@ -2,7 +2,7 @@
 
 > 調査日: 2026-05-25  
 > 対象: Cubism SDK / Cubism Viewer の runtime input layer が model evaluation に与える影響  
-> 目的: Open Live2D Stack MVP が採用するべき範囲、MVP外に置く範囲、ただし診断可能にすべき範囲を整理する。
+> 目的: Open 2D Character Rigging Stack MVP が採用するべき範囲、MVP外に置く範囲、ただし診断可能にすべき範囲を整理する。
 
 ---
 

@@ -22,8 +22,8 @@ It covers:
 - PSD happy path,
 - PSD unsupported layer,
 - split PNG fallback,
-- Cubism-like two-axis keyform grid,
-- parent-child deformer diagonal expression.
+- Project-defined two-axis keyform grid,
+- parent-child rig control diagonal expression.
 
 It does not create actual fixture files yet.
 
@@ -74,13 +74,13 @@ export const ContractFixtureIdSchema = z.enum([
   "psd-unsupported-layer",
   "split-png-fallback",
   "tutorial-like-authoring",
-  "angle-xy-grid-2d",
+  "manual-face-grid-2d",
   "keyform-grid-invalid",
   "keyform-missing-endpoint",
-  "parent-child-deformer-diagonal",
+  "parent-child-rig control-diagonal",
   "invalid-mesh-triangle",
   "invalid-missing-texture",
-  "invalid-deformer-cycle",
+  "invalid-rig control-cycle",
   "invalid-mask-reference",
   "rights-provenance-missing",
   "keyform-grid-overdimension",
@@ -90,8 +90,8 @@ export const ContractFixtureIdSchema = z.enum([
   "out-of-range-parameter-dry-run",
   "ai-repair-dry-run",
   "script-generated-minimal",
-  "gui-hit-test-deformer",
-  "ai-screenshot-deformer-parameter",
+  "gui-hit-test-rig control",
+  "ai-screenshot-rig control-parameter",
 ]);
 export type ContractFixtureId = z.infer<typeof ContractFixtureIdSchema>;
 
@@ -125,13 +125,13 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `psd-unsupported-layer` | unsupported smart/text/effect/fill handling | validation report with unsupported diagnostics | package-format, validator-core |
 | `split-png-fallback` | fallback source asset path | provenance warning, package diff | package-format, operation-core |
 | `tutorial-like-authoring` | GUI authoring MVP flow | operation log, full snapshot, validation report | editor-ui, operation-core, validator-core |
-| `angle-xy-grid-2d` | `parameter-grid-2d-v1` Angle X/Y grid | full runtime snapshot, validation report | runtime-core, operation-core |
+| `manual-face-grid-2d` | `parameter-grid-2d-v1` manual face grid | full runtime snapshot, validation report | runtime-core, operation-core |
 | `keyform-grid-invalid` | missing/duplicate two-axis grid coordinates | validation fail report | runtime-core, validator-core |
 | `keyform-missing-endpoint` | one-axis keyform lacks required endpoint | validation warning/fail report | operation-core, validator-core |
-| `parent-child-deformer-diagonal` | parent-child deformer diagonal expression | targeted snapshot, runtime diff | runtime-core, validator-core |
+| `parent-child-rig control-diagonal` | parent-child rig control diagonal expression | targeted snapshot, runtime diff | runtime-core, validator-core |
 | `invalid-mesh-triangle` | triangle index out of range / degenerate triangle | validation fail report with mesh target | validator-core, runtime-core |
 | `invalid-missing-texture` | visible drawable missing texture | validation fail report | package-format, validator-core |
-| `invalid-deformer-cycle` | hierarchy cycle | blocking validation report | runtime-core, validator-core |
+| `invalid-rig control-cycle` | hierarchy cycle | blocking validation report | runtime-core, validator-core |
 | `invalid-mask-reference` | missing/invalid mask relation | validation report + snapshot diagnostic | validator-core, runtime-core |
 | `rights-provenance-missing` | missing source provenance / blocked rights | validation fail report | package-format, validator-core |
 | `keyform-grid-overdimension` | three or more parameters on one target grid | validation needs_review/fail report | operation-core, runtime-core, validator-core |
@@ -141,8 +141,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `out-of-range-parameter-dry-run` | AI/API range clamp and strict fail | operation result, snapshot, validation diff | operation-core, runtime-core, validator-core |
 | `ai-repair-dry-run` | AI repair proposal and no commit | command transcript, diffs, repair candidate | ai-interface, operation-core, validator-core |
 | `script-generated-minimal` | no GUI authoring evidence | acceptance fail / auxiliary status | validator-core, acceptance runner |
-| `gui-hit-test-deformer` | semantic canvas hit-test target resolution | hit-test response | editor-ui, ai-interface |
-| `ai-screenshot-deformer-parameter` | screenshot-assisted AI still uses semantic APIs | command sequence, dry-run diff | editor-ui, ai-interface |
+| `gui-hit-test-rig control` | semantic canvas hit-test target resolution | hit-test response | editor-ui, ai-interface |
+| `ai-screenshot-rig control-parameter` | screenshot-assisted AI still uses semantic APIs | command sequence, dry-run diff | editor-ui, ai-interface |
 
 ## Expected Validation Reports
 
@@ -156,8 +156,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `keyform-grid-invalid` | `keyform.grid2dMissingKey` or `keyform.grid2dDuplicateKey` with `severity=error/blocking`, target keyform set ID |
 | `invalid-mesh-triangle` | `mesh.triangleIndexOutOfRange` with `severity=blocking`; optional `mesh.degenerateTriangle` warning on second mesh |
 | `invalid-missing-texture` | `ref.drawableTextureMissing` with `severity=error`, target visible drawable ID, acceptance `status=fail` |
-| `invalid-deformer-cycle` | `deformer.cycle` with `severity=blocking`, target kind `deformer`, no successful topological order |
-| `parent-child-out-of-domain` | `deformer.childOutsideWarpDomain` with `severity=warning`, acceptance `status=needs_review` |
+| `invalid-rig control-cycle` | `rig control.cycle` with `severity=blocking`, target kind `rig control`, no successful topological order |
+| `parent-child-out-of-domain` | `rig control.childOutsideWarpDomain` with `severity=warning`, acceptance `status=needs_review` |
 | `invalid-mask-reference` | `mask.sourceMissing` or `mask.drawableMissing` with `severity=blocking`, target mask relation ID |
 | `keyform-grid-overdimension` | `keyform.tooManyParametersForMvp` with `severity=warning`, acceptance `status=needs_review` |
 | `runtime-load-blocking` | `runtime.loadBlocking` with `severity=blocking`; no accepted viewer snapshot |
@@ -170,9 +170,9 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | Fixture | Snapshot detail | Required assertions |
 |---------|-----------------|---------------------|
 | `minimal-valid-package` | `summary` | non-empty draw list, no blocking diagnostics |
-| `tutorial-like-authoring` | `full` | `ParamEyeOpen`, `ParamMouthOpenY`, `ParamHairSway`, `ParamAngleX`, `ParamAngleY` representative inputs change drawable bounds/hash without blocking diagnostics |
-| `angle-xy-grid-2d` | `full` | `ParamAngleX/Y` at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
-| `parent-child-deformer-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
+| `tutorial-like-authoring` | `full` | `eyeOpen`, `mouthOpen`, `hairSway`, `faceYaw`, `facePitch` representative inputs change drawable bounds/hash without blocking diagnostics |
+| `manual-face-grid-2d` | `full` | manual face grid values at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
+| `parent-child-rig control-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
 
 ## Expected Diffs
@@ -182,7 +182,7 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `psd-import-happy-path` | model diff | source asset, parts, drawables, textures added |
 | `moveMeshVertex` slice inside `ai-repair-dry-run` | model/runtime/validation diff | vertex field changes include mesh ID and vertex ID; runtime hash changes; validation has no new `blocking` |
 | `out-of-range-parameter-dry-run` | runtime/validation diff | `runtime.parameterClamped` diagnostic added, base package revision unchanged |
-| `parent-child-deformer-diagonal` | runtime diff | targeted deformer local state and child drawable bounds/hash change |
+| `parent-child-rig control-diagonal` | runtime diff | targeted rig control local state and child drawable bounds/hash change |
 | `ai-invalid-mutation` | model/validation diff | package revision changed during dry-run is detected as invalid mutation |
 
 ## Contract Test Matrix
@@ -235,8 +235,8 @@ flowchart LR
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-003, SC-IN-002 | `psd-import-happy-path` | import operation + package diff |
-| AC-MVP-008, SC-PARAM-004 | `angle-xy-grid-2d` | runtime snapshot and validation report |
-| AC-MVP-009, SC-DEF-003 | `parent-child-deformer-diagonal` | runtime snapshot/diff |
+| AC-MVP-008, SC-PARAM-004 | `manual-face-grid-2d` | runtime snapshot and validation report |
+| AC-MVP-009, SC-DEF-003 | `parent-child-rig control-diagonal` | runtime snapshot/diff |
 | AC-MVP-013, SC-MVP-004 | expected validation reports | validator contract tests |
 | AC-MVP-014, SC-AGENT-002 | `ai-repair-dry-run` | command transcript + diffs |
 | SC-MVP-005 | `script-generated-minimal` | acceptance profile expected fail |

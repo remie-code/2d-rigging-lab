@@ -1,7 +1,7 @@
 # Open Stack Runtime Evaluation Semantics Implications
 
 > 状態: Preliminary design recommendation  
-> 対象: Open Live2D Stack MVP の runtime 評価セマンティクス  
+> 対象: Open 2D Character Rigging Stack MVP の runtime 評価セマンティクス
 > 前提: 本レポートは、Cubism SDK runtime 参照レポートが未完成でも使える暫定推奨である。Open Stack の正は repository AC / scenario とし、Cubism SDK 公式資料は参考資料としてのみ使う。
 
 ## 1. Repository facts

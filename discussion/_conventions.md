@@ -4,7 +4,7 @@
 
 ## 1. 目的
 
-`discussion/` は、Open Live2D Stack のコンセプト、設計、AC、シナリオ、調査、検証の議論を、将来のセッションや別エージェントが復元できる形で保存するための外部記憶である。
+`discussion/` は、Private 2D Rigging Lab / Prototype のコンセプト、設計、AC、シナリオ、調査、検証の議論を、将来のセッションや別エージェントが復元できる形で保存するための外部記憶である。
 
 チャット履歴に依存せず、次に読むべき文書、決まったこと、未決事項、根拠を把握できることを重視する。
 
@@ -32,7 +32,13 @@ discussion/
     02_DomainAcceptanceCriteria/
       _map.md
       *.md
-  reports/              # 技術調査・成立性調査レポート
+  demo/                 # Streaming Demo Surfaceの表示範囲、preflight、disclaimer
+    _map.md
+    *.md
+  proposal/             # Live2D Feature Proposalのテンプレート、提案draft
+    _map.md
+    *.md
+  reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
       _map.md
@@ -75,9 +81,11 @@ discussion/
 | Path | Role | Owner | Notes |
 |---|---|---|---|
 | `concept/` | プロジェクトのコンセプト、スコープ、方針変更、未決の根本問い | Undine | ユーザー合意に基づき更新する |
-| `design/` | Open Live2D Stack の設計論点、設計判断、未決事項、調査待ち、検証観点 | Undine / Gnome / Sylph | Undine が議論と地図を管理し、Gnome/Sylph が実装・レビュー時に参照する |
+| `design/` | Private 2D Rigging Lab / Prototype の設計論点、設計判断、未決事項、調査待ち、検証観点 | Undine / Gnome / Sylph | Undine が議論と地図を管理し、Gnome/Sylph が実装・レビュー時に参照する |
 | `acceptance-criteria/` | 受け入れ基準。後続作業のオラクル | Salamander / Undine | 原則はSalamander起草。ユーザーの明示指示がある場合はUndineが再編・更新する |
 | `scenarios/` | ACを検証可能な具体シナリオへ精緻化したもの | Undine | Gnome/Sylph は原則参照のみ |
+| `demo/` | Streaming Demo Surfaceで見せてよい範囲、避けるもの、preflight、disclaimer | Undine | Private Prototype本体から分離して管理する |
+| `proposal/` | Live2D Feature Proposalのテンプレート、提案draft、非目標 | Undine | 互換実装、形式対応、SDK/Core代替を示唆しない |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。
@@ -106,7 +114,7 @@ discussion/
 - 操作列
 - 期待結果
 - 検証するAC項目への逆リンク
-- 必要に応じて参照した公式資料やリポジトリ事実
+- 必要に応じて参照した外部資料やリポジトリ事実
 
 詳細な書式は [.github/skills/scenario-refinement/SKILL.md](../.github/skills/scenario-refinement/SKILL.md) を参照する。
 
@@ -114,7 +122,7 @@ discussion/
 
 議論文書では、以下を混同しない。
 
-- 公式事実: Live2D公式マニュアルなど、外部公式資料に基づく情報
+- 公式事実: 外部公式資料に基づく情報
 - リポジトリ事実: 現在のファイル、実装、テスト、ディレクトリ構造に基づく情報
 - 仮説: まだ確認できていない推測
 - 設計判断: ユーザーまたは担当エージェントが採用した方針
@@ -123,7 +131,20 @@ discussion/
 
 不確かな情報は、確定事項として書かない。
 
-## 7. ファイル命名
+## 7. Demo and Proposal Hygiene
+
+現在の正は、個人利用の Private 2D Rigging Lab / Prototype である。配信デモ、Live2Dへの機能提案、将来公開可能なsubsetは、private実装本体から分離して記述する。
+
+- Live2D / Cubism の固有名詞は、過去調査、リスク説明、非互換・非依存の宣言、Live2Dへの提案資料の文脈に限定する。
+- 本プロジェクトは Live2D Cubism 互換ツールではなく、同形式の読み書き、解析、変換、再構築を行わない。
+- `.moc3`, `.cmo3`, `.model3.json`, `.motion3.json`, `.physics3.json`, `.pose3.json` は検査・読み込み・変換対象にしない。
+- Cubism SDK/Core には依存しない。
+- fixture / sample / demo は rights-clean な自作・生成・明示許諾素材のみを使い、既存Cubismモデル、公式サンプル、第三者Live2Dモデル、nizima素材を使わない。
+- 配信デモでは、コード、内部形式、ファイル構造、Cubism形式名、SDK/Core連携、既存モデル読み込みを示唆する画面を出さない。
+- 用語は `project-defined model package`, `rig control`, `drawable mesh`, `faceYaw`, `facePitch`, `layered-character-psd-profile-v1` など独自/一般語彙を優先する。
+- `Private Prototype`, `Streaming Demo Surface`, `Live2D Feature Proposal`, `Future Public Clean Subset` の4トラックを混同しない。
+
+## 8. ファイル命名
 
 - 既存ファイルの命名は、理由なく変更しない。
 - 新規ファイルは、意味のある英語ケバブケースを基本とする。
@@ -131,7 +152,7 @@ discussion/
 - `_conventions.md` と `_map.md` のようなメタファイルには、先頭アンダースコアを使う。
 - 日本語ファイル名は、既存文脈やユーザー指定がある場合に使用してよい。
 
-## 8. 変更ルール
+## 9. 変更ルール
 
 - `acceptance-criteria/` は後続作業のオラクルであるため、変更時は根拠となるコンセプト、設計判断、ユーザー合意を明示する。
 - ACの追加・変更が必要な場合は、原則としてユーザー合意のうえで行う。

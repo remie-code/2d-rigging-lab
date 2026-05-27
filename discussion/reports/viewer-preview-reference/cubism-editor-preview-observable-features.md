@@ -1,14 +1,14 @@
 # Cubism Editor Preview Observable Features
 
 > 調査日: 2026-05-25  
-> 対象: Open Live2D Stack Editor preview / GUI Editor / Validator / AI Agent 設計のために、Cubism Editor の制作中 preview / modeling view で観測できる機能を整理する。  
+> 対象: Open 2D Character Rigging Stack Editor preview / GUI Editor / Validator / AI Agent 設計のために、Cubism Editor の制作中 preview / modeling view で観測できる機能を整理する。
 > 非対象: Cubism Editor のUI配置、メニュー、ショートカット、画面模倣。
 
 ## 1. 要約
 
 Cubism Editor の制作中 preview は、単なる runtime 表示確認ではなく、Modeling View の canvas、Parts / Deformer / Parameter / Inspector palette、mesh / keyform / deformer / draw order / clipping の編集状態、さらに warning / model statistics を重ねた authoring inspection 面である。
 
-Open Live2D Stack では、Cubism UIを再現するのではなく、次の4種類を明確に分ける必要がある。
+Open 2D Character Rigging Stack では、Cubism UIを再現するのではなく、次の4種類を明確に分ける必要がある。
 
 | 種類 | 例 | Open Stackでの扱い |
 |---|---|---|
@@ -219,7 +219,7 @@ Open Live2D Stack では、Cubism UIを再現するのではなく、次の4種�
 - Cubism Editorのpalette配置、menu構成、shortcut、icon、exact UI behaviorの模倣。
 - Animation View、timeline、motion作成、record parameter operationsからanimation生成、Form Animation。
 - SnapshotをParts paletteへ画像保存する機能、random pose、multiview、onion skinの完全再現。
-- Draw order groupの完全互換、local/global draw order表示のCubism互換再現。
+- Draw order groupの完全互換、local/global draw order表示のCubism互換再現は現方針では対象外。
 - Auto generation of full-body deformer、auto facial motion、auto sway motion、3D rotation expression、advanced blend shape、offscreen drawing、Cubism 5.3 advanced blend/offscreen performance UI。
 - Cubism `.cmo3` authoring state復元、`.moc3` / `.model3.json`互換出力、Cubism SDK/Core必須runtime。
 - Cubism Viewer互換のmotion / expression / physics / pose / playlist管理。MVPではEditor preview調査対象外であり、別Viewer調査に委ねる。

@@ -6,9 +6,9 @@
 
 ## 位置付け
 
-この調査トピックは、Open Live2D Stack の Editor preview と Viewer を設計するために、Cubism Editor の制作中プレビュー機能、Cubism Viewer / runtime確認機能、Open Stack MVPへの設計含意を分けて調査する。
+この調査トピックは、Open 2D Character Rigging Stack の Editor preview と Viewer を検討した過去調査を保管する。Cubism Editor / Viewer 関連の記述は歴史的参照・リスク確認に限定し、仕様・実装・UXの根拠にはしない。
 
-Cubism公式資料は参考資料であり、Open Live2D Stack のオラクルではない。UI模倣ではなく、GUI Editor必須の Authoring-to-Runtime MVP を成立させるために必要な確認・検証能力を抽出する。
+Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack のオラクルではない。UI模倣、互換、提携、承認を示唆しない。
 
 ## 直下のファイル
 
@@ -41,4 +41,4 @@ Cubism公式資料は参考資料であり、Open Live2D Stack のオラクル�
 | Editor preview と Viewer が共有すべき runtime 評価API | 調査済み。Shared Runtime evaluation core 共有が推奨。loader境界は未決 |
 | Editor preview にのみ必要な制作支援表示 | 調査済み。selection / lock / hide / overlay / dirty operation などは Editor-only とする方向 |
 | Viewer に必要な runtime diagnostics / inspection | 調査済み。package load diagnostics、parameter操作、runtime snapshot、drawable / mask inspection がMVP候補 |
-| Cubism Viewer相当機能のうちMVP外に置くもの | 調査済み。motion / expression asset / full physics / pose / Cubism互換Viewer機能は原則Post-MVP候補 |
+| Cubism Viewer相当機能のうちMVP外に置くもの | 調査済み。motion / expression asset / full physics / pose / Cubism互換Viewer機能は現方針では対象外。扱う場合も権利確認前提の別調査 |

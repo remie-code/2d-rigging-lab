@@ -1,33 +1,28 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-20: Private Package Validator
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is private package validator.
 
-## DOMAIN-20: Open Package Validator
+## 問い
 
-### 問い
+Project-defined packageは、何を満たせばPrivate Prototypeで利用可能なmodel assetとして合格できるか。
 
-Open Model Package は、何を満たせば利用可能なモデル資産として合格できるのか。
+### AC-VALIDATOR-001: package schema validationができること
 
-### AC-VALIDATOR-001: package schema validation ができること
+Validatorは、project-defined packageのschema、version、必須フィールド、型、参照形式を検証できること。
 
-Open Package Validator は、Open Model Package の schema、version、必須フィールド、型、参照形式を検証できること。
+### AC-VALIDATOR-002: asset reference validationができること
 
+Validatorは、texture、metadata、rights/provenance、demo-safe分類などの参照先が存在し、整合していることを検証できること。
 
-### AC-VALIDATOR-002: asset reference validation ができること
+### AC-VALIDATOR-003: mesh / drawable validationができること
 
-Open Package Validator は、texture、motion、expression、physics、metadata などの参照先が存在し、整合していることを検証できること。
+Validatorは、mesh、vertex、uv、triangle index、drawable、draw order、maskの整合性を検証できること。
 
+### AC-VALIDATOR-004: private runtime load testができること
 
-### AC-VALIDATOR-003: mesh / drawable validation ができること
+Validatorは、private runtime coreでpackageを読み込み、初期評価できることを検証できること。
 
-Open Package Validator は、mesh、vertex、uv、triangle index、drawable、draw order、mask の整合性を検証できること。
+### AC-VALIDATOR-005: AI-readable validation reportを出力できること
 
-
-### AC-VALIDATOR-004: runtime load test ができること
-
-Open Package Validator は、Open Runtime で package を読み込み、初期評価できることを検証できること。
-
-
-### AC-VALIDATOR-005: AI-readable validation report を出力できること
-
-Open Package Validator は、Pass / Fail / Needs review / Not applicable、対象ID、根拠、影響範囲、修復候補を含むレポートを出力できること。
+Validatorは、Pass / Fail / Needs review / Not applicable、対象ID、根拠、影響範囲、repair candidateを含むreportを出力できること。

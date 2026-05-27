@@ -1,33 +1,32 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-23: Future Clean Fixture and Sample Boundary
 
-# 2. Domain Acceptance Criteria
+> Status: Future / out of current MVP except private rights-clean fixtures.
+> Filename note: the historical filename is kept for link stability.
 
-## DOMAIN-23: Open Sample Model Set
+## 問い
 
-### 問い
+将来、検証用fixtureや公開可能sampleを扱う場合、どの境界を別途設計すべきか。
 
-Open Source 公開可能な検証・学習・実装用モデルをどう用意するべきか。
+## 方針
 
-### AC-SAMPLE-001: 権利的にクリーンなサンプルモデルを持つこと
+Current MVPはpublic sample model distributionを含まない。MVP内ではrights-cleanなprivate fixtureだけを使い、公開sample setはFuture Public Clean Subsetで再設計する。
 
-Open Sample Model Set は、Open Source 公開可能な素材、モデル、設定、検証データで構成されること。
+### AC-SAMPLE-001: 権利的にクリーンなprivate fixtureを持てること
 
+Private fixtureは、自作、生成、または明示許諾済み素材だけで構成されること。
 
-### AC-SAMPLE-002: 最小サンプルモデルを持つこと
+### AC-SAMPLE-002: 最小fixtureを持てること
 
-Open Sample Model Set は、最小 format / runtime / viewer 検証に使えるモデルを持つこと。
+Private fixtureは、package load、runtime evaluation、viewer display、validator reportの最小検証に使えること。
 
+### AC-SAMPLE-003: 機能別fixtureを将来候補として扱えること
 
-### AC-SAMPLE-003: 機能別サンプルを持つこと
+Mesh、parameter、face、body、secondary motion、validation failureなどのfixtureは、必要に応じて段階的に追加できること。
 
-Open Sample Model Set は、mesh deformation、parameter、face、body、physics、expression、motion、VTuber app、validation failure のサンプルを段階的に持てること。
+### AC-SAMPLE-004: validation failure fixtureを持てること
 
+ValidatorとAI assistantの検証用に、意図的に壊れたprivate packageを持てること。
 
-### AC-SAMPLE-004: validation failure sample を持つこと
+### AC-SAMPLE-005: fixture provenanceを記録できること
 
-Open Sample Model Set は、validator と reviewer が失敗を確認するための意図的に壊れた package を持てること。
-
-
-### AC-SAMPLE-005: sample provenance を記録できること
-
-Open Sample Model Set は、素材、作成手順、ライセンス、生成過程、編集履歴を記録できること。
+Fixtureの素材、作成手順、ライセンス、生成過程、編集履歴を記録できること。

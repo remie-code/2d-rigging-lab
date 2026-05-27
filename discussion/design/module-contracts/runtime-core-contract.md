@@ -15,8 +15,8 @@ This document fixes the Shared Runtime evaluation core contract:
 - `NormalizedRuntimeGraph` input shape,
 - parameter input and clamp policy,
 - one-axis keyform semantics,
-- Cubism Editor-aligned `parameter-grid-2d-v1` semantics,
-- parent-before-child deformer hierarchy,
+- project-defined `parameter-grid-2d-v1` semantics,
+- parent-before-child rig control hierarchy,
 - runtime snapshot DTO,
 - diagnostics phases,
 - epsilon and deterministic comparison policy,
@@ -30,14 +30,14 @@ It does not define renderer implementation, package file IO, or editor UI state.
 
 - MVP requires Preview and Viewer to share runtime evaluation semantics.
 - Runtime snapshots must expose evaluated drawable state, vertex/bounds/hash, opacity, visibility, draw order, mask state, and diagnostics.
-- Angle X / Y diagonal behavior is required by `AC-MVP-010`, `SC-MVP-002`, and `SC-PARAM-004`.
+- face yaw / pitch diagonal behavior is required by `AC-MVP-010`, `SC-MVP-002`, and `SC-PARAM-004`.
 
 ### Prior Design Decisions
 
 - `parameter-grid-2d-v1` is MVP contract for two-axis keyform grids.
 - One-axis keyforms remain a separate evaluator.
-- Parent-before-child deformer evaluation is required.
-- `rotation2d` and `warpLattice2d` are MVP runtime-visible deformer nodes.
+- Parent-before-child rig control evaluation is required.
+- `rotation2d` and `warpLattice2d` are MVP runtime-visible rig control nodes.
 - Arbitrary N-dimensional keyform grids are not MVP.
 
 ### Assumptions
@@ -53,7 +53,7 @@ It does not define renderer implementation, package file IO, or editor UI state.
 | `NormalizedRuntimeGraph` | `runtime-core` | runtime evaluator | typescript | internal graph |
 | `RuntimeEvaluationInput/Options` | `runtime-core` | viewer, validator, AI | zod | DTO |
 | `RuntimeSnapshotDto` | `runtime-core` | renderer, validator, AI, fixtures | zod | snapshot JSON |
-| keyform/deformer semantics | `runtime-core` | operation, validator, fixtures | mixed | evaluator contract |
+| keyform/rig control semantics | `runtime-core` | operation, validator, fixtures | mixed | evaluator contract |
 
 ## TypeScript / Zod Sketches
 
@@ -68,8 +68,8 @@ import {
   MeshId,
   ParameterId,
   ParameterIdSchema,
-  DeformerId,
-  DeformerIdSchema,
+  RigControlId,
+  RigControlIdSchema,
   RuntimeSnapshotIdSchema,
   PackageIdSchema,
   Vec2,
@@ -106,7 +106,7 @@ export interface NormalizedRuntimeGraph {
   readonly coordinateSystem: "canvas-y-down-v1";
   readonly parameters: ReadonlyMap<ParameterId, NormalizedParameter>;
   readonly drawables: ReadonlyMap<DrawableId, NormalizedDrawable>;
-  readonly deformers: ReadonlyMap<DeformerId, NormalizedDeformerNode>;
+  readonly rigControls: ReadonlyMap<RigControlId, NormalizedRigControlNode>;
   readonly keyformBindings: readonly KeyformBinding[];
   readonly masks: readonly NormalizedMaskRelation[];
   readonly drawOrder: readonly NormalizedDrawOrderEntry[];
@@ -116,7 +116,7 @@ export interface NormalizedRuntimeGraph {
 export interface NormalizedParameter {
   readonly id: ParameterId;
   readonly displayName: string;
-  readonly standardAlias?: string;
+  readonly semanticRole?: "eye" | "brow" | "mouth" | "face" | "body" | "arm" | "hair" | "custom";
   readonly min: number;
   readonly max: number;
   readonly default: number;
@@ -129,7 +129,7 @@ export type KeyformBinding =
 export interface Linear1dKeyformBinding {
   readonly evaluator: "linear-1d-v1";
   readonly targetId: string;
-  readonly targetKind: "mesh" | "deformer" | "drawable";
+  readonly targetKind: "mesh" | "rig control" | "drawable";
   readonly targetProperty: string;
   readonly parameterId: ParameterId;
   readonly keys: readonly OneAxisKey[];
@@ -140,7 +140,7 @@ export interface Linear1dKeyformBinding {
 export interface ParameterGrid2dKeyformBinding {
   readonly evaluator: "parameter-grid-2d-v1";
   readonly targetId: string;
-  readonly targetKind: "mesh" | "deformer" | "drawable";
+  readonly targetKind: "mesh" | "rig control" | "drawable";
   readonly targetProperty: string;
   readonly parameterX: ParameterId;
   readonly parameterY: ParameterId;
@@ -163,9 +163,9 @@ export interface Grid2dKey {
   readonly statePatch: unknown;
 }
 
-export type NormalizedDeformerNode =
-  | NormalizedRotation2dDeformer
-  | NormalizedWarpLattice2dDeformer;
+export type NormalizedRigControlNode =
+  | NormalizedRotation2dRigControl
+  | NormalizedWarpLattice2dRigControl;
 ```
 
 ## Evaluation Input / Options
@@ -198,7 +198,7 @@ export const RuntimeEvaluationOptionsSchema = z.object({
     keyform1d: z.literal("linear-1d-v1"),
     keyformGrid2d: z.literal("parameter-grid-2d-v1"),
     warpLattice: z.literal("bilinear-grid-v1"),
-    deformerHierarchy: z.literal("parent-before-child-v1"),
+    rigControlHierarchy: z.literal("parent-before-child-v1"),
   }),
   epsilonPolicy: EpsilonPolicySchema,
   includeTrace: z.boolean().default(false),
@@ -215,9 +215,9 @@ export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOption
 5. Evaluate one-axis bindings before `parameter-grid-2d-v1` only when `compositionOrder` says so. The order is numeric and deterministic.
 6. Same target property with multiple writers requires explicit `compositionMode` and `compositionOrder`.
 
-## Cubism-like 2-axis Keyform Grid Semantics
+## Project-defined 2-axis Keyform Grid Semantics
 
-`parameter-grid-2d-v1` represents the two-axis grid used for Angle X/Y or eyeball X/Y style combinations.
+`parameter-grid-2d-v1` represents the two-axis grid used for face yaw / pitch or eyeball X/Y style combinations.
 
 | Rule | Contract |
 |------|----------|
@@ -230,22 +230,22 @@ export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOption
 | duplicate coordinate | emit `keyform.grid2dDuplicateKey` blocking diagnostic |
 | 3+ parameters on same target grid | emit `keyform.tooManyParametersForMvp` warning/error by profile |
 
-Angle X/Y diagonal expression may be represented by:
+face yaw / pitch diagonal expression may be represented by:
 
 - one `parameter-grid-2d-v1` binding on a target, or
-- parent-child deformer hierarchy where one axis is on a parent and another is on a child.
+- parent-child rig control hierarchy where one axis is on a parent and another is on a child.
 
 Both must be visible in runtime snapshot and traceability.
 
-## Deformer Evaluation Semantics
+## RigControl Evaluation Semantics
 
 ```ts
-export interface NormalizedRotation2dDeformer {
+export interface NormalizedRotation2dRigControl {
   readonly kind: "rotation2d";
-  readonly deformerId: DeformerId;
-  readonly parentId?: DeformerId;
+  readonly rigControlId: RigControlId;
+  readonly parentId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
-  readonly childDeformerIds: readonly DeformerId[];
+  readonly childRigControlIds: readonly RigControlId[];
   readonly pivot: Vec2;
   readonly restAngleDegrees: number;
   readonly restTranslation: Vec2;
@@ -253,13 +253,13 @@ export interface NormalizedRotation2dDeformer {
   readonly enabled: boolean;
 }
 
-export interface NormalizedWarpLattice2dDeformer {
+export interface NormalizedWarpLattice2dRigControl {
   readonly kind: "warpLattice2d";
-  readonly deformerId: DeformerId;
-  readonly parentId?: DeformerId;
+  readonly rigControlId: RigControlId;
+  readonly parentId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
-  readonly childDeformerIds: readonly DeformerId[];
-  readonly bindSpace: "deformerLocalRest";
+  readonly childRigControlIds: readonly RigControlId[];
+  readonly bindSpace: "rigControlLocalRest";
   readonly domainBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly latticeColumns: number;
   readonly latticeRows: number;
@@ -269,13 +269,13 @@ export interface NormalizedWarpLattice2dDeformer {
 }
 ```
 
-Deformer rules:
+RigControl rules:
 
 - Topologically sort by parent-before-child.
 - Cycle or missing child/parent is `blocking`.
 - Child deformation never mutates parent state.
 - `rotation2d` evaluates to a local affine transform.
-- `warpLattice2d` evaluates control points and maps child vertices in `deformerLocalRest`.
+- `warpLattice2d` evaluates control points and maps child vertices in `rigControlLocalRest`.
 - Child vertex outside warp domain is `warning` unless strict profile escalates.
 
 ## Runtime Snapshot
@@ -310,11 +310,11 @@ export const KeyformSampleSchema = z.object({
   target: z.string(),
 }).passthrough();
 
-export const EvaluatedDeformerSchema = z.object({
-  deformerId: DeformerIdSchema,
+export const EvaluatedRigControlSchema = z.object({
+  rigControlId: RigControlIdSchema,
   kind: z.enum(["rotation2d", "warpLattice2d"]),
   enabled: z.boolean(),
-  parentId: DeformerIdSchema.optional(),
+  parentId: RigControlIdSchema.optional(),
   bounds: RectSchema.optional(),
 }).passthrough();
 
@@ -349,7 +349,7 @@ export const RuntimeSnapshotSchema = z.object({
   }),
   parameters: z.array(EvaluatedParameterSchema),
   keyformSamples: z.array(KeyformSampleSchema).default([]),
-  deformers: z.array(EvaluatedDeformerSchema).default([]),
+  rigControls: z.array(EvaluatedRigControlSchema).default([]),
   drawables: z.array(EvaluatedDrawableSchema),
   masks: z.array(EvaluatedMaskSchema).default([]),
   drawList: z.array(DrawableIdSchema),
@@ -371,8 +371,8 @@ flowchart TB
   input[NormalizedRuntimeGraph + RuntimeEvaluationInput] --> params[parameter resolution and clamp]
   params --> future[disabled future layers recorded]
   future --> keyforms[one-axis and parameter-grid-2d keyform sampling]
-  keyforms --> deformers[parent-before-child deformer evaluation]
-  deformers --> mesh[drawable mesh evaluation]
+  keyforms --> rigControls[parent-before-child rig control evaluation]
+  rigControls --> mesh[drawable mesh evaluation]
   mesh --> opacity[opacity / runtime visibility]
   opacity --> mask[mask resolution]
   mask --> drawOrder[draw order resolution]
@@ -385,7 +385,7 @@ flowchart TB
 |-------|----------------|
 | `parameter_resolution` | out-of-range raw input, missing parameter |
 | `keyform_sampling` | missing endpoint, grid2d missing key, duplicate coordinate |
-| `deformer_evaluation` | cycle, missing child, child outside warp domain, NaN transform |
+| `rig control_evaluation` | cycle, missing child, child outside warp domain, NaN transform |
 | `mesh_evaluation` | triangle out of range, degenerate triangle, NaN vertex |
 | `opacity_visibility` | opacity out of range, editor hide leak |
 | `mask_resolution` | missing mask source, visibility false mask source, zero-area mask |
@@ -409,7 +409,7 @@ Strict fixtures that compare full vertices must specify the epsilon policy used 
 |-----------------|------------|
 | `summary` | package ID/revision, parameter values, draw list, bounds, vertex hashes, diagnostics |
 | `targeted` | summary + full details for target IDs |
-| `full` | all vertices, masks, deformer states, diagnostics, and trace |
+| `full` | all vertices, masks, rig control states, diagnostics, and trace |
 
 Preview and Viewer equivalence in MVP can use `summary` for routine checks and `full` for contract tests.
 
@@ -422,8 +422,8 @@ Motion, expression assets, full physics, pose, and timeline are represented as d
 | Requirement | Contract element | Verification |
 |-------------|------------------|--------------|
 | AC-MVP-008, SC-PARAM-003 | one-axis keyform interpolation | `tutorial-like-authoring` snapshot |
-| AC-PARAM-005, SC-PARAM-004 | `parameter-grid-2d-v1` | `angle-xy-grid-2d` full snapshot |
-| AC-MVP-009, SC-DEF-003 | parent-before-child deformer hierarchy | `parent-child-deformer-diagonal` snapshot |
+| AC-PARAM-005, SC-PARAM-004 | `parameter-grid-2d-v1` | `manual-face-grid-2d` full snapshot |
+| AC-MVP-009, SC-DEF-003 | parent-before-child rig control hierarchy | `parent-child-rig control-diagonal` snapshot |
 | AC-MVP-012, SC-MVP-003 | `RuntimeSnapshotDto` | viewer snapshot expected output |
 | AC-MVP-015 | disabled future layers + no Cubism Core dependency | package/runtime smoke fixture |
 
@@ -432,9 +432,9 @@ Motion, expression assets, full physics, pose, and timeline are represented as d
 | Fixture / Test | Purpose | Expected artifact |
 |----------------|---------|-------------------|
 | `minimal-valid-package` | load graph and produce non-empty snapshot | summary runtime snapshot |
-| `angle-xy-grid-2d` | verify diagonal interpolation and key coordinate handling | full runtime snapshot |
-| `parent-child-deformer-diagonal` | verify parent and child axis composition | targeted snapshot + runtime diff |
-| `invalid-deformer-cycle` | cycle blocks deterministic evaluation | validation report + no snapshot or blocking snapshot |
+| `manual-face-grid-2d` | verify diagonal interpolation and key coordinate handling | full runtime snapshot |
+| `parent-child-rig control-diagonal` | verify parent and child axis composition | targeted snapshot + runtime diff |
+| `invalid-rig control-cycle` | cycle blocks deterministic evaluation | validation report + no snapshot or blocking snapshot |
 | `invalid-mask-reference` | mask diagnostics appear in runtime phase | snapshot diagnostics |
 | `out-of-range-parameter-dry-run` | clamp warning and strict validation behavior | dry-run snapshot + report |
 
@@ -442,7 +442,7 @@ Motion, expression assets, full physics, pose, and timeline are represented as d
 
 | Question | Impact | Status |
 |----------|--------|--------|
-| Exact target-property patch representation for mesh/deformer states | can-defer | operation/runtime implementers must keep patch schemas aligned before coding |
+| Exact target-property patch representation for mesh/rig control states | can-defer | operation/runtime implementers must keep patch schemas aligned before coding |
 | Whether child vertex outside warp domain escalates to fail in acceptance profile | can-defer | validator profile table decides severity |
 | Full vertex storage size for snapshot artifacts | can-defer | `summary/targeted/full` contract allows selective storage |
 
@@ -460,5 +460,5 @@ Motion, expression assets, full physics, pose, and timeline are represented as d
 Review this file for:
 
 - `parameter-grid-2d-v1` consistency with operation and fixture contracts,
-- parent-before-child deformer semantics,
+- parent-before-child rig control semantics,
 - runtime-core isolation from package IO, renderer, editor-only state, and transport adapters.

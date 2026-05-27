@@ -17,21 +17,21 @@ It blocks implementation confusion for:
 - ownership of authoring state, runtime-visible state, editor-only state, operation logs, validation reports, runtime snapshots, and fixture expected outputs.
 - forbidden dependencies that would make GUI, AI, runtime, and validator implementations disagree.
 
-MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, Open Model Package save/reload, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, animation timeline, full physics, and production renderer optimization.
+MVP scope includes GUI authoring, PSD primary import, split PNG fallback import, project-defined model package save/reload, runtime evaluation, validator reports, AI dry-run/commit contracts, and contract fixtures. It excludes Cubism `.cmo3` reconstruction, `.moc3` compatibility export, animation timeline, full physics, and production renderer optimization.
 
 ## Basis Separation
 
 ### Repository Facts
 
 - `discussion/design/module-contracts/` currently contains the module contract design outputs for the next implementation phase.
-- MVP AC requires GUI Editor as the authoring entry point, Open Model Package save/reload, Runtime / Viewer evaluation, Validator structured report, and AI Agent structured operations.
+- MVP AC requires GUI Editor as the authoring entry point, project-defined model package save/reload, Runtime / Viewer evaluation, Validator structured report, and AI Agent structured operations.
 - The existing MVP authoring-runtime draft separates dirty authoring graph, normalized runtime graph, runtime snapshot, validation report, and AI dry-run diff.
 
 ### Prior Design Decisions
 
 - External boundary DTOs use Zod as source of truth. Internal domain state uses TypeScript `type` / `interface` as source of truth.
 - PSD import is the primary source asset flow. Split PNG import is fallback / debug / compatibility.
-- Angle X / Y uses Cubism Editor-aligned `parameter-grid-2d-v1`, one-axis keyforms, and parent-before-child deformer hierarchy.
+- face yaw / pitch uses project-defined `parameter-grid-2d-v1`, one-axis keyforms, and parent-before-child rig control hierarchy.
 - GUI authoring evidence requires operation log entries. Playwright traces, screenshots, video, and session metadata are supplemental evidence.
 - AI API contracts are transport-independent and grouped into Editor semantic state API, Operation command API, and Runtime / Validator read API.
 
@@ -45,7 +45,7 @@ MVP scope includes GUI authoring, PSD primary import, split PNG fallback import,
 | Contract | Owner module | Consumers | Source of truth | Artifact |
 |----------|--------------|-----------|-----------------|----------|
 | Shared branded IDs and DTO vocabulary | `contracts` | all modules | mixed | TS types, Zod schemas |
-| Open Model Package parse/load/write | `package-format` | `editor-ui`, `viewer-ui`, `validator-core`, `ai-interface` | zod | package DTOs |
+| project-defined model package parse/load/write | `package-format` | `editor-ui`, `viewer-ui`, `validator-core`, `ai-interface` | zod | package DTOs |
 | Dirty authoring graph | `authoring-core` | `operation-core`, `editor-ui`, adapter to `runtime-core` | typescript | internal state |
 | Mutating operation boundary | `operation-core` | `editor-ui`, `ai-interface`, migration, repair | zod | request/response/log |
 | Deterministic evaluation boundary | `runtime-core` | preview, viewer, validator, AI dry-run | mixed | TS API, snapshot DTO |
@@ -64,7 +64,7 @@ MVP scope includes GUI authoring, PSD primary import, split PNG fallback import,
 | `package-format` | package file layout, DTO parsing, schema validation, package hash, PSD/split PNG provenance mapping | dirty editor UI state beyond `editor-state.json`, renderer internals | `readPackage`, `writePackage`, `parsePackageDto`, `normalizePackage` | editor, viewer, validator, AI |
 | `authoring-core` | `AuthoringGraph`, editor-visible model state, dirty revision, undo model state | DOM, HTTP, raw PSD parser, renderer handles | `createAuthoringSession`, `applyCommittedOperation`, `toRuntimeGraph` | editor, operation |
 | `operation-core` | operation registry, preconditions, dry-run, commit, undo/redo, operation log entries | canvas event details, transport details, renderer handles | `dryRunOperation`, `commitOperation`, `undoOperation`, `redoOperation` | editor, AI, migration |
-| `runtime-core` | `NormalizedRuntimeGraph`, parameter evaluation, keyform/deformer evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntime`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
+| `runtime-core` | `NormalizedRuntimeGraph`, parameter evaluation, keyform/rig control evaluation, snapshots | package file IO, editor selection, operation approval, DOM | `evaluateRuntime`, `compareRuntimeSnapshots` | preview, viewer, validator, AI |
 | `validator-core` | check registry, profiles, validation report, repair candidate contracts | GUI workflow replacement, renderer drawing, transport details | `validatePackage`, `validateAuthoringGraph`, `validateRuntimeSnapshot` | editor, viewer, AI, acceptance |
 | `renderer-adapter` | canvas/WebGL binding, texture handles, viewport presentation | package schema, operation mutation, validator policy | `renderSnapshot`, `createRendererBackend` | editor preview, viewer |
 | `editor-ui` | panels, canvas modes, selection, lock, editor hide, active tool, stable test IDs, GUI evidence | package mutation bypassing operation-core, runtime internals | UI event handlers, semantic state API | human, Playwright, AI observe |
@@ -199,7 +199,7 @@ Source-of-truth rule:
 | Operation implementer | `packages/operation-core/**` | contracts, authoring-core docs, operation contract | AI transport adapters, renderer |
 | Runtime implementer | `packages/runtime-core/**` | contracts, runtime contract, fixtures | package IO, editor state |
 | Validator implementer | `packages/validator-core/**` | contracts, validator, runtime, fixtures | editor UI mutation |
-| GUI implementer | `apps/editor/**` | GUI/operation/AI contracts | operation-core internals except public APIs |
+| GUI implementer | `apps/editor/**` | GUI/operation/AI contracts | operation-core internals except Future integration surfaces |
 | AI interface implementer | `packages/ai-interface/**` | AI/operation/runtime/validator contracts | operation internals, direct package mutation |
 | Fixtures implementer | `fixtures/contracts/**`, expected artifacts | all contracts | production core logic |
 
@@ -209,8 +209,8 @@ Source-of-truth rule:
 |-------------|------------------|--------------|
 | AC-MVP-001, SC-MVP-001, SC-MVP-005 | `editor-ui -> operation-core -> operation log` boundary | `tutorial-like-authoring` fixture requires GUI operation log |
 | AC-MVP-003, AC-IN-001, SC-IN-002, SC-IN-003 | `package-format` + PSD importer boundary | `psd-import-happy-path`, `psd-unsupported-layer` |
-| AC-MVP-008, AC-PARAM-005, SC-PARAM-004 | `runtime-core` owns `parameter-grid-2d-v1` evaluation | `angle-xy-grid-2d` expected snapshot |
-| AC-MVP-009, AC-DEF-004, SC-DEF-003 | `runtime-core` parent-before-child evaluation | `parent-child-deformer-diagonal` expected snapshot |
+| AC-MVP-008, AC-PARAM-005, SC-PARAM-004 | `runtime-core` owns `parameter-grid-2d-v1` evaluation | `manual-face-grid-2d` expected snapshot |
+| AC-MVP-009, AC-DEF-004, SC-DEF-003 | `runtime-core` parent-before-child evaluation | `parent-child-rig control-diagonal` expected snapshot |
 | AC-MVP-013, AC-VALIDATOR-005, SC-VALIDATOR-005 | `validator-core` report DTO | expected validation reports |
 | AC-MVP-014, AC-AGENT-002, SC-AGENT-002, SC-AI-002 | `ai-interface` calls operation-core, runtime-core, validator-core | `ai-repair-dry-run` expected diff |
 
@@ -222,8 +222,8 @@ Source-of-truth rule:
 | `psd-import-happy-path` | proves PSD source asset boundary and provenance | operation diff, validation report |
 | `psd-unsupported-layer` | proves unsupported PSD features do not leak into runtime-core | diagnostic report |
 | `tutorial-like-authoring` | proves GUI operations cover MVP authoring flow | operation log, full snapshot, validation report |
-| `angle-xy-grid-2d` | proves `parameter-grid-2d-v1` boundary | targeted/full runtime snapshot |
-| `parent-child-deformer-diagonal` | proves parent-before-child hierarchy | runtime snapshot and runtime diff |
+| `manual-face-grid-2d` | proves `parameter-grid-2d-v1` boundary | targeted/full runtime snapshot |
+| `parent-child-rig control-diagonal` | proves parent-before-child hierarchy | runtime snapshot and runtime diff |
 | `ai-repair-dry-run` | proves AI does not bypass operation-core | model/runtime/validation diff |
 
 ## Open Questions

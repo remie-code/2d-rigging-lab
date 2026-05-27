@@ -1,42 +1,27 @@
-﻿# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-04: Deformation Control Structure
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
 
-## DOMAIN-04: Deformation Control Structure
+## 問い
 
-### 問い
-
-Live2Dモデルの変形は、どの構造によって制御されるべきか。
-Open Editorは描画単位をどう束ね、どう動かせるようにしなければならないか。
+Private Prototypeは、drawable meshをparameterに応じて変形させる制御構造をどう扱うべきか。
 
 ### AC-DEF-001: 変形制御構造を持てること
 
-Open Editorは、描画要素または他の変形制御構造を子として持つ変形制御構造を扱えること。
-
+Project-defined packageは、warp lattice、rotation control、mask、opacity、draw orderなどのrig controlを保持できること。
 
 ### AC-DEF-002: 局所変形と大域変形を分離できること
 
-Open Editorは、顔、目、口、髪、身体などの部位ごとの局所変形と、頭部・身体全体などの大域変形を分離して扱えること。
-
+Local mesh deformationとparent-child transformを分離し、評価順と影響範囲をdebugできること。
 
 ### AC-DEF-003: 回転的変形と面変形を区別できること
 
-Open Editorは、回転軸を中心とした変形と、面状の自由変形を区別して扱えること。
-
+Rotation controlとwarp latticeを区別し、pivot、対象drawable、parameter binding、keyformを保存できること。
 
 ### AC-DEF-004: 変形制御構造の階層を管理できること
 
-Open Editorは、変形制御構造同士の親子関係を管理し、親の変形が子に伝播する構造を扱えること。
-
+Rig controlは親子関係、target、dependency、evaluation orderを持ち、循環参照をvalidatorで検出できること。
 
 ### AC-DEF-005: 変形構造を検証可能であること
 
-Open Editorは、変形制御構造が意図した可動を支える構造になっているかを検証できる情報を提供すること。
-
-検証対象には以下を含む。
-
-- 親子関係
-- 影響範囲
-- 対象描画要素
-- パラメータとの接続
-- 変形時の破綻
+Validatorは、未接続target、範囲外変形、破損したbinding、過大変形をreportできること。

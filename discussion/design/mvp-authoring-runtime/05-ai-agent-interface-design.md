@@ -8,7 +8,7 @@
 ### 1.1 リポジトリ事実
 
 - `AC-MVP-014` は、AI Agentが model structure inspection、runtime state snapshot、validation report読み込み、対象ID指定operation dry-run、model diff、runtime diff、validation diff、repair candidate、provenance、AC / scenario判定材料を扱えることを要求する。
-- `SC-MVP-004` は、AI Agentが validation report と model structure を読み、`ParamEyeOpen = 0` の閉眼keyformを対象に軽微な頂点補正operationをdry-runし、diffとrepair candidate、再検証手順をreportへ添えることを要求する。
+- `SC-MVP-004` は、AI Agentが validation report と model structure を読み、`eyeOpen = 0` の閉眼keyformを対象に軽微な頂点補正operationをdry-runし、diffとrepair candidate、再検証手順をreportへ添えることを要求する。
 - `AC-MVP-001` は、AI操作がGUI制作フローを置き換えるものではないと定めている。
 
 ### 1.2 公式・参照事実
@@ -27,7 +27,7 @@
 
 ### 2.1 File-level AI Connection
 
-AI Agent は Open Model Package のテキストファイル、operation log、validation report、runtime snapshotを直接読める。
+AI Agent は project-defined model package のテキストファイル、operation log、validation report、runtime snapshotを直接読める。
 
 提供する能力:
 
@@ -151,7 +151,7 @@ Snapshot比較を軸にする。
 
 - parameter values
 - keyform samples
-- deformer evaluated state
+- rig control evaluated state
 - drawable bounds / vertex hash / optional full vertices
 - opacity / visibility
 - mask status

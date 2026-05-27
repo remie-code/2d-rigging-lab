@@ -1,33 +1,28 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-16: Private Runtime Core
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is private runtime core.
 
-## DOMAIN-16: Open Runtime / Core
+## 問い
 
-### 問い
+Private runtime coreは、project-defined packageをどのように読み込み、評価し、private viewerへ描画可能な状態を渡すべきか。
 
-Open Runtime / Core は、Open Model Format をどのように読み込み、評価し、描画可能な状態にするべきか。
+### AC-RUNTIME-001: project-defined packageを読み込めること
 
-### AC-RUNTIME-001: Open Model Format を読み込めること
+Private runtime coreは、project-defined model packageを読み込み、runtime stateを初期化できること。
 
-Open Runtime は、Open Model Package を読み込み、runtime state を初期化できること。
+### AC-RUNTIME-002: parameter stateを保持・更新できること
 
+Private runtime coreは、parameter値を保持し、viewer override、editor preview override、operation dry-runなどの入力源から更新できること。
 
-### AC-RUNTIME-002: parameter state を保持・更新できること
+### AC-RUNTIME-003: parameterに応じたvertex / drawable状態を評価できること
 
-Open Runtime は、parameter 値を保持し、外部入力、motion、expression、physics に応じて更新できること。
-
-
-### AC-RUNTIME-003: parameter に応じた vertex / drawable 状態を評価できること
-
-Open Runtime は、parameter 値と keyform / deformer相当構造に基づき、評価後の vertex、drawable visibility、opacity、draw order、mask を計算できること。
-
+Private runtime coreは、parameter値、keyform、manual authored parameter grid、rig control、dynamicsに基づき、vertex、visibility、opacity、draw order、maskを評価できること。
 
 ### AC-RUNTIME-004: 描画統合できること
 
-Open Runtime は、WebGL等の描画基盤に対して、texture、mesh、draw order、clipping / mask を反映した描画情報を提供できること。
+Private runtime coreは、renderer adapterに対してtexture、mesh、draw order、maskを反映した描画情報を提供できること。
 
+### AC-RUNTIME-005: runtime stateを観測できること
 
-### AC-RUNTIME-005: runtime state を観測できること
-
-Open Runtime は、AIエージェントと検証ツールが runtime state、評価結果、警告、エラーを構造化して取得できること。
+Private runtime coreは、validator、private viewer、AI assistantがruntime snapshot、diagnostics、warning/errorを取得できるようにすること。

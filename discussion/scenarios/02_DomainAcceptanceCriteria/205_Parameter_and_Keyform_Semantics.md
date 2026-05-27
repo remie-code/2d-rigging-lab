@@ -1,264 +1,115 @@
-﻿# シナリオ: Parameter and Keyform Semantics
+# シナリオ: Parameter and Keyform Semantics
 
-> 参照元AC: [205_Parameter_and_Keyform_Semantics.md](../../acceptance-criteria/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md)
-> 状態: 粒度確認用ドラフト
+> 参照元AC: [../../acceptance-criteria/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md](../../acceptance-criteria/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md)
+> Status: Accepted draft for Private Prototype MVP.
 
-## 0. このドラフトの目的
+## 0. 目的
 
-このファイルは、`AC-PARAM` を「人が Cubism Editor でパラメータとキーフォームを設定するときの操作粒度」まで降ろした場合、Undine がどの程度のシナリオを書けるかを確認するための試作である。
+このシナリオは、project-defined parameter preset、semantic role、keyform、補間、manual authored parameter gridをPrivate Prototypeの正として定義する。
 
-ここでは、Cubism Editor の画面構成や保存形式を模倣することを目的にしない。ただし、Cubism Editor での参照操作を明示し、その操作によって成立している可動仕様、キー状態、中間状態、複数パラメータの同時作用を Open Editor の検証可能な期待結果として書く。
+## 1. Source-of-Truth
 
-## 1. 公式事実
+### Design Decisions
 
-- Live2D Cubism では、パラメータは `[Angle X]` や `[Mouth Open/Close]` のような特定の動きを表現する設定であり、キーとキーの中間では形状が自動補間される。作成した各パラメータを組み合わせることでモーションを表現できる。
-  参照: [About Parameters](https://docs.live2d.com/en/cubism-editor-manual/parameter/)
-- パラメータ設定では、名前、ID、最小値、デフォルト値、最大値、リピート、Blend Shape、説明などを確認できる。仕様上の規則がない場合は標準パラメータリストの ID と値を使うことが推奨されている。
-  参照: [About Parameters](https://docs.live2d.com/en/cubism-editor-manual/parameter/)
-- パラメータパレットは、オブジェクトの変形度合いを数値に結びつけるパラメータを管理する。`Add 2 keys` は最小値と最大値、`Add 3 keys` は最小値・中間値・最大値へキーを自動挿入し、手動編集では任意値へキーを作成できる。
-  参照: [Parameter Palette](https://docs.live2d.com/en/cubism-editor-manual/palametorpalatte/)
-- パラメータへキーを追加すると、変形形状をキーフォームに登録して動きを付けられる。キー値は手動で編集でき、スライダーから追加したキーが意図しない小数値になった場合はキーフォーム編集ダイアログで修正できる。
-  参照: [Add/Delete Keys to/from parameters](https://docs.live2d.com/en/cubism-editor-manual/edit-parameters/)
-- キーフォームが1つだけのパラメータでは、オブジェクトはそのキー値でだけ表示される。パラメータ移動中も常に表示したい場合は、変形しない場合でも両端にキーを挿入することが推奨されている。
-  参照: [Add/Delete Keys to/from parameters](https://docs.live2d.com/en/cubism-editor-manual/edit-parameters/)
-- 標準パラメータリストでは、`ParamAngleX` は `-30 / 0 / 30`、`ParamEyeLOpen` は `0 / 1 / 1`、`ParamMouthOpenY` は `0 / 0 / 1` などの ID と範囲が示されている。目や口は通常、閉じた状態を `0`、開いた状態を `1` とする。
-  参照: [Standard Parameter List](https://docs.live2d.com/en/cubism-editor-manual/standard-parameter-list/)
-- `Eyeball X` と `Eyeball Y` をそれぞれ3点キーにした場合、対象デフォーマには `3 x 3 = 9` パターンのキーフォームが対応する。結合表示は情報の表示方法を変えるだけで、設定そのものには影響しない。
-  参照: [Keyforms (Make X, Y Movements)](https://docs.live2d.com/en/cubism-editor-manual/keyform-xydirection/)
-- Cubism SDK では、パラメータは ID または index で指定でき、現在値の取得、値の設定、値の一時保存と復元ができる。
-  参照: [Parameter Operation](https://docs.live2d.com/en/cubism-sdk-manual/parameters/)
+- Parameter名、範囲、roleはproject-definedである。
+- 外部互換のための既定ID体系はMVP成功条件にしない。
+- Face turnや表情は、手で作成したparameter gridとkeyformで検証する。
 
-## 2. シナリオ記述方針
+### Research Notes
 
-各シナリオは、Given-When-Then を次の2層に分けて書く。
+- 旧標準IDや外部ツール互換の記述は、現在のMVP仕様ではなく過去調査扱いにする。
 
-- Given: 前提条件として、モデル内の既存要素、パラメータ、キーフォーム、制作意図を書く
-- When / Cubism参照操作: 人が Cubism Editor で行う操作を、手順が再現できる粒度で書く
-- Then / Open Stack期待結果: このプロジェクトの Open Editor が、UI模倣ではなく同等の制作能力として満たすべき観測・再生・比較・検証結果を書く
+## SC-PARAM-001: project-defined parameter presetを作成できる
 
-このドラフトでは、データモデル、保存形式、API、UI部品名の設計は扱わない。`IDを確認できる`、`状態を比較できる`、`警告として扱える` など、検証に必要な振る舞いだけを書く。
+### Given
 
-## 3. 仮説・未決事項
+- Projectにはrig controlが存在する。
 
-- Open Editor がどの画面、コマンド、エージェント応答で結果を提示するかは未決である。このドラフトでは、結果が人またはテストから観測できることだけを要求する。
-- 中間状態の補間方式、数値誤差、幾何差分の許容値は未決である。公式資料はキー間補間の存在を示すが、このプロジェクトでの検証許容値までは定義していない。
-- 複数パラメータが同一対象に同時作用する場合の競合解決は、公式資料だけではこのプロジェクトの全ケースを確定できない。このドラフトでは、具体シナリオ単位で観測可能な同時作用を検証する。
+### When
 
-## SC-PARAM-001: 標準IDを持つ顔向きパラメータを可動軸として定義できる
+1. ユーザーがparameterを作成する。
+2. ユーザーがmin、max、default、unit、semantic roleを設定する。
+3. ユーザーがparameter presetとして保存する。
 
-### Given / 前提条件
+### Then
 
-- 既存モデルが読み込まれている。
-- 頭部の左右向きに使う変形対象またはデフォーマ群が存在する。
-- 顔の左右向きは、標準パラメータ `ParamAngleX` で扱う方針である。
-- `ParamAngleX` は、まだ作成されていない、または設定を確認・修正できる状態である。
+- Parameter metadataはpackage内に保存される。
+- Semantic roleはAI assistantやvalidatorが説明に使える。
+- 範囲外default、重複ID、未使用parameterはvalidatorで報告される。
 
-### When / Cubism参照操作
+### 検証するAC
 
-1. パラメータパレットで新規パラメータを作成する。
-2. 名前に `Angle X`、ID に `ParamAngleX` を指定する。
-3. 最小値を `-30`、デフォルト値を `0`、最大値を `30` にする。
-4. 必要に応じて、説明に「顔の左右向き」を記録する。
-5. パラメータ設定ダイアログで、名前、ID、最小値、デフォルト値、最大値を確認する。
-6. パラメータの現在値を `-30`、`0`、`30` に切り替え、現在値が指定できることを確認する。
+- AC-PARAM-001
+- AC-PARAM-002
 
-### Then / Open Stack期待結果
+## SC-PARAM-002: keyformと補間を編集できる
 
-- `ParamAngleX` が、顔の左右向きを表す可動軸として識別できる。
-- `ParamAngleX` は、名前、標準ID、最小値 `-30`、デフォルト値 `0`、最大値 `30` を観測可能な設定として持つ。
-- 現在値を最小値、デフォルト値、最大値へ切り替えても、パラメータ定義自体は変化しない。
-- 表示名が将来ローカライズされても、標準ID `ParamAngleX` によって同じ可動軸として扱える。
-- パラメータ作成だけではキーフォームや変形結果は発生しないことを区別できる。
+### Given
 
-### 検証するACの項目
+- Projectにはparameterとrig controlがある。
 
-- AC-PARAM-001: 可動軸をパラメータとして定義できること
-- AC-PARAM-002: パラメータ範囲を持てること
-- AC-PARAM-006: 標準的なパラメータ識別子を扱えること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
+### When
 
-## SC-PARAM-002: 口開閉パラメータの両端にキーフォームを保持できる
+1. ユーザーがparameter値ごとのkeyformを作成する。
+2. ユーザーがlinear、step、smoothなどの補間を選ぶ。
+3. Private runtime coreが中間値を評価する。
 
-### Given / 前提条件
+### Then
 
-- 既存モデルが読み込まれている。
-- 口の開閉を制御する描画要素またはデフォーマ `Warp_Mouth_Open` が存在する。
-- 標準パラメータ `ParamMouthOpenY` が存在し、最小値 `0`、デフォルト値 `0`、最大値 `1` として設定されている。
-- `ParamMouthOpenY = 0` は通常閉じた口、`ParamMouthOpenY = 1` は通常開いた口として扱う方針である。
+- Keyformは対象control、parameter値、補間設定を保持する。
+- Runtime snapshotは評価に使ったparameter値と補間結果を確認できる。
+- 欠けたkeyformや不連続が大きい区間はwarningになる。
 
-### When / Cubism参照操作
+### 検証するAC
 
-1. `Warp_Mouth_Open` を選択する。
-2. パラメータ `Mouth Open/Close` を選択する。
-3. `[Add 2 Keyforms]` を実行し、`0` と `1` にキーを追加する。
-4. 現在値を `0` にし、口が閉じた形になるように `Warp_Mouth_Open` または配下の要素を編集する。
-5. 現在値を `1` にし、口が開いた形になるように編集する。
-6. `0` と `1` のキーを再選択し、それぞれの口形状が復元されることを確認する。
+- AC-PARAM-003
 
-### Then / Open Stack期待結果
+## SC-PARAM-003: manual authored parameter gridを保存できる
 
-- `Warp_Mouth_Open` には、`ParamMouthOpenY = 0` と `ParamMouthOpenY = 1` の2つのキーフォームが保持される。
-- 各キーフォームは、対象が描画要素か変形制御構造かに関係なく、該当パラメータ値における状態として再現できる。
-- `0` のキーフォームは閉じた口、`1` のキーフォームは開いた口として観測・比較できる。
-- パラメータ定義の範囲情報と、対象に割り当てられたキーフォームの値を区別して説明できる。
-- どの対象が `ParamMouthOpenY` のキーに関連付いているかを確認できる。
+### Given
 
-### 検証するACの項目
+- ユーザーはfaceYawとfacePitchの組み合わせで顔向き風の変形を作りたい。
 
-- AC-PARAM-002: パラメータ範囲を持てること
-- AC-PARAM-003: キーフォームを保持できること
-- AC-PARAM-006: 標準的なパラメータ識別子を扱えること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
+### When
 
-## SC-PARAM-003: 口開閉のキーフォーム間から中間状態を生成できる
+1. ユーザーが2つ以上のparameterをgridとして選ぶ。
+2. ユーザーがgrid cellごとにkeyformを手で調整する。
+3. Editorがgrid全体をpackageへ保存する。
 
-### Given / 前提条件
+### Then
 
-- `ParamMouthOpenY` が存在し、範囲は `0` から `1` である。
-- `Warp_Mouth_Open` には、`ParamMouthOpenY = 0` の閉口キーフォームと `ParamMouthOpenY = 1` の開口キーフォームが設定されている。
-- `ParamMouthOpenY = 0.5` のキーはまだ作成されていない。
+- Gridはparameter軸、cell、keyform、補間設定を保存する。
+- Runtimeはgrid内の中間状態を評価できる。
+- 未調整cellや過大変形cellはvalidatorが報告する。
 
-### When / Cubism参照操作
+### 検証するAC
 
-1. パラメータ `Mouth Open/Close` の現在値を `0` にして、閉口状態を確認する。
-2. 現在値を `1` にして、開口状態を確認する。
-3. 現在値を数値入力で `0.5` にする。
-4. `0.5` の状態を表示し、閉口・開口の両端状態と比較する。
-5. 再度 `0.5` を指定し、同じ中間状態へ戻ることを確認する。
+- AC-PARAM-004
+- AC-PARAM-005
 
-### Then / Open Stack期待結果
+## SC-PARAM-004: 複数parameterの影響を追跡できる
 
-- `ParamMouthOpenY = 0.5` では、既存キーフォーム間から中間状態を生成できる。
-- 生成された中間状態は、`0` の閉口状態とも `1` の開口状態とも同一ではなく、両端の可動意図に沿った途中状態として観測できる。
-- `0.5` を評価しても、新しいキーフォームが暗黙に追加されたものとして扱われない。
-- 同じパラメータ値を再評価した場合、同じモデル状態を再現できる。
-- 現在値、参照された両端キー、生成された中間状態を比較対象として確認できる。
+### Given
 
-### 検証するACの項目
+- 1つのdrawableに複数parameterが作用している。
 
-- AC-PARAM-004: パラメータ値に応じて中間状態を生成できること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
+### When
 
-## SC-PARAM-004: 目玉X/Yの組み合わせとして9方向のキーフォームを扱える
+1. ユーザーがdebug previewを開く。
+2. ユーザーがparameterを動かす。
+3. Editorが影響したcontrol、keyform、drawableを表示する。
 
-### Given / 前提条件
+### Then
 
-- 左目玉の位置を制御するワープデフォーマ `Warp_EyeL_Position` が存在する。
-- 標準パラメータ `ParamEyeBallX` と `ParamEyeBallY` が存在し、どちらも最小値 `-1`、デフォルト値 `0`、最大値 `1` である。
-- `ParamEyeBallX` は左右方向、`ParamEyeBallY` は上下方向として扱う。
+- どのparameterがどのcontrolに作用したかを追跡できる。
+- 意図しない同時作用はwarningとして確認できる。
+- AI assistantは影響範囲を説明し、repair suggestionをdry-runで返せる。
 
-### When / Cubism参照操作
+### 検証するAC
 
-1. `Warp_EyeL_Position` を選択する。
-2. `ParamEyeBallX` に `-1`、`0`、`1` の3点キーを追加する。
-3. `ParamEyeBallX = -1` では左、`0` では中央、`1` では右を見るように `Warp_EyeL_Position` を調整する。
-4. `ParamEyeBallY` に `-1`、`0`、`1` の3点キーを追加する。
-5. `ParamEyeBallY = -1` では下、`0` では中央、`1` では上を見るように調整する。
-6. パラメータパレットで `ParamEyeBallX` と `ParamEyeBallY` を結合表示し、9点のグリッドを確認する。
-7. `(-1, -1)`、`(-1, 1)`、`(1, -1)`、`(1, 1)`、`(0, 0)` の状態を順に確認する。
+- AC-PARAM-007
 
-### Then / Open Stack期待結果
+## 2. 未決事項
 
-- `Warp_EyeL_Position` は、`ParamEyeBallX` と `ParamEyeBallY` の組み合わせとして `3 x 3 = 9` 個のキーフォーム状態を扱える。
-- 結合表示の有無にかかわらず、2つのパラメータと9個の組み合わせ状態は同じ意味として扱われる。
-- `ParamEyeBallX` と `ParamEyeBallY` を同時に指定したとき、片方の軸だけでなく組み合わせ位置としてモデル状態を評価できる。
-- 各組み合わせについて、目玉が左上、右下、中央などの期待方向にあるかを観測・比較できる。
-- 未編集の組み合わせ、重複して見える組み合わせ、意図と逆方向の組み合わせを検証対象として特定できる。
-
-### 検証するACの項目
-
-- AC-PARAM-003: キーフォームを保持できること
-- AC-PARAM-004: パラメータ値に応じて中間状態を生成できること
-- AC-PARAM-005: 複数パラメータの組み合わせを扱えること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
-
-## SC-PARAM-005: 顔向き・瞬き・口開閉が同時に作用する状態を扱える
-
-### Given / 前提条件
-
-- `ParamAngleX` には、顔を左・中央・右へ向けるキーフォームが設定されている。
-- `ParamEyeLOpen` には、左目の閉眼 `0` と開眼 `1` のキーフォームが設定されている。
-- `ParamMouthOpenY` には、口の閉口 `0` と開口 `1` のキーフォームが設定されている。
-- 3つのパラメータは、同じモデル状態で同時に指定できる。
-
-### When / Cubism参照操作
-
-1. `ParamAngleX` を `30` にし、顔が画面右向きになることを確認する。
-2. `ParamEyeLOpen` を `0` にし、左目が閉じることを確認する。
-3. `ParamMouthOpenY` を `0.7` にし、口が途中まで開くことを確認する。
-4. 現在状態を確認したまま、`ParamMouthOpenY` だけを `0` に戻す。
-5. 顔向きと左目の状態が維持され、口だけが閉じることを確認する。
-
-### Then / Open Stack期待結果
-
-- `ParamAngleX = 30`、`ParamEyeLOpen = 0`、`ParamMouthOpenY = 0.7` の組み合わせ状態を1つのモデル状態として表示・出力できる。
-- 口開閉だけを変更した場合、顔向きと左目開閉の指定値は維持される。
-- 複数パラメータが同時に作用する状態について、各パラメータ値、対象部位、変化した範囲、変化しなかった範囲を比較できる。
-- 同時作用の結果が、どの単独パラメータ状態とも一致しない場合でも、検証可能な組み合わせ状態として扱える。
-
-### 検証するACの項目
-
-- AC-PARAM-004: パラメータ値に応じて中間状態を生成できること
-- AC-PARAM-005: 複数パラメータの組み合わせを扱えること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
-
-## SC-PARAM-006: 標準パラメータIDを外部ワークフロー向けに確認できる
-
-### Given / 前提条件
-
-- 既存モデルが読み込まれている。
-- 左目開閉に相当するパラメータが必要である。
-- 外部ランタイムや既存ワークフローとの互換性を考慮し、標準ID `ParamEyeLOpen` を使う方針である。
-
-### When / Cubism参照操作
-
-1. パラメータ設定で、左目開閉パラメータの名前、ID、最小値、デフォルト値、最大値を確認する。
-2. ID が `ParamEyeLOpen` でない場合、標準リストに合わせて修正候補を確認する。
-3. 値 `0` で左目が閉じ、値 `1` で左目が通常開くことを確認する。
-4. 外部ランタイムで使う想定として、ID `ParamEyeLOpen` を指定して値を読み書きできることを確認する。
-5. 表示名を日本語名や制作チーム内の呼称に変えても、ID が `ParamEyeLOpen` のまま維持されることを確認する。
-
-### Then / Open Stack期待結果
-
-- 左目開閉の標準パラメータID `ParamEyeLOpen` を、表示名とは独立して確認できる。
-- `ParamEyeLOpen` の標準的な範囲 `0 / 1 / 1` と、閉眼・開眼の意味を検証できる。
-- 標準的な可動仕様に対して非標準IDが使われている場合、即時失敗ではなく互換性上の警告または修正候補として扱える。
-- 外部ワークフローで ID 指定される値と、Open Editor 内で観測されるモデル状態が対応していることを確認できる。
-
-### 検証するACの項目
-
-- AC-PARAM-001: 可動軸をパラメータとして定義できること
-- AC-PARAM-002: パラメータ範囲を持てること
-- AC-PARAM-006: 標準的なパラメータ識別子を扱えること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
-
-## SC-PARAM-007: 片端だけのキー設定を検出し、パラメータ駆動状態として検証できる
-
-### Given / 前提条件
-
-- 頬の赤みを表す描画要素 `Cheek_L_Red` が存在する。
-- 頬の表示状態を `ParamCheek` で制御する方針である。
-- `ParamCheek` は最小値 `0`、最大値 `1` を持つ。
-- 制作者が誤って、`Cheek_L_Red` に `ParamCheek = 0.5` の単一キーフォームだけを追加した状態を作れる。
-
-### When / Cubism参照操作
-
-1. `Cheek_L_Red` を選択する。
-2. `ParamCheek` の現在値を `0.5` にし、単一キーフォームを追加する。
-3. 現在値を `0`、`0.5`、`1` に切り替え、頬の表示状態を確認する。
-4. パラメータの絞り込み、キーに関連付くオブジェクト選択、または割り当て済みパラメータ検証を使って、`Cheek_L_Red` と `ParamCheek` の関連を確認する。
-5. 制作意図が「`0` では非表示、`1` では表示、途中値では補間」であるかを確認する。
-
-### Then / Open Stack期待結果
-
-- `Cheek_L_Red` が `ParamCheek = 0.5` の単一キーフォームだけを持つ状態を検出できる。
-- 単一キーフォームのため、パラメータ範囲全体で期待通りに表示されない可能性を警告として扱える。
-- 検証結果には、対象要素、対象パラメータ、既存キー値、欠けている端点キー、確認したパラメータ値が含まれる。
-- 制作者が `0` と `1` の端点キーを追加すべきか、単一値だけで表示される仕様として扱うべきかを未決事項として分けて提示できる。
-- `ParamCheek = 0`、`0.5`、`1` のモデル状態を観測・比較し、制作意図との不一致を確認できる。
-
-### 検証するACの項目
-
-- AC-PARAM-003: キーフォームを保持できること
-- AC-PARAM-004: パラメータ値に応じて中間状態を生成できること
-- AC-PARAM-007: パラメータ駆動状態を検証可能であること
+- MVPで採用する補間種別の最小集合。
+- Parameter gridの保存形式と編集UI。

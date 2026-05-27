@@ -32,7 +32,7 @@ It does not define visual styling or a complete component hierarchy.
 ### Repository Facts
 
 - MVP requires GUI Editor as authoring entry point.
-- `SC-MVP-001` and `SC-MVP-002` require import, part/drawable organization, mesh, mask, parameter, keyform, deformer, Angle X/Y, preview, save.
+- `SC-MVP-001` and `SC-MVP-002` require import, part/drawable organization, mesh, mask, parameter, keyform, rig control, face yaw / pitch, preview, save.
 - `SC-MVP-005` requires GUI authoring evidence to prevent script-only packages from being accepted as MVP.
 
 ### Prior Design Decisions
@@ -78,7 +78,7 @@ It does not define visual styling or a complete component hierarchy.
 import { z } from "zod";
 import {
   DrawableIdSchema,
-  DeformerIdSchema,
+  RigControlIdSchema,
   MeshIdSchema,
   ParameterIdSchema,
   OperationIdSchema,
@@ -92,7 +92,7 @@ import {
 export const EditorModeSchema = z.enum([
   "select",
   "meshEdit",
-  "rotationDeformerEdit",
+  "rotationRigControlEdit",
   "warpLatticeEdit",
   "maskEdit",
   "drawOrderEdit",
@@ -168,10 +168,10 @@ AI or Playwright may use screenshots for visual context, but must use `getEditor
 | Mesh mode canvas | generate/edit mesh | `generateMesh`, `moveMeshVertex` | operation log + targeted snapshot | `canvas.mesh.vertex.<id>` |
 | Parameter panel | create parameter | `createParameter` | operation log | `parameter.create`, `parameter.row.<id>` |
 | Keyform panel | add one-axis keyform | `addKeyform` | operation log + preview snapshot | `keyform.add.1d` |
-| Keyform grid panel | add Angle X/Y grid | `addKeyformGrid2d` | operation log + grid snapshot | `keyform.grid2d.add` |
-| Deformer panel | create rotation deformer | `createRotation2dDeformer` | operation log | `deformer.rotation.create` |
-| Deformer panel | create warp lattice | `createWarpLattice2dDeformer` | operation log | `deformer.warp.create` |
-| Project/deformer tree | bind parent/child | `bindDeformerChild` | operation log + hierarchy diff | `deformer.tree.bind` |
+| Keyform grid panel | add face yaw / pitch grid | `addKeyformGrid2d` | operation log + grid snapshot | `keyform.grid2d.add` |
+| RigControl panel | create rotation rig control | `createRotation2dRigControl` | operation log | `rig control.rotation.create` |
+| RigControl panel | create warp lattice | `createWarpLattice2dRigControl` | operation log | `rig control.warp.create` |
+| Project/rig control tree | bind parent/child | `bindRigControlChild` | operation log + hierarchy diff | `rig control.tree.bind` |
 | Mask panel | set mask relation | `setMaskRelation` | operation log + validation diagnostics | `mask.setRelation` |
 | Draw order panel | reorder drawables | `setDrawOrder` | operation log + snapshot | `drawOrder.reorder` |
 | Inspector | runtime visibility toggle | `setRuntimeVisibility` | operation log | `inspector.runtimeVisibility` |
@@ -184,21 +184,21 @@ Selection, lock, editor hide, active tool, and viewport changes are editor state
 | Mode | Canvas gesture | Payload builder requirement |
 |------|----------------|-----------------------------|
 | `meshEdit` | drag vertex/control selection | resolves `MeshId` and `VertexId[]` before `moveMeshVertex` |
-| `rotationDeformerEdit` | move pivot/handle | resolves `DeformerId`; payload stores pivot/rest angle in model coordinates |
-| `warpLatticeEdit` | drag lattice control point | resolves `DeformerId` and control point stable ID |
+| `rotationRigControlEdit` | move pivot/handle | resolves `RigControlId`; payload stores pivot/rest angle in model coordinates |
+| `warpLatticeEdit` | drag lattice control point | resolves `RigControlId` and control point stable ID |
 | `maskEdit` | click mask source/target | resolves drawable IDs through hit-test and tree selection |
 | `drawOrderEdit` | reorder list or canvas labels | resolves drawable IDs; numeric draw order is explicit |
 | `runtimePreview` | parameter slider | preview-only until keyform or parameter definition is committed |
 
 ## 1-axis and 2-axis Keyform Grid Editing Surface
 
-Angle X/Y editing is a first-class `parameter-grid-2d-v1` surface:
+face yaw / pitch editing is a first-class `parameter-grid-2d-v1` surface:
 
-- The UI must expose the two parameter IDs, typically `ParamAngleX` and `ParamAngleY` aliases.
+- The UI must expose the two parameter IDs, typically `faceYaw` and `facePitch` aliases.
 - The grid must write through `addKeyformGrid2d`.
 - Grid coordinates must be stored as parameter values, not screen cells.
 - Missing diagonal/corner keys must be visible as validator diagnostics.
-- Parent/child deformer hierarchy remains a valid complementary approach for diagonal expression.
+- Parent/child rig control hierarchy remains a valid complementary approach for diagonal expression.
 
 ## Stable Test ID / Role / Label Policy
 
@@ -280,13 +280,13 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> Select
   Select --> MeshEdit: choose mesh tool
-  Select --> RotationDeformerEdit: choose rotation tool
+  Select --> RotationRigControlEdit: choose rotation tool
   Select --> WarpLatticeEdit: choose warp tool
   Select --> MaskEdit: choose mask tool
   Select --> DrawOrderEdit: choose draw order tool
   Select --> RuntimePreview: preview mode
   MeshEdit --> Select: commit/cancel
-  RotationDeformerEdit --> Select: commit/cancel
+  RotationRigControlEdit --> Select: commit/cancel
   WarpLatticeEdit --> Select: commit/cancel
   MaskEdit --> Select: commit/cancel
   DrawOrderEdit --> Select: commit/cancel
@@ -305,7 +305,7 @@ stateDiagram-v2
 | runtime visibility | no | yes | package/operation/runtime |
 | draw order | no | yes | package/operation/runtime |
 | mesh rest vertices | no | yes | package/runtime |
-| deformer graph | no | yes | package/runtime |
+| rig control graph | no | yes | package/runtime |
 | parameter current preview | mixed temporary | not package default | editor preview/runtime input |
 
 ## Traceability
@@ -315,8 +315,8 @@ stateDiagram-v2
 | AC-MVP-001, SC-MVP-001 | GUI UI event mapping + operation log | `tutorial-like-authoring` |
 | AC-MVP-006 | editor-only lock/hide/select separation | GUI state fixture |
 | AC-MVP-008, SC-PARAM-002 | parameter/keyform panel mappings | operation log + runtime snapshot |
-| AC-MVP-010, SC-MVP-002, SC-PARAM-004 | `parameter-grid-2d-v1` GUI surface | `angle-xy-grid-2d` |
-| AC-MVP-014, SC-AI-002 | semantic state + hit-test APIs | AI screenshot/deformer parameter scenario |
+| AC-MVP-010, SC-MVP-002, SC-PARAM-004 | `parameter-grid-2d-v1` GUI surface | `manual-face-grid-2d` |
+| AC-MVP-014, SC-AI-002 | semantic state + hit-test APIs | AI screenshot/rig control parameter scenario |
 | SC-MVP-005 | `evidence.guiOperationLogMissing` prevention | script-only fixture |
 
 ## Verification and Fixtures
@@ -324,10 +324,10 @@ stateDiagram-v2
 | Fixture / Test | Purpose | Expected artifact |
 |----------------|---------|-------------------|
 | `tutorial-like-authoring` | full GUI operation path evidence | operation log, validation report, snapshots |
-| `angle-xy-grid-2d` | grid UI maps to `addKeyformGrid2d` | operation entry + expected snapshot |
-| `gui-hit-test-deformer` | hit-test returns `DeformerId` and operation targets | hit-test response fixture |
+| `manual-face-grid-2d` | grid UI maps to `addKeyformGrid2d` | operation entry + expected snapshot |
+| `gui-hit-test-rig control` | hit-test returns `RigControlId` and operation targets | hit-test response fixture |
 | `script-generated-minimal` | no GUI log is acceptance fail | acceptance report |
-| `ai-screenshot-deformer-parameter` | screenshot assisted AI uses semantic APIs before operation | command transcript + dry-run diff |
+| `ai-screenshot-rig control-parameter` | screenshot assisted AI uses semantic APIs before operation | command transcript + dry-run diff |
 
 ## Open Questions
 
@@ -353,4 +353,4 @@ Review this file for:
 - no GUI mutation bypassing operation-core,
 - semantic state coverage for AI/Playwright observation,
 - operation log as required GUI authoring evidence,
-- Angle X/Y grid UI mapping to `parameter-grid-2d-v1`.
+- face yaw / pitch grid UI mapping to `parameter-grid-2d-v1`.

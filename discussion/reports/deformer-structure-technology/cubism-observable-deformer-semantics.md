@@ -1,7 +1,7 @@
 # Cubism Observable Deformer Semantics
 
 > 調査日: 2026-05-25  
-> 位置付け: Live2D Cubism Editor 公式資料から、ユーザーまたは外部ツールが観測できる deformer semantics を整理する。Cubism 公式資料は Open Live2D Stack の参考資料であり、Open Stack のオラクルではない。未文書の内部実装は公式事実として扱わず、仮説または設計候補に分離する。
+> 位置付け: Live2D Cubism Editor 公式資料から、ユーザーまたは外部ツールが観測できる deformer semantics を整理する。Cubism 公式資料は Open 2D Character Rigging Stack の参考資料であり、Open Stack のオラクルではない。未文書の内部実装は公式事実として扱わず、仮説または設計候補に分離する。
 
 ## 0. 参照範囲
 

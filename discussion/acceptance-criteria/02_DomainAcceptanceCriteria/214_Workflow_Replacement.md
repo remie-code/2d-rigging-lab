@@ -1,40 +1,32 @@
-# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-14: Private Workflow Independence
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
+> Filename note: the historical filename is kept for link stability; active content is Private Workflow Independence.
 
-## DOMAIN-14: Workflow Independence
+## 問い
 
-### 問い
+Private Prototypeは、Cubism ecosystemに依存せず、個人用の制作、preview、保存、検証、demo/proposal化までをどう成立させるべきか。
 
-Cubism エコシステムに依存しない制作・実行・配信ワークフローとして成立するとは何か。
+### AC-WF-001: project-defined packageを中心にした制作ワークフローを成立させること
 
-### AC-WF-001: Open Model Format を中心にした制作ワークフローを成立させること
+素材取り込み、part/drawable/mesh作成、parameter/keyform編集、保存、再読み込みがproject-defined package上で成立すること。
 
-Open Live2D Stack は、素材入力から model format 作成、runtime preview、validation、package出力までを Open Model Format 中心で成立させること。
+### AC-WF-002: private runtime/viewerによる確認ワークフローを成立させること
 
-
-### AC-WF-002: Open Runtime / Viewer による確認ワークフローを成立させること
-
-Open Live2D Stack は、Open Model Package を Open Runtime / Viewer で読み込み、parameter 操作、expression、motion、physics、draw order、mask、validation result を確認できること。
-
+Editor previewとprivate viewerが同じprivate runtime coreで評価し、保存後の見た目を確認できること。
 
 ### AC-WF-003: 新規モデル制作ワークフローを段階的に成立させること
 
-Open Editor または authoring tool は、素材入力からモデル構築、可動定義、物理、出力までの新規モデル制作ワークフローを段階的に成立させられること。
+Rights-clean素材から小さな可動モデルを制作し、validatorとAI assistantで問題を確認できること。
 
+### AC-WF-004: demo-safe workflowを成立させること
 
-### AC-WF-004: 配信利用ワークフローを成立させること
+配信・録画・スクリーンショットに出す範囲をdemo-safe preflightで確認できること。
 
-Open VTuber App は、Open Model Package を読み込み、tracking input を parameter に mapping し、OBS 等の配信環境で利用できる表示を提供できること。
+### AC-WF-005: AI assistant workflowを成立させること
 
+AI assistantは、inspection、explanation、dry-run、diff、repair suggestion、provenance記録を支援できること。
 
-### AC-WF-005: AI拡張ワークフローを成立させること
+### AC-WF-006: Cubism既存資産を入力・解析対象から除外すること
 
-Open Live2D Stack は、Cubism Editor や既存VTuber Appでは困難だったAIエージェントによる編集・補正・レビュー・自動化を成立させること。
-
-
-### AC-WF-006: Cubism からの移行を参照ワークフローとして扱えること
-
-Cubism 既存資産は、移行元または比較元として扱ってよい。
-
-ただし、Cubism 互換、`.moc3` 出力、`.cmo3` 復元を Open Live2D Stack の初期成立条件にしない。
+既存Cubismモデル、公式サンプル、第三者Live2Dモデル、Cubism形式は、現在MVPの入力・解析・変換対象にしないこと。

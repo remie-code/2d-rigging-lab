@@ -2,7 +2,7 @@
 
 > 調査日: 2026-05-25  
 > 対象: Cubism Viewer / Cubism SDK runtime で観測できる runtime package 確認機能  
-> 目的: Open Live2D Stack Viewer の設計に使うため、Cubism互換性ではなく package / runtime verification 観点を抽出する。
+> 目的: Open 2D Character Rigging Stack Viewer の設計に使うため、Cubism互換性ではなく package / runtime verification 観点を抽出する。
 
 ---
 
@@ -10,7 +10,7 @@
 
 このレポートは、Cubism Viewer や Cubism SDK runtime が、埋め込み用データを読み込み、何を確認・操作・診断できるかを整理する。
 
-Open Live2D Stack のMVPは Cubism互換を目的にしないため、ここでのCubism公式資料は「runtime package確認機能の先行例」として扱う。`.cmo3` / `.can3` の復元、Cubism SDK/Core 必須依存、`.moc3`互換出力は Open Stack MVP の成功条件ではない。
+Open 2D Character Rigging Stack のMVPは Cubism互換を目的にしないため、ここでのCubism公式資料は「runtime package確認機能の先行例」として扱う。`.cmo3` / `.can3` の復元、Cubism SDK/Core 必須依存、`.moc3`互換出力は Open Stack MVP の成功条件ではない。
 
 ---
 

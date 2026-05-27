@@ -9,14 +9,14 @@
 
 - MVP は GUI Editor 必須の Authoring-to-Runtime 一周として定義されている。
 - 技術スタックの第一候補は Web-first TypeScript として合意済みである。
-- `discussion/design/mvp-authoring-runtime/` には、MVP縦切り、Open Model Package、GUI Editor、Runtime評価、Validator、AI Agent Interface の Draft 設計がある。
+- `discussion/design/mvp-authoring-runtime/` には、MVP縦切り、project-defined model package、GUI Editor、Runtime評価、Validator、AI Agent Interface の Draft 設計がある。
 - 既存Draftは方向性、責務分担、論点整理としては有用だが、実装者がそのままモジュールを分担実装できるほどの TypeScript interface contract には落ちていない。
 
 ### 1.2 設計判断
 
 - 既存Draftは破棄せず、次の contract-first 設計の入力として扱う。
 - 次の設計フェーズのゴールは、抽象設計を増やすことではなく、サブエージェントが別モジュールを並列実装しても齟齬が発生しない interface contract を固定することである。
-- TypeScript + Web が決まっているため、概念名だけではなく TypeScript の `type` / `interface` / public API / DTO / module boundary の粒度まで落とす。
+- TypeScript + Web が決まっているため、概念名だけではなく TypeScript の `type` / `interface` / Future integration surface / DTO / module boundary の粒度まで落とす。
 - 設計成果物は、上位AC、シナリオ、参照レポートへのトレーサビリティを持つ必要がある。
 - 各出力ファイルについて、出力構造、フォーマット、置き場所、読み手、検証方法を明示する必要がある。
 
@@ -48,7 +48,7 @@ MVP実装は、規模と責務の性質からサブエージェント並列化�
 | Module | 主責務 | 境界で固定すべきもの |
 |---|---|---|
 | `contracts` | 全モジュール共有の型、ID、DTO、diagnostic語彙 | branded ID、DTO、snapshot、operation、report、diff |
-| `package-format` | Open Model Package の読み書き、schema対応 | file layout、JSON DTO、loader input/output |
+| `package-format` | project-defined model package の読み書き、schema対応 | file layout、JSON DTO、loader input/output |
 | `authoring-core` | GUI制作中の authoring graph と Editor-only state | authoring graph型、selection/lock/hide、dirty revision |
 | `operation-core` | GUI/AI/migration/repair からの変更入口 | operation request/response、precondition、dry-run、commit、undo |
 | `runtime-core` | normalized runtime graph の deterministic evaluation | evaluation input/output、snapshot、evaluator versions、epsilon policy |
@@ -65,8 +65,8 @@ MVP実装は、規模と責務の性質からサブエージェント並列化�
 
 次の型は、設計段階で TypeScript の形まで落とす。
 
-- branded stable IDs: `PackageId`, `DrawableId`, `MeshId`, `PartId`, `ParameterId`, `KeyformSetId`, `DeformerId`, `MaskRelationId`, `OperationId`, `ValidationReportId`, `RuntimeSnapshotId`
-- Open Model Package DTO: manifest、graph、drawables、meshes、parameters、keyforms、deformers、masks、draw order、editor state、rights、provenance
+- branded stable IDs: `PackageId`, `DrawableId`, `MeshId`, `PartId`, `ParameterId`, `KeyformSetId`, `RigControlId`, `MaskRelationId`, `OperationId`, `ValidationReportId`, `RuntimeSnapshotId`
+- project-defined model package DTO: manifest、graph、drawables、meshes、parameters、keyforms、rig controls、masks、draw order、editor state、rights、provenance
 - internal graph: `AuthoringGraph`, `NormalizedRuntimeGraph`
 - runtime: `RuntimeEvaluationInput`, `RuntimeEvaluationOptions`, `RuntimeSnapshot`, `RuntimeDiagnostic`
 - operations: `OperationRequest`, operation-specific payloads, `OperationResult`, `OperationDiff`, `DryRunResult`
@@ -82,7 +82,7 @@ MVP実装は、規模と責務の性質からサブエージェント並列化�
 
 | 種別 | 例 | 所有者 |
 |---|---|---|
-| package DTO | `model/drawables.json`, `model/deformers.json` | `package-format` |
+| package DTO | `model/drawables.json`, `model/rig-controls.json` | `package-format` |
 | authoring state | dirty graph、編集中keyform、operation draft | `authoring-core` |
 | Editor-only state | selection、lock、editor hide、active tool、overlay | `editor-ui` / `authoring-core` |
 | normalized runtime graph | runtime評価用に解決済みのgraph | `runtime-core` input |
@@ -98,7 +98,7 @@ MVPの source asset import は PSD primary とする。split PNG は fallback / 
 
 PSDについては、Adobeが第三者向けに Photoshop File Formats Specification を公開しており、PSD / PSB native file format の構造は公式仕様として参照できる。したがって、PSD読み込み仕様が存在しないことはMVP設計上のブロッカーではない。
 
-ただし、その仕様はデータ形式を説明するものであり、Photoshopの全機能の描画・解釈を完全に再現するSDKではない。そのため、MVPでは「Photoshop完全互換」ではなく、Live2D系素材制作に必要な PSD import profile を定義し、PSD parser / adapter を他moduleから隔離する。
+ただし、その仕様はデータ形式を説明するものであり、Photoshopの全機能の描画・解釈を完全に再現するSDKではない。そのため、MVPでは「Photoshop完全互換」ではなく、2Dキャラクターリギング向け素材制作に必要な PSD import profile を定義し、PSD parser / adapter を他moduleから隔離する。
 
 参照:
 
@@ -143,9 +143,9 @@ PSDについては、Adobeが第三者向けに Photoshop File Formats Specifica
 - `createParameter`
 - `addKeyform`
 - `addKeyformGrid2d`
-- `createRotation2dDeformer`
-- `createWarpLattice2dDeformer`
-- `bindDeformerChild`
+- `createRotation2dRigControl`
+- `createWarpLattice2dRigControl`
+- `bindRigControlChild`
 - `setMaskRelation`
 - `setDrawOrder`
 - `setRuntimeVisibility`
@@ -174,7 +174,7 @@ evaluateRuntime(
 - deterministic comparison rule
 - disabled future layers の表現
 - diagnostics phase と severity
-- Cubism Editor 準拠の1軸 keyform / `parameter-grid-2d-v1` / 親子デフォーマ階層の評価規則
+- Private Prototype独自の1軸 keyform / `parameter-grid-2d-v1` / 親子変形制御階層の評価規則
 - 3軸以上を同一対象に割り当てた場合の validator diagnostic
 
 ### 3.6 Validator and diagnostics contract
@@ -197,7 +197,7 @@ Web-first GUI は、AI Agent が Playwright 等で検証できるように構造
 
 Structured API の口一覧は、先に固定endpointとして決め打ちしない。次の設計では、ユースケースシナリオをAI操作目線でレビューし、AI Agentが実際の画面やスクリーンショットを見ながら作業する場合に必要な観測口・操作口・検証口を逆算する。
 
-代表シナリオとして、スクリーンショットを参照しながら、選択中または指定されたデフォーマに対してパラメータを設定する操作を必ず分析する。
+代表シナリオとして、スクリーンショットを参照しながら、選択中または指定された変形制御に対してパラメータを設定する操作を必ず分析する。
 
 設計で固定すること:
 
@@ -226,10 +226,10 @@ Structured API の口一覧は、先に固定endpointとして決め打ちしな
 - PSD unsupported layer package
 - split PNG fallback import package
 - basic tutorial-like package with eye / mouth / hair / face angle
-- Angle X / Y の同一デフォーマ2軸 keyform grid package
-- 親子デフォーマ階層で斜め方向を表現する package
+- face yaw / pitch の同一変形制御2軸 keyform grid package
+- 親子変形制御階層で斜め方向を表現する package
 - invalid missing texture package
-- invalid deformer cycle package
+- invalid rig control cycle package
 - invalid mask reference package
 - out-of-range parameter dry-run case
 - AI repair candidate dry-run case
@@ -244,7 +244,7 @@ Structured API の口一覧は、先に固定endpointとして決め打ちしな
 |---|---|
 | AC -> module contract | 各ACをどのmodule/API/type/testが満たすかを示す |
 | Scenario -> operation flow | 各scenarioを実行するGUI操作、operation、runtime snapshot、validation reportを示す |
-| Module -> public API | 各moduleが公開する関数・型・DTOを示す |
+| Module -> Future integration surface | 各moduleが公開する関数・型・DTOを示す |
 | File format -> TypeScript DTO | package内JSONとTS型の対応を示す |
 | Diagnostic check -> AC / scenario | check IDがどのAC/シナリオを支えるかを示す |
 | Fixture -> expected output | contract testで何を固定するかを示す |
@@ -270,7 +270,7 @@ Structured API の口一覧は、先に固定endpointとして決め打ちしな
 
 | File | Role |
 |---|---|
-| `module-boundaries.md` | module責務、所有state、禁止依存、public API一覧 |
+| `module-boundaries.md` | module責務、所有state、禁止依存、Future integration surface一覧 |
 | `typescript-contracts.md` | shared ID、DTO、graph、snapshot、diagnostic、diff のTS型案 |
 | `package-file-format-contract.md` | package内JSONファイル、PSD source asset / provenance、TS DTOの対応 |
 | `operation-contracts.md` | `importPsdSourceAsset` を含む operation request/response/precondition/diff/log entry |
@@ -309,7 +309,7 @@ Structured API の口一覧は、先に固定endpointとして決め打ちしな
 次の `/goal` では、少なくとも次を実施する。
 
 1. ユースケースシナリオをAI操作目線でレビューし、必要な Structured API の口一覧を導出する。
-2. 代表例として、スクリーンショットを見ながらデフォーマへパラメータを設定する操作を分析する。
+2. 代表例として、スクリーンショットを見ながら変形制御へパラメータを設定する操作を分析する。
 3. 導出した口を Editor semantic state API、Operation command API、Runtime / Validator read API に分ける。
 4. MVP必須、MVP任意、post-MVP のtransport adapter候補を分類する。
 

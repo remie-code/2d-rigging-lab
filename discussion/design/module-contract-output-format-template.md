@@ -206,7 +206,7 @@ flowchart LR
 
 ### 4.1 `module-boundaries.md`
 
-目的: module責務、所有state、禁止依存、public API、サブエージェントwrite ownershipを固定する。
+目的: module責務、所有state、禁止依存、Future integration surface、サブエージェントwrite ownershipを固定する。
 
 必須セクション:
 
@@ -268,7 +268,7 @@ export type MeshId = Brand<string, "MeshId">;
 
 ### 4.3 `package-file-format-contract.md`
 
-目的: Open Model Package のファイル構成と TypeScript/Zod DTO の対応を固定する。
+目的: project-defined model package のファイル構成と TypeScript/Zod DTO の対応を固定する。
 
 必須セクション:
 
@@ -342,7 +342,7 @@ export type MeshId = Brand<string, "MeshId">;
 - Runtime API
 - Normalized runtime graph
 - Parameter / keyform evaluation semantics
-- Cubism-like 2-axis keyform grid semantics
+- Project-defined 2-axis keyform grid semantics
 - Evaluation input / options
 - Runtime snapshot
 - Diagnostics phases
@@ -359,7 +359,7 @@ export type MeshId = Brand<string, "MeshId">;
 
 - 1軸 keyform 評価と `parameter-grid-2d-v1` の切り分け
 - `parameter-grid-2d-v1` の key coordinate、欠損key、補間method、clamp policy
-- 親子デフォーマ階層の parent-before-child 評価順序
+- 親子変形制御階層の parent-before-child 評価順序
 - 3軸以上を同一対象に割り当てた場合の validator diagnostic
 
 必須 code block:
@@ -431,7 +431,7 @@ export interface RuntimeCore {
 | Parameter panel | Add keyform | addKeyform | operation log | ... |
 ```
 
-Angle X / Y のような2軸キー形状編集は、Cubism Editor 準拠の操作概念として扱い、GUI操作が必ず operation-core の `parameter-grid-2d-v1` 相当operationへ落ちるように書く。
+face yaw / pitch のような2軸キー形状編集は、project-defined な操作概念として扱い、GUI操作が必ず operation-core の `parameter-grid-2d-v1` operationへ落ちるように書く。
 
 GUI authoring evidence は、operation log を必須証拠として扱う。Playwright trace、screenshot、video、session metadata は補助証拠であり、contract の正は operation log、validation report、runtime snapshot に置く。
 
@@ -471,7 +471,7 @@ AI Agent がスクリーンショットを参照しながら作業するケー�
 必須で明示すること:
 
 - ユースケースシナリオごとに、AI Agent が必要とする observe / inspect / hit-test / dry-run / commit / validate / snapshot / evidence の口。
-- 代表シナリオ「スクリーンショットを見ながらデフォーマへパラメータを設定する」の操作stepとAPI呼び出し。
+- 代表シナリオ「スクリーンショットを見ながら変形制御へパラメータを設定する」の操作stepとAPI呼び出し。
 - API口を Editor semantic state API、Operation command API、Runtime / Validator read API に分類すること。
 - transport-independent contract を正とし、HTTP JSON / WebSocket / MCP は adapter候補としてMVP必須、MVP任意、post-MVPに分類すること。
 
@@ -490,8 +490,8 @@ AI Agent がスクリーンショットを参照しながら作業するケー�
 - PSD import happy path fixture
 - PSD unsupported layer fixture
 - Split PNG fallback fixture
-- Cubism-like 2-axis keyform grid fixture
-- Parent-child deformer diagonal expression fixture
+- Project-defined 2-axis keyform grid fixture
+- Parent-child rig control diagonal expression fixture
 
 必須 Mermaid 図:
 

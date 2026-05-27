@@ -1,11 +1,13 @@
 # Cubism SDK for Web Local Loader Plan
 
+> Status: Superseded historical plan. Do not implement. Current project policy forbids Cubism SDK/Core use, existing Cubism model loading, and inspection/loading of `.model3.json`, `.moc3`, `.cmo3`, `.physics3.json`, `.motion3.json`, or `.pose3.json`.
+
 > Date: 2026-05-24  
 > Scope: Record the local-use decision, SDK acquisition path, and simplest sample app structure for loading `ref/kipfel2_vts/黒シャツキプフェル.moc3` through Cubism SDK for Web and exporting observed structured data.
 
-## 1. Recorded Decision
+## 1. Historical Recorded Decision
 
-The project will use the following policy for `.moc3` runtime intake experiments:
+The previous plan recorded the following policy for `.moc3` runtime intake experiments. This policy is superseded and must not be implemented under the current Private 2D Rigging Lab baseline:
 
 - The tool is for local personal use and is not intended for public distribution.
 - Cubism SDK/Core will not be committed to this repository.
@@ -14,7 +16,7 @@ The project will use the following policy for `.moc3` runtime intake experiments
 - If Cubism SDK/Core is absent, the sample should still be able to inspect documented JSON assets such as `.model3.json`, `.physics3.json`, and `.cdi3.json`, while reporting that `.moc3` runtime loading is unavailable.
 - Independent `.moc3` parsing/writing remains out of scope.
 
-This is a project design note, not legal advice. If the tool is ever distributed, hosted, or shared outside personal/local use, SDK/Core licensing and publication requirements must be reviewed again.
+This is a historical project design note, not legal advice. Under the current baseline, Cubism SDK/Core and Cubism model intake are not used.
 
 ## 2. SDK Acquisition
 
@@ -148,7 +150,7 @@ writeOutput.ts
   -> browser download first; optional local dev-server write later
 ```
 
-This keeps the proprietary/runtime boundary narrow and makes it possible to run a partial inspection without SDK/Core.
+This was the old boundary rationale. It is retained only to explain the superseded plan and is not current implementation guidance.
 
 ## 9. Open Questions
 

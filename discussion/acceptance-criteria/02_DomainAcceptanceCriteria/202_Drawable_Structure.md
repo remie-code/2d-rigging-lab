@@ -1,33 +1,23 @@
-﻿# Open Live2D Stack Acceptance Criteria System Draft
+# DOMAIN-02: Drawable Structure
 
-# 2. Domain Acceptance Criteria
+> Status: Current for Private Prototype baseline.
 
-## DOMAIN-02: Drawable Structure
+## 問い
 
-### 問い
-
-Live2Dモデルにおける「描かれるもの」は何か。
-Open Editorは何を描画単位として扱わなければならないか。
+Private Prototypeは、描画要素をどの単位で管理し、runtime評価とvalidatorへ渡すべきか。
 
 ### AC-DRAW-001: 描画要素を管理できること
 
-Open Editorは、Live2Dモデルを構成する描画要素を管理できること。
-
-描画要素は、テクスチャ、表示状態、描画順、所属パーツ、マスク・クリッピング等の描画制約と結びつく。
-
+Project-defined packageは、drawableのstable ID、display name、texture参照、mesh参照、bounds、opacity、visibilityを保持できること。
 
 ### AC-DRAW-002: 描画要素の階層・所属を扱えること
 
-Open Editorは、描画要素がどのパーツまたは構造に所属するかを管理できること。
-
+Drawableはpartに所属し、private GUI editor、private runtime core、validatorが同じIDで参照できること。
 
 ### AC-DRAW-003: 描画順と表示状態を制御できること
 
-Open Editorは、描画要素の表示/非表示、透明度、描画順を制御できること。
-
+Drawableはdraw order、visibility、opacity、lock/hide/selectなどの制作状態とruntime状態を分離して扱えること。
 
 ### AC-DRAW-004: マスク・クリッピング等の描画制約を扱えること
 
-Open Editorは、Live2Dモデルに必要な描画制約を扱えること。
-
-これには少なくとも、ある描画要素を別の描画要素の範囲内に制限する表現が含まれる。
+Drawable間のmask / clipping関係をproject-defined構造として保持し、private viewerで確認し、validatorで不整合を検出できること。

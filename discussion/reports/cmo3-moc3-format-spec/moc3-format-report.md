@@ -1,8 +1,12 @@
 # MOC3 Format Availability and Feasibility Report
 
+> Status: Historical private research archive. Current project policy supersedes the implementation recommendations in this report. The Private 2D Rigging Lab will not inspect, load, parse, convert, or reconstruct `.moc3`, `.cmo3`, `.model3.json`, `.physics3.json`, `.motion3.json`, or `.pose3.json`, and will not use Cubism SDK/Core.
+
 Research date: 2026-05-24
 
-Scope: Live2D Cubism `.moc3` public specification availability, SDK loading path, OSS ecosystem evidence, and practical read/write feasibility for AI-native Live2D Editor model intake and runtime export decisions.
+Scope: Live2D Cubism `.moc3` public specification availability, SDK loading path, OSS ecosystem evidence, and practical read/write feasibility for AI-native 2D Character Rigging Editor model intake and runtime export decisions.
+
+All recommendations below are historical. Current implementation guidance is in [format-feasibility-summary.md](format-feasibility-summary.md).
 
 ## Key Conclusion
 
