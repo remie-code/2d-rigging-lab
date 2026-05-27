@@ -18,7 +18,7 @@
 ### 1.2 公式・参照事実
 
 - Runtime評価セマンティクス参照レポートは、parameter操作後にmodel updateを行うruntime layer順序を参考にしつつ、Private Prototypeでは独自の評価pipelineを明文化する必要があると整理している。
-- RigControl参照レポートは、`rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、`rig controlLocalRest` bind、parent-before-child評価をMVP候補としている。
+- RigControl参照レポートは、`rotation2d` と `warpLattice2d`、`bilinear-grid-v1`、`rigControlLocalRest` bind、parent-before-child評価をMVP候補としている。
 - Viewer / Preview参照レポートは、Editor preview と Viewer が同じ Shared Runtime evaluation core と snapshot schema を共有することを推奨している。
 
 ### 1.3 設計仮定
@@ -148,7 +148,7 @@ MVP Runtime は次のrig control nodeを評価する。
 - parent-before-childでtopological sortする。
 - cycleは `blocking`。
 - missing parent / child は `blocking`。
-- `warpLattice2d` のbind spaceは `rig controlLocalRest` をMVP既定とする。
+- `warpLattice2d` のbind spaceは `rigControlLocalRest` をMVP既定とする。
 - undefined interpolation、NaN、Infinityは `blocking` または対象単位の `error` とする。
 - child vertexが親warp domain外へ出る状態は、評価可能なら `warning` とする。
 

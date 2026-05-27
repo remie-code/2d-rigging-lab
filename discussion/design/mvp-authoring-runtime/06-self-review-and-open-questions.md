@@ -67,7 +67,7 @@ These reports are private research archive and not implementation source of trut
 - `rotation2d` を pivot付き2D affine transform として扱う。
 - `warpLattice2d` を2D control lattice deformation nodeとして扱う。
 - `bilinear-grid-v1` をMVP既定のwarp evaluatorにする。
-- `rig controlLocalRest` bindをMVP既定にする。
+- `rigControlLocalRest` bindをMVP既定にする。
 - RigControl hierarchyはparent-before-childで評価し、cycleをblockingにする。
 - CubismのBezier / conversion divisionsをそのままPrivate Prototypeの正にしない。
 - final vertexだけでなくrig control nodeをruntime-visible graphとして保存する。

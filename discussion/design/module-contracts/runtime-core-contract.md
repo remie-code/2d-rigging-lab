@@ -81,12 +81,10 @@ import {
   Vec2,
   Vec2Schema,
   RectSchema,
-  RuntimeEvaluationProfileSchema,
   SnapshotDetailSchema,
+  RuntimeEvaluationContextSchema,
   RuntimeResetReasonSchema,
-  RuntimeSequenceEvaluationContextSchema,
   RuntimeStateDtoSchema,
-  RuntimeSourceSurfaceSchema,
   RuntimeSequenceFrameSchema,
 } from "./contracts";
 
@@ -111,7 +109,8 @@ export interface RuntimeCore {
     graph: NormalizedRuntimeGraph,
     input: RuntimeEvaluationInputDto,
     previousState: RuntimeStateDto,
-    options: RuntimeEvaluationOptionsDto
+    options: RuntimeEvaluationOptionsDto,
+    context: RuntimeEvaluationContextDto
   ): {
     snapshot: RuntimeSnapshotDto;
     nextState: RuntimeStateDto;
@@ -122,7 +121,7 @@ export interface RuntimeCore {
     frames: readonly RuntimeSequenceFrameDto[],
     initialState: RuntimeStateDto,
     options: RuntimeEvaluationOptionsDto,
-    context: RuntimeSequenceEvaluationContextDto
+    context: RuntimeEvaluationContextDto
   ): {
     snapshots: readonly RuntimeSnapshotDto[];
     finalState: RuntimeStateDto;
@@ -252,10 +251,6 @@ export const RuntimeEvaluationInputSchema = z.object({
   deltaTimeMs: z.number().finite().nonnegative(),
   resetReasons: z.array(RuntimeResetReasonSchema).default([]),
   authoredParameterValues: z.record(ParameterIdSchema, z.number().finite()).default({}),
-  source: z.object({
-    surface: RuntimeSourceSurfaceSchema,
-    operationId: z.string().optional(),
-  }),
   targetIds: z.array(z.string()).default([]),
 });
 export type RuntimeEvaluationInputDto = z.infer<typeof RuntimeEvaluationInputSchema>;
@@ -270,7 +265,6 @@ export type EpsilonPolicyDto = z.infer<typeof EpsilonPolicySchema>;
 
 export const RuntimeEvaluationOptionsSchema = z.object({
   schemaVersion: z.literal("runtime-evaluation-options-v1"),
-  profile: RuntimeEvaluationProfileSchema,
   snapshotDetail: SnapshotDetailSchema,
   evaluatorVersions: z.object({
     dynamics: z.literal("scalarDampedFollowV1"),
@@ -287,11 +281,11 @@ export type RuntimeEvaluationOptionsDto = z.infer<typeof RuntimeEvaluationOption
 
 // RuntimeStateDtoSchema, RuntimeDynamicsGroupStateSchema,
 // RuntimeResetReasonSchema, RuntimeSequenceFrameSchema, and
-// RuntimeSequenceEvaluationContextSchema are defined in typescript-contracts.md.
+// RuntimeEvaluationContextSchema are defined in typescript-contracts.md.
 // Runtime Core owns the semantics below, not a second DTO definition.
 export type RuntimeStateDto = z.infer<typeof RuntimeStateDtoSchema>;
 export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>;
-export type RuntimeSequenceEvaluationContextDto = z.infer<typeof RuntimeSequenceEvaluationContextSchema>;
+export type RuntimeEvaluationContextDto = z.infer<typeof RuntimeEvaluationContextSchema>;
 ```
 
 `RuntimeStateDtoSchema` is defined in [typescript-contracts.md](typescript-contracts.md). This document is the semantic contract for how Runtime Core creates, accepts, repairs, and returns that DTO.
@@ -305,15 +299,23 @@ export type RuntimeSequenceEvaluationContextDto = z.infer<typeof RuntimeSequence
 | `accumulatorMs` | Unprocessed variable delta carried between fixed substeps. Initial state starts at `0`. |
 | `dynamicsGroups` | One entry per active Dynamics group in the graph. Each group stores `position`, `velocity`, `tick`, and `resetCounter`. |
 
-`RuntimeSequenceFrameDto` is the source-of-truth input for sequence preview, Dynamics sequence tests, acceptance runner playback, and `evaluateRuntimeSequence`. It contains only frame-local input. Runtime Core normalizes each frame into an internal `RuntimeEvaluationInputDto` by combining it with `RuntimeSequenceEvaluationContextDto`.
+`RuntimeSequenceFrameDto` is the source-of-truth input for sequence preview, Dynamics sequence tests, acceptance runner playback, and `evaluateRuntimeSequence`. It contains only frame-local input. Runtime Core normalizes each frame into an internal `RuntimeEvaluationInputDto` by combining it with `RuntimeEvaluationContextDto`.
 
-`RuntimeSequenceEvaluationContextDto` carries sequence-wide execution context:
+`RuntimeEvaluationContextDto` carries runtime execution context for both frame and sequence evaluation:
 
 - `source.surface`
 - `source.operationId`
-- `profile`
+- `policy.strictness`
 
-Source surface, operation ID, caller identity, and profile must not be duplicated into `RuntimeSequenceFrameDto`. This keeps one frame list reusable across preview, viewer, validator, AI dry-run, fixtures, and acceptance runs.
+Source surface, operation ID, caller identity, runtime mode, and profile must not be duplicated into `RuntimeSequenceFrameDto` or `RuntimeEvaluationInputDto`. This keeps one frame list reusable across preview, viewer, validator, AI dry-run, fixtures, and acceptance runs.
+
+`RuntimeEvaluationContextSchema.policy` defaults to `{ strictness: "interactive" }`. A context such as `{ source: { surface: "preview" } }` is valid and means interactive preview evaluation.
+
+`RuntimeEvaluationOptionsDto` is limited to technical evaluation options such as `snapshotDetail`, evaluator versions, epsilon policy, trace inclusion, and `maxSubSteps`. It must not define a competing runtime profile. During migration, any legacy `options.profile` must be derived from `RuntimeEvaluationContextDto`; if legacy profile and context conflict, Runtime Core emits `runtime.profileMismatch`. `RuntimeEvaluationProfileSchema` is deprecated and must not be used by new runtime, operation, AI, fixture, validator, or acceptance contracts; remove it once legacy `options.profile` and `runtime.profileMismatch` references disappear.
+
+`RuntimeStateSequenceArtifact` represents replay evidence for a frame list. `states[0]` is the initial state before the first frame; for frame `i`, `states[i + 1]` is the state after evaluating `frames[i]`. `frameCount` is the number of evaluated `RuntimeSequenceFrameDto` entries, so `states.length = frameCount + 1` is a semantic rule. Runtime Core, validator, and fixtures must treat a mismatch as incomplete deterministic replay evidence and surface `runtime.stateSequenceLengthMismatch`.
+
+For acceptance and exact deterministic replay, sequence artifacts should include `inputFramesHash`, `runtimeEvaluationContext`, and `evaluatorVersionSummary`. Interactive preview artifacts may omit those fields.
 
 ## Parameter / Keyform Evaluation Semantics
 
@@ -341,7 +343,7 @@ Evaluation rules:
 
 Minimum Open Dynamics v1 is a parameter-driven deterministic secondary motion layer. It uses `scalarDampedFollowV1` only in MVP.
 
-Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, `RuntimeSequenceFrameDto[]`, fixedStepMs, options, and `RuntimeSequenceEvaluationContextDto`.
+Minimum Open Dynamics v1 is stateful, but Runtime Core must not own hidden mutable state. Every frame evaluation receives a previous `RuntimeStateDto` and returns both a `RuntimeSnapshotDto` and a next `RuntimeStateDto`. Editor preview, Private Viewer, Validator, and AI sequence preview must produce the same snapshot sequence for the same package, initial state, `RuntimeSequenceFrameDto[]`, fixedStepMs, options, and `RuntimeEvaluationContextDto`.
 
 ### Initial RuntimeState Creation
 
@@ -369,11 +371,11 @@ Creation rules:
 State compatibility rules:
 
 - If `previousState` is absent, callers must create an initial state before evaluation.
-- If both `graph.packageHash` and `previousState.packageHash` exist, they must match exactly. Mismatch emits `runtime.statePackageMismatch`; strict / acceptance profile fails or requires reset before using the stale state.
+- If both `graph.packageHash` and `previousState.packageHash` exist, they must match exactly. Mismatch emits `runtime.statePackageMismatch`; strict / acceptance strictness fails or requires reset before using the stale state.
 - If either package hash is missing, Runtime falls back to `packageId + packageRevision` comparison. If either fallback field differs, Runtime emits `runtime.statePackageMismatch`.
-- If package hash is missing but `packageId + packageRevision` match, Runtime emits `runtime.statePackageHashUnavailable`. Interactive profile may treat it as info; strict profile warns; exact deterministic replay fixtures may make missing hash an acceptance failure unless the fixture explicitly declares hashless replay.
+- If package hash is missing but `packageId + packageRevision` match, Runtime emits `runtime.statePackageHashUnavailable`. Interactive strictness may treat it as info; strict strictness warns; exact deterministic replay fixtures may make missing hash an acceptance failure unless the fixture explicitly declares hashless replay.
 - If a graph group is missing from `previousState.dynamicsGroups`, Runtime initializes that group from `currentTarget` and emits `runtime.stateMissingDynamicsGroup`.
-- If `previousState.dynamicsGroups` contains a group not present in the graph, Runtime ignores the unknown state and emits `runtime.stateUnknownDynamicsGroup`; strict profile warns or fails when replay evidence depends on exact state equality.
+- If `previousState.dynamicsGroups` contains a group not present in the graph, Runtime ignores the unknown state and emits `runtime.stateUnknownDynamicsGroup`; strict strictness warns or fails when replay evidence depends on exact state equality.
 
 Rules:
 
@@ -476,7 +478,7 @@ Timestep policy:
 - Runtime uses fixed timestep for Dynamics. Raw variable `deltaTimeMs` is accumulated into fixed steps and is never passed directly to the solver.
 - `RuntimeStateDto.fixedStepMs` is the active timestep for evaluation.
 - Sequence or operation payload `fixedStepMs` is used only when creating an initial `RuntimeStateDto`.
-- If `initialState` / `previousState` is supplied and its `fixedStepMs` differs from the request `fixedStepMs`, Runtime emits `dynamics.timestepMismatch`; strict / acceptance profile fails when deterministic replay evidence is required.
+- If `initialState` / `previousState` is supplied and its `fixedStepMs` differs from the request `fixedStepMs`, Runtime emits `dynamics.timestepMismatch`; strict / acceptance strictness fails when deterministic replay evidence is required.
 - Default `fixedStepMs` is `16.6666667`.
 - Default `maxSubSteps` is `4`.
 - `RuntimeStateDto.accumulatorMs` stores remaining unprocessed time.
@@ -653,17 +655,13 @@ export const RuntimeSnapshotSchema = z.object({
   schemaVersion: z.literal("runtime-snapshot-v1"),
   runtimeCoreVersion: z.string(),
   snapshotId: RuntimeSnapshotIdSchema,
-  source: z.object({
-    surface: RuntimeSourceSurfaceSchema,
-    operationId: z.string().optional(),
-  }),
+  context: RuntimeEvaluationContextSchema,
   packageId: PackageIdSchema,
   packageRevision: z.number().int().nonnegative(),
   packageHash: z.string().optional(),
   authoringRevision: z.number().int().nonnegative().optional(),
   dirty: z.boolean(),
   evaluation: z.object({
-    profile: RuntimeEvaluationProfileSchema,
     snapshotDetail: SnapshotDetailSchema,
     evaluatorVersions: z.record(z.string(), z.string()),
   }),
@@ -784,7 +782,7 @@ MVP hair/cloth/accessory sway is represented by Minimum Open Dynamics v1 compute
 | `manual-face-grid-2d` | verify diagonal interpolation and key coordinate handling | full runtime snapshot |
 | `parent-child-rigControl-diagonal` | verify parent and child axis composition | targeted snapshot + runtime diff |
 | `minimal-dynamics-hairSway` | faceYaw input sequence produces delayed/clamped hairSway output | snapshot sequence + runtime diff |
-| `dynamics-reset-determinism` | reset policy and fixed timestep produce identical replay | paired snapshot sequence |
+| `dynamics-reset-determinism` | reset policy and fixed timestep produce identical replay | paired `RuntimeStateSequenceArtifact` evidence with `states[0]` as initial state |
 | `invalid-rigControl-cycle` | cycle blocks deterministic evaluation | validation report + no snapshot or blocking snapshot |
 | `invalid-mask-reference` | mask diagnostics appear in runtime phase | snapshot diagnostics |
 | `out-of-range-parameter-dry-run` | clamp warning and strict validation behavior | dry-run snapshot + report |

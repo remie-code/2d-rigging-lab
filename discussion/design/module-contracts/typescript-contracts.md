@@ -184,6 +184,11 @@ export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export const ValidationProfileSchema = z.enum(["editorIncremental", "viewer", "strict", "acceptance", "aiDryRun"]);
 export type ValidationProfile = z.infer<typeof ValidationProfileSchema>;
 
+// Deprecated legacy runtime profile, retained only as a migration note.
+// New operation, AI, runtime, fixture, validator, and acceptance contracts use
+// RuntimeEvaluationContextSchema.source.surface + policy.strictness.
+// Remove this schema once legacy options.profile and runtime.profileMismatch
+// references are no longer accepted or documented.
 export const RuntimeEvaluationProfileSchema = z.enum(["preview", "viewer", "validatorStrict", "aiDryRun"]);
 export type RuntimeEvaluationProfile = z.infer<typeof RuntimeEvaluationProfileSchema>;
 
@@ -329,13 +334,18 @@ export type RuntimeResetReason = z.infer<typeof RuntimeResetReasonSchema>;
 export const RuntimeSourceSurfaceSchema = z.enum(["preview", "viewer", "validator", "aiDryRun"]);
 export type RuntimeSourceSurface = z.infer<typeof RuntimeSourceSurfaceSchema>;
 
-export const RuntimeSequenceEvaluationProfileSchema = z.enum(["interactive", "strict", "acceptance", "demoSafe"]);
-export type RuntimeSequenceEvaluationProfile = z.infer<typeof RuntimeSequenceEvaluationProfileSchema>;
+export const RuntimeEvaluationStrictnessSchema = z.enum(["interactive", "strict", "acceptance", "demoSafe"]);
+export type RuntimeEvaluationStrictness = z.infer<typeof RuntimeEvaluationStrictnessSchema>;
 
 export const RuntimeStateArtifactRefSchema = z.string().regex(
   /^runtime\/states\/[A-Za-z0-9_.-]+\.runtime-state\.json$/
 );
 export type RuntimeStateArtifactRef = z.infer<typeof RuntimeStateArtifactRefSchema>;
+
+export const RuntimeStateSequenceArtifactRefSchema = z.string().regex(
+  /^runtime\/state-sequences\/[A-Za-z0-9_.-]+\.runtime-state-sequence\.json$/
+);
+export type RuntimeStateSequenceArtifactRef = z.infer<typeof RuntimeStateSequenceArtifactRefSchema>;
 
 export const RuntimeStateDtoSchema = z.object({
   schemaVersion: z.literal("runtime-state-v1"),
@@ -358,14 +368,34 @@ export const RuntimeSequenceFrameSchema = z.object({
 });
 export type RuntimeSequenceFrameDto = z.infer<typeof RuntimeSequenceFrameSchema>;
 
-export const RuntimeSequenceEvaluationContextSchema = z.object({
+export const RuntimeEvaluationContextSchema = z.object({
   source: z.object({
     surface: RuntimeSourceSurfaceSchema,
     operationId: z.string().optional(),
   }),
-  profile: RuntimeSequenceEvaluationProfileSchema.default("interactive"),
+  policy: z.object({
+    strictness: RuntimeEvaluationStrictnessSchema.default("interactive"),
+  }).default({}),
 });
-export type RuntimeSequenceEvaluationContextDto = z.infer<typeof RuntimeSequenceEvaluationContextSchema>;
+export type RuntimeEvaluationContextDto = z.infer<typeof RuntimeEvaluationContextSchema>;
+
+// Deprecated compatibility alias. New contracts use RuntimeEvaluationContextSchema.
+export const RuntimeSequenceEvaluationContextSchema = RuntimeEvaluationContextSchema;
+export type RuntimeSequenceEvaluationContextDto = RuntimeEvaluationContextDto;
+
+export const RuntimeStateSequenceArtifactSchema = z.object({
+  schemaVersion: z.literal("runtime-state-sequence-v1"),
+  packageId: PackageIdSchema,
+  packageRevision: z.number().int().nonnegative(),
+  packageHash: z.string().optional(),
+  fixedStepMs: z.number().positive(),
+  frameCount: z.number().int().nonnegative(),
+  inputFramesHash: z.string().optional(),
+  runtimeEvaluationContext: RuntimeEvaluationContextSchema.optional(),
+  evaluatorVersionSummary: z.record(z.string(), z.string()).optional(),
+  states: z.array(RuntimeStateDtoSchema),
+});
+export type RuntimeStateSequenceArtifact = z.infer<typeof RuntimeStateSequenceArtifactSchema>;
 
 export const ValidationDiffSchema = z.object({
   schemaVersion: z.literal("validation-diff-v1"),
@@ -393,9 +423,19 @@ export type ValidationDiffDto = z.infer<typeof ValidationDiffSchema>;
 - `authoredParameterValues`
 - `targetIds`
 
-It must not carry source surface, operation ID, caller identity, or profile. Sequence execution context is represented by `RuntimeSequenceEvaluationContextDto`, so the same frame list can be reused by preview, viewer, validator, AI dry-run, fixtures, and acceptance runners.
+It must not carry source surface, operation ID, caller identity, runtime mode, or profile. Evaluation context is represented by `RuntimeEvaluationContextDto`, so the same frame list can be reused by preview, viewer, validator, AI dry-run, fixtures, and acceptance runners.
 
 `RuntimeStateArtifactRefSchema` constrains RuntimeState evidence references to generated `runtime/states/*.runtime-state.json` artifacts. These refs must not point to authored package source files.
+
+`RuntimeStateSequenceArtifactRefSchema` constrains RuntimeState sequence evidence references to generated `runtime/state-sequences/*.runtime-state-sequence.json` artifacts. `RuntimeStateSequenceArtifactSchema` stores a time-ordered array of `RuntimeStateDto` values and must not be used for single-state references.
+
+`RuntimeStateSequenceArtifactSchema.states[0]` is the initial `RuntimeStateDto` before evaluating the first `RuntimeSequenceFrameDto`. For frame `i`, `states[i + 1]` is the post-frame `RuntimeStateDto` after evaluating `frames[i]`. `frameCount` is the number of evaluated `RuntimeSequenceFrameDto` entries, so the semantic rule is `states.length = frameCount + 1`. A sequence artifact that violates this rule is incomplete deterministic replay evidence and must produce `runtime.stateSequenceLengthMismatch`.
+
+`inputFramesHash`, `runtimeEvaluationContext`, and `evaluatorVersionSummary` are optional so interactive preview artifacts can stay light. Acceptance fixtures and exact deterministic replay fixtures should include all three evidence fields, along with `packageHash`, `fixedStepMs`, and the initial state at `states[0]`.
+
+Runtime evaluation mode is represented by `RuntimeEvaluationContextDto.source.surface` and `RuntimeEvaluationContextDto.policy.strictness`, not by `RuntimeEvaluationOptionsDto.profile`. `RuntimeEvaluationContextSchema.policy` defaults to `{ strictness: "interactive" }`, so `{ source: { surface: "preview" } }` is valid and means interactive preview context.
+
+`RuntimeEvaluationProfileSchema` is deprecated and retained only as a legacy migration note. New operation, AI, runtime, fixture, validator, and acceptance contracts must not use it. It can be removed once legacy `options.profile` and the migration-only `runtime.profileMismatch` diagnostic are no longer accepted or documented.
 
 ## DTO Index
 
@@ -404,7 +444,7 @@ It must not carry source surface, operation ID, caller identity, or profile. Seq
 | `ManifestDto`, `GraphDto`, `DrawableDto`, `MeshDto`, `ParameterDto` | [package-file-format-contract.md](package-file-format-contract.md) | zod |
 | `AuthoringGraph`, `EditorSessionState` | [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md) | typescript |
 | `OperationRequestDto`, `OperationResultDto`, `OperationLogEntryDto` | [operation-contracts.md](operation-contracts.md) | zod |
-| `RuntimeStateDto`, `RuntimeSequenceFrameDto`, `RuntimeSequenceEvaluationContextDto`, `RuntimeStateArtifactRef`, `RuntimeDiffDto` | this file | zod source of truth |
+| `RuntimeStateDto`, `RuntimeSequenceFrameDto`, `RuntimeEvaluationContextDto`, `RuntimeStateArtifactRef`, `RuntimeStateSequenceArtifactRef`, `RuntimeStateSequenceArtifact`, `RuntimeDiffDto` | this file | zod source of truth |
 | `NormalizedRuntimeGraph`, `RuntimeCore` | [runtime-core-contract.md](runtime-core-contract.md) | typescript |
 | `RuntimeSnapshotDto` | [runtime-core-contract.md](runtime-core-contract.md) | zod; imports shared RuntimeState / sequence DTOs from this file |
 | `ValidationReportDto`, `RepairCandidateDto` | [validator-contract.md](validator-contract.md) | zod |
@@ -448,7 +488,7 @@ flowchart LR
 | AC-MVP-008, AC-PARAM-006 | `ParameterId`, `semanticRole`, private `projectPresetAlias` fields in downstream DTOs | `tutorial-like-authoring` |
 | AC-MVP-010, AC-PHYS-001 | `DynamicsGroupId`, `TargetKindSchema = "dynamicsGroup"` | `minimal-dynamics-hairSway` |
 | AC-MVP-013, AC-VALIDATOR-005 | `DiagnosticSchema`, `CheckIdSchema` | expected validation reports |
-| AC-MVP-012, AC-PHYS-004 | `RuntimeStateDtoSchema`, `RuntimeSequenceFrameSchema`, `RuntimeSequenceEvaluationContextSchema`, `RuntimeStateArtifactRefSchema`, `RuntimeDiffSchema.dynamicsChanges` | `dynamics-fixed-step-replay`, `dynamics-reset-determinism` |
+| AC-MVP-012, AC-PHYS-004 | `RuntimeStateDtoSchema`, `RuntimeSequenceFrameSchema`, `RuntimeEvaluationContextSchema`, `RuntimeStateArtifactRefSchema`, `RuntimeStateSequenceArtifactRefSchema`, `RuntimeStateSequenceArtifactSchema`, `RuntimeDiffSchema.dynamicsChanges` | `dynamics-fixed-step-replay`, `dynamics-reset-determinism` |
 | AC-MVP-014, AC-AI-002, AC-AGENT-003 | `ModelDiffSchema`, `RuntimeDiffSchema`, `ValidationDiffSchema` | `ai-repair-dry-run` |
 | SC-PARAM-004, SC-MVP-002 | `ParameterId` + keyform DTO index | `manual-face-grid-2d` |
 

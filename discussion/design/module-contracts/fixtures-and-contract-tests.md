@@ -202,23 +202,27 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `manual-face-grid-2d` | `full` | manual face grid values at `(-30,-30)`, `(0,0)`, `(30,30)`, `(-30,30)`, `(30,-30)` produce deterministic vertex hashes under declared epsilon |
 | `parent-child-rigControl-diagonal` | `targeted` | parent rotation and child warp states are both present; child final bounds differ from parent-only baseline |
 | `minimal-dynamics-hairSway` | `targeted` sequence | `faceYaw` authored input drives one `hairSway` computed output with delayed follow, damping, output clamp, debug target fields, and no direct mesh/rigControl writes |
-| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, `RuntimeSequenceFrameDto[]`, and fixedStepMs produce identical dynamics output sequence and state summary |
+| `dynamics-reset-determinism` | `targeted` sequence pair | same initial `RuntimeStateDto`, `RuntimeSequenceFrameDto[]`, `RuntimeEvaluationContextDto`, evaluator version summary, and fixedStepMs produce identical dynamics output sequence and state summary |
 | `dynamics-fixed-step-replay` | `targeted` sequence | variable delta inputs produce deterministic fixed-step substeps, accumulatorMs, and final RuntimeStateDto |
 | `out-of-range-parameter-dry-run` | `targeted` | raw input recorded, value clamped to range, `runtime.parameterClamped` warning emitted |
 
-Dynamics sequence fixtures, preview sequence tests, and acceptance runners use `RuntimeSequenceFrameDto[]` as the source-of-truth input. The frame list contains only frame-local input; source surface, operation ID, caller identity, and replay profile are supplied by `RuntimeSequenceEvaluationContextDto` or the surrounding operation/test harness.
+Dynamics sequence fixtures, preview sequence tests, and acceptance runners use `RuntimeSequenceFrameDto[]` as the source-of-truth input. The frame list contains only frame-local input; source surface, operation ID, caller identity, and replay strictness are supplied by explicit `RuntimeEvaluationContextDto` or the surrounding operation/test harness.
 
 ## Expected Runtime States
 
 | Fixture | Required state artifacts | Required assertions |
 |---------|--------------------------|---------------------|
-| `minimal-dynamics-hairSway` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-next-runtime-state.json` | initial state package identity matches fixture package; each group starts at currentTarget with velocity=0, tick=0, resetCounter=1 |
-| `dynamics-reset-determinism` | `runtime/states/expected-runtime-state-sequence.json` | paired runs produce byte-stable state sequence under declared evaluator version and epsilon policy |
-| `dynamics-fixed-step-replay` | `runtime/states/initial-runtime-state.json`, `runtime/states/expected-runtime-state-sequence.json`, `runtime/states/expected-next-runtime-state.json` | variable `deltaTimeMs` frames update accumulatorMs and final state deterministically; timestep mismatch fixture emits `dynamics.timestepMismatch` |
+| `minimal-dynamics-hairSway` | `runtime/states/initial.runtime-state.json`, `runtime/states/expected-next.runtime-state.json` | initial state package identity matches fixture package; each group starts at currentTarget with velocity=0, tick=0, resetCounter=1 |
+| `dynamics-reset-determinism` | `runtime/state-sequences/replay-a.runtime-state-sequence.json`, `runtime/state-sequences/replay-b.runtime-state-sequence.json` | paired runs produce byte-stable state sequence under declared evaluator version summary, packageHash, explicit context, input frame hash, and epsilon policy |
+| `dynamics-fixed-step-replay` | `runtime/states/initial.runtime-state.json`, `runtime/state-sequences/expected.runtime-state-sequence.json`, `runtime/states/expected-next.runtime-state.json` | `states[0]` is the initial state; `states[i + 1]` is the post-frame state for frame `i`; variable `deltaTimeMs` frames update accumulatorMs and final state deterministically; timestep mismatch fixture emits `dynamics.timestepMismatch` |
 
-RuntimeState artifact refs must match `RuntimeStateArtifactRefSchema` and point to generated `runtime/states/*.runtime-state.json` files. RuntimeState artifacts are generated evidence, not authored model source.
+RuntimeState artifact refs must match `RuntimeStateArtifactRefSchema` and point to generated `runtime/states/*.runtime-state.json` single-state files. RuntimeState sequence artifact refs must match `RuntimeStateSequenceArtifactRefSchema` and point to generated `runtime/state-sequences/*.runtime-state-sequence.json` files. Both artifact families are generated evidence, not authored model source.
 
-Exact deterministic replay fixtures require `packageHash` unless the fixture explicitly declares hashless replay. If either graph or state hash is missing, the fixture must record `runtime.statePackageHashUnavailable`; acceptance profile may fail the fixture when exact replay evidence is required.
+RuntimeState sequence artifacts use initial/post-frame semantics. `states[0]` is the initial `RuntimeStateDto` before any frame is evaluated. For frame `i`, `states[i + 1]` is the post-frame `RuntimeStateDto` after evaluating `RuntimeSequenceFrameDto` frame `i`. `frameCount` is the number of evaluated frames, and `states.length = frameCount + 1` is required. A mismatch emits `runtime.stateSequenceLengthMismatch` and makes the sequence incomplete deterministic replay evidence.
+
+Exact deterministic replay fixtures require `packageHash`, `inputFramesHash` for the canonical `RuntimeSequenceFrameDto[]`, explicit `RuntimeEvaluationContextDto`, `evaluatorVersionSummary`, `fixedStepMs`, and `RuntimeEvaluationContextDto.policy.strictness`, normally `strict` or `acceptance`, unless the fixture explicitly declares hashless replay. If either graph or state hash is missing, the fixture must record `runtime.statePackageHashUnavailable`; acceptance strictness may fail the fixture when exact replay evidence is required.
+
+Exact deterministic replay passes only when the compared artifacts have the same `packageHash`, same `inputFramesHash`, same `runtimeEvaluationContext`, same `evaluatorVersionSummary`, same `fixedStepMs`, the same `states[0]` initial `RuntimeStateDto`, epsilon-equivalent final state at `states[frameCount]`, and no `runtime.stateSequenceLengthMismatch`.
 
 ## Expected Diffs
 

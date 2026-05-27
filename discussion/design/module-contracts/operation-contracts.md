@@ -91,8 +91,10 @@ import {
   DiagnosticSchema,
   ModelDiffSchema,
   RuntimeDiffSchema,
+  RuntimeEvaluationContextSchema,
   RuntimeResetReasonSchema,
   RuntimeStateArtifactRefSchema,
+  RuntimeStateSequenceArtifactRefSchema,
   RuntimeStateDtoSchema,
   RuntimeSequenceFrameSchema,
   ValidationDiffSchema,
@@ -254,6 +256,7 @@ export const RunDynamicsPreviewSequencePayloadSchema = z.object({
   fixedStepMs: z.number().positive().default(16.6666667),
   maxSubSteps: z.number().int().min(1).max(16).default(4),
   detail: z.enum(["summary", "targeted", "full"]).default("targeted"),
+  context: RuntimeEvaluationContextSchema.optional(),
 });
 
 export const MoveMeshVertexPayloadSchema = z.object({
@@ -438,6 +441,7 @@ export const OperationResultSchema = z.object({
   diagnostics: z.array(DiagnosticSchema).default([]),
   generatedRuntimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
   generatedRuntimeStateRefs: z.array(RuntimeStateArtifactRefSchema).default([]),
+  generatedRuntimeStateSequenceRefs: z.array(RuntimeStateSequenceArtifactRefSchema).default([]),
   finalRuntimeState: RuntimeStatePayloadSchema.optional(),
   finalRuntimeStateRef: RuntimeStateArtifactRefSchema.optional(),
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
@@ -490,11 +494,13 @@ export interface OperationCore {
 
 `runDynamicsPreviewSequence` uses `frames: RuntimeSequenceFrameDto[]` as the operation and acceptance source of truth. Each frame carries only frame-local input: `frameIndex`, `deltaTimeMs`, per-frame `resetReasons`, `authoredParameterValues`, and `targetIds`. Any UI or adapter convenience shape such as `authoredParameterFrames` must be lowered to `frames` before it reaches the operation contract and must not be used as contract-test evidence.
 
-Source surface, operation ID, caller identity, and replay profile are supplied by the surrounding `OperationRequestDto` and the `RuntimeSequenceEvaluationContextDto` passed to Runtime Core. They are not stored on `RuntimeSequenceFrameDto`, which allows the same frame list to be replayed by preview, viewer, validator, acceptance runner, and AI dry-run contexts.
+Source surface, operation ID, caller identity, and replay strictness are supplied by `RunDynamicsPreviewSequencePayloadSchema.context`, or derived from the surrounding `OperationRequestDto` when `context` is omitted. If `context.policy` is omitted, `policy.strictness` defaults to `"interactive"`; `{ source: { surface: "preview" } }` is valid for interactive preview. Acceptance tests, deterministic replay fixtures, validator runs, and demo-safe capture tests should provide context explicitly. Context is not stored on `RuntimeSequenceFrameDto`, which allows the same frame list to be replayed by preview, viewer, validator, acceptance runner, and AI dry-run contexts.
 
-`RuntimeStateDto.fixedStepMs` is the active timestep. `RunDynamicsPreviewSequencePayloadSchema.fixedStepMs` is used only when `operation-core` must call `createInitialRuntimeState` because neither `initialState` nor `initialStateRef` was supplied. If a supplied initial state has a different timestep from the request, `operation-core` must preserve the evidence and surface `dynamics.timestepMismatch` in strict / acceptance profiles.
+`RuntimeStateDto.fixedStepMs` is the active timestep. `RunDynamicsPreviewSequencePayloadSchema.fixedStepMs` is used only when `operation-core` must call `createInitialRuntimeState` because neither `initialState` nor `initialStateRef` was supplied. If a supplied initial state has a different timestep from the request, `operation-core` must preserve the evidence and surface `dynamics.timestepMismatch` when context strictness is `strict` or `acceptance`.
 
-Sequence operations must return or reference the final state. `OperationResultSchema.generatedRuntimeStateRefs` lists generated state artifacts, and `finalRuntimeState` / `finalRuntimeStateRef` identify the final state after the last frame. Runtime state evidence refs must match `RuntimeStateArtifactRefSchema` and point to `runtime/states/*.runtime-state.json`.
+Sequence operations must return or reference the final state. `OperationResultSchema.generatedRuntimeStateRefs` lists generated single-state artifacts, and `finalRuntimeState` / `finalRuntimeStateRef` identify the final state after the last frame. Runtime state evidence refs must match `RuntimeStateArtifactRefSchema` and point to `runtime/states/*.runtime-state.json`.
+
+`OperationResultSchema.generatedRuntimeStateSequenceRefs` lists generated sequence artifacts when the operation, acceptance runner, validator evidence, or deterministic replay test persists a state sequence. Sequence refs must match `RuntimeStateSequenceArtifactRefSchema` and point to `runtime/state-sequences/*.runtime-state-sequence.json`. `runDynamicsPreviewSequence` may return individual state refs and final state without a sequence ref; sequence refs are optional evidence. When an operation persists a sequence artifact for acceptance or exact deterministic replay, the artifact should include `inputFramesHash`, `runtimeEvaluationContext`, and `evaluatorVersionSummary`, and it must use `states[0]` as the initial state with `states[i + 1]` as the post-frame state for frame `i`.
 
 RuntimeState artifacts may be produced by operation-core, runtime fixtures, validator acceptance runs, and AI dry-run sequence previews. They are generated evidence artifacts, not authored package body files. They may be read as explicit initial state only for deterministic replay, debugging, validation, or demo capture reproduction, and they must not be required for normal authored package loading.
 

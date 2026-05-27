@@ -68,7 +68,7 @@
 
 - 同じfixed timestepと初期状態なら、同じcomputed output parameter列が得られる。
 - Runtime snapshotはgroup state、driver値、output値、tick、fixedStepMs、reset状態を含む。`targeted` / `full` detailではrawTarget、clampedTarget、outputClamped、resetApplied、resetReasonsを含められる。
-- Operation/validator evidenceには`initial-runtime-state.json`、`expected-next-runtime-state.json`、`expected-runtime-state-sequence.json`、または `runtime/states/*.runtime-state.json` への参照が残る。
+- Operation/validator evidenceには単一state用の `runtime/states/initial.runtime-state.json`、`runtime/states/expected-next.runtime-state.json`、またはsequence用の `runtime/state-sequences/expected.runtime-state-sequence.json` への参照が残る。
 - Runtime diffは`dynamicsChanges`でposition、velocity、tick、resetCounter、outputParameterIdの差分を説明できる。
 - 非決定的な差分はvalidatorでFailまたはNeeds reviewになる。
 

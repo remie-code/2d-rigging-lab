@@ -37,14 +37,16 @@
 | Package | project-defined model packageを正にする。Cubism形式は検査・読み込み・変換対象にしない |
 | Source import | `layered-character-psd-profile-v1` を汎用layered character art import profileとして採用。Live2D / Cubism import profileではない |
 | Runtime / Viewer | private runtime coreをEditor previewとViewerで共有する |
-| Minimum Open Dynamics v1 | Current MVP。`RuntimeSequenceFrameDto[]` 正本、sequence context、initial/final `RuntimeStateDto` evidence、1 group = 1 output、`scalarDampedFollowV1`固定式として確定 |
+| Minimum Open Dynamics v1 | Current MVP。`RuntimeSequenceFrameDto[]` 正本、`RuntimeEvaluationContextDto`、単一/sequence RuntimeState evidence、1 group = 1 output、`scalarDampedFollowV1`固定式として確定 |
 | Validator | package / runtime / rights / provenance / demo-safe capture を構造化reportにする |
 | AI | auto-riggingではなく assistant / validator として、dry-run、diff、repair suggestion、provenanceを扱う |
 | GPT-5.5 Pro review 001 | P0/P1/P2の反映可能指摘を反映。詳細は [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) |
 | GPT-5.5 Pro review 002 | RE3-001〜RE3-020と実装前チェックリストを反映。Dynamics詳細はreview_003で上書き |
 | GPT-5.5 Pro review 003 | RE-FINAL-001〜RE-FINAL-018と確定版チェックリストを反映。RuntimeState evidence詳細はreview_004で上書き |
 | GPT-5.5 Pro review 004 | P0/P1/P2を反映。RuntimeSequence / artifact ref詳細はreview_005で上書き |
-| GPT-5.5 Pro review 005 | P0/P1/P2を反映。`memo/gpt-5.5-pro-review/review_005_fix_summary.md` に修正サマリを記録 |
+| GPT-5.5 Pro review 005 | P0/P1/P2を反映。RuntimeState sequence artifact / RuntimeEvaluationContext統合詳細はreview_006で上書き |
+| GPT-5.5 Pro review 006 | RuntimeState単体/sequence artifact分離、RuntimeEvaluationContext統合、Operation/AI/Fixture証拠参照規約を反映。RuntimeStateSequenceArtifactのinitial/post-frame意味論とdeterministic replay evidence詳細はreview_007で上書き |
+| GPT-5.5 Pro review 007 | RuntimeStateSequenceArtifactの `states[0]` initial / `states[i + 1]` post-frame規約、`states.length = frameCount + 1`、`runtime.stateSequenceLengthMismatch`、evidence fields、`policy.default({})` を反映。`memo/gpt-5.5-pro-review/review_007_fix_summary.md` に修正サマリを記録 |
 | Demo / Proposal | Streaming Demo Surface と Live2D Feature Proposal はprivate実装から分離する。専用文書を追加済み |
 
 ## 次の行動
