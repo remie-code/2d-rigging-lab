@@ -34,7 +34,8 @@
 | [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | RuntimeState evidence contractとreview_004対応記録へ更新済み |
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
-| [development_convention/](development_convention/) | P0/P1開発規約、basis、統合レビュー成果物 | P0/P1規約15本とreview成果物をAcceptedとして作成済み |
+| [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 0 foundation planを `implementation/orchestration/wave0-plan.md` に作成済み |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の焦点
@@ -56,16 +57,19 @@
 | GPT-5.5 Pro review 006 | `memo/gpt-5.5-pro-review/review_006` の指摘を分類し、単一RuntimeState artifactとRuntimeState sequence artifactの分離、`RuntimeEvaluationContextDto`統合、Operation/AI/Fixture証拠参照規約として反映済み。RuntimeStateSequenceArtifactのinitial/post-frame意味論とdeterministic replay evidence詳細はreview_007で上書き |
 | GPT-5.5 Pro review 007 | `memo/gpt-5.5-pro-review/review_007.md` 相当の指摘を分類し、`RuntimeStateSequenceArtifact.states[0]` initial / `states[i + 1]` post-frame規約、`runtime.stateSequenceLengthMismatch`、sequence evidence fields、`RuntimeEvaluationContextSchema.policy.default({})` として反映済み |
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
-| Development Convention | `development_convention/` にP0/P1規約15本、`development_convention/review/` に統合レビューと完了チェックリストを追加済み |
+| Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
+| Implementation Wave 0 | 旧mapでは完了扱いだったが、repo factsではroot `package.json` / `packages/` / `apps/` / `fixtures/` / `generated/` が未作成。新しいWave 0 foundation planを作成済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. Development Conventionのwarningに記録した `discussion/development/` と `discussion/development_convention/` のpath表記差分を、必要ならbasis側で整理する。
-2. Current AC/scenario/designを実装task、module contract、testへ落とす。
-3. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
-4. Live2Dへ最初に提案する機能単位をユーザー判断で選び、proposal templateから個別draftを作る。
-5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
+1. [implementation/orchestration/wave0-plan.md](implementation/orchestration/wave0-plan.md) を確認し、必要なら修正してからWave 0を実装する。
+2. Wave 0でmonorepo scaffold、package skeleton、scripts、fixtures/generated scaffold、dependency guard、source organization guard、smoke testを作る。
+3. Wave 0完了後にWave 1 `contracts-foundation` を計画する。
+4. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
+5. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
+6. Live2Dへ最初に提案する機能単位をユーザー判断で選び、proposal templateから個別draftを作る。
+7. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
 
 ## 未決事項
 

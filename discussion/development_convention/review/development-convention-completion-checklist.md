@@ -4,6 +4,10 @@
 
 Accepted
 
+## Later Supersession Note
+
+`implementation-orchestration-policy.md` was later discarded by user decision. This checklist remains a historical completion record for the earlier development convention set, not the active implementation orchestration entry point.
+
 ## Policy Existence
 
 - [x] `source-of-truth-policy.md`

@@ -68,11 +68,11 @@ It prevents test-free changes, review based on implementer intent instead of art
 
 ### Review terminology alignment
 
-This policy uses the same review terminology as `discussion/development_convention/implementation-orchestration-policy.md`.
+This policy uses the same review terminology as the active implementation orchestration skill and wave plans under `discussion/implementation/`.
 
 `Design / Development Compliance Review` is the orchestration review lane that includes `Development Compliance Review` and explicitly checks design conformance to AC, Scenario, and Module Contract requirements.
 
-`Test Adequacy Review` has the same meaning in this policy and in `implementation-orchestration-policy.md`: it checks whether tests, fixtures, oracles, diagnostics, and evidence sufficiently prove the referenced AC, Scenario, and Module Contract requirements.
+`Test Adequacy Review` checks whether tests, fixtures, oracles, diagnostics, and evidence sufficiently prove the referenced AC, Scenario, and Module Contract requirements.
 
 `Clean Context Review` is a review execution mode, not a separate review lane. It means the applicable review lane is performed without the implementer's conversation context, private intent, or unrecorded reasoning.
 

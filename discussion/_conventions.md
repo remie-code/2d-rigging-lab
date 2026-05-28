@@ -38,6 +38,16 @@ discussion/
   proposal/             # Live2D Feature Proposalのテンプレート、提案draft
     _map.md
     *.md
+  development_convention/ # P0/P1開発規約、/goalオーケストレーション規約、basis、review
+    _map.md
+    *.md
+    basis/
+    review/
+  implementation/       # 実装オーケストレーション、wave計画、review、completion、integration
+    _map.md
+    orchestration/
+    reviews/
+    waves/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -86,6 +96,8 @@ discussion/
 | `scenarios/` | ACを検証可能な具体シナリオへ精緻化したもの | Undine | Gnome/Sylph は原則参照のみ |
 | `demo/` | Streaming Demo Surfaceで見せてよい範囲、避けるもの、preflight、disclaimer | Undine | Private Prototype本体から分離して管理する |
 | `proposal/` | Live2D Feature Proposalのテンプレート、提案draft、非目標 | Undine | 互換実装、形式対応、SDK/Core代替を示唆しない |
+| `development_convention/` | P0/P1開発規約、/goal実装オーケストレーション規約、basis、review | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | L0用の薄いorchestration contractとdomain agent向け詳細規約を分離して管理する |
+| `implementation/` | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | Accepted development conventionに従い、実装証拠とレビュー成果物を永続化する |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。

@@ -4,6 +4,10 @@
 
 Accepted
 
+## Later Supersession Note
+
+`implementation-orchestration-policy.md` was later discarded by user decision. Active implementation orchestration now lives under `discussion/implementation/` and uses `.codex/skills/implementation-orchestration/SKILL.md` plus wave-specific plans such as `discussion/implementation/orchestration/wave0-plan.md`.
+
 ## Scope
 
 This review covers the P0/P1 development convention documents created under `discussion/development_convention/` from the authoritative basis set:
