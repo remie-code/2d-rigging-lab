@@ -1,4 +1,4 @@
-# Development Convention Basis: P0 Policy Specs
+﻿# Development Convention Basis: P0 Policy Specs
 
 ## Status
 
@@ -18,14 +18,15 @@ Draft
 この文書は、以下の P0 開発規約を対象とする。
 
 ```text
-discussion/development/source-of-truth-policy.md
-discussion/development/repository-structure-policy.md
-discussion/development/module-boundary-policy.md
-discussion/development/schema-and-id-conventions.md
-discussion/development/runtime-and-dynamics-implementation-policy.md
-discussion/development/operation-policy.md
-discussion/development/testing-and-acceptance-policy.md
-discussion/development/diagnostic-policy.md
+discussion/development_convention/source-of-truth-policy.md
+discussion/development_convention/repository-structure-policy.md
+discussion/development_convention/module-boundary-policy.md
+discussion/development_convention/schema-and-id-conventions.md
+discussion/development_convention/runtime-and-dynamics-implementation-policy.md
+discussion/development_convention/operation-policy.md
+discussion/development_convention/testing-and-acceptance-policy.md
+discussion/development_convention/diagnostic-policy.md
+discussion/development_convention/implementation-orchestration-policy.md
 ```
 
 P0 規約は、core 実装に入る前に Accepted にする。
@@ -35,7 +36,7 @@ P0 規約が Draft のままの場合、その規約が対象とする module �
 
 ## Common Requirements for All P0 Policies
 
-すべての P0 規約は、`discussion/development/development_convention_basis/01_common_policy_template.md` の共通テンプレートに従う。
+すべての P0 規約は、`discussion/development_convention/basis/01_common_policy_template.md` の共通テンプレートに従う。
 
 各規約は、最低限以下を含む。
 
@@ -69,7 +70,7 @@ P0 規約が Draft のままの場合、その規約が対象とする module �
 ## Output Path
 
 ```text
-discussion/development/source-of-truth-policy.md
+discussion/development_convention/source-of-truth-policy.md
 ```
 
 ## Purpose
@@ -171,7 +172,7 @@ Conflict Resolution Log をどこに置くかを決める。
 候補:
 
 ```text
-discussion/development/conflicts/conflict-resolution-log.md
+discussion/development_convention/conflicts/conflict-resolution-log.md
 ```
 
 または各規約内に section として持つ。
@@ -289,7 +290,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/repository-structure-policy.md
+discussion/development_convention/repository-structure-policy.md
 ```
 
 ## Purpose
@@ -536,7 +537,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/module-boundary-policy.md
+discussion/development_convention/module-boundary-policy.md
 ```
 
 ## Purpose
@@ -754,7 +755,7 @@ sequenceDiagram
 ## Output Path
 
 ```text
-discussion/development/schema-and-id-conventions.md
+discussion/development_convention/schema-and-id-conventions.md
 ```
 
 ## Purpose
@@ -961,7 +962,7 @@ graph TD
 ## Output Path
 
 ```text
-discussion/development/runtime-and-dynamics-implementation-policy.md
+discussion/development_convention/runtime-and-dynamics-implementation-policy.md
 ```
 
 ## Purpose
@@ -1159,7 +1160,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/operation-policy.md
+discussion/development_convention/operation-policy.md
 ```
 
 ## Purpose
@@ -1304,7 +1305,7 @@ sequenceDiagram
 ## Output Path
 
 ```text
-discussion/development/testing-and-acceptance-policy.md
+discussion/development_convention/testing-and-acceptance-policy.md
 ```
 
 ## Purpose
@@ -1503,7 +1504,7 @@ sequenceDiagram
 ## Output Path
 
 ```text
-discussion/development/diagnostic-policy.md
+discussion/development_convention/diagnostic-policy.md
 ```
 
 ## Purpose
@@ -1637,12 +1638,242 @@ flowchart TD
 
 ---
 
+# 9. Implementation Orchestration Policy
+
+## Output Path
+
+```text
+discussion/development_convention/implementation-orchestration-policy.md
+```
+
+## Purpose
+
+Implementation Orchestration Policy は、実装フェーズで `/goal` を Undine と見なし、wave計画、domain cycle、subagent実装、two-lane review、fix loop、early escape、Integrator review、永続レポートを定義する。
+
+この規約は、以下を防ぐ。
+
+* `/goal` が全体オーケストレーター責務を持たないまま実装が始まること。
+* Wave 0 を飛ばしてfeature実装へ入ること。
+* Gnome実装、Review-Sylphレビュー、Integrator統合の責務が混ざること。
+* Test Adequacy Review と Design / Development Compliance Review が混同されること。
+* Clean Context Review をreview laneとして誤解すること。
+* review report、domain completion report、integration review、final report が永続化されないこと。
+* source-of-truth conflict、module boundary不明、test oracle不明、Cubism oracle圧力を早期脱出せず実装で補完すること。
+
+## Required Decisions
+
+### DEC-ORCH-001: `/goal` as Undine
+
+`/goal` をL0オーケストレーターとして定義する。
+
+### DEC-ORCH-002: Wave 0 development environment setup
+
+Wave 0 を、feature implementation前の必須環境構築waveとして定義する。
+
+### DEC-ORCH-003: Agent roles
+
+Undine、Orch-Sylph、Gnome、Review-Sylph、Clean Context Review-Sylph、Integrator のroleを定義する。
+
+### DEC-ORCH-004: Wave planning
+
+dependency graph、wave list、domains、expected modified paths、required tests、required evidence、early escape risks、integration gate を含むwave planを定義する。
+
+### DEC-ORCH-005: Orch-Sylph domain cycle
+
+context collection、Gnome implementation、test execution、Review-Sylph two-lane review、fix loop、domain completion report のcycleを定義する。
+
+### DEC-ORCH-006: Two-lane Review-Sylph model
+
+Design / Development Compliance Review と Test Adequacy Review を分離する。
+Design / Development Compliance Review は、Development Compliance Review に AC / Scenario / Module Contract への設計適合確認を加えたreview laneである。
+Test Adequacy Review は、Review and PR Policy と同じ意味で使う。
+Clean Context Review はreview laneではなく、作業担当者の会話文脈を共有しないreview execution modeである。
+
+### DEC-ORCH-007: Loop control
+
+fix loop の default max loop、max loop、差分が減らない場合の停止条件、Escalated扱いを定義する。
+
+### DEC-ORCH-008: Early escape conditions
+
+source-of-truth conflict、missing source of truth、multiple valid interpretations、module boundary unclear、test oracle unclear、candidate diagnostic only oracle、Operation Core bypass pressure、RuntimeState sequence semantics unclear、Cubism oracle pressure、dependency review required、rights/provenance missing を早期脱出条件として定義する。
+
+### DEC-ORCH-009: Persistent report paths
+
+Review-Sylph report、Orch-Sylph domain completion report、wave integration review、Undine final report の永続pathを定義する。
+
+### DEC-ORCH-010: Integrator review
+
+wave完了後に、schema / DTO / artifact ref / diagnostic / fixture / traceability / generated evidence / dependency / Cubism non-oracle / machine-readable ID / concurrent edit residue を横断確認するIntegrator reviewを定義する。
+
+## Required Mermaid Diagrams
+
+### Diagram 1: Project-specific Orchestration Hierarchy
+
+#### Mermaid type
+
+```text
+graph TD
+```
+
+#### Must include
+
+* `/goal` as Undine
+* Orch-Sylph
+* Gnome
+* Review-Sylph
+* Design / Development Compliance Review
+* Test Adequacy Review
+* Integrator
+
+### Diagram 2: Wave Planning Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Must include
+
+* goal received
+* dependency graph
+* Wave 0
+* wave gate
+* domain launch
+* domain reviews
+* integration review
+* final report
+
+### Diagram 3: Domain Implementation Loop
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Must include
+
+* context collection
+* Gnome implementation
+* tests
+* Review-Sylph
+* Design / Development Compliance Review
+* Test Adequacy Review
+* fix loop
+* domain completion report
+* escalation to Undine
+
+### Diagram 4: Early Escape Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Must include
+
+* ambiguity or conflict detected
+* classification
+* stop domain loop
+* early escape report
+* Undine decision
+* user/source-of-truth decision when required
+
+### Diagram 5: Review Artifact Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Must include
+
+* Review-Sylph report
+* design/development compliance section
+* test adequacy section
+* domain completion report
+* Integrator review
+* wave summary
+* final report
+
+## Required Tables
+
+### Table 1: Agent Role Table
+
+| Role | Owns | Must produce | Must not do |
+| ---- | ---- | ------------ | ----------- |
+
+### Table 2: Review Lane Table
+
+| Review lane | Purpose | Blocking if fails? |
+| ----------- | ------- | ------------------ |
+
+### Table 3: Wave Gate Table
+
+| Gate | Required evidence | Blocking if missing? |
+| ---- | ----------------- | -------------------- |
+
+### Table 4: Review Scope Table
+
+| Review scope | Checked by | Required for |
+| ------------ | ---------- | ------------ |
+
+### Table 5: Loop Control Table
+
+| Case | Action |
+| ---- | ------ |
+
+### Table 6: Early Escape Table
+
+| Trigger | Required report |
+| ------- | --------------- |
+
+### Table 7: Persistent Report Table
+
+| Report | Path |
+| ------ | ---- |
+
+## Required Evidence
+
+* wave plan
+* environment report
+* implementation changes
+* test result
+* two-lane review report
+* domain completion report
+* integration review
+* final report
+* conflict report
+* early escape report
+
+## Review Checklist
+
+### Blocking
+
+* [ ] `/goal` as Undine is defined.
+* [ ] Wave 0 is mandatory or an accepted environment report exception is defined.
+* [ ] agent roles are defined.
+* [ ] wave planning is defined.
+* [ ] domain cycle is defined.
+* [ ] Design / Development Compliance Review and Test Adequacy Review are separated.
+* [ ] Clean Context Review is defined as an execution mode, not a review lane.
+* [ ] loop control and early escape are defined.
+* [ ] persistent report paths are defined.
+* [ ] Integrator review is required.
+* [ ] Cubism formats, SDK/Core, Viewer, Physics compatibility, and existing Cubism models are not oracles.
+* [ ] machine-readable IDs use no spaces.
+
+---
+
 # P0 Policy Completion Gate
 
 P0規約群は、以下を満たしたら完成とする。
 
 ```md
-- [ ] P0の8規約すべてが存在する。
+- [ ] P0の9規約すべてが存在する。
 - [ ] 各規約が共通テンプレートに従っている。
 - [ ] 各規約にRequired Decisionsがある。
 - [ ] 各規約にRequired Mermaid Diagramsがある。
@@ -1656,4 +1887,5 @@ P0規約群は、以下を満たしたら完成とする。
 - [ ] Operation Coreがmutation gatewayとして定義されている。
 - [ ] Testing / AcceptanceにClean Context Reviewが定義されている。
 - [ ] Diagnostic Policyでformal/candidateが分離されている。
+- [ ] Implementation Orchestration Policyで`/goal` as Undine、Wave 0、two-lane review、Integrator review、早期脱出、永続レポートが定義されている。
 - [ ] Cubism関連oracle禁止が全体方針として維持されている。

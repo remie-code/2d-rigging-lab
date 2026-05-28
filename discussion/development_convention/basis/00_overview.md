@@ -1,4 +1,4 @@
-# Development Convention Basis: Overview
+﻿# Development Convention Basis: Overview
 
 ## Status
 
@@ -170,28 +170,32 @@ Clean Context Review の目的は、実装者の暗黙意図に依存せず、�
 P0規約は、core実装に入る前に必ず作成する。
 
 ```text
-discussion/development/source-of-truth-policy.md
-discussion/development/repository-structure-policy.md
-discussion/development/module-boundary-policy.md
-discussion/development/schema-and-id-conventions.md
-discussion/development/runtime-and-dynamics-implementation-policy.md
-discussion/development/operation-policy.md
-discussion/development/testing-and-acceptance-policy.md
-discussion/development/diagnostic-policy.md
+discussion/development_convention/source-of-truth-policy.md
+discussion/development_convention/repository-structure-policy.md
+discussion/development_convention/module-boundary-policy.md
+discussion/development_convention/schema-and-id-conventions.md
+discussion/development_convention/runtime-and-dynamics-implementation-policy.md
+discussion/development_convention/operation-policy.md
+discussion/development_convention/testing-and-acceptance-policy.md
+discussion/development_convention/diagnostic-policy.md
+discussion/development_convention/implementation-orchestration-policy.md
 ```
+
+Implementation Orchestration Policy は、`/goal` を Undine と見なし、Wave 0、wave分割、Orch-Sylph / Gnome / Review-Sylph / Integrator による実装実行モデルを定義するP0規約である。
+この規約は、実装開始前にサブエージェント分担、domain cycle、two-lane review、persistent reports、early escape、Integrator reviewを同じ前提に揃える。
 
 ### P1: Required before corresponding module implementation begins
 
 P1規約は、初期実装と並行して作成してよいが、対応moduleの本格実装前にはAcceptedにする。
 
 ```text
-discussion/development/gui-implementation-policy.md
-discussion/development/ai-assistant-implementation-policy.md
-discussion/development/demo-rights-ip-policy.md
-discussion/development/dependency-policy.md
-discussion/development/review-and-pr-policy.md
-discussion/development/subagent-workflow-policy.md
-discussion/development/e2e-test-policy.md
+discussion/development_convention/gui-implementation-policy.md
+discussion/development_convention/ai-assistant-implementation-policy.md
+discussion/development_convention/demo-rights-ip-policy.md
+discussion/development_convention/dependency-policy.md
+discussion/development_convention/review-and-pr-policy.md
+discussion/development_convention/subagent-workflow-policy.md
+discussion/development_convention/e2e-test-policy.md
 ```
 
 P1も開発規約作成タスクのスコープに含める。
@@ -417,12 +421,12 @@ stateDiagram-v2:
 この overview に続き、以下の basis 文書を作成する。
 
 ```text
-discussion/development/development_convention_basis/00_overview.md
-discussion/development/development_convention_basis/01_common_policy_template.md
-discussion/development/development_convention_basis/02_p0_policy_specs.md
-discussion/development/development_convention_basis/03_p1_policy_specs.md
-discussion/development/development_convention_basis/04_required_diagrams_and_tables.md
-discussion/development/development_convention_basis/05_goal_prompt_and_completion_gate.md
+discussion/development_convention/basis/00_overview.md
+discussion/development_convention/basis/01_common_policy_template.md
+discussion/development_convention/basis/02_p0_policy_specs.md
+discussion/development_convention/basis/03_p1_policy_specs.md
+discussion/development_convention/basis/04_required_diagrams_and_tables.md
+discussion/development_convention/basis/05_goal_prompt_and_completion_gate.md
 ```
 
 各ファイルの役割:

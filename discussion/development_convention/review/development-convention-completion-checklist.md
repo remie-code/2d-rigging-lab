@@ -14,6 +14,7 @@ Accepted
 - [x] `operation-policy.md`
 - [x] `testing-and-acceptance-policy.md`
 - [x] `diagnostic-policy.md`
+- [x] `implementation-orchestration-policy.md`
 - [x] `gui-implementation-policy.md`
 - [x] `ai-assistant-implementation-policy.md`
 - [x] `demo-rights-ip-policy.md`
@@ -52,6 +53,7 @@ Accepted
 - [x] Operation Policy has mutation flow and AI dry-run flow diagrams.
 - [x] Testing Policy has acceptance runner pipeline, evidence graph, review gate, and E2E journey diagrams.
 - [x] Diagnostic Policy has diagnostic lifecycle and diagnostic use in acceptance diagrams.
+- [x] Implementation Orchestration Policy has project-specific orchestration hierarchy, wave planning, domain implementation loop, early escape, and review artifact flow diagrams.
 - [x] GUI Policy has GUI mutation, GUI evidence, and demo-safe capture diagrams.
 - [x] AI Policy has AI dry-run, approval boundary, and forbidden flow diagrams.
 - [x] Demo Policy has demo-safe preflight, asset provenance, and proposal boundary diagrams.
@@ -89,6 +91,13 @@ Accepted
 - [x] Diagnostic registry table exists.
 - [x] Candidate promotion table exists.
 - [x] Profile severity matrix exists.
+- [x] Agent role table exists.
+- [x] Review lane table exists.
+- [x] Wave gate table exists.
+- [x] Review scope table exists.
+- [x] Loop control table exists.
+- [x] Early escape table exists.
+- [x] Persistent report table exists.
 - [x] GUI panel responsibility table exists.
 - [x] GUI evidence table exists.
 - [x] Demo-safe visibility table exists.
@@ -129,6 +138,11 @@ Accepted
 - [x] Existing Cubism models and official samples are not implementation, test, acceptance, fixture, or demo oracles.
 - [x] Machine-readable IDs must contain no spaces.
 - [x] Conflicts are recorded through Conflict Handling / Conflict Resolution Log instead of silent invention.
+- [x] `/goal` as Undine is defined for implementation orchestration.
+- [x] Wave 0 is mandatory unless an accepted environment report exists.
+- [x] Design / Development Compliance Review and Test Adequacy Review are separated as orchestration review lanes.
+- [x] Clean Context Review is defined as a review execution mode, not a review lane.
+- [x] Integrator review, persistent reports, and early escape are required by orchestration policy.
 
 ## Review Findings
 

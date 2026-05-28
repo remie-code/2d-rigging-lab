@@ -66,6 +66,16 @@ It prevents test-free changes, review based on implementer intent instead of art
 
 ## Required Decisions
 
+### Review terminology alignment
+
+This policy uses the same review terminology as `discussion/development_convention/implementation-orchestration-policy.md`.
+
+`Design / Development Compliance Review` is the orchestration review lane that includes `Development Compliance Review` and explicitly checks design conformance to AC, Scenario, and Module Contract requirements.
+
+`Test Adequacy Review` has the same meaning in this policy and in `implementation-orchestration-policy.md`: it checks whether tests, fixtures, oracles, diagnostics, and evidence sufficiently prove the referenced AC, Scenario, and Module Contract requirements.
+
+`Clean Context Review` is a review execution mode, not a separate review lane. It means the applicable review lane is performed without the implementer's conversation context, private intent, or unrecorded reasoning.
+
 ### DEC-REVIEW-001: PR / patch required sections
 
 #### Question
@@ -259,12 +269,12 @@ sequenceDiagram
 
 ### Table 2: Review Type Table
 
-| Review type | Reviewer | Required when |
+| Review type or mode | Reviewer | Required when |
 |---|---|---|
 | Implementation review | Implementer peer or integrator | Any implementation-affecting change. |
 | Test Adequacy Review | Clean Context Reviewer preferred | Tests, fixtures, acceptance, diagnostics, evidence, or oracles change. |
-| Development Compliance Review | Clean Context Reviewer or integrator | Any implementation-affecting change. |
-| Clean Context Review | Independent reviewer without implementer conversation context | MVP acceptance, source-of-truth, oracle, cross-module contract, or acceptance-critical change. |
+| Development Compliance Review | Clean Context Reviewer or integrator | Any implementation-affecting change. In orchestration reports, this is included in the Design / Development Compliance Review lane with explicit AC / Scenario / Module Contract design conformance. |
+| Clean Context Review execution mode | Independent reviewer without implementer conversation context | MVP acceptance, source-of-truth, oracle, cross-module contract, or acceptance-critical change. |
 
 ### Table 3: Merge Gate Table
 

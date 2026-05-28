@@ -8,6 +8,10 @@ Accepted
 
 This policy defines how subagents are assigned, constrained, handed off, integrated, and reviewed for the Private 2D Rigging Lab / Prototype.
 
+This policy is an operational detail policy under `discussion/development_convention/implementation-orchestration-policy.md`. Implementation orchestration defines `/goal` as Undine, wave planning, the Orch-Sylph domain cycle, the two-lane Review-Sylph model, Integrator review, persistent reports, and early escape conditions.
+
+This policy defines the subagent workflow details that operate inside that orchestration model: path ownership, handoff artifacts, no concurrent same-file edits, Clean Context Review boundaries, and conflict escalation.
+
 It prevents overlapping edits, path ownership confusion, missing handoff artifacts, silent conflict resolution, module-boundary drift, and loss of Clean Context Review independence.
 
 ## Scope

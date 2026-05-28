@@ -6,7 +6,7 @@ Draft
 
 ## Purpose
 
-この文書は、`discussion/development/` 配下に作成する各開発規約ドキュメントの **共通フォーマット** を定義する。
+この文書は、`discussion/development_convention/` 配下に作成する各開発規約ドキュメントの **共通フォーマット** を定義する。
 
 開発規約ドキュメントは、単なる説明文ではない。  
 各規約は、実装者、サブエージェント、レビュワー、acceptance runner、test author が同じ前提で作業できるように、以下を明確にしなければならない。
@@ -32,26 +32,26 @@ Draft
 ### P0 Policies
 
 ```text
-discussion/development/source-of-truth-policy.md
-discussion/development/repository-structure-policy.md
-discussion/development/module-boundary-policy.md
-discussion/development/schema-and-id-conventions.md
-discussion/development/runtime-and-dynamics-implementation-policy.md
-discussion/development/operation-policy.md
-discussion/development/testing-and-acceptance-policy.md
-discussion/development/diagnostic-policy.md
+discussion/development_convention/source-of-truth-policy.md
+discussion/development_convention/repository-structure-policy.md
+discussion/development_convention/module-boundary-policy.md
+discussion/development_convention/schema-and-id-conventions.md
+discussion/development_convention/runtime-and-dynamics-implementation-policy.md
+discussion/development_convention/operation-policy.md
+discussion/development_convention/testing-and-acceptance-policy.md
+discussion/development_convention/diagnostic-policy.md
 ````
 
 ### P1 Policies
 
 ```text
-discussion/development/gui-implementation-policy.md
-discussion/development/ai-assistant-implementation-policy.md
-discussion/development/demo-rights-ip-policy.md
-discussion/development/dependency-policy.md
-discussion/development/review-and-pr-policy.md
-discussion/development/subagent-workflow-policy.md
-discussion/development/e2e-test-policy.md
+discussion/development_convention/gui-implementation-policy.md
+discussion/development_convention/ai-assistant-implementation-policy.md
+discussion/development_convention/demo-rights-ip-policy.md
+discussion/development_convention/dependency-policy.md
+discussion/development_convention/review-and-pr-policy.md
+discussion/development_convention/subagent-workflow-policy.md
+discussion/development_convention/e2e-test-policy.md
 ```
 
 ---
@@ -136,7 +136,7 @@ Accepted
 ```md
 ## Status
 
-Superseded by `discussion/development/<new-policy>.md`
+Superseded by `discussion/development_convention/<new-policy>.md`
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Accepted
 
 ## Purpose
 
@@ -96,6 +96,50 @@ Draft
 
 ---
 
+## Required Decisions
+
+### DEC-ORCH-001: `/goal` as Undine
+
+`/goal` is the accountable L0 orchestrator for implementation work and owns wave planning, domain assignment, integration decisions, and final reporting.
+
+### DEC-ORCH-002: Wave 0 development environment setup
+
+Wave 0 is mandatory before feature implementation unless an accepted environment report already proves the workspace, scripts, scaffolds, evidence paths, and forbidden dependency checks.
+
+### DEC-ORCH-003: Agent roles
+
+Implementation orchestration uses Undine, Orch-Sylph, Gnome, Review-Sylph, Clean Context Review-Sylph, and Integrator roles with explicit responsibilities and reporting obligations.
+
+### DEC-ORCH-004: Wave planning
+
+Undine must build and record a dependency-aware wave plan before starting implementation domains.
+
+### DEC-ORCH-005: Orch-Sylph domain cycle
+
+Each implementation domain follows the context collection, Gnome implementation, test execution, Review-Sylph review, fix loop, and domain completion report cycle.
+
+### DEC-ORCH-006: Two-lane Review-Sylph model
+
+Review-Sylph must separate Design / Development Compliance Review from Test Adequacy Review. A domain passes only when both applicable lanes pass.
+
+### DEC-ORCH-007: Loop control
+
+Fix loops must have explicit limits, record loop count, and escalate when differences do not decrease for two consecutive loops or max loop is reached.
+
+### DEC-ORCH-008: Early escape conditions
+
+Agents must stop and escalate when source-of-truth conflicts, missing decisions, unclear module boundaries, unclear test oracles, candidate-only MVP blocking diagnostics, Operation Core bypass pressure, Cubism oracle pressure, dependency review needs, or rights/provenance gaps block safe implementation.
+
+### DEC-ORCH-009: Persistent report paths
+
+Review reports, domain completion reports, wave integration reviews, and final orchestration reports must be written to stable discussion paths.
+
+### DEC-ORCH-010: Integrator review
+
+Every wave requires Integrator review for cross-domain DTO, schema, artifact ref, diagnostic, fixture, dependency, evidence, and guardrail consistency before the next dependent wave proceeds.
+
+---
+
 ## Core Model
 
 このプロジェクトでは、`/goal` 本体を Undine と見なす。
@@ -146,6 +190,12 @@ Review-Sylph は、単一の雑多なレビューを行ってはならない。
 1. Design / Development Compliance Review
 2. Test Adequacy Review
 ```
+
+`Design / Development Compliance Review` は、`review-and-pr-policy.md` の Development Compliance Review を含み、さらに AC / Scenario / Module Contract への設計適合を明示的に確認する orchestration review lane である。
+
+`Test Adequacy Review` は、`review-and-pr-policy.md` と同じ意味で使う。テスト、fixture、oracle、diagnostic、expected artifact、runtime state sequence、GUI evidence、AI dry-run evidence、acceptance evidence が、参照する AC / Scenario / Module Contract を十分に証明しているかを確認する。
+
+`Clean Context Review` は review lane ではない。作業担当者の会話文脈、private intent、未記録の推論を共有せずに、該当review laneを実行する review execution mode である。
 
 両方がpassしない限り、domainを完了扱いにしてはならない。
 ただし、documentation-only domain や test-only domain では、該当しないlaneを `Not Applicable` としてよい。その場合は理由を明記する。
@@ -819,7 +869,7 @@ If no stable goal ID exists, use a descriptive slug.
 
 ---
 
-## Mermaid Diagrams
+## Required Diagrams
 
 ## Diagram 1: Project-specific Orchestration Hierarchy
 

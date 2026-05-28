@@ -1,4 +1,4 @@
-# Development Convention Basis: Required Diagrams and Tables
+﻿# Development Convention Basis: Required Diagrams and Tables
 
 ## Status
 
@@ -42,26 +42,27 @@ Draft
 ### P0 Policies
 
 ```text
-discussion/development/source-of-truth-policy.md
-discussion/development/repository-structure-policy.md
-discussion/development/module-boundary-policy.md
-discussion/development/schema-and-id-conventions.md
-discussion/development/runtime-and-dynamics-implementation-policy.md
-discussion/development/operation-policy.md
-discussion/development/testing-and-acceptance-policy.md
-discussion/development/diagnostic-policy.md
+discussion/development_convention/source-of-truth-policy.md
+discussion/development_convention/repository-structure-policy.md
+discussion/development_convention/module-boundary-policy.md
+discussion/development_convention/schema-and-id-conventions.md
+discussion/development_convention/runtime-and-dynamics-implementation-policy.md
+discussion/development_convention/operation-policy.md
+discussion/development_convention/testing-and-acceptance-policy.md
+discussion/development_convention/diagnostic-policy.md
+discussion/development_convention/implementation-orchestration-policy.md
 ```
 
 ### P1 Policies
 
 ```text
-discussion/development/gui-implementation-policy.md
-discussion/development/ai-assistant-implementation-policy.md
-discussion/development/demo-rights-ip-policy.md
-discussion/development/dependency-policy.md
-discussion/development/review-and-pr-policy.md
-discussion/development/subagent-workflow-policy.md
-discussion/development/e2e-test-policy.md
+discussion/development_convention/gui-implementation-policy.md
+discussion/development_convention/ai-assistant-implementation-policy.md
+discussion/development_convention/demo-rights-ip-policy.md
+discussion/development_convention/dependency-policy.md
+discussion/development_convention/review-and-pr-policy.md
+discussion/development_convention/subagent-workflow-policy.md
+discussion/development_convention/e2e-test-policy.md
 ```
 
 ---
@@ -208,6 +209,7 @@ diagnosticやtest oracleに関わる表では、formal / candidate の区別を�
 | Operation Policy                           | Operation Mutation Flow, AI Dry-run Flow                                            | Operation Type, Actor Permission, Operation Result Artifact                        |
 | Testing and Acceptance Policy              | Acceptance Runner Pipeline, Test Evidence Graph, Review Gate Flow, E2E Journey Flow | Test Profile Matrix, Evidence Requirement, Review Requirement, E2E Test            |
 | Diagnostic Policy                          | Diagnostic Lifecycle, Diagnostic Use in Acceptance                                  | Diagnostic Registry, Candidate Promotion, Profile Severity Matrix                  |
+| Implementation Orchestration Policy        | Project-specific Orchestration Hierarchy, Wave Planning Flow, Domain Implementation Loop, Early Escape Flow, Review Artifact Flow | Agent Role, Review Lane, Wave Gate, Review Scope, Loop Control, Early Escape, Persistent Report |
 | GUI Implementation Policy                  | GUI Mutation Flow, GUI Evidence Flow, Demo-safe GUI Capture Flow                    | GUI Panel Responsibility, GUI Evidence, Demo-safe Visibility, GUI Test ID          |
 | AI Assistant Implementation Policy         | AI Dry-run Flow, AI Approval Boundary, AI Forbidden Flow                            | AI Command Permission, AI Context Access, AI Repair Candidate, AI Escalation       |
 | Demo / Rights / IP Policy                  | Demo-safe Preflight Flow, Asset Provenance Flow, Proposal Boundary Flow             | Demo-safe Field, Forbidden Term, Rights Metadata, Proposal Boundary                |
@@ -1175,9 +1177,217 @@ diagnosticがacceptance oracleとして使われる条件を示す。
 
 ---
 
+# Additional P0 Policy Diagram and Table Requirements
+
+## 9. Implementation Orchestration Policy
+
+### Required Diagram 1: Project-specific Orchestration Hierarchy
+
+#### Mermaid type
+
+```text
+graph TD
+```
+
+#### Purpose
+
+`/goal` as Undine から domain-level agents、review lanes、Integrator までの階層を示す。
+
+#### Must include
+
+* `/goal` as Undine
+* Orch-Sylph
+* Gnome
+* Review-Sylph
+* Design / Development Compliance Review
+* Test Adequacy Review
+* Integrator
+
+---
+
+### Required Diagram 2: Wave Planning Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Purpose
+
+goal受領からwave計画、Wave 0、domain実行、integration、final reportまでの流れを示す。
+
+#### Must include
+
+* goal received
+* dependency graph
+* Wave 0
+* wave gate
+* domain launch
+* domain review
+* integration review
+* final report
+
+---
+
+### Required Diagram 3: Domain Implementation Loop
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Purpose
+
+Orch-Sylph domain cycle と fix loop を示す。
+
+#### Must include
+
+* context collection
+* Gnome implementation
+* tests
+* Review-Sylph review
+* Design / Development Compliance Review
+* Test Adequacy Review
+* fix loop
+* domain completion report
+* escalation to Undine
+
+---
+
+### Required Diagram 4: Early Escape Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Purpose
+
+安全に実装継続できない場合の停止、報告、decision flowを示す。
+
+#### Must include
+
+* ambiguity or conflict detected
+* issue classification
+* stop domain loop
+* early escape report
+* Undine
+* user or source-of-truth decision
+
+---
+
+### Required Diagram 5: Review Artifact Flow
+
+#### Mermaid type
+
+```text
+flowchart TD
+```
+
+#### Purpose
+
+Review-Sylph report、domain completion、Integrator review、final reportの永続artifact flowを示す。
+
+#### Must include
+
+* Review-Sylph report
+* Design / Development Compliance Review section
+* Test Adequacy Review section
+* domain completion report
+* Integrator review
+* wave summary
+* Undine final report
+
+---
+
+### Required Table 1: Agent Role Table
+
+#### Required columns
+
+| Column       | Meaning |
+| ------------ | ------- |
+| Role         | agent role |
+| Owns         | 責務範囲 |
+| Must produce | 必須成果物 |
+| Must not do  | 禁止事項 |
+
+---
+
+### Required Table 2: Review Lane Table
+
+#### Required columns
+
+| Column             | Meaning |
+| ------------------ | ------- |
+| Review lane        | review lane |
+| Purpose            | 目的 |
+| Blocking if fails? | yes/no |
+
+---
+
+### Required Table 3: Wave Gate Table
+
+#### Required columns
+
+| Column               | Meaning |
+| -------------------- | ------- |
+| Gate                 | gate |
+| Required evidence    | 必須証拠 |
+| Blocking if missing? | yes/no |
+
+---
+
+### Required Table 4: Review Scope Table
+
+#### Required columns
+
+| Column       | Meaning |
+| ------------ | ------- |
+| Review scope | review対象 |
+| Checked by   | reviewer |
+| Required for | 必須条件 |
+
+---
+
+### Required Table 5: Loop Control Table
+
+#### Required columns
+
+| Column | Meaning |
+| ------ | ------- |
+| Case   | 状態 |
+| Action | 対応 |
+
+---
+
+### Required Table 6: Early Escape Table
+
+#### Required columns
+
+| Column          | Meaning |
+| --------------- | ------- |
+| Trigger         | 早期脱出条件 |
+| Required report | 必須報告 |
+
+---
+
+### Required Table 7: Persistent Report Table
+
+#### Required columns
+
+| Column | Meaning |
+| ------ | ------- |
+| Report | report種別 |
+| Path   | 永続化path |
+
+---
+
 # P1 Policy Diagram and Table Requirements
 
-## 9. GUI Implementation Policy
+## 10. GUI Implementation Policy
 
 ### Required Diagram 1: GUI Mutation Flow
 
@@ -1274,7 +1484,7 @@ flowchart TD
 
 ---
 
-## 10. AI Assistant Implementation Policy
+## 11. AI Assistant Implementation Policy
 
 ### Required Diagram 1: AI Dry-run Flow
 
@@ -1367,7 +1577,7 @@ flowchart TD
 
 ---
 
-## 11. Demo / Rights / IP Policy
+## 12. Demo / Rights / IP Policy
 
 ### Required Diagram 1: Demo-safe Preflight Flow
 
@@ -1462,7 +1672,7 @@ flowchart TD
 
 ---
 
-## 12. Dependency Policy
+## 13. Dependency Policy
 
 ### Required Diagram 1: Dependency Approval Flow
 
@@ -1539,7 +1749,7 @@ graph TD
 
 ---
 
-## 13. Review and PR Policy
+## 14. Review and PR Policy
 
 ### Required Diagram 1: PR Review Pipeline
 
@@ -1614,7 +1824,7 @@ sequenceDiagram
 
 ---
 
-## 14. Subagent Workflow Policy
+## 15. Subagent Workflow Policy
 
 ### Required Diagram 1: Subagent Handoff Flow
 
@@ -1704,7 +1914,7 @@ flowchart TD
 
 ---
 
-## 15. E2E Test Policy
+## 16. E2E Test Policy
 
 ### Required Diagram 1: Authoring-to-Viewer E2E
 
@@ -1832,6 +2042,11 @@ flowchart TD
 - [ ] Operation Policyにmutation flow図がある。
 - [ ] Testing Policyにacceptance runner pipeline図がある。
 - [ ] Diagnostic Policyにdiagnostic lifecycle図がある。
+- [ ] Implementation Orchestration Policyにproject-specific orchestration hierarchy図がある。
+- [ ] Implementation Orchestration Policyにwave planning flow図がある。
+- [ ] Implementation Orchestration Policyにdomain implementation loop図がある。
+- [ ] Implementation Orchestration Policyにearly escape flow図がある。
+- [ ] Implementation Orchestration Policyにreview artifact flow図がある。
 - [ ] GUI PolicyにGUI evidence flow図がある。
 - [ ] AI PolicyにAI dry-run flow図がある。
 - [ ] Demo Policyにdemo-safe preflight図がある。
@@ -1865,6 +2080,13 @@ flowchart TD
 - [ ] Evidence requirement tableがある。
 - [ ] Diagnostic registry tableがある。
 - [ ] Formal / candidate diagnostic tableまたはregistry分類がある。
+- [ ] Agent role tableがある。
+- [ ] Review lane tableがある。
+- [ ] Wave gate tableがある。
+- [ ] Review scope tableがある。
+- [ ] Loop control tableがある。
+- [ ] Early escape tableがある。
+- [ ] Persistent report tableがある。
 - [ ] GUI evidence tableがある。
 - [ ] AI command permission tableがある。
 - [ ] Demo-safe field tableがある。

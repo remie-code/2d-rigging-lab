@@ -18,13 +18,13 @@ Draft
 この文書は、以下の P1 開発規約を対象とする。
 
 ```text
-discussion/development/gui-implementation-policy.md
-discussion/development/ai-assistant-implementation-policy.md
-discussion/development/demo-rights-ip-policy.md
-discussion/development/dependency-policy.md
-discussion/development/review-and-pr-policy.md
-discussion/development/subagent-workflow-policy.md
-discussion/development/e2e-test-policy.md
+discussion/development_convention/gui-implementation-policy.md
+discussion/development_convention/ai-assistant-implementation-policy.md
+discussion/development_convention/demo-rights-ip-policy.md
+discussion/development_convention/dependency-policy.md
+discussion/development_convention/review-and-pr-policy.md
+discussion/development_convention/subagent-workflow-policy.md
+discussion/development_convention/e2e-test-policy.md
 ````
 
 P1規約は、開発規約作成タスクのスコープに含める。
@@ -47,7 +47,7 @@ E2E acceptance実装に入る前:
 
 ## Common Requirements for All P1 Policies
 
-すべての P1 規約は、`discussion/development/development_convention_basis/01_common_policy_template.md` の共通テンプレートに従う。
+すべての P1 規約は、`discussion/development_convention/basis/01_common_policy_template.md` の共通テンプレートに従う。
 
 各規約は、最低限以下を含む。
 
@@ -81,7 +81,7 @@ E2E acceptance実装に入る前:
 ## Output Path
 
 ```text
-discussion/development/gui-implementation-policy.md
+discussion/development_convention/gui-implementation-policy.md
 ```
 
 ## Purpose
@@ -305,7 +305,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/ai-assistant-implementation-policy.md
+discussion/development_convention/ai-assistant-implementation-policy.md
 ```
 
 ## Purpose
@@ -520,7 +520,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/demo-rights-ip-policy.md
+discussion/development_convention/demo-rights-ip-policy.md
 ```
 
 ## Purpose
@@ -730,7 +730,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/dependency-policy.md
+discussion/development_convention/dependency-policy.md
 ```
 
 ## Purpose
@@ -888,7 +888,7 @@ graph TD
 ## Output Path
 
 ```text
-discussion/development/review-and-pr-policy.md
+discussion/development_convention/review-and-pr-policy.md
 ```
 
 ## Purpose
@@ -1052,7 +1052,7 @@ sequenceDiagram
 ## Output Path
 
 ```text
-discussion/development/subagent-workflow-policy.md
+discussion/development_convention/subagent-workflow-policy.md
 ```
 
 ## Purpose
@@ -1214,7 +1214,7 @@ flowchart TD
 ## Output Path
 
 ```text
-discussion/development/e2e-test-policy.md
+discussion/development_convention/e2e-test-policy.md
 ```
 
 ## Purpose
