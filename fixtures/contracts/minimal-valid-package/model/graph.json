@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "model-graph-v1",
+  "coordinateSystem": "canvas-y-down-v1",
+  "canvasSize": {
+    "width": 128,
+    "height": 128
+  },
+  "parts": [
+    {
+      "partId": "part_root",
+      "displayName": "Root",
+      "childPartIds": [],
+      "drawableIds": [
+        "draw_body"
+      ]
+    }
+  ],
+  "rigControlRootIds": [],
+  "stableOrder": [
+    "draw_body"
+  ]
+}

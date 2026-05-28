@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "drawables-file-v1",
+  "drawables": [
+    {
+      "drawableId": "draw_body",
+      "displayName": "Body",
+      "partId": "part_root",
+      "sourceAssetId": "src_generated",
+      "textureId": "tex_body",
+      "meshId": "mesh_body",
+      "defaultOpacity": 1,
+      "runtimeVisibility": true,
+      "baseDrawOrder": 0,
+      "sourceProvenanceId": "prov_generated"
+    }
+  ]
+}

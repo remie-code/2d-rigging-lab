@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "provenance-file-v1",
+  "records": [
+    {
+      "provenanceId": "prov_generated",
+      "assetId": "src_generated",
+      "assetKind": "generatedFixture",
+      "filePath": "assets/sources/generated/minimal-body.json",
+      "contentHash": "sha256:minimal-valid-package-generated-source",
+      "creator": "contract-fixture",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": true,
+      "aiUsed": false,
+      "transformHistory": [
+        "Authored as text JSON fixture; no binary art asset."
+      ],
+      "relatedOperationIds": []
+    }
+  ]
+}

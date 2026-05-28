@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "rights-file-v1",
+  "records": [
+    {
+      "assetId": "src_generated",
+      "rightsStatus": "cleared",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": true,
+      "notes": "Generated text-only fixture source; no PSD, PNG, Cubism, or proprietary asset."
+    }
+  ]
+}

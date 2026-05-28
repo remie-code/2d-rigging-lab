@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "draw-order-file-v1",
+  "entries": [
+    {
+      "drawableId": "draw_body",
+      "baseDrawOrder": 0,
+      "stableOrder": 0
+    }
+  ]
+}

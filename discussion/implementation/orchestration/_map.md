@@ -8,6 +8,7 @@
 |---|---|---|
 | [wave0-plan.md](wave0-plan.md) | Wave 0 implementation foundation plan | Completed / implementation-proven |
 | [wave1-plan.md](wave1-plan.md) | Wave 1 contracts-foundation dependency and parallelism plan | Completed / implementation-proven |
+| [wave2-plan.md](wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -16,3 +17,5 @@
 - Wave 0 is complete and provides the package/test/check scaffold.
 - Wave 1 `contracts-foundation` completed on 2026-05-29. The final domain was `wave1-contracts-integration`.
 - Wave 1 public integration keeps `packages/contracts/src/index.ts` as a barrel-only export surface.
+- Wave 2 `package-runtime-validator-foundation` completed on 2026-05-29. The final domain was `wave2-integration-review-and-final-report`.
+- Wave 2 public integration keeps `packages/package-format/src/index.ts`, `packages/runtime-core/src/index.ts`, and `packages/validator-core/src/index.ts` as barrel-only export surfaces.

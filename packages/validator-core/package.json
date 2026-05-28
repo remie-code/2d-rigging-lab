@@ -5,5 +5,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@private-2d-rigging-lab/contracts": "workspace:*",
+    "@private-2d-rigging-lab/package-format": "workspace:*",
+    "@private-2d-rigging-lab/runtime-core": "workspace:*",
+    "zod": "^4.4.3"
   }
 }

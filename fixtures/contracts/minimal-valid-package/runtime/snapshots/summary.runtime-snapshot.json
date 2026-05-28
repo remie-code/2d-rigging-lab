@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "runtime-snapshot-v1",
+  "runtimeCoreVersion": "wave2-foundation",
+  "snapshotId": "snap_minimal-valid-package_0",
+  "context": {
+    "source": {
+      "surface": "validator"
+    },
+    "policy": {
+      "strictness": "strict"
+    }
+  },
+  "packageId": "pkg_minimal-valid-package",
+  "packageRevision": 0,
+  "packageHash": "sha256:minimal-valid-package-v1",
+  "dirty": false,
+  "evaluation": {
+    "snapshotDetail": "summary",
+    "evaluatorVersions": {
+      "dynamics": "scalarDampedFollowV1",
+      "keyform1d": "linear-1d-v1",
+      "keyformGrid2d": "parameter-grid-2d-v1",
+      "warpLattice": "bilinear-grid-v1",
+      "rigControlHierarchy": "parent-before-child-v1"
+    }
+  },
+  "parameters": [],
+  "dynamics": [],
+  "keyformSamples": [],
+  "rigControls": [],
+  "drawables": [
+    {
+      "drawableId": "draw_body",
+      "meshId": "mesh_body",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "evaluatedDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "vertexCount": 3,
+      "vertexHash": "hash_draw_body_3",
+      "diagnostics": []
+    }
+  ],
+  "masks": [],
+  "drawList": [
+    "draw_body"
+  ],
+  "disabledFutureLayers": [],
+  "diagnostics": []
+}

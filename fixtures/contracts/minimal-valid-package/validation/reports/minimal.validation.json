@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "validation-report-v1",
+  "reportId": "val_minimal-valid-package_strict",
+  "createdAt": "2026-05-29T00:00:00.000Z",
+  "packageId": "pkg_minimal-valid-package",
+  "packageRevision": 0,
+  "validatorVersion": "validator-core-wave2-foundation",
+  "profile": "strict",
+  "relatedScenarios": [],
+  "summary": {
+    "status": "pass",
+    "highestSeverity": "info",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 0,
+      "blocking": 0
+    }
+  },
+  "checks": [],
+  "repairCandidates": [],
+  "evidence": {
+    "operationLogPresent": false,
+    "runtimeSnapshotIds": [
+      "snap_minimal-valid-package_0"
+    ],
+    "supplementalGuiEvidenceRefs": []
+  }
+}

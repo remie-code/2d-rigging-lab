@@ -26,11 +26,38 @@ importers:
 
   packages/operation-core: {}
 
-  packages/package-format: {}
+  packages/package-format:
+    dependencies:
+      '@private-2d-rigging-lab/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
-  packages/runtime-core: {}
+  packages/runtime-core:
+    dependencies:
+      '@private-2d-rigging-lab/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
-  packages/validator-core: {}
+  packages/validator-core:
+    dependencies:
+      '@private-2d-rigging-lab/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@private-2d-rigging-lab/package-format':
+        specifier: workspace:*
+        version: link:../package-format
+      '@private-2d-rigging-lab/runtime-core':
+        specifier: workspace:*
+        version: link:../runtime-core
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
 packages:
 

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "generated-fixture-source-v1",
+  "sourceAssetId": "src_generated",
+  "title": "Minimal generated fixture source",
+  "description": "Text-only fixture source used to avoid binary or proprietary art assets.",
+  "canvas": {
+    "width": 32,
+    "height": 32
+  },
+  "layers": [
+    {
+      "sourceLayerId": "layer_body",
+      "displayName": "Body",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    }
+  ]
+}

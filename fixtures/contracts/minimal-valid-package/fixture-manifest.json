@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "minimal-valid-package",
+  "title": "Minimal valid package",
+  "coversAC": [
+    "AC-MVP-004",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "package-format",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "manifest.json",
+    "model/graph.json",
+    "model/drawables.json",
+    "model/meshes.json",
+    "model/parameters.json",
+    "model/keyforms.json",
+    "model/rig-controls.json",
+    "model/dynamics.json",
+    "model/masks.json",
+    "model/draw-order.json",
+    "assets/sources/source-manifest.json",
+    "assets/sources/generated/minimal-body.json",
+    "assets/provenance.json",
+    "assets/rights.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "runtimeSnapshot",
+      "path": "runtime/snapshots/summary.runtime-snapshot.json",
+      "id": "snap_minimal-valid-package_0",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "validation/reports/minimal.validation.json",
+      "id": "val_minimal-valid-package_strict",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "meshes-file-v1",
+  "meshes": [
+    {
+      "meshId": "mesh_body",
+      "drawableId": "draw_body",
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 32,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 32
+        }
+      ],
+      "uvs": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 1
+        }
+      ],
+      "triangles": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "vertexStableIds": [
+        "v0",
+        "v1",
+        "v2"
+      ],
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      },
+      "generationProvenanceId": "prov_generated"
+    }
+  ]
+}

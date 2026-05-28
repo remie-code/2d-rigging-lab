@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "open-model-package-manifest-v1",
+  "packageId": "pkg_minimal-valid-package",
+  "packageDisplayName": "Minimal Valid Package",
+  "formatVersion": "open-model-package-v1",
+  "packageRevision": 0,
+  "createdAt": "2026-05-29T00:00:00.000Z",
+  "updatedAt": "2026-05-29T00:00:00.000Z",
+  "schemaVersions": {
+    "manifest": "open-model-package-manifest-v1",
+    "sourceManifest": "source-manifest-v1",
+    "modelGraph": "model-graph-v1"
+  },
+  "evaluatorVersions": {
+    "runtimeCore": "wave2-foundation"
+  },
+  "modelFiles": {
+    "graph": "model/graph.json",
+    "drawables": "model/drawables.json",
+    "meshes": "model/meshes.json",
+    "parameters": "model/parameters.json",
+    "keyforms": "model/keyforms.json",
+    "rigControls": "model/rig-controls.json",
+    "dynamics": "model/dynamics.json",
+    "masks": "model/masks.json",
+    "drawOrder": "model/draw-order.json"
+  },
+  "assetIndex": "assets/sources/source-manifest.json",
+  "operationLog": "operations/log.jsonl",
+  "rightsSummary": {
+    "status": "cleared"
+  },
+  "provenanceSummary": {
+    "sourceAssetCount": 1
+  },
+  "packageStableOrderVersion": "stable-order-v1"
+}
