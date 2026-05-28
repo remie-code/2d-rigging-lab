@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "operation-dry-run-summary-v1",
+  "result": {
+    "operationId": "op_fixture_create_smile",
+    "status": "dry_run",
+    "preconditionOk": true,
+    "reversible": true
+  },
+  "sessionMutation": {
+    "originalAuthoringRevisionAfter": 0,
+    "originalDirtyAfter": false,
+    "parameterAbsentInOriginal": "param_fixture_smile"
+  },
+  "operationLog": {
+    "expectedLength": 0
+  },
+  "modelDiffRef": "expected/model-diff-summary.json"
+}

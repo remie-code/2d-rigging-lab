@@ -18,13 +18,32 @@ importers:
         specifier: 3.1.4
         version: 3.1.4(@types/node@22.15.29)
 
+  packages/authoring-core:
+    dependencies:
+      '@private-2d-rigging-lab/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@private-2d-rigging-lab/package-format':
+        specifier: workspace:*
+        version: link:../package-format
+
   packages/contracts:
     dependencies:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
 
-  packages/operation-core: {}
+  packages/operation-core:
+    dependencies:
+      '@private-2d-rigging-lab/authoring-core':
+        specifier: workspace:*
+        version: link:../authoring-core
+      '@private-2d-rigging-lab/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/package-format:
     dependencies:

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "operation-model-diff-summary-v1",
+  "modelDiff": {
+    "schemaVersion": "model-diff-v1",
+    "baseRevision": 0,
+    "candidateRevision": 1,
+    "added": [
+      {
+        "kind": "parameter",
+        "id": "param_fixture_smile"
+      }
+    ],
+    "removed": [],
+    "changed": [
+      {
+        "target": {
+          "kind": "parameter",
+          "id": "param_fixture_smile"
+        },
+        "fields": [
+          {
+            "path": "/model/parameters/parameters",
+            "before": null,
+            "after": "param_fixture_smile"
+          }
+        ]
+      }
+    ],
+    "operationIds": [
+      "op_fixture_create_smile"
+    ]
+  }
+}

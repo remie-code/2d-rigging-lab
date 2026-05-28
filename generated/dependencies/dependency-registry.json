@@ -27,10 +27,10 @@
     {
       "name": "zod",
       "version": "4.4.3",
-      "purpose": "Runtime validation schemas for authored external DTOs, branded ID contracts, package-format DTO parsing, runtime-core DTO parsing, and validator-core reports.",
+      "purpose": "Runtime validation schemas for authored external DTOs, branded ID contracts, package-format DTO parsing, runtime-core DTO parsing, validator-core reports, and operation-core request/result/log DTOs.",
       "license": "MIT",
-      "scope": "runtime:packages/contracts,packages/package-format,packages/runtime-core,packages/validator-core",
-      "status": "wave1-contracts-zod-and-core-approved; wave2-package-runtime-validator-foundation-scope-expanded; resolved-by-pnpm-lock.yaml"
+      "scope": "runtime:packages/contracts,packages/package-format,packages/runtime-core,packages/validator-core,packages/operation-core",
+      "status": "wave1-contracts-zod-and-core-approved; wave2-package-runtime-validator-foundation-scope-expanded; wave3-operation-core-scope-expanded; resolved-by-pnpm-lock.yaml"
     }
   ]
 }
