@@ -199,11 +199,29 @@ For each artifact, record:
 - demo-safe classification;
 - whether it is required or supplemental.
 
+## Traceability and Fixture Join
+
+Before executing tests, the runner builds a join across:
+
+- `discussion/tests/traceability/test-traceability-matrix.json`;
+- `discussion/tests/fixtures/fixture-manifest.json`;
+- expected artifact policy and validator profile design.
+
+The join is an acceptance input, not a reporting convenience. It must fail `gate.manifestIntegrity` when:
+
+- a Test ID references a missing fixture;
+- a fixture with `gate=mvp-blocking` has no referencing Test ID;
+- a Test ID is duplicated;
+- a machine-readable ID contains whitespace;
+- an `mvp-blocking` Test ID has neither a formal expected diagnostic nor a required expected artifact oracle.
+
+Candidate diagnostics from the validator profile are allowed only as notes or future-review candidates. MVP blocking pass/fail must use formal diagnostics from `validator-contract.md`, explicit expected artifacts, or both.
+
 ## Gate Definitions
 
 | Gate ID | Blocks MVP | Pass condition | Failure examples |
 |---|---|---|---|
-| `gate.manifestIntegrity` | Yes | All required IDs, refs, and scope entries resolve. | Missing fixture ref, duplicate test ID, ID contains spaces. |
+| `gate.manifestIntegrity` | Yes | All required IDs, refs, scope entries, mvp-blocking fixture references, and formal diagnostic/expected-artifact oracle links resolve. | Missing fixture ref, unreferenced mvp-blocking fixture, duplicate test ID, ID contains spaces, candidate-only diagnostic oracle. |
 | `gate.scopeGuardrail` | Yes | MVP scope excludes future/optional tracks and forbidden external or SDK/Core oracles. | Fixture uses external model package as oracle. |
 | `gate.rightsProvenance` | Yes | Required source/provenance metadata exists and no blocked rights source is required. | `rights.provenanceMissing`, third-party asset without permission. |
 | `gate.guiAuthoringEvidence` | Yes | GUI operation log exists and covers required authoring path. | `evidence.guiOperationLogMissing`, script-only package as MVP candidate. |

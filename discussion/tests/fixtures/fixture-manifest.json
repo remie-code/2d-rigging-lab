@@ -140,14 +140,33 @@
   "fixtures": [
     {
       "fixtureId": "minimal-valid-package",
-      "categories": ["happy-path"],
+      "categories": [
+        "happy-path"
+      ],
       "purpose": "Prove mandatory package files, stable IDs, base references, runtime load, and non-empty draw list.",
-      "relatedAcceptanceCriteria": ["AC-MVP-004", "AC-MVP-012", "AC-MVP-013", "AC-DRAW-001", "AC-RUNTIME-001"],
-      "relatedScenarios": ["SC-VIEWER-001", "SC-RUNTIME-001"],
-      "operationFlow": ["loadPackage", "validatePackage", "getRuntimeSnapshot"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-004",
+        "AC-MVP-012",
+        "AC-MVP-013",
+        "AC-DRAW-001",
+        "AC-RUNTIME-001"
+      ],
+      "relatedScenarios": [
+        "SC-VIEWER-001",
+        "SC-RUNTIME-001"
+      ],
+      "operationFlow": [
+        "loadPackage",
+        "validatePackage",
+        "getRuntimeSnapshot"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/minimal.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/summary.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/minimal.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/summary.runtime-snapshot.json"
+        ],
         "diff": [],
         "runtimeState": [],
         "runtimeStateSequence": [],
@@ -163,18 +182,40 @@
     },
     {
       "fixtureId": "psd-import-happy-path",
-      "categories": ["happy-path", "rights-provenance"],
+      "categories": [
+        "happy-path",
+        "rights-provenance"
+      ],
       "purpose": "Prove layered character PSD profile creates source assets, parts, drawables, textures, and provenance.",
-      "relatedAcceptanceCriteria": ["AC-MVP-002", "AC-MVP-003", "AC-IN-001", "AC-IN-002", "AC-IN-006", "AC-RIGHTS-002"],
-      "relatedScenarios": ["SC-IN-001"],
-      "operationFlow": ["importPsdSourceAsset", "createDrawable", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-002",
+        "AC-MVP-003",
+        "AC-IN-001",
+        "AC-IN-002",
+        "AC-IN-006",
+        "AC-RIGHTS-002"
+      ],
+      "relatedScenarios": [
+        "SC-IN-001"
+      ],
+      "operationFlow": [
+        "importPsdSourceAsset",
+        "createDrawable",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/psd-import.validation.json"],
+        "validation": [
+          "validation/reports/psd-import.validation.json"
+        ],
         "runtimeSnapshot": [],
-        "diff": ["diffs/psd-import.model-diff.json"],
+        "diff": [
+          "diffs/psd-import.model-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
-        "operationLog": ["operations/log.jsonl"],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
         "guiEvidence": [],
         "aiTranscript": [],
         "demoPreflight": []
@@ -186,15 +227,29 @@
     },
     {
       "fixtureId": "psd-unsupported-layer",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove unsupported PSD source features become structured diagnostics without becoming runtime graph requirements.",
-      "relatedAcceptanceCriteria": ["AC-MVP-003", "AC-IN-006"],
-      "relatedScenarios": ["SC-IN-001"],
-      "operationFlow": ["importPsdSourceAsset", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-003",
+        "AC-IN-006"
+      ],
+      "relatedScenarios": [
+        "SC-IN-001"
+      ],
+      "operationFlow": [
+        "importPsdSourceAsset",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/psd-unsupported-layer.validation.json"],
+        "validation": [
+          "validation/reports/psd-unsupported-layer.validation.json"
+        ],
         "runtimeSnapshot": [],
-        "diff": ["diffs/psd-unsupported-layer.model-diff.json"],
+        "diff": [
+          "diffs/psd-unsupported-layer.model-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
@@ -209,18 +264,36 @@
     },
     {
       "fixtureId": "split-png-fallback",
-      "categories": ["happy-path"],
+      "categories": [
+        "happy-path"
+      ],
       "purpose": "Prove split PNG fallback records placement, missing PSD tree warning, and provenance.",
-      "relatedAcceptanceCriteria": ["AC-MVP-003", "AC-IN-001", "AC-IN-006"],
-      "relatedScenarios": ["SC-IN-001"],
-      "operationFlow": ["importSplitPngSourceAsset", "createDrawable", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-003",
+        "AC-IN-001",
+        "AC-IN-006"
+      ],
+      "relatedScenarios": [
+        "SC-IN-001"
+      ],
+      "operationFlow": [
+        "importSplitPngSourceAsset",
+        "createDrawable",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/split-png-fallback.validation.json"],
+        "validation": [
+          "validation/reports/split-png-fallback.validation.json"
+        ],
         "runtimeSnapshot": [],
-        "diff": ["diffs/split-png-fallback.model-diff.json"],
+        "diff": [
+          "diffs/split-png-fallback.model-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
-        "operationLog": ["operations/log.jsonl"],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
         "guiEvidence": [],
         "aiTranscript": [],
         "demoPreflight": []
@@ -232,19 +305,68 @@
     },
     {
       "fixtureId": "tutorial-like-authoring",
-      "categories": ["happy-path", "gui-evidence"],
+      "categories": [
+        "happy-path",
+        "gui-evidence"
+      ],
       "purpose": "Prove the GUI authoring path covers import, mesh, part, mask, draw order, parameter, keyform, rig control, dynamics, save/reload, preview, and validation.",
-      "relatedAcceptanceCriteria": ["AC-MVP-001", "AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-005", "AC-MVP-006", "AC-MVP-007", "AC-MVP-008", "AC-MVP-009", "AC-MVP-010", "AC-MVP-011", "AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
-      "relatedScenarios": ["SC-MVP-001", "SC-MVP-002", "SC-MVP-003", "SC-WF-001"],
-      "operationFlow": ["importPsdSourceAsset", "generateMesh", "createParameter", "addKeyform", "addKeyformGrid2d", "createRotation2dRigControl", "createWarpLattice2dRigControl", "setMaskRelation", "setDrawOrder", "createDynamicsGroup", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-001",
+        "AC-MVP-002",
+        "AC-MVP-003",
+        "AC-MVP-004",
+        "AC-MVP-005",
+        "AC-MVP-006",
+        "AC-MVP-007",
+        "AC-MVP-008",
+        "AC-MVP-009",
+        "AC-MVP-010",
+        "AC-MVP-011",
+        "AC-MVP-012",
+        "AC-MVP-013",
+        "AC-MVP-014"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-001",
+        "SC-MVP-002",
+        "SC-MVP-003",
+        "SC-WF-001"
+      ],
+      "operationFlow": [
+        "importPsdSourceAsset",
+        "generateMesh",
+        "createParameter",
+        "addKeyform",
+        "addKeyformGrid2d",
+        "createRotation2dRigControl",
+        "createWarpLattice2dRigControl",
+        "setMaskRelation",
+        "setDrawOrder",
+        "createDynamicsGroup",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/tutorial-like-authoring.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/tutorial-like-authoring.full.runtime-snapshot.json"],
-        "diff": ["diffs/tutorial-like-authoring.model-diff.json", "diffs/tutorial-like-authoring.runtime-diff.json"],
-        "runtimeState": ["runtime/states/initial.runtime-state.json", "runtime/states/final.runtime-state.json"],
+        "validation": [
+          "validation/reports/tutorial-like-authoring.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/tutorial-like-authoring.full.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/tutorial-like-authoring.model-diff.json",
+          "diffs/tutorial-like-authoring.runtime-diff.json"
+        ],
+        "runtimeState": [
+          "runtime/states/initial.runtime-state.json",
+          "runtime/states/final.runtime-state.json"
+        ],
         "runtimeStateSequence": [],
-        "operationLog": ["operations/log.jsonl"],
-        "guiEvidence": ["gui-evidence/tutorial-like-authoring.gui-evidence.json"],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
+        "guiEvidence": [
+          "gui-evidence/tutorial-like-authoring.gui-evidence.json"
+        ],
         "aiTranscript": [],
         "demoPreflight": []
       },
@@ -255,18 +377,44 @@
     },
     {
       "fixtureId": "manual-face-grid-2d",
-      "categories": ["happy-path"],
+      "categories": [
+        "happy-path"
+      ],
       "purpose": "Prove parameter-grid-2d-v1 face yaw/pitch grid saves and evaluates deterministically.",
-      "relatedAcceptanceCriteria": ["AC-MVP-008", "AC-MVP-010", "AC-PARAM-004", "AC-PARAM-005", "AC-PARAM-007", "AC-FACE-007"],
-      "relatedScenarios": ["SC-PARAM-003", "SC-PARAM-004", "SC-FACE-003"],
-      "operationFlow": ["createParameter", "addKeyformGrid2d", "getRuntimeSnapshot", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-008",
+        "AC-MVP-010",
+        "AC-PARAM-004",
+        "AC-PARAM-005",
+        "AC-PARAM-007",
+        "AC-FACE-007"
+      ],
+      "relatedScenarios": [
+        "SC-PARAM-003",
+        "SC-PARAM-004",
+        "SC-FACE-003"
+      ],
+      "operationFlow": [
+        "createParameter",
+        "addKeyformGrid2d",
+        "getRuntimeSnapshot",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/manual-face-grid-2d.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/manual-face-grid-2d.full.runtime-snapshot.json"],
-        "diff": ["diffs/manual-face-grid-2d.runtime-diff.json"],
+        "validation": [
+          "validation/reports/manual-face-grid-2d.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/manual-face-grid-2d.full.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/manual-face-grid-2d.runtime-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
-        "operationLog": ["operations/log.jsonl"],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
         "guiEvidence": [],
         "aiTranscript": [],
         "demoPreflight": []
@@ -278,18 +426,41 @@
     },
     {
       "fixtureId": "parent-child-rigControl-diagonal",
-      "categories": ["happy-path"],
+      "categories": [
+        "happy-path"
+      ],
       "purpose": "Prove parent-before-child rig control evaluation composes diagonal expression.",
-      "relatedAcceptanceCriteria": ["AC-MVP-009", "AC-MVP-010", "AC-DEF-003", "AC-DEF-004", "AC-DEF-005"],
-      "relatedScenarios": ["SC-DEF-002"],
-      "operationFlow": ["createRotation2dRigControl", "createWarpLattice2dRigControl", "bindRigControlChild", "getRuntimeSnapshot"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-009",
+        "AC-MVP-010",
+        "AC-DEF-003",
+        "AC-DEF-004",
+        "AC-DEF-005"
+      ],
+      "relatedScenarios": [
+        "SC-DEF-002"
+      ],
+      "operationFlow": [
+        "createRotation2dRigControl",
+        "createWarpLattice2dRigControl",
+        "bindRigControlChild",
+        "getRuntimeSnapshot"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/parent-child-rigControl-diagonal.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/parent-child-rigControl-diagonal.targeted.runtime-snapshot.json"],
-        "diff": ["diffs/parent-child-rigControl-diagonal.runtime-diff.json"],
+        "validation": [
+          "validation/reports/parent-child-rigControl-diagonal.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/parent-child-rigControl-diagonal.targeted.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/parent-child-rigControl-diagonal.runtime-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
-        "operationLog": ["operations/log.jsonl"],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
         "guiEvidence": [],
         "aiTranscript": [],
         "demoPreflight": []
@@ -301,18 +472,53 @@
     },
     {
       "fixtureId": "minimal-dynamics-hairSway",
-      "categories": ["happy-path", "dynamics"],
+      "categories": [
+        "happy-path",
+        "dynamics"
+      ],
       "purpose": "Prove authored faceYaw drives delayed/clamped hairSway computed output without direct mesh or rig control writes.",
-      "relatedAcceptanceCriteria": ["AC-MVP-010", "AC-MVP-012", "AC-PHYS-001", "AC-PHYS-002", "AC-PHYS-003", "AC-PHYS-004", "AC-PHYS-005"],
-      "relatedScenarios": ["SC-DYN-001", "SC-DYN-002"],
-      "operationFlow": ["createDynamicsGroup", "bindDynamicsDriver", "bindDynamicsOutput", "setDynamicsSettings", "resetDynamicsPreviewState", "runDynamicsPreviewSequence", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-010",
+        "AC-MVP-012",
+        "AC-PHYS-001",
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-001",
+        "SC-DYN-002"
+      ],
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "bindDynamicsOutput",
+        "setDynamicsSettings",
+        "resetDynamicsPreviewState",
+        "runDynamicsPreviewSequence",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/minimal-dynamics-hairSway.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/minimal-dynamics-hairSway.targeted-sequence.runtime-snapshot.json"],
-        "diff": ["diffs/minimal-dynamics-hairSway.runtime-diff.json"],
-        "runtimeState": ["runtime/states/initial.runtime-state.json", "runtime/states/expected-next.runtime-state.json"],
-        "runtimeStateSequence": ["runtime/state-sequences/expected.runtime-state-sequence.json"],
-        "operationLog": ["operations/log.jsonl"],
+        "validation": [
+          "validation/reports/minimal-dynamics-hairSway.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/minimal-dynamics-hairSway.targeted-sequence.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/minimal-dynamics-hairSway.runtime-diff.json"
+        ],
+        "runtimeState": [
+          "runtime/states/initial.runtime-state.json",
+          "runtime/states/expected-next.runtime-state.json"
+        ],
+        "runtimeStateSequence": [
+          "runtime/state-sequences/expected.runtime-state-sequence.json"
+        ],
+        "operationLog": [
+          "operations/log.jsonl"
+        ],
         "guiEvidence": [],
         "aiTranscript": [],
         "demoPreflight": []
@@ -324,17 +530,39 @@
     },
     {
       "fixtureId": "dynamics-reset-determinism",
-      "categories": ["dynamics"],
+      "categories": [
+        "dynamics"
+      ],
       "purpose": "Prove reset boundaries and repeated replay produce the same dynamics output and state sequence.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-003", "AC-PHYS-004", "AC-PHYS-005"],
-      "relatedScenarios": ["SC-DYN-002"],
-      "operationFlow": ["resetDynamicsPreviewState", "runDynamicsPreviewSequence", "runDynamicsPreviewSequence"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-002"
+      ],
+      "operationFlow": [
+        "resetDynamicsPreviewState",
+        "runDynamicsPreviewSequence",
+        "runDynamicsPreviewSequence"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/dynamics-reset-determinism.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/dynamics-reset-determinism.replay-a.runtime-snapshot.json", "runtime/snapshots/dynamics-reset-determinism.replay-b.runtime-snapshot.json"],
-        "diff": ["diffs/dynamics-reset-determinism.runtime-diff.json"],
+        "validation": [
+          "validation/reports/dynamics-reset-determinism.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/dynamics-reset-determinism.replay-a.runtime-snapshot.json",
+          "runtime/snapshots/dynamics-reset-determinism.replay-b.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/dynamics-reset-determinism.runtime-diff.json"
+        ],
         "runtimeState": [],
-        "runtimeStateSequence": ["runtime/state-sequences/replay-a.runtime-state-sequence.json", "runtime/state-sequences/replay-b.runtime-state-sequence.json"],
+        "runtimeStateSequence": [
+          "runtime/state-sequences/replay-a.runtime-state-sequence.json",
+          "runtime/state-sequences/replay-b.runtime-state-sequence.json"
+        ],
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
@@ -347,17 +575,40 @@
     },
     {
       "fixtureId": "dynamics-fixed-step-replay",
-      "categories": ["dynamics"],
+      "categories": [
+        "dynamics"
+      ],
       "purpose": "Prove variable frame deltas are lowered to fixed-step substeps with deterministic accumulator and state evidence.",
-      "relatedAcceptanceCriteria": ["AC-MVP-012", "AC-PHYS-003", "AC-PHYS-004", "AC-PHYS-005"],
-      "relatedScenarios": ["SC-DYN-002"],
-      "operationFlow": ["runDynamicsPreviewSequence", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-012",
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-002"
+      ],
+      "operationFlow": [
+        "runDynamicsPreviewSequence",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/dynamics-fixed-step-replay.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/dynamics-fixed-step-replay.targeted-sequence.runtime-snapshot.json"],
-        "diff": ["diffs/dynamics-fixed-step-replay.runtime-diff.json"],
-        "runtimeState": ["runtime/states/initial.runtime-state.json", "runtime/states/expected-next.runtime-state.json"],
-        "runtimeStateSequence": ["runtime/state-sequences/expected.runtime-state-sequence.json"],
+        "validation": [
+          "validation/reports/dynamics-fixed-step-replay.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/dynamics-fixed-step-replay.targeted-sequence.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/dynamics-fixed-step-replay.runtime-diff.json"
+        ],
+        "runtimeState": [
+          "runtime/states/initial.runtime-state.json",
+          "runtime/states/expected-next.runtime-state.json"
+        ],
+        "runtimeStateSequence": [
+          "runtime/state-sequences/expected.runtime-state-sequence.json"
+        ],
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
@@ -370,16 +621,37 @@
     },
     {
       "fixtureId": "dynamics-output-range-clamp",
-      "categories": ["dynamics", "invalid"],
+      "categories": [
+        "dynamics",
+        "invalid"
+      ],
       "purpose": "Prove output clamp evidence and out-of-range diagnostics are visible.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-002", "AC-PHYS-003", "AC-PHYS-005"],
-      "relatedScenarios": ["SC-DYN-003"],
-      "operationFlow": ["setDynamicsSettings", "runDynamicsPreviewSequence", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-003"
+      ],
+      "operationFlow": [
+        "setDynamicsSettings",
+        "runDynamicsPreviewSequence",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/dynamics-output-range-clamp.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/dynamics-output-range-clamp.targeted.runtime-snapshot.json"],
-        "diff": ["diffs/dynamics-output-range-clamp.runtime-diff.json"],
-        "runtimeState": ["runtime/states/expected-next.runtime-state.json"],
+        "validation": [
+          "validation/reports/dynamics-output-range-clamp.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/dynamics-output-range-clamp.targeted.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/dynamics-output-range-clamp.runtime-diff.json"
+        ],
+        "runtimeState": [
+          "runtime/states/expected-next.runtime-state.json"
+        ],
         "runtimeStateSequence": [],
         "operationLog": [],
         "guiEvidence": [],
@@ -393,13 +665,26 @@
     },
     {
       "fixtureId": "invalid-dynamics-missing-driver",
-      "categories": ["invalid", "dynamics"],
+      "categories": [
+        "invalid",
+        "dynamics"
+      ],
       "purpose": "Prove a dynamics group without a valid authored driver fails validation.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-002"],
-      "relatedScenarios": ["SC-DYN-003"],
-      "operationFlow": ["createDynamicsGroup", "bindDynamicsOutput", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-002"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-003"
+      ],
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsOutput",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-dynamics-missing-driver.validation.json"],
+        "validation": [
+          "validation/reports/invalid-dynamics-missing-driver.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -416,13 +701,26 @@
     },
     {
       "fixtureId": "invalid-dynamics-missing-output",
-      "categories": ["invalid", "dynamics"],
+      "categories": [
+        "invalid",
+        "dynamics"
+      ],
       "purpose": "Prove a dynamics group without a computed output parameter fails validation.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-002"],
-      "relatedScenarios": ["SC-DYN-003"],
-      "operationFlow": ["createDynamicsGroup", "bindDynamicsDriver", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-002"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-003"
+      ],
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-dynamics-missing-output.validation.json"],
+        "validation": [
+          "validation/reports/invalid-dynamics-missing-output.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -439,13 +737,27 @@
     },
     {
       "fixtureId": "invalid-dynamics-cycle",
-      "categories": ["invalid", "dynamics"],
+      "categories": [
+        "invalid",
+        "dynamics"
+      ],
       "purpose": "Prove computed outputs cannot be drivers and group dependencies are prohibited.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-002"],
-      "relatedScenarios": ["SC-DYN-003"],
-      "operationFlow": ["createDynamicsGroup", "bindDynamicsDriver", "bindDynamicsOutput", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-002"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-003"
+      ],
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "bindDynamicsOutput",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-dynamics-cycle.validation.json"],
+        "validation": [
+          "validation/reports/invalid-dynamics-cycle.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -462,13 +774,27 @@
     },
     {
       "fixtureId": "invalid-dynamics-output-target-duplicate",
-      "categories": ["invalid", "dynamics"],
+      "categories": [
+        "invalid",
+        "dynamics"
+      ],
       "purpose": "Prove two groups cannot target the same computed output parameter.",
-      "relatedAcceptanceCriteria": ["AC-PHYS-001", "AC-PHYS-002"],
-      "relatedScenarios": ["SC-DYN-003"],
-      "operationFlow": ["createDynamicsGroup", "bindDynamicsOutput", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-PHYS-001",
+        "AC-PHYS-002"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-003"
+      ],
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsOutput",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-dynamics-output-target-duplicate.validation.json"],
+        "validation": [
+          "validation/reports/invalid-dynamics-output-target-duplicate.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -485,13 +811,26 @@
     },
     {
       "fixtureId": "invalid-mesh-triangle",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove out-of-range or degenerate mesh triangles block invalid geometry.",
-      "relatedAcceptanceCriteria": ["AC-MVP-005", "AC-MESH-004"],
-      "relatedScenarios": ["SC-MESH-002", "SC-VALIDATOR-002"],
-      "operationFlow": ["generateMesh", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-005",
+        "AC-MESH-004"
+      ],
+      "relatedScenarios": [
+        "SC-MESH-002",
+        "SC-VALIDATOR-002"
+      ],
+      "operationFlow": [
+        "generateMesh",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-mesh-triangle.validation.json"],
+        "validation": [
+          "validation/reports/invalid-mesh-triangle.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -508,13 +847,25 @@
     },
     {
       "fixtureId": "invalid-missing-texture",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove visible drawable missing texture fails package/reference validation.",
-      "relatedAcceptanceCriteria": ["AC-MVP-004", "AC-VALIDATOR-002"],
-      "relatedScenarios": ["SC-VALIDATOR-001"],
-      "operationFlow": ["createDrawable", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-004",
+        "AC-VALIDATOR-002"
+      ],
+      "relatedScenarios": [
+        "SC-VALIDATOR-001"
+      ],
+      "operationFlow": [
+        "createDrawable",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-missing-texture.validation.json"],
+        "validation": [
+          "validation/reports/invalid-missing-texture.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -531,13 +882,26 @@
     },
     {
       "fixtureId": "invalid-rigControl-cycle",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove rig control hierarchy cycles block runtime evaluation.",
-      "relatedAcceptanceCriteria": ["AC-MVP-009", "AC-DEF-004", "AC-DEF-005"],
-      "relatedScenarios": ["SC-DEF-002"],
-      "operationFlow": ["bindRigControlChild", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-009",
+        "AC-DEF-004",
+        "AC-DEF-005"
+      ],
+      "relatedScenarios": [
+        "SC-DEF-002"
+      ],
+      "operationFlow": [
+        "bindRigControlChild",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-rigControl-cycle.validation.json"],
+        "validation": [
+          "validation/reports/invalid-rigControl-cycle.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -554,14 +918,30 @@
     },
     {
       "fixtureId": "invalid-mask-reference",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove missing mask source/target is reported and not silently ignored.",
-      "relatedAcceptanceCriteria": ["AC-MVP-007", "AC-DRAW-004"],
-      "relatedScenarios": ["SC-DRAW-002", "SC-DEF-003"],
-      "operationFlow": ["setMaskRelation", "validatePackage", "getRuntimeSnapshot"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-007",
+        "AC-DRAW-004"
+      ],
+      "relatedScenarios": [
+        "SC-DRAW-002",
+        "SC-DEF-003"
+      ],
+      "operationFlow": [
+        "setMaskRelation",
+        "validatePackage",
+        "getRuntimeSnapshot"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/invalid-mask-reference.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/invalid-mask-reference.diagnostic.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/invalid-mask-reference.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/invalid-mask-reference.diagnostic.runtime-snapshot.json"
+        ],
         "diff": [],
         "runtimeState": [],
         "runtimeStateSequence": [],
@@ -577,14 +957,29 @@
     },
     {
       "fixtureId": "keyform-grid-invalid",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove missing or duplicate two-axis grid coordinates fail strict evaluation.",
-      "relatedAcceptanceCriteria": ["AC-PARAM-005", "AC-PARAM-007"],
-      "relatedScenarios": ["SC-PARAM-004"],
-      "operationFlow": ["addKeyformGrid2d", "validatePackage", "getRuntimeSnapshot"],
+      "relatedAcceptanceCriteria": [
+        "AC-PARAM-005",
+        "AC-PARAM-007"
+      ],
+      "relatedScenarios": [
+        "SC-PARAM-004"
+      ],
+      "operationFlow": [
+        "addKeyformGrid2d",
+        "validatePackage",
+        "getRuntimeSnapshot"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/keyform-grid-invalid.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/keyform-grid-invalid.diagnostic.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/keyform-grid-invalid.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/keyform-grid-invalid.diagnostic.runtime-snapshot.json"
+        ],
         "diff": [],
         "runtimeState": [],
         "runtimeStateSequence": [],
@@ -600,13 +995,25 @@
     },
     {
       "fixtureId": "keyform-missing-endpoint",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove one-axis interpolation endpoint omissions are visible and profile-gated.",
-      "relatedAcceptanceCriteria": ["AC-MVP-008", "AC-PARAM-003"],
-      "relatedScenarios": ["SC-PARAM-007"],
-      "operationFlow": ["addKeyform", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-008",
+        "AC-PARAM-003"
+      ],
+      "relatedScenarios": [
+        "SC-PARAM-007"
+      ],
+      "operationFlow": [
+        "addKeyform",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/keyform-missing-endpoint.validation.json"],
+        "validation": [
+          "validation/reports/keyform-missing-endpoint.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -623,13 +1030,28 @@
     },
     {
       "fixtureId": "runtime-load-blocking",
-      "categories": ["invalid"],
+      "categories": [
+        "invalid"
+      ],
       "purpose": "Prove a normalized graph that cannot produce deterministic runtime output fails before viewer acceptance.",
-      "relatedAcceptanceCriteria": ["AC-MVP-012", "AC-RUNTIME-001", "AC-VALIDATOR-004"],
-      "relatedScenarios": ["SC-RUNTIME-001", "SC-VALIDATOR-002"],
-      "operationFlow": ["loadPackage", "getRuntimeSnapshot", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-012",
+        "AC-RUNTIME-001",
+        "AC-VALIDATOR-004"
+      ],
+      "relatedScenarios": [
+        "SC-RUNTIME-001",
+        "SC-VALIDATOR-002"
+      ],
+      "operationFlow": [
+        "loadPackage",
+        "getRuntimeSnapshot",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/runtime-load-blocking.validation.json"],
+        "validation": [
+          "validation/reports/runtime-load-blocking.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -646,15 +1068,33 @@
     },
     {
       "fixtureId": "rights-provenance-missing",
-      "categories": ["invalid", "rights-provenance"],
+      "categories": [
+        "invalid",
+        "rights-provenance"
+      ],
       "purpose": "Prove missing source provenance or blocked rights prevents MVP/demo acceptance.",
-      "relatedAcceptanceCriteria": ["AC-MVP-002", "AC-RIGHTS-001", "AC-RIGHTS-002", "AC-SAMPLE-005"],
-      "relatedScenarios": ["SC-IN-002", "SC-HYGIENE-001"],
-      "operationFlow": ["setRightsMetadata", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-002",
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-SAMPLE-005"
+      ],
+      "relatedScenarios": [
+        "SC-IN-002",
+        "SC-HYGIENE-001"
+      ],
+      "operationFlow": [
+        "setRightsMetadata",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/rights-provenance-missing.validation.json"],
+        "validation": [
+          "validation/reports/rights-provenance-missing.validation.json"
+        ],
         "runtimeSnapshot": [],
-        "diff": ["diffs/rights-provenance-missing.validation-diff.json"],
+        "diff": [
+          "diffs/rights-provenance-missing.validation-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
@@ -669,14 +1109,30 @@
     },
     {
       "fixtureId": "script-generated-minimal",
-      "categories": ["invalid", "gui-evidence"],
+      "categories": [
+        "invalid",
+        "gui-evidence"
+      ],
       "purpose": "Prove script-only model generation is auxiliary and cannot satisfy MVP GUI authoring.",
-      "relatedAcceptanceCriteria": ["AC-MVP-001", "AC-MVP-016"],
-      "relatedScenarios": ["SC-MVP-006", "SC-WF-001"],
-      "operationFlow": ["loadPackage", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-001",
+        "AC-MVP-016"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-006",
+        "SC-WF-001"
+      ],
+      "operationFlow": [
+        "loadPackage",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/script-generated-minimal.acceptance.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/script-generated-minimal.summary.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/script-generated-minimal.acceptance.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/script-generated-minimal.summary.runtime-snapshot.json"
+        ],
         "diff": [],
         "runtimeState": [],
         "runtimeStateSequence": [],
@@ -692,11 +1148,24 @@
     },
     {
       "fixtureId": "gui-hit-test-rigControl",
-      "categories": ["gui-evidence", "ai"],
+      "categories": [
+        "gui-evidence",
+        "ai"
+      ],
       "purpose": "Prove semantic hit-test returns stable rig control IDs and operation targets.",
-      "relatedAcceptanceCriteria": ["AC-MVP-014", "AC-AI-002"],
-      "relatedScenarios": ["SC-AI-002", "SC-AGENT-002"],
-      "operationFlow": ["getEditorState", "getCanvasViewport", "hitTestCanvas"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-014",
+        "AC-AI-002"
+      ],
+      "relatedScenarios": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "operationFlow": [
+        "getEditorState",
+        "getCanvasViewport",
+        "hitTestCanvas"
+      ],
       "expectedArtifacts": {
         "validation": [],
         "runtimeSnapshot": [],
@@ -704,7 +1173,9 @@
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
-        "guiEvidence": ["gui-evidence/gui-hit-test-rigControl.hit-test-result.json"],
+        "guiEvidence": [
+          "gui-evidence/gui-hit-test-rigControl.hit-test-result.json"
+        ],
         "aiTranscript": [],
         "demoPreflight": []
       },
@@ -715,20 +1186,48 @@
     },
     {
       "fixtureId": "ai-screenshot-rigControl-parameter",
-      "categories": ["ai", "gui-evidence"],
+      "categories": [
+        "ai",
+        "gui-evidence"
+      ],
       "purpose": "Prove screenshot-assisted AI uses semantic APIs before dry-running a rig control/keyform edit.",
-      "relatedAcceptanceCriteria": ["AC-MVP-014", "AC-AI-002", "AC-AGENT-002"],
-      "relatedScenarios": ["SC-AI-002", "SC-AGENT-002"],
-      "operationFlow": ["getEditorState", "hitTestCanvas", "inspectTarget", "dryRunOperation", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-014",
+        "AC-AI-002",
+        "AC-AGENT-002"
+      ],
+      "relatedScenarios": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "operationFlow": [
+        "getEditorState",
+        "hitTestCanvas",
+        "inspectTarget",
+        "dryRunOperation",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/ai-screenshot-rigControl-parameter.aiDryRun.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/ai-screenshot-rigControl-parameter.targeted.runtime-snapshot.json"],
-        "diff": ["diffs/ai-screenshot-rigControl-parameter.model-diff.json", "diffs/ai-screenshot-rigControl-parameter.runtime-diff.json", "diffs/ai-screenshot-rigControl-parameter.validation-diff.json"],
+        "validation": [
+          "validation/reports/ai-screenshot-rigControl-parameter.aiDryRun.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/ai-screenshot-rigControl-parameter.targeted.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/ai-screenshot-rigControl-parameter.model-diff.json",
+          "diffs/ai-screenshot-rigControl-parameter.runtime-diff.json",
+          "diffs/ai-screenshot-rigControl-parameter.validation-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
-        "guiEvidence": ["gui-evidence/ai-screenshot-rigControl-parameter.semantic-target.json"],
-        "aiTranscript": ["ai/ai-screenshot-rigControl-parameter.command-transcript.json"],
+        "guiEvidence": [
+          "gui-evidence/ai-screenshot-rigControl-parameter.semantic-target.json"
+        ],
+        "aiTranscript": [
+          "ai/ai-screenshot-rigControl-parameter.command-transcript.json"
+        ],
         "demoPreflight": []
       },
       "oracle": "aiCommandContract+semanticTargetSelection",
@@ -738,20 +1237,40 @@
     },
     {
       "fixtureId": "ai-invalid-mutation",
-      "categories": ["ai", "invalid"],
+      "categories": [
+        "ai",
+        "invalid"
+      ],
       "purpose": "Prove AI dry-run that mutates package state is detected as blocking.",
-      "relatedAcceptanceCriteria": ["AC-MVP-014", "AC-AI-003", "AC-AGENT-002"],
-      "relatedScenarios": ["SC-AI-002", "SC-AGENT-002"],
-      "operationFlow": ["dryRunOperation", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-014",
+        "AC-AI-003",
+        "AC-AGENT-002"
+      ],
+      "relatedScenarios": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "operationFlow": [
+        "dryRunOperation",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/ai-invalid-mutation.validation.json"],
+        "validation": [
+          "validation/reports/ai-invalid-mutation.validation.json"
+        ],
         "runtimeSnapshot": [],
-        "diff": ["diffs/ai-invalid-mutation.model-diff.json", "diffs/ai-invalid-mutation.validation-diff.json"],
+        "diff": [
+          "diffs/ai-invalid-mutation.model-diff.json",
+          "diffs/ai-invalid-mutation.validation-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
         "guiEvidence": [],
-        "aiTranscript": ["ai/ai-invalid-mutation.command-transcript.json"],
+        "aiTranscript": [
+          "ai/ai-invalid-mutation.command-transcript.json"
+        ],
         "demoPreflight": []
       },
       "oracle": "dryRunNoPackageRevisionMutation",
@@ -761,20 +1280,44 @@
     },
     {
       "fixtureId": "out-of-range-parameter-dry-run",
-      "categories": ["ai", "invalid"],
+      "categories": [
+        "ai",
+        "invalid"
+      ],
       "purpose": "Prove out-of-range parameter input clamps/warns without committing the package.",
-      "relatedAcceptanceCriteria": ["AC-MVP-012", "AC-MVP-014"],
-      "relatedScenarios": ["SC-AGENT-002", "SC-RUNTIME-002"],
-      "operationFlow": ["dryRunOperation", "getRuntimeSnapshot", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-012",
+        "AC-MVP-014"
+      ],
+      "relatedScenarios": [
+        "SC-AGENT-002",
+        "SC-RUNTIME-002"
+      ],
+      "operationFlow": [
+        "dryRunOperation",
+        "getRuntimeSnapshot",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/out-of-range-parameter-dry-run.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/out-of-range-parameter-dry-run.targeted.runtime-snapshot.json"],
-        "diff": ["diffs/out-of-range-parameter-dry-run.runtime-diff.json", "diffs/out-of-range-parameter-dry-run.validation-diff.json"],
-        "runtimeState": ["runtime/states/expected-next.runtime-state.json"],
+        "validation": [
+          "validation/reports/out-of-range-parameter-dry-run.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/out-of-range-parameter-dry-run.targeted.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/out-of-range-parameter-dry-run.runtime-diff.json",
+          "diffs/out-of-range-parameter-dry-run.validation-diff.json"
+        ],
+        "runtimeState": [
+          "runtime/states/expected-next.runtime-state.json"
+        ],
         "runtimeStateSequence": [],
         "operationLog": [],
         "guiEvidence": [],
-        "aiTranscript": ["ai/out-of-range-parameter-dry-run.command-transcript.json"],
+        "aiTranscript": [
+          "ai/out-of-range-parameter-dry-run.command-transcript.json"
+        ],
         "demoPreflight": []
       },
       "oracle": "runtimeParameterClampPolicy+dryRunNoCommit",
@@ -784,20 +1327,49 @@
     },
     {
       "fixtureId": "ai-repair-dry-run",
-      "categories": ["ai"],
+      "categories": [
+        "ai"
+      ],
       "purpose": "Prove AI repair proposal returns candidate, diffs, provenance, and revalidation steps without commit.",
-      "relatedAcceptanceCriteria": ["AC-MVP-014", "AC-AI-003", "AC-AI-004", "AC-AI-007", "AC-AGENT-002", "AC-AGENT-005"],
-      "relatedScenarios": ["SC-AI-002", "SC-AGENT-002"],
-      "operationFlow": ["validatePackage", "createRepairCandidate", "dryRunOperation", "getDiff", "rerunValidation"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-014",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-007",
+        "AC-AGENT-002",
+        "AC-AGENT-005"
+      ],
+      "relatedScenarios": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "operationFlow": [
+        "validatePackage",
+        "createRepairCandidate",
+        "dryRunOperation",
+        "getDiff",
+        "rerunValidation"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/ai-repair-dry-run.baseline.validation.json", "validation/reports/ai-repair-dry-run.aiDryRun.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/ai-repair-dry-run.targeted.runtime-snapshot.json"],
-        "diff": ["diffs/ai-repair-dry-run.model-diff.json", "diffs/ai-repair-dry-run.runtime-diff.json", "diffs/ai-repair-dry-run.validation-diff.json"],
+        "validation": [
+          "validation/reports/ai-repair-dry-run.baseline.validation.json",
+          "validation/reports/ai-repair-dry-run.aiDryRun.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/ai-repair-dry-run.targeted.runtime-snapshot.json"
+        ],
+        "diff": [
+          "diffs/ai-repair-dry-run.model-diff.json",
+          "diffs/ai-repair-dry-run.runtime-diff.json",
+          "diffs/ai-repair-dry-run.validation-diff.json"
+        ],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
         "guiEvidence": [],
-        "aiTranscript": ["ai/ai-repair-dry-run.command-transcript.json"],
+        "aiTranscript": [
+          "ai/ai-repair-dry-run.command-transcript.json"
+        ],
         "demoPreflight": []
       },
       "oracle": "approvalBoundary+repairCandidateSchema+diffContracts",
@@ -807,21 +1379,49 @@
     },
     {
       "fixtureId": "demo-safe-dynamics-capture",
-      "categories": ["demo-safe", "dynamics", "rights-provenance"],
+      "categories": [
+        "demo-safe",
+        "dynamics",
+        "rights-provenance"
+      ],
       "purpose": "Prove secondary motion demo capture uses rights-clean assets and hides unsafe/internal implementation details.",
-      "relatedAcceptanceCriteria": ["AC-MVP-015", "AC-PHYS-006", "AC-RIGHTS-001", "AC-RIGHTS-002", "AC-RIGHTS-005"],
-      "relatedScenarios": ["SC-DYN-004", "SC-HYGIENE-001"],
-      "operationFlow": ["validatePackage", "runDynamicsPreviewSequence", "runDemoPreflight"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-015",
+        "AC-PHYS-006",
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-RIGHTS-005"
+      ],
+      "relatedScenarios": [
+        "SC-DYN-004",
+        "SC-HYGIENE-001"
+      ],
+      "operationFlow": [
+        "validatePackage",
+        "runDynamicsPreviewSequence",
+        "runDemoPreflight"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/demo-safe-dynamics-capture.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/demo-safe-dynamics-capture.targeted.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/demo-safe-dynamics-capture.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/demo-safe-dynamics-capture.targeted.runtime-snapshot.json"
+        ],
         "diff": [],
-        "runtimeState": ["runtime/states/demo-initial.runtime-state.json", "runtime/states/demo-final.runtime-state.json"],
-        "runtimeStateSequence": ["runtime/state-sequences/demo-expected.runtime-state-sequence.json"],
+        "runtimeState": [
+          "runtime/states/demo-initial.runtime-state.json",
+          "runtime/states/demo-final.runtime-state.json"
+        ],
+        "runtimeStateSequence": [
+          "runtime/state-sequences/demo-expected.runtime-state-sequence.json"
+        ],
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/demo-safe-dynamics-capture.demo-preflight.json"]
+        "demoPreflight": [
+          "demo-preflight/demo-safe-dynamics-capture.demo-preflight.json"
+        ]
       },
       "oracle": "demoSafePreflight+rightsMetadata+exactReplayPolicy",
       "automationLevel": "hybrid",
@@ -830,21 +1430,39 @@
     },
     {
       "fixtureId": "demo-safe-viewer-capture",
-      "categories": ["demo-safe", "rights-provenance"],
+      "categories": [
+        "demo-safe",
+        "rights-provenance"
+      ],
       "purpose": "Prove private viewer capture exposes only allowed scene, disclaimer, and high-level controls.",
-      "relatedAcceptanceCriteria": ["AC-MVP-015", "AC-RIGHTS-004"],
-      "relatedScenarios": ["SC-MVP-005", "SC-HYGIENE-001"],
-      "operationFlow": ["runDemoPreflight", "getRuntimeSnapshot"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-015",
+        "AC-RIGHTS-004"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-005",
+        "SC-HYGIENE-001"
+      ],
+      "operationFlow": [
+        "runDemoPreflight",
+        "getRuntimeSnapshot"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/demo-safe-viewer-capture.validation.json"],
-        "runtimeSnapshot": ["runtime/snapshots/demo-safe-viewer-capture.summary.runtime-snapshot.json"],
+        "validation": [
+          "validation/reports/demo-safe-viewer-capture.validation.json"
+        ],
+        "runtimeSnapshot": [
+          "runtime/snapshots/demo-safe-viewer-capture.summary.runtime-snapshot.json"
+        ],
         "diff": [],
         "runtimeState": [],
         "runtimeStateSequence": [],
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/demo-safe-viewer-capture.demo-preflight.json"]
+        "demoPreflight": [
+          "demo-preflight/demo-safe-viewer-capture.demo-preflight.json"
+        ]
       },
       "oracle": "demoCaptureSurfacePolicy",
       "automationLevel": "hybrid",
@@ -853,13 +1471,29 @@
     },
     {
       "fixtureId": "demo-unsafe-forbidden-term",
-      "categories": ["demo-safe", "invalid"],
+      "categories": [
+        "demo-safe",
+        "invalid"
+      ],
       "purpose": "Prove demo preflight detects prohibited vendor/format/compatibility wording on public-facing surfaces.",
-      "relatedAcceptanceCriteria": ["AC-MVP-015", "AC-MVP-016", "AC-RIGHTS-003", "AC-RIGHTS-004"],
-      "relatedScenarios": ["SC-HYGIENE-001", "SC-HYGIENE-002"],
-      "operationFlow": ["runDemoPreflight", "validatePackage"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-015",
+        "AC-MVP-016",
+        "AC-RIGHTS-003",
+        "AC-RIGHTS-004"
+      ],
+      "relatedScenarios": [
+        "SC-HYGIENE-001",
+        "SC-HYGIENE-002"
+      ],
+      "operationFlow": [
+        "runDemoPreflight",
+        "validatePackage"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/demo-unsafe-forbidden-term.validation.json"],
+        "validation": [
+          "validation/reports/demo-unsafe-forbidden-term.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -867,7 +1501,9 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/demo-unsafe-forbidden-term.demo-preflight.json"]
+        "demoPreflight": [
+          "demo-preflight/demo-unsafe-forbidden-term.demo-preflight.json"
+        ]
       },
       "oracle": "forbiddenSurfaceScanBySurfaceClassification",
       "automationLevel": "auto",
@@ -876,13 +1512,30 @@
     },
     {
       "fixtureId": "unsupported-input-boundary",
-      "categories": ["invalid", "guardrail"],
+      "categories": [
+        "invalid",
+        "guardrail"
+      ],
       "purpose": "Prove unsupported proprietary/runtime input paths are rejected without load, inspect, convert, or migration behavior.",
-      "relatedAcceptanceCriteria": ["AC-MVP-016", "AC-IN-004", "AC-IN-005", "AC-EXPORT-006"],
-      "relatedScenarios": ["SC-MVP-006", "SC-IN-004"],
-      "operationFlow": ["attemptUnsupportedImport", "validatePackage", "assertNoLoadInspectConvertPath"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-016",
+        "AC-IN-004",
+        "AC-IN-005",
+        "AC-EXPORT-006"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-006",
+        "SC-IN-004"
+      ],
+      "operationFlow": [
+        "attemptUnsupportedImport",
+        "validatePackage",
+        "assertNoLoadInspectConvertPath"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/unsupported-input-boundary.validation.json"],
+        "validation": [
+          "validation/reports/unsupported-input-boundary.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -890,7 +1543,9 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/unsupported-input-boundary.nondependency-scan.json"]
+        "demoPreflight": [
+          "demo-preflight/unsupported-input-boundary.nondependency-scan.json"
+        ]
       },
       "oracle": "projectDefinedInputBoundary+nondependencyGuardrail",
       "automationLevel": "auto",
@@ -899,13 +1554,31 @@
     },
     {
       "fixtureId": "demo-safe-preflight",
-      "categories": ["demo-safe", "rights-provenance"],
+      "categories": [
+        "demo-safe",
+        "rights-provenance"
+      ],
       "purpose": "Prove demo-safe preflight produces allow-list, redaction, rights visibility, and blocked-field evidence.",
-      "relatedAcceptanceCriteria": ["AC-MVP-015", "AC-RIGHTS-004", "AC-RIGHTS-005"],
-      "relatedScenarios": ["SC-MVP-005", "SC-WF-002", "SC-HYGIENE-001"],
-      "operationFlow": ["runDemoSafePreflight", "scanCaptureSurface", "redactInternalFields", "writeCaptureAllowList"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-015",
+        "AC-RIGHTS-004",
+        "AC-RIGHTS-005"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-005",
+        "SC-WF-002",
+        "SC-HYGIENE-001"
+      ],
+      "operationFlow": [
+        "runDemoSafePreflight",
+        "scanCaptureSurface",
+        "redactInternalFields",
+        "writeCaptureAllowList"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/demo-safe-preflight.validation.json"],
+        "validation": [
+          "validation/reports/demo-safe-preflight.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -913,7 +1586,11 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/demo-safe-preflight.demo-preflight.json", "demo-preflight/demo-safe-preflight.redacted-fields.json", "demo-preflight/demo-safe-preflight.allowed-capture-state.json"]
+        "demoPreflight": [
+          "demo-preflight/demo-safe-preflight.demo-preflight.json",
+          "demo-preflight/demo-safe-preflight.redacted-fields.json",
+          "demo-preflight/demo-safe-preflight.allowed-capture-state.json"
+        ]
       },
       "oracle": "demoSafePreflightPolicy+captureAllowList",
       "automationLevel": "hybrid",
@@ -922,13 +1599,28 @@
     },
     {
       "fixtureId": "proposal-boundary-review",
-      "categories": ["demo-safe", "guardrail"],
+      "categories": [
+        "demo-safe",
+        "guardrail"
+      ],
       "purpose": "Prove proposal and future-public materials stay separate from private implementation and avoid compatibility or internal-schema claims.",
-      "relatedAcceptanceCriteria": ["AC-MVP-015", "AC-MVP-016"],
-      "relatedScenarios": ["SC-HYGIENE-002", "SC-HYGIENE-003"],
-      "operationFlow": ["classifyArtifactTrack", "scanForImplementationClaims", "verifyFutureSubsetSeparation"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-015",
+        "AC-MVP-016"
+      ],
+      "relatedScenarios": [
+        "SC-HYGIENE-002",
+        "SC-HYGIENE-003"
+      ],
+      "operationFlow": [
+        "classifyArtifactTrack",
+        "scanForImplementationClaims",
+        "verifyFutureSubsetSeparation"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/proposal-boundary-review.validation.json"],
+        "validation": [
+          "validation/reports/proposal-boundary-review.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -936,7 +1628,9 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/proposal-boundary-review.hygiene-boundary-report.json"]
+        "demoPreflight": [
+          "demo-preflight/proposal-boundary-review.hygiene-boundary-report.json"
+        ]
       },
       "oracle": "trackClassification+demoProposalHygienePolicy",
       "automationLevel": "manual",
@@ -945,13 +1639,29 @@
     },
     {
       "fixtureId": "discussion-doc-baseline",
-      "categories": ["guardrail"],
+      "categories": [
+        "guardrail"
+      ],
       "purpose": "Prove discussion docs restore the current Private Prototype baseline and source paths.",
-      "relatedAcceptanceCriteria": ["AC-MVP-016", "AC-DOC-001", "AC-DOC-002"],
-      "relatedScenarios": ["SC-DOC-001", "SC-DOC-002"],
-      "operationFlow": ["readDiscussionMap", "readConcept", "readMvpAc", "assertPrivatePrototypeBaseline"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-016",
+        "AC-DOC-001",
+        "AC-DOC-002"
+      ],
+      "relatedScenarios": [
+        "SC-DOC-001",
+        "SC-DOC-002"
+      ],
+      "operationFlow": [
+        "readDiscussionMap",
+        "readConcept",
+        "readMvpAc",
+        "assertPrivatePrototypeBaseline"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/discussion-doc-baseline.validation.json"],
+        "validation": [
+          "validation/reports/discussion-doc-baseline.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -959,7 +1669,9 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/discussion-doc-baseline.source-baseline-report.json"]
+        "demoPreflight": [
+          "demo-preflight/discussion-doc-baseline.source-baseline-report.json"
+        ]
       },
       "oracle": "discussionSourceMap+privatePrototypeBaseline",
       "automationLevel": "auto",
@@ -968,13 +1680,32 @@
     },
     {
       "fixtureId": "nondependency-guardrail-scan",
-      "categories": ["guardrail", "demo-safe"],
+      "categories": [
+        "guardrail",
+        "demo-safe"
+      ],
       "purpose": "Prove MVP evidence has no forbidden dependency or oracle on proprietary formats, SDK/Core, viewer matching, physics compatibility, or existing third-party models.",
-      "relatedAcceptanceCriteria": ["AC-MVP-016", "AC-IN-004", "AC-EXPORT-006", "AC-RIGHTS-003"],
-      "relatedScenarios": ["SC-MVP-006", "SC-WF-002", "SC-IN-004"],
-      "operationFlow": ["scanPackageManifest", "scanFixtureMetadata", "scanDemoSurface", "assertNoForbiddenOracle"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-016",
+        "AC-IN-004",
+        "AC-EXPORT-006",
+        "AC-RIGHTS-003"
+      ],
+      "relatedScenarios": [
+        "SC-MVP-006",
+        "SC-WF-002",
+        "SC-IN-004"
+      ],
+      "operationFlow": [
+        "scanPackageManifest",
+        "scanFixtureMetadata",
+        "scanDemoSurface",
+        "assertNoForbiddenOracle"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/nondependency-guardrail-scan.validation.json"],
+        "validation": [
+          "validation/reports/nondependency-guardrail-scan.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -982,7 +1713,9 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/nondependency-guardrail-scan.nondependency-scan.json"]
+        "demoPreflight": [
+          "demo-preflight/nondependency-guardrail-scan.nondependency-scan.json"
+        ]
       },
       "oracle": "nondependencyGuardrail+fixtureMetadataScan",
       "automationLevel": "auto",
@@ -991,13 +1724,29 @@
     },
     {
       "fixtureId": "traceability-lint",
-      "categories": ["guardrail"],
+      "categories": [
+        "guardrail"
+      ],
       "purpose": "Prove P0/P1 traceability rows are complete, all MVP AC and active scenarios are mapped, and machine-readable IDs contain no spaces.",
-      "relatedAcceptanceCriteria": ["AC-MVP-013", "AC-MVP-014"],
-      "relatedScenarios": ["SC-VERIFY-001", "SC-AGENT-001"],
-      "operationFlow": ["readTraceabilityJson", "verifyMvpAcCoverage", "verifyScenarioCoverage", "verifyModuleSurfaceCoverage", "verifyNoSpaceIds"],
+      "relatedAcceptanceCriteria": [
+        "AC-MVP-013",
+        "AC-MVP-014"
+      ],
+      "relatedScenarios": [
+        "SC-VERIFY-001",
+        "SC-AGENT-001"
+      ],
+      "operationFlow": [
+        "readTraceabilityJson",
+        "verifyMvpAcCoverage",
+        "verifyScenarioCoverage",
+        "verifyModuleSurfaceCoverage",
+        "verifyNoSpaceIds"
+      ],
       "expectedArtifacts": {
-        "validation": ["validation/reports/traceability-lint.validation.json"],
+        "validation": [
+          "validation/reports/traceability-lint.validation.json"
+        ],
         "runtimeSnapshot": [],
         "diff": [],
         "runtimeState": [],
@@ -1005,12 +1754,267 @@
         "operationLog": [],
         "guiEvidence": [],
         "aiTranscript": [],
-        "demoPreflight": ["demo-preflight/traceability-lint.traceability-lint-report.json"]
+        "demoPreflight": [
+          "demo-preflight/traceability-lint.traceability-lint-report.json"
+        ]
       },
       "oracle": "traceabilityCompleteness+idPolicy",
       "automationLevel": "auto",
       "gate": "mvp-blocking",
       "ownerModule": "fixtures-contract-tests"
+    }
+  ],
+  "traceabilityConnectionPolicy": {
+    "sourceTraceabilityMatrix": "discussion/tests/traceability/test-traceability-matrix.json",
+    "mvpBlockingFixtureRule": "Every fixture with gate=mvp-blocking must be referenced by at least one Test ID, or its gate must be lowered with a recorded reason.",
+    "acceptanceRunnerInvariant": "gate.manifestIntegrity fails when a gate=mvp-blocking fixture has no Test ID reference in the traceability matrix.",
+    "review009Status": "all-mvp-blocking-fixtures-referenced"
+  },
+  "mvpBlockingFixtureConnectionAudit": [
+    {
+      "fixtureId": "minimal-valid-package",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DRAWABLE-PART-TEXTURE-001",
+        "TC-IN-ROUNDTRIP-001",
+        "TC-RUNTIME-LOAD-SNAPSHOT-001"
+      ]
+    },
+    {
+      "fixtureId": "psd-import-happy-path",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-IN-PSD-IMPORT-001",
+        "TC-SAMPLE-PRIVATE-FIXTURE-001"
+      ]
+    },
+    {
+      "fixtureId": "tutorial-like-authoring",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-BODY-SECONDARY-AUTHORING-001",
+        "TC-FACE-EXPRESSION-001",
+        "TC-GUI-AUTHORING-001",
+        "TC-KEYFORM-INTERPOLATION-001",
+        "TC-MESH-EDIT-001",
+        "TC-PARAM-PRESET-001",
+        "TC-RIG-WARP-001"
+      ]
+    },
+    {
+      "fixtureId": "manual-face-grid-2d",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-PARAM-GRID-2D-001",
+        "TC-VIEWER-PARAM-VALIDATION-001"
+      ]
+    },
+    {
+      "fixtureId": "parent-child-rigControl-diagonal",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-RIG-ROTATION-HIERARCHY-001"
+      ]
+    },
+    {
+      "fixtureId": "minimal-dynamics-hairSway",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-GROUP-AUTHORING-001"
+      ]
+    },
+    {
+      "fixtureId": "dynamics-reset-determinism",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-DETERMINISM-001"
+      ]
+    },
+    {
+      "fixtureId": "dynamics-fixed-step-replay",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-FIXED-STEP-REPLAY-001"
+      ]
+    },
+    {
+      "fixtureId": "dynamics-output-range-clamp",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-OUTPUT-RANGE-CLAMP-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-dynamics-missing-driver",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-MISSING-DRIVER-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-dynamics-missing-output",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-MISSING-OUTPUT-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-dynamics-cycle",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-CYCLE-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-dynamics-output-target-duplicate",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-mesh-triangle",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-MESH-INVALID-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-missing-texture",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-VALIDATOR-SCHEMA-ASSET-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-rigControl-cycle",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-RIG-INVALID-CYCLE-001"
+      ]
+    },
+    {
+      "fixtureId": "invalid-mask-reference",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-COMPOSITION-MASK-DRAWORDER-001"
+      ]
+    },
+    {
+      "fixtureId": "keyform-grid-invalid",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-KEYFORM-GRID-INVALID-001"
+      ]
+    },
+    {
+      "fixtureId": "runtime-load-blocking",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-RUNTIME-LOAD-BLOCKING-001"
+      ]
+    },
+    {
+      "fixtureId": "rights-provenance-missing",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-IN-RIGHTS-MISSING-001"
+      ]
+    },
+    {
+      "fixtureId": "script-generated-minimal",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-SCRIPT-ONLY-REJECTION-001"
+      ]
+    },
+    {
+      "fixtureId": "gui-hit-test-rigControl",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-GUI-SEMANTIC-EVIDENCE-001"
+      ]
+    },
+    {
+      "fixtureId": "ai-screenshot-rigControl-parameter",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001"
+      ]
+    },
+    {
+      "fixtureId": "ai-invalid-mutation",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-AI-INVALID-MUTATION-001"
+      ]
+    },
+    {
+      "fixtureId": "out-of-range-parameter-dry-run",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-AI-OUT-OF-RANGE-PARAMETER-001"
+      ]
+    },
+    {
+      "fixtureId": "ai-repair-dry-run",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-AI-AUDIT-LOG-001",
+        "TC-AI-DRYRUN-REPAIR-001",
+        "TC-AI-INSPECT-REPORT-001",
+        "TC-AI-PROVENANCE-DEMO-001",
+        "TC-VERIFY-DIFF-JUDGMENT-001"
+      ]
+    },
+    {
+      "fixtureId": "demo-safe-dynamics-capture",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DYN-DEMO-SAFE-001"
+      ]
+    },
+    {
+      "fixtureId": "demo-safe-viewer-capture",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DEMO-SAFE-VIEWER-CAPTURE-001"
+      ]
+    },
+    {
+      "fixtureId": "demo-unsafe-forbidden-term",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001"
+      ]
+    },
+    {
+      "fixtureId": "unsupported-input-boundary",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-IN-UNSUPPORTED-BOUNDARY-001"
+      ]
+    },
+    {
+      "fixtureId": "demo-safe-preflight",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-DEMO-PREFLIGHT-001"
+      ]
+    },
+    {
+      "fixtureId": "nondependency-guardrail-scan",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-NONDEPENDENCY-GUARDRAIL-001"
+      ]
+    },
+    {
+      "fixtureId": "traceability-lint",
+      "gate": "mvp-blocking",
+      "testIds": [
+        "TC-CONTRACT-SURFACE-LINT-001"
+      ]
     }
   ]
 }

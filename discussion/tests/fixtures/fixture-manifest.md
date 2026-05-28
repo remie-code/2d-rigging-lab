@@ -53,6 +53,14 @@
 | `aiTranscript` | Expected AI command request/response transcript. |
 | `demoPreflight` | Expected demo-safe preflight output. |
 
+## Traceability Connection Policy
+
+Repository fact after review_009 fixes: every fixture with gate `mvp-blocking` is referenced by at least one Test ID in [../traceability/test-traceability-matrix.json](../traceability/test-traceability-matrix.json).
+
+Design decision: the Acceptance Runner must fail `gate.manifestIntegrity` when a `mvp-blocking` fixture has no Test ID reference. If a fixture is intentionally kept outside executable acceptance coverage, lower its gate to `warning` or `optional` and record the reason in this manifest.
+
+The JSON mirror records this as `traceabilityConnectionPolicy` and `mvpBlockingFixtureConnectionAudit`.
+
 ## P0 Fixtures
 
 | Fixture ID | Class | Purpose | Related AC/SC | Operation flow | Expected artifacts | Oracle | Automation | Gate | Owner module |

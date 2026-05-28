@@ -1,6 +1,6 @@
 {
   "schemaVersion": "test-traceability-matrix-v1",
-  "status": "p0-design-draft",
+  "status": "implementation-ready-test-design",
   "scope": {
     "track": "Private 2D Rigging Lab / Prototype",
     "writesImplementationCode": false,
@@ -90,6 +90,12 @@
         "gui-authoring-surface",
         "operation-log-entry",
         "acceptance-evidence"
+      ],
+      "domainAcIds": [
+        "AC-WF-001",
+        "AC-WF-002",
+        "AC-WF-003",
+        "AC-WF-006"
       ]
     },
     {
@@ -130,6 +136,12 @@
         "package-directory-layout",
         "source-manifest",
         "provenance-rights-dtos"
+      ],
+      "domainAcIds": [
+        "AC-IN-001",
+        "AC-IN-002",
+        "AC-IN-006",
+        "AC-RIGHTS-002"
       ]
     },
     {
@@ -163,6 +175,15 @@
         "validation-report",
         "check-registry",
         "provenance-rights-dtos"
+      ],
+      "domainAcIds": [
+        "AC-IN-006",
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-SAMPLE-005"
+      ],
+      "expectedDiagnostics": [
+        "rights.provenanceMissing"
       ]
     },
     {
@@ -207,6 +228,23 @@
         "package-parse-load-write",
         "package-versioning",
         "runtime-snapshot-dto"
+      ],
+      "domainAcIds": [
+        "AC-DRAW-001",
+        "AC-EXPORT-001",
+        "AC-EXPORT-002",
+        "AC-EXPORT-003",
+        "AC-EXPORT-004",
+        "AC-EXPORT-005",
+        "AC-EXPORT-006",
+        "AC-FORMAT-001",
+        "AC-FORMAT-002",
+        "AC-FORMAT-003",
+        "AC-FORMAT-004",
+        "AC-FORMAT-005",
+        "AC-IN-003",
+        "AC-IN-006",
+        "AC-RUNTIME-001"
       ]
     },
     {
@@ -240,6 +278,12 @@
         "input-boundary",
         "nondependency-guardrail",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-EXPORT-006",
+        "AC-IN-004",
+        "AC-IN-005",
+        "AC-RIGHTS-001"
       ]
     },
     {
@@ -276,6 +320,13 @@
         "authoring-graph",
         "drawable-dto",
         "cross-file-reference-rules"
+      ],
+      "domainAcIds": [
+        "AC-DRAW-001",
+        "AC-DRAW-002",
+        "AC-PART-001",
+        "AC-PART-002",
+        "AC-RUNTIME-001"
       ]
     },
     {
@@ -311,6 +362,10 @@
         "operation-catalog",
         "runtime-diff-dto",
         "mesh-dto"
+      ],
+      "domainAcIds": [
+        "AC-MESH-001",
+        "AC-MESH-002"
       ]
     },
     {
@@ -344,6 +399,13 @@
         "check-registry",
         "validation-report",
         "mesh-validation"
+      ],
+      "domainAcIds": [
+        "AC-MESH-003",
+        "AC-MESH-004"
+      ],
+      "expectedDiagnostics": [
+        "mesh.triangleIndexOutOfRange"
       ]
     },
     {
@@ -382,6 +444,16 @@
         "runtime-snapshot-dto",
         "mask-reference-rules",
         "draw-order-dto"
+      ],
+      "domainAcIds": [
+        "AC-DEF-005",
+        "AC-DRAW-003",
+        "AC-DRAW-004",
+        "AC-PART-003",
+        "AC-PART-004"
+      ],
+      "expectedDiagnostics": [
+        "mask.sourceMissing"
       ]
     },
     {
@@ -417,6 +489,10 @@
         "parameter-dto",
         "operation-request-response",
         "inspect-model-command"
+      ],
+      "domainAcIds": [
+        "AC-PARAM-001",
+        "AC-PARAM-002"
       ]
     },
     {
@@ -452,6 +528,10 @@
         "keyform-semantics",
         "runtime-snapshot-dto",
         "runtime-diff-dto"
+      ],
+      "domainAcIds": [
+        "AC-PARAM-003",
+        "AC-PARAM-007"
       ]
     },
     {
@@ -489,6 +569,13 @@
         "parameter-grid-2d-v1",
         "runtime-snapshot-sequence",
         "epsilon-policy"
+      ],
+      "domainAcIds": [
+        "AC-FACE-007",
+        "AC-FACE-008",
+        "AC-PARAM-004",
+        "AC-PARAM-005",
+        "AC-PARAM-007"
       ]
     },
     {
@@ -522,6 +609,12 @@
         "check-registry",
         "keyform-validation",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PARAM-003"
+      ],
+      "expectedDiagnostics": [
+        "keyform.missingEndpoint"
       ]
     },
     {
@@ -558,6 +651,10 @@
         "rig-control-operation",
         "targeted-runtime-snapshot",
         "gui-operation-evidence"
+      ],
+      "domainAcIds": [
+        "AC-DEF-001",
+        "AC-DEF-002"
       ]
     },
     {
@@ -594,6 +691,13 @@
         "parent-before-child-evaluation",
         "runtime-diff-dto",
         "targeted-runtime-snapshot"
+      ],
+      "domainAcIds": [
+        "AC-BODY-001",
+        "AC-BODY-002",
+        "AC-DEF-003",
+        "AC-DEF-004",
+        "AC-DEF-005"
       ]
     },
     {
@@ -627,6 +731,14 @@
         "rig-control-validation",
         "check-registry",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-DEF-003",
+        "AC-DEF-004",
+        "AC-DEF-005"
+      ],
+      "expectedDiagnostics": [
+        "rigControl.cycle"
       ]
     },
     {
@@ -662,6 +774,14 @@
         "gui-operation-evidence",
         "runtime-snapshot-sequence",
         "parameter-dto"
+      ],
+      "domainAcIds": [
+        "AC-FACE-001",
+        "AC-FACE-003",
+        "AC-FACE-004",
+        "AC-FACE-005",
+        "AC-FACE-006",
+        "AC-FACE-008"
       ]
     },
     {
@@ -700,6 +820,13 @@
         "gui-authoring-surface",
         "joint-area-validation",
         "runtime-snapshot-dto"
+      ],
+      "domainAcIds": [
+        "AC-BODY-001",
+        "AC-BODY-002",
+        "AC-BODY-003",
+        "AC-BODY-004",
+        "AC-BODY-005"
       ]
     },
     {
@@ -738,6 +865,16 @@
         "dynamics-file-dto",
         "operation-catalog",
         "dynamics-validation"
+      ],
+      "domainAcIds": [
+        "AC-BODY-003",
+        "AC-BODY-004",
+        "AC-BODY-005",
+        "AC-PHYS-001",
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005"
       ]
     },
     {
@@ -777,6 +914,16 @@
         "evaluateRuntimeSequence",
         "runtime-state-dto",
         "runtime-state-sequence-artifact"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005",
+        "AC-RUNTIME-001",
+        "AC-RUNTIME-002",
+        "AC-RUNTIME-003",
+        "AC-RUNTIME-004",
+        "AC-RUNTIME-005"
       ]
     },
     {
@@ -813,28 +960,35 @@
         "runtime-state-sequence-artifact",
         "runtime-evaluation-context",
         "dynamics-timestep-policy"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-004",
+        "AC-PHYS-005"
       ]
     },
     {
-      "testId": "TC-DYN-VALIDATION-001",
-      "title": "Dynamics validator diagnostics",
+      "testId": "TC-DYN-MISSING-DRIVER-001",
+      "title": "Dynamics missing driver diagnostic",
       "mvpAcIds": [
         "AC-MVP-013"
       ],
       "scenarioIds": [
         "SC-DYN-003"
       ],
-      "fixture": "invalid-dynamics-cycle",
+      "fixture": "invalid-dynamics-missing-driver",
       "operationFlow": [
-        "loadDynamicsInvalidSet",
+        "createDynamicsGroup",
+        "bindDynamicsOutput",
         "validatePackage",
-        "assertDynamicsDiagnostics"
+        "assertExpectedDiagnostics"
       ],
       "expectedArtifacts": [
-        "discussion/tests/evidence/TC-DYN-VALIDATION-001/validation-report.json",
-        "discussion/tests/evidence/TC-DYN-VALIDATION-001/expected-diagnostics.json"
+        "discussion/tests/evidence/TC-DYN-MISSING-DRIVER-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-MISSING-DRIVER-001/expected-diagnostics.json"
       ],
-      "oracle": "Validator reports missing driver/output, duplicate output target, dependency cycle, clamp, unstable state, or reset diagnostics with stable target IDs.",
+      "oracle": "Formal validator diagnostic `dynamics.driverMissing` identifies a dynamics group without a valid authored driver.",
       "automationLevel": "auto",
       "gate": "mvp-blocking",
       "ownerModule": "validator-core",
@@ -844,8 +998,507 @@
       ],
       "contractSurfaces": [
         "dynamics-check-registry",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "expectedDiagnostics": [
+        "dynamics.driverMissing"
+      ]
+    },
+    {
+      "testId": "TC-DYN-MISSING-OUTPUT-001",
+      "title": "Dynamics missing output diagnostic",
+      "mvpAcIds": [
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-003"
+      ],
+      "fixture": "invalid-dynamics-missing-output",
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-MISSING-OUTPUT-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-MISSING-OUTPUT-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal validator diagnostic `dynamics.outputMissing` identifies a dynamics group without a computed output parameter.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "dynamics-check-registry",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "expectedDiagnostics": [
+        "dynamics.outputMissing"
+      ]
+    },
+    {
+      "testId": "TC-DYN-OUTPUT-TARGET-DUPLICATE-001",
+      "title": "Dynamics duplicate output target diagnostic",
+      "mvpAcIds": [
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-003"
+      ],
+      "fixture": "invalid-dynamics-output-target-duplicate",
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsOutput",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-OUTPUT-TARGET-DUPLICATE-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-OUTPUT-TARGET-DUPLICATE-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal validator diagnostic `dynamics.outputTargetDuplicate` identifies duplicate producers for the same computed output parameter.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "dynamics-check-registry",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-001",
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "expectedDiagnostics": [
+        "dynamics.outputTargetDuplicate"
+      ]
+    },
+    {
+      "testId": "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+      "title": "Dynamics output range clamp diagnostic",
+      "mvpAcIds": [
+        "AC-MVP-012",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-003"
+      ],
+      "fixture": "dynamics-output-range-clamp",
+      "operationFlow": [
+        "setDynamicsSettings",
+        "runDynamicsPreviewSequence",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-OUTPUT-RANGE-CLAMP-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-DYN-OUTPUT-RANGE-CLAMP-001/runtime-diff.json",
+        "discussion/tests/evidence/TC-DYN-OUTPUT-RANGE-CLAMP-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-OUTPUT-RANGE-CLAMP-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostics `dynamics.outputParameterOutOfRange` and `dynamics.outputClamped` plus runtime diff evidence prove clamp behavior without external physics matching.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "dynamics-check-registry",
+        "runtime-diff-dto",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "expectedDiagnostics": [
+        "dynamics.outputParameterOutOfRange",
+        "dynamics.outputClamped"
+      ]
+    },
+    {
+      "testId": "TC-DYN-CYCLE-001",
+      "title": "Dynamics cycle and computed-driver diagnostic",
+      "mvpAcIds": [
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-DYN-003"
+      ],
+      "fixture": "invalid-dynamics-cycle",
+      "operationFlow": [
+        "createDynamicsGroup",
+        "bindDynamicsDriver",
+        "bindDynamicsOutput",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DYN-CYCLE-001/validation-report.json",
+        "discussion/tests/evidence/TC-DYN-CYCLE-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostics `dynamics.outputUsedAsDriver` and `dynamics.groupCycle` cover only computed-output-as-driver and group dependency cycles.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core",
+        "package-format"
+      ],
+      "contractSurfaces": [
+        "dynamics-check-registry",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-002",
+        "AC-PHYS-003",
+        "AC-PHYS-005"
+      ],
+      "expectedDiagnostics": [
+        "dynamics.outputUsedAsDriver",
+        "dynamics.groupCycle"
+      ]
+    },
+    {
+      "testId": "TC-KEYFORM-GRID-INVALID-001",
+      "title": "Keyform grid invalid diagnostics",
+      "mvpAcIds": [
+        "AC-MVP-008",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-PARAM-004"
+      ],
+      "fixture": "keyform-grid-invalid",
+      "operationFlow": [
+        "addKeyformGrid2d",
+        "validatePackage",
+        "getRuntimeSnapshot",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-KEYFORM-GRID-INVALID-001/validation-report.json",
+        "discussion/tests/evidence/TC-KEYFORM-GRID-INVALID-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-KEYFORM-GRID-INVALID-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostics `keyform.grid2dMissingKey` and `keyform.grid2dDuplicateKey` identify invalid two-axis grid coordinates.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "keyform-validation",
         "validation-report",
-        "repair-candidate-boundary"
+        "runtime-snapshot-dto"
+      ],
+      "domainAcIds": [
+        "AC-PARAM-005",
+        "AC-PARAM-007"
+      ],
+      "expectedDiagnostics": [
+        "keyform.grid2dMissingKey",
+        "keyform.grid2dDuplicateKey"
+      ]
+    },
+    {
+      "testId": "TC-RUNTIME-LOAD-BLOCKING-001",
+      "title": "Runtime load blocking diagnostic",
+      "mvpAcIds": [
+        "AC-MVP-012",
+        "AC-MVP-013"
+      ],
+      "scenarioIds": [
+        "SC-RUNTIME-001",
+        "SC-VALIDATOR-002"
+      ],
+      "fixture": "runtime-load-blocking",
+      "operationFlow": [
+        "loadPackage",
+        "getRuntimeSnapshot",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-RUNTIME-LOAD-BLOCKING-001/validation-report.json",
+        "discussion/tests/evidence/TC-RUNTIME-LOAD-BLOCKING-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostic `runtime.loadBlocking` proves a normalized graph that cannot produce deterministic runtime output fails before viewer acceptance.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "runtime-core",
+      "supportingModules": [
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "runtime-load",
+        "validation-report",
+        "viewer-acceptance-boundary"
+      ],
+      "domainAcIds": [
+        "AC-RUNTIME-001",
+        "AC-RUNTIME-005",
+        "AC-VALIDATOR-003",
+        "AC-VALIDATOR-004",
+        "AC-VALIDATOR-005"
+      ],
+      "expectedDiagnostics": [
+        "runtime.loadBlocking"
+      ]
+    },
+    {
+      "testId": "TC-AI-INVALID-MUTATION-001",
+      "title": "AI dry-run mutation rejection",
+      "mvpAcIds": [
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "fixture": "ai-invalid-mutation",
+      "operationFlow": [
+        "dryRunOperation",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-INVALID-MUTATION-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-INVALID-MUTATION-001/model-diff.json",
+        "discussion/tests/evidence/TC-AI-INVALID-MUTATION-001/validation-report.json",
+        "discussion/tests/evidence/TC-AI-INVALID-MUTATION-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostic `ai.dryRunMutatedPackage` and unchanged package revision prove AI dry-run did not cross the approval boundary.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "ai-interface",
+      "supportingModules": [
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "ai-command-boundary",
+        "approval-boundary",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-003",
+        "AC-AGENT-004",
+        "AC-AGENT-005",
+        "AC-AI-003",
+        "AC-AI-004"
+      ],
+      "expectedDiagnostics": [
+        "ai.dryRunMutatedPackage"
+      ]
+    },
+    {
+      "testId": "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "title": "AI dry-run out-of-range parameter clamp",
+      "mvpAcIds": [
+        "AC-MVP-012",
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-AGENT-002",
+        "SC-RUNTIME-002"
+      ],
+      "fixture": "out-of-range-parameter-dry-run",
+      "operationFlow": [
+        "dryRunOperation",
+        "getRuntimeSnapshot",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-OUT-OF-RANGE-PARAMETER-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-OUT-OF-RANGE-PARAMETER-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-AI-OUT-OF-RANGE-PARAMETER-001/runtime-diff.json",
+        "discussion/tests/evidence/TC-AI-OUT-OF-RANGE-PARAMETER-001/validation-report.json"
+      ],
+      "oracle": "Formal diagnostic `runtime.parameterClamped`, runtime diff evidence, and dry-run no-commit evidence prove out-of-range AI input stays reviewable.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "operation-core",
+      "supportingModules": [
+        "runtime-core",
+        "ai-interface",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "operation-command-api",
+        "runtime-parameter-policy",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-003",
+        "AC-AGENT-004",
+        "AC-AGENT-005",
+        "AC-RUNTIME-002",
+        "AC-RUNTIME-003",
+        "AC-RUNTIME-004"
+      ],
+      "expectedDiagnostics": [
+        "runtime.parameterClamped"
+      ]
+    },
+    {
+      "testId": "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "title": "AI screenshot-assisted semantic target selection",
+      "mvpAcIds": [
+        "AC-MVP-014"
+      ],
+      "scenarioIds": [
+        "SC-AI-002",
+        "SC-AGENT-002"
+      ],
+      "fixture": "ai-screenshot-rigControl-parameter",
+      "operationFlow": [
+        "getEditorState",
+        "hitTestCanvas",
+        "inspectTarget",
+        "dryRunOperation",
+        "validatePackage"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001/gui-evidence.json",
+        "discussion/tests/evidence/TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001/ai-command-transcript.json",
+        "discussion/tests/evidence/TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001/model-diff.json",
+        "discussion/tests/evidence/TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001/validation-report.json"
+      ],
+      "oracle": "Semantic GUI evidence and AI command transcript identify stable `rigControl` and parameter targets before any dry-run edit; screenshot pixels are supplemental only.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "ai-interface",
+      "supportingModules": [
+        "editor-ui",
+        "operation-core",
+        "validator-core"
+      ],
+      "contractSurfaces": [
+        "editor-semantic-state",
+        "hit-test-dto",
+        "ai-command-boundary"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-003",
+        "AC-AGENT-004",
+        "AC-AGENT-005",
+        "AC-AI-002",
+        "AC-AI-003",
+        "AC-AI-004"
+      ]
+    },
+    {
+      "testId": "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+      "title": "Demo-safe viewer capture artifact",
+      "mvpAcIds": [
+        "AC-MVP-015"
+      ],
+      "scenarioIds": [
+        "SC-MVP-005",
+        "SC-HYGIENE-001"
+      ],
+      "fixture": "demo-safe-viewer-capture",
+      "operationFlow": [
+        "runDemoPreflight",
+        "getRuntimeSnapshot",
+        "assertAllowedCaptureState"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DEMO-SAFE-VIEWER-CAPTURE-001/demo-preflight-report.json",
+        "discussion/tests/evidence/TC-DEMO-SAFE-VIEWER-CAPTURE-001/runtime-snapshot.json",
+        "discussion/tests/evidence/TC-DEMO-SAFE-VIEWER-CAPTURE-001/allowed-capture-state.json"
+      ],
+      "oracle": "Demo preflight report and allowed capture state prove viewer capture exposes only approved scene, disclaimer, and high-level controls.",
+      "automationLevel": "hybrid",
+      "gate": "mvp-blocking",
+      "ownerModule": "viewer-ui",
+      "supportingModules": [
+        "validator-core",
+        "runtime-core"
+      ],
+      "contractSurfaces": [
+        "demo-safe-preflight",
+        "viewer-state",
+        "capture-allow-list"
+      ],
+      "domainAcIds": [
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-RIGHTS-004",
+        "AC-RIGHTS-005"
+      ]
+    },
+    {
+      "testId": "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "title": "Demo unsafe forbidden dependency wording",
+      "mvpAcIds": [
+        "AC-MVP-015",
+        "AC-MVP-016"
+      ],
+      "scenarioIds": [
+        "SC-HYGIENE-001",
+        "SC-HYGIENE-002"
+      ],
+      "fixture": "demo-unsafe-forbidden-term",
+      "operationFlow": [
+        "runDemoPreflight",
+        "validatePackage",
+        "assertExpectedDiagnostics"
+      ],
+      "expectedArtifacts": [
+        "discussion/tests/evidence/TC-DEMO-UNSAFE-FORBIDDEN-TERM-001/demo-preflight-report.json",
+        "discussion/tests/evidence/TC-DEMO-UNSAFE-FORBIDDEN-TERM-001/validation-report.json",
+        "discussion/tests/evidence/TC-DEMO-UNSAFE-FORBIDDEN-TERM-001/expected-diagnostics.json"
+      ],
+      "oracle": "Formal diagnostic `demo.unsafeDependencyClaim` and demo preflight evidence reject forbidden format, SDK/Core, viewer matching, or physics compatibility claims as public-surface wording.",
+      "automationLevel": "auto",
+      "gate": "mvp-blocking",
+      "ownerModule": "validator-core",
+      "supportingModules": [
+        "viewer-ui"
+      ],
+      "contractSurfaces": [
+        "demo-safe-preflight",
+        "nondependency-guardrail",
+        "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-RIGHTS-003",
+        "AC-RIGHTS-004",
+        "AC-RIGHTS-005"
+      ],
+      "expectedDiagnostics": [
+        "demo.unsafeDependencyClaim"
       ]
     },
     {
@@ -878,6 +1531,12 @@
         "demo-safe-preflight",
         "viewer-state",
         "capture-allow-list"
+      ],
+      "domainAcIds": [
+        "AC-PHYS-006",
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-RIGHTS-005"
       ]
     },
     {
@@ -917,6 +1576,15 @@
         "evaluateRuntimeFrame",
         "runtime-snapshot-dto",
         "renderer-input"
+      ],
+      "domainAcIds": [
+        "AC-DRAW-001",
+        "AC-RUNTIME-001",
+        "AC-RUNTIME-002",
+        "AC-RUNTIME-003",
+        "AC-RUNTIME-004",
+        "AC-RUNTIME-005",
+        "AC-VIEWER-001"
       ]
     },
     {
@@ -955,6 +1623,16 @@
         "viewer-state",
         "parameter-control",
         "validation-report-display"
+      ],
+      "domainAcIds": [
+        "AC-FACE-007",
+        "AC-PARAM-004",
+        "AC-PARAM-005",
+        "AC-PARAM-007",
+        "AC-VIEWER-002",
+        "AC-VIEWER-003",
+        "AC-VIEWER-004",
+        "AC-VIEWER-005"
       ]
     },
     {
@@ -991,6 +1669,16 @@
         "check-registry",
         "validation-profiles",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-VALIDATOR-001",
+        "AC-VALIDATOR-002",
+        "AC-VALIDATOR-003",
+        "AC-VALIDATOR-004",
+        "AC-VALIDATOR-005"
+      ],
+      "expectedDiagnostics": [
+        "ref.drawableTextureMissing"
       ]
     },
     {
@@ -1029,6 +1717,19 @@
         "acceptance-evidence-classification",
         "model-runtime-validation-diff",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-005",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-007",
+        "AC-VERIFY-001",
+        "AC-VERIFY-002",
+        "AC-VERIFY-003",
+        "AC-VERIFY-004",
+        "AC-VERIFY-005",
+        "AC-VERIFY-006"
       ]
     },
     {
@@ -1066,6 +1767,16 @@
         "ai-command-envelope",
         "runtime-validator-read-api",
         "command-transcript"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-001",
+        "AC-AGENT-002",
+        "AC-AGENT-005",
+        "AC-AI-001",
+        "AC-AI-002",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-007"
       ]
     },
     {
@@ -1105,6 +1816,15 @@
         "operation-command-api",
         "approval-boundary",
         "repair-candidate"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-003",
+        "AC-AGENT-004",
+        "AC-AGENT-005",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-007"
       ]
     },
     {
@@ -1141,6 +1861,15 @@
         "ai-command-envelope",
         "provenance-diff",
         "demo-safe-preflight"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-005",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-005",
+        "AC-AI-007",
+        "AC-RIGHTS-002"
       ]
     },
     {
@@ -1175,6 +1904,14 @@
         "operation-log-entry",
         "approval-boundary",
         "provenance-tracking"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-002",
+        "AC-AGENT-005",
+        "AC-AI-003",
+        "AC-AI-004",
+        "AC-AI-006",
+        "AC-AI-007"
       ]
     },
     {
@@ -1213,6 +1950,14 @@
         "editor-semantic-state",
         "hit-test-dto",
         "gui-operation-evidence"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-001",
+        "AC-AGENT-002",
+        "AC-AGENT-003",
+        "AC-AGENT-004",
+        "AC-AGENT-005",
+        "AC-AI-002"
       ]
     },
     {
@@ -1246,6 +1991,15 @@
         "fixture-manifest",
         "expected-artifacts",
         "provenance-rights-dtos"
+      ],
+      "domainAcIds": [
+        "AC-IN-001",
+        "AC-IN-002",
+        "AC-IN-006",
+        "AC-RIGHTS-002",
+        "AC-SAMPLE-001",
+        "AC-SAMPLE-002",
+        "AC-SAMPLE-005"
       ]
     },
     {
@@ -1283,6 +2037,14 @@
         "demo-safe-preflight",
         "capture-allow-list",
         "redaction-report"
+      ],
+      "domainAcIds": [
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-002",
+        "AC-RIGHTS-004",
+        "AC-RIGHTS-005",
+        "AC-WF-004",
+        "AC-WF-005"
       ]
     },
     {
@@ -1317,6 +2079,12 @@
         "track-classification",
         "demo-proposal-hygiene",
         "nondependency-guardrail"
+      ],
+      "domainAcIds": [
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-003",
+        "AC-RIGHTS-004",
+        "AC-RIGHTS-005"
       ]
     },
     {
@@ -1351,6 +2119,13 @@
         "contract-doc-lint",
         "discussion-source-map",
         "baseline-policy"
+      ],
+      "domainAcIds": [
+        "AC-DOC-001",
+        "AC-DOC-002",
+        "AC-DOC-003",
+        "AC-DOC-004",
+        "AC-DOC-005"
       ]
     },
     {
@@ -1386,6 +2161,15 @@
         "nondependency-guardrail",
         "acceptance-evidence",
         "fixture-metadata-scan"
+      ],
+      "domainAcIds": [
+        "AC-EXPORT-006",
+        "AC-IN-004",
+        "AC-IN-005",
+        "AC-RIGHTS-001",
+        "AC-RIGHTS-003",
+        "AC-WF-004",
+        "AC-WF-005"
       ]
     },
     {
@@ -1420,6 +2204,12 @@
         "acceptance-evidence",
         "gui-operation-log-required",
         "validation-report"
+      ],
+      "domainAcIds": [
+        "AC-WF-006"
+      ],
+      "expectedDiagnostics": [
+        "evidence.guiOperationLogMissing"
       ]
     },
     {
@@ -1455,6 +2245,12 @@
         "traceability-lint",
         "module-surface-coverage",
         "id-policy"
+      ],
+      "domainAcIds": [
+        "AC-AGENT-001",
+        "AC-VERIFY-001",
+        "AC-VERIFY-002",
+        "AC-VERIFY-006"
       ]
     }
   ],
@@ -1485,8 +2281,8 @@
       {
         "acId": "AC-MVP-004",
         "testIds": [
-          "TC-IN-PSD-IMPORT-001",
-          "TC-DRAWABLE-PART-TEXTURE-001"
+          "TC-DRAWABLE-PART-TEXTURE-001",
+          "TC-IN-PSD-IMPORT-001"
         ]
       },
       {
@@ -1511,31 +2307,32 @@
       {
         "acId": "AC-MVP-008",
         "testIds": [
-          "TC-PARAM-PRESET-001",
+          "TC-KEYFORM-GRID-INVALID-001",
           "TC-KEYFORM-INTERPOLATION-001",
-          "TC-KEYFORM-INVALID-001"
+          "TC-KEYFORM-INVALID-001",
+          "TC-PARAM-PRESET-001"
         ]
       },
       {
         "acId": "AC-MVP-009",
         "testIds": [
-          "TC-RIG-WARP-001",
+          "TC-RIG-INVALID-CYCLE-001",
           "TC-RIG-ROTATION-HIERARCHY-001",
-          "TC-RIG-INVALID-CYCLE-001"
+          "TC-RIG-WARP-001"
         ]
       },
       {
         "acId": "AC-MVP-010",
         "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-FACE-EXPRESSION-001",
           "TC-GUI-AUTHORING-001",
           "TC-KEYFORM-INTERPOLATION-001",
           "TC-PARAM-GRID-2D-001",
-          "TC-RIG-WARP-001",
           "TC-RIG-ROTATION-HIERARCHY-001",
-          "TC-FACE-EXPRESSION-001",
-          "TC-BODY-SECONDARY-AUTHORING-001",
-          "TC-DYN-GROUP-AUTHORING-001",
-          "TC-DYN-DETERMINISM-001"
+          "TC-RIG-WARP-001"
         ]
       },
       {
@@ -1548,11 +2345,14 @@
       {
         "acId": "AC-MVP-012",
         "testIds": [
-          "TC-IN-ROUNDTRIP-001",
-          "TC-PARAM-GRID-2D-001",
-          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
           "TC-DYN-DETERMINISM-001",
           "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
           "TC-RUNTIME-LOAD-SNAPSHOT-001",
           "TC-VIEWER-PARAM-VALIDATION-001"
         ]
@@ -1560,45 +2360,58 @@
       {
         "acId": "AC-MVP-013",
         "testIds": [
-          "TC-IN-RIGHTS-MISSING-001",
-          "TC-MESH-INVALID-001",
-          "TC-KEYFORM-INVALID-001",
-          "TC-RIG-INVALID-CYCLE-001",
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-DYN-CYCLE-001",
           "TC-DYN-FIXED-STEP-REPLAY-001",
-          "TC-DYN-VALIDATION-001",
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001",
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-KEYFORM-GRID-INVALID-001",
+          "TC-KEYFORM-INVALID-001",
+          "TC-MESH-INVALID-001",
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
           "TC-VALIDATOR-SCHEMA-ASSET-001",
           "TC-VERIFY-DIFF-JUDGMENT-001",
-          "TC-CONTRACT-SURFACE-LINT-001"
+          "TC-VIEWER-PARAM-VALIDATION-001"
         ]
       },
       {
         "acId": "AC-MVP-014",
         "testIds": [
-          "TC-VERIFY-DIFF-JUDGMENT-001",
-          "TC-AI-INSPECT-REPORT-001",
-          "TC-AI-DRYRUN-REPAIR-001",
-          "TC-AI-PROVENANCE-DEMO-001",
           "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-CONTRACT-SURFACE-LINT-001",
           "TC-GUI-SEMANTIC-EVIDENCE-001",
-          "TC-CONTRACT-SURFACE-LINT-001"
+          "TC-VERIFY-DIFF-JUDGMENT-001"
         ]
       },
       {
         "acId": "AC-MVP-015",
         "testIds": [
-          "TC-DYN-DEMO-SAFE-001",
           "TC-AI-PROVENANCE-DEMO-001",
           "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DYN-DEMO-SAFE-001",
           "TC-HYGIENE-BOUNDARY-001"
         ]
       },
       {
         "acId": "AC-MVP-016",
         "testIds": [
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DOC-BASELINE-001",
+          "TC-HYGIENE-BOUNDARY-001",
           "TC-IN-ROUNDTRIP-001",
           "TC-IN-UNSUPPORTED-BOUNDARY-001",
-          "TC-HYGIENE-BOUNDARY-001",
-          "TC-DOC-BASELINE-001",
           "TC-NONDEPENDENCY-GUARDRAIL-001",
           "TC-SCRIPT-ONLY-REJECTION-001"
         ]
@@ -1633,15 +2446,16 @@
         "scenarioId": "SC-MVP-004",
         "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
         "testIds": [
-          "TC-AI-INSPECT-REPORT-001",
-          "TC-AI-DRYRUN-REPAIR-001"
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001"
         ]
       },
       {
         "scenarioId": "SC-MVP-005",
         "sourcePath": "discussion/scenarios/03_MVP_Acceptance_Criteria.md",
         "testIds": [
-          "TC-DEMO-PREFLIGHT-001"
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001"
         ]
       },
       {
@@ -1721,8 +2535,8 @@
         "scenarioId": "SC-DEF-002",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/204_Deformation_Control_Structure.md",
         "testIds": [
-          "TC-RIG-ROTATION-HIERARCHY-001",
-          "TC-RIG-INVALID-CYCLE-001"
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
         ]
       },
       {
@@ -1757,6 +2571,7 @@
         "scenarioId": "SC-PARAM-004",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/205_Parameter_and_Keyform_Semantics.md",
         "testIds": [
+          "TC-KEYFORM-GRID-INVALID-001",
           "TC-PARAM-GRID-2D-001"
         ]
       },
@@ -1820,8 +2635,8 @@
         "scenarioId": "SC-BODY-001",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/208_Body_and_Secondary_Motion_Modeling.md",
         "testIds": [
-          "TC-RIG-ROTATION-HIERARCHY-001",
-          "TC-BODY-SECONDARY-AUTHORING-001"
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
         ]
       },
       {
@@ -1858,8 +2673,12 @@
         "scenarioId": "SC-DYN-003",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/209_Physics_and_Dynamic_Behavior.md",
         "testIds": [
+          "TC-DYN-CYCLE-001",
           "TC-DYN-FIXED-STEP-REPLAY-001",
-          "TC-DYN-VALIDATION-001"
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
         ]
       },
       {
@@ -1887,8 +2706,8 @@
         "scenarioId": "SC-VERIFY-001",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/212_Model_Verification.md",
         "testIds": [
-          "TC-VERIFY-DIFF-JUDGMENT-001",
-          "TC-CONTRACT-SURFACE-LINT-001"
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
         ]
       },
       {
@@ -1909,7 +2728,9 @@
         "scenarioId": "SC-AI-002",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/213_AI-native_Operation.md",
         "testIds": [
-          "TC-AI-DRYRUN-REPAIR-001"
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001"
         ]
       },
       {
@@ -1938,7 +2759,6 @@
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/214_Workflow_Replacement.md",
         "testIds": [
           "TC-DEMO-PREFLIGHT-001",
-          "TC-HYGIENE-BOUNDARY-001",
           "TC-NONDEPENDENCY-GUARDRAIL-001"
         ]
       },
@@ -1961,6 +2781,7 @@
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/216_Open_Runtime_Core.md",
         "testIds": [
           "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
           "TC-RUNTIME-LOAD-SNAPSHOT-001"
         ]
       },
@@ -1968,6 +2789,7 @@
         "scenarioId": "SC-RUNTIME-002",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/216_Open_Runtime_Core.md",
         "testIds": [
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
           "TC-DYN-DETERMINISM-001",
           "TC-RUNTIME-LOAD-SNAPSHOT-001"
         ]
@@ -1997,6 +2819,7 @@
         "scenarioId": "SC-VALIDATOR-002",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/220_Open_Package_Validator.md",
         "testIds": [
+          "TC-RUNTIME-LOAD-BLOCKING-001",
           "TC-VALIDATOR-SCHEMA-ASSET-001"
         ]
       },
@@ -2005,8 +2828,8 @@
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/222_Open_AI_Agent_Interface.md",
         "testIds": [
           "TC-AI-INSPECT-REPORT-001",
-          "TC-GUI-SEMANTIC-EVIDENCE-001",
-          "TC-CONTRACT-SURFACE-LINT-001"
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
         ]
       },
       {
@@ -2014,6 +2837,9 @@
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/222_Open_AI_Agent_Interface.md",
         "testIds": [
           "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
           "TC-GUI-SEMANTIC-EVIDENCE-001"
         ]
       },
@@ -2042,13 +2868,16 @@
         "scenarioId": "SC-HYGIENE-001",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/225_Open_Source_and_Rights_Hygiene.md",
         "testIds": [
-          "TC-DEMO-PREFLIGHT-001"
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001"
         ]
       },
       {
         "scenarioId": "SC-HYGIENE-002",
         "sourcePath": "discussion/scenarios/02_DomainAcceptanceCriteria/225_Open_Source_and_Rights_Hygiene.md",
         "testIds": [
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
           "TC-HYGIENE-BOUNDARY-001"
         ]
       },
@@ -2076,9 +2905,9 @@
         "ownerModule": "package-format",
         "sourcePath": "discussion/design/module-contracts/package-file-format-contract.md",
         "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001",
           "TC-IN-PSD-IMPORT-001",
-          "TC-IN-ROUNDTRIP-001",
-          "TC-DRAWABLE-PART-TEXTURE-001"
+          "TC-IN-ROUNDTRIP-001"
         ]
       },
       {
@@ -2095,10 +2924,10 @@
         "ownerModule": "operation-core",
         "sourcePath": "discussion/design/module-contracts/operation-contracts.md",
         "testIds": [
-          "TC-GUI-AUTHORING-001",
-          "TC-MESH-EDIT-001",
+          "TC-AI-AUDIT-LOG-001",
           "TC-AI-DRYRUN-REPAIR-001",
-          "TC-AI-AUDIT-LOG-001"
+          "TC-GUI-AUTHORING-001",
+          "TC-MESH-EDIT-001"
         ]
       },
       {
@@ -2106,10 +2935,13 @@
         "ownerModule": "runtime-core",
         "sourcePath": "discussion/design/module-contracts/runtime-core-contract.md",
         "testIds": [
-          "TC-RUNTIME-LOAD-SNAPSHOT-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
           "TC-DYN-DETERMINISM-001",
           "TC-DYN-FIXED-STEP-REPLAY-001",
-          "TC-PARAM-GRID-2D-001"
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
         ]
       },
       {
@@ -2117,10 +2949,17 @@
         "ownerModule": "validator-core",
         "sourcePath": "discussion/design/module-contracts/validator-contract.md",
         "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DYN-CYCLE-001",
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001",
+          "TC-KEYFORM-GRID-INVALID-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
           "TC-VALIDATOR-SCHEMA-ASSET-001",
-          "TC-DYN-VALIDATION-001",
-          "TC-VERIFY-DIFF-JUDGMENT-001",
-          "TC-DEMO-PREFLIGHT-001"
+          "TC-VERIFY-DIFF-JUDGMENT-001"
         ]
       },
       {
@@ -2137,9 +2976,9 @@
         "ownerModule": "editor-ui",
         "sourcePath": "discussion/design/module-contracts/gui-operation-contract.md",
         "testIds": [
+          "TC-FACE-EXPRESSION-001",
           "TC-GUI-AUTHORING-001",
-          "TC-GUI-SEMANTIC-EVIDENCE-001",
-          "TC-FACE-EXPRESSION-001"
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
         ]
       },
       {
@@ -2147,9 +2986,10 @@
         "ownerModule": "viewer-ui",
         "sourcePath": "discussion/design/module-contracts/module-boundaries.md",
         "testIds": [
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DYN-DEMO-SAFE-001",
           "TC-RUNTIME-LOAD-SNAPSHOT-001",
-          "TC-VIEWER-PARAM-VALIDATION-001",
-          "TC-DYN-DEMO-SAFE-001"
+          "TC-VIEWER-PARAM-VALIDATION-001"
         ]
       },
       {
@@ -2157,9 +2997,12 @@
         "ownerModule": "ai-interface",
         "sourcePath": "discussion/design/module-contracts/ai-command-contract.md",
         "testIds": [
-          "TC-AI-INSPECT-REPORT-001",
           "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
           "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
           "TC-GUI-SEMANTIC-EVIDENCE-001"
         ]
       },
@@ -2168,8 +3011,1089 @@
         "ownerModule": "fixtures-contract-tests",
         "sourcePath": "discussion/design/module-contracts/fixtures-and-contract-tests.md",
         "testIds": [
-          "TC-SAMPLE-PRIVATE-FIXTURE-001",
+          "TC-CONTRACT-SURFACE-LINT-001",
           "TC-DOC-BASELINE-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      }
+    ],
+    "domainAcceptanceCriteria": [
+      {
+        "acId": "AC-AGENT-001",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "acId": "AC-AGENT-002",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-AGENT-003",
+        "testIds": [
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "acId": "AC-AGENT-004",
+        "testIds": [
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "acId": "AC-AGENT-005",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-001",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-002",
+        "testIds": [
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-003",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-004",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-INVALID-MUTATION-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-005",
+        "testIds": [
+          "TC-AI-PROVENANCE-DEMO-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-006",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001"
+        ]
+      },
+      {
+        "acId": "AC-AI-007",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-BODY-001",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "acId": "AC-BODY-002",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "acId": "AC-BODY-003",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-BODY-004",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-BODY-005",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-DEF-001",
+        "testIds": [
+          "TC-RIG-WARP-001"
+        ]
+      },
+      {
+        "acId": "AC-DEF-002",
+        "testIds": [
+          "TC-RIG-WARP-001"
+        ]
+      },
+      {
+        "acId": "AC-DEF-003",
+        "testIds": [
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "acId": "AC-DEF-004",
+        "testIds": [
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "acId": "AC-DEF-005",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001",
+          "TC-RIG-INVALID-CYCLE-001",
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "acId": "AC-DOC-001",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "acId": "AC-DOC-002",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "acId": "AC-DOC-003",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "acId": "AC-DOC-004",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "acId": "AC-DOC-005",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "acId": "AC-DRAW-001",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-DRAW-002",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-DRAW-003",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-DRAW-004",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-001",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-002",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-003",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-004",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-005",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-EXPORT-006",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001",
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-001",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-003",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-004",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-005",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-006",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-007",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-FACE-008",
+        "testIds": [
+          "TC-FACE-EXPRESSION-001",
+          "TC-PARAM-GRID-2D-001"
+        ]
+      },
+      {
+        "acId": "AC-FORMAT-001",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-FORMAT-002",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-FORMAT-003",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-FORMAT-004",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-FORMAT-005",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-001",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-002",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-003",
+        "testIds": [
+          "TC-IN-ROUNDTRIP-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-004",
+        "testIds": [
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-005",
+        "testIds": [
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-IN-006",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-MESH-001",
+        "testIds": [
+          "TC-MESH-EDIT-001"
+        ]
+      },
+      {
+        "acId": "AC-MESH-002",
+        "testIds": [
+          "TC-MESH-EDIT-001"
+        ]
+      },
+      {
+        "acId": "AC-MESH-003",
+        "testIds": [
+          "TC-MESH-INVALID-001"
+        ]
+      },
+      {
+        "acId": "AC-MESH-004",
+        "testIds": [
+          "TC-MESH-INVALID-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-001",
+        "testIds": [
+          "TC-PARAM-PRESET-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-002",
+        "testIds": [
+          "TC-PARAM-PRESET-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-003",
+        "testIds": [
+          "TC-KEYFORM-INTERPOLATION-001",
+          "TC-KEYFORM-INVALID-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-004",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-005",
+        "testIds": [
+          "TC-KEYFORM-GRID-INVALID-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-PARAM-007",
+        "testIds": [
+          "TC-KEYFORM-GRID-INVALID-001",
+          "TC-KEYFORM-INTERPOLATION-001",
+          "TC-PARAM-GRID-2D-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-PART-001",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-PART-002",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-PART-003",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-PART-004",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-001",
+        "testIds": [
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-002",
+        "testIds": [
+          "TC-DYN-CYCLE-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-003",
+        "testIds": [
+          "TC-DYN-CYCLE-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-004",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-005",
+        "testIds": [
+          "TC-DYN-CYCLE-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-DYN-FIXED-STEP-REPLAY-001",
+          "TC-DYN-GROUP-AUTHORING-001",
+          "TC-DYN-MISSING-DRIVER-001",
+          "TC-DYN-MISSING-OUTPUT-001",
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+        ]
+      },
+      {
+        "acId": "AC-PHYS-006",
+        "testIds": [
+          "TC-DYN-DEMO-SAFE-001"
+        ]
+      },
+      {
+        "acId": "AC-RIGHTS-001",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DYN-DEMO-SAFE-001",
+          "TC-HYGIENE-BOUNDARY-001",
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-IN-UNSUPPORTED-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-RIGHTS-002",
+        "testIds": [
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DYN-DEMO-SAFE-001",
+          "TC-IN-PSD-IMPORT-001",
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-RIGHTS-003",
+        "testIds": [
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-HYGIENE-BOUNDARY-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-RIGHTS-004",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      },
+      {
+        "acId": "AC-RIGHTS-005",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+          "TC-DYN-DEMO-SAFE-001",
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      },
+      {
+        "acId": "AC-RUNTIME-001",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-RUNTIME-002",
+        "testIds": [
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-RUNTIME-003",
+        "testIds": [
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-RUNTIME-004",
+        "testIds": [
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-RUNTIME-005",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001",
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-SAMPLE-001",
+        "testIds": [
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-SAMPLE-002",
+        "testIds": [
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-SAMPLE-005",
+        "testIds": [
+          "TC-IN-RIGHTS-MISSING-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "acId": "AC-VALIDATOR-001",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "acId": "AC-VALIDATOR-002",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "acId": "AC-VALIDATOR-003",
+        "testIds": [
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "acId": "AC-VALIDATOR-004",
+        "testIds": [
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "acId": "AC-VALIDATOR-005",
+        "testIds": [
+          "TC-RUNTIME-LOAD-BLOCKING-001",
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-001",
+        "testIds": [
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-002",
+        "testIds": [
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-003",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-004",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-005",
+        "testIds": [
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VERIFY-006",
+        "testIds": [
+          "TC-CONTRACT-SURFACE-LINT-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "acId": "AC-VIEWER-001",
+        "testIds": [
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "acId": "AC-VIEWER-002",
+        "testIds": [
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-VIEWER-003",
+        "testIds": [
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-VIEWER-004",
+        "testIds": [
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-VIEWER-005",
+        "testIds": [
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-001",
+        "testIds": [
+          "TC-GUI-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-002",
+        "testIds": [
+          "TC-GUI-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-003",
+        "testIds": [
+          "TC-GUI-AUTHORING-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-004",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-005",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001",
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "acId": "AC-WF-006",
+        "testIds": [
+          "TC-GUI-AUTHORING-001",
+          "TC-SCRIPT-ONLY-REJECTION-001"
+        ]
+      }
+    ],
+    "fixtureReferences": [
+      {
+        "fixtureId": "minimal-valid-package",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DRAWABLE-PART-TEXTURE-001",
+          "TC-IN-ROUNDTRIP-001",
+          "TC-RUNTIME-LOAD-SNAPSHOT-001"
+        ]
+      },
+      {
+        "fixtureId": "psd-import-happy-path",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-IN-PSD-IMPORT-001",
+          "TC-SAMPLE-PRIVATE-FIXTURE-001"
+        ]
+      },
+      {
+        "fixtureId": "psd-unsupported-layer",
+        "gate": "warning",
+        "testIds": []
+      },
+      {
+        "fixtureId": "split-png-fallback",
+        "gate": "warning",
+        "testIds": []
+      },
+      {
+        "fixtureId": "tutorial-like-authoring",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-BODY-SECONDARY-AUTHORING-001",
+          "TC-FACE-EXPRESSION-001",
+          "TC-GUI-AUTHORING-001",
+          "TC-KEYFORM-INTERPOLATION-001",
+          "TC-MESH-EDIT-001",
+          "TC-PARAM-PRESET-001",
+          "TC-RIG-WARP-001"
+        ]
+      },
+      {
+        "fixtureId": "manual-face-grid-2d",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-PARAM-GRID-2D-001",
+          "TC-VIEWER-PARAM-VALIDATION-001"
+        ]
+      },
+      {
+        "fixtureId": "parent-child-rigControl-diagonal",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-RIG-ROTATION-HIERARCHY-001"
+        ]
+      },
+      {
+        "fixtureId": "minimal-dynamics-hairSway",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-GROUP-AUTHORING-001"
+        ]
+      },
+      {
+        "fixtureId": "dynamics-reset-determinism",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-DETERMINISM-001"
+        ]
+      },
+      {
+        "fixtureId": "dynamics-fixed-step-replay",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-FIXED-STEP-REPLAY-001"
+        ]
+      },
+      {
+        "fixtureId": "dynamics-output-range-clamp",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-OUTPUT-RANGE-CLAMP-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-dynamics-missing-driver",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-MISSING-DRIVER-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-dynamics-missing-output",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-MISSING-OUTPUT-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-dynamics-cycle",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-CYCLE-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-dynamics-output-target-duplicate",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-mesh-triangle",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-MESH-INVALID-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-missing-texture",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-VALIDATOR-SCHEMA-ASSET-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-rigControl-cycle",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-RIG-INVALID-CYCLE-001"
+        ]
+      },
+      {
+        "fixtureId": "invalid-mask-reference",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-COMPOSITION-MASK-DRAWORDER-001"
+        ]
+      },
+      {
+        "fixtureId": "keyform-grid-invalid",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-KEYFORM-GRID-INVALID-001"
+        ]
+      },
+      {
+        "fixtureId": "keyform-missing-endpoint",
+        "gate": "warning",
+        "testIds": [
+          "TC-KEYFORM-INVALID-001"
+        ]
+      },
+      {
+        "fixtureId": "runtime-load-blocking",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-RUNTIME-LOAD-BLOCKING-001"
+        ]
+      },
+      {
+        "fixtureId": "rights-provenance-missing",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-IN-RIGHTS-MISSING-001"
+        ]
+      },
+      {
+        "fixtureId": "script-generated-minimal",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-SCRIPT-ONLY-REJECTION-001"
+        ]
+      },
+      {
+        "fixtureId": "gui-hit-test-rigControl",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-GUI-SEMANTIC-EVIDENCE-001"
+        ]
+      },
+      {
+        "fixtureId": "ai-screenshot-rigControl-parameter",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001"
+        ]
+      },
+      {
+        "fixtureId": "ai-invalid-mutation",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-AI-INVALID-MUTATION-001"
+        ]
+      },
+      {
+        "fixtureId": "out-of-range-parameter-dry-run",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-AI-OUT-OF-RANGE-PARAMETER-001"
+        ]
+      },
+      {
+        "fixtureId": "ai-repair-dry-run",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-AI-AUDIT-LOG-001",
+          "TC-AI-DRYRUN-REPAIR-001",
+          "TC-AI-INSPECT-REPORT-001",
+          "TC-AI-PROVENANCE-DEMO-001",
+          "TC-VERIFY-DIFF-JUDGMENT-001"
+        ]
+      },
+      {
+        "fixtureId": "demo-safe-dynamics-capture",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DYN-DEMO-SAFE-001"
+        ]
+      },
+      {
+        "fixtureId": "demo-safe-viewer-capture",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DEMO-SAFE-VIEWER-CAPTURE-001"
+        ]
+      },
+      {
+        "fixtureId": "demo-unsafe-forbidden-term",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001"
+        ]
+      },
+      {
+        "fixtureId": "unsupported-input-boundary",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-IN-UNSUPPORTED-BOUNDARY-001"
+        ]
+      },
+      {
+        "fixtureId": "demo-safe-preflight",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-DEMO-PREFLIGHT-001"
+        ]
+      },
+      {
+        "fixtureId": "proposal-boundary-review",
+        "gate": "warning",
+        "testIds": [
+          "TC-HYGIENE-BOUNDARY-001"
+        ]
+      },
+      {
+        "fixtureId": "discussion-doc-baseline",
+        "gate": "warning",
+        "testIds": [
+          "TC-DOC-BASELINE-001"
+        ]
+      },
+      {
+        "fixtureId": "nondependency-guardrail-scan",
+        "gate": "mvp-blocking",
+        "testIds": [
+          "TC-NONDEPENDENCY-GUARDRAIL-001"
+        ]
+      },
+      {
+        "fixtureId": "traceability-lint",
+        "gate": "mvp-blocking",
+        "testIds": [
           "TC-CONTRACT-SURFACE-LINT-001"
         ]
       }
@@ -2179,5 +4103,478 @@
     "Fixture files and expected artifacts are planned only; this deliverable does not create fixture packages or runner outputs.",
     "Exact visual-review thresholds remain hybrid/manual until capture and semantic snapshot runners exist.",
     "Optional/Future-only scenarios are intentionally excluded from P0 gates and should be reintroduced only after scope is reopened."
-  ]
+  ],
+  "domainAcCoverage": {
+    "AC-AGENT-001": [
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-CONTRACT-SURFACE-LINT-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001"
+    ],
+    "AC-AGENT-002": [
+      "TC-AI-AUDIT-LOG-001",
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-AGENT-003": [
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001"
+    ],
+    "AC-AGENT-004": [
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001"
+    ],
+    "AC-AGENT-005": [
+      "TC-AI-AUDIT-LOG-001",
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-AI-001": [
+      "TC-AI-INSPECT-REPORT-001"
+    ],
+    "AC-AI-002": [
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-GUI-SEMANTIC-EVIDENCE-001"
+    ],
+    "AC-AI-003": [
+      "TC-AI-AUDIT-LOG-001",
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-AI-004": [
+      "TC-AI-AUDIT-LOG-001",
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-INVALID-MUTATION-001",
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-AI-SCREENSHOT-RIGCONTROL-PARAMETER-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-AI-005": [
+      "TC-AI-PROVENANCE-DEMO-001"
+    ],
+    "AC-AI-006": [
+      "TC-AI-AUDIT-LOG-001"
+    ],
+    "AC-AI-007": [
+      "TC-AI-AUDIT-LOG-001",
+      "TC-AI-DRYRUN-REPAIR-001",
+      "TC-AI-INSPECT-REPORT-001",
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-BODY-001": [
+      "TC-BODY-SECONDARY-AUTHORING-001",
+      "TC-RIG-ROTATION-HIERARCHY-001"
+    ],
+    "AC-BODY-002": [
+      "TC-BODY-SECONDARY-AUTHORING-001",
+      "TC-RIG-ROTATION-HIERARCHY-001"
+    ],
+    "AC-BODY-003": [
+      "TC-BODY-SECONDARY-AUTHORING-001",
+      "TC-DYN-GROUP-AUTHORING-001"
+    ],
+    "AC-BODY-004": [
+      "TC-BODY-SECONDARY-AUTHORING-001",
+      "TC-DYN-GROUP-AUTHORING-001"
+    ],
+    "AC-BODY-005": [
+      "TC-BODY-SECONDARY-AUTHORING-001",
+      "TC-DYN-GROUP-AUTHORING-001"
+    ],
+    "AC-DEF-001": [
+      "TC-RIG-WARP-001"
+    ],
+    "AC-DEF-002": [
+      "TC-RIG-WARP-001"
+    ],
+    "AC-DEF-003": [
+      "TC-RIG-INVALID-CYCLE-001",
+      "TC-RIG-ROTATION-HIERARCHY-001"
+    ],
+    "AC-DEF-004": [
+      "TC-RIG-INVALID-CYCLE-001",
+      "TC-RIG-ROTATION-HIERARCHY-001"
+    ],
+    "AC-DEF-005": [
+      "TC-COMPOSITION-MASK-DRAWORDER-001",
+      "TC-RIG-INVALID-CYCLE-001",
+      "TC-RIG-ROTATION-HIERARCHY-001"
+    ],
+    "AC-DOC-001": [
+      "TC-DOC-BASELINE-001"
+    ],
+    "AC-DOC-002": [
+      "TC-DOC-BASELINE-001"
+    ],
+    "AC-DOC-003": [
+      "TC-DOC-BASELINE-001"
+    ],
+    "AC-DOC-004": [
+      "TC-DOC-BASELINE-001"
+    ],
+    "AC-DOC-005": [
+      "TC-DOC-BASELINE-001"
+    ],
+    "AC-DRAW-001": [
+      "TC-DRAWABLE-PART-TEXTURE-001",
+      "TC-IN-ROUNDTRIP-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-DRAW-002": [
+      "TC-DRAWABLE-PART-TEXTURE-001"
+    ],
+    "AC-DRAW-003": [
+      "TC-COMPOSITION-MASK-DRAWORDER-001"
+    ],
+    "AC-DRAW-004": [
+      "TC-COMPOSITION-MASK-DRAWORDER-001"
+    ],
+    "AC-EXPORT-001": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-EXPORT-002": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-EXPORT-003": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-EXPORT-004": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-EXPORT-005": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-EXPORT-006": [
+      "TC-IN-ROUNDTRIP-001",
+      "TC-IN-UNSUPPORTED-BOUNDARY-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-FACE-001": [
+      "TC-FACE-EXPRESSION-001"
+    ],
+    "AC-FACE-003": [
+      "TC-FACE-EXPRESSION-001"
+    ],
+    "AC-FACE-004": [
+      "TC-FACE-EXPRESSION-001"
+    ],
+    "AC-FACE-005": [
+      "TC-FACE-EXPRESSION-001"
+    ],
+    "AC-FACE-006": [
+      "TC-FACE-EXPRESSION-001"
+    ],
+    "AC-FACE-007": [
+      "TC-PARAM-GRID-2D-001",
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-FACE-008": [
+      "TC-FACE-EXPRESSION-001",
+      "TC-PARAM-GRID-2D-001"
+    ],
+    "AC-FORMAT-001": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-FORMAT-002": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-FORMAT-003": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-FORMAT-004": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-FORMAT-005": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-IN-001": [
+      "TC-IN-PSD-IMPORT-001",
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-IN-002": [
+      "TC-IN-PSD-IMPORT-001",
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-IN-003": [
+      "TC-IN-ROUNDTRIP-001"
+    ],
+    "AC-IN-004": [
+      "TC-IN-UNSUPPORTED-BOUNDARY-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-IN-005": [
+      "TC-IN-UNSUPPORTED-BOUNDARY-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-IN-006": [
+      "TC-IN-PSD-IMPORT-001",
+      "TC-IN-RIGHTS-MISSING-001",
+      "TC-IN-ROUNDTRIP-001",
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-MESH-001": [
+      "TC-MESH-EDIT-001"
+    ],
+    "AC-MESH-002": [
+      "TC-MESH-EDIT-001"
+    ],
+    "AC-MESH-003": [
+      "TC-MESH-INVALID-001"
+    ],
+    "AC-MESH-004": [
+      "TC-MESH-INVALID-001"
+    ],
+    "AC-PARAM-001": [
+      "TC-PARAM-PRESET-001"
+    ],
+    "AC-PARAM-002": [
+      "TC-PARAM-PRESET-001"
+    ],
+    "AC-PARAM-003": [
+      "TC-KEYFORM-INTERPOLATION-001",
+      "TC-KEYFORM-INVALID-001"
+    ],
+    "AC-PARAM-004": [
+      "TC-PARAM-GRID-2D-001",
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-PARAM-005": [
+      "TC-KEYFORM-GRID-INVALID-001",
+      "TC-PARAM-GRID-2D-001",
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-PARAM-007": [
+      "TC-KEYFORM-GRID-INVALID-001",
+      "TC-KEYFORM-INTERPOLATION-001",
+      "TC-PARAM-GRID-2D-001",
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-PART-001": [
+      "TC-DRAWABLE-PART-TEXTURE-001"
+    ],
+    "AC-PART-002": [
+      "TC-DRAWABLE-PART-TEXTURE-001"
+    ],
+    "AC-PART-003": [
+      "TC-COMPOSITION-MASK-DRAWORDER-001"
+    ],
+    "AC-PART-004": [
+      "TC-COMPOSITION-MASK-DRAWORDER-001"
+    ],
+    "AC-PHYS-001": [
+      "TC-DYN-GROUP-AUTHORING-001",
+      "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+    ],
+    "AC-PHYS-002": [
+      "TC-DYN-CYCLE-001",
+      "TC-DYN-FIXED-STEP-REPLAY-001",
+      "TC-DYN-GROUP-AUTHORING-001",
+      "TC-DYN-MISSING-DRIVER-001",
+      "TC-DYN-MISSING-OUTPUT-001",
+      "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+      "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+    ],
+    "AC-PHYS-003": [
+      "TC-DYN-CYCLE-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-DYN-FIXED-STEP-REPLAY-001",
+      "TC-DYN-GROUP-AUTHORING-001",
+      "TC-DYN-MISSING-DRIVER-001",
+      "TC-DYN-MISSING-OUTPUT-001",
+      "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+      "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+    ],
+    "AC-PHYS-004": [
+      "TC-DYN-DETERMINISM-001",
+      "TC-DYN-FIXED-STEP-REPLAY-001",
+      "TC-DYN-GROUP-AUTHORING-001"
+    ],
+    "AC-PHYS-005": [
+      "TC-DYN-CYCLE-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-DYN-FIXED-STEP-REPLAY-001",
+      "TC-DYN-GROUP-AUTHORING-001",
+      "TC-DYN-MISSING-DRIVER-001",
+      "TC-DYN-MISSING-OUTPUT-001",
+      "TC-DYN-OUTPUT-RANGE-CLAMP-001",
+      "TC-DYN-OUTPUT-TARGET-DUPLICATE-001"
+    ],
+    "AC-PHYS-006": [
+      "TC-DYN-DEMO-SAFE-001"
+    ],
+    "AC-RIGHTS-001": [
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+      "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "TC-DYN-DEMO-SAFE-001",
+      "TC-HYGIENE-BOUNDARY-001",
+      "TC-IN-RIGHTS-MISSING-001",
+      "TC-IN-UNSUPPORTED-BOUNDARY-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-RIGHTS-002": [
+      "TC-AI-PROVENANCE-DEMO-001",
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+      "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "TC-DYN-DEMO-SAFE-001",
+      "TC-IN-PSD-IMPORT-001",
+      "TC-IN-RIGHTS-MISSING-001",
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-RIGHTS-003": [
+      "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "TC-HYGIENE-BOUNDARY-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-RIGHTS-004": [
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+      "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "TC-HYGIENE-BOUNDARY-001"
+    ],
+    "AC-RIGHTS-005": [
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-DEMO-SAFE-VIEWER-CAPTURE-001",
+      "TC-DEMO-UNSAFE-FORBIDDEN-TERM-001",
+      "TC-DYN-DEMO-SAFE-001",
+      "TC-HYGIENE-BOUNDARY-001"
+    ],
+    "AC-RUNTIME-001": [
+      "TC-DRAWABLE-PART-TEXTURE-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-IN-ROUNDTRIP-001",
+      "TC-RUNTIME-LOAD-BLOCKING-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-RUNTIME-002": [
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-RUNTIME-003": [
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-RUNTIME-004": [
+      "TC-AI-OUT-OF-RANGE-PARAMETER-001",
+      "TC-DYN-DETERMINISM-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-RUNTIME-005": [
+      "TC-DYN-DETERMINISM-001",
+      "TC-RUNTIME-LOAD-BLOCKING-001",
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-SAMPLE-001": [
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-SAMPLE-002": [
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-SAMPLE-005": [
+      "TC-IN-RIGHTS-MISSING-001",
+      "TC-SAMPLE-PRIVATE-FIXTURE-001"
+    ],
+    "AC-VALIDATOR-001": [
+      "TC-VALIDATOR-SCHEMA-ASSET-001"
+    ],
+    "AC-VALIDATOR-002": [
+      "TC-VALIDATOR-SCHEMA-ASSET-001"
+    ],
+    "AC-VALIDATOR-003": [
+      "TC-RUNTIME-LOAD-BLOCKING-001",
+      "TC-VALIDATOR-SCHEMA-ASSET-001"
+    ],
+    "AC-VALIDATOR-004": [
+      "TC-RUNTIME-LOAD-BLOCKING-001",
+      "TC-VALIDATOR-SCHEMA-ASSET-001"
+    ],
+    "AC-VALIDATOR-005": [
+      "TC-RUNTIME-LOAD-BLOCKING-001",
+      "TC-VALIDATOR-SCHEMA-ASSET-001"
+    ],
+    "AC-VERIFY-001": [
+      "TC-CONTRACT-SURFACE-LINT-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VERIFY-002": [
+      "TC-CONTRACT-SURFACE-LINT-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VERIFY-003": [
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VERIFY-004": [
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VERIFY-005": [
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VERIFY-006": [
+      "TC-CONTRACT-SURFACE-LINT-001",
+      "TC-VERIFY-DIFF-JUDGMENT-001"
+    ],
+    "AC-VIEWER-001": [
+      "TC-RUNTIME-LOAD-SNAPSHOT-001"
+    ],
+    "AC-VIEWER-002": [
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-VIEWER-003": [
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-VIEWER-004": [
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-VIEWER-005": [
+      "TC-VIEWER-PARAM-VALIDATION-001"
+    ],
+    "AC-WF-001": [
+      "TC-GUI-AUTHORING-001"
+    ],
+    "AC-WF-002": [
+      "TC-GUI-AUTHORING-001"
+    ],
+    "AC-WF-003": [
+      "TC-GUI-AUTHORING-001"
+    ],
+    "AC-WF-004": [
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-WF-005": [
+      "TC-DEMO-PREFLIGHT-001",
+      "TC-NONDEPENDENCY-GUARDRAIL-001"
+    ],
+    "AC-WF-006": [
+      "TC-GUI-AUTHORING-001",
+      "TC-SCRIPT-ONLY-REJECTION-001"
+    ]
+  }
 }

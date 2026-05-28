@@ -8,6 +8,8 @@
 
 P0 and P1 test design deliverables exist and are internally consistent after review fixes. No implementation code was added.
 
+Review_009 follow-up has been applied: `mvp-blocking` fixtures are now connected to Test IDs, Dynamics invalid coverage is fixture-granular, Domain AC coverage is visible in traceability, and formal/candidate diagnostic boundaries are recorded.
+
 ## Review Basis
 
 - `discussion/tests/test_basis.md`
@@ -52,6 +54,8 @@ Blocking findings found during integration and fixed before final verdict:
 
 - `test-traceability-matrix.json` referenced six fixtures not present in `fixture-manifest.json`. Fixed by adding `unsupported-input-boundary`, `demo-safe-preflight`, `proposal-boundary-review`, `discussion-doc-baseline`, `nondependency-guardrail-scan`, and `traceability-lint` to both fixture manifest formats.
 - `TC-AI-DRYRUN-REPAIR-001` referenced non-existent scenario IDs `SC-AGENT-003` and `SC-AGENT-005`. Fixed by removing those refs; the current source scenario IDs `SC-AI-003` and `SC-AI-004` are covered by dedicated AI provenance and audit tests.
+- `review_009` identified unreferenced `mvp-blocking` fixtures. Fixed by adding fixture-granular Test IDs and manifest connection audit entries.
+- `TC-DYN-VALIDATION-001` had an over-broad oracle. Fixed by removing it as an authoritative Test ID and replacing it with `TC-DYN-MISSING-DRIVER-001`, `TC-DYN-MISSING-OUTPUT-001`, `TC-DYN-OUTPUT-TARGET-DUPLICATE-001`, `TC-DYN-OUTPUT-RANGE-CLAMP-001`, and `TC-DYN-CYCLE-001`.
 
 ### Warning
 
@@ -71,8 +75,11 @@ Blocking findings found during integration and fixed before final verdict:
 |-------|--------|
 | MVP AC coverage | `16/16` covered by one or more Test IDs |
 | Active scenario coverage | `62/62` covered after applying `activeScenarioPolicy.excludedScenarioIds` |
-| Traceability entries | `39` Test IDs |
+| Traceability entries | `50` Test IDs |
 | Fixture manifest entries | `38` fixtures |
+| MVP-blocking fixture references | `33/33` referenced by one or more Test IDs |
+| Domain AC coverage | `domainAcIds` on every Test ID plus `domainAcCoverage` JSON summary |
+| Formal/candidate diagnostics | separated in `validator-profile-design.md`; MVP-blocking expected diagnostics are formal |
 | Missing required traceability fields | none |
 | Traceability fixture refs missing from manifest | none |
 | Machine-readable ID spaces in Test IDs, fixture refs, and operation flow IDs | none found |

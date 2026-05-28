@@ -68,6 +68,7 @@ dynamics.driverMissing
 mask.sourceMissing
 runtime.loadBlocking
 evidence.guiOperationLogMissing
+demo.unsafeDependencyClaim
 ```
 
 ## Check Catalog
@@ -112,6 +113,7 @@ evidence.guiOperationLogMissing
 | `dynamics.timestepMismatch` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
 | `runtime.timestepOverflow` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
 | `dynamics.demoUnsafeInternalName` | demo_preflight | warning | demo profile: needs_review | AC-PHYS-006 |
+| `demo.unsafeDependencyClaim` | demo_preflight | blocking | acceptance: fail | AC-MVP-015, AC-MVP-016 |
 | `mask.sourceMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
 | `mask.opacityZeroSource` | mask_resolution | warning | strict: needs_review | AC-MVP-007 |
 | `runtime.loadBlocking` | runtime_load | blocking | all: fail | AC-MVP-012 |
@@ -128,6 +130,11 @@ Dynamics output validation rules:
 - `dynamics.outputMustBeComputedParameter` fires when a group writes to `authoredInput` or `debugOverride`.
 - `dynamics.outputParameterOutOfRange` fires when output min/max is outside the target parameter range.
 - `dynamics.outputClamped` is runtime evidence that clamping occurred; it is not by itself a package schema failure unless a fixture/profile requires exact unclamped output.
+
+Demo-safe validation rules:
+
+- `demo.unsafeDependencyClaim` fires when a demo, proposal, fixture metadata, or public-facing acceptance artifact claims dependency on forbidden proprietary formats, SDK/Core behavior, viewer matching, physics compatibility, or existing third-party model behavior.
+- `demo.unsafeDependencyClaim` is a project-scope hygiene diagnostic. It is not an external compatibility oracle and must not inspect or compare proprietary runtime output.
 
 Runtime state validation rules:
 
@@ -287,9 +294,9 @@ sequenceDiagram
 | AC-MVP-005, SC-MESH-006 | mesh checks | `invalid-mesh-triangle` expected report |
 | AC-MVP-007, SC-DRAW-005, SC-PART-004 | mask checks | `invalid-mask-reference` expected report |
 | AC-MVP-009, SC-DEF-006 | rig control checks | `invalid-rigControl-cycle`, `parent-child-rigControl-diagonal` |
-| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | dynamics checks | `minimal-dynamics-hairSway`, `invalid-dynamics-cycle`, `dynamics-reset-determinism`, `demo-safe-dynamics-capture` |
+| AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | dynamics checks | `minimal-dynamics-hairSway`, `invalid-dynamics-missing-driver`, `invalid-dynamics-missing-output`, `invalid-dynamics-output-target-duplicate`, `invalid-dynamics-cycle`, `dynamics-output-range-clamp`, `dynamics-reset-determinism`, `demo-safe-dynamics-capture` |
 | AC-MVP-013, SC-MVP-004 | `ValidationReportDto` | all validation fixtures |
-| AC-MVP-014, SC-AGENT-005 | `RepairCandidateDto` | `ai-repair-dry-run` |
+| AC-MVP-014, SC-AGENT-002 | `RepairCandidateDto` | `ai-repair-dry-run` |
 | AC-MVP-001, SC-MVP-005 | `evidence.guiOperationLogMissing` | script-only fixture classification |
 
 ## Verification and Fixtures
@@ -302,10 +309,12 @@ sequenceDiagram
 | `invalid-rigControl-cycle` | rig control hierarchy cycle | blocking report |
 | `invalid-dynamics-missing-driver` | missing or wrong-source dynamics driver | error report |
 | `invalid-dynamics-missing-output` | missing or wrong-source dynamics output parameter | error report |
+| `invalid-dynamics-output-target-duplicate` | duplicate computed output target | error report |
 | `invalid-dynamics-cycle` | computed output used as dynamics driver or group dependency | blocking report |
 | `dynamics-output-range-clamp` | output clamp and range diagnostic | report + snapshot |
 | `dynamics-reset-determinism` | fixed timestep replay equality | paired strict report |
 | `demo-safe-dynamics-capture` | demo profile hides unsafe names and solver details | demo preflight report |
+| `demo-unsafe-forbidden-term` | forbidden dependency or compatibility wording on public surfaces | fail report with `demo.unsafeDependencyClaim` |
 | `invalid-mask-reference` | missing mask source/target | fail report |
 | `script-generated-minimal` | viewer-loadable but no GUI evidence | acceptance fail / auxiliary fixture status |
 | `ai-repair-dry-run` | repair candidate and validation diff | report + candidate |

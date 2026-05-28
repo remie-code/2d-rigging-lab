@@ -102,6 +102,56 @@ Each diagnostic result used by acceptance must include:
 
 Diagnostics must be deterministic for the same package, profile, runtime context, input sequence, and fixture manifest.
 
+### Diagnostic Registry Status
+
+Acceptance oracles use two registry statuses:
+
+- `formal`: the diagnostic is present in `discussion/design/module-contracts/validator-contract.md` and can be used by `mvp-blocking` tests.
+- `candidate`: the diagnostic is a design candidate only. It may appear in notes or future fixtures, but an `mvp-blocking` test must also have a formal diagnostic or an explicit expected artifact oracle.
+
+Formal diagnostics required by the current traceability matrix:
+
+| Diagnostic ID | Status | Acceptance use |
+|---|---|---|
+| `rights.provenanceMissing` | `formal` | Missing source rights/provenance blocks intake and demo acceptance. |
+| `ref.drawableTextureMissing` | `formal` | Visible drawable texture reference failure. |
+| `mesh.triangleIndexOutOfRange` | `formal` | Invalid mesh triangle index. |
+| `mask.sourceMissing` | `formal` | Missing mask source blocks composition evidence. |
+| `keyform.missingEndpoint` | `formal` | One-axis keyform endpoint omission. |
+| `keyform.grid2dMissingKey` | `formal` | Missing two-axis grid coordinate. |
+| `keyform.grid2dDuplicateKey` | `formal` | Duplicate two-axis grid coordinate. |
+| `rigControl.cycle` | `formal` | Rig control hierarchy cycle. |
+| `dynamics.driverMissing` | `formal` | Dynamics group has no valid authored driver. |
+| `dynamics.outputMissing` | `formal` | Dynamics group has no computed output parameter. |
+| `dynamics.outputTargetDuplicate` | `formal` | More than one group writes the same computed output. |
+| `dynamics.outputParameterOutOfRange` | `formal` | Dynamics output range violates parameter bounds. |
+| `dynamics.outputClamped` | `formal` | Runtime clamp evidence for a dynamics output. |
+| `dynamics.outputUsedAsDriver` | `formal` | Computed output is used as a dynamics driver. |
+| `dynamics.groupCycle` | `formal` | Dynamics group dependency cycle. |
+| `runtime.parameterClamped` | `formal` | Runtime parameter input clamps under declared policy. |
+| `runtime.loadBlocking` | `formal` | Runtime cannot produce deterministic viewer output. |
+| `runtime.stateSequenceLengthMismatch` | `formal` | Exact replay state sequence has invalid length. |
+| `ai.dryRunMutatedPackage` | `formal` | AI dry-run changed package state or revision. |
+| `evidence.guiOperationLogMissing` | `formal` | MVP GUI authoring evidence is absent. |
+| `demo.unsafeDependencyClaim` | `formal` | Demo/proposal surface claims forbidden format, SDK/Core, viewer matching, or physics compatibility dependency. |
+| `dynamics.demoUnsafeInternalName` | `formal` | Demo surface exposes unsafe internal dynamics wording. |
+
+Candidate diagnostics:
+
+| Diagnostic ID | Status | Use before promotion |
+|---|---|---|
+| `rights.displayNotAllowed` | `candidate` | Use only as nonblocking design note unless promoted. |
+| `rights.sourceUnknown` | `candidate` | Covered for MVP by formal provenance diagnostics or explicit rights expected artifacts. |
+| `rights.aiUseUnrecorded` | `candidate` | Use only as future rights facet candidate. |
+| `evidence.guiSemanticStateMissing` | `candidate` | MVP tests rely on required GUI evidence artifacts or formal GUI operation-log diagnostics. |
+| `evidence.operationSurfaceMismatch` | `candidate` | Use only as future GUI evidence refinement. |
+| `ai.targetAmbiguous` | `candidate` | MVP tests rely on explicit semantic-target artifacts unless promoted. |
+| `ai.approvalRequired` | `candidate` | MVP tests rely on approval-bound repair candidate artifacts unless promoted. |
+| `ai.repairCandidateMissingProvenance` | `candidate` | MVP tests rely on repair candidate provenance artifacts unless promoted. |
+| `demo.internalSchemaVisible` | `candidate` | MVP tests rely on demo preflight artifacts or formal unsafe dependency claims. |
+| `demo.sourcePathVisible` | `candidate` | MVP tests rely on demo preflight artifacts unless promoted. |
+| `demo.redactionMissing` | `candidate` | MVP tests rely on demo preflight artifacts unless promoted. |
+
 ## Report Shape
 
 Validator reports should preserve the existing contract shape:
@@ -141,7 +191,7 @@ Representative diagnostics:
 - `rights.sourceUnknown`
 - `rights.aiUseUnrecorded`
 
-Only `rights.provenanceMissing` is already in the cited validator contract. Additional IDs above are design candidates and require check registry review before implementation.
+Registry status: `rights.provenanceMissing` is formal. The additional IDs above are candidates and cannot be the only oracle for an `mvp-blocking` test until promoted.
 
 ## GUI Evidence Integration
 
@@ -161,7 +211,7 @@ Representative diagnostics:
 - `evidence.guiSemanticStateMissing`
 - `evidence.operationSurfaceMismatch`
 
-Only `evidence.guiOperationLogMissing` and `evidence.playwrightSupplementMissing` are already in the cited validator contract. Additional IDs above are design candidates.
+Registry status: `evidence.guiOperationLogMissing` and `evidence.playwrightSupplementMissing` are formal. The additional IDs above are candidates; MVP tests must depend on required GUI evidence artifacts or formal diagnostics, not candidate-only checks.
 
 ## AI Evidence Integration
 
@@ -182,7 +232,7 @@ Representative diagnostics:
 - `ai.approvalRequired`
 - `ai.repairCandidateMissingProvenance`
 
-Only `ai.dryRunMutatedPackage` is already in the cited validator contract. Additional IDs above are design candidates.
+Registry status: `ai.dryRunMutatedPackage` is formal. The additional IDs above are candidates; acceptance tests that mention them must also require command transcripts, diffs, approval artifacts, or a formal diagnostic.
 
 ## Demo-safe Integration
 
@@ -214,7 +264,7 @@ Representative diagnostics:
 - `demo.unsafeDependencyClaim`
 - `demo.redactionMissing`
 
-Only `dynamics.demoUnsafeInternalName` is already in the cited validator contract. Additional IDs above are design candidates.
+Registry status: `dynamics.demoUnsafeInternalName` and `demo.unsafeDependencyClaim` are formal. The additional IDs above are candidates and remain nonblocking unless promoted or backed by explicit demo preflight artifacts.
 
 ## Dynamics Replay Integration
 
@@ -253,6 +303,8 @@ This profile design is acceptable when:
 - it separates severity from status;
 - it makes profile-specific escalation explicit;
 - it treats rights, GUI, AI, demo-safe, and dynamics replay as evidence facets;
+- it separates formal diagnostics from candidate diagnostics;
+- it ensures `mvp-blocking` tests do not rely only on candidate diagnostics;
 - it fails missing GUI evidence for MVP acceptance;
 - it fails AI dry-run mutation;
 - it does not treat screenshots as sufficient evidence;
