@@ -23,6 +23,14 @@
       "license": "MIT",
       "scope": "dev",
       "status": "wave0-baseline-approved"
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "purpose": "Runtime validation schemas for authored external DTO and branded ID contracts in packages/contracts.",
+      "license": "MIT",
+      "scope": "runtime:packages/contracts",
+      "status": "wave1-contracts-zod-and-core-approved; resolved-by-pnpm-lock.yaml"
     }
   ]
 }
