@@ -29,9 +29,11 @@ discussion/implementation/
 | Path | Purpose |
 |---|---|
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
+| [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.codex/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan Wave 1 `contracts-foundation` from [orchestration/wave0-plan.md](orchestration/wave0-plan.md) and `discussion/design/module-contracts/typescript-contracts.md`.
+1. Review [orchestration/wave1-plan.md](orchestration/wave1-plan.md).
+2. If accepted, launch Wave 1 starting with `wave1-contracts-zod-and-core`.

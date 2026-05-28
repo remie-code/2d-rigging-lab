@@ -59,12 +59,13 @@
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
 | Implementation Wave 0 | 2026-05-28にmonorepo scaffold / package skeleton / guard scripts / smoke test / persistent reportsを作成し、`pnpm check` 通過。active 開発規約の package 名は `contracts` / `validator-core` に統一済み |
+| Implementation Wave 1 | `contracts-foundation` の依存順序と Orch-Sylph 並列性を [implementation/orchestration/wave1-plan.md](implementation/orchestration/wave1-plan.md) に日本語で作成済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. Wave 1 `contracts-foundation` を計画する。
-2. Wave 1で `packages/contracts` を `design/module-contracts/typescript-contracts.md` から実装する。
+1. [implementation/orchestration/wave1-plan.md](implementation/orchestration/wave1-plan.md) をレビューする。
+2. 承認後、Wave 1を `wave1-contracts-zod-and-core` から起動する。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Live2Dへ最初に提案する機能単位をユーザー判断で選び、proposal templateから個別draftを作る。
