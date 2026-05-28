@@ -25,6 +25,7 @@ discussion/implementation/
 - The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
 - Wave 1 contracts foundation completed on 2026-05-29 with public barrel export integration, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave1/wave1-final-report.md](waves/wave1/wave1-final-report.md) and [waves/wave1/integration-review.md](waves/wave1/integration-review.md).
 - Wave 2 package / runtime / validator foundation completed on 2026-05-29 with package-format, runtime-core, validator-core, minimal contract fixture, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave2/wave2-final-report.md](waves/wave2/wave2-final-report.md) and [waves/wave2/integration-review.md](waves/wave2/integration-review.md).
+- Wave 3 planning is drafted at [orchestration/wave3-plan.md](orchestration/wave3-plan.md). The recommended split is `authoring-core` session foundation + `operation-core` DTO foundation in parallel, followed by operation lifecycle, minimal operation fixture, and integration review.
 
 ## Key References
 
@@ -33,6 +34,7 @@ discussion/implementation/
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave3-plan.md](orchestration/wave3-plan.md) | Wave 3 authoring/operation foundation dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
@@ -42,6 +44,6 @@ discussion/implementation/
 
 ## Next Actions
 
-1. Use Wave 2 public package-format / runtime-core / validator-core foundations as the basis for the next implementation wave.
-2. Resolve or introduce the `authoring-core` boundary before starting `operation-core` mutation implementation.
+1. Review or start Wave 3 from [orchestration/wave3-plan.md](orchestration/wave3-plan.md).
+2. Use Wave 2 public package-format / runtime-core / validator-core foundations as the basis for the next implementation wave.
 3. Keep GUI / AI implementation deferred until operation mutation boundaries are stable.
