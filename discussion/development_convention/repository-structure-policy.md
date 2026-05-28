@@ -8,7 +8,7 @@ Accepted
 
 This policy defines the monorepo structure for the Private 2D Rigging Lab / Prototype, including top-level directories, package responsibilities, fixture placement, generated artifact placement, discussion document placement, and agent visibility.
 
-It prevents schema, runtime, validator, tests, fixtures, generated evidence, and documentation from evolving under different assumptions. It also prevents authored source from being mixed with generated artifacts and prevents accidental placement of Cubism compatibility dependencies or oracle materials.
+It prevents contracts, runtime, validator, tests, fixtures, generated evidence, and documentation from evolving under different assumptions. It also prevents authored source from being mixed with generated artifacts and prevents accidental placement of Cubism compatibility dependencies or oracle materials.
 
 This policy is required before MVP implementation because implementation, tests, generated evidence, and Clean Context Review need stable paths and ownership rules.
 
@@ -86,7 +86,7 @@ No. The repository topology is fixed as a monorepo.
 
 #### Rationale
 
-Agent-driven implementation needs schema, runtime, validator, fixtures, tests, discussion documents, generated evidence, and review outputs visible in one workspace. Cross-module changes must update contracts, code, tests, fixtures, and documentation in the same patch or review bundle.
+Agent-driven implementation needs contracts, runtime, validator, fixtures, tests, discussion documents, generated evidence, and review outputs visible in one workspace. Cross-module changes must update contracts, code, tests, fixtures, and documentation in the same patch or review bundle.
 
 #### Alternatives considered
 
@@ -143,7 +143,7 @@ Embedding apps under `packages/` was rejected because it blurs app entrypoints a
 
 #### Impact
 
-Apps must not become source-of-truth owners for schema, runtime semantics, validation rules, or operation mutation rules.
+Apps must not become source-of-truth owners for core contracts/schema, runtime semantics, validation rules, or operation mutation rules.
 
 ### DEC-REPO-004: Packages layout
 
@@ -155,11 +155,11 @@ Which package boundaries are expected before implementation?
 
 The expected P0 package roots are:
 
-- `packages/schema/`
+- `packages/contracts/`
 - `packages/package-format/`
 - `packages/operation-core/`
 - `packages/runtime-core/`
-- `packages/validator/`
+- `packages/validator-core/`
 - `packages/ai-command/`
 - `packages/gui-core/`
 - `packages/fixture-tools/`
@@ -296,7 +296,7 @@ Handoffs must state source documents, editable paths, generated output paths, re
 graph TD
   Root["monorepo root"]
   Apps["apps/<br/>editor / viewer / devtools / demo-safe-capture"]
-  Packages["packages/<br/>schema / operation-core / runtime-core / validator / runner"]
+  Packages["packages/<br/>contracts / operation-core / runtime-core / validator-core / runner"]
   Fixtures["fixtures/<br/>authored test inputs"]
   Generated["generated/<br/>generated evidence"]
   Discussion["discussion/<br/>design source of truth"]
@@ -386,16 +386,16 @@ flowchart TD
 
 | Package | Responsibility | May depend on | Must not depend on | Primary tests |
 |---|---|---|---|---|
-| `packages/schema/` | Shared DTO and ID definitions | none or minimal internal utilities | Apps, GUI, runtime-specific stateful code, Cubism SDK/Core | Schema validation and ID convention tests |
-| `packages/package-format/` | Project-defined model package read/write semantics | `packages/schema/` | Cubism format parsers, Cubism SDK/Core, apps | Package fixture roundtrip and validation tests |
-| `packages/operation-core/` | Only allowed package mutation boundary | `packages/schema/`, `packages/package-format/`, `packages/validator/` as allowed by module policy | GUI-only state, direct Cubism conversion, hidden mutation paths | Operation log, model diff, dry-run tests |
-| `packages/runtime-core/` | Deterministic runtime evaluation and RuntimeStateDto transitions | `packages/schema/`, `packages/package-format/` as needed | GUI, filesystem, AI assistant, Cubism SDK/Core, Cubism Viewer | Runtime snapshot, state, state sequence, replay tests |
-| `packages/validator/` | Validation reports and diagnostics for packages and evidence artifacts | `packages/schema/`, `packages/package-format/` | GUI, AI assistant, Cubism Viewer output as oracle | Validation report and diagnostic tests |
-| `packages/ai-command/` | AI proposal, dry-run, and approval-boundary command handling | `packages/schema/`, `packages/operation-core/`, `packages/validator/` | Direct package mutation without operation core | AI dry-run and approval-boundary tests |
-| `packages/gui-core/` | Shared GUI state, commands, and evidence capture helpers | `packages/schema/`, `packages/operation-core/`, `packages/runtime-core/`, `packages/validator/` | Defining core DTOs or bypassing operation core | GUI contract and evidence tests |
-| `packages/fixture-tools/` | Fixture creation, normalization, and checks | `packages/schema/`, `packages/package-format/`, `packages/validator/` | Third-party Live2D samples, Cubism parsers | Fixture manifest and rights/provenance tests |
-| `packages/acceptance-runner/` | Acceptance execution and evidence collection | `packages/schema/`, `packages/validator/`, `packages/runtime-core/`, fixture tools | Cubism Viewer or Cubism Physics oracle | Acceptance runner and traceability tests |
-| `packages/demo-safe-tools/` | Demo-safe scans, redaction, provenance checks, preflight reports | `packages/schema/`, `packages/validator/` | Private implementation disclosure, forbidden term leakage | Demo-safe preflight and rights tests |
+| `packages/contracts/` | Shared DTO and ID definitions | none or minimal internal utilities | Apps, GUI, runtime-specific stateful code, Cubism SDK/Core | Contract/schema validation and ID convention tests |
+| `packages/package-format/` | Project-defined model package read/write semantics | `packages/contracts/` | Cubism format parsers, Cubism SDK/Core, apps | Package fixture roundtrip and validation tests |
+| `packages/operation-core/` | Only allowed package mutation boundary | `packages/contracts/`, `packages/package-format/`, `packages/validator-core/` as allowed by module policy | GUI-only state, direct Cubism conversion, hidden mutation paths | Operation log, model diff, dry-run tests |
+| `packages/runtime-core/` | Deterministic runtime evaluation and RuntimeStateDto transitions | `packages/contracts/`, `packages/package-format/` as needed | GUI, filesystem, AI assistant, Cubism SDK/Core, Cubism Viewer | Runtime snapshot, state, state sequence, replay tests |
+| `packages/validator-core/` | Validation reports and diagnostics for packages and evidence artifacts | `packages/contracts/`, `packages/package-format/` | GUI, AI assistant, Cubism Viewer output as oracle | Validation report and diagnostic tests |
+| `packages/ai-command/` | AI proposal, dry-run, and approval-boundary command handling | `packages/contracts/`, `packages/operation-core/`, `packages/validator-core/` | Direct package mutation without operation core | AI dry-run and approval-boundary tests |
+| `packages/gui-core/` | Shared GUI state, commands, and evidence capture helpers | `packages/contracts/`, `packages/operation-core/`, `packages/runtime-core/`, `packages/validator-core/` | Defining core DTOs or bypassing operation core | GUI contract and evidence tests |
+| `packages/fixture-tools/` | Fixture creation, normalization, and checks | `packages/contracts/`, `packages/package-format/`, `packages/validator-core/` | Third-party Live2D samples, Cubism parsers | Fixture manifest and rights/provenance tests |
+| `packages/acceptance-runner/` | Acceptance execution and evidence collection | `packages/contracts/`, `packages/validator-core/`, `packages/runtime-core/`, fixture tools | Cubism Viewer or Cubism Physics oracle | Acceptance runner and traceability tests |
+| `packages/demo-safe-tools/` | Demo-safe scans, redaction, provenance checks, preflight reports | `packages/contracts/`, `packages/validator-core/` | Private implementation disclosure, forbidden term leakage | Demo-safe preflight and rights tests |
 
 ### Generated Artifact Table
 
@@ -449,7 +449,7 @@ flowchart TD
 - [ ] Authored source and generated artifacts are separated.
 - [ ] `generated/runtime/states/` and `generated/runtime/state-sequences/` are distinct.
 - [ ] Package responsibilities are aligned with module contracts.
-- [ ] Apps do not own core schema, runtime semantics, validation semantics, or mutation boundaries.
+- [ ] Apps do not own core contracts/schema, runtime semantics, validation semantics, or mutation boundaries.
 - [ ] Runtime code has no forbidden dependency on GUI, filesystem state, AI assistant state, Cubism SDK/Core, or Cubism Viewer output.
 - [ ] Fixtures are rights-clean and do not include existing Cubism models or official/third-party Live2D samples.
 - [ ] Machine-readable IDs contain no spaces.

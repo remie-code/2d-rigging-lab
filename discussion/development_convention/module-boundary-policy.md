@@ -93,12 +93,12 @@ Which modules exist at P0 for the monorepo MVP implementation?
 
 The P0 module set is:
 
-- `schema`
+- `contracts`
 - `package-format`
 - `authoring-core`
 - `operation-core`
 - `runtime-core`
-- `validator`
+- `validator-core`
 - `renderer-adapter`
 - `gui-core`
 - `editor app`
@@ -110,7 +110,7 @@ The P0 module set is:
 
 #### Rationale
 
-This set matches the accepted module contract vocabulary while preserving the P0 basis requirements for schema ownership, package format, operation gateway, runtime isolation, validator behavior, GUI/editor/viewer surfaces, AI command boundary, fixture tooling, acceptance evidence, and demo-safe preflight.
+This set matches the accepted module contract vocabulary while preserving the P0 basis requirements for contracts/schema ownership, package format, operation gateway, runtime isolation, validator behavior, GUI/editor/viewer surfaces, AI command boundary, fixture tooling, acceptance evidence, and demo-safe preflight.
 
 #### Alternatives considered
 
@@ -128,7 +128,7 @@ What does each P0 module own?
 
 #### Decision
 
-Responsibilities are defined in the Module Responsibility Table. In short, `schema` owns shared DTO and ID contracts, `package-format` owns project-defined model package IO, `operation-core` owns package mutation, `runtime-core` owns deterministic runtime evaluation and explicit `RuntimeStateDto` transitions, `validator` owns validation reports, GUI modules own interaction state, AI owns transport-independent commands, fixture tools own contract fixtures, acceptance runner owns end-to-end evidence orchestration, and demo-safe tools own capture preflight.
+Responsibilities are defined in the Module Responsibility Table. In short, `contracts` owns shared DTO and ID contracts, `package-format` owns project-defined model package IO, `operation-core` owns package mutation, `runtime-core` owns deterministic runtime evaluation and explicit `RuntimeStateDto` transitions, `validator-core` owns validation reports, GUI modules own interaction state, AI owns transport-independent commands, fixture tools own contract fixtures, acceptance runner owns end-to-end evidence orchestration, and demo-safe tools own capture preflight.
 
 #### Rationale
 
@@ -150,7 +150,7 @@ Which dependency directions are allowed?
 
 #### Decision
 
-Dependencies MUST follow the Module Dependency DAG and Allowed Dependency Table. The graph is acyclic. `schema` is the shared source for external DTO contracts. Runtime, validator, operation, GUI, AI, fixture tooling, acceptance runner, and demo-safe tools consume shared schemas instead of redefining them.
+Dependencies MUST follow the Module Dependency DAG and Allowed Dependency Table. The graph is acyclic. `contracts` is the shared source for external DTO and schema contracts. Runtime, validator, operation, GUI, AI, fixture tooling, acceptance runner, and demo-safe tools consume shared schemas instead of redefining them.
 
 #### Rationale
 
@@ -256,16 +256,16 @@ Acceptance runner results MUST reference the underlying module evidence they con
 
 ### Diagram 1: Module Dependency DAG
 
-This diagram shows allowed dependency direction, schema source of truth, and the no-cycle requirement.
+This diagram shows allowed dependency direction, contracts/schema source of truth, and the no-cycle requirement.
 
 ```mermaid
 graph TD
-  schema[schema / DTO source of truth]
+  contracts[contracts / DTO and schema source of truth]
   packageFormat[package-format]
   authoringCore[authoring-core]
   operationCore[operation-core]
   runtimeCore[runtime-core]
-  validator[validator]
+  validatorCore[validator-core]
   rendererAdapter[renderer-adapter]
   guiCore[gui-core]
   editorApp[editor app]
@@ -275,41 +275,41 @@ graph TD
   acceptanceRunner[acceptance-runner]
   demoSafeTools[demo-safe tools]
 
-  packageFormat --> schema
-  authoringCore --> schema
-  operationCore --> schema
+  packageFormat --> contracts
+  authoringCore --> contracts
+  operationCore --> contracts
   operationCore --> packageFormat
   operationCore --> authoringCore
-  runtimeCore --> schema
-  validator --> schema
-  validator --> packageFormat
-  validator --> runtimeCore
+  runtimeCore --> contracts
+  validatorCore --> contracts
+  validatorCore --> packageFormat
+  validatorCore --> runtimeCore
   rendererAdapter --> runtimeCore
-  guiCore --> schema
+  guiCore --> contracts
   guiCore --> operationCore
   guiCore --> runtimeCore
-  guiCore --> validator
+  guiCore --> validatorCore
   editorApp --> guiCore
   editorApp --> packageFormat
   viewerApp --> runtimeCore
   viewerApp --> rendererAdapter
   viewerApp --> packageFormat
-  aiCommand --> schema
+  aiCommand --> contracts
   aiCommand --> operationCore
   aiCommand --> runtimeCore
-  aiCommand --> validator
-  fixtureTools --> schema
+  aiCommand --> validatorCore
+  fixtureTools --> contracts
   fixtureTools --> packageFormat
   fixtureTools --> operationCore
   acceptanceRunner --> fixtureTools
   acceptanceRunner --> operationCore
   acceptanceRunner --> runtimeCore
-  acceptanceRunner --> validator
+  acceptanceRunner --> validatorCore
   acceptanceRunner --> aiCommand
   acceptanceRunner --> demoSafeTools
-  demoSafeTools --> schema
+  demoSafeTools --> contracts
   demoSafeTools --> packageFormat
-  demoSafeTools --> validator
+  demoSafeTools --> validatorCore
 ```
 
 ### Diagram 2: Forbidden Dependency Diagram
@@ -319,7 +319,7 @@ This diagram shows dependency edges that are blocking violations.
 ```mermaid
 graph TD
   runtimeCore[runtime-core]
-  validator[validator]
+  validatorCore[validator-core]
   aiAssistant[AI assistant / ai-command]
   gui[GUI / gui-core / editor app]
   fs[filesystem direct IO]
@@ -331,7 +331,7 @@ graph TD
   runtimeCore -. forbidden .-> fs
   runtimeCore -. forbidden .-> cubism
   runtimeCore -. forbidden .-> cubismViewer
-  validator -. forbidden .-> gui
+  validatorCore -. forbidden .-> gui
   aiAssistant -. forbidden .-> packageJson
   gui -. forbidden .-> packageJson
 ```
@@ -344,7 +344,7 @@ This diagram shows how GUI, AI, and validator repair candidates may reach packag
 sequenceDiagram
   participant GUI
   participant AI as AI assistant
-  participant Validator as validator repair candidate
+  participant Validator as validator-core repair candidate
   participant Operation as Operation Core
   participant Human as human approval
   participant Package as project-defined model package
@@ -377,12 +377,12 @@ sequenceDiagram
 
 | Module | Responsibility | Inputs | Outputs | Owns state? | Notes |
 |---|---|---|---|---|---|
-| `schema` | Shared DTO schemas, branded IDs, common enums, diff/report/ref vocabulary | Accepted contracts | Zod schemas, TypeScript DTO types, generated schema artifacts where approved | no | External boundary source of truth |
+| `contracts` | Shared DTO schemas, branded IDs, common enums, diff/report/ref vocabulary | Accepted contracts | Zod schemas, TypeScript DTO types, generated schema artifacts where approved | no | External boundary source of truth |
 | `package-format` | Project-defined package layout, parse/load/write, package normalization, provenance path mapping | Package directory, package DTOs, source asset metadata | Normalized package DTOs, package hash, package validation inputs | no | Owns file layout, not editor workflow |
 | `authoring-core` | Dirty authoring graph, editor-visible model state, conversion to runtime graph | Package DTOs, committed operations | Authoring graph, normalized runtime graph | yes | Editor domain state only |
 | `operation-core` | Operation registry, dry-run, commit, undo/redo, operation log | Operation request DTOs, authoring graph/package state | Operation result, model diff, runtime diff, validation diff, operation log | yes | Only package mutation gateway |
 | `runtime-core` | Deterministic runtime evaluation, Minimum Open Dynamics v1, explicit RuntimeState transitions, snapshots | NormalizedRuntimeGraph, RuntimeSequenceFrameDto, RuntimeStateDto, evaluation context/options | RuntimeSnapshotDto, next RuntimeStateDto, RuntimeStateSequenceArtifact | no hidden state | No filesystem, GUI, AI, or Cubism dependency |
-| `validator` | Check registry, validation profiles, validation reports, repair candidates | Package DTOs, authoring graph, runtime snapshots, evidence refs | ValidationReport, diagnostics, repair candidates | no | Does not own GUI workflow |
+| `validator-core` | Check registry, validation profiles, validation reports, repair candidates | Package DTOs, authoring graph, runtime snapshots, evidence refs | ValidationReport, diagnostics, repair candidates | no | Does not own GUI workflow |
 | `renderer-adapter` | Canvas/WebGL binding and snapshot presentation | RuntimeSnapshotDto, texture handles | Rendered frame, renderer diagnostics | yes | Owns renderer handles only |
 | `gui-core` | Editor semantic state, panels, selection, hit-test, UI event mapping | User input, operation/runtime/validator results | GUI state, operation requests, GUI evidence | yes | Must mutate through operation-core |
 | `editor app` | Integrated authoring application shell | gui-core, package-format, demo-safe status | Interactive editor session | yes | App composition layer |
@@ -396,19 +396,19 @@ sequenceDiagram
 
 | From | May depend on | Reason | Conditions |
 |---|---|---|---|
-| `package-format` | `schema` | Parse and validate package DTOs | No GUI/runtime implementation imports |
-| `authoring-core` | `schema`, `package-format` DTOs | Build editor-visible graph from package data | No DOM or renderer handles |
-| `operation-core` | `schema`, `package-format`, `authoring-core`, `validator` interface | Validate and apply package mutations with diffs | Validator use must be via stable interface |
-| `runtime-core` | `schema` | Consume runtime DTOs and produce snapshots/states | No file IO, GUI, AI, Cubism, or package write dependency |
-| `validator` | `schema`, `package-format`, `runtime-core` interface | Validate packages and runtime artifacts | No GUI dependency |
+| `package-format` | `contracts` | Parse and validate package DTOs | No GUI/runtime implementation imports |
+| `authoring-core` | `contracts`, `package-format` DTOs | Build editor-visible graph from package data | No DOM or renderer handles |
+| `operation-core` | `contracts`, `package-format`, `authoring-core`, `validator-core` interface | Validate and apply package mutations with diffs | Validator use must be via stable interface |
+| `runtime-core` | `contracts` | Consume runtime DTOs and produce snapshots/states | No file IO, GUI, AI, Cubism, or package write dependency |
+| `validator-core` | `contracts`, `package-format`, `runtime-core` interface | Validate packages and runtime artifacts | No GUI dependency |
 | `renderer-adapter` | `runtime-core` DTOs | Render runtime snapshots | No package mutation or validator policy |
-| `gui-core` | `schema`, `operation-core`, `runtime-core`, `validator`, `renderer-adapter` | Authoring workflow and preview | Mutations only through `operation-core` |
+| `gui-core` | `contracts`, `operation-core`, `runtime-core`, `validator-core`, `renderer-adapter` | Authoring workflow and preview | Mutations only through `operation-core` |
 | `editor app` | `gui-core`, `package-format`, `demo-safe tools` | Compose editor surface | No bypass of GUI/operation boundary |
-| `viewer app` | `package-format`, `runtime-core`, `renderer-adapter`, `validator` | Inspect saved packages | Read-only package behavior unless routed to editor/operation |
-| `ai-command` | `schema`, `operation-core`, `runtime-core`, `validator`, `gui-core` read APIs | Inspect, dry-run, diff, validate, and approval-gated commit | Commit requires human approval |
-| `fixture-tools` | `schema`, `package-format`, `operation-core`, `runtime-core`, `validator` | Generate and verify expected artifacts | Updates follow fixture policy |
-| `acceptance-runner` | `fixture-tools`, `operation-core`, `runtime-core`, `validator`, `ai-command`, `demo-safe tools` | Execute scenario evidence pipeline | Must reference consumed evidence |
-| `demo-safe tools` | `schema`, `package-format`, `validator` | Check capture safety and rights metadata | Does not expose private implementation details |
+| `viewer app` | `package-format`, `runtime-core`, `renderer-adapter`, `validator-core` | Inspect saved packages | Read-only package behavior unless routed to editor/operation |
+| `ai-command` | `contracts`, `operation-core`, `runtime-core`, `validator-core`, `gui-core` read APIs | Inspect, dry-run, diff, validate, and approval-gated commit | Commit requires human approval |
+| `fixture-tools` | `contracts`, `package-format`, `operation-core`, `runtime-core`, `validator-core` | Generate and verify expected artifacts | Updates follow fixture policy |
+| `acceptance-runner` | `fixture-tools`, `operation-core`, `runtime-core`, `validator-core`, `ai-command`, `demo-safe tools` | Execute scenario evidence pipeline | Must reference consumed evidence |
+| `demo-safe tools` | `contracts`, `package-format`, `validator-core` | Check capture safety and rights metadata | Does not expose private implementation details |
 
 ### Table 3: Forbidden Dependency Table
 
@@ -418,11 +418,11 @@ sequenceDiagram
 | `runtime-core` | filesystem direct IO or package write APIs | Runtime must consume explicit DTOs | blocking |
 | `runtime-core` | Cubism SDK/Core, Cubism Viewer, Cubism formats, Cubism Physics behavior | Cubism is not an implementation/test/acceptance oracle | blocking |
 | `runtime-core` | AI assistant or operation approval state | Runtime evaluation is not an agent workflow | blocking |
-| `validator` | GUI workflow, DOM, renderer drawing | Validator must be headless and reusable | blocking |
-| `validator` | Cubism SDK/Core, Cubism Viewer, Cubism formats, existing Cubism models | External Cubism behavior is not an oracle | blocking |
+| `validator-core` | GUI workflow, DOM, renderer drawing | Validator must be headless and reusable | blocking |
+| `validator-core` | Cubism SDK/Core, Cubism Viewer, Cubism formats, existing Cubism models | External Cubism behavior is not an oracle | blocking |
 | `gui-core` | Direct package JSON mutation | Mutation must be operation-gated and logged | blocking |
 | `ai-command` | Direct package JSON mutation | AI changes require dry-run, diff, validation, and human approval | blocking |
-| `acceptance-runner` | Private duplicate runtime or validator logic | Acceptance must test production contracts | blocking |
+| `acceptance-runner` | Private duplicate runtime or validator-core logic | Acceptance must test production contracts | blocking |
 | Any module | Local duplicate external DTO/schema definitions | Schema drift breaks contracts | blocking |
 | Any module | Dependency cycles | Cycles block clean module review and layering | blocking |
 
@@ -510,9 +510,9 @@ AI assistance must remain auditable and bounded.
 - Operation log
 - Post-commit validation report
 
-### R-MODULE-006: Schema definitions must not be duplicated
+### R-MODULE-006: Contract/schema definitions must not be duplicated
 
-External boundary DTOs, enum values, artifact refs, and machine-readable ID schemas MUST be owned by `schema` and consumed by other modules.
+External boundary DTOs, enum values, artifact refs, and machine-readable ID schemas MUST be owned by `contracts` and consumed by other modules.
 
 #### Rationale
 

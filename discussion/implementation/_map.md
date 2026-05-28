@@ -20,8 +20,9 @@ discussion/implementation/
 
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.codex/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
-- Wave 0 is referenced as complete in `discussion/_map.md`, but repository facts currently show no root `package.json`, `packages/`, `apps/`, `fixtures/`, or `generated/` scaffold. Treat Wave 0 as not yet implementation-proven until evidence is created or located.
-- A new Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
+- Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
+- A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
+- The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
 
 ## Key References
 
@@ -33,6 +34,4 @@ discussion/implementation/
 
 ## Next Actions
 
-1. Review and accept or revise [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
-2. Run Wave 0 foundation implementation.
-3. Record Review-Sylph, completion, and integration artifacts under `reviews/wave0/` and `waves/wave0/`.
+1. Plan Wave 1 `contracts-foundation` from [orchestration/wave0-plan.md](orchestration/wave0-plan.md) and `discussion/design/module-contracts/typescript-contracts.md`.

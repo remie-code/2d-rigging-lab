@@ -1,5 +1,6 @@
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
+model_reasoning_effort = "xhigh"
 
 [agents]
 max_threads = 20

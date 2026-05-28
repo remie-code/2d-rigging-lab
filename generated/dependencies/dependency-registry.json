@@ -1,0 +1,28 @@
+{
+  "dependencies": [
+    {
+      "name": "@types/node",
+      "version": "22.15.29",
+      "purpose": "Node.js type declarations for Wave 0 scripts and TypeScript verification.",
+      "license": "MIT",
+      "scope": "dev",
+      "status": "wave0-baseline-approved"
+    },
+    {
+      "name": "typescript",
+      "version": "5.8.3",
+      "purpose": "TypeScript compiler for Wave 0 typecheck wiring.",
+      "license": "Apache-2.0",
+      "scope": "dev",
+      "status": "wave0-baseline-approved"
+    },
+    {
+      "name": "vitest",
+      "version": "3.1.4",
+      "purpose": "Unit test runner for Wave 0 smoke test wiring.",
+      "license": "MIT",
+      "scope": "dev",
+      "status": "wave0-baseline-approved"
+    }
+  ]
+}

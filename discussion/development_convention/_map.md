@@ -25,6 +25,7 @@
 - Active implementation orchestration now lives under `discussion/implementation/` and uses `.codex/skills/implementation-orchestration/SKILL.md` as the reusable procedure.
 - Domain-level Orch-Sylph agents should receive relevant design, test, and policy documents for their scope.
 - Every implementation domain that writes authored source must receive `source-file-organization-policy.md`; Review-Sylph treats substantial logic in `index.ts` as blocking.
+- Active P0 package/module naming uses `contracts` and `validator-core`; older `schema` / `validator` package names remain only in historical basis or resolved review context.
 
 ## Next Actions
 

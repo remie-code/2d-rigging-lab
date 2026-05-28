@@ -6,7 +6,7 @@
 
 | Path | Role | Status |
 |---|---|---|
-| `wave0-foundation-review.md` | Review-Sylph report for Wave 0 foundation | Not created |
+| [wave0-foundation-review.md](wave0-foundation-review.md) | Review-Sylph report for Wave 0 foundation | Pass |
 
 ## Plan
 

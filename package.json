@@ -1,0 +1,20 @@
+{
+  "name": "private-2d-rigging-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "check:deps": "node scripts/check-dependencies.mjs",
+    "check:source": "node scripts/check-source-organization.mjs",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run check:deps && pnpm run check:source"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.29",
+    "typescript": "5.8.3",
+    "vitest": "3.1.4"
+  }
+}

@@ -14,7 +14,7 @@ It prevents schema drift, DTO/schema naming mismatch, invalid artifact reference
 
 ### Applies to
 
-- External DTOs and schemas owned by the future `schema` / `contracts` package.
+- External DTOs and schemas owned by the future `contracts` package.
 - Project-defined package schemas under `package-format`.
 - Runtime, operation, validator, GUI, AI, fixture, acceptance, and demo-safe artifact references.
 - Machine-readable IDs in enum values, check IDs, fixture IDs, test IDs, target kinds, file identifiers, operation IDs, artifact refs, and generated evidence.
@@ -22,7 +22,7 @@ It prevents schema drift, DTO/schema naming mismatch, invalid artifact reference
 
 ### Actors
 
-- Schema implementer
+- Contracts implementer
 - Package-format implementer
 - Runtime implementer
 - Operation implementer
@@ -129,7 +129,7 @@ Machine-readable IDs MUST NOT contain spaces. Depending on ID type, they MUST us
 - dot-separated lower camelCase segments for check IDs and operation names: `runtime.stateSequenceLengthMismatch`, `rigControl.rotation.create`.
 - kebab-case with embedded camelCase where established by contract fixtures: `invalid-rigControl-cycle`, `minimal-dynamics-hairSway`.
 - uppercase hyphenated test IDs for test cases: `TC-DYN-MISSING-DRIVER-001`.
-- schema-owned prefixed stable IDs where contracts define prefixes: `rig_armLeft`, `dyn_hairSway`, `op_createRigControl001`.
+- contract-owned prefixed stable IDs where contracts define prefixes: `rig_armLeft`, `dyn_hairSway`, `op_createRigControl001`.
 
 Forbidden examples include `rig control`, `runtime state sequence mismatch`, and `invalid-rig control-cycle`.
 
@@ -160,7 +160,7 @@ Diagnostic IDs MUST use dot-separated lower camelCase segments:
 - `demo.unsafeForbiddenTerm`
 - `rigControl.cycle`
 
-Each diagnostic MUST be classified as `formal` or `candidate` in the diagnostic registry or equivalent schema-owned registry. MVP blocking tests MUST NOT depend only on candidate diagnostics.
+Each diagnostic MUST be classified as `formal` or `candidate` in the diagnostic registry or equivalent contract-owned registry. MVP blocking tests MUST NOT depend only on candidate diagnostics.
 
 #### Rationale
 
@@ -242,7 +242,7 @@ How do artifact refs point to generated evidence?
 
 #### Decision
 
-Artifact refs MUST be schema-owned DTOs that point to path patterns, artifact IDs where applicable, kind, producer, and comparison semantics. Required path patterns include:
+Artifact refs MUST be contract-owned DTOs that point to path patterns, artifact IDs where applicable, kind, producer, and comparison semantics. Required path patterns include:
 
 - `runtime/states/*.runtime-state.json`
 - `runtime/state-sequences/*.runtime-state-sequence.json`
@@ -355,26 +355,26 @@ This diagram shows schema source of truth and consumers.
 
 ```mermaid
 graph TD
-  schema[schema package / authored DTO and Zod source]
+  contracts[contracts package / authored DTO and Zod source]
   packageFormat[package-format]
   operationCore[operation-core]
   runtimeCore[runtime-core]
-  validator[validator]
+  validator[validator-core]
   gui[gui-core / editor app / viewer app]
   aiCommand[AI command]
   tests[tests / fixture-tools]
   acceptance[acceptance runner]
   generated[generated JSON Schema / docs / evidence validators]
 
-  packageFormat --> schema
-  operationCore --> schema
-  runtimeCore --> schema
-  validator --> schema
-  gui --> schema
-  aiCommand --> schema
-  tests --> schema
-  acceptance --> schema
-  generated --> schema
+  packageFormat --> contracts
+  operationCore --> contracts
+  runtimeCore --> contracts
+  validator --> contracts
+  gui --> contracts
+  aiCommand --> contracts
+  tests --> contracts
+  acceptance --> contracts
+  generated --> contracts
 
   packageFormat --> generated
   runtimeCore --> generated
@@ -415,8 +415,8 @@ graph TD
 | Operation name | dot-separated lower camelCase | `rigControl.rotation.create` | `rig control.rotation.create` | `discussion/design/module-contracts/operation-contracts.md` |
 | Test ID | uppercase hyphenated with number | `TC-DYN-MISSING-DRIVER-001` | `TC DYN MISSING DRIVER 001` | `discussion/tests/traceability/test-traceability-matrix.md` |
 | Fixture ID | kebab-case with established camelCase domain terms allowed | `invalid-rigControl-cycle` | `invalid-rig control-cycle` | `discussion/design/module-contracts/fixtures-and-contract-tests.md` |
-| Package ID | schema-owned prefix + safe token | `pkg_avatarClean` | `pkg avatar clean` | `discussion/design/module-contracts/typescript-contracts.md` |
-| Runtime snapshot ID | schema-owned prefix + safe token | `snap_mvp001` | `snap mvp001` | `discussion/design/module-contracts/typescript-contracts.md` |
+| Package ID | contract-owned prefix + safe token | `pkg_avatarClean` | `pkg avatar clean` | `discussion/design/module-contracts/typescript-contracts.md` |
+| Runtime snapshot ID | contract-owned prefix + safe token | `snap_mvp001` | `snap mvp001` | `discussion/design/module-contracts/typescript-contracts.md` |
 | File identifier | kebab-case / dot suffix path | `runtime-state-sequence` | `runtime state sequence` | This policy and package format contract |
 
 ### Table 2: Artifact Ref Table
@@ -443,13 +443,13 @@ graph TD
 | `RuntimeEvaluationProfileSchema` | `RuntimeEvaluationOptionsDtoSchema` plus validator profile schema, if confirmed by contract review | Read legacy drafts only when explicitly referenced by a migration or conflict log | No accepted contract, fixture, or test references it |
 | Legacy runtime profile schema | Explicit runtime evaluation context/options DTOs | Migration review only | Runtime contract and tests no longer mention legacy profile |
 | Legacy diagnostic strings without registry entry | Formal/candidate diagnostic registry entries | Historical reports only | Validator contract registry covers all active diagnostics |
-| Free-form artifact path strings | Schema-owned artifact ref DTOs | Historical evidence only | All active tests use typed refs |
+| Free-form artifact path strings | Contract-owned artifact ref DTOs | Historical evidence only | All active tests use typed refs |
 
 ## Rules
 
-### R-SCHEMA-001: External DTO schemas must be schema-owned
+### R-SCHEMA-001: External DTO schemas must be owned by contracts
 
-External boundary DTOs, enum values, artifact refs, diagnostic IDs, and machine-readable ID validators MUST be owned by the schema package or the accepted schema contract.
+External boundary DTOs, enum values, artifact refs, diagnostic IDs, and machine-readable ID validators MUST be owned by the contracts package or the accepted schema contract.
 
 #### Rationale
 
@@ -457,7 +457,7 @@ Cross-module DTO drift breaks runtime, validator, AI, tests, and acceptance evid
 
 #### Evidence
 
-- Schema tests
+- Contract/schema tests
 - Import/dependency review
 - Contract test results
 
@@ -487,9 +487,9 @@ Matched names reduce ambiguity between authored DTOs, generated schemas, and tes
 - Schema naming test
 - Development Compliance Review
 
-### R-SCHEMA-004: Artifact refs must use schema-owned structures
+### R-SCHEMA-004: Artifact refs must use contract-owned structures
 
-Evidence-producing modules MUST emit schema-owned artifact refs instead of free-form path strings when artifacts cross module boundaries.
+Evidence-producing modules MUST emit contract-owned artifact refs instead of free-form path strings when artifacts cross module boundaries.
 
 #### Rationale
 
@@ -548,21 +548,21 @@ The project baseline is a project-defined model package, not Cubism compatibilit
 | Treating generated JSON Schema as MVP source of truth | schema generation, tests | Authored Zod/TypeScript contracts are source of truth | blocking |
 | Free-form artifact path strings across module boundaries | runtime, validator, GUI, AI, acceptance | Evidence refs must be typed | blocking |
 | MVP blocking tests depending only on candidate diagnostics | tests, validator, acceptance | Candidate diagnostics are not stable oracles | blocking |
-| Using Cubism formats as schema targets | package-format, schema, validator, AI | Project does not read/write/convert/reconstruct Cubism formats | blocking |
-| Using Cubism SDK/Core or Viewer behavior as schema oracle | schema, runtime, validator, tests | External Cubism behavior is not an oracle | blocking |
-| Using existing Cubism models to derive accepted schema behavior | fixtures, tests, schema | Fixtures must be project-defined and rights-clean | blocking |
+| Using Cubism formats as schema targets | package-format, contracts, validator-core, AI | Project does not read/write/convert/reconstruct Cubism formats | blocking |
+| Using Cubism SDK/Core or Viewer behavior as schema oracle | contracts, runtime-core, validator-core, tests | External Cubism behavior is not an oracle | blocking |
+| Using existing Cubism models to derive accepted schema behavior | fixtures, tests, contracts | Fixtures must be project-defined and rights-clean | blocking |
 | Collapsing RuntimeState artifact and RuntimeStateSequence artifact | runtime, tests, acceptance | Exact replay requires distinct artifacts | blocking |
 
 ## Required Evidence
 
 | Evidence | Producer | Consumer | Path / Ref | Required for |
 |---|---|---|---|---|
-| Schema tests | schema package / contract tests | implementers, reviewers | Future test output | DTO/schema validation |
-| Artifact ref validation tests | schema and acceptance tooling | acceptance runner, reviewer | Future test output | Evidence ref correctness |
+| Schema tests | contracts package / contract tests | implementers, reviewers | Future test output | DTO/schema validation |
+| Artifact ref validation tests | contracts and acceptance tooling | acceptance runner, reviewer | Future test output | Evidence ref correctness |
 | ID scan result | lint/test tooling | reviewer | Future generated evidence path | No spaces in machine-readable IDs |
 | RuntimeStateSequenceArtifact | runtime-core | acceptance runner, replay reviewer | `runtime/state-sequences/*.runtime-state-sequence.json` | Minimum Open Dynamics v1 replay |
-| ValidationReport | validator | GUI, AI, acceptance runner | `validation/reports/*.validation.json` | Diagnostic evidence |
-| Operation log | operation-core | validator, acceptance runner | `operations/log.jsonl` | Mutation traceability |
+| ValidationReport | validator-core | GUI, AI, acceptance runner | `validation/reports/*.validation.json` | Diagnostic evidence |
+| Operation log | operation-core | validator-core, acceptance runner | `operations/log.jsonl` | Mutation traceability |
 | GUIEvidenceRef | gui-core / editor app | acceptance runner | `generated/gui-evidence/*.gui-evidence.json` | GUI authoring proof |
 | AI dry-run response | ai-command | human approver, reviewer | AI evidence ref | AI boundary proof |
 | DemoSafePreflightRef | demo-safe tools | demo reviewer | `generated/demo-safe/*.demo-safe-preflight.json` | Demo-safe decision |
