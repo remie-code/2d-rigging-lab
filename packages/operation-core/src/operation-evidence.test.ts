@@ -21,10 +21,12 @@ describe("operation evidence provider hook", () => {
         expect(input.lifecycle).toBe("dry_run");
         expect(input.result.status).toBe("dry_run");
         expect(input.targetIds).toEqual(["param_smile"]);
+        expect(input.baselineSession.packageRevision).toBe(0);
+        expect(input.candidateSession.packageRevision).toBe(1);
         expect(getParameterById(input.baselineSession.graph, targetParameterId)).toBeUndefined();
         expect(getParameterById(input.candidateSession.graph, targetParameterId)).toBeDefined();
 
-        return createEvidence();
+        return createEvidence(input.candidateSession.packageRevision);
       }
     });
 
@@ -40,10 +42,11 @@ describe("operation evidence provider hook", () => {
     expect(result.generatedRuntimeStateSequenceRefs).toEqual([
       "runtime/state-sequences/candidate.runtime-state-sequence.json"
     ]);
-    expect(result.finalRuntimeState).toEqual(createEvidence().finalRuntimeState);
+    expect(result.finalRuntimeState).toEqual(createEvidence(1).finalRuntimeState);
     expect(result.finalRuntimeStateRef).toBe("runtime/states/candidate.runtime-state.json");
     expect(result.generatedValidationReportIds).toEqual(["val_baseline", "val_candidate"]);
     expect(getParameterById(session.graph, targetParameterId)).toBeUndefined();
+    expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
     expect(core.operationLog.entries).toHaveLength(0);
@@ -60,6 +63,8 @@ describe("operation evidence provider hook", () => {
           calls.push(input);
           expect(input.lifecycle).toBe("commit");
           expect(input.result.status).toBe("committed");
+          expect(input.baselineSession.packageRevision).toBe(0);
+          expect(input.candidateSession.packageRevision).toBe(1);
           expect(getParameterById(input.baselineSession.graph, targetParameterId)).toBeUndefined();
           expect(getParameterById(input.candidateSession.graph, targetParameterId)).toBeDefined();
 
@@ -82,6 +87,7 @@ describe("operation evidence provider hook", () => {
     expect(outcome.logEntry?.runtimeSnapshotIds).toEqual(["snap_candidate"]);
     expect(outcome.logEntry?.validationReportIds).toEqual(["val_candidate"]);
     expect(getParameterById(session.graph, targetParameterId)).toBeDefined();
+    expect(session.packageRevision).toBe(1);
     expect(core.operationLog.entries).toHaveLength(1);
   });
 
@@ -100,17 +106,24 @@ describe("operation evidence provider hook", () => {
     const revisionAfterFirstCommit = session.authoringRevision;
     const logLengthAfterFirstCommit = core.operationLog.entries.length;
 
-    const duplicate = core.commitOperation(session, createParameterRequest({ dryRun: false }));
+    const duplicate = core.commitOperation(
+      session,
+      createParameterRequest({
+        dryRun: false,
+        basePackageRevision: session.packageRevision
+      })
+    );
 
     expect(duplicate.result.status).toBe("rejected");
     expect(duplicate.result.diagnostics[0]?.checkId).toBe("operation.createParameter.duplicateParameter");
     expect(calls).toHaveLength(0);
+    expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(revisionAfterFirstCommit);
     expect(core.operationLog.entries).toHaveLength(logLengthAfterFirstCommit);
   });
 });
 
-const createEvidence = (): OperationEvidenceResultDto => OperationEvidenceResultSchema.parse({
+const createEvidence = (packageRevision = 0): OperationEvidenceResultDto => OperationEvidenceResultSchema.parse({
   runtimeDiff: {
     schemaVersion: "runtime-diff-v1",
     beforeSnapshotId: "snap_baseline",
@@ -142,7 +155,7 @@ const createEvidence = (): OperationEvidenceResultDto => OperationEvidenceResult
   finalRuntimeState: {
     schemaVersion: "runtime-state-v1",
     packageId: PackageIdSchema.parse("pkg_operation_evidence_test"),
-    packageRevision: 0,
+    packageRevision,
     frameIndex: 1,
     fixedStepMs: 16.6666667,
     accumulatorMs: 0,
@@ -152,13 +165,16 @@ const createEvidence = (): OperationEvidenceResultDto => OperationEvidenceResult
   generatedValidationReportIds: ["val_baseline", "val_candidate"]
 });
 
-const createParameterRequest = (options: { readonly dryRun: boolean }) => ({
+const createParameterRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+}) => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_create_smile",
   actor: "test",
   surface: "testFixture",
   dryRun: options.dryRun,
-  basePackageRevision: 0,
+  basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createParameter",
   payload: {
     parameterId: "param_smile",

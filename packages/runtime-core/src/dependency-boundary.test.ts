@@ -20,6 +20,17 @@ describe("runtime-core dependency boundary", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("does not perform package filesystem IO from production runtime-core source", () => {
+    const sourceDirectory = dirname(fileURLToPath(import.meta.url));
+    const productionSourceFiles = listTypeScriptFiles(sourceDirectory).filter((filePath) => !filePath.endsWith(".test.ts"));
+    const forbiddenIoImportPattern = /from\s+["'](?:node:fs|node:fs\/promises|fs|fs\/promises)["']/;
+    const offenders = productionSourceFiles.filter((filePath) =>
+      forbiddenIoImportPattern.test(readFileSync(filePath, "utf8"))
+    );
+
+    expect(offenders).toEqual([]);
+  });
 });
 
 const listTypeScriptFiles = (directory: string): string[] =>

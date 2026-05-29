@@ -15,6 +15,8 @@ export * from "./operation-ids.js";
 export * from "./preconditions.js";
 export * from "./operation-registry.js";
 export * from "./operation-log.js";
+export * from "./operation-log-jsonl.js";
+export * from "./package-revision.js";
 export * from "./operations/create-parameter.js";
 export * from "./lifecycle/evidence.js";
 export * from "./lifecycle/dry-run.js";

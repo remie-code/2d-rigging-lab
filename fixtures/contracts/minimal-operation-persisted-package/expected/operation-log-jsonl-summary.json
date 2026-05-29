@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "operation-log-jsonl-summary-v1",
+  "path": "operations/log.jsonl",
+  "lineCount": 1,
+  "trailingNewline": true,
+  "operationIds": [
+    "op_fixture_persist_create_parameter_smile"
+  ],
+  "firstEntry": {
+    "operationId": "op_fixture_persist_create_parameter_smile",
+    "operationType": "createParameter",
+    "targetIds": [
+      "param_persisted_smile"
+    ],
+    "resultStatus": "committed",
+    "runtimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ],
+    "validationReportIds": [
+      "val_persisted_create_parameter_baseline",
+      "val_persisted_create_parameter_candidate"
+    ],
+    "resultRuntimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ],
+    "resultValidationReportIds": [
+      "val_persisted_create_parameter_baseline",
+      "val_persisted_create_parameter_candidate"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r1-persisted-create-parameter-final-f1.runtime-state.json"
+  }
+}

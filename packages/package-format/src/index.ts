@@ -6,3 +6,6 @@ export * from "./model-files.js";
 export * from "./asset-metadata.js";
 export * from "./parse-result.js";
 export * from "./package-document.js";
+export * from "./package-file-paths.js";
+export * from "./package-json-serialization.js";
+export * from "./package-file-set.js";

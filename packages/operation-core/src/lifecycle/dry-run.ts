@@ -3,6 +3,7 @@ import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { OperationEvidenceProviderLike } from "../operation-evidence-provider.js";
 import { getOperationHandler } from "../operation-registry.js";
 import type { OperationResultDto } from "../operation-result.js";
+import { applyDryRunCandidatePackageRevision } from "../package-revision.js";
 import {
   createOperationDiagnostic,
   createRejectedOperationResult,
@@ -42,6 +43,12 @@ export const dryRunOperation = (
   if (applied.result.status !== "dry_run") {
     return applied.result;
   }
+
+  applyDryRunCandidatePackageRevision({
+    baselineSession: session,
+    candidateSession: applied.candidateSession,
+    basePackageRevision: prepared.request.basePackageRevision
+  });
 
   return applyOperationEvidence({
     ...(options.evidenceProvider === undefined

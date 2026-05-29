@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "validation-artifact-summary-v1",
+  "reportIds": [
+    "val_persisted_create_parameter_baseline",
+    "val_persisted_create_parameter_candidate"
+  ],
+  "artifactPaths": [
+    "validation/reports/val_persisted_create_parameter_baseline.validation.json",
+    "validation/reports/val_persisted_create_parameter_candidate.validation.json"
+  ],
+  "candidateReport": {
+    "reportId": "val_persisted_create_parameter_candidate",
+    "packageRevision": 1,
+    "status": "pass",
+    "highestSeverity": "info",
+    "operationLogPresent": true,
+    "operationLogPath": "operations/log.jsonl",
+    "runtimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ]
+  }
+}

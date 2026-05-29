@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "package-file-set-summary-v1",
+  "entryCount": 20,
+  "authoredEntryCount": 13,
+  "operationLogPath": "operations/log.jsonl",
+  "operationLogEntryPresent": true,
+  "generatedArtifactEntryCount": 6,
+  "generatedArtifactPaths": [
+    "runtime/snapshots/snap_minimal-valid-package_0.runtime-snapshot.json",
+    "runtime/snapshots/snap_minimal-valid-package_1.runtime-snapshot.json",
+    "runtime/state-sequences/pkg_minimal-valid-package-r1-persisted-create-parameter.runtime-state-sequence.json",
+    "runtime/states/pkg_minimal-valid-package-r1-persisted-create-parameter-final-f1.runtime-state.json",
+    "validation/reports/val_persisted_create_parameter_baseline.validation.json",
+    "validation/reports/val_persisted_create_parameter_candidate.validation.json"
+  ],
+  "uniqueGeneratedArtifactPathCount": 6
+}

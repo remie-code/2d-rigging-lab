@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "minimal-operation-persisted-package",
+  "title": "Minimal committed createParameter operation persisted as package-relative evidence",
+  "coversAC": [
+    "AC-MVP-008",
+    "AC-MVP-011",
+    "AC-MVP-012",
+    "AC-MVP-013",
+    "AC-MVP-014"
+  ],
+  "coversScenarios": [
+    "SC-PARAM-002",
+    "SC-MVP-003",
+    "SC-MVP-004",
+    "SC-MVP-005"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "authoring-core",
+    "package-format",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "baseline-authoring-input.json",
+    "../minimal-valid-package/manifest.json",
+    "../minimal-valid-package/model/graph.json",
+    "../minimal-valid-package/model/drawables.json",
+    "../minimal-valid-package/model/meshes.json",
+    "../minimal-valid-package/model/parameters.json",
+    "../minimal-valid-package/model/keyforms.json",
+    "../minimal-valid-package/model/rig-controls.json",
+    "../minimal-valid-package/model/dynamics.json",
+    "../minimal-valid-package/model/masks.json",
+    "../minimal-valid-package/model/draw-order.json",
+    "../minimal-valid-package/assets/sources/source-manifest.json",
+    "../minimal-valid-package/assets/provenance.json",
+    "../minimal-valid-package/assets/rights.json",
+    "request/create-parameter-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationLog",
+      "path": "expected/operation-log-jsonl-summary.json",
+      "id": "op_fixture_persist_create_parameter_smile",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "package",
+      "path": "expected/package-file-set-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeSnapshot",
+      "path": "expected/runtime-artifact-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-artifact-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "package",
+      "path": "expected/reload-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

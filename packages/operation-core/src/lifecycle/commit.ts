@@ -9,6 +9,7 @@ import type { OperationLog } from "../operation-log.js";
 import { getOperationHandler } from "../operation-registry.js";
 import type { OperationLogEntryDto } from "../operation-log-entry.js";
 import type { OperationResultDto } from "../operation-result.js";
+import { incrementCommittedPackageRevision } from "../package-revision.js";
 import {
   createOperationDiagnostic,
   createPreconditionResult,
@@ -70,6 +71,8 @@ export const commitOperation = (
       operationLogLength: operationLog.entries.length
     };
   }
+
+  incrementCommittedPackageRevision(session, prepared.request.basePackageRevision);
   const result = applyOperationEvidence({
     ...(options.evidenceProvider === undefined
       ? {}

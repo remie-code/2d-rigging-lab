@@ -1,5 +1,6 @@
 import {
   RuntimeStateArtifactRefSchema,
+  RuntimeStateDtoSchema,
   RuntimeStateSequenceArtifactRefSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
@@ -9,6 +10,10 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import {
+  runtimeArtifactJsonMediaType,
+  stringifyRuntimeArtifactJson
+} from "./runtime-artifact-json.js";
 
 export interface RuntimeStateArtifactRefInput {
   readonly graph: NormalizedRuntimeGraph;
@@ -19,6 +24,19 @@ export interface RuntimeStateArtifactRefInput {
 export interface RuntimeStateSequenceArtifactRefInput {
   readonly graph: NormalizedRuntimeGraph;
   readonly label?: string;
+}
+
+export interface RuntimeStateArtifactInput {
+  readonly state: RuntimeStateDto;
+  readonly path: RuntimeStateArtifactRef;
+}
+
+export interface RuntimeStateArtifact {
+  readonly kind: "runtimeState";
+  readonly path: RuntimeStateArtifactRef;
+  readonly mediaType: typeof runtimeArtifactJsonMediaType;
+  readonly content: string;
+  readonly state: RuntimeStateDto;
 }
 
 export const createRuntimeStateArtifactRef = (
@@ -34,6 +52,21 @@ export const createRuntimeStateSequenceArtifactRef = (
   RuntimeStateSequenceArtifactRefSchema.parse(
     `runtime/state-sequences/${createArtifactStem(input.graph, input.label ?? "candidate")}.runtime-state-sequence.json`
   );
+
+export const materializeRuntimeStateArtifact = (
+  input: RuntimeStateArtifactInput
+): RuntimeStateArtifact => {
+  const state = RuntimeStateDtoSchema.parse(input.state);
+  const path = RuntimeStateArtifactRefSchema.parse(input.path);
+
+  return {
+    kind: "runtimeState",
+    path,
+    mediaType: runtimeArtifactJsonMediaType,
+    content: stringifyRuntimeArtifactJson(state),
+    state
+  };
+};
 
 const createArtifactStem = (
   graph: NormalizedRuntimeGraph,

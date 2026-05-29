@@ -97,6 +97,7 @@ describe("minimal-operation-create-parameter contract fixture", () => {
     expect(outcome.result.precondition.ok).toBe(expectedCommit.result.preconditionOk);
     expect(outcome.result.reversible).toBe(expectedCommit.result.reversible);
     expect(outcome.result.modelDiff).toEqual(expectedModelDiff.modelDiff);
+    expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(expectedCommit.sessionMutation.authoringRevisionAfter);
     expect(session.dirty).toBe(expectedCommit.sessionMutation.dirtyAfter);
     expect(committedParameter).toMatchObject(expectedCommit.sessionMutation.addedParameter);
@@ -182,6 +183,7 @@ interface CommitSummaryFixture extends OperationSummaryFixture {
 }
 
 const summarizeSession = (session: AuthoringSession, parameterId: ReturnType<typeof ParameterIdSchema.parse>) => ({
+  packageRevision: session.packageRevision,
   authoringRevision: session.authoringRevision,
   dirty: session.dirty,
   parameterIds: session.graph.parameters.map((parameter) => parameter.parameterId),

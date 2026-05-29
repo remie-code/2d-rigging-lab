@@ -17,6 +17,7 @@ describe("operation lifecycle foundation", () => {
     expect(result.modelDiff?.added).toEqual([{ kind: "parameter", id: "param_smile" }]);
     expect(result.modelDiff?.operationIds).toEqual(["op_create_smile"]);
     expect(getParameterById(session.graph, ParameterIdSchema.parse("param_smile"))).toBeUndefined();
+    expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
     expect(core.operationLog.entries).toHaveLength(0);
@@ -31,6 +32,7 @@ describe("operation lifecycle foundation", () => {
     const outcome = core.commitOperation(session, createParameterRequest({ dryRun: false }));
 
     expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
     expect(getParameterById(session.graph, ParameterIdSchema.parse("param_smile"))?.displayName).toBe("Smile");
@@ -49,30 +51,75 @@ describe("operation lifecycle foundation", () => {
     expect(logEntry?.provenanceId).toBe("prov_create_smile");
   });
 
+  it("rejects a stale base package revision before mutation or log append", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createParameterRequest({ dryRun: false, basePackageRevision: 1 })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]?.checkId).toBe("operation.request.baseRevision");
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(getParameterById(session.graph, ParameterIdSchema.parse("param_smile"))).toBeUndefined();
+    expect(outcome.operationLogLength).toBe(0);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
   it("rejects duplicate parameters without mutating or appending a log entry", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
     core.commitOperation(session, createParameterRequest({ dryRun: false }));
+    const packageRevisionAfterFirstCommit = session.packageRevision;
     const revisionAfterFirstCommit = session.authoringRevision;
     const logLengthAfterFirstCommit = core.operationLog.entries.length;
-    const duplicate = core.commitOperation(session, createParameterRequest({ dryRun: false }));
+    const duplicate = core.commitOperation(
+      session,
+      createParameterRequest({
+        dryRun: false,
+        basePackageRevision: packageRevisionAfterFirstCommit
+      })
+    );
 
     expect(duplicate.result.status).toBe("rejected");
     expect(duplicate.result.precondition.ok).toBe(false);
     expect(duplicate.result.diagnostics[0]?.checkId).toBe("operation.createParameter.duplicateParameter");
+    expect(session.packageRevision).toBe(packageRevisionAfterFirstCommit);
     expect(session.authoringRevision).toBe(revisionAfterFirstCommit);
     expect(core.operationLog.entries).toHaveLength(logLengthAfterFirstCommit);
   });
+
+  it("rejects unsupported operations without changing package or authoring revision", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const unsupported = core.commitOperation(session, createUnsupportedGenerateMeshRequest());
+
+    expect(unsupported.result.status).toBe("rejected");
+    expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(unsupported.operationLogLength).toBe(0);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
 });
 
-const createParameterRequest = (options: { readonly dryRun: boolean }) => ({
+const createParameterRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+}) => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_create_smile",
   actor: "test",
   surface: "testFixture",
   dryRun: options.dryRun,
-  basePackageRevision: 0,
+  basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createParameter",
   payload: {
     parameterId: "param_smile",
@@ -82,6 +129,20 @@ const createParameterRequest = (options: { readonly dryRun: boolean }) => ({
     max: 1,
     default: 0,
     recommendedUiStep: 0.01
+  }
+});
+
+const createUnsupportedGenerateMeshRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_generate_mesh",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 0,
+  operationType: "generateMesh",
+  payload: {
+    drawableId: "draw_missing",
+    method: "manual-empty"
   }
 });
 

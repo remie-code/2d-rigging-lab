@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "operation-persisted-package-baseline-v1",
+  "baselinePackage": {
+    "fixtureId": "minimal-valid-package",
+    "rootRelativePath": "../minimal-valid-package",
+    "packageId": "pkg_minimal-valid-package",
+    "packageRevision": 0,
+    "packageHash": "sha256:minimal-valid-package-v1"
+  },
+  "authoringInput": {
+    "expectedInitialAuthoringRevision": 0,
+    "expectedInitialDirty": false,
+    "expectedInitialParameterIds": [],
+    "expectedStableOrder": [
+      "draw_body"
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "persisted-package-reload-summary-v1",
+  "packageId": "pkg_minimal-valid-package",
+  "packageRevision": 1,
+  "updatedAt": "2026-05-29T01:00:00.000Z",
+  "operationLogPath": "operations/log.jsonl",
+  "parameterIds": [
+    "param_persisted_smile"
+  ],
+  "committedParameter": {
+    "parameterId": "param_persisted_smile",
+    "displayName": "Persisted Smile",
+    "semanticRole": "mouth",
+    "projectPresetAlias": "private-persisted-smile-control",
+    "valueSource": "authoredInput",
+    "min": 0,
+    "max": 1,
+    "default": 0,
+    "recommendedUiStep": 0.01
+  },
+  "stableOrder": [
+    "draw_body",
+    "param_persisted_smile"
+  ]
+}

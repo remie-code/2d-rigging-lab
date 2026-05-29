@@ -7,6 +7,7 @@ export * from "./report-builder.js";
 export * from "./runtime-evidence-report.js";
 export * from "./operation-evidence-report.js";
 export * from "./validation-diff-builder.js";
+export * from "./validation-report-artifacts.js";
 export * from "./validators/package-schema.js";
 export * from "./validators/runtime-load.js";
 export * from "./validators/package-runtime.js";

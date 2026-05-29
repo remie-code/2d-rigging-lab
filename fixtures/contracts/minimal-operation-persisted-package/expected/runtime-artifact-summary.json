@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "runtime-artifact-summary-v1",
+  "generatedRuntimeSnapshotIds": [
+    "snap_minimal-valid-package_0",
+    "snap_minimal-valid-package_1"
+  ],
+  "generatedRuntimeStateRefs": [
+    "runtime/states/pkg_minimal-valid-package-r1-persisted-create-parameter-final-f1.runtime-state.json"
+  ],
+  "generatedRuntimeStateSequenceRefs": [
+    "runtime/state-sequences/pkg_minimal-valid-package-r1-persisted-create-parameter.runtime-state-sequence.json"
+  ],
+  "finalRuntimeState": {
+    "packageId": "pkg_minimal-valid-package",
+    "packageRevision": 1,
+    "frameIndex": 1
+  },
+  "artifactKinds": [
+    "runtimeSnapshot",
+    "runtimeSnapshot",
+    "runtimeState",
+    "runtimeStateSequence"
+  ],
+  "artifactPaths": [
+    "runtime/snapshots/snap_minimal-valid-package_0.runtime-snapshot.json",
+    "runtime/snapshots/snap_minimal-valid-package_1.runtime-snapshot.json",
+    "runtime/states/pkg_minimal-valid-package-r1-persisted-create-parameter-final-f1.runtime-state.json",
+    "runtime/state-sequences/pkg_minimal-valid-package-r1-persisted-create-parameter.runtime-state-sequence.json"
+  ],
+  "uniqueArtifactPathCount": 4
+}

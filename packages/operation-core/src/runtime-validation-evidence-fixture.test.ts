@@ -68,24 +68,33 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
     });
     const targetParameterId = ParameterIdSchema.parse("param_fixture_smile");
     const before = summarizeSession(session, targetParameterId);
+    const candidatePackageRevision = session.packageRevision + 1;
 
     const result = core.dryRunOperation(
       session,
       loadFixtureJson("request/create-parameter-dry-run.request.json")
     );
     const artifact = expectSingleArtifact(artifacts, "dry_run");
+    const expectedRuntimeSummary = withCandidatePackageRevision(
+      loadRuntimeSnapshotSummary(),
+      candidatePackageRevision
+    );
+    const expectedOperationResultEvidence = withRuntimeArtifactRevision(
+      loadOperationResultEvidenceSummary(),
+      candidatePackageRevision
+    );
 
     expect(result.status).toBe("dry_run");
     expect(result.generatedRuntimeSnapshotIds).toEqual(
-      loadRuntimeSnapshotSummary().generatedRuntimeSnapshotIds
+      expectedRuntimeSummary.generatedRuntimeSnapshotIds
     );
     expect(result.generatedValidationReportIds).toEqual(
-      loadOperationResultEvidenceSummary().dryRun.generatedValidationReportIds
+      expectedOperationResultEvidence.dryRun.generatedValidationReportIds
     );
     expect(result.runtimeDiff).toBeDefined();
     expect(result.validationDiff).toBeDefined();
     expect(summarizeRuntimeSnapshots(artifact.runtimeEvidence)).toEqual(
-      loadRuntimeSnapshotSummary()
+      expectedRuntimeSummary
     );
     expect(summarizeRuntimeDiff(result.runtimeDiff)).toEqual(
       loadRuntimeDiffSummary().runtimeDiff
@@ -97,7 +106,7 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
       loadValidationDiffSummary().dryRun
     );
     expect(summarizeOperationResultEvidence(result, core.operationLog.entries.length)).toEqual(
-      loadOperationResultEvidenceSummary().dryRun
+      expectedOperationResultEvidence.dryRun
     );
     expect(summarizeSession(session, targetParameterId)).toEqual(before);
     expect(getParameterById(session.graph, targetParameterId)).toBeUndefined();
@@ -111,27 +120,37 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
       evidenceProvider: (input) => collectFixtureEvidence(input, artifacts)
     });
     const targetParameterId = ParameterIdSchema.parse("param_fixture_smile");
+    const candidatePackageRevision = session.packageRevision + 1;
 
     const outcome = core.commitOperation(
       session,
       loadFixtureJson("request/create-parameter-commit.request.json")
     );
     const artifact = expectSingleArtifact(artifacts, "commit");
+    const expectedRuntimeSummary = withCandidatePackageRevision(
+      loadRuntimeSnapshotSummary(),
+      candidatePackageRevision
+    );
+    const expectedOperationResultEvidence = withRuntimeArtifactRevision(
+      loadOperationResultEvidenceSummary(),
+      candidatePackageRevision
+    );
 
     expect(outcome.result.status).toBe("committed");
     expect(getParameterById(session.graph, targetParameterId)).toBeDefined();
+    expect(session.packageRevision).toBe(candidatePackageRevision);
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
     expect(outcome.operationLogLength).toBe(1);
     expect(core.operationLog.entries).toHaveLength(1);
     expect(outcome.result.generatedRuntimeSnapshotIds).toEqual(
-      loadRuntimeSnapshotSummary().generatedRuntimeSnapshotIds
+      expectedRuntimeSummary.generatedRuntimeSnapshotIds
     );
     expect(outcome.result.generatedValidationReportIds).toEqual(
-      loadOperationResultEvidenceSummary().commit.generatedValidationReportIds
+      expectedOperationResultEvidence.commit.generatedValidationReportIds
     );
     expect(summarizeRuntimeSnapshots(artifact.runtimeEvidence)).toEqual(
-      loadRuntimeSnapshotSummary()
+      expectedRuntimeSummary
     );
     expect(summarizeRuntimeDiff(outcome.result.runtimeDiff)).toEqual(
       loadRuntimeDiffSummary().runtimeDiff
@@ -148,7 +167,7 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
         runtimeSnapshotIds: outcome.logEntry?.runtimeSnapshotIds,
         validationReportIds: outcome.logEntry?.validationReportIds
       }
-    }).toEqual(loadOperationResultEvidenceSummary().commit);
+    }).toEqual(expectedOperationResultEvidence.commit);
   });
 });
 
@@ -452,6 +471,71 @@ const summarizeOperationResultEvidence = (
         dirtyAfter: true
       })
 });
+
+const withCandidatePackageRevision = (
+  summary: RuntimeSnapshotSummaryFixture,
+  candidatePackageRevision: number
+): RuntimeSnapshotSummaryFixture => ({
+  ...summary,
+  candidateSnapshot: {
+    ...summary.candidateSnapshot,
+    packageRevision: candidatePackageRevision
+  },
+  generatedRuntimeStateRefs: reviseRuntimeArtifactRefs(
+    summary.generatedRuntimeStateRefs,
+    candidatePackageRevision
+  ),
+  generatedRuntimeStateSequenceRefs: reviseRuntimeArtifactRefs(
+    summary.generatedRuntimeStateSequenceRefs,
+    candidatePackageRevision
+  ),
+  finalRuntimeState: {
+    ...summary.finalRuntimeState,
+    packageRevision: candidatePackageRevision
+  }
+});
+
+const withRuntimeArtifactRevision = (
+  summary: OperationResultEvidenceSummaryFixture,
+  candidatePackageRevision: number
+): OperationResultEvidenceSummaryFixture => ({
+  ...summary,
+  dryRun: reviseOperationResultArtifactRefs(summary.dryRun, candidatePackageRevision),
+  commit: {
+    ...reviseOperationResultArtifactRefs(summary.commit, candidatePackageRevision),
+    logEntry: summary.commit.logEntry
+  }
+});
+
+const reviseOperationResultArtifactRefs = (
+  summary: OperationResultEvidenceSummary,
+  candidatePackageRevision: number
+): OperationResultEvidenceSummary => ({
+  ...summary,
+  generatedRuntimeStateRefs: reviseRuntimeArtifactRefs(
+    summary.generatedRuntimeStateRefs,
+    candidatePackageRevision
+  ),
+  generatedRuntimeStateSequenceRefs: reviseRuntimeArtifactRefs(
+    summary.generatedRuntimeStateSequenceRefs,
+    candidatePackageRevision
+  ),
+  finalRuntimeStateRef: reviseRuntimeArtifactRef(
+    summary.finalRuntimeStateRef,
+    candidatePackageRevision
+  )
+});
+
+const reviseRuntimeArtifactRefs = (
+  refs: readonly string[],
+  candidatePackageRevision: number
+): readonly string[] =>
+  refs.map((ref) => reviseRuntimeArtifactRef(ref, candidatePackageRevision));
+
+const reviseRuntimeArtifactRef = (
+  ref: string,
+  candidatePackageRevision: number
+): string => ref.replace(/-r\d+-/, `-r${candidatePackageRevision}-`);
 
 const expectSingleArtifact = (
   artifacts: readonly FixtureEvidenceArtifacts[],

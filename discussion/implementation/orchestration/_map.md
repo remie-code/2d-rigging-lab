@@ -11,6 +11,7 @@
 | [wave2-plan.md](wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and parallelism plan | Completed / implementation-proven |
 | [wave3-plan.md](wave3-plan.md) | Wave 3 authoring/operation foundation dependency and parallelism plan | Completed / implementation-proven |
 | [wave4-plan.md](wave4-plan.md) | Wave 4 runtime/validation evidence integration dependency and parallelism plan | Completed / implementation-proven |
+| [wave5-plan.md](wave5-plan.md) | Wave 5 package persistence / operation log foundation dependency and parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -25,3 +26,5 @@
 - Wave 3 introduced `authoring-core`, operation DTOs, minimal dry-run / commit lifecycle, and `minimal-operation-create-parameter` fixture while keeping public `index.ts` files barrel-only.
 - Wave 4 `runtime-validation-evidence-integration` completed on 2026-05-29. The final domain was `wave4-integration-review-and-final-report`.
 - Wave 4 connected authoring sessions to runtime snapshots and validation reports through provider-based operation evidence while keeping `operation-core` free of direct runtime/validator imports.
+- Wave 5 `package-persistence-and-operation-log-foundation` completed on 2026-05-29. The final domain was `wave5-integration-review-and-final-report`.
+- Wave 5 made operation evidence durable at the package-relative file set level: package revision policy, operation log JSONL, authoring-to-package document adapter, package file set writer, runtime/validation generated artifact materializers, and persisted operation evidence fixture.

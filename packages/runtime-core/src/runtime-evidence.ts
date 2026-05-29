@@ -3,8 +3,10 @@ import type {
   RuntimeSnapshotId,
   RuntimeStateArtifactRef,
   RuntimeStateDto,
+  RuntimeStateSequenceArtifact,
   RuntimeStateSequenceArtifactRef
 } from "@private-2d-rigging-lab/contracts";
+import { RuntimeSequenceFrameSchema } from "@private-2d-rigging-lab/contracts";
 
 import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
@@ -25,16 +27,11 @@ import type {
 } from "./runtime-input.js";
 import type { RuntimeEvaluationOptionsInput } from "./runtime-options.js";
 import {
-  evaluateRuntimeFrame,
-  evaluateRuntimeSequence
-} from "./runtime-core.js";
-import type {
-  RuntimeSequenceEvaluationResult,
-  RuntimeSequenceFrameInput
-} from "./runtime-core.js";
+  evaluateRuntimeStateSequenceArtifact
+} from "./runtime-state-sequence-artifacts.js";
+import type { RuntimeStateSequenceFrameInput } from "./runtime-state-sequence-artifacts.js";
 import {
-  createRuntimeStateArtifactRef,
-  createRuntimeStateSequenceArtifactRef
+  createRuntimeStateArtifactRef
 } from "./runtime-state-artifacts.js";
 import type { RuntimeComparisonResult, SnapshotComparisonPolicyInput } from "./snapshot-comparison.js";
 import type { RuntimeSnapshotDto } from "./snapshot.js";
@@ -43,7 +40,7 @@ export interface RuntimeEvidenceEvaluationInput {
   readonly initialState?: RuntimeStateDto;
   readonly initialStateRequest?: Partial<RuntimeInitialStateRequestInput>;
   readonly frame?: Partial<RuntimeEvaluationInputInput>;
-  readonly frames?: readonly RuntimeSequenceFrameInput[];
+  readonly frames?: readonly RuntimeStateSequenceFrameInput[];
 }
 
 export interface RuntimeEvidenceBuildInput {
@@ -69,6 +66,7 @@ export interface RuntimeEvidenceResult {
   readonly generatedRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
   readonly generatedRuntimeStateRefs: readonly RuntimeStateArtifactRef[];
   readonly generatedRuntimeStateSequenceRefs: readonly RuntimeStateSequenceArtifactRef[];
+  readonly runtimeStateSequenceArtifact?: RuntimeStateSequenceArtifact;
 }
 
 export const buildRuntimeEvidence = (
@@ -76,10 +74,12 @@ export const buildRuntimeEvidence = (
 ): RuntimeEvidenceResult => {
   const options = createDefaultRuntimeEvidenceOptions(input.options);
   const context = createDefaultRuntimeEvidenceContext(input.context);
+  const artifactLabel = input.artifactLabel ?? "candidate";
   const baseline = evaluateEvidenceInput({
     graph: input.baselineGraph,
     evaluation: input.baseline,
     defaultFrameIndex: 0,
+    sequenceArtifactLabel: `${artifactLabel}-baseline`,
     options,
     context
   });
@@ -87,6 +87,7 @@ export const buildRuntimeEvidence = (
     graph: input.candidateGraph,
     evaluation: input.candidate,
     defaultFrameIndex: 1,
+    sequenceArtifactLabel: artifactLabel,
     options,
     context
   });
@@ -95,16 +96,12 @@ export const buildRuntimeEvidence = (
     candidateSnapshot: candidate.snapshot,
     comparisonPolicy: input.comparisonPolicy
   });
-  const artifactLabel = input.artifactLabel ?? "candidate";
   const finalRuntimeStateRef = createRuntimeStateArtifactRef({
     graph: input.candidateGraph,
     state: candidate.finalState,
     label: `${artifactLabel}-final`
   });
-  const sequenceRef = createRuntimeStateSequenceArtifactRef({
-    graph: input.candidateGraph,
-    label: artifactLabel
-  });
+  const sequenceRef = candidate.stateSequenceArtifactRef;
 
   return {
     baselineSnapshot: baseline.snapshot,
@@ -120,7 +117,8 @@ export const buildRuntimeEvidence = (
       ...candidate.snapshots.map((snapshot) => snapshot.snapshotId)
     ]),
     generatedRuntimeStateRefs: [finalRuntimeStateRef],
-    generatedRuntimeStateSequenceRefs: [sequenceRef]
+    generatedRuntimeStateSequenceRefs: [sequenceRef],
+    runtimeStateSequenceArtifact: candidate.stateSequenceArtifact
   };
 };
 
@@ -128,6 +126,7 @@ interface EvaluateEvidenceInput {
   readonly graph: NormalizedRuntimeGraph;
   readonly evaluation: RuntimeEvidenceEvaluationInput | undefined;
   readonly defaultFrameIndex: number;
+  readonly sequenceArtifactLabel: string;
   readonly options: ReturnType<typeof createDefaultRuntimeEvidenceOptions>;
   readonly context: RuntimeEvidenceContextDto;
 }
@@ -136,6 +135,8 @@ interface EvaluatedEvidenceInput {
   readonly snapshot: RuntimeSnapshotDto;
   readonly snapshots: readonly RuntimeSnapshotDto[];
   readonly finalState: RuntimeStateDto;
+  readonly stateSequenceArtifact: RuntimeStateSequenceArtifact;
+  readonly stateSequenceArtifactRef: RuntimeStateSequenceArtifactRef;
 }
 
 const evaluateEvidenceInput = (
@@ -150,18 +151,22 @@ const evaluateEvidenceInput = (
     ...(input.evaluation?.frame ?? {})
   });
   const initialState = createEvidenceInitialState(input.graph, input.evaluation, frame.authoredParameterValues);
-  const result = evaluateRuntimeFrame(
-    input.graph,
-    frame,
+  const result = evaluateRuntimeStateSequenceArtifact({
+    graph: input.graph,
+    frames: [toRuntimeSequenceFrame(frame)],
     initialState,
-    input.options,
-    input.context
-  );
+    options: input.options,
+    context: input.context,
+    label: input.sequenceArtifactLabel
+  });
+  const snapshot = lastSnapshot(result.snapshots);
 
   return {
-    snapshot: result.snapshot,
-    snapshots: [result.snapshot],
-    finalState: result.nextState
+    snapshot,
+    snapshots: result.snapshots,
+    finalState: result.finalState,
+    stateSequenceArtifact: result.artifact,
+    stateSequenceArtifactRef: result.ref
   };
 };
 
@@ -171,19 +176,22 @@ const evaluateEvidenceSequence = (
   const frames = input.evaluation?.frames ?? [];
   const firstFrameAuthoredValues = frames[0]?.authoredParameterValues ?? {};
   const initialState = createEvidenceInitialState(input.graph, input.evaluation, firstFrameAuthoredValues);
-  const result = evaluateRuntimeSequence(
-    input.graph,
+  const result = evaluateRuntimeStateSequenceArtifact({
+    graph: input.graph,
     frames,
     initialState,
-    input.options,
-    input.context
-  );
-  const snapshot = lastSnapshot(result);
+    options: input.options,
+    context: input.context,
+    label: input.sequenceArtifactLabel
+  });
+  const snapshot = lastSnapshot(result.snapshots);
 
   return {
     snapshot,
     snapshots: result.snapshots,
-    finalState: result.finalState
+    finalState: result.finalState,
+    stateSequenceArtifact: result.artifact,
+    stateSequenceArtifactRef: result.ref
   };
 };
 
@@ -205,10 +213,21 @@ const createEvidenceInitialState = (
   );
 };
 
+const toRuntimeSequenceFrame = (
+  frame: RuntimeEvaluationInputInput
+): RuntimeStateSequenceFrameInput =>
+  RuntimeSequenceFrameSchema.parse({
+    frameIndex: frame.frameIndex,
+    deltaTimeMs: frame.deltaTimeMs,
+    resetReasons: frame.resetReasons,
+    authoredParameterValues: frame.authoredParameterValues,
+    targetIds: frame.targetIds
+  });
+
 const lastSnapshot = (
-  result: RuntimeSequenceEvaluationResult
+  snapshots: readonly RuntimeSnapshotDto[]
 ): RuntimeSnapshotDto => {
-  const snapshot = result.snapshots.at(-1);
+  const snapshot = snapshots.at(-1);
   if (snapshot === undefined) {
     throw new Error("Runtime evidence sequence evaluation requires at least one snapshot.");
   }
