@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "ai-command-summary-v1",
+  "commandStatuses": [
+    {
+      "commandId": "cmd_ai_fixture_get_state",
+      "command": "getEditorState",
+      "status": "ok"
+    },
+    {
+      "commandId": "cmd_ai_fixture_dry_run_smile",
+      "command": "dryRunOperation",
+      "status": "ok",
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "commandId": "cmd_ai_fixture_commit_without_approval",
+      "command": "commitOperation",
+      "status": "needs_approval",
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "commandId": "cmd_ai_fixture_commit_smile",
+      "command": "commitOperation",
+      "status": "ok",
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "commandId": "cmd_ai_fixture_get_operation_log",
+      "command": "getOperationLog",
+      "status": "ok"
+    }
+  ],
+  "approvalEvents": [
+    {
+      "dryRunCommandId": "cmd_ai_fixture_dry_run_smile",
+      "agentId": "agent_editor_ai_fixture",
+      "approvalStatus": "approved",
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    }
+  ],
+  "dryRun": {
+    "operationId": "op_ai_fixture_create_parameter_smile",
+    "status": "dry_run",
+    "packageRevisionAfter": 0,
+    "operationLogEntryCountAfter": 0,
+    "parameterPresentAfter": false,
+    "modelDiff": {
+      "baseRevision": 0,
+      "candidateRevision": 1,
+      "added": [
+        {
+          "kind": "parameter",
+          "id": "param_ai_fixture_smile"
+        }
+      ],
+      "removedCount": 0,
+      "changedCount": 1
+    }
+  },
+  "unapprovedCommit": {
+    "status": "needs_approval",
+    "operationStatus": "rejected",
+    "packageRevisionAfter": 0,
+    "operationLogEntryCountAfter": 0,
+    "parameterPresentAfter": false
+  },
+  "approvedCommit": {
+    "status": "ok",
+    "operationStatus": "committed",
+    "packageRevisionAfter": 1,
+    "parameterIdsAfter": [
+      "param_ai_fixture_smile"
+    ]
+  },
+  "operationLog": {
+    "entryCount": 1,
+    "entries": [
+      {
+        "operationId": "op_ai_fixture_create_parameter_smile",
+        "actor": "ai",
+        "surface": "structuredApi",
+        "operationType": "createParameter",
+        "targetIds": [
+          "param_ai_fixture_smile"
+        ],
+        "provenanceId": "prov_ai_fixture_create_parameter_smile",
+        "runtimeSnapshotIds": [
+          "snap_editor_browser_sample_0",
+          "snap_editor_browser_sample_1"
+        ],
+        "validationReportIds": [
+          "val_editor_ai_fixture_create_parameter_smile_baseline",
+          "val_editor_ai_fixture_create_parameter_smile_candidate"
+        ],
+        "reversible": true
+      }
+    ]
+  }
+}

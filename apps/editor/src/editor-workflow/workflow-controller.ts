@@ -7,6 +7,11 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 
 import {
+  createEditorAiCommandHost,
+  projectEditorAiState,
+  type EditorAiCommandHost
+} from "../ai-command-host/index.js";
+import {
   createEditorSessionAdapter,
   type EditorCreateParameterCommand,
   type EditorSessionAdapter,
@@ -75,6 +80,7 @@ export type EditorWorkflowPersistenceResult =
 export interface EditorWorkflowController {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
+  readonly aiCommandHost: EditorAiCommandHost;
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
@@ -95,6 +101,32 @@ export const createEditorWorkflowController = (
   let state = createEditorWorkflowState(adapter);
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
+  const createAiHost = (): EditorAiCommandHost =>
+    createEditorAiCommandHost({
+      operationHost: {
+        dryRunOperation(request) {
+          return adapter.dryRunOperation(request);
+        },
+        commitOperation(request) {
+          const result = adapter.commitOperation(request);
+          latestSessionPersistenceResult = result;
+          if (result.operationResult.status === "committed") {
+            state = applyEditorWorkflowCommitResult(state, adapter, result);
+          }
+
+          return result.operationResult;
+        }
+      },
+      readHost: {
+        getEditorState(payload) {
+          return projectEditorAiState(state, payload.detail);
+        },
+        getOperationLog() {
+          return adapter.getOperationLogEntries();
+        }
+      }
+    });
+  let aiCommandHost = createAiHost();
 
   return {
     get state() {
@@ -102,6 +134,9 @@ export const createEditorWorkflowController = (
     },
     get viewModel() {
       return projectEditorWorkflowViewModel(state);
+    },
+    get aiCommandHost() {
+      return aiCommandHost;
     },
     get latestSessionPersistenceResult() {
       return latestSessionPersistenceResult;
@@ -166,6 +201,7 @@ export const createEditorWorkflowController = (
         generatedArtifactPaths: project.generatedArtifactPaths
       });
       latestSessionPersistenceResult = null;
+      aiCommandHost = createAiHost();
 
       const result: EditorWorkflowLoadResult = {
         status: "loaded",
@@ -181,6 +217,7 @@ export const createEditorWorkflowController = (
       adapter = createSampleAdapter();
       state = createEditorWorkflowState(adapter);
       latestSessionPersistenceResult = null;
+      aiCommandHost = createAiHost();
 
       const result: EditorWorkflowResetResult = {
         status: "reset",

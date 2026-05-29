@@ -6,6 +6,7 @@ import {
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
   OperationLogEntryDto,
+  OperationRequestDto,
   OperationResultDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
@@ -39,6 +40,9 @@ export interface EditorSessionAdapter {
   readonly baseDocument: PackageDocumentDto;
   readonly authoringSession: AuthoringSession;
   createPersistenceSnapshot(): EditorSessionPersistenceSnapshot;
+  getOperationLogEntries(): readonly OperationLogEntryDto[];
+  dryRunOperation(request: OperationRequestDto): OperationResultDto;
+  commitOperation(request: OperationRequestDto): EditorSessionPersistenceResult;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
 }
 
@@ -62,6 +66,7 @@ export interface EditorSessionPersistenceSnapshot {
 }
 
 export interface EditorSessionPersistenceResult {
+  readonly operationType: OperationRequestDto["operationType"];
   readonly operationResult: OperationResultDto;
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly operationLogJsonl: string;
@@ -105,60 +110,92 @@ export const createEditorSessionAdapter = (
         now
       });
     },
+    getOperationLogEntries() {
+      return operationCore.operationLog.entries;
+    },
+    dryRunOperation(request) {
+      return operationCore.dryRunOperation(authoringSession, request);
+    },
+    commitOperation(request) {
+      return commitOperationRequest({
+        request,
+        authoringSession,
+        baseDocument,
+        operationCore,
+        evidenceCollector,
+        generatedArtifactEntries,
+        now
+      });
+    },
     commitCreateParameter(command) {
       const packageRevisionBefore = authoringSession.packageRevision;
-      const evidenceStartIndex = evidenceCollector.captures.length;
       const request = createParameterOperationRequest(command, packageRevisionBefore);
-      const outcome = operationCore.commitOperation(authoringSession, request);
-      const capture = evidenceCollector.captures[evidenceStartIndex];
-
-      if (outcome.result.status !== "committed") {
-        return createRejectedPersistenceResult({
-          operationResult: outcome.result,
-          operationLogEntries: operationCore.operationLog.entries,
-          packageRevisionBefore,
-          packageRevisionAfterCommit: authoringSession.packageRevision,
-          baseDocument
-        });
-      }
-
-      if (capture === undefined) {
-        throw new Error("Committed createParameter did not produce editor evidence artifacts.");
-      }
-
-      const operationLogJsonl = serializeOperationLogEntriesToJsonl(operationCore.operationLog.entries);
-      const savedDocument = toPackageDocument(authoringSession, baseDocument, {
-        updatedAt: now().toISOString()
-      });
-      appendGeneratedArtifactEntries(
-        generatedArtifactEntries,
-        toEvidencePackageFileEntries(capture)
-      );
-      const packageFileSet = serializePackageDocumentToFileSet(savedDocument, {
-        operationLogText: operationLogJsonl,
-        generatedArtifacts: generatedArtifactEntries
-      });
-      const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
-      const evidence = summarizeEvidencePaths(capture);
-      const generatedArtifactPaths = generatedArtifactEntries.map((entry) => entry.path);
-
-      return {
-        operationResult: outcome.result,
-        operationLogEntries: parseOperationLogEntriesFromJsonl(operationLogJsonl),
-        operationLogJsonl,
-        packageRevisionBefore,
-        packageRevisionAfterCommit: authoringSession.packageRevision,
-        packageFileSet,
-        packageFilePaths: packageFileSet.map((entry) => entry.path),
-        generatedArtifactPaths,
-        evidence,
-        reloadedDocument,
-        reloadedPackageRevision: reloadedDocument.manifest.packageRevision,
-        parameterIdsAfterReload: reloadedDocument.model.parameters.parameters.map(
-          (parameter) => parameter.parameterId
-        )
-      };
+      return this.commitOperation(request);
     }
+  };
+};
+
+const commitOperationRequest = (input: {
+  readonly request: OperationRequestDto;
+  readonly authoringSession: AuthoringSession;
+  readonly baseDocument: PackageDocumentDto;
+  readonly operationCore: ReturnType<typeof createOperationCore>;
+  readonly evidenceCollector: ReturnType<typeof createEditorEvidenceCollector>;
+  readonly generatedArtifactEntries: PackageFileSet[number][];
+  readonly now: () => Date;
+}): EditorSessionPersistenceResult => {
+  const packageRevisionBefore = input.authoringSession.packageRevision;
+  const evidenceStartIndex = input.evidenceCollector.captures.length;
+  const outcome = input.operationCore.commitOperation(input.authoringSession, input.request);
+  const capture = input.evidenceCollector.captures[evidenceStartIndex];
+
+  if (outcome.result.status !== "committed") {
+    return createRejectedPersistenceResult({
+      operationType: input.request.operationType,
+      operationResult: outcome.result,
+      operationLogEntries: input.operationCore.operationLog.entries,
+      packageRevisionBefore,
+      packageRevisionAfterCommit: input.authoringSession.packageRevision,
+      baseDocument: input.baseDocument
+    });
+  }
+
+  if (capture === undefined) {
+    throw new Error(`Committed ${input.request.operationType} did not produce editor evidence artifacts.`);
+  }
+
+  const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationCore.operationLog.entries);
+  const savedDocument = toPackageDocument(input.authoringSession, input.baseDocument, {
+    updatedAt: input.now().toISOString()
+  });
+  appendGeneratedArtifactEntries(
+    input.generatedArtifactEntries,
+    toEvidencePackageFileEntries(capture)
+  );
+  const packageFileSet = serializePackageDocumentToFileSet(savedDocument, {
+    operationLogText: operationLogJsonl,
+    generatedArtifacts: input.generatedArtifactEntries
+  });
+  const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
+  const evidence = summarizeEvidencePaths(capture);
+  const generatedArtifactPaths = input.generatedArtifactEntries.map((entry) => entry.path);
+
+  return {
+    operationType: input.request.operationType,
+    operationResult: outcome.result,
+    operationLogEntries: parseOperationLogEntriesFromJsonl(operationLogJsonl),
+    operationLogJsonl,
+    packageRevisionBefore,
+    packageRevisionAfterCommit: input.authoringSession.packageRevision,
+    packageFileSet,
+    packageFilePaths: packageFileSet.map((entry) => entry.path),
+    generatedArtifactPaths,
+    evidence,
+    reloadedDocument,
+    reloadedPackageRevision: reloadedDocument.manifest.packageRevision,
+    parameterIdsAfterReload: reloadedDocument.model.parameters.parameters.map(
+      (parameter) => parameter.parameterId
+    )
   };
 };
 
@@ -206,6 +243,7 @@ const appendGeneratedArtifactEntries = (
 };
 
 const createRejectedPersistenceResult = (input: {
+  readonly operationType: OperationRequestDto["operationType"];
   readonly operationResult: OperationResultDto;
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly packageRevisionBefore: number;
@@ -215,6 +253,7 @@ const createRejectedPersistenceResult = (input: {
   const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationLogEntries);
 
   return {
+    operationType: input.operationType,
     operationResult: input.operationResult,
     operationLogEntries: input.operationLogEntries,
     operationLogJsonl,

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@private-2d-rigging-lab/ai-interface": "workspace:*",
     "@private-2d-rigging-lab/authoring-core": "workspace:*",
     "@private-2d-rigging-lab/contracts": "workspace:*",
     "@private-2d-rigging-lab/operation-core": "workspace:*",

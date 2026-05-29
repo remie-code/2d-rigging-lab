@@ -34,7 +34,7 @@ export const applyEditorWorkflowCommitResult = (
   applyCommittedOperationSummary(state, {
     result: {
       ...result.operationResult,
-      operationType: "createParameter"
+      operationType: result.operationType
     },
     operationLogEntries: result.operationLogEntries,
     generatedEvidence: {

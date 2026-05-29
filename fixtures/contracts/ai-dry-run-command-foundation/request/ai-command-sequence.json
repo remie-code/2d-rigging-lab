@@ -1,0 +1,243 @@
+{
+  "schemaVersion": "ai-command-sequence-v1",
+  "sequenceId": "ai-dry-run-command-foundation",
+  "agentId": "agent_editor_ai_fixture",
+  "basis": {
+    "packageRevision": 0,
+    "relatedAC": [
+      "AC-MVP-014"
+    ],
+    "relatedScenarios": [
+      "SC-AGENT-002"
+    ]
+  },
+  "steps": [
+    {
+      "stepId": "observe-initial-state",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_fixture_get_state",
+        "session": {
+          "agentId": "agent_editor_ai_fixture",
+          "capabilities": [
+            "read"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "command": "getEditorState",
+        "payload": {
+          "detail": "summary"
+        }
+      }
+    },
+    {
+      "stepId": "dry-run-smile-parameter",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_fixture_dry_run_smile",
+        "session": {
+          "agentId": "agent_editor_ai_fixture",
+          "capabilities": [
+            "dryRunEdit"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "command": "dryRunOperation",
+        "payload": {
+          "schemaVersion": "operation-request-v1",
+          "operationId": "op_ai_fixture_create_parameter_smile",
+          "actor": "ai",
+          "surface": "structuredApi",
+          "dryRun": true,
+          "basePackageRevision": 0,
+          "idempotencyKey": "ai-fixture-create-parameter-smile",
+          "trace": {
+            "relatedAC": [
+              "AC-MVP-014"
+            ],
+            "relatedScenarios": [
+              "SC-AGENT-002"
+            ]
+          },
+          "operationType": "createParameter",
+          "payload": {
+            "parameterId": "param_ai_fixture_smile",
+            "displayName": "AI Fixture Smile",
+            "semanticRole": "mouth",
+            "projectPresetAlias": "private-ai-fixture-smile-control",
+            "valueSource": "authoredInput",
+            "min": 0,
+            "max": 1,
+            "default": 0,
+            "recommendedUiStep": 0.01
+          }
+        }
+      }
+    },
+    {
+      "stepId": "commit-without-approval",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_fixture_commit_without_approval",
+        "session": {
+          "agentId": "agent_editor_ai_fixture",
+          "capabilities": [
+            "commitWithApproval"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "command": "commitOperation",
+        "payload": {
+          "approvedDryRunCommandId": "cmd_ai_fixture_unknown_dry_run",
+          "operation": {
+            "schemaVersion": "operation-request-v1",
+            "operationId": "op_ai_fixture_create_parameter_smile",
+            "actor": "ai",
+            "surface": "structuredApi",
+            "dryRun": false,
+            "basePackageRevision": 0,
+            "idempotencyKey": "ai-fixture-create-parameter-smile",
+            "trace": {
+              "relatedAC": [
+                "AC-MVP-014"
+              ],
+              "relatedScenarios": [
+                "SC-AGENT-002"
+              ]
+            },
+            "operationType": "createParameter",
+            "payload": {
+              "parameterId": "param_ai_fixture_smile",
+              "displayName": "AI Fixture Smile",
+              "semanticRole": "mouth",
+              "projectPresetAlias": "private-ai-fixture-smile-control",
+              "valueSource": "authoredInput",
+              "min": 0,
+              "max": 1,
+              "default": 0,
+              "recommendedUiStep": 0.01
+            }
+          }
+        }
+      }
+    },
+    {
+      "stepId": "approve-dry-run",
+      "kind": "approval",
+      "dryRunCommandId": "cmd_ai_fixture_dry_run_smile",
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "stepId": "commit-approved",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_fixture_commit_smile",
+        "session": {
+          "agentId": "agent_editor_ai_fixture",
+          "capabilities": [
+            "commitWithApproval"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "command": "commitOperation",
+        "payload": {
+          "approvedDryRunCommandId": "cmd_ai_fixture_dry_run_smile",
+          "operation": {
+            "schemaVersion": "operation-request-v1",
+            "operationId": "op_ai_fixture_create_parameter_smile",
+            "actor": "ai",
+            "surface": "structuredApi",
+            "dryRun": false,
+            "basePackageRevision": 0,
+            "idempotencyKey": "ai-fixture-create-parameter-smile",
+            "trace": {
+              "relatedAC": [
+                "AC-MVP-014"
+              ],
+              "relatedScenarios": [
+                "SC-AGENT-002"
+              ]
+            },
+            "operationType": "createParameter",
+            "payload": {
+              "parameterId": "param_ai_fixture_smile",
+              "displayName": "AI Fixture Smile",
+              "semanticRole": "mouth",
+              "projectPresetAlias": "private-ai-fixture-smile-control",
+              "valueSource": "authoredInput",
+              "min": 0,
+              "max": 1,
+              "default": 0,
+              "recommendedUiStep": 0.01
+            }
+          }
+        }
+      }
+    },
+    {
+      "stepId": "read-operation-log",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_fixture_get_operation_log",
+        "session": {
+          "agentId": "agent_editor_ai_fixture",
+          "capabilities": [
+            "read"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "command": "getOperationLog",
+        "payload": {
+          "operationIds": [
+            "op_ai_fixture_create_parameter_smile"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "ai-command-transcript-v1",
+  "entries": [
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "command",
+      "commandId": "cmd_ai_fixture_get_state",
+      "agentId": "agent_editor_ai_fixture",
+      "command": "getEditorState",
+      "capabilities": [
+        "read"
+      ],
+      "basis": {
+        "packageRevision": 0,
+        "relatedAC": [
+          "AC-MVP-014"
+        ],
+        "relatedScenarios": [
+          "SC-AGENT-002"
+        ]
+      },
+      "status": "ok",
+      "evidenceRefs": []
+    },
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "command",
+      "commandId": "cmd_ai_fixture_dry_run_smile",
+      "agentId": "agent_editor_ai_fixture",
+      "command": "dryRunOperation",
+      "capabilities": [
+        "dryRunEdit"
+      ],
+      "basis": {
+        "packageRevision": 0,
+        "relatedAC": [
+          "AC-MVP-014"
+        ],
+        "relatedScenarios": [
+          "SC-AGENT-002"
+        ]
+      },
+      "status": "ok",
+      "evidenceRefs": [
+        "runtime/states/pkg_editor_browser_sample-r1-editor-create-parameter-final-f1.runtime-state.json",
+        "runtime/state-sequences/pkg_editor_browser_sample-r1-editor-create-parameter.runtime-state-sequence.json",
+        "runtime/snapshots/snap_editor_browser_sample_0.runtime-snapshot.json",
+        "runtime/snapshots/snap_editor_browser_sample_1.runtime-snapshot.json",
+        "validation/reports/val_editor_ai_fixture_create_parameter_smile_baseline.validation-report.json",
+        "validation/reports/val_editor_ai_fixture_create_parameter_smile_candidate.validation-report.json"
+      ],
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "command",
+      "commandId": "cmd_ai_fixture_commit_without_approval",
+      "agentId": "agent_editor_ai_fixture",
+      "command": "commitOperation",
+      "capabilities": [
+        "commitWithApproval"
+      ],
+      "basis": {
+        "packageRevision": 0,
+        "relatedAC": [
+          "AC-MVP-014"
+        ],
+        "relatedScenarios": [
+          "SC-AGENT-002"
+        ]
+      },
+      "status": "needs_approval",
+      "evidenceRefs": [],
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "approval",
+      "dryRunCommandId": "cmd_ai_fixture_dry_run_smile",
+      "agentId": "agent_editor_ai_fixture",
+      "approvalStatus": "approved",
+      "evidenceRefs": [],
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "command",
+      "commandId": "cmd_ai_fixture_commit_smile",
+      "agentId": "agent_editor_ai_fixture",
+      "command": "commitOperation",
+      "capabilities": [
+        "commitWithApproval"
+      ],
+      "basis": {
+        "packageRevision": 0,
+        "relatedAC": [
+          "AC-MVP-014"
+        ],
+        "relatedScenarios": [
+          "SC-AGENT-002"
+        ]
+      },
+      "status": "ok",
+      "evidenceRefs": [
+        "runtime/states/pkg_editor_browser_sample-r1-editor-create-parameter-final-f1.runtime-state.json",
+        "runtime/state-sequences/pkg_editor_browser_sample-r1-editor-create-parameter.runtime-state-sequence.json",
+        "runtime/snapshots/snap_editor_browser_sample_0.runtime-snapshot.json",
+        "runtime/snapshots/snap_editor_browser_sample_1.runtime-snapshot.json",
+        "validation/reports/val_editor_ai_fixture_create_parameter_smile_baseline.validation-report.json",
+        "validation/reports/val_editor_ai_fixture_create_parameter_smile_candidate.validation-report.json",
+        "operations/log.jsonl#op_ai_fixture_create_parameter_smile"
+      ],
+      "operationId": "op_ai_fixture_create_parameter_smile"
+    },
+    {
+      "schemaVersion": "ai-command-transcript-entry-v1",
+      "entryType": "command",
+      "commandId": "cmd_ai_fixture_get_operation_log",
+      "agentId": "agent_editor_ai_fixture",
+      "command": "getOperationLog",
+      "capabilities": [
+        "read"
+      ],
+      "basis": {
+        "packageRevision": 0,
+        "relatedAC": [
+          "AC-MVP-014"
+        ],
+        "relatedScenarios": [
+          "SC-AGENT-002"
+        ]
+      },
+      "status": "ok",
+      "evidenceRefs": []
+    }
+  ]
+}

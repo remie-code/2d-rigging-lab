@@ -1,0 +1,9 @@
+import { z } from "zod";
+
+export const AiCommandNameSchema = z.enum([
+  "getEditorState",
+  "dryRunOperation",
+  "commitOperation",
+  "getOperationLog"
+]);
+export type AiCommandName = z.infer<typeof AiCommandNameSchema>;

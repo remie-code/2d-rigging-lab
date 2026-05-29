@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "ai-dry-run-command-foundation",
+  "title": "AI dry-run command foundation fixture",
+  "coversAC": [
+    "AC-MVP-014"
+  ],
+  "coversScenarios": [
+    "SC-AGENT-002"
+  ],
+  "modulesBlocked": [
+    "ai-interface",
+    "editor"
+  ],
+  "inputArtifacts": [
+    "request/ai-command-sequence.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "aiCommandTranscript",
+      "path": "expected/ai-command-transcript.json",
+      "id": "op_ai_fixture_create_parameter_smile",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "aiCommandSummary",
+      "path": "expected/ai-command-summary.json",
+      "id": "op_ai_fixture_create_parameter_smile",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}
