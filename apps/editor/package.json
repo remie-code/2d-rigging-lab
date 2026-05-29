@@ -1,0 +1,21 @@
+{
+  "name": "@private-2d-rigging-lab/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run src --passWithNoTests"
+  },
+  "dependencies": {
+    "@private-2d-rigging-lab/authoring-core": "workspace:*",
+    "@private-2d-rigging-lab/contracts": "workspace:*",
+    "@private-2d-rigging-lab/operation-core": "workspace:*",
+    "@private-2d-rigging-lab/package-format": "workspace:*",
+    "@private-2d-rigging-lab/runtime-core": "workspace:*",
+    "@private-2d-rigging-lab/validator-core": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "6.4.2"
+  }
+}

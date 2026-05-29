@@ -12,6 +12,7 @@
 | [wave3-plan.md](wave3-plan.md) | Wave 3 authoring/operation foundation dependency and parallelism plan | Completed / implementation-proven |
 | [wave4-plan.md](wave4-plan.md) | Wave 4 runtime/validation evidence integration dependency and parallelism plan | Completed / implementation-proven |
 | [wave5-plan.md](wave5-plan.md) | Wave 5 package persistence / operation log foundation dependency and parallelism plan | Completed / implementation-proven |
+| [wave6-plan.md](wave6-plan.md) | Wave 6 editor-ui operation persistence vertical slice dependency and parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -28,3 +29,4 @@
 - Wave 4 connected authoring sessions to runtime snapshots and validation reports through provider-based operation evidence while keeping `operation-core` free of direct runtime/validator imports.
 - Wave 5 `package-persistence-and-operation-log-foundation` completed on 2026-05-29. The final domain was `wave5-integration-review-and-final-report`.
 - Wave 5 made operation evidence durable at the package-relative file set level: package revision policy, operation log JSONL, authoring-to-package document adapter, package file set writer, runtime/validation generated artifact materializers, and persisted operation evidence fixture.
+- Wave 6 `editor-ui-operation-persistence-vertical-slice` completed on 2026-05-29. It created `apps/editor` as a Vite + vanilla TypeScript browser app and proved the `createParameter` operation persistence flow from GUI to reload summary.

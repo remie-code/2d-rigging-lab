@@ -1,0 +1,395 @@
+:root {
+  color: #1d252c;
+  background: #f4f5f1;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.editor-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.editor-app-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, auto);
+  gap: 20px;
+  align-items: center;
+  min-height: 76px;
+  padding: 14px 24px;
+  color: #f9fbfa;
+  background: #243033;
+  border-bottom: 3px solid #d69a38;
+}
+
+.editor-title-group {
+  min-width: 0;
+}
+
+.editor-app-bar h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.editor-workflow-status,
+.editor-package-status__name,
+.editor-package-status__meta,
+.editor-panel__meta,
+.operation-status__meta,
+.parameter-list__empty,
+.operation-status__empty,
+.create-parameter-form__diagnostics {
+  margin: 0;
+}
+
+.editor-workflow-status {
+  margin-top: 3px;
+  color: #cbd9d6;
+  font-size: 13px;
+}
+
+.editor-package-status {
+  justify-self: end;
+  max-width: 520px;
+  min-width: 0;
+  padding: 8px 12px;
+  background: #314144;
+  border: 1px solid #496165;
+  border-radius: 6px;
+}
+
+.editor-package-status__name {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.editor-package-status__meta {
+  margin-top: 2px;
+  color: #cbd9d6;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.editor-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+  gap: 20px;
+  align-items: start;
+  padding: 20px 24px 28px;
+}
+
+.editor-panel {
+  min-width: 0;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #d6ddd8;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
+}
+
+.editor-persistence-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  min-width: 0;
+}
+
+.editor-panel h2,
+.operation-status h3 {
+  margin: 0;
+  color: #1f2a2e;
+  line-height: 1.2;
+}
+
+.editor-panel h2 {
+  font-size: 16px;
+}
+
+.editor-panel__meta {
+  margin-top: 5px;
+  color: #60716e;
+  font-size: 13px;
+}
+
+.parameter-list {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.parameter-list__table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.parameter-list__table th,
+.parameter-list__table td {
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e5e9e6;
+}
+
+.parameter-list__table th {
+  color: #50615e;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f7f8f4;
+}
+
+.parameter-list__table td {
+  overflow-wrap: anywhere;
+}
+
+.parameter-list__empty {
+  padding: 18px;
+  color: #64716d;
+  background: #f7f8f4;
+  border: 1px dashed #c8d0cb;
+  border-radius: 6px;
+}
+
+.create-parameter-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.editor-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #52605d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editor-field--wide,
+.create-parameter-form__diagnostics,
+.editor-button {
+  grid-column: 1 / -1;
+}
+
+.editor-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: #1d252c;
+  background: #fbfcfa;
+  border: 1px solid #cbd5d0;
+  border-radius: 6px;
+}
+
+.editor-field input:focus {
+  outline: 2px solid #1d7a73;
+  outline-offset: 1px;
+  border-color: #1d7a73;
+}
+
+.create-parameter-form__diagnostics {
+  min-height: 18px;
+  color: #9a4a21;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.editor-button {
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.editor-button--primary {
+  color: #ffffff;
+  background: #1d7a73;
+}
+
+.editor-button--primary:hover:not(:disabled),
+.editor-button--primary:focus-visible:not(:disabled) {
+  background: #16645f;
+}
+
+.editor-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.operation-status {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e6e2;
+}
+
+.operation-status h3 {
+  font-size: 14px;
+}
+
+.operation-status__badge {
+  display: inline-block;
+  max-width: 100%;
+  margin: 10px 0 8px;
+  padding: 5px 9px;
+  color: #263033;
+  background: #edf0ec;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.operation-status__badge--committed {
+  color: #0f493e;
+  background: #dff1e8;
+}
+
+.operation-status__badge--rejected {
+  color: #7a2e16;
+  background: #f6dfd4;
+}
+
+.operation-status__meta {
+  color: #60716e;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.operation-status__diagnostics {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f7f8f4;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.operation-status__diagnostics-heading {
+  margin: 0 0 6px;
+  color: #4b5c58;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.operation-status__diagnostics ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #614329;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.operation-status__empty {
+  color: #66736f;
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .editor-app-bar,
+  .editor-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-package-status {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .editor-persistence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .editor-app-bar {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .editor-workspace {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .editor-panel {
+    padding: 14px;
+  }
+
+  .parameter-list {
+    overflow-x: visible;
+  }
+
+  .parameter-list__table {
+    min-width: 0;
+  }
+
+  .parameter-list__table,
+  .parameter-list__table thead,
+  .parameter-list__table tbody,
+  .parameter-list__table tr,
+  .parameter-list__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .parameter-list__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .parameter-list__table tr {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #e0e5e1;
+    border-radius: 6px;
+    background: #fbfcfa;
+  }
+
+  .parameter-list__table td {
+    display: grid;
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+    gap: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .parameter-list__table td::before {
+    color: #50615e;
+    font-size: 12px;
+    font-weight: 750;
+    content: attr(data-label);
+  }
+
+  .create-parameter-form {
+    grid-template-columns: 1fr;
+  }
+}
