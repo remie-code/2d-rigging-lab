@@ -40,11 +40,12 @@ export const AiCommandTranscriptEntrySchema = z.union([
 ]);
 export type AiCommandTranscriptEntry = z.infer<typeof AiCommandTranscriptEntrySchema>;
 
-export const AiCommandTranscriptSchema = z.object({
+export const AiCommandTranscriptDocumentSchema = z.object({
   schemaVersion: z.literal("ai-command-transcript-v1"),
   entries: z.array(AiCommandTranscriptEntrySchema)
 });
-export type AiCommandTranscriptDocument = z.infer<typeof AiCommandTranscriptSchema>;
+export const AiCommandTranscriptSchema = AiCommandTranscriptDocumentSchema;
+export type AiCommandTranscriptDocument = z.infer<typeof AiCommandTranscriptDocumentSchema>;
 
 export interface AiCommandTranscript {
   readonly entries: readonly AiCommandTranscriptEntry[];
@@ -52,7 +53,11 @@ export interface AiCommandTranscript {
 }
 
 export class InMemoryAiCommandTranscript implements AiCommandTranscript {
-  readonly #entries: AiCommandTranscriptEntry[] = [];
+  readonly #entries: AiCommandTranscriptEntry[];
+
+  constructor(entries: readonly AiCommandTranscriptEntry[] = []) {
+    this.#entries = entries.map((entry) => AiCommandTranscriptEntrySchema.parse(entry));
+  }
 
   get entries(): readonly AiCommandTranscriptEntry[] {
     return this.#entries;
@@ -62,6 +67,29 @@ export class InMemoryAiCommandTranscript implements AiCommandTranscript {
     this.#entries.push(AiCommandTranscriptEntrySchema.parse(entry));
   }
 }
+
+export const parseAiCommandTranscriptDocument = (input: unknown): AiCommandTranscriptDocument =>
+  AiCommandTranscriptDocumentSchema.parse(input);
+
+export const createEmptyAiCommandTranscriptDocument = (): AiCommandTranscriptDocument =>
+  parseAiCommandTranscriptDocument({
+    schemaVersion: "ai-command-transcript-v1",
+    entries: []
+  });
+
+export const serializeAiCommandTranscript = (
+  transcript: AiCommandTranscript
+): AiCommandTranscriptDocument =>
+  parseAiCommandTranscriptDocument({
+    schemaVersion: "ai-command-transcript-v1",
+    entries: transcript.entries
+  });
+
+export const hydrateInMemoryAiCommandTranscript = (input: unknown): InMemoryAiCommandTranscript => {
+  const parsedDocument = parseAiCommandTranscriptDocument(input);
+
+  return new InMemoryAiCommandTranscript(parsedDocument.entries);
+};
 
 export const appendAiCommandResponseToTranscript = (input: {
   readonly transcript: AiCommandTranscript;

@@ -1,3 +1,8 @@
+import {
+  createEmptyAiCommandTranscriptDocument,
+  parseAiCommandTranscriptDocument,
+  type AiCommandTranscriptDocument
+} from "@private-2d-rigging-lab/ai-interface";
 import { parsePackageDocumentFromFileSet, type PackageFileSet } from "@private-2d-rigging-lab/package-format";
 
 import {
@@ -22,6 +27,7 @@ export interface BrowserProjectStoreOptions {
 export interface SaveEditorProjectInput {
   readonly packageFileSet: PackageFileSet;
   readonly operationLogJsonl: string;
+  readonly aiCommandTranscript?: AiCommandTranscriptDocument;
   readonly generatedArtifactPaths: readonly string[];
 }
 
@@ -143,6 +149,9 @@ const createPersistedEditorProject = (
   savedAt: input.savedAt,
   packageFileSet: input.packageFileSet,
   operationLogJsonl: input.operationLogJsonl,
+  aiCommandTranscript: input.aiCommandTranscript === undefined
+    ? createEmptyAiCommandTranscriptDocument()
+    : parseAiCommandTranscriptDocument(input.aiCommandTranscript),
   generatedArtifactPaths: [...input.generatedArtifactPaths],
   packageSummary: createPackageSummary(input.packageFileSet)
 });

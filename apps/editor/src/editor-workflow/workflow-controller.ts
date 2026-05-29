@@ -1,4 +1,9 @@
 import {
+  hydrateInMemoryAiCommandTranscript,
+  serializeAiCommandTranscript,
+  type AiCommandTranscript
+} from "@private-2d-rigging-lab/ai-interface";
+import {
   parseOperationLogEntriesFromJsonl
 } from "@private-2d-rigging-lab/operation-core";
 import {
@@ -29,6 +34,12 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../editor-state/index.js";
+import {
+  createWorkflowAiApprovalActions,
+  type EditorWorkflowAiApprovalDecisionResult,
+  type EditorWorkflowAiCommitResult,
+  type EditorWorkflowAiDryRunResult
+} from "./workflow-ai-approval-actions.js";
 import {
   applyEditorWorkflowCommitResult,
   createEditorWorkflowState,
@@ -84,6 +95,10 @@ export interface EditorWorkflowController {
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
+  dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
+  approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
+  rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
+  commitApprovedAiOperation(): Promise<EditorWorkflowAiCommitResult>;
   saveProject(): EditorWorkflowSaveResult;
   loadProject(): EditorWorkflowLoadResult;
   resetToSamplePackage(): EditorWorkflowResetResult;
@@ -101,7 +116,9 @@ export const createEditorWorkflowController = (
   let state = createEditorWorkflowState(adapter);
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
-  const createAiHost = (): EditorAiCommandHost =>
+  const createAiHost = (input: {
+    readonly transcript?: AiCommandTranscript;
+  } = {}): EditorAiCommandHost =>
     createEditorAiCommandHost({
       operationHost: {
         dryRunOperation(request) {
@@ -124,9 +141,21 @@ export const createEditorWorkflowController = (
         getOperationLog() {
           return adapter.getOperationLogEntries();
         }
-      }
+      },
+      ...(input.transcript === undefined ? {} : { transcript: input.transcript })
     });
   let aiCommandHost = createAiHost();
+  const aiApprovalActions = createWorkflowAiApprovalActions({
+    getState: () => state,
+    setState(nextState) {
+      state = nextState;
+    },
+    getAiCommandHost: () => aiCommandHost,
+    setAiCommandHost(nextAiCommandHost) {
+      aiCommandHost = nextAiCommandHost;
+    },
+    createAiCommandHost: createAiHost
+  });
 
   return {
     get state() {
@@ -152,11 +181,16 @@ export const createEditorWorkflowController = (
 
       return result;
     },
+    dryRunAiCreateParameterCommand: aiApprovalActions.dryRunAiCreateParameterCommand,
+    approveLatestAiDryRun: aiApprovalActions.approveLatestAiDryRun,
+    rejectLatestAiDryRun: aiApprovalActions.rejectLatestAiDryRun,
+    commitApprovedAiOperation: aiApprovalActions.commitApprovedAiOperation,
     saveProject() {
       const snapshot = adapter.createPersistenceSnapshot();
       const storeResult = options.projectStore.saveProject({
         packageFileSet: snapshot.packageFileSet,
         operationLogJsonl: snapshot.operationLogJsonl,
+        aiCommandTranscript: serializeAiCommandTranscript(aiCommandHost.transcript),
         generatedArtifactPaths: snapshot.generatedArtifactPaths
       });
       const result: EditorWorkflowSaveResult = {
@@ -177,6 +211,7 @@ export const createEditorWorkflowController = (
           storeResult.status === "empty"
             ? { status: "empty", storeResult }
             : { status: "failed", storeResult };
+        aiApprovalActions.reset();
         latestProjectPersistenceResult = result;
         return result;
       }
@@ -201,7 +236,9 @@ export const createEditorWorkflowController = (
         generatedArtifactPaths: project.generatedArtifactPaths
       });
       latestSessionPersistenceResult = null;
-      aiCommandHost = createAiHost();
+      aiApprovalActions.reset({
+        transcript: hydrateInMemoryAiCommandTranscript(project.aiCommandTranscript)
+      });
 
       const result: EditorWorkflowLoadResult = {
         status: "loaded",
@@ -217,7 +254,7 @@ export const createEditorWorkflowController = (
       adapter = createSampleAdapter();
       state = createEditorWorkflowState(adapter);
       latestSessionPersistenceResult = null;
-      aiCommandHost = createAiHost();
+      aiApprovalActions.reset();
 
       const result: EditorWorkflowResetResult = {
         status: "reset",

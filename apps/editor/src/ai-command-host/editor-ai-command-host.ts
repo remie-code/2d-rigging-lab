@@ -26,6 +26,7 @@ export interface EditorAiCommandHostOptions {
   readonly operationHost: AiOperationCommandHost;
   readonly readHost: AiReadCommandHost;
   readonly approvalPolicy?: AiApprovalPolicy;
+  readonly transcript?: AiCommandTranscript;
 }
 
 export const createEditorAiCommandHost = (
@@ -34,7 +35,8 @@ export const createEditorAiCommandHost = (
   const approvalPolicy = options.approvalPolicy ?? new InMemoryAiApprovalPolicy();
   const operationExecutor = new AiCommandExecutor({
     host: options.operationHost,
-    approvalPolicy
+    approvalPolicy,
+    ...(options.transcript === undefined ? {} : { transcript: options.transcript })
   });
 
   return {

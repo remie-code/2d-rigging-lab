@@ -31,6 +31,22 @@ export function mountEditorApp(root: HTMLElement): void {
         onResetProject() {
           workflow.resetToSamplePackage();
           render();
+        },
+        async onDryRunAiCreateParameter() {
+          await workflow.dryRunAiCreateParameterCommand();
+          render();
+        },
+        async onApproveLatestAiDryRun() {
+          await workflow.approveLatestAiDryRun();
+          render();
+        },
+        async onRejectLatestAiDryRun() {
+          await workflow.rejectLatestAiDryRun();
+          render();
+        },
+        async onCommitApprovedAiOperation() {
+          await workflow.commitApprovedAiOperation();
+          render();
         }
       })
     );

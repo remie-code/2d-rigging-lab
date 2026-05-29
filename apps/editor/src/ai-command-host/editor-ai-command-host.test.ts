@@ -1,8 +1,10 @@
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
+import { InMemoryAiCommandTranscript } from "@private-2d-rigging-lab/ai-interface";
 import { describe, expect, it } from "vitest";
 
 import { createBrowserProjectStore, type StorageLike } from "../project-persistence/index.js";
 import { createEditorWorkflowController } from "../editor-workflow/index.js";
+import { createEditorAiCommandHost } from "./editor-ai-command-host.js";
 
 describe("editor AI command host", () => {
   it("returns editor state and dry-runs createParameter without mutating state or log", async () => {
@@ -379,6 +381,51 @@ describe("editor AI command host", () => {
     });
     expect(workflow.state.parameters).toHaveLength(0);
     expect(workflow.state.operationLog.entryCount).toBe(0);
+  });
+
+  it("uses an injected transcript for restored read-only history", async () => {
+    const transcript = new InMemoryAiCommandTranscript();
+    const host = createEditorAiCommandHost({
+      transcript,
+      operationHost: {
+        dryRunOperation() {
+          throw new Error("dryRunOperation should not be called");
+        },
+        commitOperation() {
+          throw new Error("commitOperation should not be called");
+        }
+      },
+      readHost: {
+        getEditorState() {
+          return {
+            schemaVersion: "editor-semantic-state-v1",
+            packageRevision: 0
+          };
+        },
+        getOperationLog() {
+          return [];
+        }
+      }
+    });
+
+    await host.execute(
+      createAiRequest({
+        commandId: "cmd_ai_restored_get_state",
+        command: "getEditorState",
+        capabilities: ["read"],
+        payload: { detail: "summary" }
+      })
+    );
+
+    expect(host.transcript).toBe(transcript);
+    expect(transcript.entries).toEqual([
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_ai_restored_get_state",
+        command: "getEditorState",
+        status: "ok"
+      })
+    ]);
   });
 });
 

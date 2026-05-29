@@ -12,6 +12,8 @@ import {
   createGeneratedEvidenceSummaryPanel,
   createOperationLogSummaryPanel
 } from "../evidence-panel/index.js";
+import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
+import { createAiTranscriptPanel } from "../ai-transcript/index.js";
 import {
   createPackageFileSetPanel,
   createReloadSummaryPanel
@@ -31,6 +33,10 @@ export interface EditorAppShellOptions {
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onDryRunAiCreateParameter: AiApprovalPanelCallback;
+  readonly onApproveLatestAiDryRun: AiApprovalPanelCallback;
+  readonly onRejectLatestAiDryRun: AiApprovalPanelCallback;
+  readonly onCommitApprovedAiOperation: AiApprovalPanelCallback;
 }
 
 export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElement => {
@@ -102,6 +108,16 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onLoadProject: options.onLoadProject,
     onResetProject: options.onResetProject
   });
+  const aiApprovalPanel = createAiApprovalPanel({
+    viewModel: options.viewModel,
+    onDryRunCreateParameter: options.onDryRunAiCreateParameter,
+    onApproveLatestDryRun: options.onApproveLatestAiDryRun,
+    onRejectPendingDryRun: options.onRejectLatestAiDryRun,
+    onCommitApprovedOperation: options.onCommitApprovedAiOperation
+  });
+  const aiTranscriptPanel = createAiTranscriptPanel({
+    entries: options.viewModel.aiApproval.transcriptEntries
+  });
 
   const persistencePanel = document.createElement("section");
   persistencePanel.className = "editor-persistence-grid";
@@ -117,7 +133,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     createReloadSummaryPanel(options.state.reload)
   );
 
-  workspace.append(parametersPanel, operationPanel, projectPersistencePanel, persistencePanel);
+  workspace.append(
+    parametersPanel,
+    operationPanel,
+    projectPersistencePanel,
+    aiApprovalPanel,
+    aiTranscriptPanel,
+    persistencePanel
+  );
   shell.append(appBar, workspace);
 
   return shell;

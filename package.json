@@ -9,6 +9,7 @@
     "typecheck:root": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:e2e": "pnpm --filter @private-2d-rigging-lab/editor test:e2e",
     "test:e2e:editor": "node scripts/editor-e2e-smoke.mjs",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",

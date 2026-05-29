@@ -1,3 +1,4 @@
+import type { AiCommandTranscriptDocument } from "@private-2d-rigging-lab/ai-interface";
 import type { PackageFileSet } from "@private-2d-rigging-lab/package-format";
 
 export const PERSISTED_EDITOR_PROJECT_SCHEMA_VERSION = "editor-project-persistence-v1";
@@ -15,6 +16,7 @@ export interface PersistedEditorProjectDto {
   readonly savedAt: string;
   readonly packageFileSet: PackageFileSet;
   readonly operationLogJsonl: string;
+  readonly aiCommandTranscript: AiCommandTranscriptDocument;
   readonly generatedArtifactPaths: readonly string[];
   readonly packageSummary: PersistedEditorProjectPackageSummary;
 }

@@ -1,5 +1,9 @@
 import { createPageSession } from "./page-session.mjs";
-import { editorProjectStorageKey, editorTestIds } from "./test-ids.mjs";
+import {
+  createAiTranscriptEventRowTestId,
+  editorProjectStorageKey,
+  editorTestIds
+} from "./test-ids.mjs";
 
 export const editorSmokeViewports = [
   {
@@ -18,7 +22,6 @@ export const editorSmokeViewports = [
 
 export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
   const page = await createPageSession({ browserPort, viewport, url: baseUrl });
-  const parameterName = `Wave7 Smoke ${viewport.name}`;
 
   try {
     await waitForTestId(page, editorTestIds.shell);
@@ -27,10 +30,12 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await waitForTestId(page, editorTestIds.shell);
 
     await assertShellRendered(page);
+    await assertInitialAiApprovalRendered(page);
     await assertHorizontalOverflow(page, `${viewport.name} initial`);
-    await commitCreateParameter(page, parameterName);
+    await runAiApprovalFlow(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
     await saveProject(page);
-    await reloadProjectFromStorage(page, parameterName);
+    await reloadProjectFromStorage(page);
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
@@ -49,32 +54,92 @@ const assertShellRendered = async (page) => {
   await assertTextIncludes(page, editorTestIds.parameterList, "No parameters yet.");
 };
 
-const commitCreateParameter = async (page, parameterName) => {
-  await page.evaluate(
-    (formTestId, submitTestId, displayName) => {
-      const form = document.querySelector(`[data-testid="${formTestId}"]`);
-      const input = form?.querySelector('input[name="displayName"]');
-      const submit = document.querySelector(`[data-testid="${submitTestId}"]`);
+const assertInitialAiApprovalRendered = async (page) => {
+  await waitForTestId(page, editorTestIds.aiApprovalPanel);
+  await waitForTestId(page, editorTestIds.aiApprovalStatus);
+  await waitForTestId(page, editorTestIds.aiApprovalResultSummary);
+  await waitForTestId(page, editorTestIds.aiApprovalLatestTranscriptEntry);
+  await waitForTestId(page, editorTestIds.aiTranscriptPanel);
+  await waitForTestId(page, editorTestIds.aiTranscriptEmpty);
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
+  await waitForText(page, editorTestIds.aiTranscriptEmpty, "No AI command transcript entries yet.");
+  await assertApprovalActionState(page, {
+    dryRunDisabled: false,
+    approveDisabled: true,
+    rejectDisabled: true,
+    commitDisabled: true
+  });
+};
 
-      if (!(input instanceof HTMLInputElement) || !(submit instanceof HTMLButtonElement)) {
-        throw new Error("Create parameter form was not rendered.");
-      }
-
-      input.value = displayName;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      submit.click();
-    },
-    editorTestIds.parameterCreateForm,
-    editorTestIds.parameterCreateSubmit,
-    parameterName
+const runAiApprovalFlow = async (page) => {
+  await clickTestId(page, editorTestIds.aiApprovalDryRun);
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Pending approval");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "op_editor_ai_create_parameter_r0_1");
+  await waitForText(
+    page,
+    editorTestIds.aiApprovalResultSummary,
+    "createParameter dry_run"
   );
+  await waitForText(
+    page,
+    editorTestIds.aiApprovalResultSummary,
+    "cmd_editor_ai_dry_run_create_parameter_r0_1"
+  );
+  await waitForText(
+    page,
+    editorTestIds.aiApprovalResultSummary,
+    "op_editor_ai_create_parameter_r0_1"
+  );
+  await waitForText(
+    page,
+    createAiTranscriptEventRowTestId(0),
+    "cmd_editor_ai_dry_run_create_parameter_r0_1"
+  );
+  await waitForText(page, createAiTranscriptEventRowTestId(0), "dryRunOperation");
+  await waitForText(page, createAiTranscriptEventRowTestId(0), "dry_run");
+  await assertApprovalActionState(page, {
+    dryRunDisabled: true,
+    approveDisabled: false,
+    rejectDisabled: false,
+    commitDisabled: true
+  });
 
+  await clickTestId(page, editorTestIds.aiApprovalApprove);
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Approved");
+  await waitForText(page, createAiTranscriptEventRowTestId(1), "Approval");
+  await waitForText(page, createAiTranscriptEventRowTestId(1), "approved");
+  await waitForText(page, createAiTranscriptEventRowTestId(1), "op_editor_ai_create_parameter_r0_1");
+  await assertApprovalActionState(page, {
+    dryRunDisabled: true,
+    approveDisabled: true,
+    rejectDisabled: false,
+    commitDisabled: false
+  });
+
+  await clickTestId(page, editorTestIds.aiApprovalCommit);
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
   await waitForText(page, editorTestIds.operationStatus, "createParameter committed");
-  await waitForText(page, editorTestIds.parameterList, parameterName);
+  await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
   await waitForText(page, editorTestIds.reloadSummary, "Reloaded");
   await waitForOperationLogEntryCount(page, 1);
   await waitForText(page, editorTestIds.operationLogSummary, "createParameter");
+  await waitForText(
+    page,
+    createAiTranscriptEventRowTestId(2),
+    "cmd_editor_ai_commit_create_parameter_r0_1"
+  );
+  await waitForText(page, createAiTranscriptEventRowTestId(2), "commitOperation");
+  await waitForText(page, createAiTranscriptEventRowTestId(2), "ok");
+  await waitForText(page, createAiTranscriptEventRowTestId(2), "op_editor_ai_create_parameter_r0_1");
+  await waitForText(page, editorTestIds.aiApprovalLatestTranscriptEntry, "commitOperation ok");
+  await assertApprovalActionState(page, {
+    dryRunDisabled: false,
+    approveDisabled: true,
+    rejectDisabled: true,
+    commitDisabled: true
+  });
 };
 
 const saveProject = async (page) => {
@@ -95,7 +160,19 @@ const saveProject = async (page) => {
       operationLogLineCount: String(project.operationLogJsonl ?? "")
         .split("\n")
         .filter((line) => line.trim().length > 0).length,
-      packageFileCount: Array.isArray(project.packageFileSet) ? project.packageFileSet.length : 0
+      packageFileCount: Array.isArray(project.packageFileSet) ? project.packageFileSet.length : 0,
+      aiCommandTranscriptSchemaVersion: project.aiCommandTranscript?.schemaVersion,
+      aiCommandTranscriptEntryCount: Array.isArray(project.aiCommandTranscript?.entries)
+        ? project.aiCommandTranscript.entries.length
+        : 0,
+      aiCommandTranscriptEntryIds: Array.isArray(project.aiCommandTranscript?.entries)
+        ? project.aiCommandTranscript.entries.map((entry) =>
+            entry.entryType === "approval" ? entry.dryRunCommandId : entry.commandId
+          )
+        : [],
+      aiCommandTranscriptOperationIds: Array.isArray(project.aiCommandTranscript?.entries)
+        ? project.aiCommandTranscript.entries.map((entry) => entry.operationId ?? null)
+        : []
     };
   }, editorProjectStorageKey);
 
@@ -103,21 +180,46 @@ const saveProject = async (page) => {
     saved === null ||
     saved.schemaVersion !== "editor-project-persistence-v1" ||
     saved.operationLogLineCount < 1 ||
-    saved.packageFileCount < 1
+    saved.packageFileCount < 1 ||
+    saved.aiCommandTranscriptSchemaVersion !== "ai-command-transcript-v1" ||
+    saved.aiCommandTranscriptEntryCount < 3 ||
+    !saved.aiCommandTranscriptEntryIds.includes("cmd_editor_ai_dry_run_create_parameter_r0_1") ||
+    !saved.aiCommandTranscriptEntryIds.includes("cmd_editor_ai_commit_create_parameter_r0_1") ||
+    !saved.aiCommandTranscriptOperationIds.includes("op_editor_ai_create_parameter_r0_1")
   ) {
     throw new Error("Save to browser storage did not persist a valid editor project.");
   }
 };
 
-const reloadProjectFromStorage = async (page, parameterName) => {
+const reloadProjectFromStorage = async (page) => {
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
   await assertTextIncludes(page, editorTestIds.parameterList, "No parameters yet.");
+  await assertInitialAiApprovalRendered(page);
   await clickTestId(page, editorTestIds.projectPersistenceLoad);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
-  await waitForText(page, editorTestIds.parameterList, parameterName);
+  await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
   await waitForOperationLogEntryCount(page, 1);
   await waitForText(page, editorTestIds.operationLogSummary, "createParameter");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
+  await waitForText(
+    page,
+    createAiTranscriptEventRowTestId(0),
+    "cmd_editor_ai_dry_run_create_parameter_r0_1"
+  );
+  await waitForText(page, createAiTranscriptEventRowTestId(1), "approved");
+  await waitForText(
+    page,
+    createAiTranscriptEventRowTestId(2),
+    "cmd_editor_ai_commit_create_parameter_r0_1"
+  );
+  await assertApprovalActionState(page, {
+    dryRunDisabled: false,
+    approveDisabled: true,
+    rejectDisabled: true,
+    commitDisabled: true
+  });
 };
 
 const resetProject = async (page) => {
@@ -125,10 +227,51 @@ const resetProject = async (page) => {
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Cleared");
   await waitForText(page, editorTestIds.packageStatus, "pkg_editor_browser_sample");
   await waitForText(page, editorTestIds.parameterList, "No parameters yet.");
+  await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
+  await waitForTestId(page, editorTestIds.aiTranscriptEmpty);
+  await assertElementAbsent(page, editorTestIds.aiTranscriptEvents);
 
   const storedValue = await page.evaluate((storageKey) => localStorage.getItem(storageKey), editorProjectStorageKey);
   if (storedValue !== null) {
     throw new Error("Reset sample did not clear browser project storage.");
+  }
+};
+
+const assertApprovalActionState = async (
+  page,
+  { dryRunDisabled, approveDisabled, rejectDisabled, commitDisabled }
+) => {
+  const actionState = await page.evaluate((ids) => {
+    const readDisabled = (id) => {
+      const element = document.querySelector(`[data-testid="${id}"]`);
+
+      if (!(element instanceof HTMLButtonElement)) {
+        throw new Error(`Missing action button for test id ${id}.`);
+      }
+
+      return element.disabled;
+    };
+
+    return {
+      dryRunDisabled: readDisabled(ids.dryRun),
+      approveDisabled: readDisabled(ids.approve),
+      rejectDisabled: readDisabled(ids.reject),
+      commitDisabled: readDisabled(ids.commit)
+    };
+  }, {
+    dryRun: editorTestIds.aiApprovalDryRun,
+    approve: editorTestIds.aiApprovalApprove,
+    reject: editorTestIds.aiApprovalReject,
+    commit: editorTestIds.aiApprovalCommit
+  });
+
+  const expected = { dryRunDisabled, approveDisabled, rejectDisabled, commitDisabled };
+  if (JSON.stringify(actionState) !== JSON.stringify(expected)) {
+    throw new Error(
+      `AI approval action state mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(
+        actionState
+      )}.`
+    );
   }
 };
 
@@ -172,6 +315,17 @@ const waitForTestId = async (page, testId) => {
     { timeoutMs: 8_000 },
     testId
   );
+};
+
+const assertElementAbsent = async (page, testId) => {
+  const isPresent = await page.evaluate(
+    (id) => document.querySelector(`[data-testid="${id}"]`) !== null,
+    testId
+  );
+
+  if (isPresent) {
+    throw new Error(`Expected ${testId} to be absent.`);
+  }
 };
 
 const waitForText = async (page, testId, expectedText) => {

@@ -15,6 +15,7 @@
 | [wave6-plan.md](wave6-plan.md) | Wave 6 editor-ui operation persistence vertical slice dependency and parallelism plan | Completed / implementation-proven |
 | [wave7-plan.md](wave7-plan.md) | Wave 7 editor project persistence and e2e hardening dependency and parallelism plan | Completed / implementation-proven |
 | [wave8-plan.md](wave8-plan.md) | Wave 8 AI interface dry-run command foundation dependency and parallelism plan | Completed / implementation-proven |
+| [wave9-plan.md](wave9-plan.md) | Wave 9 AI command approval UI and transcript persistence dependency and parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -34,3 +35,4 @@
 - Wave 6 `editor-ui-operation-persistence-vertical-slice` completed on 2026-05-29. It created `apps/editor` as a Vite + vanilla TypeScript browser app and proved the `createParameter` operation persistence flow from GUI to reload summary.
 - Wave 7 `editor-project-persistence-and-e2e-hardening` completed on 2026-05-29. It split editor/core typecheck boundaries, added browser project persistence, supported operation log hydration, wired save/load/reset UI, and turned browser smoke into a durable e2e script.
 - Wave 8 `ai-interface-dry-run-command-foundation` completed on 2026-05-29. It created `packages/ai-interface`, implemented transport-independent command schemas, dry-run / approval / commit execution, editor in-process host integration, and transcript-backed AI command fixtures.
+- Wave 9 `ai-command-approval-ui-and-transcript-persistence` completed on 2026-05-29. It added visible AI dry-run approval workflow, browser-local transcript persistence, transcript/operation-log correlation, and desktop/mobile e2e coverage while keeping transport adapters out of scope.

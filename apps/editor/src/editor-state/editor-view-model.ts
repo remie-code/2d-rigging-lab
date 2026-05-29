@@ -1,4 +1,16 @@
 import type { EditorSemanticState } from "./editor-semantic-state.js";
+import type { AiTranscriptSummaryEntryState } from "./ai-transcript-summary.js";
+
+export interface AiApprovalWorkflowViewModel {
+  readonly status: EditorSemanticState["aiApproval"]["status"];
+  readonly latestDryRunCommandId: string | null;
+  readonly latestDryRunOperationId: string | null;
+  readonly latestDryRunResultLabel: string;
+  readonly canApproveLatestDryRun: boolean;
+  readonly canCommitApprovedOperation: boolean;
+  readonly canRejectPendingDryRun: boolean;
+  readonly transcriptEntries: readonly AiTranscriptSummaryEntryState[];
+}
 
 export interface EditorWorkflowViewModel {
   readonly packageTitle: string;
@@ -10,6 +22,7 @@ export interface EditorWorkflowViewModel {
   readonly operationLogLabel: string;
   readonly generatedEvidenceLabel: string;
   readonly reloadLabel: string;
+  readonly aiApproval: AiApprovalWorkflowViewModel;
 }
 
 export const projectEditorWorkflowViewModel = (
@@ -32,7 +45,8 @@ export const projectEditorWorkflowViewModel = (
     lastOperationLabel: projectLastOperationLabel(state),
     operationLogLabel: `${state.operationLog.entryCount} operation${state.operationLog.entryCount === 1 ? "" : "s"}`,
     generatedEvidenceLabel: `${runtimeArtifactCount} runtime / ${validationArtifactCount} validation artifacts`,
-    reloadLabel: projectReloadLabel(state)
+    reloadLabel: projectReloadLabel(state),
+    aiApproval: projectAiApprovalViewModel(state)
   };
 };
 
@@ -55,3 +69,19 @@ const projectReloadLabel = (state: EditorSemanticState): string => {
 
   return `Reloaded r${state.reload.packageRevision} with ${state.reload.parameterCount} parameter${state.reload.parameterCount === 1 ? "" : "s"}`;
 };
+
+const projectAiApprovalViewModel = (
+  state: EditorSemanticState
+): AiApprovalWorkflowViewModel => ({
+  status: state.aiApproval.status,
+  latestDryRunCommandId: state.aiApproval.latestDryRunCommandId,
+  latestDryRunOperationId: state.aiApproval.latestDryRunOperationId,
+  latestDryRunResultLabel:
+    state.aiApproval.latestDryRunResult === null
+      ? "No AI dry-run pending"
+      : `${state.aiApproval.latestDryRunResult.operationType} ${state.aiApproval.latestDryRunResult.status}`,
+  canApproveLatestDryRun: state.aiApproval.canApproveLatestDryRun,
+  canCommitApprovedOperation: state.aiApproval.canCommitApprovedOperation,
+  canRejectPendingDryRun: state.aiApproval.canRejectPendingDryRun,
+  transcriptEntries: state.aiApproval.transcriptEntries
+});

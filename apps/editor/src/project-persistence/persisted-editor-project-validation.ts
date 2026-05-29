@@ -1,3 +1,8 @@
+import {
+  createEmptyAiCommandTranscriptDocument,
+  parseAiCommandTranscriptDocument,
+  type AiCommandTranscriptDocument
+} from "@private-2d-rigging-lab/ai-interface";
 import { parseOperationLogEntriesFromJsonl } from "@private-2d-rigging-lab/operation-core";
 import {
   parsePackageDocumentFromFileSet,
@@ -14,7 +19,8 @@ export type PersistedEditorProjectValidationFailureReason =
   | "invalid-json"
   | "invalid-schema"
   | "invalid-package-file-set"
-  | "invalid-operation-log-jsonl";
+  | "invalid-operation-log-jsonl"
+  | "invalid-ai-command-transcript";
 
 export interface PersistedEditorProjectValidationFailure {
   readonly status: "failed";
@@ -123,6 +129,11 @@ const readPersistedEditorProjectShape = (
     return invalidSchema("Stored editor project packageSummary is invalid.");
   }
 
+  const aiCommandTranscript = readAiCommandTranscriptDocument(input.aiCommandTranscript);
+  if (aiCommandTranscript.status === "failed") {
+    return aiCommandTranscript;
+  }
+
   return {
     status: "valid",
     project: {
@@ -130,6 +141,7 @@ const readPersistedEditorProjectShape = (
       savedAt: input.savedAt,
       packageFileSet,
       operationLogJsonl: input.operationLogJsonl,
+      aiCommandTranscript: aiCommandTranscript.document,
       generatedArtifactPaths,
       packageSummary
     }
@@ -209,6 +221,37 @@ const readStringArray = (input: unknown): readonly string[] | undefined => {
   }
 
   return input;
+};
+
+type ReadAiCommandTranscriptDocumentResult =
+  | {
+    readonly status: "valid";
+    readonly document: AiCommandTranscriptDocument;
+  }
+  | PersistedEditorProjectValidationFailure;
+
+const readAiCommandTranscriptDocument = (
+  input: unknown
+): ReadAiCommandTranscriptDocumentResult => {
+  if (input === undefined) {
+    return {
+      status: "valid",
+      document: createEmptyAiCommandTranscriptDocument()
+    };
+  }
+
+  try {
+    return {
+      status: "valid",
+      document: parseAiCommandTranscriptDocument(input)
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: "invalid-ai-command-transcript",
+      message: `Stored AI command transcript is invalid: ${formatErrorMessage(error)}`
+    };
+  }
 };
 
 const invalidSchema = (message: string): PersistedEditorProjectValidationFailure => ({

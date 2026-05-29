@@ -1,3 +1,4 @@
+import { createEmptyAiApprovalState, type AiApprovalState } from "./ai-approval-state.js";
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
 import type { OperationResultSummaryState } from "./operation-result-summary.js";
@@ -19,6 +20,7 @@ export interface EditorSemanticState {
   readonly operationLog: OperationLogSummaryState;
   readonly generatedEvidence: GeneratedEvidenceSummaryState;
   readonly reload: ReloadSummaryState;
+  readonly aiApproval: AiApprovalState;
 }
 
 export const createInitialEditorSemanticState = (): EditorSemanticState => ({
@@ -30,5 +32,6 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),
-  reload: createEmptyReloadSummary()
+  reload: createEmptyReloadSummary(),
+  aiApproval: createEmptyAiApprovalState()
 });
