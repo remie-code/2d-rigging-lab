@@ -48,7 +48,8 @@ const applyCreateParameter = (
           })
         ]
       }),
-      targetIds: []
+      targetIds: [],
+      candidateSession: session
     };
   }
 
@@ -59,7 +60,8 @@ const applyCreateParameter = (
   if (preconditionDiagnostics.length > 0) {
     return {
       result: createRejectedOperationResult({ operationId, diagnostics: preconditionDiagnostics }),
-      targetIds: [parameterId]
+      targetIds: [parameterId],
+      candidateSession: session
     };
   }
 
@@ -89,7 +91,8 @@ const applyCreateParameter = (
 
   return {
     result,
-    targetIds: [parameterId]
+    targetIds: [parameterId],
+    candidateSession: session
   };
 };
 

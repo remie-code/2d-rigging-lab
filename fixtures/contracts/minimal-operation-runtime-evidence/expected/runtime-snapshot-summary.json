@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "operation-runtime-snapshot-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_minimal-valid-package_0",
+    "packageId": "pkg_minimal-valid-package",
+    "packageRevision": 0,
+    "parameterIds": [],
+    "drawList": [
+      "draw_body"
+    ]
+  },
+  "candidateSnapshot": {
+    "snapshotId": "snap_minimal-valid-package_1",
+    "packageId": "pkg_minimal-valid-package",
+    "packageRevision": 0,
+    "parameterIds": [
+      "param_fixture_smile"
+    ],
+    "authoredParameterValues": {
+      "param_fixture_smile": 1
+    },
+    "drawList": [
+      "draw_body"
+    ]
+  },
+  "generatedRuntimeSnapshotIds": [
+    "snap_minimal-valid-package_0",
+    "snap_minimal-valid-package_1"
+  ],
+  "generatedRuntimeStateRefs": [
+    "runtime/states/pkg_minimal-valid-package-r0-create-parameter-evidence-final-f1.runtime-state.json"
+  ],
+  "generatedRuntimeStateSequenceRefs": [
+    "runtime/state-sequences/pkg_minimal-valid-package-r0-create-parameter-evidence.runtime-state-sequence.json"
+  ],
+  "finalRuntimeState": {
+    "packageId": "pkg_minimal-valid-package",
+    "packageRevision": 0,
+    "frameIndex": 1
+  }
+}

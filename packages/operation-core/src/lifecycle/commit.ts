@@ -1,5 +1,9 @@
+import {
+  cloneAuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 
+import type { OperationEvidenceProviderLike } from "../operation-evidence-provider.js";
 import { createOperationLog, createOperationLogEntry } from "../operation-log.js";
 import type { OperationLog } from "../operation-log.js";
 import { getOperationHandler } from "../operation-registry.js";
@@ -11,10 +15,12 @@ import {
   createRejectedOperationResult,
   prepareOperationRequest
 } from "../preconditions.js";
+import { applyOperationEvidence } from "./evidence.js";
 
 export interface CommitOperationOptions {
   readonly operationLog?: OperationLog;
   readonly now?: () => Date;
+  readonly evidenceProvider?: OperationEvidenceProviderLike;
 }
 
 export interface CommitOperationOutcome {
@@ -55,6 +61,8 @@ export const commitOperation = (
     };
   }
 
+  const baselineSession =
+    options.evidenceProvider === undefined ? undefined : cloneAuthoringSession(session);
   const applied = handler.commit(session, prepared.request, prepared.operationId);
   if (applied.result.status !== "committed") {
     return {
@@ -62,10 +70,21 @@ export const commitOperation = (
       operationLogLength: operationLog.entries.length
     };
   }
+  const result = applyOperationEvidence({
+    ...(options.evidenceProvider === undefined
+      ? {}
+      : { provider: options.evidenceProvider }),
+    lifecycle: "commit",
+    baselineSession: baselineSession ?? session,
+    candidateSession: applied.candidateSession,
+    request: prepared.request,
+    result: applied.result,
+    targetIds: applied.targetIds
+  });
 
   const logEntry = createOperationLogEntry({
     request: prepared.request,
-    result: applied.result,
+    result,
     targetIds: applied.targetIds,
     precondition: createPreconditionResult(
       applied.result.precondition.diagnostics,
@@ -76,7 +95,7 @@ export const commitOperation = (
   const operationLogLength = operationLog.append(logEntry);
 
   return {
-    result: applied.result,
+    result,
     logEntry,
     operationLogLength
   };

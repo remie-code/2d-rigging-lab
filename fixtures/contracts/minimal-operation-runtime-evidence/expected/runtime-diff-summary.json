@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "operation-runtime-diff-summary-v1",
+  "runtimeDiff": {
+    "schemaVersion": "runtime-diff-v1",
+    "beforeSnapshotId": "snap_minimal-valid-package_0",
+    "afterSnapshotId": "snap_minimal-valid-package_1",
+    "parameterChangeCount": 0,
+    "dynamicsChangeCount": 0,
+    "drawableChangeCount": 0,
+    "diagnosticDeltaCount": 0
+  }
+}

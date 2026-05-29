@@ -5,20 +5,37 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("authoring-core dependency boundary", () => {
-  it("does not import runtime, operation, or validator implementation packages", () => {
+  it("imports runtime-core only from the runtime graph adapter and never imports operation or validator packages", () => {
     const sourceDirectory = dirname(fileURLToPath(import.meta.url));
     const sourceFiles = listTypeScriptFiles(sourceDirectory);
-    const forbiddenImportPattern =
-      /from\s+["']@private-2d-rigging-lab\/(?:runtime-core|operation-core|validator-core)["']/;
-    const offenders = sourceFiles.filter((filePath) => {
+    const forbiddenImportPattern = /from\s+["']@private-2d-rigging-lab\/(?:operation-core|validator-core)["']/;
+    const forbiddenOffenders = sourceFiles.filter((filePath) => {
       if (filePath.endsWith("dependency-boundary.test.ts")) {
         return false;
       }
 
       return forbiddenImportPattern.test(readFileSync(filePath, "utf8"));
     });
+    const runtimeImportPattern = /from\s+["']@private-2d-rigging-lab\/runtime-core["']/;
+    const allowedRuntimeImportFiles = new Set([
+      "runtime-graph-parameters.ts",
+      "runtime-graph-drawables.ts",
+      "runtime-graph-dynamics.ts",
+      "runtime-graph-rig-controls.ts",
+      "runtime-graph-keyforms.ts",
+      "to-runtime-graph.ts",
+      "runtime-graph-adapter.test.ts"
+    ]);
+    const runtimeOffenders = sourceFiles.filter((filePath) => {
+      if (!runtimeImportPattern.test(readFileSync(filePath, "utf8"))) {
+        return false;
+      }
 
-    expect(offenders).toEqual([]);
+      return !allowedRuntimeImportFiles.has(filePath.split(/[\\/]/).at(-1) ?? "");
+    });
+
+    expect(forbiddenOffenders).toEqual([]);
+    expect(runtimeOffenders).toEqual([]);
   });
 });
 

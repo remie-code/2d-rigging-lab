@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "minimal-operation-runtime-evidence",
+  "title": "Minimal createParameter operation with runtime and validation evidence",
+  "coversAC": [
+    "AC-MVP-008",
+    "AC-MVP-012",
+    "AC-MVP-013",
+    "AC-MVP-014"
+  ],
+  "coversScenarios": [
+    "SC-PARAM-002",
+    "SC-MVP-003",
+    "SC-MVP-004",
+    "SC-MVP-005"
+  ],
+  "modulesBlocked": [
+    "authoring-core",
+    "runtime-core",
+    "validator-core",
+    "operation-core"
+  ],
+  "inputArtifacts": [
+    "baseline-authoring-input.json",
+    "../minimal-valid-package/manifest.json",
+    "../minimal-valid-package/model/graph.json",
+    "../minimal-valid-package/model/drawables.json",
+    "../minimal-valid-package/model/meshes.json",
+    "../minimal-valid-package/model/parameters.json",
+    "../minimal-valid-package/model/keyforms.json",
+    "../minimal-valid-package/model/rig-controls.json",
+    "../minimal-valid-package/model/dynamics.json",
+    "../minimal-valid-package/model/masks.json",
+    "../minimal-valid-package/model/draw-order.json",
+    "../minimal-valid-package/assets/sources/source-manifest.json",
+    "../minimal-valid-package/assets/provenance.json",
+    "../minimal-valid-package/assets/rights.json",
+    "request/create-parameter-dry-run.request.json",
+    "request/create-parameter-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "runtimeSnapshot",
+      "path": "expected/runtime-snapshot-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeDiff",
+      "path": "expected/runtime-diff-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationDiff",
+      "path": "expected/validation-diff-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "operationLog",
+      "path": "expected/operation-result-evidence-summary.json",
+      "id": "op_fixture_create_runtime_evidence_smile",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

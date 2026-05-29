@@ -26,6 +26,9 @@ importers:
       '@private-2d-rigging-lab/package-format':
         specifier: workspace:*
         version: link:../package-format
+      '@private-2d-rigging-lab/runtime-core':
+        specifier: workspace:*
+        version: link:../runtime-core
 
   packages/contracts:
     dependencies:

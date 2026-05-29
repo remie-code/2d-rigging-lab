@@ -9,6 +9,7 @@ import { createParameterOperationHandler } from "./operations/create-parameter.j
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
   readonly targetIds: readonly string[];
+  readonly candidateSession: AuthoringSession;
 }
 
 export interface OperationHandler {

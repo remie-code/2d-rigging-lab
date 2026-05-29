@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "operation-result-evidence-summary-v1",
+  "dryRun": {
+    "operationId": "op_fixture_create_runtime_evidence_smile",
+    "status": "dry_run",
+    "generatedRuntimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_minimal-valid-package-r0-create-parameter-evidence-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_minimal-valid-package-r0-create-parameter-evidence.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r0-create-parameter-evidence-final-f1.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_fixture_dry_run_baseline",
+      "val_fixture_dry_run_candidate"
+    ],
+    "operationLogLength": 0,
+    "originalAuthoringRevisionAfter": 0,
+    "originalDirtyAfter": false
+  },
+  "commit": {
+    "operationId": "op_fixture_create_runtime_evidence_smile",
+    "status": "committed",
+    "generatedRuntimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_minimal-valid-package-r0-create-parameter-evidence-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_minimal-valid-package-r0-create-parameter-evidence.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r0-create-parameter-evidence-final-f1.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_fixture_commit_baseline",
+      "val_fixture_commit_candidate"
+    ],
+    "operationLogLength": 1,
+    "authoringRevisionAfter": 1,
+    "dirtyAfter": true,
+    "logEntry": {
+      "runtimeSnapshotIds": [
+        "snap_minimal-valid-package_0",
+        "snap_minimal-valid-package_1"
+      ],
+      "validationReportIds": [
+        "val_fixture_commit_baseline",
+        "val_fixture_commit_candidate"
+      ]
+    }
+  }
+}

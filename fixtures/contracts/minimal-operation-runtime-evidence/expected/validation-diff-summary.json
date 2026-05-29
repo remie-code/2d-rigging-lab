@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "operation-validation-diff-summary-v1",
+  "dryRun": {
+    "schemaVersion": "validation-diff-v1",
+    "beforeReportId": "val_fixture_dry_run_baseline",
+    "afterReportId": "val_fixture_dry_run_candidate",
+    "newFailureCount": 0,
+    "resolvedFailureCount": 0,
+    "severityChangeCount": 0
+  },
+  "commit": {
+    "schemaVersion": "validation-diff-v1",
+    "beforeReportId": "val_fixture_commit_baseline",
+    "afterReportId": "val_fixture_commit_candidate",
+    "newFailureCount": 0,
+    "resolvedFailureCount": 0,
+    "severityChangeCount": 0
+  }
+}

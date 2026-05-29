@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "operation-validation-report-summary-v1",
+  "dryRun": {
+    "baselineReportId": "val_fixture_dry_run_baseline",
+    "candidateReportId": "val_fixture_dry_run_candidate",
+    "status": "pass",
+    "highestSeverity": "info",
+    "operationLogPresent": false,
+    "runtimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ]
+  },
+  "commit": {
+    "baselineReportId": "val_fixture_commit_baseline",
+    "candidateReportId": "val_fixture_commit_candidate",
+    "status": "pass",
+    "highestSeverity": "info",
+    "operationLogPresent": true,
+    "operationLogPath": "operations/log.jsonl",
+    "runtimeSnapshotIds": [
+      "snap_minimal-valid-package_0",
+      "snap_minimal-valid-package_1"
+    ]
+  }
+}

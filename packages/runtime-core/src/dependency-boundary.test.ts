@@ -9,7 +9,7 @@ describe("runtime-core dependency boundary", () => {
     const sourceDirectory = dirname(fileURLToPath(import.meta.url));
     const sourceFiles = listTypeScriptFiles(sourceDirectory);
     const forbiddenImportPattern =
-      /from\s+["']@private-2d-rigging-lab\/(?:package-format|validator-core|operation-core)["']/;
+      /from\s+["']@private-2d-rigging-lab\/(?:package-format|authoring-core|operation-core|validator-core)["']/;
     const offenders = sourceFiles.filter((filePath) => {
       if (filePath.endsWith("dependency-boundary.test.ts")) {
         return false;

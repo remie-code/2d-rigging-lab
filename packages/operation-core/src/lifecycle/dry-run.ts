@@ -1,5 +1,6 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 
+import type { OperationEvidenceProviderLike } from "../operation-evidence-provider.js";
 import { getOperationHandler } from "../operation-registry.js";
 import type { OperationResultDto } from "../operation-result.js";
 import {
@@ -7,10 +8,16 @@ import {
   createRejectedOperationResult,
   prepareOperationRequest
 } from "../preconditions.js";
+import { applyOperationEvidence } from "./evidence.js";
+
+export interface DryRunOperationOptions {
+  readonly evidenceProvider?: OperationEvidenceProviderLike;
+}
 
 export const dryRunOperation = (
   session: AuthoringSession,
-  requestInput: unknown
+  requestInput: unknown,
+  options: DryRunOperationOptions = {}
 ): OperationResultDto => {
   const prepared = prepareOperationRequest(session, requestInput, true);
   if ("status" in prepared) {
@@ -31,5 +38,20 @@ export const dryRunOperation = (
     });
   }
 
-  return handler.dryRun(session, prepared.request, prepared.operationId).result;
+  const applied = handler.dryRun(session, prepared.request, prepared.operationId);
+  if (applied.result.status !== "dry_run") {
+    return applied.result;
+  }
+
+  return applyOperationEvidence({
+    ...(options.evidenceProvider === undefined
+      ? {}
+      : { provider: options.evidenceProvider }),
+    lifecycle: "dry_run",
+    baselineSession: session,
+    candidateSession: applied.candidateSession,
+    request: prepared.request,
+    result: applied.result,
+    targetIds: applied.targetIds
+  });
 };
