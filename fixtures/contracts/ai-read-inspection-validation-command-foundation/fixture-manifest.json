@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "ai-read-inspection-validation-command-foundation",
+  "title": "AI read inspection and validation command foundation fixture",
+  "coversAC": [
+    "AC-AGENT-001"
+  ],
+  "coversScenarios": [
+    "SC-AGENT-001"
+  ],
+  "modulesBlocked": [
+    "ai-interface",
+    "editor"
+  ],
+  "inputArtifacts": [
+    "request/ai-command-sequence.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "aiCommandSummary",
+      "path": "expected/ai-command-summary.json",
+      "id": "ai-read-inspection-validation-command-foundation",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "ai-read-inspection-validation-command-summary-v1",
+  "commandStatuses": [
+    {
+      "commandId": "cmd_ai_read_fixture_dry_run_parameter",
+      "command": "dryRunOperation",
+      "status": "ok",
+      "operationId": "op_ai_fixture_create_parameter_read_probe"
+    },
+    {
+      "commandId": "cmd_ai_read_fixture_commit_parameter",
+      "command": "commitOperation",
+      "status": "ok",
+      "operationId": "op_ai_fixture_create_parameter_read_probe"
+    },
+    {
+      "commandId": "cmd_ai_read_fixture_inspect_model",
+      "command": "inspectModel",
+      "status": "ok"
+    },
+    {
+      "commandId": "cmd_ai_read_fixture_inspect_target",
+      "command": "inspectTarget",
+      "status": "ok"
+    },
+    {
+      "commandId": "cmd_ai_read_fixture_validate_denied",
+      "command": "validatePackage",
+      "status": "permission_denied"
+    },
+    {
+      "commandId": "cmd_ai_read_fixture_validate_package",
+      "command": "validatePackage",
+      "status": "ok"
+    }
+  ],
+  "approvalEvents": [
+    {
+      "dryRunCommandId": "cmd_ai_read_fixture_dry_run_parameter",
+      "agentId": "agent_editor_ai_read_fixture",
+      "approvalStatus": "approved",
+      "operationId": "op_ai_fixture_create_parameter_read_probe"
+    }
+  ],
+  "committedState": {
+    "packageRevisionAfter": 1,
+    "parameterIdsAfter": [
+      "param_ai_fixture_read_probe"
+    ]
+  },
+  "inspectModel": {
+    "status": "ok",
+    "packageRevision": 1,
+    "targetCounts": {
+      "parameters": 1
+    },
+    "targetIds": [
+      "param_ai_fixture_read_probe"
+    ],
+    "editableTargetIds": [
+      "param_ai_fixture_read_probe"
+    ],
+    "supportedEditableTargetKinds": [
+      "parameter"
+    ]
+  },
+  "inspectTarget": {
+    "status": "ok",
+    "targetStatus": "ok",
+    "target": {
+      "kind": "parameter",
+      "id": "param_ai_fixture_read_probe",
+      "path": "/model/parameters/parameters/0"
+    },
+    "referenceCount": 0,
+    "parameter": {
+      "parameterId": "param_ai_fixture_read_probe",
+      "displayName": "AI Fixture Read Probe",
+      "semanticRole": "mouth",
+      "projectPresetAlias": "private-ai-fixture-read-probe",
+      "valueSource": "authoredInput",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "recommendedUiStep": 0.01
+    }
+  },
+  "validateDenied": {
+    "status": "permission_denied",
+    "reportId": "val_ai_permission_denied",
+    "reportSummary": {
+      "profile": "editorIncremental",
+      "packageRevision": 1,
+      "status": "not_applicable",
+      "highestSeverity": "info",
+      "counts": {
+        "info": 0,
+        "warning": 0,
+        "error": 0,
+        "blocking": 0
+      },
+      "checkCount": 0
+    }
+  },
+  "validatePackage": {
+    "status": "ok",
+    "reportId": "val_editor_browser_sample_editorIncremental",
+    "reportSummary": {
+      "profile": "editorIncremental",
+      "packageRevision": 1,
+      "status": "pass",
+      "highestSeverity": "info",
+      "counts": {
+        "info": 0,
+        "warning": 0,
+        "error": 0,
+        "blocking": 0
+      },
+      "checkCount": 0
+    }
+  }
+}

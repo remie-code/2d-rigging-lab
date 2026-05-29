@@ -6,16 +6,24 @@ import { describe, expect, it } from "vitest";
 import { createBrowserProjectStore, type StorageLike } from "../project-persistence/index.js";
 import { createEditorWorkflowController } from "../editor-workflow/index.js";
 
-const fixtureRoot = join(
+const dryRunFixtureRoot = join(
   process.cwd(),
   "fixtures/contracts/ai-dry-run-command-foundation"
+);
+const readFixtureRoot = join(
+  process.cwd(),
+  "fixtures/contracts/ai-read-inspection-validation-command-foundation"
 );
 
 describe("AI dry-run command foundation fixture", () => {
   it("matches the transcript and summary acceptance oracle", async () => {
-    const fixture = readJson<AiCommandSequenceFixture>("request/ai-command-sequence.json");
-    const expectedTranscript = readJson<unknown>("expected/ai-command-transcript.json");
-    const expectedSummary = readJson<unknown>("expected/ai-command-summary.json");
+    const fixture = readDryRunFixtureJson<AiCommandSequenceFixture>(
+      "request/ai-command-sequence.json"
+    );
+    const expectedTranscript = readDryRunFixtureJson<unknown>(
+      "expected/ai-command-transcript.json"
+    );
+    const expectedSummary = readDryRunFixtureJson<unknown>("expected/ai-command-summary.json");
     const workflow = createWorkflow(createMemoryStorage());
     const commandResults: Record<string, unknown> = {};
     const stateSnapshots: Record<string, WorkflowStateSummary> = {};
@@ -45,6 +53,39 @@ describe("AI dry-run command foundation fixture", () => {
 
     expect(transcript).toEqual(expectedTranscript);
     expect(summary).toEqual(expectedSummary);
+  });
+});
+
+describe("AI read inspection and validation command foundation fixture", () => {
+  it("matches the compact summary acceptance oracle", async () => {
+    const fixture = readReadFixtureJson<AiCommandSequenceFixture>(
+      "request/ai-command-sequence.json"
+    );
+    const expectedSummary = readReadFixtureJson<unknown>("expected/ai-command-summary.json");
+    const workflow = createWorkflow(createMemoryStorage());
+    const commandResults: Record<string, unknown> = {};
+    const stateSnapshots: Record<string, WorkflowStateSummary> = {};
+
+    for (const step of fixture.steps) {
+      if (step.kind === "approval") {
+        workflow.aiCommandHost.approvalPolicy.approveDryRunCommand({
+          dryRunCommandId: step.dryRunCommandId,
+          operationId: step.operationId
+        });
+        continue;
+      }
+
+      commandResults[step.stepId] = await workflow.aiCommandHost.execute(step.request);
+      stateSnapshots[step.stepId] = summarizeWorkflowState(workflow);
+    }
+
+    expect(
+      summarizeReadInspectionValidationFixtureRun({
+        workflow,
+        commandResults,
+        stateSnapshots
+      })
+    ).toEqual(expectedSummary);
   });
 });
 
@@ -144,6 +185,54 @@ const summarizeFixtureRun = (input: {
   };
 };
 
+const summarizeReadInspectionValidationFixtureRun = (input: {
+  readonly workflow: ReturnType<typeof createWorkflow>;
+  readonly commandResults: Readonly<Record<string, unknown>>;
+  readonly stateSnapshots: Readonly<Record<string, WorkflowStateSummary>>;
+}) => {
+  const inspectModelResponse = asCommandResponse(input.commandResults["inspect-model"]);
+  const inspectTargetResponse = asCommandResponse(input.commandResults["inspect-target"]);
+  const validateDeniedResponse = asCommandResponse(input.commandResults["validate-without-capability"]);
+  const validatePackageResponse = asCommandResponse(input.commandResults["validate-package"]);
+  const committedState = requireStateSummary(input.stateSnapshots["commit-read-probe-parameter"]);
+
+  return {
+    schemaVersion: "ai-read-inspection-validation-command-summary-v1",
+    commandStatuses: input.workflow.aiCommandHost.transcript.entries.flatMap((entry) =>
+      entry.entryType === "command"
+        ? [
+            {
+              commandId: entry.commandId,
+              command: entry.command,
+              status: entry.status,
+              ...(entry.operationId === undefined ? {} : { operationId: entry.operationId })
+            }
+          ]
+        : []
+    ),
+    approvalEvents: input.workflow.aiCommandHost.transcript.entries.flatMap((entry) =>
+      entry.entryType === "approval"
+        ? [
+            {
+              dryRunCommandId: entry.dryRunCommandId,
+              agentId: entry.agentId,
+              approvalStatus: entry.approvalStatus,
+              ...(entry.operationId === undefined ? {} : { operationId: entry.operationId })
+            }
+          ]
+        : []
+    ),
+    committedState: {
+      packageRevisionAfter: committedState.packageRevision,
+      parameterIdsAfter: committedState.parameterIds
+    },
+    inspectModel: summarizeInspectModelResponse(inspectModelResponse),
+    inspectTarget: summarizeInspectTargetResponse(inspectTargetResponse),
+    validateDenied: summarizeValidatePackageResponse(validateDeniedResponse),
+    validatePackage: summarizeValidatePackageResponse(validatePackageResponse)
+  };
+};
+
 interface WorkflowStateSummary {
   readonly packageRevision: number;
   readonly operationLogEntryCount: number;
@@ -185,6 +274,61 @@ const summarizeModelDiff = (modelDiff: unknown) => {
   };
 };
 
+const summarizeInspectModelResponse = (response: Record<string, unknown>) => {
+  const payload = asRecord(response["payload"]);
+
+  return {
+    status: response["status"],
+    packageRevision: payload["packageRevision"],
+    targetCounts: payload["targetCounts"],
+    targetIds: asArray(payload["targets"]).map((target) => asRecord(target)["id"]),
+    editableTargetIds: asArray(payload["editableTargets"]).map((target) => asRecord(target)["id"]),
+    supportedEditableTargetKinds: payload["supportedEditableTargetKinds"]
+  };
+};
+
+const summarizeInspectTargetResponse = (response: Record<string, unknown>) => {
+  const payload = asRecord(response["payload"]);
+  const parameter = asRecord(payload["parameter"]);
+
+  return {
+    status: response["status"],
+    targetStatus: payload["status"],
+    target: payload["target"],
+    referenceCount: asArray(payload["references"]).length,
+    parameter: {
+      parameterId: parameter["parameterId"],
+      displayName: parameter["displayName"],
+      semanticRole: parameter["semanticRole"],
+      projectPresetAlias: parameter["projectPresetAlias"],
+      valueSource: parameter["valueSource"],
+      min: parameter["min"],
+      max: parameter["max"],
+      default: parameter["default"],
+      recommendedUiStep: parameter["recommendedUiStep"]
+    }
+  };
+};
+
+const summarizeValidatePackageResponse = (response: Record<string, unknown>) => {
+  const payload = asRecord(response["payload"]);
+  const report = asRecord(payload["report"]);
+  const summary = asRecord(report["summary"]);
+
+  return {
+    status: response["status"],
+    reportId: payload["reportId"],
+    reportSummary: {
+      profile: report["profile"],
+      packageRevision: report["packageRevision"],
+      status: summary["status"],
+      highestSeverity: summary["highestSeverity"],
+      counts: summary["counts"],
+      checkCount: asArray(report["checks"]).length
+    }
+  };
+};
+
 const getOperationResult = (response: Record<string, unknown>) => {
   const payload = asRecord(response["payload"]);
 
@@ -215,8 +359,11 @@ const asArray = (value: unknown): readonly unknown[] => {
   return value;
 };
 
-const readJson = <TValue>(path: string): TValue =>
-  JSON.parse(readFileSync(join(fixtureRoot, path), "utf8")) as TValue;
+const readDryRunFixtureJson = <TValue>(path: string): TValue =>
+  JSON.parse(readFileSync(join(dryRunFixtureRoot, path), "utf8")) as TValue;
+
+const readReadFixtureJson = <TValue>(path: string): TValue =>
+  JSON.parse(readFileSync(join(readFixtureRoot, path), "utf8")) as TValue;
 
 const createWorkflow = (storage: StorageLike) =>
   createEditorWorkflowController({

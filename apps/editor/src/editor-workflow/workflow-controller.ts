@@ -17,6 +17,11 @@ import {
   type EditorAiCommandHost
 } from "../ai-command-host/index.js";
 import {
+  projectEditorInspectModel,
+  projectEditorInspectTarget
+} from "../ai-command-host/editor-ai-inspection-projector.js";
+import { projectEditorAiValidation } from "../ai-command-host/editor-ai-validation-projector.js";
+import {
   createEditorSessionAdapter,
   type EditorCreateParameterCommand,
   type EditorSessionAdapter,
@@ -137,6 +142,29 @@ export const createEditorWorkflowController = (
       readHost: {
         getEditorState(payload) {
           return projectEditorAiState(state, payload.detail);
+        },
+        inspectModel() {
+          return projectEditorInspectModel({
+            state,
+            packageDocument: adapter.createPersistenceSnapshot().document
+          });
+        },
+        inspectTarget(payload) {
+          return projectEditorInspectTarget(
+            {
+              state,
+              packageDocument: adapter.createPersistenceSnapshot().document
+            },
+            payload.target,
+            { includeReferences: payload.includeReferences }
+          );
+        },
+        validatePackage(payload) {
+          return projectEditorAiValidation({
+            packageDocument: adapter.createPersistenceSnapshot().document,
+            payload,
+            ...(options.now === undefined ? {} : { createdAt: options.now().toISOString() })
+          });
         },
         getOperationLog() {
           return adapter.getOperationLogEntries();

@@ -1,0 +1,246 @@
+{
+  "schemaVersion": "ai-command-sequence-v1",
+  "sequenceId": "ai-read-inspection-validation-command-foundation",
+  "agentId": "agent_editor_ai_read_fixture",
+  "basis": {
+    "packageRevision": 0,
+    "relatedAC": [
+      "AC-AGENT-001"
+    ],
+    "relatedScenarios": [
+      "SC-AGENT-001"
+    ]
+  },
+  "steps": [
+    {
+      "stepId": "dry-run-read-probe-parameter",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_dry_run_parameter",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "dryRunEdit"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "dryRunOperation",
+        "payload": {
+          "schemaVersion": "operation-request-v1",
+          "operationId": "op_ai_fixture_create_parameter_read_probe",
+          "actor": "ai",
+          "surface": "structuredApi",
+          "dryRun": true,
+          "basePackageRevision": 0,
+          "idempotencyKey": "ai-read-fixture-create-parameter-read-probe",
+          "trace": {
+            "relatedAC": [
+              "AC-AGENT-001"
+            ],
+            "relatedScenarios": [
+              "SC-AGENT-001"
+            ]
+          },
+          "operationType": "createParameter",
+          "payload": {
+            "parameterId": "param_ai_fixture_read_probe",
+            "displayName": "AI Fixture Read Probe",
+            "semanticRole": "mouth",
+            "projectPresetAlias": "private-ai-fixture-read-probe",
+            "valueSource": "authoredInput",
+            "min": 0,
+            "max": 1,
+            "default": 0,
+            "recommendedUiStep": 0.01
+          }
+        }
+      }
+    },
+    {
+      "stepId": "approve-read-probe-parameter",
+      "kind": "approval",
+      "dryRunCommandId": "cmd_ai_read_fixture_dry_run_parameter",
+      "operationId": "op_ai_fixture_create_parameter_read_probe"
+    },
+    {
+      "stepId": "commit-read-probe-parameter",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_commit_parameter",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "commitWithApproval"
+          ]
+        },
+        "basis": {
+          "packageRevision": 0,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "commitOperation",
+        "payload": {
+          "approvedDryRunCommandId": "cmd_ai_read_fixture_dry_run_parameter",
+          "operation": {
+            "schemaVersion": "operation-request-v1",
+            "operationId": "op_ai_fixture_create_parameter_read_probe",
+            "actor": "ai",
+            "surface": "structuredApi",
+            "dryRun": false,
+            "basePackageRevision": 0,
+            "idempotencyKey": "ai-read-fixture-create-parameter-read-probe",
+            "trace": {
+              "relatedAC": [
+                "AC-AGENT-001"
+              ],
+              "relatedScenarios": [
+                "SC-AGENT-001"
+              ]
+            },
+            "operationType": "createParameter",
+            "payload": {
+              "parameterId": "param_ai_fixture_read_probe",
+              "displayName": "AI Fixture Read Probe",
+              "semanticRole": "mouth",
+              "projectPresetAlias": "private-ai-fixture-read-probe",
+              "valueSource": "authoredInput",
+              "min": 0,
+              "max": 1,
+              "default": 0,
+              "recommendedUiStep": 0.01
+            }
+          }
+        }
+      }
+    },
+    {
+      "stepId": "inspect-model",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_inspect_model",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "read"
+          ]
+        },
+        "basis": {
+          "packageRevision": 1,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "inspectModel",
+        "payload": {
+          "includeEditorOnly": false,
+          "includeRuntimeOnly": true
+        }
+      }
+    },
+    {
+      "stepId": "inspect-target",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_inspect_target",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "read"
+          ]
+        },
+        "basis": {
+          "packageRevision": 1,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "inspectTarget",
+        "payload": {
+          "target": {
+            "kind": "parameter",
+            "id": "param_ai_fixture_read_probe"
+          },
+          "includeReferences": false
+        }
+      }
+    },
+    {
+      "stepId": "validate-without-capability",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_validate_denied",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "read"
+          ]
+        },
+        "basis": {
+          "packageRevision": 1,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "validatePackage",
+        "payload": {
+          "profile": "editorIncremental",
+          "packageRevision": 1
+        }
+      }
+    },
+    {
+      "stepId": "validate-package",
+      "kind": "command",
+      "request": {
+        "schemaVersion": "ai-command-request-v1",
+        "commandId": "cmd_ai_read_fixture_validate_package",
+        "session": {
+          "agentId": "agent_editor_ai_read_fixture",
+          "capabilities": [
+            "validate"
+          ]
+        },
+        "basis": {
+          "packageRevision": 1,
+          "relatedAC": [
+            "AC-AGENT-001"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-001"
+          ]
+        },
+        "command": "validatePackage",
+        "payload": {
+          "profile": "editorIncremental",
+          "packageRevision": 1
+        }
+      }
+    }
+  ]
+}

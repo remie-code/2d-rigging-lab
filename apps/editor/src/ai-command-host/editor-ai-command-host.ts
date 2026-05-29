@@ -49,7 +49,13 @@ export const createEditorAiCommandHost = (
     async execute(input) {
       const request = AiCommandRequestSchema.parse(input);
 
-      if (request.command === "getEditorState" || request.command === "getOperationLog") {
+      if (
+        request.command === "getEditorState" ||
+        request.command === "inspectModel" ||
+        request.command === "inspectTarget" ||
+        request.command === "validatePackage" ||
+        request.command === "getOperationLog"
+      ) {
         return executeAiReadCommand(request, options.readHost, operationExecutor.transcript);
       }
 

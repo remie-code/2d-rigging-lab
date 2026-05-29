@@ -10,5 +10,7 @@ export * from "./ai-approval-policy.js";
 export * from "./ai-command-transcript.js";
 export * from "./ai-command-executor.js";
 export * from "./ai-editor-state.js";
+export * from "./ai-inspection-command.js";
 export * from "./ai-operation-log-query.js";
 export * from "./ai-read-command.js";
+export * from "./ai-validation-command.js";

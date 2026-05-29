@@ -35,7 +35,7 @@
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 9 AI command approval UI and transcript persistence完了。次wave候補はtransport adapter foundation |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 10 AI read / inspection / validation command foundation完了。次wave推奨はAI operation catalog expansion |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の焦点
@@ -68,12 +68,13 @@
 | Implementation Wave 7 | 2026-05-29に `editor-project-persistence-and-e2e-hardening` を完了。DOM-free core/editor typecheck分離、operation log hydration、browser-local project persistence、save/load/reset UI、durable e2e smoke、integration review、final report、full verification pass を [implementation/waves/wave7/wave7-final-report.md](implementation/waves/wave7/wave7-final-report.md) に記録済み |
 | Implementation Wave 8 | 2026-05-29に `ai-interface-dry-run-command-foundation` を完了。`packages/ai-interface`、AI command schema、dry-run / approval / commit executor、editor in-process AI host、command transcript fixture、integration review、final report、full verification pass を [implementation/waves/wave8/wave8-final-report.md](implementation/waves/wave8/wave8-final-report.md) に記録済み |
 | Implementation Wave 9 | 2026-05-29に `ai-command-approval-ui-and-transcript-persistence` を完了。visible AI approval workflow、browser-local transcript persistence、transcript / operation log correlation、desktop/mobile e2e、clean integration review、final report、full verification pass を [implementation/waves/wave9/wave9-final-report.md](implementation/waves/wave9/wave9-final-report.md) に記録済み |
+| Implementation Wave 10 | 2026-05-29に `ai-read-inspection-validation-command-foundation` を完了。internal `inspectModel` / `inspectTarget` / `validatePackage` command、editor projector、host integration、compact fixture regression、clean review、full verification pass を [implementation/waves/wave10/wave10-final-report.md](implementation/waves/wave10/wave10-final-report.md) に記録済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. transport adapter が必要になった場合も、Wave 8/9 の command semantics と approval / transcript safety boundary を wrap し、HTTP / WebSocket / MCP 側で再定義しない。
-2. transport がまだ不要な場合は、deterministic AI operation catalog expansion を次wave候補として検討する。
+1. 次waveは `ai-operation-catalog-expansion` を第一候補として検討する。
+2. external HTTP / WebSocket / MCP API work は、MVP境界が明示変更されるまで Future scope に留める。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。

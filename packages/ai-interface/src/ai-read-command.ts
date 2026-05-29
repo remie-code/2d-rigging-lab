@@ -1,4 +1,5 @@
 import type { OperationLogEntryDto } from "@private-2d-rigging-lab/operation-core";
+import { ValidationReportSchema } from "@private-2d-rigging-lab/validator-core";
 
 import type { GetEditorStatePayload } from "./ai-command-payload.js";
 import { AiCommandRequestSchema, type AiCommandRequest } from "./ai-command-request.js";
@@ -9,31 +10,67 @@ import {
 } from "./ai-command-transcript.js";
 import { AiEditorStateSchema, type AiEditorState } from "./ai-editor-state.js";
 import {
+  InspectModelResultSchema,
+  InspectTargetResultSchema,
+  type InspectModelPayload,
+  type InspectModelResult,
+  type InspectTargetPayload,
+  type InspectTargetResult
+} from "./ai-inspection-command.js";
+import {
   filterAiOperationLogEntries,
   parseAiOperationLogQuery,
   type AiOperationLogQuery
 } from "./ai-operation-log-query.js";
+import {
+  ValidatePackageResultSchema,
+  type ValidatePackagePayload,
+  type ValidatePackageResult
+} from "./ai-validation-command.js";
 
 export interface AiReadCommandHost {
   getEditorState(payload: GetEditorStatePayload): AiEditorState | Promise<AiEditorState>;
+  inspectModel?(payload: InspectModelPayload): InspectModelResult | Promise<InspectModelResult>;
+  inspectTarget?(payload: InspectTargetPayload): InspectTargetResult | Promise<InspectTargetResult>;
+  validatePackage?(payload: ValidatePackagePayload): ValidatePackageResult | Promise<ValidatePackageResult>;
   getOperationLog(
     query: AiOperationLogQuery
   ): readonly OperationLogEntryDto[] | Promise<readonly OperationLogEntryDto[]>;
 }
 
-const hasReadCapability = (request: AiCommandRequest): boolean =>
-  request.session.capabilities.includes("read");
+type SupportedReadCommandName =
+  | "getEditorState"
+  | "inspectModel"
+  | "inspectTarget"
+  | "validatePackage"
+  | "getOperationLog";
+type SupportedReadRequest = Extract<AiCommandRequest, { command: SupportedReadCommandName }>;
 
-const permissionDeniedResponse = (request: AiCommandRequest): AiCommandResponse =>
+const isSupportedReadCommand = (request: AiCommandRequest): request is SupportedReadRequest =>
+  request.command === "getEditorState" ||
+  request.command === "inspectModel" ||
+  request.command === "inspectTarget" ||
+  request.command === "validatePackage" ||
+  request.command === "getOperationLog";
+
+const hasRequiredReadCapability = (request: SupportedReadRequest): boolean =>
+  request.command === "validatePackage"
+    ? request.session.capabilities.includes("validate")
+    : request.session.capabilities.includes("read");
+
+const permissionDeniedResponse = (request: SupportedReadRequest): AiCommandResponse =>
+  readStatusResponse(request, "permission_denied");
+
+const readStatusResponse = (
+  request: SupportedReadRequest,
+  status: "permission_denied" | "not_implemented"
+): AiCommandResponse =>
   AiCommandResponseSchema.parse({
     schemaVersion: "ai-command-response-v1",
     commandId: request.commandId,
-    status: "permission_denied",
+    status,
     command: request.command,
-    payload:
-      request.command === "getEditorState"
-        ? { editorState: { schemaVersion: "editor-semantic-state-v1", packageRevision: 0 } }
-        : { entries: [] }
+    payload: emptyPayloadForReadCommand(request)
   });
 
 export const executeAiReadCommand = async (
@@ -43,7 +80,7 @@ export const executeAiReadCommand = async (
 ): Promise<AiCommandResponse> => {
   const request = AiCommandRequestSchema.parse(requestInput);
 
-  if (request.command !== "getEditorState" && request.command !== "getOperationLog") {
+  if (!isSupportedReadCommand(request)) {
     return recordReadResponse(
       request,
       AiCommandResponseSchema.parse({
@@ -59,7 +96,7 @@ export const executeAiReadCommand = async (
     );
   }
 
-  if (!hasReadCapability(request)) {
+  if (!hasRequiredReadCapability(request)) {
     return recordReadResponse(request, permissionDeniedResponse(request), transcript);
   }
 
@@ -76,6 +113,66 @@ export const executeAiReadCommand = async (
         payload: {
           editorState
         }
+      }),
+      transcript
+    );
+  }
+
+  if (request.command === "inspectModel") {
+    if (host.inspectModel === undefined) {
+      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
+    }
+
+    const result = InspectModelResultSchema.parse(await host.inspectModel(request.payload));
+
+    return recordReadResponse(
+      request,
+      AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        status: "ok",
+        command: "inspectModel",
+        payload: result
+      }),
+      transcript
+    );
+  }
+
+  if (request.command === "inspectTarget") {
+    if (host.inspectTarget === undefined) {
+      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
+    }
+
+    const result = InspectTargetResultSchema.parse(await host.inspectTarget(request.payload));
+
+    return recordReadResponse(
+      request,
+      AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        status: "ok",
+        command: "inspectTarget",
+        payload: result
+      }),
+      transcript
+    );
+  }
+
+  if (request.command === "validatePackage") {
+    if (host.validatePackage === undefined) {
+      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
+    }
+
+    const result = ValidatePackageResultSchema.parse(await host.validatePackage(request.payload));
+
+    return recordReadResponse(
+      request,
+      AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        status: "ok",
+        command: "validatePackage",
+        payload: result
       }),
       transcript
     );
@@ -113,4 +210,48 @@ const recordReadResponse = (
   }
 
   return response;
+};
+
+const emptyPayloadForReadCommand = (request: SupportedReadRequest) => {
+  switch (request.command) {
+    case "getEditorState":
+      return { editorState: { schemaVersion: "editor-semantic-state-v1", packageRevision: 0 } };
+    case "inspectModel":
+      return { targets: [], editableTargets: [] };
+    case "inspectTarget":
+      return { target: request.payload.target, references: [] };
+    case "validatePackage":
+      return {
+        reportId: "val_ai_permission_denied",
+        report: ValidationReportSchema.parse({
+          schemaVersion: "validation-report-v1",
+          reportId: "val_ai_permission_denied",
+          createdAt: "2026-05-29T00:00:00.000Z",
+          packageId: "pkg_unknown",
+          packageRevision: request.payload.packageRevision ?? 0,
+          validatorVersion: "ai-interface",
+          profile: request.payload.profile,
+          relatedScenarios: [],
+          summary: {
+            status: "not_applicable",
+            highestSeverity: "info",
+            counts: {
+              info: 0,
+              warning: 0,
+              error: 0,
+              blocking: 0
+            }
+          },
+          checks: [],
+          repairCandidates: [],
+          evidence: {
+            operationLogPresent: false,
+            runtimeSnapshotIds: [],
+            supplementalGuiEvidenceRefs: []
+          }
+        })
+      };
+    case "getOperationLog":
+      return { entries: [] };
+  }
 };

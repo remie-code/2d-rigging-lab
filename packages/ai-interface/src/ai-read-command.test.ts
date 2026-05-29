@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { OperationLogEntrySchema } from "@private-2d-rigging-lab/operation-core";
+import { ValidationReportSchema } from "@private-2d-rigging-lab/validator-core";
 
 import { executeAiReadCommand, type AiReadCommandHost } from "./ai-read-command.js";
 import { InMemoryAiCommandTranscript } from "./ai-command-transcript.js";
@@ -54,7 +55,44 @@ const createOperationLogEntry = (operationId: string, targetIds: string[], surfa
     reversible: true
   });
 
-const createReadRequest = (command: "getEditorState" | "getOperationLog", payload: object, capabilities = ["read"]) => ({
+const validationReport = ValidationReportSchema.parse({
+  schemaVersion: "validation-report-v1",
+  reportId: "val_ai_read_contract",
+  createdAt: "2026-05-29T00:00:00.000Z",
+  packageId: "pkg_ai_read_contract",
+  packageRevision: 7,
+  validatorVersion: "validator-test",
+  profile: "strict",
+  relatedScenarios: ["SC-AGENT-001"],
+  summary: {
+    status: "pass",
+    highestSeverity: "info",
+    counts: {
+      info: 0,
+      warning: 0,
+      error: 0,
+      blocking: 0
+    }
+  },
+  checks: [],
+  repairCandidates: [],
+  evidence: {
+    operationLogPresent: false,
+    runtimeSnapshotIds: [],
+    supplementalGuiEvidenceRefs: []
+  }
+});
+
+const createReadHost = (overrides: Partial<AiReadCommandHost> = {}): AiReadCommandHost => ({
+  getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
+  inspectModel: () => ({ targets: [], editableTargets: [] }),
+  inspectTarget: (payload) => ({ target: payload.target, references: [] }),
+  validatePackage: () => ({ reportId: validationReport.reportId, report: validationReport }),
+  getOperationLog: () => [],
+  ...overrides
+});
+
+const createReadRequest = (command: string, payload: object, capabilities = ["read"]) => ({
   schemaVersion: "ai-command-request-v1",
   commandId: `cmd_${command}`,
   session: {
@@ -71,14 +109,13 @@ const createReadRequest = (command: "getEditorState" | "getOperationLog", payloa
 
 describe("AI read command execution", () => {
   it("returns current package revision and schema version through the host", async () => {
-    const host: AiReadCommandHost = {
+    const host = createReadHost({
       getEditorState: () => ({
         schemaVersion: "editor-semantic-state-v1",
         packageRevision: 7,
         activeMode: "authoring"
-      }),
-      getOperationLog: () => []
-    };
+      })
+    });
 
     const response = await executeAiReadCommand(createReadRequest("getEditorState", {}), host);
 
@@ -101,13 +138,12 @@ describe("AI read command execution", () => {
       createOperationLogEntry("op_other_parameter", ["param_other"])
     ];
     const observedQueries: AiOperationLogQuery[] = [];
-    const host: AiReadCommandHost = {
-      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
+    const host = createReadHost({
       getOperationLog: (query) => {
         observedQueries.push(query);
         return entries;
       }
-    };
+    });
 
     const response = await executeAiReadCommand(
       createReadRequest("getOperationLog", { operationIds: ["op_create_ai_parameter"] }),
@@ -133,10 +169,9 @@ describe("AI read command execution", () => {
       createOperationLogEntry("op_create_ai_parameter", ["param_ai_parameter"]),
       createOperationLogEntry("op_other_parameter", ["param_other"])
     ];
-    const host: AiReadCommandHost = {
-      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
+    const host = createReadHost({
       getOperationLog: () => entries
-    };
+    });
 
     const response = await executeAiReadCommand(createReadRequest("getOperationLog", {}), host);
 
@@ -156,11 +191,87 @@ describe("AI read command execution", () => {
     });
   });
 
+  it("dispatches inspectModel through the read host", async () => {
+    const host = createReadHost({
+      inspectModel: (payload) => ({
+        targets: [{ kind: "parameter", id: "param_faceYaw" }],
+        editableTargets: payload.includeEditorOnly ? [{ kind: "rigControl", id: "rig_face" }] : []
+      })
+    });
+
+    const response = await executeAiReadCommand(
+      createReadRequest("inspectModel", { includeEditorOnly: true }),
+      host
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "inspectModel",
+      payload: {
+        targets: [{ kind: "parameter", id: "param_faceYaw" }],
+        editableTargets: [{ kind: "rigControl", id: "rig_face" }]
+      }
+    });
+  });
+
+  it("dispatches inspectTarget through the read host", async () => {
+    const host = createReadHost({
+      inspectTarget: (payload) => ({
+        target: payload.target,
+        references: [{ kind: "keyformSet", id: "keyset_faceYaw" }]
+      })
+    });
+
+    const response = await executeAiReadCommand(
+      createReadRequest("inspectTarget", {
+        target: { kind: "parameter", id: "param_faceYaw" }
+      }),
+      host
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "inspectTarget",
+      payload: {
+        target: { kind: "parameter", id: "param_faceYaw" },
+        references: [{ kind: "keyformSet", id: "keyset_faceYaw" }]
+      }
+    });
+  });
+
+  it("dispatches validatePackage through the read host with validate capability", async () => {
+    const host = createReadHost({
+      validatePackage: (payload) => ({
+        reportId: validationReport.reportId,
+        report: {
+          ...validationReport,
+          profile: payload.profile,
+          packageRevision: payload.packageRevision ?? validationReport.packageRevision
+        }
+      })
+    });
+
+    const response = await executeAiReadCommand(
+      createReadRequest("validatePackage", { profile: "strict", packageRevision: 7 }, ["validate"]),
+      host
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "validatePackage",
+      payload: {
+        reportId: "val_ai_read_contract",
+        report: {
+          schemaVersion: "validation-report-v1",
+          profile: "strict",
+          packageRevision: 7
+        }
+      }
+    });
+  });
+
   it("returns permission_denied when read capability is missing", async () => {
-    const host: AiReadCommandHost = {
-      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
-      getOperationLog: () => []
-    };
+    const host = createReadHost();
 
     const response = await executeAiReadCommand(
       createReadRequest("getEditorState", {}, ["dryRunEdit"]),
@@ -173,12 +284,47 @@ describe("AI read command execution", () => {
     });
   });
 
-  it("records read command responses in the supplied transcript", async () => {
-    const transcript = new InMemoryAiCommandTranscript();
+  it("returns permission_denied when validatePackage lacks validate capability", async () => {
+    const response = await executeAiReadCommand(
+      createReadRequest("validatePackage", { profile: "strict" }, ["read"]),
+      createReadHost()
+    );
+
+    expect(response).toMatchObject({
+      status: "permission_denied",
+      command: "validatePackage",
+      payload: {
+        reportId: "val_ai_permission_denied"
+      }
+    });
+  });
+
+  it("returns not_implemented when a supported read command has no host method yet", async () => {
     const host: AiReadCommandHost = {
-      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 3 }),
+      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
       getOperationLog: () => []
     };
+
+    const response = await executeAiReadCommand(
+      createReadRequest("inspectModel", {}, ["read"]),
+      host
+    );
+
+    expect(response).toMatchObject({
+      status: "not_implemented",
+      command: "inspectModel",
+      payload: {
+        targets: [],
+        editableTargets: []
+      }
+    });
+  });
+
+  it("records read command responses in the supplied transcript", async () => {
+    const transcript = new InMemoryAiCommandTranscript();
+    const host = createReadHost({
+      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 3 })
+    });
 
     await executeAiReadCommand(createReadRequest("getEditorState", {}), host, transcript);
     await executeAiReadCommand(
@@ -220,11 +366,12 @@ describe("AI read command execution", () => {
     let dryRunOperationCalls = 0;
     let commitOperationCalls = 0;
     const host = {
-      getEditorState: (): AiEditorState => {
-        getEditorStateCalls += 1;
-        return { schemaVersion: "editor-semantic-state-v1", packageRevision: 3 };
-      },
-      getOperationLog: () => [],
+      ...createReadHost({
+        getEditorState: (): AiEditorState => {
+          getEditorStateCalls += 1;
+          return { schemaVersion: "editor-semantic-state-v1", packageRevision: 3 };
+        }
+      }),
       dryRunOperation: () => {
         dryRunOperationCalls += 1;
       },

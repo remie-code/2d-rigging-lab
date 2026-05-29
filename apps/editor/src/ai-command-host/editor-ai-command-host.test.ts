@@ -335,6 +335,175 @@ describe("editor AI command host", () => {
     });
   });
 
+  it("returns inspectModel parameter target refs through the AI host", async () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    await dryRunAndApproveAiCreateParameter(workflow, "smile");
+    await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_commit_smile",
+        command: "commitOperation",
+        capabilities: ["commitWithApproval"],
+        payload: {
+          approvedDryRunCommandId: "cmd_ai_dry_run_smile",
+          operation: createAiCreateParameterOperation({
+            name: "smile",
+            dryRun: false,
+            basePackageRevision: 0
+          })
+        }
+      })
+    );
+
+    const response = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_inspect_model",
+        command: "inspectModel",
+        capabilities: ["read"],
+        payload: { includeEditorOnly: true, includeRuntimeOnly: true }
+      })
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "inspectModel",
+      payload: {
+        targets: [
+          {
+            kind: "parameter",
+            id: "param_ai_smile",
+            path: "/model/parameters/parameters/0"
+          }
+        ],
+        editableTargets: [
+          {
+            kind: "parameter",
+            id: "param_ai_smile",
+            path: "/model/parameters/parameters/0"
+          }
+        ],
+        targetCounts: {
+          parameters: 1
+        }
+      }
+    });
+    expect(workflow.aiCommandHost.transcript.entries).toContainEqual(
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_ai_inspect_model",
+        command: "inspectModel",
+        status: "ok"
+      })
+    );
+  });
+
+  it("returns inspectTarget parameter detail through the AI host", async () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    await dryRunAndApproveAiCreateParameter(workflow, "brow");
+    await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_commit_brow",
+        command: "commitOperation",
+        capabilities: ["commitWithApproval"],
+        payload: {
+          approvedDryRunCommandId: "cmd_ai_dry_run_brow",
+          operation: createAiCreateParameterOperation({
+            name: "brow",
+            dryRun: false,
+            basePackageRevision: 0
+          })
+        }
+      })
+    );
+
+    const response = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_inspect_brow",
+        command: "inspectTarget",
+        capabilities: ["read"],
+        payload: {
+          target: {
+            kind: "parameter",
+            id: "param_ai_brow"
+          },
+          includeReferences: false
+        }
+      })
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "inspectTarget",
+      payload: {
+        status: "ok",
+        target: {
+          kind: "parameter",
+          id: "param_ai_brow",
+          path: "/model/parameters/parameters/0"
+        },
+        references: [],
+        parameter: {
+          parameterId: "param_ai_brow",
+          displayName: "AI Brow",
+          semanticRole: "brow",
+          projectPresetAlias: "private-ai-brow-control",
+          valueSource: "authoredInput",
+          min: 0,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        }
+      }
+    });
+  });
+
+  it("validates the current package through the AI host and requires validate capability", async () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    const denied = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_validate_without_capability",
+        command: "validatePackage",
+        capabilities: ["read"],
+        payload: { profile: "strict", packageRevision: 0 }
+      })
+    );
+    const validated = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_validate_package",
+        command: "validatePackage",
+        capabilities: ["validate"],
+        payload: { profile: "strict", packageRevision: 0 }
+      })
+    );
+
+    expect(denied).toMatchObject({
+      status: "permission_denied",
+      command: "validatePackage",
+      payload: {
+        report: {
+          profile: "strict"
+        }
+      }
+    });
+    expect(validated).toMatchObject({
+      status: "ok",
+      command: "validatePackage",
+      payload: {
+        report: {
+          schemaVersion: "validation-report-v1",
+          packageId: "pkg_editor_browser_sample",
+          packageRevision: 0,
+          profile: "strict"
+        }
+      }
+    });
+    expect(validated.payload).toMatchObject({
+      reportId: expect.any(String)
+    });
+  });
+
   it("clears stale AI approvals when loading or resetting the workflow session", async () => {
     const storage = createMemoryStorage();
     const workflow = createWorkflow(storage);
@@ -466,8 +635,15 @@ const dryRunAndApproveAiCreateParameter = async (
 
 const createAiRequest = (input: {
   readonly commandId: string;
-  readonly command: "getEditorState" | "dryRunOperation" | "commitOperation" | "getOperationLog";
-  readonly capabilities: readonly ("read" | "dryRunEdit" | "commitWithApproval")[];
+  readonly command:
+    | "getEditorState"
+    | "inspectModel"
+    | "inspectTarget"
+    | "validatePackage"
+    | "dryRunOperation"
+    | "commitOperation"
+    | "getOperationLog";
+  readonly capabilities: readonly ("read" | "dryRunEdit" | "commitWithApproval" | "validate")[];
   readonly payload: unknown;
 }) => ({
   schemaVersion: "ai-command-request-v1",

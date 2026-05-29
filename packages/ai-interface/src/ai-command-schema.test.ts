@@ -92,6 +92,34 @@ const operationLogEntry = {
   reversible: true
 } as const;
 
+const validationReport = {
+  schemaVersion: "validation-report-v1",
+  reportId: "val_ai_read_contract",
+  createdAt: "2026-05-29T00:00:00.000Z",
+  packageId: "pkg_ai_read_contract",
+  packageRevision: 0,
+  validatorVersion: "validator-test",
+  profile: "strict",
+  relatedScenarios: ["SC-AGENT-001"],
+  summary: {
+    status: "pass",
+    highestSeverity: "info",
+    counts: {
+      info: 0,
+      warning: 0,
+      error: 0,
+      blocking: 0
+    }
+  },
+  checks: [],
+  repairCandidates: [],
+  evidence: {
+    operationLogPresent: false,
+    runtimeSnapshotIds: [],
+    supplementalGuiEvidenceRefs: []
+  }
+} as const;
+
 describe("AI command schema foundation", () => {
   it("parses valid minimal command requests", () => {
     const editorStateRequest = AiCommandRequestSchema.parse({
@@ -108,6 +136,56 @@ describe("AI command schema foundation", () => {
       },
       command: "getEditorState",
       payload: {}
+    });
+    const inspectModelRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_inspect_model",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["read"]
+      },
+      basis: {
+        relatedAC: ["AC-AGENT-001"],
+        relatedScenarios: ["SC-AGENT-001"]
+      },
+      command: "inspectModel",
+      payload: {}
+    });
+    const inspectTargetRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_inspect_target",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["read"]
+      },
+      basis: {
+        relatedAC: ["AC-AGENT-001"],
+        relatedScenarios: ["SC-AGENT-001"]
+      },
+      command: "inspectTarget",
+      payload: {
+        target: {
+          kind: "parameter",
+          id: "param_faceYaw"
+        }
+      }
+    });
+    const validatePackageRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_validate_package",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["validate"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: ["AC-AGENT-001"],
+        relatedScenarios: ["SC-AGENT-001"]
+      },
+      command: "validatePackage",
+      payload: {
+        profile: "strict"
+      }
     });
     const dryRunRequest = AiCommandRequestSchema.parse({
       schemaVersion: "ai-command-request-v1",
@@ -169,6 +247,29 @@ describe("AI command schema foundation", () => {
         detail: "summary"
       }
     });
+    expect(inspectModelRequest).toMatchObject({
+      command: "inspectModel",
+      payload: {
+        includeEditorOnly: false,
+        includeRuntimeOnly: true
+      }
+    });
+    expect(inspectTargetRequest).toMatchObject({
+      command: "inspectTarget",
+      payload: {
+        includeReferences: true,
+        target: {
+          kind: "parameter",
+          id: "param_faceYaw"
+        }
+      }
+    });
+    expect(validatePackageRequest).toMatchObject({
+      command: "validatePackage",
+      payload: {
+        profile: "strict"
+      }
+    });
     expect(dryRunRequest).toMatchObject({
       command: "dryRunOperation",
       payload: {
@@ -203,6 +304,42 @@ describe("AI command schema foundation", () => {
           packageRevision: 0,
           activeMode: "authoring"
         }
+      }
+    });
+    const inspectModelResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_inspect_model",
+      status: "ok",
+      command: "inspectModel",
+      payload: {
+        targets: [
+          {
+            kind: "parameter",
+            id: "param_faceYaw"
+          }
+        ]
+      }
+    });
+    const inspectTargetResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_inspect_target",
+      status: "ok",
+      command: "inspectTarget",
+      payload: {
+        target: {
+          kind: "parameter",
+          id: "param_faceYaw"
+        }
+      }
+    });
+    const validatePackageResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_validate_package",
+      status: "ok",
+      command: "validatePackage",
+      payload: {
+        reportId: "val_ai_read_contract",
+        report: validationReport
       }
     });
     const dryRunResponse = AiCommandResponseSchema.parse({
@@ -246,6 +383,32 @@ describe("AI command schema foundation", () => {
       }
     });
     expect(editorStateResponse.diagnostics).toEqual([]);
+    expect(inspectModelResponse).toMatchObject({
+      payload: {
+        targets: [
+          {
+            id: "param_faceYaw"
+          }
+        ],
+        editableTargets: []
+      }
+    });
+    expect(inspectTargetResponse).toMatchObject({
+      payload: {
+        target: {
+          id: "param_faceYaw"
+        },
+        references: []
+      }
+    });
+    expect(validatePackageResponse).toMatchObject({
+      payload: {
+        reportId: "val_ai_read_contract",
+        report: {
+          schemaVersion: "validation-report-v1"
+        }
+      }
+    });
     expect(dryRunResponse).toMatchObject({
       payload: {
         operationResult: {
@@ -318,6 +481,9 @@ describe("AI command schema foundation", () => {
 
   it("rejects invalid capabilities and command names", () => {
     expect(AiCapabilitySchema.safeParse("mutateDirectly").success).toBe(false);
+    expect(AiCommandNameSchema.parse("inspectModel")).toBe("inspectModel");
+    expect(AiCommandNameSchema.parse("inspectTarget")).toBe("inspectTarget");
+    expect(AiCommandNameSchema.parse("validatePackage")).toBe("validatePackage");
     expect(AiCommandNameSchema.safeParse("getRuntimeSnapshot").success).toBe(false);
     expect(
       AiCommandRequestSchema.safeParse({

@@ -41,6 +41,45 @@ class FakeOperationCommandHost implements AiOperationCommandHost {
 }
 
 describe("AI operation command executor", () => {
+  it("returns command-matching not_implemented for read commands routed to the operation executor", async () => {
+    const host = new FakeOperationCommandHost();
+    const executor = createExecutor(host);
+
+    const response = await executor.execute({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_validate_package_unsupported_executor_path",
+      session: {
+        agentId,
+        capabilities: ["validate"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: ["AC-MVP-014"],
+        relatedScenarios: ["SC-AGENT-002"]
+      },
+      command: "validatePackage",
+      payload: {
+        profile: "strict",
+        packageRevision: 0
+      }
+    });
+
+    expect(response).toMatchObject({
+      commandId: "cmd_validate_package_unsupported_executor_path",
+      command: "validatePackage",
+      status: "not_implemented",
+      payload: {
+        reportId: "val_ai_operation_executor_not_implemented",
+        report: {
+          profile: "strict",
+          packageRevision: 0
+        }
+      }
+    });
+    expect(host.dryRunCalls).toHaveLength(0);
+    expect(host.commitCalls).toHaveLength(0);
+  });
+
   it("denies dry-run when the session is read-only", async () => {
     const host = new FakeOperationCommandHost();
     const executor = createExecutor(host);

@@ -2,6 +2,7 @@ import type { DiagnosticDto } from "@private-2d-rigging-lab/contracts";
 import { CheckIdSchema, OperationIdSchema } from "@private-2d-rigging-lab/contracts";
 import type { OperationRequestDto, OperationResultDto } from "@private-2d-rigging-lab/operation-core";
 import { OperationResultSchema } from "@private-2d-rigging-lab/operation-core";
+import { ValidationReportSchema } from "@private-2d-rigging-lab/validator-core";
 
 import type { AiCapability } from "./ai-capability.js";
 import { InMemoryAiApprovalPolicy } from "./ai-approval-policy.js";
@@ -20,6 +21,10 @@ import type { AiOperationCommandHost } from "./ai-command-host.js";
 
 type DryRunCommandRequest = Extract<AiCommandRequest, { command: "dryRunOperation" }>;
 type CommitCommandRequest = Extract<AiCommandRequest, { command: "commitOperation" }>;
+type UnsupportedReadCommandRequest = Extract<
+  AiCommandRequest,
+  { command: "getEditorState" | "inspectModel" | "inspectTarget" | "validatePackage" | "getOperationLog" }
+>;
 
 export interface AiCommandExecutorOptions {
   readonly host: AiOperationCommandHost;
@@ -58,6 +63,9 @@ export class AiCommandExecutor {
       case "commitOperation":
         return this.#executeCommit(request);
       case "getEditorState":
+      case "inspectModel":
+      case "inspectTarget":
+      case "validatePackage":
       case "getOperationLog":
         return this.#unsupportedReadCommand(request);
     }
@@ -135,17 +143,14 @@ export class AiCommandExecutor {
     });
   }
 
-  #unsupportedReadCommand(request: Extract<AiCommandRequest, { command: "getEditorState" | "getOperationLog" }>): AiCommandResponse {
+  #unsupportedReadCommand(request: UnsupportedReadCommandRequest): AiCommandResponse {
     const response = AiCommandResponseSchema.parse({
       schemaVersion: "ai-command-response-v1",
       commandId: request.commandId,
       status: "not_implemented",
       evidenceRefs: [],
       command: request.command,
-      payload:
-        request.command === "getEditorState"
-          ? { editorState: { schemaVersion: "editor-semantic-state-v1" } }
-          : { entries: [] }
+      payload: unsupportedReadPayload(request)
     });
 
     appendAiCommandResponseToTranscript({
@@ -196,6 +201,50 @@ export const executeAiCommand = (input: unknown, options: AiCommandExecutorOptio
 
 const hasCapability = (request: AiCommandRequest, capability: AiCapability): boolean =>
   request.session.capabilities.includes(capability);
+
+const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
+  switch (request.command) {
+    case "getEditorState":
+      return { editorState: { schemaVersion: "editor-semantic-state-v1" } };
+    case "inspectModel":
+      return { targets: [], editableTargets: [] };
+    case "inspectTarget":
+      return { target: request.payload.target, references: [] };
+    case "validatePackage":
+      return {
+        reportId: "val_ai_operation_executor_not_implemented",
+        report: ValidationReportSchema.parse({
+          schemaVersion: "validation-report-v1",
+          reportId: "val_ai_operation_executor_not_implemented",
+          createdAt: "2026-05-29T00:00:00.000Z",
+          packageId: "pkg_unknown",
+          packageRevision: request.payload.packageRevision ?? 0,
+          validatorVersion: "ai-interface",
+          profile: request.payload.profile,
+          relatedScenarios: [],
+          summary: {
+            status: "not_applicable",
+            highestSeverity: "info",
+            counts: {
+              info: 0,
+              warning: 0,
+              error: 0,
+              blocking: 0
+            }
+          },
+          checks: [],
+          repairCandidates: [],
+          evidence: {
+            operationLogPresent: false,
+            runtimeSnapshotIds: [],
+            supplementalGuiEvidenceRefs: []
+          }
+        })
+      };
+    case "getOperationLog":
+      return { entries: [] };
+  }
+};
 
 class TranscriptingAiApprovalPolicy implements AiApprovalPolicy {
   readonly #policy: AiApprovalPolicy;

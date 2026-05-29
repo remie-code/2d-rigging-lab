@@ -2,6 +2,12 @@ import { OperationIdSchema, SurfaceSchema } from "@private-2d-rigging-lab/contra
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
 import { z } from "zod";
 
+import {
+  InspectModelPayloadSchema,
+  InspectTargetPayloadSchema
+} from "./ai-inspection-command.js";
+import { ValidatePackagePayloadSchema } from "./ai-validation-command.js";
+
 export const GetEditorStatePayloadSchema = z.object({
   detail: z.enum(["summary", "full"]).default("summary")
 });
@@ -33,6 +39,18 @@ export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   z.object({
     command: z.literal("getEditorState"),
     payload: GetEditorStatePayloadSchema
+  }),
+  z.object({
+    command: z.literal("inspectModel"),
+    payload: InspectModelPayloadSchema
+  }),
+  z.object({
+    command: z.literal("inspectTarget"),
+    payload: InspectTargetPayloadSchema
+  }),
+  z.object({
+    command: z.literal("validatePackage"),
+    payload: ValidatePackagePayloadSchema
   }),
   z.object({
     command: z.literal("dryRunOperation"),
