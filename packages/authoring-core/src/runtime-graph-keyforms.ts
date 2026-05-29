@@ -10,6 +10,7 @@ export const createRuntimeKeyformBindings = (graph: AuthoringGraph): readonly Ke
     if (keyformSet.evaluator === "linear-1d-v1") {
       return {
         evaluator: "linear-1d-v1",
+        keyformSetId: keyformSet.keyformSetId,
         targetId: target.targetId,
         targetKind: target.targetKind,
         targetProperty: target.targetProperty,
@@ -25,6 +26,7 @@ export const createRuntimeKeyformBindings = (graph: AuthoringGraph): readonly Ke
 
     return {
       evaluator: "parameter-grid-2d-v1",
+      keyformSetId: keyformSet.keyformSetId,
       targetId: target.targetId,
       targetKind: target.targetKind,
       targetProperty: target.targetProperty,

@@ -5,11 +5,17 @@ import {
   OperationRequestSchema,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
+import {
+  createRuntimeSnapshotArtifactPath,
+  RuntimeSnapshotSchema,
+  type RuntimeSnapshotDto
+} from "@private-2d-rigging-lab/runtime-core";
 import { describe, expect, it } from "vitest";
 
 import {
   createEditorSessionAdapter,
-  type EditorSessionAdapter
+  type EditorSessionAdapter,
+  type EditorSessionPersistenceResult
 } from "./session-adapter.js";
 
 describe("editor session persistence adapter", () => {
@@ -110,6 +116,44 @@ describe("editor session persistence adapter", () => {
     expect(result.evidence.generatedRuntimeStateSequenceRefs).toEqual([
       expect.stringMatching(/editor-add-keyform\.runtime-state-sequence\.json$/)
     ]);
+    const runtimeDiff = result.operationResult.runtimeDiff;
+    if (runtimeDiff === undefined) {
+      throw new Error("Committed addKeyform should expose runtime diff evidence.");
+    }
+
+    expect(result.operationResult.generatedRuntimeSnapshotIds).toEqual(
+      expect.arrayContaining([runtimeDiff.beforeSnapshotId, runtimeDiff.afterSnapshotId])
+    );
+    expect(runtimeDiff.parameterChanges).toEqual([]);
+    expect(runtimeDiff.drawableChanges).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        boundsChanged: true
+      })
+    ]);
+    const candidateSnapshot = parseRuntimeSnapshotArtifact(result.packageFileSet, runtimeDiff.afterSnapshotId);
+    const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
+
+    expect(candidateSnapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: "keyset_mesh_mesh_body_vertices_editor_body_yaw_1",
+        evaluator: "linear-1d-v1",
+        sampledCoordinates: {
+          param_editor_body_yaw: 1
+        },
+        target: "mesh:mesh_body.vertices",
+        samplingStatus: "exact",
+        statePatch: [
+          { x: 0, y: 0 },
+          { x: 36, y: 0 },
+          { x: 0, y: 32 }
+        ]
+      })
+    ]);
+    expect(candidateDrawable).toMatchObject({
+      bounds: { x: 0, y: 0, width: 36, height: 32 },
+      vertexHash: runtimeDiff.drawableChanges[0]?.vertexHashAfter
+    });
     expect(result.evidence.generatedValidationReportIds).toEqual([
       "val_editor_editor_add_keyform_body_yaw_baseline",
       "val_editor_editor_add_keyform_body_yaw_candidate"
@@ -218,6 +262,19 @@ const listRuntimeSourceFiles = (directory: string): readonly string[] =>
 
     return [entryPath];
   });
+
+const parseRuntimeSnapshotArtifact = (
+  packageFileSet: EditorSessionPersistenceResult["packageFileSet"],
+  snapshotId: RuntimeSnapshotDto["snapshotId"]
+): RuntimeSnapshotDto => {
+  const path = createRuntimeSnapshotArtifactPath(snapshotId);
+  const entry = packageFileSet.find((candidate) => candidate.path === path);
+  if (entry === undefined) {
+    throw new Error(`Missing runtime snapshot artifact ${path}.`);
+  }
+
+  return RuntimeSnapshotSchema.parse(JSON.parse(entry.text));
+};
 
 const commitEditorParameter = (
   adapter: EditorSessionAdapter,

@@ -1,4 +1,10 @@
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
+import type { PackageFileSet } from "@private-2d-rigging-lab/package-format";
+import {
+  createRuntimeSnapshotArtifactPath,
+  RuntimeSnapshotSchema,
+  type RuntimeSnapshotDto
+} from "@private-2d-rigging-lab/runtime-core";
 import { describe, expect, it } from "vitest";
 
 import { createEditorWorkflowController } from "../editor-workflow/index.js";
@@ -86,6 +92,59 @@ describe("editor AI keyform command host regression", () => {
           ]
         }
       }
+    });
+    const commitRuntimeDiff = keyformCommitResponse.runtimeDiff;
+    const commitOperationResult = keyformCommitResponse.operationResult;
+    if (commitRuntimeDiff === undefined || commitOperationResult === undefined) {
+      throw new Error("Committed AI addKeyform response should expose runtime evidence.");
+    }
+
+    expect(commitRuntimeDiff.parameterChanges).toEqual([]);
+    expect(commitRuntimeDiff.drawableChanges).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        boundsChanged: true
+      })
+    ]);
+    expect(commitOperationResult.generatedRuntimeSnapshotIds).toEqual(
+      expect.arrayContaining([commitRuntimeDiff.beforeSnapshotId, commitRuntimeDiff.afterSnapshotId])
+    );
+    expect(keyformCommitResponse.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        createRuntimeSnapshotArtifactPath(commitRuntimeDiff.beforeSnapshotId),
+        createRuntimeSnapshotArtifactPath(commitRuntimeDiff.afterSnapshotId)
+      ])
+    );
+    const latestPersistenceResult = workflow.latestSessionPersistenceResult;
+    if (latestPersistenceResult === null) {
+      throw new Error("Committed AI addKeyform should persist generated runtime artifacts.");
+    }
+
+    const candidateSnapshot = parseRuntimeSnapshotArtifact(
+      latestPersistenceResult.packageFileSet,
+      commitRuntimeDiff.afterSnapshotId
+    );
+    const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
+
+    expect(candidateSnapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: BODY_YAW_KEYFORM_SET_ID,
+        evaluator: "linear-1d-v1",
+        sampledCoordinates: {
+          [BODY_YAW_PARAMETER_ID]: 1
+        },
+        target: "mesh:mesh_body.vertices",
+        samplingStatus: "exact",
+        statePatch: [
+          { x: 0, y: 0 },
+          { x: 36, y: 0 },
+          { x: 0, y: 32 }
+        ]
+      })
+    ]);
+    expect(candidateDrawable).toMatchObject({
+      bounds: { x: 0, y: 0, width: 36, height: 32 },
+      vertexHash: commitRuntimeDiff.drawableChanges[0]?.vertexHashAfter
     });
     expect(workflow.state.revision.packageRevision).toBe(2);
     expect(workflow.state.operationLog.entryCount).toBe(2);
@@ -400,6 +459,19 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   }
 
   return value as Record<string, unknown>;
+};
+
+const parseRuntimeSnapshotArtifact = (
+  packageFileSet: PackageFileSet,
+  snapshotId: RuntimeSnapshotDto["snapshotId"]
+): RuntimeSnapshotDto => {
+  const path = createRuntimeSnapshotArtifactPath(snapshotId);
+  const entry = packageFileSet.find((candidate) => candidate.path === path);
+  if (entry === undefined) {
+    throw new Error(`Missing runtime snapshot artifact ${path}.`);
+  }
+
+  return RuntimeSnapshotSchema.parse(JSON.parse(entry.text));
 };
 
 const asArray = (value: unknown): readonly unknown[] => {

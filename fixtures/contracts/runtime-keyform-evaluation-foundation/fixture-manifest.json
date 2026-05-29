@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "runtime-keyform-evaluation-foundation",
+  "title": "Runtime keyform evaluation foundation fixture",
+  "coversAC": [
+    "AC-MVP-008",
+    "AC-MVP-012"
+  ],
+  "coversScenarios": [
+    "SC-PARAM-003",
+    "SC-MVP-003"
+  ],
+  "modulesBlocked": [
+    "runtime-core"
+  ],
+  "inputArtifacts": [
+    "runtime/runtime-graph.json",
+    "runtime/grid2d-coverage-note.json",
+    "request/evaluation-options.json",
+    "request/evaluation-context.json",
+    "request/baseline-frame.json",
+    "request/evaluated-frame.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "runtimeKeyformEffectSummary",
+      "path": "expected/runtime-keyform-effect-summary.json",
+      "id": "keyset_fixture_body_vertices",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "runtime-evaluation-options-v1",
+  "snapshotDetail": "full",
+  "evaluatorVersions": {
+    "dynamics": "scalarDampedFollowV1",
+    "keyform1d": "linear-1d-v1",
+    "keyformGrid2d": "parameter-grid-2d-v1",
+    "warpLattice": "bilinear-grid-v1",
+    "rigControlHierarchy": "parent-before-child-v1"
+  },
+  "epsilonPolicy": {
+    "vertexPositionEpsilon": 0.0001,
+    "boundsEpsilon": 0.0001,
+    "opacityEpsilon": 0.000001,
+    "hashPrecisionDecimals": 5
+  },
+  "includeTrace": true,
+  "maxSubSteps": 4
+}

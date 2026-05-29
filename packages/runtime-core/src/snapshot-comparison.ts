@@ -73,13 +73,21 @@ export const compareRuntimeSnapshots = (
   });
   const drawableChanges = after.drawables.flatMap((afterDrawable) => {
     const beforeDrawable = before.drawables.find((drawable) => drawable.drawableId === afterDrawable.drawableId);
+    const boundsChanged =
+      beforeDrawable !== undefined &&
+      (Math.abs(beforeDrawable.bounds.x - afterDrawable.bounds.x) > policy.boundsEpsilon ||
+        Math.abs(beforeDrawable.bounds.y - afterDrawable.bounds.y) > policy.boundsEpsilon ||
+        Math.abs(beforeDrawable.bounds.width - afterDrawable.bounds.width) > policy.boundsEpsilon ||
+        Math.abs(beforeDrawable.bounds.height - afterDrawable.bounds.height) > policy.boundsEpsilon);
+    const runtimeStateChanged =
+      beforeDrawable !== undefined &&
+      (Math.abs(beforeDrawable.opacity - afterDrawable.opacity) > policy.opacityEpsilon ||
+        beforeDrawable.visible !== afterDrawable.visible ||
+        beforeDrawable.baseDrawOrder !== afterDrawable.baseDrawOrder ||
+        beforeDrawable.evaluatedDrawOrder !== afterDrawable.evaluatedDrawOrder);
     if (
       beforeDrawable === undefined ||
-      (beforeDrawable.vertexHash === afterDrawable.vertexHash &&
-        Math.abs(beforeDrawable.bounds.x - afterDrawable.bounds.x) <= policy.boundsEpsilon &&
-        Math.abs(beforeDrawable.bounds.y - afterDrawable.bounds.y) <= policy.boundsEpsilon &&
-        Math.abs(beforeDrawable.bounds.width - afterDrawable.bounds.width) <= policy.boundsEpsilon &&
-        Math.abs(beforeDrawable.bounds.height - afterDrawable.bounds.height) <= policy.boundsEpsilon)
+      (beforeDrawable.vertexHash === afterDrawable.vertexHash && !boundsChanged && !runtimeStateChanged)
     ) {
       return [];
     }
@@ -87,17 +95,26 @@ export const compareRuntimeSnapshots = (
     return [
       {
         drawableId: afterDrawable.drawableId,
-        boundsChanged: true,
+        boundsChanged,
         vertexHashBefore: beforeDrawable.vertexHash,
         vertexHashAfter: afterDrawable.vertexHash
       }
     ];
   });
+  const drawListChanges = before.drawList.join("\0") === after.drawList.join("\0")
+    ? []
+    : [
+        {
+          path: "/drawList",
+          before: before.drawList,
+          after: after.drawList
+        }
+      ];
   const diff = RuntimeDiffSchema.parse({
     schemaVersion: "runtime-diff-v1",
     beforeSnapshotId: before.snapshotId,
     afterSnapshotId: after.snapshotId,
-    parameterChanges,
+    parameterChanges: [...parameterChanges, ...drawListChanges],
     dynamicsChanges,
     drawableChanges,
     diagnosticDelta: after.diagnostics

@@ -15,12 +15,19 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DiagnosticDto,
+  ParameterId,
   RuntimeEvaluationContextDto,
   RuntimeStateDto
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
+import { applyKeyformTargetPatches } from "./keyform-target-application.js";
+import type { RuntimeKeyformSample } from "./keyform-sampling.js";
+import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
+import type { EffectiveParameterResolution } from "./parameter-resolution.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 
@@ -100,7 +107,7 @@ export const RuntimeSnapshotSchema = z.object({
   }),
   parameters: z.array(EvaluatedParameterSchema),
   dynamics: z.array(EvaluatedDynamicsGroupSchema).default([]),
-  keyformSamples: z.array(z.object({}).passthrough()).default([]),
+  keyformSamples: z.array(KeyformSampleSchema).default([]),
   rigControls: z
     .array(
       z.object({
@@ -141,7 +148,26 @@ export const createRuntimeSnapshot = (input: {
   readonly context: RuntimeEvaluationContextDto;
   readonly diagnostics: readonly DiagnosticDto[];
 }): RuntimeSnapshotDto => {
-  const drawables = createEvaluatedDrawables(input.graph, input.options);
+  const parameterResolution = resolveEffectiveParameterValues({
+    graph: input.graph,
+    authoredParameterValues: input.evaluationInput.authoredParameterValues,
+    state: input.state
+  });
+  const keyformSampling = sampleRuntimeKeyformsInEvaluationOrder({
+    graph: input.graph,
+    effectiveParameterValues: parameterResolution.effectiveParameterValues
+  });
+  const baseDrawables = createEvaluatedDrawables({
+    graph: input.graph,
+    options: input.options,
+    includeVertices: keyformSampling.samples.length > 0
+  });
+  const appliedKeyforms = applySamplesInEvaluationOrder({
+    drawables: baseDrawables,
+    samples: keyformSampling.samples,
+    hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
+  });
+  const drawables = finalizeDrawablesForDetail(appliedKeyforms.drawables, input.options);
 
   return RuntimeSnapshotSchema.parse({
     schemaVersion: "runtime-snapshot-v1",
@@ -156,9 +182,9 @@ export const createRuntimeSnapshot = (input: {
       snapshotDetail: input.options.snapshotDetail,
       evaluatorVersions: input.options.evaluatorVersions
     },
-    parameters: createEvaluatedParameters(input.graph, input.evaluationInput, input.state),
+    parameters: createEvaluatedParameters(parameterResolution),
     dynamics: createEvaluatedDynamics(input.graph, input.evaluationInput, input.state, input.options),
-    keyformSamples: [],
+    keyformSamples: keyformSampling.samples,
     rigControls: [...input.graph.rigControls.values()].map((rigControl) => ({
       rigControlId: rigControl.rigControlId,
       kind: rigControl.kind,
@@ -174,11 +200,19 @@ export const createRuntimeSnapshot = (input: {
     })),
     drawList: drawables.filter((drawable) => drawable.visible).map((drawable) => drawable.drawableId),
     disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
-    diagnostics: [...input.diagnostics],
+    diagnostics: [...input.diagnostics, ...keyformSampling.diagnostics, ...appliedKeyforms.diagnostics],
     ...(input.options.includeTrace
       ? {
           trace: {
-            phases: ["parameter_resolution", "dynamics_evaluation", "draw_order_resolution", "render_preparation"],
+            phases: [
+              "parameter_resolution",
+              "dynamics_evaluation",
+              "keyform_sampling",
+              "mesh_evaluation",
+              "opacity_visibility",
+              "draw_order_resolution",
+              "render_preparation"
+            ],
             evaluatorVersionSummary: input.options.evaluatorVersions
           }
         }
@@ -186,37 +220,8 @@ export const createRuntimeSnapshot = (input: {
   });
 };
 
-const createEvaluatedParameters = (
-  graph: NormalizedRuntimeGraph,
-  input: RuntimeEvaluationInputDto,
-  state: RuntimeStateDto
-): EvaluatedParameterDto[] =>
-  [...graph.parameters.values()].map((parameter) => {
-    const authoredValue = input.authoredParameterValues[parameter.id];
-    const authoredOrDefault = authoredValue ?? parameter.default;
-    const clampedAuthored = clamp(authoredOrDefault, parameter.min, parameter.max);
-    const dynamicsGroup = [...graph.dynamicsGroups.values()].find(
-      (group) => group.output.targetParameterId === parameter.id && group.enabled
-    );
-    const computedValue =
-      dynamicsGroup === undefined ? undefined : state.dynamicsGroups[dynamicsGroup.dynamicsGroupId]?.position;
-    const effectiveValue = parameter.valueSource === "computedDynamics" ? computedValue ?? parameter.default : clampedAuthored;
-
-    return EvaluatedParameterSchema.parse({
-      parameterId: parameter.id,
-      valueSource: parameter.valueSource,
-      ...(authoredValue === undefined ? {} : { authoredValue }),
-      ...(computedValue === undefined ? {} : { computedValue }),
-      effectiveValue,
-      clamped: authoredOrDefault !== clampedAuthored,
-      source:
-        parameter.valueSource === "computedDynamics"
-          ? "dynamicsComputed"
-          : authoredValue === undefined
-            ? "default"
-            : "viewerOverride"
-    });
-  });
+const createEvaluatedParameters = (resolution: EffectiveParameterResolution): EvaluatedParameterDto[] =>
+  resolution.values.map((parameter) => EvaluatedParameterSchema.parse(parameter));
 
 const createEvaluatedDynamics = (
   graph: NormalizedRuntimeGraph,
@@ -262,10 +267,12 @@ const createEvaluatedDynamics = (
       });
     });
 
-const createEvaluatedDrawables = (
-  graph: NormalizedRuntimeGraph,
-  options: RuntimeEvaluationOptionsDto
-): EvaluatedDrawableDto[] => {
+const createEvaluatedDrawables = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly options: RuntimeEvaluationOptionsDto;
+  readonly includeVertices: boolean;
+}): EvaluatedDrawableDto[] => {
+  const { graph, options } = input;
   const explicitOrder = new Map(graph.drawOrder.map((entry) => [entry.drawableId, entry.drawOrder]));
   return [...graph.drawables.values()]
     .map((drawable) =>
@@ -279,11 +286,85 @@ const createEvaluatedDrawables = (
         bounds: drawable.bounds,
         vertexCount: drawable.vertexCount,
         vertexHash: drawable.vertexHash ?? createStableVertexHash(drawable.drawableId, drawable.vertexCount),
-        ...(options.snapshotDetail === "full" && drawable.vertices !== undefined ? { vertices: [...drawable.vertices] } : {}),
+        ...((options.snapshotDetail === "full" || input.includeVertices) && drawable.vertices !== undefined
+          ? { vertices: drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y })) }
+          : {}),
         diagnostics: []
       })
     )
     .sort((left, right) => left.evaluatedDrawOrder - right.evaluatedDrawOrder || left.drawableId.localeCompare(right.drawableId));
+};
+
+const sampleRuntimeKeyformsInEvaluationOrder = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly effectiveParameterValues: ReadonlyMap<ParameterId, number>;
+}): {
+  readonly samples: readonly RuntimeKeyformSample[];
+  readonly diagnostics: readonly DiagnosticDto[];
+} => {
+  const samples: RuntimeKeyformSample[] = [];
+  const diagnostics: DiagnosticDto[] = [];
+
+  for (const binding of [...input.graph.keyformBindings]
+    .map((binding, index) => ({ binding, index }))
+    .sort((left, right) => left.binding.compositionOrder - right.binding.compositionOrder || left.index - right.index)) {
+    const result = sampleRuntimeKeyforms({
+      graph: {
+        ...input.graph,
+        keyformBindings: [binding.binding]
+      },
+      effectiveParameterValues: input.effectiveParameterValues
+    });
+    samples.push(...result.samples);
+    diagnostics.push(...result.diagnostics);
+  }
+
+  return {
+    samples,
+    diagnostics
+  };
+};
+
+const applySamplesInEvaluationOrder = (input: {
+  readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly samples: readonly RuntimeKeyformSample[];
+  readonly hashPrecisionDecimals: number;
+}): {
+  readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly diagnostics: readonly DiagnosticDto[];
+} => {
+  let drawables = input.drawables;
+  const diagnostics: DiagnosticDto[] = [];
+
+  for (const sample of input.samples) {
+    const result = applyKeyformTargetPatches({
+      drawables,
+      patches: [sample],
+      hashPrecisionDecimals: input.hashPrecisionDecimals
+    });
+    drawables = result.drawables;
+    diagnostics.push(...result.diagnostics);
+  }
+
+  return {
+    drawables,
+    diagnostics
+  };
+};
+
+const finalizeDrawablesForDetail = (
+  drawables: readonly EvaluatedDrawableDto[],
+  options: RuntimeEvaluationOptionsDto
+): readonly EvaluatedDrawableDto[] => {
+  if (options.snapshotDetail === "full") {
+    return drawables;
+  }
+
+  return drawables.map((drawable) => {
+    const { vertices, ...withoutVertices } = drawable;
+    void vertices;
+    return withoutVertices;
+  });
 };
 
 const createStableVertexHash = (drawableId: string, vertexCount: number): string => `hash_${drawableId}_${vertexCount}`;

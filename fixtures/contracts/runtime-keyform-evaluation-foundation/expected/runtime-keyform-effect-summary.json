@@ -1,0 +1,162 @@
+{
+  "schemaVersion": "runtime-keyform-evaluation-foundation-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_runtime_keyform_evaluation_foundation_0",
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_fixture_body_vertices",
+        "evaluator": "linear-1d-v1",
+        "sampledCoordinates": {
+          "param_fixture_yaw": -1
+        },
+        "target": "mesh:mesh_fixture_body.vertices",
+        "targetMetadata": {
+          "targetId": "mesh_fixture_body",
+          "targetKind": "mesh",
+          "targetProperty": "vertices"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 0,
+        "statePatch": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 2,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 2
+          }
+        ],
+        "samplingStatus": "exact"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_fixture_body",
+      "meshId": "mesh_fixture_body",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertexHash": "vhash_f66ef067_3",
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ]
+    },
+    "drawList": [
+      "draw_fixture_body"
+    ],
+    "diagnostics": []
+  },
+  "evaluatedSnapshot": {
+    "snapshotId": "snap_runtime_keyform_evaluation_foundation_1",
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_fixture_body_vertices",
+        "evaluator": "linear-1d-v1",
+        "sampledCoordinates": {
+          "param_fixture_yaw": 1
+        },
+        "target": "mesh:mesh_fixture_body.vertices",
+        "targetMetadata": {
+          "targetId": "mesh_fixture_body",
+          "targetKind": "mesh",
+          "targetProperty": "vertices"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 0,
+        "statePatch": [
+          {
+            "x": -1,
+            "y": 1
+          },
+          {
+            "x": 3,
+            "y": 1
+          },
+          {
+            "x": -1,
+            "y": 5
+          }
+        ],
+        "samplingStatus": "exact"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_fixture_body",
+      "meshId": "mesh_fixture_body",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "evaluatedDrawOrder": 0,
+      "bounds": {
+        "x": -1,
+        "y": 1,
+        "width": 4,
+        "height": 4
+      },
+      "vertexCount": 3,
+      "vertexHash": "vhash_b4a95b0f_3",
+      "vertices": [
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 5
+        }
+      ],
+      "diagnostics": []
+    },
+    "drawList": [
+      "draw_fixture_body"
+    ],
+    "diagnostics": []
+  },
+  "runtimeComparison": {
+    "equivalent": false,
+    "diff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_runtime_keyform_evaluation_foundation_0",
+      "afterSnapshotId": "snap_runtime_keyform_evaluation_foundation_1",
+      "parameterChanges": [
+        {
+          "path": "/parameters/param_fixture_yaw/effectiveValue",
+          "before": -1,
+          "after": 1
+        }
+      ],
+      "dynamicsChanges": [],
+      "drawableChanges": [
+        {
+          "drawableId": "draw_fixture_body",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_f66ef067_3",
+          "vertexHashAfter": "vhash_b4a95b0f_3"
+        }
+      ],
+      "diagnosticDelta": []
+    }
+  }
+}

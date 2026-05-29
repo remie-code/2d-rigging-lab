@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "runtime-keyform-graph-fixture-v1",
+  "packageId": "pkg_runtime_keyform_evaluation_foundation",
+  "packageRevision": 0,
+  "packageHash": "sha256:runtime-keyform-evaluation-foundation-v1",
+  "coordinateSystem": "canvas-y-down-v1",
+  "parameters": [
+    {
+      "id": "param_fixture_yaw",
+      "displayName": "Fixture Yaw",
+      "semanticRole": "face",
+      "valueSource": "authoredInput",
+      "min": -1,
+      "max": 1,
+      "default": -1
+    }
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_fixture_body",
+      "meshId": "mesh_fixture_body",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ],
+      "vertexCount": 3
+    }
+  ],
+  "keyformBindings": [
+    {
+      "evaluator": "linear-1d-v1",
+      "keyformSetId": "keyset_fixture_body_vertices",
+      "targetId": "mesh_fixture_body",
+      "targetKind": "mesh",
+      "targetProperty": "vertices",
+      "parameterId": "param_fixture_yaw",
+      "keys": [
+        {
+          "value": -1,
+          "statePatch": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "value": 1,
+          "statePatch": [
+            {
+              "x": -1,
+              "y": 1
+            },
+            {
+              "x": 3,
+              "y": 1
+            },
+            {
+              "x": -1,
+              "y": 5
+            }
+          ]
+        }
+      ],
+      "compositionMode": "replace",
+      "compositionOrder": 0
+    }
+  ],
+  "masks": [],
+  "drawOrder": [],
+  "disabledFutureLayers": []
+}

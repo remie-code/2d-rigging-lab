@@ -1,6 +1,7 @@
 import type {
   DrawableId,
   DynamicsGroupId,
+  KeyformSetId,
   MaskRelationId,
   MeshId,
   ParameterId,
@@ -103,6 +104,7 @@ export type KeyformBinding = Linear1dKeyformBinding | ParameterGrid2dKeyformBind
 
 export interface Linear1dKeyformBinding {
   readonly evaluator: "linear-1d-v1";
+  readonly keyformSetId: KeyformSetId;
   readonly targetId: string;
   readonly targetKind: "mesh" | "rigControl" | "drawable";
   readonly targetProperty: string;
@@ -114,6 +116,7 @@ export interface Linear1dKeyformBinding {
 
 export interface ParameterGrid2dKeyformBinding {
   readonly evaluator: "parameter-grid-2d-v1";
+  readonly keyformSetId: KeyformSetId;
   readonly targetId: string;
   readonly targetKind: "mesh" | "rigControl" | "drawable";
   readonly targetProperty: string;

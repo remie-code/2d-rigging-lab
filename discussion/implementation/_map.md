@@ -34,6 +34,7 @@ discussion/implementation/
 - Wave 9 AI command approval UI and transcript persistence completed on 2026-05-29 with visible AI approval workflow, browser-local transcript persistence, transcript/operation-log correlation, desktop/mobile e2e coverage, clean integration review, final report, and full verification pass. Evidence is recorded in [waves/wave9/wave9-final-report.md](waves/wave9/wave9-final-report.md), [waves/wave9/integration-review.md](waves/wave9/integration-review.md), and [reviews/wave9/wave9-integration-clean-review.md](reviews/wave9/wave9-integration-clean-review.md).
 - Wave 10 AI read / inspection / validation command foundation completed on 2026-05-29 with internal `inspectModel`, `inspectTarget`, and `validatePackage` command contracts, editor projectors, host integration, compact fixture regression, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave10/wave10-final-report.md](waves/wave10/wave10-final-report.md), [waves/wave10/integration-review.md](waves/wave10/integration-review.md), and [reviews/wave10/wave10-integration-clean-review.md](reviews/wave10/wave10-integration-clean-review.md).
 - Wave 11 AI operation catalog expansion / keyform foundation completed on 2026-05-29 with authoring keyform mutations, `addKeyform` / `addKeyformGrid2d` operation handlers, registry / lifecycle integration, editor evidence support, AI `addKeyform` command regression, clean review, final report, and full verification pass. Evidence is recorded in [waves/wave11/wave11-final-report.md](waves/wave11/wave11-final-report.md), [waves/wave11/integration-review.md](waves/wave11/integration-review.md), and [reviews/wave11/wave11-clean-review.md](reviews/wave11/wave11-clean-review.md).
+- Wave 12 runtime keyform evaluation foundation completed on 2026-05-30 with runtime keyform identity, sampling, target application, snapshot/evidence integration, compact fixture regression, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md), [waves/wave12/integration-review.md](waves/wave12/integration-review.md), and [reviews/wave12/_map.md](reviews/wave12/_map.md).
 
 ## Key References
 
@@ -51,6 +52,7 @@ discussion/implementation/
 | [orchestration/wave9-plan.md](orchestration/wave9-plan.md) | Wave 9 AI command approval UI and transcript persistence dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave10-plan.md](orchestration/wave10-plan.md) | Wave 10 internal AI read / inspection / validation command foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave11-plan.md](orchestration/wave11-plan.md) | Wave 11 AI operation catalog expansion / keyform foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave12-plan.md](orchestration/wave12-plan.md) | Wave 12 runtime keyform evaluation foundation dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -62,6 +64,7 @@ discussion/implementation/
 | [waves/wave9/_map.md](waves/wave9/_map.md) | Wave 9 domain completion reports, integration review, and final report |
 | [waves/wave10/_map.md](waves/wave10/_map.md) | Wave 10 domain completion reports, integration review, and final report |
 | [waves/wave11/_map.md](waves/wave11/_map.md) | Wave 11 domain completion reports, integration review, and final report |
+| [waves/wave12/_map.md](waves/wave12/_map.md) | Wave 12 domain completion reports, integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -73,11 +76,12 @@ discussion/implementation/
 | [reviews/wave9/_map.md](reviews/wave9/_map.md) | Wave 9 clean integration review reports |
 | [reviews/wave10/_map.md](reviews/wave10/_map.md) | Wave 10 clean integration review reports |
 | [reviews/wave11/_map.md](reviews/wave11/_map.md) | Wave 11 clean review reports |
+| [reviews/wave12/_map.md](reviews/wave12/_map.md) | Wave 12 domain review reports |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.codex/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan the next wave as `runtime-keyform-evaluation-foundation` unless the user explicitly prioritizes AI-host grid2d command coverage or broader operation catalog expansion.
+1. Recommended next wave: runtime diff and Grid2D evidence hardening, based on [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md).
 2. Keep external HTTP/WebSocket/MCP transport in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

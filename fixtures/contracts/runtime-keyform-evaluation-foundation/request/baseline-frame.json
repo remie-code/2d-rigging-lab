@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "runtime-evaluation-input-v1",
+  "frameIndex": 0,
+  "deltaTimeMs": 0,
+  "resetReasons": [],
+  "authoredParameterValues": {
+    "param_fixture_yaw": -1
+  },
+  "targetIds": [
+    "draw_fixture_body"
+  ]
+}

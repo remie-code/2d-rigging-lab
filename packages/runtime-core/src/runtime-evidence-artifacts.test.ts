@@ -1,5 +1,6 @@
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
@@ -8,6 +9,7 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
+import { createStableVertexHash } from "./drawable-geometry.js";
 import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import {
@@ -24,6 +26,7 @@ import {
   evaluateRuntimeStateSequenceArtifact,
   materializeRuntimeStateSequenceArtifact
 } from "./runtime-state-sequence-artifacts.js";
+import { RuntimeSnapshotSchema } from "./snapshot.js";
 
 describe("runtime evidence artifact materializers", () => {
   it("materializes snapshot artifacts and final state artifact with paths matching generated refs", () => {
@@ -63,6 +66,65 @@ describe("runtime evidence artifact materializers", () => {
     expect(RuntimeStateSequenceArtifactSchema.parse(JSON.parse(sequenceArtifact?.content ?? "{}")).states).toEqual([
       expect.objectContaining({ frameIndex: 0 }),
       expect.objectContaining({ frameIndex: 1 })
+    ]);
+  });
+
+  it("materializes candidate snapshot artifacts with runtime-visible mesh keyform evidence", () => {
+    const fixture = createMeshKeyformEvidenceFixture();
+    const keyValueFrame = {
+      authoredParameterValues: {
+        [fixture.parameterId]: 1
+      },
+      targetIds: [fixture.drawableId, fixture.meshId, fixture.parameterId]
+    };
+    const result = buildRuntimeEvidenceArtifacts({
+      baselineGraph: fixture.baselineGraph,
+      candidateGraph: fixture.candidateGraph,
+      baseline: {
+        frame: keyValueFrame
+      },
+      candidate: {
+        frame: keyValueFrame
+      },
+      artifactLabel: "keyform-regression"
+    });
+    const candidateSnapshotPath = createRuntimeSnapshotArtifactPath(result.evidence.candidateSnapshot.snapshotId);
+    const candidateSnapshotArtifact = result.artifacts.find((artifact) =>
+      artifact.kind === "runtimeSnapshot" && artifact.path === candidateSnapshotPath
+    );
+    if (candidateSnapshotArtifact === undefined) {
+      throw new Error(`Missing candidate runtime snapshot artifact ${candidateSnapshotPath}.`);
+    }
+
+    const candidateSnapshot = RuntimeSnapshotSchema.parse(JSON.parse(candidateSnapshotArtifact.content));
+    const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === fixture.drawableId);
+
+    expect(result.evidence.baselineSnapshot.keyformSamples).toEqual([]);
+    expect(candidateSnapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: fixture.keyformSetId,
+        evaluator: "linear-1d-v1",
+        sampledCoordinates: {
+          [fixture.parameterId]: 1
+        },
+        target: `mesh:${fixture.meshId}.vertices`,
+        samplingStatus: "exact",
+        statePatch: fixture.deformedVertices
+      })
+    ]);
+    expect(candidateDrawable).toMatchObject({
+      drawableId: fixture.drawableId,
+      bounds: { x: 0, y: 0, width: 36, height: 32 },
+      vertexHash: createStableVertexHash(fixture.deformedVertices)
+    });
+    expect(result.evidence.runtimeDiff.parameterChanges).toEqual([]);
+    expect(result.evidence.runtimeDiff.drawableChanges).toEqual([
+      {
+        drawableId: fixture.drawableId,
+        boundsChanged: true,
+        vertexHashBefore: createStableVertexHash(fixture.baseVertices),
+        vertexHashAfter: createStableVertexHash(fixture.deformedVertices)
+      }
     ]);
   });
 
@@ -115,12 +177,76 @@ describe("runtime evidence artifact materializers", () => {
   });
 });
 
+const createMeshKeyformEvidenceFixture = () => {
+  const packageId = PackageIdSchema.parse("pkg_keyform_evidence");
+  const parameterId = ParameterIdSchema.parse("param_evidence_body_yaw");
+  const drawableId = DrawableIdSchema.parse("draw_body");
+  const meshId = MeshIdSchema.parse("mesh_body");
+  const keyformSetId = KeyformSetIdSchema.parse("keyset_body_yaw_vertices");
+  const baseVertices = [
+    { x: 0, y: 0 },
+    { x: 32, y: 0 },
+    { x: 0, y: 32 }
+  ];
+  const deformedVertices = [
+    { x: 0, y: 0 },
+    { x: 36, y: 0 },
+    { x: 0, y: 32 }
+  ];
+  const graphOptions = {
+    meshId,
+    bounds: { x: 0, y: 0, width: 32, height: 32 },
+    vertices: baseVertices,
+    vertexHash: createStableVertexHash(baseVertices)
+  };
+  const baselineGraph = createGraph(packageId, parameterId, drawableId, graphOptions);
+  const candidateGraph = createGraph(packageId, parameterId, drawableId, {
+    ...graphOptions,
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId,
+        targetId: meshId,
+        targetKind: "mesh",
+        targetProperty: "vertices",
+        parameterId,
+        keys: [
+          {
+            value: 1,
+            statePatch: deformedVertices
+          }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 0
+      }
+    ]
+  });
+
+  return {
+    baselineGraph,
+    candidateGraph,
+    parameterId,
+    drawableId,
+    meshId,
+    keyformSetId,
+    baseVertices,
+    deformedVertices
+  };
+};
+
 const createGraph = (
   packageId: string,
   parameterId: ReturnType<typeof ParameterIdSchema.parse>,
-  drawableId: ReturnType<typeof DrawableIdSchema.parse>
+  drawableId: ReturnType<typeof DrawableIdSchema.parse>,
+  options: {
+    readonly meshId?: ReturnType<typeof MeshIdSchema.parse>;
+    readonly bounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+    readonly vertices?: readonly { readonly x: number; readonly y: number }[];
+    readonly vertexHash?: string;
+    readonly keyformBindings?: NormalizedRuntimeGraph["keyformBindings"];
+  } = {}
 ): NormalizedRuntimeGraph => {
-  const meshId = MeshIdSchema.parse("mesh_body");
+  const meshId = options.meshId ?? MeshIdSchema.parse("mesh_body");
 
   return {
     packageId,
@@ -149,13 +275,15 @@ const createGraph = (
           visible: true,
           opacity: 1,
           baseDrawOrder: 0,
-          bounds: { x: 0, y: 0, width: 16, height: 16 },
-          vertexCount: 4
+          bounds: options.bounds ?? { x: 0, y: 0, width: 16, height: 16 },
+          vertexCount: options.vertices?.length ?? 4,
+          ...(options.vertices === undefined ? {} : { vertices: options.vertices }),
+          ...(options.vertexHash === undefined ? {} : { vertexHash: options.vertexHash })
         }
       ]
     ]),
     rigControls: new Map(),
-    keyformBindings: [],
+    keyformBindings: options.keyformBindings ?? [],
     masks: [],
     drawOrder: [{ drawableId, drawOrder: 0 }],
     disabledFutureLayers: []
