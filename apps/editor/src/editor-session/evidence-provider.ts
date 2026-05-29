@@ -54,7 +54,7 @@ export const createEditorEvidenceCollector = (
   return {
     captures,
     collectOperationEvidence(input) {
-      const capture = collectCreateParameterEvidence(input, options);
+      const capture = collectEditorOperationEvidence(input, options);
       captures.push(capture);
 
       return OperationEvidenceResultSchema.parse({
@@ -87,18 +87,11 @@ export const toEvidencePackageFileEntries = (
   }))
 ];
 
-const collectCreateParameterEvidence = (
+const collectEditorOperationEvidence = (
   input: OperationEvidenceProviderInput,
   options: EditorEvidenceCollectorOptions
 ): EditorOperationEvidenceCapture => {
-  if (input.request.operationType !== "createParameter") {
-    throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
-  }
-
-  const parameterId = input.targetIds[0];
-  if (parameterId === undefined) {
-    throw new Error("createParameter evidence requires a committed target parameter.");
-  }
+  const evidenceInput = createRuntimeEvidenceInput(input);
 
   const runtimeEvidence = buildRuntimeEvidence({
     baselineGraph: toRuntimeGraph(input.baselineSession, {
@@ -107,12 +100,11 @@ const collectCreateParameterEvidence = (
     candidateGraph: toRuntimeGraph(input.candidateSession, {
       packageHash: options.packageHash
     }),
+    ...(evidenceInput.baseline === undefined ? {} : { baseline: evidenceInput.baseline }),
     candidate: {
       frame: {
-        authoredParameterValues: {
-          [parameterId]: input.request.payload.max
-        },
-        targetIds: [parameterId]
+        authoredParameterValues: evidenceInput.authoredParameterValues,
+        targetIds: evidenceInput.targetIds
       }
     },
     context: {
@@ -124,7 +116,7 @@ const collectCreateParameterEvidence = (
         strictness: "strict"
       }
     },
-    artifactLabel: "editor-create-parameter"
+    artifactLabel: evidenceInput.artifactLabel
   });
   const runtimeArtifacts = materializeRuntimeEvidenceArtifacts(runtimeEvidence).artifacts;
   const createdAt = (options.now?.() ?? new Date()).toISOString();
@@ -164,6 +156,135 @@ const collectCreateParameterEvidence = (
     validationDiff,
     validationArtifacts
   };
+};
+
+interface RuntimeEvidenceInput {
+  readonly artifactLabel: string;
+  readonly authoredParameterValues: Record<string, number>;
+  readonly targetIds: string[];
+  readonly baseline?: {
+    readonly frame: {
+      readonly authoredParameterValues: Record<string, number>;
+      readonly targetIds: string[];
+    };
+  };
+}
+
+const createRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  switch (input.request.operationType) {
+    case "createParameter":
+      return createParameterRuntimeEvidenceInput(input);
+    case "addKeyform":
+      return createAddKeyformRuntimeEvidenceInput(input);
+    case "addKeyformGrid2d":
+      return createAddKeyformGrid2dRuntimeEvidenceInput(input);
+    default:
+      throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
+  }
+};
+
+const createParameterRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createParameter") {
+    throw new Error(`createParameter evidence input received ${input.request.operationType}.`);
+  }
+
+  const parameterId = input.targetIds[0];
+  if (parameterId === undefined) {
+    throw new Error("createParameter evidence requires a committed target parameter.");
+  }
+
+  return {
+    artifactLabel: "editor-create-parameter",
+    authoredParameterValues: {
+      [parameterId]: input.request.payload.max
+    },
+    targetIds: [parameterId]
+  };
+};
+
+const createAddKeyformRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "addKeyform") {
+    throw new Error(`addKeyform evidence input received ${input.request.operationType}.`);
+  }
+
+  const authoredParameterValues = {
+    [input.request.payload.parameterId]: input.request.payload.keyValue
+  };
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.target.id,
+    input.request.payload.parameterId
+  ]);
+
+  return {
+    artifactLabel: "editor-add-keyform",
+    authoredParameterValues,
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues,
+        targetIds
+      }
+    }
+  };
+};
+
+const createAddKeyformGrid2dRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "addKeyformGrid2d") {
+    throw new Error(`addKeyformGrid2d evidence input received ${input.request.operationType}.`);
+  }
+
+  const firstKey = input.request.payload.keys[0];
+  if (firstKey === undefined) {
+    throw new Error("addKeyformGrid2d evidence requires at least one grid key.");
+  }
+
+  const authoredParameterValues = {
+    [input.request.payload.parameterX]: firstKey.x,
+    [input.request.payload.parameterY]: firstKey.y
+  };
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.target.id,
+    input.request.payload.parameterX,
+    input.request.payload.parameterY
+  ]);
+
+  return {
+    artifactLabel: "editor-add-keyform-grid2d",
+    authoredParameterValues,
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues,
+        targetIds
+      }
+    }
+  };
+};
+
+const uniqueStrings = (values: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    unique.push(value);
+  }
+
+  return unique;
 };
 
 export interface EditorEvidencePathSummary {

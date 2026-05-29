@@ -12,10 +12,9 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
-export const OperationResultPreconditionSchema = z.object({
-  ok: z.boolean(),
-  diagnostics: z.array(DiagnosticSchema)
-});
+import { OperationPreconditionResultSchema } from "./operation-precondition.js";
+
+export const OperationResultPreconditionSchema = OperationPreconditionResultSchema;
 export type OperationResultPreconditionDto = z.infer<typeof OperationResultPreconditionSchema>;
 
 export const OperationResultSchema = z.object({

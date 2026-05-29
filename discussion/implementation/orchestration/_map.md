@@ -17,6 +17,7 @@
 | [wave8-plan.md](wave8-plan.md) | Wave 8 AI interface dry-run command foundation dependency and parallelism plan | Completed / implementation-proven |
 | [wave9-plan.md](wave9-plan.md) | Wave 9 AI command approval UI and transcript persistence dependency and parallelism plan | Completed / implementation-proven |
 | [wave10-plan.md](wave10-plan.md) | Wave 10 AI read / inspection / validation command foundation dependency and parallelism plan | Completed / implementation-proven |
+| [wave11-plan.md](wave11-plan.md) | Wave 11 AI operation catalog expansion / keyform foundation dependency and parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -38,3 +39,4 @@
 - Wave 8 `ai-interface-dry-run-command-foundation` completed on 2026-05-29. It created `packages/ai-interface`, implemented transport-independent command schemas, dry-run / approval / commit execution, editor in-process host integration, and transcript-backed AI command fixtures.
 - Wave 9 `ai-command-approval-ui-and-transcript-persistence` completed on 2026-05-29. It added visible AI dry-run approval workflow, browser-local transcript persistence, transcript/operation-log correlation, and desktop/mobile e2e coverage while keeping transport adapters out of scope.
 - Wave 10 `ai-read-inspection-validation-command-foundation` completed on 2026-05-29. It added internal `inspectModel`, `inspectTarget`, and `validatePackage` commands, editor projectors, host integration, compact fixture regression, and clean review while keeping external transport out of scope.
+- Wave 11 `ai-operation-catalog-expansion-keyform-foundation` completed on 2026-05-29. It added authoring keyform mutation support, `addKeyform` / `addKeyformGrid2d` operation handlers, registry / lifecycle integration, editor evidence support, and AI host regression for `addKeyform` while keeping runtime-visible keyform deformation out of scope.

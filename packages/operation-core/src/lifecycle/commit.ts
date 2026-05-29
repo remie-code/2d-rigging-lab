@@ -2,6 +2,7 @@ import {
   cloneAuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import type { TargetRefDto } from "@private-2d-rigging-lab/contracts";
 
 import type { OperationEvidenceProviderLike } from "../operation-evidence-provider.js";
 import { createOperationLog, createOperationLogEntry } from "../operation-log.js";
@@ -90,8 +91,8 @@ export const commitOperation = (
     result,
     targetIds: applied.targetIds,
     precondition: createPreconditionResult(
-      applied.result.precondition.diagnostics,
-      applied.targetIds.map((id) => ({ kind: "parameter", id }))
+      result.precondition.diagnostics,
+      getCommittedCheckedTargetRefs(result)
     ),
     timestamp: options.now?.() ?? new Date()
   });
@@ -102,4 +103,47 @@ export const commitOperation = (
     logEntry,
     operationLogLength
   };
+};
+
+type ResultPreconditionWithCheckedTargets = OperationResultDto["precondition"] & {
+  readonly checkedTargetRefs?: readonly TargetRefDto[];
+};
+
+const getCommittedCheckedTargetRefs = (result: OperationResultDto): readonly TargetRefDto[] => {
+  const checkedTargetRefs = (result.precondition as ResultPreconditionWithCheckedTargets).checkedTargetRefs;
+
+  if (checkedTargetRefs !== undefined) {
+    return checkedTargetRefs;
+  }
+
+  return getModelDiffTargetRefs(result);
+};
+
+const getModelDiffTargetRefs = (result: OperationResultDto): readonly TargetRefDto[] => {
+  if (result.modelDiff === undefined) {
+    return [];
+  }
+
+  return uniqueTargetRefs([
+    ...result.modelDiff.added,
+    ...result.modelDiff.removed,
+    ...result.modelDiff.changed.map((change) => change.target)
+  ]);
+};
+
+const uniqueTargetRefs = (targetRefs: readonly TargetRefDto[]): readonly TargetRefDto[] => {
+  const seen = new Set<string>();
+  const unique: TargetRefDto[] = [];
+
+  for (const targetRef of targetRefs) {
+    const key = `${targetRef.kind}:${targetRef.id}:${targetRef.path ?? ""}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(targetRef);
+  }
+
+  return unique;
 };

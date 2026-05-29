@@ -8,6 +8,8 @@ export * from "./package-document-manifest.js";
 export * from "./package-document-model-files.js";
 export * from "./graph-selectors.js";
 export * from "./authoring-mutations.js";
+export * from "./keyform-selectors.js";
+export * from "./keyform-mutations.js";
 export * from "./runtime-graph-parameters.js";
 export * from "./runtime-graph-drawables.js";
 export * from "./runtime-graph-dynamics.js";

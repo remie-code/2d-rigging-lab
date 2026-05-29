@@ -5,7 +5,14 @@ import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { hasParameter } from "./graph-selectors.js";
 
-export type AuthoringMutationErrorCode = "duplicate_parameter";
+export type AuthoringMutationErrorCode =
+  | "duplicate_parameter"
+  | "duplicate_keyform_set"
+  | "missing_parameter"
+  | "missing_keyform_target"
+  | "unsupported_keyform_target_property"
+  | "duplicate_keyform_grid_axis_parameter"
+  | "duplicate_keyform_grid_coordinate";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

@@ -4,6 +4,8 @@ import type { OperationId } from "@private-2d-rigging-lab/contracts";
 import type { OperationRequestDto } from "./operation-request.js";
 import type { OperationResultDto } from "./operation-result.js";
 import type { OperationType } from "./operation-type.js";
+import { addKeyformOperationHandler } from "./operations/add-keyform.js";
+import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2d.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 
 export interface OperationApplyOutcome {
@@ -27,7 +29,9 @@ export interface OperationHandler {
 }
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
-  [createParameterOperationHandler.operationType, createParameterOperationHandler]
+  [createParameterOperationHandler.operationType, createParameterOperationHandler],
+  [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
+  [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler]
 ]);
 
 export const getOperationHandler = (operationType: OperationType): OperationHandler | undefined =>

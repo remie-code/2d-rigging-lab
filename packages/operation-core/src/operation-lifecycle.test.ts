@@ -1,6 +1,17 @@
-import { createInitialAuthoringRevision, getParameterById } from "@private-2d-rigging-lab/authoring-core";
+import {
+  createInitialAuthoringRevision,
+  getKeyformSetById,
+  getParameterById
+} from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
-import { PackageIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+import {
+  DrawableIdSchema,
+  KeyformSetIdSchema,
+  MeshIdSchema,
+  PackageIdSchema,
+  ParameterIdSchema,
+  ProvenanceIdSchema
+} from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
 import { createOperationCore } from "./index.js";
@@ -50,6 +61,119 @@ describe("operation lifecycle foundation", () => {
     expect(logEntry?.result.status).toBe("committed");
     expect(logEntry?.targetIds).toEqual(["param_smile"]);
     expect(logEntry?.provenanceId).toBe("prov_create_smile");
+  });
+
+  it("dry-runs addKeyform through the registry without mutating the original session", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore();
+    const keyformSetId = expectedLinearKeyformSetId();
+
+    const result = core.dryRunOperation(session, createAddKeyformRequest({ dryRun: true }));
+
+    expect(result.status).toBe("dry_run");
+    expect(result.operationId).toBe("op_add_keyform_body_yaw");
+    expect(result.modelDiff?.added).toEqual([{ kind: "keyformSet", id: keyformSetId }]);
+    expect(getKeyformSetById(session.graph, keyformSetId)).toBeUndefined();
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
+  it("commits addKeyform through the registry and logs keyform precondition refs", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-29T00:02:00.000Z")
+    });
+    const keyformSetId = expectedLinearKeyformSetId();
+
+    const outcome = core.commitOperation(session, createAddKeyformRequest({ dryRun: false }));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+    expect(getKeyformSetById(session.graph, keyformSetId)).toMatchObject({
+      keyformSetId,
+      target: {
+        kind: "mesh",
+        id: "mesh_body",
+        property: "vertices"
+      },
+      parameterId: "param_face_yaw"
+    });
+    expect(outcome.operationLogLength).toBe(1);
+    expect(core.operationLog.entries).toHaveLength(1);
+    expect(outcome.logEntry?.operationType).toBe("addKeyform");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      keyformSetId,
+      "param_face_yaw",
+      "mesh_body"
+    ]);
+    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "keyformSet", id: keyformSetId },
+      { kind: "parameter", id: "param_face_yaw" },
+      { kind: "mesh", id: "mesh_body" }
+    ]);
+  });
+
+  it("dry-runs addKeyformGrid2d through the registry without mutating the original session", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore();
+    const keyformSetId = expectedGridKeyformSetId();
+
+    const result = core.dryRunOperation(session, createAddKeyformGrid2dRequest({ dryRun: true }));
+
+    expect(result.status).toBe("dry_run");
+    expect(result.operationId).toBe("op_add_keyform_grid_body");
+    expect(result.modelDiff?.added).toEqual([{ kind: "keyformSet", id: keyformSetId }]);
+    expect(getKeyformSetById(session.graph, keyformSetId)).toBeUndefined();
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
+  it("commits addKeyformGrid2d through the registry and does not record non-parameters as parameter refs", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-29T00:03:00.000Z")
+    });
+    const keyformSetId = expectedGridKeyformSetId();
+
+    const outcome = core.commitOperation(session, createAddKeyformGrid2dRequest({ dryRun: false }));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+    expect(getKeyformSetById(session.graph, keyformSetId)).toMatchObject({
+      keyformSetId,
+      target: {
+        kind: "mesh",
+        id: "mesh_body",
+        property: "vertices"
+      },
+      parameterX: "param_face_yaw",
+      parameterY: "param_face_pitch"
+    });
+    expect(outcome.operationLogLength).toBe(1);
+    expect(core.operationLog.entries).toHaveLength(1);
+    expect(outcome.logEntry?.operationType).toBe("addKeyformGrid2d");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      keyformSetId,
+      "mesh_body",
+      "param_face_yaw",
+      "param_face_pitch"
+    ]);
+    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "keyformSet", id: keyformSetId },
+      { kind: "parameter", id: "param_face_yaw" },
+      { kind: "parameter", id: "param_face_pitch" },
+      { kind: "mesh", id: "mesh_body" }
+    ]);
   });
 
   it("hydrates initial operation log entries defensively", () => {
@@ -213,6 +337,68 @@ const createUnsupportedGenerateMeshRequest = () => ({
   }
 });
 
+const createAddKeyformRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+}) => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_add_keyform_body_yaw",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
+  operationType: "addKeyform",
+  payload: {
+    target: {
+      kind: "mesh",
+      id: "mesh_body"
+    },
+    targetProperty: "vertices",
+    parameterId: "param_face_yaw",
+    keyValue: 1,
+    interpolation: "linear-1d-v1",
+    statePatch: {
+      propertyPath: "vertices",
+      value: [{ x: 2, y: 0 }]
+    }
+  }
+});
+
+const createAddKeyformGrid2dRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+}) => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_add_keyform_grid_body",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
+  operationType: "addKeyformGrid2d",
+  payload: {
+    target: {
+      kind: "mesh",
+      id: "mesh_body"
+    },
+    targetProperty: "vertices",
+    parameterX: "param_face_yaw",
+    parameterY: "param_face_pitch",
+    evaluator: "parameter-grid-2d-v1",
+    interpolation: "bilinear-grid-v1",
+    clampPolicy: "clamp-to-parameter-range",
+    keys: [
+      { x: -1, y: -1, statePatch: [{ x: -1, y: 0 }] },
+      { x: 1, y: 1, statePatch: [{ x: 1, y: 0 }] }
+    ]
+  }
+});
+
+const expectedLinearKeyformSetId = () =>
+  KeyformSetIdSchema.parse("keyset_mesh_mesh_body_vertices_face_yaw_1");
+
+const expectedGridKeyformSetId = () =>
+  KeyformSetIdSchema.parse("keyset_grid_mesh_mesh_body_vertices_face_yaw_face_pitch");
+
 const createFixtureSession = (options: {
   readonly packageRevision?: number;
 } = {}): AuthoringSession => ({
@@ -245,4 +431,77 @@ const createFixtureSession = (options: {
     provenanceRecords: [],
     rightsRecords: []
   }
+});
+
+const createKeyformFixtureSession = (): AuthoringSession => ({
+  packageIdentity: {
+    packageId: PackageIdSchema.parse("pkg_operation_keyform_lifecycle_test"),
+    packageDisplayName: "Operation Keyform Lifecycle Test",
+    formatVersion: "open-model-package-v1"
+  },
+  packageRevision: 0,
+  authoringRevision: createInitialAuthoringRevision(),
+  dirty: false,
+  graph: {
+    coordinateSystem: "canvas-y-down-v1",
+    canvasSize: {
+      width: 1024,
+      height: 1024
+    },
+    parts: [],
+    drawables: [],
+    meshes: [
+      {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 }
+        ],
+        uvs: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 }
+        ],
+        triangles: [[0, 1, 2]],
+        vertexStableIds: ["vtx_body_0", "vtx_body_1", "vtx_body_2"],
+        bounds: {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1
+        },
+        generationProvenanceId: ProvenanceIdSchema.parse("prov_mesh_body")
+      }
+    ],
+    parameters: [
+      createTestParameter("param_face_yaw", "Face Yaw"),
+      createTestParameter("param_face_pitch", "Face Pitch")
+    ],
+    keyformSets: [],
+    rigControls: [],
+    dynamicsGroups: [],
+    masks: [],
+    drawOrder: [],
+    rigControlRootIds: [],
+    stableOrder: ["mesh_body", "param_face_yaw", "param_face_pitch"],
+    sourceAssets: [],
+    provenanceRecords: [],
+    rightsRecords: []
+  }
+});
+
+const createTestParameter = (
+  parameterId: string,
+  displayName: string
+): AuthoringSession["graph"]["parameters"][number] => ({
+  parameterId: ParameterIdSchema.parse(parameterId),
+  displayName,
+  semanticRole: "face",
+  valueSource: "authoredInput",
+  min: -1,
+  max: 1,
+  default: 0,
+  recommendedUiStep: 0.01
 });
