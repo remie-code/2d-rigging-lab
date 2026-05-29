@@ -6,11 +6,13 @@ import { dryRunOperation } from "./lifecycle/dry-run.js";
 import type { OperationEvidenceProviderLike } from "./operation-evidence-provider.js";
 import { createOperationLog } from "./operation-log.js";
 import type { OperationLog } from "./operation-log.js";
+import type { OperationLogEntryDto } from "./operation-log-entry.js";
 import type { OperationResultDto } from "./operation-result.js";
 
 export interface OperationCoreOptions {
   readonly now?: () => Date;
   readonly evidenceProvider?: OperationEvidenceProviderLike;
+  readonly initialOperationLogEntries?: readonly OperationLogEntryDto[];
 }
 
 export interface OperationCore {
@@ -20,7 +22,7 @@ export interface OperationCore {
 }
 
 export const createOperationCore = (options: OperationCoreOptions = {}): OperationCore => {
-  const operationLog = createOperationLog();
+  const operationLog = createOperationLog(options.initialOperationLogEntries);
 
   return {
     operationLog,

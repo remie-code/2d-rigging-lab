@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "vitest run src --passWithNoTests"
+    "test:e2e": "node ../../scripts/editor-e2e-smoke.mjs",
+    "test": "vitest run src --passWithNoTests",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@private-2d-rigging-lab/authoring-core": "workspace:*",

@@ -3,6 +3,7 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../../editor-state/index.js";
+import type { EditorWorkflowPersistenceResult } from "../../editor-workflow/index.js";
 import type {
   EditorCreateParameterCommand,
   EditorSessionPersistenceResult
@@ -18,13 +19,18 @@ import {
 import { createCreateParameterForm } from "../parameter-operation/create-parameter-form.js";
 import { createOperationStatusPanel } from "../parameter-operation/operation-status-panel.js";
 import { createParameterList } from "../parameter-operation/parameter-list.js";
+import { createProjectPersistencePanel } from "../project-persistence/index.js";
 import { createPackageStatus } from "./package-status.js";
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
   readonly latestPersistenceResult: EditorSessionPersistenceResult | null;
+  readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
+  readonly onSaveProject: () => void;
+  readonly onLoadProject: () => void;
+  readonly onResetProject: () => void;
 }
 
 export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElement => {
@@ -89,6 +95,13 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     }),
     createOperationStatusPanel(options.state, options.viewModel)
   );
+  const projectPersistencePanel = createProjectPersistencePanel({
+    viewModel: options.viewModel,
+    latestProjectPersistenceResult: options.latestProjectPersistenceResult,
+    onSaveProject: options.onSaveProject,
+    onLoadProject: options.onLoadProject,
+    onResetProject: options.onResetProject
+  });
 
   const persistencePanel = document.createElement("section");
   persistencePanel.className = "editor-persistence-grid";
@@ -104,7 +117,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     createReloadSummaryPanel(options.state.reload)
   );
 
-  workspace.append(parametersPanel, operationPanel, persistencePanel);
+  workspace.append(parametersPanel, operationPanel, projectPersistencePanel, persistencePanel);
   shell.append(appBar, workspace);
 
   return shell;

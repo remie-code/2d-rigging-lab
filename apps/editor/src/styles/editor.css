@@ -107,6 +107,18 @@ input {
   box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
 }
 
+.project-persistence-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #d6ddd8;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
+}
+
 .editor-persistence-grid {
   grid-column: 1 / -1;
   display: grid;
@@ -116,13 +128,15 @@ input {
 }
 
 .editor-panel h2,
+.project-persistence-panel h2,
 .operation-status h3 {
   margin: 0;
   color: #1f2a2e;
   line-height: 1.2;
 }
 
-.editor-panel h2 {
+.editor-panel h2,
+.project-persistence-panel h2 {
   font-size: 16px;
 }
 
@@ -240,6 +254,69 @@ input {
   opacity: 0.55;
 }
 
+.project-persistence-panel__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-persistence-panel__button {
+  min-width: 0;
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+  overflow-wrap: anywhere;
+}
+
+.project-persistence-panel__button:hover:not(:disabled),
+.project-persistence-panel__button:focus-visible:not(:disabled) {
+  background: #e1e8e3;
+}
+
+.project-persistence-panel__status {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  background: #f8faf9;
+}
+
+.project-persistence-panel__status--success {
+  border-color: #b8ddcf;
+  background: #eef8f3;
+}
+
+.project-persistence-panel__status--empty {
+  border-color: #ded6c2;
+  background: #fbf7eb;
+}
+
+.project-persistence-panel__status--failed {
+  border-color: #e5b9aa;
+  background: #fbede8;
+}
+
+.project-persistence-panel__status-label,
+.project-persistence-panel__status-detail {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-persistence-panel__status-label {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.project-persistence-panel__status-detail {
+  color: #60716e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .operation-status {
   margin-top: 18px;
   padding-top: 16px;
@@ -337,6 +414,14 @@ input {
 
   .editor-panel {
     padding: 14px;
+  }
+
+  .project-persistence-panel {
+    padding: 14px;
+  }
+
+  .project-persistence-panel__actions {
+    grid-template-columns: 1fr;
   }
 
   .parameter-list {

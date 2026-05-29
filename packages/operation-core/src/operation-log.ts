@@ -10,8 +10,15 @@ export interface OperationLog {
   append(entry: OperationLogEntryDto): number;
 }
 
-export const createOperationLog = (): OperationLog => {
-  const entries: OperationLogEntryDto[] = [];
+export const hydrateOperationLogEntries = (
+  initialEntries: readonly OperationLogEntryDto[]
+): OperationLogEntryDto[] =>
+  initialEntries.map((entry) => OperationLogEntrySchema.parse(entry));
+
+export const createOperationLog = (
+  initialEntries: readonly OperationLogEntryDto[] = []
+): OperationLog => {
+  const entries: OperationLogEntryDto[] = hydrateOperationLogEntries(initialEntries);
 
   return {
     get entries() {

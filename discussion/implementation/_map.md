@@ -29,6 +29,7 @@ discussion/implementation/
 - Wave 4 runtime / validation evidence integration completed on 2026-05-29 with authoring runtime adapter, runtime evidence helper, validator evidence helper, operation evidence provider hook, minimal runtime/validation evidence fixture, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave4/wave4-final-report.md](waves/wave4/wave4-final-report.md) and [waves/wave4/integration-review.md](waves/wave4/integration-review.md).
 - Wave 5 package persistence / operation log foundation completed on 2026-05-29 with package revision policy, operation log JSONL, authoring-to-package document adapter, package file set writer, runtime/validation artifact materializers, persisted operation evidence fixture, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave5/wave5-final-report.md](waves/wave5/wave5-final-report.md) and [waves/wave5/integration-review.md](waves/wave5/integration-review.md).
 - Wave 6 editor-ui operation persistence vertical slice completed on 2026-05-29 with `apps/editor`, browser-safe session adapter, semantic state/view model, operation UI, evidence/package panels, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave6/wave6-final-report.md](waves/wave6/wave6-final-report.md) and [waves/wave6/integration-review.md](waves/wave6/integration-review.md).
+- Wave 7 editor project persistence and e2e hardening completed on 2026-05-29 with DOM-free core/editor typecheck split, operation log hydration, browser-local project persistence, save/load/reset UI, durable editor e2e smoke, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave7/wave7-final-report.md](waves/wave7/wave7-final-report.md) and [waves/wave7/integration-review.md](waves/wave7/integration-review.md).
 
 ## Key References
 
@@ -41,23 +42,26 @@ discussion/implementation/
 | [orchestration/wave4-plan.md](orchestration/wave4-plan.md) | Wave 4 runtime/validation evidence integration dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave5-plan.md](orchestration/wave5-plan.md) | Wave 5 package persistence / operation log foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave6-plan.md](orchestration/wave6-plan.md) | Wave 6 editor-ui operation persistence vertical slice dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave7-plan.md](orchestration/wave7-plan.md) | Wave 7 editor project persistence and e2e hardening dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
 | [waves/wave4/_map.md](waves/wave4/_map.md) | Wave 4 domain completion reports, integration review, and final report |
 | [waves/wave5/_map.md](waves/wave5/_map.md) | Wave 5 domain completion reports, integration review, and final report |
 | [waves/wave6/_map.md](waves/wave6/_map.md) | Wave 6 domain completion reports, integration review, and final report |
+| [waves/wave7/_map.md](waves/wave7/_map.md) | Wave 7 domain completion reports, integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
 | [reviews/wave4/_map.md](reviews/wave4/_map.md) | Wave 4 domain review reports |
 | [reviews/wave5/_map.md](reviews/wave5/_map.md) | Wave 5 domain review reports |
 | [reviews/wave6/_map.md](reviews/wave6/_map.md) | Wave 6 domain and clean integration review reports |
+| [reviews/wave7/_map.md](reviews/wave7/_map.md) | Wave 7 clean integration review reports |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.codex/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Choose the next wave: editor project persistence / e2e hardening, or AI-interface dry-run command foundation.
-2. Use [waves/wave6/wave6-final-report.md](waves/wave6/wave6-final-report.md) as completion basis.
-3. Keep AI interface implementation behind editor/session semantics unless the user chooses a different next wave.
+1. Choose the next implementation wave from [waves/wave7/wave7-final-report.md](waves/wave7/wave7-final-report.md): editor project filesystem/export foundation or AI-interface dry-run command foundation.
+2. Keep future filesystem/archive work separate from Wave 7's browser-local project persistence boundary unless the user explicitly expands scope.
+3. Keep AI interface implementation behind editor/session workflow semantics unless the user chooses a different next wave.

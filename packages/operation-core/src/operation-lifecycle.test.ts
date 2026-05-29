@@ -4,6 +4,7 @@ import { PackageIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/cont
 import { describe, expect, it } from "vitest";
 
 import { createOperationCore } from "./index.js";
+import type { OperationLogEntryDto } from "./operation-log-entry.js";
 
 describe("operation lifecycle foundation", () => {
   it("dry-runs createParameter without mutating the original session", () => {
@@ -49,6 +50,55 @@ describe("operation lifecycle foundation", () => {
     expect(logEntry?.result.status).toBe("committed");
     expect(logEntry?.targetIds).toEqual(["param_smile"]);
     expect(logEntry?.provenanceId).toBe("prov_create_smile");
+  });
+
+  it("hydrates initial operation log entries defensively", () => {
+    const initialEntry = createCommittedLogEntry();
+    const initialEntries = [initialEntry];
+    const core = createOperationCore({
+      initialOperationLogEntries: initialEntries
+    });
+
+    initialEntries.splice(0, initialEntries.length);
+    initialEntry.targetIds.push("param_mutated");
+
+    expect(core.operationLog.entries).toHaveLength(1);
+    expect(core.operationLog.entries[0]?.operationId).toBe("op_create_smile");
+    expect(core.operationLog.entries[0]?.targetIds).toEqual(["param_smile"]);
+  });
+
+  it("appends new commits after hydrated operation log entries", () => {
+    const session = createFixtureSession({ packageRevision: 1 });
+    const core = createOperationCore({
+      initialOperationLogEntries: [createCommittedLogEntry()],
+      now: () => new Date("2026-05-29T00:01:00.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createParameterRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        operationId: "op_create_frown",
+        parameterId: "param_frown",
+        displayName: "Frown"
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.operationLogLength).toBe(2);
+    expect(core.operationLog.entries.map((entry) => entry.operationId)).toEqual([
+      "op_create_smile",
+      "op_create_frown"
+    ]);
+  });
+
+  it("rejects invalid hydrated operation log entries", () => {
+    expect(() =>
+      createOperationCore({
+        initialOperationLogEntries: [{} as OperationLogEntryDto]
+      })
+    ).toThrow();
   });
 
   it("rejects a stale base package revision before mutation or log append", () => {
@@ -113,17 +163,20 @@ describe("operation lifecycle foundation", () => {
 const createParameterRequest = (options: {
   readonly dryRun: boolean;
   readonly basePackageRevision?: number;
+  readonly operationId?: string;
+  readonly parameterId?: string;
+  readonly displayName?: string;
 }) => ({
   schemaVersion: "operation-request-v1",
-  operationId: "op_create_smile",
+  operationId: options.operationId ?? "op_create_smile",
   actor: "test",
   surface: "testFixture",
   dryRun: options.dryRun,
   basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createParameter",
   payload: {
-    parameterId: "param_smile",
-    displayName: "Smile",
+    parameterId: options.parameterId ?? "param_smile",
+    displayName: options.displayName ?? "Smile",
     semanticRole: "mouth",
     min: 0,
     max: 1,
@@ -131,6 +184,20 @@ const createParameterRequest = (options: {
     recommendedUiStep: 0.01
   }
 });
+
+const createCommittedLogEntry = (): OperationLogEntryDto => {
+  const session = createFixtureSession();
+  const core = createOperationCore({
+    now: () => new Date("2026-05-29T00:00:00.000Z")
+  });
+  const outcome = core.commitOperation(session, createParameterRequest({ dryRun: false }));
+
+  if (outcome.logEntry === undefined) {
+    throw new Error("Expected committed operation to produce a log entry.");
+  }
+
+  return outcome.logEntry;
+};
 
 const createUnsupportedGenerateMeshRequest = () => ({
   schemaVersion: "operation-request-v1",
@@ -146,13 +213,15 @@ const createUnsupportedGenerateMeshRequest = () => ({
   }
 });
 
-const createFixtureSession = (): AuthoringSession => ({
+const createFixtureSession = (options: {
+  readonly packageRevision?: number;
+} = {}): AuthoringSession => ({
   packageIdentity: {
     packageId: PackageIdSchema.parse("pkg_operation_lifecycle_test"),
     packageDisplayName: "Operation Lifecycle Test",
     formatVersion: "open-model-package-v1"
   },
-  packageRevision: 0,
+  packageRevision: options.packageRevision ?? 0,
   authoringRevision: createInitialAuthoringRevision(),
   dirty: false,
   graph: {

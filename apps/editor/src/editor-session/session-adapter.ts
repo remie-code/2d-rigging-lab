@@ -38,13 +38,27 @@ import {
 export interface EditorSessionAdapter {
   readonly baseDocument: PackageDocumentDto;
   readonly authoringSession: AuthoringSession;
+  createPersistenceSnapshot(): EditorSessionPersistenceSnapshot;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
 }
 
 export interface EditorSessionAdapterOptions {
   readonly packageDocument?: PackageDocumentDto;
   readonly packageHash?: string;
+  readonly initialOperationLogEntries?: readonly OperationLogEntryDto[];
+  readonly initialGeneratedArtifactEntries?: readonly PackageFileSet[number][];
   readonly now?: () => Date;
+}
+
+export interface EditorSessionPersistenceSnapshot {
+  readonly operationLogEntries: readonly OperationLogEntryDto[];
+  readonly operationLogJsonl: string;
+  readonly packageRevision: number;
+  readonly packageFileSet: PackageFileSet;
+  readonly packageFilePaths: readonly string[];
+  readonly generatedArtifactPaths: readonly string[];
+  readonly document: PackageDocumentDto;
+  readonly parameterIds: readonly string[];
 }
 
 export interface EditorSessionPersistenceResult {
@@ -72,14 +86,25 @@ export const createEditorSessionAdapter = (
     packageHash: options.packageHash ?? EDITOR_BROWSER_SAMPLE_PACKAGE_HASH,
     now
   });
+  const generatedArtifactEntries = [...(options.initialGeneratedArtifactEntries ?? [])];
   const operationCore = createOperationCore({
     now,
-    evidenceProvider: evidenceCollector.collectOperationEvidence
+    evidenceProvider: evidenceCollector.collectOperationEvidence,
+    initialOperationLogEntries: options.initialOperationLogEntries ?? []
   });
 
   return {
     baseDocument,
     authoringSession,
+    createPersistenceSnapshot() {
+      return createPersistenceSnapshot({
+        authoringSession,
+        baseDocument,
+        operationLogEntries: operationCore.operationLog.entries,
+        generatedArtifactEntries,
+        now
+      });
+    },
     commitCreateParameter(command) {
       const packageRevisionBefore = authoringSession.packageRevision;
       const evidenceStartIndex = evidenceCollector.captures.length;
@@ -105,17 +130,17 @@ export const createEditorSessionAdapter = (
       const savedDocument = toPackageDocument(authoringSession, baseDocument, {
         updatedAt: now().toISOString()
       });
-      const generatedArtifactEntries = toEvidencePackageFileEntries(capture);
+      appendGeneratedArtifactEntries(
+        generatedArtifactEntries,
+        toEvidencePackageFileEntries(capture)
+      );
       const packageFileSet = serializePackageDocumentToFileSet(savedDocument, {
         operationLogText: operationLogJsonl,
         generatedArtifacts: generatedArtifactEntries
       });
       const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
       const evidence = summarizeEvidencePaths(capture);
-      const generatedArtifactPaths = [
-        ...evidence.runtimeArtifactPaths,
-        ...evidence.validationArtifactPaths
-      ];
+      const generatedArtifactPaths = generatedArtifactEntries.map((entry) => entry.path);
 
       return {
         operationResult: outcome.result,
@@ -135,6 +160,49 @@ export const createEditorSessionAdapter = (
       };
     }
   };
+};
+
+const createPersistenceSnapshot = (input: {
+  readonly authoringSession: AuthoringSession;
+  readonly baseDocument: PackageDocumentDto;
+  readonly operationLogEntries: readonly OperationLogEntryDto[];
+  readonly generatedArtifactEntries: readonly PackageFileSet[number][];
+  readonly now: () => Date;
+}): EditorSessionPersistenceSnapshot => {
+  const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationLogEntries);
+  const document = toPackageDocument(input.authoringSession, input.baseDocument, {
+    updatedAt: input.now().toISOString()
+  });
+  const packageFileSet = serializePackageDocumentToFileSet(document, {
+    operationLogText: operationLogJsonl,
+    generatedArtifacts: input.generatedArtifactEntries
+  });
+
+  return {
+    operationLogEntries: parseOperationLogEntriesFromJsonl(operationLogJsonl),
+    operationLogJsonl,
+    packageRevision: document.manifest.packageRevision,
+    packageFileSet,
+    packageFilePaths: packageFileSet.map((entry) => entry.path),
+    generatedArtifactPaths: input.generatedArtifactEntries.map((entry) => entry.path),
+    document,
+    parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId)
+  };
+};
+
+const appendGeneratedArtifactEntries = (
+  target: PackageFileSet[number][],
+  entries: readonly PackageFileSet[number][]
+): void => {
+  const incomingPaths = new Set(entries.map((entry) => entry.path));
+
+  for (let index = target.length - 1; index >= 0; index -= 1) {
+    if (incomingPaths.has(target[index]?.path ?? "")) {
+      target.splice(index, 1);
+    }
+  }
+
+  target.push(...entries);
 };
 
 const createRejectedPersistenceResult = (input: {

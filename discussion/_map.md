@@ -35,7 +35,7 @@
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 6 editor-ui operation persistence vertical slice完了。次wave候補はeditor project persistence / e2e hardening または AI-interface dry-run command foundation |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 7 editor project persistence / e2e hardening完了。browser-local project persistence、save/load/reset UI、durable e2e smokeまで実装・検証済み |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の焦点
@@ -65,11 +65,12 @@
 | Implementation Wave 4 | 2026-05-29に `runtime-validation-evidence-integration` を完了。authoring runtime adapter、runtime evidence helper、validator evidence helper、operation evidence provider hook、runtime/validation evidence fixture、integration review、final report、full verification pass を [implementation/waves/wave4/wave4-final-report.md](implementation/waves/wave4/wave4-final-report.md) に記録済み |
 | Implementation Wave 5 | 2026-05-29に `package-persistence-and-operation-log-foundation` を完了。package revision policy、operation log JSONL、authoring-to-package document adapter、package file set writer、runtime/validation artifact materializers、persisted operation evidence fixture、integration review、final report、full verification pass を [implementation/waves/wave5/wave5-final-report.md](implementation/waves/wave5/wave5-final-report.md) に記録済み |
 | Implementation Wave 6 | 2026-05-29に `editor-ui-operation-persistence-vertical-slice` を完了。Vite + vanilla TypeScript の `apps/editor` でGUIからcreateParameter commit、operation log、evidence、package file set reload summaryまで通し、full verification pass を [implementation/waves/wave6/wave6-final-report.md](implementation/waves/wave6/wave6-final-report.md) に記録済み |
+| Implementation Wave 7 | 2026-05-29に `editor-project-persistence-and-e2e-hardening` を完了。DOM-free core/editor typecheck分離、operation log hydration、browser-local project persistence、save/load/reset UI、durable e2e smoke、integration review、final report、full verification pass を [implementation/waves/wave7/wave7-final-report.md](implementation/waves/wave7/wave7-final-report.md) に記録済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. 次の implementation wave は [implementation/waves/wave6/wave6-final-report.md](implementation/waves/wave6/wave6-final-report.md) を completion basis として、editor project persistence / e2e hardening または AI-interface dry-run command foundation を検討する。
+1. 次waveとして editor project filesystem/export foundation か AI-interface dry-run command foundation のどちらを優先するか決める。
 2. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 3. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 4. Live2Dへ最初に提案する機能単位をユーザー判断で選び、proposal templateから個別draftを作る。
