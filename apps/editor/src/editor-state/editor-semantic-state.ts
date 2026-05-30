@@ -3,6 +3,7 @@ import { createEmptyDrawableFormState, type CreateDrawableFormState } from "./cr
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
 import type { DrawableListItemState } from "./drawable-list-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
+import { createEmptyMeshEditState, type MeshEditState } from "./mesh-edit-state.js";
 import type { OperationResultSummaryState } from "./operation-result-summary.js";
 import { createEmptyOperationLogSummary, type OperationLogSummaryState } from "./operation-log-summary.js";
 import type { LoadedPackageIdentityState } from "./package-identity-state.js";
@@ -19,6 +20,7 @@ export interface EditorSemanticState {
   readonly revision: PackageRevisionState;
   readonly parameters: readonly ParameterListItemState[];
   readonly drawables: readonly DrawableListItemState[];
+  readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
@@ -35,6 +37,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   revision: emptyPackageRevisionState(),
   parameters: [],
   drawables: [],
+  meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),

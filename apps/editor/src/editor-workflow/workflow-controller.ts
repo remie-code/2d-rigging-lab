@@ -34,6 +34,7 @@ import {
   createEditorSessionAdapter,
   type EditorCreateDrawablePresetCommand,
   type EditorCreateParameterCommand,
+  type EditorMeshVertexNudgeCommand,
   type EditorSessionAdapter,
   type EditorSessionDrawablePresetResult,
   type EditorSessionPersistenceResult,
@@ -140,6 +141,35 @@ export type EditorWorkflowLayerMoveResult =
   | EditorWorkflowLayerMoveNotMovableResult
   | EditorWorkflowLayerActionCommitResult;
 
+export interface EditorWorkflowMeshVertexNudgeNotFoundResult {
+  readonly status: "not_found";
+  readonly meshId: string;
+  readonly vertexId: string;
+}
+
+export interface EditorWorkflowMeshVertexNudgeNotEditableResult {
+  readonly status: "not_editable";
+  readonly meshId: string;
+  readonly vertexId: string;
+}
+
+export interface EditorWorkflowMeshVertexNudgeInvalidDeltaResult {
+  readonly status: "invalid_delta";
+  readonly meshId: string;
+  readonly vertexId: string;
+}
+
+export interface EditorWorkflowMeshVertexNudgeCommitResult {
+  readonly status: "committed" | "rejected";
+  readonly result: EditorSessionPersistenceResult;
+}
+
+export type EditorWorkflowMeshVertexNudgeResult =
+  | EditorWorkflowMeshVertexNudgeNotFoundResult
+  | EditorWorkflowMeshVertexNudgeNotEditableResult
+  | EditorWorkflowMeshVertexNudgeInvalidDeltaResult
+  | EditorWorkflowMeshVertexNudgeCommitResult;
+
 export interface EditorWorkflowController {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
@@ -159,6 +189,7 @@ export interface EditorWorkflowController {
     drawableId: string,
     direction: EditorDrawableLayerMoveDirection
   ): EditorWorkflowLayerMoveResult;
+  nudgeMeshVertex(command: EditorMeshVertexNudgeCommand): EditorWorkflowMeshVertexNudgeResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
   resetPreviewParameterValues(): EditorWorkflowPreviewResetResult;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
@@ -356,6 +387,63 @@ export const createEditorWorkflowController = (
         result
       };
     },
+    nudgeMeshVertex(command) {
+      const selectedMesh = state.meshEdit.selectedMesh;
+      if (selectedMesh === null || selectedMesh.meshId !== command.meshId) {
+        return {
+          status: "not_found",
+          meshId: String(command.meshId),
+          vertexId: String(command.vertexId)
+        };
+      }
+
+      const editableVertex = state.meshEdit.editableVertices.find(
+        (vertex) => vertex.vertexId === command.vertexId
+      );
+      if (editableVertex === undefined) {
+        return {
+          status: "not_editable",
+          meshId: String(command.meshId),
+          vertexId: String(command.vertexId)
+        };
+      }
+
+      if (!isValidMeshVertexNudgeDelta(command.delta)) {
+        return {
+          status: "invalid_delta",
+          meshId: String(command.meshId),
+          vertexId: String(command.vertexId)
+        };
+      }
+
+      const result = adapter.commitMoveMeshVertex({
+        operationId:
+          command.operationId ??
+          createMeshVertexOperationId(
+            "move_mesh_vertex",
+            command.meshId,
+            command.vertexId,
+            adapter.authoringSession.packageRevision
+          ),
+        meshId: command.meshId,
+        vertexDeltas: [
+          {
+            vertexId: command.vertexId,
+            delta: command.delta
+          }
+        ],
+        intent: command.intent ?? "editor mesh vertex nudge"
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = applyEditorWorkflowCommitResult(state, adapter, result);
+
+      return {
+        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+        result
+      };
+    },
     setPreviewParameterValue(parameterId, value) {
       const projection = applyPreviewParameterValue(state.previewParameters, {
         parameterId,
@@ -532,8 +620,24 @@ const createLayerOperationId = (
 ): string =>
   `op_editor_${operation}_${sanitizeOperationIdToken(drawableId)}_${sanitizeOperationIdToken(action)}_r${packageRevision}`;
 
+const createMeshVertexOperationId = (
+  operation: string,
+  meshId: string,
+  vertexId: string,
+  packageRevision: number
+): string =>
+  `op_editor_${operation}_${sanitizeOperationIdToken(meshId)}_${sanitizeOperationIdToken(vertexId)}_r${packageRevision}`;
+
 const sanitizeOperationIdToken = (text: string): string =>
   text.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase();
+
+const isValidMeshVertexNudgeDelta = (delta: {
+  readonly x: number;
+  readonly y: number;
+}): boolean =>
+  Number.isFinite(delta.x) &&
+  Number.isFinite(delta.y) &&
+  (delta.x !== 0 || delta.y !== 0);
 
 const projectWorkflowPreviewProjection = (
   adapter: EditorSessionAdapter,

@@ -25,11 +25,12 @@ import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
 import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
-import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
+import { createStableVertexHash as createStableGeometryVertexHash } from "./drawable-geometry.js";
 
 export const EvaluatedParameterSchema = z.object({
   parameterId: ParameterIdSchema,
@@ -285,7 +286,7 @@ const createEvaluatedDrawables = (input: {
         evaluatedDrawOrder: explicitOrder.get(drawable.drawableId) ?? drawable.baseDrawOrder,
         bounds: drawable.bounds,
         vertexCount: drawable.vertexCount,
-        vertexHash: drawable.vertexHash ?? createStableVertexHash(drawable.drawableId, drawable.vertexCount),
+        vertexHash: drawable.vertexHash ?? createDrawableVertexHash(drawable, options.epsilonPolicy.hashPrecisionDecimals),
         ...((options.snapshotDetail === "full" || input.includeVertices) && drawable.vertices !== undefined
           ? { vertices: drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y })) }
           : {}),
@@ -367,6 +368,15 @@ const finalizeDrawablesForDetail = (
   });
 };
 
-const createStableVertexHash = (drawableId: string, vertexCount: number): string => `hash_${drawableId}_${vertexCount}`;
+const createDrawableVertexHash = (
+  drawable: NormalizedDrawable,
+  hashPrecisionDecimals: number
+): string => {
+  if (drawable.vertices === undefined) {
+    return `hash_${drawable.drawableId}_${drawable.vertexCount}`;
+  }
+
+  return createStableGeometryVertexHash(drawable.vertices, { hashPrecisionDecimals });
+};
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);

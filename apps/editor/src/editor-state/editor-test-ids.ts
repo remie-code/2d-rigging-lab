@@ -10,6 +10,8 @@ export const editorTestIds = {
   drawableCreateSubmit: "drawable.create",
   drawableList: "drawable.list",
   drawableLayerStatus: "drawable.layer.status",
+  meshVertexControls: "meshVertex.controls",
+  meshVertexStatus: "meshVertex.status",
   drawableResult: "drawable.result",
   operationStatus: "operation.status",
   projectPersistencePanel: "projectPersistence.panel",
@@ -42,6 +44,15 @@ export const createDrawableMoveUpTestId = (drawableId: string): string =>
 
 export const createDrawableMoveDownTestId = (drawableId: string): string =>
   `drawable.moveDown.${drawableId}`;
+
+export const createMeshVertexRowTestId = (meshId: string, vertexId: string): string =>
+  `meshVertex.row.${meshId}.${vertexId}`;
+
+export const createMeshVertexNudgeButtonTestId = (
+  meshId: string,
+  vertexId: string,
+  direction: "left" | "right" | "up" | "down"
+): string => `meshVertex.nudge.${meshId}.${vertexId}.${direction}`;
 
 export const createPreviewParameterControlTestId = (parameterId: string): string =>
   `preview.parameter.${parameterId}`;

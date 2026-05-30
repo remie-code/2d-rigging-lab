@@ -10,6 +10,7 @@ import type {
 } from "../../editor-workflow/index.js";
 import type {
   EditorCreateDrawablePresetCommand,
+  EditorMeshVertexNudgeCommand,
   EditorCreateParameterCommand,
   EditorSessionPersistenceResult
 } from "../../editor-session/index.js";
@@ -41,6 +42,7 @@ export interface EditorAppShellOptions {
   readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
+  readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
@@ -119,7 +121,8 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     viewModel: options.viewModel,
     onCommitCreateDrawable: options.onCommitCreateDrawablePreset,
     onToggleDrawableRuntimeVisibility: options.onToggleDrawableRuntimeVisibility,
-    onMoveDrawableLayer: options.onMoveDrawableLayer
+    onMoveDrawableLayer: options.onMoveDrawableLayer,
+    onNudgeMeshVertex: options.onNudgeMeshVertex
   });
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,

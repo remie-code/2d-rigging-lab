@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format";
 
 import { createBrowserProjectStore } from "../project-persistence/index.js";
 import type { StorageLike } from "../project-persistence/index.js";
@@ -215,6 +216,56 @@ describe("editor workflow controller", () => {
         visible: false
       })
     ]));
+  });
+
+  it("nudges an editable mesh vertex and restores vertex coordinates after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    first.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = first.viewModel.meshEdit.selectedMesh;
+    const vertex = first.viewModel.meshEdit.editableVertices[0];
+    if (selectedMesh === null || vertex === undefined) {
+      throw new Error("Expected generated drawable mesh to expose an editable vertex.");
+    }
+
+    const nudged = first.nudgeMeshVertex(vertex.nudgeCommands.right);
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(selectedMesh).toMatchObject({
+      meshId: "mesh_workflow_star",
+      drawableId: "draw_workflow_star"
+    });
+    expect(nudged.status).toBe("committed");
+    expect(first.state.meshEdit.editableVertices[0]).toMatchObject({
+      vertexId: "vtx_workflow_star_0_0",
+      position: { x: 17, y: 24 }
+    });
+    expect(first.viewModel.meshEdit).toMatchObject({
+      canNudgeSelectedMesh: true,
+      lastMeshEditResultLabel: "moveMeshVertex committed"
+    });
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ]);
+    expect(saved.snapshot.packageFileSet.find((entry) => entry.path === "operations/log.jsonl")?.text).toContain(
+      "moveMeshVertex"
+    );
+    expect(findMeshVertex(saved.snapshot.document, "mesh_workflow_star", 0)).toEqual({ x: 17, y: 24 });
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.operationLog.entryCount).toBe(3);
+    expect(second.state.meshEdit.selectedMesh).toMatchObject({
+      meshId: "mesh_workflow_star",
+      drawableId: "draw_workflow_star"
+    });
+    expect(second.state.meshEdit.editableVertices[0]).toMatchObject({
+      vertexId: "vtx_workflow_star_0_0",
+      position: { x: 17, y: 24 }
+    });
   });
 
   it("does not commit an operation when a layer move is not available", () => {
@@ -633,6 +684,12 @@ const parameterIds = (
 const drawableIds = (
   workflow: ReturnType<typeof createEditorWorkflowController>
 ): readonly string[] => workflow.state.drawables.map((drawable) => drawable.drawableId);
+
+const findMeshVertex = (
+  document: PackageDocumentDto,
+  meshId: string,
+  vertexIndex: number
+) => document.model.meshes.meshes.find((mesh) => mesh.meshId === meshId)?.vertices[vertexIndex];
 
 const createParameterCommand = (name: "smile" | "brow") => ({
   operationId: `op_workflow_create_parameter_${name}`,

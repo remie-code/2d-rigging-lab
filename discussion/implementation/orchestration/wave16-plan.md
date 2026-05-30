@@ -5,7 +5,7 @@
 
 ## 1. 状態
 
-- Status: Planned
+- Status: Completed / implementation-proven
 - Target wave: Wave 16
 - Wave name: `drawable-layer-controls-and-visibility-authoring`
 - Primary objective: Wave 15 で作成可能になった複数 drawable を、editor 上で並び替え・表示切替できるようにし、preview / persistence / evidence / e2e で確認する。

@@ -39,7 +39,8 @@ discussion/implementation/
 - Wave 13 runtime diff and Grid2D evidence hardening completed on 2026-05-30 with enriched runtime diff fields, Grid2D fixture/evidence, keyform diagnostic regressions, AI/editor `addKeyformGrid2d` runtime-visible evidence, inserted diagnostic alignment resolution, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave13/wave13-final-report.md](waves/wave13/wave13-final-report.md), [waves/wave13/integration-review.md](waves/wave13/integration-review.md), and [reviews/wave13/_map.md](reviews/wave13/_map.md).
 - Wave 14 editor embedded preview foundation completed on 2026-05-30 with runtime-derived embedded preview projection, preview-ready sample parameter/keyform data, preview-only workflow state, embedded preview UI, desktop/mobile e2e smoke, a sample-aware AI/editor-session regression needs-fix loop, and full final verification pass. Evidence is recorded in [waves/wave14/wave14-final-report.md](waves/wave14/wave14-final-report.md), [waves/wave14/integration-review.md](waves/wave14/integration-review.md), and [reviews/wave14/_map.md](reviews/wave14/_map.md).
 - Wave 15 editor drawable / mesh authoring vertical slice completed on 2026-05-30 with GUI generated drawable / deterministic mesh creation, operation log and package persistence, save/load restore, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and an operation lifecycle needs-fix loop after `generateMesh` became supported. Evidence is recorded in [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md), [waves/wave15/integration-review.md](waves/wave15/integration-review.md), [waves/wave15/_map.md](waves/wave15/_map.md), and [reviews/wave15/_map.md](reviews/wave15/_map.md).
-- Wave 16 drawable layer controls and visibility authoring is planned at [orchestration/wave16-plan.md](orchestration/wave16-plan.md). It should add GUI draw order and runtime visibility controls through Orch-Sylph domain delegation.
+- Wave 16 drawable layer controls and visibility authoring completed on 2026-05-30 with `setDrawOrder` / `setRuntimeVisibility` operations, runtime / validation evidence, editor workflow/state, drawable list hide/show and move up/down controls, save/load persistence smoke, desktop/mobile e2e, and integration review. Evidence is recorded in [waves/wave16/wave16-final-report.md](waves/wave16/wave16-final-report.md).
+- Wave 17 editor mesh vertex editing vertical slice completed on 2026-05-30 with `moveMeshVertex` operation support, runtime / validation evidence, editor workflow state, mesh vertex nudge controls, save/load persistence smoke, desktop/mobile E2E, clean integration review, and final report. Evidence is recorded in [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md), [waves/wave17/_map.md](waves/wave17/_map.md), and [reviews/wave17/_map.md](reviews/wave17/_map.md).
 
 ## Key References
 
@@ -63,6 +64,7 @@ discussion/implementation/
 | [orchestration/wave14-plan.md](orchestration/wave14-plan.md) | Wave 14 editor embedded preview foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave15-plan.md](orchestration/wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave16-plan.md](orchestration/wave16-plan.md) | Wave 16 drawable layer controls and visibility authoring dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave17-plan.md](orchestration/wave17-plan.md) | Wave 17 editor mesh vertex editing vertical slice dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -78,6 +80,8 @@ discussion/implementation/
 | [waves/wave13/_map.md](waves/wave13/_map.md) | Wave 13 domain completion reports, integration review, and final report |
 | [waves/wave14/_map.md](waves/wave14/_map.md) | Wave 14 domain completion reports, integration review, and final report |
 | [waves/wave15/_map.md](waves/wave15/_map.md) | Wave 15 domain completion reports, needs-fix loop, integration review, and final report |
+| [waves/wave16/wave16-final-report.md](waves/wave16/wave16-final-report.md) | Wave 16 final report for drawable layer controls and visibility authoring |
+| [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md) | Wave 17 final report for editor mesh vertex editing vertical slice |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -98,6 +102,6 @@ discussion/implementation/
 
 ## Next Actions
 
-1. Execute Wave 16 from [orchestration/wave16-plan.md](orchestration/wave16-plan.md), using Orch-Sylph domains rather than direct Undine implementation.
+1. Use [current-capability-map.md](current-capability-map.md) and the Wave 17 final report before selecting the next implementation slice.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

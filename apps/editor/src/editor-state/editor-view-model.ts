@@ -4,6 +4,11 @@ import {
   isPreviewParameterDisabled,
   type PreviewParameterValueState
 } from "./preview-parameter-state.js";
+import {
+  projectMeshEditViewModel,
+  type MeshEditViewModel
+} from "./mesh-edit-view-model.js";
+import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface AiApprovalWorkflowViewModel {
   readonly status: EditorSemanticState["aiApproval"]["status"];
@@ -30,6 +35,7 @@ export interface EditorWorkflowViewModel {
   readonly reloadLabel: string;
   readonly drawableAuthoring: DrawableAuthoringViewModel;
   readonly drawableLayers: DrawableLayerControlsViewModel;
+  readonly meshEdit: MeshEditViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
@@ -139,6 +145,7 @@ export const projectEditorWorkflowViewModel = (
     reloadLabel: projectReloadLabel(state),
     drawableAuthoring: projectDrawableAuthoringViewModel(state),
     drawableLayers: projectDrawableLayerControlsViewModel(state),
+    meshEdit: projectMeshEditViewModel(state),
     previewControls: projectPreviewControlsViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };
@@ -318,14 +325,3 @@ const projectPreviewParameterControl = (
       : null
   };
 };
-
-const formatBoundsLabel = (bounds: {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}): string =>
-  `${formatPreviewNumber(bounds.x)}, ${formatPreviewNumber(bounds.y)} / ${formatPreviewNumber(bounds.width)} x ${formatPreviewNumber(bounds.height)}`;
-
-const formatPreviewNumber = (value: number): string =>
-  Number.isInteger(value) ? `${value}` : Number.parseFloat(value.toFixed(4)).toString();

@@ -2,10 +2,12 @@ import type { EditorCreateDrawablePresetCommand } from "../../editor-session/ind
 import {
   editorTestIds,
   type EditorSemanticState,
-  type EditorWorkflowViewModel
+  type EditorWorkflowViewModel,
+  type MeshVertexNudgeViewModelCommand
 } from "../../editor-state/index.js";
 import { createDrawableAuthoringForm } from "./drawable-authoring-form.js";
 import { createDrawableList } from "./drawable-list.js";
+import { createMeshVertexControls } from "./mesh-vertex-controls.js";
 
 export interface DrawableAuthoringPanelOptions {
   readonly state: EditorSemanticState;
@@ -13,6 +15,7 @@ export interface DrawableAuthoringPanelOptions {
   readonly onCommitCreateDrawable: (command: EditorCreateDrawablePresetCommand) => void;
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: "up" | "down") => void;
+  readonly onNudgeMeshVertex: (command: MeshVertexNudgeViewModelCommand) => void;
 }
 
 export const createDrawableAuthoringPanel = (
@@ -42,6 +45,10 @@ export const createDrawableAuthoringPanel = (
     }),
     createResultSummary(options),
     createLayerStatus(options),
+    createMeshVertexControls({
+      viewModel: options.viewModel.meshEdit,
+      onNudgeVertex: options.onNudgeMeshVertex
+    }),
     createDrawableList({
       drawables: options.viewModel.drawableAuthoring.drawables,
       layerControls: options.viewModel.drawableLayers,

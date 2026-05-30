@@ -9,6 +9,7 @@ import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
+import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
 
@@ -35,6 +36,7 @@ export interface OperationHandler {
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],
+  [moveMeshVertexOperationHandler.operationType, moveMeshVertexOperationHandler],
   [createParameterOperationHandler.operationType, createParameterOperationHandler],
   [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],

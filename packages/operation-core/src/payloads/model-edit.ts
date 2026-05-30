@@ -49,8 +49,7 @@ export const MoveMeshVertexPayloadSchema = z.object({
         vertexId: VertexIdSchema,
         delta: Vec2Schema
       })
-    )
-    .min(1),
+    ),
   keyformScope: z
     .object({
       parameterId: ParameterIdSchema,

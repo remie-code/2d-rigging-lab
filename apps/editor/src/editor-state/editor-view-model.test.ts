@@ -43,6 +43,15 @@ describe("editor semantic state view model", () => {
       defaultDisplayName: "Generated Drawable",
       resultLabel: "Drawable preset ready"
     });
+    expect(viewModel.meshEdit).toMatchObject({
+      selectedMesh: null,
+      editableVertices: [],
+      hasSelectedMesh: false,
+      hasEditableVertices: false,
+      canNudgeSelectedMesh: false,
+      selectedMeshLabel: "No mesh selected",
+      lastMeshEditResultLabel: "No mesh edit committed"
+    });
   });
 
   it("summarizes a committed createParameter operation for the view model", () => {
@@ -404,6 +413,175 @@ describe("editor semantic state view model", () => {
           disabledMessage: "Preview control disabled for computedDynamics parameter"
         }
       ]
+    });
+  });
+
+  it("projects selected editable mesh vertices and nudge commands for Domain D", () => {
+    const state = applyCommittedOperationSummary(
+      projectLoadedPackageState({
+        identity: {
+          packageId: "pkg_mesh_edit",
+          packageDisplayName: "Mesh Edit Package",
+          formatVersion: "open-model-package-v1"
+        },
+        revision: {
+          packageRevision: 2,
+          authoringRevision: 2
+        },
+        drawables: [
+          {
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            displayName: "Mesh Edit",
+            partId: PartIdSchema.parse("part_root"),
+            sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+            textureId: TextureIdSchema.parse("tex_mesh_edit"),
+            meshId: MeshIdSchema.parse("mesh_mesh_edit"),
+            defaultOpacity: 1,
+            runtimeVisibility: true,
+            baseDrawOrder: 0,
+            sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+          }
+        ],
+        drawOrderEntries: [
+          {
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            baseDrawOrder: 0,
+            stableOrder: 0
+          }
+        ],
+        meshes: [
+          {
+            meshId: MeshIdSchema.parse("mesh_mesh_edit"),
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            vertices: [
+              { x: 4, y: 6 },
+              { x: 12, y: 6 },
+              { x: 4, y: 18 }
+            ],
+            uvs: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+              { x: 0, y: 1 }
+            ],
+            triangles: [[0, 1, 2]],
+            vertexStableIds: ["vtx_mesh_edit_0", "vtx_mesh_edit_1", "vtx_mesh_edit_2"],
+            bounds: { x: 4, y: 6, width: 8, height: 12 },
+            generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+          }
+        ]
+      }),
+      {
+        result: {
+          operationId: "op_move_mesh_edit",
+          operationType: "moveMeshVertex",
+          status: "committed",
+          precondition: {
+            ok: true
+          },
+          reversible: true
+        },
+        operationLogEntries: [
+          {
+            operationId: "op_move_mesh_edit",
+            operationType: "moveMeshVertex",
+            surface: "gui",
+            timestamp: "2026-05-29T00:00:00.000Z",
+            targetIds: ["mesh_mesh_edit", "vtx_mesh_edit_0"]
+          }
+        ],
+        revision: {
+          packageRevision: 3,
+          authoringRevision: 3
+        },
+        drawables: [
+          {
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            displayName: "Mesh Edit",
+            partId: PartIdSchema.parse("part_root"),
+            sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+            textureId: TextureIdSchema.parse("tex_mesh_edit"),
+            meshId: MeshIdSchema.parse("mesh_mesh_edit"),
+            defaultOpacity: 1,
+            runtimeVisibility: true,
+            baseDrawOrder: 0,
+            sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+          }
+        ],
+        drawOrderEntries: [
+          {
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            baseDrawOrder: 0,
+            stableOrder: 0
+          }
+        ],
+        meshes: [
+          {
+            meshId: MeshIdSchema.parse("mesh_mesh_edit"),
+            drawableId: DrawableIdSchema.parse("draw_mesh_edit"),
+            vertices: [
+              { x: 5, y: 6 },
+              { x: 12, y: 6 },
+              { x: 4, y: 18 }
+            ],
+            uvs: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+              { x: 0, y: 1 }
+            ],
+            triangles: [[0, 1, 2]],
+            vertexStableIds: ["vtx_mesh_edit_0", "vtx_mesh_edit_1", "vtx_mesh_edit_2"],
+            bounds: { x: 4, y: 6, width: 8, height: 12 },
+            generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+          }
+        ]
+      }
+    );
+    const viewModel = projectEditorWorkflowViewModel(state);
+
+    expect(viewModel.meshEdit).toMatchObject({
+      hasSelectedMesh: true,
+      hasEditableVertices: true,
+      canNudgeSelectedMesh: true,
+      nudgeStep: 1,
+      selectedMeshLabel: "Mesh Edit / mesh_mesh_edit",
+      editableVertexCountLabel: "3 editable vertices",
+      lastMeshEditResultLabel: "moveMeshVertex committed",
+      selectedMesh: {
+        meshId: "mesh_mesh_edit",
+        drawableId: "draw_mesh_edit",
+        drawableDisplayName: "Mesh Edit",
+        boundsLabel: "4, 6 / 8 x 12",
+        vertexCountLabel: "3 vertices / 1 triangles"
+      }
+    });
+    expect(viewModel.meshEdit.editableVertices[0]).toMatchObject({
+      vertexId: "vtx_mesh_edit_0",
+      vertexIndex: 0,
+      x: 5,
+      y: 6,
+      positionLabel: "5, 6",
+      nudgeCommands: {
+        left: {
+          meshId: "mesh_mesh_edit",
+          vertexId: "vtx_mesh_edit_0",
+          delta: { x: -1, y: 0 }
+        },
+        right: {
+          meshId: "mesh_mesh_edit",
+          vertexId: "vtx_mesh_edit_0",
+          delta: { x: 1, y: 0 }
+        },
+        up: {
+          meshId: "mesh_mesh_edit",
+          vertexId: "vtx_mesh_edit_0",
+          delta: { x: 0, y: -1 }
+        },
+        down: {
+          meshId: "mesh_mesh_edit",
+          vertexId: "vtx_mesh_edit_0",
+          delta: { x: 0, y: 1 }
+        }
+      }
     });
   });
 });

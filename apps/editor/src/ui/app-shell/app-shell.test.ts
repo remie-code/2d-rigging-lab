@@ -6,6 +6,7 @@ import {
   createDrawableMoveUpTestId,
   createDrawableRowTestId,
   createDrawableVisibilityToggleTestId,
+  createMeshVertexNudgeButtonTestId,
   createPreviewParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
@@ -99,6 +100,67 @@ describe("editor app shell preview panel", () => {
     ]);
   });
 
+  it("wires mesh vertex nudge callbacks from the authoring controls", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = workflow.viewModel.meshEdit.selectedMesh;
+    const vertex = workflow.viewModel.meshEdit.editableVertices[0];
+    const calls: unknown[] = [];
+
+    if (selectedMesh === null || vertex === undefined) {
+      throw new Error("Expected generated drawable mesh controls to expose an editable vertex.");
+    }
+
+    const shell = renderShell(workflow, {
+      onNudgeMeshVertex(command) {
+        calls.push(command);
+      }
+    });
+
+    findByTestId(
+      shell,
+      createMeshVertexNudgeButtonTestId(selectedMesh.meshId, vertex.vertexId, "right")
+    )?.emit("click");
+
+    expect(calls).toEqual([vertex.nudgeCommands.right]);
+  });
+
+  it("updates the preview visual and mesh edit status after a vertex nudge", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = workflow.viewModel.meshEdit.selectedMesh;
+    const vertex = workflow.viewModel.meshEdit.editableVertices[0];
+    const initialShell = renderShell(workflow);
+    const initialPoints =
+      selectedMesh === null ? null : findDrawableShape(initialShell, selectedMesh.drawableId)?.getAttribute("points");
+
+    if (selectedMesh === null || vertex === undefined) {
+      throw new Error("Expected generated drawable mesh controls to expose an editable vertex.");
+    }
+
+    renderShell(workflow, {
+      onNudgeMeshVertex(command) {
+        workflow.nudgeMeshVertex(command);
+      }
+    })
+      .queryByPredicate(
+        (element) =>
+          element.dataset.testid ===
+          createMeshVertexNudgeButtonTestId(selectedMesh.meshId, vertex.vertexId, "right")
+      )
+      ?.emit("click");
+
+    const updatedShell = renderShell(workflow);
+
+    expect(findDrawableShape(updatedShell, selectedMesh.drawableId)?.getAttribute("points")).not.toBe(
+      initialPoints
+    );
+    expect(findByTestId(updatedShell, editorTestIds.previewSummary)?.textContent).toContain("2 visible / 2 total");
+    expect(findByTestId(updatedShell, editorTestIds.meshVertexStatus)?.textContent).toContain(
+      "moveMeshVertex committed"
+    );
+  });
+
   it("updates preview summary after a drawable visibility action", () => {
     const workflow = createWorkflow();
     workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
@@ -179,6 +241,7 @@ describe("editor app shell preview panel", () => {
       onCommitCreateDrawablePreset() {},
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
+      onNudgeMeshVertex() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -207,6 +270,7 @@ describe("editor app shell preview panel", () => {
       onCommitCreateDrawablePreset() {},
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
+      onNudgeMeshVertex() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -229,6 +293,7 @@ const renderShell = (
     readonly onResetPreviewParameterValues?: () => void;
     readonly onToggleDrawableRuntimeVisibility?: (drawableId: string) => void;
     readonly onMoveDrawableLayer?: (drawableId: string, direction: "up" | "down") => void;
+    readonly onNudgeMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshVertex"];
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -241,6 +306,7 @@ const renderShell = (
     onCommitCreateDrawablePreset() {},
     onToggleDrawableRuntimeVisibility: callbacks.onToggleDrawableRuntimeVisibility ?? (() => {}),
     onMoveDrawableLayer: callbacks.onMoveDrawableLayer ?? (() => {}),
+    onNudgeMeshVertex: callbacks.onNudgeMeshVertex ?? (() => {}),
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
@@ -278,6 +344,9 @@ const findByTestId = (root: TestElement, testId: string): TestElement | null =>
 
 const findByTag = (root: TestElement, tagName: string): TestElement | null =>
   root.queryByPredicate((element) => element.tagName === tagName);
+
+const findDrawableShape = (root: TestElement, drawableId: string): TestElement | null =>
+  root.queryByPredicate((element) => element.getAttribute("data-drawable-id") === drawableId);
 
 class TestElement {
   readonly children: TestElement[] = [];

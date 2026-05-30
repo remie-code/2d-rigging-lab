@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_mesh_vertex_move",
+  "actor": "human",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 2,
+  "idempotencyKey": "fixture-mesh-vertex-move",
+  "operationType": "moveMeshVertex",
+  "payload": {
+    "meshId": "mesh_mesh_vertex_oracle",
+    "vertexDeltas": [
+      {
+        "vertexId": "vtx_mesh_vertex_oracle_1_1",
+        "delta": {
+          "x": 4,
+          "y": 6
+        }
+      }
+    ],
+    "intent": "Move one generated mesh corner for runtime evidence."
+  }
+}

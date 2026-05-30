@@ -1,5 +1,6 @@
 import {
   createInitialAuthoringRevision,
+  getMeshById,
   getKeyformSetById,
   getParameterById
 } from "@private-2d-rigging-lab/authoring-core";
@@ -283,11 +284,60 @@ describe("operation lifecycle foundation", () => {
     expect(core.operationLog.entries).toHaveLength(0);
   });
 
+  it("commits moveMeshVertex through the registry and appends an operation log entry", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-29T00:04:00.000Z")
+    });
+
+    const outcome = core.commitOperation(session, createMoveMeshVertexRequest({ dryRun: false }));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+    expect(getMeshById(session.graph, MeshIdSchema.parse("mesh_body"))?.vertices[1]).toEqual({
+      x: 3,
+      y: -0.5
+    });
+    expect(outcome.operationLogLength).toBe(1);
+    expect(outcome.logEntry?.operationType).toBe("moveMeshVertex");
+    expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_1"]);
+    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "mesh", id: "mesh_body" },
+      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices" }
+    ]);
+  });
+
+  it("rejects empty moveMeshVertex deltas with the operation-specific diagnostic", () => {
+    const session = createKeyformFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createMoveMeshVertexRequest({
+        dryRun: false,
+        vertexDeltas: []
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual([
+      "operation.moveMeshVertex.emptyDelta"
+    ]);
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(outcome.operationLogLength).toBe(0);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
   it("rejects unsupported operations without changing package or authoring revision", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedMoveMeshVertexRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedSetRightsMetadataRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -352,23 +402,46 @@ const createGenerateMeshMissingDrawableRequest = () => ({
   }
 });
 
-const createUnsupportedMoveMeshVertexRequest = () => ({
+const createMoveMeshVertexRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+  readonly vertexDeltas?: readonly {
+    readonly vertexId: string;
+    readonly delta: { readonly x: number; readonly y: number };
+  }[];
+}) => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_move_mesh_vertex",
   actor: "test",
   surface: "testFixture",
-  dryRun: false,
-  basePackageRevision: 0,
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "moveMeshVertex",
   payload: {
-    meshId: "mesh_missing",
-    vertexDeltas: [
+    meshId: "mesh_body",
+    vertexDeltas: options.vertexDeltas ?? [
       {
-        vertexId: "vtx_missing_0",
-        delta: { x: 1, y: 0 }
+        vertexId: "vtx_body_1",
+        delta: { x: 2, y: -0.5 }
       }
     ],
-    intent: "unsupported lifecycle regression fixture"
+    intent: "supported lifecycle regression fixture"
+  }
+});
+
+const createUnsupportedSetRightsMetadataRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_set_rights_metadata",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 0,
+  operationType: "setRightsMetadata",
+  payload: {
+    assetId: "asset_body",
+    rightsStatus: "cleared",
+    license: "internal-test",
+    redistributionAllowed: false
   }
 });
 

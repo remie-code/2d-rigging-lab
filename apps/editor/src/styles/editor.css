@@ -479,6 +479,111 @@ select {
   line-height: 1.4;
 }
 
+.mesh-vertex-controls {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding-top: 2px;
+  border-top: 1px solid #e1e6e2;
+}
+
+.mesh-vertex-controls h3 {
+  margin: 0;
+  color: #263033;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.mesh-vertex-controls__status {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mesh-vertex-controls__selected,
+.mesh-vertex-controls__result,
+.mesh-vertex-controls__empty {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.mesh-vertex-controls__selected {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.mesh-vertex-controls__result,
+.mesh-vertex-controls__empty {
+  color: #60716e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mesh-vertex-controls__empty {
+  padding: 12px;
+  background: #f7f8f4;
+  border: 1px dashed #c8d0cb;
+  border-radius: 6px;
+}
+
+.mesh-vertex-controls__table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mesh-vertex-controls__table th,
+.mesh-vertex-controls__table td {
+  padding: 8px 7px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e5e9e6;
+}
+
+.mesh-vertex-controls__table th {
+  color: #50615e;
+  font-size: 11px;
+  font-weight: 750;
+  background: #f7f8f4;
+}
+
+.mesh-vertex-controls__table td {
+  overflow-wrap: anywhere;
+}
+
+.mesh-vertex-controls__nudge-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mesh-vertex-controls__nudge {
+  min-height: 30px;
+  min-width: 42px;
+  padding: 5px 7px;
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.mesh-vertex-controls__nudge:hover:not(:disabled),
+.mesh-vertex-controls__nudge:focus-visible:not(:disabled) {
+  background: #e1e8e3;
+}
+
+.mesh-vertex-controls__nudge:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .drawable-list {
   min-width: 0;
   overflow-x: auto;
@@ -837,9 +942,56 @@ select {
   }
 
   .drawable-list__visibility-cell,
-  .drawable-list__move-cell {
+  .drawable-list__move-cell,
+  .mesh-vertex-controls__nudge-cell {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, max-content));
     justify-content: start;
+  }
+
+  .mesh-vertex-controls__table {
+    min-width: 0;
+  }
+
+  .mesh-vertex-controls__table,
+  .mesh-vertex-controls__table thead,
+  .mesh-vertex-controls__table tbody,
+  .mesh-vertex-controls__table tr,
+  .mesh-vertex-controls__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .mesh-vertex-controls__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .mesh-vertex-controls__table tr {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #e0e5e1;
+    border-radius: 6px;
+    background: #fbfcfa;
+  }
+
+  .mesh-vertex-controls__table td {
+    display: grid;
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+    gap: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .mesh-vertex-controls__table td::before {
+    color: #50615e;
+    font-size: 12px;
+    font-weight: 750;
+    content: attr(data-label);
   }
 }

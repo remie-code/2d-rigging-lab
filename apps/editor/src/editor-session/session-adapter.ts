@@ -40,6 +40,10 @@ import {
   type EditorSetDrawableRuntimeVisibilityCommand
 } from "./drawable-layer-command.js";
 import {
+  createMoveMeshVertexOperationRequest,
+  type EditorMoveMeshVertexCommand
+} from "./mesh-vertex-command.js";
+import {
   createEditorEvidenceCollector,
   summarizeEvidencePaths,
   toEvidencePackageFileEntries,
@@ -59,6 +63,7 @@ export interface EditorSessionAdapter {
     command: EditorSetDrawableRuntimeVisibilityCommand
   ): EditorSessionPersistenceResult;
   commitSetDrawableDrawOrder(command: EditorSetDrawableDrawOrderCommand): EditorSessionPersistenceResult;
+  commitMoveMeshVertex(command: EditorMoveMeshVertexCommand): EditorSessionPersistenceResult;
 }
 
 export interface EditorSessionAdapterOptions {
@@ -192,6 +197,13 @@ export const createEditorSessionAdapter = (
     },
     commitSetDrawableDrawOrder(command) {
       const request = createSetDrawableDrawOrderOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitMoveMeshVertex(command) {
+      const request = createMoveMeshVertexOperationRequest(
         command,
         authoringSession.packageRevision
       );

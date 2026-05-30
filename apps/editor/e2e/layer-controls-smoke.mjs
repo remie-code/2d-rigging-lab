@@ -8,7 +8,12 @@ import {
 
 const sampleBodyDrawableId = "draw_body";
 
-export const runLayerControlsWorkflow = async ({ page, viewport, smokeDrawable }) => {
+export const runLayerControlsWorkflow = async ({
+  page,
+  viewport,
+  smokeDrawable,
+  initialOperationLogEntryCount = 3
+}) => {
   await waitForTestId(page, editorTestIds.drawableLayerStatus);
   await waitForText(page, editorTestIds.drawableLayerStatus, "2 layers");
   await waitForText(page, editorTestIds.drawableLayerStatus, "No layer operation committed");
@@ -30,35 +35,35 @@ export const runLayerControlsWorkflow = async ({ page, viewport, smokeDrawable }
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Hidden");
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 2 total");
-  await waitForOperationLogEntryCount(page, 4);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 1);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, false);
 
   await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Visible");
   await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
-  await waitForOperationLogEntryCount(page, 5);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 2);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, true);
 
   await clickTestId(page, createDrawableMoveUpTestId(sampleBodyDrawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setDrawOrder committed");
   await waitForLayerOrder(page, [smokeDrawable.drawableId, sampleBodyDrawableId]);
-  await waitForOperationLogEntryCount(page, 6);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 3);
 
   await clickTestId(page, createDrawableMoveDownTestId(sampleBodyDrawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setDrawOrder committed");
   await waitForLayerOrder(page, [sampleBodyDrawableId, smokeDrawable.drawableId]);
-  await waitForOperationLogEntryCount(page, 7);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 4);
 
   await clickTestId(page, createDrawableMoveUpTestId(sampleBodyDrawableId));
   await waitForLayerOrder(page, [smokeDrawable.drawableId, sampleBodyDrawableId]);
-  await waitForOperationLogEntryCount(page, 8);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 5);
 
   await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Hidden");
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 2 total");
-  await waitForOperationLogEntryCount(page, 9);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 6);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, false);
   await assertLayerControlState(page, {
     smokeDrawable,
@@ -135,15 +140,16 @@ export const assertSavedLayerState = async ({ page, storageKey, smokeDrawable })
   }
 };
 
-export const assertLayerStateAfterLoad = async ({ page, smokeDrawable }) => {
+export const assertLayerStateAfterLoad = async ({
+  page,
+  smokeDrawable,
+  expectedOperationLogEntryCount = 9,
+  expectedOperationTypesText = "createParameter, createDrawable, generateMesh, setRuntimeVisibility, setDrawOrder"
+}) => {
   await waitForText(page, editorTestIds.drawableLayerStatus, "2 layers");
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 2 total");
-  await waitForOperationLogEntryCount(page, 9);
-  await waitForText(
-    page,
-    editorTestIds.operationLogSummary,
-    "createParameter, createDrawable, generateMesh, setRuntimeVisibility, setDrawOrder"
-  );
+  await waitForOperationLogEntryCount(page, expectedOperationLogEntryCount);
+  await waitForText(page, editorTestIds.operationLogSummary, expectedOperationTypesText);
   await assertPreviewDrawablePresent(page, sampleBodyDrawableId, true);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, false);
   await assertLayerControlState(page, {

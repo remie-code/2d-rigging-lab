@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "mesh-vertex-runtime-evidence-summary-v1",
+  "fixture": {
+    "drawableId": "draw_mesh_vertex_oracle",
+    "meshId": "mesh_mesh_vertex_oracle",
+    "movedVertexId": "vtx_mesh_vertex_oracle_1_1",
+    "operationTypes": [
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ],
+    "finalPackageRevision": 3
+  },
+  "moveOperation": {
+    "operationType": "moveMeshVertex",
+    "operationId": "op_mesh_vertex_move",
+    "resultStatus": "committed",
+    "targetIds": [
+      "mesh_mesh_vertex_oracle",
+      "vtx_mesh_vertex_oracle_1_1"
+    ],
+    "modelDiffPaths": [
+      "/model/meshes/mesh_mesh_vertex_oracle/vertices",
+      "/model/meshes/mesh_mesh_vertex_oracle/vertices/3",
+      "/model/meshes/mesh_mesh_vertex_oracle/bounds",
+      "/model/meshes/mesh_mesh_vertex_oracle/vertices/3"
+    ],
+    "runtimeSnapshots": {
+      "baseline": {
+        "packageRevision": 2,
+        "drawable": {
+          "drawableId": "draw_mesh_vertex_oracle",
+          "meshId": "mesh_mesh_vertex_oracle",
+          "vertexCount": 4,
+          "vertexHash": "vhash_327bd044_4",
+          "bounds": {
+            "x": 48,
+            "y": 16,
+            "width": 24,
+            "height": 24
+          },
+          "vertices": [
+            {
+              "x": 48,
+              "y": 16
+            },
+            {
+              "x": 72,
+              "y": 16
+            },
+            {
+              "x": 48,
+              "y": 40
+            },
+            {
+              "x": 72,
+              "y": 40
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "packageRevision": 3,
+        "drawable": {
+          "drawableId": "draw_mesh_vertex_oracle",
+          "meshId": "mesh_mesh_vertex_oracle",
+          "vertexCount": 4,
+          "vertexHash": "vhash_e5715a22_4",
+          "bounds": {
+            "x": 48,
+            "y": 16,
+            "width": 28,
+            "height": 30
+          },
+          "vertices": [
+            {
+              "x": 48,
+              "y": 16
+            },
+            {
+              "x": 72,
+              "y": 16
+            },
+            {
+              "x": 48,
+              "y": 40
+            },
+            {
+              "x": 76,
+              "y": 46
+            }
+          ]
+        }
+      }
+    },
+    "runtimeDiff": {
+      "beforeSnapshotId": "snap_minimal-valid-package_0",
+      "afterSnapshotId": "snap_minimal-valid-package_1",
+      "drawableChanges": [
+        {
+          "drawableId": "draw_mesh_vertex_oracle",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_327bd044_4",
+          "vertexHashAfter": "vhash_e5715a22_4"
+        }
+      ],
+      "drawableRuntimeStateChanges": [],
+      "drawListChanges": []
+    },
+    "validation": {
+      "baselineReportId": "val_op_mesh_vertex_move_baseline",
+      "candidateReportId": "val_op_mesh_vertex_move_candidate",
+      "candidateStatus": "pass",
+      "operationLogPresent": true,
+      "operationLogPath": "operations/log.jsonl",
+      "runtimeSnapshotIds": [
+        "snap_minimal-valid-package_0",
+        "snap_minimal-valid-package_1"
+      ],
+      "validationDiff": {
+        "beforeReportId": "val_op_mesh_vertex_move_baseline",
+        "afterReportId": "val_op_mesh_vertex_move_candidate",
+        "newFailureCount": 0,
+        "resolvedFailureCount": 0,
+        "severityChangeCount": 0
+      }
+    },
+    "operationEvidence": {
+      "resultRuntimeSnapshotIds": [
+        "snap_minimal-valid-package_0",
+        "snap_minimal-valid-package_1"
+      ],
+      "resultValidationReportIds": [
+        "val_op_mesh_vertex_move_baseline",
+        "val_op_mesh_vertex_move_candidate"
+      ],
+      "resultRuntimeDiffDrawableChanges": [
+        {
+          "drawableId": "draw_mesh_vertex_oracle",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_327bd044_4",
+          "vertexHashAfter": "vhash_e5715a22_4"
+        }
+      ],
+      "logEntryRuntimeSnapshotIds": [
+        "snap_minimal-valid-package_0",
+        "snap_minimal-valid-package_1"
+      ],
+      "logEntryValidationReportIds": [
+        "val_op_mesh_vertex_move_baseline",
+        "val_op_mesh_vertex_move_candidate"
+      ],
+      "logEntryRuntimeDiffDrawableChanges": [
+        {
+          "drawableId": "draw_mesh_vertex_oracle",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_327bd044_4",
+          "vertexHashAfter": "vhash_e5715a22_4"
+        }
+      ],
+      "logEntryPayloadVertexDeltas": [
+        {
+          "vertexId": "vtx_mesh_vertex_oracle_1_1",
+          "delta": {
+            "x": 4,
+            "y": 6
+          }
+        }
+      ],
+      "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r3-op_mesh_vertex_move-runtime-evidence-final-f1.runtime-state.json"
+    }
+  }
+}

@@ -9,6 +9,8 @@ export * from "./editor-state-projections.js";
 export * from "./editor-test-ids.js";
 export * from "./editor-view-model.js";
 export * from "./generated-evidence-summary.js";
+export * from "./mesh-edit-state.js";
+export * from "./mesh-edit-view-model.js";
 export * from "./operation-log-summary.js";
 export * from "./operation-result-summary.js";
 export * from "./package-identity-state.js";

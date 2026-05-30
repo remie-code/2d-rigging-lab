@@ -13,6 +13,8 @@ import {
   createDrawableMoveUpTestId,
   createDrawableRowTestId,
   createDrawableVisibilityToggleTestId,
+  createMeshVertexNudgeButtonTestId,
+  createMeshVertexRowTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
   projectLoadedPackageState
@@ -48,6 +50,7 @@ describe("drawable authoring panel", () => {
     expect(findByTestId(panel, editorTestIds.drawableCreateForm)?.textContent).toContain("Shape preset");
     expect(findByTestId(panel, editorTestIds.drawableResult)?.textContent).toContain("Drawable preset ready");
     expect(findByTestId(panel, editorTestIds.drawableLayerStatus)?.textContent).toContain("No layer operation committed");
+    expect(findByTestId(panel, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");
     expect(findByTestId(panel, createDrawableRowTestId("draw_body"))?.textContent).toContain("Body");
   });
 
@@ -59,7 +62,8 @@ describe("drawable authoring panel", () => {
       () => {},
       {
         onToggleDrawableRuntimeVisibility: (drawableId) => calls.push(["toggle", drawableId]),
-        onMoveDrawableLayer: (drawableId, direction) => calls.push(["move", drawableId, direction])
+        onMoveDrawableLayer: (drawableId, direction) => calls.push(["move", drawableId, direction]),
+        onNudgeMeshVertex() {}
       }
     );
 
@@ -87,6 +91,44 @@ describe("drawable authoring panel", () => {
 
     expect(findByTestId(panel, createDrawableMoveDownTestId("draw_body"))?.disabled).toBe(true);
     expect(findByTestId(panel, createDrawableMoveUpTestId("draw_body"))?.disabled).toBe(true);
+  });
+
+  it("renders editable mesh vertex rows and calls the nudge callback with the view-model command", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState(),
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility() {},
+        onMoveDrawableLayer() {},
+        onNudgeMeshVertex: (command) => calls.push(command)
+      }
+    );
+
+    expect(findByTestId(panel, editorTestIds.meshVertexStatus)?.textContent).toContain(
+      "3 editable vertices"
+    );
+    expect(findByTestId(panel, createMeshVertexRowTestId("mesh_body", "vtx_body_0"))?.textContent).toContain(
+      "#0 vtx_body_0"
+    );
+    expect(
+      findByTestId(panel, createMeshVertexNudgeButtonTestId("mesh_body", "vtx_body_0", "right"))?.getAttribute(
+        "aria-label"
+      )
+    ).toBe("Nudge vtx_body_0 right");
+
+    findByTestId(panel, createMeshVertexNudgeButtonTestId("mesh_body", "vtx_body_0", "right"))?.emit(
+      "click"
+    );
+
+    expect(calls).toEqual([
+      {
+        meshId: "mesh_body",
+        vertexId: "vtx_body_0",
+        delta: { x: 1, y: 0 },
+        intent: "Nudge vtx_body_0 right by 1 canvas unit."
+      }
+    ]);
   });
 
   it("submits a valid generated drawable preset command", () => {
@@ -152,10 +194,11 @@ const createPanel = (
   onSubmit: Parameters<typeof createDrawableAuthoringPanel>[0]["onCommitCreateDrawable"] = () => {},
   callbacks: Pick<
     Parameters<typeof createDrawableAuthoringPanel>[0],
-    "onToggleDrawableRuntimeVisibility" | "onMoveDrawableLayer"
+    "onToggleDrawableRuntimeVisibility" | "onMoveDrawableLayer" | "onNudgeMeshVertex"
   > = {
     onToggleDrawableRuntimeVisibility() {},
-    onMoveDrawableLayer() {}
+    onMoveDrawableLayer() {},
+    onNudgeMeshVertex() {}
   }
 ): TestElement =>
   createDrawableAuthoringPanel({
@@ -262,7 +305,7 @@ const createDrawableState = (
           { x: 0.5, y: 1 }
         ],
         triangles: [[0, 1, 2] as [number, number, number]],
-        vertexStableIds: ["v0", "v1", "v2"],
+        vertexStableIds: ["vtx_body_0", "vtx_body_1", "vtx_body_2"],
         bounds: { x: 24, y: 16, width: 48, height: 64 },
         generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
       },
@@ -282,7 +325,7 @@ const createDrawableState = (
                 { x: 0.5, y: 1 }
               ],
               triangles: [[0, 1, 2] as [number, number, number]],
-              vertexStableIds: ["s0", "s1", "s2"],
+              vertexStableIds: ["vtx_star_0", "vtx_star_1", "vtx_star_2"],
               bounds: { x: 16, y: 24, width: 24, height: 24 },
               generationProvenanceId: ProvenanceIdSchema.parse("prov_star")
             }

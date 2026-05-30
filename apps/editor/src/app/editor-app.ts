@@ -33,6 +33,10 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.moveDrawableLayer(drawableId, direction);
           render();
         },
+        onNudgeMeshVertex(command) {
+          workflow.nudgeMeshVertex(command);
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();

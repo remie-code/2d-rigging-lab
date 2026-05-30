@@ -11,6 +11,11 @@ import {
   assertSavedLayerState,
   runLayerControlsWorkflow
 } from "./layer-controls-smoke.mjs";
+import {
+  assertMeshVertexStateAfterLoad,
+  assertSavedMeshVertexState,
+  runMeshVertexEditWorkflow
+} from "./mesh-vertex-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -57,20 +62,39 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
     const drawableEvidence = await runCreateDrawableWorkflow(page, viewport);
     await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
-    const layerEvidence = await runLayerControlsWorkflow({ page, viewport, smokeDrawable });
+    const meshVertexEvidence = await runMeshVertexEditWorkflow({ page, viewport, smokeDrawable });
+    await assertHorizontalOverflow(page, `${viewport.name} post-mesh-vertex`);
+    const layerEvidence = await runLayerControlsWorkflow({
+      page,
+      viewport,
+      smokeDrawable,
+      initialOperationLogEntryCount: 4
+    });
     await assertHorizontalOverflow(page, `${viewport.name} post-layer-controls`);
     await saveProject(page, {
-      expectedOperationLogLineCount: 9,
+      expectedOperationLogLineCount: 10,
       expectedDrawableId: smokeDrawable.drawableId
     });
+    await assertSavedMeshVertexState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
     await assertSavedLayerState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
-    await reloadProjectFromStorage(page);
-    await assertLayerStateAfterLoad({ page, smokeDrawable });
+    await reloadProjectFromStorage(page, {
+      expectedOperationLogEntryCount: 10,
+      expectedOperationTypesText:
+        "createParameter, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+    });
+    await assertMeshVertexStateAfterLoad({ page, smokeDrawable });
+    await assertLayerStateAfterLoad({
+      page,
+      smokeDrawable,
+      expectedOperationLogEntryCount: 10,
+      expectedOperationTypesText:
+        "createParameter, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+    });
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
 
-    return { viewport: viewport.name, previewEvidence, drawableEvidence, layerEvidence };
+    return { viewport: viewport.name, previewEvidence, drawableEvidence, meshVertexEvidence, layerEvidence };
   } finally {
     await page.close();
   }
@@ -674,7 +698,10 @@ const saveProject = async (page, options) => {
   }
 };
 
-const reloadProjectFromStorage = async (page) => {
+const reloadProjectFromStorage = async (page, {
+  expectedOperationLogEntryCount = 9,
+  expectedOperationTypesText = "createParameter, createDrawable, generateMesh, setRuntimeVisibility, setDrawOrder"
+} = {}) => {
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
   await assertTextIncludes(page, editorTestIds.parameterList, "Preview Body Yaw");
@@ -686,12 +713,8 @@ const reloadProjectFromStorage = async (page) => {
   await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
   await waitForText(page, editorTestIds.previewSummary, "0 changes");
   await assertCreatedDrawableRestoredAfterLoad(page);
-  await waitForOperationLogEntryCount(page, 9);
-  await waitForText(
-    page,
-    editorTestIds.operationLogSummary,
-    "createParameter, createDrawable, generateMesh, setRuntimeVisibility, setDrawOrder"
-  );
+  await waitForOperationLogEntryCount(page, expectedOperationLogEntryCount);
+  await waitForText(page, editorTestIds.operationLogSummary, expectedOperationTypesText);
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
   await waitForText(

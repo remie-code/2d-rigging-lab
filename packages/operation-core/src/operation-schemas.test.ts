@@ -45,6 +45,14 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "moveMeshVertex",
+    payload: {
+      meshId: "mesh_body",
+      vertexDeltas: [],
+      intent: "schema permits empty deltas for operation precondition diagnostics"
+    }
+  },
+  {
     operationType: "createRotation2dRigControl",
     payload: {
       partId: "part_head",
@@ -111,6 +119,7 @@ describe("operation-core DTO schemas", () => {
       "importSplitPngSourceAsset",
       "createParameter",
       "createDynamicsGroup",
+      "moveMeshVertex",
       "createRotation2dRigControl"
     ]);
   });

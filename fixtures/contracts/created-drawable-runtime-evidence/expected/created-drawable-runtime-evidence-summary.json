@@ -26,7 +26,7 @@
             "drawableId": "draw_runtime_oracle",
             "meshId": "mesh_runtime_oracle",
             "vertexCount": 0,
-            "vertexHash": "hash_draw_runtime_oracle_0",
+            "vertexHash": "vhash_811c9dc5_0",
             "bounds": {
               "x": 48,
               "y": 16,
@@ -43,7 +43,7 @@
           {
             "drawableId": "draw_runtime_oracle",
             "boundsChanged": false,
-            "vertexHashAfter": "hash_draw_runtime_oracle_0"
+            "vertexHashAfter": "vhash_811c9dc5_0"
           }
         ],
         "drawListChanges": [
@@ -130,7 +130,7 @@
             "drawableId": "draw_runtime_oracle",
             "meshId": "mesh_runtime_oracle",
             "vertexCount": 0,
-            "vertexHash": "hash_draw_runtime_oracle_0",
+            "vertexHash": "vhash_811c9dc5_0",
             "bounds": {
               "x": 48,
               "y": 16,
@@ -150,7 +150,7 @@
             "drawableId": "draw_runtime_oracle",
             "meshId": "mesh_runtime_oracle",
             "vertexCount": 4,
-            "vertexHash": "hash_draw_runtime_oracle_4",
+            "vertexHash": "vhash_327bd044_4",
             "bounds": {
               "x": 48,
               "y": 16,
@@ -167,8 +167,8 @@
           {
             "drawableId": "draw_runtime_oracle",
             "boundsChanged": false,
-            "vertexHashBefore": "hash_draw_runtime_oracle_0",
-            "vertexHashAfter": "hash_draw_runtime_oracle_4"
+            "vertexHashBefore": "vhash_811c9dc5_0",
+            "vertexHashAfter": "vhash_327bd044_4"
           }
         ],
         "drawListChanges": [],

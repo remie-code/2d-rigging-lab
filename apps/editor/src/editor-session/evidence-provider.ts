@@ -188,6 +188,8 @@ const createRuntimeEvidenceInput = (
       return createSetRuntimeVisibilityEvidenceInput(input);
     case "setDrawOrder":
       return createSetDrawOrderEvidenceInput(input);
+    case "moveMeshVertex":
+      return createMoveMeshVertexEvidenceInput(input);
     default:
       throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
   }
@@ -357,6 +359,32 @@ const createSetDrawOrderEvidenceInput = (
 
   return {
     artifactLabel: "editor-set-draw-order",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createMoveMeshVertexEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "moveMeshVertex") {
+    throw new Error(`moveMeshVertex evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.meshId,
+    ...input.request.payload.vertexDeltas.map((vertexDelta) => vertexDelta.vertexId)
+  ]);
+
+  return {
+    artifactLabel: "editor-move-mesh-vertex",
     authoredParameterValues: {},
     targetIds,
     baseline: {

@@ -22,7 +22,8 @@
 | [wave13-plan.md](wave13-plan.md) | Wave 13 runtime diff and Grid2D evidence hardening dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave14-plan.md](wave14-plan.md) | Wave 14 editor embedded preview foundation dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave15-plan.md](wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
-| [wave16-plan.md](wave16-plan.md) | Wave 16 drawable layer controls and visibility authoring dependency and Orch-Sylph parallelism plan | Planned |
+| [wave16-plan.md](wave16-plan.md) | Wave 16 drawable layer controls and visibility authoring dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
+| [wave17-plan.md](wave17-plan.md) | Wave 17 editor mesh vertex editing vertical slice dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -49,4 +50,5 @@
 - Wave 13 `runtime-diff-and-grid2d-evidence-hardening` completed on 2026-05-30. It added enriched runtime diff fields, Grid2D evidence / fixture, diagnostic regressions, AI/editor `addKeyformGrid2d` runtime-visible evidence, and an inserted diagnostic alignment gate for `keyform.grid2dDuplicateKey`.
 - Wave 14 `editor-embedded-preview-foundation` completed on 2026-05-30. It added runtime-derived embedded editor preview projection, preview-ready sample parameter/keyform data, preview-only workflow state, embedded preview UI, desktop/mobile e2e smoke, and a sample-aware AI/editor-session regression needs-fix loop. Final verification passed after sandbox-limited commands were rerun with escalation.
 - Wave 15 `editor-drawable-mesh-authoring-vertical-slice` completed on 2026-05-30. It added GUI creation of rights-clean generated drawable / deterministic mesh, operation log and package persistence, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and a needs-fix loop that updated operation lifecycle coverage after `generateMesh` became supported. Final verification passed after sandbox-limited commands were rerun with escalation.
-- Wave 16 `drawable-layer-controls-and-visibility-authoring` is planned. It should add drawable reorder and runtime visibility controls while preserving Undine -> Orch-Sylph context isolation.
+- Wave 16 `drawable-layer-controls-and-visibility-authoring` completed on 2026-05-30. It added drawable reorder and runtime visibility controls, runtime / validation evidence, save/load persistence smoke, desktop/mobile e2e coverage, and final integration review.
+- Wave 17 `editor-mesh-vertex-editing-vertical-slice` completed on 2026-05-30. It added a minimal GUI `moveMeshVertex` workflow with operation/runtime evidence, editor workflow state, vertex nudge controls, browser-local persistence, desktop/mobile E2E smoke, and clean integration review while preserving Undine -> Orch-Sylph -> Gnome/Review-Sylph context isolation.

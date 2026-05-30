@@ -320,6 +320,71 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits mesh vertex movement and reloads the persisted package file set", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:32:00.000Z")
+    });
+    const preset = adapter.commitCreateDrawablePreset({
+      createOperationId: "op_editor_create_drawable_vertex_star",
+      generateOperationId: "op_editor_generate_mesh_vertex_star",
+      displayName: "Editor Vertex Star",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 10, y: 12, width: 20, height: 20 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "low"
+    });
+
+    const result = adapter.commitMoveMeshVertex({
+      operationId: "op_editor_move_mesh_vertex_star",
+      meshId: "mesh_editor_vertex_star",
+      vertexDeltas: [
+        {
+          vertexId: "vtx_editor_vertex_star_0_0",
+          delta: { x: 3, y: -2 }
+        }
+      ],
+      intent: "session test vertex nudge"
+    });
+    const mesh = result.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === "mesh_editor_vertex_star"
+    );
+
+    expect(preset.status).toBe("committed");
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("moveMeshVertex");
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ]);
+    expect(result.operationLogEntries.at(-1)).toEqual(
+      expect.objectContaining({
+        operationId: "op_editor_move_mesh_vertex_star",
+        operationType: "moveMeshVertex",
+        targetIds: expect.arrayContaining([
+          "mesh_editor_vertex_star",
+          "vtx_editor_vertex_star_0_0"
+        ])
+      })
+    );
+    expect(result.packageFilePaths).toEqual(expect.arrayContaining([
+      "model/meshes.json",
+      "operations/log.jsonl"
+    ]));
+    expect(result.packageFileSet.find((entry) => entry.path === "operations/log.jsonl")?.text).toContain(
+      "moveMeshVertex"
+    );
+    expect(mesh?.vertices[0]).toEqual({ x: 13, y: 10 });
+    expect(result.reloadedPackageRevision).toBe(3);
+    expect(result.generatedArtifactPaths).toEqual(
+      expect.arrayContaining([
+        "validation/reports/val_editor_editor_move_mesh_vertex_star_candidate.validation.json"
+      ])
+    );
+  });
+
   it("commits drawable visibility and draw order changes into the persisted package file set", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:35:00.000Z")
