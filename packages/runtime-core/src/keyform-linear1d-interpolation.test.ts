@@ -29,6 +29,25 @@ describe("linear 1d keyform interpolation", () => {
     });
   });
 
+  it("reports duplicate key values while sampling the first key deterministically", () => {
+    expect(
+      interpolateLinear1dKeyform({
+        keys: [
+          { value: -1, statePatch: 0 },
+          { value: 1, statePatch: 1 },
+          { value: 1, statePatch: 99 }
+        ],
+        parameterValue: 1
+      })
+    ).toMatchObject({
+      ok: true,
+      sampledValue: 1,
+      source: "exact",
+      statePatch: 1,
+      duplicateKeyValues: [1]
+    });
+  });
+
   it("reports unsupported and incompatible patch shapes", () => {
     expect(
       interpolateLinear1dKeyform({

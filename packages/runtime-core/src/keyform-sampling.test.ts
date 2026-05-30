@@ -1,5 +1,6 @@
 import {
   DrawableIdSchema,
+  type DiagnosticDto,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -84,6 +85,187 @@ describe("runtime keyform sampling", () => {
     });
   });
 
+  it("emits duplicate key diagnostics with stable severity, targets, and evidence", () => {
+    const fixture = createSamplingFixture({
+      includeLinearDuplicateKey: true,
+      includeGridDuplicateCoordinate: true
+    });
+
+    const result = sampleRuntimeKeyforms({
+      graph: fixture.graph,
+      effectiveParameterValues: new Map([
+        [fixture.yawParameterId, 0],
+        [fixture.pitchParameterId, 0]
+      ])
+    });
+
+    expect(result.samples).toHaveLength(2);
+    expect(findDiagnostic(result.diagnostics, "keyform.linear1dDuplicateKey")).toMatchObject({
+      checkId: "keyform.linear1dDuplicateKey",
+      severity: "warning",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: fixture.linearKeyformSetId },
+      evidence: ["value=1"]
+    });
+    expect(findDiagnostic(result.diagnostics, "keyform.grid2dDuplicateKey")).toMatchObject({
+      checkId: "keyform.grid2dDuplicateKey",
+      severity: "error",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: fixture.gridKeyformSetId },
+      evidence: ["x=1,y=1"]
+    });
+  });
+
+  it("emits a missing parameter diagnostic with parameter presence evidence", () => {
+    const fixture = createSamplingFixture();
+    const gridBinding = findGridBinding(fixture.graph, fixture.gridKeyformSetId);
+
+    const result = sampleRuntimeKeyforms({
+      graph: {
+        ...fixture.graph,
+        keyformBindings: [gridBinding]
+      },
+      effectiveParameterValues: new Map([[fixture.yawParameterId, 0]])
+    });
+
+    expect(result.samples).toEqual([]);
+    expect(findDiagnostic(result.diagnostics, "keyform.missingParameter")).toMatchObject({
+      checkId: "keyform.missingParameter",
+      severity: "error",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: fixture.gridKeyformSetId },
+      evidence: [
+        `parameterX=${fixture.yawParameterId}`,
+        `parameterY=${fixture.pitchParameterId}`,
+        "hasParameterX=true",
+        "hasParameterY=true",
+        "hasValueX=true",
+        "hasValueY=false"
+      ]
+    });
+  });
+
+  it("emits a diagnostic for unsupported evaluators instead of silently ignoring them", () => {
+    const fixture = createSamplingFixture();
+    const linearBinding = findLinearBinding(fixture.graph, fixture.linearKeyformSetId);
+    const unsupportedEvaluatorKeyformSetId = KeyformSetIdSchema.parse("keyset_unsupported_evaluator");
+
+    const result = sampleRuntimeKeyforms({
+      graph: {
+        ...fixture.graph,
+        keyformBindings: [
+          {
+            ...linearBinding,
+            evaluator: "nearest-neighbor-v0",
+            keyformSetId: unsupportedEvaluatorKeyformSetId
+          } as unknown as NormalizedRuntimeGraph["keyformBindings"][number]
+        ]
+      },
+      effectiveParameterValues: new Map([[fixture.yawParameterId, 0]])
+    });
+
+    expect(result.samples).toEqual([]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0]).toMatchObject({
+      checkId: "keyform.unsupportedEvaluator",
+      severity: "error",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: unsupportedEvaluatorKeyformSetId },
+      evidence: []
+    });
+  });
+
+  it("emits a diagnostic for unsupported patch shapes instead of silently ignoring them", () => {
+    const fixture = createSamplingFixture({ linearPatch: "unsupported" });
+    const linearBinding = findLinearBinding(fixture.graph, fixture.linearKeyformSetId);
+
+    const result = sampleRuntimeKeyforms({
+      graph: {
+        ...fixture.graph,
+        keyformBindings: [linearBinding]
+      },
+      effectiveParameterValues: new Map([[fixture.yawParameterId, 0]])
+    });
+
+    expect(result.samples).toEqual([]);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0]).toMatchObject({
+      checkId: "keyform.unsupportedPatchShape",
+      severity: "warning",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: fixture.linearKeyformSetId },
+      evidence: []
+    });
+  });
+
+  it("distinguishes Grid2D key-range clamp diagnostics from missing surrounding keys", () => {
+    const fixture = createSamplingFixture();
+    const gridBinding = findGridBinding(fixture.graph, fixture.gridKeyformSetId);
+
+    const keyRangeClampResult = sampleRuntimeKeyforms({
+      graph: {
+        ...fixture.graph,
+        keyformBindings: [
+          {
+            ...gridBinding,
+            keys: [
+              { x: 0, y: -0.5, statePatch: [{ x: 0, y: -0.5 }] },
+              { x: 0.5, y: -0.5, statePatch: [{ x: 0.5, y: -0.5 }] },
+              { x: 0, y: 0.5, statePatch: [{ x: 0, y: 0.5 }] },
+              { x: 0.5, y: 0.5, statePatch: [{ x: 0.5, y: 0.5 }] }
+            ]
+          }
+        ]
+      },
+      effectiveParameterValues: new Map([
+        [fixture.yawParameterId, 0.75],
+        [fixture.pitchParameterId, 0.25]
+      ])
+    });
+
+    expect(keyRangeClampResult.diagnostics).toHaveLength(1);
+    expect(keyRangeClampResult.samples[0]).toMatchObject({
+      keyformSetId: fixture.gridKeyformSetId,
+      sampledCoordinates: {
+        [fixture.yawParameterId]: 0.5,
+        [fixture.pitchParameterId]: 0.25
+      },
+      samplingStatus: "clamped-key-range"
+    });
+    expect(keyRangeClampResult.diagnostics[0]).toMatchObject({
+      checkId: "keyform.grid2dCoordinateClamped",
+      severity: "warning",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: fixture.gridKeyformSetId },
+      evidence: ["x=0.5,y=0.25"]
+    });
+    expect(keyRangeClampResult.diagnostics[0]?.message).toContain("available key range");
+
+    const missingKeyFixture = createSamplingFixture({ includeGridUpperRight: false });
+    const missingGridBinding = findGridBinding(missingKeyFixture.graph, missingKeyFixture.gridKeyformSetId);
+
+    const missingKeyResult = sampleRuntimeKeyforms({
+      graph: {
+        ...missingKeyFixture.graph,
+        keyformBindings: [missingGridBinding]
+      },
+      effectiveParameterValues: new Map([
+        [missingKeyFixture.yawParameterId, 0],
+        [missingKeyFixture.pitchParameterId, 0]
+      ])
+    });
+
+    expect(missingKeyResult.samples).toEqual([]);
+    expect(missingKeyResult.diagnostics).toHaveLength(1);
+    expect(missingKeyResult.diagnostics[0]).toMatchObject({
+      checkId: "keyform.grid2dMissingKey",
+      severity: "error",
+      phase: "keyform_sampling",
+      target: { kind: "keyformSet", id: missingKeyFixture.gridKeyformSetId },
+      evidence: ["x=1,y=1"]
+    });
+  });
+
   it("emits diagnostics for missing grid keys and unsupported patches", () => {
     const fixture = createSamplingFixture({
       includeGridUpperRight: false,
@@ -128,6 +310,8 @@ const createSamplingFixture = (
   options: {
     readonly includeDrawableTarget?: boolean;
     readonly includeGridUpperRight?: boolean;
+    readonly includeGridDuplicateCoordinate?: boolean;
+    readonly includeLinearDuplicateKey?: boolean;
     readonly linearPatch?: unknown;
   } = {}
 ) => {
@@ -140,6 +324,8 @@ const createSamplingFixture = (
   const gridKeyformSetId = KeyformSetIdSchema.parse("keyset_grid_vertices");
   const includeDrawableTarget = options.includeDrawableTarget ?? true;
   const includeGridUpperRight = options.includeGridUpperRight ?? true;
+  const includeGridDuplicateCoordinate = options.includeGridDuplicateCoordinate ?? false;
+  const includeLinearDuplicateKey = options.includeLinearDuplicateKey ?? false;
   const linearPatch = options.linearPatch;
   const graph: NormalizedRuntimeGraph = {
     packageId,
@@ -206,7 +392,8 @@ const createSamplingFixture = (
           { x: -1, y: -1, statePatch: [{ x: -1, y: -1 }] },
           { x: 1, y: -1, statePatch: [{ x: 1, y: -1 }] },
           { x: -1, y: 1, statePatch: [{ x: -1, y: 1 }] },
-          ...(includeGridUpperRight ? [{ x: 1, y: 1, statePatch: [{ x: 1, y: 1 }] }] : [])
+          ...(includeGridUpperRight ? [{ x: 1, y: 1, statePatch: [{ x: 1, y: 1 }] }] : []),
+          ...(includeGridDuplicateCoordinate ? [{ x: 1, y: 1, statePatch: [{ x: 99, y: 99 }] }] : [])
         ]
       },
       {
@@ -220,7 +407,8 @@ const createSamplingFixture = (
         compositionOrder: 0,
         keys: [
           { value: -1, statePatch: linearPatch ?? 0.5 },
-          { value: 1, statePatch: linearPatch ?? 1 }
+          { value: 1, statePatch: linearPatch ?? 1 },
+          ...(includeLinearDuplicateKey ? [{ value: 1, statePatch: linearPatch ?? 99 }] : [])
         ]
       }
     ],
@@ -236,4 +424,31 @@ const createSamplingFixture = (
     linearKeyformSetId,
     gridKeyformSetId
   };
+};
+
+const findDiagnostic = (diagnostics: readonly DiagnosticDto[], checkId: string): DiagnosticDto => {
+  const diagnostic = diagnostics.find((candidate) => candidate.checkId === checkId);
+  if (diagnostic === undefined) {
+    throw new Error(`Missing diagnostic ${checkId}.`);
+  }
+
+  return diagnostic;
+};
+
+const findLinearBinding = (graph: NormalizedRuntimeGraph, keyformSetId: string) => {
+  const binding = graph.keyformBindings.find((candidate) => candidate.keyformSetId === keyformSetId);
+  if (binding?.evaluator !== "linear-1d-v1") {
+    throw new Error(`Missing linear binding ${keyformSetId}.`);
+  }
+
+  return binding;
+};
+
+const findGridBinding = (graph: NormalizedRuntimeGraph, keyformSetId: string) => {
+  const binding = graph.keyformBindings.find((candidate) => candidate.keyformSetId === keyformSetId);
+  if (binding?.evaluator !== "parameter-grid-2d-v1") {
+    throw new Error(`Missing Grid2D binding ${keyformSetId}.`);
+  }
+
+  return binding;
 };

@@ -39,6 +39,63 @@ describe("grid 2d keyform interpolation", () => {
     });
   });
 
+  it("reports duplicate coordinates while sampling the first coordinate deterministically", () => {
+    expect(
+      interpolateGrid2dKeyform({
+        keys: [
+          { x: 0, y: 0, statePatch: 0 },
+          { x: 1, y: 0, statePatch: 10 },
+          { x: 0, y: 1, statePatch: 20 },
+          { x: 1, y: 1, statePatch: 30 },
+          { x: 1, y: 1, statePatch: 99 }
+        ],
+        x: 1,
+        y: 1
+      })
+    ).toMatchObject({
+      ok: true,
+      source: "exact",
+      sampledCoordinates: { x: 1, y: 1 },
+      statePatch: 30,
+      duplicateCoordinates: [{ x: 1, y: 1 }]
+    });
+  });
+
+  it("distinguishes key-range clamping from missing surrounding keys", () => {
+    const completeNarrowGrid = [
+      { x: 0, y: 0, statePatch: 0 },
+      { x: 1, y: 0, statePatch: 10 },
+      { x: 0, y: 1, statePatch: 20 },
+      { x: 1, y: 1, statePatch: 30 }
+    ];
+
+    expect(interpolateGrid2dKeyform({ keys: completeNarrowGrid, x: 2, y: 0.5 })).toMatchObject({
+      ok: true,
+      source: "clamped-key-range",
+      sampledCoordinates: { x: 1, y: 0.5 },
+      missingCoordinates: [],
+      clampedToKeyRange: true
+    });
+
+    expect(
+      interpolateGrid2dKeyform({
+        keys: [
+          { x: 0, y: 0, statePatch: 0 },
+          { x: 1, y: 0, statePatch: 10 },
+          { x: 0, y: 1, statePatch: 20 }
+        ],
+        x: 0.5,
+        y: 0.5
+      })
+    ).toMatchObject({
+      ok: false,
+      code: "keyform.grid2dMissingKey",
+      sampledCoordinates: { x: 0.5, y: 0.5 },
+      missingCoordinates: [{ x: 1, y: 1 }],
+      clampedToKeyRange: false
+    });
+  });
+
   it("reports missing surrounding keys", () => {
     expect(
       interpolateGrid2dKeyform({

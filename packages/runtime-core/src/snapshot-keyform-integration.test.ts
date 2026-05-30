@@ -144,6 +144,33 @@ describe("runtime snapshot keyform integration", () => {
       before: [fixture.drawableId],
       after: []
     });
+    expect(visibilityComparison.diff.drawableRuntimeStateChanges).toEqual([
+      {
+        drawableId: fixture.drawableId,
+        opacityBefore: 1,
+        opacityAfter: 1,
+        visibleBefore: true,
+        visibleAfter: false,
+        baseDrawOrderBefore: 10,
+        baseDrawOrderAfter: 10,
+        evaluatedDrawOrderBefore: 10,
+        evaluatedDrawOrderAfter: 10
+      }
+    ]);
+    expect(visibilityComparison.diff.drawListChanges).toEqual([
+      {
+        before: [fixture.drawableId],
+        after: [],
+        membershipChanged: true,
+        orderChanged: false,
+        positionChanges: [
+          {
+            drawableId: fixture.drawableId,
+            beforeIndex: 0
+          }
+        ]
+      }
+    ]);
     expect(visibilityComparison.diff.drawableChanges).toHaveLength(1);
   });
 });

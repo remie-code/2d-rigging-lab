@@ -90,7 +90,7 @@ demo.unsafeDependencyClaim
 | `runtime.stateUnknownDynamicsGroup` | runtime_state | warning | strict: fail when exact replay evidence is required | AC-PHYS-004 |
 | `keyform.missingEndpoint` | keyform_semantic | warning | strict: fail when target requires interpolation | AC-MVP-008 |
 | `keyform.grid2dMissingKey` | keyform_sampling | error | strict: fail | AC-PARAM-005 |
-| `keyform.grid2dDuplicateKey` | keyform_sampling | blocking | all: fail | AC-PARAM-005 |
+| `keyform.grid2dDuplicateKey` | keyform_sampling | error | strict/acceptance: fail | AC-PARAM-005 |
 | `keyform.tooManyParametersForMvp` | keyform_semantic | warning | acceptance: needs_review | AC-MVP-010 |
 | `rigControl.cycle` | rigControl_semantic | blocking | all: fail | AC-MVP-009 |
 | `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
@@ -153,7 +153,7 @@ Runtime state validation rules:
 | `editorIncremental` | fast authoring warnings while editing | dirty authoring graph, target IDs | warns; blocks only destructive invalid commits |
 | `viewer` | saved package load/inspect diagnostics | package + runtime snapshot | blocks non-loadable package |
 | `strict` | full package validation | package + representative runtime eval | fails on blocking/error |
-| `acceptance` | MVP scenario evidence | operation log, reports, snapshots, package, supplemental evidence | fails missing GUI evidence or blocking checks |
+| `acceptance` | MVP scenario evidence | operation log, reports, snapshots, package, supplemental evidence | fails missing GUI evidence, acceptance-failing formal diagnostics, or blocking checks |
 | `aiDryRun` | AI proposed operation review | baseline/temp graph, diffs, report | blocks mutation without approval or target ambiguity |
 
 ## Severity / Status

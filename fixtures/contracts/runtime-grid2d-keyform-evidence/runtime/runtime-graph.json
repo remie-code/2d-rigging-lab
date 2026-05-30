@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "runtime-grid2d-keyform-evidence-graph-v1",
+  "packageId": "pkg_runtime_grid2d_keyform_evidence",
+  "packageRevision": 0,
+  "packageHash": "sha256:runtime-grid2d-keyform-evidence-v1",
+  "coordinateSystem": "canvas-y-down-v1",
+  "parameters": [
+    {
+      "id": "param_fixture_face_x",
+      "displayName": "Fixture Face X",
+      "semanticRole": "face",
+      "valueSource": "authoredInput",
+      "min": -1,
+      "max": 1,
+      "default": -1
+    },
+    {
+      "id": "param_fixture_face_y",
+      "displayName": "Fixture Face Y",
+      "semanticRole": "face",
+      "valueSource": "authoredInput",
+      "min": -1,
+      "max": 1,
+      "default": -1
+    }
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_fixture_face",
+      "meshId": "mesh_fixture_face",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ],
+      "vertexCount": 3
+    }
+  ],
+  "keyformBindings": [
+    {
+      "evaluator": "parameter-grid-2d-v1",
+      "keyformSetId": "keyset_fixture_face_grid_vertices",
+      "targetId": "mesh_fixture_face",
+      "targetKind": "mesh",
+      "targetProperty": "vertices",
+      "parameterX": "param_fixture_face_x",
+      "parameterY": "param_fixture_face_y",
+      "interpolation": "bilinear-grid-v1",
+      "clampPolicy": "clamp-to-parameter-range",
+      "missingKeyPolicy": "diagnostic-error",
+      "keys": [
+        {
+          "x": -1,
+          "y": -1,
+          "statePatch": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "x": 1,
+          "y": -1,
+          "statePatch": [
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 3,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "x": -1,
+          "y": 1,
+          "statePatch": [
+            {
+              "x": 0,
+              "y": 1
+            },
+            {
+              "x": 2,
+              "y": 1
+            },
+            {
+              "x": 0,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "statePatch": [
+            {
+              "x": 2,
+              "y": 2
+            },
+            {
+              "x": 4,
+              "y": 2
+            },
+            {
+              "x": 2,
+              "y": 4
+            }
+          ]
+        }
+      ],
+      "compositionMode": "replace",
+      "compositionOrder": 0
+    },
+    {
+      "evaluator": "parameter-grid-2d-v1",
+      "keyformSetId": "keyset_fixture_face_grid_opacity",
+      "targetId": "draw_fixture_face",
+      "targetKind": "drawable",
+      "targetProperty": "opacity",
+      "parameterX": "param_fixture_face_x",
+      "parameterY": "param_fixture_face_y",
+      "interpolation": "bilinear-grid-v1",
+      "clampPolicy": "clamp-to-parameter-range",
+      "missingKeyPolicy": "diagnostic-error",
+      "keys": [
+        {
+          "x": -1,
+          "y": -1,
+          "statePatch": 1
+        },
+        {
+          "x": 1,
+          "y": -1,
+          "statePatch": 0.9
+        },
+        {
+          "x": -1,
+          "y": 1,
+          "statePatch": 0.8
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "statePatch": 0.3
+        }
+      ],
+      "compositionMode": "replace",
+      "compositionOrder": 1
+    }
+  ],
+  "masks": [],
+  "drawOrder": [],
+  "disabledFutureLayers": []
+}

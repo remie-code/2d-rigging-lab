@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "runtime-grid2d-keyform-evidence",
+  "title": "Runtime Grid2D keyform evidence fixture",
+  "coversAC": [
+    "AC-PARAM-005",
+    "AC-MVP-012"
+  ],
+  "coversScenarios": [
+    "SC-PARAM-004",
+    "SC-MVP-003"
+  ],
+  "modulesBlocked": [
+    "runtime-core"
+  ],
+  "inputArtifacts": [
+    "runtime/runtime-graph.json",
+    "request/evaluation-options.json",
+    "request/evaluation-context.json",
+    "request/baseline-frame.json",
+    "request/evaluated-frame.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "runtimeGrid2dKeyformEvidenceSummary",
+      "path": "expected/runtime-grid2d-keyform-evidence-summary.json",
+      "id": "keyset_fixture_face_grid_vertices",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

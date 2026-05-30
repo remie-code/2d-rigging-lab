@@ -1,6 +1,7 @@
 {
   "schemaVersion": "runtime-keyform-fixture-coverage-note-v1",
   "topic": "parameter-grid-2d-v1",
-  "status": "covered-by-runtime-core-unit-tests",
-  "rationale": "Domain F keeps this contract fixture compact around one runtime-visible 1D mesh vertices keyform; Domain B owns Grid2D sampling coverage in runtime-core unit tests."
+  "status": "superseded-by-runtime-grid2d-keyform-evidence-fixture",
+  "rationale": "Wave 12 Domain F kept this fixture compact around one runtime-visible 1D mesh vertices keyform. Wave 13 adds a compact runtime-grid2d-keyform-evidence fixture with two authored parameters, bilinear Grid2D samples, runtime-visible drawable output, and enriched runtime diff evidence.",
+  "supersededBy": "fixtures/contracts/runtime-grid2d-keyform-evidence/fixture-manifest.json"
 }

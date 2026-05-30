@@ -4,6 +4,7 @@ import {
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
+  RuntimeDiffDtoSchema,
   RuntimeStateDtoSchema,
   RuntimeStateSequenceArtifactSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -126,6 +127,80 @@ describe("runtime evidence artifact materializers", () => {
         vertexHashAfter: createStableVertexHash(fixture.deformedVertices)
       }
     ]);
+    expect(result.evidence.runtimeDiff.drawableRuntimeStateChanges).toEqual([]);
+    expect(result.evidence.runtimeDiff.drawListChanges).toEqual([]);
+  });
+
+  it("preserves dedicated drawable runtime state and drawList diff fields through artifact paths", () => {
+    const fixture = createDrawableRuntimeStateAndDrawListEvidenceFixture();
+    const result = buildRuntimeEvidenceArtifacts({
+      baselineGraph: fixture.baselineGraph,
+      candidateGraph: fixture.candidateGraph,
+      artifactLabel: "runtime-diff-regression"
+    });
+    const runtimeDiff = RuntimeDiffDtoSchema.parse(result.evidence.runtimeDiff);
+    const baselineSnapshotPath = createRuntimeSnapshotArtifactPath(runtimeDiff.beforeSnapshotId);
+    const candidateSnapshotPath = createRuntimeSnapshotArtifactPath(runtimeDiff.afterSnapshotId);
+    const baselineSnapshot = findRuntimeSnapshotArtifact(result.artifacts, baselineSnapshotPath);
+    const candidateSnapshot = findRuntimeSnapshotArtifact(result.artifacts, candidateSnapshotPath);
+
+    expect(baselineSnapshot.snapshotId).toBe(runtimeDiff.beforeSnapshotId);
+    expect(candidateSnapshot.snapshotId).toBe(runtimeDiff.afterSnapshotId);
+    expect(baselineSnapshot.drawList).toEqual([fixture.frontDrawableId, fixture.midDrawableId, fixture.backDrawableId]);
+    expect(candidateSnapshot.drawList).toEqual([fixture.backDrawableId, fixture.midDrawableId]);
+    expect(runtimeDiff.drawableRuntimeStateChanges).toHaveLength(2);
+    expect(runtimeDiff.drawableRuntimeStateChanges).toEqual(
+      expect.arrayContaining([
+        {
+          drawableId: fixture.frontDrawableId,
+          opacityBefore: 1,
+          opacityAfter: 0.5,
+          visibleBefore: true,
+          visibleAfter: false,
+          baseDrawOrderBefore: 0,
+          baseDrawOrderAfter: 3,
+          evaluatedDrawOrderBefore: 0,
+          evaluatedDrawOrderAfter: 3
+        },
+        {
+          drawableId: fixture.backDrawableId,
+          opacityBefore: 1,
+          opacityAfter: 1,
+          visibleBefore: true,
+          visibleAfter: true,
+          baseDrawOrderBefore: 2,
+          baseDrawOrderAfter: 2,
+          evaluatedDrawOrderBefore: 2,
+          evaluatedDrawOrderAfter: 0
+        }
+      ])
+    );
+    expect(runtimeDiff.drawListChanges).toEqual([
+      {
+        before: [fixture.frontDrawableId, fixture.midDrawableId, fixture.backDrawableId],
+        after: [fixture.backDrawableId, fixture.midDrawableId],
+        membershipChanged: true,
+        orderChanged: true,
+        positionChanges: [
+          {
+            drawableId: fixture.frontDrawableId,
+            beforeIndex: 0
+          },
+          {
+            drawableId: fixture.backDrawableId,
+            beforeIndex: 2,
+            afterIndex: 0
+          }
+        ]
+      }
+    ]);
+    expect(runtimeDiff.parameterChanges).toEqual([
+      {
+        path: "/drawList",
+        before: [fixture.frontDrawableId, fixture.midDrawableId, fixture.backDrawableId],
+        after: [fixture.backDrawableId, fixture.midDrawableId]
+      }
+    ]);
   });
 
   it("materializes sequence evidence with states[0] initial and states[i + 1] post-frame", () => {
@@ -232,6 +307,143 @@ const createMeshKeyformEvidenceFixture = () => {
     baseVertices,
     deformedVertices
   };
+};
+
+const createDrawableRuntimeStateAndDrawListEvidenceFixture = () => {
+  const packageId = PackageIdSchema.parse("pkg_runtime_diff_artifact_paths");
+  const parameterId = ParameterIdSchema.parse("param_runtime_diff_unused");
+  const frontDrawableId = DrawableIdSchema.parse("draw_front");
+  const midDrawableId = DrawableIdSchema.parse("draw_mid");
+  const backDrawableId = DrawableIdSchema.parse("draw_back");
+  const drawableSpecs = {
+    baseline: [
+      {
+        drawableId: frontDrawableId,
+        meshId: MeshIdSchema.parse("mesh_front"),
+        visible: true,
+        opacity: 1,
+        baseDrawOrder: 0,
+        drawOrder: 0
+      },
+      {
+        drawableId: midDrawableId,
+        meshId: MeshIdSchema.parse("mesh_mid"),
+        visible: true,
+        opacity: 1,
+        baseDrawOrder: 1,
+        drawOrder: 1
+      },
+      {
+        drawableId: backDrawableId,
+        meshId: MeshIdSchema.parse("mesh_back"),
+        visible: true,
+        opacity: 1,
+        baseDrawOrder: 2,
+        drawOrder: 2
+      }
+    ],
+    candidate: [
+      {
+        drawableId: frontDrawableId,
+        meshId: MeshIdSchema.parse("mesh_front"),
+        visible: false,
+        opacity: 0.5,
+        baseDrawOrder: 3,
+        drawOrder: 3
+      },
+      {
+        drawableId: midDrawableId,
+        meshId: MeshIdSchema.parse("mesh_mid"),
+        visible: true,
+        opacity: 1,
+        baseDrawOrder: 1,
+        drawOrder: 1
+      },
+      {
+        drawableId: backDrawableId,
+        meshId: MeshIdSchema.parse("mesh_back"),
+        visible: true,
+        opacity: 1,
+        baseDrawOrder: 2,
+        drawOrder: 0
+      }
+    ]
+  } satisfies Record<string, readonly DrawableRuntimeStateAndDrawListSpec[]>;
+
+  return {
+    baselineGraph: createGraphFromDrawableSpecs(packageId, parameterId, drawableSpecs.baseline),
+    candidateGraph: createGraphFromDrawableSpecs(packageId, parameterId, drawableSpecs.candidate),
+    frontDrawableId,
+    midDrawableId,
+    backDrawableId
+  };
+};
+
+interface DrawableRuntimeStateAndDrawListSpec {
+  readonly drawableId: ReturnType<typeof DrawableIdSchema.parse>;
+  readonly meshId: ReturnType<typeof MeshIdSchema.parse>;
+  readonly visible: boolean;
+  readonly opacity: number;
+  readonly baseDrawOrder: number;
+  readonly drawOrder: number;
+}
+
+const createGraphFromDrawableSpecs = (
+  packageId: string,
+  parameterId: ReturnType<typeof ParameterIdSchema.parse>,
+  drawables: readonly DrawableRuntimeStateAndDrawListSpec[]
+): NormalizedRuntimeGraph => ({
+  packageId,
+  packageRevision: 0,
+  coordinateSystem: "canvas-y-down-v1",
+  parameters: new Map([
+    [
+      parameterId,
+      {
+        id: parameterId,
+        displayName: "Unused",
+        valueSource: "authoredInput",
+        min: -1,
+        max: 1,
+        default: 0
+      }
+    ]
+  ]),
+  dynamicsGroups: new Map(),
+  drawables: new Map(
+    drawables.map((drawable) => [
+      drawable.drawableId,
+      {
+        drawableId: drawable.drawableId,
+        meshId: drawable.meshId,
+        visible: drawable.visible,
+        opacity: drawable.opacity,
+        baseDrawOrder: drawable.baseDrawOrder,
+        bounds: { x: 0, y: 0, width: 16, height: 16 },
+        vertexCount: 4
+      }
+    ])
+  ),
+  rigControls: new Map(),
+  keyformBindings: [],
+  masks: [],
+  drawOrder: drawables.map((drawable) => ({
+    drawableId: drawable.drawableId,
+    drawOrder: drawable.drawOrder
+  })),
+  disabledFutureLayers: []
+});
+
+const findRuntimeSnapshotArtifact = (
+  artifacts: ReturnType<typeof buildRuntimeEvidenceArtifacts>["artifacts"],
+  path: ReturnType<typeof createRuntimeSnapshotArtifactPath>
+) => {
+  const artifact = artifacts.find((candidate) => candidate.kind === "runtimeSnapshot" && candidate.path === path);
+  if (artifact === undefined) {
+    throw new Error(`Missing runtime snapshot artifact ${path}.`);
+  }
+
+  return RuntimeSnapshotSchema.parse(JSON.parse(artifact.content));
 };
 
 const createGraph = (

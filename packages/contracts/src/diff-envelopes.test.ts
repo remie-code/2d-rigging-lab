@@ -123,6 +123,8 @@ describe("runtime diff envelope", () => {
         }
       ],
       drawableChanges: [],
+      drawableRuntimeStateChanges: [],
+      drawListChanges: [],
       diagnosticDelta: [
         {
           ...diagnostic,

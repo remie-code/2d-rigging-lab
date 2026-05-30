@@ -180,6 +180,8 @@ describe("contracts public surface integration", () => {
 
     expect(modelDiff.operationIds).toEqual([]);
     expect(runtimeDiff.dynamicsChanges).toEqual([]);
+    expect(runtimeDiff.drawableRuntimeStateChanges).toEqual([]);
+    expect(runtimeDiff.drawListChanges).toEqual([]);
     expect(validationDiff.newFailures).toEqual([]);
   });
 });

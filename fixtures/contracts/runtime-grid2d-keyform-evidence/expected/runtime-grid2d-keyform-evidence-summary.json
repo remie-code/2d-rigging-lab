@@ -1,0 +1,261 @@
+{
+  "schemaVersion": "runtime-grid2d-keyform-evidence-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_runtime_grid2d_keyform_evidence_0",
+    "parameters": [
+      {
+        "parameterId": "param_fixture_face_x",
+        "valueSource": "authoredInput",
+        "authoredValue": -1,
+        "effectiveValue": -1,
+        "clamped": false,
+        "source": "viewerOverride"
+      },
+      {
+        "parameterId": "param_fixture_face_y",
+        "valueSource": "authoredInput",
+        "authoredValue": -1,
+        "effectiveValue": -1,
+        "clamped": false,
+        "source": "viewerOverride"
+      }
+    ],
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_fixture_face_grid_vertices",
+        "evaluator": "parameter-grid-2d-v1",
+        "sampledCoordinates": {
+          "param_fixture_face_x": -1,
+          "param_fixture_face_y": -1
+        },
+        "target": "mesh:mesh_fixture_face.vertices",
+        "targetMetadata": {
+          "targetId": "mesh_fixture_face",
+          "targetKind": "mesh",
+          "targetProperty": "vertices"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 0,
+        "statePatch": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 2,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 2
+          }
+        ],
+        "samplingStatus": "exact"
+      },
+      {
+        "keyformSetId": "keyset_fixture_face_grid_opacity",
+        "evaluator": "parameter-grid-2d-v1",
+        "sampledCoordinates": {
+          "param_fixture_face_x": -1,
+          "param_fixture_face_y": -1
+        },
+        "target": "drawable:draw_fixture_face.opacity",
+        "targetMetadata": {
+          "targetId": "draw_fixture_face",
+          "targetKind": "drawable",
+          "targetProperty": "opacity"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 1,
+        "statePatch": 1,
+        "samplingStatus": "exact"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_fixture_face",
+      "meshId": "mesh_fixture_face",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "evaluatedDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertexCount": 3,
+      "vertexHash": "vhash_f66ef067_3",
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ],
+      "diagnostics": []
+    },
+    "drawList": [
+      "draw_fixture_face"
+    ],
+    "diagnostics": []
+  },
+  "evaluatedSnapshot": {
+    "snapshotId": "snap_runtime_grid2d_keyform_evidence_1",
+    "parameters": [
+      {
+        "parameterId": "param_fixture_face_x",
+        "valueSource": "authoredInput",
+        "authoredValue": 0,
+        "effectiveValue": 0,
+        "clamped": false,
+        "source": "viewerOverride"
+      },
+      {
+        "parameterId": "param_fixture_face_y",
+        "valueSource": "authoredInput",
+        "authoredValue": 0,
+        "effectiveValue": 0,
+        "clamped": false,
+        "source": "viewerOverride"
+      }
+    ],
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_fixture_face_grid_vertices",
+        "evaluator": "parameter-grid-2d-v1",
+        "sampledCoordinates": {
+          "param_fixture_face_x": 0,
+          "param_fixture_face_y": 0
+        },
+        "target": "mesh:mesh_fixture_face.vertices",
+        "targetMetadata": {
+          "targetId": "mesh_fixture_face",
+          "targetKind": "mesh",
+          "targetProperty": "vertices"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 0,
+        "statePatch": [
+          {
+            "x": 0.75,
+            "y": 0.75
+          },
+          {
+            "x": 2.75,
+            "y": 0.75
+          },
+          {
+            "x": 0.75,
+            "y": 2.75
+          }
+        ],
+        "samplingStatus": "interpolated"
+      },
+      {
+        "keyformSetId": "keyset_fixture_face_grid_opacity",
+        "evaluator": "parameter-grid-2d-v1",
+        "sampledCoordinates": {
+          "param_fixture_face_x": 0,
+          "param_fixture_face_y": 0
+        },
+        "target": "drawable:draw_fixture_face.opacity",
+        "targetMetadata": {
+          "targetId": "draw_fixture_face",
+          "targetKind": "drawable",
+          "targetProperty": "opacity"
+        },
+        "compositionMode": "replace",
+        "compositionOrder": 1,
+        "statePatch": 0.75,
+        "samplingStatus": "interpolated"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_fixture_face",
+      "meshId": "mesh_fixture_face",
+      "visible": true,
+      "opacity": 0.75,
+      "baseDrawOrder": 0,
+      "evaluatedDrawOrder": 0,
+      "bounds": {
+        "x": 0.75,
+        "y": 0.75,
+        "width": 2,
+        "height": 2
+      },
+      "vertexCount": 3,
+      "vertexHash": "vhash_f93eac5f_3",
+      "vertices": [
+        {
+          "x": 0.75,
+          "y": 0.75
+        },
+        {
+          "x": 2.75,
+          "y": 0.75
+        },
+        {
+          "x": 0.75,
+          "y": 2.75
+        }
+      ],
+      "diagnostics": []
+    },
+    "drawList": [
+      "draw_fixture_face"
+    ],
+    "diagnostics": []
+  },
+  "runtimeComparison": {
+    "equivalent": false,
+    "diff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_runtime_grid2d_keyform_evidence_0",
+      "afterSnapshotId": "snap_runtime_grid2d_keyform_evidence_1",
+      "parameterChanges": [
+        {
+          "path": "/parameters/param_fixture_face_x/effectiveValue",
+          "before": -1,
+          "after": 0
+        },
+        {
+          "path": "/parameters/param_fixture_face_y/effectiveValue",
+          "before": -1,
+          "after": 0
+        }
+      ],
+      "dynamicsChanges": [],
+      "drawableChanges": [
+        {
+          "drawableId": "draw_fixture_face",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_f66ef067_3",
+          "vertexHashAfter": "vhash_f93eac5f_3"
+        }
+      ],
+      "drawableRuntimeStateChanges": [
+        {
+          "drawableId": "draw_fixture_face",
+          "opacityBefore": 1,
+          "opacityAfter": 0.75,
+          "visibleBefore": true,
+          "visibleAfter": true,
+          "baseDrawOrderBefore": 0,
+          "baseDrawOrderAfter": 0,
+          "evaluatedDrawOrderBefore": 0,
+          "evaluatedDrawOrderAfter": 0
+        }
+      ],
+      "drawListChanges": [],
+      "diagnosticDelta": []
+    }
+  }
+}

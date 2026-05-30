@@ -9,6 +9,32 @@ import {
   RuntimeSnapshotIdSchema
 } from "./ids.js";
 
+const DrawableRuntimeStateChangeSchema = z.object({
+  drawableId: DrawableIdSchema,
+  opacityBefore: z.number().min(0).max(1),
+  opacityAfter: z.number().min(0).max(1),
+  visibleBefore: z.boolean(),
+  visibleAfter: z.boolean(),
+  baseDrawOrderBefore: z.number().int(),
+  baseDrawOrderAfter: z.number().int(),
+  evaluatedDrawOrderBefore: z.number().int(),
+  evaluatedDrawOrderAfter: z.number().int()
+});
+
+const DrawListPositionChangeSchema = z.object({
+  drawableId: DrawableIdSchema,
+  beforeIndex: z.number().int().nonnegative().optional(),
+  afterIndex: z.number().int().nonnegative().optional()
+});
+
+const DrawListChangeSchema = z.object({
+  before: z.array(DrawableIdSchema),
+  after: z.array(DrawableIdSchema),
+  membershipChanged: z.boolean(),
+  orderChanged: z.boolean(),
+  positionChanges: z.array(DrawListPositionChangeSchema).default([])
+});
+
 export const RuntimeDiffSchema = z.object({
   schemaVersion: z.literal("runtime-diff-v1"),
   beforeSnapshotId: RuntimeSnapshotIdSchema,
@@ -43,6 +69,8 @@ export const RuntimeDiffSchema = z.object({
       })
     )
     .default([]),
+  drawableRuntimeStateChanges: z.array(DrawableRuntimeStateChangeSchema).default([]),
+  drawListChanges: z.array(DrawListChangeSchema).default([]),
   diagnosticDelta: z.array(DiagnosticSchema).default([])
 });
 export type RuntimeDiffDto = z.infer<typeof RuntimeDiffSchema>;

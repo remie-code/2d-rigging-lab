@@ -20,6 +20,7 @@ discussion/implementation/
 
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.codex/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
+- Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
 - A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
 - The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
@@ -35,11 +36,13 @@ discussion/implementation/
 - Wave 10 AI read / inspection / validation command foundation completed on 2026-05-29 with internal `inspectModel`, `inspectTarget`, and `validatePackage` command contracts, editor projectors, host integration, compact fixture regression, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave10/wave10-final-report.md](waves/wave10/wave10-final-report.md), [waves/wave10/integration-review.md](waves/wave10/integration-review.md), and [reviews/wave10/wave10-integration-clean-review.md](reviews/wave10/wave10-integration-clean-review.md).
 - Wave 11 AI operation catalog expansion / keyform foundation completed on 2026-05-29 with authoring keyform mutations, `addKeyform` / `addKeyformGrid2d` operation handlers, registry / lifecycle integration, editor evidence support, AI `addKeyform` command regression, clean review, final report, and full verification pass. Evidence is recorded in [waves/wave11/wave11-final-report.md](waves/wave11/wave11-final-report.md), [waves/wave11/integration-review.md](waves/wave11/integration-review.md), and [reviews/wave11/wave11-clean-review.md](reviews/wave11/wave11-clean-review.md).
 - Wave 12 runtime keyform evaluation foundation completed on 2026-05-30 with runtime keyform identity, sampling, target application, snapshot/evidence integration, compact fixture regression, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md), [waves/wave12/integration-review.md](waves/wave12/integration-review.md), and [reviews/wave12/_map.md](reviews/wave12/_map.md).
+- Wave 13 runtime diff and Grid2D evidence hardening completed on 2026-05-30 with enriched runtime diff fields, Grid2D fixture/evidence, keyform diagnostic regressions, AI/editor `addKeyformGrid2d` runtime-visible evidence, inserted diagnostic alignment resolution, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave13/wave13-final-report.md](waves/wave13/wave13-final-report.md), [waves/wave13/integration-review.md](waves/wave13/integration-review.md), and [reviews/wave13/_map.md](reviews/wave13/_map.md).
 
 ## Key References
 
 | Path | Purpose |
 |---|---|
+| [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -53,6 +56,7 @@ discussion/implementation/
 | [orchestration/wave10-plan.md](orchestration/wave10-plan.md) | Wave 10 internal AI read / inspection / validation command foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave11-plan.md](orchestration/wave11-plan.md) | Wave 11 AI operation catalog expansion / keyform foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave12-plan.md](orchestration/wave12-plan.md) | Wave 12 runtime keyform evaluation foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave13-plan.md](orchestration/wave13-plan.md) | Wave 13 runtime diff and Grid2D evidence hardening dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -65,6 +69,7 @@ discussion/implementation/
 | [waves/wave10/_map.md](waves/wave10/_map.md) | Wave 10 domain completion reports, integration review, and final report |
 | [waves/wave11/_map.md](waves/wave11/_map.md) | Wave 11 domain completion reports, integration review, and final report |
 | [waves/wave12/_map.md](waves/wave12/_map.md) | Wave 12 domain completion reports, integration review, and final report |
+| [waves/wave13/_map.md](waves/wave13/_map.md) | Wave 13 domain completion reports, integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -77,11 +82,12 @@ discussion/implementation/
 | [reviews/wave10/_map.md](reviews/wave10/_map.md) | Wave 10 clean integration review reports |
 | [reviews/wave11/_map.md](reviews/wave11/_map.md) | Wave 11 clean review reports |
 | [reviews/wave12/_map.md](reviews/wave12/_map.md) | Wave 12 domain review reports |
+| [reviews/wave13/_map.md](reviews/wave13/_map.md) | Wave 13 domain review reports |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.codex/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Recommended next wave: runtime diff and Grid2D evidence hardening, based on [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md).
-2. Keep external HTTP/WebSocket/MCP transport in Future scope unless the current MVP boundary is explicitly changed.
+1. Plan the next wave around one visible MVP workflow slice now that runtime diff and Grid2D evidence hardening is complete.
+2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

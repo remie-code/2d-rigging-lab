@@ -508,7 +508,7 @@ If `subSteps > maxSubSteps`, interactive preview emits `runtime.timestepOverflow
 | interpolation | `bilinear-grid-v1` |
 | input outside range | clamp to parameter range and emit diagnostic |
 | missing surrounding key | emit `keyform.grid2dMissingKey` error; strict profile fails |
-| duplicate coordinate | emit `keyform.grid2dDuplicateKey` blocking diagnostic |
+| duplicate coordinate | emit `keyform.grid2dDuplicateKey` error diagnostic; strict and acceptance validation fail |
 | 3+ parameters on same target grid | emit `keyform.tooManyParametersForMvp` warning/error by profile |
 
 face yaw / pitch diagonal expression may be represented by:

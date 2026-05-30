@@ -8,6 +8,7 @@ import {
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
+  RuntimeDiffSchema,
   RuntimeEvaluationContextSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
@@ -35,9 +36,9 @@ import type {
   RuntimeSnapshotDto
 } from "./snapshot.js";
 
-describe("runtime-keyform-evaluation-foundation contract fixture", () => {
-  it("evaluates a compact 1D mesh vertices keyform as runtime-visible snapshot output", () => {
-    const fixture = loadRuntimeKeyformFixture();
+describe("runtime-grid2d-keyform-evidence contract fixture", () => {
+  it("evaluates a compact Grid2D keyform as runtime-visible drawable evidence", () => {
+    const fixture = loadRuntimeGrid2dFixture();
     const graph = createRuntimeGraphFromFixture(fixture.graph);
     const initialState = createInitialRuntimeState(graph, {
       packageId: graph.packageId,
@@ -63,26 +64,48 @@ describe("runtime-keyform-evaluation-foundation contract fixture", () => {
     const baselineDrawable = findDrawable(baseline, fixture.expected.baselineSnapshot.drawable.drawableId);
     const evaluatedDrawable = findDrawable(evaluated, fixture.expected.evaluatedSnapshot.drawable.drawableId);
 
+    expect(fixture.manifest.inputArtifacts).toContain("runtime/runtime-graph.json");
+    expect(fixture.graph.parameters).toHaveLength(2);
+    expect(fixture.graph.parameters.every((parameter) => parameter.valueSource === "authoredInput")).toBe(true);
+    expect(fixture.graph.keyformBindings.every((binding) => binding.evaluator === "parameter-grid-2d-v1")).toBe(true);
     expect(baseline.snapshotId).toBe(fixture.expected.baselineSnapshot.snapshotId);
+    expect(baseline.parameters).toEqual(fixture.expected.baselineSnapshot.parameters);
     expect(baseline.keyformSamples).toEqual(fixture.expected.baselineSnapshot.keyformSamples);
-    expect(baselineDrawable).toMatchObject(fixture.expected.baselineSnapshot.drawable);
+    expect(baselineDrawable).toEqual(fixture.expected.baselineSnapshot.drawable);
     expect(baseline.drawList).toEqual(fixture.expected.baselineSnapshot.drawList);
     expect(baseline.diagnostics).toEqual(fixture.expected.baselineSnapshot.diagnostics);
     expect(evaluated.snapshotId).toBe(fixture.expected.evaluatedSnapshot.snapshotId);
+    expect(evaluated.parameters).toEqual(fixture.expected.evaluatedSnapshot.parameters);
     expect(evaluated.keyformSamples).toEqual(fixture.expected.evaluatedSnapshot.keyformSamples);
-    expect(evaluatedDrawable).toMatchObject(fixture.expected.evaluatedSnapshot.drawable);
+    expect(evaluatedDrawable).toEqual(fixture.expected.evaluatedSnapshot.drawable);
     expect(evaluated.drawList).toEqual(fixture.expected.evaluatedSnapshot.drawList);
     expect(evaluated.diagnostics).toEqual(fixture.expected.evaluatedSnapshot.diagnostics);
+    expect(evaluated.keyformSamples.map((sample) => sample.sampledCoordinates)).toEqual([
+      {
+        param_fixture_face_x: 0,
+        param_fixture_face_y: 0
+      },
+      {
+        param_fixture_face_x: 0,
+        param_fixture_face_y: 0
+      }
+    ]);
     const comparison = compareRuntimeSnapshots(baseline, evaluated);
-    const expectedRuntimeComparison = fixture.expected.runtimeComparison as object;
-    expect(comparison).toMatchObject(expectedRuntimeComparison);
-    expect(comparison.diff.drawableRuntimeStateChanges).toEqual([]);
+    expect(comparison).toEqual(fixture.expected.runtimeComparison);
+    expect(comparison.diff.drawableRuntimeStateChanges).toEqual([
+      {
+        drawableId: "draw_fixture_face",
+        opacityBefore: 1,
+        opacityAfter: 0.75,
+        visibleBefore: true,
+        visibleAfter: true,
+        baseDrawOrderBefore: 0,
+        baseDrawOrderAfter: 0,
+        evaluatedDrawOrderBefore: 0,
+        evaluatedDrawOrderAfter: 0
+      }
+    ]);
     expect(comparison.diff.drawListChanges).toEqual([]);
-    expect(fixture.grid2dCoverageNote).toMatchObject({
-      topic: "parameter-grid-2d-v1",
-      status: "superseded-by-runtime-grid2d-keyform-evidence-fixture",
-      supersededBy: "fixtures/contracts/runtime-grid2d-keyform-evidence/fixture-manifest.json"
-    });
   });
 });
 
@@ -98,8 +121,28 @@ const RectFixtureSchema = z.object({
   height: z.number().finite().nonnegative()
 });
 
+const RuntimeGrid2dFixtureManifestSchema = z.object({
+  schemaVersion: z.literal("contract-fixture-manifest-v1"),
+  fixtureId: z.literal("runtime-grid2d-keyform-evidence"),
+  title: z.string().min(1),
+  coversAC: z.array(z.string()),
+  coversScenarios: z.array(z.string()),
+  modulesBlocked: z.array(z.string()),
+  inputArtifacts: z.array(z.string()),
+  expectedArtifacts: z.array(
+    z.object({
+      kind: z.literal("runtimeGrid2dKeyformEvidenceSummary"),
+      path: z.string(),
+      id: z.string(),
+      comparison: z.literal("semantic-json")
+    })
+  ),
+  updateRule: z.literal("requires-contract-review")
+});
+type RuntimeGrid2dFixtureManifest = z.infer<typeof RuntimeGrid2dFixtureManifestSchema>;
+
 const RuntimeGraphFixtureSchema = z.object({
-  schemaVersion: z.literal("runtime-keyform-graph-fixture-v1"),
+  schemaVersion: z.literal("runtime-grid2d-keyform-evidence-graph-v1"),
   packageId: z.string(),
   packageRevision: z.number().int().nonnegative(),
   packageHash: z.string().optional(),
@@ -130,19 +173,24 @@ const RuntimeGraphFixtureSchema = z.object({
   ),
   keyformBindings: z.array(
     z.object({
-      evaluator: z.literal("linear-1d-v1"),
+      evaluator: z.literal("parameter-grid-2d-v1"),
       keyformSetId: z.string(),
       targetId: z.string(),
       targetKind: z.enum(["mesh", "rigControl", "drawable"]),
       targetProperty: z.string(),
-      parameterId: z.string(),
+      parameterX: z.string(),
+      parameterY: z.string(),
+      interpolation: z.literal("bilinear-grid-v1"),
+      clampPolicy: z.literal("clamp-to-parameter-range"),
+      missingKeyPolicy: z.literal("diagnostic-error"),
       keys: z.array(
         z.object({
-          value: z.number().finite(),
+          x: z.number().finite(),
+          y: z.number().finite(),
           statePatch: z.unknown()
         })
       ),
-      compositionMode: z.enum(["replace", "additiveDelta", "multiplyOpacity"]),
+      compositionMode: z.enum(["replace", "additiveDelta"]),
       compositionOrder: z.number().int()
     })
   ),
@@ -152,32 +200,11 @@ const RuntimeGraphFixtureSchema = z.object({
 });
 type RuntimeGraphFixture = z.infer<typeof RuntimeGraphFixtureSchema>;
 
-const Grid2dCoverageNoteSchema = z.object({
-  schemaVersion: z.literal("runtime-keyform-fixture-coverage-note-v1"),
-  topic: z.literal("parameter-grid-2d-v1"),
-  status: z.literal("superseded-by-runtime-grid2d-keyform-evidence-fixture"),
-  rationale: z.string().min(1),
-  supersededBy: z.string().min(1)
-});
-type Grid2dCoverageNote = z.infer<typeof Grid2dCoverageNoteSchema>;
-
-const ExpectedEffectSummarySchema = z.object({
-  schemaVersion: z.literal("runtime-keyform-evaluation-foundation-summary-v1"),
+const ExpectedGrid2dEvidenceSummarySchema = z.object({
+  schemaVersion: z.literal("runtime-grid2d-keyform-evidence-summary-v1"),
   baselineSnapshot: z.object({
     snapshotId: z.string(),
-    keyformSamples: z.array(z.unknown()),
-    drawable: z.object({
-      drawableId: z.string(),
-      meshId: z.string(),
-      bounds: RectFixtureSchema,
-      vertexHash: z.string(),
-      vertices: z.array(Vec2FixtureSchema)
-    }),
-    drawList: z.array(z.string()),
-    diagnostics: z.array(z.unknown())
-  }),
-  evaluatedSnapshot: z.object({
-    snapshotId: z.string(),
+    parameters: z.array(z.unknown()),
     keyformSamples: z.array(z.unknown()),
     drawable: z.object({
       drawableId: z.string(),
@@ -195,37 +222,58 @@ const ExpectedEffectSummarySchema = z.object({
     drawList: z.array(z.string()),
     diagnostics: z.array(z.unknown())
   }),
-  runtimeComparison: z.unknown()
+  evaluatedSnapshot: z.object({
+    snapshotId: z.string(),
+    parameters: z.array(z.unknown()),
+    keyformSamples: z.array(z.unknown()),
+    drawable: z.object({
+      drawableId: z.string(),
+      meshId: z.string(),
+      visible: z.boolean(),
+      opacity: z.number().finite(),
+      baseDrawOrder: z.number().int(),
+      evaluatedDrawOrder: z.number().int(),
+      bounds: RectFixtureSchema,
+      vertexCount: z.number().int().nonnegative(),
+      vertexHash: z.string(),
+      vertices: z.array(Vec2FixtureSchema),
+      diagnostics: z.array(z.unknown())
+    }),
+    drawList: z.array(z.string()),
+    diagnostics: z.array(z.unknown())
+  }),
+  runtimeComparison: z.object({
+    equivalent: z.boolean(),
+    diff: RuntimeDiffSchema
+  })
 });
-type ExpectedEffectSummary = z.infer<typeof ExpectedEffectSummarySchema>;
+type ExpectedGrid2dEvidenceSummary = z.infer<typeof ExpectedGrid2dEvidenceSummarySchema>;
 
-interface RuntimeKeyformFixture {
+interface RuntimeGrid2dFixture {
+  readonly manifest: RuntimeGrid2dFixtureManifest;
   readonly graph: RuntimeGraphFixture;
-  readonly grid2dCoverageNote: Grid2dCoverageNote;
   readonly options: RuntimeEvaluationOptionsDto;
   readonly context: RuntimeEvaluationContextDto;
   readonly baselineFrame: RuntimeEvaluationInputDto;
   readonly evaluatedFrame: RuntimeEvaluationInputDto;
-  readonly expected: ExpectedEffectSummary;
+  readonly expected: ExpectedGrid2dEvidenceSummary;
 }
 
-const loadRuntimeKeyformFixture = (): RuntimeKeyformFixture => {
+const loadRuntimeGrid2dFixture = (): RuntimeGrid2dFixture => {
   const fixtureDirectory = join(
     dirname(fileURLToPath(import.meta.url)),
-    "../../../fixtures/contracts/runtime-keyform-evaluation-foundation"
+    "../../../fixtures/contracts/runtime-grid2d-keyform-evidence"
   );
 
   return {
+    manifest: RuntimeGrid2dFixtureManifestSchema.parse(readJson(join(fixtureDirectory, "fixture-manifest.json"))),
     graph: RuntimeGraphFixtureSchema.parse(readJson(join(fixtureDirectory, "runtime/runtime-graph.json"))),
-    grid2dCoverageNote: Grid2dCoverageNoteSchema.parse(
-      readJson(join(fixtureDirectory, "runtime/grid2d-coverage-note.json"))
-    ),
     options: RuntimeEvaluationOptionsSchema.parse(readJson(join(fixtureDirectory, "request/evaluation-options.json"))),
     context: RuntimeEvaluationContextSchema.parse(readJson(join(fixtureDirectory, "request/evaluation-context.json"))),
     baselineFrame: RuntimeEvaluationInputSchema.parse(readJson(join(fixtureDirectory, "request/baseline-frame.json"))),
     evaluatedFrame: RuntimeEvaluationInputSchema.parse(readJson(join(fixtureDirectory, "request/evaluated-frame.json"))),
-    expected: ExpectedEffectSummarySchema.parse(
-      readJson(join(fixtureDirectory, "expected/runtime-keyform-effect-summary.json"))
+    expected: ExpectedGrid2dEvidenceSummarySchema.parse(
+      readJson(join(fixtureDirectory, "expected/runtime-grid2d-keyform-evidence-summary.json"))
     )
   };
 };
@@ -294,7 +342,11 @@ const createKeyformBinding = (
   targetId: binding.targetId,
   targetKind: binding.targetKind,
   targetProperty: binding.targetProperty,
-  parameterId: ParameterIdSchema.parse(binding.parameterId),
+  parameterX: ParameterIdSchema.parse(binding.parameterX),
+  parameterY: ParameterIdSchema.parse(binding.parameterY),
+  interpolation: binding.interpolation,
+  clampPolicy: binding.clampPolicy,
+  missingKeyPolicy: binding.missingKeyPolicy,
   keys: binding.keys,
   compositionMode: binding.compositionMode,
   compositionOrder: binding.compositionOrder

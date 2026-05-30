@@ -13,6 +13,10 @@ import { createBrowserProjectStore, type StorageLike } from "../project-persiste
 const BODY_YAW_PARAMETER_ID = "param_ai_body_yaw";
 const BODY_YAW_KEYFORM_OPERATION_ID = "op_ai_add_keyform_body_yaw";
 const BODY_YAW_KEYFORM_SET_ID = "keyset_mesh_mesh_body_vertices_ai_body_yaw_1";
+const GRID_YAW_PARAMETER_ID = "param_ai_grid_yaw";
+const GRID_PITCH_PARAMETER_ID = "param_ai_grid_pitch";
+const GRID2D_KEYFORM_OPERATION_ID = "op_ai_add_keyform_grid_body";
+const GRID2D_KEYFORM_SET_ID = "keyset_grid_mesh_mesh_body_vertices_ai_grid_yaw_ai_grid_pitch";
 
 describe("editor AI keyform command host regression", () => {
   it("dry-runs, approves, commits, inspects, validates, and logs addKeyform", async () => {
@@ -282,6 +286,267 @@ describe("editor AI keyform command host regression", () => {
       }
     });
   });
+
+  it("dry-runs, approves, commits, persists, and logs addKeyformGrid2d evidence", async () => {
+    const storage = createMemoryStorage();
+    const workflow = createWorkflow(storage);
+
+    await dryRunApproveAndCommitAiGridParameter(workflow, {
+      name: "grid_yaw",
+      parameterId: GRID_YAW_PARAMETER_ID,
+      displayName: "AI Grid Yaw"
+    });
+    await dryRunApproveAndCommitAiGridParameter(workflow, {
+      name: "grid_pitch",
+      parameterId: GRID_PITCH_PARAMETER_ID,
+      displayName: "AI Grid Pitch"
+    });
+
+    expect(workflow.state.revision.packageRevision).toBe(2);
+    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      GRID_YAW_PARAMETER_ID,
+      GRID_PITCH_PARAMETER_ID
+    ]);
+
+    const gridDryRunResponse = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_dry_run_grid2d_keyform",
+        command: "dryRunOperation",
+        capabilities: ["dryRunEdit"],
+        payload: createAiAddKeyformGrid2dOperation({
+          dryRun: true,
+          basePackageRevision: workflow.state.revision.packageRevision
+        })
+      })
+    );
+
+    expect(gridDryRunResponse).toMatchObject({
+      status: "ok",
+      command: "dryRunOperation",
+      payload: {
+        operationResult: {
+          status: "dry_run",
+          operationId: GRID2D_KEYFORM_OPERATION_ID,
+          modelDiff: {
+            added: [{ kind: "keyformSet", id: GRID2D_KEYFORM_SET_ID }]
+          }
+        }
+      }
+    });
+    expect(workflow.state.revision.packageRevision).toBe(2);
+    expect(workflow.state.operationLog.entryCount).toBe(2);
+
+    workflow.aiCommandHost.approvalPolicy.approveDryRunCommand({
+      dryRunCommandId: "cmd_ai_dry_run_grid2d_keyform",
+      operationId: GRID2D_KEYFORM_OPERATION_ID
+    });
+
+    const gridCommitResponse = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_commit_grid2d_keyform",
+        command: "commitOperation",
+        capabilities: ["commitWithApproval"],
+        payload: {
+          approvedDryRunCommandId: "cmd_ai_dry_run_grid2d_keyform",
+          operation: createAiAddKeyformGrid2dOperation({
+            dryRun: false,
+            basePackageRevision: workflow.state.revision.packageRevision
+          })
+        }
+      })
+    );
+
+    expect(gridCommitResponse).toMatchObject({
+      status: "ok",
+      command: "commitOperation",
+      evidenceRefs: expect.arrayContaining([
+        expect.stringMatching(/^runtime\/states\/.+editor-add-keyform-grid2d-final.+\.runtime-state\.json$/),
+        expect.stringMatching(/^runtime\/state-sequences\/.+editor-add-keyform-grid2d\.runtime-state-sequence\.json$/),
+        `operations/log.jsonl#${GRID2D_KEYFORM_OPERATION_ID}`
+      ]),
+      payload: {
+        operationResult: {
+          status: "committed",
+          operationId: GRID2D_KEYFORM_OPERATION_ID,
+          generatedRuntimeStateRefs: [
+            expect.stringMatching(/editor-add-keyform-grid2d-final/)
+          ],
+          generatedRuntimeStateSequenceRefs: [
+            expect.stringMatching(/editor-add-keyform-grid2d\.runtime-state-sequence\.json$/)
+          ],
+          generatedValidationReportIds: [
+            "val_editor_ai_add_keyform_grid_body_baseline",
+            "val_editor_ai_add_keyform_grid_body_candidate"
+          ]
+        }
+      }
+    });
+
+    const commitRuntimeDiff = gridCommitResponse.runtimeDiff;
+    const commitOperationResult = gridCommitResponse.operationResult;
+    if (commitRuntimeDiff === undefined || commitOperationResult === undefined) {
+      throw new Error("Committed AI addKeyformGrid2d response should expose runtime evidence.");
+    }
+
+    expect(commitRuntimeDiff.parameterChanges).toEqual([]);
+    expect(commitRuntimeDiff.drawableChanges).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        boundsChanged: true
+      })
+    ]);
+    expect(commitRuntimeDiff.drawableRuntimeStateChanges).toEqual([]);
+    expect(commitRuntimeDiff.drawListChanges).toEqual([]);
+    expect(commitOperationResult.generatedRuntimeSnapshotIds).toEqual(
+      expect.arrayContaining([commitRuntimeDiff.beforeSnapshotId, commitRuntimeDiff.afterSnapshotId])
+    );
+    const expectedRuntimeEvidenceRefs = [
+      ...commitOperationResult.generatedRuntimeStateRefs,
+      ...commitOperationResult.generatedRuntimeStateSequenceRefs,
+      createRuntimeSnapshotArtifactPath(commitRuntimeDiff.beforeSnapshotId),
+      createRuntimeSnapshotArtifactPath(commitRuntimeDiff.afterSnapshotId),
+      `operations/log.jsonl#${GRID2D_KEYFORM_OPERATION_ID}`
+    ];
+    expect(gridCommitResponse.evidenceRefs).toEqual(
+      expect.arrayContaining(expectedRuntimeEvidenceRefs)
+    );
+
+    const latestPersistenceResult = workflow.latestSessionPersistenceResult;
+    if (latestPersistenceResult === null) {
+      throw new Error("Committed AI addKeyformGrid2d should persist generated runtime artifacts.");
+    }
+
+    const candidateSnapshot = parseRuntimeSnapshotArtifact(
+      latestPersistenceResult.packageFileSet,
+      commitRuntimeDiff.afterSnapshotId
+    );
+    const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
+
+    expect(candidateSnapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: GRID2D_KEYFORM_SET_ID,
+        evaluator: "parameter-grid-2d-v1",
+        sampledCoordinates: {
+          [GRID_YAW_PARAMETER_ID]: -1,
+          [GRID_PITCH_PARAMETER_ID]: -1
+        },
+        target: "mesh:mesh_body.vertices",
+        samplingStatus: "exact",
+        statePatch: [
+          { x: -2, y: 0 },
+          { x: 32, y: 0 },
+          { x: 0, y: 32 }
+        ]
+      })
+    ]);
+    expect(candidateDrawable).toMatchObject({
+      bounds: { x: -2, y: 0, width: 66, height: 64 },
+      vertexHash: commitRuntimeDiff.drawableChanges[0]?.vertexHashAfter
+    });
+    expect(workflow.state.revision.packageRevision).toBe(3);
+    expect(workflow.state.operationLog.entryCount).toBe(3);
+    expect(workflow.aiCommandHost.transcript.entries).toContainEqual(
+      expect.objectContaining({
+        entryType: "approval",
+        dryRunCommandId: "cmd_ai_dry_run_grid2d_keyform",
+        approvalStatus: "approved",
+        operationId: GRID2D_KEYFORM_OPERATION_ID
+      })
+    );
+    expect(workflow.aiCommandHost.transcript.entries).toContainEqual(
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_ai_commit_grid2d_keyform",
+        command: "commitOperation",
+        status: "ok",
+        operationId: GRID2D_KEYFORM_OPERATION_ID,
+        evidenceRefs: expect.arrayContaining(expectedRuntimeEvidenceRefs)
+      })
+    );
+
+    const operationLogResponse = await workflow.aiCommandHost.execute(
+      createAiRequest({
+        commandId: "cmd_ai_get_grid2d_operation_log",
+        command: "getOperationLog",
+        capabilities: ["read"],
+        payload: {
+          operationIds: [GRID2D_KEYFORM_OPERATION_ID],
+          targetIds: [GRID2D_KEYFORM_SET_ID],
+          surface: "structuredApi"
+        }
+      })
+    );
+
+    expect(operationLogResponse).toMatchObject({
+      status: "ok",
+      command: "getOperationLog"
+    });
+    const operationLogEntries = asArray(asRecord(operationLogResponse.payload)["entries"]);
+    expect(operationLogEntries).toHaveLength(1);
+    const gridOperationLogEntry = asRecord(operationLogEntries[0]);
+
+    expect(gridOperationLogEntry).toMatchObject({
+      operationId: GRID2D_KEYFORM_OPERATION_ID,
+      actor: "ai",
+      surface: "structuredApi",
+      operationType: "addKeyformGrid2d",
+      targetIds: [
+        GRID2D_KEYFORM_SET_ID,
+        "mesh_body",
+        GRID_YAW_PARAMETER_ID,
+        GRID_PITCH_PARAMETER_ID
+      ],
+      validationReportIds: [
+        "val_editor_ai_add_keyform_grid_body_baseline",
+        "val_editor_ai_add_keyform_grid_body_candidate"
+      ],
+      payload: {
+        operationType: "addKeyformGrid2d",
+        payload: {
+          target: {
+            kind: "mesh",
+            id: "mesh_body"
+          },
+          parameterX: GRID_YAW_PARAMETER_ID,
+          parameterY: GRID_PITCH_PARAMETER_ID
+        }
+      }
+    });
+    expect(asArray(gridOperationLogEntry["runtimeSnapshotIds"])).toEqual(
+      expect.arrayContaining([commitRuntimeDiff.beforeSnapshotId, commitRuntimeDiff.afterSnapshotId])
+    );
+    expect(asRecord(gridOperationLogEntry["result"])).toMatchObject({
+      operationId: GRID2D_KEYFORM_OPERATION_ID,
+      status: "committed",
+      modelDiff: {
+        added: [{ kind: "keyformSet", id: GRID2D_KEYFORM_SET_ID }]
+      },
+      runtimeDiff: {
+        drawableChanges: [
+          expect.objectContaining({
+            drawableId: "draw_body",
+            boundsChanged: true
+          })
+        ]
+      }
+    });
+
+    workflow.saveProject();
+    const reloadedWorkflow = createWorkflow(storage);
+    const loadResult = reloadedWorkflow.loadProject();
+
+    expect(loadResult.status).toBe("loaded");
+    expect(reloadedWorkflow.aiCommandHost.transcript.entries).toContainEqual(
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_ai_commit_grid2d_keyform",
+        command: "commitOperation",
+        status: "ok",
+        operationId: GRID2D_KEYFORM_OPERATION_ID,
+        evidenceRefs: expect.arrayContaining(expectedRuntimeEvidenceRefs)
+      })
+    );
+  });
 });
 
 const dryRunApproveAndCommitAiParameter = async (
@@ -347,6 +612,72 @@ const dryRunApproveAndCommitAiParameter = async (
   expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
     BODY_YAW_PARAMETER_ID
   ]);
+};
+
+const dryRunApproveAndCommitAiGridParameter = async (
+  workflow: ReturnType<typeof createWorkflow>,
+  input: {
+    readonly name: "grid_yaw" | "grid_pitch";
+    readonly parameterId: typeof GRID_YAW_PARAMETER_ID | typeof GRID_PITCH_PARAMETER_ID;
+    readonly displayName: string;
+  }
+): Promise<void> => {
+  const dryRunCommandId = `cmd_ai_dry_run_${input.name}`;
+  const operationId = `op_ai_create_parameter_${input.name}`;
+
+  const dryRunResponse = await workflow.aiCommandHost.execute(
+    createAiRequest({
+      commandId: dryRunCommandId,
+      command: "dryRunOperation",
+      capabilities: ["dryRunEdit"],
+      payload: createAiCreateGridParameterOperation({
+        ...input,
+        dryRun: true,
+        basePackageRevision: workflow.state.revision.packageRevision
+      })
+    })
+  );
+
+  expect(dryRunResponse).toMatchObject({
+    status: "ok",
+    payload: {
+      operationResult: {
+        status: "dry_run",
+        operationId
+      }
+    }
+  });
+
+  workflow.aiCommandHost.approvalPolicy.approveDryRunCommand({
+    dryRunCommandId,
+    operationId
+  });
+
+  const commitResponse = await workflow.aiCommandHost.execute(
+    createAiRequest({
+      commandId: `cmd_ai_commit_${input.name}`,
+      command: "commitOperation",
+      capabilities: ["commitWithApproval"],
+      payload: {
+        approvedDryRunCommandId: dryRunCommandId,
+        operation: createAiCreateGridParameterOperation({
+          ...input,
+          dryRun: false,
+          basePackageRevision: workflow.state.revision.packageRevision
+        })
+      }
+    })
+  );
+
+  expect(commitResponse).toMatchObject({
+    status: "ok",
+    payload: {
+      operationResult: {
+        status: "committed",
+        operationId
+      }
+    }
+  });
 };
 
 const createAiRequest = (input: {
@@ -441,6 +772,108 @@ const createAiAddKeyformOperation = (input: {
         ],
         valueSchemaHint: "mesh.vertices"
       }
+    }
+  });
+
+const createAiCreateGridParameterOperation = (input: {
+  readonly name: "grid_yaw" | "grid_pitch";
+  readonly parameterId: typeof GRID_YAW_PARAMETER_ID | typeof GRID_PITCH_PARAMETER_ID;
+  readonly displayName: string;
+  readonly dryRun: boolean;
+  readonly basePackageRevision: number;
+}) =>
+  OperationRequestSchema.parse({
+    schemaVersion: "operation-request-v1",
+    operationId: `op_ai_create_parameter_${input.name}`,
+    actor: "ai",
+    surface: "structuredApi",
+    dryRun: input.dryRun,
+    basePackageRevision: input.basePackageRevision,
+    idempotencyKey: `ai-create-parameter-${input.name}`,
+    trace: {
+      relatedAC: ["AC-AI-006", "AC-MVP-014"],
+      relatedScenarios: ["SC-AGENT-002"]
+    },
+    operationType: "createParameter",
+    payload: {
+      parameterId: input.parameterId,
+      displayName: input.displayName,
+      semanticRole: "body",
+      projectPresetAlias: `private-ai-${input.name.replace("_", "-")}-control`,
+      valueSource: "authoredInput",
+      min: -1,
+      max: 1,
+      default: 0,
+      recommendedUiStep: 0.01
+    }
+  });
+
+const createAiAddKeyformGrid2dOperation = (input: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision: number;
+}) =>
+  OperationRequestSchema.parse({
+    schemaVersion: "operation-request-v1",
+    operationId: GRID2D_KEYFORM_OPERATION_ID,
+    actor: "ai",
+    surface: "structuredApi",
+    dryRun: input.dryRun,
+    basePackageRevision: input.basePackageRevision,
+    idempotencyKey: "ai-add-keyform-grid2d-body",
+    trace: {
+      relatedAC: ["AC-AI-006", "AC-PARAM-005", "AC-MVP-014"],
+      relatedScenarios: ["SC-AGENT-002", "SC-PARAM-004"]
+    },
+    operationType: "addKeyformGrid2d",
+    payload: {
+      target: {
+        kind: "mesh",
+        id: "mesh_body"
+      },
+      targetProperty: "vertices",
+      parameterX: GRID_YAW_PARAMETER_ID,
+      parameterY: GRID_PITCH_PARAMETER_ID,
+      evaluator: "parameter-grid-2d-v1",
+      interpolation: "bilinear-grid-v1",
+      clampPolicy: "clamp-to-parameter-range",
+      keys: [
+        {
+          x: -1,
+          y: -1,
+          statePatch: [
+            { x: -2, y: 0 },
+            { x: 32, y: 0 },
+            { x: 0, y: 32 }
+          ]
+        },
+        {
+          x: -1,
+          y: 1,
+          statePatch: [
+            { x: -1, y: 0 },
+            { x: 34, y: 0 },
+            { x: 0, y: 32 }
+          ]
+        },
+        {
+          x: 1,
+          y: -1,
+          statePatch: [
+            { x: 1, y: 0 },
+            { x: 34, y: 0 },
+            { x: 0, y: 32 }
+          ]
+        },
+        {
+          x: 1,
+          y: 1,
+          statePatch: [
+            { x: 2, y: 0 },
+            { x: 36, y: 0 },
+            { x: 0, y: 32 }
+          ]
+        }
+      ]
     }
   });
 

@@ -39,10 +39,86 @@ describe("runtime snapshot comparison", () => {
         vertexHashAfter: "hash_same"
       }
     ]);
+    expect(result.diff.drawableRuntimeStateChanges).toEqual([
+      {
+        drawableId: "draw_body",
+        opacityBefore: 1,
+        opacityAfter: 0.5,
+        visibleBefore: true,
+        visibleAfter: false,
+        baseDrawOrderBefore: 0,
+        baseDrawOrderAfter: 2,
+        evaluatedDrawOrderBefore: 0,
+        evaluatedDrawOrderAfter: 2
+      }
+    ]);
+    expect(result.diff.drawListChanges).toEqual([
+      {
+        before: ["draw_body"],
+        after: [],
+        membershipChanged: true,
+        orderChanged: false,
+        positionChanges: [
+          {
+            drawableId: "draw_body",
+            beforeIndex: 0
+          }
+        ]
+      }
+    ]);
     expect(result.diff.parameterChanges).toContainEqual({
       path: "/drawList",
       before: ["draw_body"],
       after: []
+    });
+  });
+
+  it("observes draw list order changes through a dedicated field", () => {
+    const before = createSnapshot({
+      snapshotId: "snap_compare_order_before",
+      opacity: 1,
+      visible: true,
+      baseDrawOrder: 0,
+      evaluatedDrawOrder: 0,
+      drawList: ["draw_body", "draw_head"]
+    });
+    const after = createSnapshot({
+      snapshotId: "snap_compare_order_after",
+      opacity: 1,
+      visible: true,
+      baseDrawOrder: 0,
+      evaluatedDrawOrder: 0,
+      drawList: ["draw_head", "draw_body"]
+    });
+
+    const result = compareRuntimeSnapshots(before, after);
+
+    expect(result.equivalent).toBe(false);
+    expect(result.diff.drawableRuntimeStateChanges).toEqual([]);
+    expect(result.diff.drawListChanges).toEqual([
+      {
+        before: ["draw_body", "draw_head"],
+        after: ["draw_head", "draw_body"],
+        membershipChanged: false,
+        orderChanged: true,
+        positionChanges: [
+          {
+            drawableId: "draw_body",
+            beforeIndex: 0,
+            afterIndex: 1
+          },
+          {
+            drawableId: "draw_head",
+            beforeIndex: 1,
+            afterIndex: 0
+          }
+        ]
+      }
+    ]);
+    expect(result.diff.parameterChanges).toContainEqual({
+      path: "/drawList",
+      before: ["draw_body", "draw_head"],
+      after: ["draw_head", "draw_body"]
     });
   });
 });
