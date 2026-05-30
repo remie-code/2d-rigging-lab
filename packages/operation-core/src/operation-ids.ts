@@ -1,15 +1,21 @@
 import {
+  DrawableIdSchema,
   KeyformSetIdSchema,
+  MeshIdSchema,
   OperationIdSchema,
   ParameterIdSchema,
   ProvenanceIdSchema,
+  TextureIdSchema,
   TransactionIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
+  DrawableId,
   KeyformSetId,
+  MeshId,
   OperationId,
   ParameterId,
   ProvenanceId,
+  TextureId,
   TransactionId
 } from "@private-2d-rigging-lab/contracts";
 
@@ -26,6 +32,15 @@ export const createProvenanceId = (operationId: OperationId): ProvenanceId =>
 
 export const createParameterIdFromDisplayName = (displayName: string): ParameterId =>
   ParameterIdSchema.parse(`param_${sanitizeIdToken(displayName)}`);
+
+export const createDrawableIdFromDisplayName = (displayName: string): DrawableId =>
+  DrawableIdSchema.parse(`draw_${sanitizeIdToken(displayName)}`);
+
+export const createMeshIdFromDrawableId = (drawableId: DrawableId): MeshId =>
+  MeshIdSchema.parse(`mesh_${stripIdPrefix(drawableId, "draw_")}`);
+
+export const createTextureIdFromDrawableId = (drawableId: DrawableId): TextureId =>
+  TextureIdSchema.parse(`tex_${stripIdPrefix(drawableId, "draw_")}`);
 
 export const createKeyformSetIdFromOperationRequest = (request: OperationRequestDto): KeyformSetId => {
   if (request.operationType === "addKeyform") {
@@ -61,6 +76,18 @@ const operationToken = (request: OperationRequestDto): string => {
     return `create_parameter_${sanitizeIdToken(
       request.payload.parameterId?.replace(/^param_/, "") ?? request.payload.displayName
     )}`;
+  }
+
+  if (request.operationType === "createDrawable") {
+    return `create_drawable_${sanitizeIdToken(request.payload.displayName)}`;
+  }
+
+  if (request.operationType === "generateMesh") {
+    return `generate_mesh_${[
+      stripIdPrefix(request.payload.drawableId, "draw_"),
+      request.payload.method,
+      request.payload.densityHint ?? "default"
+    ].map(sanitizeIdToken).join("_")}`;
   }
 
   if (request.operationType === "addKeyform" || request.operationType === "addKeyformGrid2d") {

@@ -82,10 +82,17 @@ export const compareRuntimeSnapshots = (
         Math.abs(beforeDrawable.bounds.height - afterDrawable.bounds.height) > policy.boundsEpsilon);
     const runtimeStateChanged =
       beforeDrawable !== undefined && drawableRuntimeStateChanged(beforeDrawable, afterDrawable, policy);
-    if (
-      beforeDrawable === undefined ||
-      (beforeDrawable.vertexHash === afterDrawable.vertexHash && !boundsChanged && !runtimeStateChanged)
-    ) {
+    if (beforeDrawable === undefined) {
+      return [
+        {
+          drawableId: afterDrawable.drawableId,
+          boundsChanged: false,
+          vertexHashAfter: afterDrawable.vertexHash
+        }
+      ];
+    }
+
+    if (beforeDrawable.vertexHash === afterDrawable.vertexHash && !boundsChanged && !runtimeStateChanged) {
       return [];
     }
 

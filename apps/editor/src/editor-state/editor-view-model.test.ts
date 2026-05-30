@@ -1,4 +1,12 @@
 import { describe, expect, it } from "vitest";
+import {
+  DrawableIdSchema,
+  MeshIdSchema,
+  PartIdSchema,
+  ProvenanceIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema
+} from "@private-2d-rigging-lab/contracts";
 
 import {
   applyCommittedOperationSummary,
@@ -20,11 +28,20 @@ describe("editor semantic state view model", () => {
       packageRevisionLabel: "Package r0 / authoring r0",
       isPackageLoaded: false,
       parameterCountLabel: "0 parameters",
+      drawableCountLabel: "0 drawables",
       canSubmitCreateParameter: false,
+      canSubmitCreateDrawable: false,
       lastOperationLabel: "No operation committed",
       operationLogLabel: "0 operations",
       generatedEvidenceLabel: "0 runtime / 0 validation artifacts",
       reloadLabel: "Not reloaded"
+    });
+    expect(viewModel.drawableAuthoring).toMatchObject({
+      hasDrawables: false,
+      drawableCountLabel: "0 drawables",
+      canSubmitCreateDrawable: false,
+      defaultDisplayName: "Generated Drawable",
+      resultLabel: "Drawable preset ready"
     });
   });
 
@@ -121,7 +138,7 @@ describe("editor semantic state view model", () => {
       lastOperationLabel: "createParameter committed",
       operationLogLabel: "1 operation",
       generatedEvidenceLabel: "2 runtime / 2 validation artifacts",
-      reloadLabel: "Reloaded r1 with 1 parameter"
+      reloadLabel: "Reloaded r1 with 1 parameter / 0 drawables"
     });
     expect(viewModel.previewControls).toMatchObject({
       hasParameters: true,
@@ -142,6 +159,122 @@ describe("editor semantic state view model", () => {
           rangeLabel: "0 to 1",
           defaultValueLabel: "Default 0",
           disabledMessage: null
+        }
+      ]
+    });
+  });
+
+  it("projects drawable list and create drawable defaults for workflow UI", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_drawable",
+        packageDisplayName: "Drawable Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 0,
+        authoringRevision: 0
+      },
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: [DrawableIdSchema.parse("draw_body")]
+        }
+      ],
+      sourceAssets: [
+        {
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          kind: "generated-fixture-v1",
+          filePath: "assets/sources/generated/body.json",
+          contentHash: "sha256:body",
+          importProfile: "split-png-fallback-v1",
+          layers: [
+            {
+              sourceLayerId: "layer_body",
+              sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+              originalName: "Body",
+              normalizedName: "body",
+              groupPath: ["Root"],
+              bounds: { x: 10, y: 12, width: 34, height: 56 },
+              visibleInSource: true,
+              opacityInSource: 1,
+              role: "editableLayer",
+              unsupportedFeatures: [],
+              mappedDrawableIds: [DrawableIdSchema.parse("draw_body")]
+            }
+          ],
+          diagnostics: []
+        }
+      ],
+      canvasSize: { width: 128, height: 128 },
+      drawables: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          displayName: "Body",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          textureId: TextureIdSchema.parse("tex_body"),
+          meshId: MeshIdSchema.parse("mesh_body"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ],
+      meshes: [
+        {
+          meshId: MeshIdSchema.parse("mesh_body"),
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          vertices: [
+            { x: 10, y: 12 },
+            { x: 44, y: 12 },
+            { x: 10, y: 68 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 }
+          ],
+          triangles: [[0, 1, 2]],
+          vertexStableIds: ["v0", "v1", "v2"],
+          bounds: { x: 10, y: 12, width: 34, height: 56 },
+          generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ]
+    });
+    const viewModel = projectEditorWorkflowViewModel(state);
+
+    expect(state.pendingCreateDrawable).toMatchObject({
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 10, y: 12, width: 34, height: 56 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+    expect(viewModel).toMatchObject({
+      drawableCountLabel: "1 drawable",
+      canSubmitCreateDrawable: true
+    });
+    expect(viewModel.drawableAuthoring).toMatchObject({
+      hasDrawables: true,
+      drawableCountLabel: "1 drawable",
+      canSubmitCreateDrawable: true,
+      sourceLabel: "src_generated / layer_body",
+      partLabel: "part_root",
+      boundsLabel: "10, 12 / 34 x 56",
+      meshMethodLabel: "auto-grid-v1 / medium",
+      drawables: [
+        {
+          drawableId: "draw_body",
+          displayName: "Body",
+          meshId: "mesh_body",
+          visible: true,
+          baseDrawOrderLabel: "Draw order 0",
+          meshSummaryLabel: "3 vertices / 1 triangles",
+          boundsLabel: "10, 12 / 34 x 56"
         }
       ]
     });

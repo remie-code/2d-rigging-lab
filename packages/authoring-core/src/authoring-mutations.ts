@@ -7,7 +7,13 @@ import { hasParameter } from "./graph-selectors.js";
 
 export type AuthoringMutationErrorCode =
   | "duplicate_parameter"
+  | "duplicate_drawable"
+  | "duplicate_mesh"
   | "duplicate_keyform_set"
+  | "missing_part"
+  | "missing_source_asset"
+  | "missing_drawable"
+  | "missing_mesh"
   | "missing_parameter"
   | "missing_keyform_target"
   | "unsupported_keyform_target_property"

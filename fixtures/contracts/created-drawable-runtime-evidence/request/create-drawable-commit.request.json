@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_fixture_create_drawable_runtime_oracle",
+  "actor": "human",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "idempotencyKey": "fixture-create-drawable-runtime-oracle",
+  "operationType": "createDrawable",
+  "payload": {
+    "sourceAssetId": "src_generated",
+    "sourceLayerId": "layer_body",
+    "partId": "part_root",
+    "displayName": "Runtime Oracle",
+    "initialBounds": {
+      "x": 48,
+      "y": 16,
+      "width": 24,
+      "height": 24
+    }
+  }
+}

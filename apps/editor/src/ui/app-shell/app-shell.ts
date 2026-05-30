@@ -6,6 +6,7 @@ import {
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
 import type { EditorWorkflowPersistenceResult } from "../../editor-workflow/index.js";
 import type {
+  EditorCreateDrawablePresetCommand,
   EditorCreateParameterCommand,
   EditorSessionPersistenceResult
 } from "../../editor-session/index.js";
@@ -15,6 +16,7 @@ import {
 } from "../evidence-panel/index.js";
 import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
 import { createAiTranscriptPanel } from "../ai-transcript/index.js";
+import { createDrawableAuthoringPanel } from "../drawable-authoring/index.js";
 import {
   createPackageFileSetPanel,
   createReloadSummaryPanel
@@ -33,6 +35,7 @@ export interface EditorAppShellOptions {
   readonly latestPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
+  readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
@@ -106,6 +109,11 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     }),
     createOperationStatusPanel(options.state, options.viewModel)
   );
+  const drawableAuthoringPanel = createDrawableAuthoringPanel({
+    state: options.state,
+    viewModel: options.viewModel,
+    onCommitCreateDrawable: options.onCommitCreateDrawablePreset
+  });
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
     preview: options.previewProjection,
@@ -146,8 +154,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
 
   workspace.append(
     parametersPanel,
-    operationPanel,
     previewPanel,
+    operationPanel,
+    drawableAuthoringPanel,
     projectPersistencePanel,
     aiApprovalPanel,
     aiTranscriptPanel,

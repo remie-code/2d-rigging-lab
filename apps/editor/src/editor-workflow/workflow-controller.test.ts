@@ -38,6 +38,88 @@ describe("editor workflow controller", () => {
     );
   });
 
+  it("commits a generated drawable preset and restores it after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const commit = first.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(commit.status).toBe("committed");
+    expect(commit.finalPersistenceResult.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(first.state.operationLog.entryCount).toBe(2);
+    expect(first.state.drawables).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        drawableId: "draw_workflow_star",
+        displayName: "Workflow Star",
+        meshId: "mesh_workflow_star",
+        vertexCount: 4,
+        triangleCount: 2
+      })
+    ]));
+    expect(first.viewModel.drawableAuthoring).toMatchObject({
+      canSubmitCreateDrawable: true,
+      drawableCountLabel: "2 drawables",
+      resultLabel: "Drawable preset committed"
+    });
+    expect(first.previewProjection?.drawables.map((drawable) => drawable.drawableId)).toContain(
+      "draw_workflow_star"
+    );
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(saved.snapshot.packageFilePaths).toEqual(expect.arrayContaining([
+      "model/drawables.json",
+      "model/meshes.json",
+      "operations/log.jsonl"
+    ]));
+    expect(loaded.status).toBe("loaded");
+    expect(drawableIds(second)).toEqual(expect.arrayContaining(["draw_workflow_star"]));
+    expect(second.state.operationLog.entryCount).toBe(2);
+    expect(second.state.reload).toMatchObject({
+      status: "reloaded",
+      packageRevision: 2,
+      drawableCount: 2,
+      drawableIds: expect.arrayContaining(["draw_workflow_star"])
+    });
+  });
+
+  it("keeps committed drawable state visible when a duplicate preset create is rejected", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+    const command = createDrawablePresetCommand("star");
+
+    workflow.commitCreateDrawablePreset(command);
+    const rejected = workflow.commitCreateDrawablePreset({
+      ...command,
+      createOperationId: "op_workflow_create_drawable_star_duplicate",
+      generateOperationId: "op_workflow_generate_mesh_star_duplicate"
+    });
+
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.generateMesh).toBeNull();
+    expect(workflow.state.pendingCreateDrawable.status).toBe("rejected");
+    expect(workflow.state.drawables).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        drawableId: "draw_workflow_star",
+        meshId: "mesh_workflow_star"
+      })
+    ]));
+    expect(workflow.state.operationLog.entryCount).toBe(2);
+    expect(workflow.viewModel.drawableAuthoring).toMatchObject({
+      drawableCountLabel: "2 drawables",
+      resultLabel: "Drawable preset rejected with 2 diagnostics"
+    });
+    expect(workflow.previewProjection?.drawables.map((drawable) => drawable.drawableId)).toContain(
+      "draw_workflow_star"
+    );
+  });
+
   it("appends operation log entries after loading a persisted project", () => {
     const storage = createMemoryStorage();
     const first = createWorkflow(storage);
@@ -405,6 +487,10 @@ const parameterIds = (
   workflow: ReturnType<typeof createEditorWorkflowController>
 ): readonly string[] => workflow.state.parameters.map((parameter) => parameter.parameterId);
 
+const drawableIds = (
+  workflow: ReturnType<typeof createEditorWorkflowController>
+): readonly string[] => workflow.state.drawables.map((drawable) => drawable.drawableId);
+
 const createParameterCommand = (name: "smile" | "brow") => ({
   operationId: `op_workflow_create_parameter_${name}`,
   parameterId: `param_workflow_${name}`,
@@ -415,6 +501,18 @@ const createParameterCommand = (name: "smile" | "brow") => ({
   max: 1,
   defaultValue: 0,
   recommendedUiStep: 0.01
+} as const);
+
+const createDrawablePresetCommand = (name: "star") => ({
+  createOperationId: `op_workflow_create_drawable_${name}`,
+  generateOperationId: `op_workflow_generate_mesh_${name}`,
+  displayName: `Workflow ${capitalize(name)}`,
+  sourceAssetId: "src_generated",
+  sourceLayerId: "layer_body",
+  partId: "part_root",
+  initialBounds: { x: 16, y: 24, width: 24, height: 24 },
+  meshMethod: "auto-grid-v1",
+  densityHint: "low"
 } as const);
 
 const capitalize = (text: string): string =>

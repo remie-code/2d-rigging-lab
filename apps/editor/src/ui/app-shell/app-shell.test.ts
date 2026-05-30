@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
 import {
   createInitialEditorSemanticState,
+  createDrawableRowTestId,
   createPreviewParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
@@ -29,6 +30,22 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.previewVisual)?.textContent).not.toContain("No runtime drawables");
     expect(findByTestId(shell, createPreviewParameterControlTestId("param_preview_body_yaw"))?.getAttribute("aria-label")).toBe(
       "Preview Body Yaw"
+    );
+  });
+
+  it("renders drawable authoring alongside the embedded preview", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.previewPanel)?.textContent).toContain("Preview");
+    expect(findByTestId(shell, editorTestIds.drawableAuthoringPanel)?.textContent).toContain("Drawable Authoring");
+    expect(findByTestId(shell, createDrawableRowTestId("draw_body"))?.textContent).toContain("Body");
+    expect(findByTestId(shell, createDrawableRowTestId("draw_workflow_star"))?.textContent).toContain(
+      "Workflow Star"
+    );
+    expect(findByTestId(shell, editorTestIds.drawableResult)?.textContent).toContain(
+      "Drawable preset committed"
     );
   });
 
@@ -97,6 +114,7 @@ describe("editor app shell preview panel", () => {
       latestPersistenceResult: null,
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
+      onCommitCreateDrawablePreset() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -122,6 +140,7 @@ describe("editor app shell preview panel", () => {
       latestPersistenceResult: null,
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
+      onCommitCreateDrawablePreset() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -151,6 +170,7 @@ const renderShell = (
     latestPersistenceResult: workflow.latestSessionPersistenceResult,
     latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
     onCommitCreateParameter() {},
+    onCommitCreateDrawablePreset() {},
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
@@ -170,6 +190,18 @@ const createWorkflow = () =>
     }),
     now: () => new Date("2026-05-30T00:00:00.000Z")
   });
+
+const createDrawablePresetCommand = (name: "star") => ({
+  createOperationId: `op_workflow_create_drawable_${name}`,
+  generateOperationId: `op_workflow_generate_mesh_${name}`,
+  displayName: `Workflow ${name.slice(0, 1).toUpperCase()}${name.slice(1)}`,
+  sourceAssetId: "src_generated",
+  sourceLayerId: "layer_body",
+  partId: "part_root",
+  initialBounds: { x: 16, y: 24, width: 24, height: 24 },
+  meshMethod: "auto-grid-v1",
+  densityHint: "low"
+} as const);
 
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);

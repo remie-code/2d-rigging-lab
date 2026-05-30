@@ -1,12 +1,24 @@
 import { createPageSession } from "./page-session.mjs";
 import {
   createAiTranscriptEventRowTestId,
+  createDrawableRowTestId,
   createPreviewParameterControlTestId,
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
+const smokeDrawable = {
+  displayName: "Wave 15 Smoke Drawable",
+  drawableId: "draw_wave_15_smoke_drawable",
+  meshId: "mesh_wave_15_smoke_drawable",
+  bounds: {
+    x: 84,
+    y: 24,
+    width: 28,
+    height: 36
+  }
+};
 
 export const editorSmokeViewports = [
   {
@@ -38,13 +50,18 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertHorizontalOverflow(page, `${viewport.name} initial`);
     await runAiApprovalFlow(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
-    await saveProject(page);
+    const drawableEvidence = await runCreateDrawableWorkflow(page, viewport);
+    await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
+    await saveProject(page, {
+      expectedOperationLogLineCount: 3,
+      expectedDrawableId: smokeDrawable.drawableId
+    });
     await reloadProjectFromStorage(page);
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
 
-    return { viewport: viewport.name, previewEvidence };
+    return { viewport: viewport.name, previewEvidence, drawableEvidence };
   } finally {
     await page.close();
   }
@@ -140,6 +157,63 @@ const runPreviewWorkflow = async (page, viewport) => {
   };
 };
 
+const runCreateDrawableWorkflow = async (page, viewport) => {
+  await waitForTestId(page, editorTestIds.drawableAuthoringPanel);
+  await waitForTestId(page, editorTestIds.drawableCreateForm);
+  await waitForTestId(page, editorTestIds.drawableCreateSubmit);
+  await waitForTestId(page, editorTestIds.drawableList);
+
+  await assertDrawableAuthoringPanelReachable(page, viewport);
+  await assertDrawableAuthoringAccessibleNames(page);
+  await assertTextIncludes(page, editorTestIds.drawableList, "Body");
+  await assertTextIncludes(page, editorTestIds.drawableList, "draw_body");
+
+  await setCreateDrawableFormValues(page, smokeDrawable);
+  await clickTestId(page, editorTestIds.drawableCreateSubmit);
+
+  await waitForText(page, editorTestIds.drawableResult, "Drawable preset committed");
+  await waitForText(page, editorTestIds.drawableList, smokeDrawable.displayName);
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.drawableId);
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
+  await waitForOperationLogEntryCount(page, 3);
+  await waitForText(page, editorTestIds.operationLogSummary, "createParameter, createDrawable, generateMesh");
+  await waitForText(page, editorTestIds.generatedEvidenceSummary, "Runtime snapshots");
+  await waitForText(page, editorTestIds.generatedEvidenceSummary, "Validation reports");
+  await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
+
+  await page.waitFor(
+    "created drawable appears in preview visual",
+    (ids, drawableId, expectedBounds) => {
+      const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+      const drawable = visual?.querySelector(`[data-drawable-id="${drawableId}"]`);
+      const points = drawable?.getAttribute("points") ?? "";
+
+      return (
+        points.includes(`${expectedBounds.x},${expectedBounds.y}`) &&
+        points.includes(`${expectedBounds.x + expectedBounds.width},${expectedBounds.y + expectedBounds.height}`)
+      );
+    },
+    { timeoutMs: 8_000 },
+    { visual: editorTestIds.previewVisual },
+    smokeDrawable.drawableId,
+    smokeDrawable.bounds
+  );
+
+  const state = await readCreatedDrawableState(page);
+  const screenshot = await page.captureScreenshot(`${viewport.name} drawable authoring smoke`);
+
+  return {
+    viewport: viewport.name,
+    drawableId: state.drawableId,
+    listText: state.listText,
+    previewSummary: state.previewSummary,
+    visualPoints: state.visualPoints,
+    screenshot
+  };
+};
+
 const assertPreviewPanelReachable = async (page, viewport) => {
   const metrics = await page.evaluate((ids) => {
     const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
@@ -229,6 +303,121 @@ const assertPreviewAccessibleNames = async (page) => {
   }
 };
 
+const assertDrawableAuthoringPanelReachable = async (page, viewport) => {
+  const metrics = await page.evaluate((ids) => {
+    const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
+    const form = document.querySelector(`[data-testid="${ids.form}"]`);
+    const submit = document.querySelector(`[data-testid="${ids.submit}"]`);
+
+    if (!(panel instanceof HTMLElement) || !(form instanceof HTMLFormElement) || !(submit instanceof HTMLButtonElement)) {
+      return null;
+    }
+
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const rectVisible = (rect) =>
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.right > 0 &&
+      rect.left < viewportWidth &&
+      rect.bottom > 0 &&
+      rect.top < viewportHeight;
+    const initialPanelRect = panel.getBoundingClientRect();
+    const panelVisibleBeforeScroll = rectVisible(initialPanelRect);
+
+    submit.scrollIntoView({ block: "center", inline: "nearest" });
+
+    const panelRect = panel.getBoundingClientRect();
+    const submitRect = submit.getBoundingClientRect();
+
+    return {
+      panelVisibleBeforeScroll,
+      panelVisible: rectVisible(panelRect),
+      submitVisible: rectVisible(submitRect),
+      panelWidth: panelRect.width,
+      submitWidth: submitRect.width
+    };
+  }, {
+    panel: editorTestIds.drawableAuthoringPanel,
+    form: editorTestIds.drawableCreateForm,
+    submit: editorTestIds.drawableCreateSubmit
+  });
+
+  if (
+    metrics === null ||
+    (!viewport.isMobile && !metrics.panelVisibleBeforeScroll) ||
+    !metrics.panelVisible ||
+    !metrics.submitVisible ||
+    metrics.panelWidth < 1 ||
+    metrics.submitWidth < 1
+  ) {
+    throw new Error(
+      `${viewport.name} drawable authoring panel was not reachable/usable: ${JSON.stringify(metrics)}.`
+    );
+  }
+};
+
+const assertDrawableAuthoringAccessibleNames = async (page) => {
+  const names = await page.evaluate((ids) => {
+    const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
+    const headingId = panel?.getAttribute("aria-labelledby");
+    const form = document.querySelector(`[data-testid="${ids.form}"]`);
+    const submit = document.querySelector(`[data-testid="${ids.submit}"]`);
+    const list = document.querySelector(`[data-testid="${ids.list}"]`);
+    const controlLabels = [...(form?.querySelectorAll("input, select") ?? [])].map((control) => {
+      const label = control.closest("label");
+      const labelText = label === null
+        ? ""
+        : [...label.childNodes]
+            .filter((node) => node.nodeType === Node.TEXT_NODE)
+            .map((node) => node.textContent ?? "")
+            .join("")
+            .trim();
+
+      return {
+        name: control.getAttribute("name") ?? "",
+        label: labelText,
+        tagName: control.tagName.toLowerCase()
+      };
+    });
+
+    return {
+      panelName: headingId === null ? "" : document.getElementById(headingId)?.textContent ?? "",
+      formName: form?.getAttribute("aria-label") ?? "",
+      submitName: submit?.textContent?.trim() ?? "",
+      listName: list?.getAttribute("aria-label") ?? "",
+      controlLabels
+    };
+  }, {
+    panel: editorTestIds.drawableAuthoringPanel,
+    form: editorTestIds.drawableCreateForm,
+    submit: editorTestIds.drawableCreateSubmit,
+    list: editorTestIds.drawableList
+  });
+
+  const expectedControlLabels = [
+    { name: "displayName", label: "Display name", tagName: "input" },
+    { name: "meshMethod", label: "Shape preset", tagName: "select" },
+    { name: "x", label: "X", tagName: "input" },
+    { name: "y", label: "Y", tagName: "input" },
+    { name: "width", label: "Width", tagName: "input" },
+    { name: "height", label: "Height", tagName: "input" }
+  ];
+  const expected = {
+    panelName: "Drawable Authoring",
+    formName: "Create generated drawable",
+    submitName: "Create drawable",
+    listName: "Drawable list",
+    controlLabels: expectedControlLabels
+  };
+
+  if (JSON.stringify(names) !== JSON.stringify(expected)) {
+    throw new Error(
+      `Drawable authoring accessible names mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(names)}.`
+    );
+  }
+};
+
 const readPreviewState = async (page) =>
   page.evaluate((ids) => {
     const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
@@ -267,6 +456,85 @@ const setPreviewSliderValue = async (page, value) => {
   }, {
     slider: createPreviewParameterControlTestId(previewSampleParameterId)
   }, value);
+};
+
+const setCreateDrawableFormValues = async (page, drawable) => {
+  await page.evaluate((ids, input) => {
+    const form = document.querySelector(`[data-testid="${ids.form}"]`);
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error("Drawable create form was missing.");
+    }
+
+    const setValue = (name, value) => {
+      const control = form.elements.namedItem(name);
+
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
+        throw new Error(`Missing drawable create field ${name}.`);
+      }
+
+      control.value = String(value);
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    setValue("displayName", input.displayName);
+    setValue("meshMethod", "auto-grid-v1");
+    setValue("x", input.bounds.x);
+    setValue("y", input.bounds.y);
+    setValue("width", input.bounds.width);
+    setValue("height", input.bounds.height);
+  }, {
+    form: editorTestIds.drawableCreateForm
+  }, drawable);
+};
+
+const readCreatedDrawableState = async (page) =>
+  page.evaluate((ids, drawableId) => {
+    const list = document.querySelector(`[data-testid="${ids.list}"]`);
+    const row = document.querySelector(`[data-testid="${ids.row}"]`);
+    const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+    const summary = document.querySelector(`[data-testid="${ids.summary}"]`);
+    const drawable = visual?.querySelector(`[data-drawable-id="${drawableId}"]`);
+
+    return {
+      drawableId,
+      listText: row?.textContent ?? list?.textContent ?? "",
+      previewSummary: summary?.textContent ?? "",
+      visualPoints: drawable?.getAttribute("points") ?? ""
+    };
+  }, {
+    list: editorTestIds.drawableList,
+    row: createDrawableRowTestId(smokeDrawable.drawableId),
+    visual: editorTestIds.previewVisual,
+    summary: editorTestIds.previewSummary
+  }, smokeDrawable.drawableId);
+
+const assertCreatedDrawableVisibleAfterLoad = async (page) => {
+  await waitForText(page, editorTestIds.drawableResult, "Drawable preset ready");
+  await waitForText(page, editorTestIds.drawableList, smokeDrawable.displayName);
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
+  await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
+  await page.waitFor(
+    "loaded created drawable appears in preview visual",
+    (ids, drawableId, expectedBounds) => {
+      const drawable = document
+        .querySelector(`[data-testid="${ids.visual}"]`)
+        ?.querySelector(`[data-drawable-id="${drawableId}"]`);
+      const points = drawable?.getAttribute("points") ?? "";
+
+      return (
+        points.includes(`${expectedBounds.x},${expectedBounds.y}`) &&
+        points.includes(`${expectedBounds.x + expectedBounds.width},${expectedBounds.y + expectedBounds.height}`)
+      );
+    },
+    { timeoutMs: 8_000 },
+    { visual: editorTestIds.previewVisual },
+    smokeDrawable.drawableId,
+    smokeDrawable.bounds
+  );
 };
 
 const assertInitialAiApprovalRendered = async (page) => {
@@ -357,7 +625,7 @@ const runAiApprovalFlow = async (page) => {
   });
 };
 
-const saveProject = async (page) => {
+const saveProject = async (page, options) => {
   await clickTestId(page, editorTestIds.projectPersistenceSave);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Saved");
 
@@ -387,15 +655,25 @@ const saveProject = async (page) => {
         : [],
       aiCommandTranscriptOperationIds: Array.isArray(project.aiCommandTranscript?.entries)
         ? project.aiCommandTranscript.entries.map((entry) => entry.operationId ?? null)
-        : []
+        : [],
+      generatedArtifactPathCount: Array.isArray(project.generatedArtifactPaths)
+        ? project.generatedArtifactPaths.length
+        : 0,
+      packageText: Array.isArray(project.packageFileSet)
+        ? project.packageFileSet.map((entry) => entry.text).join("\n")
+        : ""
     };
   }, editorProjectStorageKey);
 
   if (
     saved === null ||
     saved.schemaVersion !== "editor-project-persistence-v1" ||
-    saved.operationLogLineCount < 1 ||
+    saved.operationLogLineCount < options.expectedOperationLogLineCount ||
     saved.packageFileCount < 1 ||
+    saved.generatedArtifactPathCount < 1 ||
+    !saved.packageText.includes(options.expectedDrawableId) ||
+    !saved.packageText.includes(smokeDrawable.meshId) ||
+    !saved.packageText.includes(smokeDrawable.displayName) ||
     saved.aiCommandTranscriptSchemaVersion !== "ai-command-transcript-v1" ||
     saved.aiCommandTranscriptEntryCount < 3 ||
     !saved.aiCommandTranscriptEntryIds.includes("cmd_editor_ai_dry_run_create_parameter_r0_1") ||
@@ -417,8 +695,9 @@ const reloadProjectFromStorage = async (page) => {
   await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
   await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
   await waitForText(page, editorTestIds.previewSummary, "0 changes");
-  await waitForOperationLogEntryCount(page, 1);
-  await waitForText(page, editorTestIds.operationLogSummary, "createParameter");
+  await assertCreatedDrawableVisibleAfterLoad(page);
+  await waitForOperationLogEntryCount(page, 3);
+  await waitForText(page, editorTestIds.operationLogSummary, "createParameter, createDrawable, generateMesh");
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
   await waitForText(
@@ -446,6 +725,9 @@ const resetProject = async (page) => {
   await waitForText(page, editorTestIds.packageStatus, "pkg_editor_browser_sample");
   await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
   await waitForText(page, editorTestIds.previewSummary, "0 changes");
+  await waitForText(page, editorTestIds.previewSummary, "1 visible / 1 total");
+  await assertTextIncludes(page, editorTestIds.drawableList, "Body");
+  await assertTextExcludes(page, editorTestIds.drawableList, smokeDrawable.displayName);
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForTestId(page, editorTestIds.aiTranscriptEmpty);
   await assertElementAbsent(page, editorTestIds.aiTranscriptEvents);
@@ -581,5 +863,16 @@ const assertTextIncludes = async (page, testId, expectedText) => {
 
   if (text === null || !text.includes(expectedText)) {
     throw new Error(`Expected ${testId} to include "${expectedText}", received "${text}".`);
+  }
+};
+
+const assertTextExcludes = async (page, testId, excludedText) => {
+  const text = await page.evaluate(
+    (id) => document.querySelector(`[data-testid="${id}"]`)?.textContent ?? null,
+    testId
+  );
+
+  if (text === null || text.includes(excludedText)) {
+    throw new Error(`Expected ${testId} to exclude "${excludedText}", received "${text}".`);
   }
 };

@@ -24,19 +24,19 @@
 | Authoring / operation lifecycle | authoring session、`createParameter`、`addKeyform`、`addKeyformGrid2d`、dry-run / commit、operation log、operation evidence の基盤がある。 | Wave 3、Wave 11、`packages/authoring-core`、`packages/operation-core`。 |
 | Runtime / validation evidence | operation結果にruntime snapshot / validation report / artifact refs を結び、package-relative artifactとしてmaterializeする基盤がある。 | Wave 4-5、`packages/runtime-core`、`packages/validator-core`、`packages/operation-core`。 |
 | Persistence | package file set、operation log JSONL、generated artifact paths、browser-local project save/load/reset、operation log hydration、AI transcript persistence がある。 | Wave 5、Wave 7、Wave 9。OS filesystem / archive import/exportではない。 |
-| Editor UI | Vite + vanilla TypeScript の browser editor があり、sample package、parameter list、`createParameter` form、operation / evidence / package panels、project storage、AI approval / transcript panelsを表示できる。Wave 14で embedded preview panel、preview slider、runtime-projected SVG visual/summaryも実装済み。 | Wave 6-9、Wave 14、`apps/editor`。Wave 14はneeds-fix loop後のfinal verificationまで通過し implementation-proven。 |
+| Editor UI | Vite + vanilla TypeScript の browser editor があり、sample package、parameter list、`createParameter` form、operation / evidence / package panels、project storage、AI approval / transcript panelsを表示できる。Wave 14で embedded preview panel、preview slider、runtime-projected SVG visual/summaryを実装済み。Wave 15で generated drawable / mesh authoring form、drawable list、result summary、preview observation、save/load persistence smokeも実装済み。 | Wave 6-9、Wave 14-15、`apps/editor`。Wave 15はneeds-fix loop後のfinal verificationまで通過し implementation-proven。 |
 | AI command foundation | transport-independent `ai-interface`、in-process editor AI host、dry-run / approval / commit、transcript、`inspectModel` / `inspectTarget` / `validatePackage` read commandsがある。 | Wave 8-10。LLM providerや外部transportは未実装。 |
 | Keyform authoring | `addKeyform` / `addKeyformGrid2d` のoperation handler、authoring mutation、registry/lifecycle、editor evidence、AI `addKeyform` regressionがある。 | Wave 11。 |
 | Keyform runtime evaluation | Wave 12で runtime-visible keyform evaluation foundation が入り、effective parameter resolution、linear 1D / Grid2D sampling、mesh/drawable target application、snapshot `keyformSamples`、runtime-visible evidence fixtureがある。 | Wave 12。重要な到達点。 |
 | Runtime state / deterministic evaluation | initial `RuntimeStateDto`、state compatibility、runtime snapshot、snapshot comparison、dynamics state/evidenceの基礎がある。 | `packages/runtime-core/src/*` の focused inspection。製品UI上の完全なviewer workflowとは別。 |
 | Runtime diff / Grid2D evidence hardening | Wave 13で runtime diff dedicated fields、Grid2D fixture/evidence、diagnostic regressions、AI/editor `addKeyformGrid2d` runtime-visible evidence が pass。 | Wave 13。Editor / viewer 上の visible preview workflow とは別。 |
-| Verification posture | Wave 8-14 は final report上、typecheck / tests / source guard / e2e / diff check / clean review が pass。Wave 14では一度root `pnpm.cmd test` が失敗したが、sample-aware regression needs-fix loop後のfinal rerunで通過。 | 各Wave final report。Wave 14 completion は [waves/wave14/wave14-final-report.md](waves/wave14/wave14-final-report.md) に記録済み。 |
+| Verification posture | Wave 8-15 は final report上、typecheck / tests / source guard / e2e / diff check / clean review が pass。Wave 14では sample-aware regression、Wave 15では operation lifecycle regression の needs-fix loop後にfinal rerunで通過。 | 各Wave final report。Wave 15 completion は [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md) に記録済み。 |
 
 ## 3. Partially Implemented / Foundation Exists But Product Workflow Is Incomplete
 
 | 領域 | あるもの | まだ製品ワークフローとして不足しているもの |
 |---|---|---|
-| GUI authoring全体 | Browser editor、`createParameter`、project persistence、AI approval panels。 | PSD / split PNG import、drawable / texture / part作成、mesh編集、draw order編集、mask/clipping編集、rig control作成、canvas上の直接操作はWave報告からは未完または未検証。 |
+| GUI authoring全体 | Browser editor、`createParameter`、project persistence、AI approval panels、embedded preview、generated drawable / deterministic mesh authoring vertical slice。Wave 15でGUIからrights-clean generated drawable / meshを作成し、preview / persistence / evidenceで確認する一周が implementation-proven。 | PSD / split PNG import、real texture pipeline、part/texture authoring、full mesh editor、draw order editor、mask/clipping editor、rig control authoring、dynamics authoring、canvas上の直接操作は未完または未検証。Wave 15の到達点は generated drawable slice であり、汎用drawable/texture制作環境ではない。 |
 | Private Viewer / editor preview | Runtime core、snapshot/evidence、runtime diff、Grid2D evidenceはある。Wave 14で editor embedded preview panel、preview-only slider、runtime-projected SVG visual/summary、desktop/mobile smoke は implementation-proven。 | 残るviewer gapは、editor内embedded previewではなく、独立した private viewer UI、full renderer / texture pipeline、renderer adapter、demo capture用viewer surface。これらは未完または未検証。 |
 | Rig control | format / graph / runtime graph adapter / keyform target kindとしての基盤はある。 | Wave 12 residualにより、`rigControl` keyform target application は future scope。GUIでのrig control制作も未完または未検証。 |
 | Dynamics | schema、runtime state、snapshot、state compatibility、computed dynamics系の基礎はsource上にある。 | AC-MVP-010/012/013が求める髪・服・小物のMinimum Open Dynamics v1を、GUI authoring -> preview -> viewer -> validator -> diff/evidence で一周した証拠はこのマップ作成時点では未確認。 |
@@ -74,14 +74,14 @@
 
 | 候補 | 目的 | 判断ポイント |
 |---|---|---|
-| Editor / viewer product workflow expansion | MVPの大きな未完領域であるGUI authoringとviewer確認をさらに進める。 | Wave 14後に、drawable/texture/part、mesh、mask/clipping、rig control、standalone viewer/renderer のどれへ進むか。 |
+| Editor / viewer product workflow expansion | Wave 15のgenerated drawable / mesh sliceを足場に、MVPの大きな未完領域であるGUI authoringとviewer確認をさらに進める。 | 次に、rights-clean asset/texture/part flow、mesh editing、draw order editing、mask/clipping、rig control、dynamics、standalone viewer/renderer のどれへ進むか。 |
 | Project import/export wave | browser-local persistenceから、package archive / filesystem import/exportへ広げる。 | MVP評価でbrowser-local storageを十分とみなすか、早めに実ファイルの出入口を作るか。 |
 | AI repair / diff wave | AI assistantを「観測と承認」から「修復候補提示」へ進める。 | 先にruntime/model/validation diff contractを十分に安定させる必要がある。 |
 | Dynamics workflow verification wave | Minimum Open Dynamics v1を、authoring -> runtime -> validator -> evidenceで製品的に証明する。 | 既存sourceのdynamics基盤をどこまでMVP完了証拠として扱えるか、追加実装か検証整理かを先に決める。 |
 
 未決の大きな判断:
 
-- Wave 14後、`Private Viewer` を editor内previewとして段階的に育てるか、別viewer app/surfaceとして切り出すか。
+- Wave 15後、`Private Viewer` を editor内previewとして段階的に育てるか、別viewer app/surfaceとして切り出すか。
 - MVPの次の「一周」証拠を、runtime keyform fixture中心にするか、実際の小さな可動キャラクター制作workflow中心にするか。
 
 Assumptions / uncertainties:

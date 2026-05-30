@@ -18,7 +18,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -56,8 +57,11 @@ input {
 .editor-panel__meta,
 .operation-status__meta,
 .parameter-list__empty,
+.drawable-list__empty,
 .operation-status__empty,
-.create-parameter-form__diagnostics {
+.create-parameter-form__diagnostics,
+.create-drawable-form__diagnostics,
+.drawable-authoring-result__label {
   margin: 0;
 }
 
@@ -185,7 +189,8 @@ input {
   border-radius: 6px;
 }
 
-.create-parameter-form {
+.create-parameter-form,
+.create-drawable-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -203,11 +208,13 @@ input {
 
 .editor-field--wide,
 .create-parameter-form__diagnostics,
+.create-drawable-form__diagnostics,
 .editor-button {
   grid-column: 1 / -1;
 }
 
-.editor-field input {
+.editor-field input,
+.editor-field select {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;
@@ -217,13 +224,15 @@ input {
   border-radius: 6px;
 }
 
-.editor-field input:focus {
+.editor-field input:focus,
+.editor-field select:focus {
   outline: 2px solid #1d7a73;
   outline-offset: 1px;
   border-color: #1d7a73;
 }
 
-.create-parameter-form__diagnostics {
+.create-parameter-form__diagnostics,
+.create-drawable-form__diagnostics {
   min-height: 18px;
   color: #9a4a21;
   font-size: 12px;
@@ -383,6 +392,102 @@ input {
 .operation-status__empty {
   color: #66736f;
   font-size: 12px;
+}
+
+.drawable-authoring-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.drawable-authoring-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.drawable-authoring-summary dt,
+.drawable-authoring-summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.drawable-authoring-summary dt {
+  color: #50615e;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.drawable-authoring-summary dd {
+  color: #263033;
+  font-size: 12px;
+}
+
+.drawable-authoring-result {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: #f8faf9;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.drawable-authoring-result__label {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.drawable-authoring-result__diagnostics {
+  margin: 0;
+  padding-left: 18px;
+  color: #614329;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.drawable-list {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.drawable-list__table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.drawable-list__table th,
+.drawable-list__table td {
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e5e9e6;
+}
+
+.drawable-list__table th {
+  color: #50615e;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f7f8f4;
+}
+
+.drawable-list__table td {
+  overflow-wrap: anywhere;
+}
+
+.drawable-list__empty {
+  padding: 18px;
+  color: #64716d;
+  background: #f7f8f4;
+  border: 1px dashed #c8d0cb;
+  border-radius: 6px;
 }
 
 .preview-panel {
@@ -596,7 +701,59 @@ input {
     content: attr(data-label);
   }
 
-  .create-parameter-form {
+  .drawable-authoring-summary,
+  .create-parameter-form,
+  .create-drawable-form {
     grid-template-columns: 1fr;
+  }
+
+  .drawable-list {
+    overflow-x: visible;
+  }
+
+  .drawable-list__table {
+    min-width: 0;
+  }
+
+  .drawable-list__table,
+  .drawable-list__table thead,
+  .drawable-list__table tbody,
+  .drawable-list__table tr,
+  .drawable-list__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .drawable-list__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .drawable-list__table tr {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #e0e5e1;
+    border-radius: 6px;
+    background: #fbfcfa;
+  }
+
+  .drawable-list__table td {
+    display: grid;
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+    gap: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .drawable-list__table td::before {
+    color: #50615e;
+    font-size: 12px;
+    font-weight: 750;
+    content: attr(data-label);
   }
 }

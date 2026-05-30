@@ -1,5 +1,7 @@
 import { createEmptyAiApprovalState, type AiApprovalState } from "./ai-approval-state.js";
+import { createEmptyDrawableFormState, type CreateDrawableFormState } from "./create-drawable-form-state.js";
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
+import type { DrawableListItemState } from "./drawable-list-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
 import type { OperationResultSummaryState } from "./operation-result-summary.js";
 import { createEmptyOperationLogSummary, type OperationLogSummaryState } from "./operation-log-summary.js";
@@ -16,8 +18,10 @@ export interface EditorSemanticState {
   readonly loadedPackage: LoadedPackageIdentityState | null;
   readonly revision: PackageRevisionState;
   readonly parameters: readonly ParameterListItemState[];
+  readonly drawables: readonly DrawableListItemState[];
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly pendingCreateParameter: CreateParameterFormState;
+  readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly lastOperationResult: OperationResultSummaryState | null;
   readonly operationLog: OperationLogSummaryState;
   readonly generatedEvidence: GeneratedEvidenceSummaryState;
@@ -30,8 +34,10 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   loadedPackage: null,
   revision: emptyPackageRevisionState(),
   parameters: [],
+  drawables: [],
   previewParameters: [],
   pendingCreateParameter: createEmptyParameterFormState(),
+  pendingCreateDrawable: createEmptyDrawableFormState(),
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),

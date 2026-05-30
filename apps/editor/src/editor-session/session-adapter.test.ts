@@ -244,6 +244,124 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits a generated drawable preset through createDrawable then generateMesh", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:30:00.000Z")
+    });
+
+    const result = adapter.commitCreateDrawablePreset({
+      createOperationId: "op_editor_create_drawable_star",
+      generateOperationId: "op_editor_generate_mesh_star",
+      displayName: "Editor Star",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 12, y: 20, width: 40, height: 30 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+
+    expect(result.status).toBe("committed");
+    expect(result.createDrawable.operationResult.status).toBe("committed");
+    expect(result.generateMesh?.operationResult.status).toBe("committed");
+    expect(result.finalPersistenceResult.operationType).toBe("generateMesh");
+    expect(result.finalPersistenceResult.packageRevisionAfterCommit).toBe(2);
+    expect(result.finalPersistenceResult.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(result.finalPersistenceResult.packageFilePaths).toEqual(
+      expect.arrayContaining([
+        "model/drawables.json",
+        "model/meshes.json",
+        "model/draw-order.json",
+        "operations/log.jsonl"
+      ])
+    );
+    expect(result.finalPersistenceResult.drawableIdsAfterReload).toEqual(
+      expect.arrayContaining(["draw_editor_star"])
+    );
+    expect(result.finalPersistenceResult.reloadedDocument.model.drawables.drawables).toContainEqual(
+      expect.objectContaining({
+        drawableId: "draw_editor_star",
+        displayName: "Editor Star",
+        meshId: "mesh_editor_star",
+        partId: "part_root",
+        sourceAssetId: "src_generated"
+      })
+    );
+    expect(result.finalPersistenceResult.reloadedDocument.model.meshes.meshes).toContainEqual(
+      expect.objectContaining({
+        meshId: "mesh_editor_star",
+        drawableId: "draw_editor_star",
+        vertices: expect.arrayContaining([
+          { x: 12, y: 20 },
+          { x: 52, y: 50 }
+        ]),
+        triangles: expect.arrayContaining([[0, 1, 3]])
+      })
+    );
+    expect(result.finalPersistenceResult.generatedArtifactPaths).toEqual(
+      expect.arrayContaining([
+        "validation/reports/val_editor_editor_create_drawable_star_candidate.validation.json",
+        "validation/reports/val_editor_editor_generate_mesh_star_candidate.validation.json"
+      ])
+    );
+
+    const snapshot = adapter.createPersistenceSnapshot();
+    expect(snapshot.operationLogJsonl.trim().split("\n")).toHaveLength(2);
+    expect(snapshot.drawableIds).toEqual(expect.arrayContaining(["draw_editor_star"]));
+    expect(snapshot.document.model.meshes.meshes).toContainEqual(
+      expect.objectContaining({
+        meshId: "mesh_editor_star",
+        vertices: expect.any(Array)
+      })
+    );
+  });
+
+  it("keeps the current session snapshot when a duplicate drawable preset is rejected", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:40:00.000Z")
+    });
+    const command = {
+      createOperationId: "op_editor_create_drawable_badge",
+      generateOperationId: "op_editor_generate_mesh_badge",
+      displayName: "Editor Badge",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 10, y: 10, width: 20, height: 20 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "low"
+    } as const;
+
+    const committed = adapter.commitCreateDrawablePreset(command);
+    const rejected = adapter.commitCreateDrawablePreset({
+      ...command,
+      createOperationId: "op_editor_create_drawable_badge_duplicate",
+      generateOperationId: "op_editor_generate_mesh_badge_duplicate"
+    });
+
+    expect(committed.status).toBe("committed");
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.createDrawable.operationResult.status).toBe("rejected");
+    expect(rejected.generateMesh).toBeNull();
+    expect(rejected.finalPersistenceResult.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(rejected.finalPersistenceResult.reloadedDocument.model.drawables.drawables).toContainEqual(
+      expect.objectContaining({
+        drawableId: "draw_editor_badge",
+        meshId: "mesh_editor_badge"
+      })
+    );
+    expect(rejected.finalPersistenceResult.drawableIdsAfterReload).toEqual(
+      expect.arrayContaining(["draw_editor_badge"])
+    );
+    expect(rejected.finalPersistenceResult.packageFilePaths).toContain("model/drawables.json");
+  });
+
   it("does not import Node fs from editor-session runtime source", () => {
     const sourceRoot = join(process.cwd(), "apps/editor/src/editor-session");
     const runtimeFiles = listRuntimeSourceFiles(sourceRoot);

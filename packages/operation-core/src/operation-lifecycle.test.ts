@@ -268,11 +268,26 @@ describe("operation lifecycle foundation", () => {
     expect(core.operationLog.entries).toHaveLength(logLengthAfterFirstCommit);
   });
 
+  it("rejects registered generateMesh precondition failures without mutation or log append", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const rejected = core.commitOperation(session, createGenerateMeshMissingDrawableRequest());
+
+    expect(rejected.result.status).toBe("rejected");
+    expect(rejected.result.diagnostics[0]?.checkId).toBe("operation.generateMesh.missingDrawable");
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(rejected.operationLogLength).toBe(0);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
   it("rejects unsupported operations without changing package or authoring revision", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedGenerateMeshRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedMoveMeshVertexRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -323,7 +338,7 @@ const createCommittedLogEntry = (): OperationLogEntryDto => {
   return outcome.logEntry;
 };
 
-const createUnsupportedGenerateMeshRequest = () => ({
+const createGenerateMeshMissingDrawableRequest = () => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_generate_mesh",
   actor: "test",
@@ -334,6 +349,26 @@ const createUnsupportedGenerateMeshRequest = () => ({
   payload: {
     drawableId: "draw_missing",
     method: "manual-empty"
+  }
+});
+
+const createUnsupportedMoveMeshVertexRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_move_mesh_vertex",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 0,
+  operationType: "moveMeshVertex",
+  payload: {
+    meshId: "mesh_missing",
+    vertexDeltas: [
+      {
+        vertexId: "vtx_missing_0",
+        delta: { x: 1, y: 0 }
+      }
+    ],
+    intent: "unsupported lifecycle regression fixture"
   }
 });
 

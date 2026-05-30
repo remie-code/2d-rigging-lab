@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "created-drawable-runtime-evidence-summary-v1",
+  "createdDrawableId": "draw_runtime_oracle",
+  "createdMeshId": "mesh_runtime_oracle",
+  "operations": [
+    {
+      "operationType": "createDrawable",
+      "operationId": "op_fixture_create_drawable_runtime_oracle",
+      "resultStatus": "committed",
+      "runtimeSnapshots": {
+        "baseline": {
+          "snapshotId": "snap_minimal-valid-package_0",
+          "packageRevision": 0,
+          "drawList": [
+            "draw_body"
+          ]
+        },
+        "candidate": {
+          "snapshotId": "snap_minimal-valid-package_1",
+          "packageRevision": 1,
+          "drawList": [
+            "draw_body",
+            "draw_runtime_oracle"
+          ],
+          "createdDrawable": {
+            "drawableId": "draw_runtime_oracle",
+            "meshId": "mesh_runtime_oracle",
+            "vertexCount": 0,
+            "vertexHash": "hash_draw_runtime_oracle_0",
+            "bounds": {
+              "x": 48,
+              "y": 16,
+              "width": 24,
+              "height": 24
+            }
+          }
+        }
+      },
+      "runtimeDiff": {
+        "beforeSnapshotId": "snap_minimal-valid-package_0",
+        "afterSnapshotId": "snap_minimal-valid-package_1",
+        "drawableChanges": [
+          {
+            "drawableId": "draw_runtime_oracle",
+            "boundsChanged": false,
+            "vertexHashAfter": "hash_draw_runtime_oracle_0"
+          }
+        ],
+        "drawListChanges": [
+          {
+            "before": [
+              "draw_body"
+            ],
+            "after": [
+              "draw_body",
+              "draw_runtime_oracle"
+            ],
+            "membershipChanged": true,
+            "orderChanged": false,
+            "positionChanges": [
+              {
+                "drawableId": "draw_runtime_oracle",
+                "afterIndex": 1
+              }
+            ]
+          }
+        ],
+        "drawListParameterChanges": [
+          {
+            "path": "/drawList",
+            "before": [
+              "draw_body"
+            ],
+            "after": [
+              "draw_body",
+              "draw_runtime_oracle"
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "baselineReportId": "val_createDrawable_baseline",
+        "candidateReportId": "val_createDrawable_candidate",
+        "candidateStatus": "pass",
+        "operationLogPresent": true,
+        "operationLogPath": "operations/log.jsonl",
+        "runtimeSnapshotIds": [
+          "snap_minimal-valid-package_0",
+          "snap_minimal-valid-package_1"
+        ],
+        "validationDiff": {
+          "beforeReportId": "val_createDrawable_baseline",
+          "afterReportId": "val_createDrawable_candidate",
+          "newFailureCount": 0,
+          "resolvedFailureCount": 0,
+          "severityChangeCount": 0
+        }
+      },
+      "operationEvidence": {
+        "generatedRuntimeSnapshotIds": [
+          "snap_minimal-valid-package_0",
+          "snap_minimal-valid-package_1"
+        ],
+        "generatedRuntimeStateRefs": [
+          "runtime/states/pkg_minimal-valid-package-r1-createDrawable-runtime-evidence-final-f1.runtime-state.json"
+        ],
+        "generatedRuntimeStateSequenceRefs": [
+          "runtime/state-sequences/pkg_minimal-valid-package-r1-createDrawable-runtime-evidence.runtime-state-sequence.json"
+        ],
+        "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r1-createDrawable-runtime-evidence-final-f1.runtime-state.json",
+        "generatedValidationReportIds": [
+          "val_createDrawable_baseline",
+          "val_createDrawable_candidate"
+        ]
+      }
+    },
+    {
+      "operationType": "generateMesh",
+      "operationId": "op_fixture_generate_mesh_runtime_oracle",
+      "resultStatus": "committed",
+      "runtimeSnapshots": {
+        "baseline": {
+          "snapshotId": "snap_minimal-valid-package_0",
+          "packageRevision": 1,
+          "drawList": [
+            "draw_body",
+            "draw_runtime_oracle"
+          ],
+          "createdDrawable": {
+            "drawableId": "draw_runtime_oracle",
+            "meshId": "mesh_runtime_oracle",
+            "vertexCount": 0,
+            "vertexHash": "hash_draw_runtime_oracle_0",
+            "bounds": {
+              "x": 48,
+              "y": 16,
+              "width": 24,
+              "height": 24
+            }
+          }
+        },
+        "candidate": {
+          "snapshotId": "snap_minimal-valid-package_1",
+          "packageRevision": 2,
+          "drawList": [
+            "draw_body",
+            "draw_runtime_oracle"
+          ],
+          "createdDrawable": {
+            "drawableId": "draw_runtime_oracle",
+            "meshId": "mesh_runtime_oracle",
+            "vertexCount": 4,
+            "vertexHash": "hash_draw_runtime_oracle_4",
+            "bounds": {
+              "x": 48,
+              "y": 16,
+              "width": 24,
+              "height": 24
+            }
+          }
+        }
+      },
+      "runtimeDiff": {
+        "beforeSnapshotId": "snap_minimal-valid-package_0",
+        "afterSnapshotId": "snap_minimal-valid-package_1",
+        "drawableChanges": [
+          {
+            "drawableId": "draw_runtime_oracle",
+            "boundsChanged": false,
+            "vertexHashBefore": "hash_draw_runtime_oracle_0",
+            "vertexHashAfter": "hash_draw_runtime_oracle_4"
+          }
+        ],
+        "drawListChanges": [],
+        "drawListParameterChanges": []
+      },
+      "validation": {
+        "baselineReportId": "val_generateMesh_baseline",
+        "candidateReportId": "val_generateMesh_candidate",
+        "candidateStatus": "pass",
+        "operationLogPresent": true,
+        "operationLogPath": "operations/log.jsonl",
+        "runtimeSnapshotIds": [
+          "snap_minimal-valid-package_0",
+          "snap_minimal-valid-package_1"
+        ],
+        "validationDiff": {
+          "beforeReportId": "val_generateMesh_baseline",
+          "afterReportId": "val_generateMesh_candidate",
+          "newFailureCount": 0,
+          "resolvedFailureCount": 0,
+          "severityChangeCount": 0
+        }
+      },
+      "operationEvidence": {
+        "generatedRuntimeSnapshotIds": [
+          "snap_minimal-valid-package_0",
+          "snap_minimal-valid-package_1"
+        ],
+        "generatedRuntimeStateRefs": [
+          "runtime/states/pkg_minimal-valid-package-r2-generateMesh-runtime-evidence-final-f1.runtime-state.json"
+        ],
+        "generatedRuntimeStateSequenceRefs": [
+          "runtime/state-sequences/pkg_minimal-valid-package-r2-generateMesh-runtime-evidence.runtime-state-sequence.json"
+        ],
+        "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r2-generateMesh-runtime-evidence-final-f1.runtime-state.json",
+        "generatedValidationReportIds": [
+          "val_generateMesh_baseline",
+          "val_generateMesh_candidate"
+        ]
+      }
+    }
+  ]
+}

@@ -35,7 +35,7 @@
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 14 editor embedded preview foundation completed / implementation-proven |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 15 editor drawable / mesh authoring vertical slice完了。次Wave選定待ち |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の焦点
@@ -73,12 +73,13 @@
 | Implementation Wave 12 | 2026-05-30に `runtime-keyform-evaluation-foundation` を完了。runtime keyform identity、sampling、target application、snapshot/evidence integration、compact fixture regression、integration review、full verification pass を [implementation/waves/wave12/wave12-final-report.md](implementation/waves/wave12/wave12-final-report.md) に記録済み |
 | Implementation Wave 13 | 2026-05-30に `runtime-diff-and-grid2d-evidence-hardening` を完了。runtime diff専用field、Grid2D fixture/evidence、diagnostic regression、AI/editor `addKeyformGrid2d` runtime-visible evidence、diagnostic alignment gate、integration review、full verification pass を [implementation/waves/wave13/wave13-final-report.md](implementation/waves/wave13/wave13-final-report.md) に記録済み |
 | Implementation Wave 14 | 2026-05-30に `editor-embedded-preview-foundation` を完了。runtime-derived embedded preview projection、preview-ready sample parameter/keyform、preview-only workflow state、embedded preview UI、desktop/mobile e2e、sample-aware AI/editor-session regression needs-fix loop、full verification pass を [implementation/waves/wave14/wave14-final-report.md](implementation/waves/wave14/wave14-final-report.md) に記録済み |
+| Implementation Wave 15 | 2026-05-30に `editor-drawable-mesh-authoring-vertical-slice` を完了。GUIからrights-clean generated drawable / deterministic meshを作成し、operation log、package persistence、save/load、runtime/validation evidence、embedded preview、desktop/mobile e2eで確認する一周を実装。operation lifecycle needs-fix loop後にfull verification pass を [implementation/waves/wave15/wave15-final-report.md](implementation/waves/wave15/wave15-final-report.md) に記録済み |
 | Implementation capability map | 次Wave計画前の製品・システム現在地を [implementation/current-capability-map.md](implementation/current-capability-map.md) に記録済み |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. [implementation/current-capability-map.md](implementation/current-capability-map.md) を入口に、次のvisible product workflow waveを選ぶ。候補は richer embedded/private viewer、drawable/mesh authoring、dynamics workflow verification、project import/export。
+1. Wave 15後の次Waveを選ぶ。候補はrights-clean asset/texture/part flow、mesh editing、draw order editing、mask/clipping、rig/dynamics authoring、private viewer separation、project import/export。
 2. external HTTP / WebSocket / MCP API work と LLM provider integration は、MVP境界が明示変更されるまで Future scope に留める。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。

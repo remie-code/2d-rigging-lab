@@ -38,6 +38,7 @@ discussion/implementation/
 - Wave 12 runtime keyform evaluation foundation completed on 2026-05-30 with runtime keyform identity, sampling, target application, snapshot/evidence integration, compact fixture regression, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md), [waves/wave12/integration-review.md](waves/wave12/integration-review.md), and [reviews/wave12/_map.md](reviews/wave12/_map.md).
 - Wave 13 runtime diff and Grid2D evidence hardening completed on 2026-05-30 with enriched runtime diff fields, Grid2D fixture/evidence, keyform diagnostic regressions, AI/editor `addKeyformGrid2d` runtime-visible evidence, inserted diagnostic alignment resolution, integration review, final report, and full verification pass. Evidence is recorded in [waves/wave13/wave13-final-report.md](waves/wave13/wave13-final-report.md), [waves/wave13/integration-review.md](waves/wave13/integration-review.md), and [reviews/wave13/_map.md](reviews/wave13/_map.md).
 - Wave 14 editor embedded preview foundation completed on 2026-05-30 with runtime-derived embedded preview projection, preview-ready sample parameter/keyform data, preview-only workflow state, embedded preview UI, desktop/mobile e2e smoke, a sample-aware AI/editor-session regression needs-fix loop, and full final verification pass. Evidence is recorded in [waves/wave14/wave14-final-report.md](waves/wave14/wave14-final-report.md), [waves/wave14/integration-review.md](waves/wave14/integration-review.md), and [reviews/wave14/_map.md](reviews/wave14/_map.md).
+- Wave 15 editor drawable / mesh authoring vertical slice completed on 2026-05-30 with GUI generated drawable / deterministic mesh creation, operation log and package persistence, save/load restore, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and an operation lifecycle needs-fix loop after `generateMesh` became supported. Evidence is recorded in [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md), [waves/wave15/integration-review.md](waves/wave15/integration-review.md), [waves/wave15/_map.md](waves/wave15/_map.md), and [reviews/wave15/_map.md](reviews/wave15/_map.md).
 
 ## Key References
 
@@ -59,6 +60,7 @@ discussion/implementation/
 | [orchestration/wave12-plan.md](orchestration/wave12-plan.md) | Wave 12 runtime keyform evaluation foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave13-plan.md](orchestration/wave13-plan.md) | Wave 13 runtime diff and Grid2D evidence hardening dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave14-plan.md](orchestration/wave14-plan.md) | Wave 14 editor embedded preview foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave15-plan.md](orchestration/wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -73,6 +75,7 @@ discussion/implementation/
 | [waves/wave12/_map.md](waves/wave12/_map.md) | Wave 12 domain completion reports, integration review, and final report |
 | [waves/wave13/_map.md](waves/wave13/_map.md) | Wave 13 domain completion reports, integration review, and final report |
 | [waves/wave14/_map.md](waves/wave14/_map.md) | Wave 14 domain completion reports, integration review, and final report |
+| [waves/wave15/_map.md](waves/wave15/_map.md) | Wave 15 domain completion reports, needs-fix loop, integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -87,11 +90,12 @@ discussion/implementation/
 | [reviews/wave12/_map.md](reviews/wave12/_map.md) | Wave 12 domain review reports |
 | [reviews/wave13/_map.md](reviews/wave13/_map.md) | Wave 13 domain review reports |
 | [reviews/wave14/_map.md](reviews/wave14/_map.md) | Wave 14 domain review reports |
+| [reviews/wave15/_map.md](reviews/wave15/_map.md) | Wave 15 domain review reports and needs-fix review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.codex/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan the next visible product workflow wave from [current-capability-map.md](current-capability-map.md), choosing between richer embedded/private viewer work, drawable/mesh authoring, dynamics workflow verification, or project import/export.
+1. Use [current-capability-map.md](current-capability-map.md) to choose the next GUI authoring expansion after Wave 15: asset/texture flow, mesh editing, masks/clipping, rig/dynamics authoring, private viewer separation, or project import/export.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

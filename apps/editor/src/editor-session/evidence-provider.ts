@@ -174,6 +174,10 @@ const createRuntimeEvidenceInput = (
   input: OperationEvidenceProviderInput
 ): RuntimeEvidenceInput => {
   switch (input.request.operationType) {
+    case "createDrawable":
+      return createDrawableRuntimeEvidenceInput(input);
+    case "generateMesh":
+      return createGenerateMeshRuntimeEvidenceInput(input);
     case "createParameter":
       return createParameterRuntimeEvidenceInput(input);
     case "addKeyform":
@@ -183,6 +187,48 @@ const createRuntimeEvidenceInput = (
     default:
       throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
   }
+};
+
+const createDrawableRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createDrawable") {
+    throw new Error(`createDrawable evidence input received ${input.request.operationType}.`);
+  }
+
+  const drawableId = input.targetIds[0];
+  const meshId = input.targetIds[1];
+  if (drawableId === undefined || meshId === undefined) {
+    throw new Error("createDrawable evidence requires committed drawable and mesh targets.");
+  }
+
+  return {
+    artifactLabel: "editor-create-drawable",
+    authoredParameterValues: {},
+    targetIds: [drawableId, meshId]
+  };
+};
+
+const createGenerateMeshRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "generateMesh") {
+    throw new Error(`generateMesh evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([...input.targetIds, input.request.payload.drawableId]);
+
+  return {
+    artifactLabel: "editor-generate-mesh",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
 };
 
 const createParameterRuntimeEvidenceInput = (

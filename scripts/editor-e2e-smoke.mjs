@@ -33,9 +33,13 @@ const main = async () => {
         viewport
       });
       const screenshot = result.previewEvidence.screenshot;
+      const drawableScreenshot = result.drawableEvidence.screenshot;
       console.log(`editor-e2e: ${viewport.name} smoke passed`);
       console.log(
         `editor-e2e: ${viewport.name} preview screenshot ${screenshot.format} base64Length=${screenshot.base64Length}`
+      );
+      console.log(
+        `editor-e2e: ${viewport.name} drawable screenshot ${drawableScreenshot.format} base64Length=${drawableScreenshot.base64Length}`
       );
     }
   } finally {

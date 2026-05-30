@@ -1,16 +1,24 @@
 export const editorTestIds = {
   shell: "editor.shell",
   packageStatus: "editor.packageStatus",
+  packageRevision: "editor.packageRevision",
   parameterList: "parameter.list",
   parameterCreateForm: "parameter.create.form",
   parameterCreateSubmit: "parameter.create",
+  drawableAuthoringPanel: "drawableAuthoring.panel",
+  drawableCreateForm: "drawable.create.form",
+  drawableCreateSubmit: "drawable.create",
+  drawableList: "drawable.list",
+  drawableResult: "drawable.result",
   operationStatus: "operation.status",
+  projectPersistencePanel: "projectPersistence.panel",
   projectPersistenceSave: "projectPersistence.save",
   projectPersistenceLoad: "projectPersistence.load",
   projectPersistenceReset: "projectPersistence.reset",
   projectPersistenceStatus: "projectPersistence.status",
   projectPersistenceSummary: "projectPersistence.summary",
   operationLogSummary: "operationLog.summary",
+  generatedEvidenceSummary: "evidence.generated.summary",
   reloadSummary: "package.reload.summary",
   previewPanel: "preview.panel",
   previewVisual: "preview.visual",
@@ -33,6 +41,8 @@ export const editorTestIds = {
 export const editorProjectStorageKey = "private-2d-rigging-lab.editor-project";
 
 export const createAiTranscriptEventRowTestId = (index) => `aiTranscript.event.${index}`;
+
+export const createDrawableRowTestId = (drawableId) => `drawable.row.${drawableId}`;
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;

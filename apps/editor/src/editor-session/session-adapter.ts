@@ -1,6 +1,5 @@
 import {
   createAuthoringSessionFromPackageDocument,
-  listParameters,
   toPackageDocument,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
@@ -11,6 +10,7 @@ import type {
 } from "@private-2d-rigging-lab/operation-core";
 import {
   createOperationCore,
+  OperationRequestSchema,
   parseOperationLogEntriesFromJsonl,
   serializeOperationLogEntriesToJsonl
 } from "@private-2d-rigging-lab/operation-core";
@@ -30,6 +30,10 @@ import {
   type EditorCreateParameterCommand
 } from "./create-parameter-command.js";
 import {
+  createDrawablePresetOperationRequests,
+  type EditorCreateDrawablePresetCommand
+} from "./create-drawable-preset-command.js";
+import {
   createEditorEvidenceCollector,
   summarizeEvidencePaths,
   toEvidencePackageFileEntries,
@@ -44,6 +48,7 @@ export interface EditorSessionAdapter {
   dryRunOperation(request: OperationRequestDto): OperationResultDto;
   commitOperation(request: OperationRequestDto): EditorSessionPersistenceResult;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
+  commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
 }
 
 export interface EditorSessionAdapterOptions {
@@ -63,6 +68,7 @@ export interface EditorSessionPersistenceSnapshot {
   readonly generatedArtifactPaths: readonly string[];
   readonly document: PackageDocumentDto;
   readonly parameterIds: readonly string[];
+  readonly drawableIds: readonly string[];
 }
 
 export interface EditorSessionPersistenceResult {
@@ -79,6 +85,14 @@ export interface EditorSessionPersistenceResult {
   readonly reloadedDocument: PackageDocumentDto;
   readonly reloadedPackageRevision: number;
   readonly parameterIdsAfterReload: readonly string[];
+  readonly drawableIdsAfterReload: readonly string[];
+}
+
+export interface EditorSessionDrawablePresetResult {
+  readonly status: "committed" | "rejected";
+  readonly createDrawable: EditorSessionPersistenceResult;
+  readonly generateMesh: EditorSessionPersistenceResult | null;
+  readonly finalPersistenceResult: EditorSessionPersistenceResult;
 }
 
 export const createEditorSessionAdapter = (
@@ -131,6 +145,33 @@ export const createEditorSessionAdapter = (
       const packageRevisionBefore = authoringSession.packageRevision;
       const request = createParameterOperationRequest(command, packageRevisionBefore);
       return this.commitOperation(request);
+    },
+    commitCreateDrawablePreset(command) {
+      const packageRevisionBefore = authoringSession.packageRevision;
+      const requests = createDrawablePresetOperationRequests(command, packageRevisionBefore);
+      const createDrawable = this.commitOperation(requests.createDrawable);
+
+      if (createDrawable.operationResult.status !== "committed") {
+        return {
+          status: "rejected",
+          createDrawable,
+          generateMesh: null,
+          finalPersistenceResult: createDrawable
+        };
+      }
+
+      const generateMeshRequest = {
+        ...requests.generateMesh,
+        basePackageRevision: authoringSession.packageRevision
+      };
+      const generateMesh = this.commitOperation(OperationRequestSchema.parse(generateMeshRequest));
+
+      return {
+        status: generateMesh.operationResult.status === "committed" ? "committed" : "rejected",
+        createDrawable,
+        generateMesh,
+        finalPersistenceResult: generateMesh
+      };
     }
   };
 };
@@ -156,7 +197,10 @@ const commitOperationRequest = (input: {
       operationLogEntries: input.operationCore.operationLog.entries,
       packageRevisionBefore,
       packageRevisionAfterCommit: input.authoringSession.packageRevision,
-      baseDocument: input.baseDocument
+      authoringSession: input.authoringSession,
+      baseDocument: input.baseDocument,
+      generatedArtifactEntries: input.generatedArtifactEntries,
+      now: input.now
     });
   }
 
@@ -195,6 +239,9 @@ const commitOperationRequest = (input: {
     reloadedPackageRevision: reloadedDocument.manifest.packageRevision,
     parameterIdsAfterReload: reloadedDocument.model.parameters.parameters.map(
       (parameter) => parameter.parameterId
+    ),
+    drawableIdsAfterReload: reloadedDocument.model.drawables.drawables.map(
+      (drawable) => drawable.drawableId
     )
   };
 };
@@ -223,7 +270,8 @@ const createPersistenceSnapshot = (input: {
     packageFilePaths: packageFileSet.map((entry) => entry.path),
     generatedArtifactPaths: input.generatedArtifactEntries.map((entry) => entry.path),
     document,
-    parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId)
+    parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId),
+    drawableIds: document.model.drawables.drawables.map((drawable) => drawable.drawableId)
   };
 };
 
@@ -248,9 +296,20 @@ const createRejectedPersistenceResult = (input: {
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly packageRevisionBefore: number;
   readonly packageRevisionAfterCommit: number;
+  readonly authoringSession: AuthoringSession;
   readonly baseDocument: PackageDocumentDto;
+  readonly generatedArtifactEntries: readonly PackageFileSet[number][];
+  readonly now: () => Date;
 }): EditorSessionPersistenceResult => {
   const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationLogEntries);
+  const savedDocument = toPackageDocument(input.authoringSession, input.baseDocument, {
+    updatedAt: input.now().toISOString()
+  });
+  const packageFileSet = serializePackageDocumentToFileSet(savedDocument, {
+    operationLogText: operationLogJsonl,
+    generatedArtifacts: input.generatedArtifactEntries
+  });
+  const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
 
   return {
     operationType: input.operationType,
@@ -259,9 +318,9 @@ const createRejectedPersistenceResult = (input: {
     operationLogJsonl,
     packageRevisionBefore: input.packageRevisionBefore,
     packageRevisionAfterCommit: input.packageRevisionAfterCommit,
-    packageFileSet: [],
-    packageFilePaths: [],
-    generatedArtifactPaths: [],
+    packageFileSet,
+    packageFilePaths: packageFileSet.map((entry) => entry.path),
+    generatedArtifactPaths: input.generatedArtifactEntries.map((entry) => entry.path),
     evidence: {
       runtimeArtifactPaths: [],
       validationArtifactPaths: [],
@@ -269,10 +328,13 @@ const createRejectedPersistenceResult = (input: {
       generatedRuntimeStateSequenceRefs: [],
       generatedValidationReportIds: []
     },
-    reloadedDocument: input.baseDocument,
-    reloadedPackageRevision: input.baseDocument.manifest.packageRevision,
-    parameterIdsAfterReload: listParameters(
-      createAuthoringSessionFromPackageDocument(input.baseDocument).graph
-    ).map((parameter) => parameter.parameterId)
+    reloadedDocument,
+    reloadedPackageRevision: reloadedDocument.manifest.packageRevision,
+    parameterIdsAfterReload: reloadedDocument.model.parameters.parameters.map(
+      (parameter) => parameter.parameterId
+    ),
+    drawableIdsAfterReload: reloadedDocument.model.drawables.drawables.map(
+      (drawable) => drawable.drawableId
+    )
   };
 };

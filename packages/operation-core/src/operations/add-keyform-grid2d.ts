@@ -250,7 +250,9 @@ const createAuthoringMutationDiagnostic = (input: {
   readonly keyformSetId: KeyformSetId;
 }): DiagnosticDto =>
   createOperationDiagnostic({
-    checkId: authoringMutationCheckIds[input.error.code],
+    checkId:
+      authoringMutationCheckIds[input.error.code] ??
+      "operation.addKeyformGrid2d.authoringMutationFailed",
     message: input.error.message,
     target: createAuthoringMutationDiagnosticTarget(input)
   });
@@ -274,6 +276,8 @@ const createAuthoringMutationDiagnosticTarget = (input: {
       return input.request.payload.target;
     case "duplicate_parameter":
       return { kind: "parameter", id: input.request.payload.parameterX };
+    default:
+      return { kind: "operation", id: input.request.operationId ?? "op_rejected_invalid_request" };
   }
 };
 
@@ -313,7 +317,7 @@ const uniqueStrings = (values: readonly string[]): readonly string[] => {
   return result;
 };
 
-const authoringMutationCheckIds = {
+const authoringMutationCheckIds: Partial<Record<AuthoringMutationErrorCode, string>> = {
   duplicate_parameter: "operation.addKeyformGrid2d.duplicateParameter",
   duplicate_keyform_set: "operation.addKeyformGrid2d.duplicateKeyformSet",
   missing_parameter: "operation.addKeyformGrid2d.missingParameter",
@@ -321,7 +325,7 @@ const authoringMutationCheckIds = {
   unsupported_keyform_target_property: "operation.addKeyformGrid2d.unsupportedTargetProperty",
   duplicate_keyform_grid_axis_parameter: "operation.addKeyformGrid2d.duplicateAxisParameter",
   duplicate_keyform_grid_coordinate: "operation.addKeyformGrid2d.duplicateGridCoordinate"
-} satisfies Record<AuthoringMutationErrorCode, string>;
+};
 
 const createOperationTargetRef = (target: KeyformTarget): TargetRefDto => {
   switch (target.kind) {

@@ -32,8 +32,10 @@ import {
 import { projectEditorAiValidation } from "../ai-command-host/editor-ai-validation-projector.js";
 import {
   createEditorSessionAdapter,
+  type EditorCreateDrawablePresetCommand,
   type EditorCreateParameterCommand,
   type EditorSessionAdapter,
+  type EditorSessionDrawablePresetResult,
   type EditorSessionPersistenceResult,
   type EditorSessionPersistenceSnapshot
 } from "../editor-session/index.js";
@@ -117,8 +119,10 @@ export interface EditorWorkflowController {
   readonly previewProjection: EditorPreviewProjectionDto | null;
   readonly aiCommandHost: EditorAiCommandHost;
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
+  readonly latestDrawablePresetResult: EditorSessionDrawablePresetResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
+  commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
   resetPreviewParameterValues(): EditorWorkflowPreviewResetResult;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
@@ -141,6 +145,7 @@ export const createEditorWorkflowController = (
   let adapter = createSampleAdapter();
   let state = createEditorWorkflowState(adapter);
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
+  let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
   const createAiHost = (input: {
     readonly transcript?: AiCommandTranscript;
@@ -153,6 +158,7 @@ export const createEditorWorkflowController = (
         commitOperation(request) {
           const result = adapter.commitOperation(request);
           latestSessionPersistenceResult = result;
+          latestDrawablePresetResult = null;
           if (result.operationResult.status === "committed") {
             state = applyEditorWorkflowCommitResult(state, adapter, result);
           }
@@ -222,6 +228,9 @@ export const createEditorWorkflowController = (
     get latestSessionPersistenceResult() {
       return latestSessionPersistenceResult;
     },
+    get latestDrawablePresetResult() {
+      return latestDrawablePresetResult;
+    },
     get latestProjectPersistenceResult() {
       return latestProjectPersistenceResult;
     },
@@ -229,7 +238,20 @@ export const createEditorWorkflowController = (
       const result = adapter.commitCreateParameter(command);
 
       latestSessionPersistenceResult = result;
+      latestDrawablePresetResult = null;
       state = applyEditorWorkflowCommitResult(state, adapter, result);
+
+      return result;
+    },
+    commitCreateDrawablePreset(command) {
+      const result = adapter.commitCreateDrawablePreset(command);
+
+      latestDrawablePresetResult = result;
+      latestSessionPersistenceResult = result.finalPersistenceResult;
+      state = applyEditorWorkflowCommitResult(state, adapter, result.createDrawable);
+      if (result.generateMesh !== null) {
+        state = applyEditorWorkflowCommitResult(state, adapter, result.generateMesh);
+      }
 
       return result;
     },
@@ -316,6 +338,7 @@ export const createEditorWorkflowController = (
         generatedArtifactPaths: project.generatedArtifactPaths
       });
       latestSessionPersistenceResult = null;
+      latestDrawablePresetResult = null;
       aiApprovalActions.reset({
         transcript: hydrateInMemoryAiCommandTranscript(project.aiCommandTranscript)
       });
@@ -334,6 +357,7 @@ export const createEditorWorkflowController = (
       adapter = createSampleAdapter();
       state = createEditorWorkflowState(adapter);
       latestSessionPersistenceResult = null;
+      latestDrawablePresetResult = null;
       aiApprovalActions.reset();
 
       const result: EditorWorkflowResetResult = {

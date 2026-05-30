@@ -23,7 +23,12 @@ export const createEditorWorkflowState = (
       packageRevision: adapter.authoringSession.packageRevision,
       authoringRevision: adapter.authoringSession.authoringRevision
     },
-    parameters: adapter.baseDocument.model.parameters.parameters
+    parameters: adapter.baseDocument.model.parameters.parameters,
+    drawables: adapter.baseDocument.model.drawables.drawables,
+    meshes: adapter.baseDocument.model.meshes.meshes,
+    parts: adapter.baseDocument.model.graph.parts,
+    sourceAssets: adapter.baseDocument.assets.sourceManifest.sourceAssets,
+    canvasSize: adapter.baseDocument.model.graph.canvasSize
   });
 
 export const applyEditorWorkflowCommitResult = (
@@ -49,10 +54,13 @@ export const applyEditorWorkflowCommitResult = (
       authoringRevision: adapter.authoringSession.authoringRevision
     },
     parameters: result.reloadedDocument.model.parameters.parameters,
+    drawables: result.reloadedDocument.model.drawables.drawables,
+    meshes: result.reloadedDocument.model.meshes.meshes,
     reload: {
       status: result.operationResult.status === "committed" ? "reloaded" : "failed",
       packageRevision: result.reloadedPackageRevision,
       parameterIds: result.parameterIdsAfterReload,
+      drawableIds: result.drawableIdsAfterReload,
       filePaths: result.packageFilePaths
     }
   });
@@ -69,7 +77,12 @@ export const projectLoadedEditorWorkflowState = (input: {
       packageRevision: input.document.manifest.packageRevision,
       authoringRevision: 0
     },
-    parameters: input.document.model.parameters.parameters
+    parameters: input.document.model.parameters.parameters,
+    drawables: input.document.model.drawables.drawables,
+    meshes: input.document.model.meshes.meshes,
+    parts: input.document.model.graph.parts,
+    sourceAssets: input.document.assets.sourceManifest.sourceAssets,
+    canvasSize: input.document.model.graph.canvasSize
   });
   const evidence = projectLoadedEvidenceSummary({
     operationLogEntries: input.operationLogEntries,
@@ -86,6 +99,7 @@ export const projectLoadedEditorWorkflowState = (input: {
       parameterIds: input.document.model.parameters.parameters.map(
         (parameter) => parameter.parameterId
       ),
+      drawableIds: input.document.model.drawables.drawables.map((drawable) => drawable.drawableId),
       filePaths: input.packageFileSet.map((entry) => entry.path)
     })
   };

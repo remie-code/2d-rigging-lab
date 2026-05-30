@@ -21,6 +21,7 @@
 | [wave12-plan.md](wave12-plan.md) | Wave 12 runtime keyform evaluation foundation dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave13-plan.md](wave13-plan.md) | Wave 13 runtime diff and Grid2D evidence hardening dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave14-plan.md](wave14-plan.md) | Wave 14 editor embedded preview foundation dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
+| [wave15-plan.md](wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -46,3 +47,4 @@
 - Wave 12 `runtime-keyform-evaluation-foundation` completed on 2026-05-30. It restored explicit Orch-Sylph execution policy and implemented runtime-visible keyform sampling, target application, snapshot/evidence integration, and a compact fixture.
 - Wave 13 `runtime-diff-and-grid2d-evidence-hardening` completed on 2026-05-30. It added enriched runtime diff fields, Grid2D evidence / fixture, diagnostic regressions, AI/editor `addKeyformGrid2d` runtime-visible evidence, and an inserted diagnostic alignment gate for `keyform.grid2dDuplicateKey`.
 - Wave 14 `editor-embedded-preview-foundation` completed on 2026-05-30. It added runtime-derived embedded editor preview projection, preview-ready sample parameter/keyform data, preview-only workflow state, embedded preview UI, desktop/mobile e2e smoke, and a sample-aware AI/editor-session regression needs-fix loop. Final verification passed after sandbox-limited commands were rerun with escalation.
+- Wave 15 `editor-drawable-mesh-authoring-vertical-slice` completed on 2026-05-30. It added GUI creation of rights-clean generated drawable / deterministic mesh, operation log and package persistence, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and a needs-fix loop that updated operation lifecycle coverage after `generateMesh` became supported. Final verification passed after sandbox-limited commands were rerun with escalation.

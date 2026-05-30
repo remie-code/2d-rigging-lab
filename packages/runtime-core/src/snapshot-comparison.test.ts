@@ -121,6 +121,72 @@ describe("runtime snapshot comparison", () => {
       after: ["draw_head", "draw_body"]
     });
   });
+
+  it("observes added drawables and draw list membership through dedicated fields", () => {
+    const before = createSnapshot({
+      snapshotId: "snap_compare_added_before",
+      opacity: 1,
+      visible: true,
+      baseDrawOrder: 0,
+      evaluatedDrawOrder: 0,
+      drawList: ["draw_body"]
+    });
+    const after = {
+      ...createSnapshot({
+        snapshotId: "snap_compare_added_after",
+        opacity: 1,
+        visible: true,
+        baseDrawOrder: 0,
+        evaluatedDrawOrder: 0,
+        drawList: ["draw_body", "draw_runtime_oracle"]
+      }),
+      drawables: [
+        ...before.drawables,
+        {
+          drawableId: DrawableIdSchema.parse("draw_runtime_oracle"),
+          meshId: MeshIdSchema.parse("mesh_runtime_oracle"),
+          visible: true,
+          opacity: 1,
+          baseDrawOrder: 1,
+          evaluatedDrawOrder: 1,
+          bounds: {
+            x: 8,
+            y: 8,
+            width: 24,
+            height: 24
+          },
+          vertexCount: 0,
+          vertexHash: "hash_draw_runtime_oracle_0",
+          diagnostics: []
+        }
+      ]
+    } satisfies RuntimeSnapshotDto;
+
+    const result = compareRuntimeSnapshots(before, after);
+
+    expect(result.equivalent).toBe(false);
+    expect(result.diff.drawableChanges).toEqual([
+      {
+        drawableId: "draw_runtime_oracle",
+        boundsChanged: false,
+        vertexHashAfter: "hash_draw_runtime_oracle_0"
+      }
+    ]);
+    expect(result.diff.drawListChanges).toEqual([
+      {
+        before: ["draw_body"],
+        after: ["draw_body", "draw_runtime_oracle"],
+        membershipChanged: true,
+        orderChanged: false,
+        positionChanges: [
+          {
+            drawableId: "draw_runtime_oracle",
+            afterIndex: 1
+          }
+        ]
+      }
+    ]);
+  });
 });
 
 const createSnapshot = (input: {

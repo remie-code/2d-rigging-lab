@@ -21,6 +21,10 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitCreateParameter(command);
           render();
         },
+        onCommitCreateDrawablePreset(command) {
+          workflow.commitCreateDrawablePreset(command);
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();
