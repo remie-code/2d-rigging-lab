@@ -11,6 +11,7 @@ export * from "./drawable-selectors.js";
 export * from "./authoring-mutations.js";
 export * from "./stable-order-mutations.js";
 export * from "./draw-order-mutations.js";
+export * from "./runtime-visibility-mutations.js";
 export * from "./mesh-generation.js";
 export * from "./mesh-mutations.js";
 export * from "./drawable-mutations.js";

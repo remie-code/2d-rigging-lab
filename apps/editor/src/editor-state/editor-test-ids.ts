@@ -9,6 +9,7 @@ export const editorTestIds = {
   drawableCreateForm: "drawable.create.form",
   drawableCreateSubmit: "drawable.create",
   drawableList: "drawable.list",
+  drawableLayerStatus: "drawable.layer.status",
   drawableResult: "drawable.result",
   operationStatus: "operation.status",
   projectPersistencePanel: "projectPersistence.panel",
@@ -32,6 +33,15 @@ export const fixedEditorTestIds = Object.values(editorTestIds);
 export const createParameterRowTestId = (parameterId: string): string => `parameter.row.${parameterId}`;
 
 export const createDrawableRowTestId = (drawableId: string): string => `drawable.row.${drawableId}`;
+
+export const createDrawableVisibilityToggleTestId = (drawableId: string): string =>
+  `drawable.visibility.${drawableId}`;
+
+export const createDrawableMoveUpTestId = (drawableId: string): string =>
+  `drawable.moveUp.${drawableId}`;
+
+export const createDrawableMoveDownTestId = (drawableId: string): string =>
+  `drawable.moveDown.${drawableId}`;
 
 export const createPreviewParameterControlTestId = (parameterId: string): string =>
   `preview.parameter.${parameterId}`;

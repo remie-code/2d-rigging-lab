@@ -11,6 +11,8 @@ export interface DrawableAuthoringPanelOptions {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
   readonly onCommitCreateDrawable: (command: EditorCreateDrawablePresetCommand) => void;
+  readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
+  readonly onMoveDrawableLayer: (drawableId: string, direction: "up" | "down") => void;
 }
 
 export const createDrawableAuthoringPanel = (
@@ -39,7 +41,13 @@ export const createDrawableAuthoringPanel = (
       onSubmit: options.onCommitCreateDrawable
     }),
     createResultSummary(options),
-    createDrawableList(options.viewModel.drawableAuthoring.drawables)
+    createLayerStatus(options),
+    createDrawableList({
+      drawables: options.viewModel.drawableAuthoring.drawables,
+      layerControls: options.viewModel.drawableLayers,
+      onToggleRuntimeVisibility: options.onToggleDrawableRuntimeVisibility,
+      onMoveLayer: options.onMoveDrawableLayer
+    })
   );
 
   return panel;
@@ -81,6 +89,26 @@ const createResultSummary = (options: DrawableAuthoringPanelOptions): HTMLElemen
   }
 
   return result;
+};
+
+const createLayerStatus = (options: DrawableAuthoringPanelOptions): HTMLElement => {
+  const status = document.createElement("section");
+  status.className = "drawable-layer-status";
+  status.dataset.testid = editorTestIds.drawableLayerStatus;
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-label", "Drawable layer status");
+
+  const layerCount = document.createElement("p");
+  layerCount.className = "drawable-layer-status__count";
+  layerCount.textContent = options.viewModel.drawableLayers.layerCountLabel;
+
+  const lastOperation = document.createElement("p");
+  lastOperation.className = "drawable-layer-status__operation";
+  lastOperation.textContent = options.viewModel.drawableLayers.lastLayerOperationLabel;
+
+  status.append(layerCount, lastOperation);
+
+  return status;
 };
 
 const appendFact = (list: HTMLDListElement, label: string, value: string): void => {

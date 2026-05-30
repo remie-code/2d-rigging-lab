@@ -5,6 +5,7 @@ import {
   OperationRequestSchema,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
+import { DrawableIdSchema } from "@private-2d-rigging-lab/contracts";
 import {
   createRuntimeSnapshotArtifactPath,
   RuntimeSnapshotSchema,
@@ -317,6 +318,82 @@ describe("editor session persistence adapter", () => {
         vertices: expect.any(Array)
       })
     );
+  });
+
+  it("commits drawable visibility and draw order changes into the persisted package file set", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:35:00.000Z")
+    });
+    const preset = adapter.commitCreateDrawablePreset({
+      createOperationId: "op_editor_create_drawable_layer_star",
+      generateOperationId: "op_editor_generate_mesh_layer_star",
+      displayName: "Editor Layer Star",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 12, y: 20, width: 40, height: 30 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+
+    const visibility = adapter.commitSetDrawableRuntimeVisibility({
+      operationId: "op_editor_hide_body",
+      drawableId: "draw_body",
+      runtimeVisibility: false
+    });
+    const reorder = adapter.commitSetDrawableDrawOrder({
+      operationId: "op_editor_reorder_layers",
+      entries: [
+        { drawableId: DrawableIdSchema.parse("draw_editor_layer_star"), baseDrawOrder: 0 },
+        { drawableId: DrawableIdSchema.parse("draw_body"), baseDrawOrder: 1 }
+      ]
+    });
+
+    expect(preset.status).toBe("committed");
+    expect(visibility.operationResult.status).toBe("committed");
+    expect(reorder.operationResult.status).toBe("committed");
+    expect(reorder.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "setRuntimeVisibility",
+      "setDrawOrder"
+    ]);
+    expect(reorder.packageFilePaths).toEqual(expect.arrayContaining([
+      "model/drawables.json",
+      "model/draw-order.json",
+      "operations/log.jsonl"
+    ]));
+    expect(reorder.reloadedDocument.model.drawables.drawables).toContainEqual(
+      expect.objectContaining({
+        drawableId: "draw_body",
+        runtimeVisibility: false,
+        baseDrawOrder: 1
+      })
+    );
+    expect(reorder.reloadedDocument.model.drawOrder.entries).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        baseDrawOrder: 1,
+        stableOrder: 1
+      }),
+      expect.objectContaining({
+        drawableId: "draw_editor_layer_star",
+        baseDrawOrder: 0,
+        stableOrder: 0
+      })
+    ]);
+    expect(reorder.generatedArtifactPaths).toEqual(
+      expect.arrayContaining([
+        "validation/reports/val_editor_editor_hide_body_candidate.validation.json",
+        "validation/reports/val_editor_editor_reorder_layers_candidate.validation.json"
+      ])
+    );
+    expect(adapter.createPersistenceSnapshot().operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "setRuntimeVisibility",
+      "setDrawOrder"
+    ]);
   });
 
   it("keeps the current session snapshot when a duplicate drawable preset is rejected", () => {

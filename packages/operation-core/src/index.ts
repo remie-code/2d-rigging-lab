@@ -20,6 +20,8 @@ export * from "./package-revision.js";
 export * from "./operations/create-drawable.js";
 export * from "./operations/generate-mesh.js";
 export * from "./operations/create-parameter.js";
+export * from "./operations/set-draw-order.js";
+export * from "./operations/set-runtime-visibility.js";
 export * from "./lifecycle/evidence.js";
 export * from "./lifecycle/dry-run.js";
 export * from "./lifecycle/commit.js";

@@ -90,6 +90,149 @@ describe("editor workflow controller", () => {
     });
   });
 
+  it("toggles drawable visibility, reorders layers, and restores layer state after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    first.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const hidden = first.toggleDrawableRuntimeVisibility("draw_body");
+    const moved = first.moveDrawableLayer("draw_body", "up");
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(hidden.status).toBe("committed");
+    expect(moved.status).toBe("committed");
+    expect(first.state.drawables.map((drawable) => ({
+      drawableId: drawable.drawableId,
+      visible: drawable.visible,
+      baseDrawOrder: drawable.baseDrawOrder,
+      orderIndex: drawable.orderIndex,
+      canMoveLayerUp: drawable.canMoveLayerUp,
+      canMoveLayerDown: drawable.canMoveLayerDown
+    }))).toEqual([
+      {
+        drawableId: "draw_workflow_star",
+        visible: true,
+        baseDrawOrder: 0,
+        orderIndex: 0,
+        canMoveLayerUp: true,
+        canMoveLayerDown: false
+      },
+      {
+        drawableId: "draw_body",
+        visible: false,
+        baseDrawOrder: 1,
+        orderIndex: 1,
+        canMoveLayerUp: false,
+        canMoveLayerDown: true
+      }
+    ]);
+    expect(first.state.operationLog.entryCount).toBe(4);
+    expect(first.viewModel.drawableLayers).toMatchObject({
+      hasMultipleDrawables: true,
+      layerCountLabel: "2 layers",
+      lastLayerOperationLabel: "setDrawOrder committed",
+      orderedDrawables: [
+        {
+          drawableId: "draw_workflow_star",
+          runtimeVisibilityLabel: "Visible",
+          canMoveUp: true,
+          canMoveDown: false
+        },
+        {
+          drawableId: "draw_body",
+          runtimeVisibilityLabel: "Hidden",
+          canMoveUp: false,
+          canMoveDown: true
+        }
+      ]
+    });
+    expect(first.previewProjection).toMatchObject({
+      drawList: ["draw_workflow_star"],
+      visibleDrawableCount: 1
+    });
+    expect(first.previewProjection?.drawables).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        visible: false
+      })
+    ]));
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "setRuntimeVisibility",
+      "setDrawOrder"
+    ]);
+    expect(saved.snapshot.document.model.drawables.drawables).toContainEqual(
+      expect.objectContaining({
+        drawableId: "draw_body",
+        runtimeVisibility: false,
+        baseDrawOrder: 1
+      })
+    );
+    expect(saved.snapshot.document.model.drawOrder.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          drawableId: "draw_workflow_star",
+          baseDrawOrder: 0,
+          stableOrder: 0
+        }),
+        expect.objectContaining({
+          drawableId: "draw_body",
+          baseDrawOrder: 1,
+          stableOrder: 1
+        })
+      ])
+    );
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.drawables.map((drawable) => ({
+      drawableId: drawable.drawableId,
+      visible: drawable.visible,
+      baseDrawOrder: drawable.baseDrawOrder,
+      orderIndex: drawable.orderIndex
+    }))).toEqual([
+      {
+        drawableId: "draw_workflow_star",
+        visible: true,
+        baseDrawOrder: 0,
+        orderIndex: 0
+      },
+      {
+        drawableId: "draw_body",
+        visible: false,
+        baseDrawOrder: 1,
+        orderIndex: 1
+      }
+    ]);
+    expect(second.previewProjection).toMatchObject({
+      drawList: ["draw_workflow_star"],
+      visibleDrawableCount: 1
+    });
+    expect(second.previewProjection?.drawables).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        drawableId: "draw_body",
+        visible: false
+      })
+    ]));
+  });
+
+  it("does not commit an operation when a layer move is not available", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    expect(workflow.moveDrawableLayer("draw_body", "down")).toEqual({
+      status: "not_movable",
+      drawableId: "draw_body",
+      direction: "down"
+    });
+    expect(workflow.moveDrawableLayer("draw_missing", "up")).toEqual({
+      status: "not_found",
+      drawableId: "draw_missing"
+    });
+    expect(workflow.state.operationLog.entryCount).toBe(0);
+    expect(workflow.latestSessionPersistenceResult).toBeNull();
+  });
+
   it("keeps committed drawable state visible when a duplicate preset create is rejected", () => {
     const workflow = createWorkflow(createMemoryStorage());
     const command = createDrawablePresetCommand("star");

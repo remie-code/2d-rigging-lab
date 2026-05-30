@@ -4,7 +4,10 @@ import {
   type EditorWorkflowViewModel
 } from "../../editor-state/index.js";
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
-import type { EditorWorkflowPersistenceResult } from "../../editor-workflow/index.js";
+import type {
+  EditorDrawableLayerMoveDirection,
+  EditorWorkflowPersistenceResult
+} from "../../editor-workflow/index.js";
 import type {
   EditorCreateDrawablePresetCommand,
   EditorCreateParameterCommand,
@@ -36,6 +39,8 @@ export interface EditorAppShellOptions {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
   readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
+  readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
+  readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
@@ -112,7 +117,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   const drawableAuthoringPanel = createDrawableAuthoringPanel({
     state: options.state,
     viewModel: options.viewModel,
-    onCommitCreateDrawable: options.onCommitCreateDrawablePreset
+    onCommitCreateDrawable: options.onCommitCreateDrawablePreset,
+    onToggleDrawableRuntimeVisibility: options.onToggleDrawableRuntimeVisibility,
+    onMoveDrawableLayer: options.onMoveDrawableLayer
   });
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,

@@ -29,6 +29,7 @@ export interface EditorWorkflowViewModel {
   readonly generatedEvidenceLabel: string;
   readonly reloadLabel: string;
   readonly drawableAuthoring: DrawableAuthoringViewModel;
+  readonly drawableLayers: DrawableLayerControlsViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
@@ -38,9 +39,40 @@ export interface DrawableListItemViewModel {
   readonly displayName: string;
   readonly meshId: string;
   readonly visible: boolean;
+  readonly baseDrawOrder: number;
+  readonly stableOrder: number;
+  readonly orderIndex: number;
+  readonly visibilityLabel: string;
+  readonly canMoveLayerUp: boolean;
+  readonly canMoveLayerDown: boolean;
   readonly baseDrawOrderLabel: string;
+  readonly layerOrderLabel: string;
   readonly meshSummaryLabel: string;
   readonly boundsLabel: string;
+}
+
+export interface DrawableLayerItemViewModel {
+  readonly drawableId: string;
+  readonly displayName: string;
+  readonly visible: boolean;
+  readonly runtimeVisibilityLabel: string;
+  readonly baseDrawOrder: number;
+  readonly stableOrder: number;
+  readonly orderIndex: number;
+  readonly orderLabel: string;
+  readonly canMoveUp: boolean;
+  readonly canMoveDown: boolean;
+  readonly moveUpLabel: string;
+  readonly moveDownLabel: string;
+  readonly visibilityToggleLabel: string;
+}
+
+export interface DrawableLayerControlsViewModel {
+  readonly orderedDrawables: readonly DrawableLayerItemViewModel[];
+  readonly hasDrawables: boolean;
+  readonly hasMultipleDrawables: boolean;
+  readonly layerCountLabel: string;
+  readonly lastLayerOperationLabel: string;
 }
 
 export interface DrawableAuthoringViewModel {
@@ -106,6 +138,7 @@ export const projectEditorWorkflowViewModel = (
     generatedEvidenceLabel: `${runtimeArtifactCount} runtime / ${validationArtifactCount} validation artifacts`,
     reloadLabel: projectReloadLabel(state),
     drawableAuthoring: projectDrawableAuthoringViewModel(state),
+    drawableLayers: projectDrawableLayerControlsViewModel(state),
     previewControls: projectPreviewControlsViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };
@@ -139,7 +172,14 @@ const projectDrawableAuthoringViewModel = (
     displayName: drawable.displayName,
     meshId: drawable.meshId,
     visible: drawable.visible,
+    baseDrawOrder: drawable.baseDrawOrder,
+    stableOrder: drawable.stableOrder,
+    orderIndex: drawable.orderIndex,
+    visibilityLabel: drawable.visible ? "Visible" : "Hidden",
+    canMoveLayerUp: drawable.canMoveLayerUp,
+    canMoveLayerDown: drawable.canMoveLayerDown,
     baseDrawOrderLabel: `Draw order ${drawable.baseDrawOrder}`,
+    layerOrderLabel: `Layer ${drawable.orderIndex + 1}`,
     meshSummaryLabel: `${drawable.vertexCount} vertices / ${drawable.triangleCount} triangles`,
     boundsLabel: formatBoundsLabel(drawable.bounds)
   })),
@@ -155,6 +195,32 @@ const projectDrawableAuthoringViewModel = (
   boundsLabel: formatBoundsLabel(state.pendingCreateDrawable.initialBounds),
   meshMethodLabel: `${state.pendingCreateDrawable.meshMethod} / ${state.pendingCreateDrawable.densityHint}`,
   resultLabel: projectCreateDrawableResultLabel(state)
+});
+
+const projectDrawableLayerControlsViewModel = (
+  state: EditorSemanticState
+): DrawableLayerControlsViewModel => ({
+  orderedDrawables: state.drawables.map((drawable) => ({
+    drawableId: drawable.drawableId,
+    displayName: drawable.displayName,
+    visible: drawable.visible,
+    runtimeVisibilityLabel: drawable.visible ? "Visible" : "Hidden",
+    baseDrawOrder: drawable.baseDrawOrder,
+    stableOrder: drawable.stableOrder,
+    orderIndex: drawable.orderIndex,
+    orderLabel: `Layer ${drawable.orderIndex + 1} / draw order ${drawable.baseDrawOrder}`,
+    canMoveUp: drawable.canMoveLayerUp,
+    canMoveDown: drawable.canMoveLayerDown,
+    moveUpLabel: `Move ${drawable.displayName} up`,
+    moveDownLabel: `Move ${drawable.displayName} down`,
+    visibilityToggleLabel: drawable.visible
+      ? `Hide ${drawable.displayName}`
+      : `Show ${drawable.displayName}`
+  })),
+  hasDrawables: state.drawables.length > 0,
+  hasMultipleDrawables: state.drawables.length > 1,
+  layerCountLabel: `${state.drawables.length} layer${state.drawables.length === 1 ? "" : "s"}`,
+  lastLayerOperationLabel: projectLastLayerOperationLabel(state)
 });
 
 const canSubmitCreateDrawable = (state: EditorSemanticState): boolean =>
@@ -178,6 +244,19 @@ const projectCreateDrawableResultLabel = (state: EditorSemanticState): string =>
   }
 
   return "Drawable preset ready";
+};
+
+const projectLastLayerOperationLabel = (state: EditorSemanticState): string => {
+  const result = state.lastOperationResult;
+  if (result === null) {
+    return "No layer operation committed";
+  }
+
+  if (result.operationType !== "setDrawOrder" && result.operationType !== "setRuntimeVisibility") {
+    return "No layer operation committed";
+  }
+
+  return `${result.operationType} ${result.status}`;
 };
 
 const projectAiApprovalViewModel = (

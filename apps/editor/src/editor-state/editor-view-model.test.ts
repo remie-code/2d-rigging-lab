@@ -211,6 +211,18 @@ describe("editor semantic state view model", () => {
       canvasSize: { width: 128, height: 128 },
       drawables: [
         {
+          drawableId: DrawableIdSchema.parse("draw_star"),
+          displayName: "Star",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          textureId: TextureIdSchema.parse("tex_star"),
+          meshId: MeshIdSchema.parse("mesh_star"),
+          defaultOpacity: 1,
+          runtimeVisibility: false,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        },
+        {
           drawableId: DrawableIdSchema.parse("draw_body"),
           displayName: "Body",
           partId: PartIdSchema.parse("part_root"),
@@ -223,7 +235,39 @@ describe("editor semantic state view model", () => {
           sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
         }
       ],
+      drawOrderEntries: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          baseDrawOrder: 1,
+          stableOrder: 1
+        },
+        {
+          drawableId: DrawableIdSchema.parse("draw_star"),
+          baseDrawOrder: 0,
+          stableOrder: 0
+        }
+      ],
       meshes: [
+        {
+          meshId: MeshIdSchema.parse("mesh_star"),
+          drawableId: DrawableIdSchema.parse("draw_star"),
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+            { x: 0, y: 10 },
+            { x: 10, y: 10 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 1, y: 1 }
+          ],
+          triangles: [[0, 1, 2], [1, 3, 2]],
+          vertexStableIds: ["s0", "s1", "s2", "s3"],
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        },
         {
           meshId: MeshIdSchema.parse("mesh_body"),
           drawableId: DrawableIdSchema.parse("draw_body"),
@@ -255,12 +299,12 @@ describe("editor semantic state view model", () => {
       densityHint: "medium"
     });
     expect(viewModel).toMatchObject({
-      drawableCountLabel: "1 drawable",
+      drawableCountLabel: "2 drawables",
       canSubmitCreateDrawable: true
     });
     expect(viewModel.drawableAuthoring).toMatchObject({
       hasDrawables: true,
-      drawableCountLabel: "1 drawable",
+      drawableCountLabel: "2 drawables",
       canSubmitCreateDrawable: true,
       sourceLabel: "src_generated / layer_body",
       partLabel: "part_root",
@@ -268,13 +312,60 @@ describe("editor semantic state view model", () => {
       meshMethodLabel: "auto-grid-v1 / medium",
       drawables: [
         {
+          drawableId: "draw_star",
+          displayName: "Star",
+          meshId: "mesh_star",
+          visible: false,
+          baseDrawOrder: 0,
+          stableOrder: 0,
+          orderIndex: 0,
+          visibilityLabel: "Hidden",
+          canMoveLayerUp: true,
+          canMoveLayerDown: false,
+          baseDrawOrderLabel: "Draw order 0",
+          layerOrderLabel: "Layer 1",
+          meshSummaryLabel: "4 vertices / 2 triangles",
+          boundsLabel: "0, 0 / 10 x 10"
+        },
+        {
           drawableId: "draw_body",
           displayName: "Body",
           meshId: "mesh_body",
           visible: true,
-          baseDrawOrderLabel: "Draw order 0",
+          baseDrawOrder: 1,
+          stableOrder: 1,
+          orderIndex: 1,
+          visibilityLabel: "Visible",
+          canMoveLayerUp: false,
+          canMoveLayerDown: true,
+          baseDrawOrderLabel: "Draw order 1",
+          layerOrderLabel: "Layer 2",
           meshSummaryLabel: "3 vertices / 1 triangles",
           boundsLabel: "10, 12 / 34 x 56"
+        }
+      ]
+    });
+    expect(viewModel.drawableLayers).toMatchObject({
+      hasDrawables: true,
+      hasMultipleDrawables: true,
+      layerCountLabel: "2 layers",
+      lastLayerOperationLabel: "No layer operation committed",
+      orderedDrawables: [
+        {
+          drawableId: "draw_star",
+          runtimeVisibilityLabel: "Hidden",
+          orderLabel: "Layer 1 / draw order 0",
+          canMoveUp: true,
+          canMoveDown: false,
+          visibilityToggleLabel: "Show Star"
+        },
+        {
+          drawableId: "draw_body",
+          runtimeVisibilityLabel: "Visible",
+          orderLabel: "Layer 2 / draw order 1",
+          canMoveUp: false,
+          canMoveDown: true,
+          visibilityToggleLabel: "Hide Body"
         }
       ]
     });

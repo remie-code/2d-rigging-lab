@@ -9,6 +9,7 @@ export const editorTestIds = {
   drawableCreateForm: "drawable.create.form",
   drawableCreateSubmit: "drawable.create",
   drawableList: "drawable.list",
+  drawableLayerStatus: "drawable.layer.status",
   drawableResult: "drawable.result",
   operationStatus: "operation.status",
   projectPersistencePanel: "projectPersistence.panel",
@@ -43,6 +44,15 @@ export const editorProjectStorageKey = "private-2d-rigging-lab.editor-project";
 export const createAiTranscriptEventRowTestId = (index) => `aiTranscript.event.${index}`;
 
 export const createDrawableRowTestId = (drawableId) => `drawable.row.${drawableId}`;
+
+export const createDrawableVisibilityToggleTestId = (drawableId) =>
+  `drawable.visibility.${drawableId}`;
+
+export const createDrawableMoveUpTestId = (drawableId) =>
+  `drawable.moveUp.${drawableId}`;
+
+export const createDrawableMoveDownTestId = (drawableId) =>
+  `drawable.moveDown.${drawableId}`;
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;

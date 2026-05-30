@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_layer_reorder",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "operationType": "setDrawOrder",
+  "payload": {
+    "entries": [
+      {
+        "drawableId": "draw_back",
+        "baseDrawOrder": 20
+      }
+    ]
+  }
+}

@@ -184,6 +184,10 @@ const createRuntimeEvidenceInput = (
       return createAddKeyformRuntimeEvidenceInput(input);
     case "addKeyformGrid2d":
       return createAddKeyformGrid2dRuntimeEvidenceInput(input);
+    case "setRuntimeVisibility":
+      return createSetRuntimeVisibilityEvidenceInput(input);
+    case "setDrawOrder":
+      return createSetDrawOrderEvidenceInput(input);
     default:
       throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
   }
@@ -311,6 +315,53 @@ const createAddKeyformGrid2dRuntimeEvidenceInput = (
     baseline: {
       frame: {
         authoredParameterValues,
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetRuntimeVisibilityEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setRuntimeVisibility") {
+    throw new Error(`setRuntimeVisibility evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([...input.targetIds, input.request.payload.target.id]);
+
+  return {
+    artifactLabel: "editor-set-runtime-visibility",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetDrawOrderEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setDrawOrder") {
+    throw new Error(`setDrawOrder evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...input.request.payload.entries.map((entry) => entry.drawableId)
+  ]);
+
+  return {
+    artifactLabel: "editor-set-draw-order",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
         targetIds
       }
     }

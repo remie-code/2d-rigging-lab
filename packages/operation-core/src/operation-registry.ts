@@ -9,6 +9,8 @@ import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
+import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
+import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -35,7 +37,9 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],
   [createParameterOperationHandler.operationType, createParameterOperationHandler],
   [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
-  [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler]
+  [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
+  [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
+  [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]
 ]);
 
 export const getOperationHandler = (operationType: OperationType): OperationHandler | undefined =>

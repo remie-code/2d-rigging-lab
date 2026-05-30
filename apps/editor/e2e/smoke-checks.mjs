@@ -6,6 +6,11 @@ import {
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
+import {
+  assertLayerStateAfterLoad,
+  assertSavedLayerState,
+  runLayerControlsWorkflow
+} from "./layer-controls-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -52,16 +57,20 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
     const drawableEvidence = await runCreateDrawableWorkflow(page, viewport);
     await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
+    const layerEvidence = await runLayerControlsWorkflow({ page, viewport, smokeDrawable });
+    await assertHorizontalOverflow(page, `${viewport.name} post-layer-controls`);
     await saveProject(page, {
-      expectedOperationLogLineCount: 3,
+      expectedOperationLogLineCount: 9,
       expectedDrawableId: smokeDrawable.drawableId
     });
+    await assertSavedLayerState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
     await reloadProjectFromStorage(page);
+    await assertLayerStateAfterLoad({ page, smokeDrawable });
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
 
-    return { viewport: viewport.name, previewEvidence, drawableEvidence };
+    return { viewport: viewport.name, previewEvidence, drawableEvidence, layerEvidence };
   } finally {
     await page.close();
   }
@@ -510,31 +519,12 @@ const readCreatedDrawableState = async (page) =>
     summary: editorTestIds.previewSummary
   }, smokeDrawable.drawableId);
 
-const assertCreatedDrawableVisibleAfterLoad = async (page) => {
+const assertCreatedDrawableRestoredAfterLoad = async (page) => {
   await waitForText(page, editorTestIds.drawableResult, "Drawable preset ready");
   await waitForText(page, editorTestIds.drawableList, smokeDrawable.displayName);
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
-  await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
-  await page.waitFor(
-    "loaded created drawable appears in preview visual",
-    (ids, drawableId, expectedBounds) => {
-      const drawable = document
-        .querySelector(`[data-testid="${ids.visual}"]`)
-        ?.querySelector(`[data-drawable-id="${drawableId}"]`);
-      const points = drawable?.getAttribute("points") ?? "";
-
-      return (
-        points.includes(`${expectedBounds.x},${expectedBounds.y}`) &&
-        points.includes(`${expectedBounds.x + expectedBounds.width},${expectedBounds.y + expectedBounds.height}`)
-      );
-    },
-    { timeoutMs: 8_000 },
-    { visual: editorTestIds.previewVisual },
-    smokeDrawable.drawableId,
-    smokeDrawable.bounds
-  );
 };
 
 const assertInitialAiApprovalRendered = async (page) => {
@@ -695,9 +685,13 @@ const reloadProjectFromStorage = async (page) => {
   await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
   await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
   await waitForText(page, editorTestIds.previewSummary, "0 changes");
-  await assertCreatedDrawableVisibleAfterLoad(page);
-  await waitForOperationLogEntryCount(page, 3);
-  await waitForText(page, editorTestIds.operationLogSummary, "createParameter, createDrawable, generateMesh");
+  await assertCreatedDrawableRestoredAfterLoad(page);
+  await waitForOperationLogEntryCount(page, 9);
+  await waitForText(
+    page,
+    editorTestIds.operationLogSummary,
+    "createParameter, createDrawable, generateMesh, setRuntimeVisibility, setDrawOrder"
+  );
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForText(page, editorTestIds.aiApprovalStatus, "No AI dry-run pending");
   await waitForText(

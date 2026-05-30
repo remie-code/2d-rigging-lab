@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "drawable-layer-runtime-evidence",
+  "description": "Compact two-drawable oracle for setDrawOrder and setRuntimeVisibility runtime evidence.",
+  "requestFiles": [
+    "request/set-draw-order-commit.request.json",
+    "request/hide-front-commit.request.json",
+    "request/show-front-commit.request.json"
+  ],
+  "expectedFiles": [
+    "expected/drawable-layer-runtime-evidence-summary.json"
+  ]
+}

@@ -25,6 +25,14 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitCreateDrawablePreset(command);
           render();
         },
+        onToggleDrawableRuntimeVisibility(drawableId) {
+          workflow.toggleDrawableRuntimeVisibility(drawableId);
+          render();
+        },
+        onMoveDrawableLayer(drawableId, direction) {
+          workflow.moveDrawableLayer(drawableId, direction);
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();

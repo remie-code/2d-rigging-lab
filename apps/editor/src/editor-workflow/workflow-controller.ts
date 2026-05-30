@@ -113,6 +113,33 @@ export interface EditorWorkflowPreviewResetResult {
   readonly parameterCount: number;
 }
 
+export type EditorDrawableLayerMoveDirection = "up" | "down";
+
+export interface EditorWorkflowLayerActionNotFoundResult {
+  readonly status: "not_found";
+  readonly drawableId: string;
+}
+
+export interface EditorWorkflowLayerMoveNotMovableResult {
+  readonly status: "not_movable";
+  readonly drawableId: string;
+  readonly direction: EditorDrawableLayerMoveDirection;
+}
+
+export interface EditorWorkflowLayerActionCommitResult {
+  readonly status: "committed" | "rejected";
+  readonly result: EditorSessionPersistenceResult;
+}
+
+export type EditorWorkflowLayerVisibilityResult =
+  | EditorWorkflowLayerActionNotFoundResult
+  | EditorWorkflowLayerActionCommitResult;
+
+export type EditorWorkflowLayerMoveResult =
+  | EditorWorkflowLayerActionNotFoundResult
+  | EditorWorkflowLayerMoveNotMovableResult
+  | EditorWorkflowLayerActionCommitResult;
+
 export interface EditorWorkflowController {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
@@ -123,6 +150,15 @@ export interface EditorWorkflowController {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
+  setDrawableRuntimeVisibility(
+    drawableId: string,
+    runtimeVisibility: boolean
+  ): EditorWorkflowLayerVisibilityResult;
+  toggleDrawableRuntimeVisibility(drawableId: string): EditorWorkflowLayerVisibilityResult;
+  moveDrawableLayer(
+    drawableId: string,
+    direction: EditorDrawableLayerMoveDirection
+  ): EditorWorkflowLayerMoveResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
   resetPreviewParameterValues(): EditorWorkflowPreviewResetResult;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
@@ -255,6 +291,71 @@ export const createEditorWorkflowController = (
 
       return result;
     },
+    setDrawableRuntimeVisibility(drawableId, runtimeVisibility) {
+      if (!state.drawables.some((drawable) => drawable.drawableId === drawableId)) {
+        return {
+          status: "not_found",
+          drawableId
+        };
+      }
+
+      const result = adapter.commitSetDrawableRuntimeVisibility({
+        operationId: createLayerOperationId(
+          "set_runtime_visibility",
+          drawableId,
+          runtimeVisibility ? "show" : "hide",
+          adapter.authoringSession.packageRevision
+        ),
+        drawableId,
+        runtimeVisibility
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = applyEditorWorkflowCommitResult(state, adapter, result);
+
+      return {
+        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+        result
+      };
+    },
+    toggleDrawableRuntimeVisibility(drawableId) {
+      const drawable = state.drawables.find((candidate) => candidate.drawableId === drawableId);
+      if (drawable === undefined) {
+        return {
+          status: "not_found",
+          drawableId
+        };
+      }
+
+      return this.setDrawableRuntimeVisibility(drawableId, !drawable.visible);
+    },
+    moveDrawableLayer(drawableId, direction) {
+      const move = createDrawableLayerMoveEntries(state.drawables, drawableId, direction);
+
+      if (move.status !== "ready") {
+        return move;
+      }
+
+      const result = adapter.commitSetDrawableDrawOrder({
+        operationId: createLayerOperationId(
+          "set_draw_order",
+          drawableId,
+          direction,
+          adapter.authoringSession.packageRevision
+        ),
+        entries: move.entries
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = applyEditorWorkflowCommitResult(state, adapter, result);
+
+      return {
+        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+        result
+      };
+    },
     setPreviewParameterValue(parameterId, value) {
       const projection = applyPreviewParameterValue(state.previewParameters, {
         parameterId,
@@ -370,6 +471,69 @@ export const createEditorWorkflowController = (
     }
   };
 };
+
+const createDrawableLayerMoveEntries = (
+  drawables: EditorSemanticState["drawables"],
+  drawableId: string,
+  direction: EditorDrawableLayerMoveDirection
+):
+  | {
+      readonly status: "ready";
+      readonly entries: readonly { readonly drawableId: string; readonly baseDrawOrder: number }[];
+    }
+  | EditorWorkflowLayerActionNotFoundResult
+  | EditorWorkflowLayerMoveNotMovableResult => {
+  const ordered = [...drawables].sort((left, right) => left.orderIndex - right.orderIndex);
+  const index = ordered.findIndex((drawable) => drawable.drawableId === drawableId);
+  if (index < 0) {
+    return {
+      status: "not_found",
+      drawableId
+    };
+  }
+
+  const targetIndex = direction === "up" ? index + 1 : index - 1;
+  if (targetIndex < 0 || targetIndex >= ordered.length) {
+    return {
+      status: "not_movable",
+      drawableId,
+      direction
+    };
+  }
+
+  const reordered = [...ordered];
+  const selected = reordered[index];
+  const target = reordered[targetIndex];
+  if (selected === undefined || target === undefined) {
+    return {
+      status: "not_movable",
+      drawableId,
+      direction
+    };
+  }
+
+  reordered[index] = target;
+  reordered[targetIndex] = selected;
+
+  return {
+    status: "ready",
+    entries: reordered.map((drawable, baseDrawOrder) => ({
+      drawableId: drawable.drawableId,
+      baseDrawOrder
+    }))
+  };
+};
+
+const createLayerOperationId = (
+  operation: string,
+  drawableId: string,
+  action: string,
+  packageRevision: number
+): string =>
+  `op_editor_${operation}_${sanitizeOperationIdToken(drawableId)}_${sanitizeOperationIdToken(action)}_r${packageRevision}`;
+
+const sanitizeOperationIdToken = (text: string): string =>
+  text.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase();
 
 const projectWorkflowPreviewProjection = (
   adapter: EditorSessionAdapter,

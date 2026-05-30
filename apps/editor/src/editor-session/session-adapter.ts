@@ -34,6 +34,12 @@ import {
   type EditorCreateDrawablePresetCommand
 } from "./create-drawable-preset-command.js";
 import {
+  createSetDrawableDrawOrderOperationRequest,
+  createSetDrawableRuntimeVisibilityOperationRequest,
+  type EditorSetDrawableDrawOrderCommand,
+  type EditorSetDrawableRuntimeVisibilityCommand
+} from "./drawable-layer-command.js";
+import {
   createEditorEvidenceCollector,
   summarizeEvidencePaths,
   toEvidencePackageFileEntries,
@@ -49,6 +55,10 @@ export interface EditorSessionAdapter {
   commitOperation(request: OperationRequestDto): EditorSessionPersistenceResult;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
+  commitSetDrawableRuntimeVisibility(
+    command: EditorSetDrawableRuntimeVisibilityCommand
+  ): EditorSessionPersistenceResult;
+  commitSetDrawableDrawOrder(command: EditorSetDrawableDrawOrderCommand): EditorSessionPersistenceResult;
 }
 
 export interface EditorSessionAdapterOptions {
@@ -172,6 +182,20 @@ export const createEditorSessionAdapter = (
         generateMesh,
         finalPersistenceResult: generateMesh
       };
+    },
+    commitSetDrawableRuntimeVisibility(command) {
+      const request = createSetDrawableRuntimeVisibilityOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitSetDrawableDrawOrder(command) {
+      const request = createSetDrawableDrawOrderOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
     }
   };
 };

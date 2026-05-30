@@ -1,0 +1,418 @@
+{
+  "schemaVersion": "drawable-layer-runtime-evidence-summary-v1",
+  "fixture": {
+    "drawableIds": [
+      "draw_back",
+      "draw_front"
+    ],
+    "operationTypes": [
+      "setDrawOrder",
+      "setRuntimeVisibility",
+      "setRuntimeVisibility"
+    ]
+  },
+  "operations": [
+    {
+      "operationType": "setDrawOrder",
+      "operationId": "op_layer_reorder",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_back"
+      ],
+      "modelDiffPaths": [
+        "/model/drawOrder/entries",
+        "/model/drawables/draw_back/baseDrawOrder"
+      ],
+      "runtimeSnapshots": {
+        "baseline": {
+          "packageRevision": 0,
+          "drawList": [
+            "draw_back",
+            "draw_front"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 0,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_front",
+              "visible": true,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        },
+        "candidate": {
+          "packageRevision": 1,
+          "drawList": [
+            "draw_front",
+            "draw_back"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_front",
+              "visible": true,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 20,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        }
+      },
+      "runtimeDiff": {
+        "drawableRuntimeStateChanges": [
+          {
+            "drawableId": "draw_front",
+            "opacityBefore": 1,
+            "opacityAfter": 1,
+            "visibleBefore": true,
+            "visibleAfter": true,
+            "baseDrawOrderBefore": 10,
+            "baseDrawOrderAfter": 10,
+            "evaluatedDrawOrderBefore": 1,
+            "evaluatedDrawOrderAfter": 0
+          },
+          {
+            "drawableId": "draw_back",
+            "opacityBefore": 1,
+            "opacityAfter": 1,
+            "visibleBefore": true,
+            "visibleAfter": true,
+            "baseDrawOrderBefore": 0,
+            "baseDrawOrderAfter": 20,
+            "evaluatedDrawOrderBefore": 0,
+            "evaluatedDrawOrderAfter": 1
+          }
+        ],
+        "drawListChanges": [
+          {
+            "before": [
+              "draw_back",
+              "draw_front"
+            ],
+            "after": [
+              "draw_front",
+              "draw_back"
+            ],
+            "membershipChanged": false,
+            "orderChanged": true,
+            "positionChanges": [
+              {
+                "drawableId": "draw_back",
+                "beforeIndex": 0,
+                "afterIndex": 1
+              },
+              {
+                "drawableId": "draw_front",
+                "beforeIndex": 1,
+                "afterIndex": 0
+              }
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "baselineReportId": "val_op_layer_reorder_baseline",
+        "candidateReportId": "val_op_layer_reorder_candidate",
+        "candidateStatus": "pass",
+        "operationLogPresent": true,
+        "operationLogPath": "operations/log.jsonl",
+        "runtimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "validationDiff": {
+          "beforeReportId": "val_op_layer_reorder_baseline",
+          "afterReportId": "val_op_layer_reorder_candidate",
+          "newFailureCount": 0,
+          "resolvedFailureCount": 0,
+          "severityChangeCount": 0
+        }
+      },
+      "operationEvidence": {
+        "generatedRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "generatedValidationReportIds": [
+          "val_op_layer_reorder_baseline",
+          "val_op_layer_reorder_candidate"
+        ],
+        "logEntryRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "logEntryValidationReportIds": [
+          "val_op_layer_reorder_baseline",
+          "val_op_layer_reorder_candidate"
+        ]
+      }
+    },
+    {
+      "operationType": "setRuntimeVisibility",
+      "operationId": "op_layer_hide_front",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_front"
+      ],
+      "modelDiffPaths": [
+        "/model/drawables/draw_front/runtimeVisibility"
+      ],
+      "runtimeSnapshots": {
+        "baseline": {
+          "packageRevision": 1,
+          "drawList": [
+            "draw_front",
+            "draw_back"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_front",
+              "visible": true,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 20,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        },
+        "candidate": {
+          "packageRevision": 2,
+          "drawList": [
+            "draw_back"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_front",
+              "visible": false,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 20,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        }
+      },
+      "runtimeDiff": {
+        "drawableRuntimeStateChanges": [
+          {
+            "drawableId": "draw_front",
+            "opacityBefore": 1,
+            "opacityAfter": 1,
+            "visibleBefore": true,
+            "visibleAfter": false,
+            "baseDrawOrderBefore": 10,
+            "baseDrawOrderAfter": 10,
+            "evaluatedDrawOrderBefore": 0,
+            "evaluatedDrawOrderAfter": 0
+          }
+        ],
+        "drawListChanges": [
+          {
+            "before": [
+              "draw_front",
+              "draw_back"
+            ],
+            "after": [
+              "draw_back"
+            ],
+            "membershipChanged": true,
+            "orderChanged": false,
+            "positionChanges": [
+              {
+                "drawableId": "draw_front",
+                "beforeIndex": 0
+              },
+              {
+                "drawableId": "draw_back",
+                "beforeIndex": 1,
+                "afterIndex": 0
+              }
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "baselineReportId": "val_op_layer_hide_front_baseline",
+        "candidateReportId": "val_op_layer_hide_front_candidate",
+        "candidateStatus": "pass",
+        "operationLogPresent": true,
+        "operationLogPath": "operations/log.jsonl",
+        "runtimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "validationDiff": {
+          "beforeReportId": "val_op_layer_hide_front_baseline",
+          "afterReportId": "val_op_layer_hide_front_candidate",
+          "newFailureCount": 0,
+          "resolvedFailureCount": 0,
+          "severityChangeCount": 0
+        }
+      },
+      "operationEvidence": {
+        "generatedRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "generatedValidationReportIds": [
+          "val_op_layer_hide_front_baseline",
+          "val_op_layer_hide_front_candidate"
+        ],
+        "logEntryRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "logEntryValidationReportIds": [
+          "val_op_layer_hide_front_baseline",
+          "val_op_layer_hide_front_candidate"
+        ]
+      }
+    },
+    {
+      "operationType": "setRuntimeVisibility",
+      "operationId": "op_layer_show_front",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_front"
+      ],
+      "modelDiffPaths": [
+        "/model/drawables/draw_front/runtimeVisibility"
+      ],
+      "runtimeSnapshots": {
+        "baseline": {
+          "packageRevision": 2,
+          "drawList": [
+            "draw_back"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_front",
+              "visible": false,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 20,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        },
+        "candidate": {
+          "packageRevision": 3,
+          "drawList": [
+            "draw_front",
+            "draw_back"
+          ],
+          "drawables": [
+            {
+              "drawableId": "draw_front",
+              "visible": true,
+              "baseDrawOrder": 10,
+              "evaluatedDrawOrder": 0
+            },
+            {
+              "drawableId": "draw_back",
+              "visible": true,
+              "baseDrawOrder": 20,
+              "evaluatedDrawOrder": 1
+            }
+          ]
+        }
+      },
+      "runtimeDiff": {
+        "drawableRuntimeStateChanges": [
+          {
+            "drawableId": "draw_front",
+            "opacityBefore": 1,
+            "opacityAfter": 1,
+            "visibleBefore": false,
+            "visibleAfter": true,
+            "baseDrawOrderBefore": 10,
+            "baseDrawOrderAfter": 10,
+            "evaluatedDrawOrderBefore": 0,
+            "evaluatedDrawOrderAfter": 0
+          }
+        ],
+        "drawListChanges": [
+          {
+            "before": [
+              "draw_back"
+            ],
+            "after": [
+              "draw_front",
+              "draw_back"
+            ],
+            "membershipChanged": true,
+            "orderChanged": false,
+            "positionChanges": [
+              {
+                "drawableId": "draw_back",
+                "beforeIndex": 0,
+                "afterIndex": 1
+              },
+              {
+                "drawableId": "draw_front",
+                "afterIndex": 0
+              }
+            ]
+          }
+        ]
+      },
+      "validation": {
+        "baselineReportId": "val_op_layer_show_front_baseline",
+        "candidateReportId": "val_op_layer_show_front_candidate",
+        "candidateStatus": "pass",
+        "operationLogPresent": true,
+        "operationLogPath": "operations/log.jsonl",
+        "runtimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "validationDiff": {
+          "beforeReportId": "val_op_layer_show_front_baseline",
+          "afterReportId": "val_op_layer_show_front_candidate",
+          "newFailureCount": 0,
+          "resolvedFailureCount": 0,
+          "severityChangeCount": 0
+        }
+      },
+      "operationEvidence": {
+        "generatedRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "generatedValidationReportIds": [
+          "val_op_layer_show_front_baseline",
+          "val_op_layer_show_front_candidate"
+        ],
+        "logEntryRuntimeSnapshotIds": [
+          "snap_drawable_layer_runtime_evidence_0",
+          "snap_drawable_layer_runtime_evidence_1"
+        ],
+        "logEntryValidationReportIds": [
+          "val_op_layer_show_front_baseline",
+          "val_op_layer_show_front_candidate"
+        ]
+      }
+    }
+  ]
+}

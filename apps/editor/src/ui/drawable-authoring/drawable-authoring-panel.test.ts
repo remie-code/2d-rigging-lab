@@ -9,7 +9,10 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 
 import {
+  createDrawableMoveDownTestId,
+  createDrawableMoveUpTestId,
   createDrawableRowTestId,
+  createDrawableVisibilityToggleTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
   projectLoadedPackageState
@@ -44,7 +47,46 @@ describe("drawable authoring panel", () => {
     );
     expect(findByTestId(panel, editorTestIds.drawableCreateForm)?.textContent).toContain("Shape preset");
     expect(findByTestId(panel, editorTestIds.drawableResult)?.textContent).toContain("Drawable preset ready");
+    expect(findByTestId(panel, editorTestIds.drawableLayerStatus)?.textContent).toContain("No layer operation committed");
     expect(findByTestId(panel, createDrawableRowTestId("draw_body"))?.textContent).toContain("Body");
+  });
+
+  it("renders runtime visibility and layer move controls with boundary disabled states", () => {
+    const state = createDrawableState({ includeSecondDrawable: true });
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      state,
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility: (drawableId) => calls.push(["toggle", drawableId]),
+        onMoveDrawableLayer: (drawableId, direction) => calls.push(["move", drawableId, direction])
+      }
+    );
+
+    expect(findByTestId(panel, createDrawableVisibilityToggleTestId("draw_body"))?.getAttribute("aria-label")).toBe(
+      "Hide Body"
+    );
+    expect(findByTestId(panel, createDrawableMoveDownTestId("draw_body"))?.disabled).toBe(true);
+    expect(findByTestId(panel, createDrawableMoveUpTestId("draw_body"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createDrawableMoveDownTestId("draw_star"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createDrawableMoveUpTestId("draw_star"))?.disabled).toBe(true);
+
+    findByTestId(panel, createDrawableVisibilityToggleTestId("draw_body"))?.emit("click");
+    findByTestId(panel, createDrawableMoveUpTestId("draw_body"))?.emit("click");
+    findByTestId(panel, createDrawableMoveDownTestId("draw_star"))?.emit("click");
+
+    expect(calls).toEqual([
+      ["toggle", "draw_body"],
+      ["move", "draw_body", "up"],
+      ["move", "draw_star", "down"]
+    ]);
+  });
+
+  it("disables both layer move buttons for a single drawable", () => {
+    const panel = createPanel(createDrawableState());
+
+    expect(findByTestId(panel, createDrawableMoveDownTestId("draw_body"))?.disabled).toBe(true);
+    expect(findByTestId(panel, createDrawableMoveUpTestId("draw_body"))?.disabled).toBe(true);
   });
 
   it("submits a valid generated drawable preset command", () => {
@@ -107,15 +149,27 @@ describe("drawable authoring panel", () => {
 
 const createPanel = (
   state: ReturnType<typeof createDrawableState>,
-  onSubmit: Parameters<typeof createDrawableAuthoringPanel>[0]["onCommitCreateDrawable"] = () => {}
+  onSubmit: Parameters<typeof createDrawableAuthoringPanel>[0]["onCommitCreateDrawable"] = () => {},
+  callbacks: Pick<
+    Parameters<typeof createDrawableAuthoringPanel>[0],
+    "onToggleDrawableRuntimeVisibility" | "onMoveDrawableLayer"
+  > = {
+    onToggleDrawableRuntimeVisibility() {},
+    onMoveDrawableLayer() {}
+  }
 ): TestElement =>
   createDrawableAuthoringPanel({
     state,
     viewModel: projectEditorWorkflowViewModel(state),
-    onCommitCreateDrawable: onSubmit
+    onCommitCreateDrawable: onSubmit,
+    ...callbacks
   }) as unknown as TestElement;
 
-const createDrawableState = () =>
+const createDrawableState = (
+  options: {
+    readonly includeSecondDrawable?: boolean;
+  } = {}
+) =>
   projectLoadedPackageState({
     identity: {
       packageId: "pkg_drawable_ui",
@@ -145,7 +199,9 @@ const createDrawableState = () =>
             opacityInSource: 1,
             role: "editableLayer",
             unsupportedFeatures: [],
-            mappedDrawableIds: [DrawableIdSchema.parse("draw_body")]
+            mappedDrawableIds: options.includeSecondDrawable
+              ? [DrawableIdSchema.parse("draw_body"), DrawableIdSchema.parse("draw_star")]
+              : [DrawableIdSchema.parse("draw_body")]
           }
         ],
         diagnostics: []
@@ -156,7 +212,9 @@ const createDrawableState = () =>
         partId: PartIdSchema.parse("part_root"),
         displayName: "Root",
         childPartIds: [],
-        drawableIds: [DrawableIdSchema.parse("draw_body")]
+        drawableIds: options.includeSecondDrawable
+          ? [DrawableIdSchema.parse("draw_body"), DrawableIdSchema.parse("draw_star")]
+          : [DrawableIdSchema.parse("draw_body")]
       }
     ],
     drawables: [
@@ -171,7 +229,23 @@ const createDrawableState = () =>
         runtimeVisibility: true,
         baseDrawOrder: 0,
         sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
-      }
+      },
+      ...(options.includeSecondDrawable
+        ? [
+            {
+              drawableId: DrawableIdSchema.parse("draw_star"),
+              displayName: "Star",
+              partId: PartIdSchema.parse("part_root"),
+              sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+              textureId: TextureIdSchema.parse("tex_star"),
+              meshId: MeshIdSchema.parse("mesh_star"),
+              defaultOpacity: 1,
+              runtimeVisibility: true,
+              baseDrawOrder: 1,
+              sourceProvenanceId: ProvenanceIdSchema.parse("prov_star")
+            }
+          ]
+        : [])
     ],
     meshes: [
       {
@@ -187,11 +261,33 @@ const createDrawableState = () =>
           { x: 1, y: 0 },
           { x: 0.5, y: 1 }
         ],
-        triangles: [[0, 1, 2]],
+        triangles: [[0, 1, 2] as [number, number, number]],
         vertexStableIds: ["v0", "v1", "v2"],
         bounds: { x: 24, y: 16, width: 48, height: 64 },
         generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
-      }
+      },
+      ...(options.includeSecondDrawable
+        ? [
+            {
+              meshId: MeshIdSchema.parse("mesh_star"),
+              drawableId: DrawableIdSchema.parse("draw_star"),
+              vertices: [
+                { x: 16, y: 24 },
+                { x: 40, y: 24 },
+                { x: 28, y: 48 }
+              ],
+              uvs: [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 0.5, y: 1 }
+              ],
+              triangles: [[0, 1, 2] as [number, number, number]],
+              vertexStableIds: ["s0", "s1", "s2"],
+              bounds: { x: 16, y: 24, width: 24, height: 24 },
+              generationProvenanceId: ProvenanceIdSchema.parse("prov_star")
+            }
+          ]
+        : [])
     ]
   });
 

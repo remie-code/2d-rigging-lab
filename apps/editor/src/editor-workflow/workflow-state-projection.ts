@@ -25,6 +25,7 @@ export const createEditorWorkflowState = (
     },
     parameters: adapter.baseDocument.model.parameters.parameters,
     drawables: adapter.baseDocument.model.drawables.drawables,
+    drawOrderEntries: adapter.baseDocument.model.drawOrder.entries,
     meshes: adapter.baseDocument.model.meshes.meshes,
     parts: adapter.baseDocument.model.graph.parts,
     sourceAssets: adapter.baseDocument.assets.sourceManifest.sourceAssets,
@@ -55,6 +56,7 @@ export const applyEditorWorkflowCommitResult = (
     },
     parameters: result.reloadedDocument.model.parameters.parameters,
     drawables: result.reloadedDocument.model.drawables.drawables,
+    drawOrderEntries: result.reloadedDocument.model.drawOrder.entries,
     meshes: result.reloadedDocument.model.meshes.meshes,
     reload: {
       status: result.operationResult.status === "committed" ? "reloaded" : "failed",
@@ -79,6 +81,7 @@ export const projectLoadedEditorWorkflowState = (input: {
     },
     parameters: input.document.model.parameters.parameters,
     drawables: input.document.model.drawables.drawables,
+    drawOrderEntries: input.document.model.drawOrder.entries,
     meshes: input.document.model.meshes.meshes,
     parts: input.document.model.graph.parts,
     sourceAssets: input.document.assets.sourceManifest.sourceAssets,

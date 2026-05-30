@@ -2,7 +2,10 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
 import {
   createInitialEditorSemanticState,
+  createDrawableMoveDownTestId,
+  createDrawableMoveUpTestId,
   createDrawableRowTestId,
+  createDrawableVisibilityToggleTestId,
   createPreviewParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
@@ -72,6 +75,65 @@ describe("editor app shell preview panel", () => {
     expect(resetCount).toBe(1);
   });
 
+  it("wires drawable layer callbacks from the authoring list", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const calls: unknown[] = [];
+    const shell = renderShell(workflow, {
+      onToggleDrawableRuntimeVisibility(drawableId) {
+        calls.push(["toggle", drawableId]);
+      },
+      onMoveDrawableLayer(drawableId, direction) {
+        calls.push(["move", drawableId, direction]);
+      }
+    });
+
+    findByTestId(shell, createDrawableVisibilityToggleTestId("draw_body"))?.emit("click");
+    findByTestId(shell, createDrawableMoveUpTestId("draw_body"))?.emit("click");
+    findByTestId(shell, createDrawableMoveDownTestId("draw_workflow_star"))?.emit("click");
+
+    expect(calls).toEqual([
+      ["toggle", "draw_body"],
+      ["move", "draw_body", "up"],
+      ["move", "draw_workflow_star", "down"]
+    ]);
+  });
+
+  it("updates preview summary after a drawable visibility action", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    expect(findByTestId(renderShell(workflow), editorTestIds.previewSummary)?.textContent).toContain(
+      "2 visible / 2 total"
+    );
+
+    workflow.toggleDrawableRuntimeVisibility("draw_workflow_star");
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.previewSummary)?.textContent).toContain("1 visible / 2 total");
+    expect(findByTestId(shell, createDrawableVisibilityToggleTestId("draw_workflow_star"))?.getAttribute("aria-label")).toBe(
+      "Show Workflow Star"
+    );
+  });
+
+  it("marks first and last drawable move buttons disabled", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, createDrawableMoveDownTestId("draw_body"))?.disabled).toBe(true);
+    expect(findByTestId(shell, createDrawableMoveUpTestId("draw_body"))?.disabled).toBe(false);
+    expect(findByTestId(shell, createDrawableMoveDownTestId("draw_workflow_star"))?.disabled).toBe(false);
+    expect(findByTestId(shell, createDrawableMoveUpTestId("draw_workflow_star"))?.disabled).toBe(true);
+  });
+
+  it("keeps preview and drawable layer controls in the same shell", () => {
+    const workflow = createWorkflow();
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.previewPanel)).not.toBeNull();
+    expect(findByTestId(shell, editorTestIds.drawableList)).not.toBeNull();
+  });
+
   it("updates the projected visual and summary after a preview parameter change", () => {
     const workflow = createWorkflow();
     const initialShell = renderShell(workflow);
@@ -115,6 +177,8 @@ describe("editor app shell preview panel", () => {
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
       onCommitCreateDrawablePreset() {},
+      onToggleDrawableRuntimeVisibility() {},
+      onMoveDrawableLayer() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -141,6 +205,8 @@ describe("editor app shell preview panel", () => {
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
       onCommitCreateDrawablePreset() {},
+      onToggleDrawableRuntimeVisibility() {},
+      onMoveDrawableLayer() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -161,6 +227,8 @@ const renderShell = (
   callbacks: {
     readonly onSetPreviewParameterValue?: (parameterId: string, value: number) => void;
     readonly onResetPreviewParameterValues?: () => void;
+    readonly onToggleDrawableRuntimeVisibility?: (drawableId: string) => void;
+    readonly onMoveDrawableLayer?: (drawableId: string, direction: "up" | "down") => void;
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -171,6 +239,8 @@ const renderShell = (
     latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
     onCommitCreateParameter() {},
     onCommitCreateDrawablePreset() {},
+    onToggleDrawableRuntimeVisibility: callbacks.onToggleDrawableRuntimeVisibility ?? (() => {}),
+    onMoveDrawableLayer: callbacks.onMoveDrawableLayer ?? (() => {}),
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},

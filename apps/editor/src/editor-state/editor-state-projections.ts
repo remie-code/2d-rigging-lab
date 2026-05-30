@@ -29,6 +29,7 @@ import { projectPreviewParameterValues } from "./preview-parameter-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
 import type {
   DrawableDto,
+  DrawOrderEntryDto,
   MeshDto,
   ModelPartDto,
   SourceAssetDto
@@ -39,6 +40,7 @@ export interface LoadedPackageSummaryInput {
   readonly revision: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
   readonly drawables?: readonly DrawableDto[];
+  readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
   readonly parts?: readonly ModelPartDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
@@ -55,6 +57,7 @@ export interface CommittedOperationSummaryInput {
   readonly revision?: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
   readonly drawables?: readonly DrawableDto[];
+  readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
   readonly reload?: ReloadSummaryInput;
 }
@@ -66,7 +69,7 @@ export const projectLoadedPackageState = (
   loadedPackage: projectLoadedPackageIdentity(input.identity),
   revision: projectPackageRevision(input.revision),
   parameters: projectParameterList(input.parameters ?? []),
-  drawables: projectDrawableList(input.drawables ?? [], input.meshes ?? []),
+  drawables: projectDrawableList(input.drawables ?? [], input.meshes ?? [], input.drawOrderEntries ?? []),
   pendingCreateDrawable: projectCreateDrawableDefaults({
     ...(input.sourceAssets === undefined ? {} : { sourceAssets: input.sourceAssets }),
     ...(input.parts === undefined ? {} : { parts: input.parts }),
@@ -85,7 +88,7 @@ export const applyCommittedOperationSummary = (
   drawables:
     input.drawables === undefined
       ? state.drawables
-      : projectDrawableList(input.drawables, input.meshes ?? []),
+      : projectDrawableList(input.drawables, input.meshes ?? [], input.drawOrderEntries ?? []),
   previewParameters:
     input.parameters === undefined
       ? state.previewParameters
