@@ -6,6 +6,7 @@ import { createEmptyOperationLogSummary, type OperationLogSummaryState } from ".
 import type { LoadedPackageIdentityState } from "./package-identity-state.js";
 import { emptyPackageRevisionState, type PackageRevisionState } from "./package-revision-state.js";
 import type { ParameterListItemState } from "./parameter-list-state.js";
+import type { PreviewParameterValueState } from "./preview-parameter-state.js";
 import { createEmptyReloadSummary, type ReloadSummaryState } from "./reload-summary.js";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
@@ -15,6 +16,7 @@ export interface EditorSemanticState {
   readonly loadedPackage: LoadedPackageIdentityState | null;
   readonly revision: PackageRevisionState;
   readonly parameters: readonly ParameterListItemState[];
+  readonly previewParameters: readonly PreviewParameterValueState[];
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly lastOperationResult: OperationResultSummaryState | null;
   readonly operationLog: OperationLogSummaryState;
@@ -28,6 +30,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   loadedPackage: null,
   revision: emptyPackageRevisionState(),
   parameters: [],
+  previewParameters: [],
   pendingCreateParameter: createEmptyParameterFormState(),
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),

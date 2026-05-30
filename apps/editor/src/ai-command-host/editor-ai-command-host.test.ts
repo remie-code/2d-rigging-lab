@@ -6,6 +6,8 @@ import { createBrowserProjectStore, type StorageLike } from "../project-persiste
 import { createEditorWorkflowController } from "../editor-workflow/index.js";
 import { createEditorAiCommandHost } from "./editor-ai-command-host.js";
 
+const PREVIEW_SAMPLE_PARAMETER_ID = "param_preview_body_yaw";
+
 describe("editor AI command host", () => {
   it("returns editor state and dry-runs createParameter without mutating state or log", async () => {
     const workflow = createWorkflow(createMemoryStorage());
@@ -59,7 +61,9 @@ describe("editor AI command host", () => {
         }
       }
     });
-    expect(workflow.state.parameters).toHaveLength(0);
+    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID
+    ]);
     expect(workflow.state.revision.packageRevision).toBe(0);
     expect(workflow.state.operationLog.entryCount).toBe(0);
     expect(logResponse).toMatchObject({
@@ -115,7 +119,9 @@ describe("editor AI command host", () => {
         }
       }
     });
-    expect(workflow.state.parameters).toHaveLength(0);
+    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID
+    ]);
     expect(workflow.state.operationLog.entryCount).toBe(0);
   });
 
@@ -159,6 +165,7 @@ describe("editor AI command host", () => {
     });
     expect(workflow.state.revision.packageRevision).toBe(1);
     expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID,
       "param_ai_smile"
     ]);
     expect(workflow.state.operationLog.entryCount).toBe(1);
@@ -225,7 +232,9 @@ describe("editor AI command host", () => {
         operationId: "op_ai_create_parameter_smile"
       })
     );
-    expect(workflow.state.parameters).toHaveLength(0);
+    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID
+    ]);
     expect(workflow.state.operationLog.entryCount).toBe(0);
   });
 
@@ -278,6 +287,7 @@ describe("editor AI command host", () => {
     });
     expect(workflow.state.revision.packageRevision).toBe(1);
     expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID,
       "param_ai_smile"
     ]);
     expect(workflow.state.operationLog.entryCount).toBe(1);
@@ -371,19 +381,29 @@ describe("editor AI command host", () => {
         targets: [
           {
             kind: "parameter",
-            id: "param_ai_smile",
+            id: PREVIEW_SAMPLE_PARAMETER_ID,
             path: "/model/parameters/parameters/0"
+          },
+          {
+            kind: "parameter",
+            id: "param_ai_smile",
+            path: "/model/parameters/parameters/1"
           }
         ],
         editableTargets: [
           {
             kind: "parameter",
-            id: "param_ai_smile",
+            id: PREVIEW_SAMPLE_PARAMETER_ID,
             path: "/model/parameters/parameters/0"
+          },
+          {
+            kind: "parameter",
+            id: "param_ai_smile",
+            path: "/model/parameters/parameters/1"
           }
         ],
         targetCounts: {
-          parameters: 1
+          parameters: 2
         }
       }
     });
@@ -440,7 +460,7 @@ describe("editor AI command host", () => {
         target: {
           kind: "parameter",
           id: "param_ai_brow",
-          path: "/model/parameters/parameters/0"
+          path: "/model/parameters/parameters/1"
         },
         references: [],
         parameter: {
@@ -548,7 +568,9 @@ describe("editor AI command host", () => {
         }
       }
     });
-    expect(workflow.state.parameters).toHaveLength(0);
+    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID
+    ]);
     expect(workflow.state.operationLog.entryCount).toBe(0);
   });
 

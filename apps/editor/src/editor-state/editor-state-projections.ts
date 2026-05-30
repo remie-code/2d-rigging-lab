@@ -20,6 +20,7 @@ import {
 } from "./package-identity-state.js";
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
+import { projectPreviewParameterValues } from "./preview-parameter-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
 
 export interface LoadedPackageSummaryInput {
@@ -43,7 +44,8 @@ export const projectLoadedPackageState = (
   ...createInitialEditorSemanticState(),
   loadedPackage: projectLoadedPackageIdentity(input.identity),
   revision: projectPackageRevision(input.revision),
-  parameters: projectParameterList(input.parameters ?? [])
+  parameters: projectParameterList(input.parameters ?? []),
+  previewParameters: projectPreviewParameterValues(input.parameters ?? [])
 });
 
 export const applyCommittedOperationSummary = (
@@ -53,6 +55,10 @@ export const applyCommittedOperationSummary = (
   ...state,
   revision: input.revision === undefined ? state.revision : projectPackageRevision(input.revision),
   parameters: input.parameters === undefined ? state.parameters : projectParameterList(input.parameters),
+  previewParameters:
+    input.parameters === undefined
+      ? state.previewParameters
+      : projectPreviewParameterValues(input.parameters),
   pendingCreateParameter: {
     ...state.pendingCreateParameter,
     status: input.result.status === "committed" ? "committed" : "rejected",

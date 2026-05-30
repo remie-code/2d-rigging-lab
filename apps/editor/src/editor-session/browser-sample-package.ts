@@ -61,7 +61,7 @@ export const createBrowserSamplePackageDocument = (): PackageDocumentDto =>
           }
         ],
         rigControlRootIds: [],
-        stableOrder: ["draw_body"]
+        stableOrder: ["param_preview_body_yaw", "draw_body", "mesh_body", "keyset_preview_body_yaw_vertices"]
       },
       drawables: {
         schemaVersion: "drawables-file-v1",
@@ -87,9 +87,9 @@ export const createBrowserSamplePackageDocument = (): PackageDocumentDto =>
             meshId: "mesh_body",
             drawableId: "draw_body",
             vertices: [
-              { x: 0, y: 0 },
-              { x: 32, y: 0 },
-              { x: 0, y: 32 }
+              { x: 24, y: 16 },
+              { x: 72, y: 16 },
+              { x: 48, y: 80 }
             ],
             uvs: [
               { x: 0, y: 0 },
@@ -99,10 +99,10 @@ export const createBrowserSamplePackageDocument = (): PackageDocumentDto =>
             triangles: [[0, 1, 2]],
             vertexStableIds: ["v0", "v1", "v2"],
             bounds: {
-              x: 0,
-              y: 0,
-              width: 32,
-              height: 32
+              x: 24,
+              y: 16,
+              width: 48,
+              height: 64
             },
             generationProvenanceId: "prov_generated"
           }
@@ -110,11 +110,63 @@ export const createBrowserSamplePackageDocument = (): PackageDocumentDto =>
       },
       parameters: {
         schemaVersion: "parameters-file-v1",
-        parameters: []
+        parameters: [
+          {
+            parameterId: "param_preview_body_yaw",
+            displayName: "Preview Body Yaw",
+            semanticRole: "body",
+            projectPresetAlias: "private-editor-preview-body-yaw",
+            valueSource: "authoredInput",
+            min: -1,
+            max: 1,
+            default: 0,
+            recommendedUiStep: 0.01
+          }
+        ]
       },
       keyforms: {
         schemaVersion: "keyforms-file-v1",
-        keyformSets: []
+        keyformSets: [
+          {
+            keyformSetId: "keyset_preview_body_yaw_vertices",
+            target: {
+              kind: "mesh",
+              id: "mesh_body",
+              property: "vertices"
+            },
+            parameterId: "param_preview_body_yaw",
+            evaluator: "linear-1d-v1",
+            interpolation: "linear-1d-v1",
+            compositionMode: "replace",
+            compositionOrder: 0,
+            keys: [
+              {
+                value: -1,
+                statePatch: [
+                  { x: 18, y: 18 },
+                  { x: 66, y: 12 },
+                  { x: 42, y: 82 }
+                ]
+              },
+              {
+                value: 0,
+                statePatch: [
+                  { x: 24, y: 16 },
+                  { x: 72, y: 16 },
+                  { x: 48, y: 80 }
+                ]
+              },
+              {
+                value: 1,
+                statePatch: [
+                  { x: 30, y: 16 },
+                  { x: 84, y: 22 },
+                  { x: 54, y: 78 }
+                ]
+              }
+            ]
+          }
+        ]
       },
       rigControls: {
         schemaVersion: "rig-controls-file-v1",
@@ -157,10 +209,10 @@ export const createBrowserSamplePackageDocument = (): PackageDocumentDto =>
                 normalizedName: "body",
                 groupPath: ["Root"],
                 bounds: {
-                  x: 0,
-                  y: 0,
-                  width: 32,
-                  height: 32
+                  x: 24,
+                  y: 16,
+                  width: 48,
+                  height: 64
                 },
                 visibleInSource: true,
                 opacityInSource: 1,

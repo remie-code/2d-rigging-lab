@@ -18,6 +18,8 @@ import {
   type EditorSessionPersistenceResult
 } from "./session-adapter.js";
 
+const PREVIEW_SAMPLE_PARAMETER_ID = "param_preview_body_yaw";
+
 describe("editor session persistence adapter", () => {
   it("commits createParameter and reloads the persisted package file set", () => {
     const adapter = createEditorSessionAdapter({
@@ -134,7 +136,15 @@ describe("editor session persistence adapter", () => {
     const candidateSnapshot = parseRuntimeSnapshotArtifact(result.packageFileSet, runtimeDiff.afterSnapshotId);
     const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
 
-    expect(candidateSnapshot.keyformSamples).toEqual([
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
+      expect.objectContaining({
+        keyformSetId: "keyset_preview_body_yaw_vertices",
+        sampledCoordinates: {
+          [PREVIEW_SAMPLE_PARAMETER_ID]: 0
+        }
+      })
+    );
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
       expect.objectContaining({
         keyformSetId: "keyset_mesh_mesh_body_vertices_editor_body_yaw_1",
         evaluator: "linear-1d-v1",
@@ -149,7 +159,7 @@ describe("editor session persistence adapter", () => {
           { x: 0, y: 32 }
         ]
       })
-    ]);
+    );
     expect(candidateDrawable).toMatchObject({
       bounds: { x: 0, y: 0, width: 36, height: 32 },
       vertexHash: runtimeDiff.drawableChanges[0]?.vertexHashAfter

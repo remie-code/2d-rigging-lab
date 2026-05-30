@@ -12,4 +12,5 @@ export * from "./operation-result-summary.js";
 export * from "./package-identity-state.js";
 export * from "./package-revision-state.js";
 export * from "./parameter-list-state.js";
+export * from "./preview-parameter-state.js";
 export * from "./reload-summary.js";

@@ -17,17 +17,17 @@ describe("editor workflow controller", () => {
 
     expect(saved.status).toBe("saved");
     expect(loaded.status).toBe("loaded");
-    expect(second.state.parameters).toEqual([
+    expect(second.state.parameters).toEqual(expect.arrayContaining([
       expect.objectContaining({
         parameterId: "param_workflow_smile",
         displayName: "Workflow Smile"
       })
-    ]);
+    ]));
     expect(second.state.reload).toMatchObject({
       status: "reloaded",
       packageRevision: 1,
-      parameterCount: 1,
-      parameterIds: ["param_workflow_smile"]
+      parameterCount: second.state.parameters.length,
+      parameterIds: expect.arrayContaining(["param_workflow_smile"])
     });
     expect(second.state.operationLog.entryCount).toBe(1);
     expect(second.state.generatedEvidence.validationReportArtifactPaths).toEqual(
@@ -54,10 +54,109 @@ describe("editor workflow controller", () => {
     ]);
     expect(commit.operationLogJsonl.trim().split("\n")).toHaveLength(2);
     expect(second.state.operationLog.entryCount).toBe(2);
-    expect(second.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+    expect(parameterIds(second)).toEqual(expect.arrayContaining([
       "param_workflow_smile",
       "param_workflow_brow"
-    ]);
+    ]));
+  });
+
+  it("sets and resets preview parameter values without committing operations", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+    workflow.commitCreateParameter(createParameterCommand("smile"));
+    const sessionResultBeforePreview = workflow.latestSessionPersistenceResult;
+
+    const set = workflow.setPreviewParameterValue("param_workflow_smile", 0.75);
+
+    expect(set).toEqual({
+      status: "updated",
+      parameterId: "param_workflow_smile",
+      requestedValue: 0.75,
+      currentValue: 0.75
+    });
+    expect(workflow.state.previewParameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_workflow_smile",
+        defaultValue: 0,
+        currentValue: 0.75
+      })
+    ]));
+    expect(workflow.viewModel.previewControls.parameterControls).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_workflow_smile",
+        currentValue: 0.75,
+        valueLabel: "Workflow Smile: 0.75"
+      })
+    ]));
+    expect(workflow.latestSessionPersistenceResult).toBe(sessionResultBeforePreview);
+    expect(workflow.state.operationLog.entryCount).toBe(1);
+
+    const reset = workflow.resetPreviewParameterValues();
+
+    expect(reset).toEqual({
+      status: "reset",
+      parameterCount: workflow.state.previewParameters.length
+    });
+    expect(workflow.state.previewParameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_workflow_smile",
+        currentValue: 0
+      })
+    ]));
+    expect(workflow.state.operationLog.entryCount).toBe(1);
+  });
+
+  it("keeps preview parameter updates out of package documents and operation logs", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+    const commit = workflow.commitCreateParameter(createParameterCommand("smile"));
+
+    workflow.setPreviewParameterValue("param_workflow_smile", 0.6);
+    const saved = workflow.saveProject();
+
+    expect(saved.snapshot.operationLogJsonl).toBe(commit.operationLogJsonl);
+    expect(saved.snapshot.document.model.parameters.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_workflow_smile",
+        default: 0
+      })
+    ]));
+    expect(JSON.stringify(saved.snapshot.document)).not.toContain("0.6");
+    expect(saved.snapshot.packageRevision).toBe(commit.packageRevisionAfterCommit);
+    expect(workflow.state.operationLog.entryCount).toBe(1);
+  });
+
+  it("initializes preview parameter values from persisted package defaults on load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+    first.commitCreateParameter(createParameterCommand("smile"));
+    first.setPreviewParameterValue("param_workflow_smile", 0.9);
+    first.saveProject();
+
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.previewParameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_workflow_smile",
+        defaultValue: 0,
+        currentValue: 0
+      })
+    ]));
+  });
+
+  it("rejects missing and invalid preview parameter updates", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    expect(workflow.setPreviewParameterValue("param_missing", 0.5)).toEqual({
+      status: "not_found",
+      parameterId: "param_missing",
+      requestedValue: 0.5
+    });
+    expect(workflow.setPreviewParameterValue("param_missing", Number.NaN)).toEqual({
+      status: "invalid_value",
+      parameterId: "param_missing",
+      requestedValue: Number.NaN
+    });
   });
 
   it("clears persisted state and returns to the sample package on reset", () => {
@@ -71,7 +170,7 @@ describe("editor workflow controller", () => {
     expect(reset.status).toBe("reset");
     expect(workflow.state.loadedPackage?.packageId).toBe("pkg_editor_browser_sample");
     expect(workflow.state.revision.packageRevision).toBe(0);
-    expect(workflow.state.parameters).toEqual([]);
+    expect(parameterIds(workflow)).not.toContain("param_workflow_smile");
     expect(workflow.state.operationLog.entryCount).toBe(0);
     expect(workflow.state.reload.status).toBe("not_reloaded");
     expect(storage.getItem(reset.clearResult.storageKey)).toBeNull();
@@ -79,6 +178,7 @@ describe("editor workflow controller", () => {
 
   it("dry-runs deterministic AI createParameter and leaves package state unmutated", async () => {
     const workflow = createWorkflow(createMemoryStorage());
+    const initialParameters = workflow.state.parameters;
 
     const dryRun = await workflow.dryRunAiCreateParameterCommand();
 
@@ -93,7 +193,7 @@ describe("editor workflow controller", () => {
         }
       }
     });
-    expect(workflow.state.parameters).toEqual([]);
+    expect(workflow.state.parameters).toEqual(initialParameters);
     expect(workflow.state.operationLog.entryCount).toBe(0);
     expect(workflow.viewModel.aiApproval).toMatchObject({
       status: "pending_approval",
@@ -107,12 +207,13 @@ describe("editor workflow controller", () => {
 
   it("rejects and clears a pending AI dry-run without mutating package state", async () => {
     const workflow = createWorkflow(createMemoryStorage());
+    const initialParameters = workflow.state.parameters;
     await workflow.dryRunAiCreateParameterCommand();
 
     const rejected = workflow.rejectLatestAiDryRun();
 
     expect(rejected.status).toBe("cleared");
-    expect(workflow.state.parameters).toEqual([]);
+    expect(workflow.state.parameters).toEqual(initialParameters);
     expect(workflow.state.operationLog.entryCount).toBe(0);
     expect(workflow.viewModel.aiApproval).toMatchObject({
       status: "idle",
@@ -143,9 +244,7 @@ describe("editor workflow controller", () => {
         }
       }
     });
-    expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
-      "param_editor_ai_r0_1"
-    ]);
+    expect(parameterIds(workflow)).toEqual(expect.arrayContaining(["param_editor_ai_r0_1"]));
     expect(workflow.state.operationLog).toMatchObject({
       entryCount: 1,
       latestEntry: expect.objectContaining({
@@ -171,7 +270,7 @@ describe("editor workflow controller", () => {
     const committed = await workflow.commitApprovedAiOperation();
 
     expect(committed.status).toBe("no_approved_operation");
-    expect(workflow.state.parameters).toEqual([]);
+    expect(parameterIds(workflow)).not.toContain("param_editor_ai_r0_1");
     expect(workflow.state.operationLog.entryCount).toBe(0);
     expect(workflow.viewModel.aiApproval.status).toBe("idle");
     expect(workflow.viewModel.aiApproval.transcriptEntries).toEqual([]);
@@ -179,6 +278,7 @@ describe("editor workflow controller", () => {
 
   it("does not let pending approval survive an empty load", async () => {
     const workflow = createWorkflow(createMemoryStorage());
+    const initialParameters = workflow.state.parameters;
     await workflow.dryRunAiCreateParameterCommand();
 
     const loaded = workflow.loadProject();
@@ -186,7 +286,7 @@ describe("editor workflow controller", () => {
     expect(loaded.status).toBe("empty");
     expect(workflow.viewModel.aiApproval.status).toBe("idle");
     expect(workflow.viewModel.aiApproval.transcriptEntries).toEqual([]);
-    expect(workflow.state.parameters).toEqual([]);
+    expect(workflow.state.parameters).toEqual(initialParameters);
     expect(workflow.state.operationLog.entryCount).toBe(0);
   });
 
@@ -287,7 +387,7 @@ describe("editor workflow controller", () => {
       canCommitApprovedOperation: false,
       canRejectPendingDryRun: false
     });
-    expect(second.state.parameters).toEqual([]);
+    expect(parameterIds(second)).not.toContain("param_editor_ai_r0_1");
     expect(second.state.operationLog.entryCount).toBe(0);
   });
 });
@@ -300,6 +400,10 @@ const createWorkflow = (storage: StorageLike) =>
     }),
     now: () => new Date("2026-05-29T04:00:00.000Z")
   });
+
+const parameterIds = (
+  workflow: ReturnType<typeof createEditorWorkflowController>
+): readonly string[] => workflow.state.parameters.map((parameter) => parameter.parameterId);
 
 const createParameterCommand = (name: "smile" | "brow") => ({
   operationId: `op_workflow_create_parameter_${name}`,

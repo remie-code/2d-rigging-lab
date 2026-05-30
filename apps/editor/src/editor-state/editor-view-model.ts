@@ -1,5 +1,9 @@
 import type { EditorSemanticState } from "./editor-semantic-state.js";
 import type { AiTranscriptSummaryEntryState } from "./ai-transcript-summary.js";
+import {
+  isPreviewParameterDisabled,
+  type PreviewParameterValueState
+} from "./preview-parameter-state.js";
 
 export interface AiApprovalWorkflowViewModel {
   readonly status: EditorSemanticState["aiApproval"]["status"];
@@ -22,7 +26,34 @@ export interface EditorWorkflowViewModel {
   readonly operationLogLabel: string;
   readonly generatedEvidenceLabel: string;
   readonly reloadLabel: string;
+  readonly previewControls: EditorPreviewControlsViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
+}
+
+export interface PreviewParameterControlViewModel {
+  readonly parameterId: string;
+  readonly displayName: string;
+  readonly valueSource: PreviewParameterValueState["valueSource"];
+  readonly min: number;
+  readonly max: number;
+  readonly defaultValue: number;
+  readonly currentValue: number;
+  readonly recommendedUiStep: number;
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly valueLabel: string;
+  readonly rangeLabel: string;
+  readonly defaultValueLabel: string;
+  readonly disabledMessage: string | null;
+}
+
+export interface EditorPreviewControlsViewModel {
+  readonly hasParameters: boolean;
+  readonly parameterCountLabel: string;
+  readonly resetLabel: string;
+  readonly emptyMessage: string;
+  readonly authoredInputCount: number;
+  readonly parameterControls: readonly PreviewParameterControlViewModel[];
 }
 
 export const projectEditorWorkflowViewModel = (
@@ -46,6 +77,7 @@ export const projectEditorWorkflowViewModel = (
     operationLogLabel: `${state.operationLog.entryCount} operation${state.operationLog.entryCount === 1 ? "" : "s"}`,
     generatedEvidenceLabel: `${runtimeArtifactCount} runtime / ${validationArtifactCount} validation artifacts`,
     reloadLabel: projectReloadLabel(state),
+    previewControls: projectPreviewControlsViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };
 };
@@ -85,3 +117,50 @@ const projectAiApprovalViewModel = (
   canRejectPendingDryRun: state.aiApproval.canRejectPendingDryRun,
   transcriptEntries: state.aiApproval.transcriptEntries
 });
+
+const projectPreviewControlsViewModel = (
+  state: EditorSemanticState
+): EditorPreviewControlsViewModel => {
+  const parameterControls = state.previewParameters.map(projectPreviewParameterControl);
+  const authoredInputCount = parameterControls.filter((parameter) => !parameter.disabled).length;
+
+  return {
+    hasParameters: parameterControls.length > 0,
+    parameterCountLabel: `${parameterControls.length} preview parameter${parameterControls.length === 1 ? "" : "s"}`,
+    resetLabel: "Reset preview parameters",
+    emptyMessage:
+      state.loadedPackage === null
+        ? "No package loaded"
+        : "No preview parameters available",
+    authoredInputCount,
+    parameterControls
+  };
+};
+
+const projectPreviewParameterControl = (
+  parameter: PreviewParameterValueState
+): PreviewParameterControlViewModel => {
+  const disabled = isPreviewParameterDisabled(parameter);
+
+  return {
+    parameterId: parameter.parameterId,
+    displayName: parameter.displayName,
+    valueSource: parameter.valueSource,
+    min: parameter.min,
+    max: parameter.max,
+    defaultValue: parameter.defaultValue,
+    currentValue: parameter.currentValue,
+    recommendedUiStep: parameter.recommendedUiStep,
+    disabled,
+    label: parameter.displayName,
+    valueLabel: `${parameter.displayName}: ${formatPreviewNumber(parameter.currentValue)}`,
+    rangeLabel: `${formatPreviewNumber(parameter.min)} to ${formatPreviewNumber(parameter.max)}`,
+    defaultValueLabel: `Default ${formatPreviewNumber(parameter.defaultValue)}`,
+    disabledMessage: disabled
+      ? `Preview control disabled for ${parameter.valueSource} parameter`
+      : null
+  };
+};
+
+const formatPreviewNumber = (value: number): string =>
+  Number.isInteger(value) ? `${value}` : Number.parseFloat(value.toFixed(4)).toString();

@@ -3,6 +3,7 @@ import {
   serializeAiCommandTranscript,
   type AiCommandTranscript
 } from "@private-2d-rigging-lab/ai-interface";
+import { toRuntimeGraph } from "@private-2d-rigging-lab/authoring-core";
 import {
   parseOperationLogEntriesFromJsonl
 } from "@private-2d-rigging-lab/operation-core";
@@ -10,12 +11,20 @@ import {
   parsePackageDocumentFromFileSet,
   type PackageFileSet
 } from "@private-2d-rigging-lab/package-format";
+import {
+  buildRuntimeDiff,
+  createInitialRuntimeState,
+  defaultRuntimeEvaluationOptions,
+  evaluateRuntimeFrame
+} from "@private-2d-rigging-lab/runtime-core";
 
 import {
   createEditorAiCommandHost,
   projectEditorAiState,
   type EditorAiCommandHost
 } from "../ai-command-host/index.js";
+import type { EditorPreviewProjectionDto } from "../editor-preview/preview-dto.js";
+import { projectEditorPreview } from "../editor-preview/preview-projection.js";
 import {
   projectEditorInspectModel,
   projectEditorInspectTarget
@@ -35,7 +44,11 @@ import type {
   SaveEditorProjectResult
 } from "../project-persistence/index.js";
 import {
+  applyPreviewParameterValue,
   projectEditorWorkflowViewModel,
+  projectPreviewAuthoredParameterValues,
+  resetPreviewParameterValues as resetPreviewParameterValueStates,
+  type PreviewParameterSetResult,
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../editor-state/index.js";
@@ -93,13 +106,21 @@ export type EditorWorkflowPersistenceResult =
   | EditorWorkflowLoadResult
   | EditorWorkflowResetResult;
 
+export interface EditorWorkflowPreviewResetResult {
+  readonly status: "reset";
+  readonly parameterCount: number;
+}
+
 export interface EditorWorkflowController {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
+  readonly previewProjection: EditorPreviewProjectionDto | null;
   readonly aiCommandHost: EditorAiCommandHost;
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
+  setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
+  resetPreviewParameterValues(): EditorWorkflowPreviewResetResult;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
   approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
@@ -192,6 +213,9 @@ export const createEditorWorkflowController = (
     get viewModel() {
       return projectEditorWorkflowViewModel(state);
     },
+    get previewProjection() {
+      return projectWorkflowPreviewProjection(adapter, state);
+    },
     get aiCommandHost() {
       return aiCommandHost;
     },
@@ -208,6 +232,34 @@ export const createEditorWorkflowController = (
       state = applyEditorWorkflowCommitResult(state, adapter, result);
 
       return result;
+    },
+    setPreviewParameterValue(parameterId, value) {
+      const projection = applyPreviewParameterValue(state.previewParameters, {
+        parameterId,
+        value
+      });
+
+      if (projection.result.status === "updated") {
+        state = {
+          ...state,
+          previewParameters: projection.parameters
+        };
+      }
+
+      return projection.result;
+    },
+    resetPreviewParameterValues() {
+      const previewParameters = resetPreviewParameterValueStates(state.previewParameters);
+
+      state = {
+        ...state,
+        previewParameters
+      };
+
+      return {
+        status: "reset",
+        parameterCount: previewParameters.length
+      };
     },
     dryRunAiCreateParameterCommand: aiApprovalActions.dryRunAiCreateParameterCommand,
     approveLatestAiDryRun: aiApprovalActions.approveLatestAiDryRun,
@@ -293,6 +345,87 @@ export const createEditorWorkflowController = (
       return result;
     }
   };
+};
+
+const projectWorkflowPreviewProjection = (
+  adapter: EditorSessionAdapter,
+  state: EditorSemanticState
+): EditorPreviewProjectionDto | null => {
+  if (state.loadedPackage === null) {
+    return null;
+  }
+
+  const graph = toRuntimeGraph(adapter.authoringSession);
+  const options = {
+    ...defaultRuntimeEvaluationOptions(),
+    snapshotDetail: "full" as const
+  };
+  const context = {
+    source: {
+      surface: "preview" as const
+    }
+  };
+  const defaultParameterValues = Object.fromEntries(
+    state.previewParameters
+      .filter((parameter) => parameter.valueSource === "authoredInput")
+      .map((parameter) => [parameter.parameterId, parameter.defaultValue])
+  );
+  const currentParameterValues = projectPreviewAuthoredParameterValues(state.previewParameters);
+  const baselineState = createInitialRuntimeState(graph, {
+    packageId: graph.packageId,
+    packageRevision: graph.packageRevision,
+    authoredParameterValues: defaultParameterValues,
+    resetReasons: ["previewRestart"]
+  });
+  const baseline = evaluateRuntimeFrame(
+    graph,
+    {
+      schemaVersion: "runtime-evaluation-input-v1",
+      frameIndex: 0,
+      deltaTimeMs: 0,
+      resetReasons: ["previewRestart"],
+      authoredParameterValues: defaultParameterValues,
+      targetIds: []
+    },
+    baselineState,
+    options,
+    context
+  );
+  const currentState = createInitialRuntimeState(graph, {
+    packageId: graph.packageId,
+    packageRevision: graph.packageRevision,
+    authoredParameterValues: currentParameterValues,
+    resetReasons: ["previewRestart"]
+  });
+  const current = evaluateRuntimeFrame(
+    graph,
+    {
+      schemaVersion: "runtime-evaluation-input-v1",
+      frameIndex: 1,
+      deltaTimeMs: 0,
+      resetReasons: ["previewRestart"],
+      authoredParameterValues: currentParameterValues,
+      targetIds: []
+    },
+    currentState,
+    options,
+    context
+  );
+
+  return projectEditorPreview({
+    snapshot: current.snapshot,
+    runtimeDiff: buildRuntimeDiff({
+      baselineSnapshot: baseline.snapshot,
+      candidateSnapshot: current.snapshot
+    }),
+    canvasSize: adapter.authoringSession.graph.canvasSize,
+    drawableNames: Object.fromEntries(
+      adapter.authoringSession.graph.drawables.map((drawable) => [
+        drawable.drawableId,
+        drawable.displayName
+      ])
+    )
+  });
 };
 
 const selectGeneratedArtifactEntries = (input: {

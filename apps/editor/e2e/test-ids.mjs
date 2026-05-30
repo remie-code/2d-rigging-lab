@@ -12,6 +12,11 @@ export const editorTestIds = {
   projectPersistenceSummary: "projectPersistence.summary",
   operationLogSummary: "operationLog.summary",
   reloadSummary: "package.reload.summary",
+  previewPanel: "preview.panel",
+  previewVisual: "preview.visual",
+  previewSummary: "preview.summary",
+  previewReset: "preview.reset",
+  previewEmpty: "preview.empty",
   aiApprovalPanel: "aiApproval.panel",
   aiApprovalStatus: "aiApproval.status",
   aiApprovalResultSummary: "aiApproval.resultSummary",
@@ -28,3 +33,6 @@ export const editorTestIds = {
 export const editorProjectStorageKey = "private-2d-rigging-lab.editor-project";
 
 export const createAiTranscriptEventRowTestId = (index) => `aiTranscript.event.${index}`;
+
+export const createPreviewParameterControlTestId = (parameterId) =>
+  `preview.parameter.${parameterId}`;

@@ -1,9 +1,12 @@
 import { createPageSession } from "./page-session.mjs";
 import {
   createAiTranscriptEventRowTestId,
+  createPreviewParameterControlTestId,
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
+
+const previewSampleParameterId = "param_preview_body_yaw";
 
 export const editorSmokeViewports = [
   {
@@ -30,6 +33,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await waitForTestId(page, editorTestIds.shell);
 
     await assertShellRendered(page);
+    const previewEvidence = await runPreviewWorkflow(page, viewport);
     await assertInitialAiApprovalRendered(page);
     await assertHorizontalOverflow(page, `${viewport.name} initial`);
     await runAiApprovalFlow(page);
@@ -40,7 +44,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
 
-    return { viewport: viewport.name };
+    return { viewport: viewport.name, previewEvidence };
   } finally {
     await page.close();
   }
@@ -51,7 +55,218 @@ const assertShellRendered = async (page) => {
   await waitForTestId(page, editorTestIds.parameterCreateSubmit);
   await assertTextIncludes(page, editorTestIds.packageStatus, "pkg_editor_browser_sample");
   await assertTextIncludes(page, editorTestIds.operationStatus, "No operation committed");
-  await assertTextIncludes(page, editorTestIds.parameterList, "No parameters yet.");
+  await assertTextIncludes(page, editorTestIds.parameterList, "Preview Body Yaw");
+  await assertTextIncludes(page, editorTestIds.parameterList, previewSampleParameterId);
+};
+
+const runPreviewWorkflow = async (page, viewport) => {
+  await waitForTestId(page, editorTestIds.previewPanel);
+  await waitForTestId(page, editorTestIds.previewVisual);
+  await waitForTestId(page, editorTestIds.previewSummary);
+
+  await assertPreviewPanelReachable(page, viewport);
+  await assertPreviewAccessibleNames(page);
+  const initialState = await readPreviewState(page);
+
+  if (!initialState.visualPoints.includes("24,16 72,16 48,80")) {
+    throw new Error(`Preview visual started from unexpected polygon points: ${initialState.visualPoints}.`);
+  }
+
+  if (!initialState.summaryText.includes("0 changes")) {
+    throw new Error(`Preview summary did not start at the default diff state: ${initialState.summaryText}.`);
+  }
+
+  await setPreviewSliderValue(page, 1);
+  await page.waitFor(
+    "preview slider visual and summary update",
+    (ids, initialPoints) => {
+      const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+      const summary = document.querySelector(`[data-testid="${ids.summary}"]`);
+      const slider = document.querySelector(`[data-testid="${ids.slider}"]`);
+      const points = visual?.querySelector("[data-drawable-id='draw_body']")?.getAttribute("points") ?? "";
+
+      return (
+        slider instanceof HTMLInputElement &&
+        slider.value === "1" &&
+        points.length > 0 &&
+        points !== initialPoints &&
+        (summary?.textContent?.includes("changes / 1 drawable") ?? false) &&
+        !(summary?.textContent?.includes("0 changes") ?? false)
+      );
+    },
+    { timeoutMs: 8_000 },
+    {
+      visual: editorTestIds.previewVisual,
+      summary: editorTestIds.previewSummary,
+      slider: createPreviewParameterControlTestId(previewSampleParameterId)
+    },
+    initialState.visualPoints
+  );
+  const changedState = await readPreviewState(page);
+
+  await clickTestId(page, editorTestIds.previewReset);
+  await page.waitFor(
+    "preview reset restores default visual and summary",
+    (ids, initialPoints) => {
+      const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+      const summary = document.querySelector(`[data-testid="${ids.summary}"]`);
+      const slider = document.querySelector(`[data-testid="${ids.slider}"]`);
+      const points = visual?.querySelector("[data-drawable-id='draw_body']")?.getAttribute("points") ?? "";
+
+      return (
+        slider instanceof HTMLInputElement &&
+        slider.value === "0" &&
+        points === initialPoints &&
+        (summary?.textContent?.includes("0 changes") ?? false)
+      );
+    },
+    { timeoutMs: 8_000 },
+    {
+      visual: editorTestIds.previewVisual,
+      summary: editorTestIds.previewSummary,
+      slider: createPreviewParameterControlTestId(previewSampleParameterId)
+    },
+    initialState.visualPoints
+  );
+
+  const screenshot = await page.captureScreenshot(`${viewport.name} preview smoke`);
+
+  return {
+    viewport: viewport.name,
+    initialVisualPoints: initialState.visualPoints,
+    changedVisualPoints: changedState.visualPoints,
+    changedSummary: changedState.summaryText,
+    screenshot
+  };
+};
+
+const assertPreviewPanelReachable = async (page, viewport) => {
+  const metrics = await page.evaluate((ids) => {
+    const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
+    const slider = document.querySelector(`[data-testid="${ids.slider}"]`);
+
+    if (!(panel instanceof HTMLElement) || !(slider instanceof HTMLInputElement)) {
+      return null;
+    }
+
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const rectVisible = (rect) =>
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.right > 0 &&
+      rect.left < viewportWidth &&
+      rect.bottom > 0 &&
+      rect.top < viewportHeight;
+    const initialPanelRect = panel.getBoundingClientRect();
+    const panelVisibleBeforeScroll = rectVisible(initialPanelRect);
+
+    slider.scrollIntoView({ block: "center", inline: "nearest" });
+
+    const panelRect = panel.getBoundingClientRect();
+    const sliderRect = slider.getBoundingClientRect();
+
+    return {
+      panelVisibleBeforeScroll,
+      panelVisible: rectVisible(panelRect),
+      sliderVisible: rectVisible(sliderRect),
+      panelWidth: panelRect.width,
+      sliderWidth: sliderRect.width
+    };
+  }, {
+    panel: editorTestIds.previewPanel,
+    slider: createPreviewParameterControlTestId(previewSampleParameterId)
+  });
+
+  if (
+    metrics === null ||
+    (!viewport.isMobile && !metrics.panelVisibleBeforeScroll) ||
+    !metrics.panelVisible ||
+    !metrics.sliderVisible ||
+    metrics.panelWidth < 1 ||
+    metrics.sliderWidth < 1
+  ) {
+    throw new Error(
+      `${viewport.name} preview panel was not reachable/usable: ${JSON.stringify(metrics)}.`
+    );
+  }
+};
+
+const assertPreviewAccessibleNames = async (page) => {
+  const names = await page.evaluate((ids) => {
+    const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
+    const headingId = panel?.getAttribute("aria-labelledby");
+    const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+    const slider = document.querySelector(`[data-testid="${ids.slider}"]`);
+    const reset = document.querySelector(`[data-testid="${ids.reset}"]`);
+
+    return {
+      panelName: headingId === null ? "" : document.getElementById(headingId)?.textContent ?? "",
+      visualRole: visual?.getAttribute("role") ?? "",
+      visualName: visual?.getAttribute("aria-label") ?? "",
+      sliderName: slider?.getAttribute("aria-label") ?? "",
+      resetName: reset?.textContent?.trim() ?? ""
+    };
+  }, {
+    panel: editorTestIds.previewPanel,
+    visual: editorTestIds.previewVisual,
+    slider: createPreviewParameterControlTestId(previewSampleParameterId),
+    reset: editorTestIds.previewReset
+  });
+
+  const expected = {
+    panelName: "Preview",
+    visualRole: "img",
+    visualName: "Runtime preview visual",
+    sliderName: "Preview Body Yaw",
+    resetName: "Reset preview parameters"
+  };
+
+  if (JSON.stringify(names) !== JSON.stringify(expected)) {
+    throw new Error(
+      `Preview accessible names mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(names)}.`
+    );
+  }
+};
+
+const readPreviewState = async (page) =>
+  page.evaluate((ids) => {
+    const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+    const summary = document.querySelector(`[data-testid="${ids.summary}"]`);
+    const slider = document.querySelector(`[data-testid="${ids.slider}"]`);
+    const reset = document.querySelector(`[data-testid="${ids.reset}"]`);
+    const drawable = visual?.querySelector("[data-drawable-id='draw_body']");
+
+    if (!(slider instanceof HTMLInputElement) || !(reset instanceof HTMLButtonElement)) {
+      throw new Error("Preview slider or reset control was missing.");
+    }
+
+    return {
+      visualPoints: drawable?.getAttribute("points") ?? "",
+      summaryText: summary?.textContent ?? "",
+      sliderValue: slider.value,
+      resetDisabled: reset.disabled
+    };
+  }, {
+    visual: editorTestIds.previewVisual,
+    summary: editorTestIds.previewSummary,
+    slider: createPreviewParameterControlTestId(previewSampleParameterId),
+    reset: editorTestIds.previewReset
+  });
+
+const setPreviewSliderValue = async (page, value) => {
+  await page.evaluate((ids, nextValue) => {
+    const input = document.querySelector(`[data-testid="${ids.slider}"]`);
+
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Preview slider was missing.");
+    }
+
+    input.value = String(nextValue);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, {
+    slider: createPreviewParameterControlTestId(previewSampleParameterId)
+  }, value);
 };
 
 const assertInitialAiApprovalRendered = async (page) => {
@@ -194,11 +409,14 @@ const saveProject = async (page) => {
 const reloadProjectFromStorage = async (page) => {
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
-  await assertTextIncludes(page, editorTestIds.parameterList, "No parameters yet.");
+  await assertTextIncludes(page, editorTestIds.parameterList, "Preview Body Yaw");
+  await assertTextIncludes(page, editorTestIds.previewSummary, "0 changes");
   await assertInitialAiApprovalRendered(page);
   await clickTestId(page, editorTestIds.projectPersistenceLoad);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
+  await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
   await waitForText(page, editorTestIds.parameterList, "AI Approval Smile");
+  await waitForText(page, editorTestIds.previewSummary, "0 changes");
   await waitForOperationLogEntryCount(page, 1);
   await waitForText(page, editorTestIds.operationLogSummary, "createParameter");
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
@@ -226,7 +444,8 @@ const resetProject = async (page) => {
   await clickTestId(page, editorTestIds.projectPersistenceReset);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Cleared");
   await waitForText(page, editorTestIds.packageStatus, "pkg_editor_browser_sample");
-  await waitForText(page, editorTestIds.parameterList, "No parameters yet.");
+  await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
+  await waitForText(page, editorTestIds.previewSummary, "0 changes");
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForTestId(page, editorTestIds.aiTranscriptEmpty);
   await assertElementAbsent(page, editorTestIds.aiTranscriptEvents);

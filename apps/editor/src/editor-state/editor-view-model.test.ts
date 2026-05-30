@@ -123,5 +123,63 @@ describe("editor semantic state view model", () => {
       generatedEvidenceLabel: "2 runtime / 2 validation artifacts",
       reloadLabel: "Reloaded r1 with 1 parameter"
     });
+    expect(viewModel.previewControls).toMatchObject({
+      hasParameters: true,
+      parameterCountLabel: "1 preview parameter",
+      resetLabel: "Reset preview parameters",
+      authoredInputCount: 1,
+      parameterControls: [
+        {
+          parameterId: "param_smile",
+          displayName: "Smile",
+          min: 0,
+          max: 1,
+          defaultValue: 0,
+          currentValue: 0,
+          disabled: false,
+          label: "Smile",
+          valueLabel: "Smile: 0",
+          rangeLabel: "0 to 1",
+          defaultValueLabel: "Default 0",
+          disabledMessage: null
+        }
+      ]
+    });
+  });
+
+  it("projects disabled preview controls for non-authored parameters", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_dynamics",
+        packageDisplayName: "Dynamics Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 0,
+        authoringRevision: 0
+      },
+      parameters: [
+        {
+          parameterId: "param_hair_sway",
+          displayName: "Hair Sway",
+          valueSource: "computedDynamics",
+          min: -1,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        }
+      ]
+    });
+
+    expect(projectEditorWorkflowViewModel(state).previewControls).toMatchObject({
+      authoredInputCount: 0,
+      parameterControls: [
+        {
+          parameterId: "param_hair_sway",
+          disabled: true,
+          disabledMessage: "Preview control disabled for computedDynamics parameter"
+        }
+      ]
+    });
   });
 });

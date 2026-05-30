@@ -27,12 +27,16 @@ const main = async () => {
     launchedBrowser = await launchHeadlessBrowser({ executable: browser.executable });
 
     for (const viewport of editorSmokeViewports) {
-      await runEditorSmoke({
+      const result = await runEditorSmoke({
         baseUrl: server.baseUrl,
         browserPort: launchedBrowser.port,
         viewport
       });
+      const screenshot = result.previewEvidence.screenshot;
       console.log(`editor-e2e: ${viewport.name} smoke passed`);
+      console.log(
+        `editor-e2e: ${viewport.name} preview screenshot ${screenshot.format} base64Length=${screenshot.base64Length}`
+      );
     }
   } finally {
     if (launchedBrowser !== undefined) {

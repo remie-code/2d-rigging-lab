@@ -3,6 +3,7 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../../editor-state/index.js";
+import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
 import type { EditorWorkflowPersistenceResult } from "../../editor-workflow/index.js";
 import type {
   EditorCreateParameterCommand,
@@ -21,18 +22,22 @@ import {
 import { createCreateParameterForm } from "../parameter-operation/create-parameter-form.js";
 import { createOperationStatusPanel } from "../parameter-operation/operation-status-panel.js";
 import { createParameterList } from "../parameter-operation/parameter-list.js";
+import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
 import { createPackageStatus } from "./package-status.js";
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
+  readonly previewProjection: EditorPreviewProjectionDto | null;
   readonly latestPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onSetPreviewParameterValue: (parameterId: string, value: number) => void;
+  readonly onResetPreviewParameterValues: () => void;
   readonly onDryRunAiCreateParameter: AiApprovalPanelCallback;
   readonly onApproveLatestAiDryRun: AiApprovalPanelCallback;
   readonly onRejectLatestAiDryRun: AiApprovalPanelCallback;
@@ -101,6 +106,12 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     }),
     createOperationStatusPanel(options.state, options.viewModel)
   );
+  const previewPanel = createPreviewPanel({
+    viewModel: options.viewModel,
+    preview: options.previewProjection,
+    onSetPreviewParameterValue: options.onSetPreviewParameterValue,
+    onResetPreviewParameterValues: options.onResetPreviewParameterValues
+  });
   const projectPersistencePanel = createProjectPersistencePanel({
     viewModel: options.viewModel,
     latestProjectPersistenceResult: options.latestProjectPersistenceResult,
@@ -136,6 +147,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   workspace.append(
     parametersPanel,
     operationPanel,
+    previewPanel,
     projectPersistencePanel,
     aiApprovalPanel,
     aiTranscriptPanel,

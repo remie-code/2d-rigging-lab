@@ -11,6 +11,7 @@ import { createEditorWorkflowController } from "../editor-workflow/index.js";
 import { createBrowserProjectStore, type StorageLike } from "../project-persistence/index.js";
 
 const BODY_YAW_PARAMETER_ID = "param_ai_body_yaw";
+const PREVIEW_SAMPLE_PARAMETER_ID = "param_preview_body_yaw";
 const BODY_YAW_KEYFORM_OPERATION_ID = "op_ai_add_keyform_body_yaw";
 const BODY_YAW_KEYFORM_SET_ID = "keyset_mesh_mesh_body_vertices_ai_body_yaw_1";
 const GRID_YAW_PARAMETER_ID = "param_ai_grid_yaw";
@@ -130,7 +131,15 @@ describe("editor AI keyform command host regression", () => {
     );
     const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
 
-    expect(candidateSnapshot.keyformSamples).toEqual([
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
+      expect.objectContaining({
+        keyformSetId: "keyset_preview_body_yaw_vertices",
+        sampledCoordinates: {
+          [PREVIEW_SAMPLE_PARAMETER_ID]: 0
+        }
+      })
+    );
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
       expect.objectContaining({
         keyformSetId: BODY_YAW_KEYFORM_SET_ID,
         evaluator: "linear-1d-v1",
@@ -145,7 +154,7 @@ describe("editor AI keyform command host regression", () => {
           { x: 0, y: 32 }
         ]
       })
-    ]);
+    );
     expect(candidateDrawable).toMatchObject({
       bounds: { x: 0, y: 0, width: 36, height: 32 },
       vertexHash: commitRuntimeDiff.drawableChanges[0]?.vertexHashAfter
@@ -184,13 +193,13 @@ describe("editor AI keyform command host regression", () => {
         target: {
           kind: "parameter",
           id: BODY_YAW_PARAMETER_ID,
-          path: "/model/parameters/parameters/0"
+          path: "/model/parameters/parameters/1"
         },
         references: expect.arrayContaining([
           {
             kind: "keyformSet",
             id: BODY_YAW_KEYFORM_SET_ID,
-            path: "/model/keyforms/keyformSets/0"
+            path: "/model/keyforms/keyformSets/1"
           },
           {
             kind: "mesh",
@@ -304,6 +313,7 @@ describe("editor AI keyform command host regression", () => {
 
     expect(workflow.state.revision.packageRevision).toBe(2);
     expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+      PREVIEW_SAMPLE_PARAMETER_ID,
       GRID_YAW_PARAMETER_ID,
       GRID_PITCH_PARAMETER_ID
     ]);
@@ -422,7 +432,15 @@ describe("editor AI keyform command host regression", () => {
     );
     const candidateDrawable = candidateSnapshot.drawables.find((drawable) => drawable.drawableId === "draw_body");
 
-    expect(candidateSnapshot.keyformSamples).toEqual([
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
+      expect.objectContaining({
+        keyformSetId: "keyset_preview_body_yaw_vertices",
+        sampledCoordinates: {
+          [PREVIEW_SAMPLE_PARAMETER_ID]: 0
+        }
+      })
+    );
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
       expect.objectContaining({
         keyformSetId: GRID2D_KEYFORM_SET_ID,
         evaluator: "parameter-grid-2d-v1",
@@ -438,9 +456,9 @@ describe("editor AI keyform command host regression", () => {
           { x: 0, y: 32 }
         ]
       })
-    ]);
+    );
     expect(candidateDrawable).toMatchObject({
-      bounds: { x: -2, y: 0, width: 66, height: 64 },
+      bounds: { x: 22, y: 16, width: 82, height: 96 },
       vertexHash: commitRuntimeDiff.drawableChanges[0]?.vertexHashAfter
     });
     expect(workflow.state.revision.packageRevision).toBe(3);
@@ -610,6 +628,7 @@ const dryRunApproveAndCommitAiParameter = async (
     }
   });
   expect(workflow.state.parameters.map((parameter) => parameter.parameterId)).toEqual([
+    PREVIEW_SAMPLE_PARAMETER_ID,
     BODY_YAW_PARAMETER_ID
   ]);
 };

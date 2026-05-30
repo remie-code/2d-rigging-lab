@@ -57,6 +57,24 @@ class PageSession {
     return result.result.value;
   }
 
+  async captureScreenshot(label) {
+    const result = await this.client.call("Page.captureScreenshot", {
+      format: "png",
+      fromSurface: true,
+      captureBeyondViewport: false
+    });
+
+    if (typeof result.data !== "string" || result.data.length === 0) {
+      throw new Error(`Screenshot capture for ${label} returned no image data.`);
+    }
+
+    return {
+      label,
+      format: "png",
+      base64Length: result.data.length
+    };
+  }
+
   async waitFor(label, predicate, options = {}, ...args) {
     const timeoutMs = options.timeoutMs ?? 5_000;
     const deadline = Date.now() + timeoutMs;

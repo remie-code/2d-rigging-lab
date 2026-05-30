@@ -385,6 +385,124 @@ input {
   font-size: 12px;
 }
 
+.preview-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.preview-visual {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  min-height: 160px;
+  max-height: 320px;
+  overflow: hidden;
+  background: #f7f8f4;
+  border: 1px solid #d6ddd8;
+  border-radius: 6px;
+}
+
+.preview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preview-summary__fact {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: #f8faf9;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.preview-summary__fact dt,
+.preview-summary__fact dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.preview-summary__fact dt {
+  color: #50615e;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.preview-summary__fact dd {
+  color: #263033;
+  font-size: 12px;
+}
+
+.preview-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  background: #fbfcfa;
+  border: 1px solid #e0e5e1;
+  border-radius: 6px;
+}
+
+.preview-control__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.preview-control__name,
+.preview-control__value,
+.preview-control__meta,
+.preview-panel__empty {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.preview-control__name {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.preview-control__value {
+  color: #1d7a73;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.preview-control input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: #1d7a73;
+}
+
+.preview-control__meta,
+.preview-panel__empty {
+  margin: 0;
+  color: #60716e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.preview-panel__reset {
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+}
+
+.preview-panel__reset:hover:not(:disabled),
+.preview-panel__reset:focus-visible:not(:disabled) {
+  background: #e1e8e3;
+}
+
 @media (max-width: 860px) {
   .editor-app-bar,
   .editor-workspace {
@@ -397,6 +515,10 @@ input {
   }
 
   .editor-persistence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-summary {
     grid-template-columns: 1fr;
   }
 }

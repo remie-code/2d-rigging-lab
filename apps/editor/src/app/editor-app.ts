@@ -14,6 +14,7 @@ export function mountEditorApp(root: HTMLElement): void {
       createEditorAppShell({
         state: workflow.state,
         viewModel: workflow.viewModel,
+        previewProjection: workflow.previewProjection,
         latestPersistenceResult: workflow.latestSessionPersistenceResult,
         latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
         onCommitCreateParameter(command) {
@@ -30,6 +31,14 @@ export function mountEditorApp(root: HTMLElement): void {
         },
         onResetProject() {
           workflow.resetToSamplePackage();
+          render();
+        },
+        onSetPreviewParameterValue(parameterId, value) {
+          workflow.setPreviewParameterValue(parameterId, value);
+          render();
+        },
+        onResetPreviewParameterValues() {
+          workflow.resetPreviewParameterValues();
           render();
         },
         async onDryRunAiCreateParameter() {
