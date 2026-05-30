@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "imported-source-package-evidence-preview-consistency",
+  "description": "Compact split PNG source import through createDrawable and generateMesh, proving package evidence and current SVG preview consistency without PNG rendering.",
+  "baselinePackage": "baseline-package.json",
+  "requestFiles": [
+    "request/import-split-png-source-commit.request.json",
+    "request/create-drawable-commit.request.json",
+    "request/generate-mesh-commit.request.json"
+  ],
+  "expectedFiles": [
+    "expected/imported-source-package-evidence-preview-consistency-summary.json"
+  ],
+  "nonGoals": [
+    "actual-png-rendering",
+    "png-decode",
+    "texture-atlas-generation"
+  ]
+}

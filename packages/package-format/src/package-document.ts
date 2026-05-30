@@ -16,6 +16,7 @@ import { ModelGraphSchema } from "./model-graph.js";
 import { PackageManifestSchema } from "./package-manifest.js";
 import { toPackageParseResult, type PackageParseResult } from "./parse-result.js";
 import { SourceManifestSchema } from "./source-manifest.js";
+import { TextureAtlasFileSchema } from "./texture-atlas.js";
 
 export const PackageModelFilesSchema = z.object({
   graph: ModelGraphSchema,
@@ -33,6 +34,7 @@ export type PackageModelFilesDto = z.infer<typeof PackageModelFilesSchema>;
 
 export const PackageAssetFilesSchema = z.object({
   sourceManifest: SourceManifestSchema,
+  textureAtlas: TextureAtlasFileSchema.optional(),
   provenance: ProvenanceFileSchema,
   rights: RightsFileSchema
 });

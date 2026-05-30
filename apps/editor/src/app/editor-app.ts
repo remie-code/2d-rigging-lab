@@ -1,4 +1,8 @@
 import { createEditorWorkflowController } from "../editor-workflow/index.js";
+import {
+  projectEditorWorkflowViewModel,
+  type EditorSemanticState
+} from "../editor-state/index.js";
 import { createBrowserProjectStore } from "../project-persistence/index.js";
 import { createEditorAppShell } from "../ui/app-shell/app-shell.js";
 
@@ -8,12 +12,20 @@ export function mountEditorApp(root: HTMLElement): void {
       storage: window.localStorage
     })
   });
+  let sourceIntakeDraft = workflow.state.sourceIntakeDraft;
+
+  const createAppState = (): EditorSemanticState => ({
+    ...workflow.state,
+    sourceIntakeDraft
+  });
 
   const render = (): void => {
+    const state = createAppState();
+
     root.replaceChildren(
       createEditorAppShell({
-        state: workflow.state,
-        viewModel: workflow.viewModel,
+        state,
+        viewModel: projectEditorWorkflowViewModel(state),
         previewProjection: workflow.previewProjection,
         latestPersistenceResult: workflow.latestSessionPersistenceResult,
         latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
@@ -37,16 +49,23 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.nudgeMeshVertex(command);
           render();
         },
+        onConfirmSourceIntakeDraft(draft) {
+          workflow.commitSourceIntakeDraft(draft);
+          sourceIntakeDraft = workflow.state.sourceIntakeDraft;
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();
         },
         onLoadProject() {
           workflow.loadProject();
+          sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
         onResetProject() {
           workflow.resetToSamplePackage();
+          sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
         onSetPreviewParameterValue(parameterId, value) {

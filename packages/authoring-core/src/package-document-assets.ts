@@ -10,6 +10,9 @@ export const buildPackageDocumentAssets = (
     ...cloneDto(baseAssetFiles.sourceManifest),
     sourceAssets: cloneDto(session.graph.sourceAssets)
   },
+  ...(baseAssetFiles.textureAtlas === undefined
+    ? {}
+    : { textureAtlas: cloneDto(baseAssetFiles.textureAtlas) }),
   provenance: {
     ...cloneDto(baseAssetFiles.provenance),
     records: cloneDto(session.graph.provenanceRecords)

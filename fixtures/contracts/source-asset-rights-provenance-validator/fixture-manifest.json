@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "source-asset-rights-provenance-validator",
+  "title": "Source asset rights and provenance validator oracle",
+  "coversAC": [
+    "AC-MVP-002",
+    "AC-MVP-004",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-IN-002",
+    "SC-RIGHTS-002"
+  ],
+  "modulesBlocked": [
+    "package-format",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "source-package.cleared.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "validationReportSummary",
+      "path": "expected/source-validation-oracle-summary.json",
+      "id": "source-asset-rights-provenance-validator-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

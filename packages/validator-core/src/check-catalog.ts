@@ -82,12 +82,68 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Required package file or required package DTO field is missing."
   },
   {
+    checkId: "ref.drawableSourceMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004"],
+    description: "Drawable source asset reference cannot be resolved."
+  },
+  {
     checkId: "ref.drawableTextureMissing",
     phase: "reference",
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-004"],
     description: "Drawable texture reference cannot be resolved."
+  },
+  {
+    checkId: "rights.recordMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-013"],
+    description: "Source asset has no rights metadata record."
+  },
+  {
+    checkId: "rights.provenanceMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-013"],
+    description: "Source asset has no provenance metadata record."
+  },
+  {
+    checkId: "rights.drawableProvenanceMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Drawable source provenance ID cannot be resolved."
+  },
+  {
+    checkId: "rights.drawableProvenanceMismatch",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Drawable source provenance record does not belong to the drawable source asset."
+  },
+  {
+    checkId: "rights.statusNeedsReview",
+    phase: "rights",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002"],
+    description: "Source asset rights metadata requires human review before final MVP acceptance."
+  },
+  {
+    checkId: "rights.statusBlocked",
+    phase: "rights",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-013"],
+    description: "Source asset rights metadata blocks use in the package."
   },
   {
     checkId: "mesh.triangleIndexOutOfRange",
@@ -136,4 +192,3 @@ export const createCheckCatalog = (
 ): CheckCatalog => new CheckCatalog(definitions);
 
 export const defaultCheckCatalog = createCheckCatalog();
-

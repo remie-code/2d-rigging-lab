@@ -14,8 +14,35 @@ const operationPayloads = [
       sourceAssetId: "src_split_png",
       manifestPath: "assets/sources/split/manifest.json",
       importProfile: "split-png-fallback-v1",
+      contentHash: "sha256:split-png",
       defaultPartId: "part_head",
-      placementPolicy: "use-metadata"
+      placementPolicy: "use-metadata",
+      layers: [
+        {
+          sourceLayerId: "layer_head",
+          imagePath: "assets/sources/split/head.png",
+          originalName: "Head",
+          normalizedName: "head",
+          groupPath: ["Root"],
+          bounds: { x: 0, y: 0, width: 128, height: 128 },
+          visibleInSource: true,
+          opacityInSource: 1,
+          role: "editableLayer",
+          unsupportedFeatures: []
+        }
+      ],
+      rights: {
+        rightsStatus: "cleared",
+        license: "internal-test",
+        redistributionAllowed: false
+      },
+      provenance: {
+        creator: "fixture artist",
+        license: "internal-test",
+        redistributionAllowed: false,
+        aiUsed: false,
+        transformHistory: ["schema-fixture"]
+      }
     }
   },
   {

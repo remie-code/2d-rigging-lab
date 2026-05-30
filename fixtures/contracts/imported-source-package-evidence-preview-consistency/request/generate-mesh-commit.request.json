@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_generate_mesh_body",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 2,
+  "operationType": "generateMesh",
+  "payload": {
+    "drawableId": "draw_body",
+    "method": "auto-grid-v1",
+    "densityHint": "low"
+  }
+}

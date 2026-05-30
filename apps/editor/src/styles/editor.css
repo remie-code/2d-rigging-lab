@@ -61,7 +61,8 @@ select {
 .operation-status__empty,
 .create-parameter-form__diagnostics,
 .create-drawable-form__diagnostics,
-.drawable-authoring-result__label {
+.drawable-authoring-result__label,
+.source-intake-form__diagnostics p {
   margin: 0;
 }
 
@@ -190,7 +191,8 @@ select {
 }
 
 .create-parameter-form,
-.create-drawable-form {
+.create-drawable-form,
+.source-intake-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -209,6 +211,9 @@ select {
 .editor-field--wide,
 .create-parameter-form__diagnostics,
 .create-drawable-form__diagnostics,
+.source-intake-form__layer-rows,
+.source-intake-form__secondary-action,
+.source-intake-form__diagnostics,
 .editor-button {
   grid-column: 1 / -1;
 }
@@ -232,7 +237,8 @@ select {
 }
 
 .create-parameter-form__diagnostics,
-.create-drawable-form__diagnostics {
+.create-drawable-form__diagnostics,
+.source-intake-form__diagnostics {
   min-height: 18px;
   color: #9a4a21;
   font-size: 12px;
@@ -399,7 +405,14 @@ select {
   gap: 12px;
 }
 
-.drawable-authoring-summary {
+.source-intake-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.drawable-authoring-summary,
+.source-intake-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -407,22 +420,83 @@ select {
 }
 
 .drawable-authoring-summary dt,
-.drawable-authoring-summary dd {
+.drawable-authoring-summary dd,
+.source-intake-summary dt,
+.source-intake-summary dd {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.drawable-authoring-summary dt {
+.drawable-authoring-summary dt,
+.source-intake-summary dt {
   color: #50615e;
   font-size: 11px;
   font-weight: 750;
   text-transform: uppercase;
 }
 
-.drawable-authoring-summary dd {
+.drawable-authoring-summary dd,
+.source-intake-summary dd {
   color: #263033;
   font-size: 12px;
+}
+
+.source-intake-form__checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: #52605d;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.source-intake-form__checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1d7a73;
+}
+
+.source-intake-form__checkbox span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-intake-form__layer-rows {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.source-intake-layer-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  background: #f8faf9;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.source-intake-layer-row h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #263033;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.source-intake-form__secondary-action {
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+}
+
+.source-intake-form__secondary-action:hover,
+.source-intake-form__secondary-action:focus-visible {
+  background: #e1e8e3;
 }
 
 .drawable-authoring-result {
@@ -886,8 +960,11 @@ select {
   }
 
   .drawable-authoring-summary,
+  .source-intake-summary,
   .create-parameter-form,
-  .create-drawable-form {
+  .create-drawable-form,
+  .source-intake-form,
+  .source-intake-layer-row {
     grid-template-columns: 1fr;
   }
 

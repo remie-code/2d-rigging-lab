@@ -11,6 +11,11 @@ import { emptyPackageRevisionState, type PackageRevisionState } from "./package-
 import type { ParameterListItemState } from "./parameter-list-state.js";
 import type { PreviewParameterValueState } from "./preview-parameter-state.js";
 import { createEmptyReloadSummary, type ReloadSummaryState } from "./reload-summary.js";
+import {
+  createEmptySourceIntakeDraftState,
+  type SourceIntakeDraftState
+} from "./source-intake-draft-state.js";
+import type { SourceAssetDto } from "@private-2d-rigging-lab/package-format";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
 
@@ -24,6 +29,8 @@ export interface EditorSemanticState {
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
+  readonly sourceIntakeDraft: SourceIntakeDraftState;
+  readonly sourceAssets: readonly SourceAssetDto[];
   readonly lastOperationResult: OperationResultSummaryState | null;
   readonly operationLog: OperationLogSummaryState;
   readonly generatedEvidence: GeneratedEvidenceSummaryState;
@@ -41,6 +48,8 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   previewParameters: [],
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),
+  sourceIntakeDraft: createEmptySourceIntakeDraftState(),
+  sourceAssets: [],
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),

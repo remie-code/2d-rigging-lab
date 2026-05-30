@@ -16,6 +16,12 @@ import {
   assertSavedMeshVertexState,
   runMeshVertexEditWorkflow
 } from "./mesh-vertex-smoke.mjs";
+import {
+  assertSavedSourceIntakeState,
+  assertSourceIntakeStateAfterLoad,
+  assertSourceIntakeStateAfterReset,
+  runSourceIntakeWorkflow
+} from "./source-intake-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -60,41 +66,66 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertHorizontalOverflow(page, `${viewport.name} initial`);
     await runAiApprovalFlow(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
-    const drawableEvidence = await runCreateDrawableWorkflow(page, viewport);
+    const sourceIntakeEvidence = await runSourceIntakeWorkflow({
+      page,
+      viewport,
+      initialOperationLogEntryCount: 1
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} post-source-intake`);
+    const drawableEvidence = await runCreateDrawableWorkflow(page, viewport, {
+      expectedOperationLogEntryCount: 4,
+      expectedOperationTypesText:
+        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh"
+    });
     await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
-    const meshVertexEvidence = await runMeshVertexEditWorkflow({ page, viewport, smokeDrawable });
-    await assertHorizontalOverflow(page, `${viewport.name} post-mesh-vertex`);
-    const layerEvidence = await runLayerControlsWorkflow({
+    const meshVertexEvidence = await runMeshVertexEditWorkflow({
       page,
       viewport,
       smokeDrawable,
       initialOperationLogEntryCount: 4
     });
+    await assertHorizontalOverflow(page, `${viewport.name} post-mesh-vertex`);
+    const layerEvidence = await runLayerControlsWorkflow({
+      page,
+      viewport,
+      smokeDrawable,
+      initialOperationLogEntryCount: 5
+    });
     await assertHorizontalOverflow(page, `${viewport.name} post-layer-controls`);
     await saveProject(page, {
-      expectedOperationLogLineCount: 10,
+      expectedOperationLogLineCount: 11,
       expectedDrawableId: smokeDrawable.drawableId
     });
+    await assertSavedSourceIntakeState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
     await assertSavedMeshVertexState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
     await assertSavedLayerState({ page, storageKey: editorProjectStorageKey, smokeDrawable });
     await reloadProjectFromStorage(page, {
-      expectedOperationLogEntryCount: 10,
+      expectedOperationLogEntryCount: 11,
       expectedOperationTypesText:
-        "createParameter, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
     });
+    await assertSourceIntakeStateAfterLoad({ page, smokeDrawable });
     await assertMeshVertexStateAfterLoad({ page, smokeDrawable });
     await assertLayerStateAfterLoad({
       page,
       smokeDrawable,
-      expectedOperationLogEntryCount: 10,
+      expectedOperationLogEntryCount: 11,
       expectedOperationTypesText:
-        "createParameter, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
     });
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
 
-    return { viewport: viewport.name, previewEvidence, drawableEvidence, meshVertexEvidence, layerEvidence };
+    return {
+      viewport: viewport.name,
+      previewEvidence,
+      sourceIntakeEvidence,
+      drawableEvidence,
+      meshVertexEvidence,
+      layerEvidence
+    };
   } finally {
     await page.close();
   }
@@ -190,11 +221,19 @@ const runPreviewWorkflow = async (page, viewport) => {
   };
 };
 
-const runCreateDrawableWorkflow = async (page, viewport) => {
+const runCreateDrawableWorkflow = async (
+  page,
+  viewport,
+  {
+    expectedOperationLogEntryCount = 3,
+    expectedOperationTypesText = "createParameter, createDrawable, generateMesh"
+  } = {}
+) => {
   await waitForTestId(page, editorTestIds.drawableAuthoringPanel);
   await waitForTestId(page, editorTestIds.drawableCreateForm);
   await waitForTestId(page, editorTestIds.drawableCreateSubmit);
   await waitForTestId(page, editorTestIds.drawableList);
+  await scrollTestIdIntoView(page, editorTestIds.drawableAuthoringPanel);
 
   await assertDrawableAuthoringPanelReachable(page, viewport);
   await assertDrawableAuthoringAccessibleNames(page);
@@ -210,8 +249,8 @@ const runCreateDrawableWorkflow = async (page, viewport) => {
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
   await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
-  await waitForOperationLogEntryCount(page, 3);
-  await waitForText(page, editorTestIds.operationLogSummary, "createParameter, createDrawable, generateMesh");
+  await waitForOperationLogEntryCount(page, expectedOperationLogEntryCount);
+  await waitForText(page, editorTestIds.operationLogSummary, expectedOperationTypesText);
   await waitForText(page, editorTestIds.generatedEvidenceSummary, "Runtime snapshots");
   await waitForText(page, editorTestIds.generatedEvidenceSummary, "Validation reports");
   await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
@@ -823,6 +862,18 @@ const clickTestId = async (page, testId) => {
     }
 
     element.click();
+  }, testId);
+};
+
+const scrollTestIdIntoView = async (page, testId) => {
+  await page.evaluate((id) => {
+    const element = document.querySelector(`[data-testid="${id}"]`);
+
+    if (!(element instanceof HTMLElement)) {
+      throw new Error(`Missing element for test id ${id}.`);
+    }
+
+    element.scrollIntoView({ block: "center", inline: "nearest" });
   }, testId);
 };
 

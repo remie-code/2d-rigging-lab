@@ -44,6 +44,12 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createImportSplitPngSourceAssetOperationRequest,
+  createSetRightsMetadataOperationRequest,
+  type EditorImportSplitPngSourceAssetCommand,
+  type EditorSetRightsMetadataCommand
+} from "./source-import-command.js";
+import {
   createEditorEvidenceCollector,
   summarizeEvidencePaths,
   toEvidencePackageFileEntries,
@@ -64,6 +70,10 @@ export interface EditorSessionAdapter {
   ): EditorSessionPersistenceResult;
   commitSetDrawableDrawOrder(command: EditorSetDrawableDrawOrderCommand): EditorSessionPersistenceResult;
   commitMoveMeshVertex(command: EditorMoveMeshVertexCommand): EditorSessionPersistenceResult;
+  commitImportSplitPngSourceAsset(
+    command: EditorImportSplitPngSourceAssetCommand
+  ): EditorSessionPersistenceResult;
+  commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorSessionPersistenceResult;
 }
 
 export interface EditorSessionAdapterOptions {
@@ -204,6 +214,20 @@ export const createEditorSessionAdapter = (
     },
     commitMoveMeshVertex(command) {
       const request = createMoveMeshVertexOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitImportSplitPngSourceAsset(command) {
+      const request = createImportSplitPngSourceAssetOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitSetRightsMetadata(command) {
+      const request = createSetRightsMetadataOperationRequest(
         command,
         authoringSession.packageRevision
       );

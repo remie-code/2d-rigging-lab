@@ -35,7 +35,13 @@ export const createEditorWorkflowState = (
 export const applyEditorWorkflowCommitResult = (
   state: EditorSemanticState,
   adapter: EditorSessionAdapter,
-  result: EditorSessionPersistenceResult
+  result: EditorSessionPersistenceResult,
+  options: {
+    readonly importedSourceSelection?: {
+      readonly sourceAssetId: string;
+      readonly sourceLayerId?: string;
+    };
+  } = {}
 ): EditorSemanticState =>
   applyCommittedOperationSummary(state, {
     result: {
@@ -58,6 +64,12 @@ export const applyEditorWorkflowCommitResult = (
     drawables: result.reloadedDocument.model.drawables.drawables,
     drawOrderEntries: result.reloadedDocument.model.drawOrder.entries,
     meshes: result.reloadedDocument.model.meshes.meshes,
+    sourceAssets: result.reloadedDocument.assets.sourceManifest.sourceAssets,
+    parts: result.reloadedDocument.model.graph.parts,
+    canvasSize: result.reloadedDocument.model.graph.canvasSize,
+    ...(options.importedSourceSelection === undefined
+      ? {}
+      : { importedSourceSelection: options.importedSourceSelection }),
     reload: {
       status: result.operationResult.status === "committed" ? "reloaded" : "failed",
       packageRevision: result.reloadedPackageRevision,

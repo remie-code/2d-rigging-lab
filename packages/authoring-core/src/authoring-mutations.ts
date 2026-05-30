@@ -7,11 +7,17 @@ import { hasParameter } from "./graph-selectors.js";
 
 export type AuthoringMutationErrorCode =
   | "duplicate_parameter"
+  | "duplicate_source_asset"
+  | "duplicate_source_layer"
   | "duplicate_drawable"
   | "duplicate_mesh"
   | "duplicate_keyform_set"
   | "missing_part"
   | "missing_source_asset"
+  | "blocked_rights"
+  | "provenance_asset_mismatch"
+  | "rights_asset_mismatch"
+  | "source_layer_asset_mismatch"
   | "missing_drawable"
   | "missing_draw_order_entry"
   | "duplicate_draw_order_entry"

@@ -38,6 +38,7 @@ import {
   type EditorSessionAdapter,
   type EditorSessionDrawablePresetResult,
   type EditorSessionPersistenceResult,
+  type EditorSetRightsMetadataCommand,
   type EditorSessionPersistenceSnapshot
 } from "../editor-session/index.js";
 import type {
@@ -53,7 +54,8 @@ import {
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   type PreviewParameterSetResult,
   type EditorSemanticState,
-  type EditorWorkflowViewModel
+  type EditorWorkflowViewModel,
+  type SourceIntakeDraftState
 } from "../editor-state/index.js";
 import {
   createWorkflowAiApprovalActions,
@@ -66,6 +68,12 @@ import {
   createEditorWorkflowState,
   projectLoadedEditorWorkflowState
 } from "./workflow-state-projection.js";
+import {
+  applySourceImportResultToDraft,
+  createSourceIntakeImportCommand,
+  projectImportedSourceSelection,
+  type EditorWorkflowSourceImportCommitResult
+} from "./source-intake-workflow.js";
 
 export interface EditorWorkflowControllerOptions {
   readonly projectStore: BrowserProjectStore;
@@ -180,6 +188,8 @@ export interface EditorWorkflowController {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
+  commitSourceIntakeDraft(draft: SourceIntakeDraftState): EditorWorkflowSourceImportCommitResult;
+  commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
     runtimeVisibility: boolean
@@ -321,6 +331,42 @@ export const createEditorWorkflowController = (
       }
 
       return result;
+    },
+    commitSourceIntakeDraft(draft) {
+      const result = adapter.commitImportSplitPngSourceAsset(
+        createSourceIntakeImportCommand(draft, adapter.authoringSession.packageRevision)
+      );
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = {
+        ...applyEditorWorkflowCommitResult(
+          state,
+          adapter,
+          result,
+          result.operationResult.status === "committed"
+            ? { importedSourceSelection: projectImportedSourceSelection(draft) }
+            : {}
+        ),
+        sourceIntakeDraft: applySourceImportResultToDraft(draft, result)
+      };
+
+      return {
+        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+        result
+      };
+    },
+    commitSetRightsMetadata(command) {
+      const result = adapter.commitSetRightsMetadata(command);
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = applyEditorWorkflowCommitResult(state, adapter, result);
+
+      return {
+        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+        result
+      };
     },
     setDrawableRuntimeVisibility(drawableId, runtimeVisibility) {
       if (!state.drawables.some((drawable) => drawable.drawableId === drawableId)) {

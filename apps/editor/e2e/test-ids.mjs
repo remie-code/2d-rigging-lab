@@ -12,6 +12,17 @@ export const editorTestIds = {
   drawableLayerStatus: "drawable.layer.status",
   meshVertexControls: "meshVertex.controls",
   meshVertexStatus: "meshVertex.status",
+  sourceIntakePanel: "sourceIntake.panel",
+  sourceIntakeForm: "sourceIntake.form",
+  sourceIntakeSubmit: "sourceIntake.confirm",
+  sourceIntakeSummary: "sourceIntake.summary",
+  sourceIntakeImportedSources: "sourceIntake.importedSources",
+  sourceIntakeDiagnostics: "sourceIntake.diagnostics",
+  sourceIntakeLayerRows: "sourceIntake.layerRows",
+  sourceIntakeAddLayer: "sourceIntake.addLayer",
+  sourceIntakeManifestPath: "sourceIntake.manifestPath",
+  sourceIntakePlacementPolicy: "sourceIntake.placementPolicy",
+  sourceIntakeRightsStatus: "sourceIntake.rightsStatus",
   drawableResult: "drawable.result",
   operationStatus: "operation.status",
   projectPersistencePanel: "projectPersistence.panel",
@@ -61,6 +72,12 @@ export const createMeshVertexRowTestId = (meshId, vertexId) =>
 
 export const createMeshVertexNudgeButtonTestId = (meshId, vertexId, direction) =>
   `meshVertex.nudge.${meshId}.${vertexId}.${direction}`;
+
+export const createSourceIntakeLayerRowTestId = (sourceLayerId) =>
+  `sourceIntake.layer.${sourceLayerId}`;
+
+export const createImportedSourceAssetRowTestId = (sourceAssetId) =>
+  `sourceIntake.imported.${sourceAssetId}`;
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;

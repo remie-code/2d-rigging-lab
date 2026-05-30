@@ -24,6 +24,7 @@
 | [wave15-plan.md](wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave16-plan.md](wave16-plan.md) | Wave 16 drawable layer controls and visibility authoring dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 | [wave17-plan.md](wave17-plan.md) | Wave 17 editor mesh vertex editing vertical slice dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
+| [wave18-plan.md](wave18-plan.md) | Wave 18 split PNG source asset and provenance intake dependency and Orch-Sylph parallelism plan | Completed / implementation-proven |
 
 ## Current Decision
 
@@ -52,3 +53,4 @@
 - Wave 15 `editor-drawable-mesh-authoring-vertical-slice` completed on 2026-05-30. It added GUI creation of rights-clean generated drawable / deterministic mesh, operation log and package persistence, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and a needs-fix loop that updated operation lifecycle coverage after `generateMesh` became supported. Final verification passed after sandbox-limited commands were rerun with escalation.
 - Wave 16 `drawable-layer-controls-and-visibility-authoring` completed on 2026-05-30. It added drawable reorder and runtime visibility controls, runtime / validation evidence, save/load persistence smoke, desktop/mobile e2e coverage, and final integration review.
 - Wave 17 `editor-mesh-vertex-editing-vertical-slice` completed on 2026-05-30. It added a minimal GUI `moveMeshVertex` workflow with operation/runtime evidence, editor workflow state, vertex nudge controls, browser-local persistence, desktop/mobile E2E smoke, and clean integration review while preserving Undine -> Orch-Sylph -> Gnome/Review-Sylph context isolation.
+- Wave 18 `split-png-source-asset-and-provenance-intake` completed on 2026-05-30. It added metadata-backed split PNG source asset / layer metadata / rights / provenance intake, operation evidence, validator evidence, editor workflow integration, browser-local persistence, desktop/mobile E2E smoke, and clean integration review while preserving the Wave18 higher-parallelism Orch-Sylph/Gnome/Review-Sylph separation.

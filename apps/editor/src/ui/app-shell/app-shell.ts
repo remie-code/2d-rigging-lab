@@ -30,6 +30,7 @@ import { createOperationStatusPanel } from "../parameter-operation/operation-sta
 import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
+import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createPackageStatus } from "./package-status.js";
 
 export interface EditorAppShellOptions {
@@ -43,6 +44,7 @@ export interface EditorAppShellOptions {
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
   readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
+  readonly onConfirmSourceIntakeDraft: (draft: EditorSemanticState["sourceIntakeDraft"]) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
@@ -124,6 +126,11 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onMoveDrawableLayer: options.onMoveDrawableLayer,
     onNudgeMeshVertex: options.onNudgeMeshVertex
   });
+  const sourceIntakePanel = createSourceIntakePanel({
+    draft: options.state.sourceIntakeDraft,
+    viewModel: options.viewModel.sourceIntake,
+    onConfirmDraft: options.onConfirmSourceIntakeDraft
+  });
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
     preview: options.previewProjection,
@@ -167,6 +174,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     previewPanel,
     operationPanel,
     drawableAuthoringPanel,
+    sourceIntakePanel,
     projectPersistencePanel,
     aiApprovalPanel,
     aiTranscriptPanel,

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "source-asset-rights-provenance-validator-summary-v1",
+  "fixtureId": "source-asset-rights-provenance-validator",
+  "cases": {
+    "cleared": {
+      "status": "pass",
+      "checkIds": []
+    },
+    "needsReview": {
+      "status": "needs_review",
+      "checkIds": [
+        "rights.statusNeedsReview"
+      ]
+    },
+    "blocked": {
+      "status": "fail",
+      "checkIds": [
+        "rights.statusBlocked"
+      ]
+    },
+    "missingProvenance": {
+      "status": "fail",
+      "checkIds": [
+        "rights.provenanceMissing",
+        "rights.drawableProvenanceMissing"
+      ]
+    },
+    "missingTexture": {
+      "status": "fail",
+      "checkIds": [
+        "ref.drawableTextureMissing"
+      ]
+    },
+    "missingTextureNoAtlas": {
+      "status": "fail",
+      "checkIds": [
+        "ref.drawableTextureMissing"
+      ]
+    },
+    "psdSourceMissingTextureNoAtlas": {
+      "status": "fail",
+      "checkIds": [
+        "ref.drawableTextureMissing"
+      ]
+    },
+    "legacyGeneratedFixtureNoAtlas": {
+      "status": "pass",
+      "checkIds": []
+    },
+    "missingDrawableProvenance": {
+      "status": "fail",
+      "checkIds": [
+        "rights.drawableProvenanceMissing"
+      ]
+    }
+  }
+}

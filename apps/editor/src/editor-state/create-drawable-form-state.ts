@@ -68,6 +68,41 @@ export const projectCreateDrawableDefaults = (
   };
 };
 
+export const projectCreateDrawableDefaultsForSourceSelection = (
+  input: CreateDrawableDefaultsInput & {
+    readonly preferredSourceAssetId: string;
+    readonly preferredSourceLayerId?: string;
+  }
+): CreateDrawableFormState => {
+  const sourceAsset = input.sourceAssets?.find(
+    (candidate) => candidate.sourceAssetId === input.preferredSourceAssetId
+  );
+  const sourceLayer =
+    input.preferredSourceLayerId === undefined
+      ? sourceAsset?.layers.find((layer) => layer.role === "editableLayer") ?? sourceAsset?.layers[0]
+      : sourceAsset?.layers.find((layer) => layer.sourceLayerId === input.preferredSourceLayerId);
+  const part = input.parts?.[0];
+  const layerDisplayName = sourceLayer?.normalizedName ?? sourceLayer?.originalName;
+
+  return {
+    ...projectCreateDrawableDefaults(input),
+    displayName: layerDisplayName === undefined ? "Imported Drawable" : `Imported ${toTitleLabel(layerDisplayName)}`,
+    sourceAssetId: sourceAsset?.sourceAssetId ?? input.preferredSourceAssetId,
+    sourceLayerId: sourceLayer?.sourceLayerId ?? input.preferredSourceLayerId ?? null,
+    partId: part?.partId ?? "",
+    initialBounds: structuredClone(
+      sourceLayer?.bounds ?? {
+        x: 0,
+        y: 0,
+        width: Math.min(32, input.canvasSize?.width ?? 32),
+        height: Math.min(32, input.canvasSize?.height ?? 32)
+      }
+    ),
+    status: "idle",
+    diagnostics: []
+  };
+};
+
 export const applyCreateDrawableDraftResult = (
   state: CreateDrawableFormState,
   input: {
@@ -79,3 +114,11 @@ export const applyCreateDrawableDraftResult = (
   status: input.status,
   diagnostics: (input.diagnostics ?? []).map(projectDiagnosticSummary)
 });
+
+const toTitleLabel = (value: string): string =>
+  value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ");

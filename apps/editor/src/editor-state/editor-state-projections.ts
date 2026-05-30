@@ -4,7 +4,8 @@ import {
 } from "./editor-semantic-state.js";
 import {
   applyCreateDrawableDraftResult,
-  projectCreateDrawableDefaults
+  projectCreateDrawableDefaults,
+  projectCreateDrawableDefaultsForSourceSelection
 } from "./create-drawable-form-state.js";
 import { projectDrawableList } from "./drawable-list-state.js";
 import {
@@ -28,6 +29,7 @@ import { projectPackageRevision, type PackageRevisionInput } from "./package-rev
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
+import { createEmptySourceIntakeDraftState } from "./source-intake-draft-state.js";
 import type {
   DrawableDto,
   DrawOrderEntryDto,
@@ -60,6 +62,16 @@ export interface CommittedOperationSummaryInput {
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
+  readonly sourceAssets?: readonly SourceAssetDto[];
+  readonly parts?: readonly ModelPartDto[];
+  readonly canvasSize?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly importedSourceSelection?: {
+    readonly sourceAssetId: string;
+    readonly sourceLayerId?: string;
+  };
   readonly reload?: ReloadSummaryInput;
 }
 
@@ -84,6 +96,10 @@ export const projectLoadedPackageState = (
       ...(input.parts === undefined ? {} : { parts: input.parts }),
       ...(input.canvasSize === undefined ? {} : { canvasSize: input.canvasSize })
     }),
+    sourceIntakeDraft: createEmptySourceIntakeDraftState({
+      defaultPartId: input.parts?.[0]?.partId ?? ""
+    }),
+    sourceAssets: input.sourceAssets ?? [],
     previewParameters: projectPreviewParameterValues(input.parameters ?? [])
   };
 };
@@ -97,9 +113,11 @@ export const applyCommittedOperationSummary = (
       ? state.drawables
       : projectDrawableList(input.drawables, input.meshes ?? [], input.drawOrderEntries ?? []);
   const meshEdit =
-    input.drawables === undefined && input.meshes === undefined
+      input.drawables === undefined && input.meshes === undefined
       ? state.meshEdit
       : projectMeshEditState(drawables, input.meshes ?? []);
+  const sourceAssets = input.sourceAssets ?? state.sourceAssets;
+  const pendingCreateDrawable = projectCommittedCreateDrawableDraft(state, input, sourceAssets);
 
   return {
     ...state,
@@ -130,16 +148,42 @@ export const applyCommittedOperationSummary = (
             }))
           }
         : state.pendingCreateParameter,
-    pendingCreateDrawable:
-      input.result.operationType === "createDrawable" || input.result.operationType === "generateMesh"
-        ? applyCreateDrawableDraftResult(state.pendingCreateDrawable, {
-            status: input.result.status === "committed" ? "committed" : "rejected",
-            ...(input.result.diagnostics === undefined ? {} : { diagnostics: input.result.diagnostics })
-          })
-        : state.pendingCreateDrawable,
+    pendingCreateDrawable,
+    sourceAssets,
     lastOperationResult: projectOperationResultSummary(input.result),
     operationLog: projectOperationLogSummary(input.operationLogEntries),
     generatedEvidence: projectGeneratedEvidenceSummary(input.generatedEvidence ?? {}),
     reload: input.reload === undefined ? state.reload : projectReloadSummary(input.reload)
   };
+};
+
+const projectCommittedCreateDrawableDraft = (
+  state: EditorSemanticState,
+  input: CommittedOperationSummaryInput,
+  sourceAssets: readonly SourceAssetDto[]
+) => {
+  if (
+    input.result.operationType === "importSplitPngSourceAsset" &&
+    input.result.status === "committed" &&
+    input.importedSourceSelection !== undefined
+  ) {
+    return projectCreateDrawableDefaultsForSourceSelection({
+      sourceAssets,
+      parts: input.parts ?? [],
+      ...(input.canvasSize === undefined ? {} : { canvasSize: input.canvasSize }),
+      preferredSourceAssetId: input.importedSourceSelection.sourceAssetId,
+      ...(input.importedSourceSelection.sourceLayerId === undefined
+        ? {}
+        : { preferredSourceLayerId: input.importedSourceSelection.sourceLayerId })
+    });
+  }
+
+  if (input.result.operationType === "createDrawable" || input.result.operationType === "generateMesh") {
+    return applyCreateDrawableDraftResult(state.pendingCreateDrawable, {
+      status: input.result.status === "committed" ? "committed" : "rejected",
+      ...(input.result.diagnostics === undefined ? {} : { diagnostics: input.result.diagnostics })
+    });
+  }
+
+  return state.pendingCreateDrawable;
 };

@@ -8,6 +8,10 @@ import {
   projectMeshEditViewModel,
   type MeshEditViewModel
 } from "./mesh-edit-view-model.js";
+import {
+  projectSourceIntakeDraftViewModel,
+  type SourceIntakeDraftViewModel
+} from "./source-intake-view-model.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface AiApprovalWorkflowViewModel {
@@ -36,6 +40,7 @@ export interface EditorWorkflowViewModel {
   readonly drawableAuthoring: DrawableAuthoringViewModel;
   readonly drawableLayers: DrawableLayerControlsViewModel;
   readonly meshEdit: MeshEditViewModel;
+  readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
@@ -146,6 +151,9 @@ export const projectEditorWorkflowViewModel = (
     drawableAuthoring: projectDrawableAuthoringViewModel(state),
     drawableLayers: projectDrawableLayerControlsViewModel(state),
     meshEdit: projectMeshEditViewModel(state),
+    sourceIntake: projectSourceIntakeDraftViewModel(state.sourceIntakeDraft, {
+      sourceAssets: state.sourceAssets
+    }),
     previewControls: projectPreviewControlsViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };

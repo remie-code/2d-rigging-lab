@@ -320,6 +320,159 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits split PNG source import metadata into package assets and operation log", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:31:00.000Z")
+    });
+
+    const result = adapter.commitImportSplitPngSourceAsset(createSplitPngSourceImportCommand());
+
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("importSplitPngSourceAsset");
+    expect(result.packageRevisionBefore).toBe(0);
+    expect(result.packageRevisionAfterCommit).toBe(1);
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "importSplitPngSourceAsset"
+    ]);
+    expect(result.operationLogEntries[0]).toMatchObject({
+      operationId: "op_editor_import_split_png_source_session",
+      operationType: "importSplitPngSourceAsset",
+      targetIds: expect.arrayContaining(["src_session_split", "layer_face"])
+    });
+    expect(result.packageFilePaths).toEqual(expect.arrayContaining([
+      "assets/sources/source-manifest.json",
+      "assets/provenance.json",
+      "assets/rights.json",
+      "operations/log.jsonl"
+    ]));
+    expect(result.packageFileSet.find((entry) => entry.path === "operations/log.jsonl")?.text).toContain(
+      "importSplitPngSourceAsset"
+    );
+    expect(result.reloadedDocument.assets.sourceManifest.sourceAssets).toContainEqual(
+      expect.objectContaining({
+        sourceAssetId: "src_session_split",
+        kind: "split-png-set-v1",
+        filePath: "assets/sources/session/split-manifest.json",
+        layers: expect.arrayContaining([
+          expect.objectContaining({
+            sourceLayerId: "layer_face",
+            bounds: { x: 8, y: 10, width: 96, height: 112 },
+            mappedDrawableIds: []
+          })
+        ])
+      })
+    );
+    expect(result.reloadedDocument.assets.provenance.records).toContainEqual(
+      expect.objectContaining({
+        assetId: "src_session_split",
+        creator: "Session Artist",
+        relatedOperationIds: ["op_editor_import_split_png_source_session"]
+      })
+    );
+    expect(result.reloadedDocument.assets.rights.records).toContainEqual(
+      expect.objectContaining({
+        assetId: "src_session_split",
+        rightsStatus: "needs_review",
+        license: "private-review"
+      })
+    );
+    expect(result.generatedArtifactPaths).toEqual(
+      expect.arrayContaining([
+        "validation/reports/val_editor_editor_import_split_png_source_session_candidate.validation.json"
+      ])
+    );
+  });
+
+  it("commits source rights metadata updates after source import", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:31:30.000Z")
+    });
+
+    const imported = adapter.commitImportSplitPngSourceAsset(createSplitPngSourceImportCommand());
+    const provenanceId = imported.reloadedDocument.assets.provenance.records.find(
+      (record) => record.assetId === "src_session_split"
+    )?.provenanceId;
+    if (provenanceId === undefined) {
+      throw new Error("Expected imported source provenance.");
+    }
+
+    const result = adapter.commitSetRightsMetadata({
+      operationId: "op_editor_set_rights_session_split",
+      assetId: "src_session_split",
+      rightsStatus: "cleared",
+      license: "private-cleared",
+      redistributionAllowed: false,
+      provenanceId
+    });
+
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "importSplitPngSourceAsset",
+      "setRightsMetadata"
+    ]);
+    expect(result.reloadedDocument.assets.rights.records).toContainEqual(
+      expect.objectContaining({
+        assetId: "src_session_split",
+        rightsStatus: "cleared",
+        license: "private-cleared"
+      })
+    );
+    expect(result.reloadedDocument.assets.provenance.records).toContainEqual(
+      expect.objectContaining({
+        provenanceId,
+        relatedOperationIds: [
+          "op_editor_import_split_png_source_session",
+          "op_editor_set_rights_session_split"
+        ]
+      })
+    );
+    expect(result.packageFileSet.find((entry) => entry.path === "assets/rights.json")?.text).toContain(
+      "private-cleared"
+    );
+  });
+
+  it("creates a drawable from an imported split PNG source layer", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:31:45.000Z")
+    });
+
+    const imported = adapter.commitImportSplitPngSourceAsset(createSplitPngSourceImportCommand());
+    const preset = adapter.commitCreateDrawablePreset({
+      createOperationId: "op_editor_create_drawable_imported_face",
+      generateOperationId: "op_editor_generate_mesh_imported_face",
+      displayName: "Imported Face",
+      sourceAssetId: "src_session_split",
+      sourceLayerId: "layer_face",
+      partId: "part_root",
+      initialBounds: { x: 8, y: 10, width: 96, height: 112 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+
+    expect(imported.operationResult.status).toBe("committed");
+    expect(preset.status).toBe("committed");
+    expect(preset.finalPersistenceResult.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "importSplitPngSourceAsset",
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(preset.finalPersistenceResult.reloadedDocument.model.drawables.drawables).toContainEqual(
+      expect.objectContaining({
+        drawableId: "draw_imported_face",
+        displayName: "Imported Face",
+        sourceAssetId: "src_session_split",
+        meshId: "mesh_imported_face"
+      })
+    );
+    expect(
+      preset.finalPersistenceResult.reloadedDocument.assets.sourceManifest.sourceAssets
+        .find((sourceAsset) => sourceAsset.sourceAssetId === "src_session_split")
+        ?.layers.find((layer) => layer.sourceLayerId === "layer_face")
+    ).toMatchObject({
+      mappedDrawableIds: ["draw_imported_face"]
+    });
+  });
+
   it("commits mesh vertex movement and reloads the persisted package file set", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:32:00.000Z")
@@ -650,3 +803,38 @@ const createAddKeyformGrid2dRequest = (input: {
       ]
     }
   });
+
+const createSplitPngSourceImportCommand = () => ({
+  operationId: "op_editor_import_split_png_source_session",
+  sourceAssetId: "src_session_split",
+  manifestPath: "assets/sources/session/split-manifest.json",
+  contentHash: "sha256:session-split",
+  defaultPartId: "part_root",
+  placementPolicy: "use-metadata" as const,
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      originalName: "Face.png",
+      normalizedName: "face",
+      groupPath: ["Head"] as string[],
+      bounds: { x: 8, y: 10, width: 96, height: 112 },
+      visibleInSource: true,
+      opacityInSource: 1,
+      role: "editableLayer" as const,
+      unsupportedFeatures: [] as string[]
+    }
+  ],
+  rights: {
+    rightsStatus: "needs_review" as const,
+    license: "private-review",
+    redistributionAllowed: false
+  },
+  provenance: {
+    creator: "Session Artist",
+    sourceUrl: "https://example.invalid/session-source",
+    license: "private-review",
+    redistributionAllowed: false,
+    aiUsed: false,
+    transformHistory: ["session-test"] as string[]
+  }
+});

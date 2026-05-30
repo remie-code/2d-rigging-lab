@@ -9,8 +9,11 @@ import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
+import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
+import { unsupportedPsdSourceAssetOperationHandler } from "./operations/import-split-png-source-asset-unsupported-psd.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
+import { setRightsMetadataOperationHandler } from "./operations/set-rights-metadata.js";
 import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
 
 export interface OperationApplyOutcome {
@@ -34,6 +37,8 @@ export interface OperationHandler {
 }
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
+  [unsupportedPsdSourceAssetOperationHandler.operationType, unsupportedPsdSourceAssetOperationHandler],
+  [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],
   [moveMeshVertexOperationHandler.operationType, moveMeshVertexOperationHandler],
@@ -41,6 +46,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
+  [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
   [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]
 ]);
 

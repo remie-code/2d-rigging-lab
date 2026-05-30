@@ -41,6 +41,7 @@ discussion/implementation/
 - Wave 15 editor drawable / mesh authoring vertical slice completed on 2026-05-30 with GUI generated drawable / deterministic mesh creation, operation log and package persistence, save/load restore, runtime/validation evidence, embedded preview observation, desktop/mobile e2e smoke, and an operation lifecycle needs-fix loop after `generateMesh` became supported. Evidence is recorded in [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md), [waves/wave15/integration-review.md](waves/wave15/integration-review.md), [waves/wave15/_map.md](waves/wave15/_map.md), and [reviews/wave15/_map.md](reviews/wave15/_map.md).
 - Wave 16 drawable layer controls and visibility authoring completed on 2026-05-30 with `setDrawOrder` / `setRuntimeVisibility` operations, runtime / validation evidence, editor workflow/state, drawable list hide/show and move up/down controls, save/load persistence smoke, desktop/mobile e2e, and integration review. Evidence is recorded in [waves/wave16/wave16-final-report.md](waves/wave16/wave16-final-report.md).
 - Wave 17 editor mesh vertex editing vertical slice completed on 2026-05-30 with `moveMeshVertex` operation support, runtime / validation evidence, editor workflow state, mesh vertex nudge controls, save/load persistence smoke, desktop/mobile E2E, clean integration review, and final report. Evidence is recorded in [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md), [waves/wave17/_map.md](waves/wave17/_map.md), and [reviews/wave17/_map.md](reviews/wave17/_map.md).
+- Wave 18 split PNG source asset and provenance intake completed on 2026-05-30 with metadata-backed split PNG source asset / layer metadata / rights / provenance intake, operation and validator evidence, editor workflow integration, browser-local save/load, desktop/mobile E2E smoke, clean integration review, and final report. Evidence is recorded in [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md), [waves/wave18/_map.md](waves/wave18/_map.md), and [reviews/wave18/_map.md](reviews/wave18/_map.md).
 
 ## Key References
 
@@ -65,6 +66,7 @@ discussion/implementation/
 | [orchestration/wave15-plan.md](orchestration/wave15-plan.md) | Wave 15 editor drawable / mesh authoring vertical slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave16-plan.md](orchestration/wave16-plan.md) | Wave 16 drawable layer controls and visibility authoring dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave17-plan.md](orchestration/wave17-plan.md) | Wave 17 editor mesh vertex editing vertical slice dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave18-plan.md](orchestration/wave18-plan.md) | Wave 18 split PNG source asset and provenance intake dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -102,6 +104,6 @@ discussion/implementation/
 
 ## Next Actions
 
-1. Use [current-capability-map.md](current-capability-map.md) and the Wave 17 final report before selecting the next implementation slice.
+1. Use [current-capability-map.md](current-capability-map.md) and [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md) as the entry point for selecting the next implementation slice.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

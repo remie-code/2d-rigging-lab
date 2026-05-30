@@ -3,6 +3,7 @@ import type { PackageManifestDto, RequiredModelFilesDto } from "./package-manife
 export const PACKAGE_MANIFEST_PATH = "manifest.json";
 export const PACKAGE_PROVENANCE_PATH = "assets/provenance.json";
 export const PACKAGE_RIGHTS_PATH = "assets/rights.json";
+export const PACKAGE_TEXTURE_ATLAS_PATH = "assets/textures/texture-atlas.json";
 
 export const REQUIRED_MODEL_FILE_KEYS = [
   "graph",

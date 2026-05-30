@@ -3,6 +3,7 @@ import {
   PACKAGE_MANIFEST_PATH,
   PACKAGE_PROVENANCE_PATH,
   PACKAGE_RIGHTS_PATH,
+  PACKAGE_TEXTURE_ATLAS_PATH,
   REQUIRED_MODEL_FILE_KEYS,
   assertPackageRelativePath,
   assertUniquePackageFilePaths,
@@ -53,6 +54,9 @@ export function serializePackageDocumentToFileSet(
 
   entries.push(
     createJsonFileEntry(parsedDocument.manifest.assetIndex, parsedDocument.assets.sourceManifest),
+    ...(parsedDocument.assets.textureAtlas === undefined
+      ? []
+      : [createJsonFileEntry(PACKAGE_TEXTURE_ATLAS_PATH, parsedDocument.assets.textureAtlas)]),
     createJsonFileEntry(PACKAGE_PROVENANCE_PATH, parsedDocument.assets.provenance),
     createJsonFileEntry(PACKAGE_RIGHTS_PATH, parsedDocument.assets.rights)
   );
@@ -96,6 +100,9 @@ export function parsePackageDocumentFromFileSet(fileSet: PackageFileSet): Packag
     model,
     assets: {
       sourceManifest: parseJsonFile(manifest.assetIndex, fileMap),
+      ...(fileMap.has(PACKAGE_TEXTURE_ATLAS_PATH)
+        ? { textureAtlas: parseJsonFile(PACKAGE_TEXTURE_ATLAS_PATH, fileMap) }
+        : {}),
       provenance: parseJsonFile(PACKAGE_PROVENANCE_PATH, fileMap),
       rights: parseJsonFile(PACKAGE_RIGHTS_PATH, fileMap)
     }

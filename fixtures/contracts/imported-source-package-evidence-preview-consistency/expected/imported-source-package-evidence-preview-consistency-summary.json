@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "imported-source-package-evidence-preview-consistency-summary-v1",
+  "operations": [
+    {
+      "operationType": "importSplitPngSourceAsset",
+      "operationId": "op_import_split_body_evidence",
+      "resultStatus": "committed",
+      "targetIds": [
+        "src_split_body",
+        "layer_body"
+      ],
+      "sourceState": {
+        "sourceAssets": [
+          {
+            "sourceAssetId": "src_split_body",
+            "kind": "split-png-set-v1",
+            "filePath": "assets/sources/split/body.manifest.json",
+            "layerIds": [
+              "layer_body"
+            ],
+            "mappedDrawableIds": []
+          }
+        ],
+        "drawables": [],
+        "rightsByAsset": [
+          {
+            "assetId": "src_split_body",
+            "rightsStatus": "cleared"
+          }
+        ]
+      },
+      "runtimeDiff": {
+        "drawableChangeCount": 0,
+        "drawListChangeCount": 0
+      }
+    },
+    {
+      "operationType": "createDrawable",
+      "operationId": "op_create_body",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_body",
+        "mesh_body",
+        "part_root",
+        "src_split_body"
+      ],
+      "sourceState": {
+        "sourceAssets": [
+          {
+            "sourceAssetId": "src_split_body",
+            "mappedDrawableIds": [
+              "draw_body"
+            ]
+          }
+        ],
+        "drawables": [
+          {
+            "drawableId": "draw_body",
+            "sourceAssetId": "src_split_body",
+            "textureId": "tex_body",
+            "meshId": "mesh_body",
+            "sourceProvenanceId": "prov_create_body"
+          }
+        ]
+      },
+      "runtimeDiff": {
+        "drawableChangeCount": 1,
+        "drawListChangeCount": 1
+      }
+    },
+    {
+      "operationType": "generateMesh",
+      "operationId": "op_generate_mesh_body",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_body",
+        "mesh_body"
+      ],
+      "sourceState": {
+        "sourceAssets": [
+          {
+            "sourceAssetId": "src_split_body",
+            "mappedDrawableIds": [
+              "draw_body"
+            ]
+          }
+        ],
+        "drawables": [
+          {
+            "drawableId": "draw_body",
+            "sourceAssetId": "src_split_body",
+            "textureId": "tex_body",
+            "meshId": "mesh_body",
+            "sourceProvenanceId": "prov_create_body"
+          }
+        ]
+      },
+      "runtimeDiff": {
+        "drawableChangeCount": 1,
+        "drawListChangeCount": 0
+      }
+    }
+  ],
+  "packageFileSet": {
+    "entryCount": 33,
+    "operationLogPath": "operations/log.jsonl",
+    "operationLogTypes": [
+      "importSplitPngSourceAsset",
+      "createDrawable",
+      "generateMesh"
+    ],
+    "sourceManifest": {
+      "sourceAssetIds": [
+        "src_split_body"
+      ],
+      "layerMappings": [
+        {
+          "sourceLayerId": "layer_body",
+          "mappedDrawableIds": [
+            "draw_body"
+          ]
+        }
+      ]
+    },
+    "textureAtlas": {
+      "present": true,
+      "textureRefs": [
+        {
+          "textureId": "tex_body",
+          "sourceAssetId": "src_split_body",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_import_split_body_evidence"
+        }
+      ]
+    },
+    "rights": [
+      {
+        "assetId": "src_split_body",
+        "rightsStatus": "cleared"
+      }
+    ]
+  },
+  "runtimePreviewConsistency": {
+    "semantics": "current-svg-geometry-preview",
+    "textureBitmapRendered": false,
+    "snapshots": [
+      {
+        "operationType": "createDrawable",
+        "snapshotId": "snap_imported_source_preview_consistency_3",
+        "packageRevision": 2,
+        "drawList": [
+          "draw_body"
+        ],
+        "visibleDrawableCount": 1,
+        "drawableCount": 1,
+        "drawables": [
+          {
+            "drawableId": "draw_body",
+            "meshId": "mesh_body",
+            "sourceAssetId": "src_split_body",
+            "sourceLayerId": "layer_body",
+            "textureId": "tex_body",
+            "sourceProvenanceId": "prov_create_body",
+            "visible": true,
+            "svgShape": "rect",
+            "vertexCount": 0,
+            "polygonPointCount": 0,
+            "bounds": {
+              "x": 4,
+              "y": 8,
+              "width": 40,
+              "height": 20
+            }
+          }
+        ]
+      },
+      {
+        "operationType": "generateMesh",
+        "snapshotId": "snap_imported_source_preview_consistency_5",
+        "packageRevision": 3,
+        "drawList": [
+          "draw_body"
+        ],
+        "visibleDrawableCount": 1,
+        "drawableCount": 1,
+        "drawables": [
+          {
+            "drawableId": "draw_body",
+            "meshId": "mesh_body",
+            "sourceAssetId": "src_split_body",
+            "sourceLayerId": "layer_body",
+            "textureId": "tex_body",
+            "sourceProvenanceId": "prov_create_body",
+            "visible": true,
+            "svgShape": "polygon",
+            "vertexCount": 4,
+            "polygonPointCount": 4,
+            "bounds": {
+              "x": 4,
+              "y": 8,
+              "width": 40,
+              "height": 20
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "status": "pass",
+    "checkIds": []
+  }
+}

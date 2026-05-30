@@ -333,11 +333,11 @@ describe("operation lifecycle foundation", () => {
     expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("rejects unsupported operations without changing package or authoring revision", () => {
+  it("rejects still-unimplemented operations without changing package or authoring revision", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedSetRightsMetadataRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedDynamicsRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -429,19 +429,23 @@ const createMoveMeshVertexRequest = (options: {
   }
 });
 
-const createUnsupportedSetRightsMetadataRequest = () => ({
+const createUnsupportedDynamicsRequest = () => ({
   schemaVersion: "operation-request-v1",
-  operationId: "op_set_rights_metadata",
+  operationId: "op_create_dynamics_group",
   actor: "test",
   surface: "testFixture",
   dryRun: false,
   basePackageRevision: 0,
-  operationType: "setRightsMetadata",
+  operationType: "createDynamicsGroup",
   payload: {
-    assetId: "asset_body",
-    rightsStatus: "cleared",
-    license: "internal-test",
-    redistributionAllowed: false
+    dynamicsGroupId: "dyn_hair_sway",
+    displayName: "Hair Sway",
+    solverKind: "scalarDampedFollowV1",
+    resetPolicy: "reset-on-load",
+    settings: {
+      stiffness: 0.35,
+      damping: 0.7
+    }
   }
 });
 

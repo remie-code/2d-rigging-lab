@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_create_body",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 1,
+  "operationType": "createDrawable",
+  "payload": {
+    "sourceAssetId": "src_split_body",
+    "sourceLayerId": "layer_body",
+    "partId": "part_root",
+    "displayName": "Body"
+  }
+}

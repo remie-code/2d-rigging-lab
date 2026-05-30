@@ -3,6 +3,10 @@ import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format"
 
 import { createBrowserProjectStore } from "../project-persistence/index.js";
 import type { StorageLike } from "../project-persistence/index.js";
+import {
+  createEmptySourceIntakeDraftState,
+  type SourceIntakeDraftState
+} from "../editor-state/index.js";
 import { createEditorWorkflowController } from "./workflow-controller.js";
 
 describe("editor workflow controller", () => {
@@ -88,6 +92,146 @@ describe("editor workflow controller", () => {
       packageRevision: 2,
       drawableCount: 2,
       drawableIds: expect.arrayContaining(["draw_workflow_star"])
+    });
+  });
+
+  it("imports a split PNG source draft, updates rights, creates a drawable, and restores source metadata after load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const imported = first.commitSourceIntakeDraft(createSourceIntakeDraft());
+    const provenanceId = imported.result.reloadedDocument.assets.provenance.records.find(
+      (record) => record.assetId === "src_workflow_split"
+    )?.provenanceId;
+    if (provenanceId === undefined) {
+      throw new Error("Expected imported workflow source provenance.");
+    }
+    const rights = first.commitSetRightsMetadata({
+      operationId: "op_workflow_set_rights_split",
+      assetId: "src_workflow_split",
+      rightsStatus: "cleared",
+      license: "private-cleared",
+      redistributionAllowed: false,
+      provenanceId
+    });
+    const drawable = first.commitCreateDrawablePreset({
+      createOperationId: "op_workflow_create_drawable_imported_face",
+      generateOperationId: "op_workflow_generate_mesh_imported_face",
+      displayName: "Workflow Imported Face",
+      sourceAssetId: first.state.pendingCreateDrawable.sourceAssetId,
+      ...(first.state.pendingCreateDrawable.sourceLayerId === null
+        ? {}
+        : { sourceLayerId: first.state.pendingCreateDrawable.sourceLayerId }),
+      partId: first.state.pendingCreateDrawable.partId,
+      initialBounds: first.state.pendingCreateDrawable.initialBounds,
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(imported.status).toBe("committed");
+    expect(rights.status).toBe("committed");
+    expect(drawable.status).toBe("committed");
+    expect(first.state.sourceAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceAssetId: "src_workflow_split",
+        kind: "split-png-set-v1",
+        filePath: "assets/sources/workflow/split-manifest.json"
+      })
+    ]));
+    expect(first.state.pendingCreateDrawable).toMatchObject({
+      displayName: "Imported Face",
+      sourceAssetId: "src_workflow_split",
+      sourceLayerId: "layer_face",
+      partId: "part_root",
+      initialBounds: { x: 8, y: 10, width: 96, height: 112 }
+    });
+    expect(first.viewModel.drawableAuthoring).toMatchObject({
+      sourceLabel: "src_workflow_split / layer_face",
+      canSubmitCreateDrawable: true
+    });
+    expect(first.viewModel.sourceIntake).toMatchObject({
+      importedAssetCountLabel: "1 imported source asset",
+      importedAssets: expect.arrayContaining([
+        expect.objectContaining({
+          sourceAssetId: "src_workflow_split",
+          layerCountLabel: "1 layer"
+        })
+      ])
+    });
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "importSplitPngSourceAsset",
+      "setRightsMetadata",
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(saved.snapshot.packageFilePaths).toEqual(expect.arrayContaining([
+      "assets/sources/source-manifest.json",
+      "assets/provenance.json",
+      "assets/rights.json",
+      "operations/log.jsonl"
+    ]));
+    expect(saved.snapshot.document.assets.rights.records).toContainEqual(
+      expect.objectContaining({
+        assetId: "src_workflow_split",
+        rightsStatus: "cleared",
+        license: "private-cleared"
+      })
+    );
+    expect(
+      saved.snapshot.document.assets.sourceManifest.sourceAssets
+        .find((sourceAsset) => sourceAsset.sourceAssetId === "src_workflow_split")
+        ?.layers.find((layer) => layer.sourceLayerId === "layer_face")
+    ).toMatchObject({
+      mappedDrawableIds: ["draw_workflow_imported_face"]
+    });
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.sourceAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceAssetId: "src_workflow_split",
+        layers: expect.arrayContaining([
+          expect.objectContaining({
+            sourceLayerId: "layer_face",
+            mappedDrawableIds: ["draw_workflow_imported_face"]
+          })
+        ])
+      })
+    ]));
+    expect(second.state.operationLog.entryCount).toBe(4);
+    expect(second.state.reload).toMatchObject({
+      status: "reloaded",
+      packageRevision: 4,
+      drawableIds: expect.arrayContaining(["draw_workflow_imported_face"])
+    });
+  });
+
+  it("does not treat blocked source intake rights as a successful import", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    const rejected = workflow.commitSourceIntakeDraft(
+      createSourceIntakeDraft({
+        rightsStatus: "blocked"
+      })
+    );
+
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.result.operationResult.status).toBe("rejected");
+    expect(workflow.state.operationLog.entryCount).toBe(0);
+    expect(workflow.state.sourceAssets.map((sourceAsset) => sourceAsset.sourceAssetId)).not.toContain(
+      "src_workflow_split"
+    );
+    expect(workflow.state.sourceIntakeDraft).toMatchObject({
+      status: "idle",
+      sourceAssetId: "src_workflow_split",
+      diagnostics: expect.arrayContaining([
+        expect.stringContaining("operation.importSplitPngSourceAsset.blockedRights")
+      ])
+    });
+    expect(workflow.state.pendingCreateDrawable).toMatchObject({
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body"
     });
   });
 
@@ -714,6 +858,43 @@ const createDrawablePresetCommand = (name: "star") => ({
   meshMethod: "auto-grid-v1",
   densityHint: "low"
 } as const);
+
+const createSourceIntakeDraft = (
+  overrides: {
+    readonly rightsStatus?: SourceIntakeDraftState["rights"]["rightsStatus"];
+  } = {}
+): SourceIntakeDraftState => ({
+  ...createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }),
+  status: "confirmed",
+  sourceAssetId: "src_workflow_split",
+  manifestPath: "assets/sources/workflow/split-manifest.json",
+  contentHash: "sha256:workflow-split",
+  defaultPartId: "part_root",
+  placementPolicy: "use-metadata",
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      originalName: "Face.png",
+      normalizedName: "face",
+      groupPath: ["Head"],
+      bounds: { x: 8, y: 10, width: 96, height: 112 },
+      visibleInSource: true,
+      opacityInSource: 1,
+      role: "editableLayer",
+      unsupportedFeatures: []
+    }
+  ],
+  rights: {
+    rightsStatus: overrides.rightsStatus ?? "needs_review",
+    creator: "Workflow Artist",
+    license: "private-review",
+    redistributionAllowed: false,
+    aiUsed: false,
+    sourceUrl: "https://example.invalid/workflow-source",
+    notes: "workflow source intake test"
+  },
+  diagnostics: []
+});
 
 const capitalize = (text: string): string =>
   `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;

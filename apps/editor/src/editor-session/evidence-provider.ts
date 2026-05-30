@@ -174,6 +174,8 @@ const createRuntimeEvidenceInput = (
   input: OperationEvidenceProviderInput
 ): RuntimeEvidenceInput => {
   switch (input.request.operationType) {
+    case "importSplitPngSourceAsset":
+      return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
       return createDrawableRuntimeEvidenceInput(input);
     case "generateMesh":
@@ -190,9 +192,37 @@ const createRuntimeEvidenceInput = (
       return createSetDrawOrderEvidenceInput(input);
     case "moveMeshVertex":
       return createMoveMeshVertexEvidenceInput(input);
+    case "setRightsMetadata":
+      return createSetRightsMetadataEvidenceInput(input);
     default:
       throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
   }
+};
+
+const createImportSplitPngSourceAssetEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "importSplitPngSourceAsset") {
+    throw new Error(`importSplitPngSourceAsset evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...(input.request.payload.sourceAssetId === undefined ? [] : [input.request.payload.sourceAssetId]),
+    ...input.request.payload.layers.map((layer) => layer.sourceLayerId)
+  ]);
+
+  return {
+    artifactLabel: "editor-import-split-png-source",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
 };
 
 const createDrawableRuntimeEvidenceInput = (
@@ -385,6 +415,28 @@ const createMoveMeshVertexEvidenceInput = (
 
   return {
     artifactLabel: "editor-move-mesh-vertex",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetRightsMetadataEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setRightsMetadata") {
+    throw new Error(`setRightsMetadata evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([...input.targetIds, input.request.payload.assetId]);
+
+  return {
+    artifactLabel: "editor-set-rights-metadata",
     authoredParameterValues: {},
     targetIds,
     baseline: {

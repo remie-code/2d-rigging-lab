@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_import_split_body_evidence",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "operationType": "importSplitPngSourceAsset",
+  "payload": {
+    "sourceAssetId": "src_split_body",
+    "manifestPath": "assets/sources/split/body.manifest.json",
+    "importProfile": "split-png-fallback-v1",
+    "contentHash": "sha256:split-body-source-manifest",
+    "defaultPartId": "part_root",
+    "placementPolicy": "use-metadata",
+    "layers": [
+      {
+        "sourceLayerId": "layer_body",
+        "imagePath": "assets/sources/split/body.png",
+        "originalName": "Body",
+        "normalizedName": "body",
+        "groupPath": [
+          "Root"
+        ],
+        "bounds": {
+          "x": 4,
+          "y": 8,
+          "width": 40,
+          "height": 20
+        },
+        "visibleInSource": true,
+        "opacityInSource": 1,
+        "role": "editableLayer",
+        "unsupportedFeatures": []
+      }
+    ],
+    "rights": {
+      "rightsStatus": "cleared",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": false
+    },
+    "provenance": {
+      "creator": "contract-fixture",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": false,
+      "aiUsed": false,
+      "transformHistory": [
+        "fixture-split-png-source"
+      ]
+    }
+  }
+}

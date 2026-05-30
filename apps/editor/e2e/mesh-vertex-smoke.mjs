@@ -9,7 +9,12 @@ const meshVertexNudgeDirection = "right";
 export const createSmokeMeshVertexId = (drawableId) =>
   `vtx_${drawableId.startsWith("draw_") ? drawableId.slice("draw_".length) : drawableId}_0_0`;
 
-export const runMeshVertexEditWorkflow = async ({ page, viewport, smokeDrawable }) => {
+export const runMeshVertexEditWorkflow = async ({
+  page,
+  viewport,
+  smokeDrawable,
+  initialOperationLogEntryCount = 3
+}) => {
   const vertexId = createSmokeMeshVertexId(smokeDrawable.drawableId);
   const vertexRowId = createMeshVertexRowTestId(smokeDrawable.meshId, vertexId);
   const nudgeButtonId = createMeshVertexNudgeButtonTestId(
@@ -89,7 +94,7 @@ export const runMeshVertexEditWorkflow = async ({ page, viewport, smokeDrawable 
       svgPoint: formatSvgPoint(nudgedPosition)
     }
   );
-  await waitForOperationLogEntryCount(page, 4);
+  await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 1);
   await waitForText(page, editorTestIds.operationLogSummary, "moveMeshVertex");
 
   const changedState = await readMeshVertexEditState(page, {

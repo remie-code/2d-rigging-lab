@@ -53,6 +53,18 @@ describe("editor app shell preview panel", () => {
     );
   });
 
+  it("renders source intake draft controls without moving drawable authoring out of the shell", () => {
+    const workflow = createWorkflow();
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.sourceIntakePanel)?.textContent).toContain("Source Intake");
+    expect(findByTestId(shell, editorTestIds.sourceIntakeForm)?.getAttribute("aria-label")).toBe(
+      "Confirm split PNG source intake draft"
+    );
+    expect(findByTestId(shell, editorTestIds.drawableAuthoringPanel)?.textContent).toContain("Drawable Authoring");
+    expect(findByTestId(shell, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");
+  });
+
   it("wires slider and reset callbacks", () => {
     const workflow = createWorkflow();
     const calls: Array<readonly [string, number]> = [];
@@ -242,6 +254,7 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onConfirmSourceIntakeDraft() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -271,6 +284,7 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onConfirmSourceIntakeDraft() {},
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
@@ -307,6 +321,7 @@ const renderShell = (
     onToggleDrawableRuntimeVisibility: callbacks.onToggleDrawableRuntimeVisibility ?? (() => {}),
     onMoveDrawableLayer: callbacks.onMoveDrawableLayer ?? (() => {}),
     onNudgeMeshVertex: callbacks.onNudgeMeshVertex ?? (() => {}),
+    onConfirmSourceIntakeDraft() {},
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
