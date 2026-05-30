@@ -18,6 +18,7 @@ export const createPreviewSummary = (
     createFact("Snapshot", preview.sourceSnapshotId),
     createFact("Drawables", `${preview.visibleDrawableCount} visible / ${preview.drawableCount} total`),
     createFact("Samples", `${preview.keyformSamples.totalCount} keyform sample${preview.keyformSamples.totalCount === 1 ? "" : "s"}`),
+    createFact("Textures", createTextureRenderingLabel(preview)),
     createFact("Diagnostics", createDiagnosticLabel(preview)),
     createFact("Diff", createDiffLabel(preview))
   );
@@ -46,6 +47,55 @@ const createDiagnosticLabel = (preview: EditorPreviewProjectionDto): string => {
 
   return `${preview.diagnostics.totalCount} total / ${preview.diagnostics.errorCount} error / ${preview.diagnostics.warningCount} warning`;
 };
+
+const createTextureRenderingLabel = (preview: EditorPreviewProjectionDto): string => {
+  const textureDrawables = preview.drawables.filter(
+    (drawable) => drawable.visible && isTextureDrawable(drawable)
+  );
+  if (textureDrawables.length === 0) {
+    return "0 texture refs";
+  }
+
+  const patternCount = textureDrawables.filter((drawable) =>
+    isBrowserRenderableTextureReference(drawable)
+  ).length;
+  const packageLocalUnavailableCount = textureDrawables.filter(
+    (drawable) => drawable.texture.previewReference?.referenceKind === "package-local-file-v1"
+  ).length;
+  const missingCount = textureDrawables.filter((drawable) => drawable.texture.status === "missing").length;
+  const notMaterializedCount = textureDrawables.filter(
+    (drawable) =>
+      drawable.texture.status === "not_materialized" &&
+      drawable.texture.previewReference === undefined
+  ).length;
+  const previewMissingCount = textureDrawables.filter(
+    (drawable) =>
+      drawable.texture.status === "resolved" &&
+      drawable.texture.previewReference === undefined
+  ).length;
+  const fallbackReasons = [
+    packageLocalUnavailableCount === 0 ? null : `${packageLocalUnavailableCount} package-local unavailable`,
+    missingCount === 0 ? null : `${missingCount} missing`,
+    notMaterializedCount === 0 ? null : `${notMaterializedCount} not materialized`,
+    previewMissingCount === 0 ? null : `${previewMissingCount} no preview ref`
+  ].filter((reason): reason is string => reason !== null);
+  const fallbackCount = textureDrawables.length - patternCount;
+  const reasonLabel = fallbackReasons.length === 0 ? "" : ` (${fallbackReasons.join(" / ")})`;
+
+  return `${patternCount} pattern / ${fallbackCount} fallback${reasonLabel}`;
+};
+
+const isTextureDrawable = (
+  drawable: EditorPreviewProjectionDto["drawables"][number]
+): boolean =>
+  drawable.texture.textureId !== undefined ||
+  drawable.texture.previewReference !== undefined ||
+  drawable.texture.status === "resolved" ||
+  drawable.texture.status === "missing";
+
+const isBrowserRenderableTextureReference = (
+  drawable: EditorPreviewProjectionDto["drawables"][number]
+): boolean => drawable.texture.previewReference?.referenceKind === "deterministic-data-url-v1";
 
 const createDiffLabel = (preview: EditorPreviewProjectionDto): string => {
   if (preview.diff === undefined) {

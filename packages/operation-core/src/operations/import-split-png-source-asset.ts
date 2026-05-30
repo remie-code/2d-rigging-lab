@@ -32,6 +32,12 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
+import {
+  evaluateSplitPngLayerTextureMappingPreconditions,
+  materializeSplitPngLayerTexturePreviewMetadata,
+  splitPngLayerRequestsTextureMaterialization,
+  type SplitPngTextureMaterializationResult
+} from "./import-split-png-source-asset-texture.js";
 
 export const importSplitPngSourceAssetOperationHandler: OperationHandler = {
   operationType: "importSplitPngSourceAsset",
@@ -71,10 +77,7 @@ const applyImportSplitPngSourceAsset = (
 
   const sourceAssetId = resolveSourceAssetId(request.payload);
   const sourceTarget: TargetRefDto = { kind: "sourceAsset", id: sourceAssetId };
-  const targetIds = [
-    sourceAssetId,
-    ...request.payload.layers.map((layer) => layer.sourceLayerId)
-  ];
+  const targetIds = collectImportTargetIds(request.payload, sourceAssetId);
   const preconditionDiagnostics = evaluateImportSplitPngSourceAssetPreconditions({
     session,
     request,
@@ -133,18 +136,26 @@ const applyImportSplitPngSourceAsset = (
     provenanceRecord,
     rightsRecord
   });
+  const textureMaterializations = materializeSplitPngLayerTexturePreviewMetadata({
+    session,
+    payload: request.payload,
+    sourceAssetId,
+    provenanceId
+  });
 
   return {
     result: createImportSplitPngSourceAssetResult({
       operationId,
       status,
       baseRevision,
-      candidateRevision: mutation.authoringRevision,
+      candidateRevision:
+        textureMaterializations.at(-1)?.authoringRevision ?? mutation.authoringRevision,
       packageId: session.packageIdentity.packageId,
       sourceTarget,
       sourceAsset: mutation.sourceAsset,
       provenanceRecord: mutation.provenanceRecord,
-      rightsRecord: mutation.rightsRecord
+      rightsRecord: mutation.rightsRecord,
+      textureMaterializations
     }),
     targetIds,
     candidateSession: session
@@ -227,7 +238,13 @@ const evaluateImportSplitPngSourceAssetPreconditions = (input: {
     );
   }
 
-  diagnostics.push(...evaluateLayerMetadataPreconditions(input.request.payload, sourceTarget));
+  diagnostics.push(
+    ...evaluateLayerMetadataPreconditions({
+      session: input.session,
+      payload: input.request.payload,
+      sourceTarget
+    })
+  );
 
   if (
     input.request.payload.defaultPartId !== undefined &&
@@ -245,35 +262,47 @@ const evaluateImportSplitPngSourceAssetPreconditions = (input: {
   return diagnostics;
 };
 
-const evaluateLayerMetadataPreconditions = (
-  payload: SplitPngSourceAssetPayloadDto,
-  sourceTarget: TargetRefDto
-): DiagnosticDto[] => {
+const evaluateLayerMetadataPreconditions = (input: {
+  readonly session: AuthoringSession;
+  readonly payload: SplitPngSourceAssetPayloadDto;
+  readonly sourceTarget: TargetRefDto;
+}): DiagnosticDto[] => {
   const diagnostics: DiagnosticDto[] = [];
   const seenLayerIds = new Set<string>();
+  const seenTextureIds = new Set<string>();
 
-  for (const layer of payload.layers) {
+  for (const layer of input.payload.layers) {
     if (seenLayerIds.has(layer.sourceLayerId)) {
       diagnostics.push(
         createOperationDiagnostic({
           checkId: "operation.importSplitPngSourceAsset.duplicateSourceLayer",
           message: `Source layer appears more than once: ${layer.sourceLayerId}.`,
-          target: { ...sourceTarget, path: `/payload/layers/${layer.sourceLayerId}` }
+          target: { ...input.sourceTarget, path: `/payload/layers/${layer.sourceLayerId}` }
         })
       );
     }
 
     seenLayerIds.add(layer.sourceLayerId);
 
-    if (payload.placementPolicy === "use-metadata" && layer.bounds === undefined) {
+    if (input.payload.placementPolicy === "use-metadata" && layer.bounds === undefined) {
       diagnostics.push(
         createOperationDiagnostic({
           checkId: "operation.importSplitPngSourceAsset.missingLayerBounds",
           message: `Layer ${layer.sourceLayerId} is missing bounds required by use-metadata placement.`,
-          target: { ...sourceTarget, path: `/payload/layers/${layer.sourceLayerId}/bounds` }
+          target: { ...input.sourceTarget, path: `/payload/layers/${layer.sourceLayerId}/bounds` }
         })
       );
     }
+
+    diagnostics.push(
+      ...evaluateSplitPngLayerTextureMappingPreconditions({
+        session: input.session,
+        payload: input.payload,
+        layer,
+        seenTextureIds,
+        sourceTarget: input.sourceTarget
+      })
+    );
   }
 
   return diagnostics;
@@ -334,6 +363,20 @@ const createSourceAssetDiagnostics = (
     if (layer.imagePath !== undefined) {
       diagnostics.push(`splitPng.layerImage:${layer.sourceLayerId}:${layer.imagePath}`);
     }
+
+    if (layer.textureId !== undefined) {
+      diagnostics.push(`splitPng.layerTexture:${layer.sourceLayerId}:${layer.textureId}`);
+    }
+
+    if (layer.targetPartId !== undefined) {
+      diagnostics.push(`splitPng.layerTargetPart:${layer.sourceLayerId}:${layer.targetPartId}`);
+    }
+
+    if (layer.texturePreviewReference !== undefined) {
+      diagnostics.push(
+        `splitPng.layerTexturePreview:${layer.sourceLayerId}:${layer.texturePreviewReference}`
+      );
+    }
   }
 
   return diagnostics;
@@ -349,8 +392,13 @@ const createImportSplitPngSourceAssetResult = (input: {
   readonly sourceAsset: SourceAsset;
   readonly provenanceRecord: ProvenanceRecord;
   readonly rightsRecord: RightsRecord;
+  readonly textureMaterializations: readonly SplitPngTextureMaterializationResult[];
 }): OperationResultDto => {
   const packageTarget: TargetRefDto = { kind: "package", id: input.packageId };
+  const textureTargets = input.textureMaterializations.map((materialization) => ({
+    kind: "texture" as const,
+    id: materialization.textureEntry.textureId
+  }));
   const modelDiff: ModelDiffDto = {
     schemaVersion: "model-diff-v1",
     baseRevision: input.baseRevision,
@@ -375,7 +423,19 @@ const createImportSplitPngSourceAssetResult = (input: {
             path: "/assets/rights/records",
             before: null,
             after: input.rightsRecord.assetId
-          }
+          },
+          ...input.textureMaterializations.flatMap((materialization) => [
+            {
+              path: "/assets/textureAtlas/textures",
+              before: null,
+              after: materialization.textureEntry.textureId
+            },
+            {
+              path: "/assets/textureAtlas/previewAssets",
+              before: null,
+              after: materialization.previewAsset.previewAssetId
+            }
+          ])
         ]
       },
       {
@@ -395,7 +455,19 @@ const createImportSplitPngSourceAssetResult = (input: {
             path: "/assets/rights/records",
             before: null,
             after: toJsonValue(input.rightsRecord)
-          }
+          },
+          ...input.textureMaterializations.flatMap((materialization) => [
+            {
+              path: `/assets/textureAtlas/textures/${materialization.textureEntry.textureId}`,
+              before: null,
+              after: toJsonValue(materialization.textureEntry)
+            },
+            {
+              path: `/assets/textureAtlas/previewAssets/${materialization.previewAsset.previewAssetId}`,
+              before: null,
+              after: toJsonValue(materialization.previewAsset)
+            }
+          ])
         ]
       }
     ],
@@ -406,7 +478,7 @@ const createImportSplitPngSourceAssetResult = (input: {
     schemaVersion: "operation-result-v1",
     operationId: input.operationId,
     status: input.status,
-    precondition: createPreconditionResult([], [input.sourceTarget, packageTarget]),
+    precondition: createPreconditionResult([], [input.sourceTarget, packageTarget, ...textureTargets]),
     modelDiff,
     runtimeDiff: undefined,
     validationDiff: undefined,
@@ -424,6 +496,26 @@ const normalizeManifestPath = (manifestPath: string | undefined): string | undef
   return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 };
 
+const collectImportTargetIds = (
+  payload: SplitPngSourceAssetPayloadDto,
+  sourceAssetId: SourceAssetId
+): readonly string[] =>
+  uniqueStrings([
+    sourceAssetId,
+    ...payload.layers.map((layer) => layer.sourceLayerId),
+    ...payload.layers.flatMap((layer) => {
+      if (!splitPngLayerRequestsTextureMaterialization(layer)) {
+        return [];
+      }
+
+      const effectivePartId = layer.targetPartId ?? payload.defaultPartId;
+      return [
+        ...(layer.textureId === undefined ? [] : [layer.textureId]),
+        ...(effectivePartId === undefined ? [] : [effectivePartId])
+      ];
+    })
+  ]);
+
 const resolveSourceAssetId = (payload: SplitPngSourceAssetPayloadDto): SourceAssetId =>
   payload.sourceAssetId ?? createSourceAssetIdFromManifestPath(payload.manifestPath ?? "split_png_manifest");
 
@@ -431,6 +523,22 @@ const createSourceAssetIdFromManifestPath = (manifestPath: string): SourceAssetI
   SourceAssetIdSchema.parse(`src_${sanitizeIdToken(manifestPath.replace(/\.[^.\\/]+$/, ""))}`);
 
 const normalizeDisplayName = (value: string): string => sanitizeIdToken(value).replace(/_/g, " ");
+
+const uniqueStrings = (values: readonly string[]): readonly string[] => {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    unique.push(value);
+  }
+
+  return unique;
+};
 
 const sanitizeIdToken = (value: string): string => {
   const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");

@@ -145,6 +145,7 @@ describe("editor workflow controller", () => {
       displayName: "Imported Face",
       sourceAssetId: "src_workflow_split",
       sourceLayerId: "layer_face",
+      textureId: "tex_face",
       partId: "part_root",
       initialBounds: { x: 8, y: 10, width: 96, height: 112 }
     });
@@ -169,10 +170,38 @@ describe("editor workflow controller", () => {
     ]);
     expect(saved.snapshot.packageFilePaths).toEqual(expect.arrayContaining([
       "assets/sources/source-manifest.json",
+      "assets/textures/texture-atlas.json",
       "assets/provenance.json",
       "assets/rights.json",
       "operations/log.jsonl"
     ]));
+    expect(saved.snapshot.operationLogEntries.find(
+      (entry) => entry.operationType === "createDrawable"
+    )?.payload).toMatchObject({
+      operationType: "createDrawable",
+      payload: {
+        sourceAssetId: "src_workflow_split",
+        sourceLayerId: "layer_face",
+        textureId: "tex_face",
+        partId: "part_root"
+      }
+    });
+    expect(saved.snapshot.document.assets.textureAtlas).toMatchObject({
+      textures: [
+        expect.objectContaining({
+          textureId: "tex_face",
+          sourceAssetId: "src_workflow_split",
+          sourceLayerId: "layer_face"
+        })
+      ],
+      previewAssets: [
+        expect.objectContaining({
+          textureId: "tex_face",
+          sourceAssetId: "src_workflow_split",
+          sourceLayerId: "layer_face"
+        })
+      ]
+    });
     expect(saved.snapshot.document.assets.rights.records).toContainEqual(
       expect.objectContaining({
         assetId: "src_workflow_split",
@@ -197,6 +226,14 @@ describe("editor workflow controller", () => {
             mappedDrawableIds: ["draw_workflow_imported_face"]
           })
         ])
+      })
+    ]));
+    expect(second.state.drawables).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        drawableId: "draw_workflow_imported_face",
+        sourceAssetId: "src_workflow_split",
+        textureId: "tex_face",
+        partId: "part_root"
       })
     ]));
     expect(second.state.operationLog.entryCount).toBe(4);
@@ -233,6 +270,28 @@ describe("editor workflow controller", () => {
       sourceAssetId: "src_generated",
       sourceLayerId: "layer_body"
     });
+  });
+
+  it("keeps missing texture preview as a structured source intake diagnostic", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    const rejected = workflow.commitSourceIntakeDraft(
+      createSourceIntakeDraft({
+        omitTexturePreviewReference: true
+      })
+    );
+
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.result.operationResult.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
+      "operation.importSplitPngSourceAsset.missingTexturePreviewReference"
+    );
+    expect(workflow.state.sourceIntakeDraft).toMatchObject({
+      status: "idle",
+      diagnostics: expect.arrayContaining([
+        expect.stringContaining("operation.importSplitPngSourceAsset.missingTexturePreviewReference")
+      ])
+    });
+    expect(workflow.state.operationLog.entryCount).toBe(0);
   });
 
   it("toggles drawable visibility, reorders layers, and restores layer state after save and load", () => {
@@ -862,6 +921,7 @@ const createDrawablePresetCommand = (name: "star") => ({
 const createSourceIntakeDraft = (
   overrides: {
     readonly rightsStatus?: SourceIntakeDraftState["rights"]["rightsStatus"];
+    readonly omitTexturePreviewReference?: boolean;
   } = {}
 ): SourceIntakeDraftState => ({
   ...createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }),
@@ -881,7 +941,12 @@ const createSourceIntakeDraft = (
       visibleInSource: true,
       opacityInSource: 1,
       role: "editableLayer",
-      unsupportedFeatures: []
+      unsupportedFeatures: [],
+      ...(overrides.omitTexturePreviewReference === true
+        ? {}
+        : { texturePreviewReference: "assets/textures/workflow/face.preview.png" }),
+      textureId: "tex_face",
+      targetPartId: "part_root"
     }
   ],
   rights: {

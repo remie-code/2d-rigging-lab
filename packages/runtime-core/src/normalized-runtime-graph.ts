@@ -10,6 +10,8 @@ import type {
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 
+import type { NormalizedDrawableTextureReference } from "./texture-projection.js";
+
 export interface NormalizedRuntimeGraph {
   readonly packageId: string;
   readonly packageRevision: number;
@@ -75,6 +77,7 @@ export interface NormalizedDynamicsSettings {
 export interface NormalizedDrawable {
   readonly drawableId: DrawableId;
   readonly meshId: MeshId;
+  readonly texture?: NormalizedDrawableTextureReference;
   readonly visible: boolean;
   readonly opacity: number;
   readonly baseDrawOrder: number;

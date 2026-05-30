@@ -4,15 +4,19 @@ import {
 } from "./test-ids.mjs";
 
 export const sourceIntakeSmoke = {
-  sourceAssetId: "src_e2e_split_png_smoke",
-  sourceLayerId: "layer_e2e_body",
-  manifestPath: "assets/sources/e2e-character/split-png-manifest.json",
+  sourceAssetId: "src_e",
+  sourceLayerId: "l",
+  textureId: "tex_e",
+  texturePreviewReference:
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  texturePreviewAssetId: "preview_src_e_l",
+  manifestPath: "assets/sources/e2e.json",
   contentHash: "sha256:e2e-source-intake-smoke",
   defaultPartId: "part_root",
   creator: "E2E Rights Fixture",
   license: "CC0-1.0",
   sourceUrl: "https://example.invalid/private-2d-rigging-lab/e2e-source",
-  notes: "Metadata-only E2E source intake; PNG decode is not exercised.",
+  notes: "Deterministic data URL E2E source intake; PNG decode pipeline is not exercised.",
   bounds: {
     x: 84,
     y: 24,
@@ -51,6 +55,11 @@ export const runSourceIntakeWorkflow = async ({
   await waitForText(page, importedSourceRow, "0 mapped drawables");
   await waitForText(
     page,
+    editorTestIds.sourceIntakeLayerRows,
+    `${sourceIntakeSmoke.textureId} / ${sourceIntakeSmoke.defaultPartId}`
+  );
+  await waitForText(
+    page,
     editorTestIds.drawableAuthoringPanel,
     `${sourceIntakeSmoke.sourceAssetId} / ${sourceIntakeSmoke.sourceLayerId}`
   );
@@ -79,6 +88,7 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
     const sourceManifest = readPackageJsonFile(project, "assets/sources/source-manifest.json");
     const provenance = readPackageJsonFile(project, "assets/provenance.json");
     const rights = readPackageJsonFile(project, "assets/rights.json");
+    const textureAtlas = readPackageJsonFile(project, "assets/textures/texture-atlas.json");
     const drawables = readPackageJsonFile(project, "model/drawables.json")?.drawables ?? [];
     const operationLogEntries = String(project.operationLogJsonl ?? "")
       .split("\n")
@@ -101,12 +111,19 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
         candidate.license === expected.license
     );
     const drawable = drawables.find((candidate) => candidate.drawableId === expected.drawableId);
+    const texture = textureAtlas?.textures?.find(
+      (candidate) => candidate.textureId === expected.textureId
+    );
+    const texturePreviewAsset = textureAtlas?.previewAssets?.find(
+      (candidate) => candidate.textureId === expected.textureId
+    );
     const importEntry = operationLogEntries.find(
       (entry) =>
         entry.operationType === "importSplitPngSourceAsset" &&
         Array.isArray(entry.targetIds) &&
         entry.targetIds.includes(expected.sourceAssetId) &&
-        entry.targetIds.includes(expected.sourceLayerId)
+        entry.targetIds.includes(expected.sourceLayerId) &&
+        entry.targetIds.includes(expected.textureId)
     );
 
     return {
@@ -120,6 +137,18 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
       provenanceLicense: provenanceRecord?.license ?? null,
       provenanceHistory: provenanceRecord?.transformHistory ?? [],
       drawableSourceAssetId: drawable?.sourceAssetId ?? null,
+      drawableSourceLayerId: drawable?.sourceLayerId ?? null,
+      drawableTextureId: drawable?.textureId ?? null,
+      drawablePartId: drawable?.partId ?? null,
+      textureAtlasVersion: textureAtlas?.schemaVersion ?? null,
+      textureFilePath: texture?.filePath ?? null,
+      textureSourceAssetId: texture?.sourceAssetId ?? null,
+      textureSourceLayerId: texture?.sourceLayerId ?? null,
+      texturePreviewAssetId: texturePreviewAsset?.previewAssetId ?? null,
+      texturePreviewReferenceKind: texturePreviewAsset?.reference?.referenceKind ?? null,
+      texturePreviewDataUrl: texturePreviewAsset?.reference?.dataUrl ?? null,
+      texturePreviewSourceAssetId: texturePreviewAsset?.sourceAssetId ?? null,
+      texturePreviewSourceLayerId: texturePreviewAsset?.sourceLayerId ?? null,
       importEntryPresent: importEntry !== undefined
     };
 
@@ -141,13 +170,19 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
     manifestPath: sourceIntakeSmoke.manifestPath,
     creator: sourceIntakeSmoke.creator,
     license: sourceIntakeSmoke.license,
+    textureId: sourceIntakeSmoke.textureId,
     drawableId: smokeDrawable.drawableId
   });
 
   const expected = {
     sourceAssetId: sourceIntakeSmoke.sourceAssetId,
     sourceFilePath: sourceIntakeSmoke.manifestPath,
-    sourceDiagnostics: ["split-png-fallback-v1"],
+    sourceDiagnostics: [
+      "split-png-fallback-v1",
+      `splitPng.layerTexture:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.textureId}`,
+      `splitPng.layerTargetPart:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.defaultPartId}`,
+      `splitPng.layerTexturePreview:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.texturePreviewReference}`
+    ],
     layerMappedDrawableIds: [smokeDrawable.drawableId],
     rightsStatus: "cleared",
     rightsLicense: sourceIntakeSmoke.license,
@@ -158,6 +193,18 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
       `source-intake-note:${sourceIntakeSmoke.notes}`
     ],
     drawableSourceAssetId: sourceIntakeSmoke.sourceAssetId,
+    drawableSourceLayerId: null,
+    drawableTextureId: sourceIntakeSmoke.textureId,
+    drawablePartId: sourceIntakeSmoke.defaultPartId,
+    textureAtlasVersion: "texture-atlas-v1",
+    textureFilePath: `assets/textures/${sourceIntakeSmoke.textureId}.png`,
+    textureSourceAssetId: sourceIntakeSmoke.sourceAssetId,
+    textureSourceLayerId: sourceIntakeSmoke.sourceLayerId,
+    texturePreviewAssetId: sourceIntakeSmoke.texturePreviewAssetId,
+    texturePreviewReferenceKind: "deterministic-data-url-v1",
+    texturePreviewDataUrl: sourceIntakeSmoke.texturePreviewReference,
+    texturePreviewSourceAssetId: sourceIntakeSmoke.sourceAssetId,
+    texturePreviewSourceLayerId: sourceIntakeSmoke.sourceLayerId,
     importEntryPresent: true
   };
 
@@ -282,6 +329,9 @@ const assertSourceIntakeAccessibleNames = async (page) => {
         creator: readLabel("creator"),
         license: readLabel("license"),
         sourceLayerId: readLabel("sourceLayerId.0"),
+        texturePreviewReference: readLabel("texturePreviewReference.0"),
+        textureId: readLabel("textureId.0"),
+        targetPartId: readLabel("targetPartId.0"),
         width: readLabel("width.0")
       }
     };
@@ -309,6 +359,9 @@ const assertSourceIntakeAccessibleNames = async (page) => {
       creator: "Creator",
       license: "License",
       sourceLayerId: "Layer ID",
+      texturePreviewReference: "Texture preview reference",
+      textureId: "Texture ID",
+      targetPartId: "Target part ID",
       width: "Width"
     }
   };
@@ -367,6 +420,9 @@ const setSourceIntakeFormValues = async (page, input) => {
     setValue("originalName.0", "E2E Body");
     setValue("normalizedName.0", "e2e_body");
     setValue("groupPath.0", "Root/Character");
+    setValue("texturePreviewReference.0", values.texturePreviewReference);
+    setValue("textureId.0", values.textureId);
+    setValue("targetPartId.0", values.defaultPartId);
     setValue("x.0", values.bounds.x);
     setValue("y.0", values.bounds.y);
     setValue("width.0", values.bounds.width);

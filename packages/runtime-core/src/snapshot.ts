@@ -31,6 +31,11 @@ import type { EffectiveParameterResolution } from "./parameter-resolution.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 import { createStableVertexHash as createStableGeometryVertexHash } from "./drawable-geometry.js";
+import {
+  createEvaluatedDrawableTexture,
+  EvaluatedDrawableTextureSchema,
+  omitTextureProjectionCoordinates
+} from "./texture-projection.js";
 
 export const EvaluatedParameterSchema = z.object({
   parameterId: ParameterIdSchema,
@@ -53,6 +58,7 @@ export type EvaluatedParameterDto = z.infer<typeof EvaluatedParameterSchema>;
 export const EvaluatedDrawableSchema = z.object({
   drawableId: DrawableIdSchema,
   meshId: MeshIdSchema,
+  texture: EvaluatedDrawableTextureSchema.optional(),
   visible: z.boolean(),
   opacity: z.number().min(0).max(1),
   baseDrawOrder: z.number().int(),
@@ -280,6 +286,15 @@ const createEvaluatedDrawables = (input: {
       EvaluatedDrawableSchema.parse({
         drawableId: drawable.drawableId,
         meshId: drawable.meshId,
+        ...(drawable.texture === undefined
+          ? {}
+          : {
+              texture: createEvaluatedDrawableTexture({
+                texture: drawable.texture,
+                vertexCount: drawable.vertexCount,
+                includeUvCoordinates: options.snapshotDetail === "full"
+              })
+            }),
         visible: drawable.visible,
         opacity: clamp(drawable.opacity, 0, 1),
         baseDrawOrder: drawable.baseDrawOrder,
@@ -364,7 +379,10 @@ const finalizeDrawablesForDetail = (
   return drawables.map((drawable) => {
     const { vertices, ...withoutVertices } = drawable;
     void vertices;
-    return withoutVertices;
+    return {
+      ...withoutVertices,
+      ...(drawable.texture === undefined ? {} : { texture: omitTextureProjectionCoordinates(drawable.texture) })
+    };
   });
 };
 

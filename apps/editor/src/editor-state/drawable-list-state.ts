@@ -11,6 +11,7 @@ export interface DrawableListItemState {
   readonly meshId: string;
   readonly partId: string;
   readonly sourceAssetId: string;
+  readonly textureId: string;
   readonly visible: boolean;
   readonly baseDrawOrder: number;
   readonly stableOrder: number;
@@ -48,6 +49,7 @@ export const projectDrawableList = (
       meshId: drawable.meshId,
       partId: drawable.partId,
       sourceAssetId: drawable.sourceAssetId,
+      textureId: drawable.textureId,
       visible: drawable.runtimeVisibility,
       baseDrawOrder: drawOrder?.baseDrawOrder ?? drawable.baseDrawOrder,
       stableOrder: drawOrder?.stableOrder ?? fallbackIndex,

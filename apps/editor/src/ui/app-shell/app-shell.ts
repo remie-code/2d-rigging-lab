@@ -3,7 +3,12 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../../editor-state/index.js";
+import { applyEditorPreviewTextureAssets } from "../../editor-preview/texture-preview-resolution.js";
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
+import {
+  parsePackageDocumentFromFileSet,
+  type TextureAtlasFileDto
+} from "@private-2d-rigging-lab/package-format";
 import type {
   EditorDrawableLayerMoveDirection,
   EditorWorkflowPersistenceResult
@@ -131,9 +136,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     viewModel: options.viewModel.sourceIntake,
     onConfirmDraft: options.onConfirmSourceIntakeDraft
   });
+  const textureAtlas = resolveTextureAtlas(options);
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
-    preview: options.previewProjection,
+    preview: applyEditorPreviewTextureAssets({
+      preview: options.previewProjection,
+      ...(textureAtlas === undefined ? {} : { textureAtlas }),
+      drawableTextures: createDrawableTextureReferences(options.state)
+    }),
     onSetPreviewParameterValue: options.onSetPreviewParameterValue,
     onResetPreviewParameterValues: options.onResetPreviewParameterValues
   });
@@ -183,4 +193,51 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   shell.append(appBar, workspace);
 
   return shell;
+};
+
+const resolveTextureAtlas = (options: EditorAppShellOptions): TextureAtlasFileDto | undefined => {
+  const latestSessionAtlas = options.latestPersistenceResult?.reloadedDocument.assets.textureAtlas;
+  if (latestSessionAtlas !== undefined) {
+    return latestSessionAtlas;
+  }
+
+  const projectResult = options.latestProjectPersistenceResult;
+  if (projectResult?.status === "saved") {
+    return projectResult.snapshot.document.assets.textureAtlas;
+  }
+
+  if (projectResult?.status === "loaded") {
+    return parsePackageDocumentFromFileSet(projectResult.packageFileSet).assets.textureAtlas;
+  }
+
+  return undefined;
+};
+
+const createDrawableTextureReferences = (
+  state: EditorSemanticState
+): readonly {
+  readonly drawableId: string;
+  readonly textureId?: string;
+  readonly sourceAssetId?: string;
+  readonly sourceLayerId?: string;
+}[] => {
+  const sourceLayerIdsByDrawableId = new Map<string, string>();
+  for (const sourceAsset of state.sourceAssets) {
+    for (const sourceLayer of sourceAsset.layers) {
+      for (const drawableId of sourceLayer.mappedDrawableIds) {
+        sourceLayerIdsByDrawableId.set(drawableId, sourceLayer.sourceLayerId);
+      }
+    }
+  }
+
+  return state.drawables.map((drawable) => {
+    const sourceLayerId = sourceLayerIdsByDrawableId.get(drawable.drawableId);
+
+    return {
+      drawableId: drawable.drawableId,
+      ...(drawable.textureId.trim().length === 0 ? {} : { textureId: drawable.textureId }),
+      ...(drawable.sourceAssetId.trim().length === 0 ? {} : { sourceAssetId: drawable.sourceAssetId }),
+      ...(sourceLayerId === undefined ? {} : { sourceLayerId })
+    };
+  });
 };

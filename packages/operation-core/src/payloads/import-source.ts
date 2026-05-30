@@ -1,7 +1,8 @@
 import {
   PartIdSchema,
   RectSchema,
-  SourceAssetIdSchema
+  SourceAssetIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
@@ -40,7 +41,10 @@ export const SplitPngSourceLayerMetadataSchema = z.object({
   visibleInSource: z.boolean().default(true),
   opacityInSource: z.number().min(0).max(1).default(1),
   role: z.enum(["editableLayer", "guideImage", "referenceOnly", "unsupported"]).default("editableLayer"),
-  unsupportedFeatures: z.array(z.string()).default([])
+  unsupportedFeatures: z.array(z.string()).default([]),
+  texturePreviewReference: z.string().min(1).optional(),
+  textureId: TextureIdSchema.optional(),
+  targetPartId: PartIdSchema.optional()
 });
 export type SplitPngSourceLayerMetadataDto = z.infer<typeof SplitPngSourceLayerMetadataSchema>;
 

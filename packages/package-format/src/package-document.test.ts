@@ -4,6 +4,8 @@ import {
   PackageDocumentSchema,
   PackageManifestSchema,
   SourceManifestSchema,
+  TextureAtlasEntrySchema,
+  TexturePreviewReferenceSchema,
   parsePackageDocument
 } from "./index.js";
 
@@ -120,6 +122,84 @@ describe("package-format DTO schemas", () => {
 
     expect(parsed.manifest.packageId).toBe("pkg_minimal");
     expect(parsed.assets.sourceManifest.sourceAssets[0]?.kind).toBe("split-png-set-v1");
+  });
+
+  it("parses texture preview asset metadata as safe text references", () => {
+    const parsed = PackageDocumentSchema.parse({
+      ...minimalDocument,
+      assets: {
+        ...minimalDocument.assets,
+        textureAtlas: {
+          schemaVersion: "texture-atlas-v1",
+          textures: [
+            {
+              textureId: "tex_body",
+              filePath: "assets/textures/body.png",
+              contentHash: "sha256:texture-body",
+              sourceAssetId: "src_split_png",
+              sourceLayerId: "layer_body",
+              provenanceId: "prov_texture_body"
+            }
+          ],
+          previewAssets: [
+            {
+              previewAssetId: "preview_body",
+              textureId: "tex_body",
+              reference: {
+                referenceKind: "deterministic-data-url-v1",
+                dataUrl: "data:image/png;base64,iVBORw0KGgo="
+              },
+              contentHash: "sha256:preview-body",
+              sourceAssetId: "src_split_png",
+              sourceLayerId: "layer_body",
+              provenanceId: "prov_texture_body",
+              rightsAssetId: "tex_body"
+            }
+          ]
+        }
+      }
+    });
+
+    expect(parsed.assets.textureAtlas?.previewAssets?.[0]).toMatchObject({
+      previewAssetId: "preview_body",
+      textureId: "tex_body",
+      sourceAssetId: "src_split_png",
+      sourceLayerId: "layer_body",
+      provenanceId: "prov_texture_body",
+      rightsAssetId: "tex_body"
+    });
+  });
+
+  it("rejects external texture preview references", () => {
+    expect(TexturePreviewReferenceSchema.safeParse({
+      referenceKind: "package-local-file-v1",
+      filePath: "https://example.test/body.png"
+    }).success).toBe(false);
+    expect(TexturePreviewReferenceSchema.safeParse({
+      referenceKind: "deterministic-data-url-v1",
+      dataUrl: "https://example.test/body.png"
+    }).success).toBe(false);
+  });
+
+  it("rejects external or non-texture texture atlas entry paths", () => {
+    const validEntry = {
+      textureId: "tex_body",
+      filePath: "assets/textures/body.png"
+    };
+
+    expect(TextureAtlasEntrySchema.safeParse(validEntry).success).toBe(true);
+    expect(TextureAtlasEntrySchema.safeParse({
+      ...validEntry,
+      filePath: "https://example.test/body.png"
+    }).success).toBe(false);
+    expect(TextureAtlasEntrySchema.safeParse({
+      ...validEntry,
+      filePath: "assets/sources/body.png"
+    }).success).toBe(false);
+    expect(TextureAtlasEntrySchema.safeParse({
+      ...validEntry,
+      filePath: "assets/textures/../body.png"
+    }).success).toBe(false);
   });
 
   it("returns parse issues for invalid schemaVersion and missing required manifest fields", () => {

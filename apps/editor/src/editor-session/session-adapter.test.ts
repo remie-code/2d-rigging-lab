@@ -341,6 +341,7 @@ describe("editor session persistence adapter", () => {
     });
     expect(result.packageFilePaths).toEqual(expect.arrayContaining([
       "assets/sources/source-manifest.json",
+      "assets/textures/texture-atlas.json",
       "assets/provenance.json",
       "assets/rights.json",
       "operations/log.jsonl"
@@ -362,6 +363,29 @@ describe("editor session persistence adapter", () => {
         ])
       })
     );
+    expect(result.reloadedDocument.assets.textureAtlas).toMatchObject({
+      schemaVersion: "texture-atlas-v1",
+      textures: [
+        expect.objectContaining({
+          textureId: "tex_face",
+          filePath: "assets/textures/session/face.preview.png",
+          sourceAssetId: "src_session_split",
+          sourceLayerId: "layer_face"
+        })
+      ],
+      previewAssets: [
+        expect.objectContaining({
+          previewAssetId: "preview_src_session_split_layer_face",
+          textureId: "tex_face",
+          sourceAssetId: "src_session_split",
+          sourceLayerId: "layer_face",
+          reference: {
+            referenceKind: "package-local-file-v1",
+            filePath: "assets/textures/session/face.preview.png"
+          }
+        })
+      ]
+    });
     expect(result.reloadedDocument.assets.provenance.records).toContainEqual(
       expect.objectContaining({
         assetId: "src_session_split",
@@ -443,6 +467,7 @@ describe("editor session persistence adapter", () => {
       displayName: "Imported Face",
       sourceAssetId: "src_session_split",
       sourceLayerId: "layer_face",
+      textureId: "tex_face",
       partId: "part_root",
       initialBounds: { x: 8, y: 10, width: 96, height: 112 },
       meshMethod: "auto-grid-v1",
@@ -461,6 +486,8 @@ describe("editor session persistence adapter", () => {
         drawableId: "draw_imported_face",
         displayName: "Imported Face",
         sourceAssetId: "src_session_split",
+        textureId: "tex_face",
+        partId: "part_root",
         meshId: "mesh_imported_face"
       })
     );
@@ -821,7 +848,10 @@ const createSplitPngSourceImportCommand = () => ({
       visibleInSource: true,
       opacityInSource: 1,
       role: "editableLayer" as const,
-      unsupportedFeatures: [] as string[]
+      unsupportedFeatures: [] as string[],
+      texturePreviewReference: "assets/textures/session/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root"
     }
   ],
   rights: {

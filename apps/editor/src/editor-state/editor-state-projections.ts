@@ -71,6 +71,8 @@ export interface CommittedOperationSummaryInput {
   readonly importedSourceSelection?: {
     readonly sourceAssetId: string;
     readonly sourceLayerId?: string;
+    readonly textureId?: string;
+    readonly partId?: string;
   };
   readonly reload?: ReloadSummaryInput;
 }
@@ -93,6 +95,7 @@ export const projectLoadedPackageState = (
     meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
     pendingCreateDrawable: projectCreateDrawableDefaults({
       ...(input.sourceAssets === undefined ? {} : { sourceAssets: input.sourceAssets }),
+      ...(input.drawables === undefined ? {} : { drawables: input.drawables }),
       ...(input.parts === undefined ? {} : { parts: input.parts }),
       ...(input.canvasSize === undefined ? {} : { canvasSize: input.canvasSize })
     }),
@@ -170,11 +173,18 @@ const projectCommittedCreateDrawableDraft = (
     return projectCreateDrawableDefaultsForSourceSelection({
       sourceAssets,
       parts: input.parts ?? [],
+      drawables: input.drawables ?? [],
       ...(input.canvasSize === undefined ? {} : { canvasSize: input.canvasSize }),
       preferredSourceAssetId: input.importedSourceSelection.sourceAssetId,
       ...(input.importedSourceSelection.sourceLayerId === undefined
         ? {}
-        : { preferredSourceLayerId: input.importedSourceSelection.sourceLayerId })
+        : { preferredSourceLayerId: input.importedSourceSelection.sourceLayerId }),
+      ...(input.importedSourceSelection.textureId === undefined
+        ? {}
+        : { preferredTextureId: input.importedSourceSelection.textureId }),
+      ...(input.importedSourceSelection.partId === undefined
+        ? {}
+        : { preferredPartId: input.importedSourceSelection.partId })
     });
   }
 

@@ -1,7 +1,20 @@
 # Current Capability Map
 
-> Status: 2026-05-30 / Wave 18 完了時点の実装状況マップ。
+> Status: 2026-05-31 / Wave 19 完了時点の実装状況マップ。
 > Purpose: 次Wave計画前に、製品・システムとして「何を作るつもりで、何ができていて、何がまだ足りないか」を読むための入口。Wave別 changelog ではない。
+
+## Wave 19 Update
+
+Wave 19 is completed / implementation-proven. The system now has a minimal texture-backed preview and part mapping foundation:
+
+- Source Intake accepts per-layer texture preview reference, texture ID, and target part ID.
+- Imported source layer texture/part relations persist through package texture metadata, preview assets, source manifest/provenance/rights, operation log, browser-local save/load, and drawable creation.
+- Runtime/editor preview DTOs carry texture reference and unresolved texture state without claiming false rendering.
+- Editor preview renders deterministic browser-materialized data URL references as SVG texture patterns and keeps package-local references as explicit fallback.
+- Validator and operation evidence expose texture asset, source-layer, provenance, and missing texture diagnostics.
+- Desktop/mobile E2E smoke verifies texture-backed Source Intake, preview truthfulness, save/load, and strict horizontal overflow behavior.
+
+Remaining major gaps are real PNG file bytes, PNG decode, OS file picker, binary archive import/export, full atlas packing, UV editing, pixel-level render oracle, canvas/WebGL rendering, and standalone viewer texture rendering.
 
 ## 1. Product Intent / Intended Capability
 
@@ -71,6 +84,7 @@
 | Editor embedded preview foundation | [waves/wave14/wave14-final-report.md](waves/wave14/wave14-final-report.md), [waves/wave14/integration-review.md](waves/wave14/integration-review.md) |
 | Drawable / layer / mesh vertex editing workflow | [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md), [waves/wave16/wave16-final-report.md](waves/wave16/wave16-final-report.md), [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md) |
 | Split PNG source asset / rights / provenance intake | [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md), [reviews/wave18/wave18-integration-review-and-final-report-review.md](reviews/wave18/wave18-integration-review-and-final-report-review.md) |
+| Texture-backed preview / source layer part mapping | [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md), [reviews/wave19/wave19-integration-review-and-final-report-review.md](reviews/wave19/wave19-integration-review-and-final-report-review.md) |
 | Source-level spot check | `packages/contracts`, `packages/package-format`, `packages/authoring-core`, `packages/operation-core`, `packages/runtime-core`, `packages/validator-core`, `packages/ai-interface`, `apps/editor`, `fixtures/contracts` |
 
 ## 6. Next-Wave Candidates And Decision Points

@@ -7,6 +7,8 @@ import type {
   RectDto,
   RuntimeSnapshotId,
   Severity,
+  SourceAssetId,
+  TextureId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
@@ -44,6 +46,7 @@ export interface EditorPreviewDrawableDto {
   readonly drawListIndex?: number;
   readonly bounds: RectDto;
   readonly geometry: EditorPreviewDrawableGeometryDto;
+  readonly texture: EditorPreviewDrawableTextureDto;
   readonly keyformSampleCount: number;
   readonly diagnostics: EditorPreviewDiagnosticsSummaryDto;
 }
@@ -53,6 +56,31 @@ export interface EditorPreviewDrawableGeometryDto {
   readonly vertexHash: string;
   readonly polygonPoints?: readonly Vec2Dto[];
 }
+
+export interface EditorPreviewDrawableTextureDto {
+  readonly status: "resolved" | "missing" | "not_materialized";
+  readonly textureId?: TextureId;
+  readonly sourceAssetId?: SourceAssetId;
+  readonly sourceLayerId?: string;
+  readonly projection: EditorPreviewDrawableTextureProjectionDto;
+  readonly previewReference?: EditorPreviewDrawableTexturePreviewReferenceDto;
+}
+
+export interface EditorPreviewDrawableTexturePreviewReferenceDto {
+  readonly previewAssetId: string;
+  readonly referenceKind: "package-local-file-v1" | "deterministic-data-url-v1";
+  readonly href: string;
+}
+
+export type EditorPreviewDrawableTextureProjectionDto =
+  | {
+      readonly kind: "bounds_fit";
+    }
+  | {
+      readonly kind: "uv";
+      readonly uvCount: number;
+      readonly uvs?: readonly Vec2Dto[];
+    };
 
 export interface EditorPreviewKeyformSampleSummaryDto {
   readonly totalCount: number;

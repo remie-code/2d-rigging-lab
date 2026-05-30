@@ -1,5 +1,6 @@
 import type { RectDto } from "@private-2d-rigging-lab/contracts";
 import type {
+  DrawableDto,
   ModelPartDto,
   SourceAssetDto
 } from "@private-2d-rigging-lab/package-format";
@@ -17,6 +18,7 @@ export interface CreateDrawableFormState {
   readonly displayName: string;
   readonly sourceAssetId: string;
   readonly sourceLayerId: string | null;
+  readonly textureId: string;
   readonly partId: string;
   readonly initialBounds: RectDto;
   readonly meshMethod: "auto-grid-v1";
@@ -26,6 +28,7 @@ export interface CreateDrawableFormState {
 
 export interface CreateDrawableDefaultsInput {
   readonly sourceAssets?: readonly SourceAssetDto[];
+  readonly drawables?: readonly DrawableDto[];
   readonly parts?: readonly ModelPartDto[];
   readonly canvasSize?: {
     readonly width: number;
@@ -38,6 +41,7 @@ export const createEmptyDrawableFormState = (): CreateDrawableFormState => ({
   displayName: "Generated Drawable",
   sourceAssetId: "",
   sourceLayerId: null,
+  textureId: "",
   partId: "",
   initialBounds: { x: 0, y: 0, width: 32, height: 32 },
   meshMethod: "auto-grid-v1",
@@ -50,13 +54,15 @@ export const projectCreateDrawableDefaults = (
 ): CreateDrawableFormState => {
   const sourceAsset = input.sourceAssets?.[0];
   const sourceLayer = sourceAsset?.layers[0];
+  const mappedDrawable = findMappedDrawableForSourceLayer(input.drawables ?? [], sourceLayer);
   const part = input.parts?.[0];
 
   return {
     ...createEmptyDrawableFormState(),
     sourceAssetId: sourceAsset?.sourceAssetId ?? "",
     sourceLayerId: sourceLayer?.sourceLayerId ?? null,
-    partId: part?.partId ?? "",
+    textureId: mappedDrawable?.textureId ?? "",
+    partId: mappedDrawable?.partId ?? part?.partId ?? "",
     initialBounds: structuredClone(
       sourceLayer?.bounds ?? {
         x: 0,
@@ -72,6 +78,8 @@ export const projectCreateDrawableDefaultsForSourceSelection = (
   input: CreateDrawableDefaultsInput & {
     readonly preferredSourceAssetId: string;
     readonly preferredSourceLayerId?: string;
+    readonly preferredTextureId?: string;
+    readonly preferredPartId?: string;
   }
 ): CreateDrawableFormState => {
   const sourceAsset = input.sourceAssets?.find(
@@ -81,6 +89,7 @@ export const projectCreateDrawableDefaultsForSourceSelection = (
     input.preferredSourceLayerId === undefined
       ? sourceAsset?.layers.find((layer) => layer.role === "editableLayer") ?? sourceAsset?.layers[0]
       : sourceAsset?.layers.find((layer) => layer.sourceLayerId === input.preferredSourceLayerId);
+  const mappedDrawable = findMappedDrawableForSourceLayer(input.drawables ?? [], sourceLayer);
   const part = input.parts?.[0];
   const layerDisplayName = sourceLayer?.normalizedName ?? sourceLayer?.originalName;
 
@@ -89,7 +98,8 @@ export const projectCreateDrawableDefaultsForSourceSelection = (
     displayName: layerDisplayName === undefined ? "Imported Drawable" : `Imported ${toTitleLabel(layerDisplayName)}`,
     sourceAssetId: sourceAsset?.sourceAssetId ?? input.preferredSourceAssetId,
     sourceLayerId: sourceLayer?.sourceLayerId ?? input.preferredSourceLayerId ?? null,
-    partId: part?.partId ?? "",
+    textureId: input.preferredTextureId ?? mappedDrawable?.textureId ?? "",
+    partId: input.preferredPartId ?? mappedDrawable?.partId ?? part?.partId ?? "",
     initialBounds: structuredClone(
       sourceLayer?.bounds ?? {
         x: 0,
@@ -122,3 +132,15 @@ const toTitleLabel = (value: string): string =>
     .filter((part) => part.length > 0)
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+
+const findMappedDrawableForSourceLayer = (
+  drawables: readonly DrawableDto[],
+  sourceLayer: SourceAssetDto["layers"][number] | undefined
+): DrawableDto | undefined => {
+  if (sourceLayer === undefined) {
+    return undefined;
+  }
+
+  const mappedDrawableIds = new Set(sourceLayer.mappedDrawableIds);
+  return drawables.find((drawable) => mappedDrawableIds.has(drawable.drawableId));
+};

@@ -22,6 +22,10 @@ describe("source asset rights and provenance validator oracle", () => {
     expect(defaultCheckCatalog.has("rights.statusNeedsReview")).toBe(true);
     expect(defaultCheckCatalog.has("rights.statusBlocked")).toBe(true);
     expect(defaultCheckCatalog.has("ref.drawableTextureMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("ref.texturePreviewMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("ref.textureSourceLayerMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("rights.textureProvenanceMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("rights.textureProvenanceMismatch")).toBe(true);
   });
 
   it("keeps cleared source asset rights as a validation pass", () => {
@@ -145,6 +149,38 @@ describe("source asset rights and provenance validator oracle", () => {
     ]));
   });
 
+  it("reports a visible texture-backed drawable missing its preview payload", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createMissingTexturePayloadPackageDocument(),
+      createdAt: "2026-05-30T00:00:00.000Z"
+    });
+    const check = expectSingleCheck(report);
+
+    expect(summarizeReport(report)).toEqual(loadExpectedSummary().cases.missingTexturePayload);
+    expect(check).toMatchObject({
+      checkId: "ref.texturePreviewMissing",
+      status: "fail",
+      severity: "error",
+      phase: "reference",
+      target: {
+        kind: "texture",
+        id: "tex_body",
+        path: "/assets/textureAtlas/previewAssets"
+      },
+      targetPath: "/assets/textureAtlas/previewAssets",
+      relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+      relatedScenarios: ["SC-IN-002"]
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "drawableId=draw_body",
+      "textureId=tex_body",
+      "textureAtlasMatch=present",
+      "previewAssetMatch=missing",
+      "sourceKind=split-png-set-v1"
+    ]));
+    expect(check.impact).toContain("texture-backed drawable payload");
+  });
+
   it("reports a visible split PNG drawable when the texture atlas is absent", () => {
     const report = validatePackageRuntime({
       packageDocument: createMissingTextureAtlasPackageDocument(),
@@ -231,6 +267,73 @@ describe("source asset rights and provenance validator oracle", () => {
     ]));
     expect(check.impact).toContain("provenance record");
   });
+
+  it("reports texture source layer metadata that does not match the drawable source layer", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createSourceLayerMismatchPackageDocument(),
+      createdAt: "2026-05-30T00:00:00.000Z"
+    });
+    const check = expectSingleCheck(report);
+
+    expect(summarizeReport(report)).toEqual(loadExpectedSummary().cases.sourceLayerMismatch);
+    expect(check).toMatchObject({
+      checkId: "ref.textureSourceLayerMismatch",
+      status: "fail",
+      severity: "error",
+      phase: "reference",
+      target: {
+        kind: "texture",
+        id: "tex_body",
+        path: "/model/drawables/drawables/0/textureId"
+      },
+      targetPath: "/model/drawables/drawables/0/textureId",
+      relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+      relatedScenarios: ["SC-IN-002"]
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "drawableId=draw_body",
+      "drawableSourceAssetId=src_split_png",
+      "textureSourceLayerId=layer_other",
+      "previewSourceLayerId=layer_other",
+      "expectedSourceLayerId=layer_body",
+      "reason=drawable-texture-source-layer-mismatch"
+    ]));
+    expect(check.impact).toContain("same source layer");
+  });
+
+  it("reports texture preview rights and provenance that point at different assets", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createTextureRightsProvenanceMismatchPackageDocument(),
+      createdAt: "2026-05-30T00:00:00.000Z"
+    });
+    const check = expectSingleCheck(report);
+
+    expect(summarizeReport(report)).toEqual(loadExpectedSummary().cases.textureRightsProvenanceMismatch);
+    expect(check).toMatchObject({
+      checkId: "rights.textureProvenanceMismatch",
+      status: "fail",
+      severity: "error",
+      phase: "rights",
+      target: {
+        kind: "texture",
+        id: "tex_body",
+        path: "/assets/textureAtlas/previewAssets/0/provenanceId"
+      },
+      targetPath: "/assets/textureAtlas/previewAssets/0/provenanceId",
+      relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+      relatedScenarios: ["SC-IN-002", "SC-RIGHTS-002"]
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "textureId=tex_body",
+      "previewAssetId=preview_body",
+      "provenanceId=prov_split_png_texture",
+      "provenanceAssetId=tex_body",
+      "expectedAssetIds=src_split_png",
+      "rightsAssetId=src_split_png",
+      "reason=preview-provenance-rights-asset-mismatch"
+    ]));
+    expect(check.impact).toContain("different assets");
+  });
 });
 
 interface ExpectedOracleSummary {
@@ -292,6 +395,18 @@ const createMissingTexturePackageDocument = (): PackageDocumentDto => {
   return document;
 };
 
+const createMissingTexturePayloadPackageDocument = (): PackageDocumentDto => {
+  const document = clonePackage(loadClearedPackageDocument());
+  const textureAtlas = document.assets.textureAtlas;
+
+  if (textureAtlas === undefined) {
+    throw new Error("Fixture is missing texture atlas.");
+  }
+
+  delete textureAtlas.previewAssets;
+  return document;
+};
+
 const createMissingTextureAtlasPackageDocument = (): PackageDocumentDto => {
   const document = clonePackage(loadClearedPackageDocument());
   delete document.assets.textureAtlas;
@@ -335,6 +450,41 @@ const createMissingDrawableProvenancePackageDocument = (): PackageDocumentDto =>
   }
 
   drawable.sourceProvenanceId = ProvenanceIdSchema.parse("prov_missing");
+  return document;
+};
+
+const createSourceLayerMismatchPackageDocument = (): PackageDocumentDto => {
+  const document = clonePackage(loadClearedPackageDocument());
+  const sourceAsset = document.assets.sourceManifest.sourceAssets[0];
+  const sourceLayer = sourceAsset?.layers[0];
+  const texture = document.assets.textureAtlas?.textures[0];
+  const previewAsset = document.assets.textureAtlas?.previewAssets?.[0];
+
+  if (sourceAsset === undefined || sourceLayer === undefined || texture === undefined || previewAsset === undefined) {
+    throw new Error("Fixture is missing texture source layer inputs.");
+  }
+
+  sourceAsset.layers.push({
+    ...structuredClone(sourceLayer),
+    sourceLayerId: "layer_other",
+    originalName: "Other",
+    normalizedName: "other",
+    mappedDrawableIds: []
+  });
+  texture.sourceLayerId = "layer_other";
+  previewAsset.sourceLayerId = "layer_other";
+  return document;
+};
+
+const createTextureRightsProvenanceMismatchPackageDocument = (): PackageDocumentDto => {
+  const document = clonePackage(loadClearedPackageDocument());
+  const previewAsset = document.assets.textureAtlas?.previewAssets?.[0];
+
+  if (previewAsset === undefined) {
+    throw new Error("Fixture is missing texture preview asset.");
+  }
+
+  previewAsset.rightsAssetId = "src_split_png";
   return document;
 };
 

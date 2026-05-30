@@ -49,6 +49,7 @@ export function getAuthoredPackageFilePaths(manifest: PackageManifestDto): reado
     ...modelPaths,
     ...editorStatePath,
     manifest.assetIndex,
+    PACKAGE_TEXTURE_ATLAS_PATH,
     PACKAGE_PROVENANCE_PATH,
     PACKAGE_RIGHTS_PATH
   ];

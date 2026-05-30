@@ -12,7 +12,8 @@ import type {
   ProvenanceRecordDto,
   RigControlDto,
   RightsRecordDto,
-  SourceAssetDto
+  SourceAssetDto,
+  TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
 
 export interface AuthoringGraph {
@@ -30,6 +31,7 @@ export interface AuthoringGraph {
   rigControlRootIds: ModelGraphDto["rigControlRootIds"];
   stableOrder: string[];
   sourceAssets: SourceAssetDto[];
+  textureAtlas?: TextureAtlasFileDto;
   provenanceRecords: ProvenanceRecordDto[];
   rightsRecords: RightsRecordDto[];
 }
@@ -51,6 +53,9 @@ export const createAuthoringGraphFromPackageDocument = (
   rigControlRootIds: cloneDto(packageDocument.model.graph.rigControlRootIds),
   stableOrder: cloneDto(packageDocument.model.graph.stableOrder),
   sourceAssets: cloneDto(packageDocument.assets.sourceManifest.sourceAssets),
+  ...(packageDocument.assets.textureAtlas === undefined
+    ? {}
+    : { textureAtlas: cloneDto(packageDocument.assets.textureAtlas) }),
   provenanceRecords: cloneDto(packageDocument.assets.provenance.records),
   rightsRecords: cloneDto(packageDocument.assets.rights.records)
 });

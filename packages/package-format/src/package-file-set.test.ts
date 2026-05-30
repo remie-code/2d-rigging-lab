@@ -8,6 +8,8 @@ import {
   PackageDocumentSchema,
   PACKAGE_PROVENANCE_PATH,
   PACKAGE_RIGHTS_PATH,
+  PACKAGE_TEXTURE_ATLAS_PATH,
+  getAuthoredPackageFilePaths,
   parsePackageDocumentFromFileSet,
   serializePackageDocumentToFileSet,
   stringifyJsonDeterministic,
@@ -43,6 +45,16 @@ describe("package file set serialization", () => {
       PACKAGE_PROVENANCE_PATH,
       PACKAGE_RIGHTS_PATH
     ]);
+    expect(getAuthoredPackageFilePaths(document.manifest)).toContain(PACKAGE_TEXTURE_ATLAS_PATH);
+  });
+
+  it("serializes texture preview references as text metadata and reloads them", () => {
+    const document = withTexturePreviewMetadata(loadMinimalFixturePackageDocument());
+    const fileSet = serializePackageDocumentToFileSet(document);
+    const atlasEntry = fileSet.find((entry) => entry.path === PACKAGE_TEXTURE_ATLAS_PATH);
+
+    expect(atlasEntry?.text).toContain("data:image/png;base64,iVBORw0KGgo=");
+    expect(parsePackageDocumentFromFileSet(fileSet)).toEqual(document);
   });
 
   it("serializes JSON deterministically with a trailing newline", () => {
@@ -179,6 +191,42 @@ const loadMinimalFixturePackageDocument = (): PackageDocumentDto => {
 };
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, "utf8"));
+
+const withTexturePreviewMetadata = (document: PackageDocumentDto): PackageDocumentDto =>
+  PackageDocumentSchema.parse({
+    ...document,
+    assets: {
+      ...document.assets,
+      textureAtlas: {
+        schemaVersion: "texture-atlas-v1",
+        textures: [
+          {
+            textureId: "tex_generated_body",
+            filePath: "assets/textures/generated-body.png",
+            contentHash: "sha256:generated-body-texture",
+            sourceAssetId: "src_generated",
+            sourceLayerId: "layer_body",
+            provenanceId: "prov_generated"
+          }
+        ],
+        previewAssets: [
+          {
+            previewAssetId: "preview_generated_body",
+            textureId: "tex_generated_body",
+            reference: {
+              referenceKind: "deterministic-data-url-v1",
+              dataUrl: "data:image/png;base64,iVBORw0KGgo="
+            },
+            contentHash: "sha256:generated-body-preview",
+            sourceAssetId: "src_generated",
+            sourceLayerId: "layer_body",
+            provenanceId: "prov_generated",
+            rightsAssetId: "src_generated"
+          }
+        ]
+      }
+    }
+  });
 
 const collectProductionSourceFiles = (directory: string): readonly string[] => {
   const files: string[] = [];

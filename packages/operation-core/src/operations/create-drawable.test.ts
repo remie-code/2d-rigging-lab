@@ -83,6 +83,34 @@ describe("createDrawable operation handler", () => {
     });
   });
 
+  it("preserves an explicit texture ID on createDrawable", () => {
+    const session = createFixtureSession();
+    const operationCore = createOperationCore();
+
+    const outcome = operationCore.commitOperation(
+      session,
+      createCreateDrawableRequest({
+        dryRun: false,
+        textureId: "tex_imported_body"
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_body"))).toMatchObject({
+      drawableId: "draw_body",
+      textureId: "tex_imported_body",
+      partId: "part_root",
+      sourceAssetId: "src_generated"
+    });
+    expect(outcome.logEntry?.payload).toMatchObject({
+      operationType: "createDrawable",
+      payload: {
+        textureId: "tex_imported_body",
+        partId: "part_root"
+      }
+    });
+  });
+
   it("rejects duplicate drawable ids without a second mutation", () => {
     const session = createFixtureSession();
     const request = createCreateDrawableRequest({ dryRun: false });
@@ -156,6 +184,7 @@ const createCreateDrawableRequest = (options: {
   readonly partId?: string;
   readonly sourceAssetId?: string;
   readonly sourceLayerId?: string;
+  readonly textureId?: string;
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -168,6 +197,7 @@ const createCreateDrawableRequest = (options: {
     payload: {
       sourceAssetId: options.sourceAssetId ?? "src_generated",
       sourceLayerId: options.sourceLayerId ?? "layer_body",
+      ...(options.textureId === undefined ? {} : { textureId: options.textureId }),
       partId: options.partId ?? "part_root",
       displayName: "Body"
     }

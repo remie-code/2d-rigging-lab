@@ -45,10 +45,19 @@ describe("source intake panel", () => {
     expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
       "Split PNG manifest path"
     );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "Texture preview reference"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "Target part ID"
+    );
     expect(findByTestId(panel, editorTestIds.sourceIntakePlacementPolicy)?.value).toBe("use-metadata");
     expect(findByTestId(panel, editorTestIds.sourceIntakeRightsStatus)?.value).toBe("needs_review");
     expect(findByTestId(panel, createSourceIntakeLayerRowTestId("layer_body"))?.textContent).toContain(
       "Layer ID"
+    );
+    expect(findByTestId(panel, createSourceIntakeLayerRowTestId("layer_body"))?.textContent).toContain(
+      "tex_body / part_root"
     );
   });
 
@@ -68,6 +77,9 @@ describe("source intake panel", () => {
     setNamedFieldValue(panel, "originalName.0", "Face.png");
     setNamedFieldValue(panel, "normalizedName.0", "face");
     setNamedFieldValue(panel, "groupPath.0", "Head");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "assets/textures/face-preview.png");
+    setNamedFieldValue(panel, "textureId.0", "tex_face");
+    setNamedFieldValue(panel, "targetPartId.0", "part_head");
     setNamedFieldValue(panel, "x.0", "8");
     setNamedFieldValue(panel, "y.0", "10");
     setNamedFieldValue(panel, "width.0", "96");
@@ -96,12 +108,43 @@ describe("source intake panel", () => {
           normalizedName: "face",
           groupPath: ["Head"],
           bounds: { x: 8, y: 10, width: 96, height: 112 },
-          opacityInSource: 0.9
+          opacityInSource: 0.9,
+          texturePreviewReference: "assets/textures/face-preview.png",
+          textureId: "tex_face",
+          targetPartId: "part_head"
         }
       ],
       diagnostics: []
     });
     expect("operationType" in (calls[0] as object)).toBe(false);
+  });
+
+  it("confirms deterministic data URL texture preview references from the draft form", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }),
+      (draft) => calls.push(draft)
+    );
+
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/split-manifest.json");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "original-private-use");
+    setNamedFieldValue(panel, "texturePreviewReference.0", dataUrl);
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      status: "confirmed",
+      layers: [
+        expect.objectContaining({
+          texturePreviewReference: dataUrl,
+          textureId: "tex_body",
+          targetPartId: "part_root"
+        })
+      ],
+      diagnostics: []
+    });
   });
 
   it("keeps invalid draft input local and reports diagnostics", () => {
@@ -111,12 +154,52 @@ describe("source intake panel", () => {
     setNamedFieldValue(panel, "manifestPath", "assets/sources/character/split-manifest.json");
     setNamedFieldValue(panel, "creator", "Clean Artist");
     setNamedFieldValue(panel, "license", "original-private-use");
+    setNamedFieldValue(panel, "targetPartId.0", "part_root");
     setNamedFieldValue(panel, "width.0", "0");
     findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
 
     expect(calls).toEqual([]);
     expect(findByTestId(panel, editorTestIds.sourceIntakeDiagnostics)?.textContent).toContain(
       "Layer 1 bounds width and height must be greater than zero."
+    );
+  });
+
+  it("reports invalid layer texture references and missing target part mappings locally", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(createEmptySourceIntakeDraftState(), (draft) => calls.push(draft));
+
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/split-manifest.json");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "original-private-use");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "https://example.invalid/face.png");
+    setNamedFieldValue(panel, "targetPartId.0", "");
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(findByTestId(panel, editorTestIds.sourceIntakeDiagnostics)?.textContent).toContain(
+      "Layer 1 texture preview reference is invalid"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeDiagnostics)?.textContent).toContain(
+      "Layer 1 target part ID is required."
+    );
+  });
+
+  it("rejects generated texture preview references locally instead of confirming the draft", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }),
+      (draft) => calls.push(draft)
+    );
+
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/split-manifest.json");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "original-private-use");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "generated://texture-preview/layer_face");
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(findByTestId(panel, editorTestIds.sourceIntakeDiagnostics)?.textContent).toContain(
+      "generated://texture-preview/ references are not supported"
     );
   });
 

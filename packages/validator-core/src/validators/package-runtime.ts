@@ -7,6 +7,7 @@ import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
+import { validateTextureAssetReferences } from "./texture-assets.js";
 
 export interface PackageRuntimeValidationInput {
   readonly packageDocument: unknown;
@@ -26,7 +27,8 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
     : [
       ...validateSourceAssetRightsAndProvenance(packageResult.packageDocument),
       ...validateDrawableProvenanceReferences(packageResult.packageDocument),
-      ...validateDrawableReferences(packageResult.packageDocument)
+      ...validateDrawableReferences(packageResult.packageDocument),
+      ...validateTextureAssetReferences(packageResult.packageDocument)
     ];
   const runtimeSnapshotIds: RuntimeSnapshotId[] =
     runtimeResult?.snapshotId === undefined ? [] : [runtimeResult.snapshotId];

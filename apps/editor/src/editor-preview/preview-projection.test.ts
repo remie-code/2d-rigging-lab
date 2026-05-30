@@ -5,7 +5,9 @@ import {
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
-  RuntimeSnapshotIdSchema
+  SourceAssetIdSchema,
+  RuntimeSnapshotIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { RuntimeDiffSchema } from "@private-2d-rigging-lab/contracts";
 import { RuntimeSnapshotSchema } from "@private-2d-rigging-lab/runtime-core";
@@ -78,6 +80,40 @@ describe("projectEditorPreview", () => {
       opacity: 0,
       bounds: { x: 0, y: 0, width: 5, height: 5 },
       keyformSampleCount: 0
+    });
+  });
+
+  it("projects texture references and unresolved texture states separately from geometry fallback", () => {
+    const projection = projectEditorPreview({ snapshot: createRepresentativeRuntimeSnapshot() });
+    const front = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_front"));
+    const back = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_back"));
+    const hidden = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_hidden"));
+
+    expect(front.texture).toEqual({
+      status: "not_materialized",
+      textureId: "tex_front",
+      sourceAssetId: "src_split_body",
+      sourceLayerId: "layer_front",
+      projection: {
+        kind: "uv",
+        uvCount: 4,
+        uvs: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 1, y: 1 },
+          { x: 0, y: 1 }
+        ]
+      }
+    });
+    expect(back.texture).toEqual({
+      status: "missing",
+      sourceAssetId: "src_split_body",
+      sourceLayerId: "layer_back",
+      projection: { kind: "bounds_fit" }
+    });
+    expect(hidden.texture).toEqual({
+      status: "not_materialized",
+      projection: { kind: "bounds_fit" }
     });
   });
 
@@ -231,6 +267,22 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       {
         drawableId: DrawableIdSchema.parse("draw_front"),
         meshId: MeshIdSchema.parse("mesh_front"),
+        texture: {
+          status: "not_materialized",
+          textureId: TextureIdSchema.parse("tex_front"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_split_body"),
+          sourceLayerId: "layer_front",
+          projection: {
+            kind: "uv",
+            uvCount: 4,
+            uvs: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+              { x: 1, y: 1 },
+              { x: 0, y: 1 }
+            ]
+          }
+        },
         visible: true,
         opacity: 0.4,
         baseDrawOrder: 10,
@@ -270,6 +322,14 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       {
         drawableId: DrawableIdSchema.parse("draw_back"),
         meshId: MeshIdSchema.parse("mesh_back"),
+        texture: {
+          status: "missing",
+          sourceAssetId: SourceAssetIdSchema.parse("src_split_body"),
+          sourceLayerId: "layer_back",
+          projection: {
+            kind: "bounds_fit"
+          }
+        },
         visible: true,
         opacity: 0.75,
         baseDrawOrder: 0,

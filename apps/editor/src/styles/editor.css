@@ -62,6 +62,7 @@ select {
 .create-parameter-form__diagnostics,
 .create-drawable-form__diagnostics,
 .drawable-authoring-result__label,
+.source-intake-layer-row__mapping-summary,
 .source-intake-form__diagnostics p {
   margin: 0;
 }
@@ -411,6 +412,24 @@ select {
   gap: 12px;
 }
 
+.source-intake-imported,
+.source-intake-imported__list,
+.source-intake-imported-source {
+  min-width: 0;
+}
+
+.source-intake-imported__meta,
+.source-intake-imported__empty,
+.source-intake-imported-source h4,
+.source-intake-imported-source__meta,
+.source-intake-imported-source__path,
+.source-intake-imported-source__diagnostics,
+.source-intake-imported-source__layers,
+.source-intake-imported-source__layers li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .drawable-authoring-summary,
 .source-intake-summary {
   display: grid;
@@ -486,6 +505,15 @@ select {
   color: #263033;
   font-size: 13px;
   line-height: 1.2;
+}
+
+.source-intake-layer-row__mapping-summary {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: #60716e;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .source-intake-form__secondary-action {

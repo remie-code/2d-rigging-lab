@@ -2,6 +2,7 @@ import { createPageSession } from "./page-session.mjs";
 import {
   createAiTranscriptEventRowTestId,
   createDrawableRowTestId,
+  createDrawableVisibilityToggleTestId,
   createPreviewParameterControlTestId,
   editorProjectStorageKey,
   editorTestIds
@@ -20,7 +21,8 @@ import {
   assertSavedSourceIntakeState,
   assertSourceIntakeStateAfterLoad,
   assertSourceIntakeStateAfterReset,
-  runSourceIntakeWorkflow
+  runSourceIntakeWorkflow,
+  sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
@@ -71,12 +73,13 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       viewport,
       initialOperationLogEntryCount: 1
     });
-    await assertHorizontalOverflow(page, `${viewport.name} post-source-intake`);
+    const postSourceIntakeOverflow = await readHorizontalOverflow(page, `${viewport.name} post-source-intake`);
     const drawableEvidence = await runCreateDrawableWorkflow(page, viewport, {
       expectedOperationLogEntryCount: 4,
       expectedOperationTypesText:
         "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh"
     });
+    assertNoHorizontalOverflowEvidence(postSourceIntakeOverflow);
     await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
     const meshVertexEvidence = await runMeshVertexEditWorkflow({
       page,
@@ -113,6 +116,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       expectedOperationTypesText:
         "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
     });
+    await restoreLoadedTextureBackedPreview(page, smokeDrawable);
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
@@ -254,6 +258,7 @@ const runCreateDrawableWorkflow = async (
   await waitForText(page, editorTestIds.generatedEvidenceSummary, "Runtime snapshots");
   await waitForText(page, editorTestIds.generatedEvidenceSummary, "Validation reports");
   await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
+  await waitForText(page, editorTestIds.previewSummary, "1 pattern / 1 fallback");
 
   await page.waitFor(
     "created drawable appears in preview visual",
@@ -272,6 +277,7 @@ const runCreateDrawableWorkflow = async (
     smokeDrawable.drawableId,
     smokeDrawable.bounds
   );
+  await assertTextureBackedPreviewDrawable(page, smokeDrawable.drawableId);
 
   const state = await readCreatedDrawableState(page);
   const screenshot = await page.captureScreenshot(`${viewport.name} drawable authoring smoke`);
@@ -338,6 +344,124 @@ const assertPreviewPanelReachable = async (page, viewport) => {
   }
 };
 
+const restoreLoadedTextureBackedPreview = async (page, smokeDrawable) => {
+  await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
+  await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
+  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Visible");
+  await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
+  await waitForText(page, editorTestIds.previewSummary, "1 pattern / 1 fallback");
+  await assertTextureBackedPreviewDrawable(page, smokeDrawable.drawableId);
+};
+
+const assertTextureBackedPreviewDrawable = async (page, drawableId) => {
+  const textureEvidence = await page.evaluate(async (ids, expected) => {
+    const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
+    const drawable = visual?.querySelector(`[data-drawable-id="${expected.drawableId}"]`);
+    const pattern = visual?.querySelector(
+      `pattern[data-texture-preview-asset-id="${expected.previewAssetId}"]`
+    );
+    const image = pattern?.querySelector("image");
+    const texturePatternCount = [
+      ...(visual?.querySelectorAll('[data-texture-render="texture_pattern"]') ?? [])
+    ].length;
+    const dishonestPatternCount = [
+      ...(visual?.querySelectorAll('[data-texture-render="texture_pattern"]') ?? [])
+    ].filter((shape) => {
+      const previewAssetId = shape.getAttribute("data-texture-preview-asset-id");
+      const shapePattern = previewAssetId === null
+        ? null
+        : visual?.querySelector(`pattern[data-texture-preview-asset-id="${previewAssetId}"]`);
+      const shapeImage = shapePattern?.querySelector("image");
+
+      return shapeImage?.getAttribute("data-texture-reference-kind") !== "deterministic-data-url-v1";
+    }).length;
+    const href = image?.getAttribute("href") ?? null;
+    const imageDecode = await decodeImageReference(href);
+
+    return {
+      render: drawable?.getAttribute("data-texture-render") ?? null,
+      status: drawable?.getAttribute("data-texture-status") ?? null,
+      textureId: drawable?.getAttribute("data-texture-id") ?? null,
+      previewAssetId: drawable?.getAttribute("data-texture-preview-asset-id") ?? null,
+      href,
+      referenceKind: image?.getAttribute("data-texture-reference-kind") ?? null,
+      texturePatternCount,
+      dishonestPatternCount,
+      imageDecode
+    };
+
+    async function decodeImageReference(src) {
+      if (typeof src !== "string" || src.length === 0) {
+        return {
+          loaded: false,
+          width: 0,
+          height: 0,
+          reason: "missing-src"
+        };
+      }
+
+      const imageElement = new Image();
+      imageElement.src = src;
+
+      try {
+        if (typeof imageElement.decode === "function") {
+          await imageElement.decode();
+        } else if (!imageElement.complete) {
+          await new Promise((resolve, reject) => {
+            imageElement.addEventListener("load", resolve, { once: true });
+            imageElement.addEventListener("error", reject, { once: true });
+          });
+        }
+      } catch (error) {
+        return {
+          loaded: false,
+          width: imageElement.naturalWidth,
+          height: imageElement.naturalHeight,
+          reason: error instanceof Error ? error.name : "decode-error"
+        };
+      }
+
+      return {
+        loaded: imageElement.complete && imageElement.naturalWidth > 0 && imageElement.naturalHeight > 0,
+        width: imageElement.naturalWidth,
+        height: imageElement.naturalHeight,
+        reason: null
+      };
+    }
+  }, {
+    visual: editorTestIds.previewVisual
+  }, {
+    drawableId,
+    textureId: sourceIntakeSmoke.textureId,
+    previewAssetId: sourceIntakeSmoke.texturePreviewAssetId
+  });
+
+  const expected = {
+    render: "texture_pattern",
+    status: "resolved",
+    textureId: sourceIntakeSmoke.textureId,
+    previewAssetId: sourceIntakeSmoke.texturePreviewAssetId,
+    href: sourceIntakeSmoke.texturePreviewReference,
+    referenceKind: "deterministic-data-url-v1",
+    texturePatternCount: 1,
+    dishonestPatternCount: 0,
+    imageDecode: {
+      loaded: true,
+      width: 1,
+      height: 1,
+      reason: null
+    }
+  };
+
+  if (JSON.stringify(textureEvidence) !== JSON.stringify(expected)) {
+    throw new Error(
+      `Texture-backed preview evidence mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(
+        textureEvidence
+      )}.`
+    );
+  }
+};
+
 const assertPreviewAccessibleNames = async (page) => {
   const names = await page.evaluate((ids) => {
     const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
@@ -363,7 +487,7 @@ const assertPreviewAccessibleNames = async (page) => {
   const expected = {
     panelName: "Preview",
     visualRole: "img",
-    visualName: "Runtime preview visual",
+    visualName: "Runtime preview visual, 0 texture pattern, 1 texture fallback",
     sliderName: "Preview Body Yaw",
     resetName: "Reset preview parameters"
   };
@@ -833,23 +957,48 @@ const assertApprovalActionState = async (
 };
 
 const assertHorizontalOverflow = async (page, label) => {
-  const overflowCount = await page.evaluate(() => {
+  assertNoHorizontalOverflowEvidence(await readHorizontalOverflow(page, label));
+};
+
+const readHorizontalOverflow = async (page, label) => {
+  const overflow = await page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
     const documentOverflows =
       Math.max(document.body?.scrollWidth ?? 0, document.documentElement.scrollWidth) > viewportWidth + 1
         ? 1
         : 0;
-    const elementOverflows = [...document.body.querySelectorAll("*")].filter((element) => {
+    const overflowingElements = [...document.body.querySelectorAll("*")].filter((element) => {
       const rect = element.getBoundingClientRect();
 
       return rect.left < -1 || rect.right > viewportWidth + 1;
-    }).length;
+    });
 
-    return documentOverflows + elementOverflows;
+    return {
+      count: documentOverflows + overflowingElements.length,
+      viewportWidth,
+      documentScrollWidth: Math.max(document.body?.scrollWidth ?? 0, document.documentElement.scrollWidth),
+      elements: overflowingElements.slice(0, 8).map((element) => {
+        const rect = element.getBoundingClientRect();
+
+        return {
+          tagName: element.tagName.toLowerCase(),
+          className: element.getAttribute("class") ?? "",
+          testId: element.getAttribute("data-testid") ?? "",
+          text: (element.textContent ?? "").trim().slice(0, 96),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width)
+        };
+      })
+    };
   });
 
-  if (overflowCount !== 0) {
-    throw new Error(`${label} horizontal overflow count was ${overflowCount}; expected 0.`);
+  return { label, ...overflow };
+};
+
+const assertNoHorizontalOverflowEvidence = (overflow) => {
+  if (overflow.count !== 0) {
+    throw new Error(`${overflow.label} horizontal overflow was ${JSON.stringify(overflow)}; expected 0.`);
   }
 };
 

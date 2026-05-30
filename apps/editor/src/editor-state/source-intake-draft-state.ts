@@ -26,6 +26,16 @@ export type SourceIntakeLayerRole = (typeof sourceIntakeLayerRoles)[number];
 
 export type SourceIntakeDraftStatus = "idle" | "confirmed";
 
+const textureIdPattern = /^tex_[A-Za-z0-9_-]+$/;
+const partIdPattern = /^part_[A-Za-z0-9_-]+$/;
+const packageLocalTextureReferencePrefixes = [
+  "assets/textures/",
+  "assets/thumbnails/"
+] as const;
+const generatedTextureReferencePrefix = "generated://texture-preview/";
+const deterministicImageDataUrlPattern =
+  /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
 export interface SourceIntakeLayerDraftState {
   readonly sourceLayerId: string;
   readonly originalName: string;
@@ -36,6 +46,9 @@ export interface SourceIntakeLayerDraftState {
   readonly opacityInSource: number;
   readonly role: SourceIntakeLayerRole;
   readonly unsupportedFeatures: readonly string[];
+  readonly texturePreviewReference?: string;
+  readonly textureId?: string;
+  readonly targetPartId?: string;
 }
 
 export interface SourceIntakeRightsDraftState {
@@ -77,7 +90,8 @@ export interface SourceIntakeDraftInput {
 }
 
 export const createDefaultSourceIntakeLayerDraft = (
-  index: number
+  index: number,
+  input: SourceIntakeDraftDefaultsInput = {}
 ): SourceIntakeLayerDraftState => ({
   sourceLayerId: index === 0 ? "layer_body" : `layer_${index + 1}`,
   originalName: index === 0 ? "Body" : `Layer ${index + 1}`,
@@ -87,7 +101,13 @@ export const createDefaultSourceIntakeLayerDraft = (
   visibleInSource: true,
   opacityInSource: 1,
   role: "editableLayer",
-  unsupportedFeatures: []
+  unsupportedFeatures: [],
+  texturePreviewReference:
+    index === 0
+      ? "assets/textures/layer_body.preview.png"
+      : `assets/textures/layer_${index + 1}.preview.png`,
+  textureId: index === 0 ? "tex_body" : `tex_layer_${index + 1}`,
+  targetPartId: input.defaultPartId ?? ""
 });
 
 export const createEmptySourceIntakeDraftState = (
@@ -101,7 +121,7 @@ export const createEmptySourceIntakeDraftState = (
   importProfile: splitPngSourceIntakeImportProfile,
   defaultPartId: input.defaultPartId ?? "",
   placementPolicy: "use-metadata",
-  layers: [createDefaultSourceIntakeLayerDraft(0)],
+  layers: [createDefaultSourceIntakeLayerDraft(0, input)],
   rights: {
     rightsStatus: "needs_review",
     creator: "",
@@ -130,7 +150,7 @@ export const confirmSourceIntakeDraft = (
 export const validateSourceIntakeDraft = (
   draft: Pick<
     SourceIntakeDraftState,
-    "sourceAssetId" | "manifestPath" | "placementPolicy" | "layers" | "rights"
+    "sourceAssetId" | "manifestPath" | "defaultPartId" | "placementPolicy" | "layers" | "rights"
   >
 ): readonly string[] => {
   const diagnostics: string[] = [];
@@ -178,6 +198,35 @@ export const validateSourceIntakeDraft = (
 
     if (!sourceIntakeLayerRoles.includes(layer.role)) {
       diagnostics.push(`${label} role is not supported.`);
+    }
+
+    const texturePreviewReference = getLayerTexturePreviewReference(layer);
+    const textureId = getLayerTextureId(layer);
+    const targetPartId = getLayerTargetPartId(layer);
+    const effectivePartId = targetPartId.length > 0 ? targetPartId : draft.defaultPartId.trim();
+
+    if (texturePreviewReference.length === 0) {
+      diagnostics.push(`${label} texture preview reference is required.`);
+    } else {
+      const texturePreviewReferenceDiagnostic = getTexturePreviewReferenceDiagnostic(
+        label,
+        texturePreviewReference
+      );
+      if (texturePreviewReferenceDiagnostic !== undefined) {
+        diagnostics.push(texturePreviewReferenceDiagnostic);
+      }
+    }
+
+    if (textureId.length === 0) {
+      diagnostics.push(`${label} texture ID is required.`);
+    } else if (!textureIdPattern.test(textureId)) {
+      diagnostics.push(`${label} texture ID must start with tex_.`);
+    }
+
+    if (effectivePartId.length === 0) {
+      diagnostics.push(`${label} target part ID is required.`);
+    } else if (!partIdPattern.test(effectivePartId)) {
+      diagnostics.push(`${label} target part ID must start with part_.`);
     }
   });
 
@@ -236,7 +285,10 @@ const normalizeSourceIntakeLayer = (
   role: layer.role,
   unsupportedFeatures: layer.unsupportedFeatures
     .map((feature) => feature.trim())
-    .filter((feature) => feature.length > 0)
+    .filter((feature) => feature.length > 0),
+  texturePreviewReference: getLayerTexturePreviewReference(layer),
+  textureId: getLayerTextureId(layer),
+  targetPartId: getLayerTargetPartId(layer)
 });
 
 const isFiniteBounds = (bounds: RectDto): boolean =>
@@ -244,3 +296,52 @@ const isFiniteBounds = (bounds: RectDto): boolean =>
   Number.isFinite(bounds.y) &&
   Number.isFinite(bounds.width) &&
   Number.isFinite(bounds.height);
+
+const getLayerTexturePreviewReference = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.texturePreviewReference?.trim() ?? "";
+
+const getLayerTextureId = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.textureId?.trim() ?? "";
+
+const getLayerTargetPartId = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.targetPartId?.trim() ?? "";
+
+const isSupportedTexturePreviewReference = (reference: string): boolean => {
+  if (isDeterministicImageDataUrl(reference)) {
+    return true;
+  }
+
+  if (
+    reference.length === 0 ||
+    reference.includes("\\") ||
+    reference.startsWith("/") ||
+    reference.endsWith("/") ||
+    reference.split("/").some((part) => part.length === 0 || part === "." || part === "..") ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(reference)
+  ) {
+    return false;
+  }
+
+  return packageLocalTextureReferencePrefixes.some((prefix) => reference.startsWith(prefix));
+};
+
+const getTexturePreviewReferenceDiagnostic = (
+  label: string,
+  reference: string
+): string | undefined => {
+  if (isSupportedTexturePreviewReference(reference)) {
+    return undefined;
+  }
+
+  if (reference.startsWith(generatedTextureReferencePrefix)) {
+    return `${label} generated://texture-preview/ references are not supported by Source Intake commits; use assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,... references.`;
+  }
+
+  return `${label} texture preview reference is invalid; use assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,... references.`;
+};
+
+const isDeterministicImageDataUrl = (reference: string): boolean =>
+  deterministicImageDataUrlPattern.test(reference);

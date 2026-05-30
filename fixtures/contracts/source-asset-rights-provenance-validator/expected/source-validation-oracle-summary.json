@@ -31,6 +31,12 @@
         "ref.drawableTextureMissing"
       ]
     },
+    "missingTexturePayload": {
+      "status": "fail",
+      "checkIds": [
+        "ref.texturePreviewMissing"
+      ]
+    },
     "missingTextureNoAtlas": {
       "status": "fail",
       "checkIds": [
@@ -51,6 +57,18 @@
       "status": "fail",
       "checkIds": [
         "rights.drawableProvenanceMissing"
+      ]
+    },
+    "sourceLayerMismatch": {
+      "status": "fail",
+      "checkIds": [
+        "ref.textureSourceLayerMismatch"
+      ]
+    },
+    "textureRightsProvenanceMismatch": {
+      "status": "fail",
+      "checkIds": [
+        "rights.textureProvenanceMismatch"
       ]
     }
   }

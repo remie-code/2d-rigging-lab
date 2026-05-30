@@ -10,7 +10,8 @@ import {
   PackageIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
-  SourceAssetIdSchema
+  SourceAssetIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type { OperationId } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
@@ -103,6 +104,167 @@ describe("importSplitPngSourceAsset operation handler", () => {
     ]);
     expect(outcome.logEntry?.operationType).toBe("importSplitPngSourceAsset");
     expect(outcome.logEntry?.targetIds).toEqual(["src_split_body", "layer_body"]);
+  });
+
+  it("commits texture preview metadata when split PNG layer mapping is explicit", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-30T00:05:00.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.textureAtlas?.textures).toEqual([
+      expect.objectContaining({
+        textureId: "tex_body",
+        filePath: "assets/textures/body.preview.png",
+        sourceAssetId: "src_split_body",
+        sourceLayerId: "layer_body",
+        provenanceId: "prov_import_split_body"
+      })
+    ]);
+    expect(session.graph.textureAtlas?.previewAssets).toEqual([
+      expect.objectContaining({
+        previewAssetId: "preview_src_split_body_layer_body",
+        textureId: "tex_body",
+        reference: {
+          referenceKind: "package-local-file-v1",
+          filePath: "assets/textures/body.preview.png"
+        },
+        sourceAssetId: "src_split_body",
+        sourceLayerId: "layer_body",
+        provenanceId: "prov_import_split_body",
+        rightsAssetId: "src_split_body"
+      })
+    ]);
+    expect(outcome.result.modelDiff?.changed.flatMap((change) =>
+      change.fields.map((field) => field.path)
+    )).toEqual(expect.arrayContaining([
+      "/assets/textureAtlas/textures",
+      "/assets/textureAtlas/previewAssets",
+      "/assets/textureAtlas/textures/tex_body",
+      "/assets/textureAtlas/previewAssets/preview_src_split_body_layer_body"
+    ]));
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "src_split_body",
+      "layer_body",
+      "tex_body",
+      "part_root"
+    ]);
+    expect(outcome.logEntry?.payload).toMatchObject({
+      operationType: "importSplitPngSourceAsset",
+      payload: {
+        layers: [
+          expect.objectContaining({
+            sourceLayerId: "layer_body",
+            texturePreviewReference: "assets/textures/body.preview.png",
+            textureId: "tex_body",
+            targetPartId: "part_root"
+          })
+        ]
+      }
+    });
+  });
+
+  it("commits deterministic data URL texture preview metadata as browser-renderable preview assets", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-30T00:06:00.000Z")
+    });
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        texturePreviewReference: dataUrl
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.textureAtlas?.textures).toEqual([
+      expect.objectContaining({
+        textureId: "tex_body",
+        filePath: "assets/textures/tex_body.png",
+        sourceAssetId: "src_split_body",
+        sourceLayerId: "layer_body"
+      })
+    ]);
+    expect(session.graph.textureAtlas?.previewAssets).toEqual([
+      expect.objectContaining({
+        previewAssetId: "preview_src_split_body_layer_body",
+        textureId: "tex_body",
+        reference: {
+          referenceKind: "deterministic-data-url-v1",
+          dataUrl
+        },
+        sourceAssetId: "src_split_body",
+        sourceLayerId: "layer_body",
+        rightsAssetId: "src_split_body"
+      })
+    ]);
+    expect(outcome.logEntry?.payload).toMatchObject({
+      operationType: "importSplitPngSourceAsset",
+      payload: {
+        layers: [
+          expect.objectContaining({
+            sourceLayerId: "layer_body",
+            texturePreviewReference: dataUrl,
+            textureId: "tex_body"
+          })
+        ]
+      }
+    });
+  });
+
+  it("rejects texture materialization when the texture ID already exists in the atlas", () => {
+    const session = createFixtureSession();
+    session.graph.textureAtlas = {
+      schemaVersion: "texture-atlas-v1",
+      textures: [
+        {
+          textureId: TextureIdSchema.parse("tex_body"),
+          filePath: "assets/textures/existing-body.png"
+        }
+      ],
+      previewAssets: []
+    };
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "operation.importSplitPngSourceAsset.existingTextureId",
+        target: {
+          kind: "texture",
+          id: "tex_body",
+          path: "/payload/layers/layer_body/textureId"
+        }
+      })
+    ]));
+    expect(session.graph.sourceAssets).toHaveLength(0);
+    expect(session.graph.textureAtlas?.textures).toEqual([
+      {
+        textureId: "tex_body",
+        filePath: "assets/textures/existing-body.png"
+      }
+    ]);
   });
 
   it("lets createDrawable reference an imported source asset and layer", () => {
@@ -226,6 +388,109 @@ describe("importSplitPngSourceAsset operation handler", () => {
     expect(session.graph.rightsRecords).toHaveLength(0);
   });
 
+  it("rejects explicit texture mapping without a texture preview reference", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        includeTexturePreviewReference: false
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "operation.importSplitPngSourceAsset.missingTexturePreviewReference",
+        target: {
+          kind: "sourceAsset",
+          id: "src_split_body",
+          path: "/payload/layers/layer_body/texturePreviewReference"
+        }
+      })
+    ]));
+    expect(session.graph.sourceAssets).toHaveLength(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+  });
+
+  it("rejects unsafe texture preview references before source import commit", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        texturePreviewReference: "https://example.invalid/body.png"
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
+      "operation.importSplitPngSourceAsset.invalidTexturePreviewReference"
+    );
+    expect(session.graph.sourceAssets).toHaveLength(0);
+  });
+
+  it("rejects generated texture preview references before source import commit", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        texturePreviewReference: "generated://texture-preview/body"
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "operation.importSplitPngSourceAsset.invalidTexturePreviewReference",
+        message: expect.stringContaining("generated://texture-preview/ references are not supported")
+      })
+    ]));
+    expect(session.graph.sourceAssets).toHaveLength(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+  });
+
+  it.each([
+    "assets/textures//face.png",
+    "assets/textures/./face.png"
+  ])("rejects package-local texture preview references with invalid path segments: %s", (texturePreviewReference) => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        texturePreviewReference
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "operation.importSplitPngSourceAsset.invalidTexturePreviewReference",
+        target: {
+          kind: "sourceAsset",
+          id: "src_split_body",
+          path: "/payload/layers/layer_body/texturePreviewReference"
+        }
+      })
+    ]));
+    expect(session.graph.sourceAssets).toHaveLength(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+  });
+
   it("rejects duplicate source asset ids deterministically", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -311,6 +576,9 @@ const createImportSplitPngRequest = (options: {
   readonly includeRights?: boolean;
   readonly includeProvenance?: boolean;
   readonly includeLayerBounds?: boolean;
+  readonly includeTextureMapping?: boolean;
+  readonly includeTexturePreviewReference?: boolean;
+  readonly texturePreviewReference?: string;
   readonly rightsStatus?: "cleared" | "needs_review" | "blocked";
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
@@ -341,7 +609,19 @@ const createImportSplitPngRequest = (options: {
           visibleInSource: true,
           opacityInSource: 1,
           role: "editableLayer",
-          unsupportedFeatures: []
+          unsupportedFeatures: [],
+          ...(options.includeTextureMapping === true
+            ? {
+                ...(options.includeTexturePreviewReference === false
+                  ? {}
+                  : {
+                      texturePreviewReference:
+                        options.texturePreviewReference ?? "assets/textures/body.preview.png"
+                    }),
+                textureId: "tex_body",
+                targetPartId: "part_root"
+              }
+            : {})
         }
       ],
       ...(options.includeRights === false

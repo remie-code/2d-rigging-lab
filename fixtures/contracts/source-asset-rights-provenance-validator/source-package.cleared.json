@@ -213,6 +213,21 @@
           "sourceLayerId": "layer_body",
           "provenanceId": "prov_split_png_texture"
         }
+      ],
+      "previewAssets": [
+        {
+          "previewAssetId": "preview_body",
+          "textureId": "tex_body",
+          "reference": {
+            "referenceKind": "deterministic-data-url-v1",
+            "dataUrl": "data:image/png;base64,iVBORw0KGgo="
+          },
+          "contentHash": "sha256:split-png-preview-body",
+          "sourceAssetId": "src_split_png",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_split_png_texture",
+          "rightsAssetId": "tex_body"
+        }
       ]
     },
     "provenance": {

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
 import {
   createInitialEditorSemanticState,
+  createEmptySourceIntakeDraftState,
   createDrawableMoveDownTestId,
   createDrawableMoveUpTestId,
   createDrawableRowTestId,
@@ -10,7 +11,8 @@ import {
   createPreviewParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
-  projectLoadedPackageState
+  projectLoadedPackageState,
+  type SourceIntakeDraftState
 } from "../../editor-state/index.js";
 import { createEditorWorkflowController } from "../../editor-workflow/workflow-controller.js";
 import { createBrowserProjectStore, type StorageLike } from "../../project-persistence/index.js";
@@ -34,6 +36,74 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.previewVisual)?.textContent).not.toContain("No runtime drawables");
     expect(findByTestId(shell, createPreviewParameterControlTestId("param_preview_body_yaw"))?.getAttribute("aria-label")).toBe(
       "Preview Body Yaw"
+    );
+  });
+
+  it("keeps package-local texture preview references as truthful solid fallbacks", () => {
+    const workflow = createWorkflow();
+    const imported = workflow.commitSourceIntakeDraft(createTextureSourceIntakeDraft());
+    const drawable = workflow.commitCreateDrawablePreset({
+      createOperationId: "op_workflow_create_drawable_imported_face",
+      generateOperationId: "op_workflow_generate_mesh_imported_face",
+      displayName: "Workflow Imported Face",
+      sourceAssetId: workflow.state.pendingCreateDrawable.sourceAssetId,
+      ...(workflow.state.pendingCreateDrawable.sourceLayerId === null
+        ? {}
+        : { sourceLayerId: workflow.state.pendingCreateDrawable.sourceLayerId }),
+      partId: workflow.state.pendingCreateDrawable.partId,
+      initialBounds: workflow.state.pendingCreateDrawable.initialBounds,
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+    const shell = renderShell(workflow);
+    const texturedShape = findDrawableShape(shell, "draw_workflow_imported_face");
+    const fallbackShape = findDrawableShape(shell, "draw_body");
+
+    expect(imported.status).toBe("committed");
+    expect(drawable.status).toBe("committed");
+    expect(texturedShape?.getAttribute("fill")).toBe("#4c8d87");
+    expect(texturedShape?.getAttribute("data-texture-render")).toBe("solid_fallback");
+    expect(texturedShape?.getAttribute("data-texture-id")).toBe("tex_face");
+    expect(texturedShape?.textContent).toContain("package-local texture preview not browser materialized");
+    expect(findByTag(shell, "image")).toBeNull();
+    expect(fallbackShape?.getAttribute("data-texture-render")).toBe("solid_fallback");
+    expect(findByTestId(shell, editorTestIds.previewSummary)?.textContent).toContain(
+      "0 pattern / 2 fallback"
+    );
+    expect(findByTestId(shell, editorTestIds.previewSummary)?.textContent).toContain(
+      "1 package-local unavailable"
+    );
+    expect(findByTestId(shell, editorTestIds.previewVisual)?.getAttribute("aria-label")).toContain(
+      "0 texture pattern, 2 texture fallback"
+    );
+  });
+
+  it("renders deterministic data URL texture preview references as SVG patterns", () => {
+    const workflow = createWorkflow();
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    workflow.commitSourceIntakeDraft(createTextureSourceIntakeDraft({ texturePreviewReference: dataUrl }));
+    workflow.commitCreateDrawablePreset({
+      createOperationId: "op_workflow_create_drawable_imported_face",
+      generateOperationId: "op_workflow_generate_mesh_imported_face",
+      displayName: "Workflow Imported Face",
+      sourceAssetId: workflow.state.pendingCreateDrawable.sourceAssetId,
+      ...(workflow.state.pendingCreateDrawable.sourceLayerId === null
+        ? {}
+        : { sourceLayerId: workflow.state.pendingCreateDrawable.sourceLayerId }),
+      partId: workflow.state.pendingCreateDrawable.partId,
+      initialBounds: workflow.state.pendingCreateDrawable.initialBounds,
+      meshMethod: "auto-grid-v1",
+      densityHint: "medium"
+    });
+
+    const shell = renderShell(workflow);
+    const texturedShape = findDrawableShape(shell, "draw_workflow_imported_face");
+
+    expect(texturedShape?.getAttribute("fill")).toBe("url(#preview-texture-draw_workflow_imported_face)");
+    expect(texturedShape?.getAttribute("data-texture-render")).toBe("texture_pattern");
+    expect(findByTag(shell, "image")?.getAttribute("href")).toBe(dataUrl);
+    expect(findByTestId(shell, editorTestIds.previewSummary)?.textContent).toContain(
+      "1 pattern / 1 fallback"
     );
   });
 
@@ -353,6 +423,46 @@ const createDrawablePresetCommand = (name: "star") => ({
   meshMethod: "auto-grid-v1",
   densityHint: "low"
 } as const);
+
+const createTextureSourceIntakeDraft = (
+  input: {
+    readonly texturePreviewReference?: string;
+  } = {}
+): SourceIntakeDraftState => ({
+  ...createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }),
+  status: "confirmed",
+  sourceAssetId: "src_workflow_split",
+  manifestPath: "assets/sources/workflow/split-manifest.json",
+  contentHash: "sha256:workflow-split",
+  defaultPartId: "part_root",
+  placementPolicy: "use-metadata",
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      originalName: "Face.png",
+      normalizedName: "face",
+      groupPath: ["Head"],
+      bounds: { x: 8, y: 10, width: 96, height: 112 },
+      visibleInSource: true,
+      opacityInSource: 1,
+      role: "editableLayer",
+      unsupportedFeatures: [],
+      texturePreviewReference: input.texturePreviewReference ?? "assets/textures/workflow/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root"
+    }
+  ],
+  rights: {
+    rightsStatus: "cleared",
+    creator: "Workflow Artist",
+    license: "private-cleared",
+    redistributionAllowed: false,
+    aiUsed: false,
+    sourceUrl: "https://example.invalid/workflow-source",
+    notes: "workflow source intake test"
+  },
+  diagnostics: []
+});
 
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);

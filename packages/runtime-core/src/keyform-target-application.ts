@@ -3,6 +3,7 @@ import type { DiagnosticDto, DrawableId, TargetRefDto, Vec2Dto } from "@private-
 import { createRuntimeDiagnostic } from "./diagnostics.js";
 import { computeBoundsFromVertices, createStableVertexHash } from "./drawable-geometry.js";
 import type { EvaluatedDrawableDto } from "./snapshot.js";
+import { reconcileTextureProjectionWithVertexCount } from "./texture-projection.js";
 
 export interface SampledKeyformTargetPatch {
   readonly keyformSetId: string;
@@ -308,7 +309,15 @@ const withUpdatedVertices = (
   vertexHash: createStableVertexHash(
     vertices,
     hashPrecisionDecimals === undefined ? {} : { hashPrecisionDecimals }
-  )
+  ),
+  ...(drawable.texture === undefined
+    ? {}
+    : {
+        texture: reconcileTextureProjectionWithVertexCount({
+          texture: drawable.texture,
+          vertexCount: vertices.length
+        })
+      })
 });
 
 const applyNumericPatch = (

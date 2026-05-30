@@ -12,6 +12,14 @@ import {
   type SplitPngSourceLayerMetadataDto
 } from "@private-2d-rigging-lab/operation-core";
 
+export type EditorSplitPngSourceLayerMetadataCommand = Omit<
+  SplitPngSourceLayerMetadataDto,
+  "targetPartId" | "textureId"
+> & {
+  readonly targetPartId?: PartId | string;
+  readonly textureId?: string;
+};
+
 export interface EditorImportSplitPngSourceAssetCommand {
   readonly operationId?: OperationId | string;
   readonly sourceAssetId?: SourceAssetId | string;
@@ -19,7 +27,7 @@ export interface EditorImportSplitPngSourceAssetCommand {
   readonly contentHash?: string;
   readonly defaultPartId?: PartId | string;
   readonly placementPolicy: "use-metadata" | "origin-with-warning";
-  readonly layers: readonly SplitPngSourceLayerMetadataDto[];
+  readonly layers: readonly EditorSplitPngSourceLayerMetadataCommand[];
   readonly rights: SplitPngImportRightsMetadataDto;
   readonly provenance: SplitPngImportProvenanceMetadataDto;
 }

@@ -40,6 +40,8 @@ export const applyEditorWorkflowCommitResult = (
     readonly importedSourceSelection?: {
       readonly sourceAssetId: string;
       readonly sourceLayerId?: string;
+      readonly textureId?: string;
+      readonly partId?: string;
     };
   } = {}
 ): EditorSemanticState =>

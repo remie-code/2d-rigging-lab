@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+import {
+  ParameterIdSchema,
+  ProvenanceIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema
+} from "@private-2d-rigging-lab/contracts";
 import {
   PackageDocumentSchema,
   type PackageDocumentDto,
@@ -14,7 +19,8 @@ import { describe, expect, it } from "vitest";
 import {
   createAuthoringSessionFromPackageDocument,
   createParameter,
-  toPackageDocument
+  toPackageDocument,
+  upsertTexturePreviewAssetMetadata
 } from "./index.js";
 
 describe("authoring package document adapter", () => {
@@ -76,6 +82,61 @@ describe("authoring package document adapter", () => {
     expect(document.manifest.packageRevision).toBe(session.packageRevision);
     expect(document.assets.provenance.records).toEqual(session.graph.provenanceRecords);
     expect(document.assets.rights.records).toEqual(session.graph.rightsRecords);
+  });
+
+  it("carries source-layer-derived texture preview metadata back to package assets", () => {
+    const baseDocument = loadMinimalFixturePackageDocument();
+    const session = createAuthoringSessionFromPackageDocument(baseDocument);
+
+    const result = upsertTexturePreviewAssetMetadata(session, {
+      textureEntry: {
+        textureId: TextureIdSchema.parse("tex_generated_body"),
+        filePath: "assets/textures/generated-body.png",
+        contentHash: "sha256:generated-body-texture"
+      },
+      previewAsset: {
+        previewAssetId: "preview_generated_body",
+        textureId: TextureIdSchema.parse("tex_generated_body"),
+        reference: {
+          referenceKind: "package-local-file-v1",
+          filePath: "assets/thumbnails/generated-body-preview.png"
+        },
+        contentHash: "sha256:generated-body-preview",
+        sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+        sourceLayerId: "layer_body",
+        provenanceId: ProvenanceIdSchema.parse("prov_generated"),
+        rightsAssetId: "src_generated"
+      }
+    });
+
+    const document = toPackageDocument(session, baseDocument, {
+      updatedAt: baseDocument.manifest.updatedAt
+    });
+
+    expect(result.authoringRevision).toBe(1);
+    expect(document.assets.sourceManifest.sourceAssets[0]?.layers[0]?.sourceLayerId).toBe(
+      "layer_body"
+    );
+    expect(document.assets.provenance.records).toEqual(session.graph.provenanceRecords);
+    expect(document.assets.rights.records).toEqual(session.graph.rightsRecords);
+    expect(document.assets.textureAtlas?.textures[0]).toMatchObject({
+      textureId: "tex_generated_body",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      provenanceId: "prov_generated"
+    });
+    expect(document.assets.textureAtlas?.previewAssets?.[0]).toMatchObject({
+      previewAssetId: "preview_generated_body",
+      textureId: "tex_generated_body",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      provenanceId: "prov_generated",
+      rightsAssetId: "src_generated"
+    });
+    expect(document.assets.textureAtlas?.previewAssets?.[0]?.reference).toEqual({
+      referenceKind: "package-local-file-v1",
+      filePath: "assets/thumbnails/generated-body-preview.png"
+    });
   });
 
   it("exposes the adapter from the public barrel", () => {

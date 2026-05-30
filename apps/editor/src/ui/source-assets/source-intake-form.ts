@@ -41,7 +41,7 @@ export const createSourceIntakeForm = (
 
   let nextLayerIndex = options.draft.layers.length;
   options.draft.layers.forEach((layer, index) => {
-    layerRows.append(createLayerDraftRow(layer, index));
+    layerRows.append(createLayerDraftRow(layer, index, options.viewModel.layerRows[index]));
   });
 
   const addLayer = document.createElement("button");
@@ -50,7 +50,14 @@ export const createSourceIntakeForm = (
   addLayer.dataset.testid = editorTestIds.sourceIntakeAddLayer;
   addLayer.textContent = "Add layer row";
   addLayer.addEventListener("click", () => {
-    layerRows.append(createLayerDraftRow(createDefaultSourceIntakeLayerDraft(nextLayerIndex), nextLayerIndex));
+    layerRows.append(
+      createLayerDraftRow(
+        createDefaultSourceIntakeLayerDraft(nextLayerIndex, {
+          defaultPartId: options.draft.defaultPartId
+        }),
+        nextLayerIndex
+      )
+    );
     nextLayerIndex += 1;
   });
 
@@ -279,7 +286,8 @@ const createSelectField = <TValue extends string>(
 
 const createLayerDraftRow = (
   layer: SourceIntakeLayerDraftState,
-  index: number
+  index: number,
+  viewModel?: SourceIntakeDraftViewModel["layerRows"][number]
 ): HTMLElement => {
   const row = document.createElement("section");
   row.className = "source-intake-layer-row";
@@ -294,8 +302,16 @@ const createLayerDraftRow = (
   indexField.name = "layerIndex";
   indexField.value = String(index);
 
+  const mappingSummary = document.createElement("p");
+  mappingSummary.className = "source-intake-layer-row__mapping-summary";
+  mappingSummary.textContent =
+    viewModel === undefined
+      ? createLayerMappingSummaryLabel(layer)
+      : viewModel.textureMappingStatusLabel;
+
   row.append(
     heading,
+    mappingSummary,
     indexField,
     createTextField({
       label: "Layer ID",
@@ -319,6 +335,24 @@ const createLayerDraftRow = (
       label: "Group path",
       name: layerFieldName("groupPath", index),
       value: layer.groupPath.join("/")
+    }),
+    createTextField({
+      label: "Texture preview reference",
+      name: layerFieldName("texturePreviewReference", index),
+      value: layer.texturePreviewReference ?? "",
+      required: true,
+      wide: true
+    }),
+    createTextField({
+      label: "Texture ID",
+      name: layerFieldName("textureId", index),
+      value: layer.textureId ?? "",
+      required: true
+    }),
+    createTextField({
+      label: "Target part ID",
+      name: layerFieldName("targetPartId", index),
+      value: layer.targetPartId ?? ""
     }),
     createNumberField("X", layerFieldName("x", index), layer.bounds.x),
     createNumberField("Y", layerFieldName("y", index), layer.bounds.y),
@@ -345,6 +379,17 @@ const createLayerDraftRow = (
   );
 
   return row;
+};
+
+const createLayerMappingSummaryLabel = (
+  layer: SourceIntakeLayerDraftState
+): string => {
+  const textureId = layer.textureId?.trim() ?? "";
+  const targetPartId = layer.targetPartId?.trim() ?? "";
+
+  return `${textureId.length === 0 ? "No texture ID" : textureId} / ${
+    targetPartId.length === 0 ? "No target part" : targetPartId
+  }`;
 };
 
 const readSourceIntakeDraftInput = (
@@ -405,7 +450,14 @@ const readLayerDrafts = (
           fallback.unsupportedFeatures.join(", ")
         ),
         ","
-      )
+      ),
+      texturePreviewReference: readText(
+        fields,
+        layerFieldName("texturePreviewReference", index),
+        fallback.texturePreviewReference ?? ""
+      ),
+      textureId: readText(fields, layerFieldName("textureId", index), fallback.textureId ?? ""),
+      targetPartId: readText(fields, layerFieldName("targetPartId", index), fallback.targetPartId ?? "")
     };
   });
 };
@@ -472,6 +524,9 @@ const layerFieldName = (
     | "originalName"
     | "normalizedName"
     | "groupPath"
+    | "texturePreviewReference"
+    | "textureId"
+    | "targetPartId"
     | "x"
     | "y"
     | "width"

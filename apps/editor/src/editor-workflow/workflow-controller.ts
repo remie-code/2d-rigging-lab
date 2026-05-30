@@ -53,6 +53,7 @@ import {
   projectPreviewAuthoredParameterValues,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   type PreviewParameterSetResult,
+  type CreateDrawableFormState,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
   type SourceIntakeDraftState
@@ -321,7 +322,9 @@ export const createEditorWorkflowController = (
       return result;
     },
     commitCreateDrawablePreset(command) {
-      const result = adapter.commitCreateDrawablePreset(command);
+      const result = adapter.commitCreateDrawablePreset(
+        completeCreateDrawablePresetCommand(command, state.pendingCreateDrawable)
+      );
 
       latestDrawablePresetResult = result;
       latestSessionPersistenceResult = result.finalPersistenceResult;
@@ -655,6 +658,30 @@ const createDrawableLayerMoveEntries = (
       drawableId: drawable.drawableId,
       baseDrawOrder
     }))
+  };
+};
+
+const completeCreateDrawablePresetCommand = (
+  command: EditorCreateDrawablePresetCommand,
+  draft: CreateDrawableFormState
+): EditorCreateDrawablePresetCommand => {
+  const commandSourceLayerId = command.sourceLayerId ?? null;
+  const canInheritDraftTexture =
+    command.textureId === undefined &&
+    String(command.sourceAssetId) === draft.sourceAssetId &&
+    commandSourceLayerId === draft.sourceLayerId &&
+    draft.textureId.trim().length > 0;
+
+  if (!canInheritDraftTexture) {
+    return command;
+  }
+
+  return {
+    ...command,
+    textureId: draft.textureId.trim(),
+    ...(String(command.partId).trim().length === 0 && draft.partId.trim().length > 0
+      ? { partId: draft.partId.trim() }
+      : {})
   };
 };
 

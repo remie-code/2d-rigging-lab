@@ -98,6 +98,22 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Drawable texture reference cannot be resolved."
   },
   {
+    checkId: "ref.texturePreviewMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Texture atlas entry has no preview asset payload for a visible drawable."
+  },
+  {
+    checkId: "ref.textureSourceLayerMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Texture source layer metadata does not match source manifest or drawable mapping."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",
@@ -112,6 +128,22 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-002", "AC-MVP-013"],
     description: "Source asset has no provenance metadata record."
+  },
+  {
+    checkId: "rights.textureProvenanceMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Texture atlas or preview asset provenance ID cannot be resolved."
+  },
+  {
+    checkId: "rights.textureProvenanceMismatch",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Texture provenance and rights metadata point at different assets."
   },
   {
     checkId: "rights.drawableProvenanceMissing",

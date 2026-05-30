@@ -168,17 +168,18 @@ describe("imported source package evidence and preview consistency fixture", () 
       PACKAGE_RIGHTS_PATH,
       CANONICAL_OPERATION_LOG_PATH
     ]));
-    expect(finalValidationReport.checks).toEqual([]);
+    assertTexturePreviewMissingDiagnostic(finalValidationReport);
 
     for (const evidence of capturedEvidence) {
       assertMaterializedRuntimeArtifactsParse(evidence.runtimeArtifacts);
       assertMaterializedValidationArtifactsParse(evidence.validationArtifacts);
     }
 
-    const expectedSummary =
+    const expectedSummary = withTexturePreviewMissingValidation(
       loadFixtureJson(
         "expected/imported-source-package-evidence-preview-consistency-summary.json"
-      ) as Partial<ImportedSourceEvidenceSummary>;
+      ) as Partial<ImportedSourceEvidenceSummary>
+    );
 
     expect(summarizeImportedSourcePackageEvidence({
       outcomes: [importOutcome, createOutcome, generateOutcome],
@@ -691,6 +692,45 @@ const assertMaterializedValidationArtifactsParse = (
     expect(ValidationReportSchema.parse(JSON.parse(artifact.content))).toEqual(artifact.report);
   }
 };
+
+const assertTexturePreviewMissingDiagnostic = (report: ValidationReportDto): void => {
+  expect(report.summary).toMatchObject({
+    status: "fail",
+    highestSeverity: "error"
+  });
+  expect(report.checks).toHaveLength(1);
+  expect(report.checks[0]).toMatchObject({
+    checkId: "ref.texturePreviewMissing",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    target: {
+      kind: "texture",
+      id: "tex_body",
+      path: "/assets/textureAtlas/previewAssets"
+    },
+    targetPath: "/assets/textureAtlas/previewAssets",
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    relatedScenarios: ["SC-IN-002"]
+  });
+  expect(report.checks[0]?.evidence).toEqual(expect.arrayContaining([
+    "drawableId=draw_body",
+    "textureId=tex_body",
+    "textureAtlasMatch=present",
+    "previewAssetMatch=missing",
+    "sourceKind=split-png-set-v1"
+  ]));
+};
+
+const withTexturePreviewMissingValidation = (
+  summary: Partial<ImportedSourceEvidenceSummary>
+): Partial<ImportedSourceEvidenceSummary> => ({
+  ...summary,
+  validation: {
+    status: "fail",
+    checkIds: ["ref.texturePreviewMissing"]
+  }
+});
 
 const lastCapturedEvidence = (
   artifacts: readonly ImportedSourceOperationEvidenceArtifacts[]

@@ -16,6 +16,10 @@ export interface SourceIntakeLayerDraftViewModel {
   readonly opacityLabel: string;
   readonly roleLabel: string;
   readonly unsupportedFeaturesLabel: string;
+  readonly texturePreviewReferenceLabel: string;
+  readonly textureIdLabel: string;
+  readonly targetPartLabel: string;
+  readonly textureMappingStatusLabel: string;
 }
 
 export interface SourceIntakeDraftViewModel {
@@ -80,7 +84,9 @@ export const projectSourceIntakeDraftViewModel = (
     statusLabel: projectSourceIntakeStatusLabel(draft, diagnostics),
     canConfirmDraft: diagnostics.length === 0,
     diagnostics,
-    layerRows: draft.layers.map(projectSourceIntakeLayerViewModel),
+    layerRows: draft.layers.map((layer, index) =>
+      projectSourceIntakeLayerViewModel(layer, index, draft.defaultPartId)
+    ),
     importedAssets,
     importedAssetCountLabel: `${importedAssets.length} imported source asset${importedAssets.length === 1 ? "" : "s"}`
   };
@@ -88,7 +94,8 @@ export const projectSourceIntakeDraftViewModel = (
 
 const projectSourceIntakeLayerViewModel = (
   layer: SourceIntakeLayerDraftState,
-  index: number
+  index: number,
+  defaultPartId: string
 ): SourceIntakeLayerDraftViewModel => ({
   sourceLayerId: layer.sourceLayerId,
   rowLabel: `Layer ${index + 1}`,
@@ -104,7 +111,14 @@ const projectSourceIntakeLayerViewModel = (
   unsupportedFeaturesLabel:
     layer.unsupportedFeatures.length === 0
       ? "No unsupported features"
-      : layer.unsupportedFeatures.join(", ")
+      : layer.unsupportedFeatures.join(", "),
+  texturePreviewReferenceLabel:
+    getLayerTexturePreviewReference(layer).length === 0
+      ? "No texture preview reference"
+      : getLayerTexturePreviewReference(layer),
+  textureIdLabel: getLayerTextureId(layer).length === 0 ? "No texture ID" : getLayerTextureId(layer),
+  targetPartLabel: projectLayerTargetPartLabel(layer, defaultPartId),
+  textureMappingStatusLabel: projectLayerTextureMappingStatusLabel(layer, defaultPartId)
 });
 
 const projectSourceIntakeStatusLabel = (
@@ -166,4 +180,55 @@ const formatRightsStatus = (status: SourceIntakeDraftState["rights"]["rightsStat
     case "blocked":
       return "Blocked";
   }
+};
+
+const getLayerTexturePreviewReference = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.texturePreviewReference?.trim() ?? "";
+
+const getLayerTextureId = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.textureId?.trim() ?? "";
+
+const getLayerTargetPartId = (
+  layer: SourceIntakeLayerDraftState
+): string => layer.targetPartId?.trim() ?? "";
+
+const projectLayerTargetPartLabel = (
+  layer: SourceIntakeLayerDraftState,
+  defaultPartId: string
+): string => {
+  const targetPartId = getLayerTargetPartId(layer);
+  if (targetPartId.length > 0) {
+    return targetPartId;
+  }
+
+  return defaultPartId.trim().length === 0
+    ? "No target part"
+    : `Default part ${defaultPartId.trim()}`;
+};
+
+const projectLayerTextureMappingStatusLabel = (
+  layer: SourceIntakeLayerDraftState,
+  defaultPartId: string
+): string => {
+  const missing: string[] = [];
+
+  if (getLayerTexturePreviewReference(layer).length === 0) {
+    missing.push("texture preview reference");
+  }
+
+  if (getLayerTextureId(layer).length === 0) {
+    missing.push("texture ID");
+  }
+
+  if (getLayerTargetPartId(layer).length === 0 && defaultPartId.trim().length === 0) {
+    missing.push("target part");
+  }
+
+  if (missing.length > 0) {
+    return `Missing ${missing.join(" / ")}`;
+  }
+
+  return `${getLayerTextureId(layer)} / ${projectLayerTargetPartLabel(layer, defaultPartId)}`;
 };

@@ -6,6 +6,7 @@ import { summarizePreviewKeyformSamples } from "./keyform-sample-summary.js";
 import type {
   EditorPreviewCanvasSizeDto,
   EditorPreviewDrawableDto,
+  EditorPreviewDrawableTextureDto,
   EditorPreviewProjectionDto
 } from "./preview-dto.js";
 import { summarizePreviewRuntimeDiff } from "./runtime-diff-summary.js";
@@ -74,9 +75,38 @@ const projectDrawable = (input: {
       ? {}
       : { polygonPoints: input.drawable.vertices.map((point) => ({ x: point.x, y: point.y })) })
   },
+  texture: projectDrawableTexture(input.drawable),
   keyformSampleCount: input.keyformSampleCount,
   diagnostics: summarizePreviewDiagnostics(input.drawable.diagnostics)
 });
+
+const projectDrawableTexture = (drawable: EvaluatedDrawableDto): EditorPreviewDrawableTextureDto => {
+  if (drawable.texture === undefined) {
+    return {
+      status: "not_materialized",
+      projection: { kind: "bounds_fit" }
+    };
+  }
+
+  return {
+    status: drawable.texture.status,
+    ...(drawable.texture.textureId === undefined ? {} : { textureId: drawable.texture.textureId }),
+    ...(drawable.texture.sourceAssetId === undefined ? {} : { sourceAssetId: drawable.texture.sourceAssetId }),
+    ...(drawable.texture.sourceLayerId === undefined ? {} : { sourceLayerId: drawable.texture.sourceLayerId }),
+    projection:
+      drawable.texture.projection.kind === "uv"
+        ? {
+            kind: "uv",
+            uvCount: drawable.texture.projection.uvCount,
+            ...(drawable.texture.projection.uvs === undefined
+              ? {}
+              : {
+                  uvs: drawable.texture.projection.uvs.map((uv) => ({ x: uv.x, y: uv.y }))
+                })
+          }
+        : { kind: "bounds_fit" }
+  };
+};
 
 const orderPreviewDrawables = (snapshot: RuntimeSnapshotDto): readonly EvaluatedDrawableDto[] => {
   const drawablesById = new Map(snapshot.drawables.map((drawable) => [drawable.drawableId, drawable]));
