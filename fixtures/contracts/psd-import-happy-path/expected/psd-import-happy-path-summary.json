@@ -18,6 +18,31 @@
       "diagnosticCheckIds": [
         "operation.importPsdSourceAsset.adapterDiagnostic"
       ],
+      "diagnostics": [
+        {
+          "checkId": "operation.importPsdSourceAsset.adapterDiagnostic",
+          "status": "pass",
+          "severity": "info",
+          "phase": "operation.import.adapterResult",
+          "target": {
+            "kind": "sourceAsset",
+            "id": "src_psd_import_happy_path",
+            "path": "/sample-characterization/header"
+          },
+          "message": "Synthetic adapter result follows the rights-cleared sample PSD header shape without fixture PSD bytes.",
+          "evidence": [
+            "adapterCheckId:adapter.sampleHeaderFacts",
+            "canvas=2048x3072",
+            "channels=4",
+            "depth=8",
+            "colorMode=RGB",
+            "psdBytesFixture=false"
+          ],
+          "relatedAC": [],
+          "relatedScenarios": [],
+          "repairCandidateIds": []
+        }
+      ],
       "modelDiffPaths": [
         "/assets/sourceManifest/sourceAssets",
         "/assets/provenance/records",
@@ -42,6 +67,7 @@
         "src_psd_import_happy_path"
       ],
       "diagnosticCheckIds": [],
+      "diagnostics": [],
       "modelDiffPaths": [
         "/model/drawables/draw_psd_face_base",
         "/model/meshes/mesh_psd_face_base",
@@ -58,6 +84,7 @@
         "mesh_psd_face_base"
       ],
       "diagnosticCheckIds": [],
+      "diagnostics": [],
       "modelDiffPaths": [
         "/model/meshes/mesh_psd_face_base",
         "/model/meshes/mesh_psd_face_base/vertices",
@@ -94,6 +121,117 @@
         "unsupportedFeatures": []
       }
     ],
+    "psdProfile": {
+      "schemaVersion": "layered-character-psd-profile-v1",
+      "adapter": {
+        "adapterName": "synthetic-sample-model-profile-fixture",
+        "adapterResultSchemaVersion": "psd-adapter-result-v1",
+        "sourceProfile": "layered-character-psd-profile-v1",
+        "evidenceKind": "adapter-supplied-metadata-v1"
+      },
+      "canvas": {
+        "width": 2048,
+        "height": 3072,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 2048,
+          "height": 3072
+        }
+      },
+      "sourceGroups": [
+        {
+          "sourceGroupId": "group_root",
+          "originalName": "Root",
+          "normalizedName": "root",
+          "groupPath": [
+            "Root"
+          ],
+          "sourceOrder": 0,
+          "visibleInSource": true,
+          "opacityInSource": 1,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 2048,
+            "height": 3072
+          },
+          "targetPartId": "part_root",
+          "unsupportedFeatures": []
+        },
+        {
+          "sourceGroupId": "group_head",
+          "originalName": "Head",
+          "normalizedName": "head",
+          "parentGroupId": "group_root",
+          "groupPath": [
+            "Root",
+            "Head"
+          ],
+          "sourceOrder": 1,
+          "visibleInSource": true,
+          "opacityInSource": 1,
+          "bounds": {
+            "x": 512,
+            "y": 384,
+            "width": 1024,
+            "height": 1024
+          },
+          "targetPartId": "part_head",
+          "unsupportedFeatures": []
+        }
+      ],
+      "sourceLayers": [
+        {
+          "sourceLayerId": "layer_face_base",
+          "originalName": "Face base",
+          "normalizedName": "face_base",
+          "parentGroupId": "group_head",
+          "groupPath": [
+            "Root",
+            "Head"
+          ],
+          "sourceOrder": 2,
+          "bounds": {
+            "x": 640,
+            "y": 512,
+            "width": 768,
+            "height": 896
+          },
+          "visibleInSource": true,
+          "opacityInSource": 1,
+          "role": "referenceOnly",
+          "unsupportedFeatures": [],
+          "texturePreviewReference": "assets/textures/psd-import-happy-path/face-base.preview.png",
+          "textureId": "tex_psd_face_base",
+          "targetPartId": "part_head"
+        }
+      ],
+      "unsupportedFeatures": [],
+      "diagnostics": [
+        {
+          "checkId": "adapter.sampleHeaderFacts",
+          "severity": "info",
+          "message": "Synthetic adapter result follows the rights-cleared sample PSD header shape without fixture PSD bytes.",
+          "source": {
+            "kind": "document",
+            "path": "/sample-characterization/header"
+          },
+          "evidence": [
+            "canvas=2048x3072",
+            "channels=4",
+            "depth=8",
+            "colorMode=RGB",
+            "psdBytesFixture=false"
+          ]
+        }
+      ],
+      "compatibility": {
+        "structuredProfilePrecedence": "structured-profile-preferred-v1",
+        "flattenedDiagnosticsFallback": "sourceAsset.diagnostics-summary-fallback-v1",
+        "flattenedUnsupportedFeaturesFallback": "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+      }
+    },
     "diagnosticEvidence": {
       "canvas": "psd.canvas:2048x3072",
       "groupTargetParts": [
@@ -112,6 +250,20 @@
       "sourceAsset": "psd.sourceAsset:src_psd_import_happy_path"
     }
   },
+  "textureRelations": [
+    {
+      "sourceAssetId": "src_psd_import_happy_path",
+      "sourceLayerId": "layer_face_base",
+      "profileTextureId": "tex_psd_face_base",
+      "profileTexturePreviewReference": "assets/textures/psd-import-happy-path/face-base.preview.png",
+      "atlasTextureId": "tex_psd_face_base",
+      "atlasTextureFilePath": "assets/textures/psd-import-happy-path/face-base.preview.png",
+      "previewAssetId": "preview_src_psd_import_happy_path_layer_face_base",
+      "previewReferenceKind": "package-local-file-v1",
+      "previewFilePath": "assets/textures/psd-import-happy-path/face-base.preview.png",
+      "relationConsistent": true
+    }
+  ],
   "texturePreviewMetadata": {
     "textures": [
       {
@@ -170,6 +322,8 @@
     "reportId": "val_psd_import_happy_path_strict",
     "status": "pass",
     "highestSeverity": "info",
-    "checkIds": []
+    "checkIds": [
+      "asset.psd.adapterDiagnostic"
+    ]
   }
 }

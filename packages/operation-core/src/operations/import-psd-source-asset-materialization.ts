@@ -5,12 +5,16 @@ import type { SourceAssetId } from "@private-2d-rigging-lab/contracts";
 import type {
   ImportPsdSourceAssetPayloadDto,
   PsdAdapterResultDto,
+  PsdAdapterSourceGroupDto,
   PsdAdapterSourceLayerDto
 } from "../payloads/import-source.js";
 import { createPsdSourceAssetDiagnostics } from "./import-psd-source-asset-diagnostics.js";
 import { psdLayerRequestsTextureMaterialization } from "./import-psd-source-asset-texture.js";
 
 export type PsdSourceAsset = AuthoringSession["graph"]["sourceAssets"][number];
+type PsdProfile = NonNullable<PsdSourceAsset["psdProfile"]>;
+type PsdProfileSourceGroup = PsdProfile["sourceGroups"][number];
+type PsdProfileSourceLayer = PsdProfile["sourceLayers"][number];
 type PsdSourceLayer = PsdSourceAsset["layers"][number];
 
 export const createPsdSourceAssetFromPayload = (input: {
@@ -37,7 +41,8 @@ export const createPsdSourceAssetFromPayload = (input: {
         sourceAssetId: input.sourceAssetId
       })
     ),
-    diagnostics: createPsdSourceAssetDiagnostics(input.payload, input.sourceAssetId)
+    diagnostics: createPsdSourceAssetDiagnostics(input.payload, input.sourceAssetId),
+    psdProfile: createPsdProfileFromAdapterResult(adapterResult)
   };
 };
 
@@ -117,6 +122,63 @@ const createSourceLayerFromAdapterLayer = (input: {
   mappedDrawableIds: []
 });
 
+const createPsdProfileFromAdapterResult = (
+  adapterResult: PsdAdapterResultDto
+): PsdProfile => ({
+  schemaVersion: "layered-character-psd-profile-v1",
+  adapter: {
+    adapterName: adapterResult.adapterName,
+    adapterResultSchemaVersion: adapterResult.schemaVersion,
+    sourceProfile: adapterResult.sourceProfile,
+    evidenceKind: "adapter-supplied-metadata-v1"
+  },
+  canvas: structuredClone(adapterResult.canvas),
+  sourceGroups: adapterResult.sourceGroups.map(createPsdProfileSourceGroup),
+  sourceLayers: adapterResult.sourceLayers.map(createPsdProfileSourceLayer),
+  unsupportedFeatures: structuredClone(adapterResult.unsupportedFeatures),
+  diagnostics: structuredClone(adapterResult.diagnostics),
+  compatibility: PSD_PROFILE_COMPATIBILITY_POLICY
+});
+
+const createPsdProfileSourceGroup = (
+  group: PsdAdapterSourceGroupDto
+): PsdProfileSourceGroup => ({
+  sourceGroupId: group.sourceGroupId,
+  originalName: group.originalName,
+  normalizedName: group.normalizedName,
+  ...(group.parentGroupId === undefined ? {} : { parentGroupId: group.parentGroupId }),
+  groupPath: [...group.groupPath],
+  sourceOrder: group.sourceOrder,
+  visibleInSource: group.visibleInSource,
+  opacityInSource: group.opacityInSource,
+  ...(group.bounds === undefined ? {} : { bounds: structuredClone(group.bounds) }),
+  ...(group.blendMode === undefined ? {} : { blendMode: structuredClone(group.blendMode) }),
+  ...(group.targetPartId === undefined ? {} : { targetPartId: group.targetPartId }),
+  unsupportedFeatures: structuredClone(group.unsupportedFeatures)
+});
+
+const createPsdProfileSourceLayer = (
+  layer: PsdAdapterSourceLayerDto
+): PsdProfileSourceLayer => ({
+  sourceLayerId: layer.sourceLayerId,
+  originalName: layer.originalName,
+  normalizedName: layer.normalizedName,
+  ...(layer.parentGroupId === undefined ? {} : { parentGroupId: layer.parentGroupId }),
+  groupPath: [...layer.groupPath],
+  sourceOrder: layer.sourceOrder,
+  bounds: structuredClone(layer.bounds),
+  visibleInSource: layer.visibleInSource,
+  opacityInSource: layer.opacityInSource,
+  role: layer.role,
+  ...(layer.blendMode === undefined ? {} : { blendMode: structuredClone(layer.blendMode) }),
+  unsupportedFeatures: structuredClone(layer.unsupportedFeatures),
+  ...(layer.texturePreviewReference === undefined
+    ? {}
+    : { texturePreviewReference: layer.texturePreviewReference }),
+  ...(layer.textureId === undefined ? {} : { textureId: layer.textureId }),
+  ...(layer.targetPartId === undefined ? {} : { targetPartId: layer.targetPartId })
+});
+
 const createSourceAssetIdFromFilePath = (filePath: string): SourceAssetId =>
   SourceAssetIdSchema.parse(`src_${sanitizeIdToken(filePath.replace(/\.[^.\\/]+$/, ""))}`);
 
@@ -144,4 +206,11 @@ const uniqueStrings = <TValue extends string>(values: readonly TValue[]): readon
 const sanitizeIdToken = (value: string): string => {
   const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
   return normalized.length > 0 ? normalized : "unnamed";
+};
+
+const PSD_PROFILE_COMPATIBILITY_POLICY: PsdProfile["compatibility"] = {
+  structuredProfilePrecedence: "structured-profile-preferred-v1",
+  flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+  flattenedUnsupportedFeaturesFallback:
+    "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
 };

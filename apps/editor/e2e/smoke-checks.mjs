@@ -21,6 +21,7 @@ import {
   assertSavedSourceIntakeState,
   assertSourceIntakeStateAfterLoad,
   assertSourceIntakeStateAfterReset,
+  runSplitPngSourceIntakeCompatibilitySmoke,
   runSourceIntakeWorkflow,
   sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
@@ -121,11 +122,21 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} reset`);
+    const splitPngCompatibilityEvidence = await runSplitPngSourceIntakeCompatibilitySmoke({
+      page,
+      viewport,
+      initialOperationLogEntryCount: 0
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} split-png-source-intake`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} final-reset`);
 
     return {
       viewport: viewport.name,
       previewEvidence,
       sourceIntakeEvidence,
+      splitPngCompatibilityEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

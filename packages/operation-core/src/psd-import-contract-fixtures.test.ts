@@ -8,9 +8,7 @@ import {
   toRuntimeGraph
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
-  ModelDiffDto,
-  OperationId,
-  TextureId
+  ModelDiffDto
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -96,6 +94,10 @@ interface FixtureRun {
   readonly validationReport: ValidationReportDto;
 }
 
+type TexturePreviewFixtureAsset = NonNullable<
+  NonNullable<PackageDocumentDto["assets"]["textureAtlas"]>["previewAssets"]
+>[number];
+
 const runFixtureOperations = (
   fixtureId: string,
   requestPaths: readonly string[],
@@ -147,6 +149,7 @@ const summarizePsdFixtureRun = (
     return summarizeOperation(outcome, logEntry);
   }),
   sourceManifest: summarizeSourceManifest(run.document),
+  textureRelations: summarizeTextureRelations(run.document),
   texturePreviewMetadata: summarizeTexturePreviewMetadata(run.document),
   rightsAndProvenance: summarizeRightsAndProvenance(run.document),
   validation: {
@@ -169,6 +172,7 @@ const summarizeOperation = (
   resultStatus: outcome.result.status,
   targetIds: logEntry.targetIds,
   diagnosticCheckIds: outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId),
+  diagnostics: outcome.result.diagnostics,
   modelDiffPaths: summarizeModelDiffPaths(outcome.result.modelDiff)
 });
 
@@ -215,6 +219,7 @@ const summarizeSourceManifest = (document: PackageDocumentDto) => {
       mappedDrawableIds: layer.mappedDrawableIds,
       unsupportedFeatures: layer.unsupportedFeatures
     })),
+    psdProfile: expectPsdProfile(sourceAsset),
     diagnosticEvidence: summarizeSourceDiagnostics(sourceAsset.diagnostics)
   };
 };
@@ -268,6 +273,55 @@ const summarizeTexturePreviewMetadata = (document: PackageDocumentDto) => ({
   })) ?? []
 });
 
+const summarizeTextureRelations = (document: PackageDocumentDto) => {
+  const sourceAsset = expectSingleSourceAsset(document);
+  const psdProfile = expectPsdProfile(sourceAsset);
+
+  return psdProfile.sourceLayers
+    .filter((layer) =>
+      layer.textureId !== undefined || layer.texturePreviewReference !== undefined
+    )
+    .map((layer) => {
+      const texture = document.assets.textureAtlas?.textures.find((candidate) =>
+        candidate.textureId === layer.textureId
+      );
+      const previewAsset = document.assets.textureAtlas?.previewAssets?.find((candidate) =>
+        candidate.sourceAssetId === sourceAsset.sourceAssetId &&
+        candidate.sourceLayerId === layer.sourceLayerId
+      );
+
+      return {
+        sourceAssetId: sourceAsset.sourceAssetId,
+        sourceLayerId: layer.sourceLayerId,
+        profileTextureId: layer.textureId ?? "missing",
+        profileTexturePreviewReference: layer.texturePreviewReference ?? "missing",
+        atlasTextureId: texture?.textureId ?? "missing",
+        atlasTextureFilePath: texture?.filePath ?? "missing",
+        previewAssetId: previewAsset?.previewAssetId ?? "missing",
+        previewReferenceKind: previewAsset?.reference.referenceKind ?? "missing",
+        ...summarizePreviewReference(previewAsset),
+        relationConsistent:
+          layer.textureId !== undefined &&
+          texture?.textureId === layer.textureId &&
+          previewAsset?.textureId === layer.textureId &&
+          previewAsset?.sourceAssetId === sourceAsset.sourceAssetId &&
+          previewAsset?.sourceLayerId === layer.sourceLayerId
+      };
+    });
+};
+
+const summarizePreviewReference = (
+  previewAsset: TexturePreviewFixtureAsset | undefined
+) => {
+  if (previewAsset === undefined) {
+    return {};
+  }
+
+  return "filePath" in previewAsset.reference
+    ? { previewFilePath: previewAsset.reference.filePath }
+    : { previewDataUrl: previewAsset.reference.dataUrl };
+};
+
 const summarizeRightsAndProvenance = (document: PackageDocumentDto) => ({
   rights: document.assets.rights.records.map((record) => ({
     assetId: record.assetId,
@@ -317,6 +371,16 @@ const expectSingleSourceAsset = (
   }
 
   return sourceAsset;
+};
+
+const expectPsdProfile = (
+  sourceAsset: PackageDocumentDto["assets"]["sourceManifest"]["sourceAssets"][number]
+) => {
+  if (sourceAsset.psdProfile === undefined) {
+    throw new Error(`Expected structured PSD profile for ${sourceAsset.sourceAssetId}.`);
+  }
+
+  return sourceAsset.psdProfile;
 };
 
 const expectDiagnostic = (

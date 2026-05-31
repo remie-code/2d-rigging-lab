@@ -118,20 +118,104 @@ const createImportedSourceAssetRow = (
   path.className = "source-intake-imported-source__path";
   path.textContent = sourceAsset.filePathLabel;
 
+  const profileEvidence = document.createElement("p");
+  profileEvidence.className = "source-intake-imported-source__diagnostics";
+  profileEvidence.textContent = sourceAsset.profileEvidenceLabel;
+  applyLongTextWrap(profileEvidence);
+
   const diagnostics = document.createElement("p");
   diagnostics.className = "source-intake-imported-source__diagnostics";
   diagnostics.textContent = sourceAsset.diagnosticsLabel;
+  applyLongTextWrap(diagnostics);
 
   const layers = document.createElement("ul");
   layers.className = "source-intake-imported-source__layers";
   for (const layer of sourceAsset.layers) {
     const item = document.createElement("li");
-    item.textContent = `${layer.layerLabel} / ${layer.boundsLabel} / ${layer.roleLabel} / ${layer.mappedDrawableCountLabel}`;
+    item.textContent = [
+      layer.layerLabel,
+      layer.groupPathLabel,
+      layer.boundsLabel,
+      layer.visibilityLabel,
+      layer.opacityLabel,
+      layer.roleLabel,
+      layer.unsupportedFeaturesLabel,
+      layer.textureMappingLabel,
+      layer.blendModeLabel,
+      layer.mappedDrawableCountLabel
+    ].join(" / ");
+    applyLongTextWrap(item);
     layers.append(item);
   }
 
-  article.append(heading, meta, path, diagnostics, layers);
+  const psdProfileSummary =
+    sourceAsset.psdProfile === undefined ? [] : [createPsdProfileSummary(sourceAsset)];
+
+  article.append(
+    heading,
+    meta,
+    path,
+    profileEvidence,
+    diagnostics,
+    ...psdProfileSummary,
+    layers
+  );
   return article;
+};
+
+const createPsdProfileSummary = (
+  sourceAsset: ImportedSourceAssetViewModel
+): HTMLElement => {
+  const profile = sourceAsset.psdProfile;
+  const section = document.createElement("section");
+  section.className = "source-intake-imported-source__diagnostics";
+  section.setAttribute("aria-label", `Structured PSD profile metadata for ${sourceAsset.sourceAssetId}`);
+
+  if (profile === undefined) {
+    return section;
+  }
+
+  const facts = document.createElement("dl");
+  facts.className = "source-intake-summary";
+  appendFact(facts, "Adapter evidence", profile.adapterLabel);
+  appendFact(facts, "Canvas", profile.canvasLabel);
+  appendFact(facts, "Groups", profile.sourceGroupCountLabel);
+  appendFact(facts, "Structured layers", profile.structuredLayerCountLabel);
+  appendFact(facts, "Unsupported features", profile.unsupportedFeatureCountLabel);
+  appendFact(facts, "Adapter diagnostics", profile.adapterDiagnosticCountLabel);
+  appendFact(facts, "Compatibility", profile.compatibilityLabel);
+
+  section.append(
+    facts,
+    createProfileList("Source groups", profile.groupLabels),
+    createProfileList("Unsupported feature evidence", profile.unsupportedFeatureLabels),
+    createProfileList("Adapter diagnostics", profile.adapterDiagnosticLabels)
+  );
+  return section;
+};
+
+const createProfileList = (
+  label: string,
+  items: readonly string[]
+): HTMLElement => {
+  const section = document.createElement("section");
+  section.className = "source-intake-imported-source__diagnostics";
+  section.setAttribute("aria-label", label);
+
+  const heading = document.createElement("h5");
+  heading.textContent = label;
+
+  const list = document.createElement("ul");
+  list.className = "source-intake-imported-source__layers";
+  for (const itemText of items) {
+    const item = document.createElement("li");
+    item.textContent = itemText;
+    applyLongTextWrap(item);
+    list.append(item);
+  }
+
+  section.append(heading, list);
+  return section;
 };
 
 const appendFact = (list: HTMLDListElement, label: string, value: string): void => {
@@ -140,6 +224,11 @@ const appendFact = (list: HTMLDListElement, label: string, value: string): void 
 
   const description = document.createElement("dd");
   description.textContent = value;
+  applyLongTextWrap(description);
 
   list.append(term, description);
+};
+
+const applyLongTextWrap = (element: HTMLElement): void => {
+  element.style.overflowWrap = "anywhere";
 };

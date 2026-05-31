@@ -38,6 +38,12 @@ const psdAdapterResultPayload = {
         normalizedName: "head",
         groupPath: ["Root", "Head"],
         sourceOrder: 0,
+        blendMode: {
+          modeKey: "pass",
+          normalizedMode: "passThrough",
+          supportedByMvp: false,
+          source: { kind: "group", id: "group_head" }
+        },
         targetPartId: "part_head"
       }
     ],
@@ -58,6 +64,13 @@ const psdAdapterResultPayload = {
         visibleInSource: true,
         opacityInSource: 0.8,
         role: "editableLayer",
+        blendMode: {
+          modeKey: "mul ",
+          normalizedMode: "multiply",
+          displayName: "Multiply",
+          supportedByMvp: false,
+          source: { kind: "layer", id: "layer_face" }
+        },
         unsupportedFeatures: [
           {
             featureId: "psd.textLayer",
@@ -286,7 +299,18 @@ describe("operation-core DTO schemas", () => {
     });
     expect(request.payload.adapterResult?.sourceGroups[0]).toMatchObject({
       sourceGroupId: "group_head",
+      blendMode: {
+        modeKey: "pass",
+        normalizedMode: "passThrough",
+        supportedByMvp: false
+      },
       targetPartId: "part_head"
+    });
+    expect(request.payload.adapterResult?.sourceLayers[0]?.blendMode).toMatchObject({
+      modeKey: "mul ",
+      normalizedMode: "multiply",
+      displayName: "Multiply",
+      supportedByMvp: false
     });
   });
 

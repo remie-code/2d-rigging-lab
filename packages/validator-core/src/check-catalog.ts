@@ -122,6 +122,38 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "PSD source profile contains an unsupported feature retained as source import diagnostics."
   },
   {
+    checkId: "asset.psd.adapterDiagnostic",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile contains an adapter-supplied diagnostic."
+  },
+  {
+    checkId: "asset.psd.structuredProfileMissing",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "PSD source asset is using flattened Wave20 compatibility fields because psdProfile is absent."
+  },
+  {
+    checkId: "asset.psd.structuredProfileMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "A non-PSD source asset carries PSD-only structured source profile metadata."
+  },
+  {
+    checkId: "asset.psd.flattenedFallbackMismatch",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD unsupported feature details differ from flattened fallback feature IDs."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

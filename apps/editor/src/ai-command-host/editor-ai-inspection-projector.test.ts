@@ -144,7 +144,7 @@ describe("editor AI inspection projector", () => {
         id: "param_missing"
       },
       references: [],
-      supportedTargetKinds: ["parameter"],
+      supportedTargetKinds: ["parameter", "sourceAsset"],
       diagnostics: [
         {
           checkId: "ai.editor.inspectTarget.targetNotFound",
@@ -170,10 +170,104 @@ describe("editor AI inspection projector", () => {
         id: "draw_head"
       },
       references: [],
-      supportedTargetKinds: ["parameter"],
+      supportedTargetKinds: ["parameter", "sourceAsset"],
       diagnostics: [
         {
           checkId: "ai.editor.inspectTarget.unsupportedTargetKind",
+          severity: "warning"
+        }
+      ]
+    });
+  });
+
+  it("projects structured PSD profile metadata for source asset inspection without parser claims", () => {
+    const packageDocument = createPackageDocumentWithStructuredPsdSource();
+
+    expect(
+      projectEditorInspectTarget(
+        { packageDocument },
+        {
+          kind: "sourceAsset",
+          id: "src_ai_psd_profile"
+        }
+      )
+    ).toMatchObject({
+      schemaVersion: "editor-inspection-projection-v1",
+      status: "ok",
+      target: {
+        kind: "sourceAsset",
+        id: "src_ai_psd_profile",
+        path: "/assets/sourceManifest/sourceAssets/0"
+      },
+      references: [],
+      sourceAsset: {
+        sourceAssetId: "src_ai_psd_profile",
+        kind: "psd-source-v1",
+        projectionBasis: "structured-psd-profile-metadata",
+        truthfulness:
+          "Projection is based on adapter-supplied structured PSD profile metadata; the editor did not parse PSD bytes, decode images, or extract rasters.",
+        structuredPsdProfile: {
+          adapterName: "manual-psd-profile-entry",
+          canvas: {
+            width: 2048,
+            height: 3072
+          },
+          sourceGroupCount: 1,
+          sourceLayerCount: 1,
+          unsupportedFeatureCount: 1,
+          adapterDiagnosticCount: 1,
+          sourceLayers: [
+            expect.objectContaining({
+              sourceLayerId: "layer_face",
+              unsupportedFeatureIds: ["psd.textLayer"],
+              texturePreviewReference: "assets/sources/ai/face.preview.png",
+              textureId: "tex_face",
+              targetPartId: "part_root"
+            })
+          ],
+          adapterDiagnostics: [
+            {
+              checkId: "adapter.psd.manualProfileMetadata",
+              severity: "info",
+              message: "Manual PSD adapter/profile metadata only.",
+              evidence: ["source-intake-mode:psdAdapterProfile"]
+            }
+          ]
+        }
+      }
+    });
+    expect(
+      JSON.stringify(
+        projectEditorInspectTarget(
+          { packageDocument },
+          {
+            kind: "sourceAsset",
+            id: "src_ai_psd_profile"
+          }
+        )
+      )
+    ).not.toMatch(/file picker|parsed from bytes|decode implementation|raster extraction/i);
+  });
+
+  it("returns structured missing source asset inspection diagnostics", () => {
+    const packageDocument = createPackageDocumentWithStructuredPsdSource();
+
+    expect(
+      projectEditorInspectTarget(
+        { packageDocument },
+        {
+          kind: "sourceAsset",
+          id: "src_missing"
+        }
+      )
+    ).toMatchObject({
+      schemaVersion: "editor-inspection-projection-v1",
+      status: "missing",
+      reason: "target_not_found",
+      supportedTargetKinds: ["parameter", "sourceAsset"],
+      diagnostics: [
+        {
+          checkId: "ai.editor.inspectTarget.sourceAssetNotFound",
           severity: "warning"
         }
       ]
@@ -410,3 +504,119 @@ const createPackageDocument = (): PackageDocumentDto =>
     }
   }
 });
+
+const createPackageDocumentWithStructuredPsdSource = (): PackageDocumentDto => {
+  const document = createPackageDocument();
+
+  return PackageDocumentSchema.parse({
+    ...document,
+    manifest: {
+      ...document.manifest,
+      provenanceSummary: {
+        sourceAssetCount: 1
+      }
+    },
+    assets: {
+      ...document.assets,
+      sourceManifest: {
+        schemaVersion: "source-manifest-v1",
+        sourceAssets: [
+          {
+            sourceAssetId: "src_ai_psd_profile",
+            kind: "psd-source-v1",
+            filePath: "assets/sources/ai/source.psd",
+            contentHash: "sha256:ai-psd-reference",
+            importProfile: "layered-character-psd-profile-v1",
+            layers: [
+              {
+                sourceLayerId: "layer_face",
+                sourceAssetId: "src_ai_psd_profile",
+                originalName: "Face",
+                normalizedName: "face",
+                groupPath: ["Root", "Head"],
+                bounds: { x: 64, y: 96, width: 256, height: 300 },
+                visibleInSource: true,
+                opacityInSource: 0.8,
+                role: "editableLayer",
+                unsupportedFeatures: ["psd.textLayer"],
+                mappedDrawableIds: []
+              }
+            ],
+            diagnostics: ["adapter.psd.manualProfileMetadata: manual profile metadata"],
+            psdProfile: {
+              schemaVersion: "layered-character-psd-profile-v1",
+              adapter: {
+                adapterName: "manual-psd-profile-entry",
+                adapterResultSchemaVersion: "psd-adapter-result-v1",
+                sourceProfile: "layered-character-psd-profile-v1",
+                evidenceKind: "adapter-supplied-metadata-v1"
+              },
+              canvas: {
+                width: 2048,
+                height: 3072,
+                bounds: { x: 0, y: 0, width: 2048, height: 3072 }
+              },
+              sourceGroups: [
+                {
+                  sourceGroupId: "group_root_head",
+                  originalName: "Head",
+                  normalizedName: "head",
+                  groupPath: ["Root", "Head"],
+                  sourceOrder: 0,
+                  visibleInSource: true,
+                  opacityInSource: 1,
+                  targetPartId: "part_root",
+                  unsupportedFeatures: []
+                }
+              ],
+              sourceLayers: [
+                {
+                  sourceLayerId: "layer_face",
+                  originalName: "Face",
+                  normalizedName: "face",
+                  parentGroupId: "group_root_head",
+                  groupPath: ["Root", "Head"],
+                  sourceOrder: 1,
+                  bounds: { x: 64, y: 96, width: 256, height: 300 },
+                  visibleInSource: true,
+                  opacityInSource: 0.8,
+                  role: "editableLayer",
+                  unsupportedFeatures: [
+                    {
+                      featureId: "psd.textLayer",
+                      scope: "layer",
+                      severity: "warning",
+                      message: "Text layer metadata needs manual review.",
+                      source: { kind: "layer", id: "layer_face" },
+                      rasterizeCandidate: false,
+                      manualConfirmationRequired: true
+                    }
+                  ],
+                  texturePreviewReference: "assets/sources/ai/face.preview.png",
+                  textureId: "tex_face",
+                  targetPartId: "part_root"
+                }
+              ],
+              unsupportedFeatures: [],
+              diagnostics: [
+                {
+                  checkId: "adapter.psd.manualProfileMetadata",
+                  severity: "info",
+                  message: "Manual PSD adapter/profile metadata only.",
+                  source: { kind: "adapter", path: "/source-intake" },
+                  evidence: ["source-intake-mode:psdAdapterProfile"]
+                }
+              ],
+              compatibility: {
+                structuredProfilePrecedence: "structured-profile-preferred-v1",
+                flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+                flattenedUnsupportedFeaturesFallback:
+                  "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+              }
+            }
+          }
+        ]
+      }
+    }
+  });
+};

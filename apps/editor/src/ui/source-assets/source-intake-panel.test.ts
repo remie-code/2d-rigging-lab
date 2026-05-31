@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DrawableIdSchema,
-  SourceAssetIdSchema
+  PartIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type { SourceAssetDto } from "@private-2d-rigging-lab/package-format";
 
@@ -317,6 +319,38 @@ describe("source intake panel", () => {
       "1 mapped drawable"
     );
   });
+
+  it("renders structured PSD profile evidence without parser or raster claims", () => {
+    const draft = createEmptySourceIntakeDraftState({ defaultPartId: "part_root" });
+    const panel = createPanel(draft, () => {}, [createImportedPsdSourceAsset()]);
+    const row = findByTestId(panel, "sourceIntake.imported.src_panel_psd_profile");
+
+    expect(row?.textContent).toContain(
+      "Structured PSD profile metadata from manual-psd-profile-entry; editor did not parse PSD bytes."
+    );
+    expect(row?.textContent).toContain("manual-psd-profile-entry / adapter-supplied-metadata-v1");
+    expect(row?.textContent).toContain("2048 x 3072");
+    expect(row?.textContent).toContain("group_root_head / Root / Head");
+    expect(row?.textContent).toContain("layer layer_face / psd.textLayer");
+    expect(row?.textContent).toContain("adapter.psd.manualProfileMetadata");
+    expect(row?.textContent).toContain(
+      "assets/sources/panel/face.preview.png / tex_face / part_root"
+    );
+    expect(row?.textContent).not.toMatch(/file picker|parsed from bytes|decode|raster extraction/i);
+    expect(
+      row?.queryByPredicate((element) =>
+        element.tagName === "section" &&
+        element.getAttribute("aria-label") ===
+          "Structured PSD profile metadata for src_panel_psd_profile"
+      )
+    ).not.toBeNull();
+    expect(
+      row?.queryByPredicate((element) =>
+        element.tagName === "li" &&
+        element.textContent.includes("adapter.psd.manualProfileMetadata")
+      )?.style.overflowWrap
+    ).toBe("anywhere");
+  });
 });
 
 const createPanel = (
@@ -500,6 +534,103 @@ const createImportedSourceAsset = (): SourceAssetDto => ({
     }
   ],
   diagnostics: ["split-png-fallback-v1"]
+});
+
+const createImportedPsdSourceAsset = (): SourceAssetDto => ({
+  sourceAssetId: SourceAssetIdSchema.parse("src_panel_psd_profile"),
+  kind: "psd-source-v1",
+  filePath: "assets/sources/panel/source.psd",
+  contentHash: "sha256:panel-psd-reference",
+  importProfile: "layered-character-psd-profile-v1",
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      sourceAssetId: SourceAssetIdSchema.parse("src_panel_psd_profile"),
+      originalName: "Face",
+      normalizedName: "face",
+      groupPath: ["Root", "Head"],
+      bounds: { x: 32, y: 48, width: 128, height: 160 },
+      visibleInSource: true,
+      opacityInSource: 0.8,
+      role: "editableLayer",
+      unsupportedFeatures: ["psd.textLayer"],
+      mappedDrawableIds: [DrawableIdSchema.parse("draw_panel_face")]
+    }
+  ],
+  diagnostics: ["adapter.psd.manualProfileMetadata: manual profile metadata"],
+  psdProfile: {
+    schemaVersion: "layered-character-psd-profile-v1",
+    adapter: {
+      adapterName: "manual-psd-profile-entry",
+      adapterResultSchemaVersion: "psd-adapter-result-v1",
+      sourceProfile: "layered-character-psd-profile-v1",
+      evidenceKind: "adapter-supplied-metadata-v1"
+    },
+    canvas: {
+      width: 2048,
+      height: 3072,
+      bounds: { x: 0, y: 0, width: 2048, height: 3072 }
+    },
+    sourceGroups: [
+      {
+        sourceGroupId: "group_root_head",
+        originalName: "Head",
+        normalizedName: "head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 0,
+        visibleInSource: true,
+        opacityInSource: 1,
+        targetPartId: PartIdSchema.parse("part_root"),
+        unsupportedFeatures: []
+      }
+    ],
+    sourceLayers: [
+      {
+        sourceLayerId: "layer_face",
+        originalName: "Face",
+        normalizedName: "face",
+        parentGroupId: "group_root_head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 1,
+        bounds: { x: 32, y: 48, width: 128, height: 160 },
+        visibleInSource: true,
+        opacityInSource: 0.8,
+        role: "editableLayer",
+        unsupportedFeatures: [
+          {
+            featureId: "psd.textLayer",
+            scope: "layer",
+            severity: "warning",
+            message:
+              "Text layer metadata was supplied by the adapter profile and needs manual review.",
+            source: { kind: "layer", id: "layer_face" },
+            rasterizeCandidate: false,
+            manualConfirmationRequired: true
+          }
+        ],
+        texturePreviewReference: "assets/sources/panel/face.preview.png",
+        textureId: TextureIdSchema.parse("tex_face"),
+        targetPartId: PartIdSchema.parse("part_root")
+      }
+    ],
+    unsupportedFeatures: [],
+    diagnostics: [
+      {
+        checkId: "adapter.psd.manualProfileMetadata",
+        severity: "info",
+        message:
+          "Manual PSD adapter/profile metadata was supplied; no editor PSD byte parsing occurred.",
+        source: { kind: "adapter", path: "/source-intake" },
+        evidence: ["source-intake-mode:psdAdapterProfile"]
+      }
+    ],
+    compatibility: {
+      structuredProfilePrecedence: "structured-profile-preferred-v1",
+      flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+      flattenedUnsupportedFeaturesFallback:
+        "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+    }
+  }
 });
 
 const createUnsupportedPsdDraft = () => ({

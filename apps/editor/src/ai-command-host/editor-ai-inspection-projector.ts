@@ -8,7 +8,8 @@ import {
 import type {
   KeyformSetDto,
   PackageDocumentDto,
-  ParameterDto
+  ParameterDto,
+  SourceAssetDto
 } from "@private-2d-rigging-lab/package-format";
 
 import type { EditorSemanticState, ParameterListItemState } from "../editor-state/index.js";
@@ -28,13 +29,15 @@ export interface EditorInspectModelProjection extends InspectModelResult {
 }
 
 export type EditorInspectTargetStatus = "ok" | "missing" | "unsupported";
+type SupportedInspectionTargetKinds = readonly ["parameter", "sourceAsset"];
 
 export interface EditorInspectTargetProjection extends InspectTargetResult {
   readonly schemaVersion: "editor-inspection-projection-v1";
   readonly status: EditorInspectTargetStatus;
   readonly reason?: "target_not_found" | "unsupported_target_kind";
-  readonly supportedTargetKinds?: readonly ["parameter"];
+  readonly supportedTargetKinds?: SupportedInspectionTargetKinds;
   readonly parameter?: ParameterInspectionDetail;
+  readonly sourceAsset?: SourceAssetInspectionDetail;
   readonly diagnostics?: readonly DiagnosticDto[];
 }
 
@@ -50,6 +53,60 @@ export interface ParameterInspectionDetail {
   readonly recommendedUiStep: number;
 }
 
+export interface SourceAssetInspectionDetail {
+  readonly sourceAssetId: string;
+  readonly kind: string;
+  readonly filePath: string;
+  readonly importProfile: string;
+  readonly layerCount: number;
+  readonly flattenedDiagnostics: readonly string[];
+  readonly projectionBasis: "structured-psd-profile-metadata" | "source-manifest-flattened-summary";
+  readonly truthfulness: string;
+  readonly structuredPsdProfile?: {
+    readonly adapterName: string;
+    readonly adapterEvidenceKind: string;
+    readonly canvas: {
+      readonly width: number;
+      readonly height: number;
+    };
+    readonly sourceGroupCount: number;
+    readonly sourceLayerCount: number;
+    readonly unsupportedFeatureCount: number;
+    readonly adapterDiagnosticCount: number;
+    readonly compatibilityPolicy: {
+      readonly structuredProfilePrecedence: string;
+      readonly flattenedDiagnosticsFallback: string;
+      readonly flattenedUnsupportedFeaturesFallback: string;
+    };
+    readonly sourceGroups: readonly {
+      readonly sourceGroupId: string;
+      readonly groupPath: readonly string[];
+      readonly visibleInSource: boolean;
+      readonly opacityInSource: number;
+      readonly unsupportedFeatureIds: readonly string[];
+      readonly targetPartId?: string;
+    }[];
+    readonly sourceLayers: readonly {
+      readonly sourceLayerId: string;
+      readonly groupPath: readonly string[];
+      readonly bounds: SourceAssetDto["layers"][number]["bounds"];
+      readonly visibleInSource: boolean;
+      readonly opacityInSource: number;
+      readonly role: string;
+      readonly unsupportedFeatureIds: readonly string[];
+      readonly texturePreviewReference?: string;
+      readonly textureId?: string;
+      readonly targetPartId?: string;
+    }[];
+    readonly adapterDiagnostics: readonly {
+      readonly checkId: string;
+      readonly severity: string;
+      readonly message: string;
+      readonly evidence: readonly string[];
+    }[];
+  };
+}
+
 type ParameterInspectionSource =
   | {
       readonly source: "packageDocument";
@@ -61,6 +118,20 @@ type ParameterInspectionSource =
       readonly index: number;
       readonly parameter: ParameterListItemState;
     };
+
+type SourceAssetInspectionSource =
+  | {
+      readonly source: "packageDocument";
+      readonly index: number;
+      readonly sourceAsset: SourceAssetDto;
+    }
+  | {
+      readonly source: "editorState";
+      readonly index: number;
+      readonly sourceAsset: SourceAssetDto;
+    };
+
+const supportedInspectionTargetKinds = ["parameter", "sourceAsset"] as const satisfies SupportedInspectionTargetKinds;
 
 export const projectEditorInspectModel = (
   input: EditorInspectionProjectorInput
@@ -87,6 +158,10 @@ export const projectEditorInspectTarget = (
   target: TargetRefDto,
   options: { readonly includeReferences?: boolean } = {}
 ): EditorInspectTargetProjection => {
+  if (target.kind === "sourceAsset") {
+    return projectEditorInspectSourceAsset(input, target);
+  }
+
   if (target.kind !== "parameter") {
     return {
       schemaVersion: "editor-inspection-projection-v1",
@@ -94,14 +169,14 @@ export const projectEditorInspectTarget = (
       reason: "unsupported_target_kind",
       target,
       references: [],
-      supportedTargetKinds: ["parameter"],
+      supportedTargetKinds: supportedInspectionTargetKinds,
       diagnostics: [
         {
           checkId: CheckIdSchema.parse("ai.editor.inspectTarget.unsupportedTargetKind"),
           status: "needs_review",
           severity: "warning",
           phase: "editorInspection",
-          message: `inspectTarget currently supports parameter targets, not ${target.kind}.`,
+          message: `inspectTarget currently supports parameter and sourceAsset targets, not ${target.kind}.`,
           target,
           evidence: [],
           relatedAC: [],
@@ -120,7 +195,7 @@ export const projectEditorInspectTarget = (
       reason: "target_not_found",
       target,
       references: [],
-      supportedTargetKinds: ["parameter"],
+      supportedTargetKinds: supportedInspectionTargetKinds,
       diagnostics: [
         {
           checkId: CheckIdSchema.parse("ai.editor.inspectTarget.targetNotFound"),
@@ -152,6 +227,45 @@ export const projectEditorInspectTarget = (
   };
 };
 
+const projectEditorInspectSourceAsset = (
+  input: EditorInspectionProjectorInput,
+  target: TargetRefDto
+): EditorInspectTargetProjection => {
+  const sourceAsset = findSourceAssetSource(input, target.id);
+  if (sourceAsset === undefined) {
+    return {
+      schemaVersion: "editor-inspection-projection-v1",
+      status: "missing",
+      reason: "target_not_found",
+      target,
+      references: [],
+      supportedTargetKinds: supportedInspectionTargetKinds,
+      diagnostics: [
+        {
+          checkId: CheckIdSchema.parse("ai.editor.inspectTarget.sourceAssetNotFound"),
+          status: "needs_review",
+          severity: "warning",
+          phase: "editorInspection",
+          message: `Source asset target ${target.id} was not found in the current editor model.`,
+          target,
+          evidence: [],
+          relatedAC: [],
+          relatedScenarios: [],
+          repairCandidateIds: []
+        }
+      ]
+    };
+  }
+
+  return {
+    schemaVersion: "editor-inspection-projection-v1",
+    status: "ok",
+    target: sourceAssetTargetRef(sourceAsset.sourceAsset.sourceAssetId, sourceAsset.index),
+    references: [],
+    sourceAsset: projectSourceAssetDetail(sourceAsset.sourceAsset)
+  };
+};
+
 const listParameterSources = (
   input: EditorInspectionProjectorInput
 ): readonly ParameterInspectionSource[] => {
@@ -176,6 +290,31 @@ const findParameterSource = (
   parameterId: string
 ): ParameterInspectionSource | undefined =>
   listParameterSources(input).find(({ parameter }) => parameter.parameterId === parameterId);
+
+const listSourceAssetSources = (
+  input: EditorInspectionProjectorInput
+): readonly SourceAssetInspectionSource[] => {
+  const documentSourceAssets = input.packageDocument?.assets.sourceManifest.sourceAssets;
+  if (documentSourceAssets !== undefined) {
+    return documentSourceAssets.map((sourceAsset, index) => ({
+      source: "packageDocument",
+      index,
+      sourceAsset
+    }));
+  }
+
+  return (input.state?.sourceAssets ?? []).map((sourceAsset, index) => ({
+    source: "editorState",
+    index,
+    sourceAsset
+  }));
+};
+
+const findSourceAssetSource = (
+  input: EditorInspectionProjectorInput,
+  sourceAssetId: string
+): SourceAssetInspectionSource | undefined =>
+  listSourceAssetSources(input).find(({ sourceAsset }) => sourceAsset.sourceAssetId === sourceAssetId);
 
 const projectParameterDetail = (
   source: ParameterInspectionSource
@@ -210,6 +349,84 @@ const projectParameterDetail = (
     recommendedUiStep: parameter.recommendedUiStep
   };
 };
+
+const projectSourceAssetDetail = (
+  sourceAsset: SourceAssetDto
+): SourceAssetInspectionDetail => {
+  const profile = sourceAsset.psdProfile;
+
+  return {
+    sourceAssetId: sourceAsset.sourceAssetId,
+    kind: sourceAsset.kind,
+    filePath: sourceAsset.filePath,
+    importProfile: sourceAsset.importProfile,
+    layerCount: sourceAsset.layers.length,
+    flattenedDiagnostics: sourceAsset.diagnostics,
+    projectionBasis:
+      profile === undefined ? "source-manifest-flattened-summary" : "structured-psd-profile-metadata",
+    truthfulness:
+      profile === undefined
+        ? "Projection is based on source-manifest flattened metadata."
+        : "Projection is based on adapter-supplied structured PSD profile metadata; the editor did not parse PSD bytes, decode images, or extract rasters.",
+    ...(profile === undefined
+      ? {}
+      : {
+          structuredPsdProfile: {
+            adapterName: profile.adapter.adapterName,
+            adapterEvidenceKind: profile.adapter.evidenceKind,
+            canvas: {
+              width: profile.canvas.width,
+              height: profile.canvas.height
+            },
+            sourceGroupCount: profile.sourceGroups.length,
+            sourceLayerCount: profile.sourceLayers.length,
+            unsupportedFeatureCount: countStructuredUnsupportedFeatures(profile),
+            adapterDiagnosticCount: profile.diagnostics.length,
+            compatibilityPolicy: {
+              structuredProfilePrecedence: profile.compatibility.structuredProfilePrecedence,
+              flattenedDiagnosticsFallback: profile.compatibility.flattenedDiagnosticsFallback,
+              flattenedUnsupportedFeaturesFallback:
+                profile.compatibility.flattenedUnsupportedFeaturesFallback
+            },
+            sourceGroups: profile.sourceGroups.map((group) => ({
+              sourceGroupId: group.sourceGroupId,
+              groupPath: group.groupPath,
+              visibleInSource: group.visibleInSource,
+              opacityInSource: group.opacityInSource,
+              unsupportedFeatureIds: group.unsupportedFeatures.map((feature) => feature.featureId),
+              ...(group.targetPartId === undefined ? {} : { targetPartId: group.targetPartId })
+            })),
+            sourceLayers: profile.sourceLayers.map((layer) => ({
+              sourceLayerId: layer.sourceLayerId,
+              groupPath: layer.groupPath,
+              bounds: layer.bounds,
+              visibleInSource: layer.visibleInSource,
+              opacityInSource: layer.opacityInSource,
+              role: layer.role,
+              unsupportedFeatureIds: layer.unsupportedFeatures.map((feature) => feature.featureId),
+              ...(layer.texturePreviewReference === undefined
+                ? {}
+                : { texturePreviewReference: layer.texturePreviewReference }),
+              ...(layer.textureId === undefined ? {} : { textureId: layer.textureId }),
+              ...(layer.targetPartId === undefined ? {} : { targetPartId: layer.targetPartId })
+            })),
+            adapterDiagnostics: profile.diagnostics.map((diagnostic) => ({
+              checkId: diagnostic.checkId,
+              severity: diagnostic.severity,
+              message: diagnostic.message,
+              evidence: diagnostic.evidence
+            }))
+          }
+        })
+  };
+};
+
+const countStructuredUnsupportedFeatures = (
+  profile: NonNullable<SourceAssetDto["psdProfile"]>
+): number =>
+  profile.unsupportedFeatures.length +
+  profile.sourceGroups.reduce((count, group) => count + group.unsupportedFeatures.length, 0) +
+  profile.sourceLayers.reduce((count, layer) => count + layer.unsupportedFeatures.length, 0);
 
 const listParameterReferences = (
   packageDocument: PackageDocumentDto | undefined,
@@ -283,6 +500,12 @@ const parameterTargetRef = (parameterId: string, index: number): TargetRefDto =>
   kind: "parameter",
   id: parameterId,
   path: `/model/parameters/parameters/${index}`
+});
+
+const sourceAssetTargetRef = (sourceAssetId: string, index: number): TargetRefDto => ({
+  kind: "sourceAsset",
+  id: sourceAssetId,
+  path: `/assets/sourceManifest/sourceAssets/${index}`
 });
 
 const keyformSetTargetRef = (keyformSetId: string, index: number): TargetRefDto => ({

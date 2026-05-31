@@ -246,10 +246,14 @@ describe("editor workflow controller", () => {
   });
 
   it("imports a manual PSD adapter/profile source draft through importPsdSourceAsset", () => {
-    const workflow = createWorkflow(createMemoryStorage());
+    const storage = createMemoryStorage();
+    const workflow = createWorkflow(storage);
 
     const imported = workflow.commitSourceIntakeDraft(createPsdSourceIntakeDraft());
-    const snapshot = workflow.saveProject().snapshot;
+    const saved = workflow.saveProject();
+    const snapshot = saved.snapshot;
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
     const sourceAsset = snapshot.document.assets.sourceManifest.sourceAssets.find(
       (candidate) => candidate.sourceAssetId === "src_workflow_psd_profile"
     );
@@ -280,6 +284,61 @@ describe("editor workflow controller", () => {
         })
       ]
     });
+    expect(sourceAsset?.psdProfile).toMatchObject({
+      schemaVersion: "layered-character-psd-profile-v1",
+      adapter: {
+        adapterName: "manual-psd-profile-entry",
+        evidenceKind: "adapter-supplied-metadata-v1"
+      },
+      canvas: {
+        width: 2048,
+        height: 3072
+      },
+      sourceGroups: [
+        expect.objectContaining({
+          sourceGroupId: "group_root",
+          groupPath: ["Root"]
+        }),
+        expect.objectContaining({
+          sourceGroupId: "group_root_head",
+          groupPath: ["Root", "Head"]
+        })
+      ],
+      sourceLayers: [
+        expect.objectContaining({
+          sourceLayerId: "layer_face",
+          texturePreviewReference: "assets/sources/workflow/face.preview.png",
+          textureId: "tex_face",
+          targetPartId: "part_root",
+          unsupportedFeatures: [
+            expect.objectContaining({
+              featureId: "psd.textLayer",
+              manualConfirmationRequired: true
+            })
+          ]
+        })
+      ],
+      diagnostics: [
+        expect.objectContaining({
+          checkId: "adapter.psd.manualProfileMetadata"
+        })
+      ]
+    });
+    expect(workflow.viewModel.sourceIntake.importedAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceAssetId: "src_workflow_psd_profile",
+        profileEvidenceLabel:
+          "Structured PSD profile metadata from manual-psd-profile-entry; editor did not parse PSD bytes.",
+        psdProfile: expect.objectContaining({
+          adapterLabel: "manual-psd-profile-entry / adapter-supplied-metadata-v1",
+          canvasLabel: "2048 x 3072 / 0, 0 / 2048 x 3072",
+          sourceGroupCountLabel: "2 source groups",
+          structuredLayerCountLabel: "1 structured layer",
+          unsupportedFeatureCountLabel: "1 structured unsupported feature",
+          adapterDiagnosticCountLabel: "1 adapter diagnostic"
+        })
+      })
+    ]));
     expect(snapshot.document.assets.textureAtlas).toMatchObject({
       textures: [
         expect.objectContaining({
@@ -333,6 +392,31 @@ describe("editor workflow controller", () => {
       }
     });
     expect(JSON.stringify(importEntry?.payload)).not.toMatch(/FileReader|readFile|decode|raster extraction/i);
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.sourceAssets.find(
+      (candidate) => candidate.sourceAssetId === "src_workflow_psd_profile"
+    )?.psdProfile).toMatchObject({
+      adapter: {
+        adapterName: "manual-psd-profile-entry"
+      },
+      sourceLayers: [
+        expect.objectContaining({
+          sourceLayerId: "layer_face",
+          textureId: "tex_face",
+          targetPartId: "part_root"
+        })
+      ]
+    });
+    expect(second.viewModel.sourceIntake.importedAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceAssetId: "src_workflow_psd_profile",
+        profileEvidenceLabel:
+          "Structured PSD profile metadata from manual-psd-profile-entry; editor did not parse PSD bytes.",
+        psdProfile: expect.objectContaining({
+          unsupportedFeatureCountLabel: "1 structured unsupported feature"
+        })
+      })
+    ]));
   });
 
   it("does not treat blocked source intake rights as a successful import", () => {

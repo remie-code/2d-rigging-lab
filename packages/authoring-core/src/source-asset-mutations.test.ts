@@ -1,8 +1,10 @@
 import {
   OperationIdSchema,
   PackageIdSchema,
+  PartIdSchema,
   ProvenanceIdSchema,
-  SourceAssetIdSchema
+  SourceAssetIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -100,6 +102,33 @@ describe("source asset authoring mutations", () => {
       "psd.layerTexture:layer_face:tex_face",
       expect.stringContaining("psd.layerUnsupportedFeature:layer_face:")
     ]));
+    expect(session.graph.sourceAssets[0]?.psdProfile).toMatchObject({
+      schemaVersion: "layered-character-psd-profile-v1",
+      adapter: {
+        adapterName: "fixture-psd-adapter",
+        adapterResultSchemaVersion: "psd-adapter-result-v1",
+        evidenceKind: "adapter-supplied-metadata-v1"
+      },
+      compatibility: {
+        structuredProfilePrecedence: "structured-profile-preferred-v1",
+        flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+        flattenedUnsupportedFeaturesFallback:
+          "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+      }
+    });
+    expect(session.graph.sourceAssets[0]?.psdProfile?.sourceLayers[0]).toMatchObject({
+      sourceLayerId: "layer_face",
+      role: "referenceOnly",
+      texturePreviewReference: "assets/textures/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root",
+      unsupportedFeatures: [
+        expect.objectContaining({
+          featureId: "psd.textLayer",
+          scope: "layer"
+        })
+      ]
+    });
     expect(session.graph.provenanceRecords[0]).toMatchObject({
       provenanceId: "prov_import_psd_character",
       assetId: "src_psd_character",
@@ -249,7 +278,78 @@ const createPsdSourceAsset = (): AuthoringSession["graph"]["sourceAssets"][numbe
     "psd.layerTexture:layer_face:tex_face",
     "psd.layerTexturePreview:layer_face:assets/textures/face.preview.png",
     "psd.layerUnsupportedFeature:layer_face:{\"featureId\":\"psd.textLayer\",\"scope\":\"layer\",\"severity\":\"warning\",\"message\":\"Text layer requires adapter-side rasterization before materialization.\",\"rasterizeCandidate\":true,\"manualConfirmationRequired\":true}"
-  ]
+  ],
+  psdProfile: {
+    schemaVersion: "layered-character-psd-profile-v1",
+    adapter: {
+      adapterName: "fixture-psd-adapter",
+      adapterResultSchemaVersion: "psd-adapter-result-v1",
+      sourceProfile: "layered-character-psd-profile-v1",
+      evidenceKind: "adapter-supplied-metadata-v1"
+    },
+    canvas: {
+      width: 2048,
+      height: 3072,
+      bounds: { x: 0, y: 0, width: 2048, height: 3072 }
+    },
+    sourceGroups: [
+      {
+        sourceGroupId: "group_head",
+        originalName: "Head",
+        normalizedName: "head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 0,
+        visibleInSource: true,
+        opacityInSource: 1,
+        targetPartId: PartIdSchema.parse("part_root"),
+        unsupportedFeatures: []
+      }
+    ],
+    sourceLayers: [
+      {
+        sourceLayerId: "layer_face",
+        originalName: "Face",
+        normalizedName: "face",
+        parentGroupId: "group_head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 1,
+        bounds: { x: 320, y: 240, width: 512, height: 512 },
+        visibleInSource: true,
+        opacityInSource: 0.8,
+        role: "referenceOnly",
+        unsupportedFeatures: [
+          {
+            featureId: "psd.textLayer",
+            scope: "layer",
+            severity: "warning",
+            message: "Text layer requires adapter-side rasterization before materialization.",
+            source: { kind: "layer", id: "layer_face" },
+            rasterizeCandidate: true,
+            manualConfirmationRequired: true
+          }
+        ],
+        texturePreviewReference: "assets/textures/face.preview.png",
+        textureId: TextureIdSchema.parse("tex_face"),
+        targetPartId: PartIdSchema.parse("part_root")
+      }
+    ],
+    unsupportedFeatures: [],
+    diagnostics: [
+      {
+        checkId: "adapter.psd.unsupportedFeature",
+        severity: "warning",
+        message: "Adapter detected PSD features that operation-core must not render.",
+        source: { kind: "adapter", path: "/unsupportedFeatures" },
+        evidence: ["fixture-adapter-diagnostic"]
+      }
+    ],
+    compatibility: {
+      structuredProfilePrecedence: "structured-profile-preferred-v1",
+      flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+      flattenedUnsupportedFeaturesFallback:
+        "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+    }
+  }
 });
 
 const createProvenanceRecord = (): AuthoringSession["graph"]["provenanceRecords"][number] => ({

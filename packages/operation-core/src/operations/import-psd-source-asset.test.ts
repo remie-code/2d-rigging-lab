@@ -46,6 +46,55 @@ describe("importPsdSourceAsset operation handler", () => {
       groupPath: ["Root", "Head"],
       unsupportedFeatures: ["psd.textLayer"]
     });
+    expect(outcome.candidateSession.graph.sourceAssets[0]?.psdProfile).toMatchObject({
+      schemaVersion: "layered-character-psd-profile-v1",
+      adapter: {
+        adapterName: "fixture-psd-adapter",
+        adapterResultSchemaVersion: "psd-adapter-result-v1",
+        sourceProfile: "layered-character-psd-profile-v1",
+        evidenceKind: "adapter-supplied-metadata-v1"
+      },
+      canvas: {
+        width: 2048,
+        height: 3072,
+        bounds: { x: 0, y: 0, width: 2048, height: 3072 }
+      },
+      compatibility: {
+        structuredProfilePrecedence: "structured-profile-preferred-v1",
+        flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+        flattenedUnsupportedFeaturesFallback:
+          "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+      }
+    });
+    expect(outcome.candidateSession.graph.sourceAssets[0]?.psdProfile?.sourceGroups[0]).toMatchObject({
+      sourceGroupId: "group_head",
+      blendMode: {
+        modeKey: "pass",
+        normalizedMode: "passThrough",
+        supportedByMvp: false
+      },
+      targetPartId: "part_root"
+    });
+    expect(outcome.candidateSession.graph.sourceAssets[0]?.psdProfile?.sourceLayers[0]).toMatchObject({
+      sourceLayerId: "layer_face",
+      role: "referenceOnly",
+      blendMode: {
+        modeKey: "mul ",
+        normalizedMode: "multiply",
+        displayName: "Multiply",
+        supportedByMvp: false
+      },
+      texturePreviewReference: "assets/textures/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root",
+      unsupportedFeatures: [
+        expect.objectContaining({
+          featureId: "psd.textLayer",
+          scope: "layer",
+          manualConfirmationRequired: true
+        })
+      ]
+    });
     expect(outcome.candidateSession.graph.sourceAssets[0]?.diagnostics).toEqual(
       expect.arrayContaining([
         "psd.layerTargetPart:layer_face:part_root",
@@ -86,6 +135,12 @@ describe("importPsdSourceAsset operation handler", () => {
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(2);
     expect(session.graph.sourceAssets).toHaveLength(1);
+    expect(session.graph.sourceAssets[0]?.psdProfile?.sourceLayers[0]).toMatchObject({
+      sourceLayerId: "layer_face",
+      texturePreviewReference: "assets/textures/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root"
+    });
     expect(session.graph.provenanceRecords[0]).toMatchObject({
       provenanceId: "prov_import_psd_character",
       assetId: "src_psd_character",
@@ -244,6 +299,12 @@ const createImportPsdRequest = (options: {
                   normalizedName: "head",
                   groupPath: ["Root", "Head"],
                   sourceOrder: 0,
+                  blendMode: {
+                    modeKey: "pass",
+                    normalizedMode: "passThrough",
+                    supportedByMvp: false,
+                    source: { kind: "group", id: "group_head" }
+                  },
                   targetPartId: "part_root"
                 }
               ],
@@ -259,6 +320,13 @@ const createImportPsdRequest = (options: {
                   visibleInSource: true,
                   opacityInSource: 0.8,
                   role: "referenceOnly",
+                  blendMode: {
+                    modeKey: "mul ",
+                    normalizedMode: "multiply",
+                    displayName: "Multiply",
+                    supportedByMvp: false,
+                    source: { kind: "layer", id: "layer_face" }
+                  },
                   unsupportedFeatures: [
                     {
                       featureId: "psd.textLayer",

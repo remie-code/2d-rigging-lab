@@ -17,6 +17,10 @@ import { validatePackageRuntime } from "./validators/package-runtime.js";
 describe("PSD source profile validator diagnostics", () => {
   it("registers PSD source profile checks in the catalog", () => {
     expect(defaultCheckCatalog.has("asset.psd.unsupportedFeature")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.adapterDiagnostic")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.structuredProfileMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.structuredProfileMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.flattenedFallbackMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("rights.psdLayerProvenanceMissing")).toBe(true);
   });
 
@@ -27,11 +31,26 @@ describe("PSD source profile validator diagnostics", () => {
     expect(report.checks).toEqual([]);
   });
 
-  it("reports unsupported PSD features as source-targeted diagnostics", () => {
+  it("reports structured unsupported PSD layer features as source-targeted diagnostics", () => {
     const document = createPsdPackageDocument();
-    const sourceLayer = expectPsdLayer(document);
+    const profile = expectPsdProfile(document);
+    const structuredLayer = profile.sourceLayers[0];
 
-    sourceLayer.unsupportedFeatures = ["smartObject"];
+    if (structuredLayer === undefined) {
+      throw new Error("Expected structured PSD layer.");
+    }
+
+    structuredLayer.unsupportedFeatures = [
+      {
+        featureId: "psd.smartObject",
+        scope: "layer",
+        severity: "warning",
+        message: "Smart object layer remains adapter metadata only.",
+        source: { kind: "layer", id: "psd_layer_body" },
+        rasterizeCandidate: true,
+        manualConfirmationRequired: true
+      }
+    ];
 
     const report = validatePsdPackage(document);
     const check = expectCheckById(report, "asset.psd.unsupportedFeature");
@@ -45,9 +64,9 @@ describe("PSD source profile validator diagnostics", () => {
       target: {
         kind: "sourceAsset",
         id: "src_psd_profile",
-        path: "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/0"
+        path: "/assets/sourceManifest/sourceAssets/0/psdProfile/sourceLayers/0/unsupportedFeatures/0"
       },
-      targetPath: "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/0",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile/sourceLayers/0/unsupportedFeatures/0",
       relatedAC: ["AC-MVP-003", "AC-MVP-013"],
       relatedScenarios: ["SC-IN-003"]
     });
@@ -55,9 +74,190 @@ describe("PSD source profile validator diagnostics", () => {
       "sourceAssetId=src_psd_profile",
       "sourceKind=psd-source-v1",
       "importProfile=layered-character-psd-profile-v1",
+      "adapterName=synthetic-structured-profile-fixture",
+      "profileEntry=sourceLayer",
+      "sourceLayerId=psd_layer_body",
+      "sourceLayerRole=editableLayer",
+      "targetPartId=part_body",
+      "textureId=tex_psd_body",
+      "unsupportedFeature=psd.smartObject",
+      "unsupportedFeatureScope=layer",
+      "rasterizeCandidate=true",
+      "manualConfirmationRequired=true",
+      "unsupportedFeatureSourceKind=layer",
+      "unsupportedFeatureSourceId=psd_layer_body",
+      "structuredProfile=psdProfile",
+      "compatibility=structured-profile-preferred-v1",
+      "flattenedFallback=sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+    ]));
+  });
+
+  it("reports structured unsupported PSD group features with group identity", () => {
+    const document = createPsdPackageDocument();
+    const sourceGroup = expectPsdProfile(document).sourceGroups[0];
+
+    if (sourceGroup === undefined) {
+      throw new Error("Expected structured PSD group.");
+    }
+
+    sourceGroup.unsupportedFeatures = [
+      {
+        featureId: "psd.passThroughBlend",
+        scope: "group",
+        severity: "warning",
+        message: "Pass-through group blend mode remains source metadata only.",
+        source: { kind: "group", id: "group_body" },
+        rasterizeCandidate: false,
+        manualConfirmationRequired: true
+      }
+    ];
+
+    const report = validatePsdPackage(document);
+    const check = expectCheckById(report, "asset.psd.unsupportedFeature");
+
+    expect(check.targetPath).toBe(
+      "/assets/sourceManifest/sourceAssets/0/psdProfile/sourceGroups/0/unsupportedFeatures/0"
+    );
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "profileEntry=sourceGroup",
+      "sourceGroupId=group_body",
+      "groupPath=Root/Body",
+      "targetPartId=part_body",
+      "unsupportedFeature=psd.passThroughBlend",
+      "unsupportedFeatureScope=group",
+      "manualConfirmationRequired=true"
+    ]));
+  });
+
+  it("keeps flattened PSD unsupported features as compatibility fallback", () => {
+    const document = createPsdPackageDocument();
+    const sourceAsset = expectPsdSourceAsset(document);
+    const sourceLayer = expectPsdLayer(document);
+
+    delete sourceAsset.psdProfile;
+    sourceLayer.unsupportedFeatures = ["smartObject"];
+
+    const report = validatePsdPackage(document);
+    const fallbackCheck = expectCheckById(report, "asset.psd.structuredProfileMissing");
+    const unsupportedCheck = expectCheckById(report, "asset.psd.unsupportedFeature");
+
+    expect(report.summary.status).toBe("needs_review");
+    expect(fallbackCheck).toMatchObject({
+      checkId: "asset.psd.structuredProfileMissing",
+      status: "pass",
+      severity: "info",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile"
+    });
+    expect(fallbackCheck.evidence).toEqual(expect.arrayContaining([
+      "structuredProfile=missing",
+      "fallbackCompatibility=sourceAsset.diagnostics-summary-fallback-v1",
+      "flattenedUnsupportedFeaturesFallback=sourceLayer.unsupportedFeatures-feature-id-fallback-v1",
+      "flattenedUnsupportedFeatureCount=1"
+    ]));
+    expect(unsupportedCheck).toMatchObject({
+      checkId: "asset.psd.unsupportedFeature",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/0"
+    });
+    expect(unsupportedCheck.evidence).toEqual(expect.arrayContaining([
       "sourceLayerId=psd_layer_body",
       "unsupportedFeature=smartObject",
       "flatteningStrategy=sourceLayer.unsupportedFeatures[]"
+    ]));
+  });
+
+  it("reports structured PSD adapter diagnostics with adapter evidence", () => {
+    const document = createPsdPackageDocument();
+    const profile = expectPsdProfile(document);
+
+    profile.diagnostics = [
+      {
+        checkId: "adapter.psd.blendModeUnsupported",
+        severity: "warning",
+        message: "Blend mode is retained as metadata only.",
+        source: { kind: "layer", id: "psd_layer_body" },
+        evidence: ["blendMode=mul ", "normalizedMode=multiply"]
+      }
+    ];
+
+    const report = validatePsdPackage(document);
+    const check = expectCheckById(report, "asset.psd.adapterDiagnostic");
+
+    expect(check).toMatchObject({
+      checkId: "asset.psd.adapterDiagnostic",
+      status: "needs_review",
+      severity: "warning",
+      phase: "source_import",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile/diagnostics/0"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "adapterName=synthetic-structured-profile-fixture",
+      "adapterDiagnosticCheckId=adapter.psd.blendModeUnsupported",
+      "adapterDiagnosticSeverity=warning",
+      "adapterDiagnosticSourceKind=layer",
+      "adapterDiagnosticSourceId=psd_layer_body",
+      "adapterEvidence[0]=blendMode=mul ",
+      "adapterEvidence[1]=normalizedMode=multiply",
+      "structuredProfile=psdProfile"
+    ]));
+  });
+
+  it("reports mismatched flattened unsupported feature fallback when structured profile is authoritative", () => {
+    const document = createPsdPackageDocument();
+    const sourceLayer = expectPsdLayer(document);
+
+    sourceLayer.unsupportedFeatures = ["psd.layerEffects"];
+
+    const report = validatePsdPackage(document);
+    const check = expectCheckById(report, "asset.psd.flattenedFallbackMismatch");
+
+    expect(check).toMatchObject({
+      checkId: "asset.psd.flattenedFallbackMismatch",
+      status: "needs_review",
+      severity: "warning",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "sourceLayerId=psd_layer_body",
+      "structuredUnsupportedFeatures=none",
+      "flattenedUnsupportedFeatures=psd.layerEffects",
+      "structuredProfile=psdProfile",
+      "compatibility=structured-profile-preferred-v1",
+      "flattenedFallback=sourceLayer.unsupportedFeatures-feature-id-fallback-v1",
+      "reason=unsupported-feature-fallback-mismatch"
+    ]));
+  });
+
+  it("rejects PSD structured profile metadata on non-PSD source assets", () => {
+    const document = createPsdPackageDocument();
+    const sourceAsset = expectPsdSourceAsset(document);
+    const sourceProvenance = document.assets.provenance.records.find((record) =>
+      record.assetId === "src_psd_profile"
+    );
+
+    sourceAsset.kind = "split-png-set-v1";
+    sourceAsset.importProfile = "split-png-fallback-v1";
+    sourceAsset.filePath = "assets/sources/split/body.png";
+    sourceAsset.diagnostics = ["split-png-fallback-v1"];
+
+    if (sourceProvenance !== undefined) {
+      sourceProvenance.filePath = "assets/sources/split/body.png";
+    }
+
+    const report = validatePsdPackage(document);
+    const check = expectCheckById(report, "asset.psd.structuredProfileMismatch");
+
+    expect(report.summary.status).toBe("fail");
+    expect(check).toMatchObject({
+      checkId: "asset.psd.structuredProfileMismatch",
+      status: "fail",
+      severity: "error",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "sourceKind=split-png-set-v1",
+      "importProfile=split-png-fallback-v1",
+      "structuredProfile=present",
+      "reason=psd-profile-on-non-psd-source"
     ]));
   });
 
@@ -188,6 +388,7 @@ describe("PSD source profile validator diagnostics", () => {
     sourceAsset.importProfile = "split-png-fallback-v1";
     sourceAsset.filePath = "assets/sources/split/body.png";
     sourceAsset.diagnostics = ["source.psd.absent"];
+    delete sourceAsset.psdProfile;
     sourceProvenance.filePath = "assets/sources/split/body.png";
 
     const report = validatePsdPackage(document);
@@ -211,6 +412,26 @@ const expectPsdLayer = (document: PackageDocumentDto) => {
   }
 
   return sourceLayer;
+};
+
+const expectPsdSourceAsset = (document: PackageDocumentDto) => {
+  const sourceAsset = document.assets.sourceManifest.sourceAssets[0];
+
+  if (sourceAsset === undefined) {
+    throw new Error("Expected PSD fixture source asset.");
+  }
+
+  return sourceAsset;
+};
+
+const expectPsdProfile = (document: PackageDocumentDto) => {
+  const profile = expectPsdSourceAsset(document).psdProfile;
+
+  if (profile === undefined) {
+    throw new Error("Expected structured PSD profile.");
+  }
+
+  return profile;
 };
 
 const expectCheckById = (
@@ -390,7 +611,90 @@ const createPsdPackageDocument = (): PackageDocumentDto =>
             ],
             diagnostics: [
               "profile.adapterResultSupplied"
-            ]
+            ],
+            psdProfile: {
+              schemaVersion: "layered-character-psd-profile-v1",
+              adapter: {
+                adapterName: "synthetic-structured-profile-fixture",
+                adapterResultSchemaVersion: "psd-adapter-result-v1",
+                sourceProfile: "layered-character-psd-profile-v1",
+                evidenceKind: "adapter-supplied-metadata-v1"
+              },
+              canvas: {
+                width: 2048,
+                height: 3072,
+                bounds: {
+                  x: 0,
+                  y: 0,
+                  width: 2048,
+                  height: 3072
+                }
+              },
+              sourceGroups: [
+                {
+                  sourceGroupId: "group_body",
+                  originalName: "Body",
+                  normalizedName: "body",
+                  groupPath: ["Root", "Body"],
+                  sourceOrder: 0,
+                  visibleInSource: true,
+                  opacityInSource: 1,
+                  bounds: {
+                    x: 0,
+                    y: 0,
+                    width: 128,
+                    height: 128
+                  },
+                  blendMode: {
+                    modeKey: "pass",
+                    normalizedMode: "passThrough",
+                    displayName: "Pass Through",
+                    supportedByMvp: false,
+                    source: { kind: "group", id: "group_body" }
+                  },
+                  targetPartId: "part_body",
+                  unsupportedFeatures: []
+                }
+              ],
+              sourceLayers: [
+                {
+                  sourceLayerId: "psd_layer_body",
+                  originalName: "Body",
+                  normalizedName: "body",
+                  parentGroupId: "group_body",
+                  groupPath: ["Root", "Body"],
+                  sourceOrder: 1,
+                  bounds: {
+                    x: 0,
+                    y: 0,
+                    width: 128,
+                    height: 128
+                  },
+                  visibleInSource: true,
+                  opacityInSource: 0.9,
+                  role: "editableLayer",
+                  blendMode: {
+                    modeKey: "norm",
+                    normalizedMode: "normal",
+                    displayName: "Normal",
+                    supportedByMvp: true,
+                    source: { kind: "layer", id: "psd_layer_body" }
+                  },
+                  unsupportedFeatures: [],
+                  texturePreviewReference: "assets/textures/psd/body.preview.png",
+                  textureId: "tex_psd_body",
+                  targetPartId: "part_body"
+                }
+              ],
+              unsupportedFeatures: [],
+              diagnostics: [],
+              compatibility: {
+                structuredProfilePrecedence: "structured-profile-preferred-v1",
+                flattenedDiagnosticsFallback: "sourceAsset.diagnostics-summary-fallback-v1",
+                flattenedUnsupportedFeaturesFallback:
+                  "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+              }
+            }
           }
         ]
       },

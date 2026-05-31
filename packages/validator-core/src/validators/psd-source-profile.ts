@@ -8,6 +8,12 @@ import type {
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import {
+  createStructuredProfileMismatchCheck,
+  createStructuredProfileMissingCheck,
+  hasFlattenedPsdProfileEvidence,
+  validateStructuredPsdProfile
+} from "./psd-source-profile-structured.js";
 
 export const validatePsdSourceProfiles = (
   packageDocument: PackageDocumentDto
@@ -16,13 +22,28 @@ export const validatePsdSourceProfiles = (
   const checks: ValidationCheckResultDto[] = [];
 
   packageDocument.assets.sourceManifest.sourceAssets.forEach((sourceAsset, sourceAssetIndex) => {
+    if (sourceAsset.psdProfile !== undefined && !isPsdSourceProfile(sourceAsset)) {
+      checks.push(createStructuredProfileMismatchCheck(sourceAsset, sourceAssetIndex));
+      return;
+    }
+
     if (!isPsdSourceProfile(sourceAsset)) {
       return;
     }
 
+    if (sourceAsset.psdProfile === undefined) {
+      if (hasFlattenedPsdProfileEvidence(sourceAsset)) {
+        checks.push(createStructuredProfileMissingCheck(sourceAsset, sourceAssetIndex));
+      }
+    } else {
+      checks.push(...validateStructuredPsdProfile(sourceAsset, sourceAssetIndex, sourceAsset.psdProfile));
+    }
+
     sourceAsset.layers.forEach((sourceLayer, sourceLayerIndex) => {
       checks.push(
-        ...validateUnsupportedLayerFeatures(sourceAsset, sourceAssetIndex, sourceLayer, sourceLayerIndex),
+        ...(sourceAsset.psdProfile === undefined
+          ? validateUnsupportedLayerFeatures(sourceAsset, sourceAssetIndex, sourceLayer, sourceLayerIndex)
+          : []),
         ...validateMappedLayerProvenance(sourceAsset, sourceAssetIndex, sourceLayer, sourceLayerIndex, indexes)
       );
     });

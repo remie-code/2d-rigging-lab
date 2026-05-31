@@ -11,13 +11,61 @@
     "status": "pass",
     "highestSeverity": "info",
     "counts": {
-      "info": 0,
+      "info": 1,
       "warning": 0,
       "error": 0,
       "blocking": 0
     }
   },
-  "checks": [],
+  "checks": [
+    {
+      "checkId": "asset.psd.adapterDiagnostic",
+      "status": "pass",
+      "severity": "info",
+      "phase": "source_import",
+      "target": {
+        "kind": "sourceAsset",
+        "id": "src_psd_import_happy_path",
+        "path": "/assets/sourceManifest/sourceAssets/0/psdProfile/diagnostics/0"
+      },
+      "message": "PSD adapter synthetic-sample-model-profile-fixture reported adapter.sampleHeaderFacts: Synthetic adapter result follows the rights-cleared sample PSD header shape without fixture PSD bytes.",
+      "evidence": [
+        "sourceAssetId=src_psd_import_happy_path",
+        "sourceKind=psd-source-v1",
+        "importProfile=layered-character-psd-profile-v1",
+        "adapterName=synthetic-sample-model-profile-fixture",
+        "adapterResultSchemaVersion=psd-adapter-result-v1",
+        "sourceProfile=layered-character-psd-profile-v1",
+        "adapterEvidenceKind=adapter-supplied-metadata-v1",
+        "canvas=2048x3072",
+        "adapterDiagnosticCheckId=adapter.sampleHeaderFacts",
+        "adapterDiagnosticSeverity=info",
+        "adapterDiagnosticIndex=0",
+        "adapterDiagnosticSourceKind=document",
+        "adapterDiagnosticSourceId=missing",
+        "adapterDiagnosticSourcePath=/sample-characterization/header",
+        "adapterEvidence[0]=canvas=2048x3072",
+        "adapterEvidence[1]=channels=4",
+        "adapterEvidence[2]=depth=8",
+        "adapterEvidence[3]=colorMode=RGB",
+        "adapterEvidence[4]=psdBytesFixture=false",
+        "structuredProfile=psdProfile",
+        "compatibility=structured-profile-preferred-v1"
+      ],
+      "relatedAC": [
+        "AC-MVP-003",
+        "AC-MVP-013"
+      ],
+      "relatedScenarios": [
+        "SC-IN-003"
+      ],
+      "repairCandidateIds": [],
+      "targetPath": "/assets/sourceManifest/sourceAssets/0/psdProfile/diagnostics/0",
+      "impact": "The trusted PSD adapter supplied a structured diagnostic that should remain visible to AI and review consumers.",
+      "snapshotIds": [],
+      "operationIds": []
+    }
+  ],
   "repairCandidates": [],
   "evidence": {
     "operationLogPresent": false,

@@ -212,7 +212,8 @@ const createImportPsdSourceAssetEvidenceInput = (
     ...input.targetIds,
     ...(input.request.payload.sourceAssetId === undefined ? [] : [input.request.payload.sourceAssetId]),
     ...(input.request.payload.adapterResult?.sourceGroups.map((group) => group.sourceGroupId) ?? []),
-    ...(input.request.payload.adapterResult?.sourceLayers.map((layer) => layer.sourceLayerId) ?? [])
+    ...(input.request.payload.adapterResult?.sourceLayers.map((layer) => layer.sourceLayerId) ?? []),
+    ...collectCandidatePsdProfileEvidenceTargetIds(input)
   ]);
 
   return {
@@ -227,6 +228,77 @@ const createImportPsdSourceAssetEvidenceInput = (
     }
   };
 };
+
+const collectCandidatePsdProfileEvidenceTargetIds = (
+  input: OperationEvidenceProviderInput
+): readonly string[] => {
+  if (input.request.operationType !== "importPsdSourceAsset") {
+    return [];
+  }
+
+  const sourceAsset = findCandidatePsdSourceAsset(input);
+  const profile = sourceAsset?.psdProfile;
+  if (sourceAsset === undefined || profile === undefined) {
+    return [];
+  }
+
+  return [
+    `psd-profile:${sourceAsset.sourceAssetId}`,
+    `psd-profile-adapter:${sanitizeEvidenceTargetToken(profile.adapter.adapterName)}`,
+    `psd-profile-canvas:${formatEvidenceNumber(profile.canvas.width)}x${formatEvidenceNumber(profile.canvas.height)}`,
+    ...profile.sourceGroups.map((group) => `psd-profile-group:${group.sourceGroupId}`),
+    ...profile.sourceLayers.map((layer) => `psd-profile-layer:${layer.sourceLayerId}`),
+    ...profile.unsupportedFeatures.map((feature) =>
+      `psd-profile-unsupported:${feature.scope}:${sanitizeEvidenceTargetToken(feature.featureId)}`
+    ),
+    ...profile.sourceGroups.flatMap((group) =>
+      group.unsupportedFeatures.map((feature) =>
+        `psd-profile-group-unsupported:${group.sourceGroupId}:${sanitizeEvidenceTargetToken(feature.featureId)}`
+      )
+    ),
+    ...profile.sourceLayers.flatMap((layer) =>
+      layer.unsupportedFeatures.map((feature) =>
+        `psd-profile-layer-unsupported:${layer.sourceLayerId}:${sanitizeEvidenceTargetToken(feature.featureId)}`
+      )
+    ),
+    ...profile.diagnostics.map((diagnostic) =>
+      `psd-profile-diagnostic:${sanitizeEvidenceTargetToken(diagnostic.checkId)}`
+    )
+  ];
+};
+
+const findCandidatePsdSourceAsset = (
+  input: OperationEvidenceProviderInput
+): OperationEvidenceProviderInput["candidateSession"]["graph"]["sourceAssets"][number] | undefined => {
+  if (input.request.operationType !== "importPsdSourceAsset") {
+    return undefined;
+  }
+
+  const payload = input.request.payload as {
+    readonly sourceAssetId?: string;
+    readonly fileRef: {
+      readonly packageRelativePath: string;
+    };
+  };
+  const requestedSourceAssetId = payload.sourceAssetId;
+  if (requestedSourceAssetId !== undefined) {
+    return input.candidateSession.graph.sourceAssets.find(
+      (sourceAsset) => sourceAsset.sourceAssetId === requestedSourceAssetId
+    );
+  }
+
+  return input.candidateSession.graph.sourceAssets.find(
+    (sourceAsset) =>
+      sourceAsset.kind === "psd-source-v1" &&
+      sourceAsset.filePath === payload.fileRef.packageRelativePath
+  );
+};
+
+const sanitizeEvidenceTargetToken = (value: string): string =>
+  value.trim().replace(/[^A-Za-z0-9_.:-]+/g, "_").replace(/^_+|_+$/g, "") || "unnamed";
+
+const formatEvidenceNumber = (value: number): string =>
+  Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
 
 const createImportSplitPngSourceAssetEvidenceInput = (
   input: OperationEvidenceProviderInput

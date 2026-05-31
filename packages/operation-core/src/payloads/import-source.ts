@@ -69,6 +69,15 @@ export const PsdAdapterCanvasSchema = z.object({
 });
 export type PsdAdapterCanvasDto = z.infer<typeof PsdAdapterCanvasSchema>;
 
+export const PsdAdapterBlendModeSchema = z.object({
+  modeKey: z.string().min(1),
+  normalizedMode: z.string().min(1).optional(),
+  displayName: z.string().min(1).optional(),
+  supportedByMvp: z.boolean().default(false),
+  source: PsdAdapterSourceRefSchema.optional()
+});
+export type PsdAdapterBlendModeDto = z.infer<typeof PsdAdapterBlendModeSchema>;
+
 export const PsdAdapterSourceGroupSchema = z.object({
   sourceGroupId: z.string().min(1),
   originalName: z.string().min(1),
@@ -79,6 +88,7 @@ export const PsdAdapterSourceGroupSchema = z.object({
   visibleInSource: z.boolean().default(true),
   opacityInSource: z.number().min(0).max(1).default(1),
   bounds: RectSchema.optional(),
+  blendMode: PsdAdapterBlendModeSchema.optional(),
   targetPartId: PartIdSchema.optional(),
   unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([])
 });
@@ -105,6 +115,7 @@ export const PsdAdapterSourceLayerSchema = z.object({
   visibleInSource: z.boolean().default(true),
   opacityInSource: z.number().min(0).max(1).default(1),
   role: PsdAdapterSourceLayerRoleSchema.default("editableLayer"),
+  blendMode: PsdAdapterBlendModeSchema.optional(),
   unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
   texturePreviewReference: z.string().min(1).optional(),
   textureId: TextureIdSchema.optional(),
