@@ -1,0 +1,277 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_minimum_open_dynamics_v1_evidence",
+    "packageDisplayName": "Minimum Open Dynamics v1 Evidence",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-05-31T00:00:00.000Z",
+    "updatedAt": "2026-05-31T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 512,
+        "height": 512
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_hair"
+          ]
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "draw_hair",
+        "param_face_yaw",
+        "param_hair_sway"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_hair",
+          "displayName": "Fixture Hair",
+          "partId": "part_root",
+          "sourceAssetId": "src_generated_hair",
+          "textureId": "tex_hair",
+          "meshId": "mesh_hair",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_generated_hair"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_hair",
+          "drawableId": "draw_hair",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 2
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "v0",
+            "v1",
+            "v2"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          },
+          "generationProvenanceId": "prov_generated_hair"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": [
+        {
+          "parameterId": "param_face_yaw",
+          "displayName": "Face Yaw",
+          "semanticRole": "face",
+          "valueSource": "authoredInput",
+          "min": -1,
+          "max": 1,
+          "default": 0,
+          "recommendedUiStep": 0.01
+        },
+        {
+          "parameterId": "param_hair_sway",
+          "displayName": "Hair Sway",
+          "semanticRole": "dynamics",
+          "valueSource": "computedDynamics",
+          "min": -1,
+          "max": 1,
+          "default": 0,
+          "recommendedUiStep": 0.01
+        }
+      ]
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": [
+        {
+          "keyformSetId": "keyset_hair_sway_vertices",
+          "target": {
+            "kind": "mesh",
+            "id": "mesh_hair",
+            "property": "vertices"
+          },
+          "parameterId": "param_hair_sway",
+          "evaluator": "linear-1d-v1",
+          "interpolation": "linear-1d-v1",
+          "compositionMode": "replace",
+          "compositionOrder": 0,
+          "keys": [
+            {
+              "value": 0,
+              "statePatch": [
+                {
+                  "x": 0,
+                  "y": 0
+                },
+                {
+                  "x": 2,
+                  "y": 0
+                },
+                {
+                  "x": 0,
+                  "y": 2
+                }
+              ]
+            },
+            {
+              "value": 1,
+              "statePatch": [
+                {
+                  "x": 0,
+                  "y": 0.5
+                },
+                {
+                  "x": 2,
+                  "y": 0.5
+                },
+                {
+                  "x": 0,
+                  "y": 2.5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_hair",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_generated_hair",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/minimum-open-dynamics-hair.json",
+          "contentHash": "sha256:minimum-open-dynamics-v1-generated-hair",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_generated_hair",
+          "assetId": "src_generated_hair",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/minimum-open-dynamics-hair.json",
+          "creator": "test",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_generated_hair",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

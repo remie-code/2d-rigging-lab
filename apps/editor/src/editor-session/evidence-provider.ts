@@ -194,6 +194,10 @@ const createRuntimeEvidenceInput = (
       return createSetDrawOrderEvidenceInput(input);
     case "moveMeshVertex":
       return createMoveMeshVertexEvidenceInput(input);
+    case "createDynamicsGroup":
+      return createCreateDynamicsGroupEvidenceInput(input);
+    case "updateDynamicsGroup":
+      return createUpdateDynamicsGroupEvidenceInput(input);
     case "setRightsMetadata":
       return createSetRightsMetadataEvidenceInput(input);
     default:
@@ -527,6 +531,78 @@ const createMoveMeshVertexEvidenceInput = (
   };
 };
 
+const createCreateDynamicsGroupEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createDynamicsGroup") {
+    throw new Error(`createDynamicsGroup evidence input received ${input.request.operationType}.`);
+  }
+
+  const driverParameterIds = input.request.payload.drivers?.map((driver) => driver.sourceParameterId) ?? [];
+  const outputParameterId = input.request.payload.output?.targetParameterId;
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...driverParameterIds,
+    ...(outputParameterId === undefined ? [] : [outputParameterId])
+  ]);
+
+  return {
+    artifactLabel: "editor-create-dynamics-group",
+    authoredParameterValues: createRuntimeProbeParameterValues(
+      input.candidateSession,
+      driverParameterIds
+    ),
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: createRuntimeProbeParameterValues(
+          input.baselineSession,
+          driverParameterIds
+        ),
+        targetIds
+      }
+    }
+  };
+};
+
+const createUpdateDynamicsGroupEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "updateDynamicsGroup") {
+    throw new Error(`updateDynamicsGroup evidence input received ${input.request.operationType}.`);
+  }
+
+  const payload = input.request.payload as { readonly dynamicsGroupId: string };
+  const group = input.candidateSession.graph.dynamicsGroups.find(
+    (candidate) => candidate.dynamicsGroupId === payload.dynamicsGroupId
+  );
+  const driverParameterIds = group?.drivers.map((driver) => driver.sourceParameterId) ?? [];
+  const outputParameterId = group?.output.targetParameterId;
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...driverParameterIds,
+    ...(outputParameterId === undefined ? [] : [outputParameterId])
+  ]);
+
+  return {
+    artifactLabel: "editor-update-dynamics-group",
+    authoredParameterValues: createRuntimeProbeParameterValues(
+      input.candidateSession,
+      driverParameterIds
+    ),
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: createRuntimeProbeParameterValues(
+          input.baselineSession,
+          driverParameterIds
+        ),
+        targetIds
+      }
+    }
+  };
+};
+
 const createSetRightsMetadataEvidenceInput = (
   input: OperationEvidenceProviderInput
 ): RuntimeEvidenceInput => {
@@ -548,6 +624,24 @@ const createSetRightsMetadataEvidenceInput = (
     }
   };
 };
+
+const createRuntimeProbeParameterValues = (
+  session: OperationEvidenceProviderInput["candidateSession"],
+  parameterIds: readonly string[]
+): Record<string, number> =>
+  Object.fromEntries(
+    parameterIds.map((parameterId) => {
+      const parameter = session.graph.parameters.find(
+        (candidate) => candidate.parameterId === parameterId
+      );
+      const value = parameter === undefined
+        ? 0
+        : parameter.default === parameter.max
+          ? parameter.default
+          : parameter.max;
+      return [parameterId, value];
+    })
+  );
 
 const uniqueStrings = (values: readonly string[]): string[] => {
   const seen = new Set<string>();

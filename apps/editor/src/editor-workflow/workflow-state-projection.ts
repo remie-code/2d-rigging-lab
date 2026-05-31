@@ -24,6 +24,7 @@ export const createEditorWorkflowState = (
       authoringRevision: adapter.authoringSession.authoringRevision
     },
     parameters: adapter.baseDocument.model.parameters.parameters,
+    dynamicsGroups: adapter.baseDocument.model.dynamics.dynamicsGroups,
     drawables: adapter.baseDocument.model.drawables.drawables,
     drawOrderEntries: adapter.baseDocument.model.drawOrder.entries,
     meshes: adapter.baseDocument.model.meshes.meshes,
@@ -66,6 +67,7 @@ export const applyEditorWorkflowCommitResult = (
       authoringRevision: adapter.authoringSession.authoringRevision
     },
     parameters: result.reloadedDocument.model.parameters.parameters,
+    dynamicsGroups: result.reloadedDocument.model.dynamics.dynamicsGroups,
     drawables: result.reloadedDocument.model.drawables.drawables,
     drawOrderEntries: result.reloadedDocument.model.drawOrder.entries,
     meshes: result.reloadedDocument.model.meshes.meshes,
@@ -100,6 +102,7 @@ export const projectLoadedEditorWorkflowState = (input: {
       authoringRevision: 0
     },
     parameters: input.document.model.parameters.parameters,
+    dynamicsGroups: input.document.model.dynamics.dynamicsGroups,
     drawables: input.document.model.drawables.drawables,
     drawOrderEntries: input.document.model.drawOrder.entries,
     meshes: input.document.model.meshes.meshes,

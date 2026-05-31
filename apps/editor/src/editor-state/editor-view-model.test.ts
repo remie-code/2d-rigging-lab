@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   MeshIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
@@ -496,6 +498,108 @@ describe("editor semantic state view model", () => {
           parameterId: "param_hair_sway",
           disabled: true,
           disabledMessage: "Preview control disabled for computedDynamics parameter"
+        }
+      ]
+    });
+  });
+
+  it("projects dynamics authoring controls and group state for the editor panel", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_dynamics_authoring",
+        packageDisplayName: "Dynamics Authoring Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 1,
+        authoringRevision: 1
+      },
+      parameters: [
+        {
+          parameterId: "param_body_yaw",
+          displayName: "Body Yaw",
+          valueSource: "authoredInput",
+          min: -1,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        },
+        {
+          parameterId: "param_hair_sway",
+          displayName: "Hair Sway",
+          valueSource: "computedDynamics",
+          min: -1,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        }
+      ],
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_hair_sway"),
+          displayName: "Hair Sway",
+          enabled: true,
+          solverKind: "scalarDampedFollowV1",
+          drivers: [
+            {
+              driverId: "drv_body_yaw",
+              sourceParameterId: ParameterIdSchema.parse("param_body_yaw"),
+              inputScale: 1,
+              inputOffset: 0,
+              invert: false
+            }
+          ],
+          output: {
+            outputId: "out_hair_sway",
+            targetParameterId: ParameterIdSchema.parse("param_hair_sway"),
+            outputScale: 1,
+            outputOffset: 0,
+            min: -1,
+            max: 1,
+            clampPolicy: "clamp-to-output-range"
+          },
+          settings: {
+            stiffness: 0.25,
+            damping: 0.35,
+            maxVelocity: 2,
+            maxAmplitude: 1
+          },
+          resetPolicy: "reset-on-manual-command"
+        }
+      ]
+    });
+    const dynamics = projectEditorWorkflowViewModel(state).dynamics;
+
+    expect(dynamics).toMatchObject({
+      groupCountLabel: "1 dynamics group",
+      hasGroups: true,
+      canCreateGroup: true,
+      canRunPreview: true,
+      canResetPreview: true,
+      previewStatusLabel: "No dynamics preview run",
+      groups: [
+        {
+          dynamicsGroupId: "dyn_hair_sway",
+          displayName: "Hair Sway",
+          enabledLabel: "Enabled",
+          resetPolicyLabel: "Reset on manual command",
+          driverLabel: "param_body_yaw",
+          outputLabel: "param_hair_sway",
+          settingsLabel: "stiffness 0.25 / damping 0.35 / max velocity 2 / max amplitude 1"
+        }
+      ],
+      driverParameters: [
+        {
+          parameterId: "param_body_yaw",
+          label: "Body Yaw",
+          rangeLabel: "param_body_yaw / -1 to 1"
+        }
+      ],
+      computedOutputParameters: [
+        {
+          parameterId: "param_hair_sway",
+          label: "Hair Sway",
+          rangeLabel: "param_hair_sway / -1 to 1"
         }
       ]
     });

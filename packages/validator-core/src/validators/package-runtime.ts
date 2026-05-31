@@ -4,6 +4,7 @@ import type {
   PackageInMemoryFileSet
 } from "@private-2d-rigging-lab/package-format";
 import type { RuntimeSnapshotId } from "@private-2d-rigging-lab/contracts";
+import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 
 import { buildValidationReport, createDefaultEvidence } from "../report-builder.js";
 import type { ValidationReportDto } from "../validation-report.js";
@@ -11,6 +12,7 @@ import { validateSourceAssetRightsAndProvenance } from "./asset-rights.js";
 import { validatePackageBinaryAssets } from "./binary-assets.js";
 import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
+import { validateDynamicsSemantics } from "./dynamics-semantic.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
@@ -36,7 +38,7 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
       : validateRuntimeSnapshot(input.runtimeSnapshot, packageResult.packageId);
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
-    : collectPackageReferenceChecks(packageResult.packageDocument);
+    : collectPackageReferenceChecks(packageResult.packageDocument, runtimeResult?.snapshot);
   const runtimeSnapshotIds: RuntimeSnapshotId[] =
     runtimeResult?.snapshotId === undefined ? [] : [runtimeResult.snapshotId];
 
@@ -61,7 +63,7 @@ export const validatePackageRuntimeWithBinaryAssets = async (
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : [
-      ...collectPackageReferenceChecks(packageResult.packageDocument),
+      ...collectPackageReferenceChecks(packageResult.packageDocument, runtimeResult?.snapshot),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
         binaryFileSet: input.binaryFileSet ?? [],
@@ -82,11 +84,13 @@ export const validatePackageRuntimeWithBinaryAssets = async (
 };
 
 const collectPackageReferenceChecks = (
-  packageDocument: PackageDocumentDto
+  packageDocument: PackageDocumentDto,
+  runtimeSnapshot?: RuntimeSnapshotDto
 ) => [
   ...validatePsdSourceProfiles(packageDocument),
   ...validateSourceAssetRightsAndProvenance(packageDocument),
   ...validateDrawableProvenanceReferences(packageDocument),
   ...validateDrawableReferences(packageDocument),
-  ...validateTextureAssetReferences(packageDocument)
+  ...validateTextureAssetReferences(packageDocument),
+  ...validateDynamicsSemantics(packageDocument, runtimeSnapshot)
 ];

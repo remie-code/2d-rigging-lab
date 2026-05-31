@@ -46,6 +46,7 @@ discussion/implementation/
 - Wave 20 PSD spec field matrix and adapter boundary completed on 2026-05-31 with Adobe PSD spec field matrix, safe rights-cleared sample characterization, parser-free PSD adapter result DTOs, commit-capable `importPsdSourceAsset` materialization, PSD validator diagnostics, synthetic contract fixtures, manual editor PSD adapter/profile intake, desktop/mobile e2e persistence smoke, final verification, and clean integration review. Evidence is recorded in [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md), [waves/wave20/_map.md](waves/wave20/_map.md), and [reviews/wave20/_map.md](reviews/wave20/_map.md).
 - Wave 21 PSD structured profile persistence hardening completed on 2026-05-31 with structured `psdProfile` source manifest persistence, `importPsdSourceAsset` structured materialization, structured validator diagnostics, contract fixture evidence, editor/AI projection, desktop/mobile e2e persistence smoke, split PNG compatibility smoke, final verification, and clean integration review. Evidence is recorded in [waves/wave21/wave21-final-report.md](waves/wave21/wave21-final-report.md), [waves/wave21/_map.md](waves/wave21/_map.md), and [reviews/wave21/_map.md](reviews/wave21/_map.md).
 - Wave 22 real asset I/O boundary foundation completed on 2026-05-31 with package-local binary asset reference/storage metadata boundaries, in-memory binary file-set support, rights/provenance and validator evidence, deterministic-byte fixtures, truthful editor missing-bytes/storage UX, browser-local metadata persistence, final verification, and clean integration review while keeping real PSD parsing, image decode, file picker, actual binary upload, archive import/export, filesystem I/O, and external dependencies out of scope. Evidence is recorded in [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md), [waves/wave22/_map.md](waves/wave22/_map.md), and [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md).
+- Wave 23 Minimum Open Dynamics v1 vertical slice completed on 2026-05-31 with `createDynamicsGroup` authoring operation support, deterministic runtime dynamics sequence / snapshot / diff / evidence, validator dynamics semantic diagnostics, editor Dynamics panel with preview run/reset, deterministic contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping Cubism Physics compatibility, direct vertex physics, asset I/O expansion, file picker, parser work, and external dependencies out of scope. Evidence is recorded in [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md), [waves/wave23/_map.md](waves/wave23/_map.md), and [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md).
 
 ## Key References
 
@@ -75,6 +76,7 @@ discussion/implementation/
 | [orchestration/wave20-plan.md](orchestration/wave20-plan.md) | Wave 20 PSD spec field matrix and adapter boundary dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave21-plan.md](orchestration/wave21-plan.md) | Wave 21 PSD structured profile persistence hardening dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave22-plan.md](orchestration/wave22-plan.md) | Wave 22 real asset I/O boundary foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave23-plan.md](orchestration/wave23-plan.md) | Wave 23 Minimum Open Dynamics v1 vertical slice dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -99,6 +101,8 @@ discussion/implementation/
 | [waves/wave21/_map.md](waves/wave21/_map.md) | Wave 21 domain completion reports, final verification, and final report |
 | [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md) | Wave 22 final report for real asset I/O boundary foundation |
 | [waves/wave22/_map.md](waves/wave22/_map.md) | Wave 22 domain completion reports, clean integration review, and final report |
+| [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md) | Wave 23 final report for Minimum Open Dynamics v1 vertical slice |
+| [waves/wave23/_map.md](waves/wave23/_map.md) | Wave 23 domain completion reports, clean integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -117,11 +121,13 @@ discussion/implementation/
 | [reviews/wave20/_map.md](reviews/wave20/_map.md) | Wave 20 domain review reports and clean integration review |
 | [reviews/wave21/_map.md](reviews/wave21/_map.md) | Wave 21 domain review reports and clean integration review |
 | [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md) | Wave 22 clean integration review |
+| [reviews/wave23/_map.md](reviews/wave23/_map.md) | Wave 23 domain review reports and clean integration review |
+| [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md) | Wave 23 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Use the Wave 22 binary boundary final report and clean integration review before planning actual binary byte intake, file picker, archive I/O, image decode, or parser work.
+1. Plan the next implementation wave from [current-capability-map.md](current-capability-map.md) after the Wave 23 dynamics completion.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

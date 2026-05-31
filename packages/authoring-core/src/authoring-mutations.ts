@@ -45,7 +45,17 @@ export type AuthoringMutationErrorCode =
   | "missing_keyform_target"
   | "unsupported_keyform_target_property"
   | "duplicate_keyform_grid_axis_parameter"
-  | "duplicate_keyform_grid_coordinate";
+  | "duplicate_keyform_grid_coordinate"
+  | "duplicate_dynamics_group"
+  | "missing_dynamics_group"
+  | "missing_dynamics_driver_parameter"
+  | "missing_dynamics_output_parameter"
+  | "invalid_dynamics_driver_parameter_source"
+  | "invalid_dynamics_output_parameter_source"
+  | "duplicate_dynamics_driver"
+  | "duplicate_dynamics_output_parameter"
+  | "dynamics_output_used_as_driver"
+  | "no_op_dynamics_group_update";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

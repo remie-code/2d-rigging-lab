@@ -1,6 +1,11 @@
 import { createEmptyAiApprovalState, type AiApprovalState } from "./ai-approval-state.js";
 import { createEmptyDrawableFormState, type CreateDrawableFormState } from "./create-drawable-form-state.js";
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
+import {
+  createEmptyDynamicsPreviewState,
+  type DynamicsGroupState,
+  type DynamicsPreviewState
+} from "./dynamics-authoring-state.js";
 import type { DrawableListItemState } from "./drawable-list-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
 import { createEmptyMeshEditState, type MeshEditState } from "./mesh-edit-state.js";
@@ -27,6 +32,7 @@ export interface EditorSemanticState {
   readonly loadedPackage: LoadedPackageIdentityState | null;
   readonly revision: PackageRevisionState;
   readonly parameters: readonly ParameterListItemState[];
+  readonly dynamicsGroups: readonly DynamicsGroupState[];
   readonly drawables: readonly DrawableListItemState[];
   readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
@@ -38,6 +44,7 @@ export interface EditorSemanticState {
   readonly lastOperationResult: OperationResultSummaryState | null;
   readonly operationLog: OperationLogSummaryState;
   readonly generatedEvidence: GeneratedEvidenceSummaryState;
+  readonly dynamicsPreview: DynamicsPreviewState;
   readonly reload: ReloadSummaryState;
   readonly aiApproval: AiApprovalState;
 }
@@ -47,6 +54,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   loadedPackage: null,
   revision: emptyPackageRevisionState(),
   parameters: [],
+  dynamicsGroups: [],
   drawables: [],
   meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
@@ -58,6 +66,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),
+  dynamicsPreview: createEmptyDynamicsPreviewState(),
   reload: createEmptyReloadSummary(),
   aiApproval: createEmptyAiApprovalState()
 });

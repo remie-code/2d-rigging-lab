@@ -26,6 +26,7 @@ import {
   sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
 import { runAssetIoBoundaryPersistenceSmoke } from "./asset-io-boundary-smoke.mjs";
+import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -139,6 +140,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} final-reset`);
+    const dynamicsEvidence = await runDynamicsPersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave23-dynamics`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-dynamics-reset`);
 
     return {
       viewport: viewport.name,
@@ -146,6 +155,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       sourceIntakeEvidence,
       splitPngCompatibilityEvidence,
       assetIoBoundaryEvidence,
+      dynamicsEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

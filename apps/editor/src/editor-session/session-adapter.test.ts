@@ -72,6 +72,89 @@ describe("editor session persistence adapter", () => {
     expect(result.evidence.validationArtifactPaths.length).toBe(2);
   });
 
+  it("commits createDynamicsGroup and records editor runtime evidence", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:05:00.000Z")
+    });
+
+    const output = adapter.commitCreateParameter({
+      operationId: "op_editor_create_dynamics_output_hair",
+      parameterId: "param_editor_hair_sway",
+      displayName: "Editor Hair Sway",
+      semanticRole: "dynamics",
+      projectPresetAlias: "private-editor-hair-sway-output",
+      valueSource: "computedDynamics",
+      min: -1,
+      max: 1,
+      defaultValue: 0,
+      recommendedUiStep: 0.01
+    });
+    const result = adapter.commitCreateDynamicsGroup({
+      operationId: "op_editor_create_dynamics_hair",
+      dynamicsGroupId: "dyn_editor_hair_sway",
+      displayName: "Editor Hair Sway",
+      driverParameterId: PREVIEW_SAMPLE_PARAMETER_ID,
+      outputParameterId: "param_editor_hair_sway",
+      outputMin: -1,
+      outputMax: 1,
+      outputScale: 1,
+      outputOffset: 0,
+      resetPolicy: "reset-on-manual-command",
+      enabled: true,
+      stiffness: 0.25,
+      damping: 0.35,
+      maxVelocity: 2,
+      maxAmplitude: 1
+    });
+
+    expect(output.operationResult.status).toBe("committed");
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("createDynamicsGroup");
+    expect(result.reloadedPackageRevision).toBe(2);
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createParameter",
+      "createDynamicsGroup"
+    ]);
+    expect(result.reloadedDocument.model.parameters.parameters).toContainEqual(
+      expect.objectContaining({
+        parameterId: "param_editor_hair_sway",
+        valueSource: "computedDynamics"
+      })
+    );
+    expect(result.reloadedDocument.model.dynamics.dynamicsGroups).toContainEqual(
+      expect.objectContaining({
+        dynamicsGroupId: "dyn_editor_hair_sway",
+        displayName: "Editor Hair Sway",
+        drivers: [
+          expect.objectContaining({
+            sourceParameterId: PREVIEW_SAMPLE_PARAMETER_ID
+          })
+        ],
+        output: expect.objectContaining({
+          targetParameterId: "param_editor_hair_sway"
+        }),
+        settings: expect.objectContaining({
+          stiffness: 0.25,
+          damping: 0.35
+        })
+      })
+    );
+    expect(result.evidence.generatedValidationReportIds).toEqual([
+      "val_editor_editor_create_dynamics_hair_baseline",
+      "val_editor_editor_create_dynamics_hair_candidate"
+    ]);
+    expect(result.generatedArtifactPaths).toEqual(
+      expect.arrayContaining([
+        "validation/reports/val_editor_editor_create_dynamics_hair_baseline.validation.json",
+        "validation/reports/val_editor_editor_create_dynamics_hair_candidate.validation.json"
+      ])
+    );
+    expect(result.evidence.runtimeArtifactPaths.length).toBeGreaterThan(0);
+    expect(result.evidence.generatedRuntimeStateRefs).toEqual([
+      expect.stringMatching(/editor-create-dynamics-group-final/)
+    ]);
+  });
+
   it("commits addKeyform and keeps editor evidence paths operation-specific", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:10:00.000Z")

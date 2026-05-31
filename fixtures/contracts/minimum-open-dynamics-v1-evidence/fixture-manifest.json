@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "minimum-open-dynamics-v1-evidence",
+  "title": "Minimum Open Dynamics v1 operation, runtime, validator, and editor-facing evidence",
+  "coversAC": [
+    "AC-MVP-010",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MVP-002",
+    "SC-MVP-003",
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core",
+    "editor"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/create-dynamics-group-dry-run.request.json",
+    "request/create-dynamics-group-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-result-evidence-summary.json",
+      "id": "op_fixture_create_minimum_open_dynamics_v1",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeSnapshot",
+      "path": "expected/runtime-snapshot-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeDiff",
+      "path": "expected/runtime-diff-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationDiagnostics",
+      "path": "expected/validation-edge-diagnostics-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorEvidence",
+      "path": "expected/editor-facing-evidence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

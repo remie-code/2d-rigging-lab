@@ -1,5 +1,6 @@
 import {
   createInitialAuthoringRevision,
+  getDynamicsGroupById,
   getMeshById,
   getKeyformSetById,
   getParameterById
@@ -7,6 +8,7 @@ import {
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -333,11 +335,72 @@ describe("operation lifecycle foundation", () => {
     expect(core.operationLog.entries).toHaveLength(0);
   });
 
+  it("commits createDynamicsGroup through the registry and logs dynamics parameter refs", () => {
+    const session = createDynamicsFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-29T00:05:00.000Z")
+    });
+
+    const outcome = core.commitOperation(session, createDynamicsGroupRequest({ dryRun: false }));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+    expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toMatchObject({
+      dynamicsGroupId: "dyn_hair_sway",
+      drivers: [
+        {
+          sourceParameterId: "param_face_yaw"
+        }
+      ],
+      output: {
+        targetParameterId: "param_hair_sway"
+      }
+    });
+    expect(outcome.operationLogLength).toBe(1);
+    expect(core.operationLog.entries).toHaveLength(1);
+    expect(outcome.logEntry?.operationType).toBe("createDynamicsGroup");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "dyn_hair_sway",
+      "param_face_yaw",
+      "param_hair_sway"
+    ]);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "dynamicsGroup", id: "dyn_hair_sway" },
+      {
+        kind: "parameter",
+        id: "param_face_yaw",
+        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_hair_sway_face_yaw/sourceParameterId"
+      },
+      {
+        kind: "parameter",
+        id: "param_hair_sway",
+        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+      }
+    ]);
+  });
+
+  it("dry-runs createDynamicsGroup without mutating the original session", () => {
+    const session = createDynamicsFixtureSession();
+    const core = createOperationCore();
+
+    const result = core.dryRunOperation(session, createDynamicsGroupRequest({ dryRun: true }));
+
+    expect(result.status).toBe("dry_run");
+    expect(result.modelDiff?.added).toEqual([{ kind: "dynamicsGroup", id: "dyn_hair_sway" }]);
+    expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toBeUndefined();
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+    expect(core.operationLog.entries).toHaveLength(0);
+  });
+
   it("rejects still-unimplemented operations without changing package or authoring revision", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedDynamicsRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedRigControlRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -429,23 +492,66 @@ const createMoveMeshVertexRequest = (options: {
   }
 });
 
-const createUnsupportedDynamicsRequest = () => ({
+const createDynamicsGroupRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+}) => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_create_dynamics_group",
   actor: "test",
   surface: "testFixture",
-  dryRun: false,
-  basePackageRevision: 0,
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createDynamicsGroup",
   payload: {
     dynamicsGroupId: "dyn_hair_sway",
     displayName: "Hair Sway",
+    enabled: true,
     solverKind: "scalarDampedFollowV1",
     resetPolicy: "reset-on-load",
+    drivers: [
+      {
+        driverId: "driver_hair_sway_face_yaw",
+        sourceParameterId: "param_face_yaw",
+        inputScale: 1,
+        inputOffset: 0,
+        invert: false
+      }
+    ],
+    output: {
+      outputId: "output_hair_sway",
+      targetParameterId: "param_hair_sway",
+      outputScale: 1,
+      outputOffset: 0,
+      min: -1,
+      max: 1,
+      clampPolicy: "clamp-to-output-range"
+    },
     settings: {
       stiffness: 0.35,
       damping: 0.7
     }
+  }
+});
+
+const createUnsupportedRigControlRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_create_rotation_rig",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 0,
+  operationType: "createRotation2dRigControl",
+  payload: {
+    partId: "part_head",
+    displayName: "Head Rotation",
+    childDrawableIds: [],
+    childRigControlIds: [],
+    pivot: {
+      x: 512,
+      y: 512
+    },
+    restAngleDegrees: 0
   }
 });
 
@@ -598,6 +704,50 @@ const createKeyformFixtureSession = (): AuthoringSession => ({
     drawOrder: [],
     rigControlRootIds: [],
     stableOrder: ["mesh_body", "param_face_yaw", "param_face_pitch"],
+    sourceAssets: [],
+    provenanceRecords: [],
+    rightsRecords: []
+  }
+});
+
+const createDynamicsFixtureSession = (): AuthoringSession => ({
+  packageIdentity: {
+    packageId: PackageIdSchema.parse("pkg_operation_dynamics_lifecycle_test"),
+    packageDisplayName: "Operation Dynamics Lifecycle Test",
+    formatVersion: "open-model-package-v1"
+  },
+  packageRevision: 0,
+  authoringRevision: createInitialAuthoringRevision(),
+  dirty: false,
+  graph: {
+    coordinateSystem: "canvas-y-down-v1",
+    canvasSize: {
+      width: 1024,
+      height: 1024
+    },
+    parts: [],
+    drawables: [],
+    meshes: [],
+    parameters: [
+      createTestParameter("param_face_yaw", "Face Yaw"),
+      {
+        parameterId: ParameterIdSchema.parse("param_hair_sway"),
+        displayName: "Hair Sway",
+        semanticRole: "dynamics",
+        valueSource: "computedDynamics",
+        min: -1,
+        max: 1,
+        default: 0,
+        recommendedUiStep: 0.01
+      }
+    ],
+    keyformSets: [],
+    rigControls: [],
+    dynamicsGroups: [],
+    masks: [],
+    drawOrder: [],
+    rigControlRootIds: [],
+    stableOrder: ["param_face_yaw", "param_hair_sway"],
     sourceAssets: [],
     provenanceRecords: [],
     rightsRecords: []

@@ -42,6 +42,7 @@ export interface EditorWorkflowViewModel {
   readonly meshEdit: MeshEditViewModel;
   readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
+  readonly dynamics: DynamicsAuthoringViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
 
@@ -125,6 +126,63 @@ export interface EditorPreviewControlsViewModel {
   readonly parameterControls: readonly PreviewParameterControlViewModel[];
 }
 
+export interface DynamicsParameterOptionViewModel {
+  readonly parameterId: string;
+  readonly label: string;
+  readonly rangeLabel: string;
+}
+
+export interface DynamicsGroupItemViewModel {
+  readonly dynamicsGroupId: string;
+  readonly displayName: string;
+  readonly enabled: boolean;
+  readonly enabledLabel: string;
+  readonly resetPolicy: EditorSemanticState["dynamicsGroups"][number]["resetPolicy"];
+  readonly resetPolicyLabel: string;
+  readonly driverLabel: string;
+  readonly outputLabel: string;
+  readonly settingsLabel: string;
+}
+
+export interface DynamicsPreviewOutputViewModel {
+  readonly dynamicsGroupId: string;
+  readonly outputParameterId: string;
+  readonly outputValueLabel: string;
+  readonly stateLabel: string;
+  readonly driverValuesLabel: string;
+  readonly targetLabel: string;
+}
+
+export interface DynamicsPreviewDiagnosticViewModel {
+  readonly checkId: string;
+  readonly severity: string;
+  readonly status: string;
+  readonly message: string;
+  readonly targetLabel: string;
+}
+
+export interface DynamicsPreviewEvidenceViewModel {
+  readonly snapshotLabel: string;
+  readonly runtimeDiffLabel: string;
+  readonly validationLabel: string;
+}
+
+export interface DynamicsAuthoringViewModel {
+  readonly groupCountLabel: string;
+  readonly hasGroups: boolean;
+  readonly groups: readonly DynamicsGroupItemViewModel[];
+  readonly driverParameters: readonly DynamicsParameterOptionViewModel[];
+  readonly computedOutputParameters: readonly DynamicsParameterOptionViewModel[];
+  readonly canCreateGroup: boolean;
+  readonly createDisabledMessage: string | null;
+  readonly canRunPreview: boolean;
+  readonly canResetPreview: boolean;
+  readonly previewStatusLabel: string;
+  readonly previewOutputs: readonly DynamicsPreviewOutputViewModel[];
+  readonly previewDiagnostics: readonly DynamicsPreviewDiagnosticViewModel[];
+  readonly previewEvidence: DynamicsPreviewEvidenceViewModel | null;
+}
+
 export const projectEditorWorkflowViewModel = (
   state: EditorSemanticState
 ): EditorWorkflowViewModel => {
@@ -156,6 +214,7 @@ export const projectEditorWorkflowViewModel = (
       ...(state.textureAtlas === null ? {} : { textureAtlas: state.textureAtlas })
     }),
     previewControls: projectPreviewControlsViewModel(state),
+    dynamics: projectDynamicsAuthoringViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };
 };
@@ -333,4 +392,122 @@ const projectPreviewParameterControl = (
       ? `Preview control disabled for ${parameter.valueSource} parameter`
       : null
   };
+};
+
+const projectDynamicsAuthoringViewModel = (
+  state: EditorSemanticState
+): DynamicsAuthoringViewModel => {
+  const driverParameters = state.parameters
+    .filter((parameter) => parameter.valueSource === "authoredInput")
+    .map(projectDynamicsParameterOption);
+  const computedOutputParameters = state.parameters
+    .filter((parameter) => parameter.valueSource === "computedDynamics")
+    .map(projectDynamicsParameterOption);
+  const hasDriverParameter = driverParameters.length > 0;
+  const hasLoadedPackage = state.loadedPackage !== null;
+
+  return {
+    groupCountLabel: `${state.dynamicsGroups.length} dynamics group${state.dynamicsGroups.length === 1 ? "" : "s"}`,
+    hasGroups: state.dynamicsGroups.length > 0,
+    groups: state.dynamicsGroups.map((group) => ({
+      dynamicsGroupId: group.dynamicsGroupId,
+      displayName: group.displayName,
+      enabled: group.enabled,
+      enabledLabel: group.enabled ? "Enabled" : "Disabled",
+      resetPolicy: group.resetPolicy,
+      resetPolicyLabel: formatResetPolicy(group.resetPolicy),
+      driverLabel: group.driverParameterIds.join(", "),
+      outputLabel: group.outputParameterId,
+      settingsLabel: `stiffness ${formatPreviewNumber(group.stiffness)} / damping ${formatPreviewNumber(group.damping)}${group.maxVelocity === null ? "" : ` / max velocity ${formatPreviewNumber(group.maxVelocity)}`}${group.maxAmplitude === null ? "" : ` / max amplitude ${formatPreviewNumber(group.maxAmplitude)}`}`
+    })),
+    driverParameters,
+    computedOutputParameters,
+    canCreateGroup: hasLoadedPackage && hasDriverParameter,
+    createDisabledMessage: projectDynamicsCreateDisabledMessage({
+      hasLoadedPackage,
+      hasDriverParameter
+    }),
+    canRunPreview: hasLoadedPackage && state.dynamicsGroups.some((group) => group.enabled),
+    canResetPreview: hasLoadedPackage && state.dynamicsGroups.some((group) => group.enabled),
+    previewStatusLabel: projectDynamicsPreviewStatusLabel(state),
+    previewOutputs: state.dynamicsPreview.outputs.map((output) => ({
+      dynamicsGroupId: output.dynamicsGroupId,
+      outputParameterId: output.outputParameterId,
+      outputValueLabel: formatPreviewNumber(output.outputValue),
+      stateLabel: `position ${formatPreviewNumber(output.position)} / velocity ${formatPreviewNumber(output.velocity)} / tick ${output.tick} / resets ${output.resetCounter}`,
+      driverValuesLabel: Object.entries(output.driverValues)
+        .map(([parameterId, value]) => `${parameterId} ${formatPreviewNumber(value)}`)
+        .join(", ") || "None",
+      targetLabel:
+        output.rawTarget === null || output.clampedTarget === null
+          ? "Target unavailable"
+          : `raw ${formatPreviewNumber(output.rawTarget)} / clamped ${formatPreviewNumber(output.clampedTarget)}${output.outputClamped ? " / output clamped" : ""}`
+    })),
+    previewDiagnostics: state.dynamicsPreview.diagnostics.map((diagnostic) => ({
+      checkId: diagnostic.checkId,
+      severity: diagnostic.severity,
+      status: diagnostic.status,
+      message: diagnostic.message,
+      targetLabel:
+        diagnostic.targetKind === null || diagnostic.targetId === null
+          ? diagnostic.phase
+          : `${diagnostic.phase} / ${diagnostic.targetKind}:${diagnostic.targetId}`
+    })),
+    previewEvidence:
+      state.dynamicsPreview.evidence === null
+        ? null
+        : {
+            snapshotLabel: `${state.dynamicsPreview.evidence.snapshotId} / r${state.dynamicsPreview.evidence.packageRevision} / frame ${state.dynamicsPreview.evidence.frameIndex}`,
+            runtimeDiffLabel: `${state.dynamicsPreview.evidence.parameterChangeCount} parameter / ${state.dynamicsPreview.evidence.dynamicsChangeCount} dynamics / ${state.dynamicsPreview.evidence.drawableChangeCount} drawable changes`,
+            validationLabel:
+              state.dynamicsPreview.evidence.validationReportId === null
+                ? "No validation report"
+                : `${state.dynamicsPreview.evidence.validationReportId} / ${state.dynamicsPreview.evidence.validationStatus} / ${state.dynamicsPreview.evidence.validationHighestSeverity} / ${state.dynamicsPreview.evidence.validationCheckCount} checks`
+          }
+  };
+};
+
+const projectDynamicsParameterOption = (
+  parameter: EditorSemanticState["parameters"][number]
+): DynamicsParameterOptionViewModel => ({
+  parameterId: parameter.parameterId,
+  label: parameter.displayName,
+  rangeLabel: `${parameter.parameterId} / ${formatPreviewNumber(parameter.min)} to ${formatPreviewNumber(parameter.max)}`
+});
+
+const projectDynamicsCreateDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasDriverParameter: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasDriverParameter) {
+    return "No authored input parameter";
+  }
+
+  return null;
+};
+
+const projectDynamicsPreviewStatusLabel = (state: EditorSemanticState): string => {
+  if (state.dynamicsPreview.status === "idle") {
+    return "No dynamics preview run";
+  }
+
+  const action = state.dynamicsPreview.status === "reset" ? "Reset" : "Ran";
+  return `${action} ${state.dynamicsPreview.lastFrameCount} frame${state.dynamicsPreview.lastFrameCount === 1 ? "" : "s"}`;
+};
+
+const formatResetPolicy = (
+  resetPolicy: EditorSemanticState["dynamicsGroups"][number]["resetPolicy"]
+): string => {
+  switch (resetPolicy) {
+    case "reset-on-load":
+      return "Reset on load";
+    case "reset-on-manual-command":
+      return "Reset on manual command";
+    case "reset-on-large-input-jump":
+      return "Reset on large input jump";
+  }
 };

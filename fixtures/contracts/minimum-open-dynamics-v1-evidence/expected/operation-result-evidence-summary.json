@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "minimum-open-dynamics-operation-result-evidence-summary-v1",
+  "dryRun": {
+    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "status": "dry_run",
+    "preconditionOk": true,
+    "reversible": true,
+    "modelDiff": {
+      "baseRevision": 0,
+      "candidateRevision": 1,
+      "added": [
+        "dynamicsGroup:dyn_hair_sway"
+      ],
+      "changedTargets": [
+        "package:pkg_minimum_open_dynamics_v1_evidence:/model/dynamics/dynamicsGroups",
+        "dynamicsGroup:dyn_hair_sway",
+        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_face_yaw/sourceParameterId",
+        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+      ]
+    },
+    "generatedRuntimeSnapshotIds": [
+      "snap_minimum_open_dynamics_v1_evidence_0",
+      "snap_minimum_open_dynamics_v1_evidence_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_minimum_open_dynamics_v1_dry_run_baseline",
+      "val_minimum_open_dynamics_v1_dry_run_candidate"
+    ],
+    "validationDiff": {
+      "newFailureCount": 0,
+      "resolvedFailureCount": 2,
+      "severityChangeCount": 0
+    },
+    "operationLogLength": 0,
+    "originalPackageRevisionAfter": 0,
+    "originalAuthoringRevisionAfter": 0,
+    "originalDirtyAfter": false
+  },
+  "commit": {
+    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "status": "committed",
+    "preconditionOk": true,
+    "reversible": true,
+    "modelDiff": {
+      "baseRevision": 0,
+      "candidateRevision": 1,
+      "added": [
+        "dynamicsGroup:dyn_hair_sway"
+      ],
+      "changedTargets": [
+        "package:pkg_minimum_open_dynamics_v1_evidence:/model/dynamics/dynamicsGroups",
+        "dynamicsGroup:dyn_hair_sway",
+        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_face_yaw/sourceParameterId",
+        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+      ]
+    },
+    "generatedRuntimeSnapshotIds": [
+      "snap_minimum_open_dynamics_v1_evidence_0",
+      "snap_minimum_open_dynamics_v1_evidence_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_minimum_open_dynamics_v1_commit_baseline",
+      "val_minimum_open_dynamics_v1_commit_candidate"
+    ],
+    "validationDiff": {
+      "newFailureCount": 0,
+      "resolvedFailureCount": 2,
+      "severityChangeCount": 0
+    },
+    "operationLogLength": 1,
+    "packageRevisionAfter": 1,
+    "authoringRevisionAfter": 1,
+    "dirtyAfter": true,
+    "logEntry": {
+      "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+      "operationType": "createDynamicsGroup",
+      "targetIds": [
+        "dyn_hair_sway",
+        "param_face_yaw",
+        "param_hair_sway"
+      ],
+      "runtimeSnapshotIds": [
+        "snap_minimum_open_dynamics_v1_evidence_0",
+        "snap_minimum_open_dynamics_v1_evidence_1"
+      ],
+      "validationReportIds": [
+        "val_minimum_open_dynamics_v1_commit_baseline",
+        "val_minimum_open_dynamics_v1_commit_candidate"
+      ]
+    }
+  }
+}

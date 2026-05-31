@@ -759,6 +759,116 @@ describe("editor workflow controller", () => {
     expect(workflow.state.operationLog.entryCount).toBe(1);
   });
 
+  it("creates a dynamics group, runs preview evidence, and restores it after load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const created = first.commitCreateDynamicsGroup(createDynamicsGroupCommand("hair"));
+    first.setPreviewParameterValue("param_preview_body_yaw", 1);
+    const ran = first.runDynamicsPreview(5);
+    const reset = first.resetDynamicsPreview();
+    const updated = first.commitUpdateDynamicsGroup({
+      operationId: "op_workflow_update_dynamics_hair",
+      dynamicsGroupId: "dyn_workflow_hair_sway",
+      displayName: "Workflow Hair Settle",
+      enabled: false,
+      resetPolicy: "reset-on-large-input-jump"
+    });
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(created.status).toBe("committed");
+    expect(created.outputParameterResult?.operationType).toBe("createParameter");
+    expect(created.dynamicsGroupResult?.operationType).toBe("createDynamicsGroup");
+    expect(first.state.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parameterId: "param_dynamics_workflow_hair_sway_r0",
+        valueSource: "computedDynamics"
+      })
+    ]));
+    expect(first.state.dynamicsGroups).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        dynamicsGroupId: "dyn_workflow_hair_sway",
+        displayName: "Workflow Hair Settle",
+        enabled: false,
+        driverParameterIds: ["param_preview_body_yaw"],
+        outputParameterId: "param_dynamics_workflow_hair_sway_r0",
+        resetPolicy: "reset-on-large-input-jump"
+      })
+    ]));
+    expect(ran).toMatchObject({
+      status: "ran",
+      frameCount: 5
+    });
+    expect(reset).toMatchObject({
+      status: "reset",
+      frameCount: 0
+    });
+    expect(updated.status).toBe("committed");
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createParameter",
+      "createDynamicsGroup",
+      "updateDynamicsGroup"
+    ]);
+    expect(saved.snapshot.document.model.dynamics.dynamicsGroups).toContainEqual(
+      expect.objectContaining({
+        dynamicsGroupId: "dyn_workflow_hair_sway",
+        displayName: "Workflow Hair Settle",
+        enabled: false
+      })
+    );
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.dynamicsGroups).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        dynamicsGroupId: "dyn_workflow_hair_sway",
+        displayName: "Workflow Hair Settle",
+        enabled: false
+      })
+    ]));
+    expect(second.viewModel.dynamics).toMatchObject({
+      groupCountLabel: "1 dynamics group",
+      hasGroups: true,
+      canCreateGroup: true,
+      canRunPreview: false
+    });
+  });
+
+  it("projects dynamics preview outputs, evidence, and validator diagnostics", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDynamicsGroup(createDynamicsGroupCommand("hair"));
+    workflow.setPreviewParameterValue("param_preview_body_yaw", 1);
+    const ran = workflow.runDynamicsPreview(3);
+    const dynamics = workflow.viewModel.dynamics;
+
+    expect(ran.status).toBe("ran");
+    expect(workflow.state.dynamicsPreview).toMatchObject({
+      status: "ran",
+      lastFrameCount: 3,
+      outputs: [
+        expect.objectContaining({
+          dynamicsGroupId: "dyn_workflow_hair_sway",
+          outputParameterId: "param_dynamics_workflow_hair_sway_r0"
+        })
+      ],
+      evidence: expect.objectContaining({
+        packageRevision: 2,
+        validationReportId: "val_editor_browser_sample_editorIncremental"
+      })
+    });
+    expect(dynamics.previewStatusLabel).toBe("Ran 3 frames");
+    expect(dynamics.previewOutputs[0]).toMatchObject({
+      dynamicsGroupId: "dyn_workflow_hair_sway",
+      outputParameterId: "param_dynamics_workflow_hair_sway_r0"
+    });
+    expect(dynamics.previewEvidence).toMatchObject({
+      snapshotLabel: expect.stringContaining("frame"),
+      validationLabel: expect.stringContaining("val_editor_browser_sample_editorIncremental")
+    });
+    expect(dynamics.previewDiagnostics).toEqual([]);
+  });
+
   it("keeps preview parameter updates out of package documents and operation logs", () => {
     const workflow = createWorkflow(createMemoryStorage());
     const commit = workflow.commitCreateParameter(createParameterCommand("smile"));
@@ -1091,6 +1201,25 @@ const createDrawablePresetCommand = (name: "star") => ({
   initialBounds: { x: 16, y: 24, width: 24, height: 24 },
   meshMethod: "auto-grid-v1",
   densityHint: "low"
+} as const);
+
+const createDynamicsGroupCommand = (name: "hair") => ({
+  operationId: `op_workflow_create_dynamics_${name}`,
+  outputParameterOperationId: `op_workflow_create_dynamics_output_${name}`,
+  dynamicsGroupId: "dyn_workflow_hair_sway",
+  displayName: "Workflow Hair Sway",
+  driverParameterId: "param_preview_body_yaw",
+  outputParameterDisplayName: "Workflow Hair Sway",
+  outputMin: -1,
+  outputMax: 1,
+  outputScale: 1,
+  outputOffset: 0,
+  resetPolicy: "reset-on-manual-command",
+  enabled: true,
+  stiffness: 0.25,
+  damping: 0.35,
+  maxVelocity: 2,
+  maxAmplitude: 1
 } as const);
 
 const createSourceIntakeDraft = (

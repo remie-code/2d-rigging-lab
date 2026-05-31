@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "minimum-open-dynamics-validator-edge-diagnostics-summary-v1",
+  "cases": [
+    {
+      "caseId": "duplicate-output-target",
+      "checks": [
+        {
+          "checkId": "dynamics.outputTargetDuplicate",
+          "targetId": "param_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/output/targetParameterId",
+          "evidence": [
+            "targetParameterId=param_hair_sway",
+            "producerGroupId=dyn_hair_sway",
+            "producerGroupId=dyn_hair_sway_duplicate"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "wrong-source-type",
+      "checks": [
+        {
+          "checkId": "dynamics.driverMustBeAuthoredInput",
+          "targetId": "param_debug_override",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/drivers/0/sourceParameterId",
+          "evidence": [
+            "dynamicsGroupId=dyn_hair_sway",
+            "driverId=driver_debug_override",
+            "sourceParameterId=param_debug_override",
+            "valueSource=debugOverride",
+            "parameterPath=/model/parameters/parameters/2"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "output-as-driver",
+      "checks": [
+        {
+          "checkId": "dynamics.driverMustBeAuthoredInput",
+          "targetId": "param_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/drivers/0/sourceParameterId",
+          "evidence": [
+            "dynamicsGroupId=dyn_hair_sway",
+            "driverId=driver_hair_sway",
+            "sourceParameterId=param_hair_sway",
+            "valueSource=computedDynamics",
+            "parameterPath=/model/parameters/parameters/1"
+          ]
+        },
+        {
+          "checkId": "dynamics.outputUsedAsDriver",
+          "targetId": "param_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/drivers/0/sourceParameterId",
+          "evidence": [
+            "consumerGroupId=dyn_hair_sway",
+            "driverId=driver_hair_sway",
+            "sourceParameterId=param_hair_sway",
+            "producerGroupId=dyn_hair_sway"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "runtime-output-parameter-mismatch",
+      "checks": [
+        {
+          "checkId": "dynamics.runtimeEvidenceMissing",
+          "targetId": "dyn_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0",
+          "evidence": [
+            "dynamicsGroupId=dyn_hair_sway",
+            "outputParameterId=param_hair_sway",
+            "snapshotId=snap_minimum_open_dynamics_v1_evidence_1",
+            "snapshotOutputParameterId=param_other_output"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "runtime-output-out-of-range",
+      "checks": [
+        {
+          "checkId": "dynamics.outputParameterOutOfRange",
+          "targetId": "param_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/runtimeEvidence/outputValue",
+          "evidence": [
+            "dynamicsGroupId=dyn_hair_sway",
+            "outputParameterId=param_hair_sway",
+            "snapshotId=snap_minimum_open_dynamics_v1_evidence_1",
+            "outputValue=2",
+            "outputMin=-1",
+            "outputMax=1"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "runtime-output-clamped",
+      "checks": [
+        {
+          "checkId": "dynamics.outputClamped",
+          "targetId": "dyn_hair_sway",
+          "targetPath": "/model/dynamics/dynamicsGroups/0/runtimeEvidence/outputClamped",
+          "evidence": [
+            "dynamicsGroupId=dyn_hair_sway",
+            "outputParameterId=param_hair_sway",
+            "snapshotId=snap_minimum_open_dynamics_v1_evidence_1",
+            "outputClamped=true"
+          ]
+        }
+      ]
+    }
+  ]
+}

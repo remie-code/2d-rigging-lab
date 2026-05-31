@@ -42,6 +42,8 @@ describe("validator-core foundation", () => {
     expect(catalog.has("pkg.schema.requiredFileMissing")).toBe(true);
     expect(catalog.has("runtime.loadBlocking")).toBe(true);
     expect(catalog.has("runtime.drawListEmpty")).toBe(true);
+    expect(catalog.has("dynamics.driverMissing")).toBe(true);
+    expect(catalog.has("dynamics.runtimeEvidenceMissing")).toBe(true);
     expect(catalog.list("acceptance").map((definition) => definition.checkId)).toContain("evidence.guiOperationLogMissing");
   });
 

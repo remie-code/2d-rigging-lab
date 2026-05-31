@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "minimum-open-dynamics-validation-report-summary-v1",
+  "baseline": {
+    "reportId": "val_minimum_open_dynamics_v1_baseline",
+    "status": "fail",
+    "highestSeverity": "error",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 2,
+      "blocking": 0
+    },
+    "checkIds": [
+      "dynamics.requiredGroupMissing",
+      "dynamics.computedParameterProducerMissing"
+    ],
+    "runtimeSnapshotIds": [
+      "snap_minimum_open_dynamics_v1_evidence_0"
+    ],
+    "operationLogPresent": false
+  },
+  "candidate": {
+    "reportId": "val_minimum_open_dynamics_v1_candidate",
+    "status": "pass",
+    "highestSeverity": "info",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 0,
+      "blocking": 0
+    },
+    "checkIds": [],
+    "runtimeSnapshotIds": [
+      "snap_minimum_open_dynamics_v1_evidence_1"
+    ],
+    "operationLogPresent": true,
+    "operationLogPath": "operations/log.jsonl"
+  },
+  "validationDiff": {
+    "schemaVersion": "validation-diff-v1",
+    "beforeReportId": "val_minimum_open_dynamics_v1_baseline",
+    "afterReportId": "val_minimum_open_dynamics_v1_candidate",
+    "newFailureCount": 0,
+    "resolvedFailureCount": 2,
+    "severityChangeCount": 0
+  }
+}

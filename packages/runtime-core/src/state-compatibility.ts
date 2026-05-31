@@ -1,7 +1,7 @@
 import type { DiagnosticDto, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
 import { createRuntimeDiagnostic } from "./diagnostics.js";
-import { computeDynamicsTarget } from "./initial-state.js";
+import { computeDynamicsTarget } from "./dynamics-evaluation.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 

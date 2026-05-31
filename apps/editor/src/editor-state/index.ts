@@ -4,6 +4,7 @@ export * from "./create-drawable-form-state.js";
 export * from "./create-parameter-form-state.js";
 export * from "./diagnostic-summary.js";
 export * from "./drawable-list-state.js";
+export * from "./dynamics-authoring-state.js";
 export * from "./editor-semantic-state.js";
 export * from "./editor-state-projections.js";
 export * from "./editor-test-ids.js";

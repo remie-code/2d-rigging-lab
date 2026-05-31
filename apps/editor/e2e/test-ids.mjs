@@ -23,6 +23,14 @@ export const editorTestIds = {
   sourceIntakeManifestPath: "sourceIntake.manifestPath",
   sourceIntakePlacementPolicy: "sourceIntake.placementPolicy",
   sourceIntakeRightsStatus: "sourceIntake.rightsStatus",
+  dynamicsPanel: "dynamics.panel",
+  dynamicsCreateForm: "dynamics.create.form",
+  dynamicsCreateSubmit: "dynamics.create",
+  dynamicsPreviewRun: "dynamics.preview.run",
+  dynamicsPreviewReset: "dynamics.preview.reset",
+  dynamicsPreviewEvidence: "dynamics.preview.evidence",
+  dynamicsPreviewOutputs: "dynamics.preview.outputs",
+  dynamicsValidatorDiagnostics: "dynamics.validator.diagnostics",
   drawableResult: "drawable.result",
   operationStatus: "operation.status",
   projectPersistencePanel: "projectPersistence.panel",
@@ -81,3 +89,6 @@ export const createImportedSourceAssetRowTestId = (sourceAssetId) =>
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;
+
+export const createDynamicsGroupUpdateTestId = (dynamicsGroupId) =>
+  `dynamics.update.${dynamicsGroupId}`;

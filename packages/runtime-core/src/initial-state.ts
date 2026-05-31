@@ -1,9 +1,12 @@
 import type { DynamicsGroupId, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import { RuntimeStateDtoSchema } from "@private-2d-rigging-lab/contracts";
 
-import type { NormalizedDynamicsGroup, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import { computeDynamicsTarget } from "./dynamics-evaluation.js";
+import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeInitialStateRequestInput } from "./runtime-input.js";
 import { RuntimeInitialStateRequestSchema } from "./runtime-input.js";
+
+export { computeDynamicsTarget } from "./dynamics-evaluation.js";
 
 export const createInitialRuntimeState = (
   graph: NormalizedRuntimeGraph,
@@ -37,22 +40,3 @@ export const createInitialRuntimeState = (
     dynamicsGroups
   });
 };
-
-export const computeDynamicsTarget = (
-  graph: NormalizedRuntimeGraph,
-  group: NormalizedDynamicsGroup,
-  authoredParameterValues: Readonly<Record<string, number>>
-): number => {
-  const targetInput = group.drivers.reduce((sum, driver) => {
-    const sourceParameter = graph.parameters.get(driver.sourceParameterId);
-    const defaultValue = sourceParameter?.default ?? 0;
-    const authoredValue = authoredParameterValues[driver.sourceParameterId] ?? defaultValue;
-    const signedValue = driver.invert ? -authoredValue : authoredValue;
-    return sum + signedValue * driver.inputScale + driver.inputOffset;
-  }, 0);
-
-  const rawTarget = targetInput * group.output.outputScale + group.output.outputOffset;
-  return clamp(rawTarget, group.output.min, group.output.max);
-};
-
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);

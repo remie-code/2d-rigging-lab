@@ -24,13 +24,42 @@ export const DynamicsSettingsSchema = z.object({
 });
 export type DynamicsSettingsDto = z.infer<typeof DynamicsSettingsSchema>;
 
+export const DynamicsDriverBindingPayloadSchema = z.object({
+  driverId: z.string().optional(),
+  sourceParameterId: ParameterIdSchema,
+  inputScale: z.number().finite().default(1),
+  inputOffset: z.number().finite().default(0),
+  invert: z.boolean().default(false)
+});
+export type DynamicsDriverBindingPayloadDto = z.infer<typeof DynamicsDriverBindingPayloadSchema>;
+
+const dynamicsOutputBindingPayloadShape = {
+  outputId: z.string().optional(),
+  targetParameterId: ParameterIdSchema,
+  outputScale: z.number().finite().default(1),
+  outputOffset: z.number().finite().default(0),
+  min: z.number().finite(),
+  max: z.number().finite(),
+  clampPolicy: z.literal("clamp-to-output-range")
+};
+
+export const DynamicsOutputBindingPayloadSchema = z
+  .object(dynamicsOutputBindingPayloadShape)
+  .refine((payload) => payload.min <= payload.max, {
+    message: "min must be less than or equal to max",
+    path: ["min"]
+  });
+export type DynamicsOutputBindingPayloadDto = z.infer<typeof DynamicsOutputBindingPayloadSchema>;
+
 export const CreateDynamicsGroupPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema.optional(),
   displayName: z.string().min(1),
   enabled: z.boolean().default(true),
   solverKind: z.literal("scalarDampedFollowV1"),
   resetPolicy: DynamicsResetPolicySchema,
-  settings: DynamicsSettingsSchema
+  settings: DynamicsSettingsSchema,
+  drivers: z.array(DynamicsDriverBindingPayloadSchema).min(1).optional(),
+  output: DynamicsOutputBindingPayloadSchema.optional()
 });
 export type CreateDynamicsGroupPayloadDto = z.infer<typeof CreateDynamicsGroupPayloadSchema>;
 
@@ -49,24 +78,14 @@ export type DeleteDynamicsGroupPayloadDto = z.infer<typeof DeleteDynamicsGroupPa
 
 export const BindDynamicsDriverPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
-  driverId: z.string().optional(),
-  sourceParameterId: ParameterIdSchema,
-  inputScale: z.number().finite().default(1),
-  inputOffset: z.number().finite().default(0),
-  invert: z.boolean().default(false)
+  ...DynamicsDriverBindingPayloadSchema.shape
 });
 export type BindDynamicsDriverPayloadDto = z.infer<typeof BindDynamicsDriverPayloadSchema>;
 
 export const BindDynamicsOutputPayloadSchema = z
   .object({
     dynamicsGroupId: DynamicsGroupIdSchema,
-    outputId: z.string().optional(),
-    targetParameterId: ParameterIdSchema,
-    outputScale: z.number().finite().default(1),
-    outputOffset: z.number().finite().default(0),
-    min: z.number().finite(),
-    max: z.number().finite(),
-    clampPolicy: z.literal("clamp-to-output-range")
+    ...dynamicsOutputBindingPayloadShape
   })
   .refine((payload) => payload.min <= payload.max, {
     message: "min must be less than or equal to max",

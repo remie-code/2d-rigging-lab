@@ -9,6 +9,11 @@ import {
 } from "./create-drawable-form-state.js";
 import { projectDrawableList } from "./drawable-list-state.js";
 import {
+  createEmptyDynamicsPreviewState,
+  projectDynamicsGroupState,
+  type DynamicsPreviewState
+} from "./dynamics-authoring-state.js";
+import {
   projectGeneratedEvidenceSummary,
   type GeneratedEvidenceSummaryInput
 } from "./generated-evidence-summary.js";
@@ -33,6 +38,7 @@ import { createEmptySourceIntakeDraftState } from "./source-intake-draft-state.j
 import type {
   DrawableDto,
   DrawOrderEntryDto,
+  DynamicsGroupDto,
   MeshDto,
   ModelPartDto,
   SourceAssetDto,
@@ -43,6 +49,7 @@ export interface LoadedPackageSummaryInput {
   readonly identity: LoadedPackageIdentityInput;
   readonly revision: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
+  readonly dynamicsGroups?: readonly DynamicsGroupDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -59,8 +66,10 @@ export interface CommittedOperationSummaryInput {
   readonly result: OperationResultSummaryInput;
   readonly operationLogEntries: readonly OperationLogEntryProjectionInput[];
   readonly generatedEvidence?: GeneratedEvidenceSummaryInput;
+  readonly dynamicsPreview?: DynamicsPreviewState;
   readonly revision?: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
+  readonly dynamicsGroups?: readonly DynamicsGroupDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -94,6 +103,7 @@ export const projectLoadedPackageState = (
     loadedPackage: projectLoadedPackageIdentity(input.identity),
     revision: projectPackageRevision(input.revision),
     parameters: projectParameterList(input.parameters ?? []),
+    dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
     drawables,
     meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
     pendingCreateDrawable: projectCreateDrawableDefaults({
@@ -131,6 +141,10 @@ export const applyCommittedOperationSummary = (
     ...state,
     revision: input.revision === undefined ? state.revision : projectPackageRevision(input.revision),
     parameters: input.parameters === undefined ? state.parameters : projectParameterList(input.parameters),
+    dynamicsGroups:
+      input.dynamicsGroups === undefined
+        ? state.dynamicsGroups
+        : projectDynamicsGroupState(input.dynamicsGroups),
     drawables,
     meshEdit,
     previewParameters:
@@ -162,6 +176,11 @@ export const applyCommittedOperationSummary = (
     lastOperationResult: projectOperationResultSummary(input.result),
     operationLog: projectOperationLogSummary(input.operationLogEntries),
     generatedEvidence: projectGeneratedEvidenceSummary(input.generatedEvidence ?? {}),
+    dynamicsPreview:
+      input.dynamicsPreview ??
+      (input.parameters === undefined && input.dynamicsGroups === undefined
+        ? state.dynamicsPreview
+        : createEmptyDynamicsPreviewState()),
     reload: input.reload === undefined ? state.reload : projectReloadSummary(input.reload)
   };
 };

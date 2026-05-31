@@ -25,6 +25,7 @@ import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
 import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
+import { computeDynamicsTargetSample } from "./dynamics-evaluation.js";
 import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
@@ -240,19 +241,14 @@ const createEvaluatedDynamics = (
     .filter((group) => group.enabled)
     .map((group) => {
       const groupState = state.dynamicsGroups[group.dynamicsGroupId];
-      const outputValue = groupState?.position ?? 0;
-      const driverValues = Object.fromEntries(
-        group.drivers.map((driver) => {
-          const parameterDefault = graph.parameters.get(driver.sourceParameterId)?.default ?? 0;
-          return [driver.sourceParameterId, input.authoredParameterValues[driver.sourceParameterId] ?? parameterDefault];
-        })
-      );
+      const target = computeDynamicsTargetSample(graph, group, input.authoredParameterValues);
+      const outputValue = groupState?.position ?? target.clampedTarget;
 
       return EvaluatedDynamicsGroupSchema.parse({
         dynamicsGroupId: group.dynamicsGroupId,
         enabled: group.enabled,
         solverKind: group.solverKind,
-        driverValues,
+        driverValues: target.driverValues,
         outputParameterId: group.output.targetParameterId,
         outputValue,
         stateSummary: {
@@ -266,6 +262,9 @@ const createEvaluatedDynamics = (
           ? {}
           : {
               debug: {
+                rawTarget: target.rawTarget,
+                clampedTarget: target.clampedTarget,
+                outputClamped: target.outputClamped,
                 resetApplied: input.resetReasons.length > 0,
                 resetReasons: input.resetReasons
               }

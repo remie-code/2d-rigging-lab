@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": true,
+  "basePackageRevision": 0,
+  "idempotencyKey": "fixture-create-minimum-open-dynamics-v1-dry-run",
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-010",
+      "AC-MVP-012",
+      "AC-MVP-013"
+    ],
+    "relatedScenarios": [
+      "SC-MVP-002",
+      "SC-MVP-003",
+      "SC-MVP-004"
+    ]
+  },
+  "operationType": "createDynamicsGroup",
+  "payload": {
+    "dynamicsGroupId": "dyn_hair_sway",
+    "displayName": "Hair Sway",
+    "enabled": true,
+    "solverKind": "scalarDampedFollowV1",
+    "resetPolicy": "reset-on-load",
+    "settings": {
+      "stiffness": 0.4,
+      "damping": 0.6,
+      "maxVelocity": 2,
+      "maxAmplitude": 1
+    },
+    "drivers": [
+      {
+        "driverId": "driver_face_yaw",
+        "sourceParameterId": "param_face_yaw",
+        "inputScale": 1,
+        "inputOffset": 0,
+        "invert": false
+      }
+    ],
+    "output": {
+      "outputId": "output_hair_sway",
+      "targetParameterId": "param_hair_sway",
+      "outputScale": 1,
+      "outputOffset": 0,
+      "min": -1,
+      "max": 1,
+      "clampPolicy": "clamp-to-output-range"
+    }
+  }
+}

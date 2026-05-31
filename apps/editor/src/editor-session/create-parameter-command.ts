@@ -14,6 +14,7 @@ export interface EditorCreateParameterCommand {
   readonly displayName: string;
   readonly semanticRole?: CreateParameterPayloadDto["semanticRole"];
   readonly projectPresetAlias?: string;
+  readonly valueSource?: CreateParameterPayloadDto["valueSource"];
   readonly min: number;
   readonly max: number;
   readonly defaultValue: number;
@@ -44,7 +45,7 @@ export const createParameterOperationRequest = (
       ...(command.projectPresetAlias === undefined
         ? {}
         : { projectPresetAlias: command.projectPresetAlias }),
-      valueSource: "authoredInput",
+      valueSource: command.valueSource ?? "authoredInput",
       min: command.min,
       max: command.max,
       default: command.defaultValue,

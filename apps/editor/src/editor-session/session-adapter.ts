@@ -40,6 +40,12 @@ import {
   type EditorSetDrawableRuntimeVisibilityCommand
 } from "./drawable-layer-command.js";
 import {
+  createDynamicsGroupOperationRequest,
+  createUpdateDynamicsGroupOperationRequest,
+  type EditorCreateDynamicsGroupCommand,
+  type EditorUpdateDynamicsGroupCommand
+} from "./dynamics-group-command.js";
+import {
   createMoveMeshVertexOperationRequest,
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
@@ -70,6 +76,8 @@ export interface EditorSessionAdapter {
   ): EditorSessionPersistenceResult;
   commitSetDrawableDrawOrder(command: EditorSetDrawableDrawOrderCommand): EditorSessionPersistenceResult;
   commitMoveMeshVertex(command: EditorMoveMeshVertexCommand): EditorSessionPersistenceResult;
+  commitCreateDynamicsGroup(command: EditorCreateDynamicsGroupCommand): EditorSessionPersistenceResult;
+  commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorSessionPersistenceResult;
   commitImportSplitPngSourceAsset(
     command: EditorImportSplitPngSourceAssetCommand
   ): EditorSessionPersistenceResult;
@@ -214,6 +222,20 @@ export const createEditorSessionAdapter = (
     },
     commitMoveMeshVertex(command) {
       const request = createMoveMeshVertexOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitCreateDynamicsGroup(command) {
+      const request = createDynamicsGroupOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitUpdateDynamicsGroup(command) {
+      const request = createUpdateDynamicsGroupOperationRequest(
         command,
         authoringSession.packageRevision
       );

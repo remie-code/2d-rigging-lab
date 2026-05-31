@@ -9,7 +9,8 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import type { z } from "zod";
 
-import { computeDynamicsTarget, createInitialRuntimeState } from "./initial-state.js";
+import { advanceDynamicsGroupState } from "./dynamics-evaluation.js";
+import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeComparisonResult, SnapshotComparisonPolicyInput } from "./snapshot-comparison.js";
 import { compareRuntimeSnapshots } from "./snapshot-comparison.js";
@@ -132,15 +133,17 @@ const advanceRuntimeState = (
       continue;
     }
 
-    const previousGroupState = previousState.dynamicsGroups[group.dynamicsGroupId];
-    const target = computeDynamicsTarget(graph, group, input.authoredParameterValues);
     const resetApplied = input.resetReasons.length > 0;
-    nextDynamicsGroups[group.dynamicsGroupId] = {
-      position: resetApplied ? target : previousGroupState?.position ?? target,
-      velocity: resetApplied ? 0 : previousGroupState?.velocity ?? 0,
-      tick: resetApplied ? 0 : (previousGroupState?.tick ?? 0) + actualSubSteps,
-      resetCounter: (previousGroupState?.resetCounter ?? 0) + (resetApplied ? 1 : 0)
-    };
+    const advanced = advanceDynamicsGroupState({
+      graph,
+      group,
+      previousState: previousState.dynamicsGroups[group.dynamicsGroupId],
+      authoredParameterValues: input.authoredParameterValues,
+      fixedStepMs: previousState.fixedStepMs,
+      subSteps: actualSubSteps,
+      resetApplied
+    });
+    nextDynamicsGroups[group.dynamicsGroupId] = advanced.state;
   }
 
   return RuntimeStateDtoSchema.parse({

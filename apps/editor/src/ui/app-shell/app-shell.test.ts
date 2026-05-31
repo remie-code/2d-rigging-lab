@@ -123,6 +123,42 @@ describe("editor app shell preview panel", () => {
     );
   });
 
+  it("renders dynamics authoring and wires preview controls", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateDynamicsGroup(createDynamicsGroupCommand("hair"));
+    workflow.setPreviewParameterValue("param_preview_body_yaw", 1);
+    workflow.runDynamicsPreview(2);
+    const calls: unknown[] = [];
+    const shell = renderShell(workflow, {
+      onRunDynamicsPreview(frameCount) {
+        calls.push(["run", frameCount]);
+      },
+      onResetDynamicsPreview() {
+        calls.push(["reset"]);
+      }
+    });
+
+    expect(findByTestId(shell, editorTestIds.dynamicsPanel)?.textContent).toContain("Dynamics");
+    expect(findByTestId(shell, editorTestIds.dynamicsCreateForm)?.textContent).toContain("Create group");
+    expect(findByTestId(shell, editorTestIds.dynamicsPreviewOutputs)?.textContent).toContain(
+      "param_dynamics_workflow_hair_sway_r0"
+    );
+    expect(findByTestId(shell, editorTestIds.dynamicsPreviewEvidence)?.textContent).toContain(
+      "val_editor_browser_sample_editorIncremental"
+    );
+    expect(findByTestId(shell, editorTestIds.dynamicsValidatorDiagnostics)?.textContent).toContain(
+      "Validator Diagnostics"
+    );
+
+    findByTestId(shell, editorTestIds.dynamicsPreviewRun)?.emit("click");
+    findByTestId(shell, editorTestIds.dynamicsPreviewReset)?.emit("click");
+
+    expect(calls).toEqual([
+      ["run", 8],
+      ["reset"]
+    ]);
+  });
+
   it("renders source intake draft controls without moving drawable authoring out of the shell", () => {
     const workflow = createWorkflow();
     const shell = renderShell(workflow);
@@ -324,6 +360,10 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onCommitCreateDynamicsGroup() {},
+      onCommitUpdateDynamicsGroup() {},
+      onRunDynamicsPreview() {},
+      onResetDynamicsPreview() {},
       onConfirmSourceIntakeDraft() {},
       onSaveProject() {},
       onLoadProject() {},
@@ -354,6 +394,10 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onCommitCreateDynamicsGroup() {},
+      onCommitUpdateDynamicsGroup() {},
+      onRunDynamicsPreview() {},
+      onResetDynamicsPreview() {},
       onConfirmSourceIntakeDraft() {},
       onSaveProject() {},
       onLoadProject() {},
@@ -378,6 +422,8 @@ const renderShell = (
     readonly onToggleDrawableRuntimeVisibility?: (drawableId: string) => void;
     readonly onMoveDrawableLayer?: (drawableId: string, direction: "up" | "down") => void;
     readonly onNudgeMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshVertex"];
+    readonly onRunDynamicsPreview?: (frameCount: number) => void;
+    readonly onResetDynamicsPreview?: () => void;
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -391,6 +437,10 @@ const renderShell = (
     onToggleDrawableRuntimeVisibility: callbacks.onToggleDrawableRuntimeVisibility ?? (() => {}),
     onMoveDrawableLayer: callbacks.onMoveDrawableLayer ?? (() => {}),
     onNudgeMeshVertex: callbacks.onNudgeMeshVertex ?? (() => {}),
+    onCommitCreateDynamicsGroup() {},
+    onCommitUpdateDynamicsGroup() {},
+    onRunDynamicsPreview: callbacks.onRunDynamicsPreview ?? (() => {}),
+    onResetDynamicsPreview: callbacks.onResetDynamicsPreview ?? (() => {}),
     onConfirmSourceIntakeDraft() {},
     onSaveProject() {},
     onLoadProject() {},
@@ -422,6 +472,25 @@ const createDrawablePresetCommand = (name: "star") => ({
   initialBounds: { x: 16, y: 24, width: 24, height: 24 },
   meshMethod: "auto-grid-v1",
   densityHint: "low"
+} as const);
+
+const createDynamicsGroupCommand = (name: "hair") => ({
+  operationId: `op_workflow_create_dynamics_${name}`,
+  outputParameterOperationId: `op_workflow_create_dynamics_output_${name}`,
+  dynamicsGroupId: "dyn_workflow_hair_sway",
+  displayName: "Workflow Hair Sway",
+  driverParameterId: "param_preview_body_yaw",
+  outputParameterDisplayName: "Workflow Hair Sway",
+  outputMin: -1,
+  outputMax: 1,
+  outputScale: 1,
+  outputOffset: 0,
+  resetPolicy: "reset-on-manual-command",
+  enabled: true,
+  stiffness: 0.25,
+  damping: 0.35,
+  maxVelocity: 2,
+  maxAmplitude: 1
 } as const);
 
 const createTextureSourceIntakeDraft = (
@@ -569,6 +638,10 @@ class TestElement {
     }
 
     return null;
+  }
+
+  querySelector(selector: string): TestElement | null {
+    return this.queryByPredicate((element) => element.tagName === selector);
   }
 }
 

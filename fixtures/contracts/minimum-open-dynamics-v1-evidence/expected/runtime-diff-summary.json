@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "minimum-open-dynamics-runtime-diff-summary-v1",
+  "runtimeDiff": {
+    "schemaVersion": "runtime-diff-v1",
+    "beforeSnapshotId": "snap_minimum_open_dynamics_v1_evidence_0",
+    "afterSnapshotId": "snap_minimum_open_dynamics_v1_evidence_1",
+    "parameterChanges": [
+      {
+        "path": "/parameters/param_hair_sway/effectiveValue",
+        "before": 0,
+        "after": 1
+      }
+    ],
+    "dynamicsChanges": [
+      {
+        "dynamicsGroupId": "dyn_hair_sway",
+        "outputParameterId": "param_hair_sway",
+        "stateChanged": true,
+        "outputChanged": true,
+        "positionAfter": 1,
+        "velocityAfter": 0,
+        "tickAfter": 1,
+        "resetCounterAfter": 1
+      }
+    ],
+    "drawableChangeCount": 1,
+    "diagnosticDeltaCount": 0
+  }
+}

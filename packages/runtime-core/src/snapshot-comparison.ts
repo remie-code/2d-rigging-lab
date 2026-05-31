@@ -24,6 +24,8 @@ export const compareRuntimeSnapshots = (
 ): RuntimeComparisonResult => {
   const policy = SnapshotComparisonPolicySchema.parse(policyInput);
   const beforeDrawablesById = new Map(before.drawables.map((drawable) => [drawable.drawableId, drawable]));
+  const beforeDynamicsById = new Map(before.dynamics.map((dynamics) => [dynamics.dynamicsGroupId, dynamics]));
+  const afterDynamicsById = new Map(after.dynamics.map((dynamics) => [dynamics.dynamicsGroupId, dynamics]));
   const parameterChanges = after.parameters.flatMap((afterParameter) => {
     const beforeParameter = before.parameters.find((parameter) => parameter.parameterId === afterParameter.parameterId);
     if (beforeParameter === undefined || Math.abs(beforeParameter.effectiveValue - afterParameter.effectiveValue) <= policy.opacityEpsilon) {
@@ -38,40 +40,71 @@ export const compareRuntimeSnapshots = (
       }
     ];
   });
-  const dynamicsChanges = after.dynamics.flatMap((afterDynamics) => {
-    const beforeDynamics = before.dynamics.find((dynamics) => dynamics.dynamicsGroupId === afterDynamics.dynamicsGroupId);
-    if (beforeDynamics === undefined) {
-      return [];
-    }
-
-    const stateChanged =
-      beforeDynamics.stateSummary.position !== afterDynamics.stateSummary.position ||
-      beforeDynamics.stateSummary.velocity !== afterDynamics.stateSummary.velocity ||
-      beforeDynamics.tick !== afterDynamics.tick ||
-      beforeDynamics.resetCounter !== afterDynamics.resetCounter;
-    const outputChanged = beforeDynamics.outputValue !== afterDynamics.outputValue;
-
-    if (!stateChanged && !outputChanged) {
-      return [];
-    }
-
-    return [
-      {
-        dynamicsGroupId: afterDynamics.dynamicsGroupId,
-        outputParameterId: afterDynamics.outputParameterId,
-        stateChanged,
-        outputChanged,
-        positionBefore: beforeDynamics.stateSummary.position,
-        positionAfter: afterDynamics.stateSummary.position,
-        velocityBefore: beforeDynamics.stateSummary.velocity,
-        velocityAfter: afterDynamics.stateSummary.velocity,
-        tickBefore: beforeDynamics.tick,
-        tickAfter: afterDynamics.tick,
-        resetCounterBefore: beforeDynamics.resetCounter,
-        resetCounterAfter: afterDynamics.resetCounter
+  const dynamicsChanges = [
+    ...after.dynamics.flatMap((afterDynamics) => {
+      const beforeDynamics = beforeDynamicsById.get(afterDynamics.dynamicsGroupId);
+      if (beforeDynamics === undefined) {
+        return [
+          {
+            dynamicsGroupId: afterDynamics.dynamicsGroupId,
+            outputParameterId: afterDynamics.outputParameterId,
+            stateChanged: true,
+            outputChanged: true,
+            positionAfter: afterDynamics.stateSummary.position,
+            velocityAfter: afterDynamics.stateSummary.velocity,
+            tickAfter: afterDynamics.tick,
+            resetCounterAfter: afterDynamics.resetCounter
+          }
+        ];
       }
-    ];
-  });
+
+      const stateChanged =
+        beforeDynamics.stateSummary.position !== afterDynamics.stateSummary.position ||
+        beforeDynamics.stateSummary.velocity !== afterDynamics.stateSummary.velocity ||
+        beforeDynamics.tick !== afterDynamics.tick ||
+        beforeDynamics.resetCounter !== afterDynamics.resetCounter;
+      const outputChanged = beforeDynamics.outputValue !== afterDynamics.outputValue;
+
+      if (!stateChanged && !outputChanged) {
+        return [];
+      }
+
+      return [
+        {
+          dynamicsGroupId: afterDynamics.dynamicsGroupId,
+          outputParameterId: afterDynamics.outputParameterId,
+          stateChanged,
+          outputChanged,
+          positionBefore: beforeDynamics.stateSummary.position,
+          positionAfter: afterDynamics.stateSummary.position,
+          velocityBefore: beforeDynamics.stateSummary.velocity,
+          velocityAfter: afterDynamics.stateSummary.velocity,
+          tickBefore: beforeDynamics.tick,
+          tickAfter: afterDynamics.tick,
+          resetCounterBefore: beforeDynamics.resetCounter,
+          resetCounterAfter: afterDynamics.resetCounter
+        }
+      ];
+    }),
+    ...before.dynamics.flatMap((beforeDynamics) => {
+      if (afterDynamicsById.has(beforeDynamics.dynamicsGroupId)) {
+        return [];
+      }
+
+      return [
+        {
+          dynamicsGroupId: beforeDynamics.dynamicsGroupId,
+          outputParameterId: beforeDynamics.outputParameterId,
+          stateChanged: true,
+          outputChanged: true,
+          positionBefore: beforeDynamics.stateSummary.position,
+          velocityBefore: beforeDynamics.stateSummary.velocity,
+          tickBefore: beforeDynamics.tick,
+          resetCounterBefore: beforeDynamics.resetCounter
+        }
+      ];
+    })
+  ];
   const drawableChanges = after.drawables.flatMap((afterDrawable) => {
     const beforeDrawable = beforeDrawablesById.get(afterDrawable.drawableId);
     const boundsChanged =

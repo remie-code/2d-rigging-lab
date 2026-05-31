@@ -1,5 +1,6 @@
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   OperationIdSchema,
@@ -10,6 +11,7 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DrawableId,
+  DynamicsGroupId,
   KeyformSetId,
   MeshId,
   OperationId,
@@ -35,6 +37,19 @@ export const createParameterIdFromDisplayName = (displayName: string): Parameter
 
 export const createDrawableIdFromDisplayName = (displayName: string): DrawableId =>
   DrawableIdSchema.parse(`draw_${sanitizeIdToken(displayName)}`);
+
+export const createDynamicsGroupIdFromDisplayName = (displayName: string): DynamicsGroupId =>
+  DynamicsGroupIdSchema.parse(`dyn_${sanitizeIdToken(displayName)}`);
+
+export const createDynamicsDriverId = (
+  dynamicsGroupId: DynamicsGroupId,
+  parameterId: ParameterId
+): string => `driver_${stripIdPrefix(dynamicsGroupId, "dyn_")}_${stripIdPrefix(parameterId, "param_")}`;
+
+export const createDynamicsOutputId = (
+  dynamicsGroupId: DynamicsGroupId,
+  parameterId: ParameterId
+): string => `output_${stripIdPrefix(dynamicsGroupId, "dyn_")}_${stripIdPrefix(parameterId, "param_")}`;
 
 export const createMeshIdFromDrawableId = (drawableId: DrawableId): MeshId =>
   MeshIdSchema.parse(`mesh_${stripIdPrefix(drawableId, "draw_")}`);

@@ -17,7 +17,8 @@ import type {
   EditorCreateDrawablePresetCommand,
   EditorMeshVertexNudgeCommand,
   EditorCreateParameterCommand,
-  EditorSessionPersistenceResult
+  EditorSessionPersistenceResult,
+  EditorUpdateDynamicsGroupCommand
 } from "../../editor-session/index.js";
 import {
   createGeneratedEvidenceSummaryPanel,
@@ -26,6 +27,10 @@ import {
 import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
 import { createAiTranscriptPanel } from "../ai-transcript/index.js";
 import { createDrawableAuthoringPanel } from "../drawable-authoring/index.js";
+import {
+  createDynamicsPanel,
+  type EditorDynamicsCreateCommand
+} from "../dynamics-panel/index.js";
 import {
   createPackageFileSetPanel,
   createReloadSummaryPanel
@@ -49,6 +54,10 @@ export interface EditorAppShellOptions {
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
   readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
+  readonly onCommitCreateDynamicsGroup: (command: EditorDynamicsCreateCommand) => void;
+  readonly onCommitUpdateDynamicsGroup: (command: EditorUpdateDynamicsGroupCommand) => void;
+  readonly onRunDynamicsPreview: (frameCount: number) => void;
+  readonly onResetDynamicsPreview: () => void;
   readonly onConfirmSourceIntakeDraft: (draft: EditorSemanticState["sourceIntakeDraft"]) => void;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -136,6 +145,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     viewModel: options.viewModel.sourceIntake,
     onConfirmDraft: options.onConfirmSourceIntakeDraft
   });
+  const dynamicsPanel = createDynamicsPanel({
+    state: options.state,
+    viewModel: options.viewModel,
+    onCommitCreateDynamicsGroup: options.onCommitCreateDynamicsGroup,
+    onCommitUpdateDynamicsGroup: options.onCommitUpdateDynamicsGroup,
+    onRunDynamicsPreview: options.onRunDynamicsPreview,
+    onResetDynamicsPreview: options.onResetDynamicsPreview
+  });
   const textureAtlas = resolveTextureAtlas(options);
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
@@ -182,6 +199,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   workspace.append(
     parametersPanel,
     previewPanel,
+    dynamicsPanel,
     operationPanel,
     drawableAuthoringPanel,
     sourceIntakePanel,

@@ -16,8 +16,11 @@ export const ValidationPhaseSchema = z.enum([
   "rights",
   "reference",
   "mesh_semantic",
+  "dynamics_semantic",
+  "dynamics_evaluation",
   "runtime_load",
   "runtime_state",
+  "representative_evaluation",
   "acceptance_evidence",
   "demo_preflight"
 ]);
@@ -312,6 +315,110 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-005"],
     description: "Mesh triangle index references a missing vertex."
+  },
+  {
+    checkId: "dynamics.requiredGroupMissing",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "A required Minimum Open Dynamics v1 group is absent for a computed dynamics parameter."
+  },
+  {
+    checkId: "dynamics.driverMissing",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics group references a missing driver parameter."
+  },
+  {
+    checkId: "dynamics.outputMissing",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics group targets a missing computed output parameter."
+  },
+  {
+    checkId: "dynamics.outputTargetDuplicate",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Multiple dynamics groups target the same computed output parameter."
+  },
+  {
+    checkId: "dynamics.driverMustBeAuthoredInput",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics driver must reference an authoredInput parameter."
+  },
+  {
+    checkId: "dynamics.outputMustBeComputedParameter",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics output must target a computedDynamics parameter."
+  },
+  {
+    checkId: "dynamics.computedParameterProducerMissing",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Computed dynamics parameter has no producer group."
+  },
+  {
+    checkId: "dynamics.outputParameterOutOfRange",
+    phase: "dynamics_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
+    description: "Dynamics output range or runtime output falls outside the target parameter range."
+  },
+  {
+    checkId: "dynamics.outputClamped",
+    phase: "dynamics_evaluation",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
+    description: "Runtime dynamics output was clamped by declared output limits."
+  },
+  {
+    checkId: "dynamics.outputUsedAsDriver",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "A computed dynamics output parameter is used as a dynamics driver."
+  },
+  {
+    checkId: "dynamics.unstableSettings",
+    phase: "dynamics_semantic",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics settings are statically unsafe or likely unstable."
+  },
+  {
+    checkId: "dynamics.excessiveAmplitude",
+    phase: "dynamics_evaluation",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics maxAmplitude exceeds the safe output or parameter range."
+  },
+  {
+    checkId: "dynamics.runtimeEvidenceMissing",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
+    description: "Package dynamics cannot be matched to runtime snapshot evidence."
   },
   {
     checkId: "runtime.loadBlocking",

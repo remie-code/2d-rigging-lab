@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "editor-facing-dynamics-evidence-summary-v1",
+  "fixtureId": "minimum-open-dynamics-v1-evidence",
+  "workflow": {
+    "operationType": "createDynamicsGroup",
+    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "dynamicsGroupId": "dyn_hair_sway",
+    "displayName": "Hair Sway",
+    "driverParameterIds": [
+      "param_face_yaw"
+    ],
+    "outputParameterId": "param_hair_sway",
+    "keyformSetIdsDrivenByOutput": [
+      "keyset_hair_sway_vertices"
+    ]
+  },
+  "previewEvidence": {
+    "inputFrame": {
+      "frameIndex": 1,
+      "deltaTimeMs": 16.6666667,
+      "authoredParameterValues": {
+        "param_face_yaw": 1
+      }
+    },
+    "runtimeSnapshotId": "snap_minimum_open_dynamics_v1_evidence_1",
+    "computedOutput": {
+      "parameterId": "param_hair_sway",
+      "value": 1,
+      "source": "dynamicsComputed"
+    },
+    "projectedDrawable": {
+      "drawableId": "draw_hair",
+      "meshId": "mesh_hair",
+      "bounds": {
+        "x": 0,
+        "y": 0.5,
+        "width": 2,
+        "height": 2
+      },
+      "vertexCount": 3
+    }
+  },
+  "validationEvidence": {
+    "candidateReportId": "val_minimum_open_dynamics_v1_candidate",
+    "candidateStatus": "pass",
+    "baselineResolvedDynamicsFailures": [
+      "dynamics.requiredGroupMissing",
+      "dynamics.computedParameterProducerMissing"
+    ]
+  },
+  "artifactRefs": {
+    "baselinePackage": "fixtures/contracts/minimum-open-dynamics-v1-evidence/baseline-package.json",
+    "operationRequest": "fixtures/contracts/minimum-open-dynamics-v1-evidence/request/create-dynamics-group-commit.request.json",
+    "operationResultSummary": "fixtures/contracts/minimum-open-dynamics-v1-evidence/expected/operation-result-evidence-summary.json",
+    "runtimeSnapshotSummary": "fixtures/contracts/minimum-open-dynamics-v1-evidence/expected/runtime-snapshot-summary.json",
+    "runtimeDiffSummary": "fixtures/contracts/minimum-open-dynamics-v1-evidence/expected/runtime-diff-summary.json",
+    "validationReportSummary": "fixtures/contracts/minimum-open-dynamics-v1-evidence/expected/validation-report-summary.json"
+  },
+  "editorUiScope": "reference-only; no editor UI implementation is required by this fixture"
+}

@@ -2,6 +2,7 @@ export * from "./browser-sample-package.js";
 export * from "./create-drawable-preset-command.js";
 export * from "./create-parameter-command.js";
 export * from "./drawable-layer-command.js";
+export * from "./dynamics-group-command.js";
 export * from "./evidence-provider.js";
 export * from "./mesh-vertex-command.js";
 export * from "./session-adapter.js";

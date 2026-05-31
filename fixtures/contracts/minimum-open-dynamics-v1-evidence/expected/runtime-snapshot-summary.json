@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "minimum-open-dynamics-runtime-snapshot-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_minimum_open_dynamics_v1_evidence_0",
+    "packageId": "pkg_minimum_open_dynamics_v1_evidence",
+    "packageRevision": 0,
+    "parameters": [
+      {
+        "parameterId": "param_face_yaw",
+        "valueSource": "authoredInput",
+        "effectiveValue": 1,
+        "source": "viewerOverride"
+      },
+      {
+        "parameterId": "param_hair_sway",
+        "valueSource": "computedDynamics",
+        "effectiveValue": 0,
+        "source": "dynamicsComputed"
+      }
+    ],
+    "dynamics": [],
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_hair_sway_vertices",
+        "sampledCoordinates": {
+          "param_hair_sway": 0
+        },
+        "target": "mesh:mesh_hair.vertices",
+        "samplingStatus": "exact"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_hair",
+      "meshId": "mesh_hair",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ]
+    },
+    "diagnostics": []
+  },
+  "candidateSnapshot": {
+    "snapshotId": "snap_minimum_open_dynamics_v1_evidence_1",
+    "packageId": "pkg_minimum_open_dynamics_v1_evidence",
+    "packageRevision": 1,
+    "parameters": [
+      {
+        "parameterId": "param_face_yaw",
+        "valueSource": "authoredInput",
+        "effectiveValue": 1,
+        "source": "viewerOverride"
+      },
+      {
+        "parameterId": "param_hair_sway",
+        "valueSource": "computedDynamics",
+        "effectiveValue": 1,
+        "source": "dynamicsComputed"
+      }
+    ],
+    "dynamics": [
+      {
+        "dynamicsGroupId": "dyn_hair_sway",
+        "driverValues": {
+          "param_face_yaw": 1
+        },
+        "outputParameterId": "param_hair_sway",
+        "outputValue": 1,
+        "position": 1,
+        "velocity": 0,
+        "tick": 1,
+        "resetCounter": 1,
+        "debug": {
+          "rawTarget": 1,
+          "clampedTarget": 1,
+          "outputClamped": false,
+          "resetApplied": false,
+          "resetReasons": []
+        }
+      }
+    ],
+    "keyformSamples": [
+      {
+        "keyformSetId": "keyset_hair_sway_vertices",
+        "sampledCoordinates": {
+          "param_hair_sway": 1
+        },
+        "target": "mesh:mesh_hair.vertices",
+        "samplingStatus": "exact"
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_hair",
+      "meshId": "mesh_hair",
+      "bounds": {
+        "x": 0,
+        "y": 0.5,
+        "width": 2,
+        "height": 2
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0.5
+        },
+        {
+          "x": 2,
+          "y": 0.5
+        },
+        {
+          "x": 0,
+          "y": 2.5
+        }
+      ]
+    },
+    "diagnostics": []
+  },
+  "generatedRuntimeSnapshotIds": [
+    "snap_minimum_open_dynamics_v1_evidence_0",
+    "snap_minimum_open_dynamics_v1_evidence_1"
+  ],
+  "finalRuntimeState": {
+    "packageId": "pkg_minimum_open_dynamics_v1_evidence",
+    "packageRevision": 1,
+    "frameIndex": 1,
+    "dynamicsGroups": {
+      "dyn_hair_sway": {
+        "position": 1,
+        "velocity": 0,
+        "tick": 1,
+        "resetCounter": 1
+      }
+    }
+  }
+}

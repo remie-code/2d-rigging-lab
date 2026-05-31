@@ -49,6 +49,22 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.nudgeMeshVertex(command);
           render();
         },
+        onCommitCreateDynamicsGroup(command) {
+          workflow.commitCreateDynamicsGroup(command);
+          render();
+        },
+        onCommitUpdateDynamicsGroup(command) {
+          workflow.commitUpdateDynamicsGroup(command);
+          render();
+        },
+        onRunDynamicsPreview(frameCount) {
+          workflow.runDynamicsPreview(frameCount);
+          render();
+        },
+        onResetDynamicsPreview() {
+          workflow.resetDynamicsPreview();
+          render();
+        },
         onConfirmSourceIntakeDraft(draft) {
           workflow.commitSourceIntakeDraft(draft);
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;

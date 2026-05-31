@@ -22,6 +22,8 @@ export * from "./operations/import-split-png-source-asset.js";
 export * from "./operations/import-split-png-source-asset-unsupported-psd.js";
 export * from "./operations/generate-mesh.js";
 export * from "./operations/create-parameter.js";
+export * from "./operations/create-dynamics-group.js";
+export * from "./operations/update-dynamics-group.js";
 export * from "./operations/set-draw-order.js";
 export * from "./operations/set-rights-metadata.js";
 export * from "./operations/set-runtime-visibility.js";
