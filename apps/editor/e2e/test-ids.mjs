@@ -47,6 +47,14 @@ export const editorTestIds = {
   previewSummary: "preview.summary",
   previewReset: "preview.reset",
   previewEmpty: "preview.empty",
+  viewerRuntimeOpen: "viewerRuntime.open",
+  viewerRuntimePanel: "viewerRuntime.panel",
+  viewerRuntimeClose: "viewerRuntime.close",
+  viewerRuntimeReset: "viewerRuntime.reset",
+  viewerRuntimeSnapshotSummary: "viewerRuntime.snapshotSummary",
+  viewerRuntimeDiff: "viewerRuntime.diff",
+  viewerRuntimeDiagnostics: "viewerRuntime.diagnostics",
+  viewerRuntimePackageState: "viewerRuntime.packageState",
   aiApprovalPanel: "aiApproval.panel",
   aiApprovalStatus: "aiApproval.status",
   aiApprovalResultSummary: "aiApproval.resultSummary",
@@ -89,6 +97,9 @@ export const createImportedSourceAssetRowTestId = (sourceAssetId) =>
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;
+
+export const createViewerParameterControlTestId = (parameterId) =>
+  `viewer.parameter.${parameterId}`;
 
 export const createDynamicsGroupUpdateTestId = (dynamicsGroupId) =>
   `dynamics.update.${dynamicsGroupId}`;

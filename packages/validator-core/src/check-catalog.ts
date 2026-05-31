@@ -421,6 +421,22 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Package dynamics cannot be matched to runtime snapshot evidence."
   },
   {
+    checkId: "viewer.runtimeEvidenceMissing",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
+    description: "Viewer validation requires viewer runtime snapshot/evaluation evidence that is absent or unparseable."
+  },
+  {
+    checkId: "viewer.runtimeEvidenceStale",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
+    description: "Viewer runtime evidence does not match the validated package or runtime snapshot context."
+  },
+  {
     checkId: "runtime.loadBlocking",
     phase: "runtime_load",
     defaultSeverity: "blocking",

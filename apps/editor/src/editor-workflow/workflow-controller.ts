@@ -42,10 +42,15 @@ import type {
 } from "../project-persistence/index.js";
 import {
   applyPreviewParameterValue,
+  applyViewerParameterValue,
+  closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
+  openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
   projectCreateDrawableDefaultsForSourceSelection,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
+  resetViewerParameterValues as resetViewerRuntimeParameterValues,
   type PreviewParameterSetResult,
+  type ViewerParameterSetResult,
   type CreateDrawableFormState,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
@@ -79,6 +84,10 @@ import {
   createWorkflowDynamicsPreviewRunner,
   type EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
+import {
+  projectViewerRuntimeProjection,
+  type EditorViewerRuntimeProjection
+} from "./viewer-runtime-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -132,6 +141,15 @@ export type EditorWorkflowPersistenceResult =
   | EditorWorkflowResetResult;
 
 export interface EditorWorkflowPreviewResetResult {
+  readonly status: "reset";
+  readonly parameterCount: number;
+}
+
+export interface EditorWorkflowViewerSurfaceResult {
+  readonly status: "opened" | "closed";
+}
+
+export interface EditorWorkflowViewerResetResult {
   readonly status: "reset";
   readonly parameterCount: number;
 }
@@ -196,6 +214,7 @@ export interface EditorWorkflowController {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
   readonly previewProjection: EditorPreviewProjectionDto | null;
+  readonly viewerRuntimeProjection: EditorViewerRuntimeProjection | null;
   readonly aiCommandHost: EditorAiCommandHost;
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestDrawablePresetResult: EditorSessionDrawablePresetResult | null;
@@ -220,6 +239,10 @@ export interface EditorWorkflowController {
   runDynamicsPreview(frameCount: number): EditorWorkflowDynamicsPreviewResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
   resetPreviewParameterValues(): EditorWorkflowPreviewResetResult;
+  openViewerRuntimeSurface(): EditorWorkflowViewerSurfaceResult;
+  closeViewerRuntimeSurface(): EditorWorkflowViewerSurfaceResult;
+  setViewerParameterValue(parameterId: string, value: number): ViewerParameterSetResult;
+  resetViewerParameterValues(): EditorWorkflowViewerResetResult;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
   approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
@@ -322,6 +345,13 @@ export const createEditorWorkflowController = (
     },
     get previewProjection() {
       return dynamicsPreviewRunner.projectPreviewProjection({ adapter, state });
+    },
+    get viewerRuntimeProjection() {
+      return projectViewerRuntimeProjection({
+        adapter,
+        state,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
     },
     get aiCommandHost() {
       return aiCommandHost;
@@ -593,6 +623,54 @@ export const createEditorWorkflowController = (
       return {
         status: "reset",
         parameterCount: previewParameters.length
+      };
+    },
+    openViewerRuntimeSurface() {
+      state = {
+        ...state,
+        viewerRuntime: openViewerRuntimeStateSurface(state.viewerRuntime)
+      };
+
+      return {
+        status: "opened"
+      };
+    },
+    closeViewerRuntimeSurface() {
+      state = {
+        ...state,
+        viewerRuntime: closeViewerRuntimeStateSurface(state.viewerRuntime)
+      };
+
+      return {
+        status: "closed"
+      };
+    },
+    setViewerParameterValue(parameterId, value) {
+      const projection = applyViewerParameterValue(state.viewerRuntime, {
+        parameterId,
+        value
+      });
+
+      if (projection.result.status === "updated") {
+        state = {
+          ...state,
+          viewerRuntime: projection.viewerRuntime
+        };
+      }
+
+      return projection.result;
+    },
+    resetViewerParameterValues() {
+      const viewerRuntime = resetViewerRuntimeParameterValues(state.viewerRuntime);
+
+      state = {
+        ...state,
+        viewerRuntime
+      };
+
+      return {
+        status: "reset",
+        parameterCount: viewerRuntime.parameters.length
       };
     },
     dryRunAiCreateParameterCommand: aiApprovalActions.dryRunAiCreateParameterCommand,

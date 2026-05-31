@@ -12,6 +12,10 @@ import {
   projectSourceIntakeDraftViewModel,
   type SourceIntakeDraftViewModel
 } from "./source-intake-view-model.js";
+import {
+  projectViewerRuntimeViewModel,
+  type ViewerRuntimeViewModel
+} from "./viewer-runtime-view-model.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface AiApprovalWorkflowViewModel {
@@ -42,6 +46,7 @@ export interface EditorWorkflowViewModel {
   readonly meshEdit: MeshEditViewModel;
   readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
+  readonly viewerRuntime: ViewerRuntimeViewModel;
   readonly dynamics: DynamicsAuthoringViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
@@ -214,6 +219,7 @@ export const projectEditorWorkflowViewModel = (
       ...(state.textureAtlas === null ? {} : { textureAtlas: state.textureAtlas })
     }),
     previewControls: projectPreviewControlsViewModel(state),
+    viewerRuntime: projectViewerRuntimeViewModel(state.viewerRuntime),
     dynamics: projectDynamicsAuthoringViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };

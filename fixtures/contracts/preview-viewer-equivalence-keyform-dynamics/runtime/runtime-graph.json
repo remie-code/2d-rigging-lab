@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "normalized-runtime-graph-fixture-v1",
+  "packageId": "pkg_preview_viewer_equivalence",
+  "packageRevision": 24,
+  "packageHash": "sha256:preview-viewer-equivalence-keyform-dynamics",
+  "coordinateSystem": "canvas-y-down-v1",
+  "parameters": [
+    {
+      "id": "param_face_yaw",
+      "displayName": "Face Yaw",
+      "semanticRole": "face",
+      "valueSource": "authoredInput",
+      "min": -1,
+      "max": 1,
+      "default": 0
+    },
+    {
+      "id": "param_hair_sway",
+      "displayName": "Hair Sway",
+      "semanticRole": "dynamics",
+      "valueSource": "computedDynamics",
+      "min": -1,
+      "max": 1,
+      "default": 0
+    }
+  ],
+  "dynamicsGroups": [
+    {
+      "dynamicsGroupId": "dyn_hair_sway",
+      "displayName": "Hair Sway",
+      "enabled": true,
+      "solverKind": "scalarDampedFollowV1",
+      "drivers": [
+        {
+          "driverId": "driver_face_yaw",
+          "sourceParameterId": "param_face_yaw",
+          "inputScale": 1,
+          "inputOffset": 0,
+          "invert": false
+        }
+      ],
+      "output": {
+        "outputId": "output_hair_sway",
+        "targetParameterId": "param_hair_sway",
+        "outputScale": 1,
+        "outputOffset": 0,
+        "min": -1,
+        "max": 1,
+        "clampPolicy": "clamp-to-output-range"
+      },
+      "settings": {
+        "stiffness": 4,
+        "damping": 1
+      },
+      "resetPolicy": "reset-on-load"
+    }
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_hair",
+      "meshId": "mesh_hair",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 20,
+      "evaluatedDrawOrder": 20,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 2
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 2
+        }
+      ],
+      "vertexCount": 3
+    }
+  ],
+  "rigControls": [],
+  "keyformBindings": [
+    {
+      "evaluator": "linear-1d-v1",
+      "keyformSetId": "keyset_hair_sway_vertices",
+      "targetId": "mesh_hair",
+      "targetKind": "mesh",
+      "targetProperty": "vertices",
+      "parameterId": "param_hair_sway",
+      "compositionMode": "replace",
+      "compositionOrder": 0,
+      "keys": [
+        {
+          "value": 0,
+          "statePatch": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 2,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 2
+            }
+          ]
+        },
+        {
+          "value": 1,
+          "statePatch": [
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 2.25,
+              "y": 0.75
+            },
+            {
+              "x": 0.5,
+              "y": 2.5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "masks": [],
+  "drawOrder": [
+    {
+      "drawableId": "draw_hair",
+      "drawOrder": 20
+    }
+  ],
+  "disabledFutureLayers": []
+}

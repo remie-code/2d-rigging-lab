@@ -9,6 +9,7 @@ import {
   createDrawableVisibilityToggleTestId,
   createMeshVertexNudgeButtonTestId,
   createPreviewParameterControlTestId,
+  createViewerParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
   projectLoadedPackageState,
@@ -156,6 +157,67 @@ describe("editor app shell preview panel", () => {
     expect(calls).toEqual([
       ["run", 8],
       ["reset"]
+    ]);
+  });
+
+  it("opens the Viewer / Runtime surface and renders snapshot evidence", () => {
+    const workflow = createWorkflow();
+    workflow.openViewerRuntimeSurface();
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.viewerRuntimePanel)?.textContent).toContain("Viewer / Runtime");
+    expect(findByTestId(shell, editorTestIds.viewerRuntimeSnapshotSummary)?.textContent).toContain("viewer");
+    expect(findByTestId(shell, editorTestIds.viewerRuntimeDiff)?.textContent).toContain("Runtime Diff");
+    expect(findByTestId(shell, editorTestIds.viewerRuntimeDiagnostics)?.textContent).toContain(
+      "val_editor_browser_sample_editorIncremental"
+    );
+    expect(findByTestId(shell, editorTestIds.viewerRuntimePackageState)?.textContent).toContain(
+      "pkg_editor_browser_sample"
+    );
+  });
+
+  it("wires Viewer / Runtime open, close, slider, and reset callbacks", () => {
+    const workflow = createWorkflow();
+    const closedCalls: unknown[] = [];
+    const closedShell = renderShell(workflow, {
+      onOpenViewerRuntimeSurface() {
+        closedCalls.push(["open"]);
+      }
+    });
+
+    findByTestId(closedShell, editorTestIds.viewerRuntimeOpen)?.emit("click");
+    expect(closedCalls).toEqual([["open"]]);
+
+    workflow.openViewerRuntimeSurface();
+    const calls: unknown[] = [];
+    const shell = renderShell(workflow, {
+      onOpenViewerRuntimeSurface() {
+        calls.push(["open"]);
+      },
+      onCloseViewerRuntimeSurface() {
+        calls.push(["close"]);
+      },
+      onSetViewerParameterValue(parameterId, value) {
+        calls.push(["set", parameterId, value]);
+      },
+      onResetViewerParameterValues() {
+        calls.push(["reset"]);
+      }
+    });
+
+    findByTestId(shell, editorTestIds.viewerRuntimeOpen)?.emit("click");
+    const slider = findByTestId(shell, createViewerParameterControlTestId("param_preview_body_yaw"));
+    expect(slider?.getAttribute("aria-label")).toBe("Viewer Preview Body Yaw");
+    slider?.setProperty("value", "1");
+    slider?.emit("input");
+    findByTestId(shell, editorTestIds.viewerRuntimeReset)?.emit("click");
+    findByTestId(shell, editorTestIds.viewerRuntimeClose)?.emit("click");
+
+    expect(calls).toEqual([
+      ["close"],
+      ["set", "param_preview_body_yaw", 1],
+      ["reset"],
+      ["close"]
     ]);
   });
 
@@ -353,6 +415,7 @@ describe("editor app shell preview panel", () => {
       state,
       viewModel: projectEditorWorkflowViewModel(state),
       previewProjection: null,
+      viewerRuntimeProjection: null,
       latestPersistenceResult: null,
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
@@ -370,6 +433,10 @@ describe("editor app shell preview panel", () => {
       onResetProject() {},
       onSetPreviewParameterValue() {},
       onResetPreviewParameterValues() {},
+      onOpenViewerRuntimeSurface() {},
+      onCloseViewerRuntimeSurface() {},
+      onSetViewerParameterValue() {},
+      onResetViewerParameterValues() {},
       async onDryRunAiCreateParameter() {},
       async onApproveLatestAiDryRun() {},
       async onRejectLatestAiDryRun() {},
@@ -387,6 +454,7 @@ describe("editor app shell preview panel", () => {
       state,
       viewModel: projectEditorWorkflowViewModel(state),
       previewProjection: null,
+      viewerRuntimeProjection: null,
       latestPersistenceResult: null,
       latestProjectPersistenceResult: null,
       onCommitCreateParameter() {},
@@ -404,6 +472,10 @@ describe("editor app shell preview panel", () => {
       onResetProject() {},
       onSetPreviewParameterValue() {},
       onResetPreviewParameterValues() {},
+      onOpenViewerRuntimeSurface() {},
+      onCloseViewerRuntimeSurface() {},
+      onSetViewerParameterValue() {},
+      onResetViewerParameterValues() {},
       async onDryRunAiCreateParameter() {},
       async onApproveLatestAiDryRun() {},
       async onRejectLatestAiDryRun() {},
@@ -424,12 +496,17 @@ const renderShell = (
     readonly onNudgeMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshVertex"];
     readonly onRunDynamicsPreview?: (frameCount: number) => void;
     readonly onResetDynamicsPreview?: () => void;
+    readonly onOpenViewerRuntimeSurface?: () => void;
+    readonly onCloseViewerRuntimeSurface?: () => void;
+    readonly onSetViewerParameterValue?: (parameterId: string, value: number) => void;
+    readonly onResetViewerParameterValues?: () => void;
   } = {}
 ): TestElement =>
   createEditorAppShell({
     state: workflow.state,
     viewModel: workflow.viewModel,
     previewProjection: workflow.previewProjection,
+    viewerRuntimeProjection: workflow.viewerRuntimeProjection,
     latestPersistenceResult: workflow.latestSessionPersistenceResult,
     latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
     onCommitCreateParameter() {},
@@ -447,6 +524,10 @@ const renderShell = (
     onResetProject() {},
     onSetPreviewParameterValue: callbacks.onSetPreviewParameterValue ?? (() => {}),
     onResetPreviewParameterValues: callbacks.onResetPreviewParameterValues ?? (() => {}),
+    onOpenViewerRuntimeSurface: callbacks.onOpenViewerRuntimeSurface ?? (() => {}),
+    onCloseViewerRuntimeSurface: callbacks.onCloseViewerRuntimeSurface ?? (() => {}),
+    onSetViewerParameterValue: callbacks.onSetViewerParameterValue ?? (() => {}),
+    onResetViewerParameterValues: callbacks.onResetViewerParameterValues ?? (() => {}),
     async onDryRunAiCreateParameter() {},
     async onApproveLatestAiDryRun() {},
     async onRejectLatestAiDryRun() {},

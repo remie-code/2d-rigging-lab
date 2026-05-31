@@ -11,6 +11,7 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 import type {
   EditorDrawableLayerMoveDirection,
+  EditorViewerRuntimeProjection,
   EditorWorkflowPersistenceResult
 } from "../../editor-workflow/index.js";
 import type {
@@ -41,12 +42,14 @@ import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
+import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import { createPackageStatus } from "./package-status.js";
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
   readonly viewModel: EditorWorkflowViewModel;
   readonly previewProjection: EditorPreviewProjectionDto | null;
+  readonly viewerRuntimeProjection: EditorViewerRuntimeProjection | null;
   readonly latestPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
@@ -64,6 +67,10 @@ export interface EditorAppShellOptions {
   readonly onResetProject: () => void;
   readonly onSetPreviewParameterValue: (parameterId: string, value: number) => void;
   readonly onResetPreviewParameterValues: () => void;
+  readonly onOpenViewerRuntimeSurface: () => void;
+  readonly onCloseViewerRuntimeSurface: () => void;
+  readonly onSetViewerParameterValue: (parameterId: string, value: number) => void;
+  readonly onResetViewerParameterValues: () => void;
   readonly onDryRunAiCreateParameter: AiApprovalPanelCallback;
   readonly onApproveLatestAiDryRun: AiApprovalPanelCallback;
   readonly onRejectLatestAiDryRun: AiApprovalPanelCallback;
@@ -90,7 +97,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     ? "Operation persistence slice"
     : "Waiting for package";
 
-  titleGroup.append(title, workflowStatus);
+  titleGroup.append(title, workflowStatus, createAppBarActions(options));
   appBar.append(titleGroup, createPackageStatus(options.state, options.viewModel));
 
   const workspace = document.createElement("section");
@@ -164,6 +171,18 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onSetPreviewParameterValue: options.onSetPreviewParameterValue,
     onResetPreviewParameterValues: options.onResetPreviewParameterValues
   });
+  const viewerRuntimePanel =
+    options.viewModel.viewerRuntime.isOpen
+      ? createViewerRuntimePanel({
+          state: options.state,
+          viewModel: options.viewModel,
+          projection: options.viewerRuntimeProjection,
+          latestProjectPersistenceResult: options.latestProjectPersistenceResult,
+          onCloseViewerRuntimeSurface: options.onCloseViewerRuntimeSurface,
+          onSetViewerParameterValue: options.onSetViewerParameterValue,
+          onResetViewerParameterValues: options.onResetViewerParameterValues
+        })
+      : null;
   const projectPersistencePanel = createProjectPersistencePanel({
     viewModel: options.viewModel,
     latestProjectPersistenceResult: options.latestProjectPersistenceResult,
@@ -199,6 +218,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   workspace.append(
     parametersPanel,
     previewPanel,
+    ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
     dynamicsPanel,
     operationPanel,
     drawableAuthoringPanel,
@@ -211,6 +231,30 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   shell.append(appBar, workspace);
 
   return shell;
+};
+
+const createAppBarActions = (options: EditorAppShellOptions): HTMLElement => {
+  const actions = document.createElement("div");
+  actions.className = "project-persistence-panel__actions";
+
+  const viewerRuntime = document.createElement("button");
+  viewerRuntime.type = "button";
+  viewerRuntime.className = "editor-button project-persistence-panel__button";
+  viewerRuntime.dataset.testid = editorTestIds.viewerRuntimeOpen;
+  viewerRuntime.disabled = !options.viewModel.isPackageLoaded;
+  viewerRuntime.textContent = options.viewModel.viewerRuntime.openButtonLabel;
+  viewerRuntime.setAttribute("aria-expanded", String(options.viewModel.viewerRuntime.isOpen));
+  viewerRuntime.addEventListener("click", () => {
+    if (options.viewModel.viewerRuntime.isOpen) {
+      options.onCloseViewerRuntimeSurface();
+      return;
+    }
+
+    options.onOpenViewerRuntimeSurface();
+  });
+  actions.append(viewerRuntime);
+
+  return actions;
 };
 
 const resolveTextureAtlas = (options: EditorAppShellOptions): TextureAtlasFileDto | undefined => {

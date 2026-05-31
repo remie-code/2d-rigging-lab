@@ -46,7 +46,15 @@ export const editorTestIds = {
   previewVisual: "preview.visual",
   previewSummary: "preview.summary",
   previewReset: "preview.reset",
-  previewEmpty: "preview.empty"
+  previewEmpty: "preview.empty",
+  viewerRuntimeOpen: "viewerRuntime.open",
+  viewerRuntimePanel: "viewerRuntime.panel",
+  viewerRuntimeClose: "viewerRuntime.close",
+  viewerRuntimeReset: "viewerRuntime.reset",
+  viewerRuntimeSnapshotSummary: "viewerRuntime.snapshotSummary",
+  viewerRuntimeDiff: "viewerRuntime.diff",
+  viewerRuntimeDiagnostics: "viewerRuntime.diagnostics",
+  viewerRuntimePackageState: "viewerRuntime.packageState"
 } as const;
 
 export const fixedEditorTestIds = Object.values(editorTestIds);
@@ -81,6 +89,9 @@ export const createImportedSourceAssetRowTestId = (sourceAssetId: string): strin
 
 export const createPreviewParameterControlTestId = (parameterId: string): string =>
   `preview.parameter.${parameterId}`;
+
+export const createViewerParameterControlTestId = (parameterId: string): string =>
+  `viewer.parameter.${parameterId}`;
 
 export const createDynamicsGroupUpdateTestId = (dynamicsGroupId: string): string =>
   `dynamics.update.${dynamicsGroupId}`;

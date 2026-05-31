@@ -17,10 +17,14 @@ import { validatePackageSchema } from "./package-schema.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
 import { validateTextureAssetReferences } from "./texture-assets.js";
+import { validateViewerRuntimeEvidence } from "./viewer-evidence.js";
+import type { ViewerRuntimeEvidenceValidationResult } from "./viewer-evidence.js";
 
 export interface PackageRuntimeValidationInput {
   readonly packageDocument: unknown;
   readonly runtimeSnapshot?: unknown;
+  readonly viewerEvidence?: unknown;
+  readonly requireViewerEvidence?: boolean;
   readonly profile?: string;
   readonly createdAt?: string;
 }
@@ -39,16 +43,34 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : collectPackageReferenceChecks(packageResult.packageDocument, runtimeResult?.snapshot);
-  const runtimeSnapshotIds: RuntimeSnapshotId[] =
-    runtimeResult?.snapshotId === undefined ? [] : [runtimeResult.snapshotId];
+  const viewerEvidenceResult = packageResult.packageDocument === undefined
+    ? createEmptyViewerEvidenceValidationResult()
+    : validateViewerRuntimeEvidence({
+        packageDocument: packageResult.packageDocument,
+        ...(runtimeResult?.snapshot === undefined ? {} : { runtimeSnapshot: runtimeResult.snapshot }),
+        ...(input.viewerEvidence === undefined ? {} : { viewerEvidence: input.viewerEvidence }),
+        requireViewerEvidence: shouldRequireViewerEvidence(input)
+      });
+  const runtimeSnapshotIds = mergeRuntimeSnapshotIds(
+    viewerEvidenceResult.runtimeSnapshotIds,
+    runtimeResult?.snapshotId
+  );
 
   return buildValidationReport({
     ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
     packageId: packageResult.packageId,
     packageRevision: packageResult.packageRevision,
     profile: input.profile ?? "strict",
-    checks: [...packageResult.checks, ...packageReferenceChecks, ...(runtimeResult?.checks ?? [])],
-    evidence: createDefaultEvidence(runtimeSnapshotIds)
+    checks: [
+      ...packageResult.checks,
+      ...packageReferenceChecks,
+      ...viewerEvidenceResult.checks,
+      ...(runtimeResult?.checks ?? [])
+    ],
+    evidence: {
+      ...createDefaultEvidence(runtimeSnapshotIds),
+      supplementalGuiEvidenceRefs: [...viewerEvidenceResult.supplementalEvidenceRefs]
+    }
   });
 };
 
@@ -70,16 +92,34 @@ export const validatePackageRuntimeWithBinaryAssets = async (
         ...(input.binaryAssetIndex === undefined ? {} : { binaryAssetIndex: input.binaryAssetIndex })
       }))
     ];
-  const runtimeSnapshotIds: RuntimeSnapshotId[] =
-    runtimeResult?.snapshotId === undefined ? [] : [runtimeResult.snapshotId];
+  const viewerEvidenceResult = packageResult.packageDocument === undefined
+    ? createEmptyViewerEvidenceValidationResult()
+    : validateViewerRuntimeEvidence({
+        packageDocument: packageResult.packageDocument,
+        ...(runtimeResult?.snapshot === undefined ? {} : { runtimeSnapshot: runtimeResult.snapshot }),
+        ...(input.viewerEvidence === undefined ? {} : { viewerEvidence: input.viewerEvidence }),
+        requireViewerEvidence: shouldRequireViewerEvidence(input)
+      });
+  const runtimeSnapshotIds = mergeRuntimeSnapshotIds(
+    viewerEvidenceResult.runtimeSnapshotIds,
+    runtimeResult?.snapshotId
+  );
 
   return buildValidationReport({
     ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
     packageId: packageResult.packageId,
     packageRevision: packageResult.packageRevision,
     profile: input.profile ?? "strict",
-    checks: [...packageResult.checks, ...packageReferenceChecks, ...(runtimeResult?.checks ?? [])],
-    evidence: createDefaultEvidence(runtimeSnapshotIds)
+    checks: [
+      ...packageResult.checks,
+      ...packageReferenceChecks,
+      ...viewerEvidenceResult.checks,
+      ...(runtimeResult?.checks ?? [])
+    ],
+    evidence: {
+      ...createDefaultEvidence(runtimeSnapshotIds),
+      supplementalGuiEvidenceRefs: [...viewerEvidenceResult.supplementalEvidenceRefs]
+    }
   });
 };
 
@@ -94,3 +134,21 @@ const collectPackageReferenceChecks = (
   ...validateTextureAssetReferences(packageDocument),
   ...validateDynamicsSemantics(packageDocument, runtimeSnapshot)
 ];
+
+const shouldRequireViewerEvidence = (input: PackageRuntimeValidationInput): boolean =>
+  input.requireViewerEvidence === true || input.profile === "viewer";
+
+const createEmptyViewerEvidenceValidationResult = (): ViewerRuntimeEvidenceValidationResult => ({
+  checks: [],
+  runtimeSnapshotIds: [],
+  supplementalEvidenceRefs: []
+});
+
+const mergeRuntimeSnapshotIds = (
+  viewerRuntimeSnapshotIds: readonly RuntimeSnapshotId[],
+  runtimeSnapshotId?: RuntimeSnapshotId
+): readonly RuntimeSnapshotId[] =>
+  [...new Set([
+    ...viewerRuntimeSnapshotIds,
+    ...(runtimeSnapshotId === undefined ? [] : [runtimeSnapshotId])
+  ])];

@@ -110,6 +110,8 @@ demo.unsafeDependencyClaim
 | `dynamics.excessiveAmplitude` | dynamics_evaluation | warning | acceptance: needs_review | AC-PHYS-003 |
 | `dynamics.nonDeterministicSnapshot` | representative_evaluation | error | strict/acceptance: fail | AC-PHYS-004 |
 | `dynamics.runtimeEvidenceMissing` | representative_evaluation | error | strict/acceptance: fail when required or present dynamics cannot be matched to runtime snapshot evidence | AC-PHYS-004 |
+| `viewer.runtimeEvidenceMissing` | representative_evaluation | error | viewer: fail when viewer runtime snapshot/evaluation evidence is absent or unparseable | AC-MVP-012 |
+| `viewer.runtimeEvidenceStale` | representative_evaluation | error | viewer: fail when viewer evidence does not match the validated package or supplied runtime snapshot context | AC-MVP-012 |
 | `dynamics.resetPolicyMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-001 |
 | `dynamics.timestepMismatch` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
 | `runtime.timestepOverflow` | representative_evaluation | warning | strict: fail when replay evidence is required | AC-PHYS-004 |
@@ -132,6 +134,11 @@ Dynamics output validation rules:
 - `dynamics.outputParameterOutOfRange` fires when output min/max is outside the target parameter range.
 - `dynamics.outputClamped` is runtime evidence that clamping occurred; it is not by itself a package schema failure unless a fixture/profile requires exact unclamped output.
 - `dynamics.runtimeEvidenceMissing` fires when an enabled dynamics group is present but no runtime snapshot is supplied, the snapshot omits that group, or the snapshot lacks the computed output parameter evidence needed to prove deterministic replay.
+
+Viewer evidence validation rules:
+
+- `viewer.runtimeEvidenceMissing` fires in viewer validation when the viewer runtime evaluation evidence wrapper is absent, unparseable, or references a snapshot that is not supplied for validation.
+- `viewer.runtimeEvidenceStale` fires when supplied viewer evidence or runtime snapshot identity no longer matches the validated package, or when the runtime snapshot was not produced with `RuntimeEvaluationContextDto.source.surface = "viewer"`.
 
 Demo-safe validation rules:
 

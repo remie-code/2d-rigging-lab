@@ -27,6 +27,7 @@ export function mountEditorApp(root: HTMLElement): void {
         state,
         viewModel: projectEditorWorkflowViewModel(state),
         previewProjection: workflow.previewProjection,
+        viewerRuntimeProjection: workflow.viewerRuntimeProjection,
         latestPersistenceResult: workflow.latestSessionPersistenceResult,
         latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
         onCommitCreateParameter(command) {
@@ -90,6 +91,22 @@ export function mountEditorApp(root: HTMLElement): void {
         },
         onResetPreviewParameterValues() {
           workflow.resetPreviewParameterValues();
+          render();
+        },
+        onOpenViewerRuntimeSurface() {
+          workflow.openViewerRuntimeSurface();
+          render();
+        },
+        onCloseViewerRuntimeSurface() {
+          workflow.closeViewerRuntimeSurface();
+          render();
+        },
+        onSetViewerParameterValue(parameterId, value) {
+          workflow.setViewerParameterValue(parameterId, value);
+          render();
+        },
+        onResetViewerParameterValues() {
+          workflow.resetViewerParameterValues();
           render();
         },
         async onDryRunAiCreateParameter() {

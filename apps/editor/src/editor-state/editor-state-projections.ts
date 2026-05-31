@@ -33,6 +33,7 @@ import {
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
+import { projectViewerRuntimeState } from "./viewer-runtime-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
 import { createEmptySourceIntakeDraftState } from "./source-intake-draft-state.js";
 import type {
@@ -117,7 +118,8 @@ export const projectLoadedPackageState = (
     }),
     sourceAssets: input.sourceAssets ?? [],
     textureAtlas: input.textureAtlas ?? null,
-    previewParameters: projectPreviewParameterValues(input.parameters ?? [])
+    previewParameters: projectPreviewParameterValues(input.parameters ?? []),
+    viewerRuntime: projectViewerRuntimeState(input.parameters ?? [])
   };
 };
 
@@ -151,6 +153,10 @@ export const applyCommittedOperationSummary = (
       input.parameters === undefined
         ? state.previewParameters
         : projectPreviewParameterValues(input.parameters),
+    viewerRuntime:
+      input.parameters === undefined
+        ? state.viewerRuntime
+        : projectViewerRuntimeState(input.parameters, { surface: state.viewerRuntime.surface }),
     pendingCreateParameter:
       input.result.operationType === "createParameter"
         ? {

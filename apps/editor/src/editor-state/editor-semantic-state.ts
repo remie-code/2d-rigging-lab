@@ -15,6 +15,10 @@ import type { LoadedPackageIdentityState } from "./package-identity-state.js";
 import { emptyPackageRevisionState, type PackageRevisionState } from "./package-revision-state.js";
 import type { ParameterListItemState } from "./parameter-list-state.js";
 import type { PreviewParameterValueState } from "./preview-parameter-state.js";
+import {
+  createEmptyViewerRuntimeState,
+  type ViewerRuntimeState
+} from "./viewer-runtime-state.js";
 import { createEmptyReloadSummary, type ReloadSummaryState } from "./reload-summary.js";
 import {
   createEmptySourceIntakeDraftState,
@@ -36,6 +40,7 @@ export interface EditorSemanticState {
   readonly drawables: readonly DrawableListItemState[];
   readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
+  readonly viewerRuntime: ViewerRuntimeState;
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly sourceIntakeDraft: SourceIntakeDraftState;
@@ -58,6 +63,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   drawables: [],
   meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
+  viewerRuntime: createEmptyViewerRuntimeState(),
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),
   sourceIntakeDraft: createEmptySourceIntakeDraftState(),

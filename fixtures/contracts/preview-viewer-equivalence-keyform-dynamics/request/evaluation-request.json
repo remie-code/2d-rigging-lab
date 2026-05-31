@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "preview-viewer-equivalence-request-v1",
+  "baselineFrameIndex": 0,
+  "frameIndex": 1,
+  "deltaTimeMs": 0,
+  "resetReasons": [
+    "previewRestart"
+  ],
+  "baselineParameterOverrides": {},
+  "parameterOverrides": {
+    "param_face_yaw": 1
+  },
+  "targetIds": [
+    "param_face_yaw",
+    "param_hair_sway",
+    "dyn_hair_sway",
+    "draw_hair",
+    "mesh_hair",
+    "keyset_hair_sway_vertices"
+  ],
+  "options": {
+    "schemaVersion": "runtime-evaluation-options-v1",
+    "snapshotDetail": "full"
+  },
+  "strictness": "interactive",
+  "drawableNames": {
+    "draw_hair": "Hair Drawable"
+  }
+}

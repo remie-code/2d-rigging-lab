@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "preview-viewer-equivalence-keyform-dynamics",
+  "title": "Preview and Viewer runtime summary equivalence for keyform, drawable, and dynamics fields",
+  "coversAC": [
+    "AC-MVP-010",
+    "AC-MVP-011",
+    "AC-MVP-012"
+  ],
+  "coversScenarios": [
+    "SC-MVP-003"
+  ],
+  "modulesBlocked": [
+    "runtime-core",
+    "editor"
+  ],
+  "inputArtifacts": [
+    "runtime/runtime-graph.json",
+    "request/evaluation-request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "previewViewerEquivalenceSummary",
+      "path": "expected/preview-viewer-equivalence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

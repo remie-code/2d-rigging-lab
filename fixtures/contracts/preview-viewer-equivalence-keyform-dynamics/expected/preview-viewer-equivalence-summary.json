@@ -1,0 +1,284 @@
+{
+  "schemaVersion": "preview-viewer-equivalence-summary-v1",
+  "fixtureId": "preview-viewer-equivalence-keyform-dynamics",
+  "runtimeInput": {
+    "baselineFrameIndex": 0,
+    "frameIndex": 1,
+    "deltaTimeMs": 0,
+    "resetReasons": [
+      "previewRestart"
+    ],
+    "parameterOverrides": {
+      "param_face_yaw": 1
+    },
+    "targetIds": [
+      "param_face_yaw",
+      "param_hair_sway",
+      "dyn_hair_sway",
+      "draw_hair",
+      "mesh_hair",
+      "keyset_hair_sway_vertices"
+    ]
+  },
+  "preview": {
+    "surface": "preview",
+    "projection": {
+      "schemaVersion": "editor-preview-projection-v1",
+      "sourceSnapshotId": "snap_preview_viewer_equivalence_1",
+      "packageId": "pkg_preview_viewer_equivalence",
+      "packageRevision": 24,
+      "snapshotDetail": "full",
+      "drawList": [
+        "draw_hair"
+      ],
+      "drawableCount": 1,
+      "visibleDrawableCount": 1,
+      "keyformSampleCount": 1,
+      "diagnosticCount": 0,
+      "diff": {
+        "beforeSnapshotId": "snap_preview_viewer_equivalence_0",
+        "afterSnapshotId": "snap_preview_viewer_equivalence_1",
+        "parameterChangeCount": 2,
+        "dynamicsChangeCount": 1,
+        "drawableGeometryChangeCount": 1,
+        "drawableRuntimeStateChangeCount": 0,
+        "drawListChangeCount": 0,
+        "diagnosticDeltaCount": 0,
+        "affectedDrawableIds": [
+          "draw_hair"
+        ]
+      }
+    },
+    "comparable": {
+      "snapshot": {
+        "snapshotId": "snap_preview_viewer_equivalence_1",
+        "packageId": "pkg_preview_viewer_equivalence",
+        "packageRevision": 24,
+        "snapshotDetail": "full",
+        "drawList": [
+          "draw_hair"
+        ],
+        "drawableCount": 1,
+        "visibleDrawableCount": 1,
+        "keyformSampleCount": 1,
+        "dynamicsCount": 1,
+        "diagnosticCount": 0
+      },
+      "effectiveParameters": [
+        {
+          "parameterId": "param_face_yaw",
+          "valueSource": "authoredInput",
+          "authoredValue": 1,
+          "effectiveValue": 1,
+          "clamped": false
+        },
+        {
+          "parameterId": "param_hair_sway",
+          "valueSource": "computedDynamics",
+          "computedValue": 1,
+          "effectiveValue": 1,
+          "clamped": false
+        }
+      ],
+      "targetedKeyforms": [
+        {
+          "keyformSetId": "keyset_hair_sway_vertices",
+          "evaluator": "linear-1d-v1",
+          "sampledCoordinates": {
+            "param_hair_sway": 1
+          },
+          "target": "mesh:mesh_hair.vertices",
+          "compositionMode": "replace",
+          "compositionOrder": 0,
+          "samplingStatus": "exact"
+        }
+      ],
+      "targetedDrawables": [
+        {
+          "drawableId": "draw_hair",
+          "meshId": "mesh_hair",
+          "visible": true,
+          "opacity": 1,
+          "baseDrawOrder": 20,
+          "evaluatedDrawOrder": 20,
+          "bounds": {
+            "x": 0.25,
+            "y": 0.5,
+            "width": 2,
+            "height": 2
+          },
+          "vertexCount": 3,
+          "vertices": [
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 2.25,
+              "y": 0.75
+            },
+            {
+              "x": 0.5,
+              "y": 2.5
+            }
+          ]
+        }
+      ],
+      "targetedDynamics": [
+        {
+          "dynamicsGroupId": "dyn_hair_sway",
+          "driverValues": {
+            "param_face_yaw": 1
+          },
+          "outputParameterId": "param_hair_sway",
+          "outputValue": 1,
+          "position": 1,
+          "velocity": 0,
+          "tick": 0,
+          "resetCounter": 2
+        }
+      ],
+      "runtimeDiff": {
+        "beforeSnapshotId": "snap_preview_viewer_equivalence_0",
+        "afterSnapshotId": "snap_preview_viewer_equivalence_1",
+        "parameterChangeCount": 2,
+        "dynamicsChangeCount": 1,
+        "drawableGeometryChangeCount": 1,
+        "drawableRuntimeStateChangeCount": 0,
+        "drawListChangeCount": 0,
+        "diagnosticDeltaCount": 0,
+        "affectedDrawableIds": [
+          "draw_hair"
+        ]
+      }
+    }
+  },
+  "viewer": {
+    "surface": "viewer",
+    "evidence": {
+      "schemaVersion": "viewer-runtime-evaluation-evidence-v1",
+      "surface": "viewer",
+      "baselineSnapshotId": "snap_preview_viewer_equivalence_0",
+      "snapshotId": "snap_preview_viewer_equivalence_1",
+      "parameterOverrides": [
+        {
+          "parameterId": "param_face_yaw",
+          "value": 1
+        }
+      ],
+      "runtimeDiffEquivalent": false
+    },
+    "comparable": {
+      "snapshot": {
+        "snapshotId": "snap_preview_viewer_equivalence_1",
+        "packageId": "pkg_preview_viewer_equivalence",
+        "packageRevision": 24,
+        "snapshotDetail": "full",
+        "drawList": [
+          "draw_hair"
+        ],
+        "drawableCount": 1,
+        "visibleDrawableCount": 1,
+        "keyformSampleCount": 1,
+        "dynamicsCount": 1,
+        "diagnosticCount": 0
+      },
+      "effectiveParameters": [
+        {
+          "parameterId": "param_face_yaw",
+          "valueSource": "authoredInput",
+          "authoredValue": 1,
+          "effectiveValue": 1,
+          "clamped": false
+        },
+        {
+          "parameterId": "param_hair_sway",
+          "valueSource": "computedDynamics",
+          "computedValue": 1,
+          "effectiveValue": 1,
+          "clamped": false
+        }
+      ],
+      "targetedKeyforms": [
+        {
+          "keyformSetId": "keyset_hair_sway_vertices",
+          "evaluator": "linear-1d-v1",
+          "sampledCoordinates": {
+            "param_hair_sway": 1
+          },
+          "target": "mesh:mesh_hair.vertices",
+          "compositionMode": "replace",
+          "compositionOrder": 0,
+          "samplingStatus": "exact"
+        }
+      ],
+      "targetedDrawables": [
+        {
+          "drawableId": "draw_hair",
+          "meshId": "mesh_hair",
+          "visible": true,
+          "opacity": 1,
+          "baseDrawOrder": 20,
+          "evaluatedDrawOrder": 20,
+          "bounds": {
+            "x": 0.25,
+            "y": 0.5,
+            "width": 2,
+            "height": 2
+          },
+          "vertexCount": 3,
+          "vertices": [
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 2.25,
+              "y": 0.75
+            },
+            {
+              "x": 0.5,
+              "y": 2.5
+            }
+          ]
+        }
+      ],
+      "targetedDynamics": [
+        {
+          "dynamicsGroupId": "dyn_hair_sway",
+          "driverValues": {
+            "param_face_yaw": 1
+          },
+          "outputParameterId": "param_hair_sway",
+          "outputValue": 1,
+          "position": 1,
+          "velocity": 0,
+          "tick": 0,
+          "resetCounter": 2
+        }
+      ],
+      "runtimeDiff": {
+        "beforeSnapshotId": "snap_preview_viewer_equivalence_0",
+        "afterSnapshotId": "snap_preview_viewer_equivalence_1",
+        "parameterChangeCount": 2,
+        "dynamicsChangeCount": 1,
+        "drawableGeometryChangeCount": 1,
+        "drawableRuntimeStateChangeCount": 0,
+        "drawListChangeCount": 0,
+        "diagnosticDeltaCount": 0,
+        "affectedDrawableIds": [
+          "draw_hair"
+        ]
+      }
+    }
+  },
+  "equivalence": {
+    "snapshotSummary": true,
+    "effectiveParameters": true,
+    "targetedKeyforms": true,
+    "targetedDrawables": true,
+    "targetedDynamics": true,
+    "runtimeDiff": true
+  },
+  "oracleScope": "summary-effective-parameters-targeted-runtime-fields; no pixel renderer oracle"
+}
