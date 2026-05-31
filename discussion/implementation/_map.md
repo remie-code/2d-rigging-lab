@@ -45,7 +45,7 @@ discussion/implementation/
 - Wave 19 texture-backed preview and part mapping foundation completed on 2026-05-31 with package texture metadata, source layer texture/part mapping, texture-backed SVG preview truthfulness, validator evidence, browser-local persistence, desktop/mobile E2E smoke, clean integration review, and final report. Evidence is recorded in [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md), [waves/wave19/_map.md](waves/wave19/_map.md), and [reviews/wave19/_map.md](reviews/wave19/_map.md).
 - Wave 20 PSD spec field matrix and adapter boundary completed on 2026-05-31 with Adobe PSD spec field matrix, safe rights-cleared sample characterization, parser-free PSD adapter result DTOs, commit-capable `importPsdSourceAsset` materialization, PSD validator diagnostics, synthetic contract fixtures, manual editor PSD adapter/profile intake, desktop/mobile e2e persistence smoke, final verification, and clean integration review. Evidence is recorded in [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md), [waves/wave20/_map.md](waves/wave20/_map.md), and [reviews/wave20/_map.md](reviews/wave20/_map.md).
 - Wave 21 PSD structured profile persistence hardening completed on 2026-05-31 with structured `psdProfile` source manifest persistence, `importPsdSourceAsset` structured materialization, structured validator diagnostics, contract fixture evidence, editor/AI projection, desktop/mobile e2e persistence smoke, split PNG compatibility smoke, final verification, and clean integration review. Evidence is recorded in [waves/wave21/wave21-final-report.md](waves/wave21/wave21-final-report.md), [waves/wave21/_map.md](waves/wave21/_map.md), and [reviews/wave21/_map.md](reviews/wave21/_map.md).
-- Wave 22 real asset I/O boundary foundation is planned at [orchestration/wave22-plan.md](orchestration/wave22-plan.md). It should implement package binary file-set and binary asset reference boundaries, rights/provenance and validator evidence, deterministic-byte fixtures, and truthful editor missing-bytes/storage UX while keeping real PSD parsing, image decode, file picker, archive import/export, and external dependencies out of scope.
+- Wave 22 real asset I/O boundary foundation completed on 2026-05-31 with package-local binary asset reference/storage metadata boundaries, in-memory binary file-set support, rights/provenance and validator evidence, deterministic-byte fixtures, truthful editor missing-bytes/storage UX, browser-local metadata persistence, final verification, and clean integration review while keeping real PSD parsing, image decode, file picker, actual binary upload, archive import/export, filesystem I/O, and external dependencies out of scope. Evidence is recorded in [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md), [waves/wave22/_map.md](waves/wave22/_map.md), and [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md).
 
 ## Key References
 
@@ -97,6 +97,8 @@ discussion/implementation/
 | [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md) | Wave 20 final report for PSD spec field matrix and adapter boundary |
 | [waves/wave21/wave21-final-report.md](waves/wave21/wave21-final-report.md) | Wave 21 final report for PSD structured profile persistence hardening |
 | [waves/wave21/_map.md](waves/wave21/_map.md) | Wave 21 domain completion reports, final verification, and final report |
+| [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md) | Wave 22 final report for real asset I/O boundary foundation |
+| [waves/wave22/_map.md](waves/wave22/_map.md) | Wave 22 domain completion reports, clean integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -114,11 +116,12 @@ discussion/implementation/
 | [reviews/wave15/_map.md](reviews/wave15/_map.md) | Wave 15 domain review reports and needs-fix review |
 | [reviews/wave20/_map.md](reviews/wave20/_map.md) | Wave 20 domain review reports and clean integration review |
 | [reviews/wave21/_map.md](reviews/wave21/_map.md) | Wave 21 domain review reports and clean integration review |
+| [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md) | Wave 22 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Execute [orchestration/wave22-plan.md](orchestration/wave22-plan.md) when starting the next implementation wave.
+1. Use the Wave 22 binary boundary final report and clean integration review before planning actual binary byte intake, file picker, archive I/O, image decode, or parser work.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

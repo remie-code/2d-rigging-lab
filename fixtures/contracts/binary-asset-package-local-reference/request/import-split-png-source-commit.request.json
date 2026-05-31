@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_import_binary_fixture",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "operationType": "importSplitPngSourceAsset",
+  "payload": {
+    "sourceAssetId": "src_binary_fixture",
+    "manifestPath": "assets/sources/binary-fixture/source.bytes",
+    "importProfile": "split-png-fallback-v1",
+    "contentHash": "sha256:f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192",
+    "binaryAssetRef": {
+      "referenceKind": "package-binary-asset-ref-v1",
+      "binaryAssetId": "bin_binary_fixture_source",
+      "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+      "digest": {
+        "algorithm": "sha256",
+        "hex": "f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192"
+      },
+      "byteLength": 16,
+      "mediaType": "application/octet-stream",
+      "storageStatus": "stored-package-local-v1",
+      "provenanceId": "prov_import_binary_fixture",
+      "rightsAssetId": "src_binary_fixture"
+    },
+    "defaultPartId": "part_root",
+    "placementPolicy": "use-metadata",
+    "layers": [
+      {
+        "sourceLayerId": "layer_binary_fixture_body",
+        "originalName": "Synthetic Body Bytes",
+        "normalizedName": "synthetic body bytes",
+        "groupPath": [
+          "Root"
+        ],
+        "bounds": {
+          "x": 4,
+          "y": 8,
+          "width": 40,
+          "height": 20
+        },
+        "visibleInSource": true,
+        "opacityInSource": 1,
+        "role": "editableLayer",
+        "unsupportedFeatures": [],
+        "textureId": "tex_binary_fixture_body",
+        "targetPartId": "part_root",
+        "texturePreviewBinaryAssetRef": {
+          "referenceKind": "package-binary-asset-ref-v1",
+          "binaryAssetId": "bin_binary_fixture_texture",
+          "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+          "digest": {
+            "algorithm": "sha256",
+            "hex": "27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4"
+          },
+          "byteLength": 12,
+          "mediaType": "application/octet-stream",
+          "storageStatus": "stored-package-local-v1",
+          "provenanceId": "prov_import_binary_fixture",
+          "rightsAssetId": "src_binary_fixture"
+        }
+      }
+    ],
+    "rights": {
+      "rightsStatus": "cleared",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": true
+    },
+    "provenance": {
+      "creator": "contract-fixture",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": true,
+      "aiUsed": false,
+      "transformHistory": [
+        "Generated deterministic test bytes from deterministic-test-bytes.json.",
+        "No PSD, PNG, image decode, raster extraction, third-party content, or test_data/sample_model.psd copy."
+      ]
+    }
+  }
+}

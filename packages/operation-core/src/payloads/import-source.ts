@@ -4,11 +4,13 @@ import {
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
+import { BinaryAssetReferenceSchema } from "@private-2d-rigging-lab/authoring-core";
 import { z } from "zod";
 
 export const ImportSourceFileRefSchema = z.object({
   packageRelativePath: z.string().min(1),
-  contentHash: z.string().optional()
+  contentHash: z.string().optional(),
+  binaryAssetRef: BinaryAssetReferenceSchema.optional()
 });
 export type ImportSourceFileRefDto = z.infer<typeof ImportSourceFileRefSchema>;
 
@@ -118,6 +120,7 @@ export const PsdAdapterSourceLayerSchema = z.object({
   blendMode: PsdAdapterBlendModeSchema.optional(),
   unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
   texturePreviewReference: z.string().min(1).optional(),
+  texturePreviewBinaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   targetPartId: PartIdSchema.optional()
 });
@@ -159,6 +162,7 @@ export const SplitPngSourceLayerMetadataSchema = z.object({
   role: z.enum(["editableLayer", "guideImage", "referenceOnly", "unsupported"]).default("editableLayer"),
   unsupportedFeatures: z.array(z.string()).default([]),
   texturePreviewReference: z.string().min(1).optional(),
+  texturePreviewBinaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   targetPartId: PartIdSchema.optional()
 });
@@ -188,6 +192,7 @@ export const SplitPngSourceAssetPayloadSchema = z.object({
   manifestPath: z.string().optional(),
   importProfile: z.string(),
   contentHash: z.string().min(1).optional(),
+  binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   defaultPartId: PartIdSchema.optional(),
   placementPolicy: z.enum(["use-metadata", "origin-with-warning"]),
   layers: z.array(SplitPngSourceLayerMetadataSchema).default([]),

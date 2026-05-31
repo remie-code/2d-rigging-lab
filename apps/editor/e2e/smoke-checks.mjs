@@ -25,6 +25,7 @@ import {
   runSourceIntakeWorkflow,
   sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
+import { runAssetIoBoundaryPersistenceSmoke } from "./asset-io-boundary-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -130,6 +131,13 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertHorizontalOverflow(page, `${viewport.name} split-png-source-intake`);
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
+    const assetIoBoundaryEvidence = await runAssetIoBoundaryPersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave22-asset-io-boundary`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} final-reset`);
 
     return {
@@ -137,6 +145,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       previewEvidence,
       sourceIntakeEvidence,
       splitPngCompatibilityEvidence,
+      assetIoBoundaryEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

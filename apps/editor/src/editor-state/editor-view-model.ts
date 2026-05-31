@@ -152,7 +152,8 @@ export const projectEditorWorkflowViewModel = (
     drawableLayers: projectDrawableLayerControlsViewModel(state),
     meshEdit: projectMeshEditViewModel(state),
     sourceIntake: projectSourceIntakeDraftViewModel(state.sourceIntakeDraft, {
-      sourceAssets: state.sourceAssets
+      sourceAssets: state.sourceAssets,
+      ...(state.textureAtlas === null ? {} : { textureAtlas: state.textureAtlas })
     }),
     previewControls: projectPreviewControlsViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)

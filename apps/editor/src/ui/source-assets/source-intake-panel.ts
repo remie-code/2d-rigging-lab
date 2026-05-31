@@ -141,6 +141,7 @@ const createImportedSourceAssetRow = (
       layer.roleLabel,
       layer.unsupportedFeaturesLabel,
       layer.textureMappingLabel,
+      ...(layer.textureBinaryAssetLabel === undefined ? [] : [layer.textureBinaryAssetLabel]),
       layer.blendModeLabel,
       layer.mappedDrawableCountLabel
     ].join(" / ");
@@ -150,6 +151,13 @@ const createImportedSourceAssetRow = (
 
   const psdProfileSummary =
     sourceAsset.psdProfile === undefined ? [] : [createPsdProfileSummary(sourceAsset)];
+  const binaryAssetSummary =
+    sourceAsset.binaryAssetLabels.length === 0
+      ? []
+      : [createProfileList(
+          `Binary asset references for ${sourceAsset.sourceAssetId}`,
+          sourceAsset.binaryAssetLabels
+        )];
 
   article.append(
     heading,
@@ -157,6 +165,7 @@ const createImportedSourceAssetRow = (
     path,
     profileEvidence,
     diagnostics,
+    ...binaryAssetSummary,
     ...psdProfileSummary,
     layers
   );

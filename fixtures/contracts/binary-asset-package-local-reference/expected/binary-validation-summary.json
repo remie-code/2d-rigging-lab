@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "binary-asset-validator-diagnostics-summary-v1",
+  "fixtureId": "binary-asset-package-local-reference",
+  "cases": {
+    "storedPass": {
+      "status": "pass",
+      "checkIds": []
+    },
+    "missingBytes": {
+      "status": "fail",
+      "checkIds": [
+        "binary.bytesMissing",
+        "binary.bytesMissing",
+        "binary.bytesMissing",
+        "binary.bytesMissing"
+      ]
+    },
+    "digestMismatch": {
+      "status": "fail",
+      "checkIds": [
+        "binary.digestMismatch",
+        "binary.digestMismatch"
+      ]
+    }
+  }
+}

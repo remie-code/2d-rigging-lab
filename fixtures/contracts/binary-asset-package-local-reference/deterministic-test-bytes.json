@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "deterministic-binary-test-bytes-v1",
+  "fixtureId": "binary-asset-package-local-reference",
+  "rightsPolicy": {
+    "creator": "contract-fixture",
+    "license": "internal-test-fixture",
+    "redistributionAllowed": true,
+    "source": "Generated deterministic integer arrays authored for tests in this repository."
+  },
+  "contentPolicy": {
+    "generatedDeterministicTestBytes": true,
+    "notPsdContent": true,
+    "notPngContent": true,
+    "notImageContent": true,
+    "notThirdPartyContent": true,
+    "notCopiedFrom": [
+      "test_data/sample_model.psd"
+    ],
+    "notes": [
+      "These bytes are synthetic contract-test payloads only.",
+      "They do not begin with the PSD signature 8BPS.",
+      "They do not begin with the PNG signature.",
+      "No image decoder, raster extractor, or PSD parser is used to produce or inspect them."
+    ]
+  },
+  "assets": [
+    {
+      "binaryAssetId": "bin_binary_fixture_source",
+      "role": "source-original-v1",
+      "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+      "mediaType": "application/octet-stream",
+      "storageStatus": "stored-package-local-v1",
+      "provenanceId": "prov_import_binary_fixture",
+      "rightsAssetId": "src_binary_fixture",
+      "byteLength": 16,
+      "digest": {
+        "algorithm": "sha256",
+        "hex": "f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192"
+      },
+      "bytesDecimal": [
+        17,
+        68,
+        3,
+        250,
+        91,
+        12,
+        145,
+        0,
+        33,
+        76,
+        201,
+        8,
+        127,
+        52,
+        6,
+        99
+      ]
+    },
+    {
+      "binaryAssetId": "bin_binary_fixture_texture",
+      "role": "texture-raster-v1",
+      "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+      "mediaType": "application/octet-stream",
+      "storageStatus": "stored-package-local-v1",
+      "provenanceId": "prov_import_binary_fixture",
+      "rightsAssetId": "src_binary_fixture",
+      "byteLength": 12,
+      "digest": {
+        "algorithm": "sha256",
+        "hex": "27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4"
+      },
+      "bytesDecimal": [
+        5,
+        200,
+        34,
+        0,
+        88,
+        199,
+        13,
+        65,
+        144,
+        2,
+        111,
+        222
+      ]
+    }
+  ]
+}

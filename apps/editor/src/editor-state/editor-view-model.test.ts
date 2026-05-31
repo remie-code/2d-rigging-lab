@@ -173,6 +173,91 @@ describe("editor semantic state view model", () => {
     });
   });
 
+  it("projects binary source and texture refs through the editor source intake view model", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_binary_refs",
+        packageDisplayName: "Binary Ref Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 0,
+        authoringRevision: 0
+      },
+      sourceAssets: [
+        {
+          sourceAssetId: SourceAssetIdSchema.parse("src_binary_psd"),
+          kind: "psd-source-v1",
+          filePath: "assets/sources/binary/source.psd",
+          contentHash: "sha256:binary-source",
+          importProfile: "layered-character-psd-profile-v1",
+          binaryAssetRef: createEditorBinaryAssetRef({
+            binaryAssetId: "bin_binary_source",
+            packageRelativePath: "assets/sources/binary/source.psd",
+            mediaType: "application/vnd.adobe.photoshop",
+            byteLength: 8192,
+            storageStatus: "stored-package-local-v1",
+            digestHex: "c".repeat(64)
+          }),
+          layers: [
+            {
+              sourceLayerId: "layer_face",
+              sourceAssetId: SourceAssetIdSchema.parse("src_binary_psd"),
+              originalName: "Face",
+              normalizedName: "face",
+              groupPath: ["Root"],
+              bounds: { x: 0, y: 0, width: 64, height: 64 },
+              visibleInSource: true,
+              opacityInSource: 1,
+              role: "editableLayer",
+              unsupportedFeatures: [],
+              mappedDrawableIds: []
+            }
+          ],
+          diagnostics: []
+        }
+      ],
+      textureAtlas: {
+        schemaVersion: "texture-atlas-v1",
+        textures: [
+          {
+            textureId: TextureIdSchema.parse("tex_binary_face"),
+            filePath: "assets/textures/binary_face.png",
+            sourceAssetId: SourceAssetIdSchema.parse("src_binary_psd"),
+            sourceLayerId: "layer_face",
+            provenanceId: ProvenanceIdSchema.parse("prov_binary_source"),
+            binaryAssetRef: createEditorBinaryAssetRef({
+              binaryAssetId: "bin_binary_texture",
+              packageRelativePath: "assets/textures/binary_face.png",
+              mediaType: "image/png",
+              byteLength: 1024,
+              storageStatus: "missing-package-local-bytes-v1",
+              digestHex: "d".repeat(64)
+            })
+          }
+        ]
+      }
+    });
+
+    const importedAsset = projectEditorWorkflowViewModel(state).sourceIntake.importedAssets[0];
+
+    expect(importedAsset).toMatchObject({
+      sourceAssetId: "src_binary_psd",
+      binaryAssetLabels: [
+        expect.stringContaining("Source binary ref / bin_binary_source / stored-package-local-v1 status; bytes are not decoded by the editor"),
+        expect.stringContaining("Texture binary ref tex_binary_face / bin_binary_texture / missing-package-local-bytes-v1; package-local bytes are missing")
+      ],
+      layers: [
+        expect.objectContaining({
+          textureBinaryAssetLabel: expect.stringContaining(
+            "Texture binary ref tex_binary_face / bin_binary_texture"
+          )
+        })
+      ]
+    });
+    expect(JSON.stringify(importedAsset)).not.toMatch(/FileReader|readFile|decoded from bytes|file picker/i);
+  });
+
   it("projects drawable list and create drawable defaults for workflow UI", () => {
     const state = projectLoadedPackageState({
       identity: {
@@ -584,4 +669,29 @@ describe("editor semantic state view model", () => {
       }
     });
   });
+});
+
+const createEditorBinaryAssetRef = (input: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly byteLength: number;
+  readonly storageStatus:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly digestHex: string;
+}) => ({
+  referenceKind: "package-binary-asset-ref-v1" as const,
+  binaryAssetId: input.binaryAssetId,
+  packageRelativePath: input.packageRelativePath,
+  digest: {
+    algorithm: "sha256" as const,
+    hex: input.digestHex
+  },
+  byteLength: input.byteLength,
+  mediaType: input.mediaType,
+  storageStatus: input.storageStatus,
+  provenanceId: ProvenanceIdSchema.parse("prov_binary_source"),
+  rightsAssetId: "src_binary_psd"
 });

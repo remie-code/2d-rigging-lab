@@ -35,7 +35,8 @@ import type {
   DrawOrderEntryDto,
   MeshDto,
   ModelPartDto,
-  SourceAssetDto
+  SourceAssetDto,
+  TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
 
 export interface LoadedPackageSummaryInput {
@@ -47,6 +48,7 @@ export interface LoadedPackageSummaryInput {
   readonly meshes?: readonly MeshDto[];
   readonly parts?: readonly ModelPartDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
+  readonly textureAtlas?: TextureAtlasFileDto;
   readonly canvasSize?: {
     readonly width: number;
     readonly height: number;
@@ -63,6 +65,7 @@ export interface CommittedOperationSummaryInput {
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
+  readonly textureAtlas?: TextureAtlasFileDto;
   readonly parts?: readonly ModelPartDto[];
   readonly canvasSize?: {
     readonly width: number;
@@ -103,6 +106,7 @@ export const projectLoadedPackageState = (
       defaultPartId: input.parts?.[0]?.partId ?? ""
     }),
     sourceAssets: input.sourceAssets ?? [],
+    textureAtlas: input.textureAtlas ?? null,
     previewParameters: projectPreviewParameterValues(input.parameters ?? [])
   };
 };
@@ -120,6 +124,7 @@ export const applyCommittedOperationSummary = (
       ? state.meshEdit
       : projectMeshEditState(drawables, input.meshes ?? []);
   const sourceAssets = input.sourceAssets ?? state.sourceAssets;
+  const textureAtlas = input.textureAtlas ?? state.textureAtlas;
   const pendingCreateDrawable = projectCommittedCreateDrawableDraft(state, input, sourceAssets);
 
   return {
@@ -153,6 +158,7 @@ export const applyCommittedOperationSummary = (
         : state.pendingCreateParameter,
     pendingCreateDrawable,
     sourceAssets,
+    textureAtlas,
     lastOperationResult: projectOperationResultSummary(input.result),
     operationLog: projectOperationLogSummary(input.operationLogEntries),
     generatedEvidence: projectGeneratedEvidenceSummary(input.generatedEvidence ?? {}),

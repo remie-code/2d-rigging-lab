@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DrawableIdSchema,
   PartIdSchema,
+  ProvenanceIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
-import type { SourceAssetDto } from "@private-2d-rigging-lab/package-format";
+import type {
+  BinaryAssetReferenceDto,
+  SourceAssetDto,
+  TextureAtlasFileDto
+} from "@private-2d-rigging-lab/package-format";
 
 import {
   createEmptySourceIntakeDraftState,
@@ -351,16 +356,56 @@ describe("source intake panel", () => {
       )?.style.overflowWrap
     ).toBe("anywhere");
   });
+
+  it("renders package-local binary refs as metadata-only availability states", () => {
+    const draft = createEmptySourceIntakeDraftState({ defaultPartId: "part_root" });
+    const panel = createPanel(
+      draft,
+      () => {},
+      [createImportedPsdSourceAssetWithBinaryRefs()],
+      createTextureAtlasWithBinaryRef()
+    );
+    const row = findByTestId(panel, "sourceIntake.imported.src_panel_psd_profile");
+
+    expect(row?.textContent).toContain("Binary asset references for src_panel_psd_profile");
+    expect(row?.textContent).toContain(
+      "Source binary ref / bin_panel_psd_source / missing-package-local-bytes-v1; package-local bytes are missing / assets/sources/panel/source.psd"
+    );
+    expect(row?.textContent).toContain("application/vnd.adobe.photoshop / 4096 bytes / sha256:aaaaaaaaaaaa...");
+    expect(row?.textContent).toContain(
+      "Texture binary ref tex_face / bin_panel_face_preview / storage-unsupported-v1; current workflow cannot store bytes / assets/sources/panel/face.preview.png"
+    );
+    expect(row?.textContent).toContain("image/png / 2048 bytes / sha256:bbbbbbbbbbbb...");
+    expect(row?.textContent).toContain("metadata only; no editor file import or image decode");
+    expect(row?.textContent).not.toMatch(/file picker|FileReader|readFile|decoded from bytes|parsed from bytes|raster extraction/i);
+    expect(
+      row?.queryByPredicate((element) =>
+        element.tagName === "section" &&
+        element.getAttribute("aria-label") ===
+          "Binary asset references for src_panel_psd_profile"
+      )
+    ).not.toBeNull();
+    expect(
+      row?.queryByPredicate((element) =>
+        element.tagName === "li" &&
+        element.textContent.includes("bin_panel_face_preview")
+      )?.style.overflowWrap
+    ).toBe("anywhere");
+  });
 });
 
 const createPanel = (
   draft = createEmptySourceIntakeDraftState(),
   onConfirmDraft: Parameters<typeof createSourceIntakePanel>[0]["onConfirmDraft"] = () => {},
-  sourceAssets: readonly SourceAssetDto[] = []
+  sourceAssets: readonly SourceAssetDto[] = [],
+  textureAtlas?: TextureAtlasFileDto
 ): TestElement =>
   createSourceIntakePanel({
     draft,
-    viewModel: projectSourceIntakeDraftViewModel(draft, { sourceAssets }),
+    viewModel: projectSourceIntakeDraftViewModel(draft, {
+      sourceAssets,
+      ...(textureAtlas === undefined ? {} : { textureAtlas })
+    }),
     onConfirmDraft
   }) as unknown as TestElement;
 
@@ -631,6 +676,61 @@ const createImportedPsdSourceAsset = (): SourceAssetDto => ({
         "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
     }
   }
+});
+
+const createImportedPsdSourceAssetWithBinaryRefs = (): SourceAssetDto => ({
+  ...createImportedPsdSourceAsset(),
+  binaryAssetRef: createBinaryAssetReference({
+    binaryAssetId: "bin_panel_psd_source",
+    packageRelativePath: "assets/sources/panel/source.psd",
+    mediaType: "application/vnd.adobe.photoshop",
+    byteLength: 4096,
+    storageStatus: "missing-package-local-bytes-v1",
+    digestHex: "a".repeat(64)
+  })
+});
+
+const createTextureAtlasWithBinaryRef = (): TextureAtlasFileDto => ({
+  schemaVersion: "texture-atlas-v1",
+  textures: [
+    {
+      textureId: TextureIdSchema.parse("tex_face"),
+      filePath: "assets/textures/tex_face.png",
+      sourceAssetId: SourceAssetIdSchema.parse("src_panel_psd_profile"),
+      sourceLayerId: "layer_face",
+      provenanceId: ProvenanceIdSchema.parse("prov_panel_psd_profile"),
+      binaryAssetRef: createBinaryAssetReference({
+        binaryAssetId: "bin_panel_face_preview",
+        packageRelativePath: "assets/sources/panel/face.preview.png",
+        mediaType: "image/png",
+        byteLength: 2048,
+        storageStatus: "storage-unsupported-v1",
+        digestHex: "b".repeat(64)
+      })
+    }
+  ]
+});
+
+const createBinaryAssetReference = (input: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly byteLength: number;
+  readonly storageStatus: BinaryAssetReferenceDto["storageStatus"];
+  readonly digestHex: string;
+}): BinaryAssetReferenceDto => ({
+  referenceKind: "package-binary-asset-ref-v1",
+  binaryAssetId: input.binaryAssetId,
+  packageRelativePath: input.packageRelativePath,
+  digest: {
+    algorithm: "sha256",
+    hex: input.digestHex
+  },
+  byteLength: input.byteLength,
+  mediaType: input.mediaType,
+  storageStatus: input.storageStatus,
+  provenanceId: ProvenanceIdSchema.parse("prov_panel_psd_profile"),
+  rightsAssetId: "src_panel_psd_profile"
 });
 
 const createUnsupportedPsdDraft = () => ({

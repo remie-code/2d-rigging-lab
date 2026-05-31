@@ -13,6 +13,7 @@ import {
   type SplitPngImportRightsMetadataDto,
   type SplitPngSourceLayerMetadataDto
 } from "@private-2d-rigging-lab/operation-core";
+import type { BinaryAssetReferenceDto } from "@private-2d-rigging-lab/package-format";
 
 export type EditorSplitPngSourceLayerMetadataCommand = Omit<
   SplitPngSourceLayerMetadataDto,
@@ -27,6 +28,7 @@ export interface EditorImportSplitPngSourceAssetCommand {
   readonly sourceAssetId?: SourceAssetId | string;
   readonly manifestPath: string;
   readonly contentHash?: string;
+  readonly binaryAssetRef?: BinaryAssetReferenceDto;
   readonly defaultPartId?: PartId | string;
   readonly placementPolicy: "use-metadata" | "origin-with-warning";
   readonly layers: readonly EditorSplitPngSourceLayerMetadataCommand[];
@@ -40,6 +42,7 @@ export interface EditorImportPsdSourceAssetCommand {
   readonly fileRef: {
     readonly packageRelativePath: string;
     readonly contentHash?: string;
+    readonly binaryAssetRef?: BinaryAssetReferenceDto;
   };
   readonly adapterResult: PsdAdapterResultDto;
   readonly rights: ImportRightsSummaryDto;
@@ -77,6 +80,7 @@ export const createImportSplitPngSourceAssetOperationRequest = (
       manifestPath: command.manifestPath,
       importProfile: "split-png-fallback-v1",
       ...(command.contentHash === undefined ? {} : { contentHash: command.contentHash }),
+      ...(command.binaryAssetRef === undefined ? {} : { binaryAssetRef: command.binaryAssetRef }),
       ...(command.defaultPartId === undefined ? {} : { defaultPartId: command.defaultPartId }),
       placementPolicy: command.placementPolicy,
       layers: [...command.layers],
@@ -106,7 +110,10 @@ export const createImportPsdSourceAssetOperationRequest = (
       ...(command.sourceAssetId === undefined ? {} : { sourceAssetId: command.sourceAssetId }),
       fileRef: {
         packageRelativePath: command.fileRef.packageRelativePath,
-        ...(command.fileRef.contentHash === undefined ? {} : { contentHash: command.fileRef.contentHash })
+        ...(command.fileRef.contentHash === undefined ? {} : { contentHash: command.fileRef.contentHash }),
+        ...(command.fileRef.binaryAssetRef === undefined
+          ? {}
+          : { binaryAssetRef: command.fileRef.binaryAssetRef })
       },
       importProfile: "layered-character-psd-profile-v1",
       requestedLayerRoles: command.requestedLayerRoles ?? {},

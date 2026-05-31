@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "binary-asset-index-v1",
+  "assets": [
+    {
+      "binaryAssetId": "bin_binary_fixture_source",
+      "role": "source-original-v1",
+      "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+      "digest": {
+        "algorithm": "sha256",
+        "hex": "f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192"
+      },
+      "byteLength": 16,
+      "mediaType": "application/octet-stream",
+      "storageStatus": "stored-package-local-v1",
+      "provenanceId": "prov_import_binary_fixture",
+      "rightsAssetId": "src_binary_fixture",
+      "sourceAssetId": "src_binary_fixture",
+      "createdByOperationId": "op_import_binary_fixture"
+    },
+    {
+      "binaryAssetId": "bin_binary_fixture_texture",
+      "role": "texture-raster-v1",
+      "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+      "digest": {
+        "algorithm": "sha256",
+        "hex": "27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4"
+      },
+      "byteLength": 12,
+      "mediaType": "application/octet-stream",
+      "storageStatus": "stored-package-local-v1",
+      "provenanceId": "prov_import_binary_fixture",
+      "rightsAssetId": "src_binary_fixture",
+      "textureId": "tex_binary_fixture_body",
+      "createdByOperationId": "op_import_binary_fixture"
+    }
+  ]
+}

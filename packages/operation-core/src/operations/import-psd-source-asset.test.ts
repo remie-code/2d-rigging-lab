@@ -191,6 +191,71 @@ describe("importPsdSourceAsset operation handler", () => {
     ]);
   });
 
+  it("materializes PSD source and texture binary refs as pending package-local metadata", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-31T00:10:00.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createImportPsdRequest({
+        dryRun: false,
+        sourceBinaryAssetRefStorageStatus: "missing-package-local-bytes-v1",
+        texturePreviewBinaryAssetRefStorageStatus: "missing-package-local-bytes-v1",
+        includeTexturePreviewReference: false
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.sourceAssets[0]?.binaryAssetRef).toMatchObject({
+      binaryAssetId: "bin_psd_character_source",
+      packageRelativePath: "assets/sources/character/source.psd",
+      storageStatus: "missing-package-local-bytes-v1",
+      provenanceId: "prov_import_psd_character",
+      rightsAssetId: "src_psd_character"
+    });
+    expect(session.graph.sourceAssets[0]?.psdProfile?.sourceLayers[0]).toMatchObject({
+      sourceLayerId: "layer_face",
+      texturePreviewReference: "assets/textures/face.preview.png",
+      textureId: "tex_face"
+    });
+    expect(session.graph.textureAtlas?.textures[0]).toMatchObject({
+      textureId: "tex_face",
+      filePath: "assets/textures/face.preview.png",
+      binaryAssetRef: expect.objectContaining({
+        binaryAssetId: "bin_psd_character_face_preview",
+        packageRelativePath: "assets/textures/face.preview.png",
+        storageStatus: "missing-package-local-bytes-v1",
+        provenanceId: "prov_import_psd_character",
+        rightsAssetId: "src_psd_character"
+      })
+    });
+    const pendingDiagnostics = outcome.result.diagnostics.filter(
+      (diagnostic) => diagnostic.checkId === "operation.importPsdSourceAsset.binaryPayloadPending"
+    );
+    expect(pendingDiagnostics).toEqual([
+      expect.objectContaining({
+        status: "needs_review",
+        severity: "warning",
+        target: {
+          kind: "sourceAsset",
+          id: "src_psd_character",
+          path: "/payload/fileRef/binaryAssetRef"
+        }
+      }),
+      expect.objectContaining({
+        status: "needs_review",
+        severity: "warning",
+        target: {
+          kind: "sourceAsset",
+          id: "src_psd_character",
+          path: "/payload/adapterResult/sourceLayers/layer_face/texturePreviewBinaryAssetRef"
+        }
+      })
+    ]);
+  });
+
   it("rejects missing adapter results without parsing PSD bytes", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -260,6 +325,15 @@ describe("importPsdSourceAsset operation handler", () => {
 const createImportPsdRequest = (options: {
   readonly dryRun: boolean;
   readonly includeAdapterResult?: boolean;
+  readonly includeTexturePreviewReference?: boolean;
+  readonly sourceBinaryAssetRefStorageStatus?:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly texturePreviewBinaryAssetRefStorageStatus?:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
   readonly texturePreviewReference?: string;
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
@@ -274,7 +348,19 @@ const createImportPsdRequest = (options: {
       sourceAssetId: "src_psd_character",
       fileRef: {
         packageRelativePath: "assets/sources/character/source.psd",
-        contentHash: "sha256:psd-character"
+        contentHash: "sha256:psd-character",
+        ...(options.sourceBinaryAssetRefStorageStatus === undefined
+          ? {}
+          : {
+              binaryAssetRef: createBinaryAssetReference({
+                binaryAssetId: "bin_psd_character_source",
+                packageRelativePath: "assets/sources/character/source.psd",
+                mediaType: "application/octet-stream",
+                storageStatus: options.sourceBinaryAssetRefStorageStatus,
+                provenanceId: "prov_import_psd_character",
+                rightsAssetId: "src_psd_character"
+              })
+            })
       },
       importProfile: "layered-character-psd-profile-v1",
       requestedLayerRoles: {
@@ -338,8 +424,24 @@ const createImportPsdRequest = (options: {
                       manualConfirmationRequired: true
                     }
                   ],
-                  texturePreviewReference:
-                    options.texturePreviewReference ?? "assets/textures/face.preview.png",
+                  ...(options.includeTexturePreviewReference === false
+                    ? {}
+                    : {
+                        texturePreviewReference:
+                          options.texturePreviewReference ?? "assets/textures/face.preview.png"
+                      }),
+                  ...(options.texturePreviewBinaryAssetRefStorageStatus === undefined
+                    ? {}
+                    : {
+                        texturePreviewBinaryAssetRef: createBinaryAssetReference({
+                          binaryAssetId: "bin_psd_character_face_preview",
+                          packageRelativePath: "assets/textures/face.preview.png",
+                          mediaType: "image/png",
+                          storageStatus: options.texturePreviewBinaryAssetRefStorageStatus,
+                          provenanceId: "prov_import_psd_character",
+                          rightsAssetId: "src_psd_character"
+                        })
+                      }),
                   textureId: "tex_face",
                   targetPartId: "part_root"
                 }
@@ -364,6 +466,31 @@ const createImportPsdRequest = (options: {
       }
     }
   });
+
+const createBinaryAssetReference = (overrides: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly storageStatus:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly provenanceId: string;
+  readonly rightsAssetId: string;
+}) => ({
+  referenceKind: "package-binary-asset-ref-v1",
+  binaryAssetId: overrides.binaryAssetId,
+  packageRelativePath: overrides.packageRelativePath,
+  digest: {
+    algorithm: "sha256",
+    hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  byteLength: 12,
+  mediaType: overrides.mediaType,
+  storageStatus: overrides.storageStatus,
+  provenanceId: overrides.provenanceId,
+  rightsAssetId: overrides.rightsAssetId
+});
 
 const getRequestOperationId = (request: OperationRequestDto): OperationId => {
   if (request.operationId === undefined) {

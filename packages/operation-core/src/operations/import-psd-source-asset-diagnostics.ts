@@ -13,6 +13,10 @@ import type {
   PsdAdapterSeverityDto,
   PsdAdapterUnsupportedFeatureDto
 } from "../payloads/import-source.js";
+import {
+  createPendingBinaryAssetReferenceDiagnostics,
+  resolveBinaryBackedTexturePreviewReference
+} from "./import-binary-asset-references.js";
 import { createLayerPayloadPath } from "./import-psd-source-asset-texture.js";
 
 export const createPsdSourceAssetDiagnostics = (
@@ -30,6 +34,12 @@ export const createPsdSourceAssetDiagnostics = (
     `psd.adapterName:${adapterResult.adapterName}`,
     `psd.canvas:${adapterResult.canvas.width}x${adapterResult.canvas.height}`
   ];
+
+  if (payload.fileRef.binaryAssetRef !== undefined) {
+    diagnostics.push(
+      `psd.binaryAssetRef:${toBinaryAssetReferenceDiagnostic(payload.fileRef.binaryAssetRef)}`
+    );
+  }
 
   if (adapterResult.canvas.bounds !== undefined) {
     diagnostics.push(`psd.canvasBounds:${stableStringify(adapterResult.canvas.bounds)}`);
@@ -66,8 +76,19 @@ export const createPsdSourceAssetDiagnostics = (
       diagnostics.push(`psd.layerTexture:${layer.sourceLayerId}:${layer.textureId}`);
     }
 
-    if (layer.texturePreviewReference !== undefined) {
-      diagnostics.push(`psd.layerTexturePreview:${layer.sourceLayerId}:${layer.texturePreviewReference}`);
+    const texturePreviewReference = resolveBinaryBackedTexturePreviewReference({
+      texturePreviewReference: layer.texturePreviewReference,
+      texturePreviewBinaryAssetRef: layer.texturePreviewBinaryAssetRef
+    });
+
+    if (texturePreviewReference !== undefined) {
+      diagnostics.push(`psd.layerTexturePreview:${layer.sourceLayerId}:${texturePreviewReference}`);
+    }
+
+    if (layer.texturePreviewBinaryAssetRef !== undefined) {
+      diagnostics.push(
+        `psd.layerTextureBinaryAssetRef:${layer.sourceLayerId}:${toBinaryAssetReferenceDiagnostic(layer.texturePreviewBinaryAssetRef)}`
+      );
     }
 
     for (const feature of layer.unsupportedFeatures) {
@@ -122,6 +143,40 @@ export const createPsdAdapterResultOperationDiagnostics = (input: {
   }
 
   return diagnostics;
+};
+
+export const createPsdBinaryAssetReferenceOperationDiagnostics = (input: {
+  readonly payload: ImportPsdSourceAssetPayloadDto;
+  readonly sourceAssetId: SourceAssetId;
+}): DiagnosticDto[] => {
+  const references = [
+    ...(input.payload.fileRef.binaryAssetRef === undefined
+      ? []
+      : [
+          {
+            binaryAssetRef: input.payload.fileRef.binaryAssetRef,
+            targetPath: "/payload/fileRef/binaryAssetRef",
+            label: "PSD source"
+          }
+        ]),
+    ...(input.payload.adapterResult?.sourceLayers.flatMap((layer) =>
+      layer.texturePreviewBinaryAssetRef === undefined
+        ? []
+        : [
+            {
+              binaryAssetRef: layer.texturePreviewBinaryAssetRef,
+              targetPath: `${createLayerPayloadPath(layer.sourceLayerId)}/texturePreviewBinaryAssetRef`,
+              label: `PSD texture preview for ${layer.sourceLayerId}`
+            }
+          ]
+    ) ?? [])
+  ];
+
+  return createPendingBinaryAssetReferenceDiagnostics({
+    checkId: "operation.importPsdSourceAsset.binaryPayloadPending",
+    sourceAssetId: input.sourceAssetId,
+    references
+  });
 };
 
 export const createGroupPayloadPath = (sourceGroupId: string): string =>
@@ -270,5 +325,16 @@ const toAdapterDiagnostic = (diagnostic: PsdAdapterDiagnosticDto): unknown => ({
   ...(diagnostic.source === undefined ? {} : { source: diagnostic.source }),
   evidence: diagnostic.evidence
 });
+
+const toBinaryAssetReferenceDiagnostic = (
+  binaryAssetRef: NonNullable<ImportPsdSourceAssetPayloadDto["fileRef"]["binaryAssetRef"]>
+): string =>
+  stableStringify({
+    binaryAssetId: binaryAssetRef.binaryAssetId,
+    packageRelativePath: binaryAssetRef.packageRelativePath,
+    storageStatus: binaryAssetRef.storageStatus,
+    mediaType: binaryAssetRef.mediaType,
+    byteLength: binaryAssetRef.byteLength
+  });
 
 const stableStringify = (value: unknown): string => JSON.stringify(value);

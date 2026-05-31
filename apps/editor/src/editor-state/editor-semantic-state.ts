@@ -15,7 +15,10 @@ import {
   createEmptySourceIntakeDraftState,
   type SourceIntakeDraftState
 } from "./source-intake-draft-state.js";
-import type { SourceAssetDto } from "@private-2d-rigging-lab/package-format";
+import type {
+  SourceAssetDto,
+  TextureAtlasFileDto
+} from "@private-2d-rigging-lab/package-format";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
 
@@ -31,6 +34,7 @@ export interface EditorSemanticState {
   readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly sourceIntakeDraft: SourceIntakeDraftState;
   readonly sourceAssets: readonly SourceAssetDto[];
+  readonly textureAtlas: TextureAtlasFileDto | null;
   readonly lastOperationResult: OperationResultSummaryState | null;
   readonly operationLog: OperationLogSummaryState;
   readonly generatedEvidence: GeneratedEvidenceSummaryState;
@@ -50,6 +54,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   pendingCreateDrawable: createEmptyDrawableFormState(),
   sourceIntakeDraft: createEmptySourceIntakeDraftState(),
   sourceAssets: [],
+  textureAtlas: null,
   lastOperationResult: null,
   operationLog: createEmptyOperationLogSummary(),
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),

@@ -114,6 +114,62 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Texture source layer metadata does not match source manifest or drawable mapping."
   },
   {
+    checkId: "binary.bytesMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset metadata expects package-local bytes that are not available in the package file set."
+  },
+  {
+    checkId: "binary.byteLengthMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset byte length metadata does not match the package-local bytes."
+  },
+  {
+    checkId: "binary.digestMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset SHA-256 digest metadata does not match the package-local bytes."
+  },
+  {
+    checkId: "binary.digestUnsupported",
+    phase: "reference",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset digest verification could not run in the current validation environment."
+  },
+  {
+    checkId: "binary.mediaTypeMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset media type metadata does not match the package-local binary entry declaration."
+  },
+  {
+    checkId: "binary.assetIdMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset ID metadata does not match the package-local binary entry declaration."
+  },
+  {
+    checkId: "binary.referenceMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset reference metadata does not match its source manifest, texture atlas, or binary index owner."
+  },
+  {
     checkId: "asset.psd.unsupportedFeature",
     phase: "source_import",
     defaultSeverity: "warning",
@@ -184,6 +240,30 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
     description: "Texture provenance and rights metadata point at different assets."
+  },
+  {
+    checkId: "rights.binaryProvenanceMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset provenance ID cannot be resolved."
+  },
+  {
+    checkId: "rights.binaryRightsMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset rights asset ID cannot be resolved."
+  },
+  {
+    checkId: "rights.binaryProvenanceMismatch",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Binary asset provenance and rights metadata point at different assets."
   },
   {
     checkId: "rights.drawableProvenanceMissing",

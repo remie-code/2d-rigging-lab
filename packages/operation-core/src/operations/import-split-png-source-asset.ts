@@ -33,6 +33,13 @@ import {
   createRejectedOperationResult
 } from "../preconditions.js";
 import {
+  evaluateSourceBinaryAssetReferencePreconditions
+} from "./import-binary-asset-references.js";
+import {
+  createSplitPngBinaryAssetReferenceOperationDiagnostics,
+  createSplitPngSourceAssetDiagnostics
+} from "./import-split-png-source-asset-diagnostics.js";
+import {
   evaluateSplitPngLayerTextureMappingPreconditions,
   materializeSplitPngLayerTexturePreviewMetadata,
   splitPngLayerRequestsTextureMaterialization,
@@ -81,6 +88,7 @@ const applyImportSplitPngSourceAsset = (
   const preconditionDiagnostics = evaluateImportSplitPngSourceAssetPreconditions({
     session,
     request,
+    operationId,
     sourceAssetId
   });
 
@@ -155,7 +163,11 @@ const applyImportSplitPngSourceAsset = (
       sourceAsset: mutation.sourceAsset,
       provenanceRecord: mutation.provenanceRecord,
       rightsRecord: mutation.rightsRecord,
-      textureMaterializations
+      textureMaterializations,
+      diagnostics: createSplitPngBinaryAssetReferenceOperationDiagnostics({
+        payload: request.payload,
+        sourceAssetId
+      })
     }),
     targetIds,
     candidateSession: session
@@ -165,10 +177,12 @@ const applyImportSplitPngSourceAsset = (
 const evaluateImportSplitPngSourceAssetPreconditions = (input: {
   readonly session: AuthoringSession;
   readonly request: Extract<OperationRequestDto, { operationType: "importSplitPngSourceAsset" }>;
+  readonly operationId: OperationId;
   readonly sourceAssetId: SourceAssetId;
 }): DiagnosticDto[] => {
   const diagnostics: DiagnosticDto[] = [];
   const sourceTarget: TargetRefDto = { kind: "sourceAsset", id: input.sourceAssetId };
+  const expectedProvenanceId = createProvenanceId(input.operationId);
 
   if (normalizeManifestPath(input.request.payload.manifestPath) === undefined) {
     diagnostics.push(
@@ -179,6 +193,18 @@ const evaluateImportSplitPngSourceAssetPreconditions = (input: {
       })
     );
   }
+
+  diagnostics.push(
+    ...evaluateSourceBinaryAssetReferencePreconditions({
+      operationCheckIdPrefix: "operation.importSplitPngSourceAsset",
+      sourceTarget,
+      expectedPackageRelativePath: normalizeManifestPath(input.request.payload.manifestPath),
+      expectedProvenanceId,
+      expectedRightsAssetId: input.sourceAssetId,
+      binaryAssetRef: input.request.payload.binaryAssetRef,
+      payloadPath: "/payload/binaryAssetRef"
+    })
+  );
 
   if (input.request.payload.importProfile !== "split-png-fallback-v1") {
     diagnostics.push(
@@ -242,7 +268,9 @@ const evaluateImportSplitPngSourceAssetPreconditions = (input: {
     ...evaluateLayerMetadataPreconditions({
       session: input.session,
       payload: input.request.payload,
-      sourceTarget
+      sourceTarget,
+      expectedProvenanceId,
+      expectedRightsAssetId: input.sourceAssetId
     })
   );
 
@@ -266,6 +294,8 @@ const evaluateLayerMetadataPreconditions = (input: {
   readonly session: AuthoringSession;
   readonly payload: SplitPngSourceAssetPayloadDto;
   readonly sourceTarget: TargetRefDto;
+  readonly expectedProvenanceId: ProvenanceId;
+  readonly expectedRightsAssetId: SourceAssetId;
 }): DiagnosticDto[] => {
   const diagnostics: DiagnosticDto[] = [];
   const seenLayerIds = new Set<string>();
@@ -300,7 +330,9 @@ const evaluateLayerMetadataPreconditions = (input: {
         payload: input.payload,
         layer,
         seenTextureIds,
-        sourceTarget: input.sourceTarget
+        sourceTarget: input.sourceTarget,
+        expectedProvenanceId: input.expectedProvenanceId,
+        expectedRightsAssetId: input.expectedRightsAssetId
       })
     );
   }
@@ -326,7 +358,10 @@ const createSourceAssetFromPayload = (input: {
       placementPolicy: input.payload.placementPolicy
     })
   ),
-  diagnostics: createSourceAssetDiagnostics(input.payload)
+  diagnostics: createSplitPngSourceAssetDiagnostics(input.payload),
+  ...(input.payload.binaryAssetRef === undefined
+    ? {}
+    : { binaryAssetRef: structuredClone(input.payload.binaryAssetRef) })
 });
 
 const createSourceLayerFromPayload = (input: {
@@ -350,38 +385,6 @@ const createSourceLayerFromPayload = (input: {
   mappedDrawableIds: []
 });
 
-const createSourceAssetDiagnostics = (
-  payload: SplitPngSourceAssetPayloadDto
-): string[] => {
-  const diagnostics = ["split-png-fallback-v1"];
-
-  if (payload.placementPolicy === "origin-with-warning") {
-    diagnostics.push("splitPng.originPlacementFallback");
-  }
-
-  for (const layer of payload.layers) {
-    if (layer.imagePath !== undefined) {
-      diagnostics.push(`splitPng.layerImage:${layer.sourceLayerId}:${layer.imagePath}`);
-    }
-
-    if (layer.textureId !== undefined) {
-      diagnostics.push(`splitPng.layerTexture:${layer.sourceLayerId}:${layer.textureId}`);
-    }
-
-    if (layer.targetPartId !== undefined) {
-      diagnostics.push(`splitPng.layerTargetPart:${layer.sourceLayerId}:${layer.targetPartId}`);
-    }
-
-    if (layer.texturePreviewReference !== undefined) {
-      diagnostics.push(
-        `splitPng.layerTexturePreview:${layer.sourceLayerId}:${layer.texturePreviewReference}`
-      );
-    }
-  }
-
-  return diagnostics;
-};
-
 const createImportSplitPngSourceAssetResult = (input: {
   readonly operationId: OperationId;
   readonly status: "dry_run" | "committed";
@@ -393,6 +396,7 @@ const createImportSplitPngSourceAssetResult = (input: {
   readonly provenanceRecord: ProvenanceRecord;
   readonly rightsRecord: RightsRecord;
   readonly textureMaterializations: readonly SplitPngTextureMaterializationResult[];
+  readonly diagnostics: readonly DiagnosticDto[];
 }): OperationResultDto => {
   const packageTarget: TargetRefDto = { kind: "package", id: input.packageId };
   const textureTargets = input.textureMaterializations.map((materialization) => ({
@@ -482,7 +486,7 @@ const createImportSplitPngSourceAssetResult = (input: {
     modelDiff,
     runtimeDiff: undefined,
     validationDiff: undefined,
-    diagnostics: [],
+    diagnostics: input.diagnostics,
     generatedRuntimeSnapshotIds: [],
     generatedRuntimeStateRefs: [],
     generatedRuntimeStateSequenceRefs: [],

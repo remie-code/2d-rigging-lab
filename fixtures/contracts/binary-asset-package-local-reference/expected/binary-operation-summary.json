@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "binary-asset-operation-materialization-summary-v1",
+  "fixtureId": "binary-asset-package-local-reference",
+  "operationId": "op_import_binary_fixture",
+  "resultStatus": "committed",
+  "operationDiagnostics": [],
+  "sourceBinaryAssetRef": {
+    "binaryAssetId": "bin_binary_fixture_source",
+    "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+    "storageStatus": "stored-package-local-v1",
+    "mediaType": "application/octet-stream",
+    "byteLength": 16,
+    "digest": "sha256:f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192",
+    "provenanceId": "prov_import_binary_fixture",
+    "rightsAssetId": "src_binary_fixture"
+  },
+  "textureBinaryAssetRef": {
+    "binaryAssetId": "bin_binary_fixture_texture",
+    "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+    "storageStatus": "stored-package-local-v1",
+    "mediaType": "application/octet-stream",
+    "byteLength": 12,
+    "digest": "sha256:27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4",
+    "provenanceId": "prov_import_binary_fixture",
+    "rightsAssetId": "src_binary_fixture"
+  },
+  "texturePreviewReference": {
+    "referenceKind": "package-local-file-v1",
+    "filePath": "assets/textures/binary-fixture/body.texture-bytes"
+  },
+  "rightsAndProvenance": {
+    "rightsAssetId": "src_binary_fixture",
+    "provenanceId": "prov_import_binary_fixture",
+    "relatedOperationIds": [
+      "op_import_binary_fixture"
+    ]
+  }
+}

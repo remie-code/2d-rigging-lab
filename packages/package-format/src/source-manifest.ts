@@ -8,6 +8,8 @@ import {
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 
+import { BinaryAssetReferenceSchema } from "./binary-asset.js";
+
 export const SourceAssetKindSchema = z.enum([
   "psd-source-v1",
   "split-png-set-v1",
@@ -179,6 +181,7 @@ export const SourceAssetSchema = z.object({
   importProfile: SourceImportProfileSchema,
   layers: z.array(SourceLayerSchema).default([]),
   diagnostics: z.array(z.string()).default([]),
+  binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   psdProfile: LayeredCharacterPsdProfileSchema.optional()
 });
 export type SourceAssetDto = z.infer<typeof SourceAssetSchema>;

@@ -6,6 +6,7 @@ import {
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 
+import { BinaryAssetReferenceSchema } from "./binary-asset.js";
 import { isPackageRelativePath } from "./package-file-paths.js";
 
 const PACKAGE_LOCAL_PREVIEW_PATH_PREFIXES = [
@@ -61,7 +62,8 @@ export const TextureAtlasEntrySchema = z.object({
   contentHash: z.string().optional(),
   sourceAssetId: SourceAssetIdSchema.optional(),
   sourceLayerId: z.string().optional(),
-  provenanceId: ProvenanceIdSchema.optional()
+  provenanceId: ProvenanceIdSchema.optional(),
+  binaryAssetRef: BinaryAssetReferenceSchema.optional()
 });
 export type TextureAtlasEntryDto = z.infer<typeof TextureAtlasEntrySchema>;
 

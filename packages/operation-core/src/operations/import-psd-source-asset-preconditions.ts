@@ -5,16 +5,19 @@ import {
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type {
   DiagnosticDto,
+  OperationId,
   SourceAssetId,
   TargetRefDto
 } from "@private-2d-rigging-lab/contracts";
 
+import { createProvenanceId } from "../operation-ids.js";
 import type {
   ImportPsdSourceAssetPayloadDto,
   PsdAdapterResultDto
 } from "../payloads/import-source.js";
 import type { OperationRequestDto } from "../operation-request.js";
 import { createOperationDiagnostic } from "../preconditions.js";
+import { evaluateSourceBinaryAssetReferencePreconditions } from "./import-binary-asset-references.js";
 import { createGroupPayloadPath } from "./import-psd-source-asset-diagnostics.js";
 import { normalizePsdPackageRelativePath } from "./import-psd-source-asset-materialization.js";
 import {
@@ -31,10 +34,12 @@ type ImportPsdSourceAssetRequest = Extract<
 export const evaluateImportPsdSourceAssetPreconditions = (input: {
   readonly session: AuthoringSession;
   readonly request: ImportPsdSourceAssetRequest;
+  readonly operationId: OperationId;
   readonly sourceAssetId: SourceAssetId;
 }): DiagnosticDto[] => {
   const sourceTarget: TargetRefDto = { kind: "sourceAsset", id: input.sourceAssetId };
   const adapterResult = input.request.payload.adapterResult;
+  const expectedProvenanceId = createProvenanceId(input.operationId);
 
   if (adapterResult === undefined) {
     return [
@@ -57,6 +62,20 @@ export const evaluateImportPsdSourceAssetPreconditions = (input: {
       })
     );
   }
+
+  diagnostics.push(
+    ...evaluateSourceBinaryAssetReferencePreconditions({
+      operationCheckIdPrefix: "operation.importPsdSourceAsset",
+      sourceTarget,
+      expectedPackageRelativePath: normalizePsdPackageRelativePath(
+        input.request.payload.fileRef.packageRelativePath
+      ),
+      expectedProvenanceId,
+      expectedRightsAssetId: input.sourceAssetId,
+      binaryAssetRef: input.request.payload.fileRef.binaryAssetRef,
+      payloadPath: "/payload/fileRef/binaryAssetRef"
+    })
+  );
 
   if (adapterResult.sourceProfile !== input.request.payload.importProfile) {
     diagnostics.push(
@@ -99,7 +118,9 @@ export const evaluateImportPsdSourceAssetPreconditions = (input: {
     ...evaluateLayerMetadataPreconditions({
       session: input.session,
       payload: input.request.payload,
-      sourceTarget
+      sourceTarget,
+      expectedProvenanceId,
+      expectedRightsAssetId: input.sourceAssetId
     })
   );
   diagnostics.push(
@@ -166,6 +187,8 @@ const evaluateLayerMetadataPreconditions = (input: {
   readonly session: AuthoringSession;
   readonly payload: ImportPsdSourceAssetPayloadDto;
   readonly sourceTarget: TargetRefDto;
+  readonly expectedProvenanceId: ReturnType<typeof createProvenanceId>;
+  readonly expectedRightsAssetId: SourceAssetId;
 }): DiagnosticDto[] => {
   const diagnostics: DiagnosticDto[] = [];
   const adapterResult = input.payload.adapterResult;
@@ -215,7 +238,9 @@ const evaluateLayerMetadataPreconditions = (input: {
         session: input.session,
         layer,
         seenTextureIds,
-        sourceTarget: input.sourceTarget
+        sourceTarget: input.sourceTarget,
+        expectedProvenanceId: input.expectedProvenanceId,
+        expectedRightsAssetId: input.expectedRightsAssetId
       })
     );
   }

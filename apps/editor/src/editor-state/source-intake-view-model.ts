@@ -5,12 +5,15 @@ import {
 } from "./source-intake-draft-state.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 import type {
+  BinaryAssetReferenceDto,
   LayeredCharacterPsdProfileDto,
   PsdProfileAdapterDiagnosticDto,
   PsdProfileBlendModeDto,
   PsdProfileUnsupportedFeatureDto,
   SourceAssetDto,
-  SourceLayerDto
+  SourceLayerDto,
+  TextureAtlasEntryDto,
+  TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
 
 export interface SourceIntakeLayerDraftViewModel {
@@ -62,6 +65,7 @@ export interface ImportedSourceLayerViewModel {
   readonly roleLabel: string;
   readonly unsupportedFeaturesLabel: string;
   readonly textureMappingLabel: string;
+  readonly textureBinaryAssetLabel?: string;
   readonly blendModeLabel: string;
   readonly mappedDrawableCountLabel: string;
 }
@@ -74,6 +78,7 @@ export interface ImportedSourceAssetViewModel {
   readonly profileEvidenceLabel: string;
   readonly layerCountLabel: string;
   readonly diagnosticsLabel: string;
+  readonly binaryAssetLabels: readonly string[];
   readonly psdProfile?: ImportedPsdProfileViewModel;
   readonly layers: readonly ImportedSourceLayerViewModel[];
 }
@@ -95,12 +100,13 @@ export const projectSourceIntakeDraftViewModel = (
   draft: SourceIntakeDraftState,
   input: {
     readonly sourceAssets?: readonly SourceAssetDto[];
+    readonly textureAtlas?: TextureAtlasFileDto;
   } = {}
 ): SourceIntakeDraftViewModel => {
   const diagnostics = validateSourceIntakeDraft(draft);
   const importedAssets = (input.sourceAssets ?? [])
     .filter((sourceAsset) => sourceAsset.kind !== "generated-fixture-v1")
-    .map(projectImportedSourceAssetViewModel);
+    .map((sourceAsset) => projectImportedSourceAssetViewModel(sourceAsset, input.textureAtlas));
 
   return {
     sourceModeLabel: formatSourceIntakeMode(draft.intakeMode),
@@ -184,13 +190,15 @@ const projectSourceIntakeStatusLabel = (
 };
 
 export const projectImportedSourceAssetViewModel = (
-  sourceAsset: SourceAssetDto
+  sourceAsset: SourceAssetDto,
+  textureAtlas?: TextureAtlasFileDto
 ): ImportedSourceAssetViewModel => {
   const psdProfile =
     sourceAsset.psdProfile === undefined ? undefined : projectImportedPsdProfileViewModel(sourceAsset.psdProfile);
   const structuredLayersById = new Map(
     sourceAsset.psdProfile?.sourceLayers.map((layer) => [layer.sourceLayerId, layer]) ?? []
   );
+  const textureEntries = collectTextureEntriesForSourceAsset(sourceAsset, textureAtlas);
 
   return {
     sourceAssetId: sourceAsset.sourceAssetId,
@@ -201,16 +209,23 @@ export const projectImportedSourceAssetViewModel = (
     layerCountLabel: `${sourceAsset.layers.length} layer${sourceAsset.layers.length === 1 ? "" : "s"}`,
     diagnosticsLabel:
       sourceAsset.diagnostics.length === 0 ? "No source diagnostics" : sourceAsset.diagnostics.join(", "),
+    binaryAssetLabels: projectImportedSourceBinaryAssetLabels(sourceAsset, textureEntries),
     ...(psdProfile === undefined ? {} : { psdProfile }),
-    layers: sourceAsset.layers.map((layer) =>
-      projectImportedSourceLayerViewModel(layer, structuredLayersById.get(layer.sourceLayerId))
-    )
+    layers: sourceAsset.layers.map((layer) => {
+      const structuredLayer = structuredLayersById.get(layer.sourceLayerId);
+      return projectImportedSourceLayerViewModel(
+        layer,
+        structuredLayer,
+        findTextureEntryForSourceLayer(textureEntries, layer, structuredLayer)
+      );
+    })
   };
 };
 
 const projectImportedSourceLayerViewModel = (
   layer: SourceLayerDto,
-  structuredLayer: LayeredCharacterPsdProfileDto["sourceLayers"][number] | undefined
+  structuredLayer: LayeredCharacterPsdProfileDto["sourceLayers"][number] | undefined,
+  textureEntry: TextureAtlasEntryDto | undefined
 ): ImportedSourceLayerViewModel => ({
   sourceLayerId: layer.sourceLayerId,
   layerLabel:
@@ -224,6 +239,14 @@ const projectImportedSourceLayerViewModel = (
   roleLabel: layer.role,
   unsupportedFeaturesLabel: formatImportedLayerUnsupportedFeatures(layer, structuredLayer),
   textureMappingLabel: formatImportedLayerTextureMapping(structuredLayer),
+  ...(textureEntry?.binaryAssetRef === undefined
+    ? {}
+    : {
+        textureBinaryAssetLabel: formatBinaryAssetReferenceProjection(
+          `Texture binary ref ${textureEntry.textureId}`,
+          textureEntry.binaryAssetRef
+        )
+      }),
   blendModeLabel: formatBlendMode(structuredLayer?.blendMode),
   mappedDrawableCountLabel: `${layer.mappedDrawableIds.length} mapped drawable${layer.mappedDrawableIds.length === 1 ? "" : "s"}`
 });
@@ -245,6 +268,83 @@ const projectImportedSourceProfileEvidenceLabel = (
 
   return "Generated fixture source metadata.";
 };
+
+const projectImportedSourceBinaryAssetLabels = (
+  sourceAsset: SourceAssetDto,
+  textureEntries: readonly TextureAtlasEntryDto[]
+): readonly string[] => [
+  ...(sourceAsset.binaryAssetRef === undefined
+    ? []
+    : [formatBinaryAssetReferenceProjection("Source binary ref", sourceAsset.binaryAssetRef)]),
+  ...textureEntries.flatMap((textureEntry) =>
+    textureEntry.binaryAssetRef === undefined
+      ? []
+      : [
+          formatBinaryAssetReferenceProjection(
+            `Texture binary ref ${textureEntry.textureId}`,
+            textureEntry.binaryAssetRef
+          )
+        ]
+  )
+];
+
+const collectTextureEntriesForSourceAsset = (
+  sourceAsset: SourceAssetDto,
+  textureAtlas: TextureAtlasFileDto | undefined
+): readonly TextureAtlasEntryDto[] =>
+  textureAtlas?.textures.filter((texture) => texture.sourceAssetId === sourceAsset.sourceAssetId) ?? [];
+
+const findTextureEntryForSourceLayer = (
+  textureEntries: readonly TextureAtlasEntryDto[],
+  layer: SourceLayerDto,
+  structuredLayer: LayeredCharacterPsdProfileDto["sourceLayers"][number] | undefined
+): TextureAtlasEntryDto | undefined => {
+  const structuredTextureId = structuredLayer?.textureId;
+  const bySourceLayer = textureEntries.filter((texture) => texture.sourceLayerId === layer.sourceLayerId);
+
+  if (structuredTextureId !== undefined) {
+    return bySourceLayer.find((texture) => texture.textureId === structuredTextureId) ??
+      textureEntries.find((texture) => texture.textureId === structuredTextureId);
+  }
+
+  return bySourceLayer[0];
+};
+
+const formatBinaryAssetReferenceProjection = (
+  ownerLabel: string,
+  reference: BinaryAssetReferenceDto
+): string =>
+  [
+    ownerLabel,
+    reference.binaryAssetId,
+    formatBinaryStorageStatus(reference.storageStatus),
+    reference.packageRelativePath,
+    reference.mediaType,
+    formatByteLength(reference.byteLength),
+    formatDigest(reference.digest.hex),
+    `provenance ${reference.provenanceId}`,
+    `rights ${reference.rightsAssetId}`,
+    "metadata only; no editor file import or image decode"
+  ].join(" / ");
+
+const formatBinaryStorageStatus = (
+  status: BinaryAssetReferenceDto["storageStatus"]
+): string => {
+  switch (status) {
+    case "stored-package-local-v1":
+      return "stored-package-local-v1 status; bytes are not decoded by the editor";
+    case "missing-package-local-bytes-v1":
+      return "missing-package-local-bytes-v1; package-local bytes are missing";
+    case "storage-unsupported-v1":
+      return "storage-unsupported-v1; current workflow cannot store bytes";
+  }
+};
+
+const formatByteLength = (byteLength: number): string =>
+  `${byteLength} byte${byteLength === 1 ? "" : "s"}`;
+
+const formatDigest = (hex: string): string =>
+  `sha256:${hex.slice(0, 12)}...`;
 
 const projectImportedPsdProfileViewModel = (
   profile: LayeredCharacterPsdProfileDto

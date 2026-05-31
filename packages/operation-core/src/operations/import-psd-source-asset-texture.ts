@@ -15,6 +15,10 @@ import type {
   PsdAdapterSourceLayerDto
 } from "../payloads/import-source.js";
 import { createOperationDiagnostic } from "../preconditions.js";
+import {
+  evaluateTextureBinaryAssetReferencePreconditions,
+  resolveBinaryBackedTexturePreviewReference
+} from "./import-binary-asset-references.js";
 
 export type PsdTextureMaterializationResult = {
   readonly textureEntry: TextureAtlasFile["textures"][number];
@@ -27,6 +31,8 @@ export const evaluatePsdLayerTextureMappingPreconditions = (input: {
   readonly layer: PsdAdapterSourceLayerDto;
   readonly seenTextureIds: Set<string>;
   readonly sourceTarget: TargetRefDto;
+  readonly expectedProvenanceId: ProvenanceId;
+  readonly expectedRightsAssetId: SourceAssetId;
 }): DiagnosticDto[] => {
   if (!psdLayerRequestsTextureMaterialization(input.layer)) {
     return [];
@@ -35,9 +41,13 @@ export const evaluatePsdLayerTextureMappingPreconditions = (input: {
   const diagnostics: DiagnosticDto[] = [];
   const layerPath = createLayerPayloadPath(input.layer.sourceLayerId);
   const texturePreviewReference = normalizeOptionalString(input.layer.texturePreviewReference);
+  const resolvedTexturePreviewReference = resolveBinaryBackedTexturePreviewReference({
+    texturePreviewReference,
+    texturePreviewBinaryAssetRef: input.layer.texturePreviewBinaryAssetRef
+  });
   const textureId = input.layer.textureId;
 
-  if (texturePreviewReference === undefined) {
+  if (resolvedTexturePreviewReference === undefined) {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.importPsdSourceAsset.missingTexturePreviewReference",
@@ -45,18 +55,31 @@ export const evaluatePsdLayerTextureMappingPreconditions = (input: {
         target: { ...input.sourceTarget, path: `${layerPath}/texturePreviewReference` }
       })
     );
-  } else if (!isSupportedTexturePreviewReference(texturePreviewReference)) {
+  } else if (!isSupportedTexturePreviewReference(resolvedTexturePreviewReference)) {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.importPsdSourceAsset.invalidTexturePreviewReference",
         message: createInvalidTexturePreviewReferenceMessage(
           input.layer.sourceLayerId,
-          texturePreviewReference
+          resolvedTexturePreviewReference
         ),
         target: { ...input.sourceTarget, path: `${layerPath}/texturePreviewReference` }
       })
     );
   }
+
+  diagnostics.push(
+    ...evaluateTextureBinaryAssetReferencePreconditions({
+      operationCheckIdPrefix: "operation.importPsdSourceAsset",
+      sourceTarget: input.sourceTarget,
+      sourceLayerId: input.layer.sourceLayerId,
+      texturePreviewReference,
+      texturePreviewBinaryAssetRef: input.layer.texturePreviewBinaryAssetRef,
+      expectedProvenanceId: input.expectedProvenanceId,
+      expectedRightsAssetId: input.expectedRightsAssetId,
+      payloadPath: `${layerPath}/texturePreviewBinaryAssetRef`
+    })
+  );
 
   if (textureId === undefined) {
     diagnostics.push(
@@ -129,7 +152,11 @@ export const materializePsdLayerTexturePreviewMetadata = (input: {
     }
 
     const texturePreviewReference = normalizeOptionalString(layer.texturePreviewReference);
-    if (texturePreviewReference === undefined || layer.textureId === undefined) {
+    const resolvedTexturePreviewReference = resolveBinaryBackedTexturePreviewReference({
+      texturePreviewReference,
+      texturePreviewBinaryAssetRef: layer.texturePreviewBinaryAssetRef
+    });
+    if (resolvedTexturePreviewReference === undefined || layer.textureId === undefined) {
       throw new Error(
         `Expected importPsdSourceAsset preconditions to reject incomplete texture metadata for ${layer.sourceLayerId}.`
       );
@@ -138,15 +165,18 @@ export const materializePsdLayerTexturePreviewMetadata = (input: {
     const result = upsertTexturePreviewAssetMetadata(input.session, {
       textureEntry: {
         textureId: layer.textureId,
-        filePath: resolveTextureEntryFilePath(layer, texturePreviewReference),
+        filePath: resolveTextureEntryFilePath(layer, resolvedTexturePreviewReference),
         sourceAssetId: input.sourceAssetId,
         sourceLayerId: layer.sourceLayerId,
-        provenanceId: input.provenanceId
+        provenanceId: input.provenanceId,
+        ...(layer.texturePreviewBinaryAssetRef === undefined
+          ? {}
+          : { binaryAssetRef: structuredClone(layer.texturePreviewBinaryAssetRef) })
       },
       previewAsset: {
         previewAssetId: createTexturePreviewAssetId(input.sourceAssetId, layer.sourceLayerId),
         textureId: layer.textureId,
-        reference: createTexturePreviewReference(texturePreviewReference),
+        reference: createTexturePreviewReference(resolvedTexturePreviewReference),
         sourceAssetId: input.sourceAssetId,
         sourceLayerId: layer.sourceLayerId,
         provenanceId: input.provenanceId,
@@ -167,7 +197,9 @@ export const materializePsdLayerTexturePreviewMetadata = (input: {
 export const psdLayerRequestsTextureMaterialization = (
   layer: PsdAdapterSourceLayerDto
 ): boolean =>
-  layer.texturePreviewReference !== undefined || layer.textureId !== undefined;
+  layer.texturePreviewReference !== undefined ||
+  layer.texturePreviewBinaryAssetRef !== undefined ||
+  layer.textureId !== undefined;
 
 export const createLayerPayloadPath = (sourceLayerId: string): string =>
   `/payload/adapterResult/sourceLayers/${sourceLayerId}`;

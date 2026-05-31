@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "binary-asset-package-local-reference-summary-v1",
+  "fixtureId": "binary-asset-package-local-reference",
+  "contentPolicy": {
+    "generatedDeterministicTestBytes": true,
+    "notPsdContent": true,
+    "notPngContent": true,
+    "notImageContent": true,
+    "notThirdPartyContent": true
+  },
+  "packageReferences": {
+    "sourceBinaryAssetId": "bin_binary_fixture_source",
+    "textureBinaryAssetId": "bin_binary_fixture_texture",
+    "binaryAssetIndexCount": 2,
+    "storageStatus": [
+      "stored-package-local-v1",
+      "stored-package-local-v1"
+    ],
+    "mediaTypes": [
+      "application/octet-stream",
+      "application/octet-stream"
+    ],
+    "rightsAssetIds": [
+      "src_binary_fixture",
+      "src_binary_fixture"
+    ],
+    "provenanceIds": [
+      "prov_import_binary_fixture",
+      "prov_import_binary_fixture"
+    ]
+  },
+  "deterministicBytes": [
+    {
+      "binaryAssetId": "bin_binary_fixture_source",
+      "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+      "byteLength": 16,
+      "digest": "sha256:f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192",
+      "verificationStatus": "pass"
+    },
+    {
+      "binaryAssetId": "bin_binary_fixture_texture",
+      "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+      "byteLength": 12,
+      "digest": "sha256:27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4",
+      "verificationStatus": "pass"
+    }
+  ],
+  "fileSet": {
+    "textPackageRoundtrip": "pass",
+    "binaryEntryCount": 2,
+    "verificationStatus": "pass"
+  }
+}

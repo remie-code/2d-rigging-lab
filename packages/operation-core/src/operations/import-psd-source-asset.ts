@@ -21,7 +21,10 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
-import { createPsdAdapterResultOperationDiagnostics } from "./import-psd-source-asset-diagnostics.js";
+import {
+  createPsdAdapterResultOperationDiagnostics,
+  createPsdBinaryAssetReferenceOperationDiagnostics
+} from "./import-psd-source-asset-diagnostics.js";
 import {
   collectPsdCheckedPartIds,
   collectPsdImportTargetIds,
@@ -79,6 +82,7 @@ const applyImportPsdSourceAsset = (
   const preconditionDiagnostics = evaluateImportPsdSourceAssetPreconditions({
     session,
     request,
+    operationId,
     sourceAssetId
   });
 
@@ -158,7 +162,12 @@ const applyImportPsdSourceAsset = (
       diagnostics: createPsdAdapterResultOperationDiagnostics({
         adapterResult,
         sourceAssetId
-      }),
+      }).concat(
+        createPsdBinaryAssetReferenceOperationDiagnostics({
+          payload: request.payload,
+          sourceAssetId
+        })
+      ),
       checkedPartIds: collectPsdCheckedPartIds(adapterResult)
     }),
     targetIds,

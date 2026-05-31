@@ -9,6 +9,7 @@ import { AuthoringMutationError } from "./authoring-mutations.js";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
+import { normalizeSourceAssetBinaryAssetReference } from "./binary-asset-references.js";
 import { getSourceAssetById } from "./drawable-selectors.js";
 
 export interface ImportSourceAssetMetadataMutationResult {
@@ -41,6 +42,14 @@ export const importSourceAssetMetadata = (
   const sourceAsset = structuredClone(input.sourceAsset);
   const provenanceRecord = structuredClone(input.provenanceRecord);
   const rightsRecord = structuredClone(input.rightsRecord);
+  const binaryAssetRef = normalizeSourceAssetBinaryAssetReference({
+    sourceAsset,
+    provenanceRecord,
+    rightsRecord
+  });
+  if (binaryAssetRef !== undefined) {
+    sourceAsset.binaryAssetRef = binaryAssetRef;
+  }
 
   session.graph.sourceAssets.push(sourceAsset);
   upsertProvenanceRecord(session, provenanceRecord);

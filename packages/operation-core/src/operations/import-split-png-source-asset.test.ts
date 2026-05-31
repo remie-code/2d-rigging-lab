@@ -173,6 +173,146 @@ describe("importSplitPngSourceAsset operation handler", () => {
     });
   });
 
+  it("materializes split PNG source and texture binary refs as pending package-local metadata", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-30T00:05:30.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        includeTexturePreviewReference: false,
+        sourceBinaryAssetRefStorageStatus: "missing-package-local-bytes-v1",
+        texturePreviewBinaryAssetRefStorageStatus: "missing-package-local-bytes-v1"
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.sourceAssets[0]?.binaryAssetRef).toMatchObject({
+      binaryAssetId: "bin_split_body_manifest",
+      packageRelativePath: "assets/sources/body/manifest.json",
+      storageStatus: "missing-package-local-bytes-v1",
+      provenanceId: "prov_import_split_body",
+      rightsAssetId: "src_split_body"
+    });
+    expect(session.graph.textureAtlas?.textures[0]).toMatchObject({
+      textureId: "tex_body",
+      filePath: "assets/textures/body.preview.png",
+      binaryAssetRef: expect.objectContaining({
+        binaryAssetId: "bin_split_body_preview",
+        packageRelativePath: "assets/textures/body.preview.png",
+        storageStatus: "missing-package-local-bytes-v1",
+        provenanceId: "prov_import_split_body",
+        rightsAssetId: "src_split_body"
+      })
+    });
+    expect(session.graph.textureAtlas?.previewAssets?.[0]?.reference).toEqual({
+      referenceKind: "package-local-file-v1",
+      filePath: "assets/textures/body.preview.png"
+    });
+    const pendingDiagnostics = outcome.result.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.checkId === "operation.importSplitPngSourceAsset.binaryPayloadPending"
+    );
+    expect(pendingDiagnostics).toEqual([
+      expect.objectContaining({
+        status: "needs_review",
+        target: {
+          kind: "sourceAsset",
+          id: "src_split_body",
+          path: "/payload/binaryAssetRef"
+        }
+      }),
+      expect.objectContaining({
+        status: "needs_review",
+        target: {
+          kind: "sourceAsset",
+          id: "src_split_body",
+          path: "/payload/layers/layer_body/texturePreviewBinaryAssetRef"
+        }
+      })
+    ]);
+  });
+
+  it("reports unsupported split PNG binary storage without treating bytes as verified", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-05-30T00:05:45.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        includeTexturePreviewReference: false,
+        sourceBinaryAssetRefStorageStatus: "storage-unsupported-v1",
+        texturePreviewBinaryAssetRefStorageStatus: "storage-unsupported-v1"
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.sourceAssets[0]?.binaryAssetRef).toMatchObject({
+      binaryAssetId: "bin_split_body_manifest",
+      storageStatus: "storage-unsupported-v1"
+    });
+    expect(session.graph.textureAtlas?.textures[0]?.binaryAssetRef).toMatchObject({
+      binaryAssetId: "bin_split_body_preview",
+      storageStatus: "storage-unsupported-v1"
+    });
+    const pendingDiagnostics = outcome.result.diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.checkId === "operation.importSplitPngSourceAsset.binaryPayloadPending"
+    );
+    expect(pendingDiagnostics).toHaveLength(2);
+    for (const diagnostic of pendingDiagnostics) {
+      expect(diagnostic).toMatchObject({
+        status: "warning",
+        severity: "warning",
+        phase: "operation.import.binaryAssetRef"
+      });
+      expect(diagnostic.message).toContain("not materialized");
+      expect(diagnostic.message).toContain("bytes are not verified by operation-core");
+      expect(diagnostic.evidence).toContain("storageStatus:storage-unsupported-v1");
+    }
+  });
+
+  it("rejects binary refs with mismatched provenance, rights, or texture path", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportSplitPngRequest({
+        dryRun: false,
+        includeTextureMapping: true,
+        sourceBinaryAssetRefStorageStatus: "stored-package-local-v1",
+        sourceBinaryAssetRefProvenanceId: "prov_other",
+        sourceBinaryAssetRefRightsAssetId: "src_other",
+        texturePreviewBinaryAssetRefStorageStatus: "stored-package-local-v1",
+        texturePreviewBinaryAssetRefPackageRelativePath: "assets/textures/body.other.png",
+        texturePreviewBinaryAssetRefProvenanceId: "prov_other",
+        texturePreviewBinaryAssetRefRightsAssetId: "src_other"
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual(
+      expect.arrayContaining([
+        "operation.importSplitPngSourceAsset.sourceBinaryAssetRefProvenanceMismatch",
+        "operation.importSplitPngSourceAsset.sourceBinaryAssetRefRightsMismatch",
+        "operation.importSplitPngSourceAsset.textureBinaryAssetRefPathMismatch",
+        "operation.importSplitPngSourceAsset.textureBinaryAssetRefProvenanceMismatch",
+        "operation.importSplitPngSourceAsset.textureBinaryAssetRefRightsMismatch"
+      ])
+    );
+    expect(session.graph.sourceAssets).toHaveLength(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+  });
+
   it("commits deterministic data URL texture preview metadata as browser-renderable preview assets", () => {
     const session = createFixtureSession();
     const core = createOperationCore({
@@ -622,6 +762,19 @@ const createImportSplitPngRequest = (options: {
   readonly includeTextureMapping?: boolean;
   readonly includeTexturePreviewReference?: boolean;
   readonly texturePreviewReference?: string;
+  readonly sourceBinaryAssetRefStorageStatus?:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly sourceBinaryAssetRefProvenanceId?: string;
+  readonly sourceBinaryAssetRefRightsAssetId?: string;
+  readonly texturePreviewBinaryAssetRefStorageStatus?:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly texturePreviewBinaryAssetRefPackageRelativePath?: string;
+  readonly texturePreviewBinaryAssetRefProvenanceId?: string;
+  readonly texturePreviewBinaryAssetRefRightsAssetId?: string;
   readonly rightsStatus?: "cleared" | "needs_review" | "blocked";
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
@@ -637,6 +790,19 @@ const createImportSplitPngRequest = (options: {
       manifestPath: options.manifestPath ?? "assets/sources/body/manifest.json",
       importProfile: options.importProfile ?? "split-png-fallback-v1",
       contentHash: "sha256:split-body",
+      ...(options.sourceBinaryAssetRefStorageStatus === undefined
+        ? {}
+        : {
+            binaryAssetRef: createBinaryAssetReference({
+              binaryAssetId: "bin_split_body_manifest",
+              packageRelativePath: options.manifestPath ?? "assets/sources/body/manifest.json",
+              mediaType: "application/json",
+              storageStatus: options.sourceBinaryAssetRefStorageStatus,
+              provenanceId:
+                options.sourceBinaryAssetRefProvenanceId ?? "prov_import_split_body",
+              rightsAssetId: options.sourceBinaryAssetRefRightsAssetId ?? "src_split_body"
+            })
+          }),
       defaultPartId: "part_root",
       placementPolicy: "use-metadata",
       layers: [
@@ -660,6 +826,23 @@ const createImportSplitPngRequest = (options: {
                   : {
                       texturePreviewReference:
                         options.texturePreviewReference ?? "assets/textures/body.preview.png"
+                    }),
+                ...(options.texturePreviewBinaryAssetRefStorageStatus === undefined
+                  ? {}
+                  : {
+                      texturePreviewBinaryAssetRef: createBinaryAssetReference({
+                        binaryAssetId: "bin_split_body_preview",
+                        packageRelativePath:
+                          options.texturePreviewBinaryAssetRefPackageRelativePath ??
+                          "assets/textures/body.preview.png",
+                        mediaType: "image/png",
+                        storageStatus: options.texturePreviewBinaryAssetRefStorageStatus,
+                        provenanceId:
+                          options.texturePreviewBinaryAssetRefProvenanceId ??
+                          "prov_import_split_body",
+                        rightsAssetId:
+                          options.texturePreviewBinaryAssetRefRightsAssetId ?? "src_split_body"
+                      })
                     }),
                 textureId: "tex_body",
                 targetPartId: "part_root"
@@ -830,6 +1013,31 @@ const createImportPsdRequest = (options: {
       }
     }
   });
+
+const createBinaryAssetReference = (overrides: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly storageStatus:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly provenanceId: string;
+  readonly rightsAssetId: string;
+}) => ({
+  referenceKind: "package-binary-asset-ref-v1",
+  binaryAssetId: overrides.binaryAssetId,
+  packageRelativePath: overrides.packageRelativePath,
+  digest: {
+    algorithm: "sha256",
+    hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  byteLength: 12,
+  mediaType: overrides.mediaType,
+  storageStatus: overrides.storageStatus,
+  provenanceId: overrides.provenanceId,
+  rightsAssetId: overrides.rightsAssetId
+});
 
 const getRequestOperationId = (request: OperationRequestDto): OperationId => {
   if (request.operationId === undefined) {

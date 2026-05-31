@@ -9,6 +9,7 @@ import type {
   PsdAdapterSourceLayerDto
 } from "../payloads/import-source.js";
 import { createPsdSourceAssetDiagnostics } from "./import-psd-source-asset-diagnostics.js";
+import { resolveBinaryBackedTexturePreviewReference } from "./import-binary-asset-references.js";
 import { psdLayerRequestsTextureMaterialization } from "./import-psd-source-asset-texture.js";
 
 export type PsdSourceAsset = AuthoringSession["graph"]["sourceAssets"][number];
@@ -42,6 +43,9 @@ export const createPsdSourceAssetFromPayload = (input: {
       })
     ),
     diagnostics: createPsdSourceAssetDiagnostics(input.payload, input.sourceAssetId),
+    ...(input.payload.fileRef.binaryAssetRef === undefined
+      ? {}
+      : { binaryAssetRef: structuredClone(input.payload.fileRef.binaryAssetRef) }),
     psdProfile: createPsdProfileFromAdapterResult(adapterResult)
   };
 };
@@ -172,12 +176,20 @@ const createPsdProfileSourceLayer = (
   role: layer.role,
   ...(layer.blendMode === undefined ? {} : { blendMode: structuredClone(layer.blendMode) }),
   unsupportedFeatures: structuredClone(layer.unsupportedFeatures),
-  ...(layer.texturePreviewReference === undefined
+  ...(resolvePsdTexturePreviewReference(layer) === undefined
     ? {}
-    : { texturePreviewReference: layer.texturePreviewReference }),
+    : { texturePreviewReference: resolvePsdTexturePreviewReference(layer) }),
   ...(layer.textureId === undefined ? {} : { textureId: layer.textureId }),
   ...(layer.targetPartId === undefined ? {} : { targetPartId: layer.targetPartId })
 });
+
+const resolvePsdTexturePreviewReference = (
+  layer: PsdAdapterSourceLayerDto
+): string | undefined =>
+  resolveBinaryBackedTexturePreviewReference({
+    texturePreviewReference: layer.texturePreviewReference,
+    texturePreviewBinaryAssetRef: layer.texturePreviewBinaryAssetRef
+  });
 
 const createSourceAssetIdFromFilePath = (filePath: string): SourceAssetId =>
   SourceAssetIdSchema.parse(`src_${sanitizeIdToken(filePath.replace(/\.[^.\\/]+$/, ""))}`);

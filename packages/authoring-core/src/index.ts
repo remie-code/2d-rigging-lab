@@ -17,6 +17,7 @@ export * from "./mesh-mutations.js";
 export * from "./drawable-mutations.js";
 export * from "./source-asset-mutations.js";
 export * from "./texture-asset-mutations.js";
+export * from "./binary-asset-references.js";
 export * from "./keyform-selectors.js";
 export * from "./keyform-mutations.js";
 export * from "./runtime-graph-parameters.js";

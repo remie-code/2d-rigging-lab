@@ -1,0 +1,220 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_binary_asset_fixture",
+    "packageDisplayName": "Binary Asset Fixture",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 2,
+    "createdAt": "2026-05-31T00:00:00.000Z",
+    "updatedAt": "2026-05-31T01:00:00.000Z",
+    "schemaVersions": {
+      "manifest": "open-model-package-manifest-v1",
+      "sourceManifest": "source-manifest-v1",
+      "textureAtlas": "texture-atlas-v1"
+    },
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 64,
+        "height": 64
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": []
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": []
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": []
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": []
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": []
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_binary_fixture",
+          "kind": "split-png-set-v1",
+          "filePath": "assets/sources/binary-fixture/source.bytes",
+          "contentHash": "sha256:f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_binary_fixture_body",
+              "sourceAssetId": "src_binary_fixture",
+              "originalName": "Synthetic Body Bytes",
+              "normalizedName": "synthetic body bytes",
+              "groupPath": [
+                "Root"
+              ],
+              "bounds": {
+                "x": 4,
+                "y": 8,
+                "width": 40,
+                "height": 20
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": []
+            }
+          ],
+          "diagnostics": [
+            "split-png-fallback-v1",
+            "binaryFixture.syntheticDeterministicBytes",
+            "binaryFixture.notPsdOrImageContent"
+          ],
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_binary_fixture_source",
+            "packageRelativePath": "assets/sources/binary-fixture/source.bytes",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192"
+            },
+            "byteLength": 16,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "stored-package-local-v1",
+            "provenanceId": "prov_import_binary_fixture",
+            "rightsAssetId": "src_binary_fixture"
+          }
+        }
+      ]
+    },
+    "textureAtlas": {
+      "schemaVersion": "texture-atlas-v1",
+      "textures": [
+        {
+          "textureId": "tex_binary_fixture_body",
+          "filePath": "assets/textures/binary-fixture/body.texture-bytes",
+          "sourceAssetId": "src_binary_fixture",
+          "sourceLayerId": "layer_binary_fixture_body",
+          "provenanceId": "prov_import_binary_fixture",
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_binary_fixture_texture",
+            "packageRelativePath": "assets/textures/binary-fixture/body.texture-bytes",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "27e9d82dbef8137ceca2358f0c757a73b90c3dd6116089679c85248972bdf9d4"
+            },
+            "byteLength": 12,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "stored-package-local-v1",
+            "provenanceId": "prov_import_binary_fixture",
+            "rightsAssetId": "src_binary_fixture"
+          }
+        }
+      ],
+      "previewAssets": [
+        {
+          "previewAssetId": "preview_src_binary_fixture_layer_binary_fixture_body",
+          "textureId": "tex_binary_fixture_body",
+          "reference": {
+            "referenceKind": "package-local-file-v1",
+            "filePath": "assets/textures/binary-fixture/body.texture-bytes"
+          },
+          "sourceAssetId": "src_binary_fixture",
+          "sourceLayerId": "layer_binary_fixture_body",
+          "provenanceId": "prov_import_binary_fixture",
+          "rightsAssetId": "src_binary_fixture"
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_import_binary_fixture",
+          "assetId": "src_binary_fixture",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/binary-fixture/source.bytes",
+          "contentHash": "sha256:f56b93fa6ec02d0a4a3caca1bfe2d2e6ee012cc33b03690c963ca3207a145192",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": true,
+          "aiUsed": false,
+          "transformHistory": [
+            "importSplitPngSourceAsset:manifest-metadata",
+            "Generated deterministic test bytes from deterministic-test-bytes.json.",
+            "No PSD, PNG, image decode, raster extraction, third-party content, or test_data/sample_model.psd copy."
+          ],
+          "relatedOperationIds": [
+            "op_import_binary_fixture"
+          ]
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_binary_fixture",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": true,
+          "notes": "Project-authored deterministic byte fixture; not PSD, PNG, image, or third-party content."
+        }
+      ]
+    }
+  }
+}

@@ -58,6 +58,59 @@ describe("source asset authoring mutations", () => {
     expect(session.dirty).toBe(true);
   });
 
+  it("preserves package-local source binary refs when provenance and rights match", () => {
+    const session = createFixtureSession();
+    const binaryAssetRef = createBinaryAssetReference({
+      binaryAssetId: "bin_split_body_manifest",
+      packageRelativePath: "assets/sources/body/manifest.json",
+      mediaType: "application/json",
+      storageStatus: "missing-package-local-bytes-v1",
+      provenanceId: "prov_import_split_body",
+      rightsAssetId: "src_split_body"
+    });
+    const sourceAsset = {
+      ...createSourceAsset(),
+      binaryAssetRef
+    };
+
+    const result = importSourceAssetMetadata(session, {
+      sourceAsset,
+      provenanceRecord: createProvenanceRecord(),
+      rightsRecord: createRightsRecord("cleared")
+    });
+
+    expect(result.sourceAsset.binaryAssetRef).toEqual(binaryAssetRef);
+    expect(session.graph.sourceAssets[0]?.binaryAssetRef).toEqual(binaryAssetRef);
+  });
+
+  it("rejects source binary refs that do not match the source file path", () => {
+    const session = createFixtureSession();
+    const sourceAsset = {
+      ...createSourceAsset(),
+      binaryAssetRef: createBinaryAssetReference({
+        binaryAssetId: "bin_split_body_other",
+        packageRelativePath: "assets/sources/body/other.json",
+        mediaType: "application/json",
+        storageStatus: "missing-package-local-bytes-v1",
+        provenanceId: "prov_import_split_body",
+        rightsAssetId: "src_split_body"
+      })
+    };
+
+    expect(() =>
+      importSourceAssetMetadata(session, {
+        sourceAsset,
+        provenanceRecord: createProvenanceRecord(),
+        rightsRecord: createRightsRecord("cleared")
+      })
+    ).toThrow(
+      expect.objectContaining({
+        code: "source_binary_ref_path_mismatch"
+      }) as AuthoringMutationError
+    );
+    expect(session.graph.sourceAssets).toHaveLength(0);
+  });
+
   it("imports PSD source profile metadata with flattened adapter diagnostics", () => {
     const session = createFixtureSession();
     const sourceAsset = createPsdSourceAsset();
@@ -373,4 +426,29 @@ const createRightsRecord = (
   rightsStatus,
   license: "internal-test",
   redistributionAllowed: false
+});
+
+const createBinaryAssetReference = (overrides: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly storageStatus:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly provenanceId: string;
+  readonly rightsAssetId: string;
+}) => ({
+  referenceKind: "package-binary-asset-ref-v1" as const,
+  binaryAssetId: overrides.binaryAssetId,
+  packageRelativePath: overrides.packageRelativePath,
+  digest: {
+    algorithm: "sha256" as const,
+    hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  byteLength: 12,
+  mediaType: overrides.mediaType,
+  storageStatus: overrides.storageStatus,
+  provenanceId: ProvenanceIdSchema.parse(overrides.provenanceId),
+  rightsAssetId: overrides.rightsAssetId
 });

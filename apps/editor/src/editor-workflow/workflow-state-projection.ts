@@ -29,6 +29,9 @@ export const createEditorWorkflowState = (
     meshes: adapter.baseDocument.model.meshes.meshes,
     parts: adapter.baseDocument.model.graph.parts,
     sourceAssets: adapter.baseDocument.assets.sourceManifest.sourceAssets,
+    ...(adapter.baseDocument.assets.textureAtlas === undefined
+      ? {}
+      : { textureAtlas: adapter.baseDocument.assets.textureAtlas }),
     canvasSize: adapter.baseDocument.model.graph.canvasSize
   });
 
@@ -67,6 +70,9 @@ export const applyEditorWorkflowCommitResult = (
     drawOrderEntries: result.reloadedDocument.model.drawOrder.entries,
     meshes: result.reloadedDocument.model.meshes.meshes,
     sourceAssets: result.reloadedDocument.assets.sourceManifest.sourceAssets,
+    ...(result.reloadedDocument.assets.textureAtlas === undefined
+      ? {}
+      : { textureAtlas: result.reloadedDocument.assets.textureAtlas }),
     parts: result.reloadedDocument.model.graph.parts,
     canvasSize: result.reloadedDocument.model.graph.canvasSize,
     ...(options.importedSourceSelection === undefined
@@ -99,6 +105,9 @@ export const projectLoadedEditorWorkflowState = (input: {
     meshes: input.document.model.meshes.meshes,
     parts: input.document.model.graph.parts,
     sourceAssets: input.document.assets.sourceManifest.sourceAssets,
+    ...(input.document.assets.textureAtlas === undefined
+      ? {}
+      : { textureAtlas: input.document.assets.textureAtlas }),
     canvasSize: input.document.model.graph.canvasSize
   });
   const evidence = projectLoadedEvidenceSummary({

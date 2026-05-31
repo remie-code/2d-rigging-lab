@@ -1,0 +1,417 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_wave22_asset_io_e2e",
+    "packageDisplayName": "Wave 22 Asset I/O Boundary E2E",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 7,
+    "createdAt": "2026-05-31T00:00:00.000Z",
+    "updatedAt": "2026-05-31T02:00:00.000Z",
+    "schemaVersions": {
+      "manifest": "open-model-package-manifest-v1",
+      "sourceManifest": "source-manifest-v1",
+      "textureAtlas": "texture-atlas-v1"
+    },
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 2
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 512,
+        "height": 512
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": []
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": []
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": []
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": []
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": []
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_wave22_psd_boundary",
+          "kind": "psd-source-v1",
+          "filePath": "assets/sources/e2e/wave22-character.psd",
+          "contentHash": "metadata:wave22-psd-boundary-e2e",
+          "importProfile": "layered-character-psd-profile-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_wave22_psd_face",
+              "sourceAssetId": "src_wave22_psd_boundary",
+              "originalName": "PSD Face",
+              "normalizedName": "psd_face",
+              "groupPath": [
+                "Root",
+                "Head"
+              ],
+              "bounds": {
+                "x": 48,
+                "y": 64,
+                "width": 128,
+                "height": 144
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": []
+            }
+          ],
+          "diagnostics": [
+            "layered-character-psd-profile-v1",
+            "psd-adapter-result-v1",
+            "wave22.binaryBoundary.metadataOnly"
+          ],
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_wave22_psd_source",
+            "packageRelativePath": "assets/sources/e2e/wave22-character.psd",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            "byteLength": 2048,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "missing-package-local-bytes-v1",
+            "provenanceId": "prov_wave22_psd_boundary",
+            "rightsAssetId": "src_wave22_psd_boundary"
+          },
+          "psdProfile": {
+            "schemaVersion": "layered-character-psd-profile-v1",
+            "adapter": {
+              "adapterName": "wave22-e2e-psd-profile",
+              "adapterResultSchemaVersion": "psd-adapter-result-v1",
+              "sourceProfile": "layered-character-psd-profile-v1",
+              "evidenceKind": "adapter-supplied-metadata-v1"
+            },
+            "canvas": {
+              "width": 512,
+              "height": 512,
+              "bounds": {
+                "x": 0,
+                "y": 0,
+                "width": 512,
+                "height": 512
+              }
+            },
+            "sourceGroups": [
+              {
+                "sourceGroupId": "group_wave22_root",
+                "originalName": "Root",
+                "normalizedName": "root",
+                "groupPath": [
+                  "Root"
+                ],
+                "sourceOrder": 0,
+                "visibleInSource": true,
+                "opacityInSource": 1,
+                "unsupportedFeatures": []
+              },
+              {
+                "sourceGroupId": "group_wave22_head",
+                "originalName": "Head",
+                "normalizedName": "head",
+                "parentGroupId": "group_wave22_root",
+                "groupPath": [
+                  "Root",
+                  "Head"
+                ],
+                "sourceOrder": 1,
+                "visibleInSource": true,
+                "opacityInSource": 1,
+                "unsupportedFeatures": []
+              }
+            ],
+            "sourceLayers": [
+              {
+                "sourceLayerId": "layer_wave22_psd_face",
+                "originalName": "PSD Face",
+                "normalizedName": "psd_face",
+                "parentGroupId": "group_wave22_head",
+                "groupPath": [
+                  "Root",
+                  "Head"
+                ],
+                "sourceOrder": 2,
+                "bounds": {
+                  "x": 48,
+                  "y": 64,
+                  "width": 128,
+                  "height": 144
+                },
+                "visibleInSource": true,
+                "opacityInSource": 1,
+                "role": "editableLayer",
+                "unsupportedFeatures": [],
+                "texturePreviewReference": "assets/textures/e2e/wave22-psd-face.texture-bytes",
+                "textureId": "tex_wave22_psd_face",
+                "targetPartId": "part_root"
+              }
+            ],
+            "unsupportedFeatures": [],
+            "diagnostics": [
+              {
+                "checkId": "adapter.psd.manualProfileMetadata",
+                "severity": "info",
+                "message": "Wave 22 E2E PSD structured profile metadata; no PSD bytes were parsed by the editor.",
+                "source": {
+                  "kind": "adapter",
+                  "path": "/fixtures/e2e/wave22-asset-io-boundary"
+                },
+                "evidence": [
+                  "wave22-asset-io-boundary-smoke"
+                ]
+              }
+            ],
+            "compatibility": {
+              "structuredProfilePrecedence": "structured-profile-preferred-v1",
+              "flattenedDiagnosticsFallback": "sourceAsset.diagnostics-summary-fallback-v1",
+              "flattenedUnsupportedFeaturesFallback": "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
+            }
+          }
+        },
+        {
+          "sourceAssetId": "src_wave22_split_png_boundary",
+          "kind": "split-png-set-v1",
+          "filePath": "assets/sources/e2e/wave22-split-manifest.json",
+          "contentHash": "metadata:wave22-split-png-boundary-e2e",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_wave22_split_face",
+              "sourceAssetId": "src_wave22_split_png_boundary",
+              "originalName": "Split Face",
+              "normalizedName": "split_face",
+              "groupPath": [
+                "Root",
+                "Head"
+              ],
+              "bounds": {
+                "x": 180,
+                "y": 72,
+                "width": 96,
+                "height": 112
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": []
+            }
+          ],
+          "diagnostics": [
+            "split-png-fallback-v1",
+            "wave22.binaryBoundary.metadataOnly"
+          ],
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_wave22_split_manifest",
+            "packageRelativePath": "assets/sources/e2e/wave22-split-manifest.json",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            "byteLength": 1536,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "storage-unsupported-v1",
+            "provenanceId": "prov_wave22_split_boundary",
+            "rightsAssetId": "src_wave22_split_png_boundary"
+          }
+        }
+      ]
+    },
+    "textureAtlas": {
+      "schemaVersion": "texture-atlas-v1",
+      "textures": [
+        {
+          "textureId": "tex_wave22_psd_face",
+          "filePath": "assets/textures/e2e/wave22-psd-face.texture-bytes",
+          "contentHash": "metadata:wave22-psd-face-texture",
+          "sourceAssetId": "src_wave22_psd_boundary",
+          "sourceLayerId": "layer_wave22_psd_face",
+          "provenanceId": "prov_wave22_psd_boundary",
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_wave22_psd_face_preview",
+            "packageRelativePath": "assets/textures/e2e/wave22-psd-face.texture-bytes",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "2222222222222222222222222222222222222222222222222222222222222222"
+            },
+            "byteLength": 128,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "missing-package-local-bytes-v1",
+            "provenanceId": "prov_wave22_psd_boundary",
+            "rightsAssetId": "src_wave22_psd_boundary"
+          }
+        },
+        {
+          "textureId": "tex_wave22_split_face",
+          "filePath": "assets/textures/e2e/wave22-split-face.texture-bytes",
+          "contentHash": "metadata:wave22-split-face-texture",
+          "sourceAssetId": "src_wave22_split_png_boundary",
+          "sourceLayerId": "layer_wave22_split_face",
+          "provenanceId": "prov_wave22_split_boundary",
+          "binaryAssetRef": {
+            "referenceKind": "package-binary-asset-ref-v1",
+            "binaryAssetId": "bin_wave22_split_texture",
+            "packageRelativePath": "assets/textures/e2e/wave22-split-face.texture-bytes",
+            "digest": {
+              "algorithm": "sha256",
+              "hex": "4444444444444444444444444444444444444444444444444444444444444444"
+            },
+            "byteLength": 96,
+            "mediaType": "application/octet-stream",
+            "storageStatus": "storage-unsupported-v1",
+            "provenanceId": "prov_wave22_split_boundary",
+            "rightsAssetId": "src_wave22_split_png_boundary"
+          }
+        }
+      ],
+      "previewAssets": [
+        {
+          "previewAssetId": "preview_src_wave22_psd_boundary_layer_wave22_psd_face",
+          "textureId": "tex_wave22_psd_face",
+          "reference": {
+            "referenceKind": "package-local-file-v1",
+            "filePath": "assets/textures/e2e/wave22-psd-face.texture-bytes"
+          },
+          "sourceAssetId": "src_wave22_psd_boundary",
+          "sourceLayerId": "layer_wave22_psd_face",
+          "provenanceId": "prov_wave22_psd_boundary",
+          "rightsAssetId": "src_wave22_psd_boundary"
+        },
+        {
+          "previewAssetId": "preview_src_wave22_split_png_boundary_layer_wave22_split_face",
+          "textureId": "tex_wave22_split_face",
+          "reference": {
+            "referenceKind": "package-local-file-v1",
+            "filePath": "assets/textures/e2e/wave22-split-face.texture-bytes"
+          },
+          "sourceAssetId": "src_wave22_split_png_boundary",
+          "sourceLayerId": "layer_wave22_split_face",
+          "provenanceId": "prov_wave22_split_boundary",
+          "rightsAssetId": "src_wave22_split_png_boundary"
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_wave22_psd_boundary",
+          "assetId": "src_wave22_psd_boundary",
+          "assetKind": "source",
+          "filePath": "assets/sources/e2e/wave22-character.psd",
+          "contentHash": "metadata:wave22-psd-boundary-e2e",
+          "creator": "Wave 22 E2E Fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Structured PSD profile metadata fixture only.",
+            "No PSD bytes, image decode, raster extraction, file picker, or archive import/export."
+          ],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave22_split_boundary",
+          "assetId": "src_wave22_split_png_boundary",
+          "assetKind": "source",
+          "filePath": "assets/sources/e2e/wave22-split-manifest.json",
+          "contentHash": "metadata:wave22-split-png-boundary-e2e",
+          "creator": "Wave 22 E2E Fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Split PNG metadata fixture only.",
+            "No PNG bytes, image decode, raster extraction, file picker, or archive import/export."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_wave22_psd_boundary",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "notes": "Project-authored E2E metadata fixture. No PSD or image binary file is included."
+        },
+        {
+          "assetId": "src_wave22_split_png_boundary",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "notes": "Project-authored E2E metadata fixture. No PNG or image binary file is included."
+        }
+      ]
+    }
+  }
+}

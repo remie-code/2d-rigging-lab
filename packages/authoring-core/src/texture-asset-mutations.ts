@@ -8,6 +8,7 @@ import { AuthoringMutationError } from "./authoring-mutations.js";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
+import { normalizeTextureEntryBinaryAssetReference } from "./binary-asset-references.js";
 import { getSourceAssetById } from "./drawable-selectors.js";
 
 export interface UpsertTexturePreviewAssetMetadataMutationResult {
@@ -27,10 +28,16 @@ export const upsertTexturePreviewAssetMetadata = (
 ): UpsertTexturePreviewAssetMetadataMutationResult => {
   const previewAsset = structuredClone(input.previewAsset);
   const textureEntry = normalizeTextureEntry(input.textureEntry, previewAsset);
-  assertCanUpsertTexturePreviewAssetMetadata(session, textureEntry, previewAsset);
+  const binaryAssetRef = normalizeTextureEntryBinaryAssetReference({
+    textureEntry,
+    previewAsset
+  });
+  const normalizedTextureEntry =
+    binaryAssetRef === undefined ? textureEntry : { ...textureEntry, binaryAssetRef };
+  assertCanUpsertTexturePreviewAssetMetadata(session, normalizedTextureEntry, previewAsset);
 
   const textureAtlas = ensureTextureAtlas(session);
-  upsertTextureEntry(textureAtlas, textureEntry);
+  upsertTextureEntry(textureAtlas, normalizedTextureEntry);
   upsertPreviewAsset(textureAtlas, previewAsset);
 
   session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
@@ -38,7 +45,7 @@ export const upsertTexturePreviewAssetMetadata = (
 
   return {
     session,
-    textureEntry,
+    textureEntry: normalizedTextureEntry,
     previewAsset,
     textureAtlas: structuredClone(textureAtlas),
     authoringRevision: session.authoringRevision

@@ -92,7 +92,15 @@ describe("authoring package document adapter", () => {
       textureEntry: {
         textureId: TextureIdSchema.parse("tex_generated_body"),
         filePath: "assets/textures/generated-body.png",
-        contentHash: "sha256:generated-body-texture"
+        contentHash: "sha256:generated-body-texture",
+        binaryAssetRef: createBinaryAssetReference({
+          binaryAssetId: "bin_generated_body_texture",
+          packageRelativePath: "assets/textures/generated-body.png",
+          mediaType: "image/png",
+          storageStatus: "missing-package-local-bytes-v1",
+          provenanceId: "prov_generated",
+          rightsAssetId: "src_generated"
+        })
       },
       previewAsset: {
         previewAssetId: "preview_generated_body",
@@ -123,7 +131,12 @@ describe("authoring package document adapter", () => {
       textureId: "tex_generated_body",
       sourceAssetId: "src_generated",
       sourceLayerId: "layer_body",
-      provenanceId: "prov_generated"
+      provenanceId: "prov_generated",
+      binaryAssetRef: expect.objectContaining({
+        binaryAssetId: "bin_generated_body_texture",
+        packageRelativePath: "assets/textures/generated-body.png",
+        storageStatus: "missing-package-local-bytes-v1"
+      })
     });
     expect(document.assets.textureAtlas?.previewAssets?.[0]).toMatchObject({
       previewAssetId: "preview_generated_body",
@@ -194,3 +207,28 @@ const loadMinimalFixturePackageDocument = (): PackageDocumentDto => {
 };
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, "utf8"));
+
+const createBinaryAssetReference = (overrides: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly mediaType: string;
+  readonly storageStatus:
+    | "stored-package-local-v1"
+    | "missing-package-local-bytes-v1"
+    | "storage-unsupported-v1";
+  readonly provenanceId: string;
+  readonly rightsAssetId: string;
+}) => ({
+  referenceKind: "package-binary-asset-ref-v1" as const,
+  binaryAssetId: overrides.binaryAssetId,
+  packageRelativePath: overrides.packageRelativePath,
+  digest: {
+    algorithm: "sha256" as const,
+    hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  byteLength: 12,
+  mediaType: overrides.mediaType,
+  storageStatus: overrides.storageStatus,
+  provenanceId: ProvenanceIdSchema.parse(overrides.provenanceId),
+  rightsAssetId: overrides.rightsAssetId
+});

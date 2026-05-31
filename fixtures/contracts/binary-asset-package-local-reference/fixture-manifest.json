@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "binary-asset-package-local-reference",
+  "title": "Binary asset package-local reference evidence",
+  "coversAC": [
+    "AC-MVP-002",
+    "AC-MVP-004",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-IN-002",
+    "SC-RIGHTS-002"
+  ],
+  "modulesBlocked": [
+    "package-format",
+    "operation-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "package-document.json",
+    "binary-asset-index.json",
+    "deterministic-test-bytes.json",
+    "request/import-split-png-source-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "package",
+      "path": "expected/package-binary-evidence-summary.json",
+      "id": "binary-asset-package-local-reference-package-summary",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "operationLog",
+      "path": "expected/binary-operation-summary.json",
+      "id": "binary-asset-package-local-reference-operation-summary",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/binary-validation-summary.json",
+      "id": "binary-asset-package-local-reference-validation-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review",
+  "fixturePolicy": {
+    "bytePolicy": "generated-deterministic-test-bytes-v1",
+    "rightsClean": true,
+    "containsActualPsdBytes": false,
+    "containsActualPngBytes": false,
+    "containsThirdPartyImageBytes": false,
+    "notes": [
+      "The bytes are generated from deterministic integer arrays in deterministic-test-bytes.json.",
+      "The committed fixture contains no PSD, PNG, or third-party image binary file.",
+      "The media type is application/octet-stream and the bytes are not decoded or rendered."
+    ]
+  }
+}
