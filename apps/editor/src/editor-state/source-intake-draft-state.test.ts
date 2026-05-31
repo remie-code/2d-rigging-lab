@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   confirmSourceIntakeDraft,
   createEmptySourceIntakeDraftState,
+  createPsdAdapterProfileSourceIntakeDraftState,
   projectSourceIntakeDraftViewModel
 } from "./index.js";
 
@@ -136,6 +137,114 @@ describe("source intake draft state", () => {
     expect(confirmed.layers[0]?.texturePreviewReference).toBe(dataUrl);
     expect(viewModel.canConfirmDraft).toBe(true);
     expect(viewModel.layerRows[0]?.texturePreviewReferenceLabel).toBe(dataUrl);
+  });
+
+  it("confirms manual PSD adapter/profile metadata without parser or file-picker claims", () => {
+    const confirmed = confirmSourceIntakeDraft({
+      intakeMode: "psdAdapterProfile",
+      sourceAssetId: "src_character_psd_profile",
+      manifestPath: "assets/sources/character/source.psd",
+      contentHash: "sha256:manual-psd-reference",
+      defaultPartId: "part_root",
+      placementPolicy: "use-metadata",
+      psdProfile: {
+        adapterName: "manual-psd-profile-entry",
+        canvasWidth: 2048,
+        canvasHeight: 3072
+      },
+      layers: [
+        {
+          sourceLayerId: "layer_face",
+          originalName: "Face",
+          normalizedName: "face",
+          groupPath: ["Root", "Head"],
+          bounds: { x: 320, y: 240, width: 512, height: 512 },
+          visibleInSource: true,
+          opacityInSource: 0.8,
+          role: "editableLayer",
+          unsupportedFeatures: ["psd.textLayer"],
+          texturePreviewReference: "assets/sources/character/face.preview.png",
+          textureId: "tex_face",
+          targetPartId: "part_root"
+        }
+      ],
+      rights: {
+        rightsStatus: "cleared",
+        creator: "Clean Artist",
+        license: "original-private-use",
+        redistributionAllowed: false,
+        aiUsed: false,
+        sourceUrl: "",
+        notes: "Manual PSD profile metadata only."
+      }
+    });
+    const viewModel = projectSourceIntakeDraftViewModel(confirmed);
+
+    expect(confirmed).toMatchObject({
+      status: "confirmed",
+      intakeMode: "psdAdapterProfile",
+      importProfile: "layered-character-psd-profile-v1",
+      sourceAssetId: "src_character_psd_profile",
+      manifestPath: "assets/sources/character/source.psd",
+      diagnostics: [],
+      psdProfile: {
+        adapterName: "manual-psd-profile-entry",
+        canvasWidth: 2048,
+        canvasHeight: 3072
+      }
+    });
+    expect(viewModel).toMatchObject({
+      sourceModeLabel: "PSD adapter/profile metadata (manual)",
+      sourceReferenceLabel: "assets/sources/character/source.psd",
+      psdCanvasLabel: "2048 x 3072",
+      canConfirmDraft: true
+    });
+    expect(JSON.stringify(viewModel)).not.toMatch(/file picker|parsed from bytes|raster extraction/i);
+  });
+
+  it("keeps manual PSD profile validation local and wraps long diagnostics as strings", () => {
+    const rejected = confirmSourceIntakeDraft({
+      ...createPsdAdapterProfileSourceIntakeDraftState(),
+      manifestPath: "",
+      psdProfile: {
+        adapterName: "",
+        canvasWidth: 0,
+        canvasHeight: 3072
+      },
+      layers: [
+        {
+          sourceLayerId: "layer_face",
+          originalName: "Face",
+          normalizedName: "face",
+          groupPath: ["Root"],
+          bounds: { x: 0, y: 0, width: 64, height: 64 },
+          visibleInSource: true,
+          opacityInSource: 1,
+          role: "editableLayer",
+          unsupportedFeatures: [],
+          texturePreviewReference: "generated://texture-preview/this-reference-is-long-and-not-accepted-for-manual-psd-profile-metadata",
+          textureId: "tex_face",
+          targetPartId: "part_root"
+        }
+      ],
+      rights: {
+        rightsStatus: "needs_review",
+        creator: "Clean Artist",
+        license: "private-review",
+        redistributionAllowed: false,
+        aiUsed: false,
+        sourceUrl: "",
+        notes: ""
+      }
+    });
+
+    expect(rejected.status).toBe("idle");
+    expect(rejected.diagnostics).toEqual([
+      "PSD source reference is required for adapter/profile metadata.",
+      "PSD adapter/profile name is required.",
+      "PSD canvas width must be greater than zero.",
+      "Layer 1 generated://texture-preview/ references are not supported by Source Intake commits; use assets/sources/, assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,... references."
+    ]);
   });
 
   it("surfaces invalid texture preview references and missing target parts in the draft view model", () => {

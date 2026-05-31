@@ -9,8 +9,8 @@ import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
+import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
-import { unsupportedPsdSourceAssetOperationHandler } from "./operations/import-split-png-source-asset-unsupported-psd.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setRightsMetadataOperationHandler } from "./operations/set-rights-metadata.js";
@@ -37,7 +37,7 @@ export interface OperationHandler {
 }
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
-  [unsupportedPsdSourceAssetOperationHandler.operationType, unsupportedPsdSourceAssetOperationHandler],
+  [importPsdSourceAssetOperationHandler.operationType, importPsdSourceAssetOperationHandler],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],

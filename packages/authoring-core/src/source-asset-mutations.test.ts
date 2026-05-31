@@ -56,6 +56,61 @@ describe("source asset authoring mutations", () => {
     expect(session.dirty).toBe(true);
   });
 
+  it("imports PSD source profile metadata with flattened adapter diagnostics", () => {
+    const session = createFixtureSession();
+    const sourceAsset = createPsdSourceAsset();
+
+    const result = importSourceAssetMetadata(session, {
+      sourceAsset,
+      provenanceRecord: {
+        provenanceId: ProvenanceIdSchema.parse("prov_import_psd_character"),
+        assetId: "src_psd_character",
+        assetKind: "source",
+        filePath: "assets/sources/character/source.psd",
+        contentHash: "sha256:psd-character",
+        creator: "fixture artist",
+        license: "internal-test",
+        redistributionAllowed: false,
+        aiUsed: false,
+        transformHistory: [
+          "importPsdSourceAsset:adapter-result-metadata",
+          "psdAdapter:fixture-psd-adapter"
+        ],
+        relatedOperationIds: [OperationIdSchema.parse("op_import_psd_character")]
+      },
+      rightsRecord: {
+        assetId: "src_psd_character",
+        rightsStatus: "cleared",
+        license: "internal-test",
+        redistributionAllowed: false
+      }
+    });
+
+    expect(result.sourceAsset).toEqual(sourceAsset);
+    expect(session.graph.sourceAssets).toEqual([sourceAsset]);
+    expect(session.graph.sourceAssets[0]?.kind).toBe("psd-source-v1");
+    expect(session.graph.sourceAssets[0]?.importProfile).toBe("layered-character-psd-profile-v1");
+    expect(session.graph.sourceAssets[0]?.layers[0]).toMatchObject({
+      sourceLayerId: "layer_face",
+      role: "editableLayer",
+      unsupportedFeatures: ["psd.textLayer"]
+    });
+    expect(session.graph.sourceAssets[0]?.diagnostics).toEqual(expect.arrayContaining([
+      "psd.layerTargetPart:layer_face:part_root",
+      "psd.layerTexture:layer_face:tex_face",
+      expect.stringContaining("psd.layerUnsupportedFeature:layer_face:")
+    ]));
+    expect(session.graph.provenanceRecords[0]).toMatchObject({
+      provenanceId: "prov_import_psd_character",
+      assetId: "src_psd_character",
+      relatedOperationIds: ["op_import_psd_character"]
+    });
+    expect(session.graph.rightsRecords[0]).toMatchObject({
+      assetId: "src_psd_character",
+      rightsStatus: "cleared"
+    });
+  });
+
   it("rejects duplicate source asset ids before mutating rights or provenance", () => {
     const session = createFixtureSession();
     const sourceAsset = createSourceAsset();
@@ -162,6 +217,39 @@ const createSourceAsset = (): AuthoringSession["graph"]["sourceAssets"][number] 
     }
   ],
   diagnostics: []
+});
+
+const createPsdSourceAsset = (): AuthoringSession["graph"]["sourceAssets"][number] => ({
+  sourceAssetId: SourceAssetIdSchema.parse("src_psd_character"),
+  kind: "psd-source-v1",
+  filePath: "assets/sources/character/source.psd",
+  contentHash: "sha256:psd-character",
+  importProfile: "layered-character-psd-profile-v1",
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      sourceAssetId: SourceAssetIdSchema.parse("src_psd_character"),
+      originalName: "Face",
+      normalizedName: "face",
+      groupPath: ["Root", "Head"],
+      bounds: { x: 320, y: 240, width: 512, height: 512 },
+      visibleInSource: true,
+      opacityInSource: 0.8,
+      role: "editableLayer",
+      unsupportedFeatures: ["psd.textLayer"],
+      mappedDrawableIds: []
+    }
+  ],
+  diagnostics: [
+    "layered-character-psd-profile-v1",
+    "psd-adapter-result-v1",
+    "psd.adapterName:fixture-psd-adapter",
+    "psd.canvas:2048x3072",
+    "psd.layerTargetPart:layer_face:part_root",
+    "psd.layerTexture:layer_face:tex_face",
+    "psd.layerTexturePreview:layer_face:assets/textures/face.preview.png",
+    "psd.layerUnsupportedFeature:layer_face:{\"featureId\":\"psd.textLayer\",\"scope\":\"layer\",\"severity\":\"warning\",\"message\":\"Text layer requires adapter-side rasterization before materialization.\",\"rasterizeCandidate\":true,\"manualConfirmationRequired\":true}"
+  ]
 });
 
 const createProvenanceRecord = (): AuthoringSession["graph"]["provenanceRecords"][number] => ({

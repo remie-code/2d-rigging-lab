@@ -2,6 +2,22 @@ import type { RectDto } from "@private-2d-rigging-lab/contracts";
 
 export const sourceIntakeDraftSchemaVersion = "source-intake-draft-v1";
 export const splitPngSourceIntakeImportProfile = "split-png-fallback-v1";
+export const psdSourceIntakeImportProfile = "layered-character-psd-profile-v1";
+
+export const sourceIntakeModes = [
+  "splitPng",
+  "psdAdapterProfile"
+] as const;
+export type SourceIntakeMode = (typeof sourceIntakeModes)[number];
+
+export type SourceIntakeImportProfile =
+  | typeof splitPngSourceIntakeImportProfile
+  | typeof psdSourceIntakeImportProfile;
+
+export const sourceIntakeImportProfileByMode = {
+  splitPng: splitPngSourceIntakeImportProfile,
+  psdAdapterProfile: psdSourceIntakeImportProfile
+} as const satisfies Record<SourceIntakeMode, SourceIntakeImportProfile>;
 
 export const sourceIntakePlacementPolicies = [
   "use-metadata",
@@ -61,15 +77,23 @@ export interface SourceIntakeRightsDraftState {
   readonly notes: string;
 }
 
+export interface SourceIntakePsdProfileDraftState {
+  readonly adapterName: string;
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+}
+
 export interface SourceIntakeDraftState {
   readonly schemaVersion: typeof sourceIntakeDraftSchemaVersion;
   readonly status: SourceIntakeDraftStatus;
+  readonly intakeMode: SourceIntakeMode;
   readonly sourceAssetId: string;
   readonly manifestPath: string;
   readonly contentHash: string;
-  readonly importProfile: typeof splitPngSourceIntakeImportProfile;
+  readonly importProfile: SourceIntakeImportProfile;
   readonly defaultPartId: string;
   readonly placementPolicy: SourceIntakePlacementPolicy;
+  readonly psdProfile: SourceIntakePsdProfileDraftState;
   readonly layers: readonly SourceIntakeLayerDraftState[];
   readonly rights: SourceIntakeRightsDraftState;
   readonly diagnostics: readonly string[];
@@ -80,11 +104,14 @@ export interface SourceIntakeDraftDefaultsInput {
 }
 
 export interface SourceIntakeDraftInput {
+  readonly intakeMode?: SourceIntakeMode;
+  readonly importProfile?: SourceIntakeImportProfile;
   readonly sourceAssetId: string;
   readonly manifestPath: string;
   readonly contentHash: string;
   readonly defaultPartId: string;
   readonly placementPolicy: SourceIntakePlacementPolicy;
+  readonly psdProfile?: SourceIntakePsdProfileDraftState;
   readonly layers: readonly SourceIntakeLayerDraftState[];
   readonly rights: SourceIntakeRightsDraftState;
 }
@@ -115,12 +142,14 @@ export const createEmptySourceIntakeDraftState = (
 ): SourceIntakeDraftState => ({
   schemaVersion: sourceIntakeDraftSchemaVersion,
   status: "idle",
+  intakeMode: "splitPng",
   sourceAssetId: "src_split_png_draft",
   manifestPath: "",
   contentHash: "",
   importProfile: splitPngSourceIntakeImportProfile,
   defaultPartId: input.defaultPartId ?? "",
   placementPolicy: "use-metadata",
+  psdProfile: createDefaultPsdProfileDraft(),
   layers: [createDefaultSourceIntakeLayerDraft(0, input)],
   rights: {
     rightsStatus: "needs_review",
@@ -132,6 +161,16 @@ export const createEmptySourceIntakeDraftState = (
     notes: ""
   },
   diagnostics: []
+});
+
+export const createPsdAdapterProfileSourceIntakeDraftState = (
+  input: SourceIntakeDraftDefaultsInput = {}
+): SourceIntakeDraftState => ({
+  ...createEmptySourceIntakeDraftState(input),
+  intakeMode: "psdAdapterProfile",
+  sourceAssetId: "src_psd_profile_draft",
+  importProfile: psdSourceIntakeImportProfile,
+  psdProfile: createDefaultPsdProfileDraft()
 });
 
 export const confirmSourceIntakeDraft = (
@@ -150,21 +189,52 @@ export const confirmSourceIntakeDraft = (
 export const validateSourceIntakeDraft = (
   draft: Pick<
     SourceIntakeDraftState,
-    "sourceAssetId" | "manifestPath" | "defaultPartId" | "placementPolicy" | "layers" | "rights"
+    | "intakeMode"
+    | "importProfile"
+    | "sourceAssetId"
+    | "manifestPath"
+    | "defaultPartId"
+    | "placementPolicy"
+    | "psdProfile"
+    | "layers"
+    | "rights"
   >
 ): readonly string[] => {
   const diagnostics: string[] = [];
+  const intakeMode = resolveSourceIntakeMode(draft);
 
   if (draft.sourceAssetId.trim().length === 0) {
     diagnostics.push("Source asset ID is required.");
   }
 
   if (draft.manifestPath.trim().length === 0) {
-    diagnostics.push("Split PNG manifest path is required.");
+    diagnostics.push(
+      intakeMode === "psdAdapterProfile"
+        ? "PSD source reference is required for adapter/profile metadata."
+        : "Split PNG manifest path is required."
+    );
   }
 
   if (!sourceIntakePlacementPolicies.includes(draft.placementPolicy)) {
     diagnostics.push("Placement policy is not supported.");
+  }
+
+  if (draft.importProfile !== sourceIntakeImportProfileByMode[intakeMode]) {
+    diagnostics.push("Source intake mode and import profile do not match.");
+  }
+
+  if (intakeMode === "psdAdapterProfile") {
+    if (draft.psdProfile.adapterName.trim().length === 0) {
+      diagnostics.push("PSD adapter/profile name is required.");
+    }
+
+    if (!Number.isFinite(draft.psdProfile.canvasWidth) || draft.psdProfile.canvasWidth <= 0) {
+      diagnostics.push("PSD canvas width must be greater than zero.");
+    }
+
+    if (!Number.isFinite(draft.psdProfile.canvasHeight) || draft.psdProfile.canvasHeight <= 0) {
+      diagnostics.push("PSD canvas height must be greater than zero.");
+    }
   }
 
   if (draft.layers.length === 0) {
@@ -205,27 +275,30 @@ export const validateSourceIntakeDraft = (
     const targetPartId = getLayerTargetPartId(layer);
     const effectivePartId = targetPartId.length > 0 ? targetPartId : draft.defaultPartId.trim();
 
-    if (texturePreviewReference.length === 0) {
+    const requiresTextureMapping = intakeMode === "splitPng" || layer.role !== "unsupported";
+
+    if (texturePreviewReference.length === 0 && requiresTextureMapping) {
       diagnostics.push(`${label} texture preview reference is required.`);
-    } else {
+    } else if (texturePreviewReference.length > 0) {
       const texturePreviewReferenceDiagnostic = getTexturePreviewReferenceDiagnostic(
         label,
-        texturePreviewReference
+        texturePreviewReference,
+        intakeMode
       );
       if (texturePreviewReferenceDiagnostic !== undefined) {
         diagnostics.push(texturePreviewReferenceDiagnostic);
       }
     }
 
-    if (textureId.length === 0) {
+    if (textureId.length === 0 && requiresTextureMapping) {
       diagnostics.push(`${label} texture ID is required.`);
-    } else if (!textureIdPattern.test(textureId)) {
+    } else if (textureId.length > 0 && !textureIdPattern.test(textureId)) {
       diagnostics.push(`${label} texture ID must start with tex_.`);
     }
 
-    if (effectivePartId.length === 0) {
+    if (effectivePartId.length === 0 && requiresTextureMapping) {
       diagnostics.push(`${label} target part ID is required.`);
-    } else if (!partIdPattern.test(effectivePartId)) {
+    } else if (effectivePartId.length > 0 && !partIdPattern.test(effectivePartId)) {
       diagnostics.push(`${label} target part ID must start with part_.`);
     }
   });
@@ -249,12 +322,14 @@ const normalizeSourceIntakeDraft = (
   input: SourceIntakeDraftInput
 ): Omit<SourceIntakeDraftState, "status" | "diagnostics"> => ({
   schemaVersion: sourceIntakeDraftSchemaVersion,
+  intakeMode: resolveSourceIntakeMode(input),
   sourceAssetId: input.sourceAssetId.trim(),
   manifestPath: input.manifestPath.trim(),
   contentHash: input.contentHash.trim(),
-  importProfile: splitPngSourceIntakeImportProfile,
+  importProfile: sourceIntakeImportProfileByMode[resolveSourceIntakeMode(input)],
   defaultPartId: input.defaultPartId.trim(),
   placementPolicy: input.placementPolicy,
+  psdProfile: normalizePsdProfileDraft(input.psdProfile ?? createDefaultPsdProfileDraft()),
   layers: input.layers.map(normalizeSourceIntakeLayer),
   rights: {
     rightsStatus: input.rights.rightsStatus,
@@ -265,6 +340,20 @@ const normalizeSourceIntakeDraft = (
     sourceUrl: input.rights.sourceUrl.trim(),
     notes: input.rights.notes.trim()
   }
+});
+
+const createDefaultPsdProfileDraft = (): SourceIntakePsdProfileDraftState => ({
+  adapterName: "manual-psd-profile-entry",
+  canvasWidth: 2048,
+  canvasHeight: 3072
+});
+
+const normalizePsdProfileDraft = (
+  profile: SourceIntakePsdProfileDraftState
+): SourceIntakePsdProfileDraftState => ({
+  adapterName: profile.adapterName.trim(),
+  canvasWidth: profile.canvasWidth,
+  canvasHeight: profile.canvasHeight
 });
 
 const normalizeSourceIntakeLayer = (
@@ -309,7 +398,10 @@ const getLayerTargetPartId = (
   layer: SourceIntakeLayerDraftState
 ): string => layer.targetPartId?.trim() ?? "";
 
-const isSupportedTexturePreviewReference = (reference: string): boolean => {
+const isSupportedTexturePreviewReference = (
+  reference: string,
+  intakeMode: SourceIntakeMode
+): boolean => {
   if (isDeterministicImageDataUrl(reference)) {
     return true;
   }
@@ -325,23 +417,48 @@ const isSupportedTexturePreviewReference = (reference: string): boolean => {
     return false;
   }
 
-  return packageLocalTextureReferencePrefixes.some((prefix) => reference.startsWith(prefix));
+  return getPackageLocalTextureReferencePrefixes(intakeMode).some((prefix) =>
+    reference.startsWith(prefix)
+  );
 };
+
+const getPackageLocalTextureReferencePrefixes = (
+  intakeMode: SourceIntakeMode
+): readonly string[] =>
+  intakeMode === "psdAdapterProfile"
+    ? ["assets/sources/", ...packageLocalTextureReferencePrefixes]
+    : packageLocalTextureReferencePrefixes;
 
 const getTexturePreviewReferenceDiagnostic = (
   label: string,
-  reference: string
+  reference: string,
+  intakeMode: SourceIntakeMode
 ): string | undefined => {
-  if (isSupportedTexturePreviewReference(reference)) {
+  if (isSupportedTexturePreviewReference(reference, intakeMode)) {
     return undefined;
   }
 
   if (reference.startsWith(generatedTextureReferencePrefix)) {
-    return `${label} generated://texture-preview/ references are not supported by Source Intake commits; use assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,... references.`;
+    return `${label} generated://texture-preview/ references are not supported by Source Intake commits; use ${formatTextureReferenceGuidance(intakeMode)} references.`;
   }
 
-  return `${label} texture preview reference is invalid; use assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,... references.`;
+  return `${label} texture preview reference is invalid; use ${formatTextureReferenceGuidance(intakeMode)} references.`;
 };
+
+const formatTextureReferenceGuidance = (intakeMode: SourceIntakeMode): string =>
+  intakeMode === "psdAdapterProfile"
+    ? "assets/sources/, assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,..."
+    : "assets/textures/, assets/thumbnails/, or deterministic data:image/(png|jpeg|webp);base64,...";
 
 const isDeterministicImageDataUrl = (reference: string): boolean =>
   deterministicImageDataUrlPattern.test(reference);
+
+const resolveSourceIntakeMode = (
+  input: Pick<SourceIntakeDraftInput, "intakeMode" | "importProfile">
+): SourceIntakeMode => {
+  if (input.intakeMode !== undefined && sourceIntakeModes.includes(input.intakeMode)) {
+    return input.intakeMode;
+  }
+
+  return input.importProfile === psdSourceIntakeImportProfile ? "psdAdapterProfile" : "splitPng";
+};

@@ -77,7 +77,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     const drawableEvidence = await runCreateDrawableWorkflow(page, viewport, {
       expectedOperationLogEntryCount: 4,
       expectedOperationTypesText:
-        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh"
+        "createParameter, importPsdSourceAsset, createDrawable, generateMesh"
     });
     assertNoHorizontalOverflowEvidence(postSourceIntakeOverflow);
     await assertHorizontalOverflow(page, `${viewport.name} post-drawable`);
@@ -105,7 +105,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await reloadProjectFromStorage(page, {
       expectedOperationLogEntryCount: 11,
       expectedOperationTypesText:
-        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+        "createParameter, importPsdSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
     });
     await assertSourceIntakeStateAfterLoad({ page, smokeDrawable });
     await assertMeshVertexStateAfterLoad({ page, smokeDrawable });
@@ -114,7 +114,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       smokeDrawable,
       expectedOperationLogEntryCount: 11,
       expectedOperationTypesText:
-        "createParameter, importSplitPngSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
+        "createParameter, importPsdSourceAsset, createDrawable, generateMesh, moveMeshVertex, setRuntimeVisibility, setDrawOrder"
     });
     await restoreLoadedTextureBackedPreview(page, smokeDrawable);
     await assertHorizontalOverflow(page, `${viewport.name} loaded`);

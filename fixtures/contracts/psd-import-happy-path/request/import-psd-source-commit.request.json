@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_import_psd_happy_path",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-002",
+      "AC-MVP-003"
+    ],
+    "relatedScenarios": [
+      "SC-IN-002",
+      "SC-RIGHTS-002"
+    ]
+  },
+  "operationType": "importPsdSourceAsset",
+  "payload": {
+    "sourceAssetId": "src_psd_import_happy_path",
+    "fileRef": {
+      "packageRelativePath": "assets/sources/psd-import-happy-path/source-reference.psd",
+      "contentHash": "metadata:sample-model-header-shape-synthetic-adapter-result"
+    },
+    "importProfile": "layered-character-psd-profile-v1",
+    "requestedLayerRoles": {
+      "layer_face_base": "editableLayer"
+    },
+    "adapterResult": {
+      "schemaVersion": "psd-adapter-result-v1",
+      "sourceProfile": "layered-character-psd-profile-v1",
+      "adapterName": "synthetic-sample-model-profile-fixture",
+      "canvas": {
+        "width": 2048,
+        "height": 3072,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 2048,
+          "height": 3072
+        }
+      },
+      "sourceGroups": [
+        {
+          "sourceGroupId": "group_root",
+          "originalName": "Root",
+          "normalizedName": "root",
+          "groupPath": [
+            "Root"
+          ],
+          "sourceOrder": 0,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 2048,
+            "height": 3072
+          },
+          "targetPartId": "part_root"
+        },
+        {
+          "sourceGroupId": "group_head",
+          "originalName": "Head",
+          "normalizedName": "head",
+          "parentGroupId": "group_root",
+          "groupPath": [
+            "Root",
+            "Head"
+          ],
+          "sourceOrder": 1,
+          "bounds": {
+            "x": 512,
+            "y": 384,
+            "width": 1024,
+            "height": 1024
+          },
+          "targetPartId": "part_head"
+        }
+      ],
+      "sourceLayers": [
+        {
+          "sourceLayerId": "layer_face_base",
+          "originalName": "Face base",
+          "normalizedName": "face_base",
+          "parentGroupId": "group_head",
+          "groupPath": [
+            "Root",
+            "Head"
+          ],
+          "sourceOrder": 2,
+          "bounds": {
+            "x": 640,
+            "y": 512,
+            "width": 768,
+            "height": 896
+          },
+          "visibleInSource": true,
+          "opacityInSource": 1,
+          "role": "referenceOnly",
+          "unsupportedFeatures": [],
+          "texturePreviewReference": "assets/textures/psd-import-happy-path/face-base.preview.png",
+          "textureId": "tex_psd_face_base",
+          "targetPartId": "part_head"
+        }
+      ],
+      "unsupportedFeatures": [],
+      "diagnostics": [
+        {
+          "checkId": "adapter.sampleHeaderFacts",
+          "severity": "info",
+          "message": "Synthetic adapter result follows the rights-cleared sample PSD header shape without fixture PSD bytes.",
+          "source": {
+            "kind": "document",
+            "path": "/sample-characterization/header"
+          },
+          "evidence": [
+            "canvas=2048x3072",
+            "channels=4",
+            "depth=8",
+            "colorMode=RGB",
+            "psdBytesFixture=false"
+          ]
+        }
+      ]
+    },
+    "rights": {
+      "creator": "contract-fixture",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": false,
+      "aiUsed": false
+    }
+  }
+}

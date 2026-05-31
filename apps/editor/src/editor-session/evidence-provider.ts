@@ -174,6 +174,8 @@ const createRuntimeEvidenceInput = (
   input: OperationEvidenceProviderInput
 ): RuntimeEvidenceInput => {
   switch (input.request.operationType) {
+    case "importPsdSourceAsset":
+      return createImportPsdSourceAssetEvidenceInput(input);
     case "importSplitPngSourceAsset":
       return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
@@ -197,6 +199,33 @@ const createRuntimeEvidenceInput = (
     default:
       throw new Error(`Editor session evidence does not support ${input.request.operationType}.`);
   }
+};
+
+const createImportPsdSourceAssetEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "importPsdSourceAsset") {
+    throw new Error(`importPsdSourceAsset evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...(input.request.payload.sourceAssetId === undefined ? [] : [input.request.payload.sourceAssetId]),
+    ...(input.request.payload.adapterResult?.sourceGroups.map((group) => group.sourceGroupId) ?? []),
+    ...(input.request.payload.adapterResult?.sourceLayers.map((layer) => layer.sourceLayerId) ?? [])
+  ]);
+
+  return {
+    artifactLabel: "editor-import-psd-source-profile",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
 };
 
 const createImportSplitPngSourceAssetEvidenceInput = (

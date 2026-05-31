@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_import_psd_unsupported_layer",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-003"
+    ],
+    "relatedScenarios": [
+      "SC-IN-003"
+    ]
+  },
+  "operationType": "importPsdSourceAsset",
+  "payload": {
+    "sourceAssetId": "src_psd_unsupported_layer",
+    "fileRef": {
+      "packageRelativePath": "assets/sources/psd-unsupported-layer/source-reference.psd",
+      "contentHash": "metadata:unsupported-layer-synthetic-adapter-result"
+    },
+    "importProfile": "layered-character-psd-profile-v1",
+    "requestedLayerRoles": {},
+    "adapterResult": {
+      "schemaVersion": "psd-adapter-result-v1",
+      "sourceProfile": "layered-character-psd-profile-v1",
+      "adapterName": "synthetic-unsupported-layer-profile-fixture",
+      "canvas": {
+        "width": 2048,
+        "height": 3072,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 2048,
+          "height": 3072
+        }
+      },
+      "sourceGroups": [
+        {
+          "sourceGroupId": "group_reference",
+          "originalName": "Reference",
+          "normalizedName": "reference",
+          "groupPath": [
+            "Reference"
+          ],
+          "sourceOrder": 0
+        }
+      ],
+      "sourceLayers": [
+        {
+          "sourceLayerId": "layer_smart_reference",
+          "originalName": "Smart reference",
+          "normalizedName": "smart_reference",
+          "parentGroupId": "group_reference",
+          "groupPath": [
+            "Reference"
+          ],
+          "sourceOrder": 1,
+          "bounds": {
+            "x": 256,
+            "y": 192,
+            "width": 640,
+            "height": 512
+          },
+          "visibleInSource": true,
+          "opacityInSource": 1,
+          "role": "unsupported",
+          "unsupportedFeatures": [
+            {
+              "featureId": "psd.smartObject",
+              "scope": "layer",
+              "severity": "warning",
+              "message": "Smart object layer remains source metadata only; operation-core must not expand embedded content.",
+              "source": {
+                "kind": "layer",
+                "id": "layer_smart_reference"
+              },
+              "rasterizeCandidate": true,
+              "manualConfirmationRequired": true
+            },
+            {
+              "featureId": "psd.layerEffects",
+              "scope": "layer",
+              "severity": "warning",
+              "message": "Layer effects require adapter-side rasterization or manual review before materialization.",
+              "source": {
+                "kind": "layer",
+                "id": "layer_smart_reference"
+              },
+              "rasterizeCandidate": true,
+              "manualConfirmationRequired": true
+            }
+          ]
+        }
+      ],
+      "unsupportedFeatures": [],
+      "diagnostics": []
+    },
+    "rights": {
+      "creator": "contract-fixture",
+      "license": "internal-test-fixture",
+      "redistributionAllowed": false,
+      "aiUsed": false
+    }
+  }
+}

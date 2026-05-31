@@ -51,6 +51,7 @@ import {
   applyPreviewParameterValue,
   projectEditorWorkflowViewModel,
   projectPreviewAuthoredParameterValues,
+  projectCreateDrawableDefaultsForSourceSelection,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   type PreviewParameterSetResult,
   type CreateDrawableFormState,
@@ -71,7 +72,7 @@ import {
 } from "./workflow-state-projection.js";
 import {
   applySourceImportResultToDraft,
-  createSourceIntakeImportCommand,
+  createSourceIntakeImportOperationRequest,
   projectImportedSourceSelection,
   type EditorWorkflowSourceImportCommitResult
 } from "./source-intake-workflow.js";
@@ -336,22 +337,38 @@ export const createEditorWorkflowController = (
       return result;
     },
     commitSourceIntakeDraft(draft) {
-      const result = adapter.commitImportSplitPngSourceAsset(
-        createSourceIntakeImportCommand(draft, adapter.authoringSession.packageRevision)
+      const result = adapter.commitOperation(
+        createSourceIntakeImportOperationRequest(draft, adapter.authoringSession.packageRevision)
       );
+      const committedState = applyEditorWorkflowCommitResult(state, adapter, result);
+      const importedSourceSelection = projectImportedSourceSelection(draft);
+      const sourceIntakeDraft = applySourceImportResultToDraft(draft, result);
+      const nextPendingCreateDrawable =
+        result.operationResult.status !== "committed"
+          ? committedState.pendingCreateDrawable
+          : projectCreateDrawableDefaultsForSourceSelection({
+              sourceAssets: committedState.sourceAssets,
+              parts: result.reloadedDocument.model.graph.parts,
+              drawables: result.reloadedDocument.model.drawables.drawables,
+              canvasSize: result.reloadedDocument.model.graph.canvasSize,
+              preferredSourceAssetId: importedSourceSelection.sourceAssetId,
+              ...(importedSourceSelection.sourceLayerId === undefined
+                ? {}
+                : { preferredSourceLayerId: importedSourceSelection.sourceLayerId }),
+              ...(importedSourceSelection.textureId === undefined
+                ? {}
+                : { preferredTextureId: importedSourceSelection.textureId }),
+              ...(importedSourceSelection.partId === undefined
+                ? {}
+                : { preferredPartId: importedSourceSelection.partId })
+            });
 
       latestDrawablePresetResult = null;
       latestSessionPersistenceResult = result;
       state = {
-        ...applyEditorWorkflowCommitResult(
-          state,
-          adapter,
-          result,
-          result.operationResult.status === "committed"
-            ? { importedSourceSelection: projectImportedSourceSelection(draft) }
-            : {}
-        ),
-        sourceIntakeDraft: applySourceImportResultToDraft(draft, result)
+        ...committedState,
+        pendingCreateDrawable: nextPendingCreateDrawable,
+        sourceIntakeDraft
       };
 
       return {

@@ -43,6 +43,7 @@ discussion/implementation/
 - Wave 17 editor mesh vertex editing vertical slice completed on 2026-05-30 with `moveMeshVertex` operation support, runtime / validation evidence, editor workflow state, mesh vertex nudge controls, save/load persistence smoke, desktop/mobile E2E, clean integration review, and final report. Evidence is recorded in [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md), [waves/wave17/_map.md](waves/wave17/_map.md), and [reviews/wave17/_map.md](reviews/wave17/_map.md).
 - Wave 18 split PNG source asset and provenance intake completed on 2026-05-30 with metadata-backed split PNG source asset / layer metadata / rights / provenance intake, operation and validator evidence, editor workflow integration, browser-local save/load, desktop/mobile E2E smoke, clean integration review, and final report. Evidence is recorded in [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md), [waves/wave18/_map.md](waves/wave18/_map.md), and [reviews/wave18/_map.md](reviews/wave18/_map.md).
 - Wave 19 texture-backed preview and part mapping foundation completed on 2026-05-31 with package texture metadata, source layer texture/part mapping, texture-backed SVG preview truthfulness, validator evidence, browser-local persistence, desktop/mobile E2E smoke, clean integration review, and final report. Evidence is recorded in [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md), [waves/wave19/_map.md](waves/wave19/_map.md), and [reviews/wave19/_map.md](reviews/wave19/_map.md).
+- Wave 20 PSD spec field matrix and adapter boundary completed on 2026-05-31 with Adobe PSD spec field matrix, safe rights-cleared sample characterization, parser-free PSD adapter result DTOs, commit-capable `importPsdSourceAsset` materialization, PSD validator diagnostics, synthetic contract fixtures, manual editor PSD adapter/profile intake, desktop/mobile e2e persistence smoke, final verification, and clean integration review. Evidence is recorded in [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md), [waves/wave20/_map.md](waves/wave20/_map.md), and [reviews/wave20/_map.md](reviews/wave20/_map.md).
 
 ## Key References
 
@@ -69,6 +70,7 @@ discussion/implementation/
 | [orchestration/wave17-plan.md](orchestration/wave17-plan.md) | Wave 17 editor mesh vertex editing vertical slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave18-plan.md](orchestration/wave18-plan.md) | Wave 18 split PNG source asset and provenance intake dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave19-plan.md](orchestration/wave19-plan.md) | Wave 19 texture-backed preview and part mapping foundation dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave20-plan.md](orchestration/wave20-plan.md) | Wave 20 PSD spec field matrix and adapter boundary dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -88,6 +90,7 @@ discussion/implementation/
 | [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md) | Wave 17 final report for editor mesh vertex editing vertical slice |
 | [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md) | Wave 18 final report for split PNG source asset and provenance intake |
 | [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md) | Wave 19 final report for texture-backed preview and part mapping foundation |
+| [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md) | Wave 20 final report for PSD spec field matrix and adapter boundary |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -103,11 +106,12 @@ discussion/implementation/
 | [reviews/wave13/_map.md](reviews/wave13/_map.md) | Wave 13 domain review reports |
 | [reviews/wave14/_map.md](reviews/wave14/_map.md) | Wave 14 domain review reports |
 | [reviews/wave15/_map.md](reviews/wave15/_map.md) | Wave 15 domain review reports and needs-fix review |
+| [reviews/wave20/_map.md](reviews/wave20/_map.md) | Wave 20 domain review reports and clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan the next wave from [current-capability-map.md](current-capability-map.md) and the residual risks in [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md).
+1. Plan the next wave from [current-capability-map.md](current-capability-map.md) and the residual risks in [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md).
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

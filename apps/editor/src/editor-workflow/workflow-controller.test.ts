@@ -5,6 +5,7 @@ import { createBrowserProjectStore } from "../project-persistence/index.js";
 import type { StorageLike } from "../project-persistence/index.js";
 import {
   createEmptySourceIntakeDraftState,
+  createPsdAdapterProfileSourceIntakeDraftState,
   type SourceIntakeDraftState
 } from "../editor-state/index.js";
 import { createEditorWorkflowController } from "./workflow-controller.js";
@@ -242,6 +243,96 @@ describe("editor workflow controller", () => {
       packageRevision: 4,
       drawableIds: expect.arrayContaining(["draw_workflow_imported_face"])
     });
+  });
+
+  it("imports a manual PSD adapter/profile source draft through importPsdSourceAsset", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    const imported = workflow.commitSourceIntakeDraft(createPsdSourceIntakeDraft());
+    const snapshot = workflow.saveProject().snapshot;
+    const sourceAsset = snapshot.document.assets.sourceManifest.sourceAssets.find(
+      (candidate) => candidate.sourceAssetId === "src_workflow_psd_profile"
+    );
+    const importEntry = snapshot.operationLogEntries.find(
+      (entry) => entry.operationType === "importPsdSourceAsset"
+    );
+
+    expect(imported.status).toBe("committed");
+    expect(imported.result.operationType).toBe("importPsdSourceAsset");
+    expect(imported.result.operationResult.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "operation.importPsdSourceAsset.adapterDiagnostic",
+        message: expect.stringContaining("no PSD bytes were parsed by the editor")
+      })
+    ]));
+    expect(sourceAsset).toMatchObject({
+      sourceAssetId: "src_workflow_psd_profile",
+      kind: "psd-source-v1",
+      filePath: "assets/sources/workflow/source.psd",
+      contentHash: "sha256:workflow-psd-reference",
+      importProfile: "layered-character-psd-profile-v1",
+      layers: [
+        expect.objectContaining({
+          sourceLayerId: "layer_face",
+          groupPath: ["Root", "Head"],
+          bounds: { x: 320, y: 240, width: 512, height: 512 },
+          unsupportedFeatures: ["psd.textLayer"]
+        })
+      ]
+    });
+    expect(snapshot.document.assets.textureAtlas).toMatchObject({
+      textures: [
+        expect.objectContaining({
+          textureId: "tex_face",
+          sourceAssetId: "src_workflow_psd_profile",
+          sourceLayerId: "layer_face"
+        })
+      ],
+      previewAssets: [
+        expect.objectContaining({
+          textureId: "tex_face",
+          sourceAssetId: "src_workflow_psd_profile",
+          sourceLayerId: "layer_face"
+        })
+      ]
+    });
+    expect(workflow.state.pendingCreateDrawable).toMatchObject({
+      displayName: "Imported Face",
+      sourceAssetId: "src_workflow_psd_profile",
+      sourceLayerId: "layer_face",
+      textureId: "tex_face",
+      partId: "part_root",
+      initialBounds: { x: 320, y: 240, width: 512, height: 512 }
+    });
+    expect(importEntry?.payload).toMatchObject({
+      operationType: "importPsdSourceAsset",
+      payload: {
+        fileRef: {
+          packageRelativePath: "assets/sources/workflow/source.psd",
+          contentHash: "sha256:workflow-psd-reference"
+        },
+        importProfile: "layered-character-psd-profile-v1",
+        adapterResult: {
+          schemaVersion: "psd-adapter-result-v1",
+          adapterName: "manual-psd-profile-entry",
+          sourceProfile: "layered-character-psd-profile-v1",
+          canvas: {
+            width: 2048,
+            height: 3072
+          },
+          sourceLayers: [
+            expect.objectContaining({
+              sourceLayerId: "layer_face",
+              sourceOrder: 2,
+              texturePreviewReference: "assets/sources/workflow/face.preview.png",
+              textureId: "tex_face",
+              targetPartId: "part_root"
+            })
+          ]
+        }
+      }
+    });
+    expect(JSON.stringify(importEntry?.payload)).not.toMatch(/FileReader|readFile|decode|raster extraction/i);
   });
 
   it("does not treat blocked source intake rights as a successful import", () => {
@@ -957,6 +1048,46 @@ const createSourceIntakeDraft = (
     aiUsed: false,
     sourceUrl: "https://example.invalid/workflow-source",
     notes: "workflow source intake test"
+  },
+  diagnostics: []
+});
+
+const createPsdSourceIntakeDraft = (): SourceIntakeDraftState => ({
+  ...createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" }),
+  status: "confirmed",
+  sourceAssetId: "src_workflow_psd_profile",
+  manifestPath: "assets/sources/workflow/source.psd",
+  contentHash: "sha256:workflow-psd-reference",
+  defaultPartId: "part_root",
+  psdProfile: {
+    adapterName: "manual-psd-profile-entry",
+    canvasWidth: 2048,
+    canvasHeight: 3072
+  },
+  layers: [
+    {
+      sourceLayerId: "layer_face",
+      originalName: "Face",
+      normalizedName: "face",
+      groupPath: ["Root", "Head"],
+      bounds: { x: 320, y: 240, width: 512, height: 512 },
+      visibleInSource: true,
+      opacityInSource: 0.8,
+      role: "editableLayer",
+      unsupportedFeatures: ["psd.textLayer"],
+      texturePreviewReference: "assets/sources/workflow/face.preview.png",
+      textureId: "tex_face",
+      targetPartId: "part_root"
+    }
+  ],
+  rights: {
+    rightsStatus: "cleared",
+    creator: "Workflow Artist",
+    license: "private-cleared",
+    redistributionAllowed: false,
+    aiUsed: false,
+    sourceUrl: "https://example.invalid/workflow-psd-source",
+    notes: "manual PSD adapter/profile metadata"
   },
   diagnostics: []
 });

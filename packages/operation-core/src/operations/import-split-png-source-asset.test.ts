@@ -20,8 +20,8 @@ import { createOperationCore } from "../operation-core.js";
 import { OperationRequestSchema } from "../operation-request.js";
 import type { OperationRequestDto } from "../operation-request.js";
 import { getOperationHandler } from "../operation-registry.js";
+import { importPsdSourceAssetOperationHandler } from "./import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./import-split-png-source-asset.js";
-import { unsupportedPsdSourceAssetOperationHandler } from "./import-split-png-source-asset-unsupported-psd.js";
 import { setRightsMetadataOperationHandler } from "./set-rights-metadata.js";
 
 describe("importSplitPngSourceAsset operation handler", () => {
@@ -30,7 +30,7 @@ describe("importSplitPngSourceAsset operation handler", () => {
       importSplitPngSourceAssetOperationHandler
     );
     expect(getOperationHandler("importPsdSourceAsset")).toBe(
-      unsupportedPsdSourceAssetOperationHandler
+      importPsdSourceAssetOperationHandler
     );
     expect(getOperationHandler("setRightsMetadata")).toBe(setRightsMetadataOperationHandler);
   });
@@ -512,16 +512,59 @@ describe("importSplitPngSourceAsset operation handler", () => {
     expect(session.graph.sourceAssets).toHaveLength(1);
   });
 
-  it("rejects unsupported PSD import with an operation-specific diagnostic", () => {
+  it("rejects PSD import without an adapter result with a parser-missing diagnostic", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createImportPsdRequest());
 
     expect(outcome.result.status).toBe("rejected");
-    expect(outcome.result.diagnostics[0]?.checkId).toBe("operation.importPsdSourceAsset.unsupported");
+    expect(outcome.result.diagnostics[0]?.checkId).toBe(
+      "operation.importPsdSourceAsset.missingAdapterResult"
+    );
+    expect(outcome.result.diagnostics[0]?.message).toContain("does not parse PSD bytes");
+    expect(outcome.result.diagnostics[0]?.target).toMatchObject({
+      kind: "sourceAsset",
+      id: "src_psd_body",
+      path: "/payload/adapterResult"
+    });
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
+  });
+
+  it("commits adapter-supplied PSD import with deterministic unsupported feature diagnostics", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const outcome = core.commitOperation(
+      session,
+      createImportPsdRequest({ includeAdapterResult: true })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.result.diagnostics[0]?.checkId).toBe(
+      "operation.importPsdSourceAsset.unsupportedFeature"
+    );
+    expect(outcome.result.diagnostics[0]?.message).toContain("Smart object handling");
+    expect(session.packageRevision).toBe(1);
+    expect(session.graph.sourceAssets[0]).toMatchObject({
+      sourceAssetId: "src_psd_body",
+      kind: "psd-source-v1",
+      filePath: "assets/sources/body/body.psd",
+      importProfile: "layered-character-psd-profile-v1"
+    });
+    expect(session.graph.sourceAssets[0]?.layers[0]).toMatchObject({
+      sourceLayerId: "layer_psd_body",
+      sourceAssetId: "src_psd_body",
+      role: "unsupported",
+      unsupportedFeatures: ["psd.smartObject"]
+    });
+    expect(session.graph.textureAtlas?.textures[0]).toMatchObject({
+      textureId: "tex_body",
+      sourceAssetId: "src_psd_body",
+      sourceLayerId: "layer_psd_body",
+      provenanceId: "prov_import_psd_body"
+    });
   });
 
   it("rejects setRightsMetadata missing provenance and blocked rights deterministically", () => {
@@ -690,7 +733,9 @@ const createSetRightsMetadataRequest = (options: {
     }
   });
 
-const createImportPsdRequest = (): OperationRequestDto =>
+const createImportPsdRequest = (options: {
+  readonly includeAdapterResult?: boolean;
+} = {}): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
     operationId: "op_import_psd_body",
@@ -707,6 +752,76 @@ const createImportPsdRequest = (): OperationRequestDto =>
       },
       importProfile: "layered-character-psd-profile-v1",
       requestedLayerRoles: {},
+      ...(options.includeAdapterResult === true
+        ? {
+            adapterResult: {
+              schemaVersion: "psd-adapter-result-v1",
+              sourceProfile: "layered-character-psd-profile-v1",
+              adapterName: "fixture-psd-adapter",
+              canvas: {
+                width: 2048,
+                height: 3072,
+                bounds: { x: 0, y: 0, width: 2048, height: 3072 }
+              },
+              sourceGroups: [
+                {
+                  sourceGroupId: "group_body",
+                  originalName: "Body",
+                  normalizedName: "body",
+                  groupPath: ["Root", "Body"],
+                  sourceOrder: 0,
+                  targetPartId: "part_root"
+                }
+              ],
+              sourceLayers: [
+                {
+                  sourceLayerId: "layer_psd_body",
+                  originalName: "Body",
+                  normalizedName: "body",
+                  parentGroupId: "group_body",
+                  groupPath: ["Root", "Body"],
+                  sourceOrder: 1,
+                  bounds: { x: 4, y: 8, width: 40, height: 20 },
+                  visibleInSource: true,
+                  opacityInSource: 1,
+                  role: "unsupported",
+                  unsupportedFeatures: [
+                    {
+                      featureId: "psd.smartObject",
+                      scope: "layer",
+                      severity: "warning",
+                      message: "Smart object layer is represented as adapter diagnostics only.",
+                      source: { kind: "layer", id: "layer_psd_body" },
+                      rasterizeCandidate: true,
+                      manualConfirmationRequired: true
+                    }
+                  ],
+                  texturePreviewReference: "assets/textures/body.preview.png",
+                  textureId: "tex_body",
+                  targetPartId: "part_root"
+                }
+              ],
+              unsupportedFeatures: [
+                {
+                  featureId: "psd.smartObject",
+                  scope: "layer",
+                  severity: "warning",
+                  message: "Smart object handling requires future adapter materialization.",
+                  source: { kind: "layer", id: "layer_psd_body" },
+                  rasterizeCandidate: true
+                }
+              ],
+              diagnostics: [
+                {
+                  checkId: "adapter.psd.unsupportedFeature",
+                  severity: "warning",
+                  message: "Adapter surfaced unsupported PSD features without runtime-core data.",
+                  source: { kind: "adapter", path: "/sourceLayers/layer_psd_body" }
+                }
+              ]
+            }
+          }
+        : {}),
       rights: {
         creator: "fixture artist",
         license: "internal-test",

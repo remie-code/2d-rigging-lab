@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "validation-report-v1",
+  "reportId": "val_psd_import_happy_path_strict",
+  "createdAt": "2026-05-31T04:30:00.000Z",
+  "packageId": "pkg_psd_import_happy_path",
+  "packageRevision": 3,
+  "validatorVersion": "validator-core-wave2-foundation",
+  "profile": "strict",
+  "relatedScenarios": [],
+  "summary": {
+    "status": "pass",
+    "highestSeverity": "info",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 0,
+      "blocking": 0
+    }
+  },
+  "checks": [],
+  "repairCandidates": [],
+  "evidence": {
+    "operationLogPresent": false,
+    "runtimeSnapshotIds": [],
+    "supplementalGuiEvidenceRefs": []
+  }
+}

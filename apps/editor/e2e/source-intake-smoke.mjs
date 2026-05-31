@@ -4,19 +4,28 @@ import {
 } from "./test-ids.mjs";
 
 export const sourceIntakeSmoke = {
-  sourceAssetId: "src_e",
-  sourceLayerId: "l",
-  textureId: "tex_e",
+  sourceAssetId: "src_psd_e2e",
+  sourceLayerId: "layer_psd_face",
+  textureId: "tex_psd_e2e_face",
   texturePreviewReference:
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
-  texturePreviewAssetId: "preview_src_e_l",
-  manifestPath: "assets/sources/e2e.json",
-  contentHash: "sha256:e2e-source-intake-smoke",
+  texturePreviewAssetId: "preview_src_psd_e2e_layer_psd_face",
+  manifestPath: "assets/sources/e2e/source-reference.psd",
+  contentHash: "metadata:e2e-psd-adapter-profile",
+  adapterName: "manual-e2e-psd-profile",
+  canvasWidth: 2048,
+  canvasHeight: 3072,
   defaultPartId: "part_root",
-  creator: "E2E Rights Fixture",
-  license: "CC0-1.0",
-  sourceUrl: "https://example.invalid/private-2d-rigging-lab/e2e-source",
-  notes: "Deterministic data URL E2E source intake; PNG decode pipeline is not exercised.",
+  originalName: "E2E PSD Face",
+  normalizedName: "e2e_psd_face",
+  groupPath: "Root/Head",
+  creator: "E2E PSD Adapter Fixture",
+  license: "internal-test-fixture",
+  sourceUrl: "https://example.invalid/private-2d-rigging-lab/e2e-psd-source-reference",
+  notes: "Manual PSD adapter/profile metadata only; no PSD bytes are parsed by the editor.",
+  redistributionAllowed: false,
+  aiUsed: false,
+  unsupportedFeatures: "",
   bounds: {
     x: 84,
     y: 24,
@@ -35,23 +44,35 @@ export const runSourceIntakeWorkflow = async ({
   await waitForTestId(page, editorTestIds.sourceIntakeSubmit);
   await waitForTestId(page, editorTestIds.sourceIntakeSummary);
   await waitForTestId(page, editorTestIds.sourceIntakeImportedSources);
-  await waitForText(page, editorTestIds.sourceIntakeSummary, "No manifest path");
+  await waitForText(page, editorTestIds.sourceIntakeSummary, "No split PNG manifest path");
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "0 imported source assets");
 
   await assertSourceIntakePanelReachable(page, viewport);
   await assertSourceIntakeAccessibleNames(page);
+  await assertPsdNativeFormValidation(page, sourceIntakeSmoke);
   await setSourceIntakeFormValues(page, sourceIntakeSmoke);
   await clickTestId(page, editorTestIds.sourceIntakeSubmit);
 
   const importedSourceRow = createImportedSourceAssetRowTestId(sourceIntakeSmoke.sourceAssetId);
-  await waitForText(page, editorTestIds.operationStatus, "importSplitPngSourceAsset committed");
+  await waitForText(page, editorTestIds.operationStatus, "importPsdSourceAsset committed");
   await waitForText(page, editorTestIds.sourceIntakeSummary, "Draft confirmed");
+  await waitForText(page, editorTestIds.sourceIntakeSummary, "PSD adapter/profile metadata (manual)");
   await waitForText(page, editorTestIds.sourceIntakeSummary, sourceIntakeSmoke.manifestPath);
-  await waitForText(page, editorTestIds.sourceIntakeSummary, "Cleared / CC0-1.0");
+  await waitForText(page, editorTestIds.sourceIntakeSummary, "layered-character-psd-profile-v1");
+  await waitForText(page, editorTestIds.sourceIntakeSummary, sourceIntakeSmoke.adapterName);
+  await waitForText(
+    page,
+    editorTestIds.sourceIntakeSummary,
+    `${sourceIntakeSmoke.canvasWidth} x ${sourceIntakeSmoke.canvasHeight}`
+  );
+  await waitForText(page, editorTestIds.sourceIntakeSummary, `Cleared / ${sourceIntakeSmoke.license}`);
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "1 imported source asset");
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.sourceAssetId);
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.manifestPath);
+  await waitForText(page, importedSourceRow, "layered-character-psd-profile-v1");
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.sourceLayerId);
+  await waitForText(page, importedSourceRow, "psd.adapterName");
+  await waitForText(page, importedSourceRow, "psd.layerTexturePreview");
   await waitForText(page, importedSourceRow, "0 mapped drawables");
   await waitForText(
     page,
@@ -64,7 +85,7 @@ export const runSourceIntakeWorkflow = async ({
     `${sourceIntakeSmoke.sourceAssetId} / ${sourceIntakeSmoke.sourceLayerId}`
   );
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 1);
-  await waitForText(page, editorTestIds.operationLogSummary, "importSplitPngSourceAsset");
+  await waitForText(page, editorTestIds.operationLogSummary, "importPsdSourceAsset");
 
   const screenshot = await page.captureScreenshot(`${viewport.name} source intake smoke`);
 
@@ -119,22 +140,65 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
     );
     const importEntry = operationLogEntries.find(
       (entry) =>
-        entry.operationType === "importSplitPngSourceAsset" &&
+        entry.operationType === "importPsdSourceAsset" &&
         Array.isArray(entry.targetIds) &&
         entry.targetIds.includes(expected.sourceAssetId) &&
         entry.targetIds.includes(expected.sourceLayerId) &&
         entry.targetIds.includes(expected.textureId)
     );
+    const importPayload = importEntry?.payload?.payload;
+    const importEntryLayer = importPayload?.adapterResult?.sourceLayers?.find(
+      (candidate) => candidate.sourceLayerId === expected.sourceLayerId
+    );
 
     return {
       sourceAssetId: sourceAsset?.sourceAssetId ?? null,
+      sourceKind: sourceAsset?.kind ?? null,
       sourceFilePath: sourceAsset?.filePath ?? null,
-      sourceDiagnostics: sourceAsset?.diagnostics ?? [],
+      sourceContentHash: sourceAsset?.contentHash ?? null,
+      sourceImportProfile: sourceAsset?.importProfile ?? null,
+      sourceDiagnosticsContainProfile:
+        sourceAsset?.diagnostics?.includes("layered-character-psd-profile-v1") ?? false,
+      sourceDiagnosticsContainAdapterSchema:
+        sourceAsset?.diagnostics?.includes("psd-adapter-result-v1") ?? false,
+      sourceDiagnosticsContainAdapterName:
+        sourceAsset?.diagnostics?.includes(`psd.adapterName:${expected.adapterName}`) ?? false,
+      sourceDiagnosticsContainCanvas:
+        sourceAsset?.diagnostics?.includes(`psd.canvas:${expected.canvasWidth}x${expected.canvasHeight}`) ?? false,
+      sourceDiagnosticsContainRequestedRole:
+        sourceAsset?.diagnostics?.includes(`psd.requestedLayerRole:${expected.sourceLayerId}:editableLayer`) ?? false,
+      sourceDiagnosticsContainLayerTargetPart:
+        sourceAsset?.diagnostics?.includes(`psd.layerTargetPart:${expected.sourceLayerId}:${expected.defaultPartId}`) ?? false,
+      sourceDiagnosticsContainLayerTexture:
+        sourceAsset?.diagnostics?.includes(`psd.layerTexture:${expected.sourceLayerId}:${expected.textureId}`) ?? false,
+      sourceDiagnosticsContainLayerTexturePreview:
+        sourceAsset?.diagnostics?.includes(
+          `psd.layerTexturePreview:${expected.sourceLayerId}:${expected.texturePreviewReference}`
+        ) ?? false,
+      sourceDiagnosticsContainAdapterDiagnostic:
+        sourceAsset?.diagnostics?.some((diagnostic) =>
+          diagnostic.includes("psd.adapterDiagnostic:") &&
+          diagnostic.includes("adapter.psd.manualProfileMetadata") &&
+          diagnostic.includes("no PSD bytes were parsed by the editor")
+        ) ?? false,
+      sourceDiagnosticsContainSourceAsset:
+        sourceAsset?.diagnostics?.includes(`psd.sourceAsset:${expected.sourceAssetId}`) ?? false,
+      sourceLayerOriginalName: sourceLayer?.originalName ?? null,
+      sourceLayerNormalizedName: sourceLayer?.normalizedName ?? null,
+      sourceLayerGroupPath: sourceLayer?.groupPath ?? [],
+      sourceLayerBounds: normalizeBounds(sourceLayer?.bounds),
+      sourceLayerRole: sourceLayer?.role ?? null,
+      sourceLayerUnsupportedFeatures: sourceLayer?.unsupportedFeatures ?? [],
       layerMappedDrawableIds: sourceLayer?.mappedDrawableIds ?? [],
       rightsStatus: rightsRecord?.rightsStatus ?? null,
       rightsLicense: rightsRecord?.license ?? null,
+      rightsRedistributionAllowed: rightsRecord?.redistributionAllowed ?? null,
+      provenanceFilePath: provenanceRecord?.filePath ?? null,
+      provenanceContentHash: provenanceRecord?.contentHash ?? null,
       provenanceCreator: provenanceRecord?.creator ?? null,
       provenanceLicense: provenanceRecord?.license ?? null,
+      provenanceRedistributionAllowed: provenanceRecord?.redistributionAllowed ?? null,
+      provenanceAiUsed: provenanceRecord?.aiUsed ?? null,
       provenanceHistory: provenanceRecord?.transformHistory ?? [],
       drawableSourceAssetId: drawable?.sourceAssetId ?? null,
       drawableSourceLayerId: drawable?.sourceLayerId ?? null,
@@ -149,8 +213,66 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
       texturePreviewDataUrl: texturePreviewAsset?.reference?.dataUrl ?? null,
       texturePreviewSourceAssetId: texturePreviewAsset?.sourceAssetId ?? null,
       texturePreviewSourceLayerId: texturePreviewAsset?.sourceLayerId ?? null,
-      importEntryPresent: importEntry !== undefined
+      texturePreviewRightsAssetId: texturePreviewAsset?.rightsAssetId ?? null,
+      importEntryPresent: importEntry !== undefined,
+      importEntryOperationType: importEntry?.operationType ?? null,
+      importEntryTargetIds: importEntry?.targetIds ?? [],
+      importEntryPayloadImportProfile: importPayload?.importProfile ?? null,
+      importEntryPayloadFilePath: importPayload?.fileRef?.packageRelativePath ?? null,
+      importEntryPayloadContentHash: importPayload?.fileRef?.contentHash ?? null,
+      importEntryPayloadRequestedRole:
+        importPayload?.requestedLayerRoles?.[expected.sourceLayerId] ?? null,
+      importEntryAdapterSchema: importPayload?.adapterResult?.schemaVersion ?? null,
+      importEntryAdapterSourceProfile: importPayload?.adapterResult?.sourceProfile ?? null,
+      importEntryAdapterName: importPayload?.adapterResult?.adapterName ?? null,
+      importEntryCanvas: normalizeCanvas(importPayload?.adapterResult?.canvas),
+      importEntryLayer: importEntryLayer === undefined
+        ? null
+        : {
+            sourceLayerId: importEntryLayer.sourceLayerId,
+            originalName: importEntryLayer.originalName,
+            normalizedName: importEntryLayer.normalizedName,
+            parentGroupId: importEntryLayer.parentGroupId ?? null,
+            groupPath: importEntryLayer.groupPath ?? [],
+            sourceOrder: importEntryLayer.sourceOrder,
+            bounds: normalizeBounds(importEntryLayer.bounds),
+            visibleInSource: importEntryLayer.visibleInSource,
+            opacityInSource: importEntryLayer.opacityInSource,
+            role: importEntryLayer.role,
+            unsupportedFeatures: importEntryLayer.unsupportedFeatures ?? [],
+            texturePreviewReference: importEntryLayer.texturePreviewReference ?? null,
+            textureId: importEntryLayer.textureId ?? null,
+            targetPartId: importEntryLayer.targetPartId ?? null
+          },
+      importEntryAdapterDiagnosticMessage:
+        importPayload?.adapterResult?.diagnostics?.[0]?.message ?? null,
+      importEntryRights: importPayload?.rights ?? null
     };
+
+    function normalizeBounds(bounds) {
+      if (bounds === undefined || bounds === null) {
+        return null;
+      }
+
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      };
+    }
+
+    function normalizeCanvas(canvas) {
+      if (canvas === undefined || canvas === null) {
+        return null;
+      }
+
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        bounds: normalizeBounds(canvas.bounds)
+      };
+    }
 
     function readPackageJsonFile(projectValue, path) {
       if (!Array.isArray(projectValue.packageFileSet)) {
@@ -168,29 +290,60 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
     sourceAssetId: sourceIntakeSmoke.sourceAssetId,
     sourceLayerId: sourceIntakeSmoke.sourceLayerId,
     manifestPath: sourceIntakeSmoke.manifestPath,
+    contentHash: sourceIntakeSmoke.contentHash,
+    adapterName: sourceIntakeSmoke.adapterName,
+    canvasWidth: sourceIntakeSmoke.canvasWidth,
+    canvasHeight: sourceIntakeSmoke.canvasHeight,
+    originalName: sourceIntakeSmoke.originalName,
+    normalizedName: sourceIntakeSmoke.normalizedName,
+    groupPath: sourceIntakeSmoke.groupPath.split("/"),
     creator: sourceIntakeSmoke.creator,
     license: sourceIntakeSmoke.license,
+    redistributionAllowed: sourceIntakeSmoke.redistributionAllowed,
+    aiUsed: sourceIntakeSmoke.aiUsed,
     textureId: sourceIntakeSmoke.textureId,
+    texturePreviewReference: sourceIntakeSmoke.texturePreviewReference,
+    defaultPartId: sourceIntakeSmoke.defaultPartId,
+    bounds: sourceIntakeSmoke.bounds,
     drawableId: smokeDrawable.drawableId
   });
 
   const expected = {
     sourceAssetId: sourceIntakeSmoke.sourceAssetId,
+    sourceKind: "psd-source-v1",
     sourceFilePath: sourceIntakeSmoke.manifestPath,
-    sourceDiagnostics: [
-      "split-png-fallback-v1",
-      `splitPng.layerTexture:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.textureId}`,
-      `splitPng.layerTargetPart:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.defaultPartId}`,
-      `splitPng.layerTexturePreview:${sourceIntakeSmoke.sourceLayerId}:${sourceIntakeSmoke.texturePreviewReference}`
-    ],
+    sourceContentHash: sourceIntakeSmoke.contentHash,
+    sourceImportProfile: "layered-character-psd-profile-v1",
+    sourceDiagnosticsContainProfile: true,
+    sourceDiagnosticsContainAdapterSchema: true,
+    sourceDiagnosticsContainAdapterName: true,
+    sourceDiagnosticsContainCanvas: true,
+    sourceDiagnosticsContainRequestedRole: true,
+    sourceDiagnosticsContainLayerTargetPart: true,
+    sourceDiagnosticsContainLayerTexture: true,
+    sourceDiagnosticsContainLayerTexturePreview: true,
+    sourceDiagnosticsContainAdapterDiagnostic: true,
+    sourceDiagnosticsContainSourceAsset: true,
+    sourceLayerOriginalName: sourceIntakeSmoke.originalName,
+    sourceLayerNormalizedName: sourceIntakeSmoke.normalizedName,
+    sourceLayerGroupPath: sourceIntakeSmoke.groupPath.split("/"),
+    sourceLayerBounds: sourceIntakeSmoke.bounds,
+    sourceLayerRole: "editableLayer",
+    sourceLayerUnsupportedFeatures: [],
     layerMappedDrawableIds: [smokeDrawable.drawableId],
     rightsStatus: "cleared",
     rightsLicense: sourceIntakeSmoke.license,
+    rightsRedistributionAllowed: sourceIntakeSmoke.redistributionAllowed,
+    provenanceFilePath: sourceIntakeSmoke.manifestPath,
+    provenanceContentHash: sourceIntakeSmoke.contentHash,
     provenanceCreator: sourceIntakeSmoke.creator,
     provenanceLicense: sourceIntakeSmoke.license,
+    provenanceRedistributionAllowed: sourceIntakeSmoke.redistributionAllowed,
+    provenanceAiUsed: sourceIntakeSmoke.aiUsed,
     provenanceHistory: [
-      "importSplitPngSourceAsset:manifest-metadata",
-      `source-intake-note:${sourceIntakeSmoke.notes}`
+      "importPsdSourceAsset:adapter-result-metadata",
+      `psdAdapter:${sourceIntakeSmoke.adapterName}`,
+      "psdAdapterSchema:psd-adapter-result-v1"
     ],
     drawableSourceAssetId: sourceIntakeSmoke.sourceAssetId,
     drawableSourceLayerId: null,
@@ -205,7 +358,58 @@ export const assertSavedSourceIntakeState = async ({ page, storageKey, smokeDraw
     texturePreviewDataUrl: sourceIntakeSmoke.texturePreviewReference,
     texturePreviewSourceAssetId: sourceIntakeSmoke.sourceAssetId,
     texturePreviewSourceLayerId: sourceIntakeSmoke.sourceLayerId,
-    importEntryPresent: true
+    texturePreviewRightsAssetId: sourceIntakeSmoke.sourceAssetId,
+    importEntryPresent: true,
+    importEntryOperationType: "importPsdSourceAsset",
+    importEntryTargetIds: [
+      sourceIntakeSmoke.sourceAssetId,
+      "group_root",
+      "group_root_head",
+      sourceIntakeSmoke.sourceLayerId,
+      sourceIntakeSmoke.textureId,
+      sourceIntakeSmoke.defaultPartId
+    ],
+    importEntryPayloadImportProfile: "layered-character-psd-profile-v1",
+    importEntryPayloadFilePath: sourceIntakeSmoke.manifestPath,
+    importEntryPayloadContentHash: sourceIntakeSmoke.contentHash,
+    importEntryPayloadRequestedRole: "editableLayer",
+    importEntryAdapterSchema: "psd-adapter-result-v1",
+    importEntryAdapterSourceProfile: "layered-character-psd-profile-v1",
+    importEntryAdapterName: sourceIntakeSmoke.adapterName,
+    importEntryCanvas: {
+      width: sourceIntakeSmoke.canvasWidth,
+      height: sourceIntakeSmoke.canvasHeight,
+      bounds: {
+        x: 0,
+        y: 0,
+        width: sourceIntakeSmoke.canvasWidth,
+        height: sourceIntakeSmoke.canvasHeight
+      }
+    },
+    importEntryLayer: {
+      sourceLayerId: sourceIntakeSmoke.sourceLayerId,
+      originalName: sourceIntakeSmoke.originalName,
+      normalizedName: sourceIntakeSmoke.normalizedName,
+      parentGroupId: "group_root_head",
+      groupPath: sourceIntakeSmoke.groupPath.split("/"),
+      sourceOrder: 2,
+      bounds: sourceIntakeSmoke.bounds,
+      visibleInSource: true,
+      opacityInSource: 1,
+      role: "editableLayer",
+      unsupportedFeatures: [],
+      texturePreviewReference: sourceIntakeSmoke.texturePreviewReference,
+      textureId: sourceIntakeSmoke.textureId,
+      targetPartId: sourceIntakeSmoke.defaultPartId
+    },
+    importEntryAdapterDiagnosticMessage:
+      "PSD adapter/profile metadata was entered manually in Source Intake; no PSD bytes were parsed by the editor.",
+    importEntryRights: {
+      creator: sourceIntakeSmoke.creator,
+      license: sourceIntakeSmoke.license,
+      redistributionAllowed: sourceIntakeSmoke.redistributionAllowed,
+      aiUsed: sourceIntakeSmoke.aiUsed
+    }
   };
 
   if (JSON.stringify(saved) !== JSON.stringify(expected)) {
@@ -222,12 +426,13 @@ export const assertSourceIntakeStateAfterLoad = async ({ page, smokeDrawable }) 
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "1 imported source asset");
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.sourceAssetId);
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.manifestPath);
+  await waitForText(page, importedSourceRow, "layered-character-psd-profile-v1");
   await waitForText(page, importedSourceRow, sourceIntakeSmoke.sourceLayerId);
   await waitForText(page, importedSourceRow, "1 mapped drawable");
 };
 
 export const assertSourceIntakeStateAfterReset = async (page) => {
-  await waitForText(page, editorTestIds.sourceIntakeSummary, "No manifest path");
+  await waitForText(page, editorTestIds.sourceIntakeSummary, "No split PNG manifest path");
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "0 imported source assets");
 };
 
@@ -322,8 +527,12 @@ const assertSourceIntakeAccessibleNames = async (page) => {
       submitName: submit?.textContent?.trim() ?? "",
       addLayerName: addLayer?.textContent?.trim() ?? "",
       labels: {
+        intakeMode: readLabel("intakeMode"),
         manifestPath: readLabel("manifestPath"),
         sourceAssetId: readLabel("sourceAssetId"),
+        psdAdapterName: readLabel("psdAdapterName"),
+        psdCanvasWidth: readLabel("psdCanvasWidth"),
+        psdCanvasHeight: readLabel("psdCanvasHeight"),
         placementPolicy: readLabel("placementPolicy"),
         rightsStatus: readLabel("rightsStatus"),
         creator: readLabel("creator"),
@@ -332,6 +541,7 @@ const assertSourceIntakeAccessibleNames = async (page) => {
         texturePreviewReference: readLabel("texturePreviewReference.0"),
         textureId: readLabel("textureId.0"),
         targetPartId: readLabel("targetPartId.0"),
+        role: readLabel("role.0"),
         width: readLabel("width.0")
       }
     };
@@ -346,14 +556,18 @@ const assertSourceIntakeAccessibleNames = async (page) => {
 
   const expected = {
     panelName: "Source Intake",
-    formName: "Confirm split PNG source intake draft",
-    layerRowsName: "Split PNG source layer rows",
+    formName: "Confirm source intake adapter profile draft",
+    layerRowsName: "Source intake layer rows",
     importedSourcesName: "Imported source assets",
     submitName: "Confirm source draft",
     addLayerName: "Add layer row",
     labels: {
-      manifestPath: "Split PNG manifest path",
+      intakeMode: "Source intake mode",
+      manifestPath: "Split PNG manifest path / PSD source reference",
       sourceAssetId: "Source asset ID",
+      psdAdapterName: "PSD adapter/profile name",
+      psdCanvasWidth: "PSD canvas width",
+      psdCanvasHeight: "PSD canvas height",
       placementPolicy: "Placement policy",
       rightsStatus: "Rights status",
       creator: "Creator",
@@ -362,6 +576,7 @@ const assertSourceIntakeAccessibleNames = async (page) => {
       texturePreviewReference: "Texture preview reference",
       textureId: "Texture ID",
       targetPartId: "Target part ID",
+      role: "Layer role",
       width: "Width"
     }
   };
@@ -369,6 +584,115 @@ const assertSourceIntakeAccessibleNames = async (page) => {
   if (JSON.stringify(names) !== JSON.stringify(expected)) {
     throw new Error(
       `Source intake accessible names mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(names)}.`
+    );
+  }
+};
+
+const assertPsdNativeFormValidation = async (page, input) => {
+  const validation = await page.evaluate((ids, values) => {
+    const form = document.querySelector(`[data-testid="${ids.form}"]`);
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error("Source intake form was missing.");
+    }
+
+    const setValue = (name, value) => {
+      const control = form.elements.namedItem(name);
+
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
+        throw new Error(`Missing source intake field ${name}.`);
+      }
+
+      control.value = String(value);
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    setValue("intakeMode", "psdAdapterProfile");
+    setValue("manifestPath", values.manifestPath);
+    setValue("sourceAssetId", values.sourceAssetId);
+    setValue("contentHash", values.contentHash);
+    setValue("psdAdapterName", values.adapterName);
+    setValue("psdCanvasWidth", values.canvasWidth);
+    setValue("psdCanvasHeight", values.canvasHeight);
+    setValue("defaultPartId", values.defaultPartId);
+    setValue("rightsStatus", "cleared");
+    setValue("creator", values.creator);
+    setValue("license", values.license);
+    setValue("sourceLayerId.0", values.sourceLayerId);
+    setValue("originalName.0", values.originalName);
+    setValue("normalizedName.0", values.normalizedName);
+    setValue("groupPath.0", values.groupPath);
+    setValue("x.0", values.bounds.x);
+    setValue("y.0", values.bounds.y);
+    setValue("width.0", values.bounds.width);
+    setValue("height.0", values.bounds.height);
+    setValue("opacityInSource.0", 1);
+    setValue("texturePreviewReference.0", "");
+    setValue("textureId.0", "");
+    setValue("targetPartId.0", "");
+    setValue("role.0", "unsupported");
+
+    const texturePreview = form.elements.namedItem("texturePreviewReference.0");
+    const textureId = form.elements.namedItem("textureId.0");
+    const role = form.elements.namedItem("role.0");
+
+    if (
+      !(texturePreview instanceof HTMLInputElement) ||
+      !(textureId instanceof HTMLInputElement) ||
+      !(role instanceof HTMLSelectElement)
+    ) {
+      throw new Error("PSD native validation controls were missing.");
+    }
+
+    const unsupportedState = {
+      texturePreviewRequired: texturePreview.required,
+      textureIdRequired: textureId.required,
+      texturePreviewValueMissing: texturePreview.validity.valueMissing,
+      textureIdValueMissing: textureId.validity.valueMissing,
+      formValid: form.checkValidity()
+    };
+
+    setValue("role.0", "editableLayer");
+
+    const mappedState = {
+      texturePreviewRequired: texturePreview.required,
+      textureIdRequired: textureId.required,
+      texturePreviewValueMissing: texturePreview.validity.valueMissing,
+      textureIdValueMissing: textureId.validity.valueMissing,
+      formValid: form.checkValidity()
+    };
+
+    return {
+      unsupportedState,
+      mappedState
+    };
+  }, {
+    form: editorTestIds.sourceIntakeForm
+  }, input);
+
+  const expected = {
+    unsupportedState: {
+      texturePreviewRequired: false,
+      textureIdRequired: false,
+      texturePreviewValueMissing: false,
+      textureIdValueMissing: false,
+      formValid: true
+    },
+    mappedState: {
+      texturePreviewRequired: true,
+      textureIdRequired: true,
+      texturePreviewValueMissing: true,
+      textureIdValueMissing: true,
+      formValid: false
+    }
+  };
+
+  if (JSON.stringify(validation) !== JSON.stringify(expected)) {
+    throw new Error(
+      `PSD native form validation mismatch: expected ${JSON.stringify(expected)}, received ${JSON.stringify(
+        validation
+      )}.`
     );
   }
 };
@@ -404,9 +728,13 @@ const setSourceIntakeFormValues = async (page, input) => {
       control.dispatchEvent(new Event("change", { bubbles: true }));
     };
 
+    setValue("intakeMode", "psdAdapterProfile");
     setValue("manifestPath", values.manifestPath);
     setValue("sourceAssetId", values.sourceAssetId);
     setValue("contentHash", values.contentHash);
+    setValue("psdAdapterName", values.adapterName);
+    setValue("psdCanvasWidth", values.canvasWidth);
+    setValue("psdCanvasHeight", values.canvasHeight);
     setValue("defaultPartId", values.defaultPartId);
     setValue("placementPolicy", "use-metadata");
     setValue("rightsStatus", "cleared");
@@ -414,12 +742,12 @@ const setSourceIntakeFormValues = async (page, input) => {
     setValue("license", values.license);
     setValue("sourceUrl", values.sourceUrl);
     setValue("notes", values.notes);
-    setChecked("redistributionAllowed", true);
-    setChecked("aiUsed", false);
+    setChecked("redistributionAllowed", values.redistributionAllowed);
+    setChecked("aiUsed", values.aiUsed);
     setValue("sourceLayerId.0", values.sourceLayerId);
-    setValue("originalName.0", "E2E Body");
-    setValue("normalizedName.0", "e2e_body");
-    setValue("groupPath.0", "Root/Character");
+    setValue("originalName.0", values.originalName);
+    setValue("normalizedName.0", values.normalizedName);
+    setValue("groupPath.0", values.groupPath);
     setValue("texturePreviewReference.0", values.texturePreviewReference);
     setValue("textureId.0", values.textureId);
     setValue("targetPartId.0", values.defaultPartId);
@@ -430,7 +758,7 @@ const setSourceIntakeFormValues = async (page, input) => {
     setValue("opacityInSource.0", 1);
     setValue("role.0", "editableLayer");
     setChecked("visibleInSource.0", true);
-    setValue("unsupportedFeatures.0", "");
+    setValue("unsupportedFeatures.0", values.unsupportedFeatures);
   }, {
     form: editorTestIds.sourceIntakeForm
   }, input);

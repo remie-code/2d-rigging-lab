@@ -4,6 +4,7 @@ import {
   createSourceIntakeLayerRowTestId,
   editorTestIds,
   sourceIntakeLayerRoles,
+  sourceIntakeModes,
   sourceIntakePlacementPolicies,
   sourceIntakeRightsStatuses,
   type SourceIntakeDraftInput,
@@ -11,6 +12,7 @@ import {
   type SourceIntakeDraftViewModel,
   type SourceIntakeLayerDraftState,
   type SourceIntakeLayerRole,
+  type SourceIntakeMode,
   type SourceIntakePlacementPolicy,
   type SourceIntakeRightsStatus
 } from "../../editor-state/index.js";
@@ -27,7 +29,7 @@ export const createSourceIntakeForm = (
   const form = document.createElement("form");
   form.className = "source-intake-form";
   form.dataset.testid = editorTestIds.sourceIntakeForm;
-  form.setAttribute("aria-label", "Confirm split PNG source intake draft");
+  form.setAttribute("aria-label", "Confirm source intake adapter profile draft");
 
   const diagnostics = document.createElement("div");
   diagnostics.className = "source-intake-form__diagnostics";
@@ -37,11 +39,39 @@ export const createSourceIntakeForm = (
   const layerRows = document.createElement("div");
   layerRows.className = "source-intake-form__layer-rows";
   layerRows.dataset.testid = editorTestIds.sourceIntakeLayerRows;
-  layerRows.setAttribute("aria-label", "Split PNG source layer rows");
+  layerRows.setAttribute("aria-label", "Source intake layer rows");
 
+  const requiredSyncCallbacks: Array<() => void> = [];
+  const intakeModeControl = createSelectFieldControl({
+    label: "Source intake mode",
+    name: "intakeMode",
+    value: options.draft.intakeMode,
+    options: sourceIntakeModes.map((mode) => ({
+      value: mode,
+      label: formatSourceIntakeMode(mode)
+    })),
+    wide: true
+  });
+  const getCurrentIntakeMode = (): SourceIntakeMode =>
+    sourceIntakeModes.includes(intakeModeControl.select.value as SourceIntakeMode)
+      ? (intakeModeControl.select.value as SourceIntakeMode)
+      : options.draft.intakeMode;
+  intakeModeControl.select.addEventListener("change", () => {
+    requiredSyncCallbacks.forEach((sync) => sync());
+  });
   let nextLayerIndex = options.draft.layers.length;
   options.draft.layers.forEach((layer, index) => {
-    layerRows.append(createLayerDraftRow(layer, index, options.viewModel.layerRows[index]));
+    layerRows.append(
+      createLayerDraftRow(layer, index, {
+        ...(options.viewModel.layerRows[index] === undefined
+          ? {}
+          : { viewModel: options.viewModel.layerRows[index] }),
+        getIntakeMode: getCurrentIntakeMode,
+        onRequiredSync(sync) {
+          requiredSyncCallbacks.push(sync);
+        }
+      })
+    );
   });
 
   const addLayer = document.createElement("button");
@@ -55,7 +85,13 @@ export const createSourceIntakeForm = (
         createDefaultSourceIntakeLayerDraft(nextLayerIndex, {
           defaultPartId: options.draft.defaultPartId
         }),
-        nextLayerIndex
+        nextLayerIndex,
+        {
+          getIntakeMode: getCurrentIntakeMode,
+          onRequiredSync(sync) {
+            requiredSyncCallbacks.push(sync);
+          }
+        }
       )
     );
     nextLayerIndex += 1;
@@ -68,8 +104,9 @@ export const createSourceIntakeForm = (
   submit.textContent = "Confirm source draft";
 
   form.append(
+    intakeModeControl.label,
     createTextField({
-      label: "Split PNG manifest path",
+      label: "Split PNG manifest path / PSD source reference",
       name: "manifestPath",
       value: options.draft.manifestPath,
       required: true,
@@ -87,6 +124,23 @@ export const createSourceIntakeForm = (
       name: "contentHash",
       value: options.draft.contentHash
     }),
+    createTextField({
+      label: "PSD adapter/profile name",
+      name: "psdAdapterName",
+      value: options.draft.psdProfile.adapterName
+    }),
+    createNumberField(
+      "PSD canvas width",
+      "psdCanvasWidth",
+      options.draft.psdProfile.canvasWidth,
+      "0.000001"
+    ),
+    createNumberField(
+      "PSD canvas height",
+      "psdCanvasHeight",
+      options.draft.psdProfile.canvasHeight,
+      "0.000001"
+    ),
     createTextField({
       label: "Default part ID",
       name: "defaultPartId",
@@ -196,7 +250,21 @@ interface SelectFieldOptions<TValue extends string> {
   readonly testId?: string;
 }
 
+interface TextFieldControl {
+  readonly label: HTMLLabelElement;
+  readonly input: HTMLInputElement;
+}
+
+interface SelectFieldControl<TValue extends string> {
+  readonly label: HTMLLabelElement;
+  readonly select: HTMLSelectElement;
+}
+
 const createTextField = (options: TextFieldOptions): HTMLLabelElement => {
+  return createTextFieldControl(options).label;
+};
+
+const createTextFieldControl = (options: TextFieldOptions): TextFieldControl => {
   const label = document.createElement("label");
   label.className = options.wide === true ? "editor-field editor-field--wide" : "editor-field";
   label.textContent = options.label;
@@ -212,7 +280,7 @@ const createTextField = (options: TextFieldOptions): HTMLLabelElement => {
   }
 
   label.append(input);
-  return label;
+  return { label, input };
 };
 
 const createNumberField = (
@@ -262,6 +330,12 @@ const createCheckboxField = (options: CheckboxFieldOptions): HTMLLabelElement =>
 const createSelectField = <TValue extends string>(
   options: SelectFieldOptions<TValue>
 ): HTMLLabelElement => {
+  return createSelectFieldControl(options).label;
+};
+
+const createSelectFieldControl = <TValue extends string>(
+  options: SelectFieldOptions<TValue>
+): SelectFieldControl<TValue> => {
   const label = document.createElement("label");
   label.className = options.wide === true ? "editor-field editor-field--wide" : "editor-field";
   label.textContent = options.label;
@@ -281,13 +355,17 @@ const createSelectField = <TValue extends string>(
   }
 
   label.append(select);
-  return label;
+  return { label, select };
 };
 
 const createLayerDraftRow = (
   layer: SourceIntakeLayerDraftState,
   index: number,
-  viewModel?: SourceIntakeDraftViewModel["layerRows"][number]
+  options: {
+    readonly viewModel?: SourceIntakeDraftViewModel["layerRows"][number];
+    readonly getIntakeMode: () => SourceIntakeMode;
+    readonly onRequiredSync?: (sync: () => void) => void;
+  }
 ): HTMLElement => {
   const row = document.createElement("section");
   row.className = "source-intake-layer-row";
@@ -305,9 +383,39 @@ const createLayerDraftRow = (
   const mappingSummary = document.createElement("p");
   mappingSummary.className = "source-intake-layer-row__mapping-summary";
   mappingSummary.textContent =
-    viewModel === undefined
+    options.viewModel === undefined
       ? createLayerMappingSummaryLabel(layer)
-      : viewModel.textureMappingStatusLabel;
+      : options.viewModel.textureMappingStatusLabel;
+  const initialTextureMappingRequired = requiresLayerTextureMapping(options.getIntakeMode(), layer.role);
+  const texturePreviewReferenceField = createTextFieldControl({
+    label: "Texture preview reference",
+    name: layerFieldName("texturePreviewReference", index),
+    value: layer.texturePreviewReference ?? "",
+    required: initialTextureMappingRequired,
+    wide: true
+  });
+  const textureIdField = createTextFieldControl({
+    label: "Texture ID",
+    name: layerFieldName("textureId", index),
+    value: layer.textureId ?? "",
+    required: initialTextureMappingRequired
+  });
+  const roleField = createSelectFieldControl({
+    label: "Layer role",
+    name: layerFieldName("role", index),
+    value: layer.role,
+    options: sourceIntakeLayerRoles.map((role) => ({ value: role, label: role }))
+  });
+  const syncNativeRequired = (): void => {
+    const required = requiresLayerTextureMapping(
+      options.getIntakeMode(),
+      readLayerRoleValue(roleField.select.value, layer.role)
+    );
+    texturePreviewReferenceField.input.required = required;
+    textureIdField.input.required = required;
+  };
+  roleField.select.addEventListener("change", syncNativeRequired);
+  options.onRequiredSync?.(syncNativeRequired);
 
   row.append(
     heading,
@@ -336,19 +444,8 @@ const createLayerDraftRow = (
       name: layerFieldName("groupPath", index),
       value: layer.groupPath.join("/")
     }),
-    createTextField({
-      label: "Texture preview reference",
-      name: layerFieldName("texturePreviewReference", index),
-      value: layer.texturePreviewReference ?? "",
-      required: true,
-      wide: true
-    }),
-    createTextField({
-      label: "Texture ID",
-      name: layerFieldName("textureId", index),
-      value: layer.textureId ?? "",
-      required: true
-    }),
+    texturePreviewReferenceField.label,
+    textureIdField.label,
     createTextField({
       label: "Target part ID",
       name: layerFieldName("targetPartId", index),
@@ -359,12 +456,7 @@ const createLayerDraftRow = (
     createNumberField("Width", layerFieldName("width", index), layer.bounds.width, "0.000001"),
     createNumberField("Height", layerFieldName("height", index), layer.bounds.height, "0.000001"),
     createNumberField("Opacity", layerFieldName("opacityInSource", index), layer.opacityInSource, "0", "1"),
-    createSelectField({
-      label: "Layer role",
-      name: layerFieldName("role", index),
-      value: layer.role,
-      options: sourceIntakeLayerRoles.map((role) => ({ value: role, label: role }))
-    }),
+    roleField.label,
     createCheckboxField({
       label: "Visible in source",
       name: layerFieldName("visibleInSource", index),
@@ -380,6 +472,19 @@ const createLayerDraftRow = (
 
   return row;
 };
+
+const requiresLayerTextureMapping = (
+  intakeMode: SourceIntakeMode,
+  role: SourceIntakeLayerRole
+): boolean => intakeMode === "splitPng" || role !== "unsupported";
+
+const readLayerRoleValue = (
+  value: string,
+  fallback: SourceIntakeLayerRole
+): SourceIntakeLayerRole =>
+  sourceIntakeLayerRoles.includes(value as SourceIntakeLayerRole)
+    ? (value as SourceIntakeLayerRole)
+    : fallback;
 
 const createLayerMappingSummaryLabel = (
   layer: SourceIntakeLayerDraftState
@@ -399,11 +504,17 @@ const readSourceIntakeDraftInput = (
   const fields = new FormData(form);
 
   return {
+    intakeMode: readSourceIntakeMode(fields, fallback.intakeMode),
     sourceAssetId: readText(fields, "sourceAssetId", fallback.sourceAssetId),
     manifestPath: readText(fields, "manifestPath", fallback.manifestPath),
     contentHash: readText(fields, "contentHash", fallback.contentHash),
     defaultPartId: readText(fields, "defaultPartId", fallback.defaultPartId),
     placementPolicy: readPlacementPolicy(fields, fallback.placementPolicy),
+    psdProfile: {
+      adapterName: readText(fields, "psdAdapterName", fallback.psdProfile.adapterName),
+      canvasWidth: readNumber(fields, "psdCanvasWidth", fallback.psdProfile.canvasWidth),
+      canvasHeight: readNumber(fields, "psdCanvasHeight", fallback.psdProfile.canvasHeight)
+    },
     layers: readLayerDrafts(fields, fallback.layers),
     rights: {
       rightsStatus: readRightsStatus(fields, fallback.rights.rightsStatus),
@@ -495,6 +606,17 @@ const readPlacementPolicy = (
     : fallback;
 };
 
+const readSourceIntakeMode = (
+  fields: FormData,
+  fallback: SourceIntakeMode
+): SourceIntakeMode => {
+  const value = String(fields.get("intakeMode") ?? fallback);
+
+  return sourceIntakeModes.includes(value as SourceIntakeMode)
+    ? (value as SourceIntakeMode)
+    : fallback;
+};
+
 const readRightsStatus = (
   fields: FormData,
   fallback: SourceIntakeRightsStatus
@@ -541,8 +663,18 @@ const layerFieldName = (
 const createDiagnosticLine = (diagnostic: string): HTMLElement => {
   const line = document.createElement("p");
   line.textContent = diagnostic;
+  line.style.overflowWrap = "anywhere";
 
   return line;
+};
+
+const formatSourceIntakeMode = (mode: SourceIntakeMode): string => {
+  switch (mode) {
+    case "splitPng":
+      return "Split PNG manifest metadata";
+    case "psdAdapterProfile":
+      return "PSD adapter/profile metadata (manual)";
+  }
 };
 
 const formatPlacementPolicy = (policy: SourceIntakePlacementPolicy): string => {

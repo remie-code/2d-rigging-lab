@@ -7,6 +7,7 @@ import type { SourceAssetDto } from "@private-2d-rigging-lab/package-format";
 
 import {
   createEmptySourceIntakeDraftState,
+  createPsdAdapterProfileSourceIntakeDraftState,
   createSourceIntakeLayerRowTestId,
   editorTestIds,
   projectSourceIntakeDraftViewModel
@@ -43,7 +44,13 @@ describe("source intake panel", () => {
       "3 draft issues"
     );
     expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
-      "Split PNG manifest path"
+      "Split PNG manifest path / PSD source reference"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "Source intake mode"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "PSD adapter/profile name"
     );
     expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
       "Texture preview reference"
@@ -59,6 +66,97 @@ describe("source intake panel", () => {
     expect(findByTestId(panel, createSourceIntakeLayerRowTestId("layer_body"))?.textContent).toContain(
       "tex_body / part_root"
     );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeLayerRows)?.getAttribute("aria-label")).toBe(
+      "Source intake layer rows"
+    );
+    expect(findNamedField(panel, "texturePreviewReference.0")?.required).toBe(true);
+    expect(findNamedField(panel, "textureId.0")?.required).toBe(true);
+  });
+
+  it("lets the form choose manual PSD adapter/profile mode without file parsing wording", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(createEmptySourceIntakeDraftState({ defaultPartId: "part_root" }), (draft) =>
+      calls.push(draft)
+    );
+
+    setNamedFieldValue(panel, "intakeMode", "psdAdapterProfile");
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/source.psd");
+    setNamedFieldValue(panel, "sourceAssetId", "src_panel_psd_profile");
+    setNamedFieldValue(panel, "contentHash", "sha256:manual-psd-reference");
+    setNamedFieldValue(panel, "psdAdapterName", "manual-psd-profile-entry");
+    setNamedFieldValue(panel, "psdCanvasWidth", "2048");
+    setNamedFieldValue(panel, "psdCanvasHeight", "3072");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "private-review");
+    setNamedFieldValue(panel, "sourceLayerId.0", "layer_face");
+    setNamedFieldValue(panel, "originalName.0", "Face");
+    setNamedFieldValue(panel, "normalizedName.0", "face");
+    setNamedFieldValue(panel, "groupPath.0", "Root/Head");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "assets/sources/character/face.preview.png");
+    setNamedFieldValue(panel, "textureId.0", "tex_face");
+    setNamedFieldValue(panel, "targetPartId.0", "part_root");
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "PSD adapter/profile metadata (manual)"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).not.toMatch(
+      /file picker|parsed from bytes|raster extraction/i
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      status: "confirmed",
+      intakeMode: "psdAdapterProfile",
+      importProfile: "layered-character-psd-profile-v1",
+      sourceAssetId: "src_panel_psd_profile",
+      manifestPath: "assets/sources/character/source.psd",
+      psdProfile: {
+        adapterName: "manual-psd-profile-entry",
+        canvasWidth: 2048,
+        canvasHeight: 3072
+      },
+      layers: [
+        expect.objectContaining({
+          sourceLayerId: "layer_face",
+          groupPath: ["Root", "Head"],
+          texturePreviewReference: "assets/sources/character/face.preview.png"
+        })
+      ],
+      diagnostics: []
+    });
+  });
+
+  it("keeps native texture requirements aligned with PSD unsupported layer rules", () => {
+    const panel = createPanel(createUnsupportedPsdDraft());
+    const intakeMode = findNamedField(panel, "intakeMode");
+    const role = findNamedField(panel, "role.0");
+    const texturePreview = findNamedField(panel, "texturePreviewReference.0");
+    const textureId = findNamedField(panel, "textureId.0");
+
+    expect(intakeMode?.value).toBe("psdAdapterProfile");
+    expect(role?.value).toBe("unsupported");
+    expect(texturePreview?.required).toBe(false);
+    expect(textureId?.required).toBe(false);
+
+    setNamedFieldValue(panel, "role.0", "editableLayer");
+    role?.emit("change");
+    expect(texturePreview?.required).toBe(true);
+    expect(textureId?.required).toBe(true);
+
+    setNamedFieldValue(panel, "role.0", "unsupported");
+    role?.emit("change");
+    expect(texturePreview?.required).toBe(false);
+    expect(textureId?.required).toBe(false);
+
+    setNamedFieldValue(panel, "intakeMode", "splitPng");
+    intakeMode?.emit("change");
+    expect(texturePreview?.required).toBe(true);
+    expect(textureId?.required).toBe(true);
+
+    setNamedFieldValue(panel, "intakeMode", "psdAdapterProfile");
+    intakeMode?.emit("change");
+    expect(texturePreview?.required).toBe(false);
+    expect(textureId?.required).toBe(false);
   });
 
   it("confirms a valid source intake draft without committing an operation", () => {
@@ -159,9 +257,11 @@ describe("source intake panel", () => {
     findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
 
     expect(calls).toEqual([]);
-    expect(findByTestId(panel, editorTestIds.sourceIntakeDiagnostics)?.textContent).toContain(
+    const diagnostics = findByTestId(panel, editorTestIds.sourceIntakeDiagnostics);
+    expect(diagnostics?.textContent).toContain(
       "Layer 1 bounds width and height must be greater than zero."
     );
+    expect(diagnostics?.children[0]?.style.overflowWrap).toBe("anywhere");
   });
 
   it("reports invalid layer texture references and missing target part mappings locally", () => {
@@ -233,8 +333,11 @@ const createPanel = (
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
 
+const findNamedField = (root: TestElement, name: string): TestElement | null =>
+  root.queryByPredicate((element) => element.name === name);
+
 const setNamedFieldValue = (root: TestElement, name: string, value: string): void => {
-  const field = root.queryByPredicate((element) => element.name === name);
+  const field = findNamedField(root, name);
   if (field === null) {
     throw new Error(`Missing form field ${name}`);
   }
@@ -275,6 +378,7 @@ class TestElement {
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
   readonly listeners = new Map<string, Array<(event: { preventDefault(): void }) => void>>();
+  readonly style: Record<string, string> = {};
   parentElement: TestElement | null = null;
   className = "";
   id = "";
@@ -397,3 +501,34 @@ const createImportedSourceAsset = (): SourceAssetDto => ({
   ],
   diagnostics: ["split-png-fallback-v1"]
 });
+
+const createUnsupportedPsdDraft = () => ({
+  ...createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" }),
+  manifestPath: "assets/sources/character/source.psd",
+  layers: [
+    {
+      sourceLayerId: "layer_unsupported",
+      originalName: "Unsupported Text",
+      normalizedName: "unsupported_text",
+      groupPath: ["Root"],
+      bounds: { x: 0, y: 0, width: 64, height: 64 },
+      visibleInSource: true,
+      opacityInSource: 1,
+      role: "unsupported",
+      unsupportedFeatures: ["psd.textLayer"],
+      texturePreviewReference: "",
+      textureId: "",
+      targetPartId: ""
+    }
+  ],
+  rights: {
+    rightsStatus: "needs_review",
+    creator: "Clean Artist",
+    license: "private-review",
+    redistributionAllowed: false,
+    aiUsed: false,
+    sourceUrl: "",
+    notes: ""
+  },
+  diagnostics: []
+} as const);

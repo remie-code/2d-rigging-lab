@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "psd-import-contract-evidence-summary-v1",
+  "fixtureId": "psd-unsupported-layer",
+  "operations": [
+    {
+      "operationType": "importPsdSourceAsset",
+      "operationId": "op_import_psd_unsupported_layer",
+      "resultStatus": "committed",
+      "targetIds": [
+        "src_psd_unsupported_layer",
+        "group_reference",
+        "layer_smart_reference"
+      ],
+      "diagnosticCheckIds": [
+        "operation.importPsdSourceAsset.unsupportedFeature",
+        "operation.importPsdSourceAsset.unsupportedFeature"
+      ],
+      "modelDiffPaths": [
+        "/assets/sourceManifest/sourceAssets",
+        "/assets/provenance/records",
+        "/assets/rights/records",
+        "/assets/sourceManifest/sourceAssets/src_psd_unsupported_layer",
+        "/assets/provenance/records",
+        "/assets/rights/records"
+      ]
+    }
+  ],
+  "sourceManifest": {
+    "sourceAssetId": "src_psd_unsupported_layer",
+    "kind": "psd-source-v1",
+    "filePath": "assets/sources/psd-unsupported-layer/source-reference.psd",
+    "contentHash": "metadata:unsupported-layer-synthetic-adapter-result",
+    "importProfile": "layered-character-psd-profile-v1",
+    "layerMappings": [
+      {
+        "sourceLayerId": "layer_smart_reference",
+        "originalName": "Smart reference",
+        "normalizedName": "smart_reference",
+        "groupPath": [
+          "Reference"
+        ],
+        "bounds": {
+          "x": 256,
+          "y": 192,
+          "width": 640,
+          "height": 512
+        },
+        "role": "unsupported",
+        "mappedDrawableIds": [],
+        "unsupportedFeatures": [
+          "psd.smartObject",
+          "psd.layerEffects"
+        ]
+      }
+    ],
+    "diagnosticEvidence": {
+      "canvas": "psd.canvas:2048x3072",
+      "unsupportedFeatures": [
+        "psd.smartObject",
+        "psd.layerEffects"
+      ],
+      "sourceAsset": "psd.sourceAsset:src_psd_unsupported_layer"
+    }
+  },
+  "texturePreviewMetadata": {
+    "textures": [],
+    "previewAssets": []
+  },
+  "rightsAndProvenance": {
+    "rights": [
+      {
+        "assetId": "src_psd_unsupported_layer",
+        "rightsStatus": "cleared",
+        "license": "internal-test-fixture",
+        "redistributionAllowed": false
+      }
+    ],
+    "provenance": [
+      {
+        "provenanceId": "prov_import_psd_unsupported_layer",
+        "assetId": "src_psd_unsupported_layer",
+        "assetKind": "source",
+        "filePath": "assets/sources/psd-unsupported-layer/source-reference.psd",
+        "contentHash": "metadata:unsupported-layer-synthetic-adapter-result",
+        "creator": "contract-fixture",
+        "license": "internal-test-fixture",
+        "redistributionAllowed": false,
+        "aiUsed": false,
+        "transformHistory": [
+          "importPsdSourceAsset:adapter-result-metadata",
+          "psdAdapter:synthetic-unsupported-layer-profile-fixture",
+          "psdAdapterSchema:psd-adapter-result-v1"
+        ],
+        "relatedOperationIds": [
+          "op_import_psd_unsupported_layer"
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "reportId": "val_unsupported_layer_fixture_strict",
+    "status": "needs_review",
+    "highestSeverity": "warning",
+    "checkIds": [
+      "asset.psd.unsupportedFeature",
+      "asset.psd.unsupportedFeature"
+    ]
+  },
+  "runtimeLeakage": {
+    "drawableCount": 0,
+    "containsSourceAssetIds": false,
+    "containsPsdProfile": false,
+    "containsUnsupportedFeatureIds": false
+  }
+}

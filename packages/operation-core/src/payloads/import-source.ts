@@ -20,6 +20,110 @@ export const ImportRightsSummarySchema = z.object({
 });
 export type ImportRightsSummaryDto = z.infer<typeof ImportRightsSummarySchema>;
 
+export const PsdAdapterSeveritySchema = z.enum(["info", "warning", "error"]);
+export type PsdAdapterSeverityDto = z.infer<typeof PsdAdapterSeveritySchema>;
+
+export const PsdAdapterSourceRefSchema = z.object({
+  kind: z.enum(["document", "group", "layer", "mask", "channel", "imageResource", "adapter"]),
+  id: z.string().min(1).optional(),
+  path: z.string().min(1).optional()
+});
+export type PsdAdapterSourceRefDto = z.infer<typeof PsdAdapterSourceRefSchema>;
+
+export const PsdAdapterDiagnosticSchema = z.object({
+  checkId: z.string().min(1),
+  severity: PsdAdapterSeveritySchema.default("warning"),
+  message: z.string().min(1),
+  source: PsdAdapterSourceRefSchema.optional(),
+  evidence: z.array(z.string().min(1)).default([])
+});
+export type PsdAdapterDiagnosticDto = z.infer<typeof PsdAdapterDiagnosticSchema>;
+
+export const PsdAdapterUnsupportedFeatureSchema = z.object({
+  featureId: z.string().min(1),
+  scope: z.enum([
+    "document",
+    "group",
+    "layer",
+    "mask",
+    "channel",
+    "imageResource",
+    "compression",
+    "blendMode",
+    "unknown"
+  ]),
+  severity: PsdAdapterSeveritySchema.default("warning"),
+  message: z.string().min(1),
+  source: PsdAdapterSourceRefSchema.optional(),
+  rasterizeCandidate: z.boolean().default(false),
+  manualConfirmationRequired: z.boolean().default(false)
+});
+export type PsdAdapterUnsupportedFeatureDto = z.infer<
+  typeof PsdAdapterUnsupportedFeatureSchema
+>;
+
+export const PsdAdapterCanvasSchema = z.object({
+  width: z.number().finite().positive(),
+  height: z.number().finite().positive(),
+  bounds: RectSchema.optional()
+});
+export type PsdAdapterCanvasDto = z.infer<typeof PsdAdapterCanvasSchema>;
+
+export const PsdAdapterSourceGroupSchema = z.object({
+  sourceGroupId: z.string().min(1),
+  originalName: z.string().min(1),
+  normalizedName: z.string().min(1),
+  parentGroupId: z.string().min(1).optional(),
+  groupPath: z.array(z.string().min(1)).default([]),
+  sourceOrder: z.number().int().nonnegative(),
+  visibleInSource: z.boolean().default(true),
+  opacityInSource: z.number().min(0).max(1).default(1),
+  bounds: RectSchema.optional(),
+  targetPartId: PartIdSchema.optional(),
+  unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([])
+});
+export type PsdAdapterSourceGroupDto = z.infer<typeof PsdAdapterSourceGroupSchema>;
+
+export const PsdAdapterSourceLayerRoleSchema = z.enum([
+  "editableLayer",
+  "guideImage",
+  "referenceOnly",
+  "unsupported"
+]);
+export type PsdAdapterSourceLayerRoleDto = z.infer<
+  typeof PsdAdapterSourceLayerRoleSchema
+>;
+
+export const PsdAdapterSourceLayerSchema = z.object({
+  sourceLayerId: z.string().min(1),
+  originalName: z.string().min(1),
+  normalizedName: z.string().min(1),
+  parentGroupId: z.string().min(1).optional(),
+  groupPath: z.array(z.string().min(1)).default([]),
+  sourceOrder: z.number().int().nonnegative(),
+  bounds: RectSchema,
+  visibleInSource: z.boolean().default(true),
+  opacityInSource: z.number().min(0).max(1).default(1),
+  role: PsdAdapterSourceLayerRoleSchema.default("editableLayer"),
+  unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
+  texturePreviewReference: z.string().min(1).optional(),
+  textureId: TextureIdSchema.optional(),
+  targetPartId: PartIdSchema.optional()
+});
+export type PsdAdapterSourceLayerDto = z.infer<typeof PsdAdapterSourceLayerSchema>;
+
+export const PsdAdapterResultSchema = z.object({
+  schemaVersion: z.literal("psd-adapter-result-v1"),
+  sourceProfile: z.literal("layered-character-psd-profile-v1"),
+  adapterName: z.string().min(1),
+  canvas: PsdAdapterCanvasSchema,
+  sourceGroups: z.array(PsdAdapterSourceGroupSchema).default([]),
+  sourceLayers: z.array(PsdAdapterSourceLayerSchema).default([]),
+  unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
+  diagnostics: z.array(PsdAdapterDiagnosticSchema).default([])
+});
+export type PsdAdapterResultDto = z.infer<typeof PsdAdapterResultSchema>;
+
 export const ImportPsdSourceAssetPayloadSchema = z.object({
   sourceAssetId: SourceAssetIdSchema.optional(),
   fileRef: ImportSourceFileRefSchema,
@@ -27,6 +131,7 @@ export const ImportPsdSourceAssetPayloadSchema = z.object({
   requestedLayerRoles: z
     .record(z.string(), z.enum(["editableLayer", "guideImage", "referenceOnly"]))
     .default({}),
+  adapterResult: PsdAdapterResultSchema.optional(),
   rights: ImportRightsSummarySchema
 });
 export type ImportPsdSourceAssetPayloadDto = z.infer<typeof ImportPsdSourceAssetPayloadSchema>;

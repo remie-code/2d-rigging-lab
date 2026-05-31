@@ -7,7 +7,109 @@ import {
   OperationResultSchema
 } from "./index.js";
 
+const psdAdapterResultPayload = {
+  sourceAssetId: "src_psd_character",
+  fileRef: {
+    packageRelativePath: "assets/sources/character/source.psd",
+    contentHash: "sha256:psd-character"
+  },
+  importProfile: "layered-character-psd-profile-v1",
+  requestedLayerRoles: {
+    layer_face: "editableLayer"
+  },
+  adapterResult: {
+    schemaVersion: "psd-adapter-result-v1",
+    sourceProfile: "layered-character-psd-profile-v1",
+    adapterName: "fixture-psd-adapter",
+    canvas: {
+      width: 2048,
+      height: 3072,
+      bounds: {
+        x: 0,
+        y: 0,
+        width: 2048,
+        height: 3072
+      }
+    },
+    sourceGroups: [
+      {
+        sourceGroupId: "group_head",
+        originalName: "Head",
+        normalizedName: "head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 0,
+        targetPartId: "part_head"
+      }
+    ],
+    sourceLayers: [
+      {
+        sourceLayerId: "layer_face",
+        originalName: "Face",
+        normalizedName: "face",
+        parentGroupId: "group_head",
+        groupPath: ["Root", "Head"],
+        sourceOrder: 1,
+        bounds: {
+          x: 320,
+          y: 240,
+          width: 512,
+          height: 512
+        },
+        visibleInSource: true,
+        opacityInSource: 0.8,
+        role: "editableLayer",
+        unsupportedFeatures: [
+          {
+            featureId: "psd.textLayer",
+            scope: "layer",
+            severity: "warning",
+            message: "Text layer requires adapter-side rasterization before materialization.",
+            source: {
+              kind: "layer",
+              id: "layer_face"
+            },
+            rasterizeCandidate: true,
+            manualConfirmationRequired: true
+          }
+        ],
+        texturePreviewReference: "assets/textures/face.preview.png",
+        textureId: "tex_face",
+        targetPartId: "part_head"
+      }
+    ],
+    unsupportedFeatures: [
+      {
+        featureId: "psd.adjustmentLayer",
+        scope: "document",
+        severity: "warning",
+        message: "Adjustment layers are preserved as diagnostics in the adapter result."
+      }
+    ],
+    diagnostics: [
+      {
+        checkId: "adapter.psd.unsupportedFeature",
+        severity: "warning",
+        message: "Adapter detected PSD features that operation-core must not render.",
+        source: {
+          kind: "adapter",
+          path: "/unsupportedFeatures"
+        }
+      }
+    ]
+  },
+  rights: {
+    creator: "fixture artist",
+    license: "internal-test",
+    redistributionAllowed: false,
+    aiUsed: false
+  }
+} as const;
+
 const operationPayloads = [
+  {
+    operationType: "importPsdSourceAsset",
+    payload: psdAdapterResultPayload
+  },
   {
     operationType: "importSplitPngSourceAsset",
     payload: {
@@ -143,12 +245,49 @@ describe("operation-core DTO schemas", () => {
     const parsed = operationPayloads.map((payload) => OperationPayloadSchema.parse(payload));
 
     expect(parsed.map((payload) => payload.operationType)).toEqual([
+      "importPsdSourceAsset",
       "importSplitPngSourceAsset",
       "createParameter",
       "createDynamicsGroup",
       "moveMeshVertex",
       "createRotation2dRigControl"
     ]);
+  });
+
+  it("parses PSD adapter results through operation payload and request schemas", () => {
+    const payload = OperationPayloadSchema.parse({
+      operationType: "importPsdSourceAsset",
+      payload: psdAdapterResultPayload
+    });
+    const request = OperationRequestSchema.parse({
+      schemaVersion: "operation-request-v1",
+      operationId: "op_import_psd_character",
+      actor: "test",
+      surface: "testFixture",
+      dryRun: true,
+      basePackageRevision: 0,
+      operationType: "importPsdSourceAsset",
+      payload: psdAdapterResultPayload
+    });
+
+    if (payload.operationType !== "importPsdSourceAsset") {
+      throw new Error("Expected PSD operation payload.");
+    }
+
+    if (request.operationType !== "importPsdSourceAsset") {
+      throw new Error("Expected PSD operation request.");
+    }
+
+    expect(payload.payload.adapterResult?.sourceLayers[0]?.unsupportedFeatures[0]).toMatchObject({
+      featureId: "psd.textLayer",
+      scope: "layer",
+      rasterizeCandidate: true,
+      manualConfirmationRequired: true
+    });
+    expect(request.payload.adapterResult?.sourceGroups[0]).toMatchObject({
+      sourceGroupId: "group_head",
+      targetPartId: "part_head"
+    });
   });
 
   it("preserves dryRun=true on operation requests", () => {

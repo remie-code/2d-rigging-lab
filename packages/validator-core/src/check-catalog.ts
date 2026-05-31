@@ -114,6 +114,14 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Texture source layer metadata does not match source manifest or drawable mapping."
   },
   {
+    checkId: "asset.psd.unsupportedFeature",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "PSD source profile contains an unsupported feature retained as source import diagnostics."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",
@@ -160,6 +168,14 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
     description: "Drawable source provenance record does not belong to the drawable source asset."
+  },
+  {
+    checkId: "rights.psdLayerProvenanceMissing",
+    phase: "rights",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "PSD source layer mapped to a drawable cannot be traced to a source provenance record."
   },
   {
     checkId: "rights.statusNeedsReview",

@@ -6,6 +6,7 @@ import { validateSourceAssetRightsAndProvenance } from "./asset-rights.js";
 import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
 import { validatePackageSchema } from "./package-schema.js";
+import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
 import { validateTextureAssetReferences } from "./texture-assets.js";
 
@@ -25,6 +26,7 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : [
+      ...validatePsdSourceProfiles(packageResult.packageDocument),
       ...validateSourceAssetRightsAndProvenance(packageResult.packageDocument),
       ...validateDrawableProvenanceReferences(packageResult.packageDocument),
       ...validateDrawableReferences(packageResult.packageDocument),

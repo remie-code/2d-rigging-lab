@@ -12,6 +12,7 @@ export * from "./validators/asset-rights.js";
 export * from "./validators/drawable-provenance.js";
 export * from "./validators/drawable-references.js";
 export * from "./validators/texture-assets.js";
+export * from "./validators/psd-source-profile.js";
 export * from "./validators/package-schema.js";
 export * from "./validators/runtime-load.js";
 export * from "./validators/package-runtime.js";

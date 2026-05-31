@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_create_psd_face_base",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 1,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-004"
+    ],
+    "relatedScenarios": [
+      "SC-IN-002"
+    ]
+  },
+  "operationType": "createDrawable",
+  "payload": {
+    "sourceAssetId": "src_psd_import_happy_path",
+    "sourceLayerId": "layer_face_base",
+    "textureId": "tex_psd_face_base",
+    "partId": "part_head",
+    "displayName": "PSD Face Base",
+    "initialBounds": {
+      "x": 640,
+      "y": 512,
+      "width": 768,
+      "height": 896
+    }
+  }
+}

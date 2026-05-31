@@ -25,7 +25,7 @@ export const createSourceIntakePanel = (options: SourceIntakePanelOptions): HTML
 
   const meta = document.createElement("p");
   meta.className = "editor-panel__meta";
-  meta.textContent = `${options.viewModel.importProfileLabel} / ${options.viewModel.layerCountLabel}`;
+  meta.textContent = `${options.viewModel.sourceModeLabel} / ${options.viewModel.layerCountLabel}`;
 
   panel.append(
     heading,
@@ -50,8 +50,12 @@ const createSourceIntakeSummary = (
   summary.dataset.testid = editorTestIds.sourceIntakeSummary;
 
   appendFact(summary, "Status", viewModel.statusLabel);
-  appendFact(summary, "Manifest", viewModel.manifestPathLabel);
+  appendFact(summary, "Mode", viewModel.sourceModeLabel);
+  appendFact(summary, "Reference", viewModel.sourceReferenceLabel);
   appendFact(summary, "Source asset", viewModel.sourceAssetLabel);
+  appendFact(summary, "Profile", viewModel.importProfileLabel);
+  appendFact(summary, "Adapter", viewModel.psdAdapterNameLabel);
+  appendFact(summary, "Canvas", viewModel.psdCanvasLabel);
   appendFact(summary, "Placement", viewModel.placementPolicyLabel);
   appendFact(summary, "Rights", viewModel.rightsSummaryLabel);
   appendFact(summary, "Provenance", viewModel.provenanceSummaryLabel);

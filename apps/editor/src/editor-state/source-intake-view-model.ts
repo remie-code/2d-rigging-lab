@@ -23,8 +23,12 @@ export interface SourceIntakeLayerDraftViewModel {
 }
 
 export interface SourceIntakeDraftViewModel {
+  readonly sourceModeLabel: string;
   readonly importProfileLabel: string;
   readonly manifestPathLabel: string;
+  readonly sourceReferenceLabel: string;
+  readonly psdAdapterNameLabel: string;
+  readonly psdCanvasLabel: string;
   readonly sourceAssetLabel: string;
   readonly contentHashLabel: string;
   readonly defaultPartLabel: string;
@@ -71,8 +75,23 @@ export const projectSourceIntakeDraftViewModel = (
     .map(projectImportedSourceAssetViewModel);
 
   return {
+    sourceModeLabel: formatSourceIntakeMode(draft.intakeMode),
     importProfileLabel: draft.importProfile,
     manifestPathLabel: draft.manifestPath.length > 0 ? draft.manifestPath : "No manifest path",
+    sourceReferenceLabel:
+      draft.manifestPath.length > 0
+        ? draft.manifestPath
+        : draft.intakeMode === "psdAdapterProfile"
+          ? "No PSD source reference"
+          : "No split PNG manifest path",
+    psdAdapterNameLabel:
+      draft.psdProfile.adapterName.length > 0
+        ? draft.psdProfile.adapterName
+        : "No PSD adapter/profile name",
+    psdCanvasLabel:
+      draft.intakeMode === "psdAdapterProfile"
+        ? `${formatPreviewNumber(draft.psdProfile.canvasWidth)} x ${formatPreviewNumber(draft.psdProfile.canvasHeight)}`
+        : "Not used for split PNG",
     sourceAssetLabel: draft.sourceAssetId.length > 0 ? draft.sourceAssetId : "No source asset ID",
     contentHashLabel: draft.contentHash.length > 0 ? draft.contentHash : "No content hash",
     defaultPartLabel: draft.defaultPartId.length > 0 ? draft.defaultPartId : "No default part",
@@ -168,6 +187,15 @@ const formatPlacementPolicy = (policy: SourceIntakeDraftState["placementPolicy"]
       return "Use manifest metadata";
     case "origin-with-warning":
       return "Place at origin with warning";
+  }
+};
+
+const formatSourceIntakeMode = (mode: SourceIntakeDraftState["intakeMode"]): string => {
+  switch (mode) {
+    case "splitPng":
+      return "Split PNG manifest metadata";
+    case "psdAdapterProfile":
+      return "PSD adapter/profile metadata (manual)";
   }
 };
 

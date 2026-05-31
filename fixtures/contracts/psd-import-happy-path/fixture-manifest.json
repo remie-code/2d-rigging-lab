@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "psd-import-happy-path",
+  "title": "PSD adapter result happy path",
+  "description": "Synthetic parser-free PSD adapter result metadata based on the rights-cleared sample PSD header shape. This fixture does not include or derive PSD bytes.",
+  "baselinePackage": "baseline-package.json",
+  "requestFiles": [
+    "request/import-psd-source-commit.request.json",
+    "request/create-drawable-commit.request.json",
+    "request/generate-mesh-commit.request.json"
+  ],
+  "expectedFiles": [
+    "expected/psd-import-happy-path-summary.json",
+    "expected/validation-report.json"
+  ],
+  "coversAC": [
+    "AC-MVP-002",
+    "AC-MVP-003",
+    "AC-MVP-004",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-IN-002",
+    "SC-RIGHTS-002"
+  ],
+  "truthfulness": {
+    "adapterResult": "synthetic metadata only",
+    "sampleShapeBasis": "test_data/sample_model.psd safe header facts: 2048x3072 RGB, 8 bits/channel, 4 channels",
+    "psdBytesIncluded": false,
+    "rasterExtractionClaimed": false,
+    "texturePreviewBytesIncluded": false
+  },
+  "rightsAndProvenance": {
+    "rightsStatus": "cleared",
+    "license": "internal-test-fixture",
+    "redistributionAllowed": false,
+    "aiUsed": false
+  },
+  "nonGoals": [
+    "actual-psd-parsing",
+    "psd-byte-fixture",
+    "sample_model_psd-copy",
+    "texture-bitmap-rendering",
+    "photoshop-compatible-compositing"
+  ]
+}

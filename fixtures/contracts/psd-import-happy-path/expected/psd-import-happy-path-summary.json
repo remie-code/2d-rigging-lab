@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "psd-import-contract-evidence-summary-v1",
+  "fixtureId": "psd-import-happy-path",
+  "operations": [
+    {
+      "operationType": "importPsdSourceAsset",
+      "operationId": "op_import_psd_happy_path",
+      "resultStatus": "committed",
+      "targetIds": [
+        "src_psd_import_happy_path",
+        "group_root",
+        "group_head",
+        "layer_face_base",
+        "part_root",
+        "part_head",
+        "tex_psd_face_base"
+      ],
+      "diagnosticCheckIds": [
+        "operation.importPsdSourceAsset.adapterDiagnostic"
+      ],
+      "modelDiffPaths": [
+        "/assets/sourceManifest/sourceAssets",
+        "/assets/provenance/records",
+        "/assets/rights/records",
+        "/assets/textureAtlas/textures",
+        "/assets/textureAtlas/previewAssets",
+        "/assets/sourceManifest/sourceAssets/src_psd_import_happy_path",
+        "/assets/provenance/records",
+        "/assets/rights/records",
+        "/assets/textureAtlas/textures/tex_psd_face_base",
+        "/assets/textureAtlas/previewAssets/preview_src_psd_import_happy_path_layer_face_base"
+      ]
+    },
+    {
+      "operationType": "createDrawable",
+      "operationId": "op_create_psd_face_base",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_psd_face_base",
+        "mesh_psd_face_base",
+        "part_head",
+        "src_psd_import_happy_path"
+      ],
+      "diagnosticCheckIds": [],
+      "modelDiffPaths": [
+        "/model/drawables/draw_psd_face_base",
+        "/model/meshes/mesh_psd_face_base",
+        "/model/graph/parts/drawableIds",
+        "/assets/sourceManifest/sourceAssets"
+      ]
+    },
+    {
+      "operationType": "generateMesh",
+      "operationId": "op_generate_mesh_psd_face_base",
+      "resultStatus": "committed",
+      "targetIds": [
+        "draw_psd_face_base",
+        "mesh_psd_face_base"
+      ],
+      "diagnosticCheckIds": [],
+      "modelDiffPaths": [
+        "/model/meshes/mesh_psd_face_base",
+        "/model/meshes/mesh_psd_face_base/vertices",
+        "/model/meshes/mesh_psd_face_base/triangles",
+        "/meshId"
+      ]
+    }
+  ],
+  "sourceManifest": {
+    "sourceAssetId": "src_psd_import_happy_path",
+    "kind": "psd-source-v1",
+    "filePath": "assets/sources/psd-import-happy-path/source-reference.psd",
+    "contentHash": "metadata:sample-model-header-shape-synthetic-adapter-result",
+    "importProfile": "layered-character-psd-profile-v1",
+    "layerMappings": [
+      {
+        "sourceLayerId": "layer_face_base",
+        "originalName": "Face base",
+        "normalizedName": "face_base",
+        "groupPath": [
+          "Root",
+          "Head"
+        ],
+        "bounds": {
+          "x": 640,
+          "y": 512,
+          "width": 768,
+          "height": 896
+        },
+        "role": "editableLayer",
+        "mappedDrawableIds": [
+          "draw_psd_face_base"
+        ],
+        "unsupportedFeatures": []
+      }
+    ],
+    "diagnosticEvidence": {
+      "canvas": "psd.canvas:2048x3072",
+      "groupTargetParts": [
+        "psd.groupTargetPart:group_root:part_root",
+        "psd.groupTargetPart:group_head:part_head"
+      ],
+      "layerTargetParts": [
+        "psd.layerTargetPart:layer_face_base:part_head"
+      ],
+      "layerTextures": [
+        "psd.layerTexture:layer_face_base:tex_psd_face_base"
+      ],
+      "layerTexturePreviews": [
+        "psd.layerTexturePreview:layer_face_base:assets/textures/psd-import-happy-path/face-base.preview.png"
+      ],
+      "sourceAsset": "psd.sourceAsset:src_psd_import_happy_path"
+    }
+  },
+  "texturePreviewMetadata": {
+    "textures": [
+      {
+        "textureId": "tex_psd_face_base",
+        "filePath": "assets/textures/psd-import-happy-path/face-base.preview.png",
+        "sourceAssetId": "src_psd_import_happy_path",
+        "sourceLayerId": "layer_face_base",
+        "provenanceId": "prov_import_psd_happy_path"
+      }
+    ],
+    "previewAssets": [
+      {
+        "previewAssetId": "preview_src_psd_import_happy_path_layer_face_base",
+        "textureId": "tex_psd_face_base",
+        "referenceKind": "package-local-file-v1",
+        "filePath": "assets/textures/psd-import-happy-path/face-base.preview.png",
+        "sourceAssetId": "src_psd_import_happy_path",
+        "sourceLayerId": "layer_face_base",
+        "provenanceId": "prov_import_psd_happy_path",
+        "rightsAssetId": "src_psd_import_happy_path"
+      }
+    ]
+  },
+  "rightsAndProvenance": {
+    "rights": [
+      {
+        "assetId": "src_psd_import_happy_path",
+        "rightsStatus": "cleared",
+        "license": "internal-test-fixture",
+        "redistributionAllowed": false
+      }
+    ],
+    "provenance": [
+      {
+        "provenanceId": "prov_import_psd_happy_path",
+        "assetId": "src_psd_import_happy_path",
+        "assetKind": "source",
+        "filePath": "assets/sources/psd-import-happy-path/source-reference.psd",
+        "contentHash": "metadata:sample-model-header-shape-synthetic-adapter-result",
+        "creator": "contract-fixture",
+        "license": "internal-test-fixture",
+        "redistributionAllowed": false,
+        "aiUsed": false,
+        "transformHistory": [
+          "importPsdSourceAsset:adapter-result-metadata",
+          "psdAdapter:synthetic-sample-model-profile-fixture",
+          "psdAdapterSchema:psd-adapter-result-v1"
+        ],
+        "relatedOperationIds": [
+          "op_import_psd_happy_path"
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "reportId": "val_psd_import_happy_path_strict",
+    "status": "pass",
+    "highestSeverity": "info",
+    "checkIds": []
+  }
+}

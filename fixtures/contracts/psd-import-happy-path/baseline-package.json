@@ -1,0 +1,115 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_psd_import_happy_path",
+    "packageDisplayName": "PSD Import Happy Path",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-05-31T04:00:00.000Z",
+    "updatedAt": "2026-05-31T04:00:00.000Z",
+    "schemaVersions": {
+      "manifest": "open-model-package-manifest-v1",
+      "sourceManifest": "source-manifest-v1",
+      "textureAtlas": "texture-atlas-v1"
+    },
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 0
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 2048,
+        "height": 3072
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [
+            "part_head"
+          ],
+          "drawableIds": []
+        },
+        {
+          "partId": "part_head",
+          "displayName": "Head",
+          "parentPartId": "part_root",
+          "childPartIds": [],
+          "drawableIds": []
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "part_root",
+        "part_head"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": []
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": []
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": []
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": []
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": []
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": []
+    }
+  }
+}

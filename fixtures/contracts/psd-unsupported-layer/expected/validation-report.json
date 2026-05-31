@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "validation-report-v1",
+  "reportId": "val_unsupported_layer_fixture_strict",
+  "createdAt": "2026-05-31T05:30:00.000Z",
+  "packageId": "pkg_unsupported_layer_fixture",
+  "packageRevision": 1,
+  "validatorVersion": "validator-core-wave2-foundation",
+  "profile": "strict",
+  "relatedScenarios": [],
+  "summary": {
+    "status": "needs_review",
+    "highestSeverity": "warning",
+    "counts": {
+      "info": 0,
+      "warning": 2,
+      "error": 0,
+      "blocking": 0
+    }
+  },
+  "checks": [
+    {
+      "checkId": "asset.psd.unsupportedFeature",
+      "status": "needs_review",
+      "severity": "warning",
+      "phase": "source_import",
+      "target": {
+        "kind": "sourceAsset",
+        "id": "src_psd_unsupported_layer",
+        "path": "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/0"
+      },
+      "message": "PSD source layer layer_smart_reference records unsupported feature psd.smartObject.",
+      "evidence": [
+        "sourceAssetId=src_psd_unsupported_layer",
+        "sourceKind=psd-source-v1",
+        "importProfile=layered-character-psd-profile-v1",
+        "sourceLayerId=layer_smart_reference",
+        "sourceLayerRole=unsupported",
+        "unsupportedFeature=psd.smartObject",
+        "unsupportedFeatureIndex=0",
+        "flatteningStrategy=sourceLayer.unsupportedFeatures[]"
+      ],
+      "relatedAC": [
+        "AC-MVP-003",
+        "AC-MVP-013"
+      ],
+      "relatedScenarios": [
+        "SC-IN-003"
+      ],
+      "repairCandidateIds": [],
+      "targetPath": "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/0",
+      "impact": "The PSD source profile is structurally readable, but this layer feature needs manual review or a future adapter/rasterization path before final acceptance.",
+      "snapshotIds": [],
+      "operationIds": []
+    },
+    {
+      "checkId": "asset.psd.unsupportedFeature",
+      "status": "needs_review",
+      "severity": "warning",
+      "phase": "source_import",
+      "target": {
+        "kind": "sourceAsset",
+        "id": "src_psd_unsupported_layer",
+        "path": "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/1"
+      },
+      "message": "PSD source layer layer_smart_reference records unsupported feature psd.layerEffects.",
+      "evidence": [
+        "sourceAssetId=src_psd_unsupported_layer",
+        "sourceKind=psd-source-v1",
+        "importProfile=layered-character-psd-profile-v1",
+        "sourceLayerId=layer_smart_reference",
+        "sourceLayerRole=unsupported",
+        "unsupportedFeature=psd.layerEffects",
+        "unsupportedFeatureIndex=1",
+        "flatteningStrategy=sourceLayer.unsupportedFeatures[]"
+      ],
+      "relatedAC": [
+        "AC-MVP-003",
+        "AC-MVP-013"
+      ],
+      "relatedScenarios": [
+        "SC-IN-003"
+      ],
+      "repairCandidateIds": [],
+      "targetPath": "/assets/sourceManifest/sourceAssets/0/layers/0/unsupportedFeatures/1",
+      "impact": "The PSD source profile is structurally readable, but this layer feature needs manual review or a future adapter/rasterization path before final acceptance.",
+      "snapshotIds": [],
+      "operationIds": []
+    }
+  ],
+  "repairCandidates": [],
+  "evidence": {
+    "operationLogPresent": false,
+    "runtimeSnapshotIds": [],
+    "supplementalGuiEvidenceRefs": []
+  }
+}

@@ -129,7 +129,7 @@ describe("editor app shell preview panel", () => {
 
     expect(findByTestId(shell, editorTestIds.sourceIntakePanel)?.textContent).toContain("Source Intake");
     expect(findByTestId(shell, editorTestIds.sourceIntakeForm)?.getAttribute("aria-label")).toBe(
-      "Confirm split PNG source intake draft"
+      "Confirm source intake adapter profile draft"
     );
     expect(findByTestId(shell, editorTestIds.drawableAuthoringPanel)?.textContent).toContain("Drawable Authoring");
     expect(findByTestId(shell, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");

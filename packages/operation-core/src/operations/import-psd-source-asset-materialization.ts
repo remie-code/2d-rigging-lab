@@ -1,0 +1,147 @@
+import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import { SourceAssetIdSchema } from "@private-2d-rigging-lab/contracts";
+import type { SourceAssetId } from "@private-2d-rigging-lab/contracts";
+
+import type {
+  ImportPsdSourceAssetPayloadDto,
+  PsdAdapterResultDto,
+  PsdAdapterSourceLayerDto
+} from "../payloads/import-source.js";
+import { createPsdSourceAssetDiagnostics } from "./import-psd-source-asset-diagnostics.js";
+import { psdLayerRequestsTextureMaterialization } from "./import-psd-source-asset-texture.js";
+
+export type PsdSourceAsset = AuthoringSession["graph"]["sourceAssets"][number];
+type PsdSourceLayer = PsdSourceAsset["layers"][number];
+
+export const createPsdSourceAssetFromPayload = (input: {
+  readonly payload: ImportPsdSourceAssetPayloadDto;
+  readonly sourceAssetId: SourceAssetId;
+  readonly packageRelativePath: string;
+  readonly contentHash: string;
+}): PsdSourceAsset => {
+  const adapterResult = input.payload.adapterResult;
+  if (adapterResult === undefined) {
+    throw new Error("Expected importPsdSourceAsset preconditions to reject missing adapter result.");
+  }
+
+  return {
+    sourceAssetId: input.sourceAssetId,
+    kind: "psd-source-v1",
+    filePath: input.packageRelativePath,
+    contentHash: input.contentHash,
+    importProfile: "layered-character-psd-profile-v1",
+    layers: adapterResult.sourceLayers.map((layer) =>
+      createSourceLayerFromAdapterLayer({
+        layer,
+        payload: input.payload,
+        sourceAssetId: input.sourceAssetId
+      })
+    ),
+    diagnostics: createPsdSourceAssetDiagnostics(input.payload, input.sourceAssetId)
+  };
+};
+
+export const collectPsdImportTargetIds = (
+  payload: ImportPsdSourceAssetPayloadDto,
+  sourceAssetId: SourceAssetId
+): readonly string[] => {
+  const adapterResult = payload.adapterResult;
+  if (adapterResult === undefined) {
+    return [sourceAssetId];
+  }
+
+  return uniqueStrings([
+    sourceAssetId,
+    ...adapterResult.sourceGroups.map((group) => group.sourceGroupId),
+    ...adapterResult.sourceLayers.map((layer) => layer.sourceLayerId),
+    ...adapterResult.sourceGroups.flatMap((group) =>
+      group.targetPartId === undefined ? [] : [group.targetPartId]
+    ),
+    ...adapterResult.sourceLayers.flatMap((layer) => {
+      const textureTargets = psdLayerRequestsTextureMaterialization(layer) && layer.textureId !== undefined
+        ? [layer.textureId]
+        : [];
+      return [
+        ...textureTargets,
+        ...(layer.targetPartId === undefined ? [] : [layer.targetPartId])
+      ];
+    })
+  ]);
+};
+
+export const collectPsdCheckedPartIds = (adapterResult: PsdAdapterResultDto): readonly string[] =>
+  uniqueStrings([
+    ...adapterResult.sourceGroups.flatMap((group) =>
+      group.targetPartId === undefined ? [] : [group.targetPartId]
+    ),
+    ...adapterResult.sourceLayers.flatMap((layer) =>
+      layer.targetPartId === undefined ? [] : [layer.targetPartId]
+    )
+  ]);
+
+export const resolvePsdSourceAssetId = (
+  payload: ImportPsdSourceAssetPayloadDto
+): SourceAssetId =>
+  payload.sourceAssetId ?? createSourceAssetIdFromFilePath(payload.fileRef.packageRelativePath);
+
+export const resolvePsdContentHash = (
+  payload: ImportPsdSourceAssetPayloadDto,
+  sourceAssetId: SourceAssetId
+): string => {
+  const contentHash = normalizePsdOptionalString(payload.fileRef.contentHash);
+  return contentHash ?? `metadata:${sourceAssetId}`;
+};
+
+export const normalizePsdPackageRelativePath = (
+  path: string | undefined
+): string | undefined => {
+  const trimmed = path?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+};
+
+const createSourceLayerFromAdapterLayer = (input: {
+  readonly layer: PsdAdapterSourceLayerDto;
+  readonly payload: ImportPsdSourceAssetPayloadDto;
+  readonly sourceAssetId: SourceAssetId;
+}): PsdSourceLayer => ({
+  sourceLayerId: input.layer.sourceLayerId,
+  sourceAssetId: input.sourceAssetId,
+  originalName: input.layer.originalName,
+  normalizedName: input.layer.normalizedName,
+  groupPath: [...input.layer.groupPath],
+  bounds: structuredClone(input.layer.bounds),
+  visibleInSource: input.layer.visibleInSource,
+  opacityInSource: input.layer.opacityInSource,
+  role: input.payload.requestedLayerRoles[input.layer.sourceLayerId] ?? input.layer.role,
+  unsupportedFeatures: input.layer.unsupportedFeatures.map((feature) => feature.featureId),
+  mappedDrawableIds: []
+});
+
+const createSourceAssetIdFromFilePath = (filePath: string): SourceAssetId =>
+  SourceAssetIdSchema.parse(`src_${sanitizeIdToken(filePath.replace(/\.[^.\\/]+$/, ""))}`);
+
+const normalizePsdOptionalString = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+};
+
+const uniqueStrings = <TValue extends string>(values: readonly TValue[]): readonly TValue[] => {
+  const seen = new Set<TValue>();
+  const unique: TValue[] = [];
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    unique.push(value);
+  }
+
+  return unique;
+};
+
+const sanitizeIdToken = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+  return normalized.length > 0 ? normalized : "unnamed";
+};

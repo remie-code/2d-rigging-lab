@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "psd-unsupported-layer",
+  "title": "PSD unsupported layer diagnostics",
+  "description": "Synthetic parser-free PSD adapter result with an unsupported source layer. The fixture records diagnostics only and does not include PSD bytes, image bytes, or embedded smart object content.",
+  "baselinePackage": "baseline-package.json",
+  "requestFiles": [
+    "request/import-psd-source-commit.request.json"
+  ],
+  "expectedFiles": [
+    "expected/psd-unsupported-layer-summary.json",
+    "expected/validation-report.json"
+  ],
+  "coversAC": [
+    "AC-MVP-003",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-IN-003"
+  ],
+  "truthfulness": {
+    "adapterResult": "synthetic metadata only",
+    "psdBytesIncluded": false,
+    "rasterExtractionClaimed": false,
+    "runtimeCorePsdFieldsExpected": false
+  },
+  "rightsAndProvenance": {
+    "rightsStatus": "cleared",
+    "license": "internal-test-fixture",
+    "redistributionAllowed": false,
+    "aiUsed": false
+  },
+  "nonGoals": [
+    "actual-psd-parsing",
+    "smart-object-expansion",
+    "layer-effect-rendering",
+    "texture-bitmap-rendering",
+    "runtime-core-psd-schema"
+  ]
+}
