@@ -6,9 +6,11 @@ import type { OperationResultDto } from "./operation-result.js";
 import type { OperationType } from "./operation-type.js";
 import { addKeyformOperationHandler } from "./operations/add-keyform.js";
 import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2d.js";
+import { bindRigControlChildOperationHandler } from "./operations/bind-rig-control-child.js";
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createDynamicsGroupOperationHandler } from "./operations/create-dynamics-group.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
+import { createRotation2dRigControlOperationHandler } from "./operations/create-rotation2d-rig-control.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
@@ -49,6 +51,8 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
   [createDynamicsGroupOperationHandler.operationType, createDynamicsGroupOperationHandler],
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],
+  [createRotation2dRigControlOperationHandler.operationType, createRotation2dRigControlOperationHandler],
+  [bindRigControlChildOperationHandler.operationType, bindRigControlChildOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
   [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]

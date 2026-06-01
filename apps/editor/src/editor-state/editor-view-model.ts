@@ -47,6 +47,7 @@ export interface EditorWorkflowViewModel {
   readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly viewerRuntime: ViewerRuntimeViewModel;
+  readonly rigControls: RigControlAuthoringViewModel;
   readonly dynamics: DynamicsAuthoringViewModel;
   readonly aiApproval: AiApprovalWorkflowViewModel;
 }
@@ -172,6 +173,53 @@ export interface DynamicsPreviewEvidenceViewModel {
   readonly validationLabel: string;
 }
 
+export interface RigControlPartOptionViewModel {
+  readonly partId: string;
+  readonly label: string;
+}
+
+export interface RigControlItemViewModel {
+  readonly rigControlId: string;
+  readonly displayName: string;
+  readonly kindLabel: string;
+  readonly enabledLabel: string;
+  readonly partLabel: string;
+  readonly parentLabel: string;
+  readonly childDrawableLabel: string;
+  readonly childRigControlLabel: string;
+  readonly transformLabel: string;
+}
+
+export interface RigControlTargetOptionViewModel {
+  readonly kind: "drawable" | "rigControl";
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface RigControlOperationDiagnosticViewModel {
+  readonly checkId: string;
+  readonly severity: string;
+  readonly message: string;
+}
+
+export interface RigControlAuthoringViewModel {
+  readonly controlCountLabel: string;
+  readonly hasRigControls: boolean;
+  readonly rigControls: readonly RigControlItemViewModel[];
+  readonly partOptions: readonly RigControlPartOptionViewModel[];
+  readonly defaultPivotX: number;
+  readonly defaultPivotY: number;
+  readonly defaultRestAngleDegrees: number;
+  readonly canCreateRotation2d: boolean;
+  readonly createDisabledMessage: string | null;
+  readonly parentOptions: readonly RigControlTargetOptionViewModel[];
+  readonly childOptions: readonly RigControlTargetOptionViewModel[];
+  readonly canBindChild: boolean;
+  readonly bindDisabledMessage: string | null;
+  readonly lastRigControlOperationLabel: string;
+  readonly lastRigControlDiagnostics: readonly RigControlOperationDiagnosticViewModel[];
+}
+
 export interface DynamicsAuthoringViewModel {
   readonly groupCountLabel: string;
   readonly hasGroups: boolean;
@@ -220,6 +268,7 @@ export const projectEditorWorkflowViewModel = (
     }),
     previewControls: projectPreviewControlsViewModel(state),
     viewerRuntime: projectViewerRuntimeViewModel(state.viewerRuntime),
+    rigControls: projectRigControlAuthoringViewModel(state),
     dynamics: projectDynamicsAuthoringViewModel(state),
     aiApproval: projectAiApprovalViewModel(state)
   };
@@ -471,6 +520,161 @@ const projectDynamicsAuthoringViewModel = (
                 : `${state.dynamicsPreview.evidence.validationReportId} / ${state.dynamicsPreview.evidence.validationStatus} / ${state.dynamicsPreview.evidence.validationHighestSeverity} / ${state.dynamicsPreview.evidence.validationCheckCount} checks`
           }
   };
+};
+
+const projectRigControlAuthoringViewModel = (
+  state: EditorSemanticState
+): RigControlAuthoringViewModel => {
+  const boundDrawableIds = new Set(state.rigControls.flatMap((rigControl) => rigControl.childDrawableIds));
+  const unparentedRigControls = state.rigControls.filter((rigControl) => rigControl.parentId === null);
+  const childDrawableOptions = state.drawables
+    .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
+    .map((drawable): RigControlTargetOptionViewModel => ({
+      kind: "drawable",
+      id: drawable.drawableId,
+      label: `${drawable.displayName} / ${drawable.drawableId}`
+    }));
+  const childRigControlOptions =
+    unparentedRigControls.length < 2
+      ? []
+      : unparentedRigControls.map((rigControl): RigControlTargetOptionViewModel => ({
+          kind: "rigControl",
+          id: rigControl.rigControlId,
+          label: `${rigControl.displayName} / ${rigControl.rigControlId}`
+        }));
+  const defaultPivot = resolveDefaultRigControlPivot(state);
+  const hasLoadedPackage = state.loadedPackage !== null;
+  const hasParts = state.parts.length > 0;
+  const hasParent = state.rigControls.length > 0;
+  const hasBindableChild =
+    childDrawableOptions.length > 0 || unparentedRigControls.length > 1;
+
+  return {
+    controlCountLabel: `${state.rigControls.length} rig control${state.rigControls.length === 1 ? "" : "s"}`,
+    hasRigControls: state.rigControls.length > 0,
+    rigControls: state.rigControls.map(projectRigControlItem),
+    partOptions: state.parts.map((part) => ({
+      partId: part.partId,
+      label: `${part.displayName} / ${part.partId}`
+    })),
+    defaultPivotX: defaultPivot.x,
+    defaultPivotY: defaultPivot.y,
+    defaultRestAngleDegrees: 15,
+    canCreateRotation2d: hasLoadedPackage && hasParts,
+    createDisabledMessage: projectRigControlCreateDisabledMessage({ hasLoadedPackage, hasParts }),
+    parentOptions: state.rigControls.map((rigControl) => ({
+      kind: "rigControl",
+      id: rigControl.rigControlId,
+      label: `${rigControl.displayName} / ${rigControl.rigControlId}`
+    })),
+    childOptions: [...childDrawableOptions, ...childRigControlOptions],
+    canBindChild: hasLoadedPackage && hasParent && hasBindableChild,
+    bindDisabledMessage: projectRigControlBindDisabledMessage({
+      hasLoadedPackage,
+      hasParent,
+      hasBindableChild
+    }),
+    lastRigControlOperationLabel: projectLastRigControlOperationLabel(state),
+    lastRigControlDiagnostics: projectLastRigControlDiagnostics(state)
+  };
+};
+
+const projectRigControlItem = (
+  rigControl: EditorSemanticState["rigControls"][number]
+): RigControlItemViewModel => ({
+  rigControlId: rigControl.rigControlId,
+  displayName: rigControl.displayName,
+  kindLabel: rigControl.kind,
+  enabledLabel: rigControl.enabled ? "Enabled" : "Disabled",
+  partLabel: rigControl.partId,
+  parentLabel: rigControl.parentId ?? "Root",
+  childDrawableLabel: rigControl.childDrawableIds.join(", ") || "None",
+  childRigControlLabel: rigControl.childRigControlIds.join(", ") || "None",
+  transformLabel:
+    rigControl.kind === "rotation2d" && rigControl.pivot !== null && rigControl.restAngleDegrees !== null
+      ? `pivot ${formatPreviewNumber(rigControl.pivot.x)}, ${formatPreviewNumber(rigControl.pivot.y)} / rest ${formatPreviewNumber(rigControl.restAngleDegrees)} deg`
+      : "Future-scope evaluator"
+});
+
+const resolveDefaultRigControlPivot = (
+  state: EditorSemanticState
+): { readonly x: number; readonly y: number } => {
+  const firstVisibleDrawable = state.drawables.find((drawable) => drawable.visible) ?? state.drawables[0];
+  if (firstVisibleDrawable !== undefined) {
+    return {
+      x: firstVisibleDrawable.bounds.x + firstVisibleDrawable.bounds.width / 2,
+      y: firstVisibleDrawable.bounds.y + firstVisibleDrawable.bounds.height / 2
+    };
+  }
+
+  return { x: 0, y: 0 };
+};
+
+const projectRigControlCreateDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasParts: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasParts) {
+    return "No part available";
+  }
+
+  return null;
+};
+
+const projectRigControlBindDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasParent: boolean;
+  readonly hasBindableChild: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasParent) {
+    return "Create a rotation2d rig control first";
+  }
+
+  if (!input.hasBindableChild) {
+    return "No unbound drawable or child rig control available";
+  }
+
+  return null;
+};
+
+const projectLastRigControlOperationLabel = (state: EditorSemanticState): string => {
+  const result = state.lastOperationResult;
+  if (
+    result === null ||
+    (result.operationType !== "createRotation2dRigControl" &&
+      result.operationType !== "bindRigControlChild")
+  ) {
+    return "No rig control operation committed";
+  }
+
+  return `${result.operationType} ${result.status}`;
+};
+
+const projectLastRigControlDiagnostics = (
+  state: EditorSemanticState
+): readonly RigControlOperationDiagnosticViewModel[] => {
+  const result = state.lastOperationResult;
+  if (
+    result === null ||
+    (result.operationType !== "createRotation2dRigControl" &&
+      result.operationType !== "bindRigControlChild")
+  ) {
+    return [];
+  }
+
+  return result.diagnostics.map((diagnostic) => ({
+    checkId: diagnostic.checkId,
+    severity: diagnostic.severity,
+    message: diagnostic.message
+  }));
 };
 
 const projectDynamicsParameterOption = (

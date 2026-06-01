@@ -1,0 +1,206 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_parent_child_rigcontrol_diagonal",
+    "packageDisplayName": "Parent Child Rig Control Diagonal",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-06-01T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 128,
+        "height": 128
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_arm"
+          ]
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "draw_arm"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_arm",
+          "displayName": "Fixture Arm",
+          "partId": "part_root",
+          "sourceAssetId": "src_generated_arm",
+          "textureId": "tex_arm",
+          "meshId": "mesh_arm",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_generated_arm"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_arm",
+          "drawableId": "draw_arm",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 8
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "v0",
+            "v1",
+            "v2"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 8
+          },
+          "generationProvenanceId": "prov_generated_arm"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_arm",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_generated_arm",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/parent-child-rig-control-arm.json",
+          "contentHash": "sha256:parent-child-rigcontrol-diagonal-generated-arm",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_generated_arm",
+          "assetId": "src_generated_arm",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/parent-child-rig-control-arm.json",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only triangle fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_generated_arm",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

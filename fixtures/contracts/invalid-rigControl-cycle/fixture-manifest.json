@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "invalid-rigControl-cycle",
+  "title": "Invalid rig control hierarchy cycle diagnostic evidence",
+  "coversAC": [
+    "AC-MVP-009",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-DEF-002"
+  ],
+  "modulesBlocked": [
+    "validator-core",
+    "runtime-core"
+  ],
+  "inputArtifacts": [
+    "package.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationDiagnostics",
+      "path": "expected/expected-diagnostics.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeBlocking",
+      "path": "expected/runtime-blocking-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

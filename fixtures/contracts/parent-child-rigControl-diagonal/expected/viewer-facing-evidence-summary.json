@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "parent-child-rigControl-viewer-facing-summary-v1",
+  "workflow": {
+    "fixtureId": "parent-child-rigControl-diagonal",
+    "operationTypes": [
+      "createRotation2dRigControl",
+      "bindRigControlChild"
+    ],
+    "rootRigControlId": "rig_body_rotation",
+    "childRigControlId": "rig_arm_rotation",
+    "affectedDrawableId": "draw_arm"
+  },
+  "viewerEvidence": {
+    "runtimeSnapshotId": "snap_parent_child_rigcontrol_diagonal_1",
+    "rigControlOrder": [
+      "rig_body_rotation",
+      "rig_arm_rotation"
+    ],
+    "worldAngleDegrees": {
+      "rig_body_rotation": 30,
+      "rig_arm_rotation": 45
+    },
+    "drawableBoundsChanged": true,
+    "drawableVertexHash": "vhash_f495d7e4_3"
+  },
+  "editorUiScope": "reference-only; no editor UI implementation is required by this fixture"
+}

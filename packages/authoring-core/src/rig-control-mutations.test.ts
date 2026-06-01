@@ -1,0 +1,239 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  DrawableIdSchema,
+  MeshIdSchema,
+  PackageIdSchema,
+  PartIdSchema,
+  ProvenanceIdSchema,
+  RigControlIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema
+} from "@private-2d-rigging-lab/contracts";
+import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format";
+import { parsePackageDocument } from "@private-2d-rigging-lab/package-format";
+import { describe, expect, it } from "vitest";
+
+import { createInitialAuthoringRevision } from "./authoring-revision.js";
+import type { AuthoringSession } from "./authoring-session.js";
+import { createAuthoringSessionFromPackageDocument } from "./from-package-document.js";
+import { getRigControlById } from "./rig-control-selectors.js";
+import {
+  bindRigControlChild,
+  createRotation2dRigControl
+} from "./rig-control-mutations.js";
+import { AuthoringMutationError } from "./authoring-mutations.js";
+import { toPackageDocument } from "./to-package-document.js";
+
+describe("rig control authoring mutations", () => {
+  it("creates a rotation2d rig control as a graph root with drawable children", () => {
+    const session = createFixtureSession();
+
+    const result = createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_head", "Head", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+
+    expect(result.rigControl).toMatchObject({
+      kind: "rotation2d",
+      rigControlId: "rig_head",
+      childDrawableIds: ["draw_body"],
+      childRigControlIds: []
+    });
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+    expect(session.graph.rigControlRootIds).toEqual(["rig_head"]);
+    expect(session.graph.stableOrder).toContain("rig_head");
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head"))).toEqual(
+      result.rigControl
+    );
+  });
+
+  it("binds child drawable targets to an existing rotation2d rig control", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_head", "Head"));
+
+    const result = bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_head"),
+      child: { kind: "drawable", id: "draw_body" }
+    });
+
+    expect(result.parentRigControlBefore.childDrawableIds).toEqual([]);
+    expect(result.parentRigControlAfter.childDrawableIds).toEqual(["draw_body"]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head"))).toMatchObject({
+      childDrawableIds: ["draw_body"]
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_head"]);
+    expect(session.authoringRevision).toBe(2);
+  });
+
+  it("binds child rig controls and updates graph roots for package materialization", () => {
+    const baseDocument = loadMinimalFixturePackageDocument();
+    const session = createAuthoringSessionFromPackageDocument(baseDocument);
+
+    createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_child", "Child"));
+    const result = bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_child" }
+    });
+    session.packageRevision = 1;
+
+    const document = toPackageDocument(session, baseDocument, {
+      updatedAt: baseDocument.manifest.updatedAt
+    });
+
+    expect(result.parentRigControlAfter.childRigControlIds).toEqual(["rig_child"]);
+    expect(result.childRigControlChange?.after.parentId).toBe("rig_parent");
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+    expect(document.model.graph.rigControlRootIds).toEqual(["rig_parent"]);
+    expect(document.model.rigControls.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_parent",
+        childRigControlIds: ["rig_child"]
+      }),
+      expect.objectContaining({
+        rigControlId: "rig_child",
+        parentId: "rig_parent"
+      })
+    ]);
+  });
+
+  it("rejects a rig control binding that would introduce a cycle", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_child", "Child"));
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_child" }
+    });
+
+    let caught: unknown;
+    try {
+      bindRigControlChild(session, {
+        parentRigControlId: RigControlIdSchema.parse("rig_child"),
+        child: { kind: "rigControl", id: "rig_parent" }
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AuthoringMutationError);
+    expect((caught as AuthoringMutationError).code).toBe("rig_control_cycle");
+    expect((caught as AuthoringMutationError).message).toBe(
+      "Binding rig_parent under rig_child would create a rig control cycle"
+    );
+  });
+});
+
+const createRotationRigControl = (
+  rigControlId: string,
+  displayName: string,
+  overrides: Partial<{
+    readonly childDrawableIds: readonly string[];
+    readonly childRigControlIds: readonly string[];
+  }> = {}
+) => ({
+  kind: "rotation2d" as const,
+  rigControlId: RigControlIdSchema.parse(rigControlId),
+  displayName,
+  partId: PartIdSchema.parse("part_root"),
+  childDrawableIds: (overrides.childDrawableIds ?? []).map((drawableId) =>
+    DrawableIdSchema.parse(drawableId)
+  ),
+  childRigControlIds: (overrides.childRigControlIds ?? []).map((childRigControlId) =>
+    RigControlIdSchema.parse(childRigControlId)
+  ),
+  pivot: { x: 64, y: 64 },
+  restAngleDegrees: 0,
+  restTranslation: { x: 0, y: 0 },
+  restScale: { x: 1, y: 1 },
+  enabled: true
+});
+
+const createFixtureSession = (): AuthoringSession => ({
+  packageIdentity: {
+    packageId: PackageIdSchema.parse("pkg_rig_control_mutations_test"),
+    packageDisplayName: "Rig Control Mutations Test",
+    formatVersion: "open-model-package-v1"
+  },
+  packageRevision: 0,
+  authoringRevision: createInitialAuthoringRevision(),
+  dirty: false,
+  graph: {
+    coordinateSystem: "canvas-y-down-v1",
+    canvasSize: { width: 128, height: 128 },
+    parts: [
+      {
+        partId: PartIdSchema.parse("part_root"),
+        displayName: "Root",
+        childPartIds: [],
+        drawableIds: [DrawableIdSchema.parse("draw_body")]
+      }
+    ],
+    drawables: [
+      {
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        displayName: "Body",
+        partId: PartIdSchema.parse("part_root"),
+        sourceAssetId: SourceAssetIdSchema.parse("src_body"),
+        textureId: TextureIdSchema.parse("tex_body"),
+        meshId: MeshIdSchema.parse("mesh_body"),
+        defaultOpacity: 1,
+        runtimeVisibility: true,
+        baseDrawOrder: 0,
+        sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+      }
+    ],
+    meshes: [],
+    parameters: [],
+    keyformSets: [],
+    rigControls: [],
+    dynamicsGroups: [],
+    masks: [],
+    drawOrder: [],
+    rigControlRootIds: [],
+    stableOrder: ["draw_body"],
+    sourceAssets: [],
+    provenanceRecords: [],
+    rightsRecords: []
+  }
+});
+
+const loadMinimalFixturePackageDocument = (): PackageDocumentDto => {
+  const fixtureDirectory = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../fixtures/contracts/minimal-valid-package"
+  );
+  const parsed = parsePackageDocument({
+    manifest: readJson(join(fixtureDirectory, "manifest.json")),
+    model: {
+      graph: readJson(join(fixtureDirectory, "model/graph.json")),
+      drawables: readJson(join(fixtureDirectory, "model/drawables.json")),
+      meshes: readJson(join(fixtureDirectory, "model/meshes.json")),
+      parameters: readJson(join(fixtureDirectory, "model/parameters.json")),
+      keyforms: readJson(join(fixtureDirectory, "model/keyforms.json")),
+      rigControls: readJson(join(fixtureDirectory, "model/rig-controls.json")),
+      dynamics: readJson(join(fixtureDirectory, "model/dynamics.json")),
+      masks: readJson(join(fixtureDirectory, "model/masks.json")),
+      drawOrder: readJson(join(fixtureDirectory, "model/draw-order.json"))
+    },
+    assets: {
+      sourceManifest: readJson(join(fixtureDirectory, "assets/sources/source-manifest.json")),
+      provenance: readJson(join(fixtureDirectory, "assets/provenance.json")),
+      rights: readJson(join(fixtureDirectory, "assets/rights.json"))
+    }
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.issues.map((issue) => issue.message).join("\n"));
+  }
+
+  return parsed.data;
+};
+
+const readJson = (path: string): unknown => JSON.parse(readFileSync(path, "utf8"));

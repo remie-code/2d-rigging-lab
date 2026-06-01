@@ -375,7 +375,10 @@ const collectDynamicsPreviewTargetIds = (
   uniqueStrings([
     ...state.dynamicsGroups.map((group) => group.dynamicsGroupId),
     ...state.dynamicsGroups.flatMap((group) => group.driverParameterIds),
-    ...state.dynamicsGroups.map((group) => group.outputParameterId)
+    ...state.dynamicsGroups.map((group) => group.outputParameterId),
+    ...state.rigControls.map((rigControl) => rigControl.rigControlId),
+    ...state.rigControls.flatMap((rigControl) => rigControl.childDrawableIds),
+    ...state.rigControls.flatMap((rigControl) => rigControl.childRigControlIds)
   ]);
 
 const isReusableRuntimeState = (

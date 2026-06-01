@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "invalid-rigControl-cycle-expected-diagnostics-v1",
+  "diagnostics": [
+    {
+      "checkId": "rigControl.cycle",
+      "targetId": "rig_cycle_child",
+      "targetPath": "/model/rigControls/rigControls/1",
+      "severity": "blocking",
+      "evidence": [
+        "cyclePath=rig_cycle_child>rig_cycle_parent>rig_cycle_child",
+        "cycleLength=2"
+      ]
+    }
+  ]
+}

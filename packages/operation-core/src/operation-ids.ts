@@ -6,6 +6,7 @@ import {
   OperationIdSchema,
   ParameterIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   TextureIdSchema,
   TransactionIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -17,6 +18,7 @@ import type {
   OperationId,
   ParameterId,
   ProvenanceId,
+  RigControlId,
   TextureId,
   TransactionId
 } from "@private-2d-rigging-lab/contracts";
@@ -40,6 +42,9 @@ export const createDrawableIdFromDisplayName = (displayName: string): DrawableId
 
 export const createDynamicsGroupIdFromDisplayName = (displayName: string): DynamicsGroupId =>
   DynamicsGroupIdSchema.parse(`dyn_${sanitizeIdToken(displayName)}`);
+
+export const createRigControlIdFromDisplayName = (displayName: string): RigControlId =>
+  RigControlIdSchema.parse(`rig_${sanitizeIdToken(displayName)}`);
 
 export const createDynamicsDriverId = (
   dynamicsGroupId: DynamicsGroupId,
@@ -95,6 +100,10 @@ const operationToken = (request: OperationRequestDto): string => {
 
   if (request.operationType === "createDrawable") {
     return `create_drawable_${sanitizeIdToken(request.payload.displayName)}`;
+  }
+
+  if (request.operationType === "createRotation2dRigControl") {
+    return `create_rotation2d_rig_control_${sanitizeIdToken(request.payload.displayName)}`;
   }
 
   if (request.operationType === "generateMesh") {

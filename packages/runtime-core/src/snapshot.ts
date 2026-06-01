@@ -7,7 +7,6 @@ import {
   PackageIdSchema,
   ParameterIdSchema,
   RectDtoSchema,
-  RigControlIdSchema,
   RuntimeEvaluationContextSchema,
   RuntimeResetReasonSchema,
   RuntimeSnapshotIdSchema,
@@ -29,6 +28,7 @@ import { computeDynamicsTargetSample } from "./dynamics-evaluation.js";
 import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
+import { EvaluatedRigControlSchema, evaluateRigControlHierarchy } from "./rig-control-evaluation.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 import { createStableVertexHash as createStableGeometryVertexHash } from "./drawable-geometry.js";
@@ -116,17 +116,7 @@ export const RuntimeSnapshotSchema = z.object({
   parameters: z.array(EvaluatedParameterSchema),
   dynamics: z.array(EvaluatedDynamicsGroupSchema).default([]),
   keyformSamples: z.array(KeyformSampleSchema).default([]),
-  rigControls: z
-    .array(
-      z.object({
-        rigControlId: RigControlIdSchema,
-        kind: z.enum(["rotation2d", "warpLattice2d"]),
-        enabled: z.boolean(),
-        parentId: RigControlIdSchema.optional(),
-        bounds: RectDtoSchema.optional()
-      })
-    )
-    .default([]),
+  rigControls: z.array(EvaluatedRigControlSchema).default([]),
   drawables: z.array(EvaluatedDrawableSchema),
   masks: z.array(
     z.object({
@@ -168,14 +158,20 @@ export const createRuntimeSnapshot = (input: {
   const baseDrawables = createEvaluatedDrawables({
     graph: input.graph,
     options: input.options,
-    includeVertices: keyformSampling.samples.length > 0
+    includeVertices: keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
   });
   const appliedKeyforms = applySamplesInEvaluationOrder({
     drawables: baseDrawables,
-    samples: keyformSampling.samples,
+    samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind !== "rigControl"),
     hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
   });
-  const drawables = finalizeDrawablesForDetail(appliedKeyforms.drawables, input.options);
+  const rigControlEvaluation = evaluateRigControlHierarchy({
+    graph: input.graph,
+    drawables: appliedKeyforms.drawables,
+    samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind === "rigControl"),
+    hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
+  });
+  const drawables = finalizeDrawablesForDetail(rigControlEvaluation.drawables, input.options);
 
   return RuntimeSnapshotSchema.parse({
     schemaVersion: "runtime-snapshot-v1",
@@ -193,13 +189,7 @@ export const createRuntimeSnapshot = (input: {
     parameters: createEvaluatedParameters(parameterResolution),
     dynamics: createEvaluatedDynamics(input.graph, input.evaluationInput, input.state, input.options),
     keyformSamples: keyformSampling.samples,
-    rigControls: [...input.graph.rigControls.values()].map((rigControl) => ({
-      rigControlId: rigControl.rigControlId,
-      kind: rigControl.kind,
-      enabled: rigControl.enabled,
-      ...(rigControl.parentId === undefined ? {} : { parentId: rigControl.parentId }),
-      ...(rigControl.kind === "warpLattice2d" ? { bounds: rigControl.domainBounds } : {})
-    })),
+    rigControls: rigControlEvaluation.rigControls,
     drawables,
     masks: input.graph.masks.map((mask) => ({
       maskRelationId: mask.maskRelationId,
@@ -208,7 +198,12 @@ export const createRuntimeSnapshot = (input: {
     })),
     drawList: drawables.filter((drawable) => drawable.visible).map((drawable) => drawable.drawableId),
     disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
-    diagnostics: [...input.diagnostics, ...keyformSampling.diagnostics, ...appliedKeyforms.diagnostics],
+    diagnostics: [
+      ...input.diagnostics,
+      ...keyformSampling.diagnostics,
+      ...appliedKeyforms.diagnostics,
+      ...rigControlEvaluation.diagnostics
+    ],
     ...(input.options.includeTrace
       ? {
           trace: {
@@ -216,6 +211,7 @@ export const createRuntimeSnapshot = (input: {
               "parameter_resolution",
               "dynamics_evaluation",
               "keyform_sampling",
+              "rigControl_evaluation",
               "mesh_evaluation",
               "opacity_visibility",
               "draw_order_resolution",

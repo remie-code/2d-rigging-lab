@@ -6,6 +6,7 @@ import {
   ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -498,6 +499,126 @@ describe("editor semantic state view model", () => {
           parameterId: "param_hair_sway",
           disabled: true,
           disabledMessage: "Preview control disabled for computedDynamics parameter"
+        }
+      ]
+    });
+  });
+
+  it("projects project-defined rig control authoring options", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_rig_controls",
+        packageDisplayName: "Rig Controls Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 2,
+        authoringRevision: 2
+      },
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: [DrawableIdSchema.parse("draw_body")]
+        }
+      ],
+      drawables: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          displayName: "Body",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          textureId: TextureIdSchema.parse("tex_body"),
+          meshId: MeshIdSchema.parse("mesh_body"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        },
+        {
+          drawableId: DrawableIdSchema.parse("draw_arm"),
+          displayName: "Arm",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          textureId: TextureIdSchema.parse("tex_arm"),
+          meshId: MeshIdSchema.parse("mesh_arm"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 1,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ],
+      meshes: [
+        {
+          meshId: MeshIdSchema.parse("mesh_body"),
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          vertices: [
+            { x: 10, y: 20 },
+            { x: 30, y: 20 },
+            { x: 10, y: 60 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 }
+          ],
+          triangles: [[0, 1, 2]],
+          vertexStableIds: ["v0", "v1", "v2"],
+          bounds: { x: 10, y: 20, width: 20, height: 40 },
+          generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ],
+      rigControls: [
+        {
+          kind: "rotation2d",
+          rigControlId: RigControlIdSchema.parse("rig_body_rotation"),
+          displayName: "Body Rotation",
+          partId: PartIdSchema.parse("part_root"),
+          childDrawableIds: [DrawableIdSchema.parse("draw_body")],
+          childRigControlIds: [],
+          pivot: { x: 20, y: 40 },
+          restAngleDegrees: 15,
+          restTranslation: { x: 0, y: 0 },
+          restScale: { x: 1, y: 1 },
+          enabled: true
+        }
+      ]
+    });
+
+    expect(state.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_body_rotation",
+        childDrawableIds: ["draw_body"],
+        pivot: { x: 20, y: 40 },
+        restAngleDegrees: 15
+      })
+    ]);
+    expect(projectEditorWorkflowViewModel(state).rigControls).toMatchObject({
+      controlCountLabel: "1 rig control",
+      canCreateRotation2d: true,
+      canBindChild: true,
+      partOptions: [
+        {
+          partId: "part_root",
+          label: "Root / part_root"
+        }
+      ],
+      rigControls: [
+        {
+          rigControlId: "rig_body_rotation",
+          displayName: "Body Rotation",
+          kindLabel: "rotation2d",
+          parentLabel: "Root",
+          childDrawableLabel: "draw_body",
+          transformLabel: "pivot 20, 40 / rest 15 deg"
+        }
+      ],
+      childOptions: [
+        {
+          kind: "drawable",
+          id: "draw_arm",
+          label: "Arm / draw_arm"
         }
       ]
     });

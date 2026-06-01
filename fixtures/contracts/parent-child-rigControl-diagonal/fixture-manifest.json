@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "parent-child-rigControl-diagonal",
+  "title": "Parent-before-child rotation2d rig control hierarchy evidence",
+  "coversAC": [
+    "AC-MVP-009",
+    "AC-MVP-010",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-DEF-002",
+    "SC-BODY-001"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "runtime/runtime-graph.json",
+    "request/create-parent-dry-run.request.json",
+    "request/create-parent-commit.request.json",
+    "request/create-child-commit.request.json",
+    "request/bind-child-rig-commit.request.json",
+    "request/bind-child-drawable-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-result-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeSnapshot",
+      "path": "expected/runtime-hierarchy-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeDiff",
+      "path": "expected/runtime-diff-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "viewerEvidence",
+      "path": "expected/viewer-facing-evidence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

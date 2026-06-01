@@ -54,7 +54,15 @@ export const editorTestIds = {
   viewerRuntimeSnapshotSummary: "viewerRuntime.snapshotSummary",
   viewerRuntimeDiff: "viewerRuntime.diff",
   viewerRuntimeDiagnostics: "viewerRuntime.diagnostics",
-  viewerRuntimePackageState: "viewerRuntime.packageState"
+  viewerRuntimePackageState: "viewerRuntime.packageState",
+  rigControlPanel: "rigControl.panel",
+  rigControlCreateForm: "rigControl.create.form",
+  rigControlCreateSubmit: "rigControl.create",
+  rigControlBindForm: "rigControl.bind.form",
+  rigControlBindSubmit: "rigControl.bind",
+  rigControlList: "rigControl.list",
+  rigControlEvidence: "rigControl.evidence",
+  rigControlDiagnostics: "rigControl.diagnostics"
 } as const;
 
 export const fixedEditorTestIds = Object.values(editorTestIds);
@@ -95,3 +103,6 @@ export const createViewerParameterControlTestId = (parameterId: string): string 
 
 export const createDynamicsGroupUpdateTestId = (dynamicsGroupId: string): string =>
   `dynamics.update.${dynamicsGroupId}`;
+
+export const createRigControlRowTestId = (rigControlId: string): string =>
+  `rigControl.row.${rigControlId}`;

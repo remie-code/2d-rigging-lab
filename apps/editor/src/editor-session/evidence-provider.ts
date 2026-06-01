@@ -198,6 +198,10 @@ const createRuntimeEvidenceInput = (
       return createCreateDynamicsGroupEvidenceInput(input);
     case "updateDynamicsGroup":
       return createUpdateDynamicsGroupEvidenceInput(input);
+    case "createRotation2dRigControl":
+      return createCreateRotation2dRigControlEvidenceInput(input);
+    case "bindRigControlChild":
+      return createBindRigControlChildEvidenceInput(input);
     case "setRightsMetadata":
       return createSetRightsMetadataEvidenceInput(input);
     default:
@@ -601,6 +605,74 @@ const createUpdateDynamicsGroupEvidenceInput = (
       }
     }
   };
+};
+
+const createCreateRotation2dRigControlEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createRotation2dRigControl") {
+    throw new Error(`createRotation2dRigControl evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.partId,
+    ...input.request.payload.childDrawableIds,
+    ...input.request.payload.childRigControlIds
+  ]);
+
+  return {
+    artifactLabel: "editor-create-rotation2d-rig-control",
+    authoredParameterValues: {},
+    targetIds
+  };
+};
+
+const createBindRigControlChildEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "bindRigControlChild") {
+    throw new Error(`bindRigControlChild evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...collectCandidateRigControlEvidenceTargetIds(input, input.request.payload.parentRigControlId),
+    ...(input.request.payload.child.kind === "rigControl"
+      ? collectCandidateRigControlEvidenceTargetIds(input, input.request.payload.child.id)
+      : [input.request.payload.child.id])
+  ]);
+
+  return {
+    artifactLabel: "editor-bind-rig-control-child",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const collectCandidateRigControlEvidenceTargetIds = (
+  input: OperationEvidenceProviderInput,
+  rigControlId: string
+): readonly string[] => {
+  const rigControl = input.candidateSession.graph.rigControls.find(
+    (candidate) => candidate.rigControlId === rigControlId
+  );
+  if (rigControl === undefined) {
+    return [rigControlId];
+  }
+
+  return [
+    rigControl.rigControlId,
+    rigControl.partId,
+    ...rigControl.childDrawableIds,
+    ...rigControl.childRigControlIds
+  ];
 };
 
 const createSetRightsMetadataEvidenceInput = (

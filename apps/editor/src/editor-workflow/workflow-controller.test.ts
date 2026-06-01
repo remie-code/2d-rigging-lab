@@ -834,6 +834,102 @@ describe("editor workflow controller", () => {
     });
   });
 
+  it("creates and binds a project-defined rig control, then restores it after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const created = first.commitCreateRotation2dRigControl(createRotationRigControlCommand("body"));
+    const bound = first.commitBindRigControlChild({
+      parentRigControlId: "rig_workflow_body_rotation",
+      child: {
+        kind: "drawable",
+        id: "draw_body"
+      }
+    });
+    first.openViewerRuntimeSurface();
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+    second.openViewerRuntimeSurface();
+
+    expect(created.status).toBe("committed");
+    expect(bound.status).toBe("committed");
+    expect(first.state.rigControls).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        displayName: "Workflow Body Rotation",
+        childDrawableIds: ["draw_body"],
+        childRigControlIds: []
+      })
+    ]));
+    expect(first.viewModel.rigControls).toMatchObject({
+      controlCountLabel: "1 rig control",
+      hasRigControls: true,
+      canCreateRotation2d: true,
+      lastRigControlOperationLabel: "bindRigControlChild committed"
+    });
+    expect(first.state.generatedEvidence.runtimeSnapshotIds.length).toBeGreaterThan(0);
+    expect(first.viewerRuntimeProjection?.snapshotSummary).toMatchObject({
+      rigControlCount: 1,
+      evaluatedRigControlCount: 1,
+      rigControls: [
+        expect.objectContaining({
+          rigControlId: "rig_workflow_body_rotation",
+          evaluationStatus: "evaluated",
+          affectedDrawableLabel: "draw_body"
+        })
+      ]
+    });
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createRotation2dRigControl",
+      "bindRigControlChild"
+    ]);
+    expect(saved.snapshot.document.model.rigControls.rigControls).toContainEqual(
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.rigControls).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        childDrawableIds: ["draw_body"]
+      })
+    ]));
+    expect(second.viewerRuntimeProjection?.snapshotSummary.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        affectedDrawableLabel: "draw_body"
+      })
+    ]);
+  });
+
+  it("surfaces deterministic rig control bind diagnostics without mutating state", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    const rejected = workflow.commitBindRigControlChild({
+      parentRigControlId: "rig_missing_parent",
+      child: {
+        kind: "drawable",
+        id: "draw_body"
+      }
+    });
+
+    expect(rejected.status).toBe("rejected");
+    expect(workflow.state.operationLog.entryCount).toBe(0);
+    expect(workflow.state.rigControls).toEqual([]);
+    expect(workflow.viewModel.rigControls).toMatchObject({
+      lastRigControlOperationLabel: "bindRigControlChild rejected",
+      lastRigControlDiagnostics: [
+        expect.objectContaining({
+          checkId: "operation.bindRigControlChild.missingParentRigControl",
+          severity: "error"
+        })
+      ]
+    });
+  });
+
   it("projects dynamics preview outputs, evidence, and validator diagnostics", () => {
     const workflow = createWorkflow(createMemoryStorage());
 
@@ -1201,6 +1297,14 @@ const createDrawablePresetCommand = (name: "star") => ({
   initialBounds: { x: 16, y: 24, width: 24, height: 24 },
   meshMethod: "auto-grid-v1",
   densityHint: "low"
+} as const);
+
+const createRotationRigControlCommand = (name: "body") => ({
+  rigControlId: `rig_workflow_${name}_rotation`,
+  displayName: `Workflow ${capitalize(name)} Rotation`,
+  partId: "part_root",
+  pivot: { x: 50, y: 56 },
+  restAngleDegrees: 15
 } as const);
 
 const createDynamicsGroupCommand = (name: "hair") => ({

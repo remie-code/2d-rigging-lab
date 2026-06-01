@@ -400,7 +400,7 @@ describe("operation lifecycle foundation", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedRigControlRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedWarpRigControlRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -534,24 +534,28 @@ const createDynamicsGroupRequest = (options: {
   }
 });
 
-const createUnsupportedRigControlRequest = () => ({
+const createUnsupportedWarpRigControlRequest = () => ({
   schemaVersion: "operation-request-v1",
-  operationId: "op_create_rotation_rig",
+  operationId: "op_create_warp_rig",
   actor: "test",
   surface: "testFixture",
   dryRun: false,
   basePackageRevision: 0,
-  operationType: "createRotation2dRigControl",
+  operationType: "createWarpLattice2dRigControl",
   payload: {
     partId: "part_head",
-    displayName: "Head Rotation",
+    displayName: "Head Warp",
     childDrawableIds: [],
     childRigControlIds: [],
-    pivot: {
-      x: 512,
-      y: 512
+    domainBounds: {
+      x: 0,
+      y: 0,
+      width: 128,
+      height: 128
     },
-    restAngleDegrees: 0
+    latticeColumns: 2,
+    latticeRows: 2,
+    interpolationMethod: "bilinear-grid-v1"
   }
 });
 

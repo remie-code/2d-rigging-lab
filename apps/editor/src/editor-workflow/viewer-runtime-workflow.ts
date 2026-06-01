@@ -39,9 +39,12 @@ export interface EditorViewerRuntimeSnapshotSummary {
   readonly drawableCount: number;
   readonly visibleDrawableCount: number;
   readonly drawListCount: number;
+  readonly rigControlCount: number;
+  readonly evaluatedRigControlCount: number;
   readonly dynamicsCount: number;
   readonly diagnosticCount: number;
   readonly parameterValues: readonly EditorViewerRuntimeParameterValueSummary[];
+  readonly rigControls: readonly EditorViewerRuntimeRigControlSummary[];
   readonly dynamicsOutputs: readonly EditorViewerRuntimeDynamicsOutputSummary[];
   readonly evidenceLabel: string;
 }
@@ -60,6 +63,18 @@ export interface EditorViewerRuntimeDynamicsOutputSummary {
   readonly position: number;
   readonly velocity: number;
   readonly tick: number;
+}
+
+export interface EditorViewerRuntimeRigControlSummary {
+  readonly rigControlId: string;
+  readonly kind: string;
+  readonly evaluationStatus: string;
+  readonly hierarchyIndex: number;
+  readonly parentLabel: string;
+  readonly localAngleLabel: string;
+  readonly worldAngleLabel: string;
+  readonly affectedDrawableLabel: string;
+  readonly affectedRigControlLabel: string;
 }
 
 export interface EditorViewerRuntimeValidationSummary {
@@ -150,6 +165,10 @@ const projectSnapshotSummary = (input: {
     drawableCount: snapshot.drawables.length,
     visibleDrawableCount: snapshot.drawables.filter((drawable) => drawable.visible).length,
     drawListCount: snapshot.drawList.length,
+    rigControlCount: snapshot.rigControls.length,
+    evaluatedRigControlCount: snapshot.rigControls.filter(
+      (rigControl) => rigControl.evaluationStatus === "evaluated"
+    ).length,
     dynamicsCount: snapshot.dynamics.length,
     diagnosticCount: snapshot.diagnostics.length,
     parameterValues: snapshot.parameters.map((parameter) => ({
@@ -157,6 +176,23 @@ const projectSnapshotSummary = (input: {
       valueSource: parameter.valueSource,
       effectiveValue: parameter.effectiveValue,
       source: parameter.source
+    })),
+    rigControls: snapshot.rigControls.map((rigControl) => ({
+      rigControlId: rigControl.rigControlId,
+      kind: rigControl.kind,
+      evaluationStatus: rigControl.evaluationStatus,
+      hierarchyIndex: rigControl.hierarchyIndex,
+      parentLabel: rigControl.parentId ?? "Root",
+      localAngleLabel:
+        rigControl.localTransform === undefined
+          ? "n/a"
+          : formatViewerNumber(rigControl.localTransform.angleDegrees),
+      worldAngleLabel:
+        rigControl.worldTransform === undefined
+          ? "n/a"
+          : formatViewerNumber(rigControl.worldTransform.angleDegrees),
+      affectedDrawableLabel: rigControl.affectedDrawableIds.join(", ") || "None",
+      affectedRigControlLabel: rigControl.affectedRigControlIds.join(", ") || "None"
     })),
     dynamicsOutputs: snapshot.dynamics.map((dynamics) => ({
       dynamicsGroupId: dynamics.dynamicsGroupId,
@@ -193,6 +229,9 @@ const collectViewerTargetIds = (state: EditorSemanticState): readonly string[] =
   uniqueStrings([
     ...state.parameters.map((parameter) => parameter.parameterId),
     ...state.drawables.map((drawable) => drawable.drawableId),
+    ...state.rigControls.map((rigControl) => rigControl.rigControlId),
+    ...state.rigControls.flatMap((rigControl) => rigControl.childDrawableIds),
+    ...state.rigControls.flatMap((rigControl) => rigControl.childRigControlIds),
     ...state.dynamicsGroups.map((group) => group.dynamicsGroupId),
     ...state.dynamicsGroups.map((group) => group.outputParameterId)
   ]);
@@ -212,3 +251,6 @@ const uniqueStrings = (values: readonly string[]): string[] => {
 
   return unique;
 };
+
+const formatViewerNumber = (value: number): string =>
+  Number.isInteger(value) ? String(value) : Number.parseFloat(value.toFixed(4)).toString();

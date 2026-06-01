@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_fixture_bind_arm_rotation",
+  "actor": "human",
+  "surface": "gui",
+  "dryRun": false,
+  "basePackageRevision": 2,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-009",
+      "AC-MVP-010"
+    ],
+    "relatedScenarios": [
+      "SC-DEF-002"
+    ]
+  },
+  "operationType": "bindRigControlChild",
+  "payload": {
+    "parentRigControlId": "rig_body_rotation",
+    "child": {
+      "kind": "rigControl",
+      "id": "rig_arm_rotation"
+    }
+  }
+}

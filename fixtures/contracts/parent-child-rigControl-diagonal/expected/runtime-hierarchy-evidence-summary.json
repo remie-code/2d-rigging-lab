@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "parent-child-rigControl-runtime-hierarchy-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_parent_child_rigcontrol_diagonal_0",
+    "rigControlOrder": [],
+    "drawable": {
+      "drawableId": "draw_arm",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 8
+      },
+      "vertexHash": "vhash_568d1cfb_3"
+    }
+  },
+  "candidateSnapshot": {
+    "snapshotId": "snap_parent_child_rigcontrol_diagonal_1",
+    "rigControlOrder": [
+      "rig_body_rotation",
+      "rig_arm_rotation"
+    ],
+    "rigControls": [
+      {
+        "rigControlId": "rig_body_rotation",
+        "parentId": null,
+        "hierarchyIndex": 0,
+        "evaluationStatus": "evaluated",
+        "affectedDrawableIds": [
+          "draw_arm"
+        ],
+        "affectedRigControlIds": [
+          "rig_arm_rotation"
+        ],
+        "localAngleDegrees": 30,
+        "worldAngleDegrees": 30
+      },
+      {
+        "rigControlId": "rig_arm_rotation",
+        "parentId": "rig_body_rotation",
+        "hierarchyIndex": 1,
+        "evaluationStatus": "evaluated",
+        "affectedDrawableIds": [
+          "draw_arm"
+        ],
+        "affectedRigControlIds": [],
+        "localAngleDegrees": 15,
+        "worldAngleDegrees": 45
+      }
+    ],
+    "drawable": {
+      "drawableId": "draw_arm",
+      "bounds": {
+        "x": -5.656854,
+        "y": 0,
+        "width": 11.313708,
+        "height": 5.656854
+      },
+      "vertexHash": "vhash_f495d7e4_3",
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 5.656854,
+          "y": 5.656854
+        },
+        {
+          "x": -5.656854,
+          "y": 5.656854
+        }
+      ]
+    },
+    "diagnostics": []
+  }
+}

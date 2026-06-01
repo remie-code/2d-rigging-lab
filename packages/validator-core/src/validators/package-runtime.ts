@@ -15,6 +15,7 @@ import { validateDrawableReferences } from "./drawable-references.js";
 import { validateDynamicsSemantics } from "./dynamics-semantic.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
+import { validateRigControlSemantics } from "./rig-control-semantic.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
 import { validateTextureAssetReferences } from "./texture-assets.js";
 import { validateViewerRuntimeEvidence } from "./viewer-evidence.js";
@@ -132,6 +133,7 @@ const collectPackageReferenceChecks = (
   ...validateDrawableProvenanceReferences(packageDocument),
   ...validateDrawableReferences(packageDocument),
   ...validateTextureAssetReferences(packageDocument),
+  ...validateRigControlSemantics(packageDocument, runtimeSnapshot),
   ...validateDynamicsSemantics(packageDocument, runtimeSnapshot)
 ];
 

@@ -1,0 +1,261 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_invalid_rigcontrol_cycle",
+    "packageDisplayName": "Invalid Rig Control Cycle",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-06-01T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 128,
+        "height": 128
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_cycle_arm"
+          ]
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "draw_cycle_arm",
+        "rig_cycle_parent",
+        "rig_cycle_child"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_cycle_arm",
+          "displayName": "Cycle Arm",
+          "partId": "part_root",
+          "sourceAssetId": "src_generated_cycle_arm",
+          "textureId": "tex_cycle_arm",
+          "meshId": "mesh_cycle_arm",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_generated_cycle_arm"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_cycle_arm",
+          "drawableId": "draw_cycle_arm",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 8
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "v0",
+            "v1",
+            "v2"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 8
+          },
+          "generationProvenanceId": "prov_generated_cycle_arm"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": [
+        {
+          "kind": "rotation2d",
+          "rigControlId": "rig_cycle_parent",
+          "displayName": "Cycle Parent",
+          "partId": "part_root",
+          "parentId": "rig_cycle_child",
+          "childDrawableIds": [],
+          "childRigControlIds": [
+            "rig_cycle_child"
+          ],
+          "pivot": {
+            "x": 0,
+            "y": 0
+          },
+          "restAngleDegrees": 30,
+          "restTranslation": {
+            "x": 0,
+            "y": 0
+          },
+          "restScale": {
+            "x": 1,
+            "y": 1
+          },
+          "enabled": true
+        },
+        {
+          "kind": "rotation2d",
+          "rigControlId": "rig_cycle_child",
+          "displayName": "Cycle Child",
+          "partId": "part_root",
+          "parentId": "rig_cycle_parent",
+          "childDrawableIds": [
+            "draw_cycle_arm"
+          ],
+          "childRigControlIds": [
+            "rig_cycle_parent"
+          ],
+          "pivot": {
+            "x": 0,
+            "y": 0
+          },
+          "restAngleDegrees": 15,
+          "restTranslation": {
+            "x": 0,
+            "y": 0
+          },
+          "restScale": {
+            "x": 1,
+            "y": 1
+          },
+          "enabled": true
+        }
+      ]
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_cycle_arm",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_generated_cycle_arm",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/invalid-rig-control-cycle-arm.json",
+          "contentHash": "sha256:invalid-rigcontrol-cycle-generated-arm",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_generated_cycle_arm",
+          "assetId": "src_generated_cycle_arm",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/invalid-rig-control-cycle-arm.json",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only invalid cycle fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_generated_cycle_arm",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

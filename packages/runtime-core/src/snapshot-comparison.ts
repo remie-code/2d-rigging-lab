@@ -4,6 +4,12 @@ import { z } from "zod";
 
 import type { EvaluatedDrawableDto, RuntimeSnapshotDto } from "./snapshot.js";
 
+type RuntimeFieldChange = {
+  readonly path: string;
+  readonly before: unknown;
+  readonly after: unknown;
+};
+
 export const SnapshotComparisonPolicySchema = z.object({
   vertexPositionEpsilon: z.number().positive().default(0.0001),
   boundsEpsilon: z.number().positive().default(0.0001),
@@ -24,6 +30,8 @@ export const compareRuntimeSnapshots = (
 ): RuntimeComparisonResult => {
   const policy = SnapshotComparisonPolicySchema.parse(policyInput);
   const beforeDrawablesById = new Map(before.drawables.map((drawable) => [drawable.drawableId, drawable]));
+  const beforeRigControlsById = new Map(before.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl]));
+  const afterRigControlsById = new Map(after.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl]));
   const beforeDynamicsById = new Map(before.dynamics.map((dynamics) => [dynamics.dynamicsGroupId, dynamics]));
   const afterDynamicsById = new Map(after.dynamics.map((dynamics) => [dynamics.dynamicsGroupId, dynamics]));
   const parameterChanges = after.parameters.flatMap((afterParameter) => {
@@ -164,11 +172,40 @@ export const compareRuntimeSnapshots = (
     before: change.before,
     after: change.after
   }));
+  const rigControlChanges: RuntimeFieldChange[] = [
+    ...after.rigControls.flatMap((afterRigControl) => {
+      const beforeRigControl = beforeRigControlsById.get(afterRigControl.rigControlId);
+      if (beforeRigControl === undefined) {
+        return [
+          {
+            path: `/rigControls/${afterRigControl.rigControlId}`,
+            before: null,
+            after: summarizeRigControlForDiff(afterRigControl)
+          }
+        ];
+      }
+
+      return createRigControlFieldChanges(beforeRigControl, afterRigControl);
+    }),
+    ...before.rigControls.flatMap((beforeRigControl) => {
+      if (afterRigControlsById.has(beforeRigControl.rigControlId)) {
+        return [];
+      }
+
+      return [
+        {
+          path: `/rigControls/${beforeRigControl.rigControlId}`,
+          before: summarizeRigControlForDiff(beforeRigControl),
+          after: null
+        }
+      ];
+    })
+  ];
   const diff = RuntimeDiffSchema.parse({
     schemaVersion: "runtime-diff-v1",
     beforeSnapshotId: before.snapshotId,
     afterSnapshotId: after.snapshotId,
-    parameterChanges: [...parameterChanges, ...drawListParameterChanges],
+    parameterChanges: [...parameterChanges, ...rigControlChanges, ...drawListParameterChanges],
     dynamicsChanges,
     drawableChanges,
     drawableRuntimeStateChanges,
@@ -187,6 +224,110 @@ export const compareRuntimeSnapshots = (
     diff
   };
 };
+
+type ComparableRigControl = RuntimeSnapshotDto["rigControls"][number];
+
+const createRigControlFieldChanges = (
+  beforeRigControl: ComparableRigControl,
+  afterRigControl: ComparableRigControl
+): RuntimeFieldChange[] => {
+  const changes: RuntimeFieldChange[] = [];
+
+  if (beforeRigControl.evaluationStatus !== afterRigControl.evaluationStatus) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/evaluationStatus`,
+      before: beforeRigControl.evaluationStatus,
+      after: afterRigControl.evaluationStatus
+    });
+  }
+
+  if (beforeRigControl.hierarchyIndex !== afterRigControl.hierarchyIndex) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/hierarchyIndex`,
+      before: beforeRigControl.hierarchyIndex,
+      after: afterRigControl.hierarchyIndex
+    });
+  }
+
+  if (beforeRigControl.localTransform?.angleDegrees !== afterRigControl.localTransform?.angleDegrees) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/localTransform/angleDegrees`,
+      before: beforeRigControl.localTransform?.angleDegrees ?? null,
+      after: afterRigControl.localTransform?.angleDegrees ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.localTransform?.translation, afterRigControl.localTransform?.translation)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/localTransform/translation`,
+      before: beforeRigControl.localTransform?.translation ?? null,
+      after: afterRigControl.localTransform?.translation ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.localTransform?.scale, afterRigControl.localTransform?.scale)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/localTransform/scale`,
+      before: beforeRigControl.localTransform?.scale ?? null,
+      after: afterRigControl.localTransform?.scale ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.localTransform?.matrix, afterRigControl.localTransform?.matrix)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/localTransform/matrix`,
+      before: beforeRigControl.localTransform?.matrix ?? null,
+      after: afterRigControl.localTransform?.matrix ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.worldTransform?.matrix, afterRigControl.worldTransform?.matrix)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/worldTransform/matrix`,
+      before: beforeRigControl.worldTransform?.matrix ?? null,
+      after: afterRigControl.worldTransform?.matrix ?? null
+    });
+  }
+
+  if (!sameStringList(beforeRigControl.affectedDrawableIds, afterRigControl.affectedDrawableIds)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/affectedDrawableIds`,
+      before: beforeRigControl.affectedDrawableIds,
+      after: afterRigControl.affectedDrawableIds
+    });
+  }
+
+  if (!sameStringList(beforeRigControl.affectedRigControlIds, afterRigControl.affectedRigControlIds)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/affectedRigControlIds`,
+      before: beforeRigControl.affectedRigControlIds,
+      after: afterRigControl.affectedRigControlIds
+    });
+  }
+
+  return changes;
+};
+
+const summarizeRigControlForDiff = (rigControl: ComparableRigControl) => ({
+  rigControlId: rigControl.rigControlId,
+  kind: rigControl.kind,
+  enabled: rigControl.enabled,
+  evaluationStatus: rigControl.evaluationStatus,
+  hierarchyIndex: rigControl.hierarchyIndex,
+  childDrawableIds: rigControl.childDrawableIds,
+  childRigControlIds: rigControl.childRigControlIds,
+  affectedDrawableIds: rigControl.affectedDrawableIds,
+  affectedRigControlIds: rigControl.affectedRigControlIds,
+  ...(rigControl.localTransform === undefined ? {} : { localTransform: rigControl.localTransform }),
+  ...(rigControl.worldTransform === undefined ? {} : { worldTransform: rigControl.worldTransform }),
+  ...(rigControl.bounds === undefined ? {} : { bounds: rigControl.bounds }),
+  ...(rigControl.unsupportedReason === undefined ? {} : { unsupportedReason: rigControl.unsupportedReason })
+});
+
+const sameStringList = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const sameJsonValue = (left: unknown, right: unknown): boolean => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 const drawableRuntimeStateChanged = (
   beforeDrawable: EvaluatedDrawableDto,

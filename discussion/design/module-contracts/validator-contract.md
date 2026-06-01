@@ -64,6 +64,7 @@ ref.drawableTextureMissing
 mesh.triangleIndexOutOfRange
 keyform.grid2dMissingKey
 rigControl.cycle
+rigControl.parentChildMismatch
 dynamics.driverMissing
 mask.sourceMissing
 runtime.loadBlocking
@@ -93,6 +94,11 @@ demo.unsafeDependencyClaim
 | `keyform.grid2dDuplicateKey` | keyform_sampling | error | strict/acceptance: fail | AC-PARAM-005 |
 | `keyform.tooManyParametersForMvp` | keyform_semantic | warning | acceptance: needs_review | AC-MVP-010 |
 | `rigControl.cycle` | rigControl_semantic | blocking | all: fail | AC-MVP-009 |
+| `rigControl.parentMissing` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.childMissing` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.invalidChildTargetKind` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.parentChildMismatch` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.runtimeEvidenceMissing` | rigControl_evaluation | error | strict/acceptance: fail when enabled rig controls cannot be matched to runtime snapshot evidence | AC-MVP-009, AC-MVP-012 |
 | `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
 | `dynamics.requiredGroupMissing` | dynamics_semantic | error | acceptance fixture / metadata requiring Dynamics: fail | AC-PHYS-001 |
 | `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
@@ -134,6 +140,15 @@ Dynamics output validation rules:
 - `dynamics.outputParameterOutOfRange` fires when output min/max is outside the target parameter range.
 - `dynamics.outputClamped` is runtime evidence that clamping occurred; it is not by itself a package schema failure unless a fixture/profile requires exact unclamped output.
 - `dynamics.runtimeEvidenceMissing` fires when an enabled dynamics group is present but no runtime snapshot is supplied, the snapshot omits that group, or the snapshot lacks the computed output parameter evidence needed to prove deterministic replay.
+
+Rig control validation rules:
+
+- `rigControl.cycle` fires when parent/child rig control edges cannot be topologically ordered.
+- `rigControl.parentMissing` fires when a rig control `parentId` does not resolve to a package rig control.
+- `rigControl.childMissing` fires when a child drawable or child rig control reference does not resolve.
+- `rigControl.invalidChildTargetKind` fires when a child ID is stored under the wrong child collection, for example a `rig_` ID in `childDrawableIds`.
+- `rigControl.parentChildMismatch` fires when a parent's `childRigControlIds` entry and the child's `parentId` disagree.
+- `rigControl.runtimeEvidenceMissing` fires when an enabled package rig control has no matching runtime snapshot evidence or the supplied snapshot disagrees on kind, enabled state, or parent relation.
 
 Viewer evidence validation rules:
 

@@ -11,6 +11,8 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 import type {
   EditorDrawableLayerMoveDirection,
+  EditorWorkflowBindRigControlChildCommand,
+  EditorWorkflowCreateRotation2dRigControlCommand,
   EditorViewerRuntimeProjection,
   EditorWorkflowPersistenceResult
 } from "../../editor-workflow/index.js";
@@ -41,6 +43,7 @@ import { createOperationStatusPanel } from "../parameter-operation/operation-sta
 import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
+import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import { createPackageStatus } from "./package-status.js";
@@ -59,6 +62,10 @@ export interface EditorAppShellOptions {
   readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
   readonly onCommitCreateDynamicsGroup: (command: EditorDynamicsCreateCommand) => void;
   readonly onCommitUpdateDynamicsGroup: (command: EditorUpdateDynamicsGroupCommand) => void;
+  readonly onCommitCreateRotation2dRigControl: (
+    command: EditorWorkflowCreateRotation2dRigControlCommand
+  ) => void;
+  readonly onCommitBindRigControlChild: (command: EditorWorkflowBindRigControlChildCommand) => void;
   readonly onRunDynamicsPreview: (frameCount: number) => void;
   readonly onResetDynamicsPreview: () => void;
   readonly onConfirmSourceIntakeDraft: (draft: EditorSemanticState["sourceIntakeDraft"]) => void;
@@ -160,6 +167,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onRunDynamicsPreview: options.onRunDynamicsPreview,
     onResetDynamicsPreview: options.onResetDynamicsPreview
   });
+  const rigControlPanel = createRigControlPanel({
+    state: options.state,
+    viewModel: options.viewModel,
+    preview: options.previewProjection,
+    viewerRuntimeProjection: options.viewerRuntimeProjection,
+    onCommitCreateRotation2dRigControl: options.onCommitCreateRotation2dRigControl,
+    onCommitBindRigControlChild: options.onCommitBindRigControlChild
+  });
   const textureAtlas = resolveTextureAtlas(options);
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
@@ -219,6 +234,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     parametersPanel,
     previewPanel,
     ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
+    rigControlPanel,
     dynamicsPanel,
     operationPanel,
     drawableAuthoringPanel,

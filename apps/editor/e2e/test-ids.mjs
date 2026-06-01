@@ -55,6 +55,14 @@ export const editorTestIds = {
   viewerRuntimeDiff: "viewerRuntime.diff",
   viewerRuntimeDiagnostics: "viewerRuntime.diagnostics",
   viewerRuntimePackageState: "viewerRuntime.packageState",
+  rigControlPanel: "rigControl.panel",
+  rigControlCreateForm: "rigControl.create.form",
+  rigControlCreateSubmit: "rigControl.create",
+  rigControlBindForm: "rigControl.bind.form",
+  rigControlBindSubmit: "rigControl.bind",
+  rigControlList: "rigControl.list",
+  rigControlEvidence: "rigControl.evidence",
+  rigControlDiagnostics: "rigControl.diagnostics",
   aiApprovalPanel: "aiApproval.panel",
   aiApprovalStatus: "aiApproval.status",
   aiApprovalResultSummary: "aiApproval.resultSummary",
@@ -103,3 +111,6 @@ export const createViewerParameterControlTestId = (parameterId) =>
 
 export const createDynamicsGroupUpdateTestId = (dynamicsGroupId) =>
   `dynamics.update.${dynamicsGroupId}`;
+
+export const createRigControlRowTestId = (rigControlId) =>
+  `rigControl.row.${rigControlId}`;

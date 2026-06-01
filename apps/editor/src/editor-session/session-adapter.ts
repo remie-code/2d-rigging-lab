@@ -50,6 +50,12 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createBindRigControlChildOperationRequest,
+  createRotation2dRigControlOperationRequest,
+  type EditorBindRigControlChildCommand,
+  type EditorCreateRotation2dRigControlCommand
+} from "./rig-control-command.js";
+import {
   createImportSplitPngSourceAssetOperationRequest,
   createSetRightsMetadataOperationRequest,
   type EditorImportSplitPngSourceAssetCommand,
@@ -78,6 +84,10 @@ export interface EditorSessionAdapter {
   commitMoveMeshVertex(command: EditorMoveMeshVertexCommand): EditorSessionPersistenceResult;
   commitCreateDynamicsGroup(command: EditorCreateDynamicsGroupCommand): EditorSessionPersistenceResult;
   commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorSessionPersistenceResult;
+  commitCreateRotation2dRigControl(
+    command: EditorCreateRotation2dRigControlCommand
+  ): EditorSessionPersistenceResult;
+  commitBindRigControlChild(command: EditorBindRigControlChildCommand): EditorSessionPersistenceResult;
   commitImportSplitPngSourceAsset(
     command: EditorImportSplitPngSourceAssetCommand
   ): EditorSessionPersistenceResult;
@@ -236,6 +246,20 @@ export const createEditorSessionAdapter = (
     },
     commitUpdateDynamicsGroup(command) {
       const request = createUpdateDynamicsGroupOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitCreateRotation2dRigControl(command) {
+      const request = createRotation2dRigControlOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitBindRigControlChild(command) {
+      const request = createBindRigControlChildOperationRequest(
         command,
         authoringSession.packageRevision
       );

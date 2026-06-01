@@ -207,6 +207,16 @@ const operationPayloads = [
       },
       restAngleDegrees: 0
     }
+  },
+  {
+    operationType: "bindRigControlChild",
+    payload: {
+      parentRigControlId: "rig_head_rotation",
+      child: {
+        kind: "rigControl",
+        id: "rig_child_rotation"
+      }
+    }
   }
 ] as const;
 
@@ -263,7 +273,8 @@ describe("operation-core DTO schemas", () => {
       "createParameter",
       "createDynamicsGroup",
       "moveMeshVertex",
-      "createRotation2dRigControl"
+      "createRotation2dRigControl",
+      "bindRigControlChild"
     ]);
   });
 

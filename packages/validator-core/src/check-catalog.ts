@@ -16,6 +16,8 @@ export const ValidationPhaseSchema = z.enum([
   "rights",
   "reference",
   "mesh_semantic",
+  "rigControl_semantic",
+  "rigControl_evaluation",
   "dynamics_semantic",
   "dynamics_evaluation",
   "runtime_load",
@@ -315,6 +317,54 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-005"],
     description: "Mesh triangle index references a missing vertex."
+  },
+  {
+    checkId: "rigControl.cycle",
+    phase: "rigControl_semantic",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control hierarchy contains a parent-child cycle."
+  },
+  {
+    checkId: "rigControl.parentMissing",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control parent reference cannot be resolved."
+  },
+  {
+    checkId: "rigControl.childMissing",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control child drawable or child rig control reference cannot be resolved."
+  },
+  {
+    checkId: "rigControl.invalidChildTargetKind",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control child binding is stored under a child collection that does not match the target ID kind."
+  },
+  {
+    checkId: "rigControl.parentChildMismatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control child list and child parent reference disagree."
+  },
+  {
+    checkId: "rigControl.runtimeEvidenceMissing",
+    phase: "rigControl_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-012", "AC-MVP-013"],
+    description: "Package rig control hierarchy cannot be matched to runtime snapshot evidence."
   },
   {
     checkId: "dynamics.requiredGroupMissing",

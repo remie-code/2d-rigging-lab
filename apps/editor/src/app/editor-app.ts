@@ -58,6 +58,14 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitUpdateDynamicsGroup(command);
           render();
         },
+        onCommitCreateRotation2dRigControl(command) {
+          workflow.commitCreateRotation2dRigControl(command);
+          render();
+        },
+        onCommitBindRigControlChild(command) {
+          workflow.commitBindRigControlChild(command);
+          render();
+        },
         onRunDynamicsPreview(frameCount) {
           workflow.runDynamicsPreview(frameCount);
           render();

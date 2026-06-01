@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "parent-child-rigControl-runtime-diff-summary-v1",
+  "runtimeDiff": {
+    "schemaVersion": "runtime-diff-v1",
+    "beforeSnapshotId": "snap_parent_child_rigcontrol_diagonal_0",
+    "afterSnapshotId": "snap_parent_child_rigcontrol_diagonal_1",
+    "parameterChanges": [
+      {
+        "path": "/rigControls/rig_body_rotation",
+        "afterRigControlId": "rig_body_rotation"
+      },
+      {
+        "path": "/rigControls/rig_arm_rotation",
+        "afterRigControlId": "rig_arm_rotation"
+      }
+    ],
+    "drawableChanges": [
+      {
+        "drawableId": "draw_arm",
+        "boundsChanged": true,
+        "vertexHashBefore": "vhash_568d1cfb_3",
+        "vertexHashAfter": "vhash_f495d7e4_3"
+      }
+    ],
+    "diagnosticDeltaCount": 0
+  }
+}

@@ -33,6 +33,7 @@ import {
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
+import { projectRigControlState } from "./rig-control-authoring-state.js";
 import { projectViewerRuntimeState } from "./viewer-runtime-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
 import { createEmptySourceIntakeDraftState } from "./source-intake-draft-state.js";
@@ -42,6 +43,7 @@ import type {
   DynamicsGroupDto,
   MeshDto,
   ModelPartDto,
+  RigControlDto,
   SourceAssetDto,
   TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
@@ -51,6 +53,7 @@ export interface LoadedPackageSummaryInput {
   readonly revision: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
   readonly dynamicsGroups?: readonly DynamicsGroupDto[];
+  readonly rigControls?: readonly RigControlDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -71,6 +74,7 @@ export interface CommittedOperationSummaryInput {
   readonly revision?: PackageRevisionInput;
   readonly parameters?: readonly ParameterProjectionInput[];
   readonly dynamicsGroups?: readonly DynamicsGroupDto[];
+  readonly rigControls?: readonly RigControlDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -104,6 +108,8 @@ export const projectLoadedPackageState = (
     loadedPackage: projectLoadedPackageIdentity(input.identity),
     revision: projectPackageRevision(input.revision),
     parameters: projectParameterList(input.parameters ?? []),
+    parts: input.parts ?? [],
+    rigControls: projectRigControlState(input.rigControls ?? []),
     dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
     drawables,
     meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
@@ -147,6 +153,11 @@ export const applyCommittedOperationSummary = (
       input.dynamicsGroups === undefined
         ? state.dynamicsGroups
         : projectDynamicsGroupState(input.dynamicsGroups),
+    parts: input.parts ?? state.parts,
+    rigControls:
+      input.rigControls === undefined
+        ? state.rigControls
+        : projectRigControlState(input.rigControls),
     drawables,
     meshEdit,
     previewParameters:

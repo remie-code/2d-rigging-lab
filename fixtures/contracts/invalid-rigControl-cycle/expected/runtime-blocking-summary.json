@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "invalid-rigControl-cycle-runtime-blocking-summary-v1",
+  "fixtureId": "invalid-rigControl-cycle",
+  "topologicalEvaluation": "blocked",
+  "blockingCheckId": "rigControl.cycle",
+  "generatedRuntimeSnapshotIds": [],
+  "runtimeDiff": null
+}

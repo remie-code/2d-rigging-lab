@@ -81,6 +81,13 @@ import {
   type EditorWorkflowDynamicsUpdateResult
 } from "./dynamics-group-workflow.js";
 import {
+  commitWorkflowBindRigControlChild,
+  commitWorkflowCreateRotation2dRigControl,
+  type EditorWorkflowBindRigControlChildCommand,
+  type EditorWorkflowCreateRotation2dRigControlCommand,
+  type EditorWorkflowRigControlCommitResult
+} from "./rig-control-workflow.js";
+import {
   createWorkflowDynamicsPreviewRunner,
   type EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
@@ -97,7 +104,6 @@ export type {
 export type {
   EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
-
 export interface EditorWorkflowControllerOptions {
   readonly projectStore: BrowserProjectStore;
   readonly now?: () => Date;
@@ -235,6 +241,10 @@ export interface EditorWorkflowController {
   nudgeMeshVertex(command: EditorMeshVertexNudgeCommand): EditorWorkflowMeshVertexNudgeResult;
   commitCreateDynamicsGroup(command: EditorWorkflowCreateDynamicsGroupCommand): EditorWorkflowDynamicsCreateResult;
   commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorWorkflowDynamicsUpdateResult;
+  commitCreateRotation2dRigControl(
+    command: EditorWorkflowCreateRotation2dRigControlCommand
+  ): EditorWorkflowRigControlCommitResult;
+  commitBindRigControlChild(command: EditorWorkflowBindRigControlChildCommand): EditorWorkflowRigControlCommitResult;
   resetDynamicsPreview(): EditorWorkflowDynamicsPreviewResult;
   runDynamicsPreview(frameCount: number): EditorWorkflowDynamicsPreviewResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
@@ -582,6 +592,24 @@ export const createEditorWorkflowController = (
       latestDrawablePresetResult = null;
       latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
       state = outcome.state;
+
+      return outcome.result;
+    },
+    commitCreateRotation2dRigControl(command) {
+      const outcome = commitWorkflowCreateRotation2dRigControl({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitBindRigControlChild(command) {
+      const outcome = commitWorkflowBindRigControlChild({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
 
       return outcome.result;
     },

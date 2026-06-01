@@ -55,7 +55,16 @@ export type AuthoringMutationErrorCode =
   | "duplicate_dynamics_driver"
   | "duplicate_dynamics_output_parameter"
   | "dynamics_output_used_as_driver"
-  | "no_op_dynamics_group_update";
+  | "no_op_dynamics_group_update"
+  | "duplicate_rig_control"
+  | "missing_rig_control"
+  | "invalid_rig_control_child_kind"
+  | "invalid_rig_control_child_id"
+  | "duplicate_rig_control_child"
+  | "rig_control_self_child"
+  | "rig_control_cycle"
+  | "rig_control_child_already_parented"
+  | "no_op_rig_control_child_binding";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

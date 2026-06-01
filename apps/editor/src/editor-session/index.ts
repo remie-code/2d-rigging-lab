@@ -5,6 +5,7 @@ export * from "./drawable-layer-command.js";
 export * from "./dynamics-group-command.js";
 export * from "./evidence-provider.js";
 export * from "./mesh-vertex-command.js";
+export * from "./rig-control-command.js";
 export * from "./session-adapter.js";
 export * from "./source-import-command.js";
 export * from "./viewer-session-adapter.js";

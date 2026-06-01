@@ -9,6 +9,7 @@ import {
   createDrawableVisibilityToggleTestId,
   createMeshVertexNudgeButtonTestId,
   createPreviewParameterControlTestId,
+  createRigControlRowTestId,
   createViewerParameterControlTestId,
   editorTestIds,
   projectEditorWorkflowViewModel,
@@ -173,6 +174,30 @@ describe("editor app shell preview panel", () => {
     );
     expect(findByTestId(shell, editorTestIds.viewerRuntimePackageState)?.textContent).toContain(
       "pkg_editor_browser_sample"
+    );
+  });
+
+  it("renders rig control authoring with preview and viewer runtime evidence", () => {
+    const workflow = createWorkflow();
+    workflow.commitCreateRotation2dRigControl(createRotationRigControlCommand());
+    workflow.commitBindRigControlChild({
+      parentRigControlId: "rig_workflow_body_rotation",
+      child: { kind: "drawable", id: "draw_body" }
+    });
+    workflow.openViewerRuntimeSurface();
+    const shell = renderShell(workflow);
+
+    expect(findByTestId(shell, editorTestIds.rigControlPanel)?.textContent).toContain(
+      "Project-defined Rig Controls"
+    );
+    expect(findByTestId(shell, createRigControlRowTestId("rig_workflow_body_rotation"))?.textContent).toContain(
+      "draw_body"
+    );
+    expect(findByTestId(shell, editorTestIds.rigControlEvidence)?.textContent).toContain(
+      "rig_workflow_body_rotation"
+    );
+    expect(findByTestId(shell, editorTestIds.viewerRuntimeSnapshotSummary)?.textContent).toContain(
+      "1 evaluated / 1 total"
     );
   });
 
@@ -425,6 +450,8 @@ describe("editor app shell preview panel", () => {
       onNudgeMeshVertex() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
       onRunDynamicsPreview() {},
       onResetDynamicsPreview() {},
       onConfirmSourceIntakeDraft() {},
@@ -464,6 +491,8 @@ describe("editor app shell preview panel", () => {
       onNudgeMeshVertex() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
       onRunDynamicsPreview() {},
       onResetDynamicsPreview() {},
       onConfirmSourceIntakeDraft() {},
@@ -496,6 +525,8 @@ const renderShell = (
     readonly onNudgeMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshVertex"];
     readonly onRunDynamicsPreview?: (frameCount: number) => void;
     readonly onResetDynamicsPreview?: () => void;
+    readonly onCommitCreateRotation2dRigControl?: Parameters<typeof createEditorAppShell>[0]["onCommitCreateRotation2dRigControl"];
+    readonly onCommitBindRigControlChild?: Parameters<typeof createEditorAppShell>[0]["onCommitBindRigControlChild"];
     readonly onOpenViewerRuntimeSurface?: () => void;
     readonly onCloseViewerRuntimeSurface?: () => void;
     readonly onSetViewerParameterValue?: (parameterId: string, value: number) => void;
@@ -516,6 +547,8 @@ const renderShell = (
     onNudgeMeshVertex: callbacks.onNudgeMeshVertex ?? (() => {}),
     onCommitCreateDynamicsGroup() {},
     onCommitUpdateDynamicsGroup() {},
+    onCommitCreateRotation2dRigControl: callbacks.onCommitCreateRotation2dRigControl ?? (() => {}),
+    onCommitBindRigControlChild: callbacks.onCommitBindRigControlChild ?? (() => {}),
     onRunDynamicsPreview: callbacks.onRunDynamicsPreview ?? (() => {}),
     onResetDynamicsPreview: callbacks.onResetDynamicsPreview ?? (() => {}),
     onConfirmSourceIntakeDraft() {},
@@ -572,6 +605,14 @@ const createDynamicsGroupCommand = (name: "hair") => ({
   damping: 0.35,
   maxVelocity: 2,
   maxAmplitude: 1
+} as const);
+
+const createRotationRigControlCommand = () => ({
+  operationId: "op_workflow_create_rotation2d_body",
+  displayName: "Workflow Body Rotation",
+  partId: "part_root",
+  pivot: { x: 50, y: 56 },
+  restAngleDegrees: 15
 } as const);
 
 const createTextureSourceIntakeDraft = (

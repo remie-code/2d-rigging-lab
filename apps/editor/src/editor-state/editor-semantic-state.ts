@@ -25,9 +25,11 @@ import {
   type SourceIntakeDraftState
 } from "./source-intake-draft-state.js";
 import type {
+  ModelPartDto,
   SourceAssetDto,
   TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
+import type { RigControlState } from "./rig-control-authoring-state.js";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
 
@@ -36,6 +38,8 @@ export interface EditorSemanticState {
   readonly loadedPackage: LoadedPackageIdentityState | null;
   readonly revision: PackageRevisionState;
   readonly parameters: readonly ParameterListItemState[];
+  readonly parts: readonly ModelPartDto[];
+  readonly rigControls: readonly RigControlState[];
   readonly dynamicsGroups: readonly DynamicsGroupState[];
   readonly drawables: readonly DrawableListItemState[];
   readonly meshEdit: MeshEditState;
@@ -59,6 +63,8 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   loadedPackage: null,
   revision: emptyPackageRevisionState(),
   parameters: [],
+  parts: [],
+  rigControls: [],
   dynamicsGroups: [],
   drawables: [],
   meshEdit: createEmptyMeshEditState(),

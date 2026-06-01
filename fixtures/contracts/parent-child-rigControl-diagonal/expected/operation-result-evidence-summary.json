@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "parent-child-rigControl-operation-result-summary-v1",
+  "dryRun": {
+    "operationId": "op_fixture_dry_run_create_body_rotation",
+    "status": "dry_run",
+    "preconditionOk": true,
+    "added": [
+      "rigControl:rig_body_rotation"
+    ],
+    "changedTargets": [
+      "package:pkg_parent_child_rigcontrol_diagonal:/model/rigControls/rigControls",
+      "rigControl:rig_body_rotation",
+      "package:pkg_parent_child_rigcontrol_diagonal:/model/graph/rigControlRootIds"
+    ],
+    "generatedRuntimeSnapshotIds": [],
+    "generatedValidationReportIds": [],
+    "originalPackageRevisionAfter": 0,
+    "originalAuthoringRevisionAfter": 0,
+    "originalDirtyAfter": false
+  },
+  "commitSequence": {
+    "operationIds": [
+      "op_fixture_create_body_rotation",
+      "op_fixture_create_arm_rotation",
+      "op_fixture_bind_arm_rotation",
+      "op_fixture_bind_arm_drawable"
+    ],
+    "statuses": [
+      "committed",
+      "committed",
+      "committed",
+      "committed"
+    ],
+    "operationLogLength": 4,
+    "packageRevisionAfter": 4,
+    "authoringRevisionAfter": 4,
+    "rigControlRootIds": [
+      "rig_body_rotation"
+    ],
+    "finalRigControls": [
+      {
+        "rigControlId": "rig_body_rotation",
+        "parentId": null,
+        "childRigControlIds": [
+          "rig_arm_rotation"
+        ],
+        "childDrawableIds": [],
+        "restAngleDegrees": 30
+      },
+      {
+        "rigControlId": "rig_arm_rotation",
+        "parentId": "rig_body_rotation",
+        "childRigControlIds": [],
+        "childDrawableIds": [
+          "draw_arm"
+        ],
+        "restAngleDegrees": 15
+      }
+    ],
+    "finalOperationEvidence": {
+      "operationId": "op_fixture_bind_arm_drawable",
+      "generatedRuntimeSnapshotIds": [
+        "snap_parent_child_rigcontrol_diagonal_0",
+        "snap_parent_child_rigcontrol_diagonal_1"
+      ],
+      "generatedValidationReportIds": [
+        "val_parent_child_rigcontrol_diagonal_candidate"
+      ],
+      "runtimeDiffDrawableChanges": [
+        {
+          "drawableId": "draw_arm",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_568d1cfb_3",
+          "vertexHashAfter": "vhash_f495d7e4_3"
+        }
+      ],
+      "validationDiffNewFailureCount": 0
+    }
+  }
+}

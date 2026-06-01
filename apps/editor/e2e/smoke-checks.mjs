@@ -28,6 +28,7 @@ import {
 import { runAssetIoBoundaryPersistenceSmoke } from "./asset-io-boundary-smoke.mjs";
 import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
 import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
+import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -157,6 +158,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-viewer-runtime-reset`);
+    const rigControlEvidence = await runRigControlPersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave25-rig-control`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-rig-control-reset`);
 
     return {
       viewport: viewport.name,
@@ -166,6 +175,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       assetIoBoundaryEvidence,
       dynamicsEvidence,
       viewerRuntimeEvidence,
+      rigControlEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

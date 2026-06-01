@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "parent-child-rigControl-diagonal-runtime-graph-v1",
+  "packageId": "pkg_parent_child_rigcontrol_diagonal",
+  "packageRevision": 4,
+  "packageHash": "sha256:parent-child-rigControl-diagonal",
+  "coordinateSystem": "canvas-y-down-v1",
+  "drawables": [
+    {
+      "drawableId": "draw_arm",
+      "meshId": "mesh_arm",
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 8
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 8,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 8
+        }
+      ]
+    }
+  ],
+  "rigControls": [
+    {
+      "kind": "rotation2d",
+      "rigControlId": "rig_body_rotation",
+      "childDrawableIds": [],
+      "childRigControlIds": [
+        "rig_arm_rotation"
+      ],
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "restAngleDegrees": 30,
+      "restTranslation": {
+        "x": 0,
+        "y": 0
+      },
+      "restScale": {
+        "x": 1,
+        "y": 1
+      },
+      "enabled": true
+    },
+    {
+      "kind": "rotation2d",
+      "rigControlId": "rig_arm_rotation",
+      "parentId": "rig_body_rotation",
+      "childDrawableIds": [
+        "draw_arm"
+      ],
+      "childRigControlIds": [],
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "restAngleDegrees": 15,
+      "restTranslation": {
+        "x": 0,
+        "y": 0
+      },
+      "restScale": {
+        "x": 1,
+        "y": 1
+      },
+      "enabled": true
+    }
+  ],
+  "drawOrder": [
+    {
+      "drawableId": "draw_arm",
+      "drawOrder": 0
+    }
+  ]
+}

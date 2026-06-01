@@ -52,10 +52,16 @@ export const createViewerRuntimeSnapshotSummary = (
   appendFact(facts, "Parameters", `${summary.parameterCount} total / ${summary.overrideCount} override`);
   appendFact(facts, "Drawables", `${summary.visibleDrawableCount} visible / ${summary.drawableCount} total`);
   appendFact(facts, "Draw list", String(summary.drawListCount));
+  appendFact(facts, "Rig controls", `${summary.evaluatedRigControlCount} evaluated / ${summary.rigControlCount} total`);
   appendFact(facts, "Dynamics", String(summary.dynamicsCount));
   appendFact(facts, "Diagnostics", String(summary.diagnosticCount));
   appendFact(facts, "Evidence", summary.evidenceLabel);
-  section.append(facts, createParameterValueList(projection), createDynamicsOutputList(projection));
+  section.append(
+    facts,
+    createParameterValueList(projection),
+    createRigControlEvidenceList(projection),
+    createDynamicsOutputList(projection)
+  );
   return section;
 };
 
@@ -170,6 +176,31 @@ const createDynamicsOutputList = (
   for (const dynamics of projection.snapshotSummary.dynamicsOutputs) {
     const item = document.createElement("li");
     item.textContent = `${dynamics.dynamicsGroupId} -> ${dynamics.outputParameterId}: ${formatViewerNumber(dynamics.outputValue)}; position ${formatViewerNumber(dynamics.position)} / velocity ${formatViewerNumber(dynamics.velocity)} / tick ${dynamics.tick}`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createRigControlEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Rig Control Evidence";
+  section.append(heading);
+
+  if (projection.snapshotSummary.rigControls.length === 0) {
+    section.append(createEmpty("No project-defined rig control evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const rigControl of projection.snapshotSummary.rigControls) {
+    const item = document.createElement("li");
+    item.textContent = `${rigControl.rigControlId}: ${rigControl.kind} / ${rigControl.evaluationStatus} / order ${rigControl.hierarchyIndex}; parent ${rigControl.parentLabel}; local ${rigControl.localAngleLabel} / world ${rigControl.worldAngleLabel}; drawables ${rigControl.affectedDrawableLabel}; child controls ${rigControl.affectedRigControlLabel}`;
     list.append(item);
   }
   section.append(list);

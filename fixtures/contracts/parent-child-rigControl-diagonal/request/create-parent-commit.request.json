@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_fixture_create_body_rotation",
+  "actor": "human",
+  "surface": "gui",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-009",
+      "AC-MVP-010"
+    ],
+    "relatedScenarios": [
+      "SC-DEF-002"
+    ]
+  },
+  "operationType": "createRotation2dRigControl",
+  "payload": {
+    "partId": "part_root",
+    "displayName": "Body Rotation",
+    "childDrawableIds": [],
+    "childRigControlIds": [],
+    "pivot": {
+      "x": 0,
+      "y": 0
+    },
+    "restAngleDegrees": 30
+  }
+}
