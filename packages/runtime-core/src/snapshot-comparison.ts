@@ -289,6 +289,30 @@ const createRigControlFieldChanges = (
     });
   }
 
+  if (beforeRigControl.worldTransform?.angleDegrees !== afterRigControl.worldTransform?.angleDegrees) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/worldTransform/angleDegrees`,
+      before: beforeRigControl.worldTransform?.angleDegrees ?? null,
+      after: afterRigControl.worldTransform?.angleDegrees ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.worldTransform?.translation, afterRigControl.worldTransform?.translation)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/worldTransform/translation`,
+      before: beforeRigControl.worldTransform?.translation ?? null,
+      after: afterRigControl.worldTransform?.translation ?? null
+    });
+  }
+
+  if (!sameJsonValue(beforeRigControl.worldTransform?.scale, afterRigControl.worldTransform?.scale)) {
+    changes.push({
+      path: `/rigControls/${afterRigControl.rigControlId}/worldTransform/scale`,
+      before: beforeRigControl.worldTransform?.scale ?? null,
+      after: afterRigControl.worldTransform?.scale ?? null
+    });
+  }
+
   if (!sameStringList(beforeRigControl.affectedDrawableIds, afterRigControl.affectedDrawableIds)) {
     changes.push({
       path: `/rigControls/${afterRigControl.rigControlId}/affectedDrawableIds`,

@@ -30,6 +30,7 @@ import type {
   TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
 import type { RigControlState } from "./rig-control-authoring-state.js";
+import type { RigControlAngleKeyformState } from "./rig-control-keyform-state.js";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
 
@@ -40,6 +41,7 @@ export interface EditorSemanticState {
   readonly parameters: readonly ParameterListItemState[];
   readonly parts: readonly ModelPartDto[];
   readonly rigControls: readonly RigControlState[];
+  readonly rigControlAngleKeyforms: readonly RigControlAngleKeyformState[];
   readonly dynamicsGroups: readonly DynamicsGroupState[];
   readonly drawables: readonly DrawableListItemState[];
   readonly meshEdit: MeshEditState;
@@ -65,6 +67,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   parameters: [],
   parts: [],
   rigControls: [],
+  rigControlAngleKeyforms: [],
   dynamicsGroups: [],
   drawables: [],
   meshEdit: createEmptyMeshEditState(),

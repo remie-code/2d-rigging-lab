@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "rig-control-keyform-angle-operation",
+  "title": "addKeyform rigControl angleDegrees operation evidence",
+  "coversAC": [
+    "AC-MVP-008",
+    "AC-MVP-009",
+    "AC-MVP-010",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-PARAM-002",
+    "SC-DEF-002"
+  ],
+  "modulesBlocked": [
+    "authoring-core",
+    "operation-core",
+    "runtime-core"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/add-angle-keyform-dry-run.request.json",
+    "request/add-angle-keyform-commit.request.json",
+    "request/add-angle-keyform-missing-rig-control.request.json",
+    "request/add-angle-keyform-unsupported-property.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-result-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageFileSet",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "diagnosticSummary",
+      "path": "expected/negative-diagnostics-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "updateRule": "requires-contract-review"
+}

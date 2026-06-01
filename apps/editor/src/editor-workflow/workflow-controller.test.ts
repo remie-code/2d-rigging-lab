@@ -905,6 +905,93 @@ describe("editor workflow controller", () => {
     ]);
   });
 
+  it("creates a rig control angle keyform and restores viewer-observable evidence after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    first.commitCreateRotation2dRigControl(createRotationRigControlCommand("body"));
+    first.commitBindRigControlChild({
+      parentRigControlId: "rig_workflow_body_rotation",
+      child: {
+        kind: "drawable",
+        id: "draw_body"
+      }
+    });
+    const keyform = first.commitCreateRotation2dRigControl({
+      commandKind: "addRigControlAngleKeyform",
+      parameterId: "param_preview_body_yaw",
+      rigControlId: "rig_workflow_body_rotation",
+      keyValue: 1,
+      angleDegrees: 45
+    });
+    first.openViewerRuntimeSurface();
+    first.setViewerParameterValue("param_preview_body_yaw", 1);
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+    second.openViewerRuntimeSurface();
+    second.setViewerParameterValue("param_preview_body_yaw", 1);
+
+    expect(keyform.status).toBe("committed");
+    expect(first.state.rigControlAngleKeyforms).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        parameterId: "param_preview_body_yaw",
+        keyValue: 1,
+        angleDegrees: 45
+      })
+    ]);
+    expect(first.viewModel.rigControls).toMatchObject({
+      angleKeyformCountLabel: "1 angle keyform",
+      canCreateAngleKeyform: true,
+      lastRigControlOperationLabel: "addKeyform committed"
+    });
+    expect(first.viewerRuntimeProjection?.snapshotSummary.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        localAngleLabel: "45",
+        worldAngleLabel: "45",
+        affectedDrawableLabel: "draw_body"
+      })
+    ]);
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createRotation2dRigControl",
+      "bindRigControlChild",
+      "addKeyform"
+    ]);
+    expect(saved.snapshot.document.model.keyforms.keyformSets).toContainEqual(
+      expect.objectContaining({
+        target: {
+          kind: "rigControl",
+          id: "rig_workflow_body_rotation",
+          property: "angleDegrees"
+        },
+        parameterId: "param_preview_body_yaw",
+        keys: [
+          {
+            value: 1,
+            statePatch: 45
+          }
+        ]
+      })
+    );
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.rigControlAngleKeyforms).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        parameterId: "param_preview_body_yaw",
+        angleDegrees: 45
+      })
+    ]);
+    expect(second.viewerRuntimeProjection?.snapshotSummary.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_rotation",
+        localAngleLabel: "45",
+        worldAngleLabel: "45"
+      })
+    ]);
+  });
+
   it("surfaces deterministic rig control bind diagnostics without mutating state", () => {
     const workflow = createWorkflow(createMemoryStorage());
 

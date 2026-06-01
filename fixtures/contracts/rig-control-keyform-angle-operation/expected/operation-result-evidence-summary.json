@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "rig-control-keyform-angle-operation-result-summary-v1",
+  "operationId": "op_fixture_dry_run_add_body_rotation_angle",
+  "status": "dry_run",
+  "preconditionOk": true,
+  "checkedTargetRefs": [
+    "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+    "parameter:param_face_yaw",
+    "rigControl:rig_body_rotation"
+  ],
+  "modelDiff": {
+    "baseRevision": 0,
+    "candidateRevision": 1,
+    "added": [
+      "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1"
+    ],
+    "removed": [],
+    "changedTargets": [
+      "package:pkg_rig_control_keyform_angle_operation:/model/keyforms/keyformSets",
+      "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "parameter:param_face_yaw",
+      "rigControl:rig_body_rotation"
+    ],
+    "targetFieldAfter": {
+      "kind": "rigControl",
+      "id": "rig_body_rotation",
+      "property": "angleDegrees"
+    },
+    "operationIds": [
+      "op_fixture_dry_run_add_body_rotation_angle"
+    ]
+  },
+  "runtimeDiff": {
+    "beforeSnapshotId": "snap_rig_control_keyform_angle_operation_0",
+    "afterSnapshotId": "snap_rig_control_keyform_angle_operation_1",
+    "parameterChangePaths": [
+      "/rigControls/rig_body_rotation/localTransform/angleDegrees",
+      "/rigControls/rig_body_rotation/localTransform/matrix",
+      "/rigControls/rig_body_rotation/worldTransform/matrix",
+      "/rigControls/rig_body_rotation/worldTransform/angleDegrees"
+    ],
+    "angleChange": {
+      "before": 0,
+      "after": 30
+    },
+    "worldAngleChange": {
+      "before": 0,
+      "after": 30.000000000013
+    },
+    "drawableChanges": [
+      {
+        "drawableId": "draw_body",
+        "boundsChanged": true,
+        "vertexHashBefore": "vhash_568d1cfb_3",
+        "vertexHashAfter": "vhash_c1c59782_3"
+      }
+    ],
+    "diagnosticDeltaCheckIds": []
+  },
+  "generatedRuntimeSnapshotIds": [
+    "snap_rig_control_keyform_angle_operation_0",
+    "snap_rig_control_keyform_angle_operation_1"
+  ],
+  "generatedRuntimeStateRefs": [
+    "runtime/states/pkg_rig_control_keyform_angle_operation-r1-rig-control-keyform-angle-operation-final-f1.runtime-state.json"
+  ],
+  "generatedRuntimeStateSequenceRefs": [
+    "runtime/state-sequences/pkg_rig_control_keyform_angle_operation-r1-rig-control-keyform-angle-operation.runtime-state-sequence.json"
+  ],
+  "finalRuntimeStateRef": "runtime/states/pkg_rig_control_keyform_angle_operation-r1-rig-control-keyform-angle-operation-final-f1.runtime-state.json",
+  "capturedRuntimeArtifactCount": 4,
+  "originalPackageRevisionAfter": 0,
+  "originalAuthoringRevisionAfter": 0,
+  "originalDirtyAfter": false
+}

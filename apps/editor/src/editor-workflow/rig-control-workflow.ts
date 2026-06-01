@@ -1,4 +1,5 @@
 import type {
+  EditorAddRigControlAngleKeyformCommand,
   EditorBindRigControlChildCommand,
   EditorCreateRotation2dRigControlCommand,
   EditorSessionAdapter,
@@ -7,8 +8,14 @@ import type {
 import type { EditorSemanticState } from "../editor-state/index.js";
 import { applyEditorWorkflowCommitResult } from "./workflow-state-projection.js";
 
+export interface EditorWorkflowAddRigControlAngleKeyformCommand
+  extends EditorAddRigControlAngleKeyformCommand {
+  readonly commandKind: "addRigControlAngleKeyform";
+}
+
 export type EditorWorkflowCreateRotation2dRigControlCommand =
-  EditorCreateRotation2dRigControlCommand;
+  | EditorCreateRotation2dRigControlCommand
+  | EditorWorkflowAddRigControlAngleKeyformCommand;
 export type EditorWorkflowBindRigControlChildCommand =
   EditorBindRigControlChildCommand;
 
@@ -28,13 +35,40 @@ export const commitWorkflowCreateRotation2dRigControl = (input: {
   readonly state: EditorSemanticState;
   readonly command: EditorWorkflowCreateRotation2dRigControlCommand;
 }): EditorWorkflowRigControlCommitOutcome => {
+  const command = input.command;
+  if (isAddRigControlAngleKeyformCommand(command)) {
+    return commitWorkflowAddRigControlAngleKeyform({
+      ...input,
+      command
+    });
+  }
+
   const result = input.adapter.commitCreateRotation2dRigControl({
+    ...command,
+    operationId:
+      command.operationId ??
+      createRigControlOperationId(
+        "create_rotation2d_rig_control",
+        command.displayName,
+        input.adapter.authoringSession.packageRevision
+      )
+  });
+
+  return projectRigControlCommitOutcome(input.state, input.adapter, result);
+};
+
+export const commitWorkflowAddRigControlAngleKeyform = (input: {
+  readonly adapter: EditorSessionAdapter;
+  readonly state: EditorSemanticState;
+  readonly command: EditorWorkflowAddRigControlAngleKeyformCommand;
+}): EditorWorkflowRigControlCommitOutcome => {
+  const result = input.adapter.commitAddRigControlAngleKeyform({
     ...input.command,
     operationId:
       input.command.operationId ??
       createRigControlOperationId(
-        "create_rotation2d_rig_control",
-        input.command.displayName,
+        "add_rig_control_angle_keyform",
+        `${input.command.rigControlId}_${input.command.parameterId}_${input.command.keyValue}`,
         input.adapter.authoringSession.packageRevision
       )
   });
@@ -83,3 +117,8 @@ const createRigControlOperationId = (
 
 const sanitizeRigControlOperationIdToken = (text: string): string =>
   text.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase() || "unnamed";
+
+const isAddRigControlAngleKeyformCommand = (
+  command: EditorWorkflowCreateRotation2dRigControlCommand
+): command is EditorWorkflowAddRigControlAngleKeyformCommand =>
+  "commandKind" in command && command.commandKind === "addRigControlAngleKeyform";

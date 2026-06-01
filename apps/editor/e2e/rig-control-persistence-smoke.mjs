@@ -1,5 +1,6 @@
 import {
   createRigControlRowTestId,
+  createViewerParameterControlTestId,
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
@@ -11,9 +12,13 @@ const rigControlSmoke = {
   childDisplayName: "E2E Child Rotation",
   childRigControlId: "rig_e2e_child_rotation",
   drawableId: "draw_body",
+  parameterId: "param_preview_body_yaw",
+  keyformSetId: "keyset_rigcontrol_rig_e2e_parent_rotation_angledegrees_preview_body_yaw_1",
   partId: "part_root",
   parentRestAngleDegrees: 30,
-  childRestAngleDegrees: 15
+  childRestAngleDegrees: 15,
+  keyValue: 1,
+  angleDegrees: 45
 };
 
 export const runRigControlPersistenceSmoke = async ({ page, viewport }) => {
@@ -66,7 +71,17 @@ export const runRigControlPersistenceSmoke = async ({ page, viewport }) => {
   await clickTestId(page, editorTestIds.rigControlBindSubmit);
   await assertChildDrawableBound(page);
 
+  await setRigControlKeyformFormValues(page, {
+    parameterId: rigControlSmoke.parameterId,
+    rigControlId: rigControlSmoke.parentRigControlId,
+    keyValue: rigControlSmoke.keyValue,
+    angleDegrees: rigControlSmoke.angleDegrees
+  });
+  await clickTestId(page, editorTestIds.rigControlKeyformSubmit);
+  await assertRigControlAngleKeyformCreated(page);
+
   await clickTestId(page, editorTestIds.viewerRuntimeOpen);
+  await setViewerSliderValue(page, rigControlSmoke.parameterId, rigControlSmoke.keyValue);
   await assertRigControlViewerEvidence(page);
   const preSaveViewer = await readRigControlEvidenceState(page);
 
@@ -81,6 +96,7 @@ export const runRigControlPersistenceSmoke = async ({ page, viewport }) => {
   await assertRigControlStateAfterLoad(page);
 
   await clickTestId(page, editorTestIds.viewerRuntimeOpen);
+  await setViewerSliderValue(page, rigControlSmoke.parameterId, rigControlSmoke.keyValue);
   await assertRigControlViewerEvidence(page);
   await assertSavedRigControlProject(page, "after rig control reload");
   const postLoadViewer = await readRigControlEvidenceState(page);
@@ -100,10 +116,13 @@ export const runRigControlPersistenceSmoke = async ({ page, viewport }) => {
 const assertInitialRigControlState = async (page) => {
   await waitForText(page, editorTestIds.rigControlPanel, "0 rig controls");
   await waitForText(page, editorTestIds.rigControlList, "No project-defined rig controls");
+  await waitForText(page, editorTestIds.rigControlKeyformForm, "No rotation2d rig control");
+  await waitForText(page, editorTestIds.rigControlKeyformList, "No rig control angle keyforms");
   await waitForText(page, editorTestIds.rigControlEvidence, "No preview rig control affected targets");
   await waitForText(page, editorTestIds.rigControlEvidence, "Open Viewer / Runtime for viewer rig control evidence");
   await waitForText(page, editorTestIds.rigControlDiagnostics, "No rig control operation committed");
   await assertRigControlBindButtonState(page, { disabled: true });
+  await assertRigControlKeyformButtonState(page, { disabled: true });
 };
 
 const assertRigControlCreated = async (
@@ -156,11 +175,31 @@ const assertChildDrawableBound = async (page) => {
   await waitForText(page, editorTestIds.rigControlDiagnostics, "No rig control diagnostics");
 };
 
+const assertRigControlAngleKeyformCreated = async (page) => {
+  await waitForText(page, editorTestIds.operationStatus, "addKeyform committed");
+  await waitForOperationLogEntryCount(page, 5);
+  await waitForText(page, editorTestIds.operationLogSummary, "addKeyform");
+  await waitForText(page, editorTestIds.generatedEvidenceSummary, "Runtime snapshots");
+  await waitForText(page, editorTestIds.generatedEvidenceSummary, "Validation reports");
+  await waitForText(page, editorTestIds.rigControlKeyformList, "1 angle keyform");
+  await waitForText(page, editorTestIds.rigControlKeyformList, rigControlSmoke.keyformSetId);
+  await waitForText(page, editorTestIds.rigControlKeyformList, rigControlSmoke.parentRigControlId);
+  await waitForText(page, editorTestIds.rigControlKeyformList, rigControlSmoke.parameterId);
+  await waitForText(page, editorTestIds.rigControlKeyformList, `${rigControlSmoke.angleDegrees} deg`);
+  await waitForText(
+    page,
+    editorTestIds.rigControlEvidence,
+    `angle keyforms ${rigControlSmoke.parameterId}@${rigControlSmoke.keyValue} -> ${rigControlSmoke.angleDegrees} deg`
+  );
+  await waitForText(page, editorTestIds.rigControlDiagnostics, "addKeyform committed");
+  await waitForText(page, editorTestIds.rigControlDiagnostics, "No rig control diagnostics");
+};
+
 const assertRigControlStateAfterLoad = async (page) => {
   await waitForText(page, editorTestIds.packageStatus, rigControlSmoke.packageId);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
-  await waitForOperationLogEntryCount(page, 4);
-  await waitForText(page, editorTestIds.operationLogSummary, "createRotation2dRigControl, bindRigControlChild");
+  await waitForOperationLogEntryCount(page, 5);
+  await waitForText(page, editorTestIds.operationLogSummary, "createRotation2dRigControl, bindRigControlChild, addKeyform");
   await waitForText(page, editorTestIds.rigControlPanel, "2 rig controls");
   await waitForText(
     page,
@@ -172,8 +211,16 @@ const assertRigControlStateAfterLoad = async (page) => {
     createRigControlRowTestId(rigControlSmoke.childRigControlId),
     rigControlSmoke.drawableId
   );
+  await waitForText(page, editorTestIds.rigControlKeyformList, "1 angle keyform");
+  await waitForText(page, editorTestIds.rigControlKeyformList, rigControlSmoke.keyformSetId);
+  await waitForText(page, editorTestIds.rigControlKeyformList, `${rigControlSmoke.angleDegrees} deg`);
   await waitForText(page, editorTestIds.rigControlEvidence, `child controls ${rigControlSmoke.childRigControlId}`);
   await waitForText(page, editorTestIds.rigControlEvidence, `drawable children ${rigControlSmoke.drawableId}`);
+  await waitForText(
+    page,
+    editorTestIds.rigControlEvidence,
+    `angle keyforms ${rigControlSmoke.parameterId}@${rigControlSmoke.keyValue} -> ${rigControlSmoke.angleDegrees} deg`
+  );
   await waitForText(page, editorTestIds.rigControlDiagnostics, "No rig control diagnostics");
 };
 
@@ -181,17 +228,37 @@ const assertRigControlViewerEvidence = async (page) => {
   await waitForTestId(page, editorTestIds.viewerRuntimePanel);
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "Rig controls");
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "2 evaluated / 2 total");
+  await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "1 override");
+  await waitForText(
+    page,
+    editorTestIds.viewerRuntimeSnapshotSummary,
+    `${rigControlSmoke.parameterId}: ${rigControlSmoke.keyValue} / authoredInput / viewerOverride`
+  );
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, rigControlSmoke.parentRigControlId);
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, rigControlSmoke.childRigControlId);
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "Rig Control Evidence");
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "order 0");
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "order 1");
+  await waitForText(
+    page,
+    editorTestIds.viewerRuntimeSnapshotSummary,
+    `local ${rigControlSmoke.angleDegrees} / world ${rigControlSmoke.angleDegrees}`
+  );
+  await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, "local 15 / world 60");
   await waitForText(page, editorTestIds.viewerRuntimeSnapshotSummary, `drawables ${rigControlSmoke.drawableId}`);
   await waitForText(page, editorTestIds.viewerRuntimeDiff, "Runtime Diff");
+  await waitForText(page, editorTestIds.viewerRuntimeDiff, "Affected drawables");
+  await waitForText(page, editorTestIds.viewerRuntimeDiff, rigControlSmoke.drawableId);
   await waitForText(page, editorTestIds.viewerRuntimeDiagnostics, "Validation Diagnostics");
   await waitForText(page, editorTestIds.viewerRuntimeDiagnostics, "No diagnostics");
   await waitForText(page, editorTestIds.rigControlEvidence, `${rigControlSmoke.parentRigControlId}: evaluated`);
   await waitForText(page, editorTestIds.rigControlEvidence, `${rigControlSmoke.childRigControlId}: evaluated`);
+  await waitForText(
+    page,
+    editorTestIds.rigControlEvidence,
+    `${rigControlSmoke.parentRigControlId}: evaluated / order 0; local ${rigControlSmoke.angleDegrees} / world ${rigControlSmoke.angleDegrees}`
+  );
+  await waitForText(page, editorTestIds.rigControlEvidence, `${rigControlSmoke.childRigControlId}: evaluated / order 1; local 15 / world 60`);
   await waitForText(page, editorTestIds.rigControlEvidence, `affected ${rigControlSmoke.drawableId}`);
 };
 
@@ -204,6 +271,7 @@ const assertSavedRigControlProject = async (page, label) => {
 
     const project = JSON.parse(raw);
     const rigControls = readPackageJsonFile(project, "model/rig-controls.json");
+    const keyforms = readPackageJsonFile(project, "model/keyforms.json");
     const operationLogEntries = String(project.operationLogJsonl ?? "")
       .split("\n")
       .filter((line) => line.trim().length > 0)
@@ -213,6 +281,9 @@ const assertSavedRigControlProject = async (page, label) => {
     );
     const child = rigControls?.rigControls?.find(
       (candidate) => candidate.rigControlId === expected.childRigControlId
+    );
+    const keyformSet = keyforms?.keyformSets?.find(
+      (candidate) => candidate.keyformSetId === expected.keyformSetId
     );
 
     return {
@@ -243,6 +314,17 @@ const assertSavedRigControlProject = async (page, label) => {
             childRigControlIds: child.childRigControlIds,
             restAngleDegrees: child.restAngleDegrees
           },
+      keyformSet: keyformSet === undefined
+        ? null
+        : {
+            keyformSetId: keyformSet.keyformSetId,
+            target: keyformSet.target,
+            parameterId: keyformSet.parameterId,
+            evaluator: keyformSet.evaluator,
+            interpolation: keyformSet.interpolation,
+            compositionMode: keyformSet.compositionMode,
+            keys: keyformSet.keys
+          },
       generatedRuntimeArtifacts: (project.generatedArtifactPaths ?? []).filter((path) =>
         path.startsWith("runtime/")
       ).length,
@@ -268,12 +350,13 @@ const assertSavedRigControlProject = async (page, label) => {
   const expected = {
     schemaVersion: "editor-project-persistence-v1",
     packageId: rigControlSmoke.packageId,
-    packageRevision: 4,
+    packageRevision: 5,
     operationTypes: [
       "createRotation2dRigControl",
       "createRotation2dRigControl",
       "bindRigControlChild",
-      "bindRigControlChild"
+      "bindRigControlChild",
+      "addKeyform"
     ],
     parent: {
       rigControlId: rigControlSmoke.parentRigControlId,
@@ -292,6 +375,24 @@ const assertSavedRigControlProject = async (page, label) => {
       childDrawableIds: [rigControlSmoke.drawableId],
       childRigControlIds: [],
       restAngleDegrees: rigControlSmoke.childRestAngleDegrees
+    },
+    keyformSet: {
+      keyformSetId: rigControlSmoke.keyformSetId,
+      target: {
+        id: rigControlSmoke.parentRigControlId,
+        kind: "rigControl",
+        property: "angleDegrees"
+      },
+      parameterId: rigControlSmoke.parameterId,
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      keys: [
+        {
+          statePatch: rigControlSmoke.angleDegrees,
+          value: rigControlSmoke.keyValue
+        }
+      ]
     }
   };
 
@@ -304,8 +405,11 @@ const assertSavedRigControlProject = async (page, label) => {
     !saved.operationTargetIds.includes(rigControlSmoke.parentRigControlId) ||
     !saved.operationTargetIds.includes(rigControlSmoke.childRigControlId) ||
     !saved.operationTargetIds.includes(rigControlSmoke.drawableId) ||
+    !saved.operationTargetIds.includes(rigControlSmoke.parameterId) ||
+    !saved.operationTargetIds.includes(rigControlSmoke.keyformSetId) ||
     JSON.stringify(saved.parent) !== JSON.stringify(expected.parent) ||
     JSON.stringify(saved.child) !== JSON.stringify(expected.child) ||
+    JSON.stringify(saved.keyformSet) !== JSON.stringify(expected.keyformSet) ||
     saved.generatedRuntimeArtifacts < 1 ||
     saved.generatedValidationArtifacts < 1
   ) {
@@ -368,17 +472,22 @@ const assertRigControlAccessibleBasics = async (page) => {
     const headingId = panel?.getAttribute("aria-labelledby");
     const createForm = document.querySelector(`[data-testid="${ids.createForm}"]`);
     const bindForm = document.querySelector(`[data-testid="${ids.bindForm}"]`);
+    const keyformForm = document.querySelector(`[data-testid="${ids.keyformForm}"]`);
     const createSubmit = document.querySelector(`[data-testid="${ids.createSubmit}"]`);
     const bindSubmit = document.querySelector(`[data-testid="${ids.bindSubmit}"]`);
+    const keyformSubmit = document.querySelector(`[data-testid="${ids.keyformSubmit}"]`);
 
     return {
       panelName: headingId === null ? "" : document.getElementById(headingId)?.textContent ?? "",
       createFormName: createForm?.getAttribute("aria-label") ?? "",
       bindFormName: bindForm?.getAttribute("aria-label") ?? "",
+      keyformFormName: keyformForm?.getAttribute("aria-label") ?? "",
       createSubmitName: createSubmit?.textContent?.trim() ?? "",
       bindSubmitName: bindSubmit?.textContent?.trim() ?? "",
+      keyformSubmitName: keyformSubmit?.textContent?.trim() ?? "",
       createLabels: readFormLabels(createForm),
-      bindLabels: readFormLabels(bindForm)
+      bindLabels: readFormLabels(bindForm),
+      keyformLabels: readFormLabels(keyformForm)
     };
 
     function readFormLabels(form) {
@@ -399,16 +508,20 @@ const assertRigControlAccessibleBasics = async (page) => {
     panel: editorTestIds.rigControlPanel,
     createForm: editorTestIds.rigControlCreateForm,
     bindForm: editorTestIds.rigControlBindForm,
+    keyformForm: editorTestIds.rigControlKeyformForm,
     createSubmit: editorTestIds.rigControlCreateSubmit,
-    bindSubmit: editorTestIds.rigControlBindSubmit
+    bindSubmit: editorTestIds.rigControlBindSubmit,
+    keyformSubmit: editorTestIds.rigControlKeyformSubmit
   });
 
   const expected = {
     panelName: "Project-defined Rig Controls",
     createFormName: "Create project-defined rotation2d rig control",
     bindFormName: "Bind drawable or child rig control to a project-defined rig control",
+    keyformFormName: "Add rotation2d angle keyform",
     createSubmitName: "Create rotation control",
     bindSubmitName: "Bind child",
+    keyformSubmitName: "Add angle keyform",
     createLabels: [
       { label: "Control name", controlName: "displayName" },
       { label: "Part", controlName: "partId" },
@@ -419,6 +532,12 @@ const assertRigControlAccessibleBasics = async (page) => {
     bindLabels: [
       { label: "Parent control", controlName: "parentRigControlId" },
       { label: "Child target", controlName: "childTarget" }
+    ],
+    keyformLabels: [
+      { label: "Input parameter", controlName: "parameterId" },
+      { label: "Rotation control", controlName: "rigControlId" },
+      { label: "Key value", controlName: "keyValue" },
+      { label: "Angle patch", controlName: "angleDegrees" }
     ]
   };
 
@@ -488,6 +607,35 @@ const setRigControlBindFormValues = async (page, input) => {
   }, input);
 };
 
+const setRigControlKeyformFormValues = async (page, input) => {
+  await page.evaluate((ids, values) => {
+    const form = document.querySelector(`[data-testid="${ids.form}"]`);
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error("Rig control keyform form was missing.");
+    }
+
+    setFieldValue(form, "parameterId", values.parameterId);
+    setFieldValue(form, "rigControlId", values.rigControlId);
+    setFieldValue(form, "keyValue", values.keyValue);
+    setFieldValue(form, "angleDegrees", values.angleDegrees);
+
+    function setFieldValue(targetForm, name, value) {
+      const control = targetForm.elements.namedItem(name);
+
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
+        throw new Error(`Missing rig control keyform field ${name}.`);
+      }
+
+      control.value = String(value);
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+      control.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }, {
+    form: editorTestIds.rigControlKeyformForm
+  }, input);
+};
+
 const readRigControlEvidenceState = async (page) => ({
   panelText: await readText(page, editorTestIds.rigControlPanel),
   viewerSnapshotText: await readText(page, editorTestIds.viewerRuntimeSnapshotSummary),
@@ -507,6 +655,34 @@ const assertRigControlBindButtonState = async (page, { disabled }) => {
   if (JSON.stringify(state) !== JSON.stringify({ disabled })) {
     throw new Error(`Rig control bind button state mismatch: ${JSON.stringify(state)}.`);
   }
+};
+
+const assertRigControlKeyformButtonState = async (page, { disabled }) => {
+  const state = await page.evaluate((id) => {
+    const button = document.querySelector(`[data-testid="${id}"]`);
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Rig control keyform button was missing.");
+    }
+
+    return { disabled: button.disabled };
+  }, editorTestIds.rigControlKeyformSubmit);
+
+  if (JSON.stringify(state) !== JSON.stringify({ disabled })) {
+    throw new Error(`Rig control keyform button state mismatch: ${JSON.stringify(state)}.`);
+  }
+};
+
+const setViewerSliderValue = async (page, parameterId, value) => {
+  await page.evaluate((testId, nextValue) => {
+    const input = document.querySelector(`[data-testid="${testId}"]`);
+
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error(`Viewer slider ${testId} was missing.`);
+    }
+
+    input.value = String(nextValue);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, createViewerParameterControlTestId(parameterId), value);
 };
 
 const clickTestId = async (page, testId) => {

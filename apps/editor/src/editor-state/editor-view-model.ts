@@ -178,6 +178,12 @@ export interface RigControlPartOptionViewModel {
   readonly label: string;
 }
 
+export interface RigControlParameterOptionViewModel {
+  readonly parameterId: string;
+  readonly label: string;
+  readonly rangeLabel: string;
+}
+
 export interface RigControlItemViewModel {
   readonly rigControlId: string;
   readonly displayName: string;
@@ -194,6 +200,17 @@ export interface RigControlTargetOptionViewModel {
   readonly kind: "drawable" | "rigControl";
   readonly id: string;
   readonly label: string;
+}
+
+export interface RigControlAngleKeyformItemViewModel {
+  readonly keyformSetId: string;
+  readonly keyIndex: number;
+  readonly rigControlId: string;
+  readonly parameterId: string;
+  readonly targetLabel: string;
+  readonly parameterLabel: string;
+  readonly keyValueLabel: string;
+  readonly angleLabel: string;
 }
 
 export interface RigControlOperationDiagnosticViewModel {
@@ -216,6 +233,12 @@ export interface RigControlAuthoringViewModel {
   readonly childOptions: readonly RigControlTargetOptionViewModel[];
   readonly canBindChild: boolean;
   readonly bindDisabledMessage: string | null;
+  readonly angleKeyformParameterOptions: readonly RigControlParameterOptionViewModel[];
+  readonly angleKeyformRigControlOptions: readonly RigControlTargetOptionViewModel[];
+  readonly angleKeyforms: readonly RigControlAngleKeyformItemViewModel[];
+  readonly angleKeyformCountLabel: string;
+  readonly canCreateAngleKeyform: boolean;
+  readonly angleKeyformDisabledMessage: string | null;
   readonly lastRigControlOperationLabel: string;
   readonly lastRigControlDiagnostics: readonly RigControlOperationDiagnosticViewModel[];
 }
@@ -527,6 +550,16 @@ const projectRigControlAuthoringViewModel = (
 ): RigControlAuthoringViewModel => {
   const boundDrawableIds = new Set(state.rigControls.flatMap((rigControl) => rigControl.childDrawableIds));
   const unparentedRigControls = state.rigControls.filter((rigControl) => rigControl.parentId === null);
+  const authoredInputParameters = state.parameters
+    .filter((parameter) => parameter.valueSource === "authoredInput")
+    .map(projectRigControlParameterOption);
+  const rotation2dRigControls = state.rigControls
+    .filter((rigControl) => rigControl.kind === "rotation2d")
+    .map((rigControl): RigControlTargetOptionViewModel => ({
+      kind: "rigControl",
+      id: rigControl.rigControlId,
+      label: `${rigControl.displayName} / ${rigControl.rigControlId}`
+    }));
   const childDrawableOptions = state.drawables
     .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
     .map((drawable): RigControlTargetOptionViewModel => ({
@@ -548,6 +581,8 @@ const projectRigControlAuthoringViewModel = (
   const hasParent = state.rigControls.length > 0;
   const hasBindableChild =
     childDrawableOptions.length > 0 || unparentedRigControls.length > 1;
+  const hasAuthoredInputParameter = authoredInputParameters.length > 0;
+  const hasRotation2dRigControl = rotation2dRigControls.length > 0;
 
   return {
     controlCountLabel: `${state.rigControls.length} rig control${state.rigControls.length === 1 ? "" : "s"}`,
@@ -574,6 +609,18 @@ const projectRigControlAuthoringViewModel = (
       hasParent,
       hasBindableChild
     }),
+    angleKeyformParameterOptions: authoredInputParameters,
+    angleKeyformRigControlOptions: rotation2dRigControls,
+    angleKeyforms: state.rigControlAngleKeyforms.map((keyform) =>
+      projectRigControlAngleKeyformItem(state, keyform)
+    ),
+    angleKeyformCountLabel: `${state.rigControlAngleKeyforms.length} angle keyform${state.rigControlAngleKeyforms.length === 1 ? "" : "s"}`,
+    canCreateAngleKeyform: hasLoadedPackage && hasAuthoredInputParameter && hasRotation2dRigControl,
+    angleKeyformDisabledMessage: projectRigControlAngleKeyformDisabledMessage({
+      hasLoadedPackage,
+      hasAuthoredInputParameter,
+      hasRotation2dRigControl
+    }),
     lastRigControlOperationLabel: projectLastRigControlOperationLabel(state),
     lastRigControlDiagnostics: projectLastRigControlDiagnostics(state)
   };
@@ -595,6 +642,39 @@ const projectRigControlItem = (
       ? `pivot ${formatPreviewNumber(rigControl.pivot.x)}, ${formatPreviewNumber(rigControl.pivot.y)} / rest ${formatPreviewNumber(rigControl.restAngleDegrees)} deg`
       : "Future-scope evaluator"
 });
+
+const projectRigControlParameterOption = (
+  parameter: EditorSemanticState["parameters"][number]
+): RigControlParameterOptionViewModel => ({
+  parameterId: parameter.parameterId,
+  label: parameter.displayName,
+  rangeLabel: `${parameter.parameterId} / ${formatPreviewNumber(parameter.min)} to ${formatPreviewNumber(parameter.max)}`
+});
+
+const projectRigControlAngleKeyformItem = (
+  state: EditorSemanticState,
+  keyform: EditorSemanticState["rigControlAngleKeyforms"][number]
+): RigControlAngleKeyformItemViewModel => {
+  const rigControl = state.rigControls.find((candidate) => candidate.rigControlId === keyform.rigControlId);
+  const parameter = state.parameters.find((candidate) => candidate.parameterId === keyform.parameterId);
+
+  return {
+    keyformSetId: keyform.keyformSetId,
+    keyIndex: keyform.keyIndex,
+    rigControlId: keyform.rigControlId,
+    parameterId: keyform.parameterId,
+    targetLabel:
+      rigControl === undefined
+        ? keyform.rigControlId
+        : `${rigControl.displayName} / ${rigControl.rigControlId}`,
+    parameterLabel:
+      parameter === undefined
+        ? keyform.parameterId
+        : `${parameter.displayName} / ${parameter.parameterId}`,
+    keyValueLabel: formatPreviewNumber(keyform.keyValue),
+    angleLabel: `${formatPreviewNumber(keyform.angleDegrees)} deg`
+  };
+};
 
 const resolveDefaultRigControlPivot = (
   state: EditorSemanticState
@@ -645,12 +725,33 @@ const projectRigControlBindDisabledMessage = (input: {
   return null;
 };
 
+const projectRigControlAngleKeyformDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasAuthoredInputParameter: boolean;
+  readonly hasRotation2dRigControl: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasAuthoredInputParameter) {
+    return "No authored input parameter";
+  }
+
+  if (!input.hasRotation2dRigControl) {
+    return "No rotation2d rig control";
+  }
+
+  return null;
+};
+
 const projectLastRigControlOperationLabel = (state: EditorSemanticState): string => {
   const result = state.lastOperationResult;
   if (
     result === null ||
     (result.operationType !== "createRotation2dRigControl" &&
-      result.operationType !== "bindRigControlChild")
+      result.operationType !== "bindRigControlChild" &&
+      result.operationType !== "addKeyform")
   ) {
     return "No rig control operation committed";
   }
@@ -665,7 +766,8 @@ const projectLastRigControlDiagnostics = (
   if (
     result === null ||
     (result.operationType !== "createRotation2dRigControl" &&
-      result.operationType !== "bindRigControlChild")
+      result.operationType !== "bindRigControlChild" &&
+      result.operationType !== "addKeyform")
   ) {
     return [];
   }

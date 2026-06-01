@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   ParameterIdSchema,
   PartIdSchema,
@@ -515,6 +516,17 @@ describe("editor semantic state view model", () => {
         packageRevision: 2,
         authoringRevision: 2
       },
+      parameters: [
+        {
+          parameterId: ParameterIdSchema.parse("param_body_yaw"),
+          displayName: "Body Yaw",
+          valueSource: "authoredInput",
+          min: -1,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        }
+      ],
       parts: [
         {
           partId: PartIdSchema.parse("part_root"),
@@ -583,6 +595,27 @@ describe("editor semantic state view model", () => {
           restScale: { x: 1, y: 1 },
           enabled: true
         }
+      ],
+      keyformSets: [
+        {
+          keyformSetId: KeyformSetIdSchema.parse("keyset_rig_body_rotation_angle"),
+          target: {
+            kind: "rigControl",
+            id: "rig_body_rotation",
+            property: "angleDegrees"
+          },
+          parameterId: ParameterIdSchema.parse("param_body_yaw"),
+          evaluator: "linear-1d-v1",
+          interpolation: "linear-1d-v1",
+          compositionMode: "replace",
+          compositionOrder: 0,
+          keys: [
+            {
+              value: 1,
+              statePatch: 45
+            }
+          ]
+        }
       ]
     });
 
@@ -594,10 +627,21 @@ describe("editor semantic state view model", () => {
         restAngleDegrees: 15
       })
     ]);
+    expect(state.rigControlAngleKeyforms).toEqual([
+      expect.objectContaining({
+        keyformSetId: "keyset_rig_body_rotation_angle",
+        rigControlId: "rig_body_rotation",
+        parameterId: "param_body_yaw",
+        keyValue: 1,
+        angleDegrees: 45
+      })
+    ]);
     expect(projectEditorWorkflowViewModel(state).rigControls).toMatchObject({
       controlCountLabel: "1 rig control",
       canCreateRotation2d: true,
       canBindChild: true,
+      angleKeyformCountLabel: "1 angle keyform",
+      canCreateAngleKeyform: true,
       partOptions: [
         {
           partId: "part_root",
@@ -619,6 +663,15 @@ describe("editor semantic state view model", () => {
           kind: "drawable",
           id: "draw_arm",
           label: "Arm / draw_arm"
+        }
+      ],
+      angleKeyforms: [
+        {
+          keyformSetId: "keyset_rig_body_rotation_angle",
+          targetLabel: "Body Rotation / rig_body_rotation",
+          parameterLabel: "Body Yaw / param_body_yaw",
+          keyValueLabel: "1",
+          angleLabel: "45 deg"
         }
       ]
     });

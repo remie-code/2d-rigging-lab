@@ -1,0 +1,34 @@
+[
+  {
+    "requestPath": "request/add-angle-keyform-missing-rig-control.request.json",
+    "status": "rejected",
+    "preconditionOk": false,
+    "diagnostics": [
+      {
+        "checkId": "operation.addKeyform.missingTarget",
+        "target": "rigControl:rig_missing_rotation",
+        "message": "Keyform target does not exist: rigControl:rig_missing_rotation"
+      }
+    ],
+    "operationLogLength": 0,
+    "packageRevisionAfter": 0,
+    "authoringRevisionAfter": 0,
+    "keyformSetCountAfter": 0
+  },
+  {
+    "requestPath": "request/add-angle-keyform-unsupported-property.request.json",
+    "status": "rejected",
+    "preconditionOk": false,
+    "diagnostics": [
+      {
+        "checkId": "operation.addKeyform.unsupportedTargetProperty",
+        "target": "rigControl:rig_body_rotation:/model/keyforms/keyformTargets/rigControl/opacity",
+        "message": "Keyform target property is not supported: rigControl.opacity"
+      }
+    ],
+    "operationLogLength": 0,
+    "packageRevisionAfter": 0,
+    "authoringRevisionAfter": 0,
+    "keyformSetCountAfter": 0
+  }
+]

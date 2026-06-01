@@ -21,6 +21,7 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
+- Remaining work after Wave25 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
 - A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
 - The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
@@ -49,12 +50,14 @@ discussion/implementation/
 - Wave 23 Minimum Open Dynamics v1 vertical slice completed on 2026-05-31 with `createDynamicsGroup` authoring operation support, deterministic runtime dynamics sequence / snapshot / diff / evidence, validator dynamics semantic diagnostics, editor Dynamics panel with preview run/reset, deterministic contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping Cubism Physics compatibility, direct vertex physics, asset I/O expansion, file picker, parser work, and external dependencies out of scope. Evidence is recorded in [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md), [waves/wave23/_map.md](waves/wave23/_map.md), and [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md).
 - Wave 24 Private Viewer v0 runtime inspection surface completed on 2026-06-01 with editor-internal Viewer / Runtime surface, viewer-context runtime snapshot/diff/evidence, session-only parameter override, viewer validation diagnostics/report refs, semantic preview-vs-viewer equivalence fixture, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping standalone viewer app, full renderer, pixel oracle, file picker, parser, archive, image decode, actual binary upload, Cubism compatibility, and external dependencies out of scope. Evidence is recorded in [waves/wave24/wave24-final-report.md](waves/wave24/wave24-final-report.md), [waves/wave24/_map.md](waves/wave24/_map.md), and [reviews/wave24/wave24-clean-integration-review.md](reviews/wave24/wave24-clean-integration-review.md).
 - Wave 25 Minimum Rig Control v1 authoring/runtime slice completed on 2026-06-01 with project-defined `rotation2d` rig control creation and child binding, deterministic runtime hierarchy/evidence, validator diagnostics, parent-child and invalid-cycle fixtures, editor Preview / Viewer workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md), [waves/wave25/_map.md](waves/wave25/_map.md), and [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md).
+- Wave 26 Rig Control Keyform / Viewer Hardening completed on 2026-06-01 with `rigControl:angleDegrees` keyform operation/evidence, runtime local/world transform and affected-target evidence, validator/report hardening, editor keyform UX, Viewer / Runtime observation, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md), [waves/wave26/_map.md](waves/wave26/_map.md), and [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md).
 
 ## Key References
 
 | Path | Purpose |
 |---|---|
 | [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
+| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave25, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -81,6 +84,7 @@ discussion/implementation/
 | [orchestration/wave23-plan.md](orchestration/wave23-plan.md) | Wave 23 Minimum Open Dynamics v1 vertical slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave24-plan.md](orchestration/wave24-plan.md) | Wave 24 Private Viewer v0 runtime inspection surface dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave25-plan.md](orchestration/wave25-plan.md) | Wave 25 Minimum Rig Control v1 authoring/runtime slice dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave26-plan.md](orchestration/wave26-plan.md) | Wave 26 Rig Control Keyform / Viewer Hardening dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -111,6 +115,8 @@ discussion/implementation/
 | [waves/wave24/_map.md](waves/wave24/_map.md) | Wave 24 domain completion reports, clean integration review, and final report |
 | [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md) | Wave 25 final report for Minimum Rig Control v1 authoring/runtime slice |
 | [waves/wave25/_map.md](waves/wave25/_map.md) | Wave 25 domain completion reports, clean integration review, and final report |
+| [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md) | Wave 26 final report for Rig Control Keyform / Viewer Hardening |
+| [waves/wave26/_map.md](waves/wave26/_map.md) | Wave 26 domain completion reports, clean integration review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -135,11 +141,13 @@ discussion/implementation/
 | [reviews/wave24/wave24-clean-integration-review.md](reviews/wave24/wave24-clean-integration-review.md) | Wave 24 clean integration review |
 | [reviews/wave25/_map.md](reviews/wave25/_map.md) | Wave 25 domain review reports and clean integration review |
 | [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md) | Wave 25 clean integration review |
+| [reviews/wave26/_map.md](reviews/wave26/_map.md) | Wave 26 domain review reports and clean integration review |
+| [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md) | Wave 26 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan the next implementation wave from [current-capability-map.md](current-capability-map.md).
+1. Plan the next implementation wave from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

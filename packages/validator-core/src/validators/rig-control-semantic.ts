@@ -1,4 +1,4 @@
-import type { RuntimeSnapshotId, TargetRefDto } from "@private-2d-rigging-lab/contracts";
+import type { TargetRefDto } from "@private-2d-rigging-lab/contracts";
 import type {
   DrawableDto,
   PackageDocumentDto,
@@ -8,6 +8,7 @@ import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import { validateRuntimeRigControlEvidence } from "./rig-control-runtime-evidence.js";
 
 interface RigControlEntry {
   readonly rigControl: RigControlDto;
@@ -18,8 +19,6 @@ interface DrawableEntry {
   readonly drawable: DrawableDto;
   readonly index: number;
 }
-
-type RuntimeRigControlEvidence = RuntimeSnapshotDto["rigControls"][number];
 
 export const validateRigControlSemantics = (
   packageDocument: PackageDocumentDto,
@@ -48,6 +47,8 @@ export const validateRigControlSemantics = (
     ? []
     : validateRuntimeRigControlEvidence({
         rigControlEntries,
+        packageDocument,
+        rigControlsById,
         ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot })
       });
 
@@ -121,71 +122,6 @@ const validateRigControlCycles = (
   return [...cycleChecks.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([, check]) => check);
-};
-
-const validateRuntimeRigControlEvidence = (input: {
-  readonly rigControlEntries: readonly RigControlEntry[];
-  readonly runtimeSnapshot?: RuntimeSnapshotDto;
-}): readonly ValidationCheckResultDto[] => {
-  const enabledRigControls = input.rigControlEntries.filter((entry) => entry.rigControl.enabled);
-  if (enabledRigControls.length === 0) {
-    return [];
-  }
-
-  if (input.runtimeSnapshot === undefined) {
-    return enabledRigControls.map((entry) =>
-      createRuntimeEvidenceMissingCheck({
-        entry,
-        evidence: [
-          `rigControlId=${entry.rigControl.rigControlId}`,
-          `rigControlKind=${entry.rigControl.kind}`,
-          "runtimeSnapshot=missing"
-        ]
-      })
-    );
-  }
-
-  const runtimeSnapshot = input.runtimeSnapshot;
-  const snapshotRigControlsById = new Map(
-    runtimeSnapshot.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
-  );
-
-  return enabledRigControls.flatMap((entry) => {
-    const snapshotRigControl = snapshotRigControlsById.get(entry.rigControl.rigControlId);
-    if (snapshotRigControl === undefined) {
-      return [
-        createRuntimeEvidenceMissingCheck({
-          entry,
-          runtimeSnapshotId: runtimeSnapshot.snapshotId,
-          reason: "missing",
-          evidence: [
-            `rigControlId=${entry.rigControl.rigControlId}`,
-            `snapshotId=${runtimeSnapshot.snapshotId}`,
-            "snapshotRigControl=missing"
-          ]
-        })
-      ];
-    }
-
-    const mismatchEvidence = createRuntimeRigControlMismatchEvidence(entry.rigControl, snapshotRigControl);
-    if (mismatchEvidence.length === 0) {
-      return [];
-    }
-
-    return [
-      createRuntimeEvidenceMissingCheck({
-        entry,
-        runtimeSnapshotId: runtimeSnapshot.snapshotId,
-        reason: "mismatch",
-        evidence: [
-          `rigControlId=${entry.rigControl.rigControlId}`,
-          `snapshotId=${runtimeSnapshot.snapshotId}`,
-          "snapshotRigControl=mismatch",
-          ...mismatchEvidence
-        ]
-      })
-    ];
-  });
 };
 
 const buildRigControlAdjacency = (
@@ -271,33 +207,6 @@ const canonicalizeCycle = (cycle: readonly string[]): readonly string[] => {
   const canonical = rotations.sort((left, right) => left.join(">").localeCompare(right.join(">")))[0] ?? closedCycle;
   return [...canonical, canonical[0] ?? ""].filter((value) => value.length > 0);
 };
-
-const createRuntimeRigControlMismatchEvidence = (
-  packageRigControl: RigControlDto,
-  runtimeRigControl: RuntimeRigControlEvidence
-): readonly string[] => {
-  const evidence: string[] = [];
-
-  if (packageRigControl.kind !== runtimeRigControl.kind) {
-    evidence.push(`packageKind=${packageRigControl.kind}`);
-    evidence.push(`runtimeKind=${runtimeRigControl.kind}`);
-  }
-
-  if (packageRigControl.enabled !== runtimeRigControl.enabled) {
-    evidence.push(`packageEnabled=${packageRigControl.enabled}`);
-    evidence.push(`runtimeEnabled=${runtimeRigControl.enabled}`);
-  }
-
-  if (normalizeOptionalRigControlId(packageRigControl.parentId) !== normalizeOptionalRigControlId(runtimeRigControl.parentId)) {
-    evidence.push(`packageParentId=${normalizeOptionalRigControlId(packageRigControl.parentId)}`);
-    evidence.push(`runtimeParentId=${normalizeOptionalRigControlId(runtimeRigControl.parentId)}`);
-  }
-
-  return evidence;
-};
-
-const normalizeOptionalRigControlId = (rigControlId: string | undefined): string =>
-  rigControlId ?? "root";
 
 const createParentMissingCheck = (entry: RigControlEntry): ValidationCheckResultDto =>
   createRigControlCheck({
@@ -421,33 +330,6 @@ const createCycleCheck = (
     impact: "Runtime cannot produce a deterministic parent-before-child rig control evaluation order."
   });
 
-const createRuntimeEvidenceMissingCheck = (input: {
-  readonly entry: RigControlEntry;
-  readonly runtimeSnapshotId?: RuntimeSnapshotId;
-  readonly reason?: "missing" | "mismatch";
-  readonly evidence: readonly string[];
-}): ValidationCheckResultDto =>
-  createRigControlCheck({
-    checkId: "rigControl.runtimeEvidenceMissing",
-    status: "fail",
-    severity: "error",
-    phase: "rigControl_evaluation",
-    target: {
-      kind: "rigControl",
-      id: input.entry.rigControl.rigControlId,
-      path: rigControlBasePath(input.entry.index)
-    },
-    targetPath: rigControlBasePath(input.entry.index),
-    message: input.runtimeSnapshotId === undefined
-      ? `Rig control ${input.entry.rigControl.rigControlId} has no runtime snapshot evidence.`
-      : input.reason === "mismatch"
-        ? `Runtime snapshot ${input.runtimeSnapshotId} has mismatched rig control evidence for ${input.entry.rigControl.rigControlId}.`
-      : `Runtime snapshot ${input.runtimeSnapshotId} is missing rig control evidence for ${input.entry.rigControl.rigControlId}.`,
-    evidence: input.evidence,
-    impact: "Validator cannot prove deterministic rig control hierarchy evaluation without runtime snapshot evidence.",
-    snapshotIds: input.runtimeSnapshotId === undefined ? [] : [input.runtimeSnapshotId]
-  });
-
 const createRigControlCheck = (input: {
   readonly checkId: string;
   readonly status: "pass" | "warning" | "fail" | "needs_review" | "not_applicable";
@@ -458,7 +340,6 @@ const createRigControlCheck = (input: {
   readonly message: string;
   readonly evidence: readonly string[];
   readonly impact: string;
-  readonly snapshotIds?: readonly RuntimeSnapshotId[];
 }): ValidationCheckResultDto =>
   ValidationCheckResultSchema.parse({
     checkId: input.checkId,
@@ -471,8 +352,7 @@ const createRigControlCheck = (input: {
     evidence: input.evidence,
     relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
     relatedScenarios: ["SC-DEF-002"],
-    impact: input.impact,
-    snapshotIds: input.snapshotIds ?? []
+    impact: input.impact
   });
 
 const rigControlBasePath = (index: number): string =>

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "rig-control-keyform-angle-package-materialization-summary-v1",
+  "operationId": "op_fixture_add_body_rotation_angle",
+  "status": "committed",
+  "operationLogLength": 1,
+  "packageRevisionAfter": 1,
+  "authoringRevisionAfter": 1,
+  "committedKeyformSet": {
+    "keyformSetId": "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+    "target": {
+      "kind": "rigControl",
+      "id": "rig_body_rotation",
+      "property": "angleDegrees"
+    },
+    "parameterId": "param_face_yaw",
+    "evaluator": "linear-1d-v1",
+    "interpolation": "linear-1d-v1",
+    "compositionMode": "replace",
+    "keys": [
+      {
+        "value": 1,
+        "statePatch": 30
+      }
+    ]
+  },
+  "modelDiff": {
+    "baseRevision": 0,
+    "candidateRevision": 1,
+    "added": [
+      "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1"
+    ],
+    "removed": [],
+    "changedTargets": [
+      "package:pkg_rig_control_keyform_angle_operation:/model/keyforms/keyformSets",
+      "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "parameter:param_face_yaw",
+      "rigControl:rig_body_rotation"
+    ],
+    "targetFieldAfter": {
+      "kind": "rigControl",
+      "id": "rig_body_rotation",
+      "property": "angleDegrees"
+    },
+    "operationIds": [
+      "op_fixture_add_body_rotation_angle"
+    ]
+  },
+  "logEntry": {
+    "operationType": "addKeyform",
+    "targetIds": [
+      "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "param_face_yaw",
+      "rig_body_rotation"
+    ],
+    "checkedTargetRefs": [
+      "keyformSet:keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "parameter:param_face_yaw",
+      "rigControl:rig_body_rotation"
+    ],
+    "payloadTarget": {
+      "kind": "rigControl",
+      "id": "rig_body_rotation",
+      "targetProperty": "angleDegrees"
+    },
+    "resultRuntimeDiff": {
+      "beforeSnapshotId": "snap_rig_control_keyform_angle_operation_0",
+      "afterSnapshotId": "snap_rig_control_keyform_angle_operation_1",
+      "parameterChangePaths": [
+        "/rigControls/rig_body_rotation/localTransform/angleDegrees",
+        "/rigControls/rig_body_rotation/localTransform/matrix",
+        "/rigControls/rig_body_rotation/worldTransform/matrix",
+        "/rigControls/rig_body_rotation/worldTransform/angleDegrees"
+      ],
+      "angleChange": {
+        "before": 0,
+        "after": 30
+      },
+      "worldAngleChange": {
+        "before": 0,
+        "after": 30.000000000013
+      },
+      "drawableChanges": [
+        {
+          "drawableId": "draw_body",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_568d1cfb_3",
+          "vertexHashAfter": "vhash_c1c59782_3"
+        }
+      ],
+      "diagnosticDeltaCheckIds": []
+    },
+    "runtimeSnapshotIds": [
+      "snap_rig_control_keyform_angle_operation_0",
+      "snap_rig_control_keyform_angle_operation_1"
+    ],
+    "validationReportIds": []
+  },
+  "materializedPackage": {
+    "packageRevision": 1,
+    "updatedAt": "2026-06-01T00:01:00.000Z",
+    "reloadedPackageRevision": 1,
+    "keyformsFilePath": "model/keyforms.json",
+    "operationLogPath": "operations/log.jsonl",
+    "operationLogTrailingNewline": true,
+    "operationLogEntryPresent": true,
+    "fileSetEntryCount": 18,
+    "generatedArtifactPaths": [
+      "runtime/snapshots/snap_rig_control_keyform_angle_operation_0.runtime-snapshot.json",
+      "runtime/snapshots/snap_rig_control_keyform_angle_operation_1.runtime-snapshot.json",
+      "runtime/states/pkg_rig_control_keyform_angle_operation-r1-rig-control-keyform-angle-operation-final-f1.runtime-state.json",
+      "runtime/state-sequences/pkg_rig_control_keyform_angle_operation-r1-rig-control-keyform-angle-operation.runtime-state-sequence.json"
+    ],
+    "materializedKeyformSet": {
+      "keyformSetId": "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_body_rotation",
+        "property": "angleDegrees"
+      },
+      "parameterId": "param_face_yaw",
+      "evaluator": "linear-1d-v1",
+      "interpolation": "linear-1d-v1",
+      "compositionMode": "replace",
+      "keys": [
+        {
+          "value": 1,
+          "statePatch": 30
+        }
+      ]
+    },
+    "reloadedKeyformSet": {
+      "keyformSetId": "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_body_rotation",
+        "property": "angleDegrees"
+      },
+      "parameterId": "param_face_yaw",
+      "evaluator": "linear-1d-v1",
+      "interpolation": "linear-1d-v1",
+      "compositionMode": "replace",
+      "keys": [
+        {
+          "value": 1,
+          "statePatch": 30
+        }
+      ]
+    }
+  }
+}

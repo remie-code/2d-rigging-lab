@@ -4,13 +4,16 @@ import { fileURLToPath } from "node:url";
 
 import {
   KeyformSetIdSchema,
-  ParameterIdSchema
+  PartIdSchema,
+  ParameterIdSchema,
+  RigControlIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
   Linear1dKeyformSetDto,
   PackageDocumentDto,
   ParameterDto,
-  ParameterGrid2dKeyformSetDto
+  ParameterGrid2dKeyformSetDto,
+  RigControlDto
 } from "@private-2d-rigging-lab/package-format";
 import { parsePackageDocument } from "@private-2d-rigging-lab/package-format";
 import { describe, expect, it } from "vitest";
@@ -21,6 +24,7 @@ import {
   createLinear1dKeyformSet,
   createParameter,
   createParameterGrid2dKeyformSet,
+  createRotation2dRigControl,
   getKeyformSetById
 } from "./index.js";
 
@@ -41,6 +45,36 @@ describe("keyform authoring mutations", () => {
     expect(getKeyformSetById(session.graph, keyformSet.keyformSetId)).toEqual(keyformSet);
     expect(session.graph.stableOrder).toContain(keyformSet.keyformSetId);
     expect(session.dirty).toBe(true);
+  });
+
+  it("creates a linear 1d rig control angle keyform set", () => {
+    const session = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const parameter = createTestParameter("param_face_yaw");
+    createParameter(session, parameter);
+    createRotation2dRigControl(session, createTestRotation2dRigControl("rig_body_rotation"));
+    const keyformSet = createLinear1dRigControlAngleKeyformSet(
+      "keyset_body_rotation_angle",
+      parameter.parameterId
+    );
+
+    const result = createLinear1dKeyformSet(session, keyformSet);
+
+    expect(result.keyformSet).toEqual(keyformSet);
+    expect(getKeyformSetById(session.graph, keyformSet.keyformSetId)).toEqual(
+      expect.objectContaining({
+        target: {
+          kind: "rigControl",
+          id: "rig_body_rotation",
+          property: "angleDegrees"
+        },
+        keys: [
+          {
+            value: 1,
+            statePatch: 30
+          }
+        ]
+      })
+    );
   });
 
   it("creates a parameter grid 2d keyform set with distinct axis parameters", () => {
@@ -98,6 +132,25 @@ describe("keyform authoring mutations", () => {
     );
   });
 
+  it("rejects a keyform set with a missing rig control target", () => {
+    const session = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const parameter = createTestParameter("param_face_yaw");
+    createParameter(session, parameter);
+    const keyformSet = {
+      ...createLinear1dRigControlAngleKeyformSet("keyset_missing_rig_control", parameter.parameterId),
+      target: {
+        kind: "rigControl",
+        id: "rig_missing_rotation",
+        property: "angleDegrees"
+      }
+    } satisfies Linear1dKeyformSetDto;
+
+    expectMutationErrorCode(
+      () => createLinear1dKeyformSet(session, keyformSet),
+      "missing_keyform_target"
+    );
+  });
+
   it("rejects a keyform set with an unsupported target property", () => {
     const session = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
     const parameter = createTestParameter("param_face_yaw");
@@ -108,6 +161,26 @@ describe("keyform authoring mutations", () => {
         kind: "mesh",
         id: "mesh_body",
         property: "angleDegrees"
+      }
+    } satisfies Linear1dKeyformSetDto;
+
+    expectMutationErrorCode(
+      () => createLinear1dKeyformSet(session, keyformSet),
+      "unsupported_keyform_target_property"
+    );
+  });
+
+  it("rejects a rig control keyform set with an unsupported target property", () => {
+    const session = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const parameter = createTestParameter("param_face_yaw");
+    createParameter(session, parameter);
+    createRotation2dRigControl(session, createTestRotation2dRigControl("rig_body_rotation"));
+    const keyformSet = {
+      ...createLinear1dRigControlAngleKeyformSet("keyset_unsupported_rig_control_property", parameter.parameterId),
+      target: {
+        kind: "rigControl",
+        id: "rig_body_rotation",
+        property: "opacity"
       }
     } satisfies Linear1dKeyformSetDto;
 
@@ -192,6 +265,26 @@ const createLinear1dMeshKeyformSet = (
   ]
 });
 
+const createLinear1dRigControlAngleKeyformSet = (
+  keyformSetIdText: string,
+  parameterId: ParameterDto["parameterId"]
+): Linear1dKeyformSetDto => ({
+  keyformSetId: KeyformSetIdSchema.parse(keyformSetIdText),
+  target: {
+    kind: "rigControl",
+    id: "rig_body_rotation",
+    property: "angleDegrees"
+  },
+  parameterId,
+  evaluator: "linear-1d-v1",
+  interpolation: "linear-1d-v1",
+  compositionMode: "replace",
+  compositionOrder: 0,
+  keys: [
+    { value: 1, statePatch: 30 }
+  ]
+});
+
 const createGrid2dMeshKeyformSet = (input: {
   readonly keyformSetId: string;
   readonly parameterX: ParameterDto["parameterId"];
@@ -225,6 +318,22 @@ const createTestParameter = (parameterIdText: string): ParameterDto => ({
   max: 1,
   default: 0,
   recommendedUiStep: 0.01
+});
+
+const createTestRotation2dRigControl = (
+  rigControlIdText: string
+): Extract<RigControlDto, { readonly kind: "rotation2d" }> => ({
+  kind: "rotation2d",
+  rigControlId: RigControlIdSchema.parse(rigControlIdText),
+  displayName: toDisplayName(rigControlIdText),
+  partId: PartIdSchema.parse("part_root"),
+  childDrawableIds: [],
+  childRigControlIds: [],
+  pivot: { x: 0, y: 0 },
+  restAngleDegrees: 0,
+  restTranslation: { x: 0, y: 0 },
+  restScale: { x: 1, y: 1 },
+  enabled: true
 });
 
 const toDisplayName = (parameterIdText: string): string =>

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_fixture_add_missing_body_rotation_angle",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "operationType": "addKeyform",
+  "payload": {
+    "target": {
+      "kind": "rigControl",
+      "id": "rig_missing_rotation"
+    },
+    "targetProperty": "angleDegrees",
+    "parameterId": "param_face_yaw",
+    "keyValue": 1,
+    "interpolation": "linear-1d-v1",
+    "statePatch": {
+      "propertyPath": "angleDegrees",
+      "value": 30
+    }
+  }
+}

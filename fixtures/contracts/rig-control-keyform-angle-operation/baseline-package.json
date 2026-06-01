@@ -1,0 +1,246 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_rig_control_keyform_angle_operation",
+    "packageDisplayName": "Rig Control Keyform Angle Operation",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-06-01T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 128,
+        "height": 128
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_body"
+          ]
+        }
+      ],
+      "rigControlRootIds": [
+        "rig_body_rotation"
+      ],
+      "stableOrder": [
+        "draw_body",
+        "param_face_yaw",
+        "rig_body_rotation"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_body",
+          "displayName": "Fixture Body",
+          "partId": "part_root",
+          "sourceAssetId": "src_generated_body",
+          "textureId": "tex_body",
+          "meshId": "mesh_body",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_generated_body"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_body",
+          "drawableId": "draw_body",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 8
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "v0",
+            "v1",
+            "v2"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 8
+          },
+          "generationProvenanceId": "prov_generated_body"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": [
+        {
+          "parameterId": "param_face_yaw",
+          "displayName": "Face Yaw",
+          "semanticRole": "face",
+          "valueSource": "authoredInput",
+          "min": -1,
+          "max": 1,
+          "default": 0,
+          "recommendedUiStep": 0.01
+        }
+      ]
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": [
+        {
+          "kind": "rotation2d",
+          "rigControlId": "rig_body_rotation",
+          "displayName": "Body Rotation",
+          "partId": "part_root",
+          "childDrawableIds": [
+            "draw_body"
+          ],
+          "childRigControlIds": [],
+          "pivot": {
+            "x": 0,
+            "y": 0
+          },
+          "restAngleDegrees": 0,
+          "restTranslation": {
+            "x": 0,
+            "y": 0
+          },
+          "restScale": {
+            "x": 1,
+            "y": 1
+          },
+          "enabled": true
+        }
+      ]
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_body",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_generated_body",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/rig-control-keyform-angle-body.json",
+          "contentHash": "sha256:rig-control-keyform-angle-operation-generated-body",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_generated_body",
+          "assetId": "src_generated_body",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/rig-control-keyform-angle-body.json",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only triangle fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_generated_body",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

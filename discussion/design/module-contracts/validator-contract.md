@@ -98,7 +98,7 @@ demo.unsafeDependencyClaim
 | `rigControl.childMissing` | rigControl_semantic | error | all: fail | AC-MVP-009 |
 | `rigControl.invalidChildTargetKind` | rigControl_semantic | error | all: fail | AC-MVP-009 |
 | `rigControl.parentChildMismatch` | rigControl_semantic | error | all: fail | AC-MVP-009 |
-| `rigControl.runtimeEvidenceMissing` | rigControl_evaluation | error | strict/acceptance: fail when enabled rig controls cannot be matched to runtime snapshot evidence | AC-MVP-009, AC-MVP-012 |
+| `rigControl.runtimeEvidenceMissing` | rigControl_evaluation | error | strict/acceptance: fail when enabled rig controls cannot be matched to current runtime snapshot evidence, including keyform-driven rig-control sample and transform evidence | AC-MVP-009, AC-MVP-012 |
 | `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
 | `dynamics.requiredGroupMissing` | dynamics_semantic | error | acceptance fixture / metadata requiring Dynamics: fail | AC-PHYS-001 |
 | `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
@@ -148,7 +148,7 @@ Rig control validation rules:
 - `rigControl.childMissing` fires when a child drawable or child rig control reference does not resolve.
 - `rigControl.invalidChildTargetKind` fires when a child ID is stored under the wrong child collection, for example a `rig_` ID in `childDrawableIds`.
 - `rigControl.parentChildMismatch` fires when a parent's `childRigControlIds` entry and the child's `parentId` disagree.
-- `rigControl.runtimeEvidenceMissing` fires when an enabled package rig control has no matching runtime snapshot evidence or the supplied snapshot disagrees on kind, enabled state, or parent relation.
+- `rigControl.runtimeEvidenceMissing` fires when an enabled package rig control has no matching runtime snapshot evidence, the supplied snapshot identity is stale for the validated package, the snapshot disagrees on kind, enabled state, or parent relation, or keyform-driven rig-control evidence omits or mismatches target keyform sample refs, local/world transform evidence, affected target refs, or snapshot refs.
 
 Viewer evidence validation rules:
 

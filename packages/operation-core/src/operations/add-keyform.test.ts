@@ -8,8 +8,10 @@ import {
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  PartIdSchema,
   ParameterIdSchema,
-  ProvenanceIdSchema
+  ProvenanceIdSchema,
+  RigControlIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type { OperationId } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
@@ -114,6 +116,71 @@ describe("addKeyform operation handler", () => {
     expect(outcome.result.modelDiff?.candidateRevision).toBe(1);
   });
 
+  it("dry-runs addKeyform for rigControl angleDegrees with traceable model diff evidence", () => {
+    const session = createFixtureSession();
+    const request = createAddKeyformRequest({
+      dryRun: true,
+      targetKind: "rigControl",
+      targetId: "rig_body_rotation",
+      targetProperty: "angleDegrees",
+      statePatchValue: 30
+    });
+    const operationId = getRequestOperationId(request);
+    const keyformSetId = KeyformSetIdSchema.parse(
+      "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1"
+    );
+
+    const outcome = addKeyformOperationHandler.dryRun(session, request, operationId);
+
+    expect(outcome.result.status).toBe("dry_run");
+    expect(outcome.candidateSession).not.toBe(session);
+    expect(getKeyformSetById(session.graph, keyformSetId)).toBeUndefined();
+    expect(getKeyformSetById(outcome.candidateSession.graph, keyformSetId)).toEqual(
+      expect.objectContaining({
+        target: {
+          kind: "rigControl",
+          id: "rig_body_rotation",
+          property: "angleDegrees"
+        },
+        keys: [
+          {
+            value: 1,
+            statePatch: 30
+          }
+        ]
+      })
+    );
+    expect(outcome.targetIds).toEqual([
+      keyformSetId,
+      "param_face_yaw",
+      "rig_body_rotation"
+    ]);
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
+      { kind: "keyformSet", id: keyformSetId },
+      { kind: "parameter", id: "param_face_yaw" },
+      { kind: "rigControl", id: "rig_body_rotation" }
+    ]);
+    expect(outcome.result.modelDiff?.changed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: { kind: "rigControl", id: "rig_body_rotation" },
+          fields: [
+            expect.objectContaining({
+              path: `/model/keyforms/keyformSets/${keyformSetId}/target`,
+              after: {
+                kind: "rigControl",
+                id: "rig_body_rotation",
+                property: "angleDegrees"
+              }
+            })
+          ]
+        })
+      ])
+    );
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
+  });
+
   it("rejects a missing parameter as an operation diagnostic", () => {
     const session = createFixtureSession();
     const request = createAddKeyformRequest({
@@ -146,6 +213,27 @@ describe("addKeyform operation handler", () => {
     expect(outcome.result.diagnostics[0]).toMatchObject({
       checkId: "operation.addKeyform.missingTarget",
       target: { kind: "mesh", id: "mesh_missing" }
+    });
+    expect(session.graph.keyformSets).toHaveLength(0);
+    expect(session.authoringRevision).toBe(0);
+  });
+
+  it("rejects a missing rig control target as an operation diagnostic", () => {
+    const session = createFixtureSession();
+    const request = createAddKeyformRequest({
+      dryRun: false,
+      targetKind: "rigControl",
+      targetId: "rig_missing_rotation",
+      targetProperty: "angleDegrees",
+      statePatchValue: 30
+    });
+
+    const outcome = addKeyformOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]).toMatchObject({
+      checkId: "operation.addKeyform.missingTarget",
+      target: { kind: "rigControl", id: "rig_missing_rotation" }
     });
     expect(session.graph.keyformSets).toHaveLength(0);
     expect(session.authoringRevision).toBe(0);
@@ -186,6 +274,31 @@ describe("addKeyform operation handler", () => {
         kind: "mesh",
         id: "mesh_body",
         path: "/model/keyforms/keyformTargets/mesh/angleDegrees"
+      }
+    });
+    expect(session.graph.keyformSets).toHaveLength(0);
+    expect(session.authoringRevision).toBe(0);
+  });
+
+  it("rejects unsupported rig control target properties as operation diagnostics", () => {
+    const session = createFixtureSession();
+    const request = createAddKeyformRequest({
+      dryRun: false,
+      targetKind: "rigControl",
+      targetId: "rig_body_rotation",
+      targetProperty: "opacity",
+      statePatchValue: 0.5
+    });
+
+    const outcome = addKeyformOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]).toMatchObject({
+      checkId: "operation.addKeyform.unsupportedTargetProperty",
+      target: {
+        kind: "rigControl",
+        id: "rig_body_rotation",
+        path: "/model/keyforms/keyformTargets/rigControl/opacity"
       }
     });
     expect(session.graph.keyformSets).toHaveLength(0);
@@ -259,6 +372,7 @@ const createAddKeyformRequest = (options: {
   readonly targetId?: string;
   readonly targetProperty?: string;
   readonly statePatchPropertyPath?: string;
+  readonly statePatchValue?: unknown;
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -279,7 +393,7 @@ const createAddKeyformRequest = (options: {
       interpolation: "linear-1d-v1",
       statePatch: {
         propertyPath: options.statePatchPropertyPath ?? options.targetProperty ?? "vertices",
-        value: [{ x: 2, y: 0 }]
+        value: options.statePatchValue ?? [{ x: 2, y: 0 }]
       }
     }
   });
@@ -367,7 +481,21 @@ const createFixtureSession = (): AuthoringSession => ({
       }
     ],
     keyformSets: [],
-    rigControls: [],
+    rigControls: [
+      {
+        kind: "rotation2d",
+        rigControlId: RigControlIdSchema.parse("rig_body_rotation"),
+        displayName: "Body Rotation",
+        partId: PartIdSchema.parse("part_root"),
+        childDrawableIds: [],
+        childRigControlIds: [],
+        pivot: { x: 0, y: 0 },
+        restAngleDegrees: 0,
+        restTranslation: { x: 0, y: 0 },
+        restScale: { x: 1, y: 1 },
+        enabled: true
+      }
+    ],
     dynamicsGroups: [],
     masks: [],
     drawOrder: [],

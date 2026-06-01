@@ -50,8 +50,10 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createAddRigControlAngleKeyformOperationRequest,
   createBindRigControlChildOperationRequest,
   createRotation2dRigControlOperationRequest,
+  type EditorAddRigControlAngleKeyformCommand,
   type EditorBindRigControlChildCommand,
   type EditorCreateRotation2dRigControlCommand
 } from "./rig-control-command.js";
@@ -88,6 +90,9 @@ export interface EditorSessionAdapter {
     command: EditorCreateRotation2dRigControlCommand
   ): EditorSessionPersistenceResult;
   commitBindRigControlChild(command: EditorBindRigControlChildCommand): EditorSessionPersistenceResult;
+  commitAddRigControlAngleKeyform(
+    command: EditorAddRigControlAngleKeyformCommand
+  ): EditorSessionPersistenceResult;
   commitImportSplitPngSourceAsset(
     command: EditorImportSplitPngSourceAssetCommand
   ): EditorSessionPersistenceResult;
@@ -260,6 +265,13 @@ export const createEditorSessionAdapter = (
     },
     commitBindRigControlChild(command) {
       const request = createBindRigControlChildOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitAddRigControlAngleKeyform(command) {
+      const request = createAddRigControlAngleKeyformOperationRequest(
         command,
         authoringSession.packageRevision
       );

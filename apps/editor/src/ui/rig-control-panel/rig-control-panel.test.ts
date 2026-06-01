@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  KeyformSetIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   RigControlIdSchema
 } from "@private-2d-rigging-lab/contracts";
-import type { RigControlDto } from "@private-2d-rigging-lab/package-format";
+import type {
+  KeyformSetDto,
+  ParameterDto,
+  RigControlDto
+} from "@private-2d-rigging-lab/package-format";
 
 import {
   editorTestIds,
@@ -104,6 +110,166 @@ describe("editor rig control panel", () => {
     ]);
   });
 
+  it("submits a rig control angle keyform command from authored parameter and rotation2d fields", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_body_yaw", "Body Yaw")],
+      rigControls: [createRotationRigControl("rig_parent", "Parent Rotation")]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl(command) {
+        calls.push(command);
+      },
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlKeyformForm);
+    if (form === null) {
+      throw new Error("Expected rig control keyform form.");
+    }
+
+    expect(form.attributes.get("aria-label")).toBe("Add rotation2d angle keyform");
+    setNamedFieldValue(form, "parameterId", "param_body_yaw");
+    setNamedFieldValue(form, "rigControlId", "rig_parent");
+    setNamedFieldValue(form, "keyValue", "1");
+    setNamedFieldValue(form, "angleDegrees", "45");
+    form.emit("submit");
+
+    expect(calls).toEqual([
+      {
+        commandKind: "addRigControlAngleKeyform",
+        parameterId: "param_body_yaw",
+        rigControlId: "rig_parent",
+        keyValue: 1,
+        angleDegrees: 45
+      }
+    ]);
+  });
+
+  it("blocks rig control angle keyform submit when no authored parameter is eligible", () => {
+    const state = createRigControlPanelState({
+      rigControls: [createRotationRigControl("rig_parent", "Parent Rotation")]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl(command) {
+        calls.push(command);
+      },
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlKeyformForm);
+    if (form === null) {
+      throw new Error("Expected rig control keyform form.");
+    }
+
+    form.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("No authored input parameter available.");
+  });
+
+  it("blocks rig control angle keyform submit when no rotation2d control is eligible", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_body_yaw", "Body Yaw")],
+      rigControls: []
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl(command) {
+        calls.push(command);
+      },
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlKeyformForm);
+    if (form === null) {
+      throw new Error("Expected rig control keyform form.");
+    }
+
+    form.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("No rotation2d rig control available.");
+  });
+
+  it("blocks rig control angle keyform submit with deterministic invalid field diagnostics", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_body_yaw", "Body Yaw")],
+      rigControls: [
+        createRotationRigControl("rig_parent", "Parent Rotation"),
+        createWarpRigControl("rig_warp", "Warp Control")
+      ]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl(command) {
+        calls.push(command);
+      },
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlKeyformForm);
+    if (form === null) {
+      throw new Error("Expected rig control keyform form.");
+    }
+
+    setNamedFieldValue(form, "parameterId", "");
+    form.emit("submit");
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("Parameter and rotation2d rig control are required.");
+
+    setNamedFieldValue(form, "parameterId", "param_body_yaw");
+    setNamedFieldValue(form, "rigControlId", "rig_warp");
+    form.emit("submit");
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("Selected rig control must be rotation2d with angleDegrees.");
+
+    setNamedFieldValue(form, "rigControlId", "rig_parent");
+    setNamedFieldValue(form, "angleDegrees", "not-a-number");
+    form.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("Key value and angle must contain finite values.");
+  });
+
+  it("renders authored rig control angle keyform state in the panel evidence", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_body_yaw", "Body Yaw")],
+      rigControls: [createRotationRigControl("rig_parent", "Parent Rotation")],
+      keyformSets: [
+        createRigControlAngleKeyform("keyset_rig_parent_angle", "rig_parent", "param_body_yaw", 1, 45)
+      ]
+    });
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const keyformList = findByTestId(panel, editorTestIds.rigControlKeyformList);
+    const evidence = findByTestId(panel, editorTestIds.rigControlEvidence);
+
+    expect(keyformList?.textContent).toContain("1 angle keyform");
+    expect(keyformList?.textContent).toContain("Body Yaw / param_body_yaw");
+    expect(keyformList?.textContent).toContain("45 deg");
+    expect(evidence?.textContent).toContain("angle keyforms param_body_yaw@1 -> 45 deg");
+  });
+
   it("blocks self-binding with a deterministic user-visible diagnostic", () => {
     const state = createRigControlPanelState({
       rigControls: [
@@ -137,7 +303,9 @@ describe("editor rig control panel", () => {
 });
 
 const createRigControlPanelState = (input: {
+  readonly parameters?: readonly ParameterDto[];
   readonly rigControls: readonly RigControlDto[];
+  readonly keyformSets?: readonly KeyformSetDto[];
 }) =>
   projectLoadedPackageState({
     identity: {
@@ -157,7 +325,9 @@ const createRigControlPanelState = (input: {
         drawableIds: []
       }
     ],
-    rigControls: input.rigControls
+    ...(input.parameters === undefined ? {} : { parameters: input.parameters }),
+    rigControls: input.rigControls,
+    ...(input.keyformSets === undefined ? {} : { keyformSets: input.keyformSets })
   });
 
 const createRotationRigControl = (
@@ -177,6 +347,71 @@ const createRotationRigControl = (
   enabled: true
 });
 
+const createWarpRigControl = (
+  rigControlId: string,
+  displayName: string
+): RigControlDto => ({
+  kind: "warpLattice2d",
+  rigControlId: RigControlIdSchema.parse(rigControlId),
+  displayName,
+  partId: PartIdSchema.parse("part_root"),
+  childDrawableIds: [],
+  childRigControlIds: [],
+  bindSpace: "rigControlLocalRest",
+  domainBounds: { x: 0, y: 0, width: 100, height: 100 },
+  latticeColumns: 2,
+  latticeRows: 2,
+  restControlPoints: [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 0, y: 100 },
+    { x: 100, y: 100 }
+  ],
+  interpolationMethod: "bilinear-grid-v1",
+  enabled: true
+});
+
+const createAuthoredParameter = (
+  parameterId: string,
+  displayName: string
+): ParameterDto => ({
+  parameterId: ParameterIdSchema.parse(parameterId),
+  displayName,
+  semanticRole: "body",
+  projectPresetAlias: parameterId.replace(/^param_/, "private-"),
+  valueSource: "authoredInput",
+  min: -1,
+  max: 1,
+  default: 0,
+  recommendedUiStep: 0.01
+});
+
+const createRigControlAngleKeyform = (
+  keyformSetId: string,
+  rigControlId: string,
+  parameterId: string,
+  keyValue: number,
+  angleDegrees: number
+): KeyformSetDto => ({
+  keyformSetId: KeyformSetIdSchema.parse(keyformSetId),
+  target: {
+    kind: "rigControl",
+    id: rigControlId,
+    property: "angleDegrees"
+  },
+  parameterId: ParameterIdSchema.parse(parameterId),
+  evaluator: "linear-1d-v1",
+  interpolation: "linear-1d-v1",
+  compositionMode: "replace",
+  compositionOrder: 0,
+  keys: [
+    {
+      value: keyValue,
+      statePatch: angleDegrees
+    }
+  ]
+});
+
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
 
@@ -191,6 +426,7 @@ const setNamedFieldValue = (
   }
 
   field.value = value;
+  field.valueWasSet = true;
 };
 
 class TestFormData {
@@ -214,6 +450,10 @@ class TestFormData {
 const readFormFieldValue = (field: TestElement): string => {
   if (field.tagName !== "select") {
     return field.type === "checkbox" ? "on" : field.value;
+  }
+
+  if (field.valueWasSet) {
+    return field.value;
   }
 
   if (field.value.length > 0) {
@@ -250,6 +490,7 @@ class TestElement {
   disabled = false;
   checked = false;
   selected = false;
+  valueWasSet = false;
   private ownText = "";
 
   constructor(readonly tagName: string) {}

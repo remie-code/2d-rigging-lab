@@ -282,6 +282,7 @@ describe("validator rig control semantic checks", () => {
         evidence: [
           "rigControlId=rig_parent",
           "snapshotId=snap_rig_validator_0",
+          "runtimeSnapshotRef=runtime/snapshots/snap_rig_validator_0.runtime-snapshot.json",
           "snapshotRigControl=mismatch",
           "packageKind=rotation2d",
           "runtimeKind=warpLattice2d",

@@ -260,6 +260,68 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits rig control angle keyforms through the editor session adapter", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:15:00.000Z")
+    });
+    adapter.commitCreateRotation2dRigControl({
+      operationId: "op_editor_create_rig_control_body",
+      displayName: "Editor Body Rotation",
+      partId: "part_root",
+      pivot: { x: 50, y: 56 },
+      restAngleDegrees: 15
+    });
+
+    const result = adapter.commitAddRigControlAngleKeyform({
+      operationId: "op_editor_add_rig_control_angle",
+      parameterId: "param_preview_body_yaw",
+      rigControlId: "rig_editor_body_rotation",
+      keyValue: 1,
+      angleDegrees: 45
+    });
+
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("addKeyform");
+    expect(result.reloadedDocument.model.keyforms.keyformSets).toContainEqual(
+      expect.objectContaining({
+        evaluator: "linear-1d-v1",
+        parameterId: "param_preview_body_yaw",
+        target: {
+          kind: "rigControl",
+          id: "rig_editor_body_rotation",
+          property: "angleDegrees"
+        },
+        keys: [
+          {
+            value: 1,
+            statePatch: 45
+          }
+        ]
+      })
+    );
+    const runtimeDiff = result.operationResult.runtimeDiff;
+    if (runtimeDiff === undefined) {
+      throw new Error("Committed rig control angle keyform should expose runtime diff evidence.");
+    }
+
+    const candidateSnapshot = parseRuntimeSnapshotArtifact(result.packageFileSet, runtimeDiff.afterSnapshotId);
+    expect(candidateSnapshot.rigControls).toContainEqual(
+      expect.objectContaining({
+        rigControlId: "rig_editor_body_rotation",
+        localTransform: expect.objectContaining({
+          angleDegrees: 45
+        })
+      })
+    );
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
+      expect.objectContaining({
+        target: "rigControl:rig_editor_body_rotation.angleDegrees",
+        samplingStatus: "exact",
+        statePatch: 45
+      })
+    );
+  });
+
   it("commits addKeyformGrid2d and records generated editor evidence", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:20:00.000Z")

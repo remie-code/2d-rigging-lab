@@ -1,5 +1,6 @@
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
 import type {
+  EditorWorkflowAddRigControlAngleKeyformCommand,
   EditorViewerRuntimeProjection,
   EditorWorkflowBindRigControlChildCommand,
   EditorWorkflowCreateRotation2dRigControlCommand
@@ -45,7 +46,9 @@ export const createRigControlPanel = (
     meta,
     createRigControlCreateForm(options),
     createRigControlBindForm(options),
+    createRigControlAngleKeyformForm(options),
     createRigControlList(options),
+    createRigControlAngleKeyformList(options),
     createRigControlRuntimeEvidence(options),
     createRigControlStatus(options)
   );
@@ -169,6 +172,67 @@ const createRigControlBindForm = (
   return form;
 };
 
+const createRigControlAngleKeyformForm = (
+  options: RigControlPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "create-drawable-form";
+  form.dataset.testid = editorTestIds.rigControlKeyformForm;
+  form.setAttribute("aria-label", "Add rotation2d angle keyform");
+
+  const heading = document.createElement("h3");
+  heading.className = "editor-field--wide";
+  heading.textContent = "Add angle keyform";
+  const parameter = createSelectField({
+    label: "Input parameter",
+    name: "parameterId",
+    options: options.viewModel.rigControls.angleKeyformParameterOptions.map((parameterOption) => ({
+      value: parameterOption.parameterId,
+      label: `${parameterOption.label} / ${parameterOption.rangeLabel}`
+    }))
+  });
+  const rigControl = createSelectField({
+    label: "Rotation control",
+    name: "rigControlId",
+    options: options.viewModel.rigControls.angleKeyformRigControlOptions.map((rigControlOption) => ({
+      value: rigControlOption.id,
+      label: rigControlOption.label
+    }))
+  });
+  const keyValue = createNumberField({
+    label: "Key value",
+    name: "keyValue",
+    value: 1,
+    step: "any"
+  });
+  const angle = createNumberField({
+    label: "Angle patch",
+    name: "angleDegrees",
+    value: 30,
+    step: "any"
+  });
+  const diagnostics = createDiagnosticsStatus(
+    options.viewModel.rigControls.angleKeyformDisabledMessage ?? ""
+  );
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.rigControlKeyformSubmit;
+  submit.disabled = !options.viewModel.rigControls.canCreateAngleKeyform;
+  submit.textContent = "Add angle keyform";
+
+  form.append(heading, parameter, rigControl, keyValue, angle, diagnostics, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const command = readAddRigControlAngleKeyformCommand(form, diagnostics, options);
+    if (command !== null) {
+      options.onCommitCreateRotation2dRigControl(command);
+    }
+  });
+
+  return form;
+};
+
 const createRigControlList = (options: RigControlPanelOptions): HTMLElement => {
   const section = document.createElement("section");
   section.className = "rig-control-list";
@@ -202,6 +266,44 @@ const createRigControlList = (options: RigControlPanelOptions): HTMLElement => {
     appendFact(facts, "Drawable children", rigControl.childDrawableLabel);
     appendFact(facts, "Child controls", rigControl.childRigControlLabel);
     appendFact(facts, "Transform", rigControl.transformLabel);
+    item.append(title, facts);
+    section.append(item);
+  }
+
+  return section;
+};
+
+const createRigControlAngleKeyformList = (options: RigControlPanelOptions): HTMLElement => {
+  const section = document.createElement("section");
+  section.className = "rig-control-list";
+  section.dataset.testid = editorTestIds.rigControlKeyformList;
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Angle keyforms";
+  const meta = document.createElement("p");
+  meta.className = "editor-panel__meta";
+  meta.textContent = options.viewModel.rigControls.angleKeyformCountLabel;
+  section.append(heading, meta);
+
+  if (options.viewModel.rigControls.angleKeyforms.length === 0) {
+    section.append(createEmpty("No rig control angle keyforms"));
+    return section;
+  }
+
+  for (const keyform of options.viewModel.rigControls.angleKeyforms) {
+    const item = document.createElement("article");
+    item.className = "drawable-authoring-result";
+
+    const title = document.createElement("h4");
+    title.className = "drawable-authoring-result__label";
+    title.textContent = keyform.keyformSetId;
+
+    const facts = document.createElement("dl");
+    facts.className = "drawable-authoring-summary";
+    appendFact(facts, "Target", keyform.targetLabel);
+    appendFact(facts, "Parameter", keyform.parameterLabel);
+    appendFact(facts, "Key value", keyform.keyValueLabel);
+    appendFact(facts, "Angle", keyform.angleLabel);
     item.append(title, facts);
     section.append(item);
   }
@@ -244,7 +346,7 @@ const createPreviewRigControlEvidence = (
     : `preview ${options.preview.sourceSnapshotId}`;
   for (const rigControl of options.state.rigControls) {
     const item = document.createElement("li");
-    item.textContent = `${rigControl.rigControlId}: ${rigControl.kind} / ${previewLabel}; rest ${formatOptionalNumber(rigControl.restAngleDegrees)}; drawable children ${rigControl.childDrawableIds.join(", ") || "None"}; child controls ${rigControl.childRigControlIds.join(", ") || "None"}`;
+    item.textContent = `${rigControl.rigControlId}: ${rigControl.kind} / ${previewLabel}; rest ${formatOptionalNumber(rigControl.restAngleDegrees)}; angle keyforms ${formatRigControlAngleKeyformEvidence(options.state, rigControl.rigControlId)}; drawable children ${rigControl.childDrawableIds.join(", ") || "None"}; child controls ${rigControl.childRigControlIds.join(", ") || "None"}`;
     list.append(item);
   }
   section.append(list);
@@ -437,6 +539,40 @@ const readBindRigControlChildCommand = (
   };
 };
 
+const readAddRigControlAngleKeyformCommand = (
+  form: HTMLFormElement,
+  diagnostics: HTMLElement,
+  options: RigControlPanelOptions
+): EditorWorkflowAddRigControlAngleKeyformCommand | null => {
+  const fields = new FormData(form);
+  const parameterId = String(fields.get("parameterId") ?? "").trim();
+  const rigControlId = String(fields.get("rigControlId") ?? "").trim();
+  const keyValue = toFiniteNumber(fields.get("keyValue"));
+  const angleDegrees = toFiniteNumber(fields.get("angleDegrees"));
+  const validationMessage = validateAddRigControlAngleKeyformInput({
+    state: options.state,
+    viewModel: options.viewModel,
+    parameterId,
+    rigControlId,
+    keyValue,
+    angleDegrees
+  });
+
+  if (validationMessage !== null) {
+    diagnostics.textContent = validationMessage;
+    return null;
+  }
+
+  diagnostics.textContent = "";
+  return {
+    commandKind: "addRigControlAngleKeyform",
+    parameterId,
+    rigControlId,
+    keyValue,
+    angleDegrees
+  };
+};
+
 const validateCreateRotation2dInput = (input: {
   readonly displayName: string;
   readonly partId: string;
@@ -454,6 +590,49 @@ const validateCreateRotation2dInput = (input: {
 
   if (!Number.isFinite(input.pivotX) || !Number.isFinite(input.pivotY) || !Number.isFinite(input.restAngleDegrees)) {
     return "Pivot and rest angle must contain finite values.";
+  }
+
+  return null;
+};
+
+const validateAddRigControlAngleKeyformInput = (input: {
+  readonly state: EditorSemanticState;
+  readonly viewModel: EditorWorkflowViewModel;
+  readonly parameterId: string;
+  readonly rigControlId: string;
+  readonly keyValue: number;
+  readonly angleDegrees: number;
+}): string | null => {
+  const parameterOptions = input.viewModel.rigControls.angleKeyformParameterOptions;
+  const rigControlOptions = input.viewModel.rigControls.angleKeyformRigControlOptions;
+
+  if (parameterOptions.length === 0) {
+    return "No authored input parameter available.";
+  }
+
+  if (rigControlOptions.length === 0) {
+    return "No rotation2d rig control available.";
+  }
+
+  if (input.parameterId.length === 0 || input.rigControlId.length === 0) {
+    return "Parameter and rotation2d rig control are required.";
+  }
+
+  if (!parameterOptions.some((option) => option.parameterId === input.parameterId)) {
+    return "Selected parameter must be an authored input parameter.";
+  }
+
+  if (!rigControlOptions.some((option) => option.id === input.rigControlId)) {
+    const rigControl = input.state.rigControls.find(
+      (candidate) => candidate.rigControlId === input.rigControlId
+    );
+    return rigControl === undefined
+      ? "Selected rotation2d rig control is unavailable."
+      : "Selected rig control must be rotation2d with angleDegrees.";
+  }
+
+  if (!Number.isFinite(input.keyValue) || !Number.isFinite(input.angleDegrees)) {
+    return "Key value and angle must contain finite values.";
   }
 
   return null;
@@ -499,3 +678,20 @@ const toFiniteNumber = (value: FormDataEntryValue | null): number => {
 
 const formatOptionalNumber = (value: number | null): string =>
   value === null ? "n/a" : Number.isInteger(value) ? String(value) : Number.parseFloat(value.toFixed(4)).toString();
+
+const formatRigControlAngleKeyformEvidence = (
+  state: EditorSemanticState,
+  rigControlId: string
+): string => {
+  const keyforms = state.rigControlAngleKeyforms.filter(
+    (keyform) => keyform.rigControlId === rigControlId
+  );
+
+  if (keyforms.length === 0) {
+    return "None";
+  }
+
+  return keyforms
+    .map((keyform) => `${keyform.parameterId}@${formatOptionalNumber(keyform.keyValue)} -> ${formatOptionalNumber(keyform.angleDegrees)} deg`)
+    .join(", ");
+};
