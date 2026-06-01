@@ -1,6 +1,6 @@
-# Wave25後の残件リスト
+# Wave27完了後の残件リスト
 
-> 状態: 2026-06-01、Wave25完了後の残件バックログ。
+> 状態: 2026-06-01、Wave27完了後の残件バックログ。
 
 ## 目的
 
@@ -9,6 +9,13 @@
 各waveのfinal reportは「そのwaveで何が実装証明されたか」を記録する。一方、この残件リストは「まだ何ができていないか」「どこに判断ゲートがあるか」「品質面で何を持ち越しているか」を見失わないために置く。
 
 ここにある項目がすべて次wave対象という意味ではない。次waveはこの中から1つの実装境界を選び、1waveで完了できる大きさに切る。
+
+## 更新履歴
+
+- Wave26でRig Control Keyform / Viewer Hardeningは`implementation-proven`になったため、P0候補から外した。
+- Wave27では`Mask / clipping / opacity authoring`を選定済み。詳細な実装範囲とOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave27-plan.md`に固定した。
+- Wave27で`Mask / clipping / opacity authoring`は`implementation-proven`になったため、P0候補から外した。
+- この文書はWave28以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -21,11 +28,11 @@ Undineは観点設計と統合だけを担当し、実装状況の読解はread-
 | 品質 / source / test | source organization、検証再現性、test構造 | 次waveのgateや並行品質domainに入れるべきものは何か |
 | PSD / asset I/O / dependency / rights | PSD、PNG、binary file-set、archive、fixture、demo/public境界 | 実バイトやparserへ進む前に何を決めるべきか |
 
-根拠にした主な文書は、`.agents/skills/implementation-orchestration/SKILL.md`、`discussion/implementation/current-capability-map.md`、Wave20-Wave25のfinal report / review、acceptance / scenario文書、dependency policy、source organization policy、およびfocused source inspection。Sylphはsource editを行わず、今回の残件調査ではtest再実行もしていない。
+根拠にした主な文書は、`.agents/skills/implementation-orchestration/SKILL.md`、`discussion/implementation/current-capability-map.md`、Wave20-Wave27のfinal report / review、acceptance / scenario文書、dependency policy、source organization policy、およびfocused source inspection。初期の残件調査ではSylphがsource editを行わずread-onlyで整理した。Wave27についてはfinal verificationとclean integration reviewがpassしている。
 
 ## 実装証明済みの大枠
 
-Wave25時点で、以下はimplementation-provenとして扱ってよい。
+Wave27完了後、以下はimplementation-provenとして扱ってよい。
 
 - foundation packages、contracts、runtime、validator、operation lifecycle、package persistence、editor operation UI、browser-local save/load、AI dry-run/read/approval foundation。
 - keyform authoringとruntime keyform evaluation、Grid2D evidence hardening。
@@ -34,6 +41,8 @@ Wave25時点で、以下はimplementation-provenとして扱ってよい。
 - Minimum Open Dynamics v1のsemantic runtime slice。
 - Private Viewer v0のeditor-internal runtime inspection surface。
 - Minimum Rig Control v1のproject-defined `rotation2d` authoring/runtime slice。
+- Rig Control Keyform / Viewer Hardening。keyform-to-rigControl product authoring、negative UX、viewer/report hardening、transform recompute coverageはWave26で一段閉じた。
+- Mask / Clipping / Opacity Authoring v1。`setMaskRelation` operation、runtime mask relation / opacity evidence、validator composition diagnostics、rights-clean contract fixture、Editor Composition / Mask / Opacity UX、Preview / Viewer observation、desktop/mobile save-load e2e smokeはWave27で一段閉じた。
 
 一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、file picker、archive import/export、actual binary upload、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
@@ -41,8 +50,6 @@ Wave25時点で、以下はimplementation-provenとして扱ってよい。
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| Rig-control hardening | Wave25は`rotation2d`のcreate/bindとsemantic Viewer evidenceまで。keyform-to-rigControl product authoring、追加negative UX、viewer/report hardening、transform recompute coverageが薄い。 | 次wave候補として最も自然。`warpLattice2d` full evaluatorを含めずsemantic hardeningに閉じるのが安全。 | `warpLattice2d`まで含めるなら必要。 |
-| Mask / clipping / opacity authoring | package/runtimeの足場はあるが、product workflow、editor controls、validator evidence、fixture materializationが未完。 | rig-control hardeningの次点、または代替の強い次wave候補。 | semantic scopeに閉じるなら大きな判断は不要。 |
 | Part / texture / layer tree workflow | source layer mappingとtexture-backed previewはあるが、part/texture authoring、full layer tree、lock/hide/select、multi-select workflowは未完。 | 実画像decodeと混ぜず、editor workflow waveとして切る。 | MVP範囲次第で必要。 |
 | Mesh editor completion | generated meshとvertex row nudgeはあるが、canvas drag、multi-vertex edit、topology、UV editor、invalid triangle workflowは未完。 | renderer workと混ぜず、mesh editor単独waveにする。 | MVP meshの深さを決める必要あり。 |
 | Tutorial-like MVP mini model | 個別sliceは増えているが、blink/brow/mouth/face/body/arm/hair dynamicsを1つのGUI制作fixtureで通す証拠がない。 | mask/part/mesh/rigの残件が狭まった後のintegration wave向き。 | 最小モデル仕様が必要。 |
@@ -86,20 +93,29 @@ Wave25時点で、以下はimplementation-provenとして扱ってよい。
 | Demo-safe preflight / capture | policyはあるが、capture scene、自動preflight、disclaimer、public subsetが未実装/未決。 | viewer/product slicesが固まった後に扱う。 | 必要。 |
 | Viewer renderer / standalone viewer / demo capture | Viewerはeditor-internal semantic inspection。full renderer、standalone app、pixel oracle、demo sceneはfuture scope。 | semantic authoring waveには混ぜない。境界変更時だけ扱う。 | 必要。 |
 
-## 次waveの推奨選択肢
+## Wave27で完了した範囲
 
-1. **Rig-control hardening**  
-   Wave25の直後で最も摩擦が少ない。外部dependencyを増やさず、semantic authoring / runtime / validator / viewer evidenceに閉じられる。推奨scopeはkeyform-to-rigControl product authoring、negative UX、validator/runtime evidence hardening、Viewer report hardening。full `warpLattice2d`は明示判断がない限り除外。
+1. **Mask / clipping / opacity authoring**
+   Wave27で完了済み。`setMaskRelation`をauthoring operationとして閉じ、runtime evidence、validator diagnostics、contract fixture、editor composition workflow、desktop/mobile save-load e2e smokeまで一周させた。full renderer、pixel oracle、Cubism互換、file picker、parser、image decode、archive、actual binary upload、external dependencyは含めていない。
+   根拠: `discussion/implementation/waves/wave27/wave27-final-report.md`
 
-2. **Mask / clipping / opacity authoring**  
-   見えるMVP composition gapを閉じにいける。rendererやpixel oracleに踏み込まず、semantic runtime evidenceとvalidator fixture、editor workflowで切れる。
+## Wave28以降の推奨選択肢
 
-3. **Package Binary/File I/O Decision + Byte Intake Pilot v0**  
+1. **Part / texture / layer tree workflow**
+   Wave27でsemantic composition workflowが閉じたため、次のeditor product workflowとして自然。実画像decodeやfile I/Oとは分け、part/texture authoring、layer mapping操作、必要最小限のlock/hide/select workflowをeditor workflow waveとして切る。
+
+2. **Mesh editor completion**
+   generated meshとvertex row nudgeの次として、canvas drag、multi-vertex edit、topology/UV、invalid triangle workflowを扱う候補。renderer workやpixel oracleとは混ぜない。
+
+3. **Tutorial-like MVP mini model**
+   mask / part / mesh / rig / dynamicsの主要sliceが狭まった後、GUIで小さなLive2D風モデル制作を通すintegration waveとして有効。最小モデル仕様が必要。
+
+4. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
    real assetsを優先するならこちら。ただし最小scopeは`<input type=file>`で任意binaryを受け、既存package-local binary file-setとbinary validatorでdigest / byteLength / mediaType / rights / provenanceを証明するところまで。PSD parser、PNG decode、archive dependency、public demo asset policyは入れない。
 
 ## 関連wave前に確認すべき判断
 
-1. Rig-control hardeningに`warpLattice2d` full evaluatorを含めるか、`rotation2d` / semantic hardeningに閉じるか。
+1. Wave27のmask / clipping / opacityはsemantic evidenceで閉じた。次にpixel clipping rendererやfull rendererへ進むか、引き続きsemantic authoring / editor workflowを優先するか。
 2. asset I/Oはdecision-onlyから始めるか、minimal actual binary byte-intake pilotまで進めるか。
 3. file inputを許可する場合、`<input type=file>`に限定するか、drag-drop / File System Access APIまで含めるか。
 4. archive import/exportを今project-defined ZIPとして始めるか、browser-local binary byte intake後まで延期するか。
@@ -109,6 +125,6 @@ Wave25時点で、以下はimplementation-provenとして扱ってよい。
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。そこから1つのproduct directionを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave27については`discussion/implementation/waves/wave27/wave27-final-report.md`と`discussion/implementation/reviews/wave27/wave27-clean-integration-review.md`を完了根拠として扱う。Wave28以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

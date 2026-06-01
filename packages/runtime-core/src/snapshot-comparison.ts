@@ -2,6 +2,9 @@ import type { RuntimeDiffDto } from "@private-2d-rigging-lab/contracts";
 import { RuntimeDiffSchema } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import {
+  createMaskRelationChanges
+} from "./mask-relation-evidence.js";
 import type { EvaluatedDrawableDto, RuntimeSnapshotDto } from "./snapshot.js";
 
 type RuntimeFieldChange = {
@@ -172,6 +175,7 @@ export const compareRuntimeSnapshots = (
     before: change.before,
     after: change.after
   }));
+  const maskRelationChanges = createMaskRelationChanges(before.masks, after.masks);
   const rigControlChanges: RuntimeFieldChange[] = [
     ...after.rigControls.flatMap((afterRigControl) => {
       const beforeRigControl = beforeRigControlsById.get(afterRigControl.rigControlId);
@@ -205,7 +209,12 @@ export const compareRuntimeSnapshots = (
     schemaVersion: "runtime-diff-v1",
     beforeSnapshotId: before.snapshotId,
     afterSnapshotId: after.snapshotId,
-    parameterChanges: [...parameterChanges, ...rigControlChanges, ...drawListParameterChanges],
+    parameterChanges: [
+      ...parameterChanges,
+      ...maskRelationChanges,
+      ...rigControlChanges,
+      ...drawListParameterChanges
+    ],
     dynamicsChanges,
     drawableChanges,
     drawableRuntimeStateChanges,

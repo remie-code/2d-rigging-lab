@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "wave27-composition-runtime-diff-summary-v1",
+  "runtimeDiff": {
+    "schemaVersion": "runtime-diff-v1",
+    "beforeSnapshotId": "snap_wave27_composition_contract_10",
+    "afterSnapshotId": "snap_wave27_composition_contract_11",
+    "maskChanges": [
+      {
+        "path": "/masks/maskrel_wave27_body_clip",
+        "before": null,
+        "after": {
+          "maskRelationId": "maskrel_wave27_body_clip",
+          "sourceDrawableIds": [
+            "draw_wave27_mask"
+          ],
+          "targetDrawableIds": [
+            "draw_wave27_body"
+          ],
+          "enabled": true,
+          "clippingIntent": "semanticClipping",
+          "resolved": true
+        }
+      }
+    ],
+    "parameterChangeCount": 1,
+    "drawableRuntimeStateChangeCount": 0,
+    "diagnosticDeltaCount": 0
+  }
+}

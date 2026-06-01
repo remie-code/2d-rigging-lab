@@ -202,6 +202,8 @@ const createRuntimeEvidenceInput = (
       return createCreateRotation2dRigControlEvidenceInput(input);
     case "bindRigControlChild":
       return createBindRigControlChildEvidenceInput(input);
+    case "setMaskRelation":
+      return createSetMaskRelationEvidenceInput(input);
     case "setRightsMetadata":
       return createSetRightsMetadataEvidenceInput(input);
     default:
@@ -645,6 +647,32 @@ const createBindRigControlChildEvidenceInput = (
 
   return {
     artifactLabel: "editor-bind-rig-control-child",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetMaskRelationEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setMaskRelation") {
+    throw new Error(`setMaskRelation evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...input.request.payload.maskDrawableIds,
+    ...input.request.payload.targetDrawableIds
+  ]);
+
+  return {
+    artifactLabel: "editor-set-mask-relation",
     authoredParameterValues: {},
     targetIds,
     baseline: {

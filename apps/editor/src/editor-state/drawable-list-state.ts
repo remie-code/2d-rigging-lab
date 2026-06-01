@@ -12,6 +12,7 @@ export interface DrawableListItemState {
   readonly partId: string;
   readonly sourceAssetId: string;
   readonly textureId: string;
+  readonly defaultOpacity: number;
   readonly visible: boolean;
   readonly baseDrawOrder: number;
   readonly stableOrder: number;
@@ -50,6 +51,7 @@ export const projectDrawableList = (
       partId: drawable.partId,
       sourceAssetId: drawable.sourceAssetId,
       textureId: drawable.textureId,
+      defaultOpacity: drawable.defaultOpacity,
       visible: drawable.runtimeVisibility,
       baseDrawOrder: drawOrder?.baseDrawOrder ?? drawable.baseDrawOrder,
       stableOrder: drawOrder?.stableOrder ?? fallbackIndex,

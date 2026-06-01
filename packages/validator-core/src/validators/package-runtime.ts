@@ -13,6 +13,7 @@ import { validatePackageBinaryAssets } from "./binary-assets.js";
 import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
 import { validateDynamicsSemantics } from "./dynamics-semantic.js";
+import { validateMaskCompositionSemantics } from "./mask-composition.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validateRigControlSemantics } from "./rig-control-semantic.js";
@@ -133,6 +134,7 @@ const collectPackageReferenceChecks = (
   ...validateDrawableProvenanceReferences(packageDocument),
   ...validateDrawableReferences(packageDocument),
   ...validateTextureAssetReferences(packageDocument),
+  ...validateMaskCompositionSemantics(packageDocument, runtimeSnapshot),
   ...validateRigControlSemantics(packageDocument, runtimeSnapshot),
   ...validateDynamicsSemantics(packageDocument, runtimeSnapshot)
 ];

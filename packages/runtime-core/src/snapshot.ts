@@ -3,7 +3,6 @@ import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
   MeshIdSchema,
-  MaskRelationIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
   RectDtoSchema,
@@ -21,6 +20,10 @@ import type {
 import { z } from "zod";
 
 import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
+import {
+  createEvaluatedMaskRelations,
+  EvaluatedMaskRelationSchema
+} from "./mask-relation-evidence.js";
 import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
@@ -37,6 +40,13 @@ import {
   EvaluatedDrawableTextureSchema,
   omitTextureProjectionCoordinates
 } from "./texture-projection.js";
+
+export {
+  EvaluatedMaskRelationSchema
+} from "./mask-relation-evidence.js";
+export type {
+  EvaluatedMaskRelationDto
+} from "./mask-relation-evidence.js";
 
 export const EvaluatedParameterSchema = z.object({
   parameterId: ParameterIdSchema,
@@ -118,13 +128,7 @@ export const RuntimeSnapshotSchema = z.object({
   keyformSamples: z.array(KeyformSampleSchema).default([]),
   rigControls: z.array(EvaluatedRigControlSchema).default([]),
   drawables: z.array(EvaluatedDrawableSchema),
-  masks: z.array(
-    z.object({
-      maskRelationId: MaskRelationIdSchema,
-      targetDrawableIds: z.array(DrawableIdSchema),
-      resolved: z.boolean()
-    })
-  ),
+  masks: z.array(EvaluatedMaskRelationSchema),
   drawList: z.array(DrawableIdSchema),
   disabledFutureLayers: z.array(z.string()).default([]),
   diagnostics: z.array(DiagnosticSchema),
@@ -191,11 +195,7 @@ export const createRuntimeSnapshot = (input: {
     keyformSamples: keyformSampling.samples,
     rigControls: rigControlEvaluation.rigControls,
     drawables,
-    masks: input.graph.masks.map((mask) => ({
-      maskRelationId: mask.maskRelationId,
-      targetDrawableIds: [...mask.targetDrawableIds],
-      resolved: true
-    })),
+    masks: createEvaluatedMaskRelations(input.graph),
     drawList: drawables.filter((drawable) => drawable.visible).map((drawable) => drawable.drawableId),
     disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
     diagnostics: [
@@ -214,6 +214,7 @@ export const createRuntimeSnapshot = (input: {
               "rigControl_evaluation",
               "mesh_evaluation",
               "opacity_visibility",
+              "mask_resolution",
               "draw_order_resolution",
               "render_preparation"
             ],

@@ -2,6 +2,7 @@ import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
   KeyformSetIdSchema,
+  MaskRelationIdSchema,
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema
@@ -132,6 +133,56 @@ describe("viewer runtime evaluation", () => {
     ]);
     expect(result.snapshot.disabledFutureLayers).toEqual([]);
     expect(result.snapshot.diagnostics).toEqual([]);
+  });
+
+  it("exposes semantic mask relations and drawable opacity as viewer evidence basis", () => {
+    const fixture = createViewerCompositionEvidenceFixture();
+
+    const result = evaluateViewerRuntimeSnapshot(fixture.graph, {
+      parameterOverrides: {
+        [fixture.opacityParameterId]: 1
+      },
+      targetIds: [fixture.targetDrawableId]
+    });
+    const targetDrawable = result.snapshot.drawables.find(
+      (drawable) => drawable.drawableId === fixture.targetDrawableId
+    );
+
+    expect(result.snapshot.masks).toEqual([
+      {
+        maskRelationId: fixture.maskRelationId,
+        sourceDrawableIds: [fixture.maskDrawableId],
+        targetDrawableIds: [fixture.targetDrawableId],
+        enabled: true,
+        clippingIntent: "semanticClipping",
+        resolved: true
+      }
+    ]);
+    expect(targetDrawable).toMatchObject({
+      drawableId: fixture.targetDrawableId,
+      opacity: 0.25,
+      visible: true
+    });
+    expect(result.runtimeDiff.drawableRuntimeStateChanges).toEqual([
+      {
+        drawableId: fixture.targetDrawableId,
+        opacityBefore: 1,
+        opacityAfter: 0.25,
+        visibleBefore: true,
+        visibleAfter: true,
+        baseDrawOrderBefore: 1,
+        baseDrawOrderAfter: 1,
+        evaluatedDrawOrderBefore: 1,
+        evaluatedDrawOrderAfter: 1
+      }
+    ]);
+    expect(result.evidence.maskRelationEvidence).toEqual(result.snapshot.masks);
+    expect(result.evidence.drawableOpacityEvidence).toContainEqual({
+      drawableId: fixture.targetDrawableId,
+      opacity: 0.25,
+      visible: true
+    });
+    expect(result.evidence.drawableRuntimeStateChanges).toEqual(result.runtimeDiff.drawableRuntimeStateChanges);
   });
 });
 
@@ -281,5 +332,99 @@ const createViewerEvaluationFixture = (
     hairSwayParameterId,
     drawableId,
     dynamicsGroupId
+  };
+};
+
+const createViewerCompositionEvidenceFixture = () => {
+  const packageId = PackageIdSchema.parse("pkg_viewer_composition");
+  const opacityParameterId = ParameterIdSchema.parse("param_opacity");
+  const maskDrawableId = DrawableIdSchema.parse("draw_mask");
+  const targetDrawableId = DrawableIdSchema.parse("draw_target");
+  const maskMeshId = MeshIdSchema.parse("mesh_mask");
+  const targetMeshId = MeshIdSchema.parse("mesh_target");
+  const maskRelationId = MaskRelationIdSchema.parse("maskrel_viewerClip");
+  const opacityKeyformSetId = KeyformSetIdSchema.parse("keyset_viewerOpacity");
+  const graph: NormalizedRuntimeGraph = {
+    packageId,
+    packageRevision: 3,
+    packageHash: "sha256:viewer-composition",
+    coordinateSystem: "canvas-y-down-v1",
+    parameters: new Map([
+      [
+        opacityParameterId,
+        {
+          id: opacityParameterId,
+          displayName: "Opacity",
+          valueSource: "authoredInput",
+          min: 0,
+          max: 1,
+          default: 0
+        }
+      ]
+    ]),
+    dynamicsGroups: new Map(),
+    drawables: new Map([
+      [
+        maskDrawableId,
+        {
+          drawableId: maskDrawableId,
+          meshId: maskMeshId,
+          visible: true,
+          opacity: 1,
+          baseDrawOrder: 0,
+          bounds: { x: 0, y: 0, width: 8, height: 8 },
+          vertexCount: 4
+        }
+      ],
+      [
+        targetDrawableId,
+        {
+          drawableId: targetDrawableId,
+          meshId: targetMeshId,
+          visible: true,
+          opacity: 1,
+          baseDrawOrder: 1,
+          bounds: { x: 0, y: 0, width: 12, height: 12 },
+          vertexCount: 4
+        }
+      ]
+    ]),
+    rigControls: new Map(),
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: opacityKeyformSetId,
+        targetId: targetDrawableId,
+        targetKind: "drawable",
+        targetProperty: "opacity",
+        parameterId: opacityParameterId,
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [
+          { value: 0, statePatch: 1 },
+          { value: 1, statePatch: 0.25 }
+        ]
+      }
+    ],
+    masks: [
+      {
+        maskRelationId,
+        sourceDrawableIds: [maskDrawableId],
+        targetDrawableIds: [targetDrawableId]
+      }
+    ],
+    drawOrder: [
+      { drawableId: maskDrawableId, drawOrder: 0 },
+      { drawableId: targetDrawableId, drawOrder: 1 }
+    ],
+    disabledFutureLayers: []
+  };
+
+  return {
+    graph,
+    opacityParameterId,
+    maskDrawableId,
+    targetDrawableId,
+    maskRelationId
   };
 };

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "wave27-composition-validation-report-summary-v1",
+  "dryRun": {
+    "baselineReportId": "val_wave27_composition_dry_run_baseline",
+    "candidateReportId": "val_wave27_composition_dry_run_candidate",
+    "candidateStatus": "pass",
+    "candidateHighestSeverity": "info",
+    "candidateCheckIds": [],
+    "candidateRuntimeSnapshotIds": [
+      "snap_wave27_composition_contract_11"
+    ],
+    "validationDiff": {
+      "schemaVersion": "validation-diff-v1",
+      "beforeReportId": "val_wave27_composition_dry_run_baseline",
+      "afterReportId": "val_wave27_composition_dry_run_candidate",
+      "newFailureCount": 0,
+      "resolvedFailureCount": 0,
+      "severityChangeCount": 0
+    }
+  },
+  "commit": {
+    "baselineReportId": "val_wave27_composition_commit_baseline",
+    "candidateReportId": "val_wave27_composition_commit_candidate",
+    "candidateStatus": "pass",
+    "candidateHighestSeverity": "info",
+    "candidateCheckIds": [],
+    "candidateRuntimeSnapshotIds": [
+      "snap_wave27_composition_contract_11"
+    ],
+    "validationDiff": {
+      "schemaVersion": "validation-diff-v1",
+      "beforeReportId": "val_wave27_composition_commit_baseline",
+      "afterReportId": "val_wave27_composition_commit_candidate",
+      "newFailureCount": 0,
+      "resolvedFailureCount": 0,
+      "severityChangeCount": 0
+    }
+  },
+  "invalidMissingTarget": {
+    "reportId": "val_wave27_composition_invalid_missing_target",
+    "status": "fail",
+    "highestSeverity": "blocking",
+    "checks": [
+      {
+        "checkId": "mask.targetMissing",
+        "severity": "blocking",
+        "targetPath": "/model/masks/masks/0/targetDrawableIds/0",
+        "evidence": [
+          "maskRelationId=maskrel_wave27_missing_target",
+          "targetDrawableId=draw_wave27_missing_target",
+          "targetDrawableMatch=missing"
+        ]
+      }
+    ]
+  }
+}

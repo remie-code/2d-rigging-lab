@@ -33,6 +33,10 @@ import {
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
+import {
+  projectCompositionMaskRelationState,
+  projectDrawableOpacityKeyformState
+} from "./composition-authoring-state.js";
 import { projectRigControlState } from "./rig-control-authoring-state.js";
 import { projectRigControlAngleKeyformState } from "./rig-control-keyform-state.js";
 import { projectViewerRuntimeState } from "./viewer-runtime-state.js";
@@ -43,6 +47,7 @@ import type {
   DrawOrderEntryDto,
   DynamicsGroupDto,
   KeyformSetDto,
+  MaskRelationDto,
   MeshDto,
   ModelPartDto,
   RigControlDto,
@@ -57,6 +62,7 @@ export interface LoadedPackageSummaryInput {
   readonly dynamicsGroups?: readonly DynamicsGroupDto[];
   readonly rigControls?: readonly RigControlDto[];
   readonly keyformSets?: readonly KeyformSetDto[];
+  readonly masks?: readonly MaskRelationDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -79,6 +85,7 @@ export interface CommittedOperationSummaryInput {
   readonly dynamicsGroups?: readonly DynamicsGroupDto[];
   readonly rigControls?: readonly RigControlDto[];
   readonly keyformSets?: readonly KeyformSetDto[];
+  readonly masks?: readonly MaskRelationDto[];
   readonly drawables?: readonly DrawableDto[];
   readonly drawOrderEntries?: readonly DrawOrderEntryDto[];
   readonly meshes?: readonly MeshDto[];
@@ -115,6 +122,8 @@ export const projectLoadedPackageState = (
     parts: input.parts ?? [],
     rigControls: projectRigControlState(input.rigControls ?? []),
     rigControlAngleKeyforms: projectRigControlAngleKeyformState(input.keyformSets ?? []),
+    maskRelations: projectCompositionMaskRelationState(input.masks ?? []),
+    drawableOpacityKeyforms: projectDrawableOpacityKeyformState(input.keyformSets ?? []),
     dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
     drawables,
     meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
@@ -167,6 +176,14 @@ export const applyCommittedOperationSummary = (
       input.keyformSets === undefined
         ? state.rigControlAngleKeyforms
         : projectRigControlAngleKeyformState(input.keyformSets),
+    maskRelations:
+      input.masks === undefined
+        ? state.maskRelations
+        : projectCompositionMaskRelationState(input.masks),
+    drawableOpacityKeyforms:
+      input.keyformSets === undefined
+        ? state.drawableOpacityKeyforms
+        : projectDrawableOpacityKeyformState(input.keyformSets),
     drawables,
     meshEdit,
     previewParameters:

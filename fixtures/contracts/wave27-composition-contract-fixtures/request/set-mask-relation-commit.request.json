@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave27_set_mask_relation",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-007",
+      "AC-MVP-012",
+      "AC-MVP-013"
+    ],
+    "relatedScenarios": [
+      "SC-MVP-003",
+      "SC-MVP-004"
+    ]
+  },
+  "operationType": "setMaskRelation",
+  "payload": {
+    "maskRelationId": "maskrel_wave27_body_clip",
+    "maskDrawableIds": [
+      "draw_wave27_mask"
+    ],
+    "targetDrawableIds": [
+      "draw_wave27_body"
+    ],
+    "enabled": true
+  }
+}

@@ -26,6 +26,12 @@ import {
   EDITOR_BROWSER_SAMPLE_PACKAGE_HASH
 } from "./browser-sample-package.js";
 import {
+  createAddDrawableOpacityKeyformOperationRequest,
+  createSetMaskRelationOperationRequest,
+  type EditorAddDrawableOpacityKeyformCommand,
+  type EditorSetMaskRelationCommand
+} from "./composition-command.js";
+import {
   createParameterOperationRequest,
   type EditorCreateParameterCommand
 } from "./create-parameter-command.js";
@@ -92,6 +98,10 @@ export interface EditorSessionAdapter {
   commitBindRigControlChild(command: EditorBindRigControlChildCommand): EditorSessionPersistenceResult;
   commitAddRigControlAngleKeyform(
     command: EditorAddRigControlAngleKeyformCommand
+  ): EditorSessionPersistenceResult;
+  commitSetMaskRelation(command: EditorSetMaskRelationCommand): EditorSessionPersistenceResult;
+  commitAddDrawableOpacityKeyform(
+    command: EditorAddDrawableOpacityKeyformCommand
   ): EditorSessionPersistenceResult;
   commitImportSplitPngSourceAsset(
     command: EditorImportSplitPngSourceAssetCommand
@@ -272,6 +282,20 @@ export const createEditorSessionAdapter = (
     },
     commitAddRigControlAngleKeyform(command) {
       const request = createAddRigControlAngleKeyformOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitSetMaskRelation(command) {
+      const request = createSetMaskRelationOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitAddDrawableOpacityKeyform(command) {
+      const request = createAddDrawableOpacityKeyformOperationRequest(
         command,
         authoringSession.packageRevision
       );

@@ -123,8 +123,8 @@ export type AddKeyformGrid2dPayloadDto = z.infer<typeof AddKeyformGrid2dPayloadS
 
 export const SetMaskRelationPayloadSchema = z.object({
   maskRelationId: MaskRelationIdSchema.optional(),
-  maskDrawableIds: z.array(DrawableIdSchema).min(1),
-  targetDrawableIds: z.array(DrawableIdSchema).min(1),
+  maskDrawableIds: z.array(DrawableIdSchema),
+  targetDrawableIds: z.array(DrawableIdSchema),
   enabled: z.boolean()
 });
 export type SetMaskRelationPayloadDto = z.infer<typeof SetMaskRelationPayloadSchema>;

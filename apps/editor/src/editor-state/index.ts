@@ -2,6 +2,8 @@ export * from "./ai-approval-state.js";
 export * from "./ai-transcript-summary.js";
 export * from "./create-drawable-form-state.js";
 export * from "./create-parameter-form-state.js";
+export * from "./composition-authoring-state.js";
+export * from "./composition-authoring-view-model.js";
 export * from "./diagnostic-summary.js";
 export * from "./drawable-list-state.js";
 export * from "./dynamics-authoring-state.js";

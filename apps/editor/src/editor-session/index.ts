@@ -1,4 +1,5 @@
 export * from "./browser-sample-package.js";
+export * from "./composition-command.js";
 export * from "./create-drawable-preset-command.js";
 export * from "./create-parameter-command.js";
 export * from "./drawable-layer-command.js";

@@ -1,5 +1,6 @@
 import {
   DrawableIdSchema,
+  MaskRelationIdSchema,
   MeshIdSchema,
   PackageIdSchema,
   RuntimeSnapshotIdSchema
@@ -187,6 +188,106 @@ describe("runtime snapshot comparison", () => {
       }
     ]);
   });
+
+  it("observes semantic mask relation changes through stable field paths", () => {
+    const before = createSnapshot({
+      snapshotId: "snap_compare_mask_before",
+      opacity: 1,
+      visible: true,
+      baseDrawOrder: 0,
+      evaluatedDrawOrder: 0,
+      drawList: ["draw_body"],
+      masks: [
+        {
+          maskRelationId: MaskRelationIdSchema.parse("maskrel_bodyClip"),
+          sourceDrawableIds: [DrawableIdSchema.parse("draw_maskA")],
+          targetDrawableIds: [DrawableIdSchema.parse("draw_body")],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: true
+        },
+        {
+          maskRelationId: MaskRelationIdSchema.parse("maskrel_removedClip"),
+          sourceDrawableIds: [DrawableIdSchema.parse("draw_removedMask")],
+          targetDrawableIds: [DrawableIdSchema.parse("draw_body")],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: true
+        }
+      ]
+    });
+    const after = createSnapshot({
+      snapshotId: "snap_compare_mask_after",
+      opacity: 1,
+      visible: true,
+      baseDrawOrder: 0,
+      evaluatedDrawOrder: 0,
+      drawList: ["draw_body"],
+      masks: [
+        {
+          maskRelationId: MaskRelationIdSchema.parse("maskrel_addedClip"),
+          sourceDrawableIds: [DrawableIdSchema.parse("draw_maskAdded")],
+          targetDrawableIds: [DrawableIdSchema.parse("draw_body")],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: true
+        },
+        {
+          maskRelationId: MaskRelationIdSchema.parse("maskrel_bodyClip"),
+          sourceDrawableIds: [DrawableIdSchema.parse("draw_maskB")],
+          targetDrawableIds: [DrawableIdSchema.parse("draw_body"), DrawableIdSchema.parse("draw_shadow")],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: false
+        }
+      ]
+    });
+
+    const result = compareRuntimeSnapshots(before, after);
+
+    expect(result.equivalent).toBe(false);
+    expect(result.diff.parameterChanges).toEqual([
+      {
+        path: "/masks/maskrel_addedClip",
+        before: null,
+        after: {
+          maskRelationId: "maskrel_addedClip",
+          sourceDrawableIds: ["draw_maskAdded"],
+          targetDrawableIds: ["draw_body"],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: true
+        }
+      },
+      {
+        path: "/masks/maskrel_bodyClip/sourceDrawableIds",
+        before: ["draw_maskA"],
+        after: ["draw_maskB"]
+      },
+      {
+        path: "/masks/maskrel_bodyClip/targetDrawableIds",
+        before: ["draw_body"],
+        after: ["draw_body", "draw_shadow"]
+      },
+      {
+        path: "/masks/maskrel_bodyClip/resolved",
+        before: true,
+        after: false
+      },
+      {
+        path: "/masks/maskrel_removedClip",
+        before: {
+          maskRelationId: "maskrel_removedClip",
+          sourceDrawableIds: ["draw_removedMask"],
+          targetDrawableIds: ["draw_body"],
+          enabled: true,
+          clippingIntent: "semanticClipping",
+          resolved: true
+        },
+        after: null
+      }
+    ]);
+  });
 });
 
 const createSnapshot = (input: {
@@ -196,6 +297,7 @@ const createSnapshot = (input: {
   readonly baseDrawOrder: number;
   readonly evaluatedDrawOrder: number;
   readonly drawList: readonly string[];
+  readonly masks?: RuntimeSnapshotDto["masks"];
 }): RuntimeSnapshotDto => ({
   schemaVersion: "runtime-snapshot-v1",
   runtimeCoreVersion: "test",
@@ -244,7 +346,7 @@ const createSnapshot = (input: {
       diagnostics: []
     }
   ],
-  masks: [],
+  masks: input.masks ?? [],
   drawList: input.drawList.map((drawableId) => DrawableIdSchema.parse(drawableId)),
   disabledFutureLayers: [],
   diagnostics: []

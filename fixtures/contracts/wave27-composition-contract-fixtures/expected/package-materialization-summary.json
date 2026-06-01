@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "wave27-composition-package-materialization-summary-v1",
+  "packageId": "pkg_wave27_composition_contract",
+  "packageRevision": 1,
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "masksFile": {
+    "schemaVersion": "masks-file-v1",
+    "masks": [
+      {
+        "maskRelationId": "maskrel_wave27_body_clip",
+        "maskDrawableIds": [
+          "draw_wave27_mask"
+        ],
+        "targetDrawableIds": [
+          "draw_wave27_body"
+        ],
+        "enabled": true
+      }
+    ]
+  },
+  "runtimeMasks": [
+    {
+      "maskRelationId": "maskrel_wave27_body_clip",
+      "sourceDrawableIds": [
+        "draw_wave27_mask"
+      ],
+      "targetDrawableIds": [
+        "draw_wave27_body"
+      ]
+    }
+  ],
+  "drawableOpacityDefaults": [
+    {
+      "drawableId": "draw_wave27_body",
+      "defaultOpacity": 0.82,
+      "runtimeVisibility": true
+    },
+    {
+      "drawableId": "draw_wave27_mask",
+      "defaultOpacity": 0.6,
+      "runtimeVisibility": true
+    }
+  ]
+}

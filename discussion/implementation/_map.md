@@ -51,6 +51,7 @@ discussion/implementation/
 - Wave 24 Private Viewer v0 runtime inspection surface completed on 2026-06-01 with editor-internal Viewer / Runtime surface, viewer-context runtime snapshot/diff/evidence, session-only parameter override, viewer validation diagnostics/report refs, semantic preview-vs-viewer equivalence fixture, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping standalone viewer app, full renderer, pixel oracle, file picker, parser, archive, image decode, actual binary upload, Cubism compatibility, and external dependencies out of scope. Evidence is recorded in [waves/wave24/wave24-final-report.md](waves/wave24/wave24-final-report.md), [waves/wave24/_map.md](waves/wave24/_map.md), and [reviews/wave24/wave24-clean-integration-review.md](reviews/wave24/wave24-clean-integration-review.md).
 - Wave 25 Minimum Rig Control v1 authoring/runtime slice completed on 2026-06-01 with project-defined `rotation2d` rig control creation and child binding, deterministic runtime hierarchy/evidence, validator diagnostics, parent-child and invalid-cycle fixtures, editor Preview / Viewer workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md), [waves/wave25/_map.md](waves/wave25/_map.md), and [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md).
 - Wave 26 Rig Control Keyform / Viewer Hardening completed on 2026-06-01 with `rigControl:angleDegrees` keyform operation/evidence, runtime local/world transform and affected-target evidence, validator/report hardening, editor keyform UX, Viewer / Runtime observation, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md), [waves/wave26/_map.md](waves/wave26/_map.md), and [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md).
+- Wave 27 Mask / Clipping / Opacity Authoring v1 completed on 2026-06-01 with semantic `setMaskRelation` operation support, runtime mask/opacity evidence, validator composition diagnostics, rights-clean contract fixtures, Editor Composition / Mask / Opacity UX, Viewer / Runtime semantic observation, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping pixel oracle, full renderer, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md), [waves/wave27/_map.md](waves/wave27/_map.md), [reviews/wave27/_map.md](reviews/wave27/_map.md), and [reviews/wave27/wave27-clean-integration-review.md](reviews/wave27/wave27-clean-integration-review.md).
 
 ## Key References
 
@@ -85,6 +86,7 @@ discussion/implementation/
 | [orchestration/wave24-plan.md](orchestration/wave24-plan.md) | Wave 24 Private Viewer v0 runtime inspection surface dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave25-plan.md](orchestration/wave25-plan.md) | Wave 25 Minimum Rig Control v1 authoring/runtime slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave26-plan.md](orchestration/wave26-plan.md) | Wave 26 Rig Control Keyform / Viewer Hardening dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave27-plan.md](orchestration/wave27-plan.md) | Wave 27 Mask / Clipping / Opacity Authoring v1 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -117,6 +119,8 @@ discussion/implementation/
 | [waves/wave25/_map.md](waves/wave25/_map.md) | Wave 25 domain completion reports, clean integration review, and final report |
 | [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md) | Wave 26 final report for Rig Control Keyform / Viewer Hardening |
 | [waves/wave26/_map.md](waves/wave26/_map.md) | Wave 26 domain completion reports, clean integration review, and final report |
+| [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md) | Wave 27 final report for Mask / Clipping / Opacity Authoring v1 |
+| [waves/wave27/_map.md](waves/wave27/_map.md) | Wave 27 domain completion reports, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -143,6 +147,8 @@ discussion/implementation/
 | [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md) | Wave 25 clean integration review |
 | [reviews/wave26/_map.md](reviews/wave26/_map.md) | Wave 26 domain review reports and clean integration review |
 | [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md) | Wave 26 clean integration review |
+| [reviews/wave27/_map.md](reviews/wave27/_map.md) | Wave 27 domain review reports and clean integration review |
+| [reviews/wave27/wave27-clean-integration-review.md](reviews/wave27/wave27-clean-integration-review.md) | Wave 27 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

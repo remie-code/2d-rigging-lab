@@ -195,6 +195,15 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "setMaskRelation",
+    payload: {
+      maskRelationId: "maskrel_empty_relation",
+      maskDrawableIds: [],
+      targetDrawableIds: ["draw_body"],
+      enabled: true
+    }
+  },
+  {
     operationType: "createRotation2dRigControl",
     payload: {
       partId: "part_head",
@@ -273,6 +282,7 @@ describe("operation-core DTO schemas", () => {
       "createParameter",
       "createDynamicsGroup",
       "moveMeshVertex",
+      "setMaskRelation",
       "createRotation2dRigControl",
       "bindRigControlChild"
     ]);

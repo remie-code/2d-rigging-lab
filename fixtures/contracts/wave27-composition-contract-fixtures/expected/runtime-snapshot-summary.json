@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "wave27-composition-runtime-snapshot-summary-v1",
+  "baselineSnapshot": {
+    "snapshotId": "snap_wave27_composition_contract_10",
+    "packageId": "pkg_wave27_composition_contract",
+    "packageRevision": 0,
+    "maskRelationEvidence": [],
+    "drawableOpacityEvidence": [
+      {
+        "drawableId": "draw_wave27_mask",
+        "opacity": 0.6,
+        "visible": true
+      },
+      {
+        "drawableId": "draw_wave27_body",
+        "opacity": 0.82,
+        "visible": true
+      }
+    ],
+    "drawList": [
+      "draw_wave27_mask",
+      "draw_wave27_body"
+    ]
+  },
+  "candidateSnapshot": {
+    "snapshotId": "snap_wave27_composition_contract_11",
+    "packageId": "pkg_wave27_composition_contract",
+    "packageRevision": 1,
+    "maskRelationEvidence": [
+      {
+        "maskRelationId": "maskrel_wave27_body_clip",
+        "sourceDrawableIds": [
+          "draw_wave27_mask"
+        ],
+        "targetDrawableIds": [
+          "draw_wave27_body"
+        ],
+        "enabled": true,
+        "clippingIntent": "semanticClipping",
+        "resolved": true
+      }
+    ],
+    "drawableOpacityEvidence": [
+      {
+        "drawableId": "draw_wave27_mask",
+        "opacity": 0.6,
+        "visible": true
+      },
+      {
+        "drawableId": "draw_wave27_body",
+        "opacity": 0.82,
+        "visible": true
+      }
+    ],
+    "drawList": [
+      "draw_wave27_mask",
+      "draw_wave27_body"
+    ]
+  },
+  "generatedRuntimeSnapshotIds": [
+    "snap_wave27_composition_contract_10",
+    "snap_wave27_composition_contract_11"
+  ],
+  "generatedRuntimeStateRefs": [
+    "runtime/states/pkg_wave27_composition_contract-r1-wave27-composition-final-f11.runtime-state.json"
+  ],
+  "generatedRuntimeStateSequenceRefs": [
+    "runtime/state-sequences/pkg_wave27_composition_contract-r1-wave27-composition.runtime-state-sequence.json"
+  ],
+  "finalRuntimeState": {
+    "packageId": "pkg_wave27_composition_contract",
+    "packageRevision": 1,
+    "frameIndex": 11
+  }
+}

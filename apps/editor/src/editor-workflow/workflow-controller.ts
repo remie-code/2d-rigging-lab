@@ -88,6 +88,13 @@ import {
   type EditorWorkflowRigControlCommitResult
 } from "./rig-control-workflow.js";
 import {
+  commitWorkflowAddDrawableOpacityKeyform,
+  commitWorkflowSetMaskRelation,
+  type EditorWorkflowAddDrawableOpacityKeyformCommand,
+  type EditorWorkflowCompositionCommitResult,
+  type EditorWorkflowSetMaskRelationCommand
+} from "./composition-workflow.js";
+import {
   createWorkflowDynamicsPreviewRunner,
   type EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
@@ -245,6 +252,12 @@ export interface EditorWorkflowController {
     command: EditorWorkflowCreateRotation2dRigControlCommand
   ): EditorWorkflowRigControlCommitResult;
   commitBindRigControlChild(command: EditorWorkflowBindRigControlChildCommand): EditorWorkflowRigControlCommitResult;
+  commitSetMaskRelation(
+    command: EditorWorkflowSetMaskRelationCommand
+  ): EditorWorkflowCompositionCommitResult;
+  commitAddDrawableOpacityKeyform(
+    command: EditorWorkflowAddDrawableOpacityKeyformCommand
+  ): EditorWorkflowCompositionCommitResult;
   resetDynamicsPreview(): EditorWorkflowDynamicsPreviewResult;
   runDynamicsPreview(frameCount: number): EditorWorkflowDynamicsPreviewResult;
   setPreviewParameterValue(parameterId: string, value: number): PreviewParameterSetResult;
@@ -606,6 +619,24 @@ export const createEditorWorkflowController = (
     },
     commitBindRigControlChild(command) {
       const outcome = commitWorkflowBindRigControlChild({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitSetMaskRelation(command) {
+      const outcome = commitWorkflowSetMaskRelation({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitAddDrawableOpacityKeyform(command) {
+      const outcome = commitWorkflowAddDrawableOpacityKeyform({ adapter, state, command });
       latestDrawablePresetResult = null;
       latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
       state = outcome.state;

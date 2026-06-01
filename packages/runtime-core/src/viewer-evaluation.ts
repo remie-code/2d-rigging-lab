@@ -1,4 +1,5 @@
 import {
+  DrawableIdSchema,
   ParameterIdSchema,
   RuntimeEvaluationContextSchema,
   RuntimeEvaluationStrictnessSchema,
@@ -23,6 +24,9 @@ import {
   compareRuntimeSnapshots
 } from "./snapshot-comparison.js";
 import type { RuntimeSnapshotDto } from "./snapshot.js";
+import {
+  EvaluatedMaskRelationSchema
+} from "./mask-relation-evidence.js";
 import {
   RuntimeEvaluationInputSchema
 } from "./runtime-input.js";
@@ -84,6 +88,31 @@ export const ViewerRuntimeEvaluationEvidenceSchema = z.object({
     })
   ),
   targetIds: z.array(z.string()),
+  maskRelationEvidence: z.array(EvaluatedMaskRelationSchema).default([]),
+  drawableOpacityEvidence: z
+    .array(
+      z.object({
+        drawableId: DrawableIdSchema,
+        opacity: z.number().min(0).max(1),
+        visible: z.boolean()
+      })
+    )
+    .default([]),
+  drawableRuntimeStateChanges: z
+    .array(
+      z.object({
+        drawableId: DrawableIdSchema,
+        opacityBefore: z.number().min(0).max(1),
+        opacityAfter: z.number().min(0).max(1),
+        visibleBefore: z.boolean(),
+        visibleAfter: z.boolean(),
+        baseDrawOrderBefore: z.number().int(),
+        baseDrawOrderAfter: z.number().int(),
+        evaluatedDrawOrderBefore: z.number().int(),
+        evaluatedDrawOrderAfter: z.number().int()
+      })
+    )
+    .default([]),
   runtimeDiffEquivalent: z.boolean(),
   runtimeEvaluationContext: RuntimeEvaluationContextSchema
 });
@@ -247,6 +276,19 @@ const createViewerRuntimeEvaluationEvidence = (input: {
     baselineParameterOverrides: toSortedOverrideEntries(input.baselineParameterOverrides),
     parameterOverrides: toSortedOverrideEntries(input.parameterOverrides),
     targetIds: [...input.targetIds],
+    maskRelationEvidence: [...input.snapshot.masks].sort((left, right) =>
+      left.maskRelationId.localeCompare(right.maskRelationId)
+    ),
+    drawableOpacityEvidence: input.snapshot.drawables
+      .map((drawable) => ({
+        drawableId: drawable.drawableId,
+        opacity: drawable.opacity,
+        visible: drawable.visible
+      }))
+      .sort((left, right) => left.drawableId.localeCompare(right.drawableId)),
+    drawableRuntimeStateChanges: [...input.runtimeComparison.diff.drawableRuntimeStateChanges].sort((left, right) =>
+      left.drawableId.localeCompare(right.drawableId)
+    ),
     runtimeDiffEquivalent: input.runtimeComparison.equivalent,
     runtimeEvaluationContext: input.context
   });

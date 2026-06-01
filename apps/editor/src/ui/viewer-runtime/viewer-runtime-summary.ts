@@ -53,6 +53,7 @@ export const createViewerRuntimeSnapshotSummary = (
   appendFact(facts, "Drawables", `${summary.visibleDrawableCount} visible / ${summary.drawableCount} total`);
   appendFact(facts, "Draw list", String(summary.drawListCount));
   appendFact(facts, "Rig controls", `${summary.evaluatedRigControlCount} evaluated / ${summary.rigControlCount} total`);
+  appendFact(facts, "Masks", `${summary.maskRelationCount} semantic`);
   appendFact(facts, "Dynamics", String(summary.dynamicsCount));
   appendFact(facts, "Diagnostics", String(summary.diagnosticCount));
   appendFact(facts, "Evidence", summary.evidenceLabel);
@@ -60,6 +61,8 @@ export const createViewerRuntimeSnapshotSummary = (
     facts,
     createParameterValueList(projection),
     createRigControlEvidenceList(projection),
+    createMaskRelationEvidenceList(projection),
+    createDrawableOpacityEvidenceList(projection),
     createDynamicsOutputList(projection)
   );
   return section;
@@ -176,6 +179,56 @@ const createDynamicsOutputList = (
   for (const dynamics of projection.snapshotSummary.dynamicsOutputs) {
     const item = document.createElement("li");
     item.textContent = `${dynamics.dynamicsGroupId} -> ${dynamics.outputParameterId}: ${formatViewerNumber(dynamics.outputValue)}; position ${formatViewerNumber(dynamics.position)} / velocity ${formatViewerNumber(dynamics.velocity)} / tick ${dynamics.tick}`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createMaskRelationEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Mask Relation Evidence";
+  section.append(heading);
+
+  if (projection.snapshotSummary.maskRelations.length === 0) {
+    section.append(createEmpty("No semantic mask relation evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const mask of projection.snapshotSummary.maskRelations) {
+    const item = document.createElement("li");
+    item.textContent = `${mask.maskRelationId}: ${mask.clippingIntent} / ${mask.resolvedLabel}; masks ${mask.sourceDrawableLabel}; targets ${mask.targetDrawableLabel}`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createDrawableOpacityEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Drawable Opacity Evidence";
+  section.append(heading);
+
+  if (projection.snapshotSummary.drawableOpacityEvidence.length === 0) {
+    section.append(createEmpty("No drawable opacity evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const drawable of projection.snapshotSummary.drawableOpacityEvidence) {
+    const item = document.createElement("li");
+    item.textContent = `${drawable.drawableId}: opacity ${formatViewerNumber(drawable.opacity)} / ${drawable.visible ? "visible" : "hidden"}`;
     list.append(item);
   }
   section.append(list);

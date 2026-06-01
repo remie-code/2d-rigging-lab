@@ -42,9 +42,12 @@ export interface EditorViewerRuntimeSnapshotSummary {
   readonly rigControlCount: number;
   readonly evaluatedRigControlCount: number;
   readonly dynamicsCount: number;
+  readonly maskRelationCount: number;
   readonly diagnosticCount: number;
   readonly parameterValues: readonly EditorViewerRuntimeParameterValueSummary[];
   readonly rigControls: readonly EditorViewerRuntimeRigControlSummary[];
+  readonly maskRelations: readonly EditorViewerRuntimeMaskRelationSummary[];
+  readonly drawableOpacityEvidence: readonly EditorViewerRuntimeDrawableOpacitySummary[];
   readonly dynamicsOutputs: readonly EditorViewerRuntimeDynamicsOutputSummary[];
   readonly evidenceLabel: string;
 }
@@ -75,6 +78,20 @@ export interface EditorViewerRuntimeRigControlSummary {
   readonly worldAngleLabel: string;
   readonly affectedDrawableLabel: string;
   readonly affectedRigControlLabel: string;
+}
+
+export interface EditorViewerRuntimeMaskRelationSummary {
+  readonly maskRelationId: string;
+  readonly sourceDrawableLabel: string;
+  readonly targetDrawableLabel: string;
+  readonly clippingIntent: string;
+  readonly resolvedLabel: string;
+}
+
+export interface EditorViewerRuntimeDrawableOpacitySummary {
+  readonly drawableId: string;
+  readonly opacity: number;
+  readonly visible: boolean;
 }
 
 export interface EditorViewerRuntimeValidationSummary {
@@ -170,6 +187,7 @@ const projectSnapshotSummary = (input: {
       (rigControl) => rigControl.evaluationStatus === "evaluated"
     ).length,
     dynamicsCount: snapshot.dynamics.length,
+    maskRelationCount: snapshot.masks.length,
     diagnosticCount: snapshot.diagnostics.length,
     parameterValues: snapshot.parameters.map((parameter) => ({
       parameterId: parameter.parameterId,
@@ -193,6 +211,18 @@ const projectSnapshotSummary = (input: {
           : formatViewerNumber(rigControl.worldTransform.angleDegrees),
       affectedDrawableLabel: rigControl.affectedDrawableIds.join(", ") || "None",
       affectedRigControlLabel: rigControl.affectedRigControlIds.join(", ") || "None"
+    })),
+    maskRelations: snapshot.masks.map((mask) => ({
+      maskRelationId: mask.maskRelationId,
+      sourceDrawableLabel: mask.sourceDrawableIds.join(", ") || "None",
+      targetDrawableLabel: mask.targetDrawableIds.join(", ") || "None",
+      clippingIntent: mask.clippingIntent,
+      resolvedLabel: mask.resolved ? "Resolved" : "Unresolved"
+    })),
+    drawableOpacityEvidence: snapshot.drawables.map((drawable) => ({
+      drawableId: drawable.drawableId,
+      opacity: drawable.opacity,
+      visible: drawable.visible
     })),
     dynamicsOutputs: snapshot.dynamics.map((dynamics) => ({
       dynamicsGroupId: dynamics.dynamicsGroupId,
@@ -232,6 +262,9 @@ const collectViewerTargetIds = (state: EditorSemanticState): readonly string[] =
     ...state.rigControls.map((rigControl) => rigControl.rigControlId),
     ...state.rigControls.flatMap((rigControl) => rigControl.childDrawableIds),
     ...state.rigControls.flatMap((rigControl) => rigControl.childRigControlIds),
+    ...state.maskRelations.map((relation) => relation.maskRelationId),
+    ...state.maskRelations.flatMap((relation) => relation.maskDrawableIds),
+    ...state.maskRelations.flatMap((relation) => relation.targetDrawableIds),
     ...state.dynamicsGroups.map((group) => group.dynamicsGroupId),
     ...state.dynamicsGroups.map((group) => group.outputParameterId)
   ]);

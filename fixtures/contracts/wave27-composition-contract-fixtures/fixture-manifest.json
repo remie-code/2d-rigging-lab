@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave27-composition-contract-fixtures",
+  "title": "Wave 27 semantic mask relation and opacity evidence contract",
+  "coversAC": [
+    "AC-MVP-007",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MVP-003",
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "authoring-core",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/set-mask-relation-dry-run.request.json",
+    "request/set-mask-relation-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-result-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageMaterialization",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeSnapshot",
+      "path": "expected/runtime-snapshot-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeDiff",
+      "path": "expected/runtime-diff-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "viewerEvidence",
+      "path": "expected/viewer-facing-evidence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "rightsClean": {
+    "source": "text-only generated fixture geometry",
+    "realAssetBytes": false,
+    "externalDependency": false
+  },
+  "updateRule": "requires-contract-review"
+}

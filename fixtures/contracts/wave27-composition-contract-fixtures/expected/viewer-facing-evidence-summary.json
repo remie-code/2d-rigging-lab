@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "wave27-composition-viewer-facing-evidence-summary-v1",
+  "surface": "viewer",
+  "packageId": "pkg_wave27_composition_contract",
+  "packageRevision": 1,
+  "baselineSnapshotId": "snap_wave27_composition_contract_20",
+  "snapshotId": "snap_wave27_composition_contract_21",
+  "finalRuntimeStateRef": "runtime/states/pkg_wave27_composition_contract-r1-viewer-f21.runtime-state.json",
+  "targetIds": [
+    "draw_wave27_body"
+  ],
+  "maskRelationEvidence": [
+    {
+      "maskRelationId": "maskrel_wave27_body_clip",
+      "sourceDrawableIds": [
+        "draw_wave27_mask"
+      ],
+      "targetDrawableIds": [
+        "draw_wave27_body"
+      ],
+      "enabled": true,
+      "clippingIntent": "semanticClipping",
+      "resolved": true
+    }
+  ],
+  "drawableOpacityEvidence": [
+    {
+      "drawableId": "draw_wave27_body",
+      "opacity": 0.82,
+      "visible": true
+    },
+    {
+      "drawableId": "draw_wave27_mask",
+      "opacity": 0.6,
+      "visible": true
+    }
+  ],
+  "runtimeDiffEquivalent": true,
+  "runtimeEvaluationContext": {
+    "source": {
+      "surface": "viewer",
+      "operationId": "op_wave27_set_mask_relation"
+    },
+    "policy": {
+      "strictness": "interactive"
+    }
+  }
+}

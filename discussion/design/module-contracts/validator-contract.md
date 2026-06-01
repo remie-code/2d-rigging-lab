@@ -124,6 +124,12 @@ demo.unsafeDependencyClaim
 | `dynamics.demoUnsafeInternalName` | demo_preflight | warning | demo profile: needs_review | AC-PHYS-006 |
 | `demo.unsafeDependencyClaim` | demo_preflight | blocking | acceptance: fail | AC-MVP-015, AC-MVP-016 |
 | `mask.sourceMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
+| `mask.targetMissing` | mask_resolution | blocking | all: fail | AC-MVP-007 |
+| `mask.selfReference` | mask_resolution | error | all: fail | AC-MVP-007 |
+| `mask.duplicateRelation` | mask_resolution | error | all: fail | AC-MVP-007 |
+| `mask.runtimeEvidenceMissing` | mask_resolution | error | strict/acceptance: fail when an enabled mask relation cannot be matched to current runtime snapshot evidence, including stale snapshot identity mismatch | AC-MVP-007, AC-MVP-012 |
+| `mask.runtimeEvidenceMismatch` | mask_resolution | error | strict/acceptance: fail when runtime mask evidence is disabled, unknown, unresolved, or source/target-mismatched | AC-MVP-007, AC-MVP-012 |
+| `mask.opacityEvidenceMissing` | mask_resolution | error | strict/acceptance: fail when runtime drawable opacity evidence for a mask source or target is absent | AC-MVP-007, AC-MVP-012 |
 | `mask.opacityZeroSource` | mask_resolution | warning | strict: needs_review | AC-MVP-007 |
 | `runtime.loadBlocking` | runtime_load | blocking | all: fail | AC-MVP-012 |
 | `runtime.drawListEmpty` | runtime_load | blocking | acceptance: fail | AC-MVP-012 |
@@ -154,6 +160,15 @@ Viewer evidence validation rules:
 
 - `viewer.runtimeEvidenceMissing` fires in viewer validation when the viewer runtime evaluation evidence wrapper is absent, unparseable, or references a snapshot that is not supplied for validation.
 - `viewer.runtimeEvidenceStale` fires when supplied viewer evidence or runtime snapshot identity no longer matches the validated package, or when the runtime snapshot was not produced with `RuntimeEvaluationContextDto.source.surface = "viewer"`.
+
+Mask validation rules:
+
+- `mask.sourceMissing` and `mask.targetMissing` fire when a mask relation references a drawable ID absent from package drawables.
+- `mask.selfReference` fires when the same drawable is both a mask source and target in one relation.
+- `mask.duplicateRelation` fires for duplicate mask relation IDs or duplicate source-target relation semantics.
+- `mask.runtimeEvidenceMissing` fires when an enabled, statically resolvable mask relation has no current runtime snapshot evidence, including when the supplied snapshot identity is stale for the validated package.
+- `mask.runtimeEvidenceMismatch` fires when runtime mask evidence is present for a disabled or unknown relation, is unresolved, or has target drawable IDs that disagree with the package relation.
+- `mask.opacityEvidenceMissing` fires only from existing runtime drawable evidence: if a matched runtime snapshot omits the evaluated drawable entry needed to inspect mask-source or target opacity. Out-of-range package or runtime opacity remains covered by package schema / runtime load diagnostics.
 
 Demo-safe validation rules:
 

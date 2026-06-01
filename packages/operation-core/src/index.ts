@@ -26,6 +26,7 @@ export * from "./operations/create-dynamics-group.js";
 export * from "./operations/update-dynamics-group.js";
 export * from "./operations/create-rotation2d-rig-control.js";
 export * from "./operations/bind-rig-control-child.js";
+export * from "./operations/set-mask-relation.js";
 export * from "./operations/set-draw-order.js";
 export * from "./operations/set-rights-metadata.js";
 export * from "./operations/set-runtime-visibility.js";

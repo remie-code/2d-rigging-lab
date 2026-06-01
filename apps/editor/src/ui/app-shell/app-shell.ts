@@ -11,9 +11,11 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 import type {
   EditorDrawableLayerMoveDirection,
+  EditorWorkflowAddDrawableOpacityKeyformCommand,
   EditorWorkflowBindRigControlChildCommand,
   EditorWorkflowCreateRotation2dRigControlCommand,
   EditorViewerRuntimeProjection,
+  EditorWorkflowSetMaskRelationCommand,
   EditorWorkflowPersistenceResult
 } from "../../editor-workflow/index.js";
 import type {
@@ -30,6 +32,7 @@ import {
 import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
 import { createAiTranscriptPanel } from "../ai-transcript/index.js";
 import { createDrawableAuthoringPanel } from "../drawable-authoring/index.js";
+import { createCompositionPanel } from "../composition-panel/index.js";
 import {
   createDynamicsPanel,
   type EditorDynamicsCreateCommand
@@ -66,6 +69,10 @@ export interface EditorAppShellOptions {
     command: EditorWorkflowCreateRotation2dRigControlCommand
   ) => void;
   readonly onCommitBindRigControlChild: (command: EditorWorkflowBindRigControlChildCommand) => void;
+  readonly onCommitSetMaskRelation: (command: EditorWorkflowSetMaskRelationCommand) => void;
+  readonly onCommitAddDrawableOpacityKeyform: (
+    command: EditorWorkflowAddDrawableOpacityKeyformCommand
+  ) => void;
   readonly onRunDynamicsPreview: (frameCount: number) => void;
   readonly onResetDynamicsPreview: () => void;
   readonly onConfirmSourceIntakeDraft: (draft: EditorSemanticState["sourceIntakeDraft"]) => void;
@@ -175,6 +182,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onCommitCreateRotation2dRigControl: options.onCommitCreateRotation2dRigControl,
     onCommitBindRigControlChild: options.onCommitBindRigControlChild
   });
+  const compositionPanel = createCompositionPanel({
+    state: options.state,
+    viewModel: options.viewModel,
+    preview: options.previewProjection,
+    viewerRuntimeProjection: options.viewerRuntimeProjection,
+    onCommitSetMaskRelation: options.onCommitSetMaskRelation,
+    onCommitAddDrawableOpacityKeyform: options.onCommitAddDrawableOpacityKeyform
+  });
   const textureAtlas = resolveTextureAtlas(options);
   const previewPanel = createPreviewPanel({
     viewModel: options.viewModel,
@@ -234,6 +249,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     parametersPanel,
     previewPanel,
     ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
+    compositionPanel,
     rigControlPanel,
     dynamicsPanel,
     operationPanel,

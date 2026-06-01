@@ -2,6 +2,7 @@ import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
   KeyformSetIdSchema,
+  MaskRelationIdSchema,
   MeshIdSchema,
   OperationIdSchema,
   ParameterIdSchema,
@@ -14,6 +15,7 @@ import type {
   DrawableId,
   DynamicsGroupId,
   KeyformSetId,
+  MaskRelationId,
   MeshId,
   OperationId,
   ParameterId,
@@ -45,6 +47,22 @@ export const createDynamicsGroupIdFromDisplayName = (displayName: string): Dynam
 
 export const createRigControlIdFromDisplayName = (displayName: string): RigControlId =>
   RigControlIdSchema.parse(`rig_${sanitizeIdToken(displayName)}`);
+
+export const createMaskRelationIdFromDrawableIds = (
+  maskDrawableIds: readonly DrawableId[],
+  targetDrawableIds: readonly DrawableId[]
+): MaskRelationId =>
+  MaskRelationIdSchema.parse(
+    `maskrel_mask_${maskDrawableIds
+      .map((drawableId) => stripIdPrefix(drawableId, "draw_"))
+      .sort()
+      .map(sanitizeIdToken)
+      .join("_and_")}_target_${targetDrawableIds
+      .map((drawableId) => stripIdPrefix(drawableId, "draw_"))
+      .sort()
+      .map(sanitizeIdToken)
+      .join("_and_")}`
+  );
 
 export const createDynamicsDriverId = (
   dynamicsGroupId: DynamicsGroupId,

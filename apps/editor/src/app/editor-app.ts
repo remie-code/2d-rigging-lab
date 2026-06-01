@@ -66,6 +66,14 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitBindRigControlChild(command);
           render();
         },
+        onCommitSetMaskRelation(command) {
+          workflow.commitSetMaskRelation(command);
+          render();
+        },
+        onCommitAddDrawableOpacityKeyform(command) {
+          workflow.commitAddDrawableOpacityKeyform(command);
+          render();
+        },
         onRunDynamicsPreview(frameCount) {
           workflow.runDynamicsPreview(frameCount);
           render();

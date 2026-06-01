@@ -16,6 +16,7 @@ export const ValidationPhaseSchema = z.enum([
   "rights",
   "reference",
   "mesh_semantic",
+  "mask_resolution",
   "rigControl_semantic",
   "rigControl_evaluation",
   "dynamics_semantic",
@@ -117,6 +118,62 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-004", "AC-MVP-013"],
     description: "Texture source layer metadata does not match source manifest or drawable mapping."
+  },
+  {
+    checkId: "mask.sourceMissing",
+    phase: "mask_resolution",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-013"],
+    description: "Mask relation source drawable reference cannot be resolved."
+  },
+  {
+    checkId: "mask.targetMissing",
+    phase: "mask_resolution",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-013"],
+    description: "Mask relation target drawable reference cannot be resolved."
+  },
+  {
+    checkId: "mask.selfReference",
+    phase: "mask_resolution",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-013"],
+    description: "Mask relation uses the same drawable as source and target."
+  },
+  {
+    checkId: "mask.duplicateRelation",
+    phase: "mask_resolution",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-013"],
+    description: "Mask relation duplicates an existing relation ID or source-target relation."
+  },
+  {
+    checkId: "mask.runtimeEvidenceMissing",
+    phase: "mask_resolution",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-012", "AC-MVP-013"],
+    description: "Enabled mask relation cannot be matched to current runtime snapshot evidence, including stale snapshot identity mismatch."
+  },
+  {
+    checkId: "mask.runtimeEvidenceMismatch",
+    phase: "mask_resolution",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-012", "AC-MVP-013"],
+    description: "Runtime mask evidence is disabled, unknown, unresolved, or source/target-mismatched for the package relation."
+  },
+  {
+    checkId: "mask.opacityEvidenceMissing",
+    phase: "mask_resolution",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-012", "AC-MVP-013"],
+    description: "Runtime evidence lacks drawable opacity entries required to validate mask composition semantics."
   },
   {
     checkId: "binary.bytesMissing",

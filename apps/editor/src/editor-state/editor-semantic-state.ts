@@ -15,6 +15,10 @@ import type { LoadedPackageIdentityState } from "./package-identity-state.js";
 import { emptyPackageRevisionState, type PackageRevisionState } from "./package-revision-state.js";
 import type { ParameterListItemState } from "./parameter-list-state.js";
 import type { PreviewParameterValueState } from "./preview-parameter-state.js";
+import type {
+  CompositionMaskRelationState,
+  DrawableOpacityKeyformState
+} from "./composition-authoring-state.js";
 import {
   createEmptyViewerRuntimeState,
   type ViewerRuntimeState
@@ -42,6 +46,8 @@ export interface EditorSemanticState {
   readonly parts: readonly ModelPartDto[];
   readonly rigControls: readonly RigControlState[];
   readonly rigControlAngleKeyforms: readonly RigControlAngleKeyformState[];
+  readonly maskRelations: readonly CompositionMaskRelationState[];
+  readonly drawableOpacityKeyforms: readonly DrawableOpacityKeyformState[];
   readonly dynamicsGroups: readonly DynamicsGroupState[];
   readonly drawables: readonly DrawableListItemState[];
   readonly meshEdit: MeshEditState;
@@ -68,6 +74,8 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   parts: [],
   rigControls: [],
   rigControlAngleKeyforms: [],
+  maskRelations: [],
+  drawableOpacityKeyforms: [],
   dynamicsGroups: [],
   drawables: [],
   meshEdit: createEmptyMeshEditState(),

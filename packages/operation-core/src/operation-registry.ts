@@ -16,6 +16,7 @@ import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-so
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
+import { setMaskRelationOperationHandler } from "./operations/set-mask-relation.js";
 import { setRightsMetadataOperationHandler } from "./operations/set-rights-metadata.js";
 import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
@@ -53,6 +54,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],
   [createRotation2dRigControlOperationHandler.operationType, createRotation2dRigControlOperationHandler],
   [bindRigControlChildOperationHandler.operationType, bindRigControlChildOperationHandler],
+  [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
   [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]

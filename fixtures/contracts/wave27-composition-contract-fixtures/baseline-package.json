@@ -1,0 +1,305 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_wave27_composition_contract",
+    "packageDisplayName": "Wave27 Composition Contract",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-06-01T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 2
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 128,
+        "height": 128
+      },
+      "parts": [
+        {
+          "partId": "part_wave27_root",
+          "displayName": "Wave27 Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_wave27_mask",
+            "draw_wave27_body"
+          ]
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "draw_wave27_mask",
+        "draw_wave27_body"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_wave27_mask",
+          "displayName": "Wave27 Mask Source",
+          "partId": "part_wave27_root",
+          "sourceAssetId": "src_wave27_mask",
+          "textureId": "tex_wave27_mask",
+          "meshId": "mesh_wave27_mask",
+          "defaultOpacity": 0.6,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_wave27_mask"
+        },
+        {
+          "drawableId": "draw_wave27_body",
+          "displayName": "Wave27 Body Target",
+          "partId": "part_wave27_root",
+          "sourceAssetId": "src_wave27_body",
+          "textureId": "tex_wave27_body",
+          "meshId": "mesh_wave27_body",
+          "defaultOpacity": 0.82,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 10,
+          "sourceProvenanceId": "prov_wave27_body"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_wave27_mask",
+          "drawableId": "draw_wave27_mask",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 16,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 16
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "mask_v0",
+            "mask_v1",
+            "mask_v2"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 16,
+            "height": 16
+          },
+          "generationProvenanceId": "prov_wave27_mask"
+        },
+        {
+          "meshId": "mesh_wave27_body",
+          "drawableId": "draw_wave27_body",
+          "vertices": [
+            {
+              "x": 8,
+              "y": 8
+            },
+            {
+              "x": 40,
+              "y": 8
+            },
+            {
+              "x": 8,
+              "y": 40
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "body_v0",
+            "body_v1",
+            "body_v2"
+          ],
+          "bounds": {
+            "x": 8,
+            "y": 8,
+            "width": 32,
+            "height": 32
+          },
+          "generationProvenanceId": "prov_wave27_body"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_wave27_mask",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        },
+        {
+          "drawableId": "draw_wave27_body",
+          "baseDrawOrder": 10,
+          "stableOrder": 1
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_wave27_mask",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/wave27-mask.json",
+          "contentHash": "sha256:wave27-composition-mask-fixture-v1",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        },
+        {
+          "sourceAssetId": "src_wave27_body",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/wave27-body.json",
+          "contentHash": "sha256:wave27-composition-body-fixture-v1",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_wave27_mask",
+          "assetId": "src_wave27_mask",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/wave27-mask.json",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only triangle fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave27_body",
+          "assetId": "src_wave27_body",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/wave27-body.json",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only triangle fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_wave27_mask",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false
+        },
+        {
+          "assetId": "src_wave27_body",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

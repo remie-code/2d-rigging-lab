@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "wave27-composition-operation-result-summary-v1",
+  "dryRun": {
+    "operationId": "op_wave27_set_mask_relation",
+    "status": "dry_run",
+    "preconditionOk": true,
+    "checkedTargets": [
+      "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip",
+      "drawable:draw_wave27_mask",
+      "drawable:draw_wave27_body"
+    ],
+    "modelDiff": {
+      "baseRevision": 0,
+      "candidateRevision": 1,
+      "addedTargets": [
+        "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip"
+      ],
+      "changedTargets": [
+        "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip"
+      ],
+      "changedFields": [
+        {
+          "path": "/model/masks/maskrel_wave27_body_clip",
+          "before": null,
+          "after": {
+            "maskRelationId": "maskrel_wave27_body_clip",
+            "maskDrawableIds": [
+              "draw_wave27_mask"
+            ],
+            "targetDrawableIds": [
+              "draw_wave27_body"
+            ],
+            "enabled": true
+          }
+        }
+      ]
+    },
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave27_composition_contract_10",
+      "snap_wave27_composition_contract_11"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_wave27_composition_contract-r1-wave27-composition-final-f11.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_wave27_composition_contract-r1-wave27-composition.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_wave27_composition_contract-r1-wave27-composition-final-f11.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_wave27_composition_dry_run_baseline",
+      "val_wave27_composition_dry_run_candidate"
+    ],
+    "operationLogLength": 0,
+    "packageRevisionAfter": 0,
+    "authoringRevisionAfter": 0,
+    "dirtyAfter": false
+  },
+  "commit": {
+    "operationId": "op_wave27_set_mask_relation",
+    "status": "committed",
+    "preconditionOk": true,
+    "checkedTargets": [
+      "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip",
+      "drawable:draw_wave27_mask",
+      "drawable:draw_wave27_body"
+    ],
+    "modelDiff": {
+      "baseRevision": 0,
+      "candidateRevision": 1,
+      "addedTargets": [
+        "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip"
+      ],
+      "changedTargets": [
+        "maskRelation:maskrel_wave27_body_clip:/model/masks/maskrel_wave27_body_clip"
+      ],
+      "changedFields": [
+        {
+          "path": "/model/masks/maskrel_wave27_body_clip",
+          "before": null,
+          "after": {
+            "maskRelationId": "maskrel_wave27_body_clip",
+            "maskDrawableIds": [
+              "draw_wave27_mask"
+            ],
+            "targetDrawableIds": [
+              "draw_wave27_body"
+            ],
+            "enabled": true
+          }
+        }
+      ]
+    },
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave27_composition_contract_10",
+      "snap_wave27_composition_contract_11"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_wave27_composition_contract-r1-wave27-composition-final-f11.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_wave27_composition_contract-r1-wave27-composition.runtime-state-sequence.json"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_wave27_composition_contract-r1-wave27-composition-final-f11.runtime-state.json",
+    "generatedValidationReportIds": [
+      "val_wave27_composition_commit_baseline",
+      "val_wave27_composition_commit_candidate"
+    ],
+    "operationLogLength": 1,
+    "packageRevisionAfter": 1,
+    "authoringRevisionAfter": 1,
+    "dirtyAfter": true,
+    "logEntry": {
+      "runtimeSnapshotIds": [
+        "snap_wave27_composition_contract_10",
+        "snap_wave27_composition_contract_11"
+      ],
+      "validationReportIds": [
+        "val_wave27_composition_commit_baseline",
+        "val_wave27_composition_commit_candidate"
+      ]
+    }
+  }
+}
