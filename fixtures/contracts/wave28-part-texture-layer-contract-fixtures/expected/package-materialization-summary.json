@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "wave28-part-texture-layer-package-materialization-summary-v1",
+  "packageId": "pkg_wave28_part_texture_layer",
+  "packageRevision": 4,
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "parts": [
+    {
+      "partId": "part_root",
+      "displayName": "Root",
+      "parentPartId": null,
+      "childPartIds": [
+        "part_face"
+      ],
+      "drawableIds": [
+        "draw_body"
+      ]
+    },
+    {
+      "partId": "part_face",
+      "displayName": "Face Controls",
+      "parentPartId": "part_root",
+      "childPartIds": [],
+      "drawableIds": [
+        "draw_eye"
+      ]
+    }
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_body",
+      "partId": "part_root",
+      "textureId": "tex_body",
+      "runtimeVisibility": true
+    },
+    {
+      "drawableId": "draw_eye",
+      "partId": "part_face",
+      "textureId": "tex_eye_alt",
+      "runtimeVisibility": true
+    }
+  ],
+  "textureAtlasIds": [
+    "tex_body",
+    "tex_eye_alt"
+  ],
+  "rightsClean": {
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  }
+}

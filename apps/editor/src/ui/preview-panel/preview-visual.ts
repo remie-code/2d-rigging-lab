@@ -74,12 +74,27 @@ const applyDrawableShapeAttributes = (
   element.setAttribute("stroke", "#1f2a2e");
   element.setAttribute("stroke-width", "1.5");
   element.setAttribute("vector-effect", "non-scaling-stroke");
-  element.setAttribute("opacity", String(drawable.opacity));
+  element.setAttribute("opacity", String(drawable.layerState?.editorHidden ? Math.min(drawable.opacity, 0.25) : drawable.opacity));
   element.setAttribute("data-texture-status", drawable.texture.status);
   element.setAttribute(
     "data-texture-render",
     texturePatternFill === null ? "solid_fallback" : "texture_pattern"
   );
+  if (drawable.layerState !== undefined) {
+    element.setAttribute("data-runtime-visible", String(drawable.layerState.runtimeVisible));
+    element.setAttribute("data-editor-hidden", String(drawable.layerState.editorHidden));
+    element.setAttribute("data-layer-locked", String(drawable.layerState.locked));
+    element.setAttribute("data-layer-selected", String(drawable.layerState.selected));
+    element.setAttribute("data-texture-backed", String(drawable.layerState.textureBacked));
+    element.setAttribute("data-texture-unresolved", String(drawable.layerState.textureUnresolved));
+    if (drawable.layerState.editorHidden) {
+      element.setAttribute("stroke-dasharray", "3 3");
+    }
+    if (drawable.layerState.selected) {
+      element.setAttribute("stroke", "#b84d3d");
+      element.setAttribute("stroke-width", "2.5");
+    }
+  }
   if (drawable.texture.textureId !== undefined) {
     element.setAttribute("data-texture-id", drawable.texture.textureId);
   }
@@ -154,8 +169,17 @@ const createDrawableTitle = (
     texturePatternFill === null
       ? createTextureFallbackLabel(drawable)
       : `texture preview ${drawable.texture.previewReference?.previewAssetId ?? "reference"}`;
-  title.textContent = `${drawable.name}: ${textureLabel}`;
+  title.textContent = `${drawable.name}: ${textureLabel}${createLayerStateTitleSuffix(drawable)}`;
   return title;
+};
+
+const createLayerStateTitleSuffix = (drawable: EditorPreviewDrawableDto): string => {
+  const state = drawable.layerState;
+  if (state === undefined) {
+    return "";
+  }
+
+  return ` / ${state.runtimeVisible ? "runtime visible" : "runtime hidden"} / ${state.editorHidden ? "editor hidden" : "editor visible"} / ${state.locked ? "locked" : "unlocked"} / ${state.selected ? "selected" : "not selected"}`;
 };
 
 const createPreviewVisualAriaLabel = (preview: EditorPreviewProjectionDto): string => {

@@ -174,6 +174,35 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "createPart",
+    payload: {
+      partId: "part_face",
+      displayName: "Face",
+      parentPartId: "part_head"
+    }
+  },
+  {
+    operationType: "updatePart",
+    payload: {
+      partId: "part_face",
+      displayName: "Face Controls"
+    }
+  },
+  {
+    operationType: "setDrawablePart",
+    payload: {
+      drawableId: "draw_face",
+      partId: "part_head"
+    }
+  },
+  {
+    operationType: "setDrawableTexture",
+    payload: {
+      drawableId: "draw_face",
+      textureId: "tex_face"
+    }
+  },
+  {
     operationType: "createDynamicsGroup",
     payload: {
       dynamicsGroupId: "dyn_hair_sway",
@@ -280,6 +309,10 @@ describe("operation-core DTO schemas", () => {
       "importPsdSourceAsset",
       "importSplitPngSourceAsset",
       "createParameter",
+      "createPart",
+      "updatePart",
+      "setDrawablePart",
+      "setDrawableTexture",
       "createDynamicsGroup",
       "moveMeshVertex",
       "setMaskRelation",

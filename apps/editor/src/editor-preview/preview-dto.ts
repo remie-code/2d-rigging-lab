@@ -4,6 +4,7 @@ import type {
   DrawableId,
   MeshId,
   PackageId,
+  PartId,
   RectDto,
   RuntimeSnapshotId,
   Severity,
@@ -26,6 +27,7 @@ export interface EditorPreviewProjectionDto {
   readonly snapshotDetail: RuntimeSnapshotDto["evaluation"]["snapshotDetail"];
   readonly canvasSize?: EditorPreviewCanvasSizeDto;
   readonly drawList: readonly DrawableId[];
+  readonly parts?: readonly EditorPreviewPartDto[];
   readonly drawableCount: number;
   readonly visibleDrawableCount: number;
   readonly drawables: readonly EditorPreviewDrawableDto[];
@@ -34,10 +36,28 @@ export interface EditorPreviewProjectionDto {
   readonly diff?: EditorPreviewRuntimeDiffSummaryDto;
 }
 
+export interface EditorPreviewPartDto {
+  readonly partId: PartId;
+  readonly displayName: string;
+  readonly parentPartId?: PartId;
+  readonly childPartIds: readonly PartId[];
+  readonly drawableIds: readonly DrawableId[];
+  readonly hierarchyPath: readonly PartId[];
+  readonly depth: number;
+  readonly layerState?: EditorPreviewPartLayerStateDto;
+}
+
+export interface EditorPreviewPartLayerStateDto {
+  readonly editorHidden: boolean;
+  readonly locked: boolean;
+  readonly selected: boolean;
+}
+
 export interface EditorPreviewDrawableDto {
   readonly drawableId: DrawableId;
   readonly name: string;
   readonly meshId: MeshId;
+  readonly partId?: PartId;
   readonly visible: boolean;
   readonly opacity: number;
   readonly baseDrawOrder: number;
@@ -47,8 +67,19 @@ export interface EditorPreviewDrawableDto {
   readonly bounds: RectDto;
   readonly geometry: EditorPreviewDrawableGeometryDto;
   readonly texture: EditorPreviewDrawableTextureDto;
+  readonly layerState?: EditorPreviewDrawableLayerStateDto;
   readonly keyformSampleCount: number;
   readonly diagnostics: EditorPreviewDiagnosticsSummaryDto;
+}
+
+export interface EditorPreviewDrawableLayerStateDto {
+  readonly runtimeVisible: boolean;
+  readonly editorHidden: boolean;
+  readonly locked: boolean;
+  readonly selected: boolean;
+  readonly textureStatus: EditorPreviewDrawableTextureDto["status"];
+  readonly textureBacked: boolean;
+  readonly textureUnresolved: boolean;
 }
 
 export interface EditorPreviewDrawableGeometryDto {
@@ -122,10 +153,13 @@ export interface EditorPreviewRuntimeDiffSummaryDto {
   readonly beforeSnapshotId: RuntimeSnapshotId;
   readonly afterSnapshotId: RuntimeSnapshotId;
   readonly parameterChangeCount: number;
+  readonly partChangeCount?: number;
+  readonly drawableTextureChangeCount?: number;
   readonly dynamicsChangeCount: number;
   readonly drawableGeometryChangeCount: number;
   readonly drawableRuntimeStateChangeCount: number;
   readonly drawListChangeCount: number;
   readonly diagnosticDeltaCount: number;
   readonly affectedDrawableIds: readonly DrawableId[];
+  readonly affectedPartIds?: readonly PartId[];
 }

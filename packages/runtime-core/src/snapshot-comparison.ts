@@ -5,6 +5,10 @@ import { z } from "zod";
 import {
   createMaskRelationChanges
 } from "./mask-relation-evidence.js";
+import {
+  createDrawableLayerChanges,
+  createPartHierarchyChanges
+} from "./layer-tree-evidence.js";
 import type { EvaluatedDrawableDto, RuntimeSnapshotDto } from "./snapshot.js";
 
 type RuntimeFieldChange = {
@@ -176,6 +180,8 @@ export const compareRuntimeSnapshots = (
     after: change.after
   }));
   const maskRelationChanges = createMaskRelationChanges(before.masks, after.masks);
+  const partHierarchyChanges = createPartHierarchyChanges(before.parts, after.parts);
+  const drawableLayerChanges = createDrawableLayerChanges(before.drawables, after.drawables);
   const rigControlChanges: RuntimeFieldChange[] = [
     ...after.rigControls.flatMap((afterRigControl) => {
       const beforeRigControl = beforeRigControlsById.get(afterRigControl.rigControlId);
@@ -212,6 +218,8 @@ export const compareRuntimeSnapshots = (
     parameterChanges: [
       ...parameterChanges,
       ...maskRelationChanges,
+      ...partHierarchyChanges,
+      ...drawableLayerChanges,
       ...rigControlChanges,
       ...drawListParameterChanges
     ],

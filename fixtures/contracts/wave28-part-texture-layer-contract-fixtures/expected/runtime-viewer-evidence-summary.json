@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "wave28-part-texture-layer-runtime-viewer-evidence-summary-v1",
+  "runtimeEvidence": {
+    "baselineSnapshotId": "snap_wave28_part_texture_layer_0",
+    "candidateSnapshotId": "snap_wave28_part_texture_layer_1",
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave28_part_texture_layer_0",
+      "snap_wave28_part_texture_layer_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_wave28_part_texture_layer-r4-wave28-part-texture-layer-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_wave28_part_texture_layer-r4-wave28-part-texture-layer.runtime-state-sequence.json"
+    ],
+    "candidateParts": [
+      {
+        "partId": "part_root",
+        "displayName": "Root",
+        "parentPartId": null,
+        "childPartIds": [
+          "part_face"
+        ],
+        "drawableIds": [
+          "draw_body"
+        ],
+        "hierarchyPath": [
+          "part_root"
+        ],
+        "depth": 0,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      },
+      {
+        "partId": "part_face",
+        "displayName": "Face Controls",
+        "parentPartId": "part_root",
+        "childPartIds": [],
+        "drawableIds": [
+          "draw_eye"
+        ],
+        "hierarchyPath": [
+          "part_root",
+          "part_face"
+        ],
+        "depth": 1,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      }
+    ],
+    "candidateDrawableLayers": [
+      {
+        "drawableId": "draw_body",
+        "partId": "part_root",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_body",
+        "sourceLayerId": "layer_body"
+      },
+      {
+        "drawableId": "draw_eye",
+        "partId": "part_face",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_eye_alt",
+        "sourceLayerId": "layer_eye"
+      }
+    ],
+    "drawList": [
+      "draw_body",
+      "draw_eye"
+    ],
+    "runtimeDiff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_wave28_part_texture_layer_0",
+      "afterSnapshotId": "snap_wave28_part_texture_layer_1",
+      "parameterChangePaths": [
+        "/parts/part_face",
+        "/parts/part_root/childPartIds",
+        "/parts/part_root/drawableIds",
+        "/drawables/draw_eye/partId",
+        "/drawables/draw_eye/texture/sourceLayerId",
+        "/drawables/draw_eye/texture/textureId"
+      ],
+      "drawableChangeCount": 0,
+      "drawableRuntimeStateChangeCount": 0,
+      "diagnosticDeltaCount": 0
+    }
+  },
+  "viewerEvidence": {
+    "surface": "viewer",
+    "baselineSnapshotId": "snap_wave28_part_texture_layer_10",
+    "snapshotId": "snap_wave28_part_texture_layer_11",
+    "finalRuntimeStateRef": "runtime/states/pkg_wave28_part_texture_layer-r4-viewer-f11.runtime-state.json",
+    "targetIds": [
+      "draw_body",
+      "draw_eye",
+      "part_face"
+    ],
+    "partHierarchyEvidence": [
+      {
+        "partId": "part_root",
+        "displayName": "Root",
+        "childPartIds": [
+          "part_face"
+        ],
+        "drawableIds": [
+          "draw_body"
+        ],
+        "hierarchyPath": [
+          "part_root"
+        ],
+        "depth": 0,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      },
+      {
+        "partId": "part_face",
+        "displayName": "Face Controls",
+        "parentPartId": "part_root",
+        "childPartIds": [],
+        "drawableIds": [
+          "draw_eye"
+        ],
+        "hierarchyPath": [
+          "part_root",
+          "part_face"
+        ],
+        "depth": 1,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      }
+    ],
+    "drawableLayerEvidence": [
+      {
+        "drawableId": "draw_body",
+        "partId": "part_root",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_body"
+      },
+      {
+        "drawableId": "draw_eye",
+        "partId": "part_face",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_eye_alt"
+      }
+    ],
+    "runtimeDiffEquivalent": true,
+    "runtimeEvaluationContext": {
+      "source": {
+        "surface": "viewer",
+        "operationId": "op_wave28_viewer_contract_evidence"
+      },
+      "policy": {
+        "strictness": "strict"
+      }
+    }
+  },
+  "semanticBoundary": {
+    "pixelOracle": false,
+    "rendererOracle": false,
+    "editorOnlyStateInRuntimeCore": false
+  }
+}

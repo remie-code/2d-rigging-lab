@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "wave28-part-texture-layer-editor-state-evidence-summary-v1",
+  "source": "model/editor-state.json",
+  "runtimeRenderingSemanticsClaim": "none",
+  "selection": [
+    "draw_eye"
+  ],
+  "lockedIds": [
+    "part_face"
+  ],
+  "editorHiddenIds": [
+    "draw_body"
+  ],
+  "activeTool": "layerTree",
+  "runtimeVisibleDrawableIds": [
+    "draw_body",
+    "draw_eye"
+  ],
+  "editorHiddenDoesNotMutateRuntimeVisibility": true
+}

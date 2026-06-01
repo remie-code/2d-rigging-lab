@@ -30,6 +30,7 @@ import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
 import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
 import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
 import { runCompositionPersistenceSmoke } from "./composition-persistence-smoke.mjs";
+import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persistence-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -175,6 +176,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-composition-reset`);
+    const partTextureLayerEvidence = await runPartTextureLayerPersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave28-part-texture-layer`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-part-texture-layer-reset`);
 
     return {
       viewport: viewport.name,
@@ -186,6 +195,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       viewerRuntimeEvidence,
       rigControlEvidence,
       compositionEvidence,
+      partTextureLayerEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

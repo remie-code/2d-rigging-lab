@@ -62,7 +62,9 @@ export const createViewerRuntimeSnapshotSummary = (
     createParameterValueList(projection),
     createRigControlEvidenceList(projection),
     createMaskRelationEvidenceList(projection),
+    createPartLayerEvidenceList(projection),
     createDrawableOpacityEvidenceList(projection),
+    createDrawableLayerEvidenceList(projection),
     createDynamicsOutputList(projection)
   );
   return section;
@@ -129,6 +131,67 @@ export const createViewerRuntimeValidationDiagnostics = (
   for (const diagnostic of validation.diagnostics) {
     const item = document.createElement("li");
     item.textContent = `${diagnostic.severity} / ${diagnostic.status} / ${diagnostic.checkId}: ${diagnostic.message} (${diagnostic.targetLabel})`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createPartLayerEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Part Layer Evidence";
+  section.append(heading);
+
+  const parts = projection.previewProjection.parts ?? [];
+  if (parts.length === 0) {
+    section.append(createEmpty("No part hierarchy evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const part of parts) {
+    const state = part.layerState;
+    const stateLabel =
+      state === undefined
+        ? "no editor layer state"
+        : `${state.editorHidden ? "editor hidden" : "editor visible"} / ${state.locked ? "locked" : "unlocked"} / ${state.selected ? "selected" : "not selected"}`;
+    const item = document.createElement("li");
+    item.textContent = `${part.partId}: depth ${part.depth}; path ${part.hierarchyPath.join(" > ") || part.partId}; drawables ${part.drawableIds.join(", ") || "None"}; ${stateLabel}`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createDrawableLayerEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Drawable Layer Evidence";
+  section.append(heading);
+
+  if (projection.previewProjection.drawables.length === 0) {
+    section.append(createEmpty("No drawable layer evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const drawable of projection.previewProjection.drawables) {
+    const state = drawable.layerState;
+    const stateLabel =
+      state === undefined
+        ? "no editor layer state"
+        : `${state.runtimeVisible ? "runtime visible" : "runtime hidden"} / ${state.editorHidden ? "editor hidden" : "editor visible"} / ${state.locked ? "locked" : "unlocked"} / ${state.selected ? "selected" : "not selected"} / ${state.textureUnresolved ? "texture unresolved" : "texture resolved"}${state.textureBacked ? " / texture-backed" : ""}`;
+    const item = document.createElement("li");
+    item.textContent = `${drawable.drawableId}: part ${drawable.partId ?? "none"} / texture ${drawable.texture.textureId ?? drawable.texture.status}; ${stateLabel}`;
     list.append(item);
   }
   section.append(list);

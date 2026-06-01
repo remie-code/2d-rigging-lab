@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave28_set_drawable_texture",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 3,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-004"
+    ],
+    "relatedScenarios": [
+      "SC-PART-001"
+    ]
+  },
+  "operationType": "setDrawableTexture",
+  "payload": {
+    "drawableId": "draw_eye",
+    "textureId": "tex_eye_alt"
+  }
+}

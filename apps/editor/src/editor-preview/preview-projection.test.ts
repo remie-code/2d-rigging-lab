@@ -4,6 +4,7 @@ import {
   DynamicsGroupIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  PartIdSchema,
   ParameterIdSchema,
   SourceAssetIdSchema,
   RuntimeSnapshotIdSchema,
@@ -199,6 +200,112 @@ describe("projectEditorPreview", () => {
       affectedDrawableIds: ["draw_back", "draw_front"]
     });
   });
+
+  it("projects part hierarchy and editor-only layer state without changing runtime visibility", () => {
+    const projection = projectEditorPreview({
+      snapshot: createRepresentativeRuntimeSnapshot(),
+      editorState: {
+        selection: ["draw_front", "part_body"],
+        lockedIds: ["draw_back"],
+        editorHiddenIds: ["draw_hidden"]
+      }
+    });
+    const front = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_front"));
+    const back = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_back"));
+    const hidden = expectDrawable(projection.drawables.find((drawable) => drawable.drawableId === "draw_hidden"));
+
+    expect(projection.parts).toEqual([
+      {
+        partId: "part_body",
+        displayName: "Body",
+        childPartIds: ["part_face"],
+        drawableIds: ["draw_back", "draw_hidden"],
+        hierarchyPath: ["part_body"],
+        depth: 0,
+        layerState: {
+          editorHidden: false,
+          locked: false,
+          selected: true
+        }
+      },
+      {
+        partId: "part_face",
+        displayName: "Face",
+        parentPartId: "part_body",
+        childPartIds: [],
+        drawableIds: ["draw_front"],
+        hierarchyPath: ["part_body", "part_face"],
+        depth: 1,
+        layerState: {
+          editorHidden: false,
+          locked: false,
+          selected: false
+        }
+      }
+    ]);
+    expect(front).toMatchObject({
+      partId: "part_face",
+      visible: true,
+      layerState: {
+        runtimeVisible: true,
+        editorHidden: false,
+        locked: false,
+        selected: true,
+        textureStatus: "not_materialized",
+        textureBacked: false,
+        textureUnresolved: true
+      }
+    });
+    expect(back).toMatchObject({
+      partId: "part_body",
+      visible: true,
+      layerState: {
+        runtimeVisible: true,
+        editorHidden: false,
+        locked: true,
+        selected: false
+      }
+    });
+    expect(hidden).toMatchObject({
+      partId: "part_body",
+      visible: false,
+      layerState: {
+        runtimeVisible: false,
+        editorHidden: true,
+        locked: false,
+        selected: false
+      }
+    });
+  });
+
+  it("summarizes runtime diff part and texture evidence paths for preview consumers", () => {
+    const projection = projectEditorPreview({
+      snapshot: createRepresentativeRuntimeSnapshot(),
+      runtimeDiff: RuntimeDiffSchema.parse({
+        schemaVersion: "runtime-diff-v1",
+        beforeSnapshotId: "snap_preview_000",
+        afterSnapshotId: "snap_preview_001",
+        parameterChanges: [
+          { path: "/parts/part_face/drawableIds", before: [], after: ["draw_front"] },
+          { path: "/drawables/draw_front/partId", before: "part_body", after: "part_face" },
+          { path: "/drawables/draw_front/texture/textureId", before: null, after: "tex_front" }
+        ],
+        dynamicsChanges: [],
+        drawableChanges: [],
+        drawableRuntimeStateChanges: [],
+        drawListChanges: [],
+        diagnosticDelta: []
+      })
+    });
+
+    expect(projection.diff).toMatchObject({
+      parameterChangeCount: 3,
+      partChangeCount: 2,
+      drawableTextureChangeCount: 1,
+      affectedDrawableIds: ["draw_front"],
+      affectedPartIds: ["part_body", "part_face"]
+    });
+  });
 });
 
 const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
@@ -221,6 +328,35 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       }
     },
     parameters: [],
+    parts: [
+      {
+        partId: PartIdSchema.parse("part_body"),
+        displayName: "Body",
+        childPartIds: [PartIdSchema.parse("part_face")],
+        drawableIds: [
+          DrawableIdSchema.parse("draw_back"),
+          DrawableIdSchema.parse("draw_hidden")
+        ],
+        hierarchyPath: [PartIdSchema.parse("part_body")],
+        depth: 0,
+        drawableCount: 2,
+        runtimeVisibleDrawableCount: 1
+      },
+      {
+        partId: PartIdSchema.parse("part_face"),
+        displayName: "Face",
+        parentPartId: PartIdSchema.parse("part_body"),
+        childPartIds: [],
+        drawableIds: [DrawableIdSchema.parse("draw_front")],
+        hierarchyPath: [
+          PartIdSchema.parse("part_body"),
+          PartIdSchema.parse("part_face")
+        ],
+        depth: 1,
+        drawableCount: 1,
+        runtimeVisibleDrawableCount: 1
+      }
+    ],
     dynamics: [
       {
         dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_hair"),
@@ -267,6 +403,7 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       {
         drawableId: DrawableIdSchema.parse("draw_front"),
         meshId: MeshIdSchema.parse("mesh_front"),
+        partId: PartIdSchema.parse("part_face"),
         texture: {
           status: "not_materialized",
           textureId: TextureIdSchema.parse("tex_front"),
@@ -310,6 +447,7 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       {
         drawableId: DrawableIdSchema.parse("draw_hidden"),
         meshId: MeshIdSchema.parse("mesh_hidden"),
+        partId: PartIdSchema.parse("part_body"),
         visible: false,
         opacity: 0,
         baseDrawOrder: 5,
@@ -322,6 +460,7 @@ const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>
       {
         drawableId: DrawableIdSchema.parse("draw_back"),
         meshId: MeshIdSchema.parse("mesh_back"),
+        partId: PartIdSchema.parse("part_body"),
         texture: {
           status: "missing",
           sourceAssetId: SourceAssetIdSchema.parse("src_split_body"),

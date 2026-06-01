@@ -26,11 +26,15 @@ import {
   createEditorSessionAdapter,
   type EditorCreateDrawablePresetCommand,
   type EditorCreateParameterCommand,
+  type EditorCreatePartCommand,
   type EditorMeshVertexNudgeCommand,
   type EditorSessionAdapter,
   type EditorSessionDrawablePresetResult,
   type EditorSessionPersistenceResult,
+  type EditorSetDrawablePartCommand,
+  type EditorSetDrawableTextureCommand,
   type EditorSetRightsMetadataCommand,
+  type EditorUpdatePartCommand,
   type EditorUpdateDynamicsGroupCommand,
   type EditorSessionPersistenceSnapshot
 } from "../editor-session/index.js";
@@ -44,6 +48,7 @@ import {
   applyPreviewParameterValue,
   applyViewerParameterValue,
   closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
+  createEditorStateFileFromLayerTreeDraft,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
   projectCreateDrawableDefaultsForSourceSelection,
@@ -95,6 +100,23 @@ import {
   type EditorWorkflowSetMaskRelationCommand
 } from "./composition-workflow.js";
 import {
+  commitWorkflowCreatePart,
+  commitWorkflowMoveDrawableLayer,
+  commitWorkflowSetDrawablePart,
+  commitWorkflowSetDrawableRuntimeVisibility,
+  commitWorkflowSetDrawableTexture,
+  commitWorkflowToggleDrawableRuntimeVisibility,
+  commitWorkflowUpdatePart,
+  selectWorkflowDrawableLayer,
+  toggleWorkflowDrawableEditorHidden,
+  toggleWorkflowDrawableLayerLock,
+  type EditorDrawableLayerMoveDirection,
+  type EditorWorkflowLayerDraftResult,
+  type EditorWorkflowLayerMoveResult,
+  type EditorWorkflowLayerVisibilityResult,
+  type EditorWorkflowPartTextureCommitResult
+} from "./part-texture-layer-workflow.js";
+import {
   createWorkflowDynamicsPreviewRunner,
   type EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
@@ -111,6 +133,18 @@ export type {
 export type {
   EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
+export type {
+  EditorDrawableLayerMoveDirection,
+  EditorWorkflowLayerActionCommitResult,
+  EditorWorkflowLayerActionNotFoundResult,
+  EditorWorkflowLayerDraftActionResult,
+  EditorWorkflowLayerDraftResult,
+  EditorWorkflowLayerLockedResult,
+  EditorWorkflowLayerMoveNotMovableResult,
+  EditorWorkflowLayerMoveResult,
+  EditorWorkflowLayerVisibilityResult,
+  EditorWorkflowPartTextureCommitResult
+} from "./part-texture-layer-workflow.js";
 export interface EditorWorkflowControllerOptions {
   readonly projectStore: BrowserProjectStore;
   readonly now?: () => Date;
@@ -167,33 +201,6 @@ export interface EditorWorkflowViewerResetResult {
   readonly parameterCount: number;
 }
 
-export type EditorDrawableLayerMoveDirection = "up" | "down";
-
-export interface EditorWorkflowLayerActionNotFoundResult {
-  readonly status: "not_found";
-  readonly drawableId: string;
-}
-
-export interface EditorWorkflowLayerMoveNotMovableResult {
-  readonly status: "not_movable";
-  readonly drawableId: string;
-  readonly direction: EditorDrawableLayerMoveDirection;
-}
-
-export interface EditorWorkflowLayerActionCommitResult {
-  readonly status: "committed" | "rejected";
-  readonly result: EditorSessionPersistenceResult;
-}
-
-export type EditorWorkflowLayerVisibilityResult =
-  | EditorWorkflowLayerActionNotFoundResult
-  | EditorWorkflowLayerActionCommitResult;
-
-export type EditorWorkflowLayerMoveResult =
-  | EditorWorkflowLayerActionNotFoundResult
-  | EditorWorkflowLayerMoveNotMovableResult
-  | EditorWorkflowLayerActionCommitResult;
-
 export interface EditorWorkflowMeshVertexNudgeNotFoundResult {
   readonly status: "not_found";
   readonly meshId: string;
@@ -234,6 +241,13 @@ export interface EditorWorkflowController {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
+  commitCreatePart(command: EditorCreatePartCommand): EditorWorkflowPartTextureCommitResult;
+  commitUpdatePart(command: EditorUpdatePartCommand): EditorWorkflowPartTextureCommitResult;
+  commitSetDrawablePart(command: EditorSetDrawablePartCommand): EditorWorkflowPartTextureCommitResult;
+  commitSetDrawableTexture(command: EditorSetDrawableTextureCommand): EditorWorkflowPartTextureCommitResult;
+  selectDrawableLayer(drawableId: string): EditorWorkflowLayerDraftResult;
+  toggleDrawableLayerLock(drawableId: string): EditorWorkflowLayerDraftResult;
+  toggleDrawableEditorHidden(drawableId: string): EditorWorkflowLayerDraftResult;
   commitSourceIntakeDraft(draft: SourceIntakeDraftState): EditorWorkflowSourceImportCommitResult;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
@@ -413,6 +427,89 @@ export const createEditorWorkflowController = (
 
       return result;
     },
+    commitCreatePart(command) {
+      const outcome = commitWorkflowCreatePart({
+        adapter,
+        state,
+        command
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitUpdatePart(command) {
+      const outcome = commitWorkflowUpdatePart({
+        adapter,
+        state,
+        command
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitSetDrawablePart(command) {
+      const outcome = commitWorkflowSetDrawablePart({
+        adapter,
+        state,
+        command
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitSetDrawableTexture(command) {
+      const outcome = commitWorkflowSetDrawableTexture({
+        adapter,
+        state,
+        command
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    selectDrawableLayer(drawableId) {
+      const outcome = selectWorkflowDrawableLayer({
+        state,
+        drawableId
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    toggleDrawableLayerLock(drawableId) {
+      const outcome = toggleWorkflowDrawableLayerLock({
+        state,
+        drawableId
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    toggleDrawableEditorHidden(drawableId) {
+      const outcome = toggleWorkflowDrawableEditorHidden({
+        state,
+        drawableId
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
     commitSourceIntakeDraft(draft) {
       const result = adapter.commitOperation(
         createSourceIntakeImportOperationRequest(draft, adapter.authoringSession.packageRevision)
@@ -468,71 +565,54 @@ export const createEditorWorkflowController = (
       };
     },
     setDrawableRuntimeVisibility(drawableId, runtimeVisibility) {
-      if (!state.drawables.some((drawable) => drawable.drawableId === drawableId)) {
-        return {
-          status: "not_found",
-          drawableId
-        };
-      }
-
-      const result = adapter.commitSetDrawableRuntimeVisibility({
-        operationId: createLayerOperationId(
-          "set_runtime_visibility",
-          drawableId,
-          runtimeVisibility ? "show" : "hide",
-          adapter.authoringSession.packageRevision
-        ),
+      const outcome = commitWorkflowSetDrawableRuntimeVisibility({
+        adapter,
+        state,
         drawableId,
         runtimeVisibility
       });
 
-      latestDrawablePresetResult = null;
-      latestSessionPersistenceResult = result;
-      state = applyEditorWorkflowCommitResult(state, adapter, result);
-      clearDynamicsPreview();
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
 
-      return {
-        status: result.operationResult.status === "committed" ? "committed" : "rejected",
-        result
-      };
+      return outcome.result;
     },
     toggleDrawableRuntimeVisibility(drawableId) {
-      const drawable = state.drawables.find((candidate) => candidate.drawableId === drawableId);
-      if (drawable === undefined) {
-        return {
-          status: "not_found",
-          drawableId
-        };
-      }
-
-      return this.setDrawableRuntimeVisibility(drawableId, !drawable.visible);
-    },
-    moveDrawableLayer(drawableId, direction) {
-      const move = createDrawableLayerMoveEntries(state.drawables, drawableId, direction);
-
-      if (move.status !== "ready") {
-        return move;
-      }
-
-      const result = adapter.commitSetDrawableDrawOrder({
-        operationId: createLayerOperationId(
-          "set_draw_order",
-          drawableId,
-          direction,
-          adapter.authoringSession.packageRevision
-        ),
-        entries: move.entries
+      const outcome = commitWorkflowToggleDrawableRuntimeVisibility({
+        adapter,
+        state,
+        drawableId
       });
 
-      latestDrawablePresetResult = null;
-      latestSessionPersistenceResult = result;
-      state = applyEditorWorkflowCommitResult(state, adapter, result);
-      clearDynamicsPreview();
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
 
-      return {
-        status: result.operationResult.status === "committed" ? "committed" : "rejected",
-        result
-      };
+      return outcome.result;
+    },
+    moveDrawableLayer(drawableId, direction) {
+      const outcome = commitWorkflowMoveDrawableLayer({
+        adapter,
+        state,
+        drawableId,
+        direction
+      });
+
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
     },
     nudgeMeshVertex(command) {
       const selectedMesh = state.meshEdit.selectedMesh;
@@ -743,7 +823,9 @@ export const createEditorWorkflowController = (
       return result;
     },
     saveProject() {
-      const snapshot = adapter.createPersistenceSnapshot();
+      const snapshot = adapter.createPersistenceSnapshot({
+        editorState: createEditorStateFileFromLayerTreeDraft(state.layerTreeDraft)
+      });
       const storeResult = options.projectStore.saveProject({
         packageFileSet: snapshot.packageFileSet,
         operationLogJsonl: snapshot.operationLogJsonl,
@@ -828,58 +910,6 @@ export const createEditorWorkflowController = (
   };
 };
 
-const createDrawableLayerMoveEntries = (
-  drawables: EditorSemanticState["drawables"],
-  drawableId: string,
-  direction: EditorDrawableLayerMoveDirection
-):
-  | {
-      readonly status: "ready";
-      readonly entries: readonly { readonly drawableId: string; readonly baseDrawOrder: number }[];
-    }
-  | EditorWorkflowLayerActionNotFoundResult
-  | EditorWorkflowLayerMoveNotMovableResult => {
-  const ordered = [...drawables].sort((left, right) => left.orderIndex - right.orderIndex);
-  const index = ordered.findIndex((drawable) => drawable.drawableId === drawableId);
-  if (index < 0) {
-    return {
-      status: "not_found",
-      drawableId
-    };
-  }
-
-  const targetIndex = direction === "up" ? index + 1 : index - 1;
-  if (targetIndex < 0 || targetIndex >= ordered.length) {
-    return {
-      status: "not_movable",
-      drawableId,
-      direction
-    };
-  }
-
-  const reordered = [...ordered];
-  const selected = reordered[index];
-  const target = reordered[targetIndex];
-  if (selected === undefined || target === undefined) {
-    return {
-      status: "not_movable",
-      drawableId,
-      direction
-    };
-  }
-
-  reordered[index] = target;
-  reordered[targetIndex] = selected;
-
-  return {
-    status: "ready",
-    entries: reordered.map((drawable, baseDrawOrder) => ({
-      drawableId: drawable.drawableId,
-      baseDrawOrder
-    }))
-  };
-};
-
 const completeCreateDrawablePresetCommand = (
   command: EditorCreateDrawablePresetCommand,
   draft: CreateDrawableFormState
@@ -903,14 +933,6 @@ const completeCreateDrawablePresetCommand = (
       : {})
   };
 };
-
-const createLayerOperationId = (
-  operation: string,
-  drawableId: string,
-  action: string,
-  packageRevision: number
-): string =>
-  `op_editor_${operation}_${sanitizeOperationIdToken(drawableId)}_${sanitizeOperationIdToken(action)}_r${packageRevision}`;
 
 const createMeshVertexOperationId = (
   operation: string,

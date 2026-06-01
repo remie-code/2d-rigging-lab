@@ -3,6 +3,7 @@ import {
   DrawableIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  PartIdSchema,
   ProvenanceIdSchema,
   RuntimeSnapshotIdSchema,
   SourceAssetIdSchema,
@@ -39,6 +40,11 @@ describe("editor preview texture preview resolution", () => {
         href: "data:image/png;base64,iVBORw0KGgo="
       }
     });
+    expect(projected?.drawables[0]?.layerState).toMatchObject({
+      textureStatus: "resolved",
+      textureBacked: true,
+      textureUnresolved: false
+    });
   });
 
   it("keeps authored texture refs as not materialized when no preview asset is available", () => {
@@ -62,10 +68,62 @@ describe("editor preview texture preview resolution", () => {
       textureId: "tex_face"
     });
     expect(projected?.drawables[0]?.texture.previewReference).toBeUndefined();
+    expect(projected?.drawables[0]?.layerState).toMatchObject({
+      textureStatus: "not_materialized",
+      textureBacked: false,
+      textureUnresolved: true
+    });
+  });
+
+  it("hydrates missing drawable part evidence from projected part membership", () => {
+    const projected = applyEditorPreviewTextureAssets({
+      preview: createPreviewProjection({
+        parts: [
+          {
+            partId: PartIdSchema.parse("part_root"),
+            displayName: "Root",
+            childPartIds: [PartIdSchema.parse("part_face")],
+            drawableIds: [],
+            hierarchyPath: [PartIdSchema.parse("part_root")],
+            depth: 0
+          },
+          {
+            partId: PartIdSchema.parse("part_face"),
+            displayName: "Face",
+            parentPartId: PartIdSchema.parse("part_root"),
+            childPartIds: [],
+            drawableIds: [DrawableIdSchema.parse("draw_face")],
+            hierarchyPath: [
+              PartIdSchema.parse("part_root"),
+              PartIdSchema.parse("part_face")
+            ],
+            depth: 1
+          }
+        ]
+      }),
+      textureAtlas: createTextureAtlas(),
+      drawableTextures: [
+        {
+          drawableId: "draw_face",
+          textureId: "tex_face"
+        }
+      ]
+    });
+
+    expect(projected?.drawables[0]?.partId).toBe("part_face");
+    expect(projected?.parts?.[1]?.drawableIds).toEqual(["draw_face"]);
+    expect(projected?.drawables[0]?.texture).toMatchObject({
+      status: "resolved",
+      textureId: "tex_face"
+    });
   });
 });
 
-const createPreviewProjection = (): EditorPreviewProjectionDto => ({
+const createPreviewProjection = (
+  options: {
+    readonly parts?: EditorPreviewProjectionDto["parts"];
+  } = {}
+): EditorPreviewProjectionDto => ({
   schemaVersion: "editor-preview-projection-v1",
   sourceSnapshotId: RuntimeSnapshotIdSchema.parse("snap_preview_texture"),
   packageId: PackageIdSchema.parse("pkg_preview_texture"),
@@ -73,6 +131,7 @@ const createPreviewProjection = (): EditorPreviewProjectionDto => ({
   snapshotDetail: "full",
   canvasSize: { width: 128, height: 128 },
   drawList: [DrawableIdSchema.parse("draw_face")],
+  ...(options.parts === undefined ? {} : { parts: options.parts }),
   drawableCount: 1,
   visibleDrawableCount: 1,
   drawables: [

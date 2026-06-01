@@ -6,3 +6,4 @@ export * from "./composition-workflow.js";
 export * from "./rig-control-workflow.js";
 export * from "./source-intake-workflow.js";
 export * from "./viewer-runtime-workflow.js";
+export * from "./part-texture-layer-workflow.js";

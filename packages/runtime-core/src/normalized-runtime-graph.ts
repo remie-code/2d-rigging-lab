@@ -4,6 +4,7 @@ import type {
   KeyformSetId,
   MaskRelationId,
   MeshId,
+  PartId,
   ParameterId,
   RectDto,
   RigControlId,
@@ -18,6 +19,7 @@ export interface NormalizedRuntimeGraph {
   readonly packageHash?: string;
   readonly coordinateSystem: "canvas-y-down-v1";
   readonly parameters: ReadonlyMap<ParameterId, NormalizedParameter>;
+  readonly parts?: ReadonlyMap<PartId, NormalizedPart>;
   readonly dynamicsGroups: ReadonlyMap<DynamicsGroupId, NormalizedDynamicsGroup>;
   readonly drawables: ReadonlyMap<DrawableId, NormalizedDrawable>;
   readonly rigControls: ReadonlyMap<RigControlId, NormalizedRigControlNode>;
@@ -25,6 +27,14 @@ export interface NormalizedRuntimeGraph {
   readonly masks: readonly NormalizedMaskRelation[];
   readonly drawOrder: readonly NormalizedDrawOrderEntry[];
   readonly disabledFutureLayers: readonly DisabledFutureLayer[];
+}
+
+export interface NormalizedPart {
+  readonly partId: PartId;
+  readonly displayName: string;
+  readonly parentPartId?: PartId;
+  readonly childPartIds: readonly PartId[];
+  readonly drawableIds: readonly DrawableId[];
 }
 
 export interface NormalizedParameter {
@@ -77,6 +87,7 @@ export interface NormalizedDynamicsSettings {
 export interface NormalizedDrawable {
   readonly drawableId: DrawableId;
   readonly meshId: MeshId;
+  readonly partId?: PartId;
   readonly texture?: NormalizedDrawableTextureReference;
   readonly visible: boolean;
   readonly opacity: number;

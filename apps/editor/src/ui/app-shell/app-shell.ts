@@ -20,10 +20,14 @@ import type {
 } from "../../editor-workflow/index.js";
 import type {
   EditorCreateDrawablePresetCommand,
+  EditorCreatePartCommand,
   EditorMeshVertexNudgeCommand,
   EditorCreateParameterCommand,
   EditorSessionPersistenceResult,
-  EditorUpdateDynamicsGroupCommand
+  EditorSetDrawablePartCommand,
+  EditorSetDrawableTextureCommand,
+  EditorUpdateDynamicsGroupCommand,
+  EditorUpdatePartCommand
 } from "../../editor-session/index.js";
 import {
   createGeneratedEvidenceSummaryPanel,
@@ -32,6 +36,7 @@ import {
 import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
 import { createAiTranscriptPanel } from "../ai-transcript/index.js";
 import { createDrawableAuthoringPanel } from "../drawable-authoring/index.js";
+import { createLayerTreePanel } from "../layer-tree/index.js";
 import { createCompositionPanel } from "../composition-panel/index.js";
 import {
   createDynamicsPanel,
@@ -60,6 +65,13 @@ export interface EditorAppShellOptions {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
   readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
+  readonly onCommitCreatePart: (command: EditorCreatePartCommand) => void;
+  readonly onCommitUpdatePart: (command: EditorUpdatePartCommand) => void;
+  readonly onCommitSetDrawablePart: (command: EditorSetDrawablePartCommand) => void;
+  readonly onCommitSetDrawableTexture: (command: EditorSetDrawableTextureCommand) => void;
+  readonly onSelectDrawableLayer: (drawableId: string) => void;
+  readonly onToggleDrawableLayerLock: (drawableId: string) => void;
+  readonly onToggleDrawableEditorHidden: (drawableId: string) => void;
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
   readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
@@ -161,6 +173,17 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onMoveDrawableLayer: options.onMoveDrawableLayer,
     onNudgeMeshVertex: options.onNudgeMeshVertex
   });
+  const layerTreePanel = createLayerTreePanel({
+    viewModel: options.viewModel.layerTree,
+    workflow: options.viewModel.partTextureWorkflow,
+    onCreatePart: options.onCommitCreatePart,
+    onUpdatePart: options.onCommitUpdatePart,
+    onSetDrawablePart: options.onCommitSetDrawablePart,
+    onSetDrawableTexture: options.onCommitSetDrawableTexture,
+    onSelectDrawable: options.onSelectDrawableLayer,
+    onToggleDrawableLock: options.onToggleDrawableLayerLock,
+    onToggleDrawableEditorHidden: options.onToggleDrawableEditorHidden
+  });
   const sourceIntakePanel = createSourceIntakePanel({
     draft: options.state.sourceIntakeDraft,
     viewModel: options.viewModel.sourceIntake,
@@ -253,6 +276,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     rigControlPanel,
     dynamicsPanel,
     operationPanel,
+    layerTreePanel,
     drawableAuthoringPanel,
     sourceIntakePanel,
     projectPersistencePanel,

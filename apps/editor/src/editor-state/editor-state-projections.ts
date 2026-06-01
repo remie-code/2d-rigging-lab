@@ -17,6 +17,7 @@ import {
   projectGeneratedEvidenceSummary,
   type GeneratedEvidenceSummaryInput
 } from "./generated-evidence-summary.js";
+import { projectLayerTreeDraftState } from "./layer-tree-draft-state.js";
 import { projectMeshEditState } from "./mesh-edit-state.js";
 import {
   projectOperationLogSummary,
@@ -46,6 +47,7 @@ import type {
   DrawableDto,
   DrawOrderEntryDto,
   DynamicsGroupDto,
+  EditorStateFileDto,
   KeyformSetDto,
   MaskRelationDto,
   MeshDto,
@@ -69,6 +71,7 @@ export interface LoadedPackageSummaryInput {
   readonly parts?: readonly ModelPartDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
   readonly textureAtlas?: TextureAtlasFileDto;
+  readonly editorState?: EditorStateFileDto;
   readonly canvasSize?: {
     readonly width: number;
     readonly height: number;
@@ -91,6 +94,7 @@ export interface CommittedOperationSummaryInput {
   readonly meshes?: readonly MeshDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
   readonly textureAtlas?: TextureAtlasFileDto;
+  readonly editorState?: EditorStateFileDto;
   readonly parts?: readonly ModelPartDto[];
   readonly canvasSize?: {
     readonly width: number;
@@ -126,6 +130,7 @@ export const projectLoadedPackageState = (
     drawableOpacityKeyforms: projectDrawableOpacityKeyformState(input.keyformSets ?? []),
     dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
     drawables,
+    layerTreeDraft: projectLayerTreeDraftState(input.editorState),
     meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
     pendingCreateDrawable: projectCreateDrawableDefaults({
       ...(input.sourceAssets === undefined ? {} : { sourceAssets: input.sourceAssets }),
@@ -185,6 +190,10 @@ export const applyCommittedOperationSummary = (
         ? state.drawableOpacityKeyforms
         : projectDrawableOpacityKeyformState(input.keyformSets),
     drawables,
+    layerTreeDraft:
+      input.editorState === undefined
+        ? state.layerTreeDraft
+        : projectLayerTreeDraftState(input.editorState),
     meshEdit,
     previewParameters:
       input.parameters === undefined

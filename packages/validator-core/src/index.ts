@@ -14,6 +14,7 @@ export * from "./validators/drawable-provenance.js";
 export * from "./validators/drawable-references.js";
 export * from "./validators/dynamics-semantic.js";
 export * from "./validators/mask-composition.js";
+export * from "./validators/part-layer-semantics.js";
 export * from "./validators/rig-control-semantic.js";
 export * from "./validators/texture-assets.js";
 export * from "./validators/psd-source-profile.js";

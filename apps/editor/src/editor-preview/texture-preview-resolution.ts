@@ -15,6 +15,7 @@ import type {
   EditorPreviewDrawableTexturePreviewReferenceDto,
   EditorPreviewProjectionDto
 } from "./preview-dto.js";
+import { refreshEditorPreviewDrawableTextureLayerState } from "./preview-layer-state.js";
 
 export interface EditorPreviewDrawableTextureReferenceInput {
   readonly drawableId: string;
@@ -36,6 +37,7 @@ export const applyEditorPreviewTextureAssets = (
     return null;
   }
 
+  const drawablePartIdsById = createDrawablePartIdIndex(input.preview);
   const drawableTexturesById = new Map(
     (input.drawableTextures ?? []).map((drawableTexture) => [
       drawableTexture.drawableId,
@@ -47,11 +49,41 @@ export const applyEditorPreviewTextureAssets = (
     ...input.preview,
     drawables: input.preview.drawables.map((drawable) =>
       applyDrawableTextureAssets({
-        drawable,
+        drawable: applyDrawablePartEvidence(drawable, drawablePartIdsById.get(drawable.drawableId)),
         textureAtlas: input.textureAtlas,
         drawableTexture: drawableTexturesById.get(drawable.drawableId)
       })
     )
+  };
+};
+
+const createDrawablePartIdIndex = (
+  preview: EditorPreviewProjectionDto
+): ReadonlyMap<string, EditorPreviewDrawableDto["partId"]> => {
+  const partIdsByDrawableId = new Map<string, EditorPreviewDrawableDto["partId"]>();
+
+  for (const part of preview.parts ?? []) {
+    for (const drawableId of part.drawableIds) {
+      if (!partIdsByDrawableId.has(drawableId)) {
+        partIdsByDrawableId.set(drawableId, part.partId);
+      }
+    }
+  }
+
+  return partIdsByDrawableId;
+};
+
+const applyDrawablePartEvidence = (
+  drawable: EditorPreviewDrawableDto,
+  inferredPartId: EditorPreviewDrawableDto["partId"]
+): EditorPreviewDrawableDto => {
+  if (drawable.partId !== undefined || inferredPartId === undefined) {
+    return drawable;
+  }
+
+  return {
+    ...drawable,
+    partId: inferredPartId
   };
 };
 
@@ -72,7 +104,7 @@ const applyDrawableTextureAssets = (input: {
     sourceLayerId
   });
 
-  return {
+  return refreshEditorPreviewDrawableTextureLayerState({
     ...input.drawable,
     texture: {
       ...input.drawable.texture,
@@ -84,7 +116,7 @@ const applyDrawableTextureAssets = (input: {
         ? {}
         : { previewReference: projectPreviewReference(previewAsset) })
     }
-  };
+  });
 };
 
 const resolveTextureStatus = (

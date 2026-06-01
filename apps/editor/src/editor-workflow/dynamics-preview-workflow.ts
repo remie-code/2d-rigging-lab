@@ -17,10 +17,12 @@ import { projectEditorPreview } from "../editor-preview/preview-projection.js";
 import type { EditorSessionAdapter } from "../editor-session/index.js";
 import {
   createEmptyDynamicsPreviewState,
+  createEditorStateFileFromLayerTreeDraft,
   projectDynamicsPreviewState,
   projectPreviewAuthoredParameterValues,
   type EditorSemanticState
 } from "../editor-state/index.js";
+import { applyWorkflowPreviewTextureAssets } from "./preview-texture-application.js";
 
 export interface EditorWorkflowDynamicsPreviewResult {
   readonly status: "reset" | "ran" | "no_dynamics_group";
@@ -252,7 +254,9 @@ const evaluateWorkflowDynamicsPreview = (input: {
     candidateSnapshot: evaluated.snapshot
   });
   const validationReport = validatePackageRuntime({
-    packageDocument: input.adapter.createPersistenceSnapshot().document,
+    packageDocument: input.adapter.createPersistenceSnapshot({
+      editorState: createEditorStateFileFromLayerTreeDraft(input.state.layerTreeDraft)
+    }).document,
     runtimeSnapshot: evaluated.snapshot,
     profile: "editorIncremental",
     ...(input.now === undefined ? {} : { createdAt: input.now().toISOString() })
@@ -339,7 +343,7 @@ const projectWorkflowPreviewProjection = (
     context
   );
 
-  return projectEditorPreview({
+  return applyWorkflowPreviewTextureAssets(projectEditorPreview({
     snapshot: current.snapshot,
     runtimeDiff: buildRuntimeDiff({
       baselineSnapshot: baseline.snapshot,
@@ -351,8 +355,9 @@ const projectWorkflowPreviewProjection = (
         drawable.drawableId,
         drawable.displayName
       ])
-    )
-  });
+    ),
+    editorState: state.layerTreeDraft
+  }), state);
 };
 
 const createPreviewRuntimeOptions = () => ({

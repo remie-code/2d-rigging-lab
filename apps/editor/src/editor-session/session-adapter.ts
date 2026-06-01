@@ -17,6 +17,7 @@ import {
 import {
   parsePackageDocumentFromFileSet,
   serializePackageDocumentToFileSet,
+  type EditorStateFileDto,
   type PackageDocumentDto,
   type PackageFileSet
 } from "@private-2d-rigging-lab/package-format";
@@ -56,6 +57,16 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createPartOperationRequest,
+  createSetDrawablePartOperationRequest,
+  createSetDrawableTextureOperationRequest,
+  createUpdatePartOperationRequest,
+  type EditorCreatePartCommand,
+  type EditorSetDrawablePartCommand,
+  type EditorSetDrawableTextureCommand,
+  type EditorUpdatePartCommand
+} from "./part-texture-layer-command.js";
+import {
   createAddRigControlAngleKeyformOperationRequest,
   createBindRigControlChildOperationRequest,
   createRotation2dRigControlOperationRequest,
@@ -79,12 +90,16 @@ import {
 export interface EditorSessionAdapter {
   readonly baseDocument: PackageDocumentDto;
   readonly authoringSession: AuthoringSession;
-  createPersistenceSnapshot(): EditorSessionPersistenceSnapshot;
+  createPersistenceSnapshot(options?: EditorSessionPersistenceSnapshotOptions): EditorSessionPersistenceSnapshot;
   getOperationLogEntries(): readonly OperationLogEntryDto[];
   dryRunOperation(request: OperationRequestDto): OperationResultDto;
   commitOperation(request: OperationRequestDto): EditorSessionPersistenceResult;
   commitCreateParameter(command: EditorCreateParameterCommand): EditorSessionPersistenceResult;
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
+  commitCreatePart(command: EditorCreatePartCommand): EditorSessionPersistenceResult;
+  commitUpdatePart(command: EditorUpdatePartCommand): EditorSessionPersistenceResult;
+  commitSetDrawablePart(command: EditorSetDrawablePartCommand): EditorSessionPersistenceResult;
+  commitSetDrawableTexture(command: EditorSetDrawableTextureCommand): EditorSessionPersistenceResult;
   commitSetDrawableRuntimeVisibility(
     command: EditorSetDrawableRuntimeVisibilityCommand
   ): EditorSessionPersistenceResult;
@@ -115,6 +130,10 @@ export interface EditorSessionAdapterOptions {
   readonly initialOperationLogEntries?: readonly OperationLogEntryDto[];
   readonly initialGeneratedArtifactEntries?: readonly PackageFileSet[number][];
   readonly now?: () => Date;
+}
+
+export interface EditorSessionPersistenceSnapshotOptions {
+  readonly editorState?: EditorStateFileDto;
 }
 
 export interface EditorSessionPersistenceSnapshot {
@@ -173,13 +192,14 @@ export const createEditorSessionAdapter = (
   return {
     baseDocument,
     authoringSession,
-    createPersistenceSnapshot() {
+    createPersistenceSnapshot(snapshotOptions = {}) {
       return createPersistenceSnapshot({
         authoringSession,
         baseDocument,
         operationLogEntries: operationCore.operationLog.entries,
         generatedArtifactEntries,
-        now
+        now,
+        ...snapshotOptions
       });
     },
     getOperationLogEntries() {
@@ -230,6 +250,22 @@ export const createEditorSessionAdapter = (
         generateMesh,
         finalPersistenceResult: generateMesh
       };
+    },
+    commitCreatePart(command) {
+      const request = createPartOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitUpdatePart(command) {
+      const request = createUpdatePartOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitSetDrawablePart(command) {
+      const request = createSetDrawablePartOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitSetDrawableTexture(command) {
+      const request = createSetDrawableTextureOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
     },
     commitSetDrawableRuntimeVisibility(command) {
       const request = createSetDrawableRuntimeVisibilityOperationRequest(
@@ -394,11 +430,15 @@ const createPersistenceSnapshot = (input: {
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly generatedArtifactEntries: readonly PackageFileSet[number][];
   readonly now: () => Date;
+  readonly editorState?: EditorStateFileDto;
 }): EditorSessionPersistenceSnapshot => {
   const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationLogEntries);
-  const document = toPackageDocument(input.authoringSession, input.baseDocument, {
-    updatedAt: input.now().toISOString()
-  });
+  const document = applyEditorStateToDocument(
+    toPackageDocument(input.authoringSession, input.baseDocument, {
+      updatedAt: input.now().toISOString()
+    }),
+    input.editorState
+  );
   const packageFileSet = serializePackageDocumentToFileSet(document, {
     operationLogText: operationLogJsonl,
     generatedArtifacts: input.generatedArtifactEntries
@@ -414,6 +454,30 @@ const createPersistenceSnapshot = (input: {
     document,
     parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId),
     drawableIds: document.model.drawables.drawables.map((drawable) => drawable.drawableId)
+  };
+};
+
+const applyEditorStateToDocument = (
+  document: PackageDocumentDto,
+  editorState: EditorStateFileDto | undefined
+): PackageDocumentDto => {
+  if (editorState === undefined) {
+    return document;
+  }
+
+  return {
+    ...document,
+    manifest: {
+      ...document.manifest,
+      modelFiles: {
+        ...document.manifest.modelFiles,
+        editorState: "model/editor-state.json"
+      }
+    },
+    model: {
+      ...document.model,
+      editorState
+    }
   };
 };
 

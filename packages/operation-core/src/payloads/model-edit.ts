@@ -8,6 +8,7 @@ import {
   RectSchema,
   SourceAssetIdSchema,
   TargetRefSchema,
+  TextureIdSchema,
   Vec2Schema,
   VertexIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -33,6 +34,48 @@ export const CreateDrawablePayloadSchema = z.object({
   initialBounds: RectSchema.optional()
 });
 export type CreateDrawablePayloadDto = z.infer<typeof CreateDrawablePayloadSchema>;
+
+const LockedTargetIdsSchema = z.array(z.string().min(1)).default([]);
+
+export const CreatePartPayloadSchema = z.object({
+  partId: PartIdSchema.optional(),
+  displayName: z.string().min(1),
+  parentPartId: PartIdSchema.optional(),
+  lockedTargetIds: LockedTargetIdsSchema
+});
+export type CreatePartPayloadDto = z.infer<typeof CreatePartPayloadSchema>;
+
+export const UpdatePartPayloadSchema = z
+  .object({
+    partId: PartIdSchema,
+    displayName: z.string().min(1).optional(),
+    parentPartId: PartIdSchema.nullable().optional(),
+    lockedTargetIds: LockedTargetIdsSchema
+  })
+  .refine(
+    (payload) =>
+      payload.displayName !== undefined ||
+      Object.prototype.hasOwnProperty.call(payload, "parentPartId"),
+    {
+      message: "updatePart requires displayName or parentPartId",
+      path: ["displayName"]
+    }
+  );
+export type UpdatePartPayloadDto = z.infer<typeof UpdatePartPayloadSchema>;
+
+export const SetDrawablePartPayloadSchema = z.object({
+  drawableId: DrawableIdSchema,
+  partId: PartIdSchema,
+  lockedTargetIds: LockedTargetIdsSchema
+});
+export type SetDrawablePartPayloadDto = z.infer<typeof SetDrawablePartPayloadSchema>;
+
+export const SetDrawableTexturePayloadSchema = z.object({
+  drawableId: DrawableIdSchema,
+  textureId: TextureIdSchema,
+  lockedTargetIds: LockedTargetIdsSchema
+});
+export type SetDrawableTexturePayloadDto = z.infer<typeof SetDrawableTexturePayloadSchema>;
 
 export const GenerateMeshPayloadSchema = z.object({
   drawableId: DrawableIdSchema,

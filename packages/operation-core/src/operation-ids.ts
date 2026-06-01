@@ -6,6 +6,7 @@ import {
   MeshIdSchema,
   OperationIdSchema,
   ParameterIdSchema,
+  PartIdSchema,
   ProvenanceIdSchema,
   RigControlIdSchema,
   TextureIdSchema,
@@ -19,6 +20,7 @@ import type {
   MeshId,
   OperationId,
   ParameterId,
+  PartId,
   ProvenanceId,
   RigControlId,
   TextureId,
@@ -38,6 +40,9 @@ export const createProvenanceId = (operationId: OperationId): ProvenanceId =>
 
 export const createParameterIdFromDisplayName = (displayName: string): ParameterId =>
   ParameterIdSchema.parse(`param_${sanitizeIdToken(displayName)}`);
+
+export const createPartIdFromDisplayName = (displayName: string): PartId =>
+  PartIdSchema.parse(`part_${sanitizeIdToken(displayName)}`);
 
 export const createDrawableIdFromDisplayName = (displayName: string): DrawableId =>
   DrawableIdSchema.parse(`draw_${sanitizeIdToken(displayName)}`);
@@ -118,6 +123,30 @@ const operationToken = (request: OperationRequestDto): string => {
 
   if (request.operationType === "createDrawable") {
     return `create_drawable_${sanitizeIdToken(request.payload.displayName)}`;
+  }
+
+  if (request.operationType === "createPart") {
+    return `create_part_${sanitizeIdToken(
+      request.payload.partId?.replace(/^part_/, "") ?? request.payload.displayName
+    )}`;
+  }
+
+  if (request.operationType === "updatePart") {
+    return `update_part_${sanitizeIdToken(stripIdPrefix(request.payload.partId, "part_"))}`;
+  }
+
+  if (request.operationType === "setDrawablePart") {
+    return `set_drawable_part_${[
+      stripIdPrefix(request.payload.drawableId, "draw_"),
+      stripIdPrefix(request.payload.partId, "part_")
+    ].map(sanitizeIdToken).join("_")}`;
+  }
+
+  if (request.operationType === "setDrawableTexture") {
+    return `set_drawable_texture_${[
+      stripIdPrefix(request.payload.drawableId, "draw_"),
+      stripIdPrefix(request.payload.textureId, "tex_")
+    ].map(sanitizeIdToken).join("_")}`;
   }
 
   if (request.operationType === "createRotation2dRigControl") {

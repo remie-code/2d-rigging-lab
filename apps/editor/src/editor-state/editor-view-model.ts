@@ -20,6 +20,14 @@ import {
   projectCompositionAuthoringViewModel,
   type CompositionAuthoringViewModel
 } from "./composition-authoring-view-model.js";
+import {
+  projectLayerTreeViewModel,
+  type LayerTreeViewModel
+} from "./layer-tree-view-model.js";
+import {
+  projectPartTextureWorkflowViewModel,
+  type PartTextureWorkflowViewModel
+} from "./part-texture-workflow-view-model.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface AiApprovalWorkflowViewModel {
@@ -47,6 +55,8 @@ export interface EditorWorkflowViewModel {
   readonly reloadLabel: string;
   readonly drawableAuthoring: DrawableAuthoringViewModel;
   readonly drawableLayers: DrawableLayerControlsViewModel;
+  readonly layerTree: LayerTreeViewModel;
+  readonly partTextureWorkflow: PartTextureWorkflowViewModel;
   readonly meshEdit: MeshEditViewModel;
   readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
@@ -289,6 +299,18 @@ export const projectEditorWorkflowViewModel = (
     reloadLabel: projectReloadLabel(state),
     drawableAuthoring: projectDrawableAuthoringViewModel(state),
     drawableLayers: projectDrawableLayerControlsViewModel(state),
+    layerTree: projectLayerTreeViewModel({
+      parts: state.parts,
+      drawables: state.drawables,
+      textureAtlas: state.textureAtlas,
+      layerTreeDraft: state.layerTreeDraft
+    }),
+    partTextureWorkflow: projectPartTextureWorkflowViewModel({
+      loaded: state.loadedPackage !== null,
+      parts: state.parts,
+      drawables: state.drawables,
+      textureAtlas: state.textureAtlas
+    }),
     meshEdit: projectMeshEditViewModel(state),
     sourceIntake: projectSourceIntakeDraftViewModel(state.sourceIntakeDraft, {
       sourceAssets: state.sourceAssets,

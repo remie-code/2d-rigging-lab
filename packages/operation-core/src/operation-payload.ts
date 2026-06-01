@@ -18,13 +18,17 @@ import {
   AddKeyformGrid2dPayloadSchema,
   AddKeyformPayloadSchema,
   CreateDrawablePayloadSchema,
+  CreatePartPayloadSchema,
   CreateParameterPayloadSchema,
   GenerateMeshPayloadSchema,
   MoveMeshVertexPayloadSchema,
   SetDrawOrderPayloadSchema,
+  SetDrawablePartPayloadSchema,
+  SetDrawableTexturePayloadSchema,
   SetMaskRelationPayloadSchema,
   SetRightsMetadataPayloadSchema,
-  SetRuntimeVisibilityPayloadSchema
+  SetRuntimeVisibilityPayloadSchema,
+  UpdatePartPayloadSchema
 } from "./payloads/model-edit.js";
 import {
   BindRigControlChildPayloadSchema,
@@ -36,6 +40,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("importPsdSourceAsset"), payload: ImportPsdSourceAssetPayloadSchema }),
   z.object({ operationType: z.literal("importSplitPngSourceAsset"), payload: SplitPngSourceAssetPayloadSchema }),
   z.object({ operationType: z.literal("createDrawable"), payload: CreateDrawablePayloadSchema }),
+  z.object({ operationType: z.literal("createPart"), payload: CreatePartPayloadSchema }),
+  z.object({ operationType: z.literal("updatePart"), payload: UpdatePartPayloadSchema }),
+  z.object({ operationType: z.literal("setDrawablePart"), payload: SetDrawablePartPayloadSchema }),
+  z.object({ operationType: z.literal("setDrawableTexture"), payload: SetDrawableTexturePayloadSchema }),
   z.object({ operationType: z.literal("generateMesh"), payload: GenerateMeshPayloadSchema }),
   z.object({ operationType: z.literal("moveMeshVertex"), payload: MoveMeshVertexPayloadSchema }),
   z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),

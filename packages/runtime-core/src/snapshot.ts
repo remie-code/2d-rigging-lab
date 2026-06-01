@@ -4,6 +4,7 @@ import {
   DynamicsGroupIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  PartIdSchema,
   ParameterIdSchema,
   RectDtoSchema,
   RuntimeEvaluationContextSchema,
@@ -19,6 +20,10 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import {
+  createEvaluatedParts,
+  EvaluatedPartSchema
+} from "./layer-tree-evidence.js";
 import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
 import {
   createEvaluatedMaskRelations,
@@ -69,6 +74,7 @@ export type EvaluatedParameterDto = z.infer<typeof EvaluatedParameterSchema>;
 export const EvaluatedDrawableSchema = z.object({
   drawableId: DrawableIdSchema,
   meshId: MeshIdSchema,
+  partId: PartIdSchema.optional(),
   texture: EvaluatedDrawableTextureSchema.optional(),
   visible: z.boolean(),
   opacity: z.number().min(0).max(1),
@@ -127,6 +133,7 @@ export const RuntimeSnapshotSchema = z.object({
   dynamics: z.array(EvaluatedDynamicsGroupSchema).default([]),
   keyformSamples: z.array(KeyformSampleSchema).default([]),
   rigControls: z.array(EvaluatedRigControlSchema).default([]),
+  parts: z.array(EvaluatedPartSchema).optional(),
   drawables: z.array(EvaluatedDrawableSchema),
   masks: z.array(EvaluatedMaskRelationSchema),
   drawList: z.array(DrawableIdSchema),
@@ -194,6 +201,7 @@ export const createRuntimeSnapshot = (input: {
     dynamics: createEvaluatedDynamics(input.graph, input.evaluationInput, input.state, input.options),
     keyformSamples: keyformSampling.samples,
     rigControls: rigControlEvaluation.rigControls,
+    parts: createEvaluatedParts(input.graph),
     drawables,
     masks: createEvaluatedMaskRelations(input.graph),
     drawList: drawables.filter((drawable) => drawable.visible).map((drawable) => drawable.drawableId),
@@ -282,6 +290,7 @@ const createEvaluatedDrawables = (input: {
       EvaluatedDrawableSchema.parse({
         drawableId: drawable.drawableId,
         meshId: drawable.meshId,
+        ...(drawable.partId === undefined ? {} : { partId: drawable.partId }),
         ...(drawable.texture === undefined
           ? {}
           : {

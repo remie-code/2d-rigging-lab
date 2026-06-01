@@ -80,8 +80,15 @@ demo.unsafeDependencyClaim
 | `asset.psd.unsupportedFeature` | source_import | warning | strict: needs_review/fail by feature | AC-MVP-003 |
 | `rights.provenanceMissing` | rights | error | acceptance: fail | AC-MVP-002 |
 | `ref.drawableTextureMissing` | reference | error | acceptance: fail if visible drawable | AC-MVP-004 |
+| `ref.drawablePartMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `mesh.triangleIndexOutOfRange` | mesh_semantic | blocking | all: fail | AC-MVP-005 |
 | `mesh.degenerateTriangle` | mesh_semantic | warning | strict: fail or needs_review | AC-MVP-005 |
+| `part.parentMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.childMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.parentChildMismatch` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.cycle` | reference | blocking | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.drawableMembershipMismatch` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `editorState.staleReference` | reference | warning | editor/viewer/strict: warning; acceptance: needs_review by scenario | AC-MVP-004, AC-MVP-011, AC-MVP-013 |
 | `runtime.parameterClamped` | parameter_resolution | warning | strict: fail for invalid external input tests | AC-MVP-012 |
 | `runtime.profileMismatch` | runtime_context | warning | strict/acceptance: fail during legacy migration | AC-PHYS-004 |
 | `runtime.stateSequenceLengthMismatch` | runtime_state | warning | context strictness interactive: warning; strict/acceptance/demoSafe: fail | AC-PHYS-004 |
@@ -184,6 +191,15 @@ Runtime state validation rules:
 - `runtime.stateMissingDynamicsGroup` fires when the graph contains a dynamics group that is absent from `previousState.dynamicsGroups`; Runtime may initialize that group from `currentTarget`, but strict replay fixtures must record the reset.
 - `runtime.stateUnknownDynamicsGroup` fires when `previousState.dynamicsGroups` contains a group that is not present in the graph; Runtime ignores that stale group state.
 - `dynamics.timestepMismatch` fires when supplied `RuntimeStateDto.fixedStepMs` differs from the evaluation request timestep in a strict / acceptance replay context.
+
+Part / layer-tree validation rules:
+
+- `ref.drawablePartMissing` fires when a drawable `partId` does not resolve to a package part.
+- `part.parentMissing` and `part.childMissing` fire when part hierarchy references point at absent part IDs.
+- `part.parentChildMismatch` fires when `parentPartId` and reciprocal `childPartIds` disagree.
+- `part.cycle` fires when package part hierarchy edges cannot be topologically ordered.
+- `part.drawableMembershipMismatch` fires when `drawable.partId` and `part.drawableIds` disagree or a part lists a missing drawable.
+- `editorState.staleReference` fires only for stale editor-only `selection`, `lockedIds`, or `editorHiddenIds` references. It must not change runtime semantics, must not hide runtime/package failures, and should remain warning-level unless an acceptance scenario explicitly promotes stale editor evidence to `needs_review`.
 
 ## Validation Profiles
 

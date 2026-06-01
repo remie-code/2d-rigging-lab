@@ -8,6 +8,10 @@ import {
 } from "./dynamics-authoring-state.js";
 import type { DrawableListItemState } from "./drawable-list-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
+import {
+  createEmptyLayerTreeDraftState,
+  type LayerTreeDraftState
+} from "./layer-tree-draft-state.js";
 import { createEmptyMeshEditState, type MeshEditState } from "./mesh-edit-state.js";
 import type { OperationResultSummaryState } from "./operation-result-summary.js";
 import { createEmptyOperationLogSummary, type OperationLogSummaryState } from "./operation-log-summary.js";
@@ -50,6 +54,7 @@ export interface EditorSemanticState {
   readonly drawableOpacityKeyforms: readonly DrawableOpacityKeyformState[];
   readonly dynamicsGroups: readonly DynamicsGroupState[];
   readonly drawables: readonly DrawableListItemState[];
+  readonly layerTreeDraft: LayerTreeDraftState;
   readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly viewerRuntime: ViewerRuntimeState;
@@ -78,6 +83,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   drawableOpacityKeyforms: [],
   dynamicsGroups: [],
   drawables: [],
+  layerTreeDraft: createEmptyLayerTreeDraftState(),
   meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
   viewerRuntime: createEmptyViewerRuntimeState(),

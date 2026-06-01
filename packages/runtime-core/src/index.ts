@@ -3,6 +3,7 @@ export * from "./normalized-runtime-graph.js";
 export * from "./runtime-input.js";
 export * from "./runtime-options.js";
 export * from "./texture-projection.js";
+export * from "./layer-tree-evidence.js";
 export * from "./dynamics-evaluation.js";
 export * from "./rig-control-transform.js";
 export * from "./rig-control-hierarchy.js";

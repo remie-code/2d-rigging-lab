@@ -1,0 +1,115 @@
+{
+  "packageId": "pkg_wave28_part_texture_layer",
+  "packageRevision": 4,
+  "packageHash": "sha256:wave28-part-texture-layer-final",
+  "coordinateSystem": "canvas-y-down-v1",
+  "parts": [
+    {
+      "partId": "part_root",
+      "displayName": "Root",
+      "childPartIds": [
+        "part_face"
+      ],
+      "drawableIds": [
+        "draw_body"
+      ]
+    },
+    {
+      "partId": "part_face",
+      "displayName": "Face Controls",
+      "parentPartId": "part_root",
+      "childPartIds": [],
+      "drawableIds": [
+        "draw_eye"
+      ]
+    }
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_body",
+      "meshId": "mesh_body",
+      "partId": "part_root",
+      "texture": {
+        "status": "resolved",
+        "textureId": "tex_body",
+        "sourceAssetId": "src_wave28_layers",
+        "sourceLayerId": "layer_body",
+        "projection": {
+          "kind": "bounds_fit"
+        }
+      },
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 0,
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 64,
+        "height": 96
+      },
+      "vertices": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 64,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 96
+        }
+      ],
+      "vertexCount": 3
+    },
+    {
+      "drawableId": "draw_eye",
+      "meshId": "mesh_eye",
+      "partId": "part_face",
+      "texture": {
+        "status": "resolved",
+        "textureId": "tex_eye_alt",
+        "sourceAssetId": "src_wave28_layers",
+        "sourceLayerId": "layer_eye",
+        "projection": {
+          "kind": "bounds_fit"
+        }
+      },
+      "visible": true,
+      "opacity": 1,
+      "baseDrawOrder": 1,
+      "bounds": {
+        "x": 16,
+        "y": 24,
+        "width": 20,
+        "height": 12
+      },
+      "vertices": [
+        {
+          "x": 16,
+          "y": 24
+        },
+        {
+          "x": 36,
+          "y": 24
+        },
+        {
+          "x": 16,
+          "y": 36
+        }
+      ],
+      "vertexCount": 3
+    }
+  ],
+  "drawOrder": [
+    {
+      "drawableId": "draw_body",
+      "drawOrder": 0
+    },
+    {
+      "drawableId": "draw_eye",
+      "drawOrder": 1
+    }
+  ]
+}

@@ -32,6 +32,9 @@ export const createEditorWorkflowState = (
     drawOrderEntries: adapter.baseDocument.model.drawOrder.entries,
     meshes: adapter.baseDocument.model.meshes.meshes,
     parts: adapter.baseDocument.model.graph.parts,
+    ...(adapter.baseDocument.model.editorState === undefined
+      ? {}
+      : { editorState: adapter.baseDocument.model.editorState }),
     sourceAssets: adapter.baseDocument.assets.sourceManifest.sourceAssets,
     ...(adapter.baseDocument.assets.textureAtlas === undefined
       ? {}
@@ -82,6 +85,9 @@ export const applyEditorWorkflowCommitResult = (
       ? {}
       : { textureAtlas: result.reloadedDocument.assets.textureAtlas }),
     parts: result.reloadedDocument.model.graph.parts,
+    ...(result.reloadedDocument.model.editorState === undefined
+      ? {}
+      : { editorState: result.reloadedDocument.model.editorState }),
     canvasSize: result.reloadedDocument.model.graph.canvasSize,
     ...(options.importedSourceSelection === undefined
       ? {}
@@ -116,6 +122,9 @@ export const projectLoadedEditorWorkflowState = (input: {
     drawOrderEntries: input.document.model.drawOrder.entries,
     meshes: input.document.model.meshes.meshes,
     parts: input.document.model.graph.parts,
+    ...(input.document.model.editorState === undefined
+      ? {}
+      : { editorState: input.document.model.editorState }),
     sourceAssets: input.document.assets.sourceManifest.sourceAssets,
     ...(input.document.assets.textureAtlas === undefined
       ? {}

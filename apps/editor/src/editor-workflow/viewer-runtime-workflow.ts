@@ -15,9 +15,11 @@ import {
   type EditorSessionAdapter
 } from "../editor-session/index.js";
 import {
+  createEditorStateFileFromLayerTreeDraft,
   projectViewerParameterOverrides,
   type EditorSemanticState
 } from "../editor-state/index.js";
+import { applyWorkflowPreviewTextureAssets } from "./preview-texture-application.js";
 
 export interface EditorViewerRuntimeProjection {
   readonly snapshotSummary: EditorViewerRuntimeSnapshotSummary;
@@ -130,7 +132,9 @@ export const projectViewerRuntimeProjection = (input: {
       }
     }
   });
-  const packageDocument = input.adapter.createPersistenceSnapshot().document;
+  const packageDocument = input.adapter.createPersistenceSnapshot({
+    editorState: createEditorStateFileFromLayerTreeDraft(input.state.layerTreeDraft)
+  }).document;
   const validationReport = validatePackageRuntime({
     packageDocument,
     runtimeSnapshot: evaluation.snapshot,
@@ -145,7 +149,7 @@ export const projectViewerRuntimeProjection = (input: {
     }),
     runtimeDiff: summarizePreviewRuntimeDiff(evaluation.runtimeDiff),
     validation: projectValidationSummary(validationReport),
-    previewProjection: projectEditorPreview({
+    previewProjection: applyWorkflowPreviewTextureAssets(projectEditorPreview({
       snapshot: evaluation.snapshot,
       runtimeDiff: evaluation.runtimeDiff,
       canvasSize: input.adapter.authoringSession.graph.canvasSize,
@@ -154,8 +158,9 @@ export const projectViewerRuntimeProjection = (input: {
           drawable.drawableId,
           drawable.displayName
         ])
-      )
-    })
+      ),
+      editorState: input.state.layerTreeDraft
+    }), input.state)!
   };
 };
 

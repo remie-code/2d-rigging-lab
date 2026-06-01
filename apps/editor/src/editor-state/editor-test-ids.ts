@@ -10,6 +10,16 @@ export const editorTestIds = {
   drawableCreateSubmit: "drawable.create",
   drawableList: "drawable.list",
   drawableLayerStatus: "drawable.layer.status",
+  layerTreePanel: "layerTree.panel",
+  layerTreeSummary: "layerTree.summary",
+  layerTreeCreatePartForm: "layerTree.part.create.form",
+  layerTreeCreatePartSubmit: "layerTree.part.create",
+  layerTreeUpdatePartForm: "layerTree.part.update.form",
+  layerTreeUpdatePartSubmit: "layerTree.part.update",
+  layerTreeAssignPartForm: "layerTree.drawable.part.form",
+  layerTreeAssignPartSubmit: "layerTree.drawable.part",
+  layerTreeAssignTextureForm: "layerTree.drawable.texture.form",
+  layerTreeAssignTextureSubmit: "layerTree.drawable.texture",
   meshVertexControls: "meshVertex.controls",
   meshVertexStatus: "meshVertex.status",
   sourceIntakePanel: "sourceIntake.panel",
@@ -91,6 +101,21 @@ export const createDrawableMoveUpTestId = (drawableId: string): string =>
 
 export const createDrawableMoveDownTestId = (drawableId: string): string =>
   `drawable.moveDown.${drawableId}`;
+
+export const createLayerTreePartGroupTestId = (partId: string): string =>
+  `layerTree.part.${partId}`;
+
+export const createLayerTreeDrawableRowTestId = (drawableId: string): string =>
+  `layerTree.drawable.${drawableId}`;
+
+export const createLayerTreeSelectDrawableTestId = (drawableId: string): string =>
+  `layerTree.select.${drawableId}`;
+
+export const createLayerTreeToggleLockTestId = (drawableId: string): string =>
+  `layerTree.lock.${drawableId}`;
+
+export const createLayerTreeToggleEditorHiddenTestId = (drawableId: string): string =>
+  `layerTree.editorHidden.${drawableId}`;
 
 export const createMeshVertexRowTestId = (meshId: string, vertexId: string): string =>
   `meshVertex.row.${meshId}.${vertexId}`;

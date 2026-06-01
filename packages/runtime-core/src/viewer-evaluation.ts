@@ -6,7 +6,9 @@ import {
   RuntimeResetReasonSchema,
   RuntimeStateArtifactRefSchema,
   RuntimeStateDtoSchema,
-  RuntimeSnapshotIdSchema
+  RuntimeSnapshotIdSchema,
+  PartIdSchema,
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
   RuntimeDiffDto,
@@ -27,6 +29,9 @@ import type { RuntimeSnapshotDto } from "./snapshot.js";
 import {
   EvaluatedMaskRelationSchema
 } from "./mask-relation-evidence.js";
+import {
+  EvaluatedPartSchema
+} from "./layer-tree-evidence.js";
 import {
   RuntimeEvaluationInputSchema
 } from "./runtime-input.js";
@@ -89,6 +94,18 @@ export const ViewerRuntimeEvaluationEvidenceSchema = z.object({
   ),
   targetIds: z.array(z.string()),
   maskRelationEvidence: z.array(EvaluatedMaskRelationSchema).default([]),
+  partHierarchyEvidence: z.array(EvaluatedPartSchema).default([]),
+  drawableLayerEvidence: z
+    .array(
+      z.object({
+        drawableId: DrawableIdSchema,
+        partId: PartIdSchema.optional(),
+        runtimeVisible: z.boolean(),
+        textureStatus: z.enum(["resolved", "missing", "not_materialized"]),
+        textureId: TextureIdSchema.optional()
+      })
+    )
+    .default([]),
   drawableOpacityEvidence: z
     .array(
       z.object({
@@ -279,6 +296,19 @@ const createViewerRuntimeEvaluationEvidence = (input: {
     maskRelationEvidence: [...input.snapshot.masks].sort((left, right) =>
       left.maskRelationId.localeCompare(right.maskRelationId)
     ),
+    partHierarchyEvidence: [...(input.snapshot.parts ?? [])].sort((left, right) =>
+      left.hierarchyPath.join("/").localeCompare(right.hierarchyPath.join("/")) ||
+      left.partId.localeCompare(right.partId)
+    ),
+    drawableLayerEvidence: input.snapshot.drawables
+      .map((drawable) => ({
+        drawableId: drawable.drawableId,
+        ...(drawable.partId === undefined ? {} : { partId: drawable.partId }),
+        runtimeVisible: drawable.visible,
+        textureStatus: drawable.texture?.status ?? "missing",
+        ...(drawable.texture?.textureId === undefined ? {} : { textureId: drawable.texture.textureId })
+      }))
+      .sort((left, right) => left.drawableId.localeCompare(right.drawableId)),
     drawableOpacityEvidence: input.snapshot.drawables
       .map((drawable) => ({
         drawableId: drawable.drawableId,

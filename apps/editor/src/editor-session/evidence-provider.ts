@@ -180,6 +180,14 @@ const createRuntimeEvidenceInput = (
       return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
       return createDrawableRuntimeEvidenceInput(input);
+    case "createPart":
+      return createPartRuntimeEvidenceInput(input);
+    case "updatePart":
+      return createUpdatePartRuntimeEvidenceInput(input);
+    case "setDrawablePart":
+      return createSetDrawablePartRuntimeEvidenceInput(input);
+    case "setDrawableTexture":
+      return createSetDrawableTextureRuntimeEvidenceInput(input);
     case "generateMesh":
       return createGenerateMeshRuntimeEvidenceInput(input);
     case "createParameter":
@@ -325,6 +333,112 @@ const createImportSplitPngSourceAssetEvidenceInput = (
 
   return {
     artifactLabel: "editor-import-split-png-source",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createPartRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createPart") {
+    throw new Error(`createPart evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...(input.request.payload.partId === undefined ? [] : [input.request.payload.partId]),
+    ...(input.request.payload.parentPartId === undefined ? [] : [input.request.payload.parentPartId])
+  ]);
+
+  return {
+    artifactLabel: "editor-create-part",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createUpdatePartRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "updatePart") {
+    throw new Error(`updatePart evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.partId,
+    ...(input.request.payload.parentPartId === undefined || input.request.payload.parentPartId === null
+      ? []
+      : [input.request.payload.parentPartId])
+  ]);
+
+  return {
+    artifactLabel: "editor-update-part",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetDrawablePartRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setDrawablePart") {
+    throw new Error(`setDrawablePart evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.drawableId,
+    input.request.payload.partId
+  ]);
+
+  return {
+    artifactLabel: "editor-set-drawable-part",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createSetDrawableTextureRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "setDrawableTexture") {
+    throw new Error(`setDrawableTexture evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.drawableId,
+    input.request.payload.textureId
+  ]);
+
+  return {
+    artifactLabel: "editor-set-drawable-texture",
     authoredParameterValues: {},
     targetIds,
     baseline: {

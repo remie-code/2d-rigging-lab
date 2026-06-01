@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "wave28-part-texture-layer-validation-report-summary-v1",
+  "validFinal": {
+    "reportId": "val_wave28_part_texture_layer_valid_final",
+    "profile": "viewer",
+    "status": "pass",
+    "highestSeverity": "info",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 0,
+      "blocking": 0
+    },
+    "runtimeSnapshotIds": [
+      "snap_wave28_part_texture_layer_10",
+      "snap_wave28_part_texture_layer_11"
+    ],
+    "checks": []
+  },
+  "invalidMissingPart": {
+    "reportId": "val_wave28_part_texture_layer_invalid_missing_part",
+    "profile": "strict",
+    "status": "fail",
+    "highestSeverity": "error",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 1,
+      "blocking": 0
+    },
+    "runtimeSnapshotIds": [],
+    "checks": [
+      {
+        "checkId": "ref.drawablePartMissing",
+        "status": "fail",
+        "severity": "error",
+        "targetPath": "/model/drawables/drawables/1/partId",
+        "evidence": [
+          "drawableId=draw_eye",
+          "partId=part_missing",
+          "partGraphMatch=missing"
+        ]
+      }
+    ]
+  },
+  "invalidMissingTexture": {
+    "reportId": "val_wave28_part_texture_layer_invalid_missing_texture",
+    "profile": "strict",
+    "status": "fail",
+    "highestSeverity": "error",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 1,
+      "blocking": 0
+    },
+    "runtimeSnapshotIds": [],
+    "checks": [
+      {
+        "checkId": "ref.drawableTextureMissing",
+        "status": "fail",
+        "severity": "error",
+        "targetPath": "/model/drawables/drawables/1/textureId",
+        "evidence": [
+          "drawableId=draw_eye",
+          "textureId=tex_eye_alt",
+          "runtimeVisibility=true",
+          "sourceAssetId=src_wave28_layers",
+          "sourceKind=generated-fixture-v1",
+          "textureAtlasPresent=true",
+          "textureAtlasMatch=missing"
+        ]
+      }
+    ]
+  }
+}

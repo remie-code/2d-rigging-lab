@@ -21,7 +21,7 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave25 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave28 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
 - A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
 - The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
@@ -52,6 +52,7 @@ discussion/implementation/
 - Wave 25 Minimum Rig Control v1 authoring/runtime slice completed on 2026-06-01 with project-defined `rotation2d` rig control creation and child binding, deterministic runtime hierarchy/evidence, validator diagnostics, parent-child and invalid-cycle fixtures, editor Preview / Viewer workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md), [waves/wave25/_map.md](waves/wave25/_map.md), and [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md).
 - Wave 26 Rig Control Keyform / Viewer Hardening completed on 2026-06-01 with `rigControl:angleDegrees` keyform operation/evidence, runtime local/world transform and affected-target evidence, validator/report hardening, editor keyform UX, Viewer / Runtime observation, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping warp lattice full evaluator, direct physics, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md), [waves/wave26/_map.md](waves/wave26/_map.md), and [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md).
 - Wave 27 Mask / Clipping / Opacity Authoring v1 completed on 2026-06-01 with semantic `setMaskRelation` operation support, runtime mask/opacity evidence, validator composition diagnostics, rights-clean contract fixtures, Editor Composition / Mask / Opacity UX, Viewer / Runtime semantic observation, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping pixel oracle, full renderer, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, and external dependencies out of scope. Evidence is recorded in [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md), [waves/wave27/_map.md](waves/wave27/_map.md), [reviews/wave27/_map.md](reviews/wave27/_map.md), and [reviews/wave27/wave27-clean-integration-review.md](reviews/wave27/wave27-clean-integration-review.md).
+- Wave 28 Part / Texture / Layer Tree Workflow v1 completed on 2026-06-01 with semantic part hierarchy, drawable part reassignment, existing texture assignment, editor layer selection / lock / editor-hide, Preview / Viewer evidence, validator diagnostics, rights-clean contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping full drag-and-drop layer tree, real image bytes, file picker, parser, image decode, archive, pixel oracle, full renderer, Cubism compatibility, and external dependencies out of scope. Evidence is recorded in [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md), [waves/wave28/_map.md](waves/wave28/_map.md), [reviews/wave28/_map.md](reviews/wave28/_map.md), and [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md).
 
 ## Key References
 
@@ -87,6 +88,7 @@ discussion/implementation/
 | [orchestration/wave25-plan.md](orchestration/wave25-plan.md) | Wave 25 Minimum Rig Control v1 authoring/runtime slice dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave26-plan.md](orchestration/wave26-plan.md) | Wave 26 Rig Control Keyform / Viewer Hardening dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave27-plan.md](orchestration/wave27-plan.md) | Wave 27 Mask / Clipping / Opacity Authoring v1 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave28-plan.md](orchestration/wave28-plan.md) | Wave 28 Part / Texture / Layer Tree Workflow v1 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -121,6 +123,8 @@ discussion/implementation/
 | [waves/wave26/_map.md](waves/wave26/_map.md) | Wave 26 domain completion reports, clean integration review, and final report |
 | [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md) | Wave 27 final report for Mask / Clipping / Opacity Authoring v1 |
 | [waves/wave27/_map.md](waves/wave27/_map.md) | Wave 27 domain completion reports, review map links, final verification, and final report |
+| [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md) | Wave 28 final report for Part / Texture / Layer Tree Workflow v1 |
+| [waves/wave28/_map.md](waves/wave28/_map.md) | Wave 28 domain completion reports, remediation/rerun links, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -149,6 +153,8 @@ discussion/implementation/
 | [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md) | Wave 26 clean integration review |
 | [reviews/wave27/_map.md](reviews/wave27/_map.md) | Wave 27 domain review reports and clean integration review |
 | [reviews/wave27/wave27-clean-integration-review.md](reviews/wave27/wave27-clean-integration-review.md) | Wave 27 clean integration review |
+| [reviews/wave28/_map.md](reviews/wave28/_map.md) | Wave 28 domain review reports, remediation/rerun reviews, and clean integration review placeholder |
+| [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md) | Wave 28 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

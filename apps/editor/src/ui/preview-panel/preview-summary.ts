@@ -17,6 +17,8 @@ export const createPreviewSummary = (
   summary.append(
     createFact("Snapshot", preview.sourceSnapshotId),
     createFact("Drawables", `${preview.visibleDrawableCount} visible / ${preview.drawableCount} total`),
+    createFact("Parts", createPartLabel(preview)),
+    createFact("Layer State", createLayerStateLabel(preview)),
     createFact("Samples", `${preview.keyformSamples.totalCount} keyform sample${preview.keyformSamples.totalCount === 1 ? "" : "s"}`),
     createFact("Textures", createTextureRenderingLabel(preview)),
     createFact("Diagnostics", createDiagnosticLabel(preview)),
@@ -24,6 +26,29 @@ export const createPreviewSummary = (
   );
 
   return summary;
+};
+
+const createPartLabel = (preview: EditorPreviewProjectionDto): string => {
+  const parts = preview.parts ?? [];
+  if (parts.length === 0) {
+    return "0 part groups";
+  }
+
+  const drawableMembershipCount = parts.reduce((count, part) => count + part.drawableIds.length, 0);
+  return `${parts.length} part group${parts.length === 1 ? "" : "s"} / ${drawableMembershipCount} drawable memberships`;
+};
+
+const createLayerStateLabel = (preview: EditorPreviewProjectionDto): string => {
+  const states = preview.drawables.flatMap((drawable) =>
+    drawable.layerState === undefined ? [] : [drawable.layerState]
+  );
+  const selectedCount = states.filter((state) => state.selected).length;
+  const lockedCount = states.filter((state) => state.locked).length;
+  const editorHiddenCount = states.filter((state) => state.editorHidden).length;
+  const textureUnresolvedCount = states.filter((state) => state.textureUnresolved).length;
+  const textureBackedCount = states.filter((state) => state.textureBacked).length;
+
+  return `${selectedCount} selected / ${lockedCount} locked / ${editorHiddenCount} editor-hidden / ${textureUnresolvedCount} texture unresolved / ${textureBackedCount} texture-backed`;
 };
 
 const createFact = (termText: string, detailText: string): HTMLElement => {

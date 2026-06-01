@@ -38,6 +38,34 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitCreateDrawablePreset(command);
           render();
         },
+        onCommitCreatePart(command) {
+          workflow.commitCreatePart(command);
+          render();
+        },
+        onCommitUpdatePart(command) {
+          workflow.commitUpdatePart(command);
+          render();
+        },
+        onCommitSetDrawablePart(command) {
+          workflow.commitSetDrawablePart(command);
+          render();
+        },
+        onCommitSetDrawableTexture(command) {
+          workflow.commitSetDrawableTexture(command);
+          render();
+        },
+        onSelectDrawableLayer(drawableId) {
+          workflow.selectDrawableLayer(drawableId);
+          render();
+        },
+        onToggleDrawableLayerLock(drawableId) {
+          workflow.toggleDrawableLayerLock(drawableId);
+          render();
+        },
+        onToggleDrawableEditorHidden(drawableId) {
+          workflow.toggleDrawableEditorHidden(drawableId);
+          render();
+        },
         onToggleDrawableRuntimeVisibility(drawableId) {
           workflow.toggleDrawableRuntimeVisibility(drawableId);
           render();

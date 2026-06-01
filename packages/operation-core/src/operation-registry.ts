@@ -9,6 +9,7 @@ import { addKeyformGrid2dOperationHandler } from "./operations/add-keyform-grid2
 import { bindRigControlChildOperationHandler } from "./operations/bind-rig-control-child.js";
 import { createDrawableOperationHandler } from "./operations/create-drawable.js";
 import { createDynamicsGroupOperationHandler } from "./operations/create-dynamics-group.js";
+import { createPartOperationHandler } from "./operations/create-part.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { createRotation2dRigControlOperationHandler } from "./operations/create-rotation2d-rig-control.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
@@ -16,9 +17,12 @@ import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-so
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
+import { setDrawablePartOperationHandler } from "./operations/set-drawable-part.js";
+import { setDrawableTextureOperationHandler } from "./operations/set-drawable-texture.js";
 import { setMaskRelationOperationHandler } from "./operations/set-mask-relation.js";
 import { setRightsMetadataOperationHandler } from "./operations/set-rights-metadata.js";
 import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
+import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
 
 export interface OperationApplyOutcome {
@@ -45,6 +49,10 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [importPsdSourceAssetOperationHandler.operationType, importPsdSourceAssetOperationHandler],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
+  [createPartOperationHandler.operationType, createPartOperationHandler],
+  [updatePartOperationHandler.operationType, updatePartOperationHandler],
+  [setDrawablePartOperationHandler.operationType, setDrawablePartOperationHandler],
+  [setDrawableTextureOperationHandler.operationType, setDrawableTextureOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],
   [moveMeshVertexOperationHandler.operationType, moveMeshVertexOperationHandler],
   [createParameterOperationHandler.operationType, createParameterOperationHandler],

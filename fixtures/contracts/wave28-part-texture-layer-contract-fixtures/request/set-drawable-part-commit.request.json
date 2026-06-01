@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave28_set_drawable_part",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 2,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-004"
+    ],
+    "relatedScenarios": [
+      "SC-PART-001"
+    ]
+  },
+  "operationType": "setDrawablePart",
+  "payload": {
+    "drawableId": "draw_eye",
+    "partId": "part_face"
+  }
+}

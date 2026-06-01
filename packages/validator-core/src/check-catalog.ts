@@ -104,6 +104,62 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Drawable texture reference cannot be resolved."
   },
   {
+    checkId: "ref.drawablePartMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Drawable part reference cannot be resolved."
+  },
+  {
+    checkId: "part.parentMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part parent reference cannot be resolved."
+  },
+  {
+    checkId: "part.childMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part child reference cannot be resolved."
+  },
+  {
+    checkId: "part.parentChildMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part parentPartId and childPartIds references disagree."
+  },
+  {
+    checkId: "part.cycle",
+    phase: "reference",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part hierarchy contains a cycle."
+  },
+  {
+    checkId: "part.drawableMembershipMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Drawable partId and part drawableIds membership disagree."
+  },
+  {
+    checkId: "editorState.staleReference",
+    phase: "reference",
+    defaultSeverity: "warning",
+    profiles: ["editorIncremental", "viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-011", "AC-MVP-013"],
+    description: "Editor-only selection, lock, or hide state references a package target that no longer exists."
+  },
+  {
     checkId: "ref.texturePreviewMissing",
     phase: "reference",
     defaultSeverity: "error",

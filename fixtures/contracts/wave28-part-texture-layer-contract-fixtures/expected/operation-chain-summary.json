@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "wave28-part-texture-layer-operation-chain-summary-v1",
+  "operations": [
+    {
+      "operationId": "op_wave28_create_part_face",
+      "operationType": "createPart",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "part:part_face"
+      ],
+      "logEntryTargetIds": [
+        "part_face"
+      ],
+      "changedTargets": [
+        "package:pkg_wave28_part_texture_layer",
+        "part:part_face"
+      ],
+      "changedFieldPaths": [
+        "/model/graph/parts",
+        "/model/graph/stableOrder",
+        "/model/graph/parts/part_face"
+      ],
+      "packageRevisionAfter": 1,
+      "authoringRevisionAfter": 1,
+      "operationLogLength": 1
+    },
+    {
+      "operationId": "op_wave28_update_part_face",
+      "operationType": "updatePart",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "part:part_face",
+        "part:part_root"
+      ],
+      "logEntryTargetIds": [
+        "part_face",
+        "part_root"
+      ],
+      "changedTargets": [
+        "part:part_face",
+        "part:part_root"
+      ],
+      "changedFieldPaths": [
+        "/model/graph/parts/part_face/displayName",
+        "/model/graph/parts/part_face/parentPartId",
+        "/model/graph/parts/part_root/childPartIds"
+      ],
+      "packageRevisionAfter": 2,
+      "authoringRevisionAfter": 2,
+      "operationLogLength": 2
+    },
+    {
+      "operationId": "op_wave28_set_drawable_part",
+      "operationType": "setDrawablePart",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "drawable:draw_eye",
+        "part:part_face",
+        "part:part_root"
+      ],
+      "logEntryTargetIds": [
+        "draw_eye",
+        "part_face",
+        "part_root"
+      ],
+      "changedTargets": [
+        "drawable:draw_eye",
+        "part:part_root",
+        "part:part_face"
+      ],
+      "changedFieldPaths": [
+        "/model/drawables/draw_eye/partId",
+        "/model/graph/parts/part_root/drawableIds",
+        "/model/graph/parts/part_face/drawableIds"
+      ],
+      "packageRevisionAfter": 3,
+      "authoringRevisionAfter": 3,
+      "operationLogLength": 3
+    },
+    {
+      "operationId": "op_wave28_set_drawable_texture",
+      "operationType": "setDrawableTexture",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "drawable:draw_eye",
+        "texture:tex_eye_alt"
+      ],
+      "logEntryTargetIds": [
+        "draw_eye",
+        "tex_eye_alt"
+      ],
+      "changedTargets": [
+        "drawable:draw_eye"
+      ],
+      "changedFieldPaths": [
+        "/model/drawables/draw_eye/textureId"
+      ],
+      "packageRevisionAfter": 4,
+      "authoringRevisionAfter": 4,
+      "operationLogLength": 4
+    }
+  ],
+  "finalOperationLogLength": 4
+}
