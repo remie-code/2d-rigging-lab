@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave29-mesh-edit-contract-fixtures",
+  "title": "Wave 29 canvas mesh edit contract",
+  "coversAC": [
+    "AC-MVP-005",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MESH-001",
+    "SC-MESH-002",
+    "SC-MVP-003",
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/create-drawable-commit.request.json",
+    "request/generate-mesh-commit.request.json",
+    "request/move-mesh-vertices-commit.request.json",
+    "runtime/baseline-runtime-graph.json",
+    "runtime/final-runtime-graph.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-chain-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageMaterialization",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeViewerEvidence",
+      "path": "expected/runtime-viewer-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorSelectionEvidence",
+      "path": "expected/editor-selection-evidence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "invalidCases": [
+    {
+      "caseId": "invalid-mesh-topology",
+      "expectedCheckIds": [
+        "mesh.vertexStableIdsLengthMismatch",
+        "mesh.uvCountMismatch",
+        "mesh.triangleIndexOutOfRange",
+        "mesh.degenerateTriangle"
+      ]
+    }
+  ],
+  "rightsClean": {
+    "source": "text-only generated fixture geometry and package-local semantic source metadata",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  },
+  "runtimeOracle": "semantic-runtime-and-viewer-evidence-only; no pixel renderer oracle",
+  "editorSelectionBoundary": "editor-only semantic state; does not claim runtime rendering semantics",
+  "updateRule": "requires-contract-review"
+}

@@ -1,5 +1,6 @@
 import {
   createInitialAuthoringRevision,
+  toPackageDocument,
   toRuntimeGraph
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
@@ -27,11 +28,14 @@ describe("moveMeshVertex operation handler", () => {
     expect(getOperationHandler("moveMeshVertex")).toBe(moveMeshVertexOperationHandler);
   });
 
-  it("dry-runs vertex delta updates on a cloned candidate session", () => {
+  it("dry-runs multi-vertex delta updates on a cloned candidate session", () => {
     const session = createFixtureSession();
     const request = createMoveMeshVertexRequest({
       dryRun: true,
-      vertexDeltas: [{ vertexId: "vtx_body_1", delta: { x: 3, y: -1 } }]
+      vertexDeltas: [
+        { vertexId: "vtx_body_1", delta: { x: 3, y: -1 } },
+        { vertexId: "vtx_body_2", delta: { x: 1, y: 2 } }
+      ]
     });
 
     const outcome = moveMeshVertexOperationHandler.dryRun(session, request, getRequestOperationId(request));
@@ -39,8 +43,17 @@ describe("moveMeshVertex operation handler", () => {
     expect(outcome.result.status).toBe("dry_run");
     expect(outcome.candidateSession).not.toBe(session);
     expect(session.graph.meshes[0]?.vertices[1]).toEqual({ x: 2, y: 0 });
+    expect(session.graph.meshes[0]?.vertices[2]).toEqual({ x: 0, y: 1 });
     expect(outcome.candidateSession.graph.meshes[0]?.vertices[1]).toEqual({ x: 5, y: -1 });
-    expect(outcome.candidateSession.graph.meshes[0]?.bounds).toEqual({ x: 0, y: -1, width: 5, height: 2 });
+    expect(outcome.candidateSession.graph.meshes[0]?.vertices[2]).toEqual({ x: 1, y: 3 });
+    expect(outcome.candidateSession.graph.meshes[0]?.bounds).toEqual({ x: 0, y: -1, width: 5, height: 4 });
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
+      { kind: "mesh", id: "mesh_body" },
+      { kind: "drawable", id: "draw_body" },
+      { kind: "part", id: "part_root" },
+      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" },
+      { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices/2" }
+    ]);
     expect(outcome.result.modelDiff?.changed[0]).toMatchObject({
       target: { kind: "mesh", id: "mesh_body" },
       fields: [
@@ -53,9 +66,14 @@ describe("moveMeshVertex operation handler", () => {
           after: { x: 5, y: -1 }
         },
         {
+          path: "/model/meshes/mesh_body/vertices/2",
+          before: { x: 0, y: 1 },
+          after: { x: 1, y: 3 }
+        },
+        {
           path: "/model/meshes/mesh_body/bounds",
           before: { x: 0, y: 0, width: 2, height: 1 },
-          after: { x: 0, y: -1, width: 5, height: 2 }
+          after: { x: 0, y: -1, width: 5, height: 4 }
         }
       ]
     });
@@ -73,12 +91,26 @@ describe("moveMeshVertex operation handler", () => {
         }
       ]
     });
+    expect(outcome.result.modelDiff?.changed[2]).toEqual({
+      target: {
+        kind: "vertex",
+        id: "vtx_body_2",
+        path: "/model/meshes/mesh_body/vertices/2"
+      },
+      fields: [
+        {
+          path: "/model/meshes/mesh_body/vertices/2",
+          before: { x: 0, y: 1 },
+          after: { x: 1, y: 3 }
+        }
+      ]
+    });
     expect(toRuntimeGraph(outcome.candidateSession).drawables.get(DrawableIdSchema.parse("draw_body"))).toMatchObject({
-      bounds: { x: 0, y: -1, width: 5, height: 2 },
+      bounds: { x: 0, y: -1, width: 5, height: 4 },
       vertices: [
         { x: 0, y: 0 },
         { x: 5, y: -1 },
-        { x: 0, y: 1 }
+        { x: 1, y: 3 }
       ]
     });
   });
@@ -106,13 +138,60 @@ describe("moveMeshVertex operation handler", () => {
     expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_2"]);
     expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
       { kind: "mesh", id: "mesh_body" },
-      { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices" }
+      { kind: "drawable", id: "draw_body" },
+      { kind: "part", id: "part_root" },
+      { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices/2" }
     ]);
     expect(outcome.result.modelDiff?.changed[1]?.target).toEqual({
       kind: "vertex",
       id: "vtx_body_2",
       path: "/model/meshes/mesh_body/vertices/2"
     });
+  });
+
+  it("commits multi-vertex translate and materializes package mesh coordinates", () => {
+    const session = createFixtureSession();
+    const baseDocument = createBaseDocument(session);
+    const operationCore = createOperationCore({
+      now: () => new Date("2026-06-01T00:00:00.000Z")
+    });
+
+    const outcome = operationCore.commitOperation(
+      session,
+      createMoveMeshVertexRequest({
+        dryRun: false,
+        vertexDeltas: [
+          { vertexId: "vtx_body_1", delta: { x: 1, y: 1 } },
+          { vertexId: "vtx_body_2", delta: { x: -1, y: 2 } }
+        ]
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_1", "vtx_body_2"]);
+    expect(outcome.result.modelDiff?.changed.map((change) => change.target)).toEqual([
+      { kind: "mesh", id: "mesh_body" },
+      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" },
+      { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices/2" }
+    ]);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "mesh", id: "mesh_body" },
+      { kind: "drawable", id: "draw_body" },
+      { kind: "part", id: "part_root" },
+      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" },
+      { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices/2" }
+    ]);
+
+    const materialized = toPackageDocument(session, baseDocument);
+    const mesh = materialized.model.meshes.meshes.find((candidate) => candidate.meshId === "mesh_body");
+    expect(materialized.manifest.packageRevision).toBe(1);
+    expect(mesh?.vertices).toEqual([
+      { x: 0, y: 0 },
+      { x: 3, y: 1 },
+      { x: -1, y: 3 }
+    ]);
+    expect(mesh?.vertexStableIds).toEqual(["vtx_body_0", "vtx_body_1", "vtx_body_2"]);
+    expect(mesh?.bounds).toEqual({ x: -1, y: 0, width: 4, height: 3 });
   });
 
   it("rejects missing mesh, missing vertex, duplicate vertex, and empty deltas deterministically", () => {
@@ -180,6 +259,38 @@ describe("moveMeshVertex operation handler", () => {
     expect(session.authoringRevision).toBe(0);
   });
 
+  it("rejects caller-supplied locked drawable and part targets without editor-state dependency", () => {
+    const session = createFixtureSession();
+    const operationCore = createOperationCore();
+
+    const locked = operationCore.commitOperation(
+      session,
+      createMoveMeshVertexRequest({
+        dryRun: false,
+        vertexDeltas: [{ vertexId: "vtx_body_1", delta: { x: 1, y: 0 } }],
+        lockedTargetIds: ["draw_body", "part_root"]
+      })
+    );
+
+    expect(locked.result.status).toBe("rejected");
+    expect(locked.result.diagnostics.map((diagnostic) => ({
+      checkId: diagnostic.checkId,
+      target: diagnostic.target
+    }))).toEqual([
+      {
+        checkId: "operation.moveMeshVertex.lockedTarget",
+        target: { kind: "drawable", id: "draw_body" }
+      },
+      {
+        checkId: "operation.moveMeshVertex.lockedTarget",
+        target: { kind: "part", id: "part_root" }
+      }
+    ]);
+    expect(locked.operationLogLength).toBe(0);
+    expect(session.graph.meshes[0]?.vertices[1]).toEqual({ x: 2, y: 0 });
+    expect(session.authoringRevision).toBe(0);
+  });
+
   it("rejects no-op deltas and keyform-scoped payloads in this wave", () => {
     const session = createFixtureSession();
     const noOp = moveMeshVertexOperationHandler.commit(
@@ -230,6 +341,7 @@ const createMoveMeshVertexRequest = (options: {
     readonly parameterId: string;
     readonly keyValue: number;
   };
+  readonly lockedTargetIds?: readonly string[];
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -250,6 +362,7 @@ const createMoveMeshVertexRequest = (options: {
               keyValue: options.keyformScope.keyValue
             }
           }),
+      ...(options.lockedTargetIds === undefined ? {} : { lockedTargetIds: options.lockedTargetIds }),
       intent: "test vertex delta"
     }
   });
@@ -329,3 +442,57 @@ const createFixtureSession = (): AuthoringSession => ({
     rightsRecords: []
   }
 });
+
+const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPackageDocument>[1] =>
+  ({
+    manifest: {
+      schemaVersion: "open-model-package-manifest-v1",
+      packageId: session.packageIdentity.packageId,
+      packageDisplayName: session.packageIdentity.packageDisplayName,
+      formatVersion: session.packageIdentity.formatVersion,
+      packageRevision: 0,
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      schemaVersions: { manifest: "open-model-package-manifest-v1" },
+      evaluatorVersions: {},
+      modelFiles: {
+        graph: "model/graph.json",
+        drawables: "model/drawables.json",
+        meshes: "model/meshes.json",
+        parameters: "model/parameters.json",
+        keyforms: "model/keyforms.json",
+        rigControls: "model/rig-controls.json",
+        dynamics: "model/dynamics.json",
+        masks: "model/masks.json",
+        drawOrder: "model/draw-order.json"
+      },
+      assetIndex: "assets/sources/source-manifest.json",
+      operationLog: "operations/log.jsonl",
+      rightsSummary: { status: "cleared" },
+      provenanceSummary: { sourceAssetCount: 0 },
+      packageStableOrderVersion: "stable-order-v1"
+    },
+    model: {
+      graph: {
+        schemaVersion: "model-graph-v1",
+        coordinateSystem: session.graph.coordinateSystem,
+        canvasSize: session.graph.canvasSize,
+        parts: session.graph.parts,
+        rigControlRootIds: session.graph.rigControlRootIds,
+        stableOrder: session.graph.stableOrder
+      },
+      drawables: { schemaVersion: "drawables-file-v1", drawables: session.graph.drawables },
+      meshes: { schemaVersion: "meshes-file-v1", meshes: session.graph.meshes },
+      parameters: { schemaVersion: "parameters-file-v1", parameters: session.graph.parameters },
+      keyforms: { schemaVersion: "keyforms-file-v1", keyformSets: session.graph.keyformSets },
+      rigControls: { schemaVersion: "rig-controls-file-v1", rigControls: session.graph.rigControls },
+      dynamics: { schemaVersion: "dynamics-file-v1", dynamicsGroups: session.graph.dynamicsGroups },
+      masks: { schemaVersion: "masks-file-v1", masks: session.graph.masks },
+      drawOrder: { schemaVersion: "draw-order-file-v1", entries: session.graph.drawOrder }
+    },
+    assets: {
+      sourceManifest: { schemaVersion: "source-manifest-v1", sourceAssets: [] },
+      provenance: { schemaVersion: "provenance-file-v1", records: session.graph.provenanceRecords },
+      rights: { schemaVersion: "rights-file-v1", records: session.graph.rightsRecords }
+    }
+  }) as Parameters<typeof toPackageDocument>[1];

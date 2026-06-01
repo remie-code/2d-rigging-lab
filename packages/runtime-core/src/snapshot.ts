@@ -29,6 +29,11 @@ import {
   createEvaluatedMaskRelations,
   EvaluatedMaskRelationSchema
 } from "./mask-relation-evidence.js";
+import {
+  createEvaluatedDrawableMeshEvidence,
+  EvaluatedDrawableMeshEvidenceSchema,
+  shouldEmitDrawableMeshEvidence
+} from "./mesh-evidence.js";
 import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
@@ -84,6 +89,7 @@ export const EvaluatedDrawableSchema = z.object({
   vertexCount: z.number().int().nonnegative(),
   vertexHash: z.string(),
   vertices: z.array(Vec2DtoSchema).optional(),
+  mesh: EvaluatedDrawableMeshEvidenceSchema.optional(),
   diagnostics: z.array(DiagnosticSchema).default([])
 });
 export type EvaluatedDrawableDto = z.infer<typeof EvaluatedDrawableSchema>;
@@ -182,7 +188,7 @@ export const createRuntimeSnapshot = (input: {
     samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind === "rigControl"),
     hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
   });
-  const drawables = finalizeDrawablesForDetail(rigControlEvaluation.drawables, input.options);
+  const drawables = finalizeDrawablesForDetail(rigControlEvaluation.drawables, input.options, input.graph);
 
   return RuntimeSnapshotSchema.parse({
     schemaVersion: "runtime-snapshot-v1",
@@ -375,13 +381,35 @@ const applySamplesInEvaluationOrder = (input: {
 
 const finalizeDrawablesForDetail = (
   drawables: readonly EvaluatedDrawableDto[],
-  options: RuntimeEvaluationOptionsDto
+  options: RuntimeEvaluationOptionsDto,
+  graph: NormalizedRuntimeGraph
 ): readonly EvaluatedDrawableDto[] => {
+  const drawablesWithMeshEvidence = drawables.map((drawable) => {
+    const graphDrawable = graph.drawables.get(drawable.drawableId);
+    if (graphDrawable === undefined || !shouldEmitDrawableMeshEvidence(graphDrawable)) {
+      return drawable;
+    }
+
+    return {
+      ...drawable,
+      mesh: createEvaluatedDrawableMeshEvidence({
+        drawable: {
+          ...graphDrawable,
+          bounds: drawable.bounds,
+          vertexHash: drawable.vertexHash,
+          vertexCount: drawable.vertexCount,
+          ...(drawable.vertices === undefined ? {} : { vertices: drawable.vertices })
+        },
+        includeVertices: options.snapshotDetail === "full" && drawable.vertices !== undefined
+      })
+    };
+  });
+
   if (options.snapshotDetail === "full") {
-    return drawables;
+    return drawablesWithMeshEvidence;
   }
 
-  return drawables.map((drawable) => {
+  return drawablesWithMeshEvidence.map((drawable) => {
     const { vertices, ...withoutVertices } = drawable;
     void vertices;
     return {

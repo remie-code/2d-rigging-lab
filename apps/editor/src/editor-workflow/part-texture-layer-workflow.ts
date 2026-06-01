@@ -10,6 +10,7 @@ import {
   selectDrawableLayerInEditorState,
   toggleDrawableEditorHiddenInEditorState,
   toggleDrawableLayerLockInEditorState,
+  reprojectMeshEditState,
   type EditorSemanticState
 } from "../editor-state/index.js";
 import { applyEditorWorkflowCommitResult } from "./workflow-state-projection.js";
@@ -172,7 +173,9 @@ export const selectWorkflowDrawableLayer = (input: {
   }
 
   return {
-    state: selectDrawableLayerInEditorState(input.state, input.drawableId),
+    state: reprojectLayerDraftMeshEdit(
+      selectDrawableLayerInEditorState(input.state, input.drawableId)
+    ),
     result: {
       status: "updated",
       drawableId: input.drawableId
@@ -195,7 +198,9 @@ export const toggleWorkflowDrawableLayerLock = (input: {
   }
 
   return {
-    state: toggleDrawableLayerLockInEditorState(input.state, input.drawableId),
+    state: reprojectLayerDraftMeshEdit(
+      toggleDrawableLayerLockInEditorState(input.state, input.drawableId)
+    ),
     result: {
       status: "updated",
       drawableId: input.drawableId
@@ -218,7 +223,9 @@ export const toggleWorkflowDrawableEditorHidden = (input: {
   }
 
   return {
-    state: toggleDrawableEditorHiddenInEditorState(input.state, input.drawableId),
+    state: reprojectLayerDraftMeshEdit(
+      toggleDrawableEditorHiddenInEditorState(input.state, input.drawableId)
+    ),
     result: {
       status: "updated",
       drawableId: input.drawableId
@@ -416,6 +423,15 @@ const createDrawableLayerMoveEntries = (
 
 const hasDrawable = (state: EditorSemanticState, drawableId: string): boolean =>
   state.drawables.some((drawable) => drawable.drawableId === drawableId);
+
+const reprojectLayerDraftMeshEdit = (state: EditorSemanticState): EditorSemanticState => ({
+  ...state,
+  meshEdit: reprojectMeshEditState(state.meshEdit, {
+    layerTreeDraft: state.layerTreeDraft,
+    selectedVertexIds: state.meshEdit.selectedVertexIds,
+    drawables: state.drawables
+  })
+});
 
 const isDrawableLocked = (state: EditorSemanticState, drawableId: string): boolean =>
   state.layerTreeDraft.lockedIds.includes(drawableId);

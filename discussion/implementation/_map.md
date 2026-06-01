@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave28 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave29 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 29 `canvas-mesh-editing-v1` completed on 2026-06-02 with bounded canvas/SVG mesh vertex selection, multi-vertex translate, semantic Preview / Viewer / Runtime mesh evidence, validator topology diagnostics, contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean review path registration while keeping topology/UV editor, full renderer, pixel oracle, real image bytes, file picker/parser/archive, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
 - A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
 - The Wave 0 package naming follow-up was resolved after Wave 0 by aligning active development conventions to `contracts` / `validator-core`.
@@ -59,7 +60,7 @@ discussion/implementation/
 | Path | Purpose |
 |---|---|
 | [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
-| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave25, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
+| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave29, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -89,6 +90,7 @@ discussion/implementation/
 | [orchestration/wave26-plan.md](orchestration/wave26-plan.md) | Wave 26 Rig Control Keyform / Viewer Hardening dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave27-plan.md](orchestration/wave27-plan.md) | Wave 27 Mask / Clipping / Opacity Authoring v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave28-plan.md](orchestration/wave28-plan.md) | Wave 28 Part / Texture / Layer Tree Workflow v1 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave29-plan.md](orchestration/wave29-plan.md) | Wave 29 Canvas Mesh Editing v1 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -125,6 +127,8 @@ discussion/implementation/
 | [waves/wave27/_map.md](waves/wave27/_map.md) | Wave 27 domain completion reports, review map links, final verification, and final report |
 | [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md) | Wave 28 final report for Part / Texture / Layer Tree Workflow v1 |
 | [waves/wave28/_map.md](waves/wave28/_map.md) | Wave 28 domain completion reports, remediation/rerun links, review map links, final verification, and final report |
+| [waves/wave29/wave29-final-report.md](waves/wave29/wave29-final-report.md) | Wave 29 final report for Canvas Mesh Editing v1 |
+| [waves/wave29/_map.md](waves/wave29/_map.md) | Wave 29 domain completion reports, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -155,6 +159,8 @@ discussion/implementation/
 | [reviews/wave27/wave27-clean-integration-review.md](reviews/wave27/wave27-clean-integration-review.md) | Wave 27 clean integration review |
 | [reviews/wave28/_map.md](reviews/wave28/_map.md) | Wave 28 domain review reports, remediation/rerun reviews, and clean integration review placeholder |
 | [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md) | Wave 28 clean integration review |
+| [reviews/wave29/_map.md](reviews/wave29/_map.md) | Wave 29 domain review reports and clean integration review path |
+| [reviews/wave29/wave29-clean-integration-review.md](reviews/wave29/wave29-clean-integration-review.md) | Wave 29 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

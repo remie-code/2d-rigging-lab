@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave29_move_mesh_vertices",
+  "actor": "human",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 2,
+  "idempotencyKey": "fixture-wave29-move-mesh-vertices",
+  "operationType": "moveMeshVertex",
+  "payload": {
+    "meshId": "mesh_wave29_mesh",
+    "vertexDeltas": [
+      {
+        "vertexId": "vtx_wave29_mesh_0_1",
+        "delta": {
+          "x": 2,
+          "y": -4
+        }
+      },
+      {
+        "vertexId": "vtx_wave29_mesh_1_0",
+        "delta": {
+          "x": -6,
+          "y": 5
+        }
+      }
+    ],
+    "intent": "Translate two selected generated mesh vertices for Wave29 contract evidence."
+  }
+}

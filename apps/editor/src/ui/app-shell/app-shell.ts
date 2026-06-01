@@ -1,7 +1,8 @@
 import {
   editorTestIds,
   type EditorSemanticState,
-  type EditorWorkflowViewModel
+  type EditorWorkflowViewModel,
+  type MeshCanvasVertexSelectionCommand
 } from "../../editor-state/index.js";
 import { applyEditorPreviewTextureAssets } from "../../editor-preview/texture-preview-resolution.js";
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
@@ -75,6 +76,9 @@ export interface EditorAppShellOptions {
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: EditorDrawableLayerMoveDirection) => void;
   readonly onNudgeMeshVertex: (command: EditorMeshVertexNudgeCommand) => void;
+  readonly onSelectMeshCanvasVertex: (command: MeshCanvasVertexSelectionCommand) => void;
+  readonly onNudgeMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
+  readonly onDragMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
   readonly onCommitCreateDynamicsGroup: (command: EditorDynamicsCreateCommand) => void;
   readonly onCommitUpdateDynamicsGroup: (command: EditorUpdateDynamicsGroupCommand) => void;
   readonly onCommitCreateRotation2dRigControl: (
@@ -171,7 +175,10 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onCommitCreateDrawable: options.onCommitCreateDrawablePreset,
     onToggleDrawableRuntimeVisibility: options.onToggleDrawableRuntimeVisibility,
     onMoveDrawableLayer: options.onMoveDrawableLayer,
-    onNudgeMeshVertex: options.onNudgeMeshVertex
+    onNudgeMeshVertex: options.onNudgeMeshVertex,
+    onSelectMeshCanvasVertex: options.onSelectMeshCanvasVertex,
+    onNudgeMeshCanvasSelection: options.onNudgeMeshCanvasSelection,
+    onDragMeshCanvasSelection: options.onDragMeshCanvasSelection
   });
   const layerTreePanel = createLayerTreePanel({
     viewModel: options.viewModel.layerTree,

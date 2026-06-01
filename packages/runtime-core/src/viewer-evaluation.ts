@@ -30,6 +30,10 @@ import {
   EvaluatedMaskRelationSchema
 } from "./mask-relation-evidence.js";
 import {
+  createRuntimeMeshEditEvidence,
+  RuntimeMeshEditEvidenceSchema
+} from "./mesh-evidence.js";
+import {
   EvaluatedPartSchema
 } from "./layer-tree-evidence.js";
 import {
@@ -130,6 +134,7 @@ export const ViewerRuntimeEvaluationEvidenceSchema = z.object({
       })
     )
     .default([]),
+  meshEditEvidence: RuntimeMeshEditEvidenceSchema.optional(),
   runtimeDiffEquivalent: z.boolean(),
   runtimeEvaluationContext: RuntimeEvaluationContextSchema
 });
@@ -221,6 +226,7 @@ export const evaluateViewerRuntimeSnapshot = (
       parameterOverrides: request.parameterOverrides,
       targetIds: request.targetIds,
       runtimeComparison,
+      comparisonPolicy: options.epsilonPolicy,
       context
     })
   };
@@ -279,6 +285,7 @@ const createViewerRuntimeEvaluationEvidence = (input: {
   readonly parameterOverrides: ViewerParameterOverrideDto;
   readonly targetIds: readonly string[];
   readonly runtimeComparison: RuntimeComparisonResult;
+  readonly comparisonPolicy: RuntimeEvaluationOptionsDto["epsilonPolicy"];
   readonly context: z.infer<typeof RuntimeEvaluationContextSchema>;
 }): ViewerRuntimeEvaluationEvidenceDto =>
   ViewerRuntimeEvaluationEvidenceSchema.parse({
@@ -319,6 +326,11 @@ const createViewerRuntimeEvaluationEvidence = (input: {
     drawableRuntimeStateChanges: [...input.runtimeComparison.diff.drawableRuntimeStateChanges].sort((left, right) =>
       left.drawableId.localeCompare(right.drawableId)
     ),
+    meshEditEvidence: createRuntimeMeshEditEvidence({
+      baselineSnapshot: input.baselineSnapshot,
+      candidateSnapshot: input.snapshot,
+      comparisonPolicy: input.comparisonPolicy
+    }),
     runtimeDiffEquivalent: input.runtimeComparison.equivalent,
     runtimeEvaluationContext: input.context
   });

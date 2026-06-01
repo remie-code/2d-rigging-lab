@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "wave29-mesh-edit-editor-selection-evidence-summary-v1",
+  "source": "fixture-editor-semantic-state",
+  "runtimeRenderingSemanticsClaim": "none",
+  "activeTool": "meshEdit",
+  "selectedVertexRefs": [
+    {
+      "meshId": "mesh_wave29_mesh",
+      "vertexStableId": "vtx_wave29_mesh_0_1",
+      "vertexIndex": 1,
+      "vertexRef": "mesh_wave29_mesh.vtx_wave29_mesh_0_1",
+      "selected": true
+    },
+    {
+      "meshId": "mesh_wave29_mesh",
+      "vertexStableId": "vtx_wave29_mesh_1_0",
+      "vertexIndex": 2,
+      "vertexRef": "mesh_wave29_mesh.vtx_wave29_mesh_1_0",
+      "selected": true
+    }
+  ],
+  "lockedIds": [],
+  "editorHiddenIds": [],
+  "selectionMatchesMaterializedMesh": true,
+  "runtimeEvidenceCarriesSelectionState": false
+}

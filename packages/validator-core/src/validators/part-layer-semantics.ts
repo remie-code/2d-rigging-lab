@@ -60,6 +60,7 @@ const createKnownEditorTargetIds = (packageDocument: PackageDocumentDto): Readon
     ...packageDocument.model.drawables.drawables.map((drawable) => drawable.drawableId),
     ...packageDocument.model.drawables.drawables.map((drawable) => drawable.meshId),
     ...packageDocument.model.meshes.meshes.map((mesh) => mesh.meshId),
+    ...packageDocument.model.meshes.meshes.flatMap((mesh) => mesh.vertexStableIds),
     ...packageDocument.model.parameters.parameters.map((parameter) => parameter.parameterId),
     ...packageDocument.model.keyforms.keyformSets.map((keyformSet) => keyformSet.keyformSetId),
     ...packageDocument.model.rigControls.rigControls.map((rigControl) => rigControl.rigControlId),

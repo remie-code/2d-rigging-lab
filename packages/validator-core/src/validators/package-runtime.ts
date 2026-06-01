@@ -14,6 +14,7 @@ import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
 import { validateDynamicsSemantics } from "./dynamics-semantic.js";
 import { validateMaskCompositionSemantics } from "./mask-composition.js";
+import { validateMeshSemantics } from "./mesh-semantics.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePartLayerSemantics } from "./part-layer-semantics.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
@@ -45,7 +46,11 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
       : validateRuntimeSnapshot(input.runtimeSnapshot, packageResult.packageId);
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
-    : collectPackageReferenceChecks(packageResult.packageDocument, runtimeResult?.snapshot);
+    : collectPackageReferenceChecks(
+      packageResult.packageDocument,
+      runtimeResult?.snapshot,
+      shouldRequireViewerEvidence(input)
+    );
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()
     : validateViewerRuntimeEvidence({
@@ -88,7 +93,11 @@ export const validatePackageRuntimeWithBinaryAssets = async (
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : [
-      ...collectPackageReferenceChecks(packageResult.packageDocument, runtimeResult?.snapshot),
+      ...collectPackageReferenceChecks(
+        packageResult.packageDocument,
+        runtimeResult?.snapshot,
+        shouldRequireViewerEvidence(input)
+      ),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
         binaryFileSet: input.binaryFileSet ?? [],
@@ -128,12 +137,18 @@ export const validatePackageRuntimeWithBinaryAssets = async (
 
 const collectPackageReferenceChecks = (
   packageDocument: PackageDocumentDto,
-  runtimeSnapshot?: RuntimeSnapshotDto
+  runtimeSnapshot: RuntimeSnapshotDto | undefined,
+  requireRuntimeEvidence = false
 ) => [
   ...validatePsdSourceProfiles(packageDocument),
   ...validateSourceAssetRightsAndProvenance(packageDocument),
   ...validateDrawableProvenanceReferences(packageDocument),
   ...validateDrawableReferences(packageDocument),
+  ...validateMeshSemantics({
+    packageDocument,
+    ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot }),
+    requireRuntimeEvidence
+  }),
   ...validatePartLayerSemantics(packageDocument),
   ...validateTextureAssetReferences(packageDocument),
   ...validateMaskCompositionSemantics(packageDocument, runtimeSnapshot),

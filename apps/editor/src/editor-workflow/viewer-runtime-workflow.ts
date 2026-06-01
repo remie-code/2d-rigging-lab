@@ -15,7 +15,7 @@ import {
   type EditorSessionAdapter
 } from "../editor-session/index.js";
 import {
-  createEditorStateFileFromLayerTreeDraft,
+  createEditorStateFileFromEditorState,
   projectViewerParameterOverrides,
   type EditorSemanticState
 } from "../editor-state/index.js";
@@ -133,7 +133,7 @@ export const projectViewerRuntimeProjection = (input: {
     }
   });
   const packageDocument = input.adapter.createPersistenceSnapshot({
-    editorState: createEditorStateFileFromLayerTreeDraft(input.state.layerTreeDraft)
+    editorState: createEditorStateFileFromEditorState(input.state)
   }).document;
   const validationReport = validatePackageRuntime({
     packageDocument,
@@ -159,7 +159,10 @@ export const projectViewerRuntimeProjection = (input: {
           drawable.displayName
         ])
       ),
-      editorState: input.state.layerTreeDraft
+      editorState: createEditorStateFileFromEditorState(input.state),
+      ...(evaluation.evidence.meshEditEvidence === undefined
+        ? {}
+        : { meshEditEvidence: evaluation.evidence.meshEditEvidence })
     }), input.state)!
   };
 };

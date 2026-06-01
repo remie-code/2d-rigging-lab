@@ -99,6 +99,7 @@ export const MoveMeshVertexPayloadSchema = z.object({
       keyValue: z.number().finite()
     })
     .optional(),
+  lockedTargetIds: LockedTargetIdsSchema,
   intent: z.string().max(500)
 });
 export type MoveMeshVertexPayloadDto = z.infer<typeof MoveMeshVertexPayloadSchema>;

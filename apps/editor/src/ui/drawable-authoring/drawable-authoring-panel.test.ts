@@ -13,6 +13,8 @@ import {
   createDrawableMoveUpTestId,
   createDrawableRowTestId,
   createDrawableVisibilityToggleTestId,
+  createMeshCanvasNudgeButtonTestId,
+  createMeshCanvasVertexTestId,
   createMeshVertexNudgeButtonTestId,
   createMeshVertexRowTestId,
   editorTestIds,
@@ -63,7 +65,10 @@ describe("drawable authoring panel", () => {
       {
         onToggleDrawableRuntimeVisibility: (drawableId) => calls.push(["toggle", drawableId]),
         onMoveDrawableLayer: (drawableId, direction) => calls.push(["move", drawableId, direction]),
-        onNudgeMeshVertex() {}
+        onNudgeMeshVertex() {},
+        onSelectMeshCanvasVertex() {},
+        onNudgeMeshCanvasSelection() {},
+        onDragMeshCanvasSelection() {}
       }
     );
 
@@ -101,7 +106,10 @@ describe("drawable authoring panel", () => {
       {
         onToggleDrawableRuntimeVisibility() {},
         onMoveDrawableLayer() {},
-        onNudgeMeshVertex: (command) => calls.push(command)
+        onNudgeMeshVertex: (command) => calls.push(command),
+        onSelectMeshCanvasVertex() {},
+        onNudgeMeshCanvasSelection() {},
+        onDragMeshCanvasSelection() {}
       }
     );
 
@@ -128,6 +136,126 @@ describe("drawable authoring panel", () => {
         delta: { x: 1, y: 0 },
         intent: "Nudge vtx_body_0 right by 1 canvas unit."
       }
+    ]);
+  });
+
+  it("renders a semantic mesh canvas, calls selection, and disables selected-vertex nudge when empty", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState(),
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility() {},
+        onMoveDrawableLayer() {},
+        onNudgeMeshVertex() {},
+        onSelectMeshCanvasVertex: (command) => calls.push(["select", command]),
+        onNudgeMeshCanvasSelection: (delta) => calls.push(["canvasNudge", delta]),
+        onDragMeshCanvasSelection() {}
+      }
+    );
+
+    expect(findByTestId(panel, editorTestIds.meshCanvasStatus)?.textContent).toContain(
+      "0 selected vertices"
+    );
+    expect(findByTestId(panel, createMeshCanvasNudgeButtonTestId("right"))?.disabled).toBe(true);
+    expect(
+      findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_0"))?.getAttribute(
+        "aria-label"
+      )
+    ).toContain("Mesh vertex vtx_body_0");
+
+    findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_0"))?.emit("click");
+
+    expect(calls).toEqual([
+      ["select", { vertexId: "vtx_body_0", mode: "replace" }]
+    ]);
+  });
+
+  it("calls selected-vertex canvas nudge callback when selection is active", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState({ selectedVertexIds: ["vtx_body_0"] }),
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility() {},
+        onMoveDrawableLayer() {},
+        onNudgeMeshVertex() {},
+        onSelectMeshCanvasVertex() {},
+        onNudgeMeshCanvasSelection: (delta) => calls.push(["canvasNudge", delta]),
+        onDragMeshCanvasSelection() {}
+      }
+    );
+
+    expect(findByTestId(panel, editorTestIds.meshCanvasStatus)?.textContent).toContain(
+      "1 selected vertex"
+    );
+    expect(findByTestId(panel, createMeshCanvasNudgeButtonTestId("right"))?.disabled).toBe(false);
+
+    findByTestId(panel, createMeshCanvasNudgeButtonTestId("right"))?.emit("click");
+
+    expect(calls).toEqual([
+      ["canvasNudge", { x: 1, y: 0 }]
+    ]);
+  });
+
+  it("wires mesh canvas modifier selection modes from SVG vertex clicks", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState(),
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility() {},
+        onMoveDrawableLayer() {},
+        onNudgeMeshVertex() {},
+        onSelectMeshCanvasVertex: (command) => calls.push(["select", command]),
+        onNudgeMeshCanvasSelection() {},
+        onDragMeshCanvasSelection() {}
+      }
+    );
+
+    findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_0"))?.emit(
+      "click",
+      { shiftKey: true }
+    );
+    findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_1"))?.emit(
+      "click",
+      { ctrlKey: true }
+    );
+    findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_2"))?.emit(
+      "click",
+      { metaKey: true }
+    );
+
+    expect(calls).toEqual([
+      ["select", { vertexId: "vtx_body_0", mode: "add" }],
+      ["select", { vertexId: "vtx_body_1", mode: "toggle" }],
+      ["select", { vertexId: "vtx_body_2", mode: "toggle" }]
+    ]);
+  });
+
+  it("wires selected SVG pointer drag to the canvas drag callback", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState({ selectedVertexIds: ["vtx_body_0"] }),
+      () => {},
+      {
+        onToggleDrawableRuntimeVisibility() {},
+        onMoveDrawableLayer() {},
+        onNudgeMeshVertex() {},
+        onSelectMeshCanvasVertex() {},
+        onNudgeMeshCanvasSelection() {},
+        onDragMeshCanvasSelection: (delta) => calls.push(["drag", delta])
+      }
+    );
+    const vertex = findByTestId(panel, createMeshCanvasVertexTestId("mesh_body", "vtx_body_0"));
+
+    expect(vertex?.getAttribute("data-selected")).toBe("true");
+
+    vertex?.emit("pointerdown", { clientX: 10, clientY: 20 });
+    vertex?.emit("pointerup", { clientX: 16, clientY: 17 });
+
+    expect(calls).toEqual([
+      ["drag", { x: 6, y: -3 }]
     ]);
   });
 
@@ -194,11 +322,19 @@ const createPanel = (
   onSubmit: Parameters<typeof createDrawableAuthoringPanel>[0]["onCommitCreateDrawable"] = () => {},
   callbacks: Pick<
     Parameters<typeof createDrawableAuthoringPanel>[0],
-    "onToggleDrawableRuntimeVisibility" | "onMoveDrawableLayer" | "onNudgeMeshVertex"
+    | "onToggleDrawableRuntimeVisibility"
+    | "onMoveDrawableLayer"
+    | "onNudgeMeshVertex"
+    | "onSelectMeshCanvasVertex"
+    | "onNudgeMeshCanvasSelection"
+    | "onDragMeshCanvasSelection"
   > = {
     onToggleDrawableRuntimeVisibility() {},
     onMoveDrawableLayer() {},
-    onNudgeMeshVertex() {}
+    onNudgeMeshVertex() {},
+    onSelectMeshCanvasVertex() {},
+    onNudgeMeshCanvasSelection() {},
+    onDragMeshCanvasSelection() {}
   }
 ): TestElement =>
   createDrawableAuthoringPanel({
@@ -211,6 +347,7 @@ const createPanel = (
 const createDrawableState = (
   options: {
     readonly includeSecondDrawable?: boolean;
+    readonly selectedVertexIds?: readonly string[];
   } = {}
 ) =>
   projectLoadedPackageState({
@@ -223,6 +360,17 @@ const createDrawableState = (
       packageRevision: 0,
       authoringRevision: 0
     },
+    ...(options.selectedVertexIds === undefined
+      ? {}
+      : {
+          editorState: {
+            schemaVersion: "editor-state-v1",
+            selection: [...options.selectedVertexIds],
+            lockedIds: [],
+            editorHiddenIds: [],
+            activeTool: "meshEdit"
+          }
+        }),
     sourceAssets: [
       {
         sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
@@ -359,11 +507,25 @@ class TestFormData {
   }
 }
 
+type TestDomEvent = {
+  readonly shiftKey?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly clientX?: number;
+  readonly clientY?: number;
+  preventDefault(): void;
+};
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
-  readonly listeners = new Map<string, Array<(event: { preventDefault(): void }) => void>>();
+  readonly listeners = new Map<string, Array<(event: TestDomEvent) => void>>();
+  readonly classList = {
+    add: (...classNames: string[]) => {
+      this.className = [...new Set([...this.className.split(" ").filter(Boolean), ...classNames])].join(" ");
+    }
+  };
   parentElement: TestElement | null = null;
   className = "";
   id = "";
@@ -414,14 +576,17 @@ class TestElement {
     return this.attributes.get(name) ?? null;
   }
 
-  addEventListener(type: string, listener: (event: { preventDefault(): void }) => void): void {
+  addEventListener(type: string, listener: (event: TestDomEvent) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
-  emit(type: string): void {
-    const event = { preventDefault() {} };
+  emit(type: string, event: Partial<TestDomEvent> = {}): void {
+    const testEvent: TestDomEvent = {
+      preventDefault() {},
+      ...event
+    };
     for (const listener of this.listeners.get(type) ?? []) {
-      listener(event);
+      listener(testEvent);
     }
   }
 
@@ -451,6 +616,9 @@ class TestElement {
 const installTestDocument = (): void => {
   const document = {
     createElement(tagName: string) {
+      return new TestElement(tagName);
+    },
+    createElementNS(_namespace: string, tagName: string) {
       return new TestElement(tagName);
     }
   };

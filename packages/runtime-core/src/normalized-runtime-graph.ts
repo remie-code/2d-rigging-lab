@@ -94,9 +94,14 @@ export interface NormalizedDrawable {
   readonly baseDrawOrder: number;
   readonly bounds: RectDto;
   readonly vertices?: readonly Vec2Dto[];
+  readonly uvs?: readonly Vec2Dto[];
+  readonly triangles?: readonly NormalizedMeshTriangle[];
+  readonly vertexStableIds?: readonly string[];
   readonly vertexCount: number;
   readonly vertexHash?: string;
 }
+
+export type NormalizedMeshTriangle = readonly [number, number, number];
 
 export interface NormalizedDrawOrderEntry {
   readonly drawableId: DrawableId;

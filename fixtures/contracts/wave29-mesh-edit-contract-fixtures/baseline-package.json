@@ -1,0 +1,153 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_wave29_mesh_edit_contract",
+    "packageDisplayName": "Wave 29 Mesh Edit Contract Fixture",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-06-01T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 128,
+        "height": 128
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": []
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "part_root"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": []
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": []
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": []
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_wave29_generated",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/wave29-mesh-source.json",
+          "contentHash": "sha256:wave29-generated-source",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_wave29_mesh",
+              "sourceAssetId": "src_wave29_generated",
+              "originalName": "Wave29 Mesh",
+              "normalizedName": "wave29_mesh",
+              "groupPath": [
+                "Root"
+              ],
+              "bounds": {
+                "x": 48,
+                "y": 16,
+                "width": 24,
+                "height": 24
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": []
+            }
+          ],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_wave29_generated_source",
+          "assetId": "src_wave29_generated",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/wave29-mesh-source.json",
+          "contentHash": "sha256:wave29-generated-source",
+          "creator": "wave29-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_wave29_generated",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

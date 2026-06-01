@@ -12,7 +12,10 @@ import type {
   TextureId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
-import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
+import type {
+  EvaluatedMeshTopologySummaryDto,
+  RuntimeSnapshotDto
+} from "@private-2d-rigging-lab/runtime-core";
 
 export interface EditorPreviewCanvasSizeDto {
   readonly width: number;
@@ -85,7 +88,28 @@ export interface EditorPreviewDrawableLayerStateDto {
 export interface EditorPreviewDrawableGeometryDto {
   readonly vertexCount: number;
   readonly vertexHash: string;
+  readonly topology?: EvaluatedMeshTopologySummaryDto;
   readonly polygonPoints?: readonly Vec2Dto[];
+  readonly vertices?: readonly EditorPreviewMeshVertexDto[];
+  readonly movedVertexRefs?: readonly string[];
+}
+
+export interface EditorPreviewMeshVertexDto {
+  readonly vertexIndex: number;
+  readonly vertexStableId?: string;
+  readonly vertexRef: string;
+  readonly position: Vec2Dto;
+  readonly state: EditorPreviewMeshVertexStateDto;
+}
+
+export interface EditorPreviewMeshVertexStateDto {
+  readonly selected: boolean;
+  readonly moved: boolean;
+  readonly locked: boolean;
+  readonly editorHidden: boolean;
+  readonly runtimeVisible: boolean;
+  readonly runtimeHidden: boolean;
+  readonly textureBacked: boolean;
 }
 
 export interface EditorPreviewDrawableTextureDto {

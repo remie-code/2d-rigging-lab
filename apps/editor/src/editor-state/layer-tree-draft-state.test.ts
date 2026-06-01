@@ -32,6 +32,21 @@ describe("layer tree draft state", () => {
     });
   });
 
+  it("keeps mesh-edit vertex selection out of layer tree selection", () => {
+    expect(
+      createEmptyLayerTreeDraftState({
+        selection: ["vtx_body_0", "vtx_body_2"],
+        lockedIds: ["draw_body"],
+        editorHiddenIds: [],
+        activeTool: "meshEdit"
+      })
+    ).toEqual({
+      selection: [],
+      lockedIds: ["draw_body"],
+      editorHiddenIds: []
+    });
+  });
+
   it("updates drawable selection, lock, and editor-only hidden state without changing runtime visibility", () => {
     const loaded = projectLoadedPackageState({
       identity: {

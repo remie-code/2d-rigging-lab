@@ -432,6 +432,38 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Mesh triangle index references a missing vertex."
   },
   {
+    checkId: "mesh.degenerateTriangle",
+    phase: "mesh_semantic",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005"],
+    description: "Mesh triangle has repeated vertices or zero area."
+  },
+  {
+    checkId: "mesh.vertexStableIdsLengthMismatch",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh vertexStableIds length does not match vertices length."
+  },
+  {
+    checkId: "mesh.uvCountMismatch",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh UV count does not match vertices length."
+  },
+  {
+    checkId: "mesh.runtimeEvidenceMissing",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-012", "AC-MVP-013"],
+    description: "Package mesh cannot be matched to runtime or viewer snapshot evidence."
+  },
+  {
     checkId: "rigControl.cycle",
     phase: "rigControl_semantic",
     defaultSeverity: "blocking",

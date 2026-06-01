@@ -121,6 +121,33 @@ const RectFixtureSchema = z.object({
   height: z.number().finite().nonnegative()
 });
 
+const MeshTopologyFixtureSchema = z.object({
+  vertexCount: z.number().int().nonnegative(),
+  stableVertexIdCount: z.number().int().nonnegative(),
+  uvCount: z.number().int().nonnegative(),
+  triangleCount: z.number().int().nonnegative(),
+  triangleIndexCount: z.number().int().nonnegative(),
+  hasStableVertexIds: z.boolean(),
+  hasUvProjection: z.boolean(),
+  hasTriangles: z.boolean()
+});
+
+const MeshVertexFixtureSchema = z.object({
+  vertexIndex: z.number().int().nonnegative(),
+  vertexStableId: z.string().optional(),
+  vertexRef: z.string().min(1),
+  position: Vec2FixtureSchema
+});
+
+const DrawableMeshEvidenceFixtureSchema = z.object({
+  drawableId: z.string(),
+  meshId: z.string(),
+  bounds: RectFixtureSchema,
+  vertexHash: z.string(),
+  topology: MeshTopologyFixtureSchema,
+  vertices: z.array(MeshVertexFixtureSchema)
+});
+
 const RuntimeGrid2dFixtureManifestSchema = z.object({
   schemaVersion: z.literal("contract-fixture-manifest-v1"),
   fixtureId: z.literal("runtime-grid2d-keyform-evidence"),
@@ -217,6 +244,7 @@ const ExpectedGrid2dEvidenceSummarySchema = z.object({
       vertexCount: z.number().int().nonnegative(),
       vertexHash: z.string(),
       vertices: z.array(Vec2FixtureSchema),
+      mesh: DrawableMeshEvidenceFixtureSchema,
       diagnostics: z.array(z.unknown())
     }),
     drawList: z.array(z.string()),
@@ -237,6 +265,7 @@ const ExpectedGrid2dEvidenceSummarySchema = z.object({
       vertexCount: z.number().int().nonnegative(),
       vertexHash: z.string(),
       vertices: z.array(Vec2FixtureSchema),
+      mesh: DrawableMeshEvidenceFixtureSchema,
       diagnostics: z.array(z.unknown())
     }),
     drawList: z.array(z.string()),

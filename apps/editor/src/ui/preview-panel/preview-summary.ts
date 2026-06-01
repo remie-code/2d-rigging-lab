@@ -19,6 +19,7 @@ export const createPreviewSummary = (
     createFact("Drawables", `${preview.visibleDrawableCount} visible / ${preview.drawableCount} total`),
     createFact("Parts", createPartLabel(preview)),
     createFact("Layer State", createLayerStateLabel(preview)),
+    createFact("Mesh", createMeshEvidenceLabel(preview)),
     createFact("Samples", `${preview.keyformSamples.totalCount} keyform sample${preview.keyformSamples.totalCount === 1 ? "" : "s"}`),
     createFact("Textures", createTextureRenderingLabel(preview)),
     createFact("Diagnostics", createDiagnosticLabel(preview)),
@@ -49,6 +50,25 @@ const createLayerStateLabel = (preview: EditorPreviewProjectionDto): string => {
   const textureBackedCount = states.filter((state) => state.textureBacked).length;
 
   return `${selectedCount} selected / ${lockedCount} locked / ${editorHiddenCount} editor-hidden / ${textureUnresolvedCount} texture unresolved / ${textureBackedCount} texture-backed`;
+};
+
+const createMeshEvidenceLabel = (preview: EditorPreviewProjectionDto): string => {
+  const meshDrawables = preview.drawables.filter((drawable) =>
+    drawable.geometry.vertices !== undefined || drawable.geometry.topology !== undefined
+  );
+  const vertices = meshDrawables.flatMap((drawable) => drawable.geometry.vertices ?? []);
+  const selectedCount = vertices.filter((vertex) => vertex.state.selected).length;
+  const movedCount = new Set(
+    meshDrawables.flatMap((drawable) =>
+      drawable.geometry.movedVertexRefs ??
+      (drawable.geometry.vertices ?? [])
+        .filter((vertex) => vertex.state.moved)
+        .map((vertex) => vertex.vertexRef)
+    )
+  ).size;
+  const topologyCount = meshDrawables.filter((drawable) => drawable.geometry.topology !== undefined).length;
+
+  return `${meshDrawables.length} drawable mesh evidence / ${selectedCount} selected vertices / ${movedCount} moved vertices / ${topologyCount} topology summaries`;
 };
 
 const createFact = (termText: string, detailText: string): HTMLElement => {

@@ -22,6 +22,9 @@ export const editorTestIds = {
   layerTreeAssignTextureSubmit: "layerTree.drawable.texture",
   meshVertexControls: "meshVertex.controls",
   meshVertexStatus: "meshVertex.status",
+  meshCanvasEditor: "meshCanvas.editor",
+  meshCanvasSurface: "meshCanvas.surface",
+  meshCanvasStatus: "meshCanvas.status",
   sourceIntakePanel: "sourceIntake.panel",
   sourceIntakeForm: "sourceIntake.form",
   sourceIntakeSubmit: "sourceIntake.confirm",
@@ -126,6 +129,13 @@ export const createMeshVertexNudgeButtonTestId = (
   direction: "left" | "right" | "up" | "down"
 ): string => `meshVertex.nudge.${meshId}.${vertexId}.${direction}`;
 
+export const createMeshCanvasVertexTestId = (meshId: string, vertexId: string): string =>
+  `meshCanvas.vertex.${meshId}.${vertexId}`;
+
+export const createMeshCanvasNudgeButtonTestId = (
+  direction: "left" | "right" | "up" | "down"
+): string => `meshCanvas.nudge.${direction}`;
+
 export const createSourceIntakeLayerRowTestId = (sourceLayerId: string): string =>
   `sourceIntake.layer.${sourceLayerId}`;
 
@@ -137,6 +147,9 @@ export const createPreviewParameterControlTestId = (parameterId: string): string
 
 export const createViewerParameterControlTestId = (parameterId: string): string =>
   `viewer.parameter.${parameterId}`;
+
+export const createViewerRuntimeMeshEvidenceRowTestId = (drawableId: string): string =>
+  `viewerRuntime.meshEvidence.${drawableId}`;
 
 export const createDynamicsGroupUpdateTestId = (dynamicsGroupId: string): string =>
   `dynamics.update.${dynamicsGroupId}`;

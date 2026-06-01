@@ -3,10 +3,12 @@ import {
   editorTestIds,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
+  type MeshCanvasVertexSelectionCommand,
   type MeshVertexNudgeViewModelCommand
 } from "../../editor-state/index.js";
 import { createDrawableAuthoringForm } from "./drawable-authoring-form.js";
 import { createDrawableList } from "./drawable-list.js";
+import { createMeshCanvasEditor } from "./mesh-canvas-editor.js";
 import { createMeshVertexControls } from "./mesh-vertex-controls.js";
 
 export interface DrawableAuthoringPanelOptions {
@@ -16,6 +18,9 @@ export interface DrawableAuthoringPanelOptions {
   readonly onToggleDrawableRuntimeVisibility: (drawableId: string) => void;
   readonly onMoveDrawableLayer: (drawableId: string, direction: "up" | "down") => void;
   readonly onNudgeMeshVertex: (command: MeshVertexNudgeViewModelCommand) => void;
+  readonly onSelectMeshCanvasVertex: (command: MeshCanvasVertexSelectionCommand) => void;
+  readonly onNudgeMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
+  readonly onDragMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
 }
 
 export const createDrawableAuthoringPanel = (
@@ -45,6 +50,12 @@ export const createDrawableAuthoringPanel = (
     }),
     createResultSummary(options),
     createLayerStatus(options),
+    createMeshCanvasEditor({
+      viewModel: options.viewModel.meshEdit,
+      onSelectVertex: options.onSelectMeshCanvasVertex,
+      onNudgeSelection: options.onNudgeMeshCanvasSelection,
+      onDragSelection: options.onDragMeshCanvasSelection
+    }),
     createMeshVertexControls({
       viewModel: options.viewModel.meshEdit,
       onNudgeVertex: options.onNudgeMeshVertex

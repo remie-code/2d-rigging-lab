@@ -3,6 +3,7 @@ import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import {
   buildRuntimeDiff,
   createInitialRuntimeState,
+  createRuntimeMeshEditEvidence,
   defaultRuntimeEvaluationOptions,
   evaluateRuntimeFrame,
   evaluateRuntimeSequence
@@ -17,7 +18,7 @@ import { projectEditorPreview } from "../editor-preview/preview-projection.js";
 import type { EditorSessionAdapter } from "../editor-session/index.js";
 import {
   createEmptyDynamicsPreviewState,
-  createEditorStateFileFromLayerTreeDraft,
+  createEditorStateFileFromEditorState,
   projectDynamicsPreviewState,
   projectPreviewAuthoredParameterValues,
   type EditorSemanticState
@@ -255,7 +256,7 @@ const evaluateWorkflowDynamicsPreview = (input: {
   });
   const validationReport = validatePackageRuntime({
     packageDocument: input.adapter.createPersistenceSnapshot({
-      editorState: createEditorStateFileFromLayerTreeDraft(input.state.layerTreeDraft)
+      editorState: createEditorStateFileFromEditorState(input.state)
     }).document,
     runtimeSnapshot: evaluated.snapshot,
     profile: "editorIncremental",
@@ -343,9 +344,15 @@ const projectWorkflowPreviewProjection = (
     context
   );
 
+  const runtimeDiff = buildRuntimeDiff({
+    baselineSnapshot: baseline.snapshot,
+    candidateSnapshot: current.snapshot
+  });
+
   return applyWorkflowPreviewTextureAssets(projectEditorPreview({
     snapshot: current.snapshot,
-    runtimeDiff: buildRuntimeDiff({
+    runtimeDiff,
+    meshEditEvidence: createRuntimeMeshEditEvidence({
       baselineSnapshot: baseline.snapshot,
       candidateSnapshot: current.snapshot
     }),
@@ -356,7 +363,7 @@ const projectWorkflowPreviewProjection = (
         drawable.displayName
       ])
     ),
-    editorState: state.layerTreeDraft
+    editorState: createEditorStateFileFromEditorState(state)
   }), state);
 };
 

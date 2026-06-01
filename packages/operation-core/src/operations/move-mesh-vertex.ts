@@ -1,6 +1,7 @@
 import {
   AuthoringMutationError,
   createDryRunAuthoringSession,
+  getDrawableById,
   getMeshById,
   moveMeshVertices
 } from "@private-2d-rigging-lab/authoring-core";
@@ -11,9 +12,11 @@ import type {
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
   DiagnosticDto,
+  DrawableId,
   MeshId,
   ModelDiffDto,
   OperationId,
+  PartId,
   TargetRefDto,
   VertexId
 } from "@private-2d-rigging-lab/contracts";
@@ -27,6 +30,7 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
+import { createLockedTargetDiagnostics } from "./locked-targets.js";
 
 type MoveMeshVertexRequest = Extract<OperationRequestDto, { operationType: "moveMeshVertex" }>;
 type MeshDto = MoveMeshVerticesMutationResult["meshBefore"];
@@ -68,8 +72,8 @@ const applyMoveMeshVertex = (
   }
 
   const targetIds = createTargetIds(request);
-  const checkedTargets = createCheckedTargets(request);
-  const preconditionDiagnostics = evaluateMoveMeshVertexPreconditions(session, request);
+  const checkedTargets = createCheckedTargets(session, request);
+  const preconditionDiagnostics = evaluateMoveMeshVertexPreconditions(session, request, checkedTargets);
 
   if (preconditionDiagnostics.length > 0) {
     return {
@@ -115,9 +119,16 @@ const applyMoveMeshVertex = (
 
 const evaluateMoveMeshVertexPreconditions = (
   session: AuthoringSession,
-  request: MoveMeshVertexRequest
+  request: MoveMeshVertexRequest,
+  checkedTargets: readonly TargetRefDto[]
 ): DiagnosticDto[] => {
-  const diagnostics: DiagnosticDto[] = [];
+  const diagnostics: DiagnosticDto[] = [
+    ...createLockedTargetDiagnostics({
+      operationType: "moveMeshVertex",
+      lockedTargetIds: request.payload.lockedTargetIds,
+      targets: checkedTargets
+    })
+  ];
 
   if (request.payload.keyformScope !== undefined) {
     diagnostics.push(
@@ -305,19 +316,63 @@ const createTargetIds = (request: MoveMeshVertexRequest): readonly string[] =>
     ...request.payload.vertexDeltas.map((vertexDelta) => vertexDelta.vertexId)
   ]);
 
-const createCheckedTargets = (request: MoveMeshVertexRequest): readonly TargetRefDto[] =>
-  uniqueTargetRefs([
-    createMeshTarget(request.payload.meshId),
-    ...request.payload.vertexDeltas.map((vertexDelta) => ({
-      kind: "vertex" as const,
-      id: vertexDelta.vertexId,
-      path: `/model/meshes/${request.payload.meshId}/vertices`
-    }))
-  ]);
+const createCheckedTargets = (
+  session: AuthoringSession,
+  request: MoveMeshVertexRequest
+): readonly TargetRefDto[] => {
+  const mesh = getMeshById(session.graph, request.payload.meshId);
+  const vertexIndexById = mesh === undefined ? undefined : createVertexIndexById(mesh);
+  const refs: TargetRefDto[] = [createMeshTarget(request.payload.meshId)];
+
+  if (mesh !== undefined) {
+    refs.push(createDrawableTarget(mesh.drawableId));
+    const drawable = getDrawableById(session.graph, mesh.drawableId);
+    if (drawable !== undefined) {
+      refs.push(createPartTarget(drawable.partId));
+    }
+  }
+
+  refs.push(
+    ...request.payload.vertexDeltas.map((vertexDelta) => {
+      const vertexIndex = vertexIndexById?.get(vertexDelta.vertexId);
+
+      return createVertexTarget({
+        meshId: request.payload.meshId,
+        vertexId: vertexDelta.vertexId,
+        ...(vertexIndex === undefined ? {} : { vertexIndex })
+      });
+    })
+  );
+
+  return uniqueTargetRefs(refs);
+};
 
 const createMeshTarget = (meshId: MeshId | string): TargetRefDto => ({
   kind: "mesh",
   id: meshId
+});
+
+const createDrawableTarget = (drawableId: DrawableId | string): TargetRefDto => ({
+  kind: "drawable",
+  id: drawableId
+});
+
+const createPartTarget = (partId: PartId | string): TargetRefDto => ({
+  kind: "part",
+  id: partId
+});
+
+const createVertexTarget = (input: {
+  readonly meshId: MeshId | string;
+  readonly vertexId: VertexId | string;
+  readonly vertexIndex?: number;
+}): TargetRefDto => ({
+  kind: "vertex",
+  id: input.vertexId,
+  path:
+    input.vertexIndex === undefined
+      ? `/model/meshes/${input.meshId}/vertexStableIds`
+      : `/model/meshes/${input.meshId}/vertices/${input.vertexIndex}`
 });
 
 const createVertexIndexById = (mesh: MeshDto): ReadonlyMap<VertexId, number> => {

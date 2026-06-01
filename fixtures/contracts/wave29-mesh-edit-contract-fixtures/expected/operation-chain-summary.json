@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "wave29-mesh-edit-operation-chain-summary-v1",
+  "operations": [
+    {
+      "operationId": "op_wave29_create_drawable",
+      "operationType": "createDrawable",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "drawable:draw_wave29_mesh",
+        "mesh:mesh_wave29_mesh",
+        "part:part_root",
+        "sourceAsset:src_wave29_generated"
+      ],
+      "logEntryTargetIds": [
+        "draw_wave29_mesh",
+        "mesh_wave29_mesh",
+        "part_root",
+        "src_wave29_generated"
+      ],
+      "changedTargets": [
+        "package:pkg_wave29_mesh_edit_contract",
+        "drawable:draw_wave29_mesh",
+        "mesh:mesh_wave29_mesh",
+        "part:part_root",
+        "sourceAsset:src_wave29_generated"
+      ],
+      "changedFieldPaths": [
+        "/model/drawables/drawables",
+        "/model/meshes/meshes",
+        "/model/drawOrder/entries",
+        "/model/graph/stableOrder",
+        "/model/drawables/draw_wave29_mesh",
+        "/model/meshes/mesh_wave29_mesh",
+        "/model/graph/parts/drawableIds",
+        "/assets/sourceManifest/sourceAssets"
+      ],
+      "packageRevisionAfter": 1,
+      "authoringRevisionAfter": 1,
+      "operationLogLength": 1
+    },
+    {
+      "operationId": "op_wave29_generate_mesh",
+      "operationType": "generateMesh",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "drawable:draw_wave29_mesh",
+        "mesh:mesh_wave29_mesh"
+      ],
+      "logEntryTargetIds": [
+        "draw_wave29_mesh",
+        "mesh_wave29_mesh"
+      ],
+      "changedTargets": [
+        "mesh:mesh_wave29_mesh",
+        "drawable:draw_wave29_mesh"
+      ],
+      "changedFieldPaths": [
+        "/model/meshes/mesh_wave29_mesh",
+        "/model/meshes/mesh_wave29_mesh/vertices",
+        "/model/meshes/mesh_wave29_mesh/triangles",
+        "/meshId"
+      ],
+      "packageRevisionAfter": 2,
+      "authoringRevisionAfter": 2,
+      "operationLogLength": 2
+    },
+    {
+      "operationId": "op_wave29_move_mesh_vertices",
+      "operationType": "moveMeshVertex",
+      "status": "committed",
+      "preconditionOk": true,
+      "checkedTargets": [
+        "mesh:mesh_wave29_mesh",
+        "drawable:draw_wave29_mesh",
+        "part:part_root",
+        "vertex:vtx_wave29_mesh_0_1:/model/meshes/mesh_wave29_mesh/vertices/1",
+        "vertex:vtx_wave29_mesh_1_0:/model/meshes/mesh_wave29_mesh/vertices/2"
+      ],
+      "logEntryTargetIds": [
+        "mesh_wave29_mesh",
+        "vtx_wave29_mesh_0_1",
+        "vtx_wave29_mesh_1_0"
+      ],
+      "changedTargets": [
+        "mesh:mesh_wave29_mesh",
+        "vertex:vtx_wave29_mesh_0_1:/model/meshes/mesh_wave29_mesh/vertices/1",
+        "vertex:vtx_wave29_mesh_1_0:/model/meshes/mesh_wave29_mesh/vertices/2"
+      ],
+      "changedFieldPaths": [
+        "/model/meshes/mesh_wave29_mesh/vertices",
+        "/model/meshes/mesh_wave29_mesh/vertices/1",
+        "/model/meshes/mesh_wave29_mesh/vertices/2",
+        "/model/meshes/mesh_wave29_mesh/bounds",
+        "/model/meshes/mesh_wave29_mesh/vertices/1",
+        "/model/meshes/mesh_wave29_mesh/vertices/2"
+      ],
+      "packageRevisionAfter": 3,
+      "authoringRevisionAfter": 3,
+      "operationLogLength": 3
+    }
+  ],
+  "finalOperationLogLength": 3
+}

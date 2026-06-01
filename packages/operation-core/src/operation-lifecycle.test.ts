@@ -308,7 +308,8 @@ describe("operation lifecycle foundation", () => {
     expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
     expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
       { kind: "mesh", id: "mesh_body" },
-      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices" }
+      { kind: "drawable", id: "draw_body" },
+      { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" }
     ]);
   });
 

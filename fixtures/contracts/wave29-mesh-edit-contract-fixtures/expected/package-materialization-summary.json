@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "wave29-mesh-edit-package-materialization-summary-v1",
+  "packageId": "pkg_wave29_mesh_edit_contract",
+  "packageRevision": 3,
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "drawable": {
+    "drawableId": "draw_wave29_mesh",
+    "displayName": "Wave29 Mesh",
+    "partId": "part_root",
+    "textureId": "tex_wave29_mesh",
+    "meshId": "mesh_wave29_mesh",
+    "runtimeVisibility": true,
+    "baseDrawOrder": 0
+  },
+  "mesh": {
+    "meshId": "mesh_wave29_mesh",
+    "drawableId": "draw_wave29_mesh",
+    "vertexStableIds": [
+      "vtx_wave29_mesh_0_0",
+      "vtx_wave29_mesh_0_1",
+      "vtx_wave29_mesh_1_0",
+      "vtx_wave29_mesh_1_1"
+    ],
+    "vertices": [
+      {
+        "x": 48,
+        "y": 16
+      },
+      {
+        "x": 74,
+        "y": 12
+      },
+      {
+        "x": 42,
+        "y": 45
+      },
+      {
+        "x": 72,
+        "y": 40
+      }
+    ],
+    "uvs": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 0
+      },
+      {
+        "x": 0,
+        "y": 1
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "triangles": [
+      [
+        0,
+        1,
+        2
+      ],
+      [
+        1,
+        3,
+        2
+      ]
+    ],
+    "bounds": {
+      "x": 42,
+      "y": 12,
+      "width": 32,
+      "height": 33
+    },
+    "generationProvenanceId": "prov_wave29_generate_mesh"
+  },
+  "sourceLayerMapping": {
+    "sourceAssetId": "src_wave29_generated",
+    "sourceLayerId": "layer_wave29_mesh",
+    "mappedDrawableIds": [
+      "draw_wave29_mesh"
+    ]
+  },
+  "operationLog": {
+    "operationIds": [
+      "op_wave29_create_drawable",
+      "op_wave29_generate_mesh",
+      "op_wave29_move_mesh_vertices"
+    ],
+    "operationTypes": [
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ],
+    "finalOperationLogLength": 3
+  },
+  "rightsClean": {
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  }
+}

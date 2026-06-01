@@ -3,6 +3,7 @@ import type {
   EditorViewerRuntimeProjection
 } from "../../editor-workflow/viewer-runtime-workflow.js";
 import {
+  createViewerRuntimeMeshEvidenceRowTestId,
   editorTestIds,
   type EditorSemanticState
 } from "../../editor-state/index.js";
@@ -65,6 +66,7 @@ export const createViewerRuntimeSnapshotSummary = (
     createPartLayerEvidenceList(projection),
     createDrawableOpacityEvidenceList(projection),
     createDrawableLayerEvidenceList(projection),
+    createMeshEvidenceList(projection),
     createDynamicsOutputList(projection)
   );
   return section;
@@ -192,6 +194,48 @@ const createDrawableLayerEvidenceList = (
         : `${state.runtimeVisible ? "runtime visible" : "runtime hidden"} / ${state.editorHidden ? "editor hidden" : "editor visible"} / ${state.locked ? "locked" : "unlocked"} / ${state.selected ? "selected" : "not selected"} / ${state.textureUnresolved ? "texture unresolved" : "texture resolved"}${state.textureBacked ? " / texture-backed" : ""}`;
     const item = document.createElement("li");
     item.textContent = `${drawable.drawableId}: part ${drawable.partId ?? "none"} / texture ${drawable.texture.textureId ?? drawable.texture.status}; ${stateLabel}`;
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+};
+
+const createMeshEvidenceList = (
+  projection: EditorViewerRuntimeProjection
+): HTMLElement => {
+  const section = document.createElement("section");
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Mesh Evidence";
+  section.append(heading);
+
+  const meshDrawables = projection.previewProjection.drawables.filter((drawable) =>
+    drawable.geometry.vertices !== undefined || drawable.geometry.topology !== undefined
+  );
+  if (meshDrawables.length === 0) {
+    section.append(createEmpty("No mesh evidence"));
+    return section;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "dynamics-preview-outputs__list";
+  for (const drawable of meshDrawables) {
+    const vertices = drawable.geometry.vertices ?? [];
+    const selectedVertexIds = vertices
+      .filter((vertex) => vertex.state.selected)
+      .map((vertex) => vertex.vertexStableId ?? vertex.vertexRef);
+    const movedVertexIds = vertices
+      .filter((vertex) => vertex.state.moved)
+      .map((vertex) => vertex.vertexStableId ?? vertex.vertexRef);
+    const movedRefs = drawable.geometry.movedVertexRefs ?? movedVertexIds;
+    const topology = drawable.geometry.topology;
+    const topologyLabel =
+      topology === undefined
+        ? "no topology summary"
+        : `${topology.vertexCount} vertices / ${topology.triangleCount} triangles`;
+    const item = document.createElement("li");
+    item.dataset.testid = createViewerRuntimeMeshEvidenceRowTestId(drawable.drawableId);
+    item.textContent = `${drawable.drawableId}: mesh ${drawable.meshId}; ${topologyLabel}; selected ${selectedVertexIds.join(", ") || "None"}; moved ${movedRefs.join(", ") || "None"}; hash ${drawable.geometry.vertexHash}`;
     list.append(item);
   }
   section.append(list);

@@ -83,6 +83,9 @@ demo.unsafeDependencyClaim
 | `ref.drawablePartMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `mesh.triangleIndexOutOfRange` | mesh_semantic | blocking | all: fail | AC-MVP-005 |
 | `mesh.degenerateTriangle` | mesh_semantic | warning | strict: fail or needs_review | AC-MVP-005 |
+| `mesh.vertexStableIdsLengthMismatch` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
+| `mesh.uvCountMismatch` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
+| `mesh.runtimeEvidenceMissing` | representative_evaluation | error | viewer/strict/acceptance: fail when required mesh runtime or viewer snapshot evidence is absent or inconsistent | AC-MVP-005, AC-MVP-012, AC-MVP-013 |
 | `part.parentMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.childMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.parentChildMismatch` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
@@ -162,6 +165,15 @@ Rig control validation rules:
 - `rigControl.invalidChildTargetKind` fires when a child ID is stored under the wrong child collection, for example a `rig_` ID in `childDrawableIds`.
 - `rigControl.parentChildMismatch` fires when a parent's `childRigControlIds` entry and the child's `parentId` disagree.
 - `rigControl.runtimeEvidenceMissing` fires when an enabled package rig control has no matching runtime snapshot evidence, the supplied snapshot identity is stale for the validated package, the snapshot disagrees on kind, enabled state, or parent relation, or keyform-driven rig-control evidence omits or mismatches target keyform sample refs, local/world transform evidence, affected target refs, or snapshot refs.
+
+Mesh validation rules:
+
+- `mesh.triangleIndexOutOfRange` fires for each triangle corner whose vertex index is outside the mesh `vertices` array.
+- `mesh.degenerateTriangle` fires for repeated-index or zero-area triangles after triangle indexes are proven in range. It is warning-level by default because it is a mesh-quality issue rather than an editor-selection or package-reference failure.
+- `mesh.vertexStableIdsLengthMismatch` fires when `vertexStableIds.length !== vertices.length`; stable vertex refs cannot be used safely for mesh edits until every vertex has one stable ID.
+- `mesh.uvCountMismatch` fires when `uvs.length !== vertices.length`; texture projection evidence is not deterministic while vertex and UV counts disagree.
+- `mesh.runtimeEvidenceMissing` fires only where runtime/viewer mesh evidence is required or supplied but incomplete: missing runtime snapshot, missing runtime drawable mesh evidence for a runtime-visible package drawable, package/runtime mesh ID disagreement, or package/runtime vertex count disagreement.
+- `editorState.staleReference` covers stale editor-only selected vertex refs. It remains warning-level and must not be promoted to runtime rendering failure just because the stale ref came from mesh selection state.
 
 Viewer evidence validation rules:
 

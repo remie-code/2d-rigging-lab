@@ -78,6 +78,18 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.nudgeMeshVertex(command);
           render();
         },
+        onSelectMeshCanvasVertex(command) {
+          workflow.selectMeshCanvasVertex(command);
+          render();
+        },
+        onNudgeMeshCanvasSelection(delta) {
+          workflow.nudgeMeshCanvasSelection(delta);
+          render();
+        },
+        onDragMeshCanvasSelection(delta) {
+          workflow.dragMeshCanvasSelection(delta);
+          render();
+        },
         onCommitCreateDynamicsGroup(command) {
           workflow.commitCreateDynamicsGroup(command);
           render();

@@ -646,6 +646,157 @@ describe("editor workflow controller", () => {
     });
   });
 
+  it("selects and moves multiple mesh vertices from the canvas workflow and restores selection after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    first.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = first.viewModel.meshEdit.selectedMesh;
+    const firstVertex = first.viewModel.meshEdit.editableVertices[0];
+    const thirdVertex = first.viewModel.meshEdit.editableVertices[2];
+    if (selectedMesh === null || firstVertex === undefined || thirdVertex === undefined) {
+      throw new Error("Expected generated drawable mesh vertices.");
+    }
+
+    first.selectMeshCanvasVertex({ vertexId: firstVertex.vertexId });
+    first.selectMeshCanvasVertex({ vertexId: thirdVertex.vertexId, mode: "add" });
+    const moved = first.dragMeshCanvasSelection({ x: 2, y: -1 });
+    first.openViewerRuntimeSurface();
+    const previewGeometry = first.previewProjection?.drawables
+      .find((drawable) => drawable.meshId === selectedMesh.meshId)
+      ?.geometry;
+    const viewerGeometry = first.viewerRuntimeProjection?.previewProjection.drawables
+      .find((drawable) => drawable.meshId === selectedMesh.meshId)
+      ?.geometry;
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(moved.status).toBe("committed");
+    expect(first.state.meshEdit.selectedVertexIds).toEqual([
+      firstVertex.vertexId,
+      thirdVertex.vertexId
+    ]);
+    expect(findEditableVertex(first, firstVertex.vertexId)?.position).toEqual({
+      x: firstVertex.x + 2,
+      y: firstVertex.y - 1
+    });
+    expect(findEditableVertex(first, thirdVertex.vertexId)?.position).toEqual({
+      x: thirdVertex.x + 2,
+      y: thirdVertex.y - 1
+    });
+    expect(previewGeometry?.polygonPoints).toEqual(expect.arrayContaining([
+      { x: firstVertex.x + 2, y: firstVertex.y - 1 },
+      { x: thirdVertex.x + 2, y: thirdVertex.y - 1 }
+    ]));
+    expect(viewerGeometry?.polygonPoints).toEqual(expect.arrayContaining([
+      { x: firstVertex.x + 2, y: firstVertex.y - 1 },
+      { x: thirdVertex.x + 2, y: thirdVertex.y - 1 }
+    ]));
+    expect(saved.snapshot.document.model.editorState).toMatchObject({
+      schemaVersion: "editor-state-v1",
+      activeTool: "meshEdit",
+      selection: [firstVertex.vertexId, thirdVertex.vertexId]
+    });
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ]);
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.meshEdit.selectedMesh).toMatchObject({
+      meshId: selectedMesh.meshId,
+      drawableId: selectedMesh.drawableId
+    });
+    expect(second.state.layerTreeDraft.selection).toEqual([]);
+    expect(second.state.meshEdit.selectedVertexIds).toEqual([
+      firstVertex.vertexId,
+      thirdVertex.vertexId
+    ]);
+    expect(findEditableVertex(second, firstVertex.vertexId)?.position).toEqual({
+      x: firstVertex.x + 2,
+      y: firstVertex.y - 1
+    });
+  });
+
+  it("commits selected mesh canvas nudge through the operation lifecycle", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = workflow.viewModel.meshEdit.selectedMesh;
+    const firstVertex = workflow.viewModel.meshEdit.editableVertices[0];
+    const secondVertex = workflow.viewModel.meshEdit.editableVertices[1];
+    if (selectedMesh === null || firstVertex === undefined || secondVertex === undefined) {
+      throw new Error("Expected generated drawable mesh vertices.");
+    }
+
+    workflow.selectMeshCanvasVertex({ vertexId: firstVertex.vertexId });
+    workflow.selectMeshCanvasVertex({ vertexId: secondVertex.vertexId, mode: "add" });
+    const nudged = workflow.nudgeMeshCanvasSelection({ x: 1, y: 0 });
+    if (nudged.status !== "committed") {
+      throw new Error(`Expected committed canvas nudge, received ${nudged.status}.`);
+    }
+
+    expect(nudged.selectedVertexIds).toEqual([
+      firstVertex.vertexId,
+      secondVertex.vertexId
+    ]);
+    expect(nudged.result.operationType).toBe("moveMeshVertex");
+    expect(nudged.result.operationResult.status).toBe("committed");
+    expect(workflow.latestSessionPersistenceResult?.operationType).toBe("moveMeshVertex");
+    expect(workflow.state.operationLog.entryCount).toBe(3);
+    expect(workflow.latestSessionPersistenceResult?.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "moveMeshVertex"
+    ]);
+    expect(workflow.state.meshEdit.selectedVertexIds).toEqual([
+      firstVertex.vertexId,
+      secondVertex.vertexId
+    ]);
+    expect(findEditableVertex(workflow, firstVertex.vertexId)?.position).toEqual({
+      x: firstVertex.x + 1,
+      y: firstVertex.y
+    });
+    expect(findEditableVertex(workflow, secondVertex.vertexId)?.position).toEqual({
+      x: secondVertex.x + 1,
+      y: secondVertex.y
+    });
+  });
+
+  it("blocks canvas mesh movement on locked layers without committing an operation", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const selectedMesh = workflow.viewModel.meshEdit.selectedMesh;
+    const vertex = workflow.viewModel.meshEdit.editableVertices[0];
+    if (selectedMesh === null || vertex === undefined) {
+      throw new Error("Expected generated drawable mesh vertex.");
+    }
+
+    workflow.selectMeshCanvasVertex({ vertexId: vertex.vertexId });
+    workflow.toggleDrawableLayerLock(selectedMesh.drawableId);
+    const blockedCanvasMove = workflow.nudgeMeshCanvasSelection({ x: 1, y: 0 });
+    const blockedRowNudge = workflow.nudgeMeshVertex(vertex.nudgeCommands.right);
+
+    expect(blockedCanvasMove).toEqual({
+      status: "blocked",
+      blockedReason: "locked",
+      selectedVertexIds: [vertex.vertexId]
+    });
+    expect(blockedRowNudge).toEqual({
+      status: "not_editable",
+      meshId: selectedMesh.meshId,
+      vertexId: vertex.vertexId
+    });
+    expect(workflow.state.operationLog.entryCount).toBe(2);
+    expect(workflow.latestSessionPersistenceResult?.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh"
+    ]);
+    expect(workflow.latestSessionPersistenceResult?.operationType).toBe("generateMesh");
+  });
+
   it("does not commit an operation when a layer move is not available", () => {
     const workflow = createWorkflow(createMemoryStorage());
 
@@ -1361,6 +1512,11 @@ const findMeshVertex = (
   meshId: string,
   vertexIndex: number
 ) => document.model.meshes.meshes.find((mesh) => mesh.meshId === meshId)?.vertices[vertexIndex];
+
+const findEditableVertex = (
+  workflow: ReturnType<typeof createEditorWorkflowController>,
+  vertexId: string
+) => workflow.state.meshEdit.editableVertices.find((vertex) => vertex.vertexId === vertexId);
 
 const createParameterCommand = (name: "smile" | "brow") => ({
   operationId: `op_workflow_create_parameter_${name}`,

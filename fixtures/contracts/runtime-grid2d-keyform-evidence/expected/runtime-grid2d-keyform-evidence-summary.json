@@ -100,6 +100,53 @@
           "y": 2
         }
       ],
+      "mesh": {
+        "drawableId": "draw_fixture_face",
+        "meshId": "mesh_fixture_face",
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 2,
+          "height": 2
+        },
+        "vertexHash": "vhash_f66ef067_3",
+        "topology": {
+          "vertexCount": 3,
+          "stableVertexIdCount": 0,
+          "uvCount": 0,
+          "triangleCount": 0,
+          "triangleIndexCount": 0,
+          "hasStableVertexIds": false,
+          "hasUvProjection": false,
+          "hasTriangles": false
+        },
+        "vertices": [
+          {
+            "vertexIndex": 0,
+            "vertexRef": "mesh_fixture_face.vertex.0",
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "vertexIndex": 1,
+            "vertexRef": "mesh_fixture_face.vertex.1",
+            "position": {
+              "x": 2,
+              "y": 0
+            }
+          },
+          {
+            "vertexIndex": 2,
+            "vertexRef": "mesh_fixture_face.vertex.2",
+            "position": {
+              "x": 0,
+              "y": 2
+            }
+          }
+        ]
+      },
       "diagnostics": []
     },
     "drawList": [
@@ -207,6 +254,53 @@
           "y": 2.75
         }
       ],
+      "mesh": {
+        "drawableId": "draw_fixture_face",
+        "meshId": "mesh_fixture_face",
+        "bounds": {
+          "x": 0.75,
+          "y": 0.75,
+          "width": 2,
+          "height": 2
+        },
+        "vertexHash": "vhash_f93eac5f_3",
+        "topology": {
+          "vertexCount": 3,
+          "stableVertexIdCount": 0,
+          "uvCount": 0,
+          "triangleCount": 0,
+          "triangleIndexCount": 0,
+          "hasStableVertexIds": false,
+          "hasUvProjection": false,
+          "hasTriangles": false
+        },
+        "vertices": [
+          {
+            "vertexIndex": 0,
+            "vertexRef": "mesh_fixture_face.vertex.0",
+            "position": {
+              "x": 0.75,
+              "y": 0.75
+            }
+          },
+          {
+            "vertexIndex": 1,
+            "vertexRef": "mesh_fixture_face.vertex.1",
+            "position": {
+              "x": 2.75,
+              "y": 0.75
+            }
+          },
+          {
+            "vertexIndex": 2,
+            "vertexRef": "mesh_fixture_face.vertex.2",
+            "position": {
+              "x": 0.75,
+              "y": 2.75
+            }
+          }
+        ]
+      },
       "diagnostics": []
     },
     "drawList": [

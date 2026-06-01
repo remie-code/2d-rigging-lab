@@ -11,15 +11,15 @@ export interface LayerTreeDraftOwner {
 }
 
 export const createEmptyLayerTreeDraftState = (
-  input: Partial<Pick<EditorStateFileDto, "selection" | "lockedIds" | "editorHiddenIds">> = {}
+  input: Partial<Pick<EditorStateFileDto, "selection" | "lockedIds" | "editorHiddenIds" | "activeTool">> = {}
 ): LayerTreeDraftState => ({
-  selection: normalizeUniqueTargetIds(input.selection ?? []),
+  selection: input.activeTool === "meshEdit" ? [] : normalizeUniqueTargetIds(input.selection ?? []),
   lockedIds: sortTargetIds(normalizeUniqueTargetIds(input.lockedIds ?? [])),
   editorHiddenIds: sortTargetIds(normalizeUniqueTargetIds(input.editorHiddenIds ?? []))
 });
 
 export const projectLayerTreeDraftState = (
-  editorState: Pick<EditorStateFileDto, "selection" | "lockedIds" | "editorHiddenIds"> | undefined
+  editorState: Pick<EditorStateFileDto, "selection" | "lockedIds" | "editorHiddenIds" | "activeTool"> | undefined
 ): LayerTreeDraftState => createEmptyLayerTreeDraftState(editorState);
 
 export const createEditorStateFileFromLayerTreeDraft = (

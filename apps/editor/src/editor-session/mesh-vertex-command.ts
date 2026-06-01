@@ -16,6 +16,7 @@ export interface EditorMoveMeshVertexCommand {
     readonly vertexId: VertexId | string;
     readonly delta: Vec2Dto;
   }[];
+  readonly lockedTargetIds?: readonly string[];
   readonly intent?: string;
 }
 
@@ -53,6 +54,9 @@ export const createMoveMeshVertexOperationRequest = (
           y: vertexDelta.delta.y
         }
       })),
+      ...(command.lockedTargetIds === undefined
+        ? {}
+        : { lockedTargetIds: [...command.lockedTargetIds] }),
       intent: command.intent ?? "editor mesh vertex nudge"
     }
   });

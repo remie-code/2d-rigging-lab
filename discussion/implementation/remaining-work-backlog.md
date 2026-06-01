@@ -1,6 +1,6 @@
-# Wave28完了後の残件リスト
+# Wave29完了後の残件リスト
 
-> 状態: 2026-06-01、Wave28完了後の残件バックログ。
+> 状態: 2026-06-02、Wave29完了後の残件バックログ。
 
 ## 目的
 
@@ -16,7 +16,8 @@
 - Wave27では`Mask / clipping / opacity authoring`を選定済み。詳細な実装範囲とOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave27-plan.md`に固定した。
 - Wave27で`Mask / clipping / opacity authoring`は`implementation-proven`になったため、P0候補から外した。
 - Wave28では`Part / texture / layer tree workflow`を選定し、semantic part hierarchy、drawable part reassignment、existing texture assignment、editor layer selection / lock / editor-hide、Preview / Viewer evidence、fixtures、desktop/mobile e2e persistence smoke まで `implementation-proven` になったため、P0候補から外した。
-- この文書はWave29以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave29で`Canvas Mesh Editing v1`は`implementation-proven`になった。Wave17のrow/button vertex nudgeを、canvas/SVG selection、multi-vertex translate、semantic Preview / Viewer / Runtime evidence、validator mesh diagnostics、fixtures、desktop/mobile e2eへ拡張した。Topology editor、UV editor、full renderer、pixel oracle、real image bytes、file picker/parser/archive、external dependency、Cubism compatibilityは含めていない。
+- この文書はWave30以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -52,7 +53,7 @@ Wave28完了後、以下はimplementation-provenとして扱ってよい。
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| Mesh editor completion | generated meshとvertex row nudgeはあるが、canvas drag、multi-vertex edit、topology、UV editor、invalid triangle workflowは未完。 | renderer workと混ぜず、mesh editor単独waveにする。 | MVP meshの深さを決める必要あり。 |
+| Mesh topology / UV editor expansion | Canvas Mesh Editing v1は完了したが、vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingは未実装。 | Wave29の後続候補。renderer/pixel oracleやreal texture bytesとは別waveで扱う。 | topology/UV直接編集へ進む場合は必要。 |
 | Tutorial-like MVP mini model | 個別sliceは増えているが、blink/brow/mouth/face/body/arm/hair dynamicsを1つのGUI制作fixtureで通す証拠がない。 | mask/part/mesh/rigの残件が狭まった後のintegration wave向き。 | 最小モデル仕様が必要。 |
 
 ## Asset I/O / PSD / Binaryの判断ゲート
@@ -104,19 +105,35 @@ Wave28完了後、以下はimplementation-provenとして扱ってよい。
    Wave28で完了済み。part create/update、drawable part reassignment、existing texture atlas assignment、editor selection / lock / editor-only hide、Preview / Viewer semantic evidence、validator diagnostics、contract fixture、desktop/mobile save-load e2e smokeまで一周させた。full drag-and-drop layer tree、full part tree UX、real image bytes、file picker、parser、image decode、archive、actual binary upload、external dependency、Cubism互換、full renderer、pixel oracleは含めていない。
    根拠: `discussion/implementation/waves/wave28/wave28-final-report.md`
 
-## Wave29以降の推奨選択肢
+## Wave29完了範囲
 
-1. **Mesh editor completion**
-   generated meshとvertex row nudgeの次として、canvas drag、multi-vertex edit、topology/UV、invalid triangle workflowを扱う候補。renderer workやpixel oracleとは混ぜない。
+Wave29は **Canvas Mesh Editing v1** として完了済み。
 
-2. **Tutorial-like MVP mini model**
+目的は、Wave17の最小mesh vertex nudgeを、Editor上のcanvas/SVG mesh editing workflowへ進めること。最小scopeは以下。
+
+- Canvas/SVG上でmesh vertexを選択し、単一または複数頂点をtranslateする。
+- Existing `moveMeshVertex` operation lifecycleを活用し、dry-run / commit / operation log / model diff / package materializationに残す。
+- Runtime / Preview / Viewerにmoved vertices、bounds/hash、topology summary、selection/lock/editor-hide/runtime visibilityのsemantic evidenceを残す。
+- Validatorにinvalid triangle index、degenerate triangle、vertexStableIds length mismatch、UV count mismatch、stale selected vertex refsなどのdeterministic diagnosticsを追加または補強する。
+- Contract fixtureとdesktop/mobile e2eでsave/load後の再観測まで確認する。
+
+Wave29では、topology editor、UV editor、automatic triangulation、full renderer、pixel oracle、real image bytes、file picker/parser/archive、external dependency、Cubism compatibilityを扱っていない。これらは引き続き残件またはfuture scopeとして扱う。
+
+詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave29-plan.md`に固定した。
+
+## Wave30以降の推奨選択肢
+
+1. **Tutorial-like MVP mini model**
    mask / part / mesh / rig / dynamicsの主要sliceが狭まった後、GUIで小さなLive2D風モデル制作を通すintegration waveとして有効。最小モデル仕様が必要。
 
-3. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
+2. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
    real assetsを優先するならこちら。ただし最小scopeは`<input type=file>`で任意binaryを受け、既存package-local binary file-setとbinary validatorでdigest / byteLength / mediaType / rights / provenanceを証明するところまで。PSD parser、PNG decode、archive dependency、public demo asset policyは入れない。
 
-4. **Full layer tree / part tree UX expansion**
+3. **Full layer tree / part tree UX expansion**
    Wave28のminimum form-based workflowを足場に、drag-and-drop reorder、rename/delete/reparent completeness、multi-select bulk operations、group transform、または canvas/tree direct manipulation へ広げる候補。real image decodeやrenderer workとは分ける。
+
+4. **Mesh topology / UV editor expansion**
+   Wave29がCanvas Mesh Editing v1を閉じた後の候補。vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingへ広げる場合は、renderer/pixel oracleやtexture bytesとは別waveで扱う。
 
 ## 関連wave前に確認すべき判断
 
@@ -130,6 +147,6 @@ Wave28完了後、以下はimplementation-provenとして扱ってよい。
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave28については`discussion/implementation/waves/wave28/wave28-final-report.md`、`discussion/implementation/waves/wave28/_map.md`、`discussion/implementation/reviews/wave28/_map.md`を完了根拠として扱う。Wave29以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

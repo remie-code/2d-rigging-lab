@@ -25,6 +25,10 @@ import type {
   RuntimeEvaluationInputInput,
   RuntimeInitialStateRequestInput
 } from "./runtime-input.js";
+import {
+  createRuntimeMeshEditEvidence
+} from "./mesh-evidence.js";
+import type { RuntimeMeshEditEvidenceDto } from "./mesh-evidence.js";
 import type { RuntimeEvaluationOptionsInput } from "./runtime-options.js";
 import {
   evaluateRuntimeStateSequenceArtifact
@@ -63,6 +67,7 @@ export interface RuntimeEvidenceResult {
   readonly finalRuntimeStateRef: RuntimeStateArtifactRef;
   readonly runtimeComparison: RuntimeComparisonResult;
   readonly runtimeDiff: RuntimeDiffDto;
+  readonly meshEditEvidence: RuntimeMeshEditEvidenceDto;
   readonly generatedRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
   readonly generatedRuntimeStateRefs: readonly RuntimeStateArtifactRef[];
   readonly generatedRuntimeStateSequenceRefs: readonly RuntimeStateSequenceArtifactRef[];
@@ -96,6 +101,11 @@ export const buildRuntimeEvidence = (
     candidateSnapshot: candidate.snapshot,
     comparisonPolicy: input.comparisonPolicy
   });
+  const meshEditEvidence = createRuntimeMeshEditEvidence({
+    baselineSnapshot: baseline.snapshot,
+    candidateSnapshot: candidate.snapshot,
+    comparisonPolicy: input.comparisonPolicy
+  });
   const finalRuntimeStateRef = createRuntimeStateArtifactRef({
     graph: input.candidateGraph,
     state: candidate.finalState,
@@ -112,6 +122,7 @@ export const buildRuntimeEvidence = (
     finalRuntimeStateRef,
     runtimeComparison,
     runtimeDiff: runtimeComparison.diff,
+    meshEditEvidence,
     generatedRuntimeSnapshotIds: uniqueSnapshotIds([
       ...baseline.snapshots.map((snapshot) => snapshot.snapshotId),
       ...candidate.snapshots.map((snapshot) => snapshot.snapshotId)

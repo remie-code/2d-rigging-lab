@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "wave29-mesh-edit-runtime-viewer-evidence-summary-v1",
+  "runtimeEvidence": {
+    "baselineSnapshotId": "snap_wave29_mesh_edit_contract_0",
+    "candidateSnapshotId": "snap_wave29_mesh_edit_contract_1",
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave29_mesh_edit_contract_0",
+      "snap_wave29_mesh_edit_contract_1"
+    ],
+    "generatedRuntimeStateRefs": [
+      "runtime/states/pkg_wave29_mesh_edit_contract-r3-wave29-mesh-edit-contract-final-f1.runtime-state.json"
+    ],
+    "generatedRuntimeStateSequenceRefs": [
+      "runtime/state-sequences/pkg_wave29_mesh_edit_contract-r3-wave29-mesh-edit-contract.runtime-state-sequence.json"
+    ],
+    "meshEditEvidence": [
+      {
+        "drawableId": "draw_wave29_mesh",
+        "meshId": "mesh_wave29_mesh",
+        "boundsBefore": {
+          "x": 48,
+          "y": 16,
+          "width": 24,
+          "height": 24
+        },
+        "boundsAfter": {
+          "x": 42,
+          "y": 12,
+          "width": 32,
+          "height": 33
+        },
+        "vertexHashBefore": "vhash_327bd044_4",
+        "vertexHashAfter": "vhash_38005812_4",
+        "boundsChanged": true,
+        "vertexHashChanged": true,
+        "topology": {
+          "vertexCount": 4,
+          "stableVertexIdCount": 4,
+          "uvCount": 4,
+          "triangleCount": 2,
+          "triangleIndexCount": 6,
+          "hasStableVertexIds": true,
+          "hasUvProjection": true,
+          "hasTriangles": true
+        },
+        "movedVertexRefs": [
+          {
+            "vertexIndex": 1,
+            "vertexStableId": "vtx_wave29_mesh_0_1",
+            "vertexRef": "mesh_wave29_mesh.vtx_wave29_mesh_0_1",
+            "before": {
+              "x": 72,
+              "y": 16
+            },
+            "after": {
+              "x": 74,
+              "y": 12
+            },
+            "delta": {
+              "x": 2,
+              "y": -4
+            }
+          },
+          {
+            "vertexIndex": 2,
+            "vertexStableId": "vtx_wave29_mesh_1_0",
+            "vertexRef": "mesh_wave29_mesh.vtx_wave29_mesh_1_0",
+            "before": {
+              "x": 48,
+              "y": 40
+            },
+            "after": {
+              "x": 42,
+              "y": 45
+            },
+            "delta": {
+              "x": -6,
+              "y": 5
+            }
+          }
+        ]
+      }
+    ],
+    "runtimeDiff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_wave29_mesh_edit_contract_0",
+      "afterSnapshotId": "snap_wave29_mesh_edit_contract_1",
+      "drawableChanges": [
+        {
+          "drawableId": "draw_wave29_mesh",
+          "boundsChanged": true,
+          "vertexHashBefore": "vhash_327bd044_4",
+          "vertexHashAfter": "vhash_38005812_4"
+        }
+      ],
+      "drawableRuntimeStateChangeCount": 0,
+      "diagnosticDeltaCount": 0
+    }
+  },
+  "viewerEvidence": {
+    "surface": "viewer",
+    "baselineSnapshotId": "snap_wave29_mesh_edit_contract_20",
+    "snapshotId": "snap_wave29_mesh_edit_contract_21",
+    "finalRuntimeStateRef": "runtime/states/pkg_wave29_mesh_edit_contract-r3-viewer-f21.runtime-state.json",
+    "targetIds": [
+      "draw_wave29_mesh",
+      "mesh_wave29_mesh"
+    ],
+    "meshEditEvidence": [
+      {
+        "drawableId": "draw_wave29_mesh",
+        "meshId": "mesh_wave29_mesh",
+        "boundsChanged": false,
+        "vertexHashChanged": false,
+        "movedVertexRefs": []
+      }
+    ],
+    "runtimeDiffEquivalent": true,
+    "runtimeEvaluationContext": {
+      "source": {
+        "surface": "viewer",
+        "operationId": "op_wave29_viewer_contract_evidence"
+      },
+      "policy": {
+        "strictness": "strict"
+      }
+    }
+  },
+  "semanticBoundary": {
+    "pixelOracle": false,
+    "rendererOracle": false,
+    "editorOnlyStateInRuntimeCore": false
+  }
+}

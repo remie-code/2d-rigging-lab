@@ -17,8 +17,9 @@ import {
   projectGeneratedEvidenceSummary,
   type GeneratedEvidenceSummaryInput
 } from "./generated-evidence-summary.js";
+import { projectMeshSelectedVertexIdsFromEditorState } from "./editor-state-file.js";
 import { projectLayerTreeDraftState } from "./layer-tree-draft-state.js";
-import { projectMeshEditState } from "./mesh-edit-state.js";
+import { projectMeshEditState, reprojectMeshEditState } from "./mesh-edit-state.js";
 import {
   projectOperationLogSummary,
   type OperationLogEntryProjectionInput
@@ -117,6 +118,7 @@ export const projectLoadedPackageState = (
     input.meshes ?? [],
     input.drawOrderEntries ?? []
   );
+  const layerTreeDraft = projectLayerTreeDraftState(input.editorState);
 
   return {
     ...createInitialEditorSemanticState(),
@@ -130,8 +132,11 @@ export const projectLoadedPackageState = (
     drawableOpacityKeyforms: projectDrawableOpacityKeyformState(input.keyformSets ?? []),
     dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
     drawables,
-    layerTreeDraft: projectLayerTreeDraftState(input.editorState),
-    meshEdit: projectMeshEditState(drawables, input.meshes ?? []),
+    layerTreeDraft,
+    meshEdit: projectMeshEditState(drawables, input.meshes ?? [], {
+      layerTreeDraft,
+      selectedVertexIds: projectMeshSelectedVertexIdsFromEditorState(input.editorState)
+    }),
     pendingCreateDrawable: projectCreateDrawableDefaults({
       ...(input.sourceAssets === undefined ? {} : { sourceAssets: input.sourceAssets }),
       ...(input.drawables === undefined ? {} : { drawables: input.drawables }),
@@ -156,10 +161,27 @@ export const applyCommittedOperationSummary = (
     input.drawables === undefined
       ? state.drawables
       : projectDrawableList(input.drawables, input.meshes ?? [], input.drawOrderEntries ?? []);
+  const layerTreeDraft =
+    input.editorState === undefined
+      ? state.layerTreeDraft
+      : projectLayerTreeDraftState(input.editorState);
+  const selectedVertexIds =
+    input.editorState === undefined || input.editorState.activeTool !== "meshEdit"
+      ? state.meshEdit.selectedVertexIds
+      : projectMeshSelectedVertexIdsFromEditorState(input.editorState);
   const meshEdit =
-      input.drawables === undefined && input.meshes === undefined
+    input.drawables === undefined && input.meshes === undefined && input.editorState === undefined
       ? state.meshEdit
-      : projectMeshEditState(drawables, input.meshes ?? []);
+      : input.meshes === undefined
+        ? reprojectMeshEditState(state.meshEdit, {
+            layerTreeDraft,
+            selectedVertexIds,
+            ...(input.drawables === undefined ? {} : { drawables })
+          })
+        : projectMeshEditState(drawables, input.meshes, {
+            layerTreeDraft,
+            selectedVertexIds
+          });
   const sourceAssets = input.sourceAssets ?? state.sourceAssets;
   const textureAtlas = input.textureAtlas ?? state.textureAtlas;
   const pendingCreateDrawable = projectCommittedCreateDrawableDraft(state, input, sourceAssets);
@@ -190,10 +212,7 @@ export const applyCommittedOperationSummary = (
         ? state.drawableOpacityKeyforms
         : projectDrawableOpacityKeyformState(input.keyformSets),
     drawables,
-    layerTreeDraft:
-      input.editorState === undefined
-        ? state.layerTreeDraft
-        : projectLayerTreeDraftState(input.editorState),
+    layerTreeDraft,
     meshEdit,
     previewParameters:
       input.parameters === undefined

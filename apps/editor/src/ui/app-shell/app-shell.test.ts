@@ -455,6 +455,9 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onSelectMeshCanvasVertex() {},
+      onNudgeMeshCanvasSelection() {},
+      onDragMeshCanvasSelection() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
@@ -505,6 +508,9 @@ describe("editor app shell preview panel", () => {
       onToggleDrawableRuntimeVisibility() {},
       onMoveDrawableLayer() {},
       onNudgeMeshVertex() {},
+      onSelectMeshCanvasVertex() {},
+      onNudgeMeshCanvasSelection() {},
+      onDragMeshCanvasSelection() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
@@ -541,6 +547,9 @@ const renderShell = (
     readonly onToggleDrawableRuntimeVisibility?: (drawableId: string) => void;
     readonly onMoveDrawableLayer?: (drawableId: string, direction: "up" | "down") => void;
     readonly onNudgeMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshVertex"];
+    readonly onSelectMeshCanvasVertex?: Parameters<typeof createEditorAppShell>[0]["onSelectMeshCanvasVertex"];
+    readonly onNudgeMeshCanvasSelection?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshCanvasSelection"];
+    readonly onDragMeshCanvasSelection?: Parameters<typeof createEditorAppShell>[0]["onDragMeshCanvasSelection"];
     readonly onRunDynamicsPreview?: (frameCount: number) => void;
     readonly onResetDynamicsPreview?: () => void;
     readonly onCommitCreateRotation2dRigControl?: Parameters<typeof createEditorAppShell>[0]["onCommitCreateRotation2dRigControl"];
@@ -570,6 +579,9 @@ const renderShell = (
     onToggleDrawableRuntimeVisibility: callbacks.onToggleDrawableRuntimeVisibility ?? (() => {}),
     onMoveDrawableLayer: callbacks.onMoveDrawableLayer ?? (() => {}),
     onNudgeMeshVertex: callbacks.onNudgeMeshVertex ?? (() => {}),
+    onSelectMeshCanvasVertex: callbacks.onSelectMeshCanvasVertex ?? (() => {}),
+    onNudgeMeshCanvasSelection: callbacks.onNudgeMeshCanvasSelection ?? (() => {}),
+    onDragMeshCanvasSelection: callbacks.onDragMeshCanvasSelection ?? (() => {}),
     onCommitCreateDynamicsGroup() {},
     onCommitUpdateDynamicsGroup() {},
     onCommitCreateRotation2dRigControl: callbacks.onCommitCreateRotation2dRigControl ?? (() => {}),

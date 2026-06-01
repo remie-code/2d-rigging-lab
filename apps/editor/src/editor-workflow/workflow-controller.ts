@@ -48,7 +48,7 @@ import {
   applyPreviewParameterValue,
   applyViewerParameterValue,
   closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
-  createEditorStateFileFromLayerTreeDraft,
+  createEditorStateFileFromEditorState,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
   projectCreateDrawableDefaultsForSourceSelection,
@@ -59,6 +59,8 @@ import {
   type CreateDrawableFormState,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
+  type MeshCanvasHitSelectionCommand,
+  type MeshCanvasVertexSelectionCommand,
   type SourceIntakeDraftState
 } from "../editor-state/index.js";
 import {
@@ -124,6 +126,13 @@ import {
   projectViewerRuntimeProjection,
   type EditorViewerRuntimeProjection
 } from "./viewer-runtime-workflow.js";
+import {
+  commitWorkflowMeshCanvasMove,
+  selectWorkflowMeshCanvasHitTarget,
+  selectWorkflowMeshCanvasVertex,
+  type EditorWorkflowMeshCanvasMoveResult,
+  type EditorWorkflowMeshCanvasSelectionResult
+} from "./mesh-canvas-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -259,6 +268,14 @@ export interface EditorWorkflowController {
     drawableId: string,
     direction: EditorDrawableLayerMoveDirection
   ): EditorWorkflowLayerMoveResult;
+  selectMeshCanvasVertex(
+    command: MeshCanvasVertexSelectionCommand
+  ): EditorWorkflowMeshCanvasSelectionResult;
+  selectMeshCanvasHitTarget(
+    command: MeshCanvasHitSelectionCommand
+  ): EditorWorkflowMeshCanvasSelectionResult;
+  nudgeMeshCanvasSelection(delta: { readonly x: number; readonly y: number }): EditorWorkflowMeshCanvasMoveResult;
+  dragMeshCanvasSelection(delta: { readonly x: number; readonly y: number }): EditorWorkflowMeshCanvasMoveResult;
   nudgeMeshVertex(command: EditorMeshVertexNudgeCommand): EditorWorkflowMeshVertexNudgeResult;
   commitCreateDynamicsGroup(command: EditorWorkflowCreateDynamicsGroupCommand): EditorWorkflowDynamicsCreateResult;
   commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorWorkflowDynamicsUpdateResult;
@@ -614,6 +631,58 @@ export const createEditorWorkflowController = (
 
       return outcome.result;
     },
+    selectMeshCanvasVertex(command) {
+      const outcome = selectWorkflowMeshCanvasVertex({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    selectMeshCanvasHitTarget(command) {
+      const outcome = selectWorkflowMeshCanvasHitTarget({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    nudgeMeshCanvasSelection(delta) {
+      const outcome = commitWorkflowMeshCanvasMove({
+        adapter,
+        state,
+        delta,
+        source: "canvasNudge"
+      });
+
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    dragMeshCanvasSelection(delta) {
+      const outcome = commitWorkflowMeshCanvasMove({
+        adapter,
+        state,
+        delta,
+        source: "canvasDrag"
+      });
+
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
     nudgeMeshVertex(command) {
       const selectedMesh = state.meshEdit.selectedMesh;
       if (selectedMesh === null || selectedMesh.meshId !== command.meshId) {
@@ -628,6 +697,14 @@ export const createEditorWorkflowController = (
         (vertex) => vertex.vertexId === command.vertexId
       );
       if (editableVertex === undefined) {
+        return {
+          status: "not_editable",
+          meshId: String(command.meshId),
+          vertexId: String(command.vertexId)
+        };
+      }
+
+      if (!state.meshEdit.canNudgeSelectedMesh) {
         return {
           status: "not_editable",
           meshId: String(command.meshId),
@@ -659,6 +736,7 @@ export const createEditorWorkflowController = (
             delta: command.delta
           }
         ],
+        lockedTargetIds: state.layerTreeDraft.lockedIds,
         intent: command.intent ?? "editor mesh vertex nudge"
       });
 
@@ -824,7 +902,7 @@ export const createEditorWorkflowController = (
     },
     saveProject() {
       const snapshot = adapter.createPersistenceSnapshot({
-        editorState: createEditorStateFileFromLayerTreeDraft(state.layerTreeDraft)
+        editorState: createEditorStateFileFromEditorState(state)
       });
       const storeResult = options.projectStore.saveProject({
         packageFileSet: snapshot.packageFileSet,
