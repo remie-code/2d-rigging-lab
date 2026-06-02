@@ -110,6 +110,12 @@ demo.unsafeDependencyClaim
 | `rigControl.invalidChildTargetKind` | rigControl_semantic | error | all: fail | AC-MVP-009 |
 | `rigControl.parentChildMismatch` | rigControl_semantic | error | all: fail | AC-MVP-009 |
 | `rigControl.runtimeEvidenceMissing` | rigControl_evaluation | error | strict/acceptance: fail when enabled rig controls cannot be matched to current runtime snapshot evidence, including keyform-driven rig-control sample and transform evidence | AC-MVP-009, AC-MVP-012 |
+| `rigControl.warpLatticeCardinalityMismatch` | rigControl_semantic | error | all: fail | AC-MVP-009, AC-MVP-010 |
+| `rigControl.warpLatticeDomainBoundsInvalid` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.warpLatticeRestControlPointMismatch` | rigControl_semantic | error | all: fail | AC-MVP-009 |
+| `rigControl.warpLatticeUnsupportedProperty` | rigControl_semantic | error | all: fail | AC-MVP-009, AC-MVP-010 |
+| `rigControl.warpLatticeMalformedPatch` | rigControl_semantic | error | all: fail | AC-MVP-009, AC-MVP-010 |
+| `rigControl.warpLatticeRuntimeEvidenceMismatch` | rigControl_evaluation | error | strict/acceptance: fail when evaluated `warpLattice2d` runtime evidence disagrees with package lattice shape, domain, affected drawable refs, or keyform patch evidence | AC-MVP-009, AC-MVP-012 |
 | `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
 | `dynamics.requiredGroupMissing` | dynamics_semantic | error | acceptance fixture / metadata requiring Dynamics: fail | AC-PHYS-001 |
 | `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
@@ -166,6 +172,12 @@ Rig control validation rules:
 - `rigControl.invalidChildTargetKind` fires when a child ID is stored under the wrong child collection, for example a `rig_` ID in `childDrawableIds`.
 - `rigControl.parentChildMismatch` fires when a parent's `childRigControlIds` entry and the child's `parentId` disagree.
 - `rigControl.runtimeEvidenceMissing` fires when an enabled package rig control has no matching runtime snapshot evidence, the supplied snapshot identity is stale for the validated package, the snapshot disagrees on kind, enabled state, or parent relation, or keyform-driven rig-control evidence omits or mismatches target keyform sample refs, local/world transform evidence, affected target refs, or snapshot refs.
+- `rigControl.warpLatticeCardinalityMismatch` fires when `latticeColumns * latticeRows !== restControlPoints.length`.
+- `rigControl.warpLatticeDomainBoundsInvalid` fires when a `warpLattice2d` domain has non-positive width or height.
+- `rigControl.warpLatticeRestControlPointMismatch` fires when `restControlPoints` do not fit inside the declared `domainBounds`.
+- `rigControl.warpLatticeUnsupportedProperty` fires when a `warpLattice2d` keyform targets a property other than `controlPointOffsets`.
+- `rigControl.warpLatticeMalformedPatch` fires when a `controlPointOffsets` keyform patch is not a `Vec2[]` with one offset per rest control point, or uses a composition mode outside `replace` / `additiveDelta`.
+- `rigControl.warpLatticeRuntimeEvidenceMismatch` fires when current runtime evidence for an enabled `warpLattice2d` is present but does not prove evaluated project-defined warp lattice semantics, including stale unsupported/no-op status, domain bounds mismatch, affected target mismatch, missing affected drawable evidence, or mismatched runtime keyform patch shape.
 
 Mesh validation rules:
 

@@ -22,12 +22,22 @@ import { createBrowserProjectStore, type StorageLike } from "../../project-persi
 import { createEditorAppShell } from "./app-shell.js";
 
 describe("editor app shell preview panel", () => {
+  let originalFormData: typeof FormData | undefined;
+
   beforeEach(() => {
     installTestDocument();
+    originalFormData = globalThis.FormData;
+    (globalThis as unknown as { FormData: typeof FormData }).FormData =
+      TestFormData as unknown as typeof FormData;
   });
 
   afterEach(() => {
     delete (globalThis as Partial<{ document: Document }>).document;
+    if (originalFormData === undefined) {
+      delete (globalThis as Partial<{ FormData: typeof FormData }>).FormData;
+    } else {
+      globalThis.FormData = originalFormData;
+    }
   });
 
   it("renders the embedded preview panel from runtime projection and preview controls", () => {
@@ -251,6 +261,91 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.viewerRuntimeSnapshotSummary)?.textContent).toContain(
       "1 evaluated / 1 total"
     );
+  });
+
+  it("routes warp lattice draft forms through production shell commit callbacks", () => {
+    const createRigWorkflow = createWorkflow();
+    const createShell = renderShell(createRigWorkflow, {
+      onCommitCreateWarpLattice2dRigControl(command) {
+        createRigWorkflow.commitCreateWarpLattice2dRigControl(command);
+      }
+    });
+    const createForm = findByTestId(
+      createShell,
+      editorTestIds.rigControlWarpLatticeCreateDraftForm
+    );
+    if (createForm === null) {
+      throw new Error("Expected warp lattice create draft form.");
+    }
+
+    setNamedFieldValue(createForm, "displayName", "Shell Warp Draft");
+    setNamedFieldValue(createForm, "domainX", "8");
+    setNamedFieldValue(createForm, "domainY", "12");
+    setNamedFieldValue(createForm, "domainWidth", "64");
+    setNamedFieldValue(createForm, "domainHeight", "48");
+    createForm.emit("submit");
+
+    expect(
+      createRigWorkflow.state.rigControls.find(
+        (rigControl) => rigControl.displayName === "Shell Warp Draft"
+      )
+    ).toMatchObject({
+      kind: "warpLattice2d",
+      domainBounds: { x: 8, y: 12, width: 64, height: 48 }
+    });
+
+    const bindRigWorkflow = createWorkflow();
+    const bindShell = renderShell(bindRigWorkflow, {
+      onCommitBindWarpLattice2dChild(command) {
+        bindRigWorkflow.commitBindWarpLattice2dChild(command);
+      }
+    });
+    const bindForm = findByTestId(
+      bindShell,
+      editorTestIds.rigControlWarpLatticeBindDraftForm
+    );
+    if (bindForm === null) {
+      throw new Error("Expected warp lattice bind draft form.");
+    }
+
+    setNamedFieldValue(bindForm, "warpParentTarget", "draft:rig_warp_lattice_draft");
+    setNamedFieldValue(bindForm, "childTarget", "drawable:draw_body");
+    bindForm.emit("submit");
+
+    expect(
+      bindRigWorkflow.state.rigControls.find((rigControl) => rigControl.kind === "warpLattice2d")
+        ?.childDrawableIds
+    ).toContain("draw_body");
+
+    const keyformRigWorkflow = createWorkflow();
+    const keyformShell = renderShell(keyformRigWorkflow, {
+      onCommitAddWarpLattice2dControlPointOffsetsKeyform(command) {
+        keyformRigWorkflow.commitAddWarpLattice2dControlPointOffsetsKeyform(command);
+      }
+    });
+    const keyformForm = findByTestId(
+      keyformShell,
+      editorTestIds.rigControlWarpLatticeKeyformDraftForm
+    );
+    if (keyformForm === null) {
+      throw new Error("Expected warp lattice controlPointOffsets keyform draft form.");
+    }
+
+    setNamedFieldValue(keyformForm, "parameterId", "param_preview_body_yaw");
+    setNamedFieldValue(keyformForm, "warpTarget", "draft:rig_warp_lattice_draft");
+    setNamedFieldValue(keyformForm, "keyValue", "1");
+    setNamedFieldValue(keyformForm, "compositionMode", "additiveDelta");
+    setNamedFieldValue(keyformForm, "offsetX1", "3");
+    setNamedFieldValue(keyformForm, "offsetY2", "-2");
+    keyformForm.emit("submit");
+
+    expect(keyformRigWorkflow.state.rigControlWarpLatticeKeyforms).toHaveLength(1);
+    expect(keyformRigWorkflow.state.rigControlWarpLatticeKeyforms[0]).toMatchObject({
+      rigControlId: "rig_2x2_warp_lattice_draft",
+      parameterId: "param_preview_body_yaw",
+      keyValue: 1,
+      compositionMode: "additiveDelta"
+    });
   });
 
   it("wires Viewer / Runtime open, close, slider, and reset callbacks", () => {
@@ -513,7 +608,10 @@ describe("editor app shell preview panel", () => {
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
+      onCommitCreateWarpLattice2dRigControl() {},
       onCommitBindRigControlChild() {},
+      onCommitBindWarpLattice2dChild() {},
+      onCommitAddWarpLattice2dControlPointOffsetsKeyform() {},
       onCommitSetMaskRelation() {},
       onCommitAddDrawableOpacityKeyform() {},
       onRunDynamicsPreview() {},
@@ -569,7 +667,10 @@ describe("editor app shell preview panel", () => {
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
+      onCommitCreateWarpLattice2dRigControl() {},
       onCommitBindRigControlChild() {},
+      onCommitBindWarpLattice2dChild() {},
+      onCommitAddWarpLattice2dControlPointOffsetsKeyform() {},
       onCommitSetMaskRelation() {},
       onCommitAddDrawableOpacityKeyform() {},
       onRunDynamicsPreview() {},
@@ -611,7 +712,10 @@ const renderShell = (
     readonly onRunDynamicsPreview?: (frameCount: number) => void;
     readonly onResetDynamicsPreview?: () => void;
     readonly onCommitCreateRotation2dRigControl?: Parameters<typeof createEditorAppShell>[0]["onCommitCreateRotation2dRigControl"];
+    readonly onCommitCreateWarpLattice2dRigControl?: Parameters<typeof createEditorAppShell>[0]["onCommitCreateWarpLattice2dRigControl"];
     readonly onCommitBindRigControlChild?: Parameters<typeof createEditorAppShell>[0]["onCommitBindRigControlChild"];
+    readonly onCommitBindWarpLattice2dChild?: Parameters<typeof createEditorAppShell>[0]["onCommitBindWarpLattice2dChild"];
+    readonly onCommitAddWarpLattice2dControlPointOffsetsKeyform?: Parameters<typeof createEditorAppShell>[0]["onCommitAddWarpLattice2dControlPointOffsetsKeyform"];
     readonly onOpenViewerRuntimeSurface?: () => void;
     readonly onCloseViewerRuntimeSurface?: () => void;
     readonly onSetViewerParameterValue?: (parameterId: string, value: number) => void;
@@ -646,7 +750,12 @@ const renderShell = (
     onCommitCreateDynamicsGroup() {},
     onCommitUpdateDynamicsGroup() {},
     onCommitCreateRotation2dRigControl: callbacks.onCommitCreateRotation2dRigControl ?? (() => {}),
+    onCommitCreateWarpLattice2dRigControl:
+      callbacks.onCommitCreateWarpLattice2dRigControl ?? (() => {}),
     onCommitBindRigControlChild: callbacks.onCommitBindRigControlChild ?? (() => {}),
+    onCommitBindWarpLattice2dChild: callbacks.onCommitBindWarpLattice2dChild ?? (() => {}),
+    onCommitAddWarpLattice2dControlPointOffsetsKeyform:
+      callbacks.onCommitAddWarpLattice2dControlPointOffsetsKeyform ?? (() => {}),
     onCommitSetMaskRelation() {},
     onCommitAddDrawableOpacityKeyform() {},
     onRunDynamicsPreview: callbacks.onRunDynamicsPreview ?? (() => {}),
@@ -767,11 +876,56 @@ const findByTag = (root: TestElement, tagName: string): TestElement | null =>
 const findDrawableShape = (root: TestElement, drawableId: string): TestElement | null =>
   root.queryByPredicate((element) => element.getAttribute("data-drawable-id") === drawableId);
 
+const setNamedFieldValue = (
+  root: TestElement,
+  name: string,
+  value: string
+): void => {
+  const field = root.queryByPredicate((element) => element.name === name);
+  if (field === null) {
+    throw new Error(`Missing field ${name}.`);
+  }
+
+  field.value = value;
+  field.valueWasSet = true;
+};
+
+class TestFormData {
+  private readonly values = new Map<string, string>();
+
+  constructor(form: TestElement) {
+    for (const field of form.queryAllByPredicate((element) => element.name.length > 0)) {
+      if (field.type === "checkbox" && !field.checked) {
+        continue;
+      }
+
+      this.values.set(field.name, readFormFieldValue(field));
+    }
+  }
+
+  get(name: string): string | null {
+    return this.values.get(name) ?? null;
+  }
+}
+
+const readFormFieldValue = (field: TestElement): string => {
+  if (field.tagName !== "select") {
+    return field.type === "checkbox" ? "on" : field.value;
+  }
+
+  if (field.valueWasSet || field.value.length > 0) {
+    return field.value;
+  }
+
+  const selected = field.children.find((child) => child.selected) ?? field.children[0];
+  return selected?.value ?? "";
+};
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
-  readonly listeners = new Map<string, Array<() => void>>();
+  readonly listeners = new Map<string, Array<(event: { preventDefault(): void }) => void>>();
   readonly style: Record<string, string> = {};
   readonly classList = {
     add: (...classNames: string[]) => {
@@ -788,8 +942,12 @@ class TestElement {
   step = "";
   value = "";
   name = "";
+  autocomplete = "";
   required = false;
   disabled = false;
+  checked = false;
+  selected = false;
+  valueWasSet = false;
   private ownText = "";
 
   constructor(readonly tagName: string) {}
@@ -836,13 +994,16 @@ class TestElement {
     return this.attributes.get(name) ?? null;
   }
 
-  addEventListener(type: string, listener: () => void): void {
+  addEventListener(type: string, listener: (event: { preventDefault(): void }) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
   emit(type: string): void {
+    const event = {
+      preventDefault() {}
+    };
     for (const listener of this.listeners.get(type) ?? []) {
-      listener();
+      listener(event);
     }
   }
 
@@ -863,6 +1024,13 @@ class TestElement {
     }
 
     return null;
+  }
+
+  queryAllByPredicate(predicate: (element: TestElement) => boolean): readonly TestElement[] {
+    return [
+      ...(predicate(this) ? [this] : []),
+      ...this.children.flatMap((child) => child.queryAllByPredicate(predicate))
+    ];
   }
 
   querySelector(selector: string): TestElement | null {

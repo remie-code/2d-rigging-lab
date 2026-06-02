@@ -153,6 +153,10 @@ const operationToken = (request: OperationRequestDto): string => {
     return `create_rotation2d_rig_control_${sanitizeIdToken(request.payload.displayName)}`;
   }
 
+  if (request.operationType === "createWarpLattice2dRigControl") {
+    return `create_warp_lattice2d_rig_control_${sanitizeIdToken(request.payload.displayName)}`;
+  }
+
   if (request.operationType === "generateMesh") {
     return `generate_mesh_${[
       stripIdPrefix(request.payload.drawableId, "draw_"),

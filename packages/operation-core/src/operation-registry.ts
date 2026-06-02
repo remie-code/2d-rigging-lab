@@ -12,6 +12,7 @@ import { createDynamicsGroupOperationHandler } from "./operations/create-dynamic
 import { createPartOperationHandler } from "./operations/create-part.js";
 import { createParameterOperationHandler } from "./operations/create-parameter.js";
 import { createRotation2dRigControlOperationHandler } from "./operations/create-rotation2d-rig-control.js";
+import { createWarpLattice2dRigControlOperationHandler } from "./operations/create-warp-lattice2d-rig-control.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
@@ -61,6 +62,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [createDynamicsGroupOperationHandler.operationType, createDynamicsGroupOperationHandler],
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],
   [createRotation2dRigControlOperationHandler.operationType, createRotation2dRigControlOperationHandler],
+  [createWarpLattice2dRigControlOperationHandler.operationType, createWarpLattice2dRigControlOperationHandler],
   [bindRigControlChildOperationHandler.operationType, bindRigControlChildOperationHandler],
   [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],

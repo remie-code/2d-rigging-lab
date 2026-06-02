@@ -11,6 +11,12 @@ export interface RigControlState {
   readonly childRigControlIds: readonly string[];
   readonly pivot: { readonly x: number; readonly y: number } | null;
   readonly restAngleDegrees: number | null;
+  readonly bindSpace: "rigControlLocalRest" | null;
+  readonly domainBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null;
+  readonly latticeColumns: number | null;
+  readonly latticeRows: number | null;
+  readonly restControlPoints: readonly { readonly x: number; readonly y: number }[] | null;
+  readonly interpolationMethod: "bilinear-grid-v1" | null;
 }
 
 export const projectRigControlState = (
@@ -26,5 +32,15 @@ export const projectRigControlState = (
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
     pivot: rigControl.kind === "rotation2d" ? { ...rigControl.pivot } : null,
-    restAngleDegrees: rigControl.kind === "rotation2d" ? rigControl.restAngleDegrees : null
+    restAngleDegrees: rigControl.kind === "rotation2d" ? rigControl.restAngleDegrees : null,
+    bindSpace: rigControl.kind === "warpLattice2d" ? rigControl.bindSpace : null,
+    domainBounds: rigControl.kind === "warpLattice2d" ? { ...rigControl.domainBounds } : null,
+    latticeColumns: rigControl.kind === "warpLattice2d" ? rigControl.latticeColumns : null,
+    latticeRows: rigControl.kind === "warpLattice2d" ? rigControl.latticeRows : null,
+    restControlPoints:
+      rigControl.kind === "warpLattice2d"
+        ? rigControl.restControlPoints.map((point) => ({ ...point }))
+        : null,
+    interpolationMethod:
+      rigControl.kind === "warpLattice2d" ? rigControl.interpolationMethod : null
   }));

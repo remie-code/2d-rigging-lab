@@ -30,6 +30,7 @@ import { runByteIntakePersistenceSmoke } from "./byte-intake-smoke.mjs";
 import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
 import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
 import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
+import { runWarpLatticePersistenceSmoke } from "./warp-lattice-persistence-smoke.mjs";
 import { runCompositionPersistenceSmoke } from "./composition-persistence-smoke.mjs";
 import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persistence-smoke.mjs";
 import { runTutorialMiniModelPersistenceSmoke } from "./tutorial-mini-model-persistence-smoke.mjs";
@@ -178,6 +179,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-rig-control-reset`);
+    const warpLatticeEvidence = await runWarpLatticePersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave32-warp-lattice`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-warp-lattice-reset`);
     const compositionEvidence = await runCompositionPersistenceSmoke({
       page,
       viewport
@@ -212,6 +221,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       dynamicsEvidence,
       viewerRuntimeEvidence,
       rigControlEvidence,
+      warpLatticeEvidence,
       compositionEvidence,
       partTextureLayerEvidence,
       tutorialMiniModelEvidence,

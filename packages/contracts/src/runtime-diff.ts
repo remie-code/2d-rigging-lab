@@ -6,8 +6,16 @@ import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
   ParameterIdSchema,
+  RigControlIdSchema,
   RuntimeSnapshotIdSchema
 } from "./ids.js";
+import {
+  WarpLattice2dBindSpaceSchema,
+  WarpLattice2dControlPointOrderSchema,
+  WarpLattice2dDomainBoundsSchema,
+  WarpLattice2dInterpolationMethodSchema,
+  WarpLattice2dOutsideDomainPolicySchema
+} from "./warp-lattice2d.js";
 
 const DrawableRuntimeStateChangeSchema = z.object({
   drawableId: DrawableIdSchema,
@@ -35,6 +43,27 @@ const DrawListChangeSchema = z.object({
   positionChanges: z.array(DrawListPositionChangeSchema).default([])
 });
 
+const WarpLattice2dRuntimeChangeSchema = z.object({
+  kind: z.literal("warpLattice2d"),
+  rigControlId: RigControlIdSchema,
+  evaluationStatus: z.enum(["evaluated", "disabled", "blocked", "unsupported"]),
+  bindSpace: WarpLattice2dBindSpaceSchema,
+  domainBounds: WarpLattice2dDomainBoundsSchema,
+  interpolationMethod: WarpLattice2dInterpolationMethodSchema,
+  controlPointOrder: WarpLattice2dControlPointOrderSchema,
+  controlPointOffsetCount: z.number().int().min(4),
+  outsideDomainPolicy: WarpLattice2dOutsideDomainPolicySchema,
+  affectedDrawableIds: z.array(DrawableIdSchema).default([]),
+  boundsChanged: z.boolean(),
+  vertexHashBefore: z.string().optional(),
+  vertexHashAfter: z.string().optional(),
+  fullVertexDeltaRef: z.string().optional()
+});
+
+const RigControlRuntimeChangeSchema = z.discriminatedUnion("kind", [
+  WarpLattice2dRuntimeChangeSchema
+]);
+
 export const RuntimeDiffSchema = z.object({
   schemaVersion: z.literal("runtime-diff-v1"),
   beforeSnapshotId: RuntimeSnapshotIdSchema,
@@ -58,6 +87,7 @@ export const RuntimeDiffSchema = z.object({
       })
     )
     .default([]),
+  rigControlChanges: z.array(RigControlRuntimeChangeSchema).optional(),
   drawableChanges: z
     .array(
       z.object({

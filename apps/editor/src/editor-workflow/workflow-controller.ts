@@ -91,10 +91,16 @@ import {
   type EditorWorkflowDynamicsUpdateResult
 } from "./dynamics-group-workflow.js";
 import {
+  commitWorkflowAddWarpLattice2dControlPointOffsetsKeyform,
   commitWorkflowBindRigControlChild,
+  commitWorkflowBindWarpLattice2dChild,
   commitWorkflowCreateRotation2dRigControl,
+  commitWorkflowCreateWarpLattice2dRigControl,
+  type EditorWorkflowAddWarpLattice2dControlPointOffsetsKeyformCommand,
   type EditorWorkflowBindRigControlChildCommand,
+  type EditorWorkflowBindWarpLattice2dChildCommand,
   type EditorWorkflowCreateRotation2dRigControlCommand,
+  type EditorWorkflowCreateWarpLattice2dRigControlCommand,
   type EditorWorkflowRigControlCommitResult
 } from "./rig-control-workflow.js";
 import {
@@ -295,7 +301,16 @@ export interface EditorWorkflowController {
   commitCreateRotation2dRigControl(
     command: EditorWorkflowCreateRotation2dRigControlCommand
   ): EditorWorkflowRigControlCommitResult;
+  commitCreateWarpLattice2dRigControl(
+    command: EditorWorkflowCreateWarpLattice2dRigControlCommand
+  ): EditorWorkflowRigControlCommitResult;
   commitBindRigControlChild(command: EditorWorkflowBindRigControlChildCommand): EditorWorkflowRigControlCommitResult;
+  commitBindWarpLattice2dChild(
+    command: EditorWorkflowBindWarpLattice2dChildCommand
+  ): EditorWorkflowRigControlCommitResult;
+  commitAddWarpLattice2dControlPointOffsetsKeyform(
+    command: EditorWorkflowAddWarpLattice2dControlPointOffsetsKeyformCommand
+  ): EditorWorkflowRigControlCommitResult;
   commitSetMaskRelation(
     command: EditorWorkflowSetMaskRelationCommand
   ): EditorWorkflowCompositionCommitResult;
@@ -797,8 +812,35 @@ export const createEditorWorkflowController = (
 
       return outcome.result;
     },
+    commitCreateWarpLattice2dRigControl(command) {
+      const outcome = commitWorkflowCreateWarpLattice2dRigControl({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
     commitBindRigControlChild(command) {
       const outcome = commitWorkflowBindRigControlChild({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitBindWarpLattice2dChild(command) {
+      const outcome = commitWorkflowBindWarpLattice2dChild({ adapter, state, command });
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    commitAddWarpLattice2dControlPointOffsetsKeyform(command) {
+      const outcome = commitWorkflowAddWarpLattice2dControlPointOffsetsKeyform({ adapter, state, command });
       latestDrawablePresetResult = null;
       latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
       state = outcome.state;

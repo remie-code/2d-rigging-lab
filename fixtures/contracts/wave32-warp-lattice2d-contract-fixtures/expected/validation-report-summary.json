@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "wave32-warp-lattice2d-validation-report-summary-v1",
+  "reportId": "val_wave32_warp_lattice2d_contract_final",
+  "status": "pass",
+  "highestSeverity": "info",
+  "counts": {
+    "blocking": 0,
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "checkIds": [],
+  "runtimeSnapshotIds": [
+    "snap_wave32_warp_lattice2d_contract_20",
+    "snap_wave32_warp_lattice2d_contract_21"
+  ],
+  "viewerEvidenceSnapshotId": null,
+  "operationLogPresent": true,
+  "operationLogPath": "operations/log.jsonl"
+}

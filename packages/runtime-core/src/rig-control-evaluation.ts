@@ -39,6 +39,11 @@ import type {
   Affine2dMatrixDto,
   Rotation2dTransformStateDto
 } from "./rig-control-transform.js";
+import {
+  applyWarpLattice2dToVertices,
+  evaluateWarpLattice2dState
+} from "./rig-control-warp-lattice.js";
+import type { WarpLattice2dLocalState } from "./rig-control-warp-lattice.js";
 
 export const EvaluatedRigControlSchema = z.object({
   rigControlId: RigControlIdSchema,
@@ -67,6 +72,12 @@ export interface RigControlEvaluationResult {
 interface EvaluatedRigControlInternal {
   readonly dto: EvaluatedRigControlDto;
   readonly worldMatrix: Affine2dMatrixDto;
+  readonly warpLatticeState?: WarpLattice2dLocalState;
+}
+
+interface RigControlEffect {
+  readonly rigControl: NormalizedRigControlNode;
+  readonly evaluated: EvaluatedRigControlInternal;
 }
 
 export const evaluateRigControlHierarchy = (input: {
@@ -175,7 +186,7 @@ const evaluateRigControlNode = (input: {
 }): EvaluatedRigControlInternal => {
   const { rigControl } = input;
   if (rigControl.kind === "warpLattice2d") {
-    return evaluateUnsupportedWarpLatticeRigControl({
+    return evaluateWarpLatticeRigControl({
       ...input,
       rigControl
     });
@@ -257,7 +268,7 @@ const evaluateRotation2dRigControl = (input: {
   };
 };
 
-const evaluateUnsupportedWarpLatticeRigControl = (input: {
+const evaluateWarpLatticeRigControl = (input: {
   readonly rigControl: NormalizedWarpLattice2dRigControl;
   readonly parentWorldMatrix: Affine2dMatrixDto;
   readonly descendantRigControlIds: readonly RigControlId[];
@@ -266,34 +277,30 @@ const evaluateUnsupportedWarpLatticeRigControl = (input: {
   readonly hierarchyIndex: number;
   readonly diagnostics: DiagnosticDto[];
 }): EvaluatedRigControlInternal => {
-  if (input.samples.length > 0) {
-    input.diagnostics.push(
-      createRuntimeDiagnostic({
-        checkId: "rigControl.warpLatticeUnsupported",
-        severity: "warning",
-        phase: "rigControl_evaluation",
-        target: { kind: "rigControl", id: input.rigControl.rigControlId },
-        message: "warpLattice2d rig control keyform samples are recorded but not evaluated in Minimum Rig Control v1.",
-        evidence: input.samples.map((sample) => `keyformSetId=${sample.keyformSetId}`)
-      })
-    );
-  }
+  const latticeEvaluation = evaluateWarpLattice2dState({
+    rigControl: input.rigControl,
+    samples: input.samples,
+    diagnostics: input.diagnostics
+  });
 
   return {
     worldMatrix: input.parentWorldMatrix,
+    warpLatticeState: latticeEvaluation.localState,
     dto: EvaluatedRigControlSchema.parse({
       rigControlId: input.rigControl.rigControlId,
       kind: input.rigControl.kind,
       enabled: input.rigControl.enabled,
       ...(input.rigControl.parentId === undefined ? {} : { parentId: input.rigControl.parentId }),
       hierarchyIndex: input.hierarchyIndex,
-      evaluationStatus: "unsupported",
+      evaluationStatus: latticeEvaluation.evaluationStatus,
       childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
       childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       bounds: input.rigControl.domainBounds,
-      unsupportedReason: "warpLattice2dEvaluatorFutureScope"
+      ...(latticeEvaluation.evaluationStatus === "unsupported"
+        ? { unsupportedReason: latticeEvaluation.unsupportedReason }
+        : {})
     })
   };
 };
@@ -306,7 +313,7 @@ const applyRigControlTransformsToDrawables = (input: {
   readonly hashPrecisionDecimals: number;
   readonly diagnostics: DiagnosticDto[];
 }): readonly EvaluatedDrawableDto[] => {
-  const transformByDrawableId = new Map<DrawableId, Affine2dMatrixDto>();
+  const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
 
   for (const rigControlId of input.orderedRigControlIds) {
     const rigControl = input.graph.rigControls.get(rigControlId);
@@ -324,22 +331,29 @@ const applyRigControlTransformsToDrawables = (input: {
         continue;
       }
 
-      if (transformByDrawableId.has(drawableId)) {
+      if (directRigControlByDrawableId.has(drawableId)) {
         input.diagnostics.push(createDuplicateDrawableParentDiagnostic(drawableId, rigControlId));
         continue;
       }
 
-      transformByDrawableId.set(drawableId, evaluated.worldMatrix);
+      directRigControlByDrawableId.set(drawableId, { rigControl, evaluated });
     }
   }
 
   return input.drawables.map((drawable) => {
-    const transform = transformByDrawableId.get(drawable.drawableId);
-    if (transform === undefined || drawable.vertices === undefined) {
+    const directRigControl = directRigControlByDrawableId.get(drawable.drawableId);
+    if (directRigControl === undefined || drawable.vertices === undefined) {
       return drawable;
     }
 
-    const transformedVertices = applyAffine2dToVertices(transform, drawable.vertices);
+    const transformedVertices = applyRigControlEffectChainToVertices({
+      vertices: drawable.vertices,
+      effects: createRigControlEffectChain({
+        graph: input.graph,
+        directRigControl,
+        evaluatedById: input.evaluatedById
+      })
+    });
     return {
       ...drawable,
       vertices: transformedVertices,
@@ -349,6 +363,61 @@ const applyRigControlTransformsToDrawables = (input: {
       })
     };
   });
+};
+
+const createRigControlEffectChain = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly directRigControl: RigControlEffect;
+  readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
+}): readonly RigControlEffect[] => {
+  const effects: RigControlEffect[] = [];
+  const visited = new Set<RigControlId>();
+  let currentRigControl: NormalizedRigControlNode | undefined = input.directRigControl.rigControl;
+
+  while (currentRigControl !== undefined && !visited.has(currentRigControl.rigControlId)) {
+    visited.add(currentRigControl.rigControlId);
+    const evaluated =
+      currentRigControl.rigControlId === input.directRigControl.rigControl.rigControlId
+        ? input.directRigControl.evaluated
+        : input.evaluatedById.get(currentRigControl.rigControlId);
+    if (evaluated === undefined) {
+      break;
+    }
+
+    effects.push({ rigControl: currentRigControl, evaluated });
+    currentRigControl =
+      currentRigControl.parentId === undefined ? undefined : input.graph.rigControls.get(currentRigControl.parentId);
+  }
+
+  return effects;
+};
+
+const applyRigControlEffectChainToVertices = (input: {
+  readonly vertices: readonly Vec2Dto[];
+  readonly effects: readonly RigControlEffect[];
+}): Vec2Dto[] =>
+  input.effects.reduce<Vec2Dto[]>((vertices, effect) => applyRigControlEffectToVertices(effect, vertices), [
+    ...input.vertices
+  ]);
+
+const applyRigControlEffectToVertices = (
+  effect: RigControlEffect,
+  vertices: readonly Vec2Dto[]
+): Vec2Dto[] => {
+  if (effect.rigControl.kind === "rotation2d") {
+    const localMatrix = effect.evaluated.dto.localTransform?.matrix;
+    return effect.evaluated.dto.evaluationStatus === "evaluated" && localMatrix !== undefined
+      ? applyAffine2dToVertices(localMatrix, vertices)
+      : [...vertices];
+  }
+
+  return effect.evaluated.dto.evaluationStatus === "evaluated" && effect.evaluated.warpLatticeState !== undefined
+    ? applyWarpLattice2dToVertices({
+        rigControl: effect.rigControl,
+        localState: effect.evaluated.warpLatticeState,
+        vertices
+      })
+    : [...vertices];
 };
 
 const createMissingDrawableDiagnostic = (

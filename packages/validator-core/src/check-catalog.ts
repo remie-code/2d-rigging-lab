@@ -521,6 +521,54 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Package rig control hierarchy cannot be matched to runtime snapshot evidence."
   },
   {
+    checkId: "rigControl.warpLatticeCardinalityMismatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "warpLattice2d latticeColumns * latticeRows does not match restControlPoints length."
+  },
+  {
+    checkId: "rigControl.warpLatticeDomainBoundsInvalid",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "warpLattice2d domainBounds is not a positive runtime evaluation domain."
+  },
+  {
+    checkId: "rigControl.warpLatticeRestControlPointMismatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "warpLattice2d restControlPoints are not coherent with the declared domainBounds."
+  },
+  {
+    checkId: "rigControl.warpLatticeUnsupportedProperty",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "warpLattice2d keyform targets a property other than controlPointOffsets."
+  },
+  {
+    checkId: "rigControl.warpLatticeMalformedPatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "warpLattice2d controlPointOffsets keyform patch is not one Vec2 offset per rest control point."
+  },
+  {
+    checkId: "rigControl.warpLatticeRuntimeEvidenceMismatch",
+    phase: "rigControl_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-012", "AC-MVP-013"],
+    description: "warpLattice2d runtime evidence disagrees with package lattice shape, domain, affected drawables, or keyform patch evidence."
+  },
+  {
     checkId: "dynamics.requiredGroupMissing",
     phase: "dynamics_semantic",
     defaultSeverity: "error",

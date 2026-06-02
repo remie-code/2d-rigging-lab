@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "wave32-warp-lattice2d-package-materialization-summary-v1",
+  "packageId": "pkg_wave32_warp_lattice2d_contract",
+  "packageRevision": 3,
+  "updatedAt": "2026-06-02T00:01:00.000Z",
+  "rigControl": {
+    "rigControlId": "rig_wave32_body_warp_lattice",
+    "kind": "warpLattice2d",
+    "displayName": "Wave32 Body Warp Lattice",
+    "partId": "part_root",
+    "parentId": null,
+    "childDrawableIds": [
+      "draw_wave32_body"
+    ],
+    "childRigControlIds": [],
+    "bindSpace": "rigControlLocalRest",
+    "domainBounds": {
+      "x": 0,
+      "y": 0,
+      "width": 64,
+      "height": 64
+    },
+    "latticeColumns": 2,
+    "latticeRows": 2,
+    "restControlPoints": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 64,
+        "y": 0
+      },
+      {
+        "x": 0,
+        "y": 64
+      },
+      {
+        "x": 64,
+        "y": 64
+      }
+    ],
+    "interpolationMethod": "bilinear-grid-v1",
+    "enabled": true
+  },
+  "keyformSet": {
+    "keyformSetId": "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1",
+    "target": {
+      "kind": "rigControl",
+      "id": "rig_wave32_body_warp_lattice",
+      "property": "controlPointOffsets"
+    },
+    "parameterId": "param_wave32_warp_x",
+    "evaluator": "linear-1d-v1",
+    "interpolation": "linear-1d-v1",
+    "compositionMode": "replace",
+    "compositionOrder": 0,
+    "keys": [
+      {
+        "value": 1,
+        "statePatch": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 6,
+            "y": 4
+          }
+        ]
+      }
+    ]
+  },
+  "reloadedPackageRevision": 3,
+  "reloadedRigControlId": "rig_wave32_body_warp_lattice",
+  "reloadedKeyformSetId": "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1",
+  "rightsCleanJsonOnly": true
+}

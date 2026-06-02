@@ -677,6 +677,248 @@ describe("editor semantic state view model", () => {
     });
   });
 
+  it("projects minimum warpLattice2d draft and controlPointOffsets keyform state", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_warp_lattice",
+        packageDisplayName: "Warp Lattice Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 3,
+        authoringRevision: 3
+      },
+      parameters: [
+        {
+          parameterId: ParameterIdSchema.parse("param_warp"),
+          displayName: "Warp Amount",
+          valueSource: "authoredInput",
+          min: -1,
+          max: 1,
+          default: 0,
+          recommendedUiStep: 0.01
+        }
+      ],
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: [DrawableIdSchema.parse("draw_face")]
+        }
+      ],
+      drawables: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_face"),
+          displayName: "Face",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+          textureId: TextureIdSchema.parse("tex_face"),
+          meshId: MeshIdSchema.parse("mesh_face"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ],
+      meshes: [
+        {
+          meshId: MeshIdSchema.parse("mesh_face"),
+          drawableId: DrawableIdSchema.parse("draw_face"),
+          vertices: [
+            { x: 10, y: 20 },
+            { x: 50, y: 20 },
+            { x: 10, y: 80 },
+            { x: 50, y: 80 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 1, y: 1 }
+          ],
+          triangles: [[0, 1, 2], [1, 3, 2]],
+          vertexStableIds: ["v0", "v1", "v2", "v3"],
+          bounds: { x: 10, y: 20, width: 40, height: 60 },
+          generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
+        }
+      ],
+      rigControls: [
+        {
+          kind: "warpLattice2d",
+          rigControlId: RigControlIdSchema.parse("rig_face_warp"),
+          displayName: "Face Warp",
+          partId: PartIdSchema.parse("part_root"),
+          childDrawableIds: [DrawableIdSchema.parse("draw_face")],
+          childRigControlIds: [],
+          bindSpace: "rigControlLocalRest",
+          domainBounds: { x: 10, y: 20, width: 40, height: 60 },
+          latticeColumns: 2,
+          latticeRows: 2,
+          restControlPoints: [
+            { x: 10, y: 20 },
+            { x: 50, y: 20 },
+            { x: 10, y: 80 },
+            { x: 50, y: 80 }
+          ],
+          interpolationMethod: "bilinear-grid-v1",
+          enabled: true
+        }
+      ],
+      keyformSets: [
+        {
+          keyformSetId: KeyformSetIdSchema.parse("keyset_face_warp_offsets"),
+          target: {
+            kind: "rigControl",
+            id: "rig_face_warp",
+            property: "controlPointOffsets"
+          },
+          parameterId: ParameterIdSchema.parse("param_warp"),
+          evaluator: "linear-1d-v1",
+          interpolation: "linear-1d-v1",
+          compositionMode: "replace",
+          compositionOrder: 0,
+          keys: [
+            {
+              value: 1,
+              statePatch: [
+                { x: 0, y: 0 },
+                { x: 4, y: -2 },
+                { x: -3, y: 5 },
+                { x: 2, y: 6 }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+    const rigControls = projectEditorWorkflowViewModel(state).rigControls;
+
+    expect(state.warpLattice2dDraft).toMatchObject({
+      draftRigControlId: "rig_warp_lattice_draft",
+      partId: "part_root",
+      domainBounds: { x: 10, y: 20, width: 40, height: 60 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      targetProperty: "controlPointOffsets"
+    });
+    expect(state.rigControls[0]).toMatchObject({
+      rigControlId: "rig_face_warp",
+      kind: "warpLattice2d",
+      domainBounds: { x: 10, y: 20, width: 40, height: 60 },
+      latticeColumns: 2,
+      latticeRows: 2
+    });
+    expect(state.rigControlWarpLatticeKeyforms).toEqual([
+      expect.objectContaining({
+        keyformSetId: "keyset_face_warp_offsets",
+        rigControlId: "rig_face_warp",
+        parameterId: "param_warp",
+        keyValue: 1,
+        compositionMode: "replace",
+        controlPointOffsets: [
+          { x: 0, y: 0 },
+          { x: 4, y: -2 },
+          { x: -3, y: 5 },
+          { x: 2, y: 6 }
+        ]
+      })
+    ]);
+    expect(rigControls).toMatchObject({
+      canCreateWarpLattice2dDraft: true,
+      canCreateWarpLattice2dKeyformDraft: true,
+      warpLatticeKeyformCountLabel: "1 controlPointOffsets keyform",
+      warpLatticeDraft: {
+        domainBoundsLabel: "10, 20 / 40 x 60",
+        latticeSizeLabel: "2 x 2",
+        pointCountLabel: "4 control point offsets",
+        controlPoints: expect.arrayContaining([
+          expect.objectContaining({
+            index: 0,
+            column: 0,
+            row: 0,
+            restLabel: "10, 20",
+            offsetLabel: "0, 0"
+          })
+        ])
+      },
+      warpLatticeTargetOptions: [
+        {
+          source: "draft",
+          id: "rig_warp_lattice_draft"
+        },
+        {
+          source: "package",
+          id: "rig_face_warp"
+        }
+      ],
+      rigControls: [
+        {
+          rigControlId: "rig_face_warp",
+          kindLabel: "warpLattice2d",
+          transformLabel: "2 x 2 lattice / domain 10, 20 / 40 x 60 / bilinear-grid-v1 draft"
+        }
+      ],
+      warpLatticeKeyforms: [
+        {
+          keyformSetId: "keyset_face_warp_offsets",
+          targetLabel: "Face Warp / rig_face_warp",
+          parameterLabel: "Warp Amount / param_warp",
+          offsetsLabel: "p0 0, 0; p1 4, -2; p2 -3, 5; p3 2, 6"
+        }
+      ]
+    });
+  });
+
+  it("allows a synthetic warpLattice2d draft parent to target one existing child rig control", () => {
+    const state = projectLoadedPackageState({
+      identity: {
+        packageId: "pkg_warp_lattice_single_child",
+        packageDisplayName: "Warp Lattice Single Child Package",
+        formatVersion: "open-model-package-v1"
+      },
+      revision: {
+        packageRevision: 1,
+        authoringRevision: 1
+      },
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: []
+        }
+      ],
+      rigControls: [
+        {
+          kind: "rotation2d",
+          rigControlId: RigControlIdSchema.parse("rig_single_child"),
+          displayName: "Single Child",
+          partId: PartIdSchema.parse("part_root"),
+          childDrawableIds: [],
+          childRigControlIds: [],
+          pivot: { x: 0, y: 0 },
+          restAngleDegrees: 0,
+          restTranslation: { x: 0, y: 0 },
+          restScale: { x: 1, y: 1 },
+          enabled: true
+        }
+      ]
+    });
+    const rigControls = projectEditorWorkflowViewModel(state).rigControls;
+
+    expect(rigControls.canBindChild).toBe(false);
+    expect(rigControls.childOptions).toEqual([]);
+    expect(rigControls.canDraftWarpLattice2dBindChild).toBe(true);
+    expect(rigControls.warpLatticeChildOptions).toEqual([
+      {
+        kind: "rigControl",
+        id: "rig_single_child",
+        label: "Single Child / rig_single_child"
+      }
+    ]);
+  });
+
   it("projects dynamics authoring controls and group state for the editor panel", () => {
     const state = projectLoadedPackageState({
       identity: {

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave32_create_warp_lattice2d",
+  "actor": "human",
+  "surface": "gui",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "idempotencyKey": "wave32-create-warp-lattice2d",
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-009",
+      "AC-MVP-010",
+      "AC-MVP-011"
+    ],
+    "relatedScenarios": [
+      "SC-MVP-002",
+      "SC-MVP-003"
+    ]
+  },
+  "operationType": "createWarpLattice2dRigControl",
+  "payload": {
+    "partId": "part_root",
+    "displayName": "Wave32 Body Warp Lattice",
+    "childDrawableIds": [],
+    "childRigControlIds": [],
+    "domainBounds": {
+      "x": 0,
+      "y": 0,
+      "width": 64,
+      "height": 64
+    },
+    "latticeColumns": 2,
+    "latticeRows": 2,
+    "interpolationMethod": "bilinear-grid-v1"
+  }
+}

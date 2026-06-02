@@ -95,6 +95,7 @@ describe("editor rig control panel", () => {
       throw new Error("Expected rig control bind form.");
     }
 
+    expect(getNamedSelectOptionValues(form, "childTarget")).toContain("rigControl:rig_child");
     setNamedFieldValue(form, "parentRigControlId", "rig_parent");
     setNamedFieldValue(form, "childTarget", "rigControl:rig_child");
     form.emit("submit");
@@ -108,6 +109,28 @@ describe("editor rig control panel", () => {
         }
       }
     ]);
+  });
+
+  it("does not expose a sole existing rig control in the normal bind form", () => {
+    const state = createRigControlPanelState({
+      rigControls: [createRotationRigControl("rig_single_child", "Single Child")]
+    });
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlBindForm);
+    const submit = findByTestId(panel, editorTestIds.rigControlBindSubmit);
+    if (form === null || submit === null) {
+      throw new Error("Expected rig control bind form.");
+    }
+
+    expect(submit.disabled).toBe(true);
+    expect(getNamedSelectOptionValues(form, "childTarget")).toEqual([]);
   });
 
   it("submits a rig control angle keyform command from authored parameter and rotation2d fields", () => {
@@ -147,6 +170,281 @@ describe("editor rig control panel", () => {
         angleDegrees: 45
       }
     ]);
+  });
+
+  it("submits a minimum warpLattice2d create draft without operation commit wiring", () => {
+    const state = createRigControlPanelState({ rigControls: [] });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftCreateWarpLattice2dRigControl(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeCreateDraftForm);
+    if (form === null) {
+      throw new Error("Expected warp lattice create draft form.");
+    }
+
+    expect(form.attributes.get("aria-label")).toBe("Draft minimum 2x2 warpLattice2d rig control");
+    expect(form.textContent).toContain("Minimum 2x2 draft");
+    setNamedFieldValue(form, "draftRigControlId", "rig_warp_panel");
+    setNamedFieldValue(form, "displayName", "Panel Warp Draft");
+    setNamedFieldValue(form, "domainX", "10");
+    setNamedFieldValue(form, "domainY", "20");
+    setNamedFieldValue(form, "domainWidth", "80");
+    setNamedFieldValue(form, "domainHeight", "40");
+    form.emit("submit");
+
+    expect(calls).toEqual([
+      {
+        commandKind: "draftWarpLattice2dRigControl",
+        draftRigControlId: "rig_warp_panel",
+        displayName: "Panel Warp Draft",
+        partId: "part_root",
+        bindSpace: "rigControlLocalRest",
+        domainBounds: { x: 10, y: 20, width: 80, height: 40 },
+        latticeColumns: 2,
+        latticeRows: 2,
+        restControlPoints: [
+          { x: 10, y: 20 },
+          { x: 90, y: 20 },
+          { x: 10, y: 60 },
+          { x: 90, y: 60 }
+        ],
+        interpolationMethod: "bilinear-grid-v1"
+      }
+    ]);
+  });
+
+  it("blocks a warpLattice2d create draft with invalid domain bounds", () => {
+    const state = createRigControlPanelState({ rigControls: [] });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftCreateWarpLattice2dRigControl(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeCreateDraftForm);
+    if (form === null) {
+      throw new Error("Expected warp lattice create draft form.");
+    }
+
+    setNamedFieldValue(form, "domainWidth", "0");
+    form.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("Domain width and height must be positive.");
+  });
+
+  it("submits a warpLattice2d child binding draft for an existing warp target", () => {
+    const state = createRigControlPanelState({
+      rigControls: [
+        createWarpRigControl("rig_warp", "Warp Control"),
+        createRotationRigControl("rig_child", "Child Rotation")
+      ]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftBindWarpLattice2dChild(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeBindDraftForm);
+    if (form === null) {
+      throw new Error("Expected warp lattice bind draft form.");
+    }
+
+    setNamedFieldValue(form, "warpParentTarget", "package:rig_warp");
+    setNamedFieldValue(form, "childTarget", "rigControl:rig_child");
+    form.emit("submit");
+
+    expect(calls).toEqual([
+      {
+        commandKind: "draftWarpLattice2dBindChild",
+        parent: {
+          source: "package",
+          id: "rig_warp"
+        },
+        child: {
+          kind: "rigControl",
+          id: "rig_child"
+        }
+      }
+    ]);
+  });
+
+  it("submits a synthetic warpLattice2d draft binding with one existing rig-control child", () => {
+    const state = createRigControlPanelState({
+      rigControls: [createRotationRigControl("rig_single_child", "Single Child")]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftBindWarpLattice2dChild(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeBindDraftForm);
+    const submit = findByTestId(panel, editorTestIds.rigControlWarpLatticeBindDraftSubmit);
+    if (form === null || submit === null) {
+      throw new Error("Expected warp lattice bind draft form.");
+    }
+
+    expect(submit.disabled).toBe(false);
+    expect(getNamedSelectOptionValues(form, "childTarget")).toContain(
+      "rigControl:rig_single_child"
+    );
+    setNamedFieldValue(form, "warpParentTarget", "draft:rig_warp_lattice_draft");
+    setNamedFieldValue(form, "childTarget", "rigControl:rig_single_child");
+    form.emit("submit");
+
+    expect(calls).toEqual([
+      {
+        commandKind: "draftWarpLattice2dBindChild",
+        parent: {
+          source: "draft",
+          id: "rig_warp_lattice_draft"
+        },
+        child: {
+          kind: "rigControl",
+          id: "rig_single_child"
+        }
+      }
+    ]);
+  });
+
+  it("submits a warpLattice2d controlPointOffsets keyform draft", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_warp", "Warp Amount")],
+      rigControls: [createWarpRigControl("rig_warp", "Warp Control")]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftAddWarpLattice2dControlPointOffsetsKeyform(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeKeyformDraftForm);
+    if (form === null) {
+      throw new Error("Expected warp lattice keyform draft form.");
+    }
+
+    expect(form.attributes.get("aria-label")).toBe("Draft warpLattice2d controlPointOffsets keyform");
+    setNamedFieldValue(form, "parameterId", "param_warp");
+    setNamedFieldValue(form, "warpTarget", "package:rig_warp");
+    setNamedFieldValue(form, "keyValue", "1");
+    setNamedFieldValue(form, "compositionMode", "additiveDelta");
+    setNamedFieldValue(form, "offsetX0", "0");
+    setNamedFieldValue(form, "offsetY0", "0");
+    setNamedFieldValue(form, "offsetX1", "3");
+    setNamedFieldValue(form, "offsetY1", "-2");
+    setNamedFieldValue(form, "offsetX2", "-4");
+    setNamedFieldValue(form, "offsetY2", "5");
+    setNamedFieldValue(form, "offsetX3", "1");
+    setNamedFieldValue(form, "offsetY3", "6");
+    form.emit("submit");
+
+    expect(calls).toEqual([
+      {
+        commandKind: "draftWarpLattice2dControlPointOffsetsKeyform",
+        target: {
+          source: "package",
+          id: "rig_warp",
+          property: "controlPointOffsets"
+        },
+        parameterId: "param_warp",
+        keyValue: 1,
+        compositionMode: "additiveDelta",
+        controlPointOffsets: [
+          { x: 0, y: 0 },
+          { x: 3, y: -2 },
+          { x: -4, y: 5 },
+          { x: 1, y: 6 }
+        ]
+      }
+    ]);
+  });
+
+  it("blocks a warpLattice2d controlPointOffsets draft with malformed offsets", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_warp", "Warp Amount")],
+      rigControls: [createWarpRigControl("rig_warp", "Warp Control")]
+    });
+    const calls: unknown[] = [];
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {},
+      onDraftAddWarpLattice2dControlPointOffsetsKeyform(command) {
+        calls.push(command);
+      }
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeKeyformDraftForm);
+    if (form === null) {
+      throw new Error("Expected warp lattice keyform draft form.");
+    }
+
+    setNamedFieldValue(form, "parameterId", "param_warp");
+    setNamedFieldValue(form, "warpTarget", "package:rig_warp");
+    setNamedFieldValue(form, "offsetX1", "not-a-number");
+    form.emit("submit");
+
+    expect(calls).toEqual([]);
+    expect(form.textContent).toContain("All 2x2 control point offsets must contain finite values.");
+  });
+
+  it("disables warpLattice2d controlPointOffsets draft when no authored parameter is eligible", () => {
+    const state = createRigControlPanelState({
+      rigControls: [createWarpRigControl("rig_warp", "Warp Control")]
+    });
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const form = findByTestId(panel, editorTestIds.rigControlWarpLatticeKeyformDraftForm);
+    const submit = findByTestId(panel, editorTestIds.rigControlWarpLatticeKeyformDraftSubmit);
+    if (form === null || submit === null) {
+      throw new Error("Expected warp lattice keyform draft form.");
+    }
+
+    expect(submit.disabled).toBe(true);
+    expect(form.textContent).toContain("No authored input parameter");
   });
 
   it("blocks rig control angle keyform submit when no authored parameter is eligible", () => {
@@ -268,6 +566,33 @@ describe("editor rig control panel", () => {
     expect(keyformList?.textContent).toContain("Body Yaw / param_body_yaw");
     expect(keyformList?.textContent).toContain("45 deg");
     expect(evidence?.textContent).toContain("angle keyforms param_body_yaw@1 -> 45 deg");
+  });
+
+  it("renders authored warpLattice2d controlPointOffsets keyform state in the panel evidence", () => {
+    const state = createRigControlPanelState({
+      parameters: [createAuthoredParameter("param_warp", "Warp Amount")],
+      rigControls: [createWarpRigControl("rig_warp", "Warp Control")],
+      keyformSets: [
+        createWarpLatticeOffsetsKeyform("keyset_rig_warp_offsets", "rig_warp", "param_warp")
+      ]
+    });
+    const panel = createRigControlPanel({
+      state,
+      viewModel: projectEditorWorkflowViewModel(state),
+      preview: null,
+      viewerRuntimeProjection: null,
+      onCommitCreateRotation2dRigControl() {},
+      onCommitBindRigControlChild() {}
+    }) as unknown as TestElement;
+    const keyformList = findByTestId(panel, editorTestIds.rigControlWarpLatticeKeyformList);
+    const evidence = findByTestId(panel, editorTestIds.rigControlEvidence);
+
+    expect(keyformList?.textContent).toContain("1 controlPointOffsets keyform");
+    expect(keyformList?.textContent).toContain("Warp Amount / param_warp");
+    expect(keyformList?.textContent).toContain("p3 1, 4");
+    expect(evidence?.textContent).toContain(
+      "controlPointOffsets draft keyforms param_warp@1 replace p0 0, 0; p1 2, -2; p2 -1, 3; p3 1, 4"
+    );
   });
 
   it("blocks self-binding with a deterministic user-visible diagnostic", () => {
@@ -412,6 +737,35 @@ const createRigControlAngleKeyform = (
   ]
 });
 
+const createWarpLatticeOffsetsKeyform = (
+  keyformSetId: string,
+  rigControlId: string,
+  parameterId: string
+): KeyformSetDto => ({
+  keyformSetId: KeyformSetIdSchema.parse(keyformSetId),
+  target: {
+    kind: "rigControl",
+    id: rigControlId,
+    property: "controlPointOffsets"
+  },
+  parameterId: ParameterIdSchema.parse(parameterId),
+  evaluator: "linear-1d-v1",
+  interpolation: "linear-1d-v1",
+  compositionMode: "replace",
+  compositionOrder: 0,
+  keys: [
+    {
+      value: 1,
+      statePatch: [
+        { x: 0, y: 0 },
+        { x: 2, y: -2 },
+        { x: -1, y: 3 },
+        { x: 1, y: 4 }
+      ]
+    }
+  ]
+});
+
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
 
@@ -427,6 +781,22 @@ const setNamedFieldValue = (
 
   field.value = value;
   field.valueWasSet = true;
+};
+
+const getNamedSelectOptionValues = (
+  root: TestElement,
+  name: string
+): readonly string[] => {
+  const field = root.queryByPredicate((element) => element.name === name);
+  if (field === null) {
+    throw new Error(`Missing field ${name}.`);
+  }
+
+  if (field.tagName !== "select") {
+    throw new Error(`Field ${name} is not a select.`);
+  }
+
+  return field.children.map((child) => child.value);
 };
 
 class TestFormData {

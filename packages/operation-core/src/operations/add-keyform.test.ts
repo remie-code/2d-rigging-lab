@@ -181,6 +181,73 @@ describe("addKeyform operation handler", () => {
     expect(session.dirty).toBe(false);
   });
 
+  it("commits warpLattice2d controlPointOffsets keyforms with additiveDelta composition", () => {
+    const session = createFixtureSession();
+    const request = createAddKeyformRequest({
+      dryRun: false,
+      targetKind: "rigControl",
+      targetId: "rig_body_warp",
+      targetProperty: "controlPointOffsets",
+      statePatchValue: [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+        { x: 0, y: 1 },
+        { x: 2, y: 1 }
+      ],
+      compositionMode: "additiveDelta"
+    });
+    const keyformSetId = KeyformSetIdSchema.parse(
+      "keyset_rigcontrol_rig_body_warp_controlpointoffsets_face_yaw_1"
+    );
+
+    const outcome = addKeyformOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getKeyformSetById(session.graph, keyformSetId)).toEqual(
+      expect.objectContaining({
+        target: {
+          kind: "rigControl",
+          id: "rig_body_warp",
+          property: "controlPointOffsets"
+        },
+        compositionMode: "additiveDelta",
+        keys: [
+          {
+            value: 1,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 2, y: 0 },
+              { x: 0, y: 1 },
+              { x: 2, y: 1 }
+            ]
+          }
+        ]
+      })
+    );
+    expect(outcome.targetIds).toEqual([
+      keyformSetId,
+      "param_face_yaw",
+      "rig_body_warp"
+    ]);
+    expect(outcome.result.modelDiff?.changed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: { kind: "rigControl", id: "rig_body_warp" },
+          fields: [
+            expect.objectContaining({
+              path: `/model/keyforms/keyformSets/${keyformSetId}/target`,
+              after: {
+                kind: "rigControl",
+                id: "rig_body_warp",
+                property: "controlPointOffsets"
+              }
+            })
+          ]
+        })
+      ])
+    );
+  });
+
   it("rejects a missing parameter as an operation diagnostic", () => {
     const session = createFixtureSession();
     const request = createAddKeyformRequest({
@@ -373,6 +440,7 @@ const createAddKeyformRequest = (options: {
   readonly targetProperty?: string;
   readonly statePatchPropertyPath?: string;
   readonly statePatchValue?: unknown;
+  readonly compositionMode?: "replace" | "additiveDelta" | "multiplyOpacity";
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -391,6 +459,7 @@ const createAddKeyformRequest = (options: {
       parameterId: options.parameterId ?? "param_face_yaw",
       keyValue: 1,
       interpolation: "linear-1d-v1",
+      ...(options.compositionMode === undefined ? {} : { compositionMode: options.compositionMode }),
       statePatch: {
         propertyPath: options.statePatchPropertyPath ?? options.targetProperty ?? "vertices",
         value: options.statePatchValue ?? [{ x: 2, y: 0 }]
@@ -493,6 +562,26 @@ const createFixtureSession = (): AuthoringSession => ({
         restAngleDegrees: 0,
         restTranslation: { x: 0, y: 0 },
         restScale: { x: 1, y: 1 },
+        enabled: true
+      },
+      {
+        kind: "warpLattice2d",
+        rigControlId: RigControlIdSchema.parse("rig_body_warp"),
+        displayName: "Body Warp",
+        partId: PartIdSchema.parse("part_root"),
+        childDrawableIds: [],
+        childRigControlIds: [],
+        bindSpace: "rigControlLocalRest",
+        domainBounds: { x: 0, y: 0, width: 1, height: 1 },
+        latticeColumns: 2,
+        latticeRows: 2,
+        restControlPoints: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 },
+          { x: 1, y: 1 }
+        ],
+        interpolationMethod: "bilinear-grid-v1",
         enabled: true
       }
     ],

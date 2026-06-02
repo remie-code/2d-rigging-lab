@@ -185,7 +185,7 @@ describe("runtime rig control hierarchy evidence", () => {
     expectDrawChildUntransformed(result.snapshot.drawables);
   });
 
-  it("keeps warpLattice2d as unsupported no-op evidence without applying lattice deformation", () => {
+  it("evaluates warpLattice2d zero-offset lattice evidence without applying displacement", () => {
     const graph = createWarpNoOpGraph();
     const result = evaluateSingleFrame(graph, 0, 0);
 
@@ -193,13 +193,165 @@ describe("runtime rig control hierarchy evidence", () => {
       expect.objectContaining({
         rigControlId: "rig_warp_future",
         kind: "warpLattice2d",
-        evaluationStatus: "unsupported",
-        unsupportedReason: "warpLattice2dEvaluatorFutureScope",
+        evaluationStatus: "evaluated",
         affectedDrawableIds: ["draw_child"]
       })
     ]);
     expect(result.snapshot.drawables[0]?.bounds).toEqual({ x: 10, y: 0, width: 2, height: 2 });
     expect(result.snapshot.diagnostics.filter((diagnostic) => diagnostic.phase === "rigControl_evaluation")).toEqual([]);
+  });
+
+  it("applies ancestor warpLattice2d along descendant rotation2d drawable evidence deterministically", () => {
+    const graph = createWarpParentRotationChildGraph();
+    const request = {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_parent", "rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const
+      }
+    };
+
+    const first = evaluateViewerRuntimeSnapshot(graph, request);
+    const second = evaluateViewerRuntimeSnapshot(graph, request);
+
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.runtimeDiff).toEqual(second.runtimeDiff);
+    expect(expectRigControl(first.snapshot.rigControls, "rig_parent")).toMatchObject({
+      kind: "warpLattice2d",
+      evaluationStatus: "evaluated",
+      childRigControlIds: ["rig_child"],
+      affectedDrawableIds: ["draw_child"],
+      affectedRigControlIds: ["rig_child"]
+    });
+    expect(expectRigControl(first.snapshot.rigControls, "rig_child")).toMatchObject({
+      kind: "rotation2d",
+      parentId: "rig_parent",
+      evaluationStatus: "evaluated",
+      affectedDrawableIds: ["draw_child"]
+    });
+    expect(expectRigControl(first.snapshot.rigControls, "rig_child").worldTransform?.angleDegrees).toBe(90);
+    expect(first.snapshot.drawables[0]).toMatchObject({
+      drawableId: "draw_child",
+      bounds: { x: 8, y: 1, width: 2.5, height: 3 },
+      vertices: [
+        { x: 10.5, y: 1 },
+        { x: 10.5, y: 4 },
+        { x: 8, y: 4 },
+        { x: 8, y: 1 }
+      ]
+    });
+    expect(first.runtimeDiff.drawableChanges).toEqual([
+      {
+        drawableId: "draw_child",
+        boundsChanged: true,
+        vertexHashBefore: first.baselineSnapshot.drawables[0]?.vertexHash,
+        vertexHashAfter: first.snapshot.drawables[0]?.vertexHash
+      }
+    ]);
+  });
+
+  it("keeps blocked ancestor warpLattice2d as no-op while descendant rotation2d transforms drawable evidence", () => {
+    const graph = createInvalidWarpParentRotationChildGraph();
+    const request = {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_parent", "rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const
+      }
+    };
+
+    const first = evaluateViewerRuntimeSnapshot(graph, request);
+    const second = evaluateViewerRuntimeSnapshot(graph, request);
+
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.runtimeDiff).toEqual(second.runtimeDiff);
+    expect(expectRigControl(first.snapshot.rigControls, "rig_parent")).toMatchObject({
+      kind: "warpLattice2d",
+      evaluationStatus: "blocked",
+      affectedDrawableIds: ["draw_child"],
+      affectedRigControlIds: ["rig_child"]
+    });
+    expect(expectRigControl(first.snapshot.rigControls, "rig_child")).toMatchObject({
+      kind: "rotation2d",
+      parentId: "rig_parent",
+      evaluationStatus: "evaluated",
+      affectedDrawableIds: ["draw_child"]
+    });
+    expect(first.snapshot.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "rigControl.warpLatticeInvalidConfig",
+          severity: "blocking",
+          phase: "rigControl_evaluation",
+          target: { kind: "rigControl", id: "rig_parent" },
+          evidence: expect.arrayContaining(["restControlPoints.length=3", "expectedRestControlPoints=4"])
+        })
+      ])
+    );
+    expect(first.snapshot.drawables[0]).toMatchObject({
+      drawableId: "draw_child",
+      bounds: { x: 8, y: 0, width: 2, height: 2 },
+      vertices: [
+        { x: 10, y: 0 },
+        { x: 10, y: 2 },
+        { x: 8, y: 2 },
+        { x: 8, y: 0 }
+      ]
+    });
+    expect(first.runtimeDiff.drawableChanges).toEqual([
+      {
+        drawableId: "draw_child",
+        boundsChanged: true,
+        vertexHashBefore: first.baselineSnapshot.drawables[0]?.vertexHash,
+        vertexHashAfter: first.snapshot.drawables[0]?.vertexHash
+      }
+    ]);
+    expect(first.runtimeDiff.diagnosticDelta).toEqual(first.snapshot.diagnostics);
+  });
+
+  it("keeps disabled warpLattice2d deterministic without applying controlPointOffsets displacement", () => {
+    const result = evaluateSingleFrame(createWarpControlPointOffsetGraph({ enabled: false }), 1, 1);
+
+    expect(result.snapshot.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_warp_future",
+        kind: "warpLattice2d",
+        enabled: false,
+        evaluationStatus: "disabled",
+        affectedDrawableIds: ["draw_child"]
+      })
+    ]);
+    expectDrawChildUntransformed(result.snapshot.drawables);
+    expect(result.snapshot.diagnostics.filter((diagnostic) => diagnostic.phase === "rigControl_evaluation")).toEqual([]);
+  });
+
+  it("blocks invalid warpLattice2d lattice cardinality without applying drawable deformation", () => {
+    const result = evaluateSingleFrame(createInvalidWarpLatticeGraph(), 1, 1);
+
+    expect(result.snapshot.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_warp_future",
+        kind: "warpLattice2d",
+        evaluationStatus: "blocked",
+        affectedDrawableIds: ["draw_child"]
+      })
+    ]);
+    expect(result.snapshot.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "rigControl.warpLatticeInvalidConfig",
+          severity: "blocking",
+          phase: "rigControl_evaluation",
+          target: { kind: "rigControl", id: "rig_warp_future" },
+          evidence: expect.arrayContaining(["restControlPoints.length=3", "expectedRestControlPoints=4"])
+        })
+      ])
+    );
+    expectDrawChildUntransformed(result.snapshot.drawables);
   });
 });
 
@@ -457,6 +609,203 @@ const createWarpNoOpGraph = (): NormalizedRuntimeGraph => {
       ]
     ]),
     keyformBindings: []
+  };
+};
+
+const createWarpParentRotationChildGraph = (): NormalizedRuntimeGraph => {
+  const graph = createRotationRigControlGraph();
+  const parentRigId = RigControlIdSchema.parse("rig_parent");
+  const childRigId = RigControlIdSchema.parse("rig_child");
+  const drawableId = DrawableIdSchema.parse("draw_child");
+  const childRigControl = graph.rigControls.get(childRigId);
+
+  if (childRigControl?.kind !== "rotation2d") {
+    throw new Error("Expected rotation2d child rig control");
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        parentRigId,
+        {
+          kind: "warpLattice2d",
+          rigControlId: parentRigId,
+          childDrawableIds: [],
+          childRigControlIds: [childRigId],
+          bindSpace: "rigControlLocalRest",
+          domainBounds: { x: 8, y: -2, width: 8, height: 8 },
+          latticeColumns: 2,
+          latticeRows: 2,
+          restControlPoints: [
+            { x: 8, y: -2 },
+            { x: 16, y: -2 },
+            { x: 8, y: 6 },
+            { x: 16, y: 6 }
+          ],
+          interpolationMethod: "bilinear-grid-v1",
+          enabled: true
+        }
+      ],
+      [
+        childRigId,
+        {
+          ...childRigControl,
+          parentId: parentRigId
+        }
+      ]
+    ]),
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_parent_warp_offsets"),
+        targetId: parentRigId,
+        targetKind: "rigControl",
+        targetProperty: "controlPointOffsets",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        keys: [
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 2, y: 0 },
+              { x: 0, y: 4 },
+              { x: 2, y: 4 }
+            ]
+          }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 0
+      },
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_child_rotation"),
+        targetId: childRigId,
+        targetKind: "rigControl",
+        targetProperty: "angleDegrees",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        keys: [
+          { value: 0, statePatch: 0 },
+          { value: 1, statePatch: 90 }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 1
+      }
+    ],
+    drawOrder: [{ drawableId, drawOrder: 0 }]
+  };
+};
+
+const createInvalidWarpParentRotationChildGraph = (): NormalizedRuntimeGraph => {
+  const graph = createWarpParentRotationChildGraph();
+  const parentRigId = RigControlIdSchema.parse("rig_parent");
+  const parentRigControl = graph.rigControls.get(parentRigId);
+
+  if (parentRigControl?.kind !== "warpLattice2d") {
+    throw new Error("Expected warpLattice2d parent rig control");
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        parentRigId,
+        {
+          ...parentRigControl,
+          restControlPoints: parentRigControl.restControlPoints.slice(0, 3)
+        }
+      ],
+      ...[...graph.rigControls.entries()].filter(([rigControlId]) => rigControlId !== parentRigId)
+    ])
+  };
+};
+
+const createWarpControlPointOffsetGraph = (input: {
+  readonly enabled: boolean;
+}): NormalizedRuntimeGraph => {
+  const graph = createWarpNoOpGraph();
+  const warpRigId = RigControlIdSchema.parse("rig_warp_future");
+  const warpRigControl = graph.rigControls.get(warpRigId);
+
+  if (warpRigControl?.kind !== "warpLattice2d") {
+    throw new Error("Expected warpLattice2d test rig control");
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        warpRigId,
+        {
+          ...warpRigControl,
+          enabled: input.enabled
+        }
+      ]
+    ]),
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_warp_offsets"),
+        targetId: warpRigId,
+        targetKind: "rigControl",
+        targetProperty: "controlPointOffsets",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        keys: [
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 2, y: 2 },
+              { x: 2, y: 2 },
+              { x: 2, y: 2 },
+              { x: 2, y: 2 }
+            ]
+          }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 0
+      }
+    ]
+  };
+};
+
+const createInvalidWarpLatticeGraph = (): NormalizedRuntimeGraph => {
+  const graph = createWarpControlPointOffsetGraph({ enabled: true });
+  const warpRigId = RigControlIdSchema.parse("rig_warp_future");
+  const warpRigControl = graph.rigControls.get(warpRigId);
+
+  if (warpRigControl?.kind !== "warpLattice2d") {
+    throw new Error("Expected warpLattice2d test rig control");
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        warpRigId,
+        {
+          ...warpRigControl,
+          restControlPoints: warpRigControl.restControlPoints.slice(0, 3)
+        }
+      ]
+    ])
   };
 };
 

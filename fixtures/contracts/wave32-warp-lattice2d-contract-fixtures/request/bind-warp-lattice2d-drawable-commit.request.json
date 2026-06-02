@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave32_bind_warp_lattice2d_drawable",
+  "actor": "human",
+  "surface": "gui",
+  "dryRun": false,
+  "basePackageRevision": 1,
+  "idempotencyKey": "wave32-bind-warp-lattice2d-drawable",
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-009",
+      "AC-MVP-010",
+      "AC-MVP-011"
+    ],
+    "relatedScenarios": [
+      "SC-MVP-002",
+      "SC-MVP-003"
+    ]
+  },
+  "operationType": "bindRigControlChild",
+  "payload": {
+    "parentRigControlId": "rig_wave32_body_warp_lattice",
+    "child": {
+      "kind": "drawable",
+      "id": "draw_wave32_body"
+    }
+  }
+}

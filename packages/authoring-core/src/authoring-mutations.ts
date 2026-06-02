@@ -59,6 +59,8 @@ export type AuthoringMutationErrorCode =
   | "missing_parameter"
   | "missing_keyform_target"
   | "unsupported_keyform_target_property"
+  | "unsupported_keyform_composition_mode"
+  | "invalid_warp_lattice_control_point_offsets_patch"
   | "duplicate_keyform_grid_axis_parameter"
   | "duplicate_keyform_grid_coordinate"
   | "duplicate_dynamics_group"
@@ -79,7 +81,12 @@ export type AuthoringMutationErrorCode =
   | "rig_control_self_child"
   | "rig_control_cycle"
   | "rig_control_child_already_parented"
-  | "no_op_rig_control_child_binding";
+  | "no_op_rig_control_child_binding"
+  | "invalid_warp_lattice_bind_space"
+  | "invalid_warp_lattice_domain_bounds"
+  | "invalid_warp_lattice_grid"
+  | "invalid_warp_lattice_rest_control_points"
+  | "invalid_warp_lattice_interpolation";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

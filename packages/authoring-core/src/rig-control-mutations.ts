@@ -1,6 +1,10 @@
 import {
   DrawableIdSchema,
-  RigControlIdSchema
+  RigControlIdSchema,
+  WarpLattice2dBindSpaceSchema,
+  WarpLattice2dDomainBoundsSchema,
+  WarpLattice2dInterpolationMethodSchema,
+  hasWarpLattice2dControlPointCardinality
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DrawableId,
@@ -19,6 +23,7 @@ import { getRigControlById, hasRigControl } from "./rig-control-selectors.js";
 import { addStableOrderId } from "./stable-order-mutations.js";
 
 export type Rotation2dRigControlDto = Extract<RigControlDto, { readonly kind: "rotation2d" }>;
+export type WarpLattice2dRigControlDto = Extract<RigControlDto, { readonly kind: "warpLattice2d" }>;
 
 export interface RigControlMutationChange {
   readonly before: RigControlDto;
@@ -28,6 +33,15 @@ export interface RigControlMutationChange {
 export interface CreateRotation2dRigControlMutationResult {
   readonly session: AuthoringSession;
   readonly rigControl: Rotation2dRigControlDto;
+  readonly childRigControlChanges: readonly RigControlMutationChange[];
+  readonly rigControlRootIdsBefore: readonly RigControlId[];
+  readonly rigControlRootIdsAfter: readonly RigControlId[];
+  readonly authoringRevision: AuthoringRevision;
+}
+
+export interface CreateWarpLattice2dRigControlMutationResult {
+  readonly session: AuthoringSession;
+  readonly rigControl: WarpLattice2dRigControlDto;
   readonly childRigControlChanges: readonly RigControlMutationChange[];
   readonly rigControlRootIdsBefore: readonly RigControlId[];
   readonly rigControlRootIdsAfter: readonly RigControlId[];
@@ -54,6 +68,42 @@ export const createRotation2dRigControl = (
   session: AuthoringSession,
   rigControl: Rotation2dRigControlDto
 ): CreateRotation2dRigControlMutationResult => {
+  assertUniqueRigControlId(session, rigControl.rigControlId);
+  assertPartExists(session, rigControl);
+  assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
+  assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
+  assertChildDrawablesCanBind(session, rigControl.childDrawableIds);
+  assertChildRigControlsCanBind(session.graph, rigControl.rigControlId, rigControl.childRigControlIds);
+
+  const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
+  const storedRigControl = structuredClone(rigControl);
+  session.graph.rigControls.push(storedRigControl);
+  addStableOrderId(session.graph, storedRigControl.rigControlId);
+  addRigControlRootId(session.graph, storedRigControl.rigControlId);
+
+  const childRigControlChanges = storedRigControl.childRigControlIds.map((childRigControlId) =>
+    setChildRigControlParent(session.graph, childRigControlId, storedRigControl.rigControlId)
+  );
+  const rigControlRootIdsAfter = cloneDto(session.graph.rigControlRootIds);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    rigControl: storedRigControl,
+    childRigControlChanges,
+    rigControlRootIdsBefore,
+    rigControlRootIdsAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const createWarpLattice2dRigControl = (
+  session: AuthoringSession,
+  rigControl: WarpLattice2dRigControlDto
+): CreateWarpLattice2dRigControlMutationResult => {
+  assertWarpLattice2dRigControlShape(rigControl);
   assertUniqueRigControlId(session, rigControl.rigControlId);
   assertPartExists(session, rigControl);
   assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
@@ -145,6 +195,59 @@ const assertUniqueRigControlId = (
     throw new AuthoringMutationError(
       "duplicate_rig_control",
       `Rig control already exists: ${rigControlId}`
+    );
+  }
+};
+
+const assertWarpLattice2dRigControlShape = (rigControl: WarpLattice2dRigControlDto): void => {
+  if (!WarpLattice2dBindSpaceSchema.safeParse(rigControl.bindSpace).success) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_bind_space",
+      `warpLattice2d bindSpace is not supported: ${rigControl.bindSpace}`
+    );
+  }
+
+  if (!WarpLattice2dDomainBoundsSchema.safeParse(rigControl.domainBounds).success) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_domain_bounds",
+      `warpLattice2d domainBounds must have positive width and height: ${JSON.stringify(rigControl.domainBounds)}`
+    );
+  }
+
+  if (
+    !Number.isInteger(rigControl.latticeColumns) ||
+    !Number.isInteger(rigControl.latticeRows) ||
+    rigControl.latticeColumns < 2 ||
+    rigControl.latticeRows < 2
+  ) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_grid",
+      `warpLattice2d lattice size must be at least 2x2: ${rigControl.latticeColumns}x${rigControl.latticeRows}`
+    );
+  }
+
+  if (!hasWarpLattice2dControlPointCardinality(rigControl, rigControl.restControlPoints.length)) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_rest_control_points",
+      `warpLattice2d restControlPoints length must equal latticeColumns * latticeRows for ${rigControl.rigControlId}`
+    );
+  }
+
+  if (
+    rigControl.restControlPoints.some(
+      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y)
+    )
+  ) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_rest_control_points",
+      `warpLattice2d restControlPoints must contain finite Vec2 values for ${rigControl.rigControlId}`
+    );
+  }
+
+  if (!WarpLattice2dInterpolationMethodSchema.safeParse(rigControl.interpolationMethod).success) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_interpolation",
+      `warpLattice2d interpolationMethod is not supported: ${rigControl.interpolationMethod}`
     );
   }
 };

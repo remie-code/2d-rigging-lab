@@ -104,7 +104,7 @@ const applyAddKeyform = (
     parameterId: request.payload.parameterId,
     evaluator: "linear-1d-v1",
     interpolation: request.payload.interpolation,
-    compositionMode: "replace",
+    compositionMode: request.payload.compositionMode ?? "replace",
     compositionOrder: 0,
     keys: [
       {
@@ -233,6 +233,24 @@ const createAddKeyformMutationDiagnostic = (
         target: {
           ...context.operationTarget,
           path: `/model/keyforms/keyformTargets/${context.packageTarget.kind}/${context.packageTarget.property}`
+        }
+      });
+    case "unsupported_keyform_composition_mode":
+      return createOperationDiagnostic({
+        checkId: "operation.addKeyform.unsupportedCompositionMode",
+        message: error.message,
+        target: {
+          ...context.operationTarget,
+          path: `/model/keyforms/keyformSets/${context.keyformSetId}/compositionMode`
+        }
+      });
+    case "invalid_warp_lattice_control_point_offsets_patch":
+      return createOperationDiagnostic({
+        checkId: "operation.addKeyform.invalidControlPointOffsets",
+        message: error.message,
+        target: {
+          ...context.operationTarget,
+          path: `/model/keyforms/keyformSets/${context.keyformSetId}/keys`
         }
       });
     default:

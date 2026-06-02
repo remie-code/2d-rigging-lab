@@ -208,6 +208,8 @@ const createRuntimeEvidenceInput = (
       return createUpdateDynamicsGroupEvidenceInput(input);
     case "createRotation2dRigControl":
       return createCreateRotation2dRigControlEvidenceInput(input);
+    case "createWarpLattice2dRigControl":
+      return createCreateWarpLattice2dRigControlEvidenceInput(input);
     case "bindRigControlChild":
       return createBindRigControlChildEvidenceInput(input);
     case "setMaskRelation":
@@ -739,6 +741,27 @@ const createCreateRotation2dRigControlEvidenceInput = (
 
   return {
     artifactLabel: "editor-create-rotation2d-rig-control",
+    authoredParameterValues: {},
+    targetIds
+  };
+};
+
+const createCreateWarpLattice2dRigControlEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "createWarpLattice2dRigControl") {
+    throw new Error(`createWarpLattice2dRigControl evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.partId,
+    ...input.request.payload.childDrawableIds,
+    ...input.request.payload.childRigControlIds
+  ]);
+
+  return {
+    artifactLabel: "editor-create-warp-lattice2d-rig-control",
     authoredParameterValues: {},
     targetIds
   };

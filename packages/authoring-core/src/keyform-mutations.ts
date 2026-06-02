@@ -1,4 +1,12 @@
 import type {
+  Vec2Dto
+} from "@private-2d-rigging-lab/contracts";
+import {
+  WarpLattice2dControlPointOffsetsSchema,
+  getWarpLattice2dControlPointCount,
+  isWarpLattice2dControlPointOffsetsTarget
+} from "@private-2d-rigging-lab/contracts";
+import type {
   KeyformSetDto,
   KeyformTargetDto,
   Linear1dKeyformSetDto,
@@ -26,6 +34,7 @@ export const createLinear1dKeyformSet = (
   assertUniqueKeyformSetId(session, keyformSet);
   assertParameterExists(session, keyformSet.parameterId);
   assertSupportedTarget(session.graph, keyformSet.target);
+  assertWarpLattice2dControlPointOffsetsKeyform(session.graph, keyformSet);
 
   return storeKeyformSet(session, keyformSet);
 };
@@ -40,6 +49,7 @@ export const createParameterGrid2dKeyformSet = (
   assertParameterExists(session, keyformSet.parameterY);
   assertSupportedTarget(session.graph, keyformSet.target);
   assertUniqueGridCoordinates(keyformSet);
+  assertWarpLattice2dControlPointOffsetsKeyform(session.graph, keyformSet);
 
   return storeKeyformSet(session, keyformSet);
 };
@@ -147,6 +157,48 @@ const targetExists = (graph: AuthoringGraph, target: KeyformTargetDto): boolean 
 const isSupportedTargetProperty = (target: KeyformTargetDto): boolean =>
   supportedTargetProperties[target.kind].has(target.property);
 
+const assertWarpLattice2dControlPointOffsetsKeyform = (
+  graph: AuthoringGraph,
+  keyformSet: KeyformSetDto
+): void => {
+  if (!isWarpLattice2dControlPointOffsetsTarget(keyformSet.target)) {
+    return;
+  }
+
+  const rigControl = graph.rigControls.find(
+    (candidate) => candidate.rigControlId === keyformSet.target.id
+  );
+  if (rigControl?.kind !== "warpLattice2d") {
+    throw new AuthoringMutationError(
+      "unsupported_keyform_target_property",
+      `controlPointOffsets keyforms require a warpLattice2d rig control target: ${keyformSet.target.id}`
+    );
+  }
+
+  if (keyformSet.compositionMode !== "replace" && keyformSet.compositionMode !== "additiveDelta") {
+    throw new AuthoringMutationError(
+      "unsupported_keyform_composition_mode",
+      `warpLattice2d controlPointOffsets keyforms allow only replace or additiveDelta composition: ${keyformSet.compositionMode}`
+    );
+  }
+
+  const expectedControlPointCount = getWarpLattice2dControlPointCount(rigControl);
+  for (const key of keyformSet.keys) {
+    const parsed = WarpLattice2dControlPointOffsetsSchema.safeParse(key.statePatch);
+    if (!parsed.success || !hasExpectedControlPointCount(parsed.data, expectedControlPointCount)) {
+      throw new AuthoringMutationError(
+        "invalid_warp_lattice_control_point_offsets_patch",
+        `warpLattice2d controlPointOffsets statePatch must be Vec2[] with ${expectedControlPointCount} entries`
+      );
+    }
+  }
+};
+
+const hasExpectedControlPointCount = (
+  offsets: readonly Vec2Dto[],
+  expectedControlPointCount: number
+): boolean => offsets.length === expectedControlPointCount;
+
 const supportedTargetProperties = {
   mesh: new Set(["vertices"]),
   rigControl: new Set([
@@ -157,7 +209,8 @@ const supportedTargetProperties = {
     "scale",
     "restScale",
     "controlPoints",
-    "restControlPoints"
+    "restControlPoints",
+    "controlPointOffsets"
   ]),
   drawable: new Set([
     "opacity",

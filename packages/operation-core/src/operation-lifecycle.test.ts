@@ -401,7 +401,7 @@ describe("operation lifecycle foundation", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
-    const unsupported = core.commitOperation(session, createUnsupportedWarpRigControlRequest());
+    const unsupported = core.commitOperation(session, createUnsupportedDynamicsGroupDeleteRequest());
 
     expect(unsupported.result.status).toBe("rejected");
     expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
@@ -535,28 +535,16 @@ const createDynamicsGroupRequest = (options: {
   }
 });
 
-const createUnsupportedWarpRigControlRequest = () => ({
+const createUnsupportedDynamicsGroupDeleteRequest = () => ({
   schemaVersion: "operation-request-v1",
-  operationId: "op_create_warp_rig",
+  operationId: "op_delete_dynamics_group",
   actor: "test",
   surface: "testFixture",
   dryRun: false,
   basePackageRevision: 0,
-  operationType: "createWarpLattice2dRigControl",
+  operationType: "deleteDynamicsGroup",
   payload: {
-    partId: "part_head",
-    displayName: "Head Warp",
-    childDrawableIds: [],
-    childRigControlIds: [],
-    domainBounds: {
-      x: 0,
-      y: 0,
-      width: 128,
-      height: 128
-    },
-    latticeColumns: 2,
-    latticeRows: 2,
-    interpolationMethod: "bilinear-grid-v1"
+    dynamicsGroupId: "dyn_hair_sway"
   }
 });
 

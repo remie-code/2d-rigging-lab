@@ -141,6 +141,7 @@ export const AddKeyformPayloadSchema = z.object({
   parameterId: ParameterIdSchema,
   keyValue: z.number().finite(),
   interpolation: z.literal("linear-1d-v1"),
+  compositionMode: z.enum(["replace", "additiveDelta", "multiplyOpacity"]).optional(),
   statePatch: KeyformStatePatchSchema
 });
 export type AddKeyformPayloadDto = z.infer<typeof AddKeyformPayloadSchema>;

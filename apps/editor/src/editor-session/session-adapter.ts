@@ -89,11 +89,15 @@ import {
 } from "./part-texture-layer-command.js";
 import {
   createAddRigControlAngleKeyformOperationRequest,
+  createAddWarpLattice2dControlPointOffsetsKeyformOperationRequest,
   createBindRigControlChildOperationRequest,
   createRotation2dRigControlOperationRequest,
+  createWarpLattice2dRigControlOperationRequest,
   type EditorAddRigControlAngleKeyformCommand,
+  type EditorAddWarpLattice2dControlPointOffsetsKeyformCommand,
   type EditorBindRigControlChildCommand,
-  type EditorCreateRotation2dRigControlCommand
+  type EditorCreateRotation2dRigControlCommand,
+  type EditorCreateWarpLattice2dRigControlCommand
 } from "./rig-control-command.js";
 import {
   createImportPsdSourceAssetOperationRequest,
@@ -133,9 +137,15 @@ export interface EditorSessionAdapter {
   commitCreateRotation2dRigControl(
     command: EditorCreateRotation2dRigControlCommand
   ): EditorSessionPersistenceResult;
+  commitCreateWarpLattice2dRigControl(
+    command: EditorCreateWarpLattice2dRigControlCommand
+  ): EditorSessionPersistenceResult;
   commitBindRigControlChild(command: EditorBindRigControlChildCommand): EditorSessionPersistenceResult;
   commitAddRigControlAngleKeyform(
     command: EditorAddRigControlAngleKeyformCommand
+  ): EditorSessionPersistenceResult;
+  commitAddWarpLattice2dControlPointOffsetsKeyform(
+    command: EditorAddWarpLattice2dControlPointOffsetsKeyformCommand
   ): EditorSessionPersistenceResult;
   commitSetMaskRelation(command: EditorSetMaskRelationCommand): EditorSessionPersistenceResult;
   commitAddDrawableOpacityKeyform(
@@ -350,6 +360,13 @@ export const createEditorSessionAdapter = (
       );
       return this.commitOperation(request);
     },
+    commitCreateWarpLattice2dRigControl(command) {
+      const request = createWarpLattice2dRigControlOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
     commitBindRigControlChild(command) {
       const request = createBindRigControlChildOperationRequest(
         command,
@@ -359,6 +376,13 @@ export const createEditorSessionAdapter = (
     },
     commitAddRigControlAngleKeyform(command) {
       const request = createAddRigControlAngleKeyformOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    commitAddWarpLattice2dControlPointOffsetsKeyform(command) {
+      const request = createAddWarpLattice2dControlPointOffsetsKeyformOperationRequest(
         command,
         authoringSession.packageRevision
       );

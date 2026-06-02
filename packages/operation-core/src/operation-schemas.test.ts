@@ -247,6 +247,24 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "createWarpLattice2dRigControl",
+    payload: {
+      partId: "part_head",
+      displayName: "Head Warp Lattice",
+      childDrawableIds: ["draw_face"],
+      childRigControlIds: [],
+      domainBounds: {
+        x: 320,
+        y: 240,
+        width: 512,
+        height: 512
+      },
+      latticeColumns: 2,
+      latticeRows: 2,
+      interpolationMethod: "bilinear-grid-v1"
+    }
+  },
+  {
     operationType: "bindRigControlChild",
     payload: {
       parentRigControlId: "rig_head_rotation",
@@ -317,6 +335,7 @@ describe("operation-core DTO schemas", () => {
       "moveMeshVertex",
       "setMaskRelation",
       "createRotation2dRigControl",
+      "createWarpLattice2dRigControl",
       "bindRigControlChild"
     ]);
   });

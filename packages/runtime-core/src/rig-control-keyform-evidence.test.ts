@@ -199,7 +199,7 @@ describe("runtime rig control keyform evidence", () => {
     });
   });
 
-  it("keeps warpLattice2d keyform samples as unsupported no-op evidence without deforming drawables", () => {
+  it("applies warpLattice2d controlPointOffsets keyform samples as semantic bilinear drawable deformation", () => {
     const graph = createWarpLatticeKeyformGraph();
     const request = {
       baselineParameterOverrides: { param_rig_angle: 0 },
@@ -220,42 +220,97 @@ describe("runtime rig control keyform evidence", () => {
       expect.objectContaining({
         rigControlId: "rig_warp_future",
         kind: "warpLattice2d",
-        evaluationStatus: "unsupported",
-        unsupportedReason: "warpLattice2dEvaluatorFutureScope",
+        evaluationStatus: "evaluated",
         affectedDrawableIds: ["draw_child"]
       })
     ]);
     expect(first.snapshot.keyformSamples).toEqual([
       expect.objectContaining({
         keyformSetId: "keyset_warp_future",
-        target: "rigControl:rig_warp_future.angleDegrees",
+        target: "rigControl:rig_warp_future.controlPointOffsets",
         targetMetadata: {
           targetId: "rig_warp_future",
           targetKind: "rigControl",
-          targetProperty: "angleDegrees"
+          targetProperty: "controlPointOffsets"
         },
-        statePatch: 45
+        statePatch: [
+          { x: 0, y: 0 },
+          { x: 2, y: 0 },
+          { x: 0, y: 4 },
+          { x: 2, y: 4 }
+        ]
       })
     ]);
+    expect(first.snapshot.diagnostics).toEqual([]);
+    expect(expectDrawable(first.snapshot.drawables, "draw_child")).toMatchObject({
+      bounds: { x: 10.5, y: 0, width: 9.5, height: 4 },
+      vertices: [
+        { x: 10.5, y: 1 },
+        { x: 13, y: 1 },
+        { x: 13, y: 4 },
+        { x: 10.5, y: 4 },
+        { x: 20, y: 0 }
+      ]
+    });
+    expect(first.snapshot.drawables[0]?.vertexHash).not.toBe(first.baselineSnapshot.drawables[0]?.vertexHash);
+    expect(first.runtimeDiff.drawableChanges).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_child",
+        boundsChanged: true,
+        vertexHashBefore: first.baselineSnapshot.drawables[0]?.vertexHash,
+        vertexHashAfter: first.snapshot.drawables[0]?.vertexHash
+      })
+    ]);
+    expect(first.evidence.runtimeDiffEquivalent).toBe(false);
+  });
+
+  it("blocks invalid warpLattice2d controlPointOffsets patch shape deterministically", () => {
+    const graph = createWarpLatticeInvalidOffsetsGraph();
+    const request = {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_warp_future", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const
+      }
+    };
+
+    const first = evaluateViewerRuntimeSnapshot(graph, request);
+    const second = evaluateViewerRuntimeSnapshot(graph, request);
+
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.runtimeDiff).toEqual(second.runtimeDiff);
+    expect(expectRigControl(first.snapshot.rigControls, "rig_warp_future")).toMatchObject({
+      kind: "warpLattice2d",
+      evaluationStatus: "blocked",
+      affectedDrawableIds: ["draw_child"]
+    });
     expect(first.snapshot.diagnostics).toEqual([
       expect.objectContaining({
-        checkId: "rigControl.warpLatticeUnsupported",
-        severity: "warning",
+        checkId: "rigControl.invalidPatchShape",
+        severity: "blocking",
         phase: "rigControl_evaluation",
         target: { kind: "rigControl", id: "rig_warp_future" },
-        evidence: ["keyformSetId=keyset_warp_future"]
+        evidence: expect.arrayContaining([
+          "keyformSetId=keyset_warp_bad_offsets",
+          "targetProperty=controlPointOffsets",
+          "actualLength=3",
+          "expectedLength=4"
+        ])
       })
     ]);
     expect(expectDrawable(first.snapshot.drawables, "draw_child")).toMatchObject({
-      bounds: { x: 10, y: 0, width: 2, height: 2 },
+      bounds: { x: 10, y: 0, width: 10, height: 2 },
       vertices: [
         { x: 10, y: 0 },
         { x: 12, y: 0 },
         { x: 12, y: 2 },
-        { x: 10, y: 2 }
+        { x: 10, y: 2 },
+        { x: 20, y: 0 }
       ]
     });
-    expect(first.runtimeDiff.drawableChanges).toEqual([]);
+    expect(first.runtimeDiff.diagnosticDelta).toEqual(first.snapshot.diagnostics);
   });
 });
 
@@ -364,9 +419,30 @@ const createWarpLatticeKeyformGraph = (): NormalizedRuntimeGraph => {
   const graph = createRotation2dKeyformGraph();
   const drawableId = DrawableIdSchema.parse("draw_child");
   const warpRigId = RigControlIdSchema.parse("rig_warp_future");
+  const drawable = graph.drawables.get(drawableId);
+  if (drawable === undefined) {
+    throw new Error("Expected warp lattice drawable fixture");
+  }
 
   return {
     ...graph,
+    drawables: new Map([
+      [
+        drawableId,
+        {
+          ...drawable,
+          bounds: { x: 10, y: 0, width: 10, height: 2 },
+          vertices: [
+            { x: 10, y: 0 },
+            { x: 12, y: 0 },
+            { x: 12, y: 2 },
+            { x: 10, y: 2 },
+            { x: 20, y: 0 }
+          ],
+          vertexCount: 5
+        }
+      ]
+    ]),
     rigControls: new Map([
       [
         warpRigId,
@@ -396,13 +472,69 @@ const createWarpLatticeKeyformGraph = (): NormalizedRuntimeGraph => {
         keyformSetId: KeyformSetIdSchema.parse("keyset_warp_future"),
         targetId: warpRigId,
         targetKind: "rigControl",
-        targetProperty: "angleDegrees",
+        targetProperty: "controlPointOffsets",
         parameterId: ParameterIdSchema.parse("param_rig_angle"),
         compositionMode: "replace",
         compositionOrder: 0,
         keys: [
-          { value: 0, statePatch: 0 },
-          { value: 1, statePatch: 45 }
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 2, y: 0 },
+              { x: 0, y: 4 },
+              { x: 2, y: 4 }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+};
+
+const createWarpLatticeInvalidOffsetsGraph = (): NormalizedRuntimeGraph => {
+  const graph = createWarpLatticeKeyformGraph();
+  const warpRigId = RigControlIdSchema.parse("rig_warp_future");
+
+  return {
+    ...graph,
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_warp_bad_offsets"),
+        targetId: warpRigId,
+        targetKind: "rigControl",
+        targetProperty: "controlPointOffsets",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 2, y: 0 },
+              { x: 0, y: 4 }
+            ]
+          }
         ]
       }
     ]

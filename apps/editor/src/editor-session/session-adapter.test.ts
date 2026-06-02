@@ -322,6 +322,110 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits warpLattice2d create and controlPointOffsets keyforms through the editor session adapter", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:16:00.000Z")
+    });
+    const create = adapter.commitCreateWarpLattice2dRigControl({
+      operationId: "op_editor_create_warp_lattice_body",
+      displayName: "Editor Body Warp",
+      partId: "part_root",
+      childDrawableIds: ["draw_body"],
+      domainBounds: { x: 0, y: 0, width: 128, height: 128 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      interpolationMethod: "bilinear-grid-v1"
+    });
+
+    const result = adapter.commitAddWarpLattice2dControlPointOffsetsKeyform({
+      operationId: "op_editor_add_warp_lattice_offsets",
+      parameterId: "param_preview_body_yaw",
+      rigControlId: "rig_editor_body_warp",
+      keyValue: 1,
+      compositionMode: "replace",
+      controlPointOffsets: [
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 0, y: 2 },
+        { x: 4, y: 2 }
+      ]
+    });
+
+    expect(create.operationResult.status).toBe("committed");
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("addKeyform");
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createWarpLattice2dRigControl",
+      "addKeyform"
+    ]);
+    expect(result.reloadedDocument.model.rigControls.rigControls).toContainEqual(
+      expect.objectContaining({
+        kind: "warpLattice2d",
+        rigControlId: "rig_editor_body_warp",
+        childDrawableIds: ["draw_body"],
+        restControlPoints: [
+          { x: 0, y: 0 },
+          { x: 128, y: 0 },
+          { x: 0, y: 128 },
+          { x: 128, y: 128 }
+        ]
+      })
+    );
+    expect(result.reloadedDocument.model.keyforms.keyformSets).toContainEqual(
+      expect.objectContaining({
+        evaluator: "linear-1d-v1",
+        parameterId: "param_preview_body_yaw",
+        target: {
+          kind: "rigControl",
+          id: "rig_editor_body_warp",
+          property: "controlPointOffsets"
+        },
+        compositionMode: "replace",
+        keys: [
+          {
+            value: 1,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 4, y: 0 },
+              { x: 0, y: 2 },
+              { x: 4, y: 2 }
+            ]
+          }
+        ]
+      })
+    );
+    const runtimeDiff = result.operationResult.runtimeDiff;
+    if (runtimeDiff === undefined) {
+      throw new Error("Committed warp lattice keyform should expose runtime diff evidence.");
+    }
+
+    const candidateSnapshot = parseRuntimeSnapshotArtifact(result.packageFileSet, runtimeDiff.afterSnapshotId);
+    expect(candidateSnapshot.rigControls).toContainEqual(
+      expect.objectContaining({
+        rigControlId: "rig_editor_body_warp",
+        kind: "warpLattice2d",
+        evaluationStatus: "evaluated",
+        affectedDrawableIds: ["draw_body"]
+      })
+    );
+    expect(candidateSnapshot.keyformSamples).toContainEqual(
+      expect.objectContaining({
+        target: "rigControl:rig_editor_body_warp.controlPointOffsets",
+        samplingStatus: "exact",
+        statePatch: [
+          { x: 0, y: 0 },
+          { x: 4, y: 0 },
+          { x: 0, y: 2 },
+          { x: 4, y: 2 }
+        ]
+      })
+    );
+    expect(result.evidence.generatedValidationReportIds).toEqual([
+      "val_editor_editor_add_warp_lattice_offsets_baseline",
+      "val_editor_editor_add_warp_lattice_offsets_candidate"
+    ]);
+  });
+
   it("commits addKeyformGrid2d and records generated editor evidence", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:20:00.000Z")

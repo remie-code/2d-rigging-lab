@@ -11,6 +11,7 @@ import type { z } from "zod";
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import { createWarpLatticeSchemaIssueCheck } from "./warp-lattice-schema-issues.js";
 
 export interface PackageSchemaValidationResult {
   readonly packageDocument?: PackageDocumentDto;
@@ -47,6 +48,11 @@ const createSchemaIssueCheck = (
   const rigControlChildKindCheck = createInvalidRigControlChildTargetKindCheck(issue, input, packageId);
   if (rigControlChildKindCheck !== undefined) {
     return rigControlChildKindCheck;
+  }
+
+  const warpLatticeSchemaCheck = createWarpLatticeSchemaIssueCheck(issue, input, packageId);
+  if (warpLatticeSchemaCheck !== undefined) {
+    return warpLatticeSchemaCheck;
   }
 
   const path = issue.path.map(String).join(".");

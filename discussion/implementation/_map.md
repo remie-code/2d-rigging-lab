@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave31 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave32 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 32 `warp-lattice2d-rig-control-authoring-evaluator-v0` completed on 2026-06-02 with project-defined `warpLattice2d` authoring, `controlPointOffsets` keyform evidence, semantic bilinear runtime evaluator, validator diagnostics, Editor / Preview / Viewer workflow, rights-clean semantic fixture, desktop/mobile e2e smoke, final verification, and clean integration review while keeping Cubism deformer compatibility, full renderer, pixel oracle, full lattice gizmo, PSD/image/archive expansion, File System Access API, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 31 `package-binary-file-io-byte-intake-pilot-v0` completed on 2026-06-02 with browser `<input type=file>` actual-byte intake, digest / byteLength / mediaType / rights / provenance evidence, package-local current-session byte registration, validator diagnostics, truthful save/load reupload state, byte-only local sample fixture, desktop/mobile e2e smoke, final verification, and clean integration review while keeping PSD parser, image decode, archive, drag-drop, File System Access API, external dependencies, full renderer, pixel oracle, Cubism compatibility, public asset distribution, and persistent binary storage guarantees out of scope.
 - Wave 30 `tutorial-like-mvp-mini-model-v0` completed on 2026-06-02 with a rights-clean synthetic mini model recipe, operation log/model diff/package materialization, semantic runtime/viewer tutorial evidence, validator readiness preflight, guided editor workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping real asset bytes, file picker/parser/archive, image decode, full renderer, pixel oracle, texture sampling correctness, standalone viewer, public tutorial asset distribution, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 29 `canvas-mesh-editing-v1` completed on 2026-06-02 with bounded canvas/SVG mesh vertex selection, multi-vertex translate, semantic Preview / Viewer / Runtime mesh evidence, validator topology diagnostics, contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean review path registration while keeping topology/UV editor, full renderer, pixel oracle, real image bytes, file picker/parser/archive, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
@@ -95,6 +96,7 @@ discussion/implementation/
 | [orchestration/wave29-plan.md](orchestration/wave29-plan.md) | Wave 29 Canvas Mesh Editing v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave30-plan.md](orchestration/wave30-plan.md) | Wave 30 Tutorial-like MVP Mini Model v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave31-plan.md](orchestration/wave31-plan.md) | Wave 31 Package Binary / File I/O Decision + Browser Byte Intake Pilot v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave32-plan.md](orchestration/wave32-plan.md) | Wave 32 WarpLattice2d Rig Control Authoring / Evaluator v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -137,6 +139,8 @@ discussion/implementation/
 | [waves/wave30/_map.md](waves/wave30/_map.md) | Wave 30 domain completion reports, corrective handback, review map links, final verification, and final report |
 | [waves/wave31/wave31-final-report.md](waves/wave31/wave31-final-report.md) | Wave 31 final report for Package Binary / File I/O Decision + Browser Byte Intake Pilot v0 |
 | [waves/wave31/_map.md](waves/wave31/_map.md) | Wave 31 domain completion reports, review map links, final verification, and final report |
+| [waves/wave32/wave32-final-report.md](waves/wave32/wave32-final-report.md) | Wave 32 final report for WarpLattice2d Rig Control Authoring / Evaluator v0 |
+| [waves/wave32/_map.md](waves/wave32/_map.md) | Wave 32 domain completion reports, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -173,11 +177,13 @@ discussion/implementation/
 | [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md) | Wave 30 clean integration review |
 | [reviews/wave31/_map.md](reviews/wave31/_map.md) | Wave 31 domain review reports and clean integration review |
 | [reviews/wave31/wave31-clean-integration-review.md](reviews/wave31/wave31-clean-integration-review.md) | Wave 31 clean integration review |
+| [reviews/wave32/_map.md](reviews/wave32/_map.md) | Wave 32 domain review reports and clean integration review |
+| [reviews/wave32/wave32-clean-integration-review.md](reviews/wave32/wave32-clean-integration-review.md) | Wave 32 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Plan the next implementation wave from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
+1. Plan Wave 33 from [current-capability-map.md](current-capability-map.md), [remaining-work-backlog.md](remaining-work-backlog.md), and the completed Wave32 artifacts.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

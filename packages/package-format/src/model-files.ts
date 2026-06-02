@@ -13,7 +13,16 @@ import {
   RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
-  Vec2Schema
+  Vec2Schema,
+  WarpLattice2dBindSpaceSchema,
+  WarpLattice2dControlPointOffsetsSchema,
+  WarpLattice2dDomainBoundsSchema,
+  WarpLattice2dInterpolationMethodSchema,
+  WarpLattice2dLatticeColumnsSchema,
+  WarpLattice2dLatticeRowsSchema,
+  getWarpLattice2dControlPointCount,
+  hasWarpLattice2dControlPointCardinality,
+  isWarpLattice2dControlPointOffsetsTarget
 } from "@private-2d-rigging-lab/contracts";
 
 export const DrawableSchema = z.object({
@@ -111,10 +120,35 @@ export const ParameterGrid2dKeyformSetSchema = z.object({
 });
 export type ParameterGrid2dKeyformSetDto = z.infer<typeof ParameterGrid2dKeyformSetSchema>;
 
-export const KeyformSetSchema = z.discriminatedUnion("evaluator", [
+const KeyformSetBaseSchema = z.discriminatedUnion("evaluator", [
   Linear1dKeyformSetSchema,
   ParameterGrid2dKeyformSetSchema
 ]);
+
+export const KeyformSetSchema = KeyformSetBaseSchema.superRefine((keyformSet, context) => {
+  if (!isWarpLattice2dControlPointOffsetsTarget(keyformSet.target)) {
+    return;
+  }
+
+  if (keyformSet.compositionMode !== "replace" && keyformSet.compositionMode !== "additiveDelta") {
+    context.addIssue({
+      code: "custom",
+      path: ["compositionMode"],
+      message: "warpLattice2d controlPointOffsets keyforms allow only replace or additiveDelta composition."
+    });
+  }
+
+  keyformSet.keys.forEach((key, index) => {
+    if (!WarpLattice2dControlPointOffsetsSchema.safeParse(key.statePatch).success) {
+      context.addIssue({
+        code: "custom",
+        path: ["keys", index, "statePatch"],
+        message:
+          "warpLattice2d controlPointOffsets statePatch must be a control-point-ordered Vec2[] with at least four entries."
+      });
+    }
+  });
+});
 export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
 
 export const DynamicsDriverSchema = z.object({
@@ -157,38 +191,62 @@ export const DynamicsGroupSchema = z.object({
 });
 export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
 
-export const RigControlSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("rotation2d"),
-    rigControlId: RigControlIdSchema,
-    displayName: z.string(),
-    partId: PartIdSchema,
-    parentId: RigControlIdSchema.optional(),
-    childDrawableIds: z.array(DrawableIdSchema).default([]),
-    childRigControlIds: z.array(RigControlIdSchema).default([]),
-    pivot: Vec2Schema,
-    restAngleDegrees: z.number().finite(),
-    restTranslation: Vec2Schema,
-    restScale: Vec2Schema,
-    enabled: z.boolean()
-  }),
-  z.object({
-    kind: z.literal("warpLattice2d"),
-    rigControlId: RigControlIdSchema,
-    displayName: z.string(),
-    partId: PartIdSchema,
-    parentId: RigControlIdSchema.optional(),
-    childDrawableIds: z.array(DrawableIdSchema).default([]),
-    childRigControlIds: z.array(RigControlIdSchema).default([]),
-    bindSpace: z.literal("rigControlLocalRest"),
-    domainBounds: RectSchema,
-    latticeColumns: z.number().int().min(2),
-    latticeRows: z.number().int().min(2),
-    restControlPoints: z.array(Vec2Schema),
-    interpolationMethod: z.literal("bilinear-grid-v1"),
-    enabled: z.boolean()
-  })
+const Rotation2dRigControlSchema = z.object({
+  kind: z.literal("rotation2d"),
+  rigControlId: RigControlIdSchema,
+  displayName: z.string(),
+  partId: PartIdSchema,
+  parentId: RigControlIdSchema.optional(),
+  childDrawableIds: z.array(DrawableIdSchema).default([]),
+  childRigControlIds: z.array(RigControlIdSchema).default([]),
+  pivot: Vec2Schema,
+  restAngleDegrees: z.number().finite(),
+  restTranslation: Vec2Schema,
+  restScale: Vec2Schema,
+  enabled: z.boolean()
+});
+
+const WarpLattice2dRigControlSchema = z.object({
+  kind: z.literal("warpLattice2d"),
+  rigControlId: RigControlIdSchema,
+  displayName: z.string(),
+  partId: PartIdSchema,
+  parentId: RigControlIdSchema.optional(),
+  childDrawableIds: z.array(DrawableIdSchema).default([]),
+  childRigControlIds: z.array(RigControlIdSchema).default([]),
+  bindSpace: WarpLattice2dBindSpaceSchema,
+  domainBounds: WarpLattice2dDomainBoundsSchema,
+  latticeColumns: WarpLattice2dLatticeColumnsSchema,
+  latticeRows: WarpLattice2dLatticeRowsSchema,
+  restControlPoints: z.array(Vec2Schema),
+  interpolationMethod: WarpLattice2dInterpolationMethodSchema,
+  enabled: z.boolean()
+});
+
+const RigControlBaseSchema = z.discriminatedUnion("kind", [
+  Rotation2dRigControlSchema,
+  WarpLattice2dRigControlSchema
 ]);
+
+export const RigControlSchema = RigControlBaseSchema.superRefine((rigControl, context) => {
+  if (rigControl.kind !== "warpLattice2d") {
+    return;
+  }
+
+  if (
+    !hasWarpLattice2dControlPointCardinality(
+      rigControl,
+      rigControl.restControlPoints.length
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["restControlPoints"],
+      message: `warpLattice2d restControlPoints length must equal latticeColumns * latticeRows (${getWarpLattice2dControlPointCount(rigControl)}).`
+    });
+  }
+});
+
 export type RigControlDto = z.infer<typeof RigControlSchema>;
 
 export const MaskRelationSchema = z.object({

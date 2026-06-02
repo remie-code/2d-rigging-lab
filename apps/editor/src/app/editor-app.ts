@@ -102,8 +102,20 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitCreateRotation2dRigControl(command);
           render();
         },
+        onCommitCreateWarpLattice2dRigControl(command) {
+          workflow.commitCreateWarpLattice2dRigControl(command);
+          render();
+        },
         onCommitBindRigControlChild(command) {
           workflow.commitBindRigControlChild(command);
+          render();
+        },
+        onCommitBindWarpLattice2dChild(command) {
+          workflow.commitBindWarpLattice2dChild(command);
+          render();
+        },
+        onCommitAddWarpLattice2dControlPointOffsetsKeyform(command) {
+          workflow.commitAddWarpLattice2dControlPointOffsetsKeyform(command);
           render();
         },
         onCommitSetMaskRelation(command) {

@@ -1241,6 +1241,102 @@ describe("editor workflow controller", () => {
     ]);
   });
 
+  it("creates a warpLattice2d controlPointOffsets keyform and restores it after save and load", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const created = first.commitCreateWarpLattice2dRigControl(createWarpLatticeRigControlCommand("body"));
+    const keyform = first.commitAddWarpLattice2dControlPointOffsetsKeyform({
+      commandKind: "draftWarpLattice2dControlPointOffsetsKeyform",
+      target: {
+        source: "package",
+        id: "rig_workflow_body_warp",
+        property: "controlPointOffsets"
+      },
+      parameterId: "param_preview_body_yaw",
+      keyValue: 1,
+      compositionMode: "replace",
+      controlPointOffsets: [
+        { x: 0, y: 0 },
+        { x: 6, y: 0 },
+        { x: 0, y: 3 },
+        { x: 6, y: 3 }
+      ]
+    });
+    first.openViewerRuntimeSurface();
+    first.setViewerParameterValue("param_preview_body_yaw", 1);
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+    second.openViewerRuntimeSurface();
+    second.setViewerParameterValue("param_preview_body_yaw", 1);
+
+    expect(created.status).toBe("committed");
+    expect(keyform.status).toBe("committed");
+    expect(first.state.rigControls).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_warp",
+        kind: "warpLattice2d",
+        childDrawableIds: ["draw_body"],
+        latticeColumns: 2,
+        latticeRows: 2
+      })
+    ]));
+    expect(first.state.rigControlWarpLatticeKeyforms).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_warp",
+        parameterId: "param_preview_body_yaw",
+        keyValue: 1,
+        compositionMode: "replace",
+        controlPointOffsets: [
+          { x: 0, y: 0 },
+          { x: 6, y: 0 },
+          { x: 0, y: 3 },
+          { x: 6, y: 3 }
+        ]
+      })
+    ]);
+    expect(first.viewModel.rigControls).toMatchObject({
+      warpLatticeKeyformCountLabel: "1 controlPointOffsets keyform",
+      lastRigControlOperationLabel: "addKeyform committed"
+    });
+    expect(first.viewerRuntimeProjection?.snapshotSummary.rigControls).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_warp",
+        evaluationStatus: "evaluated",
+        affectedDrawableLabel: "draw_body"
+      })
+    ]);
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createWarpLattice2dRigControl",
+      "addKeyform"
+    ]);
+    expect(saved.snapshot.document.model.keyforms.keyformSets).toContainEqual(
+      expect.objectContaining({
+        target: {
+          kind: "rigControl",
+          id: "rig_workflow_body_warp",
+          property: "controlPointOffsets"
+        },
+        parameterId: "param_preview_body_yaw",
+        compositionMode: "replace"
+      })
+    );
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.rigControlWarpLatticeKeyforms).toEqual([
+      expect.objectContaining({
+        rigControlId: "rig_workflow_body_warp",
+        parameterId: "param_preview_body_yaw",
+        controlPointOffsets: [
+          { x: 0, y: 0 },
+          { x: 6, y: 0 },
+          { x: 0, y: 3 },
+          { x: 6, y: 3 }
+        ]
+      })
+    ]);
+  });
+
   it("surfaces deterministic rig control bind diagnostics without mutating state", () => {
     const workflow = createWorkflow(createMemoryStorage());
 
@@ -1646,6 +1742,16 @@ const createRotationRigControlCommand = (name: "body") => ({
   partId: "part_root",
   pivot: { x: 50, y: 56 },
   restAngleDegrees: 15
+} as const);
+
+const createWarpLatticeRigControlCommand = (name: "body") => ({
+  displayName: `Workflow ${capitalize(name)} Warp`,
+  partId: "part_root",
+  childDrawableIds: ["draw_body"],
+  domainBounds: { x: 0, y: 0, width: 128, height: 128 },
+  latticeColumns: 2,
+  latticeRows: 2,
+  interpolationMethod: "bilinear-grid-v1"
 } as const);
 
 const createDynamicsGroupCommand = (name: "hair") => ({

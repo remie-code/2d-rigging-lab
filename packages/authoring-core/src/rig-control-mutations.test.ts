@@ -22,7 +22,8 @@ import { createAuthoringSessionFromPackageDocument } from "./from-package-docume
 import { getRigControlById } from "./rig-control-selectors.js";
 import {
   bindRigControlChild,
-  createRotation2dRigControl
+  createRotation2dRigControl,
+  createWarpLattice2dRigControl
 } from "./rig-control-mutations.js";
 import { AuthoringMutationError } from "./authoring-mutations.js";
 import { toPackageDocument } from "./to-package-document.js";
@@ -69,6 +70,49 @@ describe("rig control authoring mutations", () => {
     });
     expect(session.graph.rigControlRootIds).toEqual(["rig_head"]);
     expect(session.authoringRevision).toBe(2);
+  });
+
+  it("creates a warpLattice2d rig control with deterministic 2x2 package materialization", () => {
+    const baseDocument = loadMinimalFixturePackageDocument();
+    const session = createAuthoringSessionFromPackageDocument(baseDocument);
+
+    const result = createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_head_warp", "Head Warp", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    session.packageRevision = 1;
+
+    const document = toPackageDocument(session, baseDocument, {
+      updatedAt: baseDocument.manifest.updatedAt
+    });
+
+    expect(result.rigControl).toMatchObject({
+      kind: "warpLattice2d",
+      rigControlId: "rig_head_warp",
+      bindSpace: "rigControlLocalRest",
+      latticeColumns: 2,
+      latticeRows: 2,
+      childDrawableIds: ["draw_body"],
+      interpolationMethod: "bilinear-grid-v1"
+    });
+    expect(result.rigControl.restControlPoints).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 0, y: 100 },
+      { x: 100, y: 100 }
+    ]);
+    expect(session.graph.rigControlRootIds).toContain("rig_head_warp");
+    expect(session.graph.stableOrder).toContain("rig_head_warp");
+    expect(document.model.rigControls.rigControls).toContainEqual(
+      expect.objectContaining({
+        rigControlId: "rig_head_warp",
+        kind: "warpLattice2d",
+        childDrawableIds: ["draw_body"],
+        restControlPoints: result.rigControl.restControlPoints
+      })
+    );
   });
 
   it("binds child rig controls and updates graph roots for package materialization", () => {
@@ -152,6 +196,38 @@ const createRotationRigControl = (
   restAngleDegrees: 0,
   restTranslation: { x: 0, y: 0 },
   restScale: { x: 1, y: 1 },
+  enabled: true
+});
+
+const createWarpLatticeRigControl = (
+  rigControlId: string,
+  displayName: string,
+  overrides: Partial<{
+    readonly childDrawableIds: readonly string[];
+    readonly childRigControlIds: readonly string[];
+  }> = {}
+) => ({
+  kind: "warpLattice2d" as const,
+  rigControlId: RigControlIdSchema.parse(rigControlId),
+  displayName,
+  partId: PartIdSchema.parse("part_root"),
+  childDrawableIds: (overrides.childDrawableIds ?? []).map((drawableId) =>
+    DrawableIdSchema.parse(drawableId)
+  ),
+  childRigControlIds: (overrides.childRigControlIds ?? []).map((childRigControlId) =>
+    RigControlIdSchema.parse(childRigControlId)
+  ),
+  bindSpace: "rigControlLocalRest" as const,
+  domainBounds: { x: 0, y: 0, width: 100, height: 100 },
+  latticeColumns: 2,
+  latticeRows: 2,
+  restControlPoints: [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 0, y: 100 },
+    { x: 100, y: 100 }
+  ],
+  interpolationMethod: "bilinear-grid-v1" as const,
   enabled: true
 });
 

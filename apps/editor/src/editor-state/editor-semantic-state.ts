@@ -51,6 +51,11 @@ import type {
 } from "@private-2d-rigging-lab/package-format";
 import type { RigControlState } from "./rig-control-authoring-state.js";
 import type { RigControlAngleKeyformState } from "./rig-control-keyform-state.js";
+import {
+  createEmptyWarpLattice2dDraftState,
+  type WarpLattice2dDraftState
+} from "./rig-control-warp-lattice-draft-state.js";
+import type { RigControlWarpLatticeKeyformState } from "./rig-control-warp-lattice-keyform-state.js";
 
 export const editorSemanticStateSchemaVersion = "editor-semantic-state-v1";
 
@@ -62,6 +67,8 @@ export interface EditorSemanticState {
   readonly parts: readonly ModelPartDto[];
   readonly rigControls: readonly RigControlState[];
   readonly rigControlAngleKeyforms: readonly RigControlAngleKeyformState[];
+  readonly rigControlWarpLatticeKeyforms: readonly RigControlWarpLatticeKeyformState[];
+  readonly warpLattice2dDraft: WarpLattice2dDraftState;
   readonly maskRelations: readonly CompositionMaskRelationState[];
   readonly drawableOpacityKeyforms: readonly DrawableOpacityKeyformState[];
   readonly dynamicsGroups: readonly DynamicsGroupState[];
@@ -94,6 +101,8 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   parts: [],
   rigControls: [],
   rigControlAngleKeyforms: [],
+  rigControlWarpLatticeKeyforms: [],
+  warpLattice2dDraft: createEmptyWarpLattice2dDraftState(),
   maskRelations: [],
   drawableOpacityKeyforms: [],
   dynamicsGroups: [],

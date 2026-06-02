@@ -45,6 +45,8 @@ import {
 } from "./composition-authoring-state.js";
 import { projectRigControlState } from "./rig-control-authoring-state.js";
 import { projectRigControlAngleKeyformState } from "./rig-control-keyform-state.js";
+import { projectWarpLattice2dDraftState } from "./rig-control-warp-lattice-draft-state.js";
+import { projectRigControlWarpLatticeKeyformState } from "./rig-control-warp-lattice-keyform-state.js";
 import { projectTutorialGuidedWorkflowState } from "./tutorial-guided-workflow-state.js";
 import type { TutorialReadinessPreflightState } from "./tutorial-readiness-preflight-state.js";
 import { projectViewerRuntimeState } from "./viewer-runtime-state.js";
@@ -128,6 +130,9 @@ export const projectLoadedPackageState = (
   const parts = input.parts ?? [];
   const rigControls = projectRigControlState(input.rigControls ?? []);
   const rigControlAngleKeyforms = projectRigControlAngleKeyformState(input.keyformSets ?? []);
+  const rigControlWarpLatticeKeyforms = projectRigControlWarpLatticeKeyformState(
+    input.keyformSets ?? []
+  );
   const maskRelations = projectCompositionMaskRelationState(input.masks ?? []);
   const drawableOpacityKeyforms = projectDrawableOpacityKeyformState(input.keyformSets ?? []);
   const dynamicsGroups = projectDynamicsGroupState(input.dynamicsGroups ?? []);
@@ -154,6 +159,8 @@ export const projectLoadedPackageState = (
     parts,
     rigControls,
     rigControlAngleKeyforms,
+    rigControlWarpLatticeKeyforms,
+    warpLattice2dDraft: projectWarpLattice2dDraftState({ parts, drawables }),
     maskRelations,
     drawableOpacityKeyforms,
     dynamicsGroups,
@@ -236,6 +243,10 @@ export const applyCommittedOperationSummary = (
     input.keyformSets === undefined
       ? state.rigControlAngleKeyforms
       : projectRigControlAngleKeyformState(input.keyformSets);
+  const rigControlWarpLatticeKeyforms =
+    input.keyformSets === undefined
+      ? state.rigControlWarpLatticeKeyforms
+      : projectRigControlWarpLatticeKeyformState(input.keyformSets);
   const maskRelations =
     input.masks === undefined
       ? state.maskRelations
@@ -268,6 +279,8 @@ export const applyCommittedOperationSummary = (
     parts,
     rigControls,
     rigControlAngleKeyforms,
+    rigControlWarpLatticeKeyforms,
+    warpLattice2dDraft: projectWarpLattice2dDraftState({ parts, drawables }),
     maskRelations,
     drawableOpacityKeyforms,
     drawables,

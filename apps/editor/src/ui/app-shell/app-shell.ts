@@ -15,7 +15,10 @@ import {
 import type {
   EditorDrawableLayerMoveDirection,
   EditorWorkflowAddDrawableOpacityKeyformCommand,
+  EditorWorkflowAddWarpLattice2dControlPointOffsetsKeyformCommand,
   EditorWorkflowBindRigControlChildCommand,
+  EditorWorkflowBindWarpLattice2dChildCommand,
+  EditorWorkflowCreateWarpLattice2dRigControlCommand,
   EditorWorkflowCreateRotation2dRigControlCommand,
   EditorViewerRuntimeProjection,
   EditorWorkflowSetMaskRelationCommand,
@@ -87,7 +90,16 @@ export interface EditorAppShellOptions {
   readonly onCommitCreateRotation2dRigControl: (
     command: EditorWorkflowCreateRotation2dRigControlCommand
   ) => void;
+  readonly onCommitCreateWarpLattice2dRigControl: (
+    command: EditorWorkflowCreateWarpLattice2dRigControlCommand
+  ) => void;
   readonly onCommitBindRigControlChild: (command: EditorWorkflowBindRigControlChildCommand) => void;
+  readonly onCommitBindWarpLattice2dChild: (
+    command: EditorWorkflowBindWarpLattice2dChildCommand
+  ) => void;
+  readonly onCommitAddWarpLattice2dControlPointOffsetsKeyform: (
+    command: EditorWorkflowAddWarpLattice2dControlPointOffsetsKeyformCommand
+  ) => void;
   readonly onCommitSetMaskRelation: (command: EditorWorkflowSetMaskRelationCommand) => void;
   readonly onCommitAddDrawableOpacityKeyform: (
     command: EditorWorkflowAddDrawableOpacityKeyformCommand
@@ -219,7 +231,11 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     preview: options.previewProjection,
     viewerRuntimeProjection: options.viewerRuntimeProjection,
     onCommitCreateRotation2dRigControl: options.onCommitCreateRotation2dRigControl,
-    onCommitBindRigControlChild: options.onCommitBindRigControlChild
+    onCommitBindRigControlChild: options.onCommitBindRigControlChild,
+    onDraftCreateWarpLattice2dRigControl: options.onCommitCreateWarpLattice2dRigControl,
+    onDraftBindWarpLattice2dChild: options.onCommitBindWarpLattice2dChild,
+    onDraftAddWarpLattice2dControlPointOffsetsKeyform:
+      options.onCommitAddWarpLattice2dControlPointOffsetsKeyform
   });
   const compositionPanel = createCompositionPanel({
     state: options.state,

@@ -356,7 +356,7 @@ describe("validator rig control runtime evidence checks", () => {
     ]);
   });
 
-  it("keeps unsupported warp lattice runtime evidence non-blocking when the snapshot records unsupported no-op behavior", () => {
+  it("reports unsupported warp lattice property and unsupported no-op runtime evidence after Wave32", () => {
     const warpKeyformSetId = "keyset_rig_warp_angleDegrees_param_faceYaw";
     const report = validatePackageRuntime({
       packageDocument: createRigControlPackage({
@@ -406,8 +406,35 @@ describe("validator rig control runtime evidence checks", () => {
       createdAt: CREATED_AT
     });
 
-    expect(report.summary.status).toBe("pass");
-    expect(report.checks).toEqual([]);
+    expect(report.summary.status).toBe("fail");
+    expect(report.checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "rigControl.warpLatticeUnsupportedProperty",
+        targetId: warpKeyformSetId,
+        targetPath: "/model/keyforms/keyformSets/0/target/property",
+        severity: "error",
+        evidence: [
+          `keyformSetId=${warpKeyformSetId}`,
+          "rigControlId=rig_warp",
+          "targetProperty=angleDegrees",
+          "supportedProperty=controlPointOffsets"
+        ]
+      },
+      {
+        checkId: "rigControl.warpLatticeRuntimeEvidenceMismatch",
+        targetId: RIG_WARP_ID,
+        targetPath: "/model/rigControls/rigControls/0",
+        severity: "error",
+        evidence: [
+          "rigControlId=rig_warp",
+          "snapshotId=snap_rig_validator_0",
+          "runtimeSnapshotRef=runtime/snapshots/snap_rig_validator_0.runtime-snapshot.json",
+          "expectedEvaluationStatus=evaluated",
+          "runtimeEvaluationStatus=unsupported",
+          "runtimeUnsupportedReason=warpLattice2dEvaluatorFutureScope"
+        ]
+      }
+    ]);
     expect(report.evidence.runtimeSnapshotIds).toEqual(["snap_rig_validator_0"]);
   });
 });

@@ -161,11 +161,7 @@ const createKeyformTransformEvidenceMismatch = (
   const evidence: string[] = [];
 
   if (packageRigControl.kind === "warpLattice2d") {
-    if (runtimeRigControl.evaluationStatus !== "unsupported") {
-      evidence.push("expectedEvaluationStatus=unsupported");
-      evidence.push(`runtimeEvaluationStatus=${runtimeRigControl.evaluationStatus}`);
-    }
-    return evidence;
+    return [];
   }
 
   if (runtimeRigControl.evaluationStatus !== "evaluated") {

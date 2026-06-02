@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "wave32-warp-lattice2d-editor-persistence-reinspection-summary-v1",
+  "fixtureId": "wave32-warp-lattice2d-contract-fixtures",
+  "saveLoadContract": {
+    "schemaVersion": "editor-project-persistence-v1",
+    "operationTypes": [
+      "createWarpLattice2dRigControl",
+      "bindRigControlChild",
+      "addKeyform"
+    ],
+    "persistedRigControlId": "rig_wave32_body_warp_lattice",
+    "persistedDrawableBinding": "draw_wave32_body",
+    "persistedKeyformSetId": "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1",
+    "reinspectPreviewEvidence": true,
+    "reinspectViewerEvidence": true
+  },
+  "browserSmokeOwner": "apps/editor/e2e/warp-lattice-persistence-smoke.mjs",
+  "semanticBoundary": {
+    "localStoragePackageJsonOnly": true,
+    "realImageBytes": false,
+    "fileSystemAccessApi": false,
+    "rendererOracle": false,
+    "pixelOracle": false
+  }
+}

@@ -233,6 +233,53 @@ export interface RigControlAngleKeyformItemViewModel {
   readonly angleLabel: string;
 }
 
+export interface RigControlWarpLatticeDraftPointViewModel {
+  readonly index: number;
+  readonly column: number;
+  readonly row: number;
+  readonly restLabel: string;
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly offsetLabel: string;
+  readonly offsetXName: string;
+  readonly offsetYName: string;
+}
+
+export interface RigControlWarpLatticeTargetOptionViewModel {
+  readonly source: "draft" | "package";
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface RigControlWarpLatticeDraftViewModel {
+  readonly draftRigControlId: string;
+  readonly displayName: string;
+  readonly partId: string;
+  readonly bindSpaceLabel: string;
+  readonly domainBounds: EditorSemanticState["warpLattice2dDraft"]["domainBounds"];
+  readonly domainBoundsLabel: string;
+  readonly latticeSizeLabel: string;
+  readonly interpolationLabel: string;
+  readonly targetProperty: "controlPointOffsets";
+  readonly compositionMode: "replace";
+  readonly keyValue: number;
+  readonly pointCountLabel: string;
+  readonly controlPoints: readonly RigControlWarpLatticeDraftPointViewModel[];
+  readonly scopeLabel: string;
+}
+
+export interface RigControlWarpLatticeKeyformItemViewModel {
+  readonly keyformSetId: string;
+  readonly keyIndex: number;
+  readonly rigControlId: string;
+  readonly parameterId: string;
+  readonly targetLabel: string;
+  readonly parameterLabel: string;
+  readonly keyValueLabel: string;
+  readonly compositionLabel: string;
+  readonly offsetsLabel: string;
+}
+
 export interface RigControlOperationDiagnosticViewModel {
   readonly checkId: string;
   readonly severity: string;
@@ -259,6 +306,17 @@ export interface RigControlAuthoringViewModel {
   readonly angleKeyformCountLabel: string;
   readonly canCreateAngleKeyform: boolean;
   readonly angleKeyformDisabledMessage: string | null;
+  readonly warpLatticeDraft: RigControlWarpLatticeDraftViewModel;
+  readonly warpLatticeTargetOptions: readonly RigControlWarpLatticeTargetOptionViewModel[];
+  readonly warpLatticeChildOptions: readonly RigControlTargetOptionViewModel[];
+  readonly canCreateWarpLattice2dDraft: boolean;
+  readonly warpLatticeCreateDraftDisabledMessage: string | null;
+  readonly canDraftWarpLattice2dBindChild: boolean;
+  readonly warpLatticeBindDraftDisabledMessage: string | null;
+  readonly canCreateWarpLattice2dKeyformDraft: boolean;
+  readonly warpLatticeKeyformDraftDisabledMessage: string | null;
+  readonly warpLatticeKeyforms: readonly RigControlWarpLatticeKeyformItemViewModel[];
+  readonly warpLatticeKeyformCountLabel: string;
   readonly lastRigControlOperationLabel: string;
   readonly lastRigControlDiagnostics: readonly RigControlOperationDiagnosticViewModel[];
 }
@@ -595,6 +653,13 @@ const projectRigControlAuthoringViewModel = (
       id: rigControl.rigControlId,
       label: `${rigControl.displayName} / ${rigControl.rigControlId}`
     }));
+  const warpLattice2dRigControls = state.rigControls
+    .filter((rigControl) => rigControl.kind === "warpLattice2d")
+    .map((rigControl): RigControlWarpLatticeTargetOptionViewModel => ({
+      source: "package",
+      id: rigControl.rigControlId,
+      label: `${rigControl.displayName} / ${rigControl.rigControlId}`
+    }));
   const childDrawableOptions = state.drawables
     .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
     .map((drawable): RigControlTargetOptionViewModel => ({
@@ -610,14 +675,39 @@ const projectRigControlAuthoringViewModel = (
           id: rigControl.rigControlId,
           label: `${rigControl.displayName} / ${rigControl.rigControlId}`
         }));
+  const warpLatticeChildRigControlOptions = unparentedRigControls.map(
+    (rigControl): RigControlTargetOptionViewModel => ({
+      kind: "rigControl",
+      id: rigControl.rigControlId,
+      label: `${rigControl.displayName} / ${rigControl.rigControlId}`
+    })
+  );
   const defaultPivot = resolveDefaultRigControlPivot(state);
   const hasLoadedPackage = state.loadedPackage !== null;
   const hasParts = state.parts.length > 0;
   const hasParent = state.rigControls.length > 0;
   const hasBindableChild =
     childDrawableOptions.length > 0 || unparentedRigControls.length > 1;
+  const warpLatticeChildOptions = [
+    ...childDrawableOptions,
+    ...warpLatticeChildRigControlOptions
+  ];
+  const hasWarpLatticeBindableChild = warpLatticeChildOptions.length > 0;
   const hasAuthoredInputParameter = authoredInputParameters.length > 0;
   const hasRotation2dRigControl = rotation2dRigControls.length > 0;
+  const warpLatticeDraft = projectWarpLattice2dDraftViewModel(state);
+  const warpLatticeTargetOptions: readonly RigControlWarpLatticeTargetOptionViewModel[] =
+    hasLoadedPackage && hasParts
+      ? [
+          {
+            source: "draft",
+            id: warpLatticeDraft.draftRigControlId,
+            label: `${warpLatticeDraft.displayName} / ${warpLatticeDraft.draftRigControlId}`
+          },
+          ...warpLattice2dRigControls
+        ]
+      : warpLattice2dRigControls;
+  const hasWarpLatticeTarget = warpLatticeTargetOptions.length > 0;
 
   return {
     controlCountLabel: `${state.rigControls.length} rig control${state.rigControls.length === 1 ? "" : "s"}`,
@@ -656,6 +746,32 @@ const projectRigControlAuthoringViewModel = (
       hasAuthoredInputParameter,
       hasRotation2dRigControl
     }),
+    warpLatticeDraft,
+    warpLatticeTargetOptions,
+    warpLatticeChildOptions,
+    canCreateWarpLattice2dDraft: hasLoadedPackage && hasParts,
+    warpLatticeCreateDraftDisabledMessage: projectRigControlCreateDisabledMessage({
+      hasLoadedPackage,
+      hasParts
+    }),
+    canDraftWarpLattice2dBindChild:
+      hasLoadedPackage && hasWarpLatticeTarget && hasWarpLatticeBindableChild,
+    warpLatticeBindDraftDisabledMessage: projectRigControlWarpLatticeBindDraftDisabledMessage({
+      hasLoadedPackage,
+      hasWarpLatticeTarget,
+      hasBindableChild: hasWarpLatticeBindableChild
+    }),
+    canCreateWarpLattice2dKeyformDraft:
+      hasLoadedPackage && hasAuthoredInputParameter && hasWarpLatticeTarget,
+    warpLatticeKeyformDraftDisabledMessage: projectRigControlWarpLatticeKeyformDraftDisabledMessage({
+      hasLoadedPackage,
+      hasAuthoredInputParameter,
+      hasWarpLatticeTarget
+    }),
+    warpLatticeKeyforms: state.rigControlWarpLatticeKeyforms.map((keyform) =>
+      projectRigControlWarpLatticeKeyformItem(state, keyform)
+    ),
+    warpLatticeKeyformCountLabel: `${state.rigControlWarpLatticeKeyforms.length} controlPointOffsets keyform${state.rigControlWarpLatticeKeyforms.length === 1 ? "" : "s"}`,
     lastRigControlOperationLabel: projectLastRigControlOperationLabel(state),
     lastRigControlDiagnostics: projectLastRigControlDiagnostics(state)
   };
@@ -672,11 +788,28 @@ const projectRigControlItem = (
   parentLabel: rigControl.parentId ?? "Root",
   childDrawableLabel: rigControl.childDrawableIds.join(", ") || "None",
   childRigControlLabel: rigControl.childRigControlIds.join(", ") || "None",
-  transformLabel:
-    rigControl.kind === "rotation2d" && rigControl.pivot !== null && rigControl.restAngleDegrees !== null
-      ? `pivot ${formatPreviewNumber(rigControl.pivot.x)}, ${formatPreviewNumber(rigControl.pivot.y)} / rest ${formatPreviewNumber(rigControl.restAngleDegrees)} deg`
-      : "Future-scope evaluator"
+  transformLabel: projectRigControlTransformLabel(rigControl)
 });
+
+const projectRigControlTransformLabel = (
+  rigControl: EditorSemanticState["rigControls"][number]
+): string => {
+  if (rigControl.kind === "rotation2d" && rigControl.pivot !== null && rigControl.restAngleDegrees !== null) {
+    return `pivot ${formatPreviewNumber(rigControl.pivot.x)}, ${formatPreviewNumber(rigControl.pivot.y)} / rest ${formatPreviewNumber(rigControl.restAngleDegrees)} deg`;
+  }
+
+  if (
+    rigControl.kind === "warpLattice2d" &&
+    rigControl.domainBounds !== null &&
+    rigControl.latticeColumns !== null &&
+    rigControl.latticeRows !== null &&
+    rigControl.interpolationMethod !== null
+  ) {
+    return `${rigControl.latticeColumns} x ${rigControl.latticeRows} lattice / domain ${formatBoundsLabel(rigControl.domainBounds)} / ${rigControl.interpolationMethod} draft`;
+  }
+
+  return "Future-scope evaluator";
+};
 
 const projectRigControlParameterOption = (
   parameter: EditorSemanticState["parameters"][number]
@@ -708,6 +841,68 @@ const projectRigControlAngleKeyformItem = (
         : `${parameter.displayName} / ${parameter.parameterId}`,
     keyValueLabel: formatPreviewNumber(keyform.keyValue),
     angleLabel: `${formatPreviewNumber(keyform.angleDegrees)} deg`
+  };
+};
+
+const projectWarpLattice2dDraftViewModel = (
+  state: EditorSemanticState
+): RigControlWarpLatticeDraftViewModel => {
+  const draft = state.warpLattice2dDraft;
+
+  return {
+    draftRigControlId: draft.draftRigControlId,
+    displayName: draft.displayName,
+    partId: draft.partId,
+    bindSpaceLabel: draft.bindSpace,
+    domainBounds: draft.domainBounds,
+    domainBoundsLabel: formatBoundsLabel(draft.domainBounds),
+    latticeSizeLabel: `${draft.latticeColumns} x ${draft.latticeRows}`,
+    interpolationLabel: draft.interpolationMethod,
+    targetProperty: draft.targetProperty,
+    compositionMode: draft.compositionMode,
+    keyValue: draft.keyValue,
+    pointCountLabel: `${draft.controlPointOffsets.length} control point offsets`,
+    controlPoints: draft.restControlPoints.map((restPoint, index) => {
+      const offset = draft.controlPointOffsets[index] ?? { x: 0, y: 0 };
+      return {
+        index,
+        column: index % draft.latticeColumns,
+        row: Math.floor(index / draft.latticeColumns),
+        restLabel: `${formatPreviewNumber(restPoint.x)}, ${formatPreviewNumber(restPoint.y)}`,
+        offsetX: offset.x,
+        offsetY: offset.y,
+        offsetLabel: `${formatPreviewNumber(offset.x)}, ${formatPreviewNumber(offset.y)}`,
+        offsetXName: `offsetX${index}`,
+        offsetYName: `offsetY${index}`
+      };
+    }),
+    scopeLabel: "Minimum 2x2 draft; operation commit wiring is future scope"
+  };
+};
+
+const projectRigControlWarpLatticeKeyformItem = (
+  state: EditorSemanticState,
+  keyform: EditorSemanticState["rigControlWarpLatticeKeyforms"][number]
+): RigControlWarpLatticeKeyformItemViewModel => {
+  const rigControl = state.rigControls.find((candidate) => candidate.rigControlId === keyform.rigControlId);
+  const parameter = state.parameters.find((candidate) => candidate.parameterId === keyform.parameterId);
+
+  return {
+    keyformSetId: keyform.keyformSetId,
+    keyIndex: keyform.keyIndex,
+    rigControlId: keyform.rigControlId,
+    parameterId: keyform.parameterId,
+    targetLabel:
+      rigControl === undefined
+        ? keyform.rigControlId
+        : `${rigControl.displayName} / ${rigControl.rigControlId}`,
+    parameterLabel:
+      parameter === undefined
+        ? keyform.parameterId
+        : `${parameter.displayName} / ${parameter.parameterId}`,
+    keyValueLabel: formatPreviewNumber(keyform.keyValue),
+    compositionLabel: keyform.compositionMode,
+    offsetsLabel: formatWarpLatticeOffsets(keyform.controlPointOffsets)
   };
 };
 
@@ -779,6 +974,53 @@ const projectRigControlAngleKeyformDisabledMessage = (input: {
 
   return null;
 };
+
+const projectRigControlWarpLatticeBindDraftDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasWarpLatticeTarget: boolean;
+  readonly hasBindableChild: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasWarpLatticeTarget) {
+    return "No warpLattice2d draft target";
+  }
+
+  if (!input.hasBindableChild) {
+    return "No unbound drawable or child rig control available";
+  }
+
+  return null;
+};
+
+const projectRigControlWarpLatticeKeyformDraftDisabledMessage = (input: {
+  readonly hasLoadedPackage: boolean;
+  readonly hasAuthoredInputParameter: boolean;
+  readonly hasWarpLatticeTarget: boolean;
+}): string | null => {
+  if (!input.hasLoadedPackage) {
+    return "No package loaded";
+  }
+
+  if (!input.hasAuthoredInputParameter) {
+    return "No authored input parameter";
+  }
+
+  if (!input.hasWarpLatticeTarget) {
+    return "No warpLattice2d draft target";
+  }
+
+  return null;
+};
+
+const formatWarpLatticeOffsets = (
+  offsets: readonly { readonly x: number; readonly y: number }[]
+): string =>
+  offsets
+    .map((offset, index) => `p${index} ${formatPreviewNumber(offset.x)}, ${formatPreviewNumber(offset.y)}`)
+    .join("; ");
 
 const projectLastRigControlOperationLabel = (state: EditorSemanticState): string => {
   const result = state.lastOperationResult;

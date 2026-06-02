@@ -9,6 +9,7 @@ import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
 import { validateRuntimeRigControlEvidence } from "./rig-control-runtime-evidence.js";
+import { validateWarpLatticeDiagnostics } from "./warp-lattice-diagnostics.js";
 
 interface RigControlEntry {
   readonly rigControl: RigControlDto;
@@ -43,6 +44,12 @@ export const validateRigControlSemantics = (
     drawablesById
   });
   const cycleChecks = validateRigControlCycles(rigControlEntries, rigControlsById);
+  const warpLatticeChecks = validateWarpLatticeDiagnostics({
+    packageDocument,
+    rigControlEntries,
+    rigControlsById,
+    ...(cycleChecks.length > 0 || runtimeSnapshot === undefined ? {} : { runtimeSnapshot })
+  });
   const runtimeEvidenceChecks = cycleChecks.length > 0
     ? []
     : validateRuntimeRigControlEvidence({
@@ -55,6 +62,7 @@ export const validateRigControlSemantics = (
   return [
     ...referenceChecks,
     ...cycleChecks,
+    ...warpLatticeChecks,
     ...runtimeEvidenceChecks
   ];
 };

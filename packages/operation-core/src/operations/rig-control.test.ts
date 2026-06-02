@@ -89,6 +89,62 @@ describe("rig control operation handlers", () => {
     ]);
   });
 
+  it("commits createWarpLattice2dRigControl with deterministic rest control points", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-06-01T00:05:00.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createWarpLattice2dRigControlRequest({
+        dryRun: false,
+        childDrawableIds: ["draw_body"]
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(1);
+    expect(session.authoringRevision).toBe(1);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_body_warp_lattice"))).toMatchObject({
+      kind: "warpLattice2d",
+      childDrawableIds: ["draw_body"],
+      bindSpace: "rigControlLocalRest",
+      domainBounds: { x: 0, y: 0, width: 1, height: 1 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      restControlPoints: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 }
+      ],
+      interpolationMethod: "bilinear-grid-v1"
+    });
+    expect(outcome.logEntry?.operationType).toBe("createWarpLattice2dRigControl");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "rig_body_warp_lattice",
+      "part_root",
+      "draw_body"
+    ]);
+    expect(outcome.result.modelDiff?.added).toEqual([
+      { kind: "rigControl", id: "rig_body_warp_lattice" }
+    ]);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "rigControl", id: "rig_body_warp_lattice" },
+      {
+        kind: "part",
+        id: "part_root",
+        path: "/model/rigControls/rigControls/rig_body_warp_lattice/partId"
+      },
+      {
+        kind: "drawable",
+        id: "draw_body",
+        path: "/model/rigControls/rigControls/rig_body_warp_lattice/childDrawableIds"
+      }
+    ]);
+  });
+
   it("commits bindRigControlChild for drawable children", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -223,6 +279,37 @@ const createRotation2dRigControlRequest = (options: {
       y: 64
     },
     restAngleDegrees: 0
+  }
+});
+
+const createWarpLattice2dRigControlRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+  readonly displayName?: string;
+  readonly childDrawableIds?: readonly string[];
+  readonly childRigControlIds?: readonly string[];
+}) => ({
+  schemaVersion: "operation-request-v1",
+  operationId: `op_create_${(options.displayName ?? "Body Warp Lattice").toLowerCase().replaceAll(" ", "_")}`,
+  actor: "test",
+  surface: "testFixture",
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
+  operationType: "createWarpLattice2dRigControl",
+  payload: {
+    partId: "part_root",
+    displayName: options.displayName ?? "Body Warp Lattice",
+    childDrawableIds: options.childDrawableIds ?? [],
+    childRigControlIds: options.childRigControlIds ?? [],
+    domainBounds: {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1
+    },
+    latticeColumns: 2,
+    latticeRows: 2,
+    interpolationMethod: "bilinear-grid-v1"
   }
 });
 

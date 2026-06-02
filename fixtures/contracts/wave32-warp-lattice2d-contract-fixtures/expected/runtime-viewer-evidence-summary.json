@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "wave32-warp-lattice2d-runtime-viewer-evidence-summary-v1",
+  "runtimeEvidence": {
+    "baselineSnapshotId": "snap_wave32_warp_lattice2d_contract_0",
+    "candidateSnapshotId": "snap_wave32_warp_lattice2d_contract_1",
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave32_warp_lattice2d_contract_0",
+      "snap_wave32_warp_lattice2d_contract_1"
+    ],
+    "candidateRigControl": {
+      "rigControlId": "rig_wave32_body_warp_lattice",
+      "kind": "warpLattice2d",
+      "evaluationStatus": "evaluated",
+      "hierarchyIndex": 0,
+      "affectedDrawableIds": [
+        "draw_wave32_body"
+      ],
+      "affectedRigControlIds": []
+    },
+    "keyformSample": {
+      "target": "rigControl:rig_wave32_body_warp_lattice.controlPointOffsets",
+      "samplingStatus": "exact",
+      "statePatch": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 6,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 4
+        },
+        {
+          "x": 6,
+          "y": 4
+        }
+      ]
+    },
+    "runtimeDiff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_wave32_warp_lattice2d_contract_0",
+      "afterSnapshotId": "snap_wave32_warp_lattice2d_contract_1",
+      "drawableChangeCount": 1,
+      "rigControlChangePaths": [
+        "/rigControls/rig_wave32_body_warp_lattice"
+      ],
+      "diagnosticDeltaCount": 0
+    }
+  },
+  "viewerEvidence": {
+    "surface": "viewer",
+    "baselineSnapshotId": "snap_wave32_warp_lattice2d_contract_20",
+    "snapshotId": "snap_wave32_warp_lattice2d_contract_21",
+    "targetIds": [
+      "draw_wave32_body",
+      "rig_wave32_body_warp_lattice",
+      "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1"
+    ],
+    "parameterOverrides": [
+      {
+        "parameterId": "param_wave32_warp_x",
+        "value": 1
+      }
+    ],
+    "rigControl": {
+      "rigControlId": "rig_wave32_body_warp_lattice",
+      "kind": "warpLattice2d",
+      "evaluationStatus": "evaluated",
+      "hierarchyIndex": 0,
+      "affectedDrawableIds": [
+        "draw_wave32_body"
+      ],
+      "affectedRigControlIds": []
+    },
+    "runtimeDiffEquivalent": false
+  },
+  "semanticBoundary": {
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "cubismCompatibilityOracle": false
+  }
+}

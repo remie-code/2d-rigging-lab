@@ -1,0 +1,265 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_wave32_warp_lattice2d_contract",
+    "packageDisplayName": "Wave32 Warp Lattice2d Contract",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-02T00:00:00.000Z",
+    "updatedAt": "2026-06-02T00:00:00.000Z",
+    "schemaVersions": {
+      "manifest": "open-model-package-manifest-v1",
+      "sourceManifest": "source-manifest-v1",
+      "modelGraph": "model-graph-v1"
+    },
+    "evaluatorVersions": {
+      "runtimeCore": "wave32-warp-lattice2d-semantic-v0"
+    },
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 96,
+        "height": 96
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [],
+          "drawableIds": [
+            "draw_wave32_body"
+          ]
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "param_wave32_warp_x",
+        "draw_wave32_body",
+        "mesh_wave32_body"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_wave32_body",
+          "displayName": "Wave32 Body",
+          "partId": "part_root",
+          "sourceAssetId": "src_wave32_generated",
+          "textureId": "tex_wave32_body",
+          "meshId": "mesh_wave32_body",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_wave32_generated"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_wave32_body",
+          "drawableId": "draw_wave32_body",
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 64,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 64
+            },
+            {
+              "x": 64,
+              "y": 64
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 1
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              1,
+              3,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "vtx_wave32_body_0_0",
+            "vtx_wave32_body_1_0",
+            "vtx_wave32_body_0_1",
+            "vtx_wave32_body_1_1"
+          ],
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 64,
+            "height": 64
+          },
+          "generationProvenanceId": "prov_wave32_generated"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": [
+        {
+          "parameterId": "param_wave32_warp_x",
+          "displayName": "Wave32 Warp X",
+          "semanticRole": "body",
+          "projectPresetAlias": "wave32-warp-lattice-contract-x",
+          "valueSource": "authoredInput",
+          "min": -1,
+          "max": 1,
+          "default": 0,
+          "recommendedUiStep": 0.01
+        }
+      ]
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_wave32_body",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_wave32_generated",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/generated/wave32-warp-lattice-body.json",
+          "contentHash": "sha256:wave32-warp-lattice-generated-body",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_wave32_body",
+              "sourceAssetId": "src_wave32_generated",
+              "originalName": "Wave32 Body",
+              "normalizedName": "wave32_body",
+              "groupPath": [
+                "Root"
+              ],
+              "bounds": {
+                "x": 0,
+                "y": 0,
+                "width": 64,
+                "height": 64
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": [
+                "draw_wave32_body"
+              ]
+            }
+          ],
+          "diagnostics": []
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_wave32_generated",
+          "assetId": "src_wave32_generated",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/generated/wave32-warp-lattice-body.json",
+          "contentHash": "sha256:wave32-warp-lattice-generated-body",
+          "creator": "contract-fixture",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [
+            "Text-only generated mesh fixture; no binary image asset."
+          ],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_wave32_generated",
+          "rightsStatus": "cleared",
+          "license": "internal-test-fixture",
+          "redistributionAllowed": false,
+          "notes": "Generated semantic JSON fixture only; no PSD, PNG, Cubism, proprietary model, or external asset."
+        }
+      ]
+    }
+  }
+}

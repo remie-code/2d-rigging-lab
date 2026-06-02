@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave32-warp-lattice2d-contract-fixtures",
+  "title": "Wave32 warpLattice2d controlPointOffsets semantic contract evidence",
+  "coversAC": [
+    "AC-MVP-009",
+    "AC-MVP-010",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MVP-002",
+    "SC-MVP-003",
+    "SC-DEF-001",
+    "SC-DEF-003"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core",
+    "editor-ui",
+    "viewer-ui"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/create-warp-lattice2d-commit.request.json",
+    "request/bind-warp-lattice2d-drawable-commit.request.json",
+    "request/add-control-point-offsets-keyform-commit.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-chain-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageFileSet",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeViewerEvidence",
+      "path": "expected/runtime-viewer-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorPersistence",
+      "path": "expected/editor-persistence-reinspection-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "semanticBoundary": {
+    "rightsCleanJsonOnly": true,
+    "realImageBytes": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "cubismCompatibilityOracle": false,
+    "externalDependency": false
+  },
+  "updateRule": "requires-contract-review"
+}

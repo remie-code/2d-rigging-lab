@@ -8,9 +8,45 @@ import type {
 import {
   createRigControlRowTestId,
   editorTestIds,
+  projectMinimumWarpLattice2dRestControlPoints,
   type EditorSemanticState,
   type EditorWorkflowViewModel
 } from "../../editor-state/index.js";
+
+export interface RigControlWarpLattice2dCreateDraftCommand {
+  readonly commandKind: "draftWarpLattice2dRigControl";
+  readonly draftRigControlId: string;
+  readonly displayName: string;
+  readonly partId: string;
+  readonly bindSpace: "rigControlLocalRest";
+  readonly domainBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly latticeColumns: 2;
+  readonly latticeRows: 2;
+  readonly restControlPoints: readonly { readonly x: number; readonly y: number }[];
+  readonly interpolationMethod: "bilinear-grid-v1";
+}
+
+export interface RigControlWarpLattice2dBindChildDraftCommand {
+  readonly commandKind: "draftWarpLattice2dBindChild";
+  readonly parent: {
+    readonly source: "draft" | "package";
+    readonly id: string;
+  };
+  readonly child: EditorWorkflowBindRigControlChildCommand["child"];
+}
+
+export interface RigControlWarpLattice2dControlPointOffsetsKeyformDraftCommand {
+  readonly commandKind: "draftWarpLattice2dControlPointOffsetsKeyform";
+  readonly target: {
+    readonly source: "draft" | "package";
+    readonly id: string;
+    readonly property: "controlPointOffsets";
+  };
+  readonly parameterId: string;
+  readonly keyValue: number;
+  readonly compositionMode: "replace" | "additiveDelta";
+  readonly controlPointOffsets: readonly { readonly x: number; readonly y: number }[];
+}
 
 export interface RigControlPanelOptions {
   readonly state: EditorSemanticState;
@@ -22,6 +58,15 @@ export interface RigControlPanelOptions {
   ) => void;
   readonly onCommitBindRigControlChild: (
     command: EditorWorkflowBindRigControlChildCommand
+  ) => void;
+  readonly onDraftCreateWarpLattice2dRigControl?: (
+    command: RigControlWarpLattice2dCreateDraftCommand
+  ) => void;
+  readonly onDraftBindWarpLattice2dChild?: (
+    command: RigControlWarpLattice2dBindChildDraftCommand
+  ) => void;
+  readonly onDraftAddWarpLattice2dControlPointOffsetsKeyform?: (
+    command: RigControlWarpLattice2dControlPointOffsetsKeyformDraftCommand
   ) => void;
 }
 
@@ -45,10 +90,14 @@ export const createRigControlPanel = (
     heading,
     meta,
     createRigControlCreateForm(options),
+    createWarpLattice2dCreateDraftForm(options),
     createRigControlBindForm(options),
+    createWarpLattice2dBindDraftForm(options),
     createRigControlAngleKeyformForm(options),
+    createWarpLattice2dControlPointOffsetsKeyformDraftForm(options),
     createRigControlList(options),
     createRigControlAngleKeyformList(options),
+    createWarpLattice2dControlPointOffsetsKeyformList(options),
     createRigControlRuntimeEvidence(options),
     createRigControlStatus(options)
   );
@@ -123,6 +172,109 @@ const createRigControlCreateForm = (
   return form;
 };
 
+const createWarpLattice2dCreateDraftForm = (
+  options: RigControlPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "create-drawable-form";
+  form.dataset.testid = editorTestIds.rigControlWarpLatticeCreateDraftForm;
+  form.setAttribute("aria-label", "Draft minimum 2x2 warpLattice2d rig control");
+
+  const draft = options.viewModel.rigControls.warpLatticeDraft;
+  const heading = document.createElement("h3");
+  heading.className = "editor-field--wide";
+  heading.textContent = "Draft 2x2 warpLattice2d";
+
+  const scope = createDiagnosticsStatus(draft.scopeLabel);
+  const draftRigControlId = createTextField({
+    label: "Draft control ID",
+    name: "draftRigControlId",
+    value: draft.draftRigControlId,
+    required: true,
+    wide: true
+  });
+  const displayName = createTextField({
+    label: "Control name",
+    name: "displayName",
+    value: draft.displayName,
+    required: true,
+    wide: true
+  });
+  const part = createSelectField({
+    label: "Part",
+    name: "partId",
+    options: options.viewModel.rigControls.partOptions.map((partOption) => ({
+      value: partOption.partId,
+      label: partOption.label
+    }))
+  });
+  const domainX = createNumberField({
+    label: "Domain X",
+    name: "domainX",
+    value: draft.domainBounds.x,
+    step: "any"
+  });
+  const domainY = createNumberField({
+    label: "Domain Y",
+    name: "domainY",
+    value: draft.domainBounds.y,
+    step: "any"
+  });
+  const domainWidth = createNumberField({
+    label: "Domain width",
+    name: "domainWidth",
+    value: draft.domainBounds.width,
+    step: "any"
+  });
+  const domainHeight = createNumberField({
+    label: "Domain height",
+    name: "domainHeight",
+    value: draft.domainBounds.height,
+    step: "any"
+  });
+  const fixedShape = createDiagnosticsStatus(
+    `Fixed ${draft.latticeSizeLabel} / ${draft.interpolationLabel} / ${draft.bindSpaceLabel}`
+  );
+  const diagnostics = createDiagnosticsStatus(
+    options.viewModel.rigControls.warpLatticeCreateDraftDisabledMessage ?? ""
+  );
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.rigControlWarpLatticeCreateDraftSubmit;
+  submit.disabled = !options.viewModel.rigControls.canCreateWarpLattice2dDraft;
+  submit.textContent = "Stage warp draft";
+
+  form.append(
+    heading,
+    scope,
+    draftRigControlId,
+    displayName,
+    part,
+    domainX,
+    domainY,
+    domainWidth,
+    domainHeight,
+    fixedShape,
+    diagnostics,
+    submit
+  );
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const command = readDraftWarpLattice2dRigControlCommand(form, diagnostics, options);
+    if (command === null) {
+      return;
+    }
+
+    options.onDraftCreateWarpLattice2dRigControl?.(command);
+    if (options.onDraftCreateWarpLattice2dRigControl === undefined) {
+      diagnostics.textContent = "Warp lattice draft validated; operation commit wiring is future scope.";
+    }
+  });
+
+  return form;
+};
+
 const createRigControlBindForm = (
   options: RigControlPanelOptions
 ): HTMLFormElement => {
@@ -166,6 +318,60 @@ const createRigControlBindForm = (
     const command = readBindRigControlChildCommand(form, diagnostics);
     if (command !== null) {
       options.onCommitBindRigControlChild(command);
+    }
+  });
+
+  return form;
+};
+
+const createWarpLattice2dBindDraftForm = (
+  options: RigControlPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "create-drawable-form";
+  form.dataset.testid = editorTestIds.rigControlWarpLatticeBindDraftForm;
+  form.setAttribute("aria-label", "Draft child binding for minimum warpLattice2d");
+
+  const heading = document.createElement("h3");
+  heading.className = "editor-field--wide";
+  heading.textContent = "Draft warp child binding";
+  const parent = createSelectField({
+    label: "Warp parent",
+    name: "warpParentTarget",
+    options: options.viewModel.rigControls.warpLatticeTargetOptions.map((parentOption) => ({
+      value: `${parentOption.source}:${parentOption.id}`,
+      label: parentOption.label
+    }))
+  });
+  const child = createSelectField({
+    label: "Child target",
+    name: "childTarget",
+    options: options.viewModel.rigControls.warpLatticeChildOptions.map((childOption) => ({
+      value: `${childOption.kind}:${childOption.id}`,
+      label: childOption.label
+    }))
+  });
+  const diagnostics = createDiagnosticsStatus(
+    options.viewModel.rigControls.warpLatticeBindDraftDisabledMessage ?? ""
+  );
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.rigControlWarpLatticeBindDraftSubmit;
+  submit.disabled = !options.viewModel.rigControls.canDraftWarpLattice2dBindChild;
+  submit.textContent = "Stage warp bind";
+
+  form.append(heading, parent, child, diagnostics, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const command = readDraftWarpLattice2dBindChildCommand(form, diagnostics, options);
+    if (command === null) {
+      return;
+    }
+
+    options.onDraftBindWarpLattice2dChild?.(command);
+    if (options.onDraftBindWarpLattice2dChild === undefined) {
+      diagnostics.textContent = "Warp lattice bind draft validated; operation commit wiring is future scope.";
     }
   });
 
@@ -231,6 +437,119 @@ const createRigControlAngleKeyformForm = (
   });
 
   return form;
+};
+
+const createWarpLattice2dControlPointOffsetsKeyformDraftForm = (
+  options: RigControlPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "create-drawable-form";
+  form.dataset.testid = editorTestIds.rigControlWarpLatticeKeyformDraftForm;
+  form.setAttribute("aria-label", "Draft warpLattice2d controlPointOffsets keyform");
+
+  const draft = options.viewModel.rigControls.warpLatticeDraft;
+  const heading = document.createElement("h3");
+  heading.className = "editor-field--wide";
+  heading.textContent = "Draft controlPointOffsets keyform";
+  const parameter = createSelectField({
+    label: "Input parameter",
+    name: "parameterId",
+    options: options.viewModel.rigControls.angleKeyformParameterOptions.map((parameterOption) => ({
+      value: parameterOption.parameterId,
+      label: `${parameterOption.label} / ${parameterOption.rangeLabel}`
+    }))
+  });
+  const rigControl = createSelectField({
+    label: "Warp target",
+    name: "warpTarget",
+    options: options.viewModel.rigControls.warpLatticeTargetOptions.map((targetOption) => ({
+      value: `${targetOption.source}:${targetOption.id}`,
+      label: targetOption.label
+    }))
+  });
+  const keyValue = createNumberField({
+    label: "Key value",
+    name: "keyValue",
+    value: draft.keyValue,
+    step: "any"
+  });
+  const compositionMode = createSelectField({
+    label: "Patch mode",
+    name: "compositionMode",
+    options: [
+      { value: "replace", label: "replace" },
+      { value: "additiveDelta", label: "additiveDelta" }
+    ]
+  });
+  const pointFields = draft.controlPoints.map((point) =>
+    createControlPointOffsetFieldset(point)
+  );
+  const diagnostics = createDiagnosticsStatus(
+    options.viewModel.rigControls.warpLatticeKeyformDraftDisabledMessage ?? ""
+  );
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.rigControlWarpLatticeKeyformDraftSubmit;
+  submit.disabled = !options.viewModel.rigControls.canCreateWarpLattice2dKeyformDraft;
+  submit.textContent = "Stage offset keyform";
+
+  form.append(
+    heading,
+    createDiagnosticsStatus(`${draft.scopeLabel}; property ${draft.targetProperty}`),
+    parameter,
+    rigControl,
+    keyValue,
+    compositionMode,
+    ...pointFields,
+    diagnostics,
+    submit
+  );
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const command = readDraftWarpLattice2dControlPointOffsetsKeyformCommand(
+      form,
+      diagnostics,
+      options
+    );
+    if (command === null) {
+      return;
+    }
+
+    options.onDraftAddWarpLattice2dControlPointOffsetsKeyform?.(command);
+    if (options.onDraftAddWarpLattice2dControlPointOffsetsKeyform === undefined) {
+      diagnostics.textContent = "Warp lattice keyform draft validated; operation commit wiring is future scope.";
+    }
+  });
+
+  return form;
+};
+
+const createControlPointOffsetFieldset = (
+  point: EditorWorkflowViewModel["rigControls"]["warpLatticeDraft"]["controlPoints"][number]
+): HTMLElement => {
+  const fieldset = document.createElement("fieldset");
+  fieldset.className = "editor-field editor-field--wide";
+
+  const legend = document.createElement("legend");
+  legend.textContent = `Point ${point.index} (${point.column}, ${point.row}) rest ${point.restLabel}`;
+  fieldset.append(
+    legend,
+    createNumberField({
+      label: "Offset X",
+      name: point.offsetXName,
+      value: point.offsetX,
+      step: "any"
+    }),
+    createNumberField({
+      label: "Offset Y",
+      name: point.offsetYName,
+      value: point.offsetY,
+      step: "any"
+    })
+  );
+
+  return fieldset;
 };
 
 const createRigControlList = (options: RigControlPanelOptions): HTMLElement => {
@@ -311,6 +630,47 @@ const createRigControlAngleKeyformList = (options: RigControlPanelOptions): HTML
   return section;
 };
 
+const createWarpLattice2dControlPointOffsetsKeyformList = (
+  options: RigControlPanelOptions
+): HTMLElement => {
+  const section = document.createElement("section");
+  section.className = "rig-control-list";
+  section.dataset.testid = editorTestIds.rigControlWarpLatticeKeyformList;
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Warp lattice keyforms";
+  const meta = document.createElement("p");
+  meta.className = "editor-panel__meta";
+  meta.textContent = options.viewModel.rigControls.warpLatticeKeyformCountLabel;
+  section.append(heading, meta);
+
+  if (options.viewModel.rigControls.warpLatticeKeyforms.length === 0) {
+    section.append(createEmpty("No controlPointOffsets draft keyforms"));
+    return section;
+  }
+
+  for (const keyform of options.viewModel.rigControls.warpLatticeKeyforms) {
+    const item = document.createElement("article");
+    item.className = "drawable-authoring-result";
+
+    const title = document.createElement("h4");
+    title.className = "drawable-authoring-result__label";
+    title.textContent = keyform.keyformSetId;
+
+    const facts = document.createElement("dl");
+    facts.className = "drawable-authoring-summary";
+    appendFact(facts, "Target", keyform.targetLabel);
+    appendFact(facts, "Parameter", keyform.parameterLabel);
+    appendFact(facts, "Key value", keyform.keyValueLabel);
+    appendFact(facts, "Patch mode", keyform.compositionLabel);
+    appendFact(facts, "Offsets", keyform.offsetsLabel);
+    item.append(title, facts);
+    section.append(item);
+  }
+
+  return section;
+};
+
 const createRigControlRuntimeEvidence = (
   options: RigControlPanelOptions
 ): HTMLElement => {
@@ -346,7 +706,7 @@ const createPreviewRigControlEvidence = (
     : `preview ${options.preview.sourceSnapshotId}`;
   for (const rigControl of options.state.rigControls) {
     const item = document.createElement("li");
-    item.textContent = `${rigControl.rigControlId}: ${rigControl.kind} / ${previewLabel}; rest ${formatOptionalNumber(rigControl.restAngleDegrees)}; angle keyforms ${formatRigControlAngleKeyformEvidence(options.state, rigControl.rigControlId)}; drawable children ${rigControl.childDrawableIds.join(", ") || "None"}; child controls ${rigControl.childRigControlIds.join(", ") || "None"}`;
+    item.textContent = `${rigControl.rigControlId}: ${rigControl.kind} / ${previewLabel}; ${formatRigControlDraftKeyformEvidence(options.state, rigControl)}; drawable children ${rigControl.childDrawableIds.join(", ") || "None"}; child controls ${rigControl.childRigControlIds.join(", ") || "None"}`;
     list.append(item);
   }
   section.append(list);
@@ -513,6 +873,49 @@ const readCreateRotation2dRigControlCommand = (
   };
 };
 
+const readDraftWarpLattice2dRigControlCommand = (
+  form: HTMLFormElement,
+  diagnostics: HTMLElement,
+  options: RigControlPanelOptions
+): RigControlWarpLattice2dCreateDraftCommand | null => {
+  const fields = new FormData(form);
+  const draftRigControlId = String(fields.get("draftRigControlId") ?? "").trim();
+  const displayName = String(fields.get("displayName") ?? "").trim();
+  const partId = String(fields.get("partId") ?? "").trim();
+  const domainBounds = {
+    x: toFiniteNumber(fields.get("domainX")),
+    y: toFiniteNumber(fields.get("domainY")),
+    width: toFiniteNumber(fields.get("domainWidth")),
+    height: toFiniteNumber(fields.get("domainHeight"))
+  };
+  const validationMessage = validateDraftWarpLattice2dRigControlInput({
+    viewModel: options.viewModel,
+    draftRigControlId,
+    displayName,
+    partId,
+    domainBounds
+  });
+
+  if (validationMessage !== null) {
+    diagnostics.textContent = validationMessage;
+    return null;
+  }
+
+  diagnostics.textContent = "";
+  return {
+    commandKind: "draftWarpLattice2dRigControl",
+    draftRigControlId,
+    displayName,
+    partId,
+    bindSpace: "rigControlLocalRest",
+    domainBounds,
+    latticeColumns: 2,
+    latticeRows: 2,
+    restControlPoints: projectMinimumWarpLattice2dRestControlPoints(domainBounds),
+    interpolationMethod: "bilinear-grid-v1"
+  };
+};
+
 const readBindRigControlChildCommand = (
   form: HTMLFormElement,
   diagnostics: HTMLElement
@@ -535,6 +938,38 @@ const readBindRigControlChildCommand = (
   diagnostics.textContent = "";
   return {
     parentRigControlId,
+    child
+  };
+};
+
+const readDraftWarpLattice2dBindChildCommand = (
+  form: HTMLFormElement,
+  diagnostics: HTMLElement,
+  options: RigControlPanelOptions
+): RigControlWarpLattice2dBindChildDraftCommand | null => {
+  const fields = new FormData(form);
+  const parent = parseWarpLatticeTarget(String(fields.get("warpParentTarget") ?? "").trim());
+  const child = parseChildTarget(String(fields.get("childTarget") ?? "").trim());
+  const validationMessage = validateDraftWarpLattice2dBindChildInput({
+    state: options.state,
+    viewModel: options.viewModel,
+    parent,
+    child
+  });
+
+  if (validationMessage !== null) {
+    diagnostics.textContent = validationMessage;
+    return null;
+  }
+
+  if (parent === null || child === null) {
+    return null;
+  }
+
+  diagnostics.textContent = "";
+  return {
+    commandKind: "draftWarpLattice2dBindChild",
+    parent,
     child
   };
 };
@@ -573,6 +1008,55 @@ const readAddRigControlAngleKeyformCommand = (
   };
 };
 
+const readDraftWarpLattice2dControlPointOffsetsKeyformCommand = (
+  form: HTMLFormElement,
+  diagnostics: HTMLElement,
+  options: RigControlPanelOptions
+): RigControlWarpLattice2dControlPointOffsetsKeyformDraftCommand | null => {
+  const fields = new FormData(form);
+  const parameterId = String(fields.get("parameterId") ?? "").trim();
+  const target = parseWarpLatticeTarget(String(fields.get("warpTarget") ?? "").trim());
+  const keyValue = toFiniteNumber(fields.get("keyValue"));
+  const compositionMode = String(fields.get("compositionMode") ?? "").trim();
+  const controlPointOffsets = readControlPointOffsets(fields);
+  const validationMessage = validateDraftWarpLattice2dControlPointOffsetsKeyformInput({
+    state: options.state,
+    viewModel: options.viewModel,
+    parameterId,
+    target,
+    keyValue,
+    compositionMode,
+    controlPointOffsets
+  });
+
+  if (validationMessage !== null) {
+    diagnostics.textContent = validationMessage;
+    return null;
+  }
+
+  if (
+    target === null ||
+    (compositionMode !== "replace" && compositionMode !== "additiveDelta") ||
+    controlPointOffsets === null
+  ) {
+    return null;
+  }
+
+  diagnostics.textContent = "";
+  return {
+    commandKind: "draftWarpLattice2dControlPointOffsetsKeyform",
+    target: {
+      source: target.source,
+      id: target.id,
+      property: "controlPointOffsets"
+    },
+    parameterId,
+    keyValue,
+    compositionMode,
+    controlPointOffsets
+  };
+};
+
 const validateCreateRotation2dInput = (input: {
   readonly displayName: string;
   readonly partId: string;
@@ -590,6 +1074,49 @@ const validateCreateRotation2dInput = (input: {
 
   if (!Number.isFinite(input.pivotX) || !Number.isFinite(input.pivotY) || !Number.isFinite(input.restAngleDegrees)) {
     return "Pivot and rest angle must contain finite values.";
+  }
+
+  return null;
+};
+
+const validateDraftWarpLattice2dRigControlInput = (input: {
+  readonly viewModel: EditorWorkflowViewModel;
+  readonly draftRigControlId: string;
+  readonly displayName: string;
+  readonly partId: string;
+  readonly domainBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+}): string | null => {
+  if (!input.viewModel.rigControls.canCreateWarpLattice2dDraft) {
+    return input.viewModel.rigControls.warpLatticeCreateDraftDisabledMessage;
+  }
+
+  if (input.draftRigControlId.length === 0 || /\s/.test(input.draftRigControlId)) {
+    return "Draft control ID is required and must not contain spaces.";
+  }
+
+  if (input.displayName.length === 0) {
+    return "Control name is required.";
+  }
+
+  if (input.partId.length === 0) {
+    return "Part is required.";
+  }
+
+  if (!input.viewModel.rigControls.partOptions.some((option) => option.partId === input.partId)) {
+    return "Selected part is unavailable.";
+  }
+
+  if (
+    !Number.isFinite(input.domainBounds.x) ||
+    !Number.isFinite(input.domainBounds.y) ||
+    !Number.isFinite(input.domainBounds.width) ||
+    !Number.isFinite(input.domainBounds.height)
+  ) {
+    return "Domain bounds must contain finite values.";
+  }
+
+  if (input.domainBounds.width <= 0 || input.domainBounds.height <= 0) {
+    return "Domain width and height must be positive.";
   }
 
   return null;
@@ -638,6 +1165,97 @@ const validateAddRigControlAngleKeyformInput = (input: {
   return null;
 };
 
+const validateDraftWarpLattice2dBindChildInput = (input: {
+  readonly state: EditorSemanticState;
+  readonly viewModel: EditorWorkflowViewModel;
+  readonly parent: RigControlWarpLattice2dBindChildDraftCommand["parent"] | null;
+  readonly child: EditorWorkflowBindRigControlChildCommand["child"] | null;
+}): string | null => {
+  if (!input.viewModel.rigControls.canDraftWarpLattice2dBindChild) {
+    return input.viewModel.rigControls.warpLatticeBindDraftDisabledMessage;
+  }
+
+  if (input.parent === null || input.child === null) {
+    return "Warp parent and child are required.";
+  }
+
+  if (!isKnownWarpLatticeTarget(input.viewModel, input.parent)) {
+    return "Selected warpLattice2d draft target is unavailable.";
+  }
+
+  if (!isKnownWarpLatticeChild(input.viewModel, input.child)) {
+    return "Selected child target is unavailable for warpLattice2d draft binding.";
+  }
+
+  if (input.parent.source === "package" && input.child.kind === "rigControl" && input.child.id === input.parent.id) {
+    return "Parent rig control cannot be bound to itself.";
+  }
+
+  if (
+    input.child.kind === "rigControl" &&
+    !input.state.rigControls.some((rigControl) => rigControl.rigControlId === input.child?.id)
+  ) {
+    return "Selected child rig control is unavailable.";
+  }
+
+  return null;
+};
+
+const validateDraftWarpLattice2dControlPointOffsetsKeyformInput = (input: {
+  readonly state: EditorSemanticState;
+  readonly viewModel: EditorWorkflowViewModel;
+  readonly parameterId: string;
+  readonly target: RigControlWarpLattice2dBindChildDraftCommand["parent"] | null;
+  readonly keyValue: number;
+  readonly compositionMode: string;
+  readonly controlPointOffsets: readonly { readonly x: number; readonly y: number }[] | null;
+}): string | null => {
+  const parameterOptions = input.viewModel.rigControls.angleKeyformParameterOptions;
+
+  if (!input.viewModel.rigControls.canCreateWarpLattice2dKeyformDraft) {
+    return input.viewModel.rigControls.warpLatticeKeyformDraftDisabledMessage;
+  }
+
+  if (parameterOptions.length === 0) {
+    return "No authored input parameter available.";
+  }
+
+  if (input.viewModel.rigControls.warpLatticeTargetOptions.length === 0) {
+    return "No warpLattice2d draft target available.";
+  }
+
+  if (input.parameterId.length === 0 || input.target === null) {
+    return "Parameter and warp lattice target are required.";
+  }
+
+  if (!parameterOptions.some((option) => option.parameterId === input.parameterId)) {
+    return "Selected parameter must be an authored input parameter.";
+  }
+
+  if (!isKnownWarpLatticeTarget(input.viewModel, input.target)) {
+    const rigControl = input.state.rigControls.find(
+      (candidate) => candidate.rigControlId === input.target?.id
+    );
+    return rigControl === undefined
+      ? "Selected warpLattice2d target is unavailable."
+      : "Selected rig control must be warpLattice2d with controlPointOffsets.";
+  }
+
+  if (input.compositionMode !== "replace" && input.compositionMode !== "additiveDelta") {
+    return "Patch mode must be replace or additiveDelta.";
+  }
+
+  if (!Number.isFinite(input.keyValue)) {
+    return "Key value must contain a finite value.";
+  }
+
+  if (input.controlPointOffsets === null) {
+    return "All 2x2 control point offsets must contain finite values.";
+  }
+
+  return null;
+};
+
 const parseChildTarget = (
   value: string
 ): EditorWorkflowBindRigControlChildCommand["child"] | null => {
@@ -654,6 +1272,52 @@ const parseChildTarget = (
 
   return { kind, id };
 };
+
+const parseWarpLatticeTarget = (
+  value: string
+): RigControlWarpLattice2dBindChildDraftCommand["parent"] | null => {
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex < 0) {
+    return null;
+  }
+
+  const source = value.slice(0, separatorIndex);
+  const id = value.slice(separatorIndex + 1);
+  if ((source !== "draft" && source !== "package") || id.length === 0) {
+    return null;
+  }
+
+  return { source, id };
+};
+
+const readControlPointOffsets = (
+  fields: FormData
+): readonly { readonly x: number; readonly y: number }[] | null => {
+  const offsets = [0, 1, 2, 3].map((index) => ({
+    x: toFiniteNumber(fields.get(`offsetX${index}`)),
+    y: toFiniteNumber(fields.get(`offsetY${index}`))
+  }));
+
+  return offsets.every((offset) => Number.isFinite(offset.x) && Number.isFinite(offset.y))
+    ? offsets
+    : null;
+};
+
+const isKnownWarpLatticeTarget = (
+  viewModel: EditorWorkflowViewModel,
+  target: RigControlWarpLattice2dBindChildDraftCommand["parent"]
+): boolean =>
+  viewModel.rigControls.warpLatticeTargetOptions.some(
+    (option) => option.source === target.source && option.id === target.id
+  );
+
+const isKnownWarpLatticeChild = (
+  viewModel: EditorWorkflowViewModel,
+  child: EditorWorkflowBindRigControlChildCommand["child"]
+): boolean =>
+  viewModel.rigControls.warpLatticeChildOptions.some(
+    (option) => option.kind === child.kind && option.id === child.id
+  );
 
 const appendFact = (list: HTMLDListElement, label: string, value: string): void => {
   const term = document.createElement("dt");
@@ -679,6 +1343,17 @@ const toFiniteNumber = (value: FormDataEntryValue | null): number => {
 const formatOptionalNumber = (value: number | null): string =>
   value === null ? "n/a" : Number.isInteger(value) ? String(value) : Number.parseFloat(value.toFixed(4)).toString();
 
+const formatRigControlDraftKeyformEvidence = (
+  state: EditorSemanticState,
+  rigControl: EditorSemanticState["rigControls"][number]
+): string => {
+  if (rigControl.kind === "warpLattice2d") {
+    return `controlPointOffsets draft keyforms ${formatRigControlWarpLatticeKeyformEvidence(state, rigControl.rigControlId)}`;
+  }
+
+  return `rest ${formatOptionalNumber(rigControl.restAngleDegrees)}; angle keyforms ${formatRigControlAngleKeyformEvidence(state, rigControl.rigControlId)}`;
+};
+
 const formatRigControlAngleKeyformEvidence = (
   state: EditorSemanticState,
   rigControlId: string
@@ -695,3 +1370,30 @@ const formatRigControlAngleKeyformEvidence = (
     .map((keyform) => `${keyform.parameterId}@${formatOptionalNumber(keyform.keyValue)} -> ${formatOptionalNumber(keyform.angleDegrees)} deg`)
     .join(", ");
 };
+
+const formatRigControlWarpLatticeKeyformEvidence = (
+  state: EditorSemanticState,
+  rigControlId: string
+): string => {
+  const keyforms = state.rigControlWarpLatticeKeyforms.filter(
+    (keyform) => keyform.rigControlId === rigControlId
+  );
+
+  if (keyforms.length === 0) {
+    return "None";
+  }
+
+  return keyforms
+    .map(
+      (keyform) =>
+        `${keyform.parameterId}@${formatOptionalNumber(keyform.keyValue)} ${keyform.compositionMode} ${formatControlPointOffsets(keyform.controlPointOffsets)}`
+    )
+    .join(", ");
+};
+
+const formatControlPointOffsets = (
+  offsets: readonly { readonly x: number; readonly y: number }[]
+): string =>
+  offsets
+    .map((offset, index) => `p${index} ${formatOptionalNumber(offset.x)}, ${formatOptionalNumber(offset.y)}`)
+    .join("; ");
