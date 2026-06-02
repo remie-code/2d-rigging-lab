@@ -5,6 +5,14 @@ import type {
 } from "@private-2d-rigging-lab/package-format";
 
 import type { DrawableListItemState } from "./drawable-list-state.js";
+import {
+  createUnavailableDrawableDirectManipulation,
+  createUnavailablePartDirectManipulation,
+  projectLayerTreeDirectManipulationViewModel,
+  type LayerTreeDirectManipulationViewModel,
+  type LayerTreeDrawableDirectManipulationViewModel,
+  type LayerTreePartDirectManipulationViewModel
+} from "./layer-tree-direct-manipulation-view-model.js";
 import type { LayerTreeDraftState } from "./layer-tree-draft-state.js";
 
 export type LayerTreePartStatus = "resolved" | "missing";
@@ -30,6 +38,7 @@ export interface LayerTreeDrawableViewModel {
   readonly selectedLabel: string;
   readonly orderLabel: string;
   readonly stateLabel: string;
+  readonly directManipulation: LayerTreeDrawableDirectManipulationViewModel;
 }
 
 export interface LayerTreePartGroupViewModel {
@@ -41,6 +50,7 @@ export interface LayerTreePartGroupViewModel {
   readonly partLabel: string;
   readonly drawableCount: number;
   readonly drawableCountLabel: string;
+  readonly directManipulation: LayerTreePartDirectManipulationViewModel;
   readonly drawables: readonly LayerTreeDrawableViewModel[];
 }
 
@@ -53,12 +63,15 @@ export interface LayerTreeViewModel {
   readonly lockedDrawableIds: readonly string[];
   readonly editorHiddenDrawableIds: readonly string[];
   readonly missingTextureDrawableIds: readonly string[];
+  readonly directManipulationDraftCount: number;
   readonly partCountLabel: string;
   readonly drawableCountLabel: string;
   readonly selectedCountLabel: string;
   readonly lockedCountLabel: string;
   readonly editorHiddenCountLabel: string;
   readonly missingTextureCountLabel: string;
+  readonly directManipulationDraftCountLabel: string;
+  readonly directManipulationSummaryLabel: string;
   readonly summaryLabel: string;
 }
 
@@ -88,6 +101,7 @@ export const projectLayerTreeViewModel = (
   const selectedIds = new Set(input.layerTreeDraft.selection);
   const lockedIds = new Set(input.layerTreeDraft.lockedIds);
   const editorHiddenIds = new Set(input.layerTreeDraft.editorHiddenIds);
+  const directManipulation = projectLayerTreeDirectManipulationViewModel(input);
 
   const partGroups = [
     ...orderPartsByHierarchy(input.parts).map(({ part, depth }) =>
@@ -99,7 +113,8 @@ export const projectLayerTreeViewModel = (
         textureEntriesById,
         selectedIds,
         lockedIds,
-        editorHiddenIds
+        editorHiddenIds,
+        directManipulation
       })
     ),
     ...projectMissingPartGroups({
@@ -108,7 +123,8 @@ export const projectLayerTreeViewModel = (
       textureEntriesById,
       selectedIds,
       lockedIds,
-      editorHiddenIds
+      editorHiddenIds,
+      directManipulation
     })
   ];
   const drawableItems = partGroups.flatMap((group) => group.drawables);
@@ -134,12 +150,15 @@ export const projectLayerTreeViewModel = (
     lockedDrawableIds,
     editorHiddenDrawableIds,
     missingTextureDrawableIds,
+    directManipulationDraftCount: directManipulation.draftCount,
     partCountLabel: formatCount(partGroups.length, "part group"),
     drawableCountLabel: formatCount(input.drawables.length, "drawable"),
     selectedCountLabel: formatCount(selectedDrawableIds.length, "selected drawable"),
     lockedCountLabel: formatCount(lockedDrawableIds.length, "locked drawable"),
     editorHiddenCountLabel: formatCount(editorHiddenDrawableIds.length, "editor-hidden drawable"),
     missingTextureCountLabel: formatCount(missingTextureDrawableIds.length, "missing texture"),
+    directManipulationDraftCountLabel: directManipulation.draftCountLabel,
+    directManipulationSummaryLabel: directManipulation.summaryLabel,
     summaryLabel: [
       formatCount(partGroups.length, "part group"),
       formatCount(input.drawables.length, "drawable"),
@@ -170,6 +189,7 @@ const projectMissingPartGroups = (input: {
   readonly selectedIds: ReadonlySet<string>;
   readonly lockedIds: ReadonlySet<string>;
   readonly editorHiddenIds: ReadonlySet<string>;
+  readonly directManipulation: LayerTreeDirectManipulationViewModel;
 }): readonly LayerTreePartGroupViewModel[] =>
   [...input.drawablesByPartId.keys()]
     .filter((partId) => !input.partsById.has(partId))
@@ -188,7 +208,8 @@ const projectMissingPartGroups = (input: {
         textureEntriesById: input.textureEntriesById,
         selectedIds: input.selectedIds,
         lockedIds: input.lockedIds,
-        editorHiddenIds: input.editorHiddenIds
+        editorHiddenIds: input.editorHiddenIds,
+        directManipulation: input.directManipulation
       })
     );
 
@@ -201,6 +222,7 @@ const projectPartGroup = (input: {
   readonly selectedIds: ReadonlySet<string>;
   readonly lockedIds: ReadonlySet<string>;
   readonly editorHiddenIds: ReadonlySet<string>;
+  readonly directManipulation: LayerTreeDirectManipulationViewModel;
 }): LayerTreePartGroupViewModel => ({
   partId: input.part.partId,
   displayName: input.part.displayName,
@@ -213,6 +235,9 @@ const projectPartGroup = (input: {
       : `Missing part ${input.part.partId}`,
   drawableCount: input.drawables.length,
   drawableCountLabel: formatCount(input.drawables.length, "drawable"),
+  directManipulation:
+    input.directManipulation.partDraftsByPartId.get(input.part.partId) ??
+    createUnavailablePartDirectManipulation(input.part.partId),
   drawables: input.drawables.map((drawable) =>
     projectLayerTreeDrawable({
       drawable,
@@ -220,7 +245,10 @@ const projectPartGroup = (input: {
       textureEntriesById: input.textureEntriesById,
       selectedIds: input.selectedIds,
       lockedIds: input.lockedIds,
-      editorHiddenIds: input.editorHiddenIds
+      editorHiddenIds: input.editorHiddenIds,
+      directManipulation:
+        input.directManipulation.drawableDraftsByDrawableId.get(drawable.drawableId) ??
+        createUnavailableDrawableDirectManipulation(drawable.drawableId)
     })
   )
 });
@@ -232,6 +260,7 @@ const projectLayerTreeDrawable = (input: {
   readonly selectedIds: ReadonlySet<string>;
   readonly lockedIds: ReadonlySet<string>;
   readonly editorHiddenIds: ReadonlySet<string>;
+  readonly directManipulation: LayerTreeDrawableDirectManipulationViewModel;
 }): LayerTreeDrawableViewModel => {
   const texture = projectTextureState(input.drawable.textureId, input.textureEntriesById);
   const runtimeVisibilityLabel = input.drawable.visible ? "Runtime visible" : "Runtime hidden";
@@ -267,7 +296,8 @@ const projectLayerTreeDrawable = (input: {
       editorVisibilityLabel,
       lockedLabel,
       selectedLabel
-    ].join(" / ")
+    ].join(" / "),
+    directManipulation: input.directManipulation
   };
 };
 

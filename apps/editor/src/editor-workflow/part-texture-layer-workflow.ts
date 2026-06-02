@@ -1,5 +1,6 @@
 import type {
   EditorCreatePartCommand,
+  EditorDeletePartCommand,
   EditorSessionAdapter,
   EditorSessionPersistenceResult,
   EditorSetDrawablePartCommand,
@@ -150,6 +151,26 @@ export const commitWorkflowSetDrawableTexture = (input: {
       createPartTextureOperationId(
         "set_drawable_texture",
         input.command.drawableId,
+        input.adapter.authoringSession.packageRevision
+      ),
+    lockedTargetIds: input.state.layerTreeDraft.lockedIds
+  });
+
+  return projectPartTextureCommitOutcome(input.state, input.adapter, result);
+};
+
+export const commitWorkflowDeletePart = (input: {
+  readonly adapter: EditorSessionAdapter;
+  readonly state: EditorSemanticState;
+  readonly command: EditorDeletePartCommand;
+}): EditorWorkflowPartTextureCommitOutcome => {
+  const result = input.adapter.commitDeletePart({
+    ...input.command,
+    operationId:
+      input.command.operationId ??
+      createPartTextureOperationId(
+        "delete_part",
+        input.command.partId,
         input.adapter.authoringSession.packageRevision
       ),
     lockedTargetIds: input.state.layerTreeDraft.lockedIds

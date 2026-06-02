@@ -890,6 +890,50 @@ describe("editor session persistence adapter", () => {
     ]);
   });
 
+  it("commits empty-leaf part delete and reloads part-tree evidence", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:37:00.000Z")
+    });
+    const created = adapter.commitCreatePart({
+      operationId: "op_editor_create_empty_leaf_part",
+      partId: "part_editor_empty_leaf",
+      displayName: "Editor Empty Leaf",
+      parentPartId: "part_root"
+    });
+
+    const result = adapter.commitDeletePart({
+      operationId: "op_editor_delete_empty_leaf_part",
+      partId: "part_editor_empty_leaf"
+    });
+
+    expect(created.operationResult.status).toBe("committed");
+    expect(result.operationResult.status).toBe("committed");
+    expect(result.operationType).toBe("deletePart");
+    expect(result.reloadedPackageRevision).toBe(2);
+    expect(result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createPart",
+      "deletePart"
+    ]);
+    expect(result.reloadedDocument.model.graph.parts.find(
+      (part) => part.partId === "part_editor_empty_leaf"
+    )).toBeUndefined();
+    expect(result.reloadedDocument.model.graph.parts.find(
+      (part) => part.partId === "part_root"
+    )?.childPartIds).not.toContain("part_editor_empty_leaf");
+    expect(result.packageFilePaths).toEqual(expect.arrayContaining([
+      "model/graph.json",
+      "operations/log.jsonl"
+    ]));
+    expect(result.evidence.generatedValidationReportIds).toEqual([
+      "val_editor_editor_delete_empty_leaf_part_baseline",
+      "val_editor_editor_delete_empty_leaf_part_candidate"
+    ]);
+    expect(result.generatedArtifactPaths).toEqual(expect.arrayContaining([
+      "validation/reports/val_editor_editor_delete_empty_leaf_part_baseline.validation.json",
+      "validation/reports/val_editor_editor_delete_empty_leaf_part_candidate.validation.json"
+    ]));
+  });
+
   it("keeps the current session snapshot when a duplicate drawable preset is rejected", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:40:00.000Z")

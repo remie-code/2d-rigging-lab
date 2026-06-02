@@ -1,0 +1,399 @@
+{
+  "manifest": {
+    "schemaVersion": "open-model-package-manifest-v1",
+    "packageId": "pkg_wave33_layer_tree_direct_manipulation",
+    "packageDisplayName": "Wave 33 Layer Tree Direct Manipulation Fixture",
+    "formatVersion": "open-model-package-v1",
+    "packageRevision": 0,
+    "createdAt": "2026-06-02T00:00:00.000Z",
+    "updatedAt": "2026-06-02T00:00:00.000Z",
+    "schemaVersions": {},
+    "evaluatorVersions": {},
+    "modelFiles": {
+      "graph": "model/graph.json",
+      "drawables": "model/drawables.json",
+      "meshes": "model/meshes.json",
+      "parameters": "model/parameters.json",
+      "keyforms": "model/keyforms.json",
+      "rigControls": "model/rig-controls.json",
+      "dynamics": "model/dynamics.json",
+      "masks": "model/masks.json",
+      "drawOrder": "model/draw-order.json",
+      "editorState": "model/editor-state.json"
+    },
+    "assetIndex": "assets/sources/source-manifest.json",
+    "operationLog": "operations/log.jsonl",
+    "rightsSummary": {
+      "status": "cleared"
+    },
+    "provenanceSummary": {
+      "sourceAssetCount": 1
+    },
+    "packageStableOrderVersion": "stable-order-v1"
+  },
+  "model": {
+    "graph": {
+      "schemaVersion": "model-graph-v1",
+      "coordinateSystem": "canvas-y-down-v1",
+      "canvasSize": {
+        "width": 256,
+        "height": 256
+      },
+      "parts": [
+        {
+          "partId": "part_root",
+          "displayName": "Root",
+          "childPartIds": [
+            "part_wave33_parent",
+            "part_wave33_head",
+            "part_wave33_empty"
+          ],
+          "drawableIds": [
+            "draw_body"
+          ]
+        },
+        {
+          "partId": "part_wave33_parent",
+          "displayName": "Wave 33 Parent",
+          "parentPartId": "part_root",
+          "childPartIds": [],
+          "drawableIds": []
+        },
+        {
+          "partId": "part_wave33_head",
+          "displayName": "Wave 33 Head",
+          "parentPartId": "part_root",
+          "childPartIds": [],
+          "drawableIds": []
+        },
+        {
+          "partId": "part_wave33_empty",
+          "displayName": "Wave 33 Empty",
+          "parentPartId": "part_root",
+          "childPartIds": [],
+          "drawableIds": []
+        }
+      ],
+      "rigControlRootIds": [],
+      "stableOrder": [
+        "part_root",
+        "part_wave33_parent",
+        "part_wave33_head",
+        "part_wave33_empty",
+        "draw_body"
+      ]
+    },
+    "drawables": {
+      "schemaVersion": "drawables-file-v1",
+      "drawables": [
+        {
+          "drawableId": "draw_body",
+          "displayName": "Body",
+          "partId": "part_root",
+          "sourceAssetId": "src_wave33_layers",
+          "textureId": "tex_body",
+          "meshId": "mesh_body",
+          "defaultOpacity": 1,
+          "runtimeVisibility": true,
+          "baseDrawOrder": 0,
+          "sourceProvenanceId": "prov_wave33_source"
+        }
+      ]
+    },
+    "meshes": {
+      "schemaVersion": "meshes-file-v1",
+      "meshes": [
+        {
+          "meshId": "mesh_body",
+          "drawableId": "draw_body",
+          "vertices": [
+            {
+              "x": 24,
+              "y": 16
+            },
+            {
+              "x": 72,
+              "y": 16
+            },
+            {
+              "x": 48,
+              "y": 80
+            }
+          ],
+          "uvs": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 0
+            },
+            {
+              "x": 0.5,
+              "y": 1
+            }
+          ],
+          "triangles": [
+            [
+              0,
+              1,
+              2
+            ]
+          ],
+          "vertexStableIds": [
+            "vtx_body_0",
+            "vtx_body_1",
+            "vtx_body_2"
+          ],
+          "bounds": {
+            "x": 24,
+            "y": 16,
+            "width": 48,
+            "height": 64
+          },
+          "generationProvenanceId": "prov_wave33_source"
+        }
+      ]
+    },
+    "parameters": {
+      "schemaVersion": "parameters-file-v1",
+      "parameters": []
+    },
+    "keyforms": {
+      "schemaVersion": "keyforms-file-v1",
+      "keyformSets": []
+    },
+    "rigControls": {
+      "schemaVersion": "rig-controls-file-v1",
+      "rigControls": []
+    },
+    "dynamics": {
+      "schemaVersion": "dynamics-file-v1",
+      "dynamicsGroups": []
+    },
+    "masks": {
+      "schemaVersion": "masks-file-v1",
+      "masks": []
+    },
+    "drawOrder": {
+      "schemaVersion": "draw-order-file-v1",
+      "entries": [
+        {
+          "drawableId": "draw_body",
+          "baseDrawOrder": 0,
+          "stableOrder": 0
+        }
+      ]
+    },
+    "editorState": {
+      "schemaVersion": "editor-state-v1",
+      "selection": [
+        "draw_body"
+      ],
+      "lockedIds": [],
+      "editorHiddenIds": [],
+      "activeTool": "layerTree",
+      "canvas": {
+        "zoom": 1,
+        "pan": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    }
+  },
+  "assets": {
+    "sourceManifest": {
+      "schemaVersion": "source-manifest-v1",
+      "sourceAssets": [
+        {
+          "sourceAssetId": "src_wave33_layers",
+          "kind": "generated-fixture-v1",
+          "filePath": "assets/sources/wave33-layers.json",
+          "contentHash": "sha256:wave33-generated-source",
+          "importProfile": "split-png-fallback-v1",
+          "layers": [
+            {
+              "sourceLayerId": "layer_body",
+              "sourceAssetId": "src_wave33_layers",
+              "originalName": "Body",
+              "normalizedName": "body",
+              "groupPath": [
+                "Root"
+              ],
+              "bounds": {
+                "x": 24,
+                "y": 16,
+                "width": 48,
+                "height": 64
+              },
+              "visibleInSource": true,
+              "opacityInSource": 1,
+              "role": "editableLayer",
+              "unsupportedFeatures": [],
+              "mappedDrawableIds": [
+                "draw_body"
+              ]
+            }
+          ],
+          "diagnostics": []
+        }
+      ]
+    },
+    "textureAtlas": {
+      "schemaVersion": "texture-atlas-v1",
+      "textures": [
+        {
+          "textureId": "tex_body",
+          "filePath": "assets/textures/body.png",
+          "contentHash": "sha256:wave33-texture-body",
+          "sourceAssetId": "src_wave33_layers",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_wave33_texture_body"
+        },
+        {
+          "textureId": "tex_wave33",
+          "filePath": "assets/textures/wave33-direct.png",
+          "contentHash": "sha256:wave33-texture-direct",
+          "sourceAssetId": "src_wave33_layers",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_wave33_texture_direct"
+        }
+      ],
+      "previewAssets": [
+        {
+          "previewAssetId": "preview_wave33_body",
+          "textureId": "tex_body",
+          "reference": {
+            "referenceKind": "package-local-file-v1",
+            "filePath": "assets/thumbnails/body-preview.png"
+          },
+          "contentHash": "sha256:wave33-preview-body",
+          "sourceAssetId": "src_wave33_layers",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_wave33_preview_body",
+          "rightsAssetId": "asset_wave33_preview_body"
+        },
+        {
+          "previewAssetId": "preview_wave33_direct",
+          "textureId": "tex_wave33",
+          "reference": {
+            "referenceKind": "package-local-file-v1",
+            "filePath": "assets/thumbnails/wave33-direct-preview.png"
+          },
+          "contentHash": "sha256:wave33-preview-direct",
+          "sourceAssetId": "src_wave33_layers",
+          "sourceLayerId": "layer_body",
+          "provenanceId": "prov_wave33_preview_direct",
+          "rightsAssetId": "asset_wave33_preview_direct"
+        }
+      ]
+    },
+    "provenance": {
+      "schemaVersion": "provenance-file-v1",
+      "records": [
+        {
+          "provenanceId": "prov_wave33_source",
+          "assetId": "src_wave33_layers",
+          "assetKind": "generatedFixture",
+          "filePath": "assets/sources/wave33-layers.json",
+          "contentHash": "sha256:wave33-generated-source",
+          "creator": "wave33-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave33_texture_body",
+          "assetId": "tex_body",
+          "assetKind": "texture",
+          "filePath": "assets/textures/body.png",
+          "contentHash": "sha256:wave33-texture-body",
+          "creator": "wave33-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave33_texture_direct",
+          "assetId": "tex_wave33",
+          "assetKind": "texture",
+          "filePath": "assets/textures/wave33-direct.png",
+          "contentHash": "sha256:wave33-texture-direct",
+          "creator": "wave33-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave33_preview_body",
+          "assetId": "asset_wave33_preview_body",
+          "assetKind": "thumbnail",
+          "filePath": "assets/thumbnails/body-preview.png",
+          "contentHash": "sha256:wave33-preview-body",
+          "creator": "wave33-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        },
+        {
+          "provenanceId": "prov_wave33_preview_direct",
+          "assetId": "asset_wave33_preview_direct",
+          "assetKind": "thumbnail",
+          "filePath": "assets/thumbnails/wave33-direct-preview.png",
+          "contentHash": "sha256:wave33-preview-direct",
+          "creator": "wave33-contract-fixture",
+          "license": "internal-test",
+          "redistributionAllowed": false,
+          "aiUsed": false,
+          "transformHistory": [],
+          "relatedOperationIds": []
+        }
+      ]
+    },
+    "rights": {
+      "schemaVersion": "rights-file-v1",
+      "records": [
+        {
+          "assetId": "src_wave33_layers",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        },
+        {
+          "assetId": "tex_body",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        },
+        {
+          "assetId": "tex_wave33",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        },
+        {
+          "assetId": "asset_wave33_preview_body",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        },
+        {
+          "assetId": "asset_wave33_preview_direct",
+          "rightsStatus": "cleared",
+          "license": "internal-test",
+          "redistributionAllowed": false
+        }
+      ]
+    }
+  }
+}

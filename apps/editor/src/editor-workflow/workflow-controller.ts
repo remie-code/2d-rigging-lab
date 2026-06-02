@@ -59,6 +59,11 @@ import {
   type CreateDrawableFormState,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
+  type LayerTreeDrawablePartAssignmentDraftCommand,
+  type LayerTreeDrawableTextureAssignmentDraftCommand,
+  type LayerTreeEmptyLeafPartDeleteDraftCommand,
+  type LayerTreePartRenameDraftCommand,
+  type LayerTreePartReparentDraftCommand,
   type MeshCanvasHitSelectionCommand,
   type MeshCanvasVertexSelectionCommand,
   type SourceIntakeSelectedFileBytes,
@@ -128,6 +133,17 @@ import {
   type EditorWorkflowPartTextureCommitResult
 } from "./part-texture-layer-workflow.js";
 import {
+  clearWorkflowLayerTreeDirectManipulationDraft,
+  commitWorkflowLayerTreeDirectManipulationDrafts,
+  draftWorkflowLayerTreeDrawablePartAssignment,
+  draftWorkflowLayerTreeDrawableTextureAssignment,
+  draftWorkflowLayerTreeEmptyLeafPartDelete,
+  draftWorkflowLayerTreePartRename,
+  draftWorkflowLayerTreePartReparent,
+  type EditorWorkflowLayerTreeDirectDraftResult,
+  type EditorWorkflowLayerTreeDirectManipulationCommitResult
+} from "./layer-tree-direct-manipulation-workflow.js";
+import {
   createWorkflowDynamicsPreviewRunner,
   type EditorWorkflowDynamicsPreviewResult
 } from "./dynamics-preview-workflow.js";
@@ -169,6 +185,13 @@ export type {
   EditorWorkflowLayerVisibilityResult,
   EditorWorkflowPartTextureCommitResult
 } from "./part-texture-layer-workflow.js";
+export type {
+  EditorWorkflowLayerTreeDirectDraftNotFoundResult,
+  EditorWorkflowLayerTreeDirectDraftResult,
+  EditorWorkflowLayerTreeDirectDraftUpdatedResult,
+  EditorWorkflowLayerTreeDirectManipulationCommitResult,
+  EditorWorkflowLayerTreeDirectManipulationSkippedDraft
+} from "./layer-tree-direct-manipulation-workflow.js";
 export interface EditorWorkflowControllerOptions {
   readonly projectStore: BrowserProjectStore;
   readonly now?: () => Date;
@@ -269,6 +292,19 @@ export interface EditorWorkflowController {
   commitUpdatePart(command: EditorUpdatePartCommand): EditorWorkflowPartTextureCommitResult;
   commitSetDrawablePart(command: EditorSetDrawablePartCommand): EditorWorkflowPartTextureCommitResult;
   commitSetDrawableTexture(command: EditorSetDrawableTextureCommand): EditorWorkflowPartTextureCommitResult;
+  draftLayerTreePartRename(command: LayerTreePartRenameDraftCommand): EditorWorkflowLayerTreeDirectDraftResult;
+  draftLayerTreePartReparent(command: LayerTreePartReparentDraftCommand): EditorWorkflowLayerTreeDirectDraftResult;
+  draftLayerTreeEmptyLeafPartDelete(
+    command: LayerTreeEmptyLeafPartDeleteDraftCommand
+  ): EditorWorkflowLayerTreeDirectDraftResult;
+  draftLayerTreeDrawablePartAssignment(
+    command: LayerTreeDrawablePartAssignmentDraftCommand
+  ): EditorWorkflowLayerTreeDirectDraftResult;
+  draftLayerTreeDrawableTextureAssignment(
+    command: LayerTreeDrawableTextureAssignmentDraftCommand
+  ): EditorWorkflowLayerTreeDirectDraftResult;
+  commitLayerTreeDirectManipulationDrafts(): EditorWorkflowLayerTreeDirectManipulationCommitResult;
+  clearLayerTreeDirectManipulationDrafts(): EditorWorkflowLayerTreeDirectDraftResult;
   selectDrawableLayer(drawableId: string): EditorWorkflowLayerDraftResult;
   toggleDrawableLayerLock(drawableId: string): EditorWorkflowLayerDraftResult;
   toggleDrawableEditorHidden(drawableId: string): EditorWorkflowLayerDraftResult;
@@ -532,6 +568,75 @@ export const createEditorWorkflowController = (
       clearDynamicsPreview();
 
       return outcome.result;
+    },
+    draftLayerTreePartRename(command) {
+      const outcome = draftWorkflowLayerTreePartRename({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    draftLayerTreePartReparent(command) {
+      const outcome = draftWorkflowLayerTreePartReparent({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    draftLayerTreeEmptyLeafPartDelete(command) {
+      const outcome = draftWorkflowLayerTreeEmptyLeafPartDelete({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    draftLayerTreeDrawablePartAssignment(command) {
+      const outcome = draftWorkflowLayerTreeDrawablePartAssignment({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    draftLayerTreeDrawableTextureAssignment(command) {
+      const outcome = draftWorkflowLayerTreeDrawableTextureAssignment({
+        state,
+        command
+      });
+
+      state = outcome.state;
+      return outcome.result;
+    },
+    commitLayerTreeDirectManipulationDrafts() {
+      const outcome = commitWorkflowLayerTreeDirectManipulationDrafts({
+        adapter,
+        state
+      });
+
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestDrawablePresetResult = null;
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    clearLayerTreeDirectManipulationDrafts() {
+      state = clearWorkflowLayerTreeDirectManipulationDraft(state);
+
+      return {
+        status: "updated",
+        targetKind: "part",
+        targetId: "layerTreeDirectManipulation"
+      };
     },
     selectDrawableLayer(drawableId) {
       const outcome = selectWorkflowDrawableLayer({

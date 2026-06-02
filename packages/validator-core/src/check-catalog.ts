@@ -129,6 +129,14 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Part child reference cannot be resolved."
   },
   {
+    checkId: "part.duplicateChild",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part childPartIds contains the same child part more than once."
+  },
+  {
     checkId: "part.parentChildMismatch",
     phase: "reference",
     defaultSeverity: "error",
@@ -151,6 +159,22 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-004", "AC-MVP-013"],
     description: "Drawable partId and part drawableIds membership disagree."
+  },
+  {
+    checkId: "part.deleteNonEmpty",
+    phase: "reference",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part delete candidate is blocked because the part still owns child, drawable, mask, or rig-control evidence."
+  },
+  {
+    checkId: "part.runtimeEvidenceMismatch",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-012", "AC-MVP-013"],
+    description: "Runtime or viewer part hierarchy evidence disagrees with package part and drawable membership."
   },
   {
     checkId: "editorState.staleReference",

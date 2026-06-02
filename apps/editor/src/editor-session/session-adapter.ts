@@ -78,11 +78,13 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createDeletePartOperationRequest,
   createPartOperationRequest,
   createSetDrawablePartOperationRequest,
   createSetDrawableTextureOperationRequest,
   createUpdatePartOperationRequest,
   type EditorCreatePartCommand,
+  type EditorDeletePartCommand,
   type EditorSetDrawablePartCommand,
   type EditorSetDrawableTextureCommand,
   type EditorUpdatePartCommand
@@ -125,6 +127,7 @@ export interface EditorSessionAdapter {
   commitCreateDrawablePreset(command: EditorCreateDrawablePresetCommand): EditorSessionDrawablePresetResult;
   commitCreatePart(command: EditorCreatePartCommand): EditorSessionPersistenceResult;
   commitUpdatePart(command: EditorUpdatePartCommand): EditorSessionPersistenceResult;
+  commitDeletePart(command: EditorDeletePartCommand): EditorSessionPersistenceResult;
   commitSetDrawablePart(command: EditorSetDrawablePartCommand): EditorSessionPersistenceResult;
   commitSetDrawableTexture(command: EditorSetDrawableTextureCommand): EditorSessionPersistenceResult;
   commitSetDrawableRuntimeVisibility(
@@ -308,6 +311,10 @@ export const createEditorSessionAdapter = (
     },
     commitUpdatePart(command) {
       const request = createUpdatePartOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitDeletePart(command) {
+      const request = createDeletePartOperationRequest(command, authoringSession.packageRevision);
       return this.commitOperation(request);
     },
     commitSetDrawablePart(command) {

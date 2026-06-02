@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-validation-report-summary-v1",
+  "reportId": "val_wave33_layer_tree_direct_manipulation_final",
+  "status": "pass",
+  "highestSeverity": "info",
+  "counts": {
+    "blocking": 0,
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "checkIds": [],
+  "runtimeSnapshotIds": [
+    "snap_wave33_layer_tree_direct_manipulation_20",
+    "snap_wave33_layer_tree_direct_manipulation_21"
+  ],
+  "operationLogPresent": true,
+  "operationLogPath": "operations/log.jsonl"
+}

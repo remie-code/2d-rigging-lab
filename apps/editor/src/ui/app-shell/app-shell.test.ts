@@ -8,6 +8,11 @@ import {
   createDrawableMoveUpTestId,
   createDrawableRowTestId,
   createDrawableVisibilityToggleTestId,
+  createLayerTreeDrawablePartDraftFormTestId,
+  createLayerTreeDrawableTextureDraftFormTestId,
+  createLayerTreeEmptyLeafDeleteDraftTestId,
+  createLayerTreePartRenameFormTestId,
+  createLayerTreePartReparentFormTestId,
   createMeshVertexNudgeButtonTestId,
   createPreviewParameterControlTestId,
   createRigControlRowTestId,
@@ -452,6 +457,75 @@ describe("editor app shell preview panel", () => {
     ]);
   });
 
+  it("routes layer tree direct manipulation draft controls through production shell callbacks", () => {
+    const workflow = createWorkflow();
+    workflow.commitSourceIntakeDraft(createTextureSourceIntakeDraft());
+    workflow.commitCreatePart({
+      operationId: "op_shell_create_direct_head",
+      partId: "part_shell_head",
+      displayName: "Shell Head",
+      parentPartId: "part_root"
+    });
+    const calls: unknown[] = [];
+    const callbacks = {
+      onDraftLayerTreePartRename(command) {
+        calls.push(["rename", command]);
+        workflow.draftLayerTreePartRename(command);
+      },
+      onDraftLayerTreePartReparent(command) {
+        calls.push(["reparent", command]);
+        workflow.draftLayerTreePartReparent(command);
+      },
+      onDraftLayerTreeEmptyLeafPartDelete(command) {
+        calls.push(["delete", command]);
+        workflow.draftLayerTreeEmptyLeafPartDelete(command);
+      },
+      onDraftLayerTreeDrawablePartAssignment(command) {
+        calls.push(["drawablePart", command]);
+        workflow.draftLayerTreeDrawablePartAssignment(command);
+      },
+      onDraftLayerTreeDrawableTextureAssignment(command) {
+        calls.push(["drawableTexture", command]);
+        workflow.draftLayerTreeDrawableTextureAssignment(command);
+      },
+      onCommitLayerTreeDirectManipulationDrafts() {
+        calls.push(["commit"]);
+      },
+      onClearLayerTreeDirectManipulationDrafts() {
+        calls.push(["clear"]);
+      }
+    } satisfies Parameters<typeof renderShell>[1];
+    const shell = renderShell(workflow, callbacks);
+    const renameForm = findByTestId(shell, createLayerTreePartRenameFormTestId("part_shell_head"));
+    const reparentForm = findByTestId(shell, createLayerTreePartReparentFormTestId("part_shell_head"));
+    const drawablePartForm = findByTestId(shell, createLayerTreeDrawablePartDraftFormTestId("draw_body"));
+    const drawableTextureForm = findByTestId(shell, createLayerTreeDrawableTextureDraftFormTestId("draw_body"));
+
+    renameForm?.querySelector("input")?.setProperty("value", "Shell Head Renamed");
+    renameForm?.emit("submit");
+    reparentForm?.querySelector("select")?.setProperty("value", "");
+    reparentForm?.emit("submit");
+    drawablePartForm?.querySelector("select")?.setProperty("value", "part_shell_head");
+    drawablePartForm?.emit("submit");
+    drawableTextureForm?.querySelector("select")?.setProperty("value", "tex_face");
+    drawableTextureForm?.emit("submit");
+    findByTestId(shell, createLayerTreeEmptyLeafDeleteDraftTestId("part_shell_head"))?.emit("click");
+
+    const commitShell = renderShell(workflow, callbacks);
+    findByTestId(commitShell, editorTestIds.layerTreeDirectDraftCommit)?.emit("click");
+    findByTestId(commitShell, editorTestIds.layerTreeDirectDraftClear)?.emit("click");
+
+    expect(calls).toEqual([
+      ["rename", { partId: "part_shell_head", displayName: "Shell Head Renamed" }],
+      ["reparent", { partId: "part_shell_head", parentPartId: null }],
+      ["drawablePart", { drawableId: "draw_body", partId: "part_shell_head" }],
+      ["drawableTexture", { drawableId: "draw_body", textureId: "tex_face" }],
+      ["delete", { partId: "part_shell_head" }],
+      ["commit"],
+      ["clear"]
+    ]);
+  });
+
   it("wires mesh vertex nudge callbacks from the authoring controls", () => {
     const workflow = createWorkflow();
     workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
@@ -716,6 +790,13 @@ const renderShell = (
     readonly onCommitBindRigControlChild?: Parameters<typeof createEditorAppShell>[0]["onCommitBindRigControlChild"];
     readonly onCommitBindWarpLattice2dChild?: Parameters<typeof createEditorAppShell>[0]["onCommitBindWarpLattice2dChild"];
     readonly onCommitAddWarpLattice2dControlPointOffsetsKeyform?: Parameters<typeof createEditorAppShell>[0]["onCommitAddWarpLattice2dControlPointOffsetsKeyform"];
+    readonly onDraftLayerTreePartRename?: Parameters<typeof createEditorAppShell>[0]["onDraftLayerTreePartRename"];
+    readonly onDraftLayerTreePartReparent?: Parameters<typeof createEditorAppShell>[0]["onDraftLayerTreePartReparent"];
+    readonly onDraftLayerTreeEmptyLeafPartDelete?: Parameters<typeof createEditorAppShell>[0]["onDraftLayerTreeEmptyLeafPartDelete"];
+    readonly onDraftLayerTreeDrawablePartAssignment?: Parameters<typeof createEditorAppShell>[0]["onDraftLayerTreeDrawablePartAssignment"];
+    readonly onDraftLayerTreeDrawableTextureAssignment?: Parameters<typeof createEditorAppShell>[0]["onDraftLayerTreeDrawableTextureAssignment"];
+    readonly onCommitLayerTreeDirectManipulationDrafts?: Parameters<typeof createEditorAppShell>[0]["onCommitLayerTreeDirectManipulationDrafts"];
+    readonly onClearLayerTreeDirectManipulationDrafts?: Parameters<typeof createEditorAppShell>[0]["onClearLayerTreeDirectManipulationDrafts"];
     readonly onOpenViewerRuntimeSurface?: () => void;
     readonly onCloseViewerRuntimeSurface?: () => void;
     readonly onSetViewerParameterValue?: (parameterId: string, value: number) => void;
@@ -738,6 +819,27 @@ const renderShell = (
     onCommitUpdatePart() {},
     onCommitSetDrawablePart() {},
     onCommitSetDrawableTexture() {},
+    ...(callbacks.onDraftLayerTreePartRename === undefined
+      ? {}
+      : { onDraftLayerTreePartRename: callbacks.onDraftLayerTreePartRename }),
+    ...(callbacks.onDraftLayerTreePartReparent === undefined
+      ? {}
+      : { onDraftLayerTreePartReparent: callbacks.onDraftLayerTreePartReparent }),
+    ...(callbacks.onDraftLayerTreeEmptyLeafPartDelete === undefined
+      ? {}
+      : { onDraftLayerTreeEmptyLeafPartDelete: callbacks.onDraftLayerTreeEmptyLeafPartDelete }),
+    ...(callbacks.onDraftLayerTreeDrawablePartAssignment === undefined
+      ? {}
+      : { onDraftLayerTreeDrawablePartAssignment: callbacks.onDraftLayerTreeDrawablePartAssignment }),
+    ...(callbacks.onDraftLayerTreeDrawableTextureAssignment === undefined
+      ? {}
+      : { onDraftLayerTreeDrawableTextureAssignment: callbacks.onDraftLayerTreeDrawableTextureAssignment }),
+    ...(callbacks.onCommitLayerTreeDirectManipulationDrafts === undefined
+      ? {}
+      : { onCommitLayerTreeDirectManipulationDrafts: callbacks.onCommitLayerTreeDirectManipulationDrafts }),
+    ...(callbacks.onClearLayerTreeDirectManipulationDrafts === undefined
+      ? {}
+      : { onClearLayerTreeDirectManipulationDrafts: callbacks.onClearLayerTreeDirectManipulationDrafts }),
     onSelectDrawableLayer() {},
     onToggleDrawableLayerLock() {},
     onToggleDrawableEditorHidden() {},

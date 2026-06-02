@@ -21,6 +21,7 @@ import { validateMaskCompositionSemantics } from "./mask-composition.js";
 import { validateMeshSemantics } from "./mesh-semantics.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePartLayerSemantics } from "./part-layer-semantics.js";
+import { validatePartRuntimeEvidence } from "./part-runtime-evidence.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validateRigControlSemantics } from "./rig-control-semantic.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
@@ -54,7 +55,8 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
     : collectPackageReferenceChecks(
       packageResult.packageDocument,
       runtimeResult?.snapshot,
-      shouldRequireViewerEvidence(input)
+      shouldRequireViewerEvidence(input),
+      input.viewerEvidence
     );
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()
@@ -101,7 +103,8 @@ export const validatePackageRuntimeWithBinaryAssets = async (
       ...collectPackageReferenceChecks(
         packageResult.packageDocument,
         runtimeResult?.snapshot,
-        shouldRequireViewerEvidence(input)
+        shouldRequireViewerEvidence(input),
+        input.viewerEvidence
       ),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
@@ -146,7 +149,8 @@ export const validatePackageRuntimeWithBinaryAssets = async (
 const collectPackageReferenceChecks = (
   packageDocument: PackageDocumentDto,
   runtimeSnapshot: RuntimeSnapshotDto | undefined,
-  requireRuntimeEvidence = false
+  requireRuntimeEvidence = false,
+  viewerEvidence?: unknown
 ) => [
   ...validatePsdSourceProfiles(packageDocument),
   ...validateSourceAssetRightsAndProvenance(packageDocument),
@@ -158,6 +162,11 @@ const collectPackageReferenceChecks = (
     requireRuntimeEvidence
   }),
   ...validatePartLayerSemantics(packageDocument),
+  ...validatePartRuntimeEvidence({
+    packageDocument,
+    ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot }),
+    ...(viewerEvidence === undefined ? {} : { viewerEvidence })
+  }),
   ...validateTextureAssetReferences(packageDocument),
   ...validateMaskCompositionSemantics(packageDocument, runtimeSnapshot),
   ...validateRigControlSemantics(packageDocument, runtimeSnapshot),

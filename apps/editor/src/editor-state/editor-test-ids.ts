@@ -20,6 +20,8 @@ export const editorTestIds = {
   layerTreeAssignPartSubmit: "layerTree.drawable.part",
   layerTreeAssignTextureForm: "layerTree.drawable.texture.form",
   layerTreeAssignTextureSubmit: "layerTree.drawable.texture",
+  layerTreeDirectDraftCommit: "layerTree.directDraft.commit",
+  layerTreeDirectDraftClear: "layerTree.directDraft.clear",
   meshVertexControls: "meshVertex.controls",
   meshVertexStatus: "meshVertex.status",
   meshCanvasEditor: "meshCanvas.editor",
@@ -134,6 +136,33 @@ export const createLayerTreeToggleLockTestId = (drawableId: string): string =>
 
 export const createLayerTreeToggleEditorHiddenTestId = (drawableId: string): string =>
   `layerTree.editorHidden.${drawableId}`;
+
+export const createLayerTreePartRenameFormTestId = (partId: string): string =>
+  `layerTree.part.rename.form.${partId}`;
+
+export const createLayerTreePartRenameSubmitTestId = (partId: string): string =>
+  `layerTree.part.rename.${partId}`;
+
+export const createLayerTreePartReparentFormTestId = (partId: string): string =>
+  `layerTree.part.reparent.form.${partId}`;
+
+export const createLayerTreePartReparentSubmitTestId = (partId: string): string =>
+  `layerTree.part.reparent.${partId}`;
+
+export const createLayerTreeEmptyLeafDeleteDraftTestId = (partId: string): string =>
+  `layerTree.part.emptyLeafDeleteDraft.${partId}`;
+
+export const createLayerTreeDrawablePartDraftFormTestId = (drawableId: string): string =>
+  `layerTree.drawable.partDraft.form.${drawableId}`;
+
+export const createLayerTreeDrawablePartDraftSubmitTestId = (drawableId: string): string =>
+  `layerTree.drawable.partDraft.${drawableId}`;
+
+export const createLayerTreeDrawableTextureDraftFormTestId = (drawableId: string): string =>
+  `layerTree.drawable.textureDraft.form.${drawableId}`;
+
+export const createLayerTreeDrawableTextureDraftSubmitTestId = (drawableId: string): string =>
+  `layerTree.drawable.textureDraft.${drawableId}`;
 
 export const createMeshVertexRowTestId = (meshId: string, vertexId: string): string =>
   `meshVertex.row.${meshId}.${vertexId}`;

@@ -1,6 +1,6 @@
-# Wave32完了時点の残件リスト
+# Wave33完了時点の残件リスト
 
-> 状態: 2026-06-02、Wave32完了時点の残件バックログ。
+> 状態: 2026-06-02、Wave33完了時点の残件バックログ。
 
 ## 目的
 
@@ -24,7 +24,8 @@
 - Wave31完了後にread-only SylphへAC/traceability、実装、asset I/O、品質の4観点で再調査させた。大枠の完了/未完分類は正しいが、`<input type=file>` actual-byte intake完了後の文言、`warpLattice2d`残件、byte-intake direct-call契約、source/test大型化watch itemを更新対象とした。
 - Wave32では`WarpLattice2d Rig Control Authoring / Evaluator v0`を選定した。AC-MVP-009を維持する前提で、project-defined `warpLattice2d`のauthoring、`controlPointOffsets` keyform、semantic runtime evaluator、validator diagnostics、Editor / Preview / Viewer workflow、desktop-mobile e2e smokeまでを1waveに切る計画である。Cubism deformer互換、full renderer、pixel oracle、full lattice gizmo、PSD/image/archive、external dependencyは含めない。
 - Wave32で`WarpLattice2d Rig Control Authoring / Evaluator v0`は`implementation-proven`になった。Project-defined `warpLattice2d` authoring、`controlPointOffsets` keyform、semantic bilinear evaluator、validator diagnostics、Editor / Preview / Viewer workflow、rights-clean semantic fixture、desktop-mobile e2e save-load reinspectionまで一段閉じた。Cubism deformer互換、full renderer、pixel oracle、full canvas lattice gizmo、PSD/image/archive、File System Access API、external dependency、package manifest/lockfile変更は含めていない。
-- この文書はWave33以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave33では`Layer Tree Direct Manipulation / Part Tree UX v0`を選定し、implementation-provenになった。Wave28のminimum form-based workflowを足場に、tree上のrename、reparent、empty-leaf part delete、drawable reassignment、texture assignment、selection / lock / editor-hide維持、Preview / Viewer / Validator evidence、fixture、desktop-mobile e2eまでを一段閉じた。Native browser drag-and-drop、multi-select bulk、recursive delete、group transform、renderer/pixel、PSD/image/archive、external dependencyは含めていない。
+- この文書はWave34以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -57,14 +58,15 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 - Tutorial-like MVP Mini Model v0。rights-clean synthetic mini model recipe、operation log/model diff/package materialization、semantic runtime-viewer evidence、validator readiness、guided editor workflow、desktop/mobile save-load e2e smokeはWave30で一段閉じた。
 - Package Binary / File I/O Decision + Browser Byte Intake Pilot v0。browser `<input type=file>` actual-byte intake、package-local current-session byte registration、validator byte availability diagnostics、truthful save/load reupload state、byte-only local sample fixture、desktop/mobile e2e smokeはWave31で一段閉じた。
 - WarpLattice2d Rig Control Authoring / Evaluator v0。project-defined `warpLattice2d` authoring、`controlPointOffsets` keyform、semantic runtime evaluator、validator diagnostics、Editor / Preview / Viewer workflow、rights-clean semantic fixture、desktop/mobile save-load e2e smokeはWave32で一段閉じた。
+- Layer Tree Direct Manipulation / Part Tree UX v0。explicit controlsによるpart rename、reparent、empty-leaf delete、drawable reassignment、texture assignment、pending-delete preflight、Preview / Viewer / Validator evidence、rights-clean fixture、desktop/mobile save-load e2e smokeはWave33で一段閉じた。
 
-一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、drag-drop / File System Access API / directory picker、archive import/export、persistent binary upload/storage、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
+一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、native browser drag-and-drop、multi-select bulk、recursive delete、group transform、File System Access API / directory picker、archive import/export、persistent binary upload/storage、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
 ## P0 / 近いwave候補
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| Full layer tree / part tree UX expansion | Wave28はminimum form-based workflowまで。drag-and-drop reorder、rename/delete/reparent completeness、multi-select bulk operations、group transformは未実装。 | AC-MVP-006の豊かなpart/layer workflowを進める候補。real image decodeやrenderer workとは分ける。 | UX completenessを優先する場合は必要。 |
+| Layer tree follow-up: native drag/drop / multi-select / group transform | Wave33でexplicit controlsによるrename/reparent/empty-leaf delete/direct reassignment/texture assignmentはimplementation-provenになった。一方、native browser drag-and-drop、multi-select bulk operations、group transform、recursive delete/delete-with-reassignは未実装。 | Wave33とは別waveで扱う。先にUX/security/operation semanticsを切り、recursive deleteやdelete-with-reassignを許すかは独立判断にする。 | native drag-and-drop、recursive delete、delete-with-reassignへ広げる場合は必要。 |
 | Mesh topology / UV editor expansion | Canvas Mesh Editing v1は完了したが、vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingは未実装。 | Wave29の後続候補。renderer/pixel oracleやreal texture bytesとは別waveで扱う。 | topology/UV直接編集へ進む場合は必要。 |
 | Public tutorial / demo asset boundary | Wave30はrights-clean synthetic semantic mini modelまで。公開配布用tutorial asset、demo capture scene、final disclaimer、public/private asset splitは未決。 | 実素材や公開demoへ進む前に、rights policy / fixture policy / preflightを先に決める。 | 必要。 |
 
@@ -93,7 +95,7 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 | Fresh checkout replay gate | 現在のworktree状態確認とは別に、fresh checkout / CI replay script or workflowがpackage scriptや`.github/workflows`として未整備。fresh checkout replayがない限り、再現性リスクが残る。 | 近いうちにquality gateまたは並行quality domainへ入れる。 | 不要。 |
 | `check:source` blind spot hardening | 現guardは`.ts`の`index.ts`とcatch-all名が中心。大型`.mjs` e2e、`.js/.tsx`、行数threshold、責務混在、非catch-all名の巨大ファイルを検出しない。 | threshold合意後に慎重に拡張する。 | thresholdがpolicyなら必要。 |
 | Editor workflow/view-model/evidence surface split | 現行policy違反ではないが、次のUI waveでさらに太りやすい。 | 触るwaveで継続的に分割する。 | 不要。 |
-| Large source/test watch items | Wave31後、`apps/editor/src/ui/source-assets/source-intake-form.ts`、`packages/validator-core/src/binary-asset-validator.test.ts`、`apps/editor/src/editor-workflow/workflow-controller.test.ts`、`apps/editor/e2e/source-intake-smoke.mjs`、`apps/editor/e2e/smoke-checks.mjs`などが大型化している。現guardはこれらを必ずしも止めない。 | 触るwaveで責務分割、helper extraction、test splitを継続する。 | thresholdをpolicy化するなら必要。 |
+| Large source/test watch items | Wave31後からの大型ファイルに加え、Wave33で`apps/editor/e2e/layer-tree-direct-manipulation-smoke.mjs`、`apps/editor/src/ui/layer-tree/layer-tree-panel.ts`、`apps/editor/src/editor-state/layer-tree-direct-manipulation-view-model.ts`、`apps/editor/src/editor-workflow/layer-tree-direct-manipulation-workflow.ts`、`packages/operation-core/src/wave33-layer-tree-direct-manipulation-contract-fixtures.test.ts`が大型化した。現guardは通っているが、`.mjs` e2eや大きな UI/test helper は必ずしも止めない。 | 触るwaveで責務分割、helper extraction、test splitを継続する。layer-tree follow-up時は優先的に分割する。 | thresholdをpolicy化するなら必要。 |
 | E2E smoke suite decomposition / coverage matrix | smoke testが大型化しており、coverageもsemantic smoke-levelが多い。個別smoke fileはあるが、package scriptsで個別実行できるものは限定的。 | test helper境界、coverage matrix、個別smoke package scriptsをtest-focused waveまたは並行quality domainで扱う。 | 不要。 |
 | Traceability summary refresh | Wave30/Wave31の個別traceability行は登録済みだが、AC coverage / module surface coverage / warning fixture reference coverage のsummaryにWave30以降の反映漏れがある。 | traceability-focused doc sync taskとして扱う。 | 不要。 |
 | Validator contract doc refresh | Wave21/Wave22のbinary/PSD check IDsやasync binary validation entrypointに加え、Wave31のbyte availability、`requiresReupload`、`byteIntake.unsupportedClaim`、verified summary扱いがcontract docsに十分反映されていない。 | 小さなdoc/contract sync task。 | 不要。 |
@@ -174,22 +176,39 @@ Wave32では、Cubism deformer互換、full renderer、pixel oracle、full canva
 詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave32-plan.md`に固定した。
 完了根拠は`discussion/implementation/waves/wave32/wave32-final-report.md`と`discussion/implementation/reviews/wave32/wave32-clean-integration-review.md`に記録した。
 
-## Wave33以降の推奨選択肢
+## Wave33完了範囲
 
-1. **Full layer tree / part tree UX expansion**
-   Wave28のminimum form-based workflowを足場に、drag-and-drop reorder、rename/delete/reparent completeness、multi-select bulk operations、group transform、または canvas/tree direct manipulation へ広げる候補。real image decodeやrenderer workとは分ける。
+Wave33は **Layer Tree Direct Manipulation / Part Tree UX v0** として完了済み。
 
-2. **Package archive / persistent binary storage decision**
+目的は、Wave28のminimum form-based layer tree workflowを、Editor上の直接操作に近いtree UXへ育てること。完了scopeは以下。
+
+- Layer tree上のexplicit controlsでpart rename、reparent、empty-leaf part delete、drawable reassignment、texture assignmentを扱える。
+- 既存`updatePart`をrename/reparentに使い、削除は新規`deletePart` empty-leaf onlyに限定した。
+- Non-empty part delete、same-batch pending-delete target assignment、recursive delete、delete-with-reassignはdeterministic diagnostics / preflight / future scopeに切り分けた。
+- Preview / Viewer / Validatorでpart hierarchy、drawable membership、stale/mismatch evidenceを確認できるようにした。
+- Rights-clean semantic fixtureとdesktop/mobile e2eでtree edit -> save/load -> Preview / Viewer再観測を確認した。
+
+Wave33では、native browser drag-and-drop、multi-select bulk operations、group transform、recursive delete、full renderer、pixel oracle、Cubism互換、PSD parser、PNG/image decode、archive import/export、external dependencyは扱わない。
+
+詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave33-plan.md`に固定した。
+完了根拠は`discussion/implementation/waves/wave33/wave33-final-report.md`と`discussion/implementation/reviews/wave33/wave33-clean-integration-review.md`に記録した。
+
+## Wave34以降の推奨選択肢
+
+1. **Package archive / persistent binary storage decision**
    Wave31のcurrent-session byte intakeを足場に、package archive writer/importer、filesystem import/export、browser persistence strategy、binary storage policyを決める候補。PSD parserやimage decodeとは分ける。
 
-3. **Mesh topology / UV editor expansion**
+2. **Mesh topology / UV editor expansion**
    Wave29がCanvas Mesh Editing v1を閉じた後の候補。vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingへ広げる場合は、renderer/pixel oracleやtexture bytesとは別waveで扱う。
 
-4. **AI repair / diff workflow**
+3. **AI repair / diff workflow**
    Wave30のtutorial mini modelやvalidator readinessを足場に、repair candidate generation、natural-language repair、standalone diff、rerun validationへ広げる候補。LLM provider / prompt boundary は別判断。
 
-5. **Public tutorial / demo asset boundary**
+4. **Public tutorial / demo asset boundary**
    Wave30はsynthetic semantic fixtureで閉じた。public tutorial asset、demo capture scene、final disclaimer、preflight自動化へ進むなら、rights-clean policyとpublic/private splitを先に固定する。
+
+5. **Layer tree follow-up: native drag/drop / multi-select / group transform**
+   Wave33はexplicit controlsによるdirect manipulationに限定して完了した。native browser drag-and-drop、multi-select bulk、group transform、recursive delete/delete-with-reassignへ進む場合は別waveで扱う。
 
 ## 関連wave前に確認すべき判断
 
@@ -205,6 +224,6 @@ Wave32では、Cubism deformer互換、full renderer、pixel oracle、full canva
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33については`discussion/implementation/waves/wave33/wave33-final-report.md`、`discussion/implementation/waves/wave33/_map.md`、`discussion/implementation/reviews/wave33/_map.md`を完了根拠として扱う。Wave34以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

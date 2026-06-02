@@ -20,6 +20,8 @@ export const editorTestIds = {
   layerTreeAssignPartSubmit: "layerTree.drawable.part",
   layerTreeAssignTextureForm: "layerTree.drawable.texture.form",
   layerTreeAssignTextureSubmit: "layerTree.drawable.texture",
+  layerTreeDirectDraftCommit: "layerTree.directDraft.commit",
+  layerTreeDirectDraftClear: "layerTree.directDraft.clear",
   meshVertexControls: "meshVertex.controls",
   meshVertexStatus: "meshVertex.status",
   meshCanvasEditor: "meshCanvas.editor",
@@ -145,6 +147,33 @@ export const createLayerTreeToggleLockTestId = (drawableId) =>
 
 export const createLayerTreeToggleEditorHiddenTestId = (drawableId) =>
   `layerTree.editorHidden.${drawableId}`;
+
+export const createLayerTreePartRenameFormTestId = (partId) =>
+  `layerTree.part.rename.form.${partId}`;
+
+export const createLayerTreePartRenameSubmitTestId = (partId) =>
+  `layerTree.part.rename.${partId}`;
+
+export const createLayerTreePartReparentFormTestId = (partId) =>
+  `layerTree.part.reparent.form.${partId}`;
+
+export const createLayerTreePartReparentSubmitTestId = (partId) =>
+  `layerTree.part.reparent.${partId}`;
+
+export const createLayerTreeEmptyLeafDeleteDraftTestId = (partId) =>
+  `layerTree.part.emptyLeafDeleteDraft.${partId}`;
+
+export const createLayerTreeDrawablePartDraftFormTestId = (drawableId) =>
+  `layerTree.drawable.partDraft.form.${drawableId}`;
+
+export const createLayerTreeDrawablePartDraftSubmitTestId = (drawableId) =>
+  `layerTree.drawable.partDraft.${drawableId}`;
+
+export const createLayerTreeDrawableTextureDraftFormTestId = (drawableId) =>
+  `layerTree.drawable.textureDraft.form.${drawableId}`;
+
+export const createLayerTreeDrawableTextureDraftSubmitTestId = (drawableId) =>
+  `layerTree.drawable.textureDraft.${drawableId}`;
 
 export const createMeshVertexRowTestId = (meshId, vertexId) =>
   `meshVertex.row.${meshId}.${vertexId}`;

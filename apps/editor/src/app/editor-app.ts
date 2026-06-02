@@ -54,6 +54,34 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.commitSetDrawableTexture(command);
           render();
         },
+        onDraftLayerTreePartRename(command) {
+          workflow.draftLayerTreePartRename(command);
+          render();
+        },
+        onDraftLayerTreePartReparent(command) {
+          workflow.draftLayerTreePartReparent(command);
+          render();
+        },
+        onDraftLayerTreeEmptyLeafPartDelete(command) {
+          workflow.draftLayerTreeEmptyLeafPartDelete(command);
+          render();
+        },
+        onDraftLayerTreeDrawablePartAssignment(command) {
+          workflow.draftLayerTreeDrawablePartAssignment(command);
+          render();
+        },
+        onDraftLayerTreeDrawableTextureAssignment(command) {
+          workflow.draftLayerTreeDrawableTextureAssignment(command);
+          render();
+        },
+        onCommitLayerTreeDirectManipulationDrafts() {
+          workflow.commitLayerTreeDirectManipulationDrafts();
+          render();
+        },
+        onClearLayerTreeDirectManipulationDrafts() {
+          workflow.clearLayerTreeDirectManipulationDrafts();
+          render();
+        },
         onSelectDrawableLayer(drawableId) {
           workflow.selectDrawableLayer(drawableId);
           render();

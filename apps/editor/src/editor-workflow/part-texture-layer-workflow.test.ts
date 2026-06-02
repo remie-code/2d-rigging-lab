@@ -138,6 +138,247 @@ describe("part texture layer workflow", () => {
     ]));
   });
 
+  it("commits layer tree direct manipulation drafts and skips reverted row drafts", () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+    const imported = first.commitSourceIntakeDraft(createSourceIntakeDraft());
+    const rootDisplayName = first.state.parts.find((part) => part.partId === "part_root")?.displayName;
+
+    first.commitCreatePart({
+      operationId: "op_workflow_create_direct_head",
+      partId: "part_direct_head",
+      displayName: "Direct Head",
+      parentPartId: "part_root"
+    });
+    first.commitCreatePart({
+      operationId: "op_workflow_create_direct_empty",
+      partId: "part_direct_empty",
+      displayName: "Direct Empty",
+      parentPartId: "part_root"
+    });
+    first.selectDrawableLayer("draw_body");
+    first.toggleDrawableEditorHidden("draw_body");
+    first.openViewerRuntimeSurface();
+
+    if (rootDisplayName === undefined) {
+      throw new Error("Expected sample root part.");
+    }
+
+    first.draftLayerTreePartRename({
+      partId: "part_root",
+      displayName: rootDisplayName
+    });
+    first.draftLayerTreePartRename({
+      partId: "part_direct_head",
+      displayName: "Direct Head Renamed"
+    });
+    first.draftLayerTreePartReparent({
+      partId: "part_direct_head",
+      parentPartId: null
+    });
+    first.draftLayerTreeDrawablePartAssignment({
+      drawableId: "draw_body",
+      partId: "part_direct_head"
+    });
+    first.draftLayerTreeDrawableTextureAssignment({
+      drawableId: "draw_body",
+      textureId: "tex_face"
+    });
+    first.draftLayerTreeEmptyLeafPartDelete({
+      partId: "part_direct_empty"
+    });
+
+    const committed = first.commitLayerTreeDirectManipulationDrafts();
+    const previewPart = first.previewProjection?.parts?.find(
+      (part) => part.partId === "part_direct_head"
+    );
+    const viewerDrawable = first.viewerRuntimeProjection?.previewProjection.drawables.find(
+      (drawable) => drawable.drawableId === "draw_body"
+    );
+    const saved = first.saveProject();
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+
+    expect(imported.status).toBe("committed");
+    expect(committed.status).toBe("committed");
+    expect(committed.committedCount).toBe(4);
+    expect(committed.skippedDrafts).toContainEqual({
+      draftKind: "partUpdate",
+      targetId: "part_root",
+      reason: "no_change"
+    });
+    expect(committed.results.map((result) => result.result.operationType)).toEqual([
+      "updatePart",
+      "setDrawablePart",
+      "setDrawableTexture",
+      "deletePart"
+    ]);
+    expect(first.state.layerTreeDraft).toEqual({
+      selection: ["draw_body"],
+      lockedIds: [],
+      editorHiddenIds: ["draw_body"]
+    });
+    expect(first.state.parts.find((part) => part.partId === "part_direct_empty")).toBeUndefined();
+    expect(first.state.parts.find((part) => part.partId === "part_direct_head")).toMatchObject({
+      partId: "part_direct_head",
+      displayName: "Direct Head Renamed",
+      drawableIds: ["draw_body"]
+    });
+    expect(first.state.parts.find((part) => part.partId === "part_direct_head")?.parentPartId).toBeUndefined();
+    expect(first.state.drawables.find((drawable) => drawable.drawableId === "draw_body")).toMatchObject({
+      partId: "part_direct_head",
+      textureId: "tex_face"
+    });
+    expect(first.latestSessionPersistenceResult?.operationType).toBe("deletePart");
+    expect(first.latestSessionPersistenceResult?.evidence.generatedValidationReportIds).toEqual([
+      "val_editor_editor_direct_delete_part_part_direct_empty_r6_baseline",
+      "val_editor_editor_direct_delete_part_part_direct_empty_r6_candidate"
+    ]);
+    expect(previewPart).toMatchObject({
+      partId: "part_direct_head",
+      displayName: "Direct Head Renamed",
+      drawableIds: ["draw_body"],
+      depth: 0
+    });
+    expect(viewerDrawable).toMatchObject({
+      drawableId: "draw_body",
+      partId: "part_direct_head",
+      layerState: expect.objectContaining({
+        textureBacked: true,
+        textureUnresolved: false
+      })
+    });
+    expect(saved.snapshot.document.model.editorState).toEqual({
+      schemaVersion: "editor-state-v1",
+      selection: ["draw_body"],
+      lockedIds: [],
+      editorHiddenIds: ["draw_body"]
+    });
+    expect(saved.snapshot.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "importSplitPngSourceAsset",
+      "createPart",
+      "createPart",
+      "updatePart",
+      "setDrawablePart",
+      "setDrawableTexture",
+      "deletePart"
+    ]);
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.layerTreeDraft).toEqual(first.state.layerTreeDraft);
+    expect(second.state.parts.find((part) => part.partId === "part_direct_empty")).toBeUndefined();
+    expect(second.state.drawables.find((drawable) => drawable.drawableId === "draw_body")).toMatchObject({
+      partId: "part_direct_head",
+      textureId: "tex_face"
+    });
+  });
+
+  it("rejects direct manipulation batches before committing reparent drafts to pending-delete parts", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreatePart({
+      operationId: "op_workflow_create_pending_delete_parent",
+      partId: "part_pending_delete_parent",
+      displayName: "Pending Delete Parent",
+      parentPartId: "part_root"
+    });
+    workflow.commitCreatePart({
+      operationId: "op_workflow_create_direct_child_candidate",
+      partId: "part_direct_child_candidate",
+      displayName: "Direct Child Candidate",
+      parentPartId: "part_root"
+    });
+
+    const latestBefore = workflow.latestSessionPersistenceResult;
+    const operationTypesBefore = workflow.saveProject().snapshot.operationLogEntries.map(
+      (entry) => entry.operationType
+    );
+
+    workflow.draftLayerTreeEmptyLeafPartDelete({
+      partId: "part_pending_delete_parent"
+    });
+    workflow.draftLayerTreePartReparent({
+      partId: "part_direct_child_candidate",
+      parentPartId: "part_pending_delete_parent"
+    });
+
+    const rejected = workflow.commitLayerTreeDirectManipulationDrafts();
+    const operationTypesAfter = workflow.saveProject().snapshot.operationLogEntries.map(
+      (entry) => entry.operationType
+    );
+
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.committedCount).toBe(0);
+    expect(rejected.results).toEqual([]);
+    expect(rejected.latestResult).toBeNull();
+    expect(rejected.batchIssues).toContainEqual(expect.objectContaining({
+      checkId: "editor.layerTreeDirectDraft.reparentToPendingDelete",
+      targetKind: "part",
+      targetId: "part_direct_child_candidate",
+      pendingDeletePartId: "part_pending_delete_parent"
+    }));
+    expect(workflow.latestSessionPersistenceResult).toBe(latestBefore);
+    expect(operationTypesAfter).toEqual(operationTypesBefore);
+    expect(workflow.state.parts.find((part) => part.partId === "part_pending_delete_parent")).toBeDefined();
+    expect(workflow.state.parts.find((part) => part.partId === "part_direct_child_candidate")).toMatchObject({
+      parentPartId: "part_root"
+    });
+    expect(workflow.state.layerTreeDraft.directManipulation?.emptyLeafPartDeletes).toEqual([{
+      draftKind: "emptyLeafPartDelete",
+      partId: "part_pending_delete_parent"
+    }]);
+  });
+
+  it("rejects direct manipulation batches before committing drawable assignments to pending-delete parts", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreatePart({
+      operationId: "op_workflow_create_pending_delete_drawable_part",
+      partId: "part_pending_delete_drawable",
+      displayName: "Pending Delete Drawable Part",
+      parentPartId: "part_root"
+    });
+
+    const latestBefore = workflow.latestSessionPersistenceResult;
+    const operationTypesBefore = workflow.saveProject().snapshot.operationLogEntries.map(
+      (entry) => entry.operationType
+    );
+
+    workflow.draftLayerTreeEmptyLeafPartDelete({
+      partId: "part_pending_delete_drawable"
+    });
+    workflow.draftLayerTreeDrawablePartAssignment({
+      drawableId: "draw_body",
+      partId: "part_pending_delete_drawable"
+    });
+
+    const rejected = workflow.commitLayerTreeDirectManipulationDrafts();
+    const operationTypesAfter = workflow.saveProject().snapshot.operationLogEntries.map(
+      (entry) => entry.operationType
+    );
+
+    expect(rejected.status).toBe("rejected");
+    expect(rejected.committedCount).toBe(0);
+    expect(rejected.results).toEqual([]);
+    expect(rejected.latestResult).toBeNull();
+    expect(rejected.batchIssues).toContainEqual(expect.objectContaining({
+      checkId: "editor.layerTreeDirectDraft.drawablePartToPendingDelete",
+      targetKind: "drawable",
+      targetId: "draw_body",
+      pendingDeletePartId: "part_pending_delete_drawable"
+    }));
+    expect(workflow.latestSessionPersistenceResult).toBe(latestBefore);
+    expect(operationTypesAfter).toEqual(operationTypesBefore);
+    expect(workflow.state.parts.find((part) => part.partId === "part_pending_delete_drawable")).toBeDefined();
+    expect(workflow.state.drawables.find((drawable) => drawable.drawableId === "draw_body")).toMatchObject({
+      partId: "part_root"
+    });
+    expect(workflow.state.layerTreeDraft.directManipulation?.drawablePartAssignments).toEqual([{
+      draftKind: "drawablePartAssignment",
+      drawableId: "draw_body",
+      partId: "part_pending_delete_drawable"
+    }]);
+  });
+
   it("uses layer locks as operation preconditions without changing runtime visibility", () => {
     const workflow = createWorkflow(createMemoryStorage());
 

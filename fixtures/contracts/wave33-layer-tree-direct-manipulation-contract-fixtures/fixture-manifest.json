@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave33-layer-tree-direct-manipulation-contract-fixtures",
+  "title": "Wave33 layer tree direct manipulation semantic contract evidence",
+  "coversAC": [
+    "AC-MVP-004",
+    "AC-MVP-011",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-PART-001",
+    "SC-MVP-003",
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core",
+    "editor-ui",
+    "viewer-ui"
+  ],
+  "inputArtifacts": [
+    "baseline-package.json",
+    "request/update-part-rename-reparent-commit.request.json",
+    "request/set-drawable-part-commit.request.json",
+    "request/set-drawable-texture-commit.request.json",
+    "request/delete-empty-leaf-commit.request.json",
+    "request/delete-non-empty-rejected.request.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-chain-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageMaterialization",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeViewerEvidence",
+      "path": "expected/runtime-viewer-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-report-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorPersistence",
+      "path": "expected/editor-persistence-reinspection-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorPreflight",
+      "path": "expected/editor-pending-delete-preflight-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "invalidCases": [
+    {
+      "caseId": "non-empty-parent-delete-rejected",
+      "expectedCheckIds": [
+        "operation.deletePart.partHasChildParts"
+      ]
+    },
+    {
+      "caseId": "pending-delete-draft-target-preflight",
+      "expectedCheckIds": [
+        "editor.layerTreeDirectDraft.drawablePartToPendingDelete"
+      ]
+    }
+  ],
+  "semanticBoundary": {
+    "rightsCleanJsonOnly": true,
+    "realImageBytes": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "cubismCompatibilityOracle": false,
+    "nativeDragAndDropDependency": false,
+    "externalDependency": false
+  },
+  "updateRule": "requires-contract-review"
+}

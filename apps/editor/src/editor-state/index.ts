@@ -14,6 +14,8 @@ export * from "./editor-state-projections.js";
 export * from "./editor-test-ids.js";
 export * from "./editor-view-model.js";
 export * from "./generated-evidence-summary.js";
+export * from "./layer-tree-direct-manipulation-draft-state.js";
+export * from "./layer-tree-direct-manipulation-view-model.js";
 export * from "./layer-tree-draft-state.js";
 export * from "./layer-tree-view-model.js";
 export * from "./mesh-canvas-selection-state.js";

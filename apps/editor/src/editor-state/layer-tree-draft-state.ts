@@ -1,9 +1,25 @@
 import type { EditorStateFileDto } from "@private-2d-rigging-lab/package-format";
+import {
+  createEmptyLayerTreeDirectManipulationDraftState,
+  draftDrawablePartAssignmentInDirectManipulationState,
+  draftDrawableTextureAssignmentInDirectManipulationState,
+  draftEmptyLeafPartDeleteInDirectManipulationState,
+  draftPartRenameInDirectManipulationState,
+  draftPartReparentInDirectManipulationState,
+  hasLayerTreeDirectManipulationDraft,
+  type LayerTreeDirectManipulationDraftState,
+  type LayerTreeDrawablePartAssignmentDraftCommand,
+  type LayerTreeDrawableTextureAssignmentDraftCommand,
+  type LayerTreeEmptyLeafPartDeleteDraftCommand,
+  type LayerTreePartRenameDraftCommand,
+  type LayerTreePartReparentDraftCommand
+} from "./layer-tree-direct-manipulation-draft-state.js";
 
 export interface LayerTreeDraftState {
   readonly selection: readonly string[];
   readonly lockedIds: readonly string[];
   readonly editorHiddenIds: readonly string[];
+  readonly directManipulation?: LayerTreeDirectManipulationDraftState;
 }
 
 export interface LayerTreeDraftOwner {
@@ -139,6 +155,91 @@ export const toggleDrawableEditorHiddenInEditorState = <State extends LayerTreeD
   layerTreeDraft: toggleDrawableEditorHidden(state.layerTreeDraft, drawableId)
 });
 
+export const draftLayerTreePartRename = (
+  draft: LayerTreeDraftState,
+  command: LayerTreePartRenameDraftCommand
+): LayerTreeDraftState =>
+  updateDirectManipulationDraft(draft, (directManipulation) =>
+    draftPartRenameInDirectManipulationState(directManipulation, command)
+  );
+
+export const draftLayerTreePartReparent = (
+  draft: LayerTreeDraftState,
+  command: LayerTreePartReparentDraftCommand
+): LayerTreeDraftState =>
+  updateDirectManipulationDraft(draft, (directManipulation) =>
+    draftPartReparentInDirectManipulationState(directManipulation, command)
+  );
+
+export const draftLayerTreeEmptyLeafPartDelete = (
+  draft: LayerTreeDraftState,
+  command: LayerTreeEmptyLeafPartDeleteDraftCommand
+): LayerTreeDraftState =>
+  updateDirectManipulationDraft(draft, (directManipulation) =>
+    draftEmptyLeafPartDeleteInDirectManipulationState(directManipulation, command)
+  );
+
+export const draftLayerTreeDrawablePartAssignment = (
+  draft: LayerTreeDraftState,
+  command: LayerTreeDrawablePartAssignmentDraftCommand
+): LayerTreeDraftState =>
+  updateDirectManipulationDraft(draft, (directManipulation) =>
+    draftDrawablePartAssignmentInDirectManipulationState(directManipulation, command)
+  );
+
+export const draftLayerTreeDrawableTextureAssignment = (
+  draft: LayerTreeDraftState,
+  command: LayerTreeDrawableTextureAssignmentDraftCommand
+): LayerTreeDraftState =>
+  updateDirectManipulationDraft(draft, (directManipulation) =>
+    draftDrawableTextureAssignmentInDirectManipulationState(directManipulation, command)
+  );
+
+export const clearLayerTreeDirectManipulationDraft = (
+  draft: LayerTreeDraftState
+): LayerTreeDraftState => omitDirectManipulationDraft(draft);
+
+export const draftLayerTreePartRenameInEditorState = <State extends LayerTreeDraftOwner>(
+  state: State,
+  command: LayerTreePartRenameDraftCommand
+): State => ({
+  ...state,
+  layerTreeDraft: draftLayerTreePartRename(state.layerTreeDraft, command)
+});
+
+export const draftLayerTreePartReparentInEditorState = <State extends LayerTreeDraftOwner>(
+  state: State,
+  command: LayerTreePartReparentDraftCommand
+): State => ({
+  ...state,
+  layerTreeDraft: draftLayerTreePartReparent(state.layerTreeDraft, command)
+});
+
+export const draftLayerTreeEmptyLeafPartDeleteInEditorState = <State extends LayerTreeDraftOwner>(
+  state: State,
+  command: LayerTreeEmptyLeafPartDeleteDraftCommand
+): State => ({
+  ...state,
+  layerTreeDraft: draftLayerTreeEmptyLeafPartDelete(state.layerTreeDraft, command)
+});
+
+export const draftLayerTreeDrawablePartAssignmentInEditorState = <State extends LayerTreeDraftOwner>(
+  state: State,
+  command: LayerTreeDrawablePartAssignmentDraftCommand
+): State => ({
+  ...state,
+  layerTreeDraft: draftLayerTreeDrawablePartAssignment(state.layerTreeDraft, command)
+});
+
+export const draftLayerTreeDrawableTextureAssignmentInEditorState =
+  <State extends LayerTreeDraftOwner>(
+    state: State,
+    command: LayerTreeDrawableTextureAssignmentDraftCommand
+  ): State => ({
+    ...state,
+    layerTreeDraft: draftLayerTreeDrawableTextureAssignment(state.layerTreeDraft, command)
+  });
+
 const updateTargetIdSet = (
   targetIds: readonly string[],
   drawableId: string,
@@ -180,3 +281,27 @@ const normalizeTargetId = (targetId: string): string => targetId.trim();
 
 const sortTargetIds = (targetIds: readonly string[]): readonly string[] =>
   [...targetIds].sort((left, right) => left.localeCompare(right));
+
+const updateDirectManipulationDraft = (
+  draft: LayerTreeDraftState,
+  update: (
+    directManipulation: LayerTreeDirectManipulationDraftState
+  ) => LayerTreeDirectManipulationDraftState
+): LayerTreeDraftState => {
+  const nextDirectManipulation = update(
+    draft.directManipulation ?? createEmptyLayerTreeDirectManipulationDraftState()
+  );
+
+  return hasLayerTreeDirectManipulationDraft(nextDirectManipulation)
+    ? {
+        ...draft,
+        directManipulation: nextDirectManipulation
+      }
+    : omitDirectManipulationDraft(draft);
+};
+
+const omitDirectManipulationDraft = (draft: LayerTreeDraftState): LayerTreeDraftState => {
+  const { directManipulation: _directManipulation, ...rest } = draft;
+
+  return rest;
+};

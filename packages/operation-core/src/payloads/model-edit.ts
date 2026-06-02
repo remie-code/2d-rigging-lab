@@ -63,6 +63,12 @@ export const UpdatePartPayloadSchema = z
   );
 export type UpdatePartPayloadDto = z.infer<typeof UpdatePartPayloadSchema>;
 
+export const DeletePartPayloadSchema = z.object({
+  partId: PartIdSchema,
+  lockedTargetIds: LockedTargetIdsSchema
+});
+export type DeletePartPayloadDto = z.infer<typeof DeletePartPayloadSchema>;
+
 export const SetDrawablePartPayloadSchema = z.object({
   drawableId: DrawableIdSchema,
   partId: PartIdSchema,

@@ -6,6 +6,7 @@ export const operationTypes = [
   "createDrawable",
   "createPart",
   "updatePart",
+  "deletePart",
   "setDrawablePart",
   "setDrawableTexture",
   "generateMesh",

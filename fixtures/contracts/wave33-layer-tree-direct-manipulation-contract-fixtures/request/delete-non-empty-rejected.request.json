@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave33_direct_delete_non_empty_parent",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 4,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-004",
+      "AC-MVP-013"
+    ],
+    "relatedScenarios": [
+      "SC-PART-001"
+    ]
+  },
+  "operationType": "deletePart",
+  "payload": {
+    "partId": "part_wave33_parent"
+  }
+}

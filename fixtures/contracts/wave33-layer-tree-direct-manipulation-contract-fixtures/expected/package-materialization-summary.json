@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-package-materialization-summary-v1",
+  "packageId": "pkg_wave33_layer_tree_direct_manipulation",
+  "packageRevision": 4,
+  "updatedAt": "2026-06-02T00:01:00.000Z",
+  "parts": [
+    {
+      "partId": "part_root",
+      "displayName": "Root",
+      "parentPartId": null,
+      "childPartIds": [
+        "part_wave33_parent"
+      ],
+      "drawableIds": []
+    },
+    {
+      "partId": "part_wave33_parent",
+      "displayName": "Wave 33 Parent",
+      "parentPartId": "part_root",
+      "childPartIds": [
+        "part_wave33_head"
+      ],
+      "drawableIds": []
+    },
+    {
+      "partId": "part_wave33_head",
+      "displayName": "Wave 33 Head Renamed",
+      "parentPartId": "part_wave33_parent",
+      "childPartIds": [],
+      "drawableIds": [
+        "draw_body"
+      ]
+    }
+  ],
+  "deletedPartAbsent": true,
+  "stableOrder": [
+    "part_root",
+    "part_wave33_parent",
+    "part_wave33_head",
+    "draw_body"
+  ],
+  "drawables": [
+    {
+      "drawableId": "draw_body",
+      "partId": "part_wave33_head",
+      "textureId": "tex_wave33",
+      "runtimeVisibility": true
+    }
+  ],
+  "textureAtlasIds": [
+    "tex_body",
+    "tex_wave33"
+  ],
+  "editorState": {
+    "selection": [
+      "draw_body"
+    ],
+    "lockedIds": [],
+    "editorHiddenIds": [],
+    "activeTool": "layerTree"
+  },
+  "reloadedPackageRevision": 4,
+  "reloadedPartIds": [
+    "part_root",
+    "part_wave33_parent",
+    "part_wave33_head"
+  ],
+  "rightsClean": {
+    "realImageBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  }
+}

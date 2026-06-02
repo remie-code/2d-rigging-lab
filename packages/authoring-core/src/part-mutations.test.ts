@@ -4,6 +4,7 @@ import {
   PackageIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -12,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { AuthoringMutationError } from "./authoring-mutations.js";
 import { createInitialAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
-import { createPart, updatePart } from "./part-mutations.js";
+import { createPart, deletePart, updatePart } from "./part-mutations.js";
 
 describe("part authoring mutations", () => {
   it("creates a part and links it to its parent", () => {
@@ -88,6 +89,52 @@ describe("part authoring mutations", () => {
     expect(session.authoringRevision).toBe(1);
   });
 
+  it("deletes an empty leaf part and unlinks it from its parent", () => {
+    const session = createFixtureSession({
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [PartIdSchema.parse("part_head"), PartIdSchema.parse("part_empty")],
+          drawableIds: []
+        },
+        {
+          partId: PartIdSchema.parse("part_head"),
+          displayName: "Head",
+          parentPartId: PartIdSchema.parse("part_root"),
+          childPartIds: [],
+          drawableIds: []
+        },
+        {
+          partId: PartIdSchema.parse("part_empty"),
+          displayName: "Empty",
+          parentPartId: PartIdSchema.parse("part_root"),
+          childPartIds: [],
+          drawableIds: []
+        }
+      ],
+      stableOrder: ["part_root", "part_head", "part_empty", "draw_body"]
+    });
+
+    const result = deletePart(session, {
+      partId: PartIdSchema.parse("part_empty")
+    });
+
+    expect(result.partBefore).toMatchObject({
+      partId: "part_empty",
+      parentPartId: "part_root"
+    });
+    expect(result.parentBefore?.childPartIds).toEqual(["part_head", "part_empty"]);
+    expect(result.parentAfter?.childPartIds).toEqual(["part_head"]);
+    expect(result.stableOrderBefore).toContain("part_empty");
+    expect(result.stableOrderAfter).not.toContain("part_empty");
+    expect(session.graph.parts.map((part) => part.partId)).toEqual(["part_root", "part_head"]);
+    expect(session.graph.parts[0]?.childPartIds).toEqual(["part_head"]);
+    expect(session.graph.stableOrder).toEqual(["part_root", "part_head", "draw_body"]);
+    expect(session.authoringRevision).toBe(1);
+    expect(session.dirty).toBe(true);
+  });
+
   it("rejects missing parent, duplicate child, cycle, and no-op updates deterministically", () => {
     const session = createFixtureSession();
 
@@ -139,10 +186,78 @@ describe("part authoring mutations", () => {
     ).toThrow(expect.objectContaining({ code: "no_op_part_update" }) as AuthoringMutationError);
     expect(session.authoringRevision).toBe(0);
   });
+
+  it("rejects non-empty part deletes deterministically", () => {
+    const childSession = createFixtureSession();
+    expect(() =>
+      deletePart(childSession, {
+        partId: PartIdSchema.parse("part_root")
+      })
+    ).toThrow(expect.objectContaining({ code: "part_has_child_parts" }) as AuthoringMutationError);
+
+    const drawableSession = createFixtureSession();
+    expect(() =>
+      deletePart(drawableSession, {
+        partId: PartIdSchema.parse("part_head")
+      })
+    ).toThrow(expect.objectContaining({ code: "part_has_drawables" }) as AuthoringMutationError);
+
+    const rigSession = createFixtureSession({
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [PartIdSchema.parse("part_head"), PartIdSchema.parse("part_empty")],
+          drawableIds: []
+        },
+        {
+          partId: PartIdSchema.parse("part_head"),
+          displayName: "Head",
+          parentPartId: PartIdSchema.parse("part_root"),
+          childPartIds: [],
+          drawableIds: []
+        },
+        {
+          partId: PartIdSchema.parse("part_empty"),
+          displayName: "Empty",
+          parentPartId: PartIdSchema.parse("part_root"),
+          childPartIds: [],
+          drawableIds: []
+        }
+      ],
+      stableOrder: ["part_root", "part_head", "part_empty", "draw_body"],
+      rigControls: [
+        {
+          kind: "rotation2d",
+          rigControlId: RigControlIdSchema.parse("rig_empty_rotation"),
+          displayName: "Empty Rotation",
+          partId: PartIdSchema.parse("part_empty"),
+          childDrawableIds: [],
+          childRigControlIds: [],
+          pivot: { x: 0, y: 0 },
+          restAngleDegrees: 0,
+          restTranslation: { x: 0, y: 0 },
+          restScale: { x: 1, y: 1 },
+          enabled: true
+        }
+      ]
+    });
+    expect(() =>
+      deletePart(rigSession, {
+        partId: PartIdSchema.parse("part_empty")
+      })
+    ).toThrow(expect.objectContaining({ code: "part_has_rig_controls" }) as AuthoringMutationError);
+
+    expect(childSession.authoringRevision).toBe(0);
+    expect(drawableSession.authoringRevision).toBe(0);
+    expect(rigSession.authoringRevision).toBe(0);
+  });
 });
 
 const createFixtureSession = (options: {
   readonly parts?: AuthoringSession["graph"]["parts"];
+  readonly rigControls?: AuthoringSession["graph"]["rigControls"];
+  readonly stableOrder?: AuthoringSession["graph"]["stableOrder"];
 } = {}): AuthoringSession => ({
   packageIdentity: {
     packageId: PackageIdSchema.parse("pkg_part_mutation_test"),
@@ -175,12 +290,12 @@ const createFixtureSession = (options: {
     meshes: [createFixtureMesh()],
     parameters: [],
     keyformSets: [],
-    rigControls: [],
+    rigControls: options.rigControls ?? [],
     dynamicsGroups: [],
     masks: [],
     drawOrder: [{ drawableId: DrawableIdSchema.parse("draw_body"), baseDrawOrder: 0, stableOrder: 0 }],
     rigControlRootIds: [],
-    stableOrder: ["part_root", "part_head", "draw_body"],
+    stableOrder: options.stableOrder ?? ["part_root", "part_head", "draw_body"],
     sourceAssets: [],
     provenanceRecords: [],
     rightsRecords: []

@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-runtime-viewer-evidence-summary-v1",
+  "runtimeEvidence": {
+    "baselineSnapshotId": "snap_wave33_layer_tree_direct_manipulation_0",
+    "candidateSnapshotId": "snap_wave33_layer_tree_direct_manipulation_1",
+    "generatedRuntimeSnapshotIds": [
+      "snap_wave33_layer_tree_direct_manipulation_0",
+      "snap_wave33_layer_tree_direct_manipulation_1"
+    ],
+    "candidateParts": [
+      {
+        "partId": "part_root",
+        "displayName": "Root",
+        "parentPartId": null,
+        "childPartIds": [
+          "part_wave33_parent"
+        ],
+        "drawableIds": [],
+        "hierarchyPath": [
+          "part_root"
+        ],
+        "depth": 0,
+        "drawableCount": 0,
+        "runtimeVisibleDrawableCount": 0
+      },
+      {
+        "partId": "part_wave33_parent",
+        "displayName": "Wave 33 Parent",
+        "parentPartId": "part_root",
+        "childPartIds": [
+          "part_wave33_head"
+        ],
+        "drawableIds": [],
+        "hierarchyPath": [
+          "part_root",
+          "part_wave33_parent"
+        ],
+        "depth": 1,
+        "drawableCount": 0,
+        "runtimeVisibleDrawableCount": 0
+      },
+      {
+        "partId": "part_wave33_head",
+        "displayName": "Wave 33 Head Renamed",
+        "parentPartId": "part_wave33_parent",
+        "childPartIds": [],
+        "drawableIds": [
+          "draw_body"
+        ],
+        "hierarchyPath": [
+          "part_root",
+          "part_wave33_parent",
+          "part_wave33_head"
+        ],
+        "depth": 2,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      }
+    ],
+    "candidateDrawableLayers": [
+      {
+        "drawableId": "draw_body",
+        "partId": "part_wave33_head",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_wave33",
+        "sourceLayerId": "layer_body"
+      }
+    ],
+    "drawList": [
+      "draw_body"
+    ],
+    "runtimeDiff": {
+      "schemaVersion": "runtime-diff-v1",
+      "beforeSnapshotId": "snap_wave33_layer_tree_direct_manipulation_0",
+      "afterSnapshotId": "snap_wave33_layer_tree_direct_manipulation_1",
+      "parameterChangeCount": 10,
+      "drawableChangeCount": 0,
+      "drawableRuntimeStateChangeCount": 0,
+      "diagnosticDeltaCount": 0
+    }
+  },
+  "viewerEvidence": {
+    "surface": "viewer",
+    "baselineSnapshotId": "snap_wave33_layer_tree_direct_manipulation_20",
+    "snapshotId": "snap_wave33_layer_tree_direct_manipulation_21",
+    "targetIds": [
+      "draw_body",
+      "part_wave33_parent",
+      "part_wave33_head"
+    ],
+    "partHierarchyEvidence": [
+      {
+        "partId": "part_root",
+        "displayName": "Root",
+        "childPartIds": [
+          "part_wave33_parent"
+        ],
+        "drawableIds": [],
+        "hierarchyPath": [
+          "part_root"
+        ],
+        "depth": 0,
+        "drawableCount": 0,
+        "runtimeVisibleDrawableCount": 0
+      },
+      {
+        "partId": "part_wave33_parent",
+        "displayName": "Wave 33 Parent",
+        "parentPartId": "part_root",
+        "childPartIds": [
+          "part_wave33_head"
+        ],
+        "drawableIds": [],
+        "hierarchyPath": [
+          "part_root",
+          "part_wave33_parent"
+        ],
+        "depth": 1,
+        "drawableCount": 0,
+        "runtimeVisibleDrawableCount": 0
+      },
+      {
+        "partId": "part_wave33_head",
+        "displayName": "Wave 33 Head Renamed",
+        "parentPartId": "part_wave33_parent",
+        "childPartIds": [],
+        "drawableIds": [
+          "draw_body"
+        ],
+        "hierarchyPath": [
+          "part_root",
+          "part_wave33_parent",
+          "part_wave33_head"
+        ],
+        "depth": 2,
+        "drawableCount": 1,
+        "runtimeVisibleDrawableCount": 1
+      }
+    ],
+    "drawableLayerEvidence": [
+      {
+        "drawableId": "draw_body",
+        "partId": "part_wave33_head",
+        "runtimeVisible": true,
+        "textureStatus": "resolved",
+        "textureId": "tex_wave33"
+      }
+    ],
+    "runtimeDiffEquivalent": true
+  },
+  "semanticBoundary": {
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "cubismCompatibilityOracle": false
+  }
+}

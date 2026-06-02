@@ -129,6 +129,109 @@ describe("runtime layer tree evidence", () => {
     expect(comparison.diff.drawableChanges).toEqual([]);
     expect(comparison.diff.drawableRuntimeStateChanges).toEqual([]);
   });
+
+  it("emits runtime and viewer evidence for part rename and reparent without drawable membership churn", () => {
+    const beforeFixture = createPartTreeMutationFixture({ includeEmptyLeaf: true });
+    const afterFixture = createPartTreeMutationFixture({
+      headDisplayName: "Face Controls",
+      reparentHeadUnderBody: true,
+      includeEmptyLeaf: true
+    });
+    const beforeSnapshot = evaluateSnapshot(beforeFixture.graph, 0);
+    const afterSnapshot = evaluateSnapshot(afterFixture.graph, 1);
+    const viewerResult = evaluateViewerRuntimeSnapshot(afterFixture.graph);
+    const comparison = compareRuntimeSnapshots(beforeSnapshot, afterSnapshot);
+
+    expect(afterSnapshot.parts?.find((part) => part.partId === afterFixture.headPartId)).toMatchObject({
+      partId: afterFixture.headPartId,
+      displayName: "Face Controls",
+      parentPartId: afterFixture.bodyPartId,
+      hierarchyPath: [afterFixture.rootPartId, afterFixture.bodyPartId, afterFixture.headPartId],
+      drawableIds: [afterFixture.faceDrawableId],
+      drawableCount: 1,
+      runtimeVisibleDrawableCount: 1
+    });
+    expect(viewerResult.evidence.partHierarchyEvidence.find((part) => part.partId === afterFixture.headPartId))
+      .toMatchObject({
+        displayName: "Face Controls",
+        parentPartId: afterFixture.bodyPartId,
+        hierarchyPath: [afterFixture.rootPartId, afterFixture.bodyPartId, afterFixture.headPartId],
+        drawableIds: [afterFixture.faceDrawableId]
+      });
+    expect(createDrawableMembershipSummary(afterSnapshot)).toEqual(createDrawableMembershipSummary(beforeSnapshot));
+    expect(createViewerDrawableMembershipSummary(viewerResult.evidence.drawableLayerEvidence)).toEqual(
+      createDrawableMembershipSummary(afterSnapshot)
+    );
+    expect(comparison.diff.parameterChanges).toEqual([
+      {
+        path: `/parts/${afterFixture.bodyPartId}/childPartIds`,
+        before: [],
+        after: [afterFixture.headPartId]
+      },
+      {
+        path: `/parts/${afterFixture.headPartId}/displayName`,
+        before: "Head",
+        after: "Face Controls"
+      },
+      {
+        path: `/parts/${afterFixture.headPartId}/hierarchyPath`,
+        before: [afterFixture.rootPartId, afterFixture.headPartId],
+        after: [afterFixture.rootPartId, afterFixture.bodyPartId, afterFixture.headPartId]
+      },
+      {
+        path: `/parts/${afterFixture.headPartId}/parentPartId`,
+        before: afterFixture.rootPartId,
+        after: afterFixture.bodyPartId
+      },
+      {
+        path: `/parts/${afterFixture.rootPartId}/childPartIds`,
+        before: [afterFixture.bodyPartId, afterFixture.headPartId, afterFixture.emptyLeafPartId],
+        after: [afterFixture.bodyPartId, afterFixture.emptyLeafPartId]
+      }
+    ]);
+    expect(comparison.diff.parameterChanges.filter((change) => change.path.startsWith("/drawables/"))).toEqual([]);
+    expect(comparison.diff.drawableChanges).toEqual([]);
+    expect(comparison.diff.drawableRuntimeStateChanges).toEqual([]);
+  });
+
+  it("observes deleted empty leaf part absence while keeping drawable membership stable", () => {
+    const beforeFixture = createPartTreeMutationFixture({ includeEmptyLeaf: true });
+    const afterFixture = createPartTreeMutationFixture({ includeEmptyLeaf: false });
+    const beforeSnapshot = evaluateSnapshot(beforeFixture.graph, 0);
+    const afterSnapshot = evaluateSnapshot(afterFixture.graph, 1);
+    const viewerResult = evaluateViewerRuntimeSnapshot(afterFixture.graph);
+    const comparison = compareRuntimeSnapshots(beforeSnapshot, afterSnapshot);
+
+    expect(afterSnapshot.parts?.some((part) => part.partId === afterFixture.emptyLeafPartId)).toBe(false);
+    expect(viewerResult.evidence.partHierarchyEvidence.some((part) => part.partId === afterFixture.emptyLeafPartId))
+      .toBe(false);
+    expect(createDrawableMembershipSummary(afterSnapshot)).toEqual(createDrawableMembershipSummary(beforeSnapshot));
+    expect(createViewerDrawableMembershipSummary(viewerResult.evidence.drawableLayerEvidence)).toEqual(
+      createDrawableMembershipSummary(afterSnapshot)
+    );
+    expect(comparison.diff.parameterChanges).toEqual([
+      {
+        path: `/parts/${afterFixture.emptyLeafPartId}`,
+        before: {
+          partId: beforeFixture.emptyLeafPartId,
+          displayName: "Empty Leaf",
+          parentPartId: beforeFixture.rootPartId,
+          childPartIds: [],
+          drawableIds: [],
+          hierarchyPath: [beforeFixture.rootPartId, beforeFixture.emptyLeafPartId]
+        },
+        after: null
+      },
+      {
+        path: `/parts/${afterFixture.rootPartId}/childPartIds`,
+        before: [afterFixture.bodyPartId, afterFixture.headPartId, afterFixture.emptyLeafPartId],
+        after: [afterFixture.bodyPartId, afterFixture.headPartId]
+      }
+    ]);
+    expect(comparison.diff.parameterChanges.filter((change) => change.path.startsWith("/drawables/"))).toEqual([]);
+    expect(comparison.diff.drawableChanges).toEqual([]);
+    expect(comparison.diff.drawableRuntimeStateChanges).toEqual([]);
+  });
 });
 
 const evaluateSnapshot = (
@@ -267,3 +370,164 @@ const createLayerTreeFixture = (
     faceTextureId
   };
 };
+
+const createPartTreeMutationFixture = (
+  options: {
+    readonly headDisplayName?: string;
+    readonly reparentHeadUnderBody?: boolean;
+    readonly includeEmptyLeaf?: boolean;
+  } = {}
+) => {
+  const packageId = PackageIdSchema.parse("pkg_layer_tree_mutation_evidence");
+  const rootPartId = PartIdSchema.parse("part_root");
+  const bodyPartId = PartIdSchema.parse("part_body");
+  const headPartId = PartIdSchema.parse("part_head");
+  const emptyLeafPartId = PartIdSchema.parse("part_empty_leaf");
+  const bodyDrawableId = DrawableIdSchema.parse("draw_body");
+  const faceDrawableId = DrawableIdSchema.parse("draw_face");
+  const bodyMeshId = MeshIdSchema.parse("mesh_body");
+  const faceMeshId = MeshIdSchema.parse("mesh_face");
+  const bodyTextureId = TextureIdSchema.parse("tex_body");
+  const faceTextureId = TextureIdSchema.parse("tex_face");
+  const sourceAssetId = SourceAssetIdSchema.parse("src_layer_tree_mutation");
+  const includeEmptyLeaf = options.includeEmptyLeaf ?? true;
+  const reparentHeadUnderBody = options.reparentHeadUnderBody ?? false;
+
+  const graph: NormalizedRuntimeGraph = {
+    packageId,
+    packageRevision: 3,
+    packageHash: "sha256:layer-tree-mutation-evidence",
+    coordinateSystem: "canvas-y-down-v1",
+    parameters: new Map(),
+    parts: new Map([
+      [
+        rootPartId,
+        {
+          partId: rootPartId,
+          displayName: "Root",
+          childPartIds: [
+            bodyPartId,
+            ...(reparentHeadUnderBody ? [] : [headPartId]),
+            ...(includeEmptyLeaf ? [emptyLeafPartId] : [])
+          ],
+          drawableIds: []
+        }
+      ],
+      [
+        bodyPartId,
+        {
+          partId: bodyPartId,
+          displayName: "Body",
+          parentPartId: rootPartId,
+          childPartIds: reparentHeadUnderBody ? [headPartId] : [],
+          drawableIds: [bodyDrawableId]
+        }
+      ],
+      [
+        headPartId,
+        {
+          partId: headPartId,
+          displayName: options.headDisplayName ?? "Head",
+          parentPartId: reparentHeadUnderBody ? bodyPartId : rootPartId,
+          childPartIds: [],
+          drawableIds: [faceDrawableId]
+        }
+      ],
+      ...(includeEmptyLeaf
+        ? [
+            [
+              emptyLeafPartId,
+              {
+                partId: emptyLeafPartId,
+                displayName: "Empty Leaf",
+                parentPartId: rootPartId,
+                childPartIds: [],
+                drawableIds: []
+              }
+            ] as const
+          ]
+        : [])
+    ]),
+    dynamicsGroups: new Map(),
+    drawables: new Map([
+      [
+        bodyDrawableId,
+        {
+          drawableId: bodyDrawableId,
+          meshId: bodyMeshId,
+          partId: bodyPartId,
+          texture: {
+            status: "resolved",
+            textureId: bodyTextureId,
+            sourceAssetId,
+            sourceLayerId: "layer_body",
+            projection: { kind: "bounds_fit" }
+          },
+          visible: true,
+          opacity: 1,
+          baseDrawOrder: 0,
+          bounds: { x: 0, y: 0, width: 32, height: 48 },
+          vertexCount: 4
+        }
+      ],
+      [
+        faceDrawableId,
+        {
+          drawableId: faceDrawableId,
+          meshId: faceMeshId,
+          partId: headPartId,
+          texture: {
+            status: "resolved",
+            textureId: faceTextureId,
+            sourceAssetId,
+            sourceLayerId: "layer_face",
+            projection: { kind: "bounds_fit" }
+          },
+          visible: true,
+          opacity: 1,
+          baseDrawOrder: 1,
+          bounds: { x: 4, y: 4, width: 16, height: 16 },
+          vertexCount: 4
+        }
+      ]
+    ]),
+    rigControls: new Map(),
+    keyformBindings: [],
+    masks: [],
+    drawOrder: [
+      { drawableId: bodyDrawableId, drawOrder: 0 },
+      { drawableId: faceDrawableId, drawOrder: 1 }
+    ],
+    disabledFutureLayers: []
+  };
+
+  return {
+    graph,
+    rootPartId,
+    bodyPartId,
+    headPartId,
+    emptyLeafPartId,
+    bodyDrawableId,
+    faceDrawableId
+  };
+};
+
+const createDrawableMembershipSummary = (
+  snapshot: ReturnType<typeof evaluateSnapshot>
+): readonly { readonly drawableId: string; readonly partId: string | null }[] =>
+  snapshot.drawables
+    .map((drawable) => ({
+      drawableId: drawable.drawableId,
+      partId: drawable.partId ?? null
+    }))
+    .sort((left, right) => left.drawableId.localeCompare(right.drawableId));
+
+const createViewerDrawableMembershipSummary = (
+  evidence: ReturnType<typeof evaluateViewerRuntimeSnapshot>["evidence"]["drawableLayerEvidence"]
+): readonly { readonly drawableId: string; readonly partId: string | null }[] =>
+  evidence
+    .map((drawable) => ({
+      drawableId: drawable.drawableId,
+      partId: drawable.partId ?? null
+    }))
+    .sort((left, right) => left.drawableId.localeCompare(right.drawableId));

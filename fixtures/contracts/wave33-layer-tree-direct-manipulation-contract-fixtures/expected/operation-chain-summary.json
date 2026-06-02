@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-operation-chain-summary-v1",
+  "fixtureId": "wave33-layer-tree-direct-manipulation-contract-fixtures",
+  "packageRevisionAfter": 4,
+  "authoringRevisionAfter": 4,
+  "operationLogTypes": [
+    "updatePart",
+    "setDrawablePart",
+    "setDrawableTexture",
+    "deletePart"
+  ],
+  "operations": [
+    {
+      "operationId": "op_wave33_direct_update_head",
+      "operationType": "updatePart",
+      "status": "committed",
+      "targetIds": [
+        "part_wave33_head",
+        "part_root",
+        "part_wave33_parent"
+      ],
+      "changedTargets": [
+        "part:part_wave33_head",
+        "part:part_root",
+        "part:part_wave33_parent"
+      ],
+      "removedTargets": [],
+      "changedFieldPaths": [
+        "/model/graph/parts/part_wave33_head/displayName",
+        "/model/graph/parts/part_wave33_head/parentPartId",
+        "/model/graph/parts/part_root/childPartIds",
+        "/model/graph/parts/part_wave33_parent/childPartIds"
+      ],
+      "packageRevisionAfter": 1,
+      "authoringRevisionAfter": 1
+    },
+    {
+      "operationId": "op_wave33_direct_set_drawable_part",
+      "operationType": "setDrawablePart",
+      "status": "committed",
+      "targetIds": [
+        "draw_body",
+        "part_wave33_head",
+        "part_root"
+      ],
+      "changedTargets": [
+        "drawable:draw_body",
+        "part:part_root",
+        "part:part_wave33_head"
+      ],
+      "removedTargets": [],
+      "changedFieldPaths": [
+        "/model/drawables/draw_body/partId",
+        "/model/graph/parts/part_root/drawableIds",
+        "/model/graph/parts/part_wave33_head/drawableIds"
+      ],
+      "packageRevisionAfter": 2,
+      "authoringRevisionAfter": 2
+    },
+    {
+      "operationId": "op_wave33_direct_set_drawable_texture",
+      "operationType": "setDrawableTexture",
+      "status": "committed",
+      "targetIds": [
+        "draw_body",
+        "tex_wave33"
+      ],
+      "changedTargets": [
+        "drawable:draw_body"
+      ],
+      "removedTargets": [],
+      "changedFieldPaths": [
+        "/model/drawables/draw_body/textureId"
+      ],
+      "packageRevisionAfter": 3,
+      "authoringRevisionAfter": 3
+    },
+    {
+      "operationId": "op_wave33_direct_delete_empty_leaf",
+      "operationType": "deletePart",
+      "status": "committed",
+      "targetIds": [
+        "part_wave33_empty",
+        "part_root"
+      ],
+      "changedTargets": [
+        "package:pkg_wave33_layer_tree_direct_manipulation",
+        "part:part_wave33_empty",
+        "part:part_root"
+      ],
+      "removedTargets": [
+        "part:part_wave33_empty"
+      ],
+      "changedFieldPaths": [
+        "/model/graph/parts",
+        "/model/graph/stableOrder",
+        "/model/graph/parts/part_wave33_empty",
+        "/model/graph/parts/part_root/childPartIds"
+      ],
+      "packageRevisionAfter": 4,
+      "authoringRevisionAfter": 4
+    }
+  ],
+  "rejectedNonEmptyDelete": {
+    "operationId": "op_wave33_direct_delete_non_empty_parent",
+    "operationType": "deletePart",
+    "status": "rejected",
+    "operationLogLengthAfter": 4,
+    "diagnostics": [
+      {
+        "checkId": "operation.deletePart.partHasChildParts",
+        "severity": "error",
+        "target": {
+          "kind": "part",
+          "id": "part_wave33_parent",
+          "path": "/model/graph/parts/part_wave33_parent/childPartIds"
+        }
+      }
+    ]
+  }
+}

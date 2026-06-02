@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "operation-request-v1",
+  "operationId": "op_wave33_direct_update_head",
+  "actor": "test",
+  "surface": "testFixture",
+  "dryRun": false,
+  "basePackageRevision": 0,
+  "trace": {
+    "relatedAC": [
+      "AC-MVP-004",
+      "AC-MVP-012"
+    ],
+    "relatedScenarios": [
+      "SC-PART-001",
+      "SC-MVP-003"
+    ]
+  },
+  "operationType": "updatePart",
+  "payload": {
+    "partId": "part_wave33_head",
+    "displayName": "Wave 33 Head Renamed",
+    "parentPartId": "part_wave33_parent"
+  }
+}

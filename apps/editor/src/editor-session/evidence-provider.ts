@@ -184,6 +184,8 @@ const createRuntimeEvidenceInput = (
       return createPartRuntimeEvidenceInput(input);
     case "updatePart":
       return createUpdatePartRuntimeEvidenceInput(input);
+    case "deletePart":
+      return createDeletePartRuntimeEvidenceInput(input);
     case "setDrawablePart":
       return createSetDrawablePartRuntimeEvidenceInput(input);
     case "setDrawableTexture":
@@ -389,6 +391,31 @@ const createUpdatePartRuntimeEvidenceInput = (
 
   return {
     artifactLabel: "editor-update-part",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createDeletePartRuntimeEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "deletePart") {
+    throw new Error(`deletePart evidence input received ${input.request.operationType}.`);
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.partId
+  ]);
+
+  return {
+    artifactLabel: "editor-delete-part",
     authoredParameterValues: {},
     targetIds,
     baseline: {

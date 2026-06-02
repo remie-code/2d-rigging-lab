@@ -1,9 +1,11 @@
 import {
   DrawableIdSchema,
+  MaskRelationIdSchema,
   MeshIdSchema,
   PackageIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -16,11 +18,13 @@ import { evaluateViewerRuntimeSnapshot } from "@private-2d-rigging-lab/runtime-c
 import { describe, expect, it } from "vitest";
 
 import { createCheckCatalog } from "./check-catalog.js";
+import { validatePartDeleteCandidates } from "./validators/part-delete-blockers.js";
 import { validatePackageRuntime } from "./validators/package-runtime.js";
 
 const PACKAGE_ID = PackageIdSchema.parse("pkg_part_texture_layer");
 const ROOT_PART_ID = PartIdSchema.parse("part_root");
 const HEAD_PART_ID = PartIdSchema.parse("part_head");
+const EMPTY_LEAF_PART_ID = PartIdSchema.parse("part_emptyLeaf");
 const BODY_DRAWABLE_ID = DrawableIdSchema.parse("draw_body");
 const EYE_DRAWABLE_ID = DrawableIdSchema.parse("draw_eye");
 const BODY_MESH_ID = MeshIdSchema.parse("mesh_body");
@@ -34,6 +38,8 @@ const BODY_TEXTURE_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_texture_body")
 const EYE_TEXTURE_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_texture_eye");
 const BODY_PREVIEW_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_preview_body");
 const EYE_PREVIEW_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_preview_eye");
+const ROOT_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rootRotation");
+const BODY_MASK_RELATION_ID = MaskRelationIdSchema.parse("maskrel_bodyClip");
 const CREATED_AT = "2026-06-01T00:00:00.000Z";
 
 describe("part, texture, and editor layer diagnostics", () => {
@@ -43,9 +49,12 @@ describe("part, texture, and editor layer diagnostics", () => {
     expect(catalog.has("ref.drawablePartMissing")).toBe(true);
     expect(catalog.has("part.parentMissing")).toBe(true);
     expect(catalog.has("part.childMissing")).toBe(true);
+    expect(catalog.has("part.duplicateChild")).toBe(true);
     expect(catalog.has("part.parentChildMismatch")).toBe(true);
     expect(catalog.has("part.cycle")).toBe(true);
     expect(catalog.has("part.drawableMembershipMismatch")).toBe(true);
+    expect(catalog.has("part.deleteNonEmpty")).toBe(true);
+    expect(catalog.has("part.runtimeEvidenceMismatch")).toBe(true);
     expect(catalog.has("editorState.staleReference")).toBe(true);
   });
 
@@ -205,6 +214,38 @@ describe("part, texture, and editor layer diagnostics", () => {
           `partId=${ROOT_PART_ID}`,
           `childPartId=${MISSING_PART_ID}`,
           "childPartMatch=missing"
+        ]
+      })
+    ]);
+  });
+
+  it("reports duplicate child part references deterministically", () => {
+    const duplicateChildBaseDocument = clonePackageDocument(createPackageDocument());
+    const duplicateChildDocument = withGraphParts(duplicateChildBaseDocument, [
+      {
+        ...duplicateChildBaseDocument.model.graph.parts[0]!,
+        childPartIds: [HEAD_PART_ID, HEAD_PART_ID]
+      },
+      duplicateChildBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const report = validatePackageRuntime({
+      packageDocument: duplicateChildDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(report.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.duplicateChild",
+        status: "fail",
+        severity: "error",
+        targetPath: "/model/graph/parts/0/childPartIds/1",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `childPartId=${HEAD_PART_ID}`,
+          "firstChildIndex=0",
+          "duplicateChildIndex=1",
+          "reason=duplicate-child"
         ]
       })
     ]);
@@ -372,6 +413,198 @@ describe("part, texture, and editor layer diagnostics", () => {
     ]);
   });
 
+  it("reports non-empty part delete blockers while accepting empty leaf delete candidates", () => {
+    const document = clonePackageDocument(createPackageDocument());
+    document.model.rigControls.rigControls = [
+      {
+        kind: "rotation2d",
+        rigControlId: ROOT_RIG_CONTROL_ID,
+        displayName: "Root Rotation",
+        partId: ROOT_PART_ID,
+        childDrawableIds: [BODY_DRAWABLE_ID],
+        childRigControlIds: [],
+        pivot: { x: 0, y: 0 },
+        restAngleDegrees: 0,
+        restTranslation: { x: 0, y: 0 },
+        restScale: { x: 1, y: 1 },
+        enabled: true
+      }
+    ];
+    document.model.masks.masks = [
+      {
+        maskRelationId: BODY_MASK_RELATION_ID,
+        maskDrawableIds: [BODY_DRAWABLE_ID],
+        targetDrawableIds: [EYE_DRAWABLE_ID],
+        enabled: true
+      }
+    ];
+    document.model.graph.parts = [
+      {
+        ...document.model.graph.parts[0]!,
+        childPartIds: [HEAD_PART_ID, EMPTY_LEAF_PART_ID]
+      },
+      document.model.graph.parts[1]!,
+      {
+        partId: EMPTY_LEAF_PART_ID,
+        displayName: "Empty Leaf",
+        parentPartId: ROOT_PART_ID,
+        childPartIds: [],
+        drawableIds: []
+      }
+    ];
+
+    const checks = validatePartDeleteCandidates({
+      packageDocument: document,
+      candidates: [
+        {
+          partId: ROOT_PART_ID,
+          operationId: "op_delete_part_root"
+        },
+        {
+          partId: EMPTY_LEAF_PART_ID,
+          operationId: "op_delete_part_emptyLeaf"
+        }
+      ]
+    });
+
+    expect(checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.deleteNonEmpty",
+        status: "fail",
+        severity: "blocking",
+        targetPath: "/model/graph/parts/0",
+        operationIds: ["op_delete_part_root"],
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          "blockerKinds=childPart,drawable,rigControl,maskRelation",
+          `childPartIds=${EMPTY_LEAF_PART_ID},${HEAD_PART_ID}`,
+          `drawableIds=${BODY_DRAWABLE_ID}`,
+          `rigControlIds=${ROOT_RIG_CONTROL_ID}`,
+          `maskRelationIds=${BODY_MASK_RELATION_ID}`,
+          "deleteScope=empty-leaf-only"
+        ]
+      })
+    ]);
+  });
+
+  it("reports stale runtime and viewer part hierarchy evidence deterministically", () => {
+    const viewerResult = evaluateViewerRuntimeSnapshot(createRuntimeGraph(), {
+      targetIds: [BODY_DRAWABLE_ID, EYE_DRAWABLE_ID]
+    });
+
+    const staleRuntimeSnapshot = clonePackageDocument(viewerResult.snapshot);
+    staleRuntimeSnapshot.parts![1] = {
+      ...staleRuntimeSnapshot.parts![1]!,
+      displayName: "Stale Head"
+    };
+
+    const staleRuntimeReport = validatePackageRuntime({
+      packageDocument: createPackageDocument(),
+      runtimeSnapshot: staleRuntimeSnapshot,
+      createdAt: CREATED_AT
+    });
+
+    expect(staleRuntimeReport.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.runtimeEvidenceMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/runtimeSnapshot/parts/1/displayName",
+        snapshotIds: [viewerResult.snapshot.snapshotId],
+        evidence: [
+          "evidenceSource=runtimeSnapshot",
+          `snapshotId=${viewerResult.snapshot.snapshotId}`,
+          `partId=${HEAD_PART_ID}`,
+          "field=displayName",
+          "packageValue=Head",
+          "evidenceValue=Stale Head",
+          "reason=part-field-mismatch"
+        ]
+      })
+    ]);
+
+    const staleViewerEvidence = clonePackageDocument(viewerResult.evidence);
+    staleViewerEvidence.partHierarchyEvidence[0] = {
+      ...staleViewerEvidence.partHierarchyEvidence[0]!,
+      displayName: "Stale Root"
+    };
+
+    const staleViewerReport = validatePackageRuntime({
+      packageDocument: createPackageDocument(),
+      runtimeSnapshot: viewerResult.snapshot,
+      viewerEvidence: staleViewerEvidence,
+      profile: "viewer",
+      createdAt: CREATED_AT
+    });
+
+    expect(staleViewerReport.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.runtimeEvidenceMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/viewer/runtimeEvidence/partHierarchyEvidence/0/displayName",
+        snapshotIds: [viewerResult.snapshot.snapshotId],
+        evidence: [
+          "evidenceSource=viewerEvidence",
+          `snapshotId=${viewerResult.snapshot.snapshotId}`,
+          `partId=${ROOT_PART_ID}`,
+          "field=displayName",
+          "packageValue=Root",
+          "evidenceValue=Stale Root",
+          "reason=part-field-mismatch"
+        ]
+      })
+    ]);
+  });
+
+  it("reports stale runtime part evidence package identity deterministically", () => {
+    const viewerResult = evaluateViewerRuntimeSnapshot(createRuntimeGraph(), {
+      targetIds: [BODY_DRAWABLE_ID, EYE_DRAWABLE_ID]
+    });
+    const staleRuntimeSnapshot = clonePackageDocument(viewerResult.snapshot);
+    staleRuntimeSnapshot.packageId = PackageIdSchema.parse("pkg_part_texture_layer_stale");
+    staleRuntimeSnapshot.packageRevision = 7;
+
+    const report = validatePackageRuntime({
+      packageDocument: createPackageDocument(),
+      runtimeSnapshot: staleRuntimeSnapshot,
+      createdAt: CREATED_AT
+    });
+
+    expect(report.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.runtimeEvidenceMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/runtimeSnapshot/packageId",
+        snapshotIds: [viewerResult.snapshot.snapshotId],
+        evidence: [
+          "evidenceSource=runtimeSnapshot",
+          `snapshotId=${viewerResult.snapshot.snapshotId}`,
+          "field=packageId",
+          `packageValue=${PACKAGE_ID}`,
+          "evidenceValue=pkg_part_texture_layer_stale",
+          "reason=stale-runtime-snapshot-identity"
+        ]
+      }),
+      expect.objectContaining({
+        checkId: "part.runtimeEvidenceMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/runtimeSnapshot/packageRevision",
+        snapshotIds: [viewerResult.snapshot.snapshotId],
+        evidence: [
+          "evidenceSource=runtimeSnapshot",
+          `snapshotId=${viewerResult.snapshot.snapshotId}`,
+          "field=packageRevision",
+          "packageValue=1",
+          "evidenceValue=7",
+          "reason=stale-runtime-snapshot-identity"
+        ]
+      })
+    ]);
+  });
+
   it("does not let editor-only hide mask runtime texture semantics", () => {
     const document = clonePackageDocument(createPackageDocument());
     document.assets.textureAtlas!.textures = document.assets.textureAtlas!.textures.filter(
@@ -393,8 +626,8 @@ describe("part, texture, and editor layer diagnostics", () => {
 
 type TestPackageDocument = PackageDocumentDto;
 
-const clonePackageDocument = (document: TestPackageDocument): TestPackageDocument =>
-  JSON.parse(JSON.stringify(document)) as TestPackageDocument;
+const clonePackageDocument = <TValue>(document: TValue): TValue =>
+  JSON.parse(JSON.stringify(document)) as TValue;
 
 const withGraphParts = (
   document: TestPackageDocument,
@@ -414,6 +647,27 @@ const createRuntimeGraph = (): NormalizedRuntimeGraph => ({
   packageId: PACKAGE_ID,
   packageRevision: 1,
   coordinateSystem: "canvas-y-down-v1",
+  parts: new Map([
+    [
+      ROOT_PART_ID,
+      {
+        partId: ROOT_PART_ID,
+        displayName: "Root",
+        childPartIds: [HEAD_PART_ID],
+        drawableIds: [BODY_DRAWABLE_ID]
+      }
+    ],
+    [
+      HEAD_PART_ID,
+      {
+        partId: HEAD_PART_ID,
+        displayName: "Head",
+        parentPartId: ROOT_PART_ID,
+        childPartIds: [],
+        drawableIds: [EYE_DRAWABLE_ID]
+      }
+    ]
+  ]),
   parameters: new Map(),
   dynamicsGroups: new Map(),
   drawables: new Map([
@@ -422,6 +676,7 @@ const createRuntimeGraph = (): NormalizedRuntimeGraph => ({
       {
         drawableId: BODY_DRAWABLE_ID,
         meshId: BODY_MESH_ID,
+        partId: ROOT_PART_ID,
         visible: true,
         opacity: 1,
         baseDrawOrder: 0,
@@ -440,6 +695,7 @@ const createRuntimeGraph = (): NormalizedRuntimeGraph => ({
       {
         drawableId: EYE_DRAWABLE_ID,
         meshId: EYE_MESH_ID,
+        partId: HEAD_PART_ID,
         visible: true,
         opacity: 1,
         baseDrawOrder: 1,

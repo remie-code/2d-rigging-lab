@@ -25,6 +25,12 @@ export interface EditorUpdatePartCommand {
   readonly lockedTargetIds?: readonly string[];
 }
 
+export interface EditorDeletePartCommand {
+  readonly operationId?: OperationId | string;
+  readonly partId: PartId | string;
+  readonly lockedTargetIds?: readonly string[];
+}
+
 export interface EditorSetDrawablePartCommand {
   readonly operationId?: OperationId | string;
   readonly drawableId: DrawableId | string;
@@ -87,6 +93,29 @@ export const createUpdatePartOperationRequest = (
       ...(Object.prototype.hasOwnProperty.call(command, "parentPartId")
         ? { parentPartId: command.parentPartId ?? null }
         : {}),
+      lockedTargetIds: [...(command.lockedTargetIds ?? [])]
+    }
+  });
+
+export const createDeletePartOperationRequest = (
+  command: EditorDeletePartCommand,
+  basePackageRevision: number
+): OperationRequestDto =>
+  OperationRequestSchema.parse({
+    schemaVersion: "operation-request-v1",
+    ...(command.operationId === undefined ? {} : { operationId: command.operationId }),
+    actor: "human",
+    surface: "gui",
+    dryRun: false,
+    basePackageRevision,
+    idempotencyKey: `editor-delete-part-${normalizeIdempotencyToken(command.partId)}-r${basePackageRevision}`,
+    trace: {
+      relatedAC: ["AC-MVP-012", "AC-MVP-013"],
+      relatedScenarios: ["SC-MVP-003", "SC-MVP-005"]
+    },
+    operationType: "deletePart",
+    payload: {
+      partId: command.partId,
       lockedTargetIds: [...(command.lockedTargetIds ?? [])]
     }
   });

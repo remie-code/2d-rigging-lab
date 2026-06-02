@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-editor-persistence-reinspection-summary-v1",
+  "fixtureId": "wave33-layer-tree-direct-manipulation-contract-fixtures",
+  "saveLoadContract": {
+    "operationTypes": [
+      "updatePart",
+      "setDrawablePart",
+      "setDrawableTexture",
+      "deletePart"
+    ],
+    "renamedPartId": "part_wave33_head",
+    "renamedDisplayName": "Wave 33 Head Renamed",
+    "reparentedParentPartId": "part_wave33_parent",
+    "deletedPartId": "part_wave33_empty",
+    "deletedPartAbsentAfterLoad": true,
+    "reassignedDrawableId": "draw_body",
+    "assignedTextureId": "tex_wave33",
+    "reinspectPreviewEvidence": true,
+    "reinspectViewerEvidence": true,
+    "reinspectValidationEvidence": true
+  },
+  "semanticBoundary": {
+    "browserLocalStorageOnly": true,
+    "archiveExport": false,
+    "fileSystemAccessApi": false,
+    "rendererOracle": false,
+    "pixelOracle": false
+  }
+}

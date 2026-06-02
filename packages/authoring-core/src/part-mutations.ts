@@ -27,6 +27,16 @@ export interface UpdatePartMutationResult {
   readonly authoringRevision: AuthoringRevision;
 }
 
+export interface DeletePartMutationResult {
+  readonly session: AuthoringSession;
+  readonly partBefore: ModelPartDto;
+  readonly parentBefore?: ModelPartDto;
+  readonly parentAfter?: ModelPartDto;
+  readonly stableOrderBefore: readonly string[];
+  readonly stableOrderAfter: readonly string[];
+  readonly authoringRevision: AuthoringRevision;
+}
+
 export const createPart = (
   session: AuthoringSession,
   input: {
@@ -56,6 +66,48 @@ export const createPart = (
     part: storedPart,
     ...(parentBefore === undefined ? {} : { parentBefore }),
     ...(parentAfter === undefined ? {} : { parentAfter }),
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const deletePart = (
+  session: AuthoringSession,
+  input: {
+    readonly partId: PartId;
+  }
+): DeletePartMutationResult => {
+  const part = getPartById(session.graph, input.partId);
+  if (part === undefined) {
+    throw new AuthoringMutationError("missing_part", `Part does not exist: ${input.partId}.`);
+  }
+
+  assertCanDeletePart(session, part);
+
+  const parent =
+    part.parentPartId === undefined ? undefined : getPartById(session.graph, part.parentPartId);
+  const partBefore = structuredClone(part);
+  const parentBefore = parent === undefined ? undefined : structuredClone(parent);
+  const stableOrderBefore = [...session.graph.stableOrder];
+
+  if (parent !== undefined) {
+    parent.childPartIds = parent.childPartIds.filter((childPartId) => childPartId !== part.partId);
+  }
+
+  session.graph.parts = session.graph.parts.filter((candidate) => candidate.partId !== part.partId);
+  session.graph.stableOrder = session.graph.stableOrder.filter((stableId) => stableId !== part.partId);
+
+  const parentAfter = parent === undefined ? undefined : structuredClone(parent);
+  const stableOrderAfter = [...session.graph.stableOrder];
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    partBefore,
+    ...(parentBefore === undefined ? {} : { parentBefore }),
+    ...(parentAfter === undefined ? {} : { parentAfter }),
+    stableOrderBefore,
+    stableOrderAfter,
     authoringRevision: session.authoringRevision
   };
 };
@@ -169,6 +221,45 @@ const assertCanCreatePart = (session: AuthoringSession, part: ModelPartDto): voi
   }
 };
 
+const assertCanDeletePart = (session: AuthoringSession, part: ModelPartDto): void => {
+  if (part.parentPartId === part.partId) {
+    throw new AuthoringMutationError("part_cycle", `Part ${part.partId} cannot parent itself.`);
+  }
+
+  if (part.parentPartId !== undefined && getPartById(session.graph, part.parentPartId) === undefined) {
+    throw new AuthoringMutationError(
+      "missing_parent_part",
+      `Parent part does not exist: ${part.parentPartId}.`
+    );
+  }
+
+  const childPartIds = getDirectChildPartIds(session, part.partId);
+  if (childPartIds.length > 0) {
+    throw new AuthoringMutationError(
+      "part_has_child_parts",
+      `Part ${part.partId} cannot be deleted because it has child parts: ${childPartIds.join(", ")}.`
+    );
+  }
+
+  const drawableIds = getPartDrawableIds(session, part);
+  if (drawableIds.length > 0) {
+    throw new AuthoringMutationError(
+      "part_has_drawables",
+      `Part ${part.partId} cannot be deleted because it owns drawables: ${drawableIds.join(", ")}.`
+    );
+  }
+
+  const rigControlIds = session.graph.rigControls
+    .filter((rigControl) => rigControl.partId === part.partId)
+    .map((rigControl) => rigControl.rigControlId);
+  if (rigControlIds.length > 0) {
+    throw new AuthoringMutationError(
+      "part_has_rig_controls",
+      `Part ${part.partId} cannot be deleted because rig controls reference it: ${rigControlIds.join(", ")}.`
+    );
+  }
+};
+
 const assertCanUpdatePart = (
   session: AuthoringSession,
   part: ModelPartDto,
@@ -227,3 +318,27 @@ const isDescendantPart = (
 };
 
 const hasDuplicateStrings = (values: readonly string[]): boolean => new Set(values).size !== values.length;
+
+const getDirectChildPartIds = (session: AuthoringSession, partId: PartId): readonly PartId[] => {
+  const childPartIds = new Set<PartId>(getPartById(session.graph, partId)?.childPartIds ?? []);
+
+  for (const candidate of session.graph.parts) {
+    if (candidate.parentPartId === partId) {
+      childPartIds.add(candidate.partId);
+    }
+  }
+
+  return [...childPartIds];
+};
+
+const getPartDrawableIds = (session: AuthoringSession, part: ModelPartDto): readonly string[] => {
+  const drawableIds = new Set<string>(part.drawableIds);
+
+  for (const drawable of session.graph.drawables) {
+    if (drawable.partId === part.partId) {
+      drawableIds.add(drawable.drawableId);
+    }
+  }
+
+  return [...drawableIds];
+};

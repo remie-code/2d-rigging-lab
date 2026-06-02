@@ -2,6 +2,11 @@ import {
   editorTestIds,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
+  type LayerTreeDrawablePartAssignmentDraftCommand,
+  type LayerTreeDrawableTextureAssignmentDraftCommand,
+  type LayerTreeEmptyLeafPartDeleteDraftCommand,
+  type LayerTreePartRenameDraftCommand,
+  type LayerTreePartReparentDraftCommand,
   type MeshCanvasVertexSelectionCommand,
   type SourceIntakeSelectedFileBytes,
   type TutorialSelectedTargetState
@@ -76,6 +81,19 @@ export interface EditorAppShellOptions {
   readonly onCommitUpdatePart: (command: EditorUpdatePartCommand) => void;
   readonly onCommitSetDrawablePart: (command: EditorSetDrawablePartCommand) => void;
   readonly onCommitSetDrawableTexture: (command: EditorSetDrawableTextureCommand) => void;
+  readonly onDraftLayerTreePartRename?: (command: LayerTreePartRenameDraftCommand) => void;
+  readonly onDraftLayerTreePartReparent?: (command: LayerTreePartReparentDraftCommand) => void;
+  readonly onDraftLayerTreeEmptyLeafPartDelete?: (
+    command: LayerTreeEmptyLeafPartDeleteDraftCommand
+  ) => void;
+  readonly onDraftLayerTreeDrawablePartAssignment?: (
+    command: LayerTreeDrawablePartAssignmentDraftCommand
+  ) => void;
+  readonly onDraftLayerTreeDrawableTextureAssignment?: (
+    command: LayerTreeDrawableTextureAssignmentDraftCommand
+  ) => void;
+  readonly onCommitLayerTreeDirectManipulationDrafts?: () => void;
+  readonly onClearLayerTreeDirectManipulationDrafts?: () => void;
   readonly onSelectDrawableLayer: (drawableId: string) => void;
   readonly onToggleDrawableLayerLock: (drawableId: string) => void;
   readonly onToggleDrawableEditorHidden: (drawableId: string) => void;
@@ -208,6 +226,27 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onUpdatePart: options.onCommitUpdatePart,
     onSetDrawablePart: options.onCommitSetDrawablePart,
     onSetDrawableTexture: options.onCommitSetDrawableTexture,
+    ...(options.onDraftLayerTreePartRename === undefined
+      ? {}
+      : { onDraftPartRename: options.onDraftLayerTreePartRename }),
+    ...(options.onDraftLayerTreePartReparent === undefined
+      ? {}
+      : { onDraftPartReparent: options.onDraftLayerTreePartReparent }),
+    ...(options.onDraftLayerTreeEmptyLeafPartDelete === undefined
+      ? {}
+      : { onDraftEmptyLeafPartDelete: options.onDraftLayerTreeEmptyLeafPartDelete }),
+    ...(options.onDraftLayerTreeDrawablePartAssignment === undefined
+      ? {}
+      : { onDraftDrawablePartAssignment: options.onDraftLayerTreeDrawablePartAssignment }),
+    ...(options.onDraftLayerTreeDrawableTextureAssignment === undefined
+      ? {}
+      : { onDraftDrawableTextureAssignment: options.onDraftLayerTreeDrawableTextureAssignment }),
+    ...(options.onCommitLayerTreeDirectManipulationDrafts === undefined
+      ? {}
+      : { onCommitDirectManipulationDrafts: options.onCommitLayerTreeDirectManipulationDrafts }),
+    ...(options.onClearLayerTreeDirectManipulationDrafts === undefined
+      ? {}
+      : { onClearDirectManipulationDrafts: options.onClearLayerTreeDirectManipulationDrafts }),
     onSelectDrawable: options.onSelectDrawableLayer,
     onToggleDrawableLock: options.onToggleDrawableLayerLock,
     onToggleDrawableEditorHidden: options.onToggleDrawableEditorHidden

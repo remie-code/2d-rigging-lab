@@ -189,6 +189,12 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "deletePart",
+    payload: {
+      partId: "part_empty"
+    }
+  },
+  {
     operationType: "setDrawablePart",
     payload: {
       drawableId: "draw_face",
@@ -329,6 +335,7 @@ describe("operation-core DTO schemas", () => {
       "createParameter",
       "createPart",
       "updatePart",
+      "deletePart",
       "setDrawablePart",
       "setDrawableTexture",
       "createDynamicsGroup",

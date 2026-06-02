@@ -33,6 +33,7 @@ import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.m
 import { runWarpLatticePersistenceSmoke } from "./warp-lattice-persistence-smoke.mjs";
 import { runCompositionPersistenceSmoke } from "./composition-persistence-smoke.mjs";
 import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persistence-smoke.mjs";
+import { runLayerTreeDirectManipulationSmoke } from "./layer-tree-direct-manipulation-smoke.mjs";
 import { runTutorialMiniModelPersistenceSmoke } from "./tutorial-mini-model-persistence-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
@@ -203,6 +204,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-part-texture-layer-reset`);
+    const layerTreeDirectManipulationEvidence = await runLayerTreeDirectManipulationSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave33-layer-tree-direct-manipulation`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-layer-tree-direct-manipulation-reset`);
     const tutorialMiniModelEvidence = await runTutorialMiniModelPersistenceSmoke({
       page,
       viewport
@@ -224,6 +233,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       warpLatticeEvidence,
       compositionEvidence,
       partTextureLayerEvidence,
+      layerTreeDirectManipulationEvidence,
       tutorialMiniModelEvidence,
       drawableEvidence,
       meshVertexEvidence,

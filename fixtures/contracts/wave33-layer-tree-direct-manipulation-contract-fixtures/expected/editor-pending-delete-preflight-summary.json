@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "wave33-layer-tree-direct-manipulation-editor-pending-delete-preflight-summary-v1",
+  "fixtureId": "wave33-layer-tree-direct-manipulation-contract-fixtures",
+  "preflightContract": {
+    "productionPath": "layer tree direct manipulation batch commit",
+    "draftSequence": [
+      "draftDrawablePartAssignment(draw_body -> part_wave33_empty)",
+      "draftEmptyLeafPartDelete(part_wave33_empty)",
+      "commitDirectDrafts"
+    ],
+    "expectedStatus": "rejected",
+    "committedCount": 0,
+    "expectedCheckIds": [
+      "editor.layerTreeDirectDraft.drawablePartToPendingDelete"
+    ],
+    "latestSessionPersistenceResult": null,
+    "operationLogMutationAllowed": false,
+    "packageGraphMutationAllowed": false,
+    "draftStatePreserved": true
+  },
+  "semanticBoundary": {
+    "nativeDragAndDropDependency": false,
+    "recursiveDelete": false,
+    "deleteWithReassign": false,
+    "multiSelectBulkOperation": false
+  }
+}

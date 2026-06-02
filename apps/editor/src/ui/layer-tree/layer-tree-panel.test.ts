@@ -1,12 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  createLayerTreeDrawablePartDraftFormTestId,
+  createLayerTreeDrawablePartDraftSubmitTestId,
   createLayerTreeDrawableRowTestId,
+  createLayerTreeDrawableTextureDraftFormTestId,
+  createLayerTreeDrawableTextureDraftSubmitTestId,
+  createLayerTreeEmptyLeafDeleteDraftTestId,
+  createLayerTreePartReparentFormTestId,
+  createLayerTreePartReparentSubmitTestId,
   createLayerTreePartGroupTestId,
+  createLayerTreePartRenameFormTestId,
+  createLayerTreePartRenameSubmitTestId,
   createLayerTreeSelectDrawableTestId,
   createLayerTreeToggleEditorHiddenTestId,
   createLayerTreeToggleLockTestId,
   editorTestIds,
+  type LayerTreeDrawableDirectManipulationViewModel,
   type LayerTreeViewModel,
+  type LayerTreePartDirectManipulationViewModel,
   type PartTextureWorkflowViewModel
 } from "../../editor-state/index.js";
 
@@ -90,6 +101,81 @@ describe("layer tree panel", () => {
     ]);
   });
 
+  it("dispatches row-level direct manipulation draft controls", () => {
+    const calls: unknown[] = [];
+    const panel = createLayerTreePanel({
+      viewModel: createLayerTreeViewModel({ includeEmptyPart: true }),
+      workflow: createPartTextureWorkflowViewModel(),
+      onCreatePart: () => {},
+      onUpdatePart: () => {},
+      onSetDrawablePart: () => {},
+      onSetDrawableTexture: () => {},
+      onSelectDrawable: () => {},
+      onToggleDrawableLock: () => {},
+      onToggleDrawableEditorHidden: () => {},
+      onDraftPartRename: (command) => calls.push(["renameDraft", command.partId, command.displayName]),
+      onDraftPartReparent: (command) =>
+        calls.push(["reparentDraft", command.partId, command.parentPartId]),
+      onDraftEmptyLeafPartDelete: (command) => calls.push(["deleteDraft", command.partId]),
+      onDraftDrawablePartAssignment: (command) =>
+        calls.push(["drawablePartDraft", command.drawableId, command.partId]),
+      onDraftDrawableTextureAssignment: (command) =>
+        calls.push(["drawableTextureDraft", command.drawableId, command.textureId])
+    }) as unknown as TestElement;
+
+    const renameForm = findByTestId(panel, createLayerTreePartRenameFormTestId("part_face"));
+    const renameInput = renameForm?.queryByPredicate((element) => element.tagName === "input");
+    if (renameInput !== null && renameInput !== undefined) {
+      renameInput.value = "Face Draft";
+    }
+    renameForm?.emit("submit");
+
+    const reparentForm = findByTestId(panel, createLayerTreePartReparentFormTestId("part_face"));
+    const reparentSelect = reparentForm?.queryByPredicate((element) => element.tagName === "select");
+    if (reparentSelect !== null && reparentSelect !== undefined) {
+      reparentSelect.value = "";
+    }
+    reparentForm?.emit("submit");
+
+    findByTestId(panel, createLayerTreeEmptyLeafDeleteDraftTestId("part_empty"))?.emit("click");
+
+    const drawablePartForm = findByTestId(
+      panel,
+      createLayerTreeDrawablePartDraftFormTestId("draw_eye")
+    );
+    const drawablePartSelect = drawablePartForm?.queryByPredicate(
+      (element) => element.tagName === "select"
+    );
+    if (drawablePartSelect !== null && drawablePartSelect !== undefined) {
+      drawablePartSelect.value = "part_root";
+    }
+    drawablePartForm?.emit("submit");
+
+    const drawableTextureForm = findByTestId(
+      panel,
+      createLayerTreeDrawableTextureDraftFormTestId("draw_eye")
+    );
+    const drawableTextureSelect = drawableTextureForm?.queryByPredicate(
+      (element) => element.tagName === "select"
+    );
+    if (drawableTextureSelect !== null && drawableTextureSelect !== undefined) {
+      drawableTextureSelect.value = "tex_body";
+    }
+    drawableTextureForm?.emit("submit");
+
+    expect(findByTestId(panel, createLayerTreePartRenameSubmitTestId("part_face"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createLayerTreePartReparentSubmitTestId("part_face"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createLayerTreeDrawablePartDraftSubmitTestId("draw_eye"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createLayerTreeDrawableTextureDraftSubmitTestId("draw_eye"))?.disabled).toBe(false);
+    expect(calls).toEqual([
+      ["renameDraft", "part_face", "Face Draft"],
+      ["reparentDraft", "part_face", null],
+      ["deleteDraft", "part_empty"],
+      ["drawablePartDraft", "draw_eye", "part_root"],
+      ["drawableTextureDraft", "draw_eye", "tex_body"]
+    ]);
+  });
+
   it("constrains long texture selector labels for responsive layout", () => {
     const longTextureLabel = "tex_psd_e2e_face / assets/textures/tex_psd_e2e_face.png";
     const workflow: PartTextureWorkflowViewModel = {
@@ -170,8 +256,10 @@ const createPartTextureWorkflowViewModel = (): PartTextureWorkflowViewModel => (
   partAssignmentStatusLabel: "2 parts / 2 drawables"
 });
 
-const createLayerTreeViewModel = (): LayerTreeViewModel => ({
-  partGroups: [
+const createLayerTreeViewModel = (
+  options: { readonly includeEmptyPart?: boolean } = {}
+): LayerTreeViewModel => {
+  const partGroups: LayerTreeViewModel["partGroups"] = [
     {
       partId: "part_root",
       displayName: "Root",
@@ -181,6 +269,15 @@ const createLayerTreeViewModel = (): LayerTreeViewModel => ({
       partLabel: "Root / part_root",
       drawableCount: 1,
       drawableCountLabel: "1 drawable",
+      directManipulation: createPartDirectManipulation({
+        partId: "part_root",
+        displayName: "Root",
+        parentPartId: null,
+        canDraftReparent: false,
+        reparentDisabledMessage: "No other parent available",
+        canDraftEmptyLeafDelete: false,
+        emptyLeafDeleteDisabledMessage: "Part has child parts"
+      }),
       drawables: [
         {
           drawableId: "draw_body",
@@ -201,7 +298,13 @@ const createLayerTreeViewModel = (): LayerTreeViewModel => ({
           selected: false,
           selectedLabel: "Not selected",
           orderLabel: "Layer 1 / draw order 0",
-          stateLabel: "Texture resolved / Runtime visible / Editor visible / Locked / Not selected"
+          stateLabel: "Texture resolved / Runtime visible / Editor visible / Locked / Not selected",
+          directManipulation: createDrawableDirectManipulation({
+            drawableId: "draw_body",
+            partId: "part_root",
+            textureId: "tex_body",
+            locked: true
+          })
         }
       ]
     },
@@ -214,6 +317,14 @@ const createLayerTreeViewModel = (): LayerTreeViewModel => ({
       partLabel: "Face / part_face",
       drawableCount: 1,
       drawableCountLabel: "1 drawable",
+      directManipulation: createPartDirectManipulation({
+        partId: "part_face",
+        displayName: "Face",
+        parentPartId: "part_root",
+        canDraftReparent: true,
+        canDraftEmptyLeafDelete: false,
+        emptyLeafDeleteDisabledMessage: "Part has drawables"
+      }),
       drawables: [
         {
           drawableId: "draw_eye",
@@ -234,25 +345,129 @@ const createLayerTreeViewModel = (): LayerTreeViewModel => ({
           selected: true,
           selectedLabel: "Selected",
           orderLabel: "Layer 2 / draw order 1",
-          stateLabel: "Texture missing / Runtime hidden / Editor hidden / Unlocked / Selected"
+          stateLabel: "Texture missing / Runtime hidden / Editor hidden / Unlocked / Selected",
+          directManipulation: createDrawableDirectManipulation({
+            drawableId: "draw_eye",
+            partId: "part_face",
+            textureId: "tex_missing",
+            locked: false
+          })
         }
       ]
+    },
+    ...(options.includeEmptyPart === true
+      ? [
+          {
+            partId: "part_empty",
+            displayName: "Empty",
+            parentPartId: "part_root",
+            depth: 1,
+            partStatus: "resolved" as const,
+            partLabel: "Empty / part_empty",
+            drawableCount: 0,
+            drawableCountLabel: "0 drawables",
+            directManipulation: createPartDirectManipulation({
+              partId: "part_empty",
+              displayName: "Empty",
+              parentPartId: "part_root",
+              canDraftReparent: true,
+              canDraftEmptyLeafDelete: true,
+              emptyLeafDeleteDisabledMessage: null
+            }),
+            drawables: []
+          }
+        ]
+      : [])
+  ];
+
+  return {
+    partGroups,
+    hasParts: true,
+    hasDrawables: true,
+    drawableCount: 2,
+    selectedDrawableIds: ["draw_eye"],
+    lockedDrawableIds: ["draw_body"],
+    editorHiddenDrawableIds: ["draw_eye"],
+    missingTextureDrawableIds: ["draw_eye"],
+    directManipulationDraftCount: 0,
+    partCountLabel: `${partGroups.length} part group${partGroups.length === 1 ? "" : "s"}`,
+    drawableCountLabel: "2 drawables",
+    selectedCountLabel: "1 selected drawable",
+    lockedCountLabel: "1 locked drawable",
+    editorHiddenCountLabel: "1 editor-hidden drawable",
+    missingTextureCountLabel: "1 missing texture",
+    directManipulationDraftCountLabel: "0 direct drafts",
+    directManipulationSummaryLabel: "No direct manipulation drafts",
+    summaryLabel: `${partGroups.length} part group${partGroups.length === 1 ? "" : "s"} / 2 drawables / 1 selected / 1 locked / 1 editor-hidden / 1 missing texture`
+  };
+};
+
+const createPartDirectManipulation = (input: {
+  readonly partId: string;
+  readonly displayName: string;
+  readonly parentPartId: string | null;
+  readonly canDraftReparent: boolean;
+  readonly reparentDisabledMessage?: string | null;
+  readonly canDraftEmptyLeafDelete: boolean;
+  readonly emptyLeafDeleteDisabledMessage: string | null;
+}): LayerTreePartDirectManipulationViewModel => ({
+  partId: input.partId,
+  currentDisplayName: input.displayName,
+  renameValue: input.displayName,
+  renameDrafted: false,
+  canDraftRename: true,
+  renameDisabledMessage: null,
+  currentParentPartId: input.parentPartId,
+  parentPartId: input.parentPartId,
+  parentOptionValue: input.parentPartId ?? "",
+  parentOptions: [
+    { value: "", partId: null, label: "No parent", disabled: false },
+    { value: "part_root", partId: "part_root", label: "Root / part_root", disabled: false },
+    { value: "part_face", partId: "part_face", label: "Face / part_face", disabled: false }
+  ].filter((option) => option.partId !== input.partId),
+  reparentDrafted: false,
+  canDraftReparent: input.canDraftReparent,
+  reparentDisabledMessage:
+    input.reparentDisabledMessage === undefined ? null : input.reparentDisabledMessage,
+  emptyLeafDeleteDrafted: false,
+  canDraftEmptyLeafDelete: input.canDraftEmptyLeafDelete,
+  emptyLeafDeleteDisabledMessage: input.emptyLeafDeleteDisabledMessage,
+  statusLabel: "No part direct draft"
+});
+
+const createDrawableDirectManipulation = (input: {
+  readonly drawableId: string;
+  readonly partId: string;
+  readonly textureId: string;
+  readonly locked: boolean;
+}): LayerTreeDrawableDirectManipulationViewModel => ({
+  drawableId: input.drawableId,
+  currentPartId: input.partId,
+  partId: input.partId,
+  partOptionValue: input.partId,
+  partOptions: [
+    { value: "part_root", partId: "part_root", label: "Root / part_root", disabled: false },
+    { value: "part_face", partId: "part_face", label: "Face / part_face", disabled: false }
+  ],
+  partAssignmentDrafted: false,
+  canDraftPartAssignment: !input.locked,
+  partAssignmentDisabledMessage: input.locked ? "Drawable is locked" : null,
+  currentTextureId: input.textureId,
+  textureId: input.textureId,
+  textureOptionValue: input.textureId,
+  textureOptions: [
+    {
+      value: "tex_body",
+      textureId: "tex_body",
+      label: "tex_body / assets/textures/body.png",
+      disabled: false
     }
   ],
-  hasParts: true,
-  hasDrawables: true,
-  drawableCount: 2,
-  selectedDrawableIds: ["draw_eye"],
-  lockedDrawableIds: ["draw_body"],
-  editorHiddenDrawableIds: ["draw_eye"],
-  missingTextureDrawableIds: ["draw_eye"],
-  partCountLabel: "2 part groups",
-  drawableCountLabel: "2 drawables",
-  selectedCountLabel: "1 selected drawable",
-  lockedCountLabel: "1 locked drawable",
-  editorHiddenCountLabel: "1 editor-hidden drawable",
-  missingTextureCountLabel: "1 missing texture",
-  summaryLabel: "2 part groups / 2 drawables / 1 selected / 1 locked / 1 editor-hidden / 1 missing texture"
+  textureAssignmentDrafted: false,
+  canDraftTextureAssignment: !input.locked && input.textureId !== "tex_body",
+  textureAssignmentDisabledMessage:
+    input.locked || input.textureId === "tex_body" ? "No other texture atlas entry" : null,
+  statusLabel: "No drawable direct draft"
 });
 
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>

@@ -135,6 +135,10 @@ const operationToken = (request: OperationRequestDto): string => {
     return `update_part_${sanitizeIdToken(stripIdPrefix(request.payload.partId, "part_"))}`;
   }
 
+  if (request.operationType === "deletePart") {
+    return `delete_part_${sanitizeIdToken(stripIdPrefix(request.payload.partId, "part_"))}`;
+  }
+
   if (request.operationType === "setDrawablePart") {
     return `set_drawable_part_${[
       stripIdPrefix(request.payload.drawableId, "draw_"),

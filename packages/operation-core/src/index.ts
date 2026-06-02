@@ -20,6 +20,7 @@ export * from "./package-revision.js";
 export * from "./operations/create-drawable.js";
 export * from "./operations/create-part.js";
 export * from "./operations/update-part.js";
+export * from "./operations/delete-part.js";
 export * from "./operations/set-drawable-part.js";
 export * from "./operations/set-drawable-texture.js";
 export * from "./operations/import-split-png-source-asset.js";

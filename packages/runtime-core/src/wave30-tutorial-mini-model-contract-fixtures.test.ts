@@ -15,6 +15,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import type {
+  NormalizedDrawable,
   NormalizedPart,
   NormalizedRuntimeGraph,
   TutorialRuntimeViewerEvidenceSummaryDto
@@ -90,9 +91,9 @@ const createTutorialRuntimeGraphsFromRecipe = (): {
 
   for (const request of createTutorialMiniModelOperationRequests()) {
     if (request.operationId === "op_tutorial_move_front_hair_mesh_vertices") {
-      beforeMeshEditGraph = withRuntimeParts(toRuntimeGraph(seed.session, {
+      beforeMeshEditGraph = withRuntimePartEvidence(toRuntimeGraph(seed.session, {
         packageHash: "sha256:tutorial-mini-model-before-mesh-edit-v1"
-      }), seed.session.graph.parts);
+      }), seed.session.graph.parts, seed.session.graph.drawables);
     }
 
     const outcome = core.commitOperation(seed.session, request);
@@ -107,18 +108,20 @@ const createTutorialRuntimeGraphsFromRecipe = (): {
 
   return {
     beforeMeshEditGraph,
-    finalGraph: withRuntimeParts(toRuntimeGraph(seed.session, {
+    finalGraph: withRuntimePartEvidence(toRuntimeGraph(seed.session, {
       packageHash: "sha256:tutorial-mini-model-final-v1"
-    }), seed.session.graph.parts)
+    }), seed.session.graph.parts, seed.session.graph.drawables)
   };
 };
 
-const withRuntimeParts = (
+const withRuntimePartEvidence = (
   graph: NormalizedRuntimeGraph,
-  parts: readonly RuntimePartInput[]
+  parts: readonly RuntimePartInput[],
+  drawables: readonly RuntimeDrawableMembershipInput[]
 ): NormalizedRuntimeGraph => ({
   ...graph,
-  parts: new Map(parts.map((part) => [part.partId, toNormalizedPart(part)]))
+  parts: new Map(parts.map((part) => [part.partId, toNormalizedPart(part)])),
+  drawables: withRuntimeDrawablePartIds(graph, drawables)
 });
 
 type RuntimePartInput = Omit<NormalizedPart, "parentPartId"> & {
@@ -132,6 +135,32 @@ const toNormalizedPart = (part: RuntimePartInput): NormalizedPart => ({
   childPartIds: [...part.childPartIds],
   drawableIds: [...part.drawableIds]
 });
+
+type RuntimeDrawableMembershipInput = {
+  readonly drawableId: NormalizedDrawable["drawableId"];
+  readonly partId: NonNullable<NormalizedDrawable["partId"]>;
+};
+
+const withRuntimeDrawablePartIds = (
+  graph: NormalizedRuntimeGraph,
+  drawables: readonly RuntimeDrawableMembershipInput[]
+): NormalizedRuntimeGraph["drawables"] => {
+  const partIdsByDrawableId = new Map(drawables.map((drawable) => [drawable.drawableId, drawable.partId]));
+
+  return new Map([...graph.drawables].map(([drawableId, drawable]) => {
+    const partId = partIdsByDrawableId.get(drawableId);
+
+    return [
+      drawableId,
+      partId === undefined
+        ? drawable
+        : {
+            ...drawable,
+            partId
+          }
+    ];
+  }));
+};
 
 const summarizeRuntimeViewerEvidence = (summary: TutorialRuntimeViewerEvidenceSummaryDto) => {
   const runtimeSliceStatus = createSlicePresenceMap(summary.runtimeSummary.semanticReadiness.sliceStatus);

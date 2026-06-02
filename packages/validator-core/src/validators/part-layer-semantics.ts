@@ -125,6 +125,12 @@ const validatePartChildReferences = (
   const checks: ValidationCheckResultDto[] = [];
 
   partEntry.part.childPartIds.forEach((childPartId, childIndex) => {
+    const firstChildIndex = partEntry.part.childPartIds.indexOf(childPartId);
+    if (firstChildIndex !== childIndex) {
+      checks.push(createPartDuplicateChildCheck(partEntry, childPartId, firstChildIndex, childIndex));
+      return;
+    }
+
     const childEntry = indexes.partsById.get(childPartId);
     if (childEntry === undefined) {
       checks.push(createPartChildMissingCheck(partEntry, childPartId, childIndex));
@@ -364,6 +370,39 @@ const createPartChildMissingCheck = (
     relatedAC: ["AC-MVP-004", "AC-MVP-013"],
     relatedScenarios: ["SC-PART-001", "SC-MVP-004"],
     impact: "The part tree cannot be traversed deterministically while a child reference is unresolved."
+  });
+};
+
+const createPartDuplicateChildCheck = (
+  partEntry: PartWithIndex,
+  childPartId: string,
+  firstChildIndex: number,
+  duplicateChildIndex: number
+): ValidationCheckResultDto => {
+  const targetPath = `/model/graph/parts/${partEntry.index}/childPartIds/${duplicateChildIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "part.duplicateChild",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    target: {
+      kind: "part",
+      id: partEntry.part.partId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Part ${partEntry.part.partId} lists child part ${childPartId} more than once.`,
+    evidence: [
+      `partId=${partEntry.part.partId}`,
+      `childPartId=${childPartId}`,
+      `firstChildIndex=${firstChildIndex}`,
+      `duplicateChildIndex=${duplicateChildIndex}`,
+      "reason=duplicate-child"
+    ],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    relatedScenarios: ["SC-PART-001", "SC-MVP-004"],
+    impact: "The part tree cannot derive a deterministic child ordering while a child part appears multiple times under the same parent."
   });
 };
 

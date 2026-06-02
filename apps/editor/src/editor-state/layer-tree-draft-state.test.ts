@@ -9,7 +9,14 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 
 import {
+  clearLayerTreeDirectManipulationDraft,
+  createEditorStateFileFromLayerTreeDraft,
   createEmptyLayerTreeDraftState,
+  draftLayerTreeDrawablePartAssignment,
+  draftLayerTreeDrawableTextureAssignment,
+  draftLayerTreeEmptyLeafPartDelete,
+  draftLayerTreePartRename,
+  draftLayerTreePartReparent,
   projectLoadedPackageState,
   selectDrawableLayerInEditorState,
   setDrawableEditorHiddenInEditorState,
@@ -93,5 +100,81 @@ describe("layer tree draft state", () => {
     expect(editorVisible.layerTreeDraft.editorHiddenIds).toEqual([]);
     expect(editorHidden.drawables[0]?.visible).toBe(true);
     expect(editorHidden.drawables[0]?.drawableId).toBe("draw_body");
+  });
+
+  it("records row-level direct manipulation drafts without changing selection, lock, or editor-hide state", () => {
+    const base = createEmptyLayerTreeDraftState({
+      selection: ["draw_eye"],
+      lockedIds: ["draw_body"],
+      editorHiddenIds: ["draw_eye"]
+    });
+    const renamed = draftLayerTreePartRename(base, {
+      partId: " part_face ",
+      displayName: " Face Draft "
+    });
+    const reparented = draftLayerTreePartReparent(renamed, {
+      partId: "part_face",
+      parentPartId: " part_root "
+    });
+    const deleteRequested = draftLayerTreeEmptyLeafPartDelete(reparented, {
+      partId: " part_empty "
+    });
+    const drawableReassigned = draftLayerTreeDrawablePartAssignment(deleteRequested, {
+      drawableId: " draw_eye ",
+      partId: " part_face "
+    });
+    const textureAssigned = draftLayerTreeDrawableTextureAssignment(drawableReassigned, {
+      drawableId: "draw_eye",
+      textureId: " tex_eye "
+    });
+
+    expect(textureAssigned).toEqual({
+      selection: ["draw_eye"],
+      lockedIds: ["draw_body"],
+      editorHiddenIds: ["draw_eye"],
+      directManipulation: {
+        partRenames: [
+          {
+            draftKind: "partRename",
+            partId: "part_face",
+            displayName: "Face Draft"
+          }
+        ],
+        partReparents: [
+          {
+            draftKind: "partReparent",
+            partId: "part_face",
+            parentPartId: "part_root"
+          }
+        ],
+        emptyLeafPartDeletes: [
+          {
+            draftKind: "emptyLeafPartDelete",
+            partId: "part_empty"
+          }
+        ],
+        drawablePartAssignments: [
+          {
+            draftKind: "drawablePartAssignment",
+            drawableId: "draw_eye",
+            partId: "part_face"
+          }
+        ],
+        drawableTextureAssignments: [
+          {
+            draftKind: "drawableTextureAssignment",
+            drawableId: "draw_eye",
+            textureId: "tex_eye"
+          }
+        ]
+      }
+    });
+    expect(createEditorStateFileFromLayerTreeDraft(textureAssigned)).toEqual({
+      schemaVersion: "editor-state-v1",
+      selection: ["draw_eye"],
+      lockedIds: ["draw_body"],
+      editorHiddenIds: ["draw_eye"]
+    });
+    expect(clearLayerTreeDirectManipulationDraft(textureAssigned)).toEqual(base);
   });
 });

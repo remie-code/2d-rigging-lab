@@ -89,9 +89,12 @@ demo.unsafeDependencyClaim
 | `mesh.runtimeEvidenceMissing` | representative_evaluation | error | viewer/strict/acceptance: fail when required mesh runtime or viewer snapshot evidence is absent or inconsistent | AC-MVP-005, AC-MVP-012, AC-MVP-013 |
 | `part.parentMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.childMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.duplicateChild` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.parentChildMismatch` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.cycle` | reference | blocking | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.drawableMembershipMismatch` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
+| `part.deleteNonEmpty` | reference | blocking | all: fail for delete candidate evidence | AC-MVP-004, AC-MVP-013 |
+| `part.runtimeEvidenceMismatch` | representative_evaluation | error | viewer/strict/acceptance: fail when supplied part hierarchy or drawable layer evidence disagrees with package graph | AC-MVP-004, AC-MVP-012, AC-MVP-013 |
 | `editorState.staleReference` | reference | warning | editor/viewer/strict: warning; acceptance: needs_review by scenario | AC-MVP-004, AC-MVP-011, AC-MVP-013 |
 | `runtime.parameterClamped` | parameter_resolution | warning | strict: fail for invalid external input tests | AC-MVP-012 |
 | `runtime.profileMismatch` | runtime_context | warning | strict/acceptance: fail during legacy migration | AC-PHYS-004 |
@@ -221,9 +224,12 @@ Part / layer-tree validation rules:
 
 - `ref.drawablePartMissing` fires when a drawable `partId` does not resolve to a package part.
 - `part.parentMissing` and `part.childMissing` fire when part hierarchy references point at absent part IDs.
+- `part.duplicateChild` fires when one part lists the same child part more than once in `childPartIds`.
 - `part.parentChildMismatch` fires when `parentPartId` and reciprocal `childPartIds` disagree.
 - `part.cycle` fires when package part hierarchy edges cannot be topologically ordered.
 - `part.drawableMembershipMismatch` fires when `drawable.partId` and `part.drawableIds` disagree or a part lists a missing drawable.
+- `part.deleteNonEmpty` fires for direct-manipulation delete candidate evidence when the target part is not an empty leaf: child parts, assigned drawables, mask-backed drawable evidence, or rig controls still reference the part. It does not authorize recursive delete or delete-with-reassign.
+- `part.runtimeEvidenceMismatch` fires when supplied runtime snapshot or viewer evidence includes part hierarchy / drawable layer evidence but that evidence no longer matches the validated package identity/revision, package `parts`, `drawable.partId`, or `part.drawableIds`.
 - `editorState.staleReference` fires only for stale editor-only `selection`, `lockedIds`, or `editorHiddenIds` references. It must not change runtime semantics, must not hide runtime/package failures, and should remain warning-level unless an acceptance scenario explicitly promotes stale editor evidence to `needs_review`.
 
 Byte-intake preflight validation rules:

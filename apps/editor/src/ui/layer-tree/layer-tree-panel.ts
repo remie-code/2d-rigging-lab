@@ -1,12 +1,26 @@
 import {
+  createLayerTreeDrawablePartDraftFormTestId,
+  createLayerTreeDrawablePartDraftSubmitTestId,
   createLayerTreeDrawableRowTestId,
+  createLayerTreeDrawableTextureDraftFormTestId,
+  createLayerTreeDrawableTextureDraftSubmitTestId,
+  createLayerTreeEmptyLeafDeleteDraftTestId,
+  createLayerTreePartReparentFormTestId,
+  createLayerTreePartReparentSubmitTestId,
   createLayerTreePartGroupTestId,
+  createLayerTreePartRenameFormTestId,
+  createLayerTreePartRenameSubmitTestId,
   createLayerTreeSelectDrawableTestId,
   createLayerTreeToggleEditorHiddenTestId,
   createLayerTreeToggleLockTestId,
   editorTestIds,
+  type LayerTreeDrawablePartAssignmentDraftCommand,
+  type LayerTreeDrawableTextureAssignmentDraftCommand,
   type LayerTreeDrawableViewModel,
+  type LayerTreeEmptyLeafPartDeleteDraftCommand,
   type LayerTreePartGroupViewModel,
+  type LayerTreePartRenameDraftCommand,
+  type LayerTreePartReparentDraftCommand,
   type LayerTreeViewModel,
   type PartTextureWorkflowViewModel
 } from "../../editor-state/index.js";
@@ -27,6 +41,17 @@ export interface LayerTreePanelOptions {
   readonly onSelectDrawable: (drawableId: string) => void;
   readonly onToggleDrawableLock: (drawableId: string) => void;
   readonly onToggleDrawableEditorHidden: (drawableId: string) => void;
+  readonly onDraftPartRename?: (command: LayerTreePartRenameDraftCommand) => void;
+  readonly onDraftPartReparent?: (command: LayerTreePartReparentDraftCommand) => void;
+  readonly onDraftEmptyLeafPartDelete?: (command: LayerTreeEmptyLeafPartDeleteDraftCommand) => void;
+  readonly onDraftDrawablePartAssignment?: (
+    command: LayerTreeDrawablePartAssignmentDraftCommand
+  ) => void;
+  readonly onDraftDrawableTextureAssignment?: (
+    command: LayerTreeDrawableTextureAssignmentDraftCommand
+  ) => void;
+  readonly onCommitDirectManipulationDrafts?: () => void;
+  readonly onClearDirectManipulationDrafts?: () => void;
 }
 
 export const createLayerTreePanel = (options: LayerTreePanelOptions): HTMLElement => {
@@ -65,7 +90,8 @@ const createWorkflowControls = (options: LayerTreePanelOptions): HTMLElement => 
     createCreatePartForm(options),
     createUpdatePartForm(options),
     createDrawablePartAssignmentForm(options),
-    createDrawableTextureAssignmentForm(options)
+    createDrawableTextureAssignmentForm(options),
+    createDirectManipulationDraftControls(options)
   );
 
   return controls;
@@ -75,6 +101,10 @@ const responsiveStackStyle =
   "display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; min-width: 0; max-width: 100%;";
 const responsiveFormStyle =
   "display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 12px; min-width: 0; max-width: 100%; margin-top: 14px;";
+const rowDraftControlsStyle =
+  "display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 8px; min-width: 0; max-width: 100%;";
+const rowDraftFormStyle =
+  "display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; max-width: 100%;";
 const wideFormItemStyle = "grid-column: 1 / -1; min-width: 0; max-width: 100%;";
 const formHeadingStyle = `${wideFormItemStyle} margin: 0;`;
 const wrappingTextStyle = "min-width: 0; max-width: 100%; overflow-wrap: anywhere;";
@@ -117,7 +147,11 @@ const createTextInput = (options: {
 
 const createSelect = (options: {
   readonly label: string;
-  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly disabled?: boolean;
+  }[];
   readonly value: string;
 }): {
   readonly field: HTMLElement;
@@ -135,6 +169,7 @@ const createSelect = (options: {
     const item = document.createElement("option");
     item.value = option.value;
     item.textContent = option.label;
+    item.disabled = option.disabled ?? false;
     select.append(item);
   }
   select.value = options.value;
@@ -373,6 +408,67 @@ const createDrawableTextureAssignmentForm = (options: LayerTreePanelOptions): HT
   return form;
 };
 
+const createDirectManipulationDraftControls = (options: LayerTreePanelOptions): HTMLElement => {
+  const controls = document.createElement("div");
+  controls.className = "layer-tree-panel__form";
+  controls.setAttribute("style", responsiveFormStyle);
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Direct Drafts";
+  applyFormHeadingLayout(heading);
+
+  const status = document.createElement("p");
+  status.className = "editor-panel__meta";
+  applyWideFormItem(status);
+  status.textContent = options.viewModel.directManipulationSummaryLabel;
+
+  const commit = createActionButton({
+    text: "Commit direct drafts",
+    label: "Commit layer tree direct manipulation drafts",
+    pressed: false,
+    disabled:
+      options.viewModel.directManipulationDraftCount === 0 ||
+      options.onCommitDirectManipulationDrafts === undefined,
+    testId: editorTestIds.layerTreeDirectDraftCommit,
+    onClick: () => {
+      if (
+        options.viewModel.directManipulationDraftCount === 0 ||
+        options.onCommitDirectManipulationDrafts === undefined
+      ) {
+        return;
+      }
+
+      options.onCommitDirectManipulationDrafts();
+    }
+  });
+  commit.setAttribute("style", wideFormItemStyle);
+
+  const clear = createActionButton({
+    text: "Clear direct drafts",
+    label: "Clear layer tree direct manipulation drafts",
+    pressed: false,
+    disabled:
+      options.viewModel.directManipulationDraftCount === 0 ||
+      options.onClearDirectManipulationDrafts === undefined,
+    testId: editorTestIds.layerTreeDirectDraftClear,
+    onClick: () => {
+      if (
+        options.viewModel.directManipulationDraftCount === 0 ||
+        options.onClearDirectManipulationDrafts === undefined
+      ) {
+        return;
+      }
+
+      options.onClearDirectManipulationDrafts();
+    }
+  });
+  clear.setAttribute("style", wideFormItemStyle);
+
+  controls.append(heading, status, commit, clear);
+
+  return controls;
+};
+
 const createSummary = (viewModel: LayerTreeViewModel): HTMLElement => {
   const summary = document.createElement("p");
   summary.className = "layer-tree-panel__summary";
@@ -405,6 +501,7 @@ const createPartGroup = (
   count.textContent = partGroup.drawableCountLabel;
 
   group.append(heading, count);
+  group.append(createPartDirectManipulationControls(partGroup, options));
 
   if (partGroup.drawables.length === 0) {
     const emptyState = document.createElement("p");
@@ -424,6 +521,144 @@ const createPartGroup = (
   group.append(list);
 
   return group;
+};
+
+const createPartDirectManipulationControls = (
+  partGroup: LayerTreePartGroupViewModel,
+  options: LayerTreePanelOptions
+): HTMLElement => {
+  const controls = document.createElement("div");
+  controls.className = "layer-tree-panel__part-direct-controls";
+  controls.setAttribute("style", rowDraftControlsStyle);
+  controls.append(
+    createPartRenameDraftForm(partGroup, options),
+    createPartReparentDraftForm(partGroup, options),
+    createEmptyLeafDeleteDraftControl(partGroup, options)
+  );
+
+  return controls;
+};
+
+const createPartRenameDraftForm = (
+  partGroup: LayerTreePartGroupViewModel,
+  options: LayerTreePanelOptions
+): HTMLFormElement => {
+  const draft = partGroup.directManipulation;
+  const form = document.createElement("form");
+  form.className = "layer-tree-panel__row-form";
+  form.dataset.testid = createLayerTreePartRenameFormTestId(partGroup.partId);
+  form.setAttribute("style", rowDraftFormStyle);
+
+  const name = createTextInput({
+    label: "Part name",
+    value: draft.renameValue
+  });
+  const status = createRowMeta(draft.renameDisabledMessage ?? draft.statusLabel);
+  const submit = createSubmitButton({
+    text: draft.renameDrafted ? "Update rename draft" : "Draft rename",
+    testId: createLayerTreePartRenameSubmitTestId(partGroup.partId),
+    disabled: !draft.canDraftRename || options.onDraftPartRename === undefined
+  });
+
+  form.append(name.field, status, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const displayName = name.input.value.trim();
+    if (
+      displayName.length === 0 ||
+      (!draft.renameDrafted && displayName === draft.currentDisplayName) ||
+      !draft.canDraftRename ||
+      options.onDraftPartRename === undefined
+    ) {
+      return;
+    }
+
+    options.onDraftPartRename({
+      partId: partGroup.partId,
+      displayName
+    });
+  });
+
+  return form;
+};
+
+const createPartReparentDraftForm = (
+  partGroup: LayerTreePartGroupViewModel,
+  options: LayerTreePanelOptions
+): HTMLFormElement => {
+  const draft = partGroup.directManipulation;
+  const form = document.createElement("form");
+  form.className = "layer-tree-panel__row-form";
+  form.dataset.testid = createLayerTreePartReparentFormTestId(partGroup.partId);
+  form.setAttribute("style", rowDraftFormStyle);
+
+  const parent = createSelect({
+    label: "Parent",
+    options: draft.parentOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      disabled: option.disabled
+    })),
+    value: draft.parentOptionValue
+  });
+  const status = createRowMeta(draft.reparentDisabledMessage ?? draft.statusLabel);
+  const submit = createSubmitButton({
+    text: draft.reparentDrafted ? "Update parent draft" : "Draft parent",
+    testId: createLayerTreePartReparentSubmitTestId(partGroup.partId),
+    disabled: !draft.canDraftReparent || options.onDraftPartReparent === undefined
+  });
+
+  form.append(parent.field, status, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const parentPartId = parent.select.value.length === 0 ? null : parent.select.value;
+    if (
+      (!draft.reparentDrafted && parentPartId === draft.currentParentPartId) ||
+      !draft.canDraftReparent ||
+      isSelectedOptionDisabled(parent.select, draft.parentOptions) ||
+      options.onDraftPartReparent === undefined
+    ) {
+      return;
+    }
+
+    options.onDraftPartReparent({
+      partId: partGroup.partId,
+      parentPartId
+    });
+  });
+
+  return form;
+};
+
+const createEmptyLeafDeleteDraftControl = (
+  partGroup: LayerTreePartGroupViewModel,
+  options: LayerTreePanelOptions
+): HTMLElement => {
+  const draft = partGroup.directManipulation;
+  const control = document.createElement("div");
+  control.className = "layer-tree-panel__row-form";
+  control.setAttribute("style", rowDraftFormStyle);
+
+  const status = createRowMeta(draft.emptyLeafDeleteDisabledMessage ?? draft.statusLabel);
+  const button = createActionButton({
+    text: draft.emptyLeafDeleteDrafted ? "Delete draft pending" : "Draft empty-leaf delete",
+    label: `Draft empty-leaf delete for ${partGroup.displayName}`,
+    pressed: draft.emptyLeafDeleteDrafted,
+    disabled:
+      !draft.canDraftEmptyLeafDelete || options.onDraftEmptyLeafPartDelete === undefined,
+    testId: createLayerTreeEmptyLeafDeleteDraftTestId(partGroup.partId),
+    onClick: () => {
+      if (!draft.canDraftEmptyLeafDelete || options.onDraftEmptyLeafPartDelete === undefined) {
+        return;
+      }
+
+      options.onDraftEmptyLeafPartDelete({ partId: partGroup.partId });
+    }
+  });
+
+  control.append(status, button);
+
+  return control;
 };
 
 const createDrawableRow = (
@@ -449,6 +684,8 @@ const createDrawableRow = (
   texture.className = `layer-tree-panel__texture layer-tree-panel__texture--${drawable.textureStatus}`;
   texture.setAttribute("style", wrappingTextStyle);
   texture.textContent = drawable.textureLabel;
+
+  const directControls = createDrawableDirectManipulationControls(drawable, options);
 
   const actions = document.createElement("span");
   actions.className = "layer-tree-panel__actions";
@@ -479,15 +716,130 @@ const createDrawableRow = (
     })
   );
 
-  row.append(title, state, texture, actions);
+  row.append(title, state, texture, directControls, actions);
 
   return row;
+};
+
+const createDrawableDirectManipulationControls = (
+  drawable: LayerTreeDrawableViewModel,
+  options: LayerTreePanelOptions
+): HTMLElement => {
+  const controls = document.createElement("div");
+  controls.className = "layer-tree-panel__drawable-direct-controls";
+  controls.setAttribute("style", rowDraftControlsStyle);
+  controls.append(
+    createDrawablePartDraftForm(drawable, options),
+    createDrawableTextureDraftForm(drawable, options)
+  );
+
+  return controls;
+};
+
+const createDrawablePartDraftForm = (
+  drawable: LayerTreeDrawableViewModel,
+  options: LayerTreePanelOptions
+): HTMLFormElement => {
+  const draft = drawable.directManipulation;
+  const form = document.createElement("form");
+  form.className = "layer-tree-panel__row-form";
+  form.dataset.testid = createLayerTreeDrawablePartDraftFormTestId(drawable.drawableId);
+  form.setAttribute("style", rowDraftFormStyle);
+
+  const part = createSelect({
+    label: "Part",
+    options: draft.partOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      disabled: option.disabled
+    })),
+    value: draft.partOptionValue
+  });
+  const status = createRowMeta(draft.partAssignmentDisabledMessage ?? draft.statusLabel);
+  const submit = createSubmitButton({
+    text: draft.partAssignmentDrafted ? "Update part draft" : "Draft part",
+    testId: createLayerTreeDrawablePartDraftSubmitTestId(drawable.drawableId),
+    disabled:
+      !draft.canDraftPartAssignment || options.onDraftDrawablePartAssignment === undefined
+  });
+
+  form.append(part.field, status, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (
+      part.select.value.length === 0 ||
+      (!draft.partAssignmentDrafted && part.select.value === draft.currentPartId) ||
+      !draft.canDraftPartAssignment ||
+      isSelectedOptionDisabled(part.select, draft.partOptions) ||
+      options.onDraftDrawablePartAssignment === undefined
+    ) {
+      return;
+    }
+
+    options.onDraftDrawablePartAssignment({
+      drawableId: drawable.drawableId,
+      partId: part.select.value
+    });
+  });
+
+  return form;
+};
+
+const createDrawableTextureDraftForm = (
+  drawable: LayerTreeDrawableViewModel,
+  options: LayerTreePanelOptions
+): HTMLFormElement => {
+  const draft = drawable.directManipulation;
+  const form = document.createElement("form");
+  form.className = "layer-tree-panel__row-form";
+  form.dataset.testid = createLayerTreeDrawableTextureDraftFormTestId(drawable.drawableId);
+  form.setAttribute("style", rowDraftFormStyle);
+
+  const texture = createSelect({
+    label: "Texture",
+    options: draft.textureOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      disabled: option.disabled
+    })),
+    value: draft.textureOptionValue
+  });
+  const status = createRowMeta(draft.textureAssignmentDisabledMessage ?? draft.statusLabel);
+  const submit = createSubmitButton({
+    text: draft.textureAssignmentDrafted ? "Update texture draft" : "Draft texture",
+    testId: createLayerTreeDrawableTextureDraftSubmitTestId(drawable.drawableId),
+    disabled:
+      !draft.canDraftTextureAssignment ||
+      options.onDraftDrawableTextureAssignment === undefined
+  });
+
+  form.append(texture.field, status, submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (
+      texture.select.value.length === 0 ||
+      (!draft.textureAssignmentDrafted && texture.select.value === draft.currentTextureId) ||
+      !draft.canDraftTextureAssignment ||
+      isSelectedOptionDisabled(texture.select, draft.textureOptions) ||
+      options.onDraftDrawableTextureAssignment === undefined
+    ) {
+      return;
+    }
+
+    options.onDraftDrawableTextureAssignment({
+      drawableId: drawable.drawableId,
+      textureId: texture.select.value
+    });
+  });
+
+  return form;
 };
 
 const createActionButton = (options: {
   readonly text: string;
   readonly label: string;
   readonly pressed: boolean;
+  readonly disabled?: boolean;
   readonly testId: string;
   readonly onClick: () => void;
 }): HTMLButtonElement => {
@@ -495,6 +847,7 @@ const createActionButton = (options: {
   button.type = "button";
   button.className = "drawable-list__control layer-tree-panel__action";
   button.dataset.testid = options.testId;
+  button.disabled = options.disabled ?? false;
   button.setAttribute("aria-label", options.label);
   button.setAttribute("aria-pressed", options.pressed ? "true" : "false");
   button.setAttribute("style", "max-width: 100%; white-space: normal;");
@@ -503,3 +856,17 @@ const createActionButton = (options: {
 
   return button;
 };
+
+const createRowMeta = (text: string): HTMLElement => {
+  const status = document.createElement("p");
+  status.className = "editor-panel__meta layer-tree-panel__row-meta";
+  status.setAttribute("style", wrappingTextStyle);
+  status.textContent = text;
+
+  return status;
+};
+
+const isSelectedOptionDisabled = (
+  select: HTMLSelectElement,
+  options: readonly { readonly value: string; readonly disabled: boolean }[]
+): boolean => options.find((option) => option.value === select.value)?.disabled ?? false;
