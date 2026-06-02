@@ -37,6 +37,10 @@ import {
   EvaluatedPartSchema
 } from "./layer-tree-evidence.js";
 import {
+  createTutorialSnapshotEvidenceSummary,
+  TutorialSnapshotEvidenceSummarySchema
+} from "./tutorial-evidence-summary.js";
+import {
   RuntimeEvaluationInputSchema
 } from "./runtime-input.js";
 import {
@@ -135,6 +139,7 @@ export const ViewerRuntimeEvaluationEvidenceSchema = z.object({
     )
     .default([]),
   meshEditEvidence: RuntimeMeshEditEvidenceSchema.optional(),
+  tutorialEvidenceSummary: TutorialSnapshotEvidenceSummarySchema,
   runtimeDiffEquivalent: z.boolean(),
   runtimeEvaluationContext: RuntimeEvaluationContextSchema
 });
@@ -287,8 +292,14 @@ const createViewerRuntimeEvaluationEvidence = (input: {
   readonly runtimeComparison: RuntimeComparisonResult;
   readonly comparisonPolicy: RuntimeEvaluationOptionsDto["epsilonPolicy"];
   readonly context: z.infer<typeof RuntimeEvaluationContextSchema>;
-}): ViewerRuntimeEvaluationEvidenceDto =>
-  ViewerRuntimeEvaluationEvidenceSchema.parse({
+}): ViewerRuntimeEvaluationEvidenceDto => {
+  const meshEditEvidence = createRuntimeMeshEditEvidence({
+    baselineSnapshot: input.baselineSnapshot,
+    candidateSnapshot: input.snapshot,
+    comparisonPolicy: input.comparisonPolicy
+  });
+
+  return ViewerRuntimeEvaluationEvidenceSchema.parse({
     schemaVersion: "viewer-runtime-evaluation-evidence-v1",
     surface: "viewer",
     packageId: input.graph.packageId,
@@ -326,14 +337,20 @@ const createViewerRuntimeEvaluationEvidence = (input: {
     drawableRuntimeStateChanges: [...input.runtimeComparison.diff.drawableRuntimeStateChanges].sort((left, right) =>
       left.drawableId.localeCompare(right.drawableId)
     ),
-    meshEditEvidence: createRuntimeMeshEditEvidence({
-      baselineSnapshot: input.baselineSnapshot,
-      candidateSnapshot: input.snapshot,
-      comparisonPolicy: input.comparisonPolicy
+    meshEditEvidence,
+    tutorialEvidenceSummary: createTutorialSnapshotEvidenceSummary({
+      source: "viewer",
+      snapshot: input.snapshot,
+      baselineSnapshotId: input.baselineSnapshot.snapshotId,
+      candidateSnapshotId: input.snapshot.snapshotId,
+      finalRuntimeStateRef: input.finalRuntimeStateRef,
+      runtimeDiff: input.runtimeComparison.diff,
+      meshEditEvidence
     }),
     runtimeDiffEquivalent: input.runtimeComparison.equivalent,
     runtimeEvaluationContext: input.context
   });
+};
 
 const toSortedOverrideEntries = (
   overrides: ViewerParameterOverrideDto

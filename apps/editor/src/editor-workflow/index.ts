@@ -8,3 +8,4 @@ export * from "./source-intake-workflow.js";
 export * from "./viewer-runtime-workflow.js";
 export * from "./part-texture-layer-workflow.js";
 export * from "./mesh-canvas-workflow.js";
+export * from "./tutorial-mini-model-workflow.js";

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "wave30-tutorial-mini-model-validation-readiness-summary-v1",
+  "validReadinessReport": {
+    "reportId": "val_tutorial_mini_model_contract_ready",
+    "profile": "acceptance",
+    "status": "pass",
+    "highestSeverity": "info",
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 0,
+      "blocking": 0
+    },
+    "operationLogPresent": true,
+    "operationLogPath": "operations/log.jsonl",
+    "runtimeSnapshotIds": [
+      "snap_tutorial_mini_model_40",
+      "snap_tutorial_mini_model_41"
+    ],
+    "checks": []
+  },
+  "invalidCases": [
+    {
+      "caseId": "missing-eye-drawable",
+      "checks": [
+        {
+          "checkId": "tutorial.requiredDrawableMissing",
+          "status": "fail",
+          "severity": "error",
+          "targetPath": "/model/drawables/drawables",
+          "evidence": [
+            "requiredDrawableRole=eye",
+            "requiredPartRole=face",
+            "expectedPartId=part_tutorial_face",
+            "availableDrawableIds=draw_tutorial_body,draw_tutorial_head,draw_tutorial_face,draw_tutorial_mouth,draw_tutorial_eye_mask,draw_tutorial_front_hair,draw_tutorial_arm",
+            "drawableRoleMatch=missing"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "unsupported-renderer-claim",
+      "checks": [
+        {
+          "checkId": "tutorial.unsupportedClaim",
+          "status": "fail",
+          "severity": "blocking",
+          "targetPath": "/tutorial/unsupportedClaims/0",
+          "evidence": [
+            "claimId=fullRenderer",
+            "claimStatus=present",
+            "claimSource=fixture-metadata",
+            "rendererClaim=fullRenderer"
+          ]
+        },
+        {
+          "checkId": "tutorial.unsupportedClaim",
+          "status": "not_applicable",
+          "severity": "info",
+          "targetPath": "/tutorial/unsupportedClaims/1",
+          "evidence": [
+            "claimId=pixelOracle",
+            "claimStatus=unsupported",
+            "claimSource=fixture-metadata",
+            "pixelOracle=false"
+          ]
+        }
+      ]
+    }
+  ]
+}

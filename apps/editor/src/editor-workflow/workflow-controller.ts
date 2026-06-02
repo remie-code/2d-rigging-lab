@@ -54,6 +54,7 @@ import {
   projectCreateDrawableDefaultsForSourceSelection,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   resetViewerParameterValues as resetViewerRuntimeParameterValues,
+  selectTutorialTargetInEditorState,
   type PreviewParameterSetResult,
   type ViewerParameterSetResult,
   type CreateDrawableFormState,
@@ -61,7 +62,8 @@ import {
   type EditorWorkflowViewModel,
   type MeshCanvasHitSelectionCommand,
   type MeshCanvasVertexSelectionCommand,
-  type SourceIntakeDraftState
+  type SourceIntakeDraftState,
+  type TutorialSelectedTargetState
 } from "../editor-state/index.js";
 import {
   createWorkflowAiApprovalActions,
@@ -133,6 +135,12 @@ import {
   type EditorWorkflowMeshCanvasMoveResult,
   type EditorWorkflowMeshCanvasSelectionResult
 } from "./mesh-canvas-workflow.js";
+import {
+  commitWorkflowTutorialSmallMeshEdit,
+  createWorkflowTutorialMiniModel,
+  type EditorWorkflowTutorialCreateResult,
+  type EditorWorkflowTutorialSmallEditResult
+} from "./tutorial-mini-model-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -301,6 +309,9 @@ export interface EditorWorkflowController {
   approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   commitApprovedAiOperation(): Promise<EditorWorkflowAiCommitResult>;
+  createTutorialMiniModel(): EditorWorkflowTutorialCreateResult;
+  applyTutorialSmallEdit(): EditorWorkflowTutorialSmallEditResult;
+  selectTutorialTarget(target: TutorialSelectedTargetState | null): void;
   saveProject(): EditorWorkflowSaveResult;
   loadProject(): EditorWorkflowLoadResult;
   resetToSamplePackage(): EditorWorkflowResetResult;
@@ -315,7 +326,9 @@ export const createEditorWorkflowController = (
     });
 
   let adapter = createSampleAdapter();
-  let state = createEditorWorkflowState(adapter);
+  let state = createEditorWorkflowState(adapter, {
+    ...(options.now === undefined ? {} : { now: options.now })
+  });
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
@@ -900,6 +913,34 @@ export const createEditorWorkflowController = (
       }
       return result;
     },
+    createTutorialMiniModel() {
+      const outcome = createWorkflowTutorialMiniModel({
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      adapter = outcome.adapter;
+      state = outcome.state;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      latestDrawablePresetResult = null;
+      latestProjectPersistenceResult = null;
+      aiApprovalActions.reset();
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    applyTutorialSmallEdit() {
+      const outcome = commitWorkflowTutorialSmallMeshEdit({ adapter, state });
+      state = outcome.state;
+      if (outcome.latestSessionPersistenceResult !== null) {
+        latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    selectTutorialTarget(target) {
+      state = selectTutorialTargetInEditorState(state, target);
+    },
     saveProject() {
       const snapshot = adapter.createPersistenceSnapshot({
         editorState: createEditorStateFileFromEditorState(state)
@@ -950,7 +991,8 @@ export const createEditorWorkflowController = (
         document,
         packageFileSet: project.packageFileSet,
         operationLogEntries,
-        generatedArtifactPaths: project.generatedArtifactPaths
+        generatedArtifactPaths: project.generatedArtifactPaths,
+        ...(options.now === undefined ? {} : { now: options.now })
       });
       latestSessionPersistenceResult = null;
       latestDrawablePresetResult = null;
@@ -971,7 +1013,9 @@ export const createEditorWorkflowController = (
     resetToSamplePackage() {
       const clearResult = options.projectStore.clearProject();
       adapter = createSampleAdapter();
-      state = createEditorWorkflowState(adapter);
+      state = createEditorWorkflowState(adapter, {
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
       latestSessionPersistenceResult = null;
       latestDrawablePresetResult = null;
       aiApprovalActions.reset();

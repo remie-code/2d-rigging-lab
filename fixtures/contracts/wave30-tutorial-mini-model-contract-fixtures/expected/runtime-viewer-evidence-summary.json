@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "wave30-tutorial-mini-model-runtime-viewer-evidence-summary-v1",
+  "packageRef": {
+    "packageId": "pkg_tutorial_mini_model",
+    "packageRevision": 34,
+    "packageHash": "sha256:tutorial-mini-model-final-v1"
+  },
+  "semanticReadiness": {
+    "status": "ready",
+    "ready": true,
+    "missingSlices": [],
+    "presentSlices": [
+      "parts",
+      "layers",
+      "drawables",
+      "meshes",
+      "meshEdits",
+      "maskOpacity",
+      "rigControls",
+      "rigControlKeyforms",
+      "dynamics"
+    ]
+  },
+  "runtimeEvidence": {
+    "baselineSnapshotId": "snap_tutorial_mini_model_30",
+    "candidateSnapshotId": "snap_tutorial_mini_model_31",
+    "generatedRuntimeSnapshotIds": [
+      "snap_tutorial_mini_model_30",
+      "snap_tutorial_mini_model_31"
+    ],
+    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r34-wave30-tutorial-mini-model-contract-final-f31.runtime-state.json",
+    "finalRuntimeStateSequenceRef": "runtime/state-sequences/pkg_tutorial_mini_model-r34-wave30-tutorial-mini-model-contract.runtime-state-sequence.json",
+    "requiredSliceEvidencePresent": {
+      "parts": true,
+      "layers": true,
+      "drawables": true,
+      "meshes": true,
+      "meshEdits": true,
+      "maskOpacity": true,
+      "rigControls": true,
+      "rigControlKeyforms": true,
+      "dynamics": true
+    },
+    "counts": {
+      "parts": 5,
+      "layers": 8,
+      "drawables": 8,
+      "meshes": 8,
+      "maskRelations": 1,
+      "rigControls": 1,
+      "rigControlKeyforms": 1,
+      "dynamicsGroups": 1
+    },
+    "frontHairMeshEditPresent": true,
+    "authoredMovedVertexRefsPreservedThroughRuntimeKeyform": false
+  },
+  "viewerEvidence": {
+    "baselineSnapshotId": "snap_tutorial_mini_model_40",
+    "snapshotId": "snap_tutorial_mini_model_41",
+    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r34-viewer-f41.runtime-state.json",
+    "surface": "viewer",
+    "runtimeDiffEquivalent": true,
+    "targetIds": [
+      "draw_tutorial_body",
+      "draw_tutorial_head",
+      "draw_tutorial_face",
+      "draw_tutorial_mouth",
+      "draw_tutorial_eye_mask",
+      "draw_tutorial_eye",
+      "draw_tutorial_front_hair",
+      "draw_tutorial_arm",
+      "rig_tutorial_head_rotation",
+      "dyn_tutorial_hair_sway"
+    ],
+    "tutorialSummaryStatus": "incomplete",
+    "tutorialSummaryMissingSlices": [
+      "meshEdits"
+    ]
+  },
+  "renderedCorrectness": {
+    "status": "not_evaluated",
+    "fullRenderer": false,
+    "pixelOracle": false,
+    "textureSamplingCorrectness": false,
+    "basis": "semanticRuntimeEvidenceOnly"
+  }
+}

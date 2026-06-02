@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave29 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave30 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 30 `tutorial-like-mvp-mini-model-v0` completed on 2026-06-02 with a rights-clean synthetic mini model recipe, operation log/model diff/package materialization, semantic runtime/viewer tutorial evidence, validator readiness preflight, guided editor workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping real asset bytes, file picker/parser/archive, image decode, full renderer, pixel oracle, texture sampling correctness, standalone viewer, public tutorial asset distribution, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 29 `canvas-mesh-editing-v1` completed on 2026-06-02 with bounded canvas/SVG mesh vertex selection, multi-vertex translate, semantic Preview / Viewer / Runtime mesh evidence, validator topology diagnostics, contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean review path registration while keeping topology/UV editor, full renderer, pixel oracle, real image bytes, file picker/parser/archive, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
 - A Wave 0 plan exists at [orchestration/wave0-plan.md](orchestration/wave0-plan.md).
@@ -60,7 +61,7 @@ discussion/implementation/
 | Path | Purpose |
 |---|---|
 | [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
-| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave29, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
+| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave30, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -91,6 +92,7 @@ discussion/implementation/
 | [orchestration/wave27-plan.md](orchestration/wave27-plan.md) | Wave 27 Mask / Clipping / Opacity Authoring v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave28-plan.md](orchestration/wave28-plan.md) | Wave 28 Part / Texture / Layer Tree Workflow v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave29-plan.md](orchestration/wave29-plan.md) | Wave 29 Canvas Mesh Editing v1 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave30-plan.md](orchestration/wave30-plan.md) | Wave 30 Tutorial-like MVP Mini Model v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -129,6 +131,8 @@ discussion/implementation/
 | [waves/wave28/_map.md](waves/wave28/_map.md) | Wave 28 domain completion reports, remediation/rerun links, review map links, final verification, and final report |
 | [waves/wave29/wave29-final-report.md](waves/wave29/wave29-final-report.md) | Wave 29 final report for Canvas Mesh Editing v1 |
 | [waves/wave29/_map.md](waves/wave29/_map.md) | Wave 29 domain completion reports, review map links, final verification, and final report |
+| [waves/wave30/wave30-final-report.md](waves/wave30/wave30-final-report.md) | Wave 30 final report for Tutorial-like MVP Mini Model v0 |
+| [waves/wave30/_map.md](waves/wave30/_map.md) | Wave 30 domain completion reports, corrective handback, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -161,6 +165,8 @@ discussion/implementation/
 | [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md) | Wave 28 clean integration review |
 | [reviews/wave29/_map.md](reviews/wave29/_map.md) | Wave 29 domain review reports and clean integration review path |
 | [reviews/wave29/wave29-clean-integration-review.md](reviews/wave29/wave29-clean-integration-review.md) | Wave 29 clean integration review |
+| [reviews/wave30/_map.md](reviews/wave30/_map.md) | Wave 30 domain review reports, corrective handback review, and clean integration review |
+| [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md) | Wave 30 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

@@ -1,6 +1,7 @@
 import type { RuntimeDiffDto } from "@private-2d-rigging-lab/contracts";
 import {
-  createMeshVertexRef
+  createMeshVertexRef,
+  createTutorialSnapshotEvidenceSummary
 } from "@private-2d-rigging-lab/runtime-core";
 import type {
   EvaluatedDrawableDto,
@@ -68,6 +69,12 @@ export const projectEditorPreview = (input: ProjectEditorPreviewInput): EditorPr
     visibleDrawableCount: input.snapshot.drawables.filter((drawable) => drawable.visible).length,
     drawables,
     keyformSamples: summarizePreviewKeyformSamples(input.snapshot.keyformSamples),
+    tutorialEvidenceSummary: createTutorialSnapshotEvidenceSummary({
+      source: "preview",
+      snapshot: input.snapshot,
+      ...(input.runtimeDiff === undefined ? {} : { runtimeDiff: input.runtimeDiff }),
+      ...(input.meshEditEvidence === undefined ? {} : { meshEditEvidence: input.meshEditEvidence })
+    }),
     diagnostics: summarizePreviewDiagnostics(allDiagnostics),
     ...(input.runtimeDiff === undefined ? {} : { diff: summarizePreviewRuntimeDiff(input.runtimeDiff) })
   };

@@ -10,4 +10,5 @@ export * from "./part-texture-layer-command.js";
 export * from "./rig-control-command.js";
 export * from "./session-adapter.js";
 export * from "./source-import-command.js";
+export * from "./tutorial-mini-model-session.js";
 export * from "./viewer-session-adapter.js";

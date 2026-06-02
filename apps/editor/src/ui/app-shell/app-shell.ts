@@ -2,7 +2,8 @@ import {
   editorTestIds,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
-  type MeshCanvasVertexSelectionCommand
+  type MeshCanvasVertexSelectionCommand,
+  type TutorialSelectedTargetState
 } from "../../editor-state/index.js";
 import { applyEditorPreviewTextureAssets } from "../../editor-preview/texture-preview-resolution.js";
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
@@ -54,6 +55,7 @@ import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
 import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
+import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import { createPackageStatus } from "./package-status.js";
 
@@ -95,6 +97,9 @@ export interface EditorAppShellOptions {
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onCreateTutorialMiniModel: () => void;
+  readonly onApplyTutorialSmallEdit: () => void;
+  readonly onSelectTutorialTarget: (target: TutorialSelectedTargetState | null) => void;
   readonly onSetPreviewParameterValue: (parameterId: string, value: number) => void;
   readonly onResetPreviewParameterValues: () => void;
   readonly onOpenViewerRuntimeSurface: () => void;
@@ -231,6 +236,12 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onSetPreviewParameterValue: options.onSetPreviewParameterValue,
     onResetPreviewParameterValues: options.onResetPreviewParameterValues
   });
+  const tutorialWorkflowPanel = createTutorialWorkflowPanel({
+    viewModel: options.viewModel.tutorialGuidedWorkflow,
+    onCreateTutorialMiniModel: options.onCreateTutorialMiniModel,
+    onApplyTutorialSmallEdit: options.onApplyTutorialSmallEdit,
+    onSelectTutorialTarget: options.onSelectTutorialTarget
+  });
   const viewerRuntimePanel =
     options.viewModel.viewerRuntime.isOpen
       ? createViewerRuntimePanel({
@@ -278,6 +289,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   workspace.append(
     parametersPanel,
     previewPanel,
+    tutorialWorkflowPanel,
     ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
     compositionPanel,
     rigControlPanel,

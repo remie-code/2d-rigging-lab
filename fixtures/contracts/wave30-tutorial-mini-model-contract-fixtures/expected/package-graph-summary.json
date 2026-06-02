@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "wave30-tutorial-mini-model-package-graph-summary-v1",
+  "packageId": "pkg_tutorial_mini_model",
+  "packageRevision": 34,
+  "updatedAt": "2026-06-02T00:00:00.000Z",
+  "canvasSize": {
+    "width": 320,
+    "height": 420
+  },
+  "partIds": [
+    "part_tutorial_body",
+    "part_tutorial_head",
+    "part_tutorial_face",
+    "part_tutorial_front_hair",
+    "part_tutorial_arm"
+  ],
+  "faceDrawableIds": [
+    "draw_tutorial_face",
+    "draw_tutorial_mouth",
+    "draw_tutorial_eye_mask",
+    "draw_tutorial_eye"
+  ],
+  "drawableIds": [
+    "draw_tutorial_body",
+    "draw_tutorial_head",
+    "draw_tutorial_face",
+    "draw_tutorial_mouth",
+    "draw_tutorial_eye_mask",
+    "draw_tutorial_eye",
+    "draw_tutorial_front_hair",
+    "draw_tutorial_arm"
+  ],
+  "generatedMeshCount": 8,
+  "frontHairMeshEdit": {
+    "meshId": "mesh_tutorial_front_hair",
+    "vertexCount": 9,
+    "triangleCount": 8,
+    "movedVertexStableIds": [
+      "vtx_tutorial_front_hair_0_1",
+      "vtx_tutorial_front_hair_0_2"
+    ],
+    "bounds": {
+      "x": 82,
+      "y": 50,
+      "width": 160,
+      "height": 98
+    }
+  },
+  "textureMetadata": {
+    "textureCount": 9,
+    "bodyTextureId": "tex_tutorial_body",
+    "textureBinaryRefsPresent": false,
+    "previewAssetReferenceKinds": [
+      "package-local-file-v1"
+    ]
+  },
+  "maskOpacity": {
+    "enabledMaskRelationIds": [
+      "maskrel_tutorial_eye_mask_to_eye"
+    ],
+    "opacityKeyformIds": [
+      "keyset_drawable_draw_tutorial_mouth_opacity_mouth_open_1"
+    ]
+  },
+  "rigControlKeyform": {
+    "rigControlId": "rig_tutorial_head_rotation",
+    "rigControlKind": "rotation2d",
+    "angleKeyformSetId": "keyset_rigcontrol_rig_tutorial_head_rotation_angledegrees_face_yaw_1"
+  },
+  "dynamics": {
+    "dynamicsGroupId": "dyn_tutorial_hair_sway",
+    "driverParameterIds": [
+      "param_face_yaw",
+      "param_body_bob"
+    ],
+    "outputParameterId": "param_hair_sway"
+  },
+  "rightsClean": {
+    "sourceKind": "generated-fixture-v1",
+    "rightsStatus": "cleared",
+    "redistributionAllowed": false,
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "publicSampleDistribution": false
+  }
+}

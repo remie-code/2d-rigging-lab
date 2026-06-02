@@ -27,6 +27,14 @@ import {
   createEmptyViewerRuntimeState,
   type ViewerRuntimeState
 } from "./viewer-runtime-state.js";
+import {
+  createEmptyTutorialGuidedWorkflowState,
+  type TutorialGuidedWorkflowState
+} from "./tutorial-guided-workflow-state.js";
+import {
+  createEmptyTutorialReadinessPreflightState,
+  type TutorialReadinessPreflightState
+} from "./tutorial-readiness-preflight-state.js";
 import { createEmptyReloadSummary, type ReloadSummaryState } from "./reload-summary.js";
 import {
   createEmptySourceIntakeDraftState,
@@ -58,6 +66,8 @@ export interface EditorSemanticState {
   readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly viewerRuntime: ViewerRuntimeState;
+  readonly tutorialReadinessPreflight: TutorialReadinessPreflightState;
+  readonly tutorialGuidedWorkflow: TutorialGuidedWorkflowState;
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly sourceIntakeDraft: SourceIntakeDraftState;
@@ -87,6 +97,8 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
   viewerRuntime: createEmptyViewerRuntimeState(),
+  tutorialReadinessPreflight: createEmptyTutorialReadinessPreflightState(),
+  tutorialGuidedWorkflow: createEmptyTutorialGuidedWorkflowState(),
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),
   sourceIntakeDraft: createEmptySourceIntakeDraftState(),

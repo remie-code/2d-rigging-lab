@@ -25,6 +25,7 @@ export const ValidationPhaseSchema = z.enum([
   "runtime_state",
   "representative_evaluation",
   "acceptance_evidence",
+  "tutorial_readiness",
   "demo_preflight"
 ]);
 export type ValidationPhase = z.infer<typeof ValidationPhaseSchema>;
@@ -654,6 +655,94 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     profiles: ["acceptance"],
     relatedAC: ["AC-MVP-001"],
     description: "Acceptance evidence does not include a GUI operation log."
+  },
+  {
+    checkId: "tutorial.requiredPartMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Tutorial mini model is missing one of the required synthetic character part roles."
+  },
+  {
+    checkId: "tutorial.requiredMeshMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Tutorial mini model is missing generated drawable mesh evidence."
+  },
+  {
+    checkId: "tutorial.requiredDrawableMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-005", "AC-MVP-013"],
+    description: "Tutorial mini model is missing required mouth or eye drawable/layer evidence under the face part."
+  },
+  {
+    checkId: "tutorial.requiredMaskOrOpacityMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-007", "AC-MVP-013"],
+    description: "Tutorial mini model is missing enabled mask relation or authored opacity evidence."
+  },
+  {
+    checkId: "tutorial.requiredRigControlMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Tutorial mini model is missing enabled rotation2d rig control evidence."
+  },
+  {
+    checkId: "tutorial.requiredKeyformMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Tutorial mini model is missing rigControl angle keyform evidence."
+  },
+  {
+    checkId: "tutorial.requiredDynamicsMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
+    description: "Tutorial mini model is missing enabled Minimum Open Dynamics v1 evidence."
+  },
+  {
+    checkId: "tutorial.viewerEvidenceMissing",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
+    description: "Tutorial readiness requires semantic viewer runtime evidence."
+  },
+  {
+    checkId: "tutorial.evidenceStale",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
+    description: "Tutorial readiness evidence does not match the validated package or viewer context."
+  },
+  {
+    checkId: "tutorial.missingReference",
+    phase: "tutorial_readiness",
+    defaultSeverity: "error",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "Tutorial readiness-specific evidence references a missing package target."
+  },
+  {
+    checkId: "tutorial.unsupportedClaim",
+    phase: "tutorial_readiness",
+    defaultSeverity: "blocking",
+    profiles: ["acceptance"],
+    relatedAC: ["AC-MVP-015", "AC-MVP-016"],
+    description: "Tutorial readiness rejects real-asset, renderer, pixel oracle, public distribution, file I/O, or Cubism compatibility claims."
   },
   {
     checkId: "demo.unsafeDependencyClaim",

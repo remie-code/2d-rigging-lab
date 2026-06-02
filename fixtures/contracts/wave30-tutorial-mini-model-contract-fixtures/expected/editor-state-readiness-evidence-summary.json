@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "wave30-tutorial-mini-model-editor-state-readiness-evidence-summary-v1",
+  "source": "fixture-editor-semantic-state",
+  "recipeId": "tutorialMiniModelV0",
+  "packageId": "pkg_tutorial_mini_model",
+  "packageRevision": 34,
+  "selectedTarget": {
+    "kind": "mesh",
+    "id": "mesh_tutorial_front_hair"
+  },
+  "readiness": {
+    "status": "inProgress",
+    "readyStepCount": 7,
+    "totalStepCount": 8,
+    "readyStepIds": [
+      "partLayerSelection",
+      "generatedDrawableMesh",
+      "textureMetadata",
+      "maskOrOpacity",
+      "rotation2dRigKeyform",
+      "dynamicsEvidence",
+      "previewViewerValidator"
+    ],
+    "missingStepIds": [
+      "browserLocalSaveLoad"
+    ]
+  },
+  "steps": [
+    {
+      "stepId": "partLayerSelection",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "part",
+          "id": "part_tutorial_front_hair"
+        },
+        {
+          "kind": "drawable",
+          "id": "draw_tutorial_front_hair"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "generatedDrawableMesh",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "drawable",
+          "id": "draw_tutorial_front_hair"
+        },
+        {
+          "kind": "mesh",
+          "id": "mesh_tutorial_front_hair"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "textureMetadata",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "drawable",
+          "id": "draw_tutorial_front_hair"
+        },
+        {
+          "kind": "texture",
+          "id": "tex_tutorial_front_hair"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "maskOrOpacity",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "maskRelation",
+          "id": "maskrel_tutorial_eye_mask_to_eye"
+        },
+        {
+          "kind": "opacityKeyform",
+          "id": "keyset_drawable_draw_tutorial_mouth_opacity_mouth_open_1"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "rotation2dRigKeyform",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "rigControl",
+          "id": "rig_tutorial_head_rotation"
+        },
+        {
+          "kind": "keyformSet",
+          "id": "keyset_rigcontrol_rig_tutorial_head_rotation_angledegrees_face_yaw_1"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "dynamicsEvidence",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "dynamicsGroup",
+          "id": "dyn_tutorial_hair_sway"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "previewViewerValidator",
+      "status": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "runtimeEvidence",
+          "id": "snap_tutorial_mini_model_41"
+        },
+        {
+          "kind": "validationReport",
+          "id": "val_tutorial_mini_model_contract_ready"
+        },
+        {
+          "kind": "viewerRuntime",
+          "id": "viewerRuntime"
+        }
+      ],
+      "missingEvidence": []
+    },
+    {
+      "stepId": "browserLocalSaveLoad",
+      "status": "missingEvidence",
+      "evidenceRefs": [
+        {
+          "kind": "package",
+          "id": "pkg_tutorial_mini_model"
+        }
+      ],
+      "missingEvidence": [
+        "browser-local save/load reload summary is outside this fixture domain"
+      ]
+    }
+  ],
+  "nonGoalClaims": [
+    "realAssetImport",
+    "imageDecode",
+    "filePicker",
+    "archiveImportExport",
+    "fullRenderer",
+    "pixelOracle",
+    "publicTutorialDistribution",
+    "cubismCompatibility"
+  ],
+  "runtimeRenderingSemanticsClaim": "none"
+}

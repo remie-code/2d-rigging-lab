@@ -24,3 +24,4 @@ export * from "./validators/runtime-load.js";
 export * from "./validators/package-runtime.js";
 export * from "./validators/runtime-evidence.js";
 export * from "./validators/viewer-evidence.js";
+export * from "./validators/tutorial-readiness.js";

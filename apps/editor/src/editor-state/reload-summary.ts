@@ -1,5 +1,8 @@
+export type ReloadSummarySource = "operationCommit" | "browserLocalLoad";
+
 export interface ReloadSummaryState {
   readonly status: "not_reloaded" | "reloaded" | "failed";
+  readonly source: ReloadSummarySource | null;
   readonly packageRevision: number;
   readonly parameterCount: number;
   readonly parameterIds: readonly string[];
@@ -10,6 +13,7 @@ export interface ReloadSummaryState {
 
 export interface ReloadSummaryInput {
   readonly status: "reloaded" | "failed";
+  readonly source?: ReloadSummarySource;
   readonly packageRevision: number;
   readonly parameterIds?: readonly string[];
   readonly drawableIds?: readonly string[];
@@ -18,6 +22,7 @@ export interface ReloadSummaryInput {
 
 export const createEmptyReloadSummary = (): ReloadSummaryState => ({
   status: "not_reloaded",
+  source: null,
   packageRevision: 0,
   parameterCount: 0,
   parameterIds: [],
@@ -32,6 +37,7 @@ export const projectReloadSummary = (input: ReloadSummaryInput): ReloadSummarySt
 
   return {
     status: input.status,
+    source: input.source ?? "operationCommit",
     packageRevision: input.packageRevision,
     parameterCount: parameterIds.length,
     parameterIds,

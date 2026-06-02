@@ -1,6 +1,6 @@
-# Wave29完了後の残件リスト
+# Wave30完了後の残件リスト
 
-> 状態: 2026-06-02、Wave29完了後の残件バックログ。
+> 状態: 2026-06-02、Wave30完了後の残件バックログ。
 
 ## 目的
 
@@ -17,7 +17,9 @@
 - Wave27で`Mask / clipping / opacity authoring`は`implementation-proven`になったため、P0候補から外した。
 - Wave28では`Part / texture / layer tree workflow`を選定し、semantic part hierarchy、drawable part reassignment、existing texture assignment、editor layer selection / lock / editor-hide、Preview / Viewer evidence、fixtures、desktop/mobile e2e persistence smoke まで `implementation-proven` になったため、P0候補から外した。
 - Wave29で`Canvas Mesh Editing v1`は`implementation-proven`になった。Wave17のrow/button vertex nudgeを、canvas/SVG selection、multi-vertex translate、semantic Preview / Viewer / Runtime evidence、validator mesh diagnostics、fixtures、desktop/mobile e2eへ拡張した。Topology editor、UV editor、full renderer、pixel oracle、real image bytes、file picker/parser/archive、external dependency、Cubism compatibilityは含めていない。
-- この文書はWave30以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave30では`Tutorial-like MVP mini model`を候補から選び、1waveで閉じる範囲として`Tutorial-like MVP Mini Model v0`を計画した。これはrights-clean synthetic modelを使って既存のpart / texture / layer / mesh / mask / rig-control keyform / dynamics / Viewer / Validator workflowを一周させる計画であり、real asset bytes、file picker/parser/archive、image decode、full renderer、pixel oracle、Cubism compatibility、public sample distributionは含めない。
+- Wave30で`Tutorial-like MVP Mini Model v0`は`implementation-proven`になった。Rights-clean synthetic mini modelを、recipe / operation log / model diff / package materialization / semantic runtime-viewer evidence / validator readiness / guided editor workflow / desktop-mobile save-load e2e まで一周させた。Real asset bytes、file picker/parser/archive、image decode、full renderer、pixel oracle、texture sampling correctness、standalone viewer、Cubism compatibility、public tutorial asset distributionは含めていない。
+- この文書はWave31以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -34,7 +36,7 @@ Undineは観点設計と統合だけを担当し、実装状況の読解はread-
 
 ## 実装証明済みの大枠
 
-Wave28完了後、以下はimplementation-provenとして扱ってよい。
+Wave30完了後、以下はimplementation-provenとして扱ってよい。
 
 - foundation packages、contracts、runtime、validator、operation lifecycle、package persistence、editor operation UI、browser-local save/load、AI dry-run/read/approval foundation。
 - keyform authoringとruntime keyform evaluation、Grid2D evidence hardening。
@@ -46,6 +48,8 @@ Wave28完了後、以下はimplementation-provenとして扱ってよい。
 - Rig Control Keyform / Viewer Hardening。keyform-to-rigControl product authoring、negative UX、viewer/report hardening、transform recompute coverageはWave26で一段閉じた。
 - Mask / Clipping / Opacity Authoring v1。`setMaskRelation` operation、runtime mask relation / opacity evidence、validator composition diagnostics、rights-clean contract fixture、Editor Composition / Mask / Opacity UX、Preview / Viewer observation、desktop/mobile save-load e2e smokeはWave27で一段閉じた。
 - Part / Texture / Layer Tree Workflow v1。`createPart` / `updatePart` / `setDrawablePart` / `setDrawableTexture` operation、semantic part hierarchy、drawable part membership、existing texture atlas assignment、editor selection / lock / editor-only hide、validator diagnostics、rights-clean contract fixture、Preview / Viewer evidence、desktop/mobile save-load e2e smokeはWave28で一段閉じた。
+- Canvas Mesh Editing v1。canvas/SVG selection、single/multi-vertex translate、semantic Preview / Viewer / Runtime mesh evidence、validator topology diagnostics、contract fixture、desktop/mobile save-load e2e smokeはWave29で一段閉じた。
+- Tutorial-like MVP Mini Model v0。rights-clean synthetic mini model recipe、operation log/model diff/package materialization、semantic runtime-viewer evidence、validator readiness、guided editor workflow、desktop/mobile save-load e2e smokeはWave30で一段閉じた。
 
 一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、file picker、archive import/export、actual binary upload、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
@@ -54,7 +58,7 @@ Wave28完了後、以下はimplementation-provenとして扱ってよい。
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
 | Mesh topology / UV editor expansion | Canvas Mesh Editing v1は完了したが、vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingは未実装。 | Wave29の後続候補。renderer/pixel oracleやreal texture bytesとは別waveで扱う。 | topology/UV直接編集へ進む場合は必要。 |
-| Tutorial-like MVP mini model | 個別sliceは増えているが、blink/brow/mouth/face/body/arm/hair dynamicsを1つのGUI制作fixtureで通す証拠がない。 | mask/part/mesh/rigの残件が狭まった後のintegration wave向き。 | 最小モデル仕様が必要。 |
+| Public tutorial / demo asset boundary | Wave30はrights-clean synthetic semantic mini modelまで。公開配布用tutorial asset、demo capture scene、final disclaimer、public/private asset splitは未決。 | 実素材や公開demoへ進む前に、rights policy / fixture policy / preflightを先に決める。 | 必要。 |
 
 ## Asset I/O / PSD / Binaryの判断ゲート
 
@@ -121,19 +125,38 @@ Wave29では、topology editor、UV editor、automatic triangulation、full rend
 
 詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave29-plan.md`に固定した。
 
-## Wave30以降の推奨選択肢
+## Wave30完了範囲
 
-1. **Tutorial-like MVP mini model**
-   mask / part / mesh / rig / dynamicsの主要sliceが狭まった後、GUIで小さなLive2D風モデル制作を通すintegration waveとして有効。最小モデル仕様が必要。
+Wave30は **Tutorial-like MVP Mini Model v0** として完了済み。
 
-2. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
+目的は、これまで個別にimplementation-provenになったsemantic authoring sliceを、Private Prototype内で1体の小さなsynthetic character model制作workflowとして一周させること。完了scopeは以下。
+
+- Rights-clean synthetic mini modelを作成する。外部画像、実PSD/PNG bytes、file picker、parser、archive、image decodeは使わない。
+- Existing operations / editor workflowsを組み合わせ、part / texture / layer / mesh / mask or opacity / rig-control keyform / dynamicsを横断する。
+- Runtime / Preview / Viewerにtutorial readinessと各slice evidenceをAI-readableに残す。
+- Validatorにtutorial readiness profile / preflightを追加し、missing sliceやunsupported claimsをdeterministic diagnosticsとして出す。
+- Contract fixtureとdesktop/mobile e2eでsave/load後の再観測まで確認する。
+
+Wave30では、public tutorial asset、demo capture scene、full renderer、pixel oracle、actual binary upload、file picker/parser/archive、external dependency、Cubism compatibilityは扱わない。
+
+詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave30-plan.md`に固定した。完了根拠は`discussion/implementation/waves/wave30/wave30-final-report.md`と`discussion/implementation/reviews/wave30/wave30-clean-integration-review.md`に記録した。
+
+## Wave31以降の推奨選択肢
+
+1. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
    real assetsを優先するならこちら。ただし最小scopeは`<input type=file>`で任意binaryを受け、既存package-local binary file-setとbinary validatorでdigest / byteLength / mediaType / rights / provenanceを証明するところまで。PSD parser、PNG decode、archive dependency、public demo asset policyは入れない。
 
-3. **Full layer tree / part tree UX expansion**
+2. **Full layer tree / part tree UX expansion**
    Wave28のminimum form-based workflowを足場に、drag-and-drop reorder、rename/delete/reparent completeness、multi-select bulk operations、group transform、または canvas/tree direct manipulation へ広げる候補。real image decodeやrenderer workとは分ける。
 
-4. **Mesh topology / UV editor expansion**
+3. **Mesh topology / UV editor expansion**
    Wave29がCanvas Mesh Editing v1を閉じた後の候補。vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingへ広げる場合は、renderer/pixel oracleやtexture bytesとは別waveで扱う。
+
+4. **AI repair / diff workflow**
+   Wave30のtutorial mini modelやvalidator readinessを足場に、repair candidate generation、natural-language repair、standalone diff、rerun validationへ広げる候補。LLM provider / prompt boundary は別判断。
+
+5. **Public tutorial / demo asset boundary**
+   Wave30はsynthetic semantic fixtureで閉じた。public tutorial asset、demo capture scene、final disclaimer、preflight自動化へ進むなら、rights-clean policyとpublic/private splitを先に固定する。
 
 ## 関連wave前に確認すべき判断
 
@@ -142,11 +165,11 @@ Wave29では、topology editor、UV editor、automatic triangulation、full rend
 3. file inputを許可する場合、`<input type=file>`に限定するか、drag-drop / File System Access APIまで含めるか。
 4. archive import/exportを今project-defined ZIPとして始めるか、browser-local binary byte intake後まで延期するか。
 5. 実PSD/PNG/image fixtureとdemo/public assetに対するrights-clean policyをどこまで厳格にするか。
-6. editor end-to-endを証明するtutorial-like MVP modelの最小仕様は何か。
+6. Wave30のtutorial-like MVP modelはsynthetic mini modelとして完了済み。次にpublic tutorial asset / demo captureへ進む場合、最小仕様とrights policyを改めて決める必要がある。
 7. Viewerは当面editor-internal semantic inspectionのままにするか、standalone/full rendererへ進み始めるか。
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

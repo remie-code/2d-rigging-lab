@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "wave30-tutorial-mini-model-operation-chain-summary-v1",
+  "recipeId": "tutorial-mini-model-recipe-v1",
+  "operationCount": 34,
+  "finalPackageRevision": 34,
+  "finalAuthoringRevision": 34,
+  "operationLogLength": 34,
+  "operationTypesByCount": {
+    "addKeyform": 3,
+    "createDrawable": 8,
+    "createDynamicsGroup": 1,
+    "createParameter": 4,
+    "createPart": 5,
+    "createRotation2dRigControl": 1,
+    "generateMesh": 8,
+    "moveMeshVertex": 1,
+    "setDrawOrder": 1,
+    "setDrawableTexture": 1,
+    "setMaskRelation": 1
+  },
+  "changedTargetKinds": [
+    "drawable",
+    "dynamicsGroup",
+    "keyformSet",
+    "maskRelation",
+    "mesh",
+    "package",
+    "parameter",
+    "part",
+    "rigControl",
+    "sourceAsset",
+    "vertex"
+  ],
+  "checkedTargetKinds": [
+    "drawable",
+    "dynamicsGroup",
+    "keyformSet",
+    "maskRelation",
+    "mesh",
+    "package",
+    "parameter",
+    "part",
+    "rigControl",
+    "sourceAsset",
+    "texture",
+    "vertex"
+  ],
+  "allCommitted": true,
+  "allPreconditionsOk": true,
+  "modelDiffOperationIdsMatch": true,
+  "operationLogOperationIdsMatchRequests": true,
+  "noWholeModelOperation": true
+}

@@ -28,6 +28,10 @@ import {
   projectPartTextureWorkflowViewModel,
   type PartTextureWorkflowViewModel
 } from "./part-texture-workflow-view-model.js";
+import {
+  projectTutorialGuidedWorkflowViewModel,
+  type TutorialGuidedWorkflowViewModel
+} from "./tutorial-guided-workflow-view-model.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface AiApprovalWorkflowViewModel {
@@ -61,6 +65,7 @@ export interface EditorWorkflowViewModel {
   readonly sourceIntake: SourceIntakeDraftViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly viewerRuntime: ViewerRuntimeViewModel;
+  readonly tutorialGuidedWorkflow: TutorialGuidedWorkflowViewModel;
   readonly composition: CompositionAuthoringViewModel;
   readonly rigControls: RigControlAuthoringViewModel;
   readonly dynamics: DynamicsAuthoringViewModel;
@@ -318,6 +323,7 @@ export const projectEditorWorkflowViewModel = (
     }),
     previewControls: projectPreviewControlsViewModel(state),
     viewerRuntime: projectViewerRuntimeViewModel(state.viewerRuntime),
+    tutorialGuidedWorkflow: projectTutorialGuidedWorkflowViewModel(state.tutorialGuidedWorkflow),
     composition: projectCompositionAuthoringViewModel(state),
     rigControls: projectRigControlAuthoringViewModel(state),
     dynamics: projectDynamicsAuthoringViewModel(state),

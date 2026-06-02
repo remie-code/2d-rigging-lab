@@ -11,13 +11,27 @@ import {
   projectLoadedPackageState,
   projectOperationLogSummary,
   projectReloadSummary,
+  projectTutorialGuidedWorkflowState,
   type EditorSemanticState
 } from "../editor-state/index.js";
+import {
+  projectTutorialReadinessPreflightFromActiveSession,
+  projectTutorialReadinessPreflightFromPackageDocument
+} from "./tutorial-readiness-preflight-workflow.js";
 
 export const createEditorWorkflowState = (
-  adapter: EditorSessionAdapter
-): EditorSemanticState =>
-  projectLoadedPackageState({
+  adapter: EditorSessionAdapter,
+  options: {
+    readonly now?: () => Date;
+  } = {}
+): EditorSemanticState => {
+  const tutorialReadinessPreflight = projectTutorialReadinessPreflightFromActiveSession({
+    adapter,
+    packageDocument: adapter.baseDocument,
+    ...(options.now === undefined ? {} : { now: options.now })
+  });
+
+  return projectLoadedPackageState({
     identity: adapter.baseDocument.manifest,
     revision: {
       packageRevision: adapter.authoringSession.packageRevision,
@@ -39,14 +53,17 @@ export const createEditorWorkflowState = (
     ...(adapter.baseDocument.assets.textureAtlas === undefined
       ? {}
       : { textureAtlas: adapter.baseDocument.assets.textureAtlas }),
-    canvasSize: adapter.baseDocument.model.graph.canvasSize
+    canvasSize: adapter.baseDocument.model.graph.canvasSize,
+    tutorialReadinessPreflight
   });
+};
 
 export const applyEditorWorkflowCommitResult = (
   state: EditorSemanticState,
   adapter: EditorSessionAdapter,
   result: EditorSessionPersistenceResult,
   options: {
+    readonly now?: () => Date;
     readonly importedSourceSelection?: {
       readonly sourceAssetId: string;
       readonly sourceLayerId?: string;
@@ -54,8 +71,14 @@ export const applyEditorWorkflowCommitResult = (
       readonly partId?: string;
     };
   } = {}
-): EditorSemanticState =>
-  applyCommittedOperationSummary(state, {
+): EditorSemanticState => {
+  const tutorialReadinessPreflight = projectTutorialReadinessPreflightFromActiveSession({
+    adapter,
+    packageDocument: result.reloadedDocument,
+    ...(options.now === undefined ? {} : { now: options.now })
+  });
+
+  return applyCommittedOperationSummary(state, {
     result: {
       ...result.operationResult,
       operationType: result.operationType
@@ -92,21 +115,29 @@ export const applyEditorWorkflowCommitResult = (
     ...(options.importedSourceSelection === undefined
       ? {}
       : { importedSourceSelection: options.importedSourceSelection }),
+    tutorialReadinessPreflight,
     reload: {
       status: result.operationResult.status === "committed" ? "reloaded" : "failed",
+      source: "operationCommit",
       packageRevision: result.reloadedPackageRevision,
       parameterIds: result.parameterIdsAfterReload,
       drawableIds: result.drawableIdsAfterReload,
       filePaths: result.packageFilePaths
     }
   });
+};
 
 export const projectLoadedEditorWorkflowState = (input: {
   readonly document: PackageDocumentDto;
   readonly packageFileSet: PackageFileSet;
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly generatedArtifactPaths: readonly string[];
+  readonly now?: () => Date;
 }): EditorSemanticState => {
+  const tutorialReadinessPreflight = projectTutorialReadinessPreflightFromPackageDocument({
+    packageDocument: input.document,
+    ...(input.now === undefined ? {} : { now: input.now })
+  });
   const loadedState = projectLoadedPackageState({
     identity: input.document.manifest,
     revision: {
@@ -129,26 +160,52 @@ export const projectLoadedEditorWorkflowState = (input: {
     ...(input.document.assets.textureAtlas === undefined
       ? {}
       : { textureAtlas: input.document.assets.textureAtlas }),
-    canvasSize: input.document.model.graph.canvasSize
+    canvasSize: input.document.model.graph.canvasSize,
+    tutorialReadinessPreflight
   });
   const evidence = projectLoadedEvidenceSummary({
     operationLogEntries: input.operationLogEntries,
     generatedArtifactPaths: input.generatedArtifactPaths
   });
+  const operationLog = projectOperationLogSummary(input.operationLogEntries);
+  const generatedEvidence = projectGeneratedEvidenceSummary(evidence);
+  const reload = projectReloadSummary({
+    status: "reloaded",
+    source: "browserLocalLoad",
+    packageRevision: input.document.manifest.packageRevision,
+    parameterIds: input.document.model.parameters.parameters.map(
+      (parameter) => parameter.parameterId
+    ),
+    drawableIds: input.document.model.drawables.drawables.map((drawable) => drawable.drawableId),
+    filePaths: input.packageFileSet.map((entry) => entry.path)
+  });
 
   return {
     ...loadedState,
-    operationLog: projectOperationLogSummary(input.operationLogEntries),
-    generatedEvidence: projectGeneratedEvidenceSummary(evidence),
-    reload: projectReloadSummary({
-      status: "reloaded",
-      packageRevision: input.document.manifest.packageRevision,
-      parameterIds: input.document.model.parameters.parameters.map(
-        (parameter) => parameter.parameterId
-      ),
-      drawableIds: input.document.model.drawables.drawables.map((drawable) => drawable.drawableId),
-      filePaths: input.packageFileSet.map((entry) => entry.path)
-    })
+    operationLog,
+    generatedEvidence,
+    reload,
+    tutorialReadinessPreflight,
+    tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState(
+      {
+        loadedPackage: loadedState.loadedPackage,
+        parts: loadedState.parts,
+        drawables: loadedState.drawables,
+        layerTreeDraft: loadedState.layerTreeDraft,
+        meshEdit: loadedState.meshEdit,
+        textureAtlas: loadedState.textureAtlas,
+        maskRelations: loadedState.maskRelations,
+        drawableOpacityKeyforms: loadedState.drawableOpacityKeyforms,
+        rigControls: loadedState.rigControls,
+        rigControlAngleKeyforms: loadedState.rigControlAngleKeyforms,
+        dynamicsGroups: loadedState.dynamicsGroups,
+        generatedEvidence,
+        tutorialReadinessPreflight,
+        viewerRuntime: loadedState.viewerRuntime,
+        reload
+      },
+      loadedState.tutorialGuidedWorkflow
+    )
   };
 };
 

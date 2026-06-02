@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { TUTORIAL_MINI_MODEL_IDS } from "@private-2d-rigging-lab/authoring-core";
 
 import {
   createInitialEditorSemanticState,
@@ -175,6 +176,57 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.viewerRuntimePackageState)?.textContent).toContain(
       "pkg_editor_browser_sample"
     );
+  });
+
+  it("renders the tutorial workflow panel and wires tutorial actions", () => {
+    const workflow = createWorkflow();
+    workflow.createTutorialMiniModel();
+    const calls: unknown[] = [];
+    const shell = renderShell(workflow, {
+      onCreateTutorialMiniModel() {
+        calls.push(["create"]);
+      },
+      onApplyTutorialSmallEdit() {
+        calls.push(["smallEdit"]);
+      },
+      onSelectTutorialTarget(target) {
+        calls.push(["select", target]);
+      }
+    });
+
+    expect(findByTestId(shell, editorTestIds.tutorialWorkflowPanel)?.textContent).toContain(
+      "Tutorial Mini Model v0"
+    );
+    expect(findByTestId(shell, editorTestIds.tutorialWorkflowPanel)?.textContent).toContain(
+      "In progress: 7 of 8 tutorial steps ready"
+    );
+    expect(findByTestId(shell, editorTestIds.tutorialWorkflowSteps)?.textContent).toContain(
+      "Mask or opacity evidence"
+    );
+    expect(findByTestId(shell, editorTestIds.tutorialWorkflowNonGoals)?.textContent).toContain(
+      "no full renderer"
+    );
+
+    findByTestId(shell, editorTestIds.tutorialWorkflowCreate)?.emit("click");
+    findByTestId(shell, editorTestIds.tutorialWorkflowSmallEdit)?.emit("click");
+    const targetSelect = findByTestId(shell, editorTestIds.tutorialWorkflowTargetSelect);
+    targetSelect?.setProperty(
+      "value",
+      `drawable:${TUTORIAL_MINI_MODEL_IDS.drawables.frontHair}`
+    );
+    targetSelect?.emit("change");
+
+    expect(calls).toEqual([
+      ["create"],
+      ["smallEdit"],
+      [
+        "select",
+        {
+          kind: "drawable",
+          id: TUTORIAL_MINI_MODEL_IDS.drawables.frontHair
+        }
+      ]
+    ]);
   });
 
   it("renders rig control authoring with preview and viewer runtime evidence", () => {
@@ -470,6 +522,9 @@ describe("editor app shell preview panel", () => {
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
+      onCreateTutorialMiniModel() {},
+      onApplyTutorialSmallEdit() {},
+      onSelectTutorialTarget() {},
       onSetPreviewParameterValue() {},
       onResetPreviewParameterValues() {},
       onOpenViewerRuntimeSurface() {},
@@ -523,6 +578,9 @@ describe("editor app shell preview panel", () => {
       onSaveProject() {},
       onLoadProject() {},
       onResetProject() {},
+      onCreateTutorialMiniModel() {},
+      onApplyTutorialSmallEdit() {},
+      onSelectTutorialTarget() {},
       onSetPreviewParameterValue() {},
       onResetPreviewParameterValues() {},
       onOpenViewerRuntimeSurface() {},
@@ -558,6 +616,9 @@ const renderShell = (
     readonly onCloseViewerRuntimeSurface?: () => void;
     readonly onSetViewerParameterValue?: (parameterId: string, value: number) => void;
     readonly onResetViewerParameterValues?: () => void;
+    readonly onCreateTutorialMiniModel?: () => void;
+    readonly onApplyTutorialSmallEdit?: () => void;
+    readonly onSelectTutorialTarget?: Parameters<typeof createEditorAppShell>[0]["onSelectTutorialTarget"];
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -594,6 +655,9 @@ const renderShell = (
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
+    onCreateTutorialMiniModel: callbacks.onCreateTutorialMiniModel ?? (() => {}),
+    onApplyTutorialSmallEdit: callbacks.onApplyTutorialSmallEdit ?? (() => {}),
+    onSelectTutorialTarget: callbacks.onSelectTutorialTarget ?? (() => {}),
     onSetPreviewParameterValue: callbacks.onSetPreviewParameterValue ?? (() => {}),
     onResetPreviewParameterValues: callbacks.onResetPreviewParameterValues ?? (() => {}),
     onOpenViewerRuntimeSurface: callbacks.onOpenViewerRuntimeSurface ?? (() => {}),

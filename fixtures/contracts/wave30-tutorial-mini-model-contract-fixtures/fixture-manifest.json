@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave30-tutorial-mini-model-contract-fixtures",
+  "title": "Wave 30 tutorial mini model contract fixture",
+  "coversAC": [
+    "AC-MVP-004",
+    "AC-MVP-005",
+    "AC-MVP-007",
+    "AC-MVP-009",
+    "AC-MVP-010",
+    "AC-MVP-012",
+    "AC-MVP-013",
+    "AC-MVP-016"
+  ],
+  "coversScenarios": [
+    "SC-MVP-001",
+    "SC-MVP-002",
+    "SC-MVP-003",
+    "SC-MVP-004",
+    "SC-MVP-006",
+    "SC-DRAW-001",
+    "SC-MESH-001",
+    "SC-DEF-002",
+    "SC-PARAM-002",
+    "SC-DYN-001"
+  ],
+  "modulesBlocked": [
+    "operation-core",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "request/tutorial-mini-model-operation-sequence.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-chain-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageMaterialization",
+      "path": "expected/package-graph-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeViewerEvidence",
+      "path": "expected/runtime-viewer-evidence-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validationReport",
+      "path": "expected/validation-readiness-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorStateReadinessEvidence",
+      "path": "expected/editor-state-readiness-evidence-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "invalidCases": [
+    {
+      "caseId": "missing-eye-drawable",
+      "expectedCheckIds": [
+        "tutorial.requiredDrawableMissing"
+      ]
+    },
+    {
+      "caseId": "unsupported-renderer-claim",
+      "expectedCheckIds": [
+        "tutorial.unsupportedClaim"
+      ]
+    }
+  ],
+  "rightsClean": {
+    "source": "metadata-only generated tutorial mini model seed and deterministic operation recipe",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "publicSampleDistribution": false
+  },
+  "runtimeOracle": "semantic runtime/viewer evidence only; no full renderer, texture sampling correctness, or pixel oracle",
+  "editorStateBoundary": "fixture-level semantic readiness evidence only; no browser-local persistence or UI rendering claim",
+  "updateRule": "requires-contract-review"
+}

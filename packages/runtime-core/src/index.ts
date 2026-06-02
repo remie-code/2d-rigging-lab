@@ -23,3 +23,4 @@ export * from "./runtime-diff-builder.js";
 export * from "./runtime-evidence.js";
 export * from "./runtime-evidence-artifacts.js";
 export * from "./viewer-evaluation.js";
+export * from "./tutorial-evidence-summary.js";

@@ -31,6 +31,7 @@ import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
 import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
 import { runCompositionPersistenceSmoke } from "./composition-persistence-smoke.mjs";
 import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persistence-smoke.mjs";
+import { runTutorialMiniModelPersistenceSmoke } from "./tutorial-mini-model-persistence-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -184,6 +185,13 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-part-texture-layer-reset`);
+    const tutorialMiniModelEvidence = await runTutorialMiniModelPersistenceSmoke({
+      page,
+      viewport
+    });
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-tutorial-mini-model-reset`);
 
     return {
       viewport: viewport.name,
@@ -196,6 +204,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       rigControlEvidence,
       compositionEvidence,
       partTextureLayerEvidence,
+      tutorialMiniModelEvidence,
       drawableEvidence,
       meshVertexEvidence,
       layerEvidence

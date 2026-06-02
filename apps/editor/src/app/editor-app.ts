@@ -141,6 +141,19 @@ export function mountEditorApp(root: HTMLElement): void {
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
+        onCreateTutorialMiniModel() {
+          workflow.createTutorialMiniModel();
+          sourceIntakeDraft = workflow.state.sourceIntakeDraft;
+          render();
+        },
+        onApplyTutorialSmallEdit() {
+          workflow.applyTutorialSmallEdit();
+          render();
+        },
+        onSelectTutorialTarget(target) {
+          workflow.selectTutorialTarget(target);
+          render();
+        },
         onSetPreviewParameterValue(parameterId, value) {
           workflow.setPreviewParameterValue(parameterId, value);
           render();

@@ -37,4 +37,5 @@ export * from "./operations/set-runtime-visibility.js";
 export * from "./lifecycle/evidence.js";
 export * from "./lifecycle/dry-run.js";
 export * from "./lifecycle/commit.js";
+export * from "./tutorial-mini-model-recipe.js";
 export * from "./operation-core.js";

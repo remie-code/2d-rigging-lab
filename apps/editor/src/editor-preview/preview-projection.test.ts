@@ -306,6 +306,43 @@ describe("projectEditorPreview", () => {
       affectedPartIds: ["part_body", "part_face"]
     });
   });
+
+  it("adds tutorial semantic evidence summary without rendered correctness claims", () => {
+    const projection = projectEditorPreview({ snapshot: createRepresentativeRuntimeSnapshot() });
+
+    expect(projection.tutorialEvidenceSummary).toMatchObject({
+      schemaVersion: "tutorial-snapshot-evidence-summary-v1",
+      source: "preview",
+      packageRef: {
+        packageId: "pkg_preview",
+        packageRevision: 7
+      },
+      semanticReadiness: {
+        status: "incomplete",
+        ready: false
+      },
+      renderedCorrectness: {
+        status: "not_evaluated",
+        fullRenderer: false,
+        pixelOracle: false,
+        textureSamplingCorrectness: false,
+        basis: "semanticRuntimeEvidenceOnly"
+      }
+    });
+    expect(projection.tutorialEvidenceSummary?.semanticReadiness.presentSlices).toEqual([
+      "parts",
+      "layers",
+      "drawables",
+      "meshes",
+      "maskOpacity",
+      "dynamics"
+    ]);
+    expect(projection.tutorialEvidenceSummary?.semanticReadiness.missingSlices).toEqual([
+      "meshEdits",
+      "rigControls",
+      "rigControlKeyforms"
+    ]);
+  });
 });
 
 const createRepresentativeRuntimeSnapshot = (): RuntimeSnapshotDto =>

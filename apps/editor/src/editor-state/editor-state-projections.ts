@@ -41,6 +41,8 @@ import {
 } from "./composition-authoring-state.js";
 import { projectRigControlState } from "./rig-control-authoring-state.js";
 import { projectRigControlAngleKeyformState } from "./rig-control-keyform-state.js";
+import { projectTutorialGuidedWorkflowState } from "./tutorial-guided-workflow-state.js";
+import type { TutorialReadinessPreflightState } from "./tutorial-readiness-preflight-state.js";
 import { projectViewerRuntimeState } from "./viewer-runtime-state.js";
 import { projectReloadSummary, type ReloadSummaryInput } from "./reload-summary.js";
 import { createEmptySourceIntakeDraftState } from "./source-intake-draft-state.js";
@@ -73,6 +75,7 @@ export interface LoadedPackageSummaryInput {
   readonly sourceAssets?: readonly SourceAssetDto[];
   readonly textureAtlas?: TextureAtlasFileDto;
   readonly editorState?: EditorStateFileDto;
+  readonly tutorialReadinessPreflight?: TutorialReadinessPreflightState;
   readonly canvasSize?: {
     readonly width: number;
     readonly height: number;
@@ -108,48 +111,80 @@ export interface CommittedOperationSummaryInput {
     readonly partId?: string;
   };
   readonly reload?: ReloadSummaryInput;
+  readonly tutorialReadinessPreflight?: TutorialReadinessPreflightState;
 }
 
 export const projectLoadedPackageState = (
   input: LoadedPackageSummaryInput
 ): EditorSemanticState => {
+  const initialState = createInitialEditorSemanticState();
+  const loadedPackage = projectLoadedPackageIdentity(input.identity);
+  const parts = input.parts ?? [];
+  const rigControls = projectRigControlState(input.rigControls ?? []);
+  const rigControlAngleKeyforms = projectRigControlAngleKeyformState(input.keyformSets ?? []);
+  const maskRelations = projectCompositionMaskRelationState(input.masks ?? []);
+  const drawableOpacityKeyforms = projectDrawableOpacityKeyformState(input.keyformSets ?? []);
+  const dynamicsGroups = projectDynamicsGroupState(input.dynamicsGroups ?? []);
   const drawables = projectDrawableList(
     input.drawables ?? [],
     input.meshes ?? [],
     input.drawOrderEntries ?? []
   );
   const layerTreeDraft = projectLayerTreeDraftState(input.editorState);
+  const meshEdit = projectMeshEditState(drawables, input.meshes ?? [], {
+    layerTreeDraft,
+    selectedVertexIds: projectMeshSelectedVertexIdsFromEditorState(input.editorState)
+  });
+  const textureAtlas = input.textureAtlas ?? null;
+  const viewerRuntime = projectViewerRuntimeState(input.parameters ?? []);
+  const tutorialReadinessPreflight =
+    input.tutorialReadinessPreflight ?? initialState.tutorialReadinessPreflight;
 
   return {
-    ...createInitialEditorSemanticState(),
-    loadedPackage: projectLoadedPackageIdentity(input.identity),
+    ...initialState,
+    loadedPackage,
     revision: projectPackageRevision(input.revision),
     parameters: projectParameterList(input.parameters ?? []),
-    parts: input.parts ?? [],
-    rigControls: projectRigControlState(input.rigControls ?? []),
-    rigControlAngleKeyforms: projectRigControlAngleKeyformState(input.keyformSets ?? []),
-    maskRelations: projectCompositionMaskRelationState(input.masks ?? []),
-    drawableOpacityKeyforms: projectDrawableOpacityKeyformState(input.keyformSets ?? []),
-    dynamicsGroups: projectDynamicsGroupState(input.dynamicsGroups ?? []),
+    parts,
+    rigControls,
+    rigControlAngleKeyforms,
+    maskRelations,
+    drawableOpacityKeyforms,
+    dynamicsGroups,
     drawables,
     layerTreeDraft,
-    meshEdit: projectMeshEditState(drawables, input.meshes ?? [], {
-      layerTreeDraft,
-      selectedVertexIds: projectMeshSelectedVertexIdsFromEditorState(input.editorState)
-    }),
+    meshEdit,
     pendingCreateDrawable: projectCreateDrawableDefaults({
       ...(input.sourceAssets === undefined ? {} : { sourceAssets: input.sourceAssets }),
       ...(input.drawables === undefined ? {} : { drawables: input.drawables }),
-      ...(input.parts === undefined ? {} : { parts: input.parts }),
+      parts,
       ...(input.canvasSize === undefined ? {} : { canvasSize: input.canvasSize })
     }),
     sourceIntakeDraft: createEmptySourceIntakeDraftState({
-      defaultPartId: input.parts?.[0]?.partId ?? ""
+      defaultPartId: parts[0]?.partId ?? ""
     }),
     sourceAssets: input.sourceAssets ?? [],
-    textureAtlas: input.textureAtlas ?? null,
+    textureAtlas,
     previewParameters: projectPreviewParameterValues(input.parameters ?? []),
-    viewerRuntime: projectViewerRuntimeState(input.parameters ?? [])
+    viewerRuntime,
+    tutorialReadinessPreflight,
+    tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState({
+      loadedPackage,
+      parts,
+      drawables,
+      layerTreeDraft,
+      meshEdit,
+      textureAtlas,
+      maskRelations,
+      drawableOpacityKeyforms,
+      rigControls,
+      rigControlAngleKeyforms,
+      dynamicsGroups,
+      generatedEvidence: initialState.generatedEvidence,
+      viewerRuntime,
+      tutorialReadinessPreflight,
+      reload: initialState.reload
+    })
   };
 };
 
@@ -185,32 +220,49 @@ export const applyCommittedOperationSummary = (
   const sourceAssets = input.sourceAssets ?? state.sourceAssets;
   const textureAtlas = input.textureAtlas ?? state.textureAtlas;
   const pendingCreateDrawable = projectCommittedCreateDrawableDraft(state, input, sourceAssets);
+  const parts = input.parts ?? state.parts;
+  const rigControls =
+    input.rigControls === undefined
+      ? state.rigControls
+      : projectRigControlState(input.rigControls);
+  const rigControlAngleKeyforms =
+    input.keyformSets === undefined
+      ? state.rigControlAngleKeyforms
+      : projectRigControlAngleKeyformState(input.keyformSets);
+  const maskRelations =
+    input.masks === undefined
+      ? state.maskRelations
+      : projectCompositionMaskRelationState(input.masks);
+  const drawableOpacityKeyforms =
+    input.keyformSets === undefined
+      ? state.drawableOpacityKeyforms
+      : projectDrawableOpacityKeyformState(input.keyformSets);
+  const dynamicsGroups =
+    input.dynamicsGroups === undefined
+      ? state.dynamicsGroups
+      : projectDynamicsGroupState(input.dynamicsGroups);
+  const generatedEvidence =
+    input.generatedEvidence === undefined
+      ? state.generatedEvidence
+      : projectGeneratedEvidenceSummary(input.generatedEvidence);
+  const viewerRuntime =
+    input.parameters === undefined
+      ? state.viewerRuntime
+      : projectViewerRuntimeState(input.parameters, { surface: state.viewerRuntime.surface });
+  const reload = input.reload === undefined ? state.reload : projectReloadSummary(input.reload);
+  const tutorialReadinessPreflight =
+    input.tutorialReadinessPreflight ?? state.tutorialReadinessPreflight;
 
   return {
     ...state,
     revision: input.revision === undefined ? state.revision : projectPackageRevision(input.revision),
     parameters: input.parameters === undefined ? state.parameters : projectParameterList(input.parameters),
-    dynamicsGroups:
-      input.dynamicsGroups === undefined
-        ? state.dynamicsGroups
-        : projectDynamicsGroupState(input.dynamicsGroups),
-    parts: input.parts ?? state.parts,
-    rigControls:
-      input.rigControls === undefined
-        ? state.rigControls
-        : projectRigControlState(input.rigControls),
-    rigControlAngleKeyforms:
-      input.keyformSets === undefined
-        ? state.rigControlAngleKeyforms
-        : projectRigControlAngleKeyformState(input.keyformSets),
-    maskRelations:
-      input.masks === undefined
-        ? state.maskRelations
-        : projectCompositionMaskRelationState(input.masks),
-    drawableOpacityKeyforms:
-      input.keyformSets === undefined
-        ? state.drawableOpacityKeyforms
-        : projectDrawableOpacityKeyformState(input.keyformSets),
+    dynamicsGroups,
+    parts,
+    rigControls,
+    rigControlAngleKeyforms,
+    maskRelations,
+    drawableOpacityKeyforms,
     drawables,
     layerTreeDraft,
     meshEdit,
@@ -218,10 +270,8 @@ export const applyCommittedOperationSummary = (
       input.parameters === undefined
         ? state.previewParameters
         : projectPreviewParameterValues(input.parameters),
-    viewerRuntime:
-      input.parameters === undefined
-        ? state.viewerRuntime
-        : projectViewerRuntimeState(input.parameters, { surface: state.viewerRuntime.surface }),
+    viewerRuntime,
+    tutorialReadinessPreflight,
     pendingCreateParameter:
       input.result.operationType === "createParameter"
         ? {
@@ -246,13 +296,33 @@ export const applyCommittedOperationSummary = (
     textureAtlas,
     lastOperationResult: projectOperationResultSummary(input.result),
     operationLog: projectOperationLogSummary(input.operationLogEntries),
-    generatedEvidence: projectGeneratedEvidenceSummary(input.generatedEvidence ?? {}),
+    generatedEvidence,
     dynamicsPreview:
       input.dynamicsPreview ??
       (input.parameters === undefined && input.dynamicsGroups === undefined
         ? state.dynamicsPreview
         : createEmptyDynamicsPreviewState()),
-    reload: input.reload === undefined ? state.reload : projectReloadSummary(input.reload)
+    reload,
+    tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState(
+      {
+        loadedPackage: state.loadedPackage,
+        parts,
+        drawables,
+        layerTreeDraft,
+        meshEdit,
+        textureAtlas,
+        maskRelations,
+        drawableOpacityKeyforms,
+        rigControls,
+        rigControlAngleKeyforms,
+        dynamicsGroups,
+        generatedEvidence,
+        viewerRuntime,
+        tutorialReadinessPreflight,
+        reload
+      },
+      state.tutorialGuidedWorkflow
+    )
   };
 };
 

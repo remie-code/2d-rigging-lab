@@ -14,7 +14,8 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 import type {
   EvaluatedMeshTopologySummaryDto,
-  RuntimeSnapshotDto
+  RuntimeSnapshotDto,
+  TutorialSnapshotEvidenceSummaryDto
 } from "@private-2d-rigging-lab/runtime-core";
 
 export interface EditorPreviewCanvasSizeDto {
@@ -35,6 +36,7 @@ export interface EditorPreviewProjectionDto {
   readonly visibleDrawableCount: number;
   readonly drawables: readonly EditorPreviewDrawableDto[];
   readonly keyformSamples: EditorPreviewKeyformSampleSummaryDto;
+  readonly tutorialEvidenceSummary?: TutorialSnapshotEvidenceSummaryDto;
   readonly diagnostics: EditorPreviewDiagnosticsSummaryDto;
   readonly diff?: EditorPreviewRuntimeDiffSummaryDto;
 }
