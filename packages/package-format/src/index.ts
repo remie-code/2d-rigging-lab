@@ -4,6 +4,8 @@ export * from "./source-manifest.js";
 export * from "./texture-atlas.js";
 export * from "./binary-asset.js";
 export * from "./byte-intake.js";
+export * from "./byte-availability-contract.js";
+export * from "./byte-availability.js";
 export * from "./model-graph.js";
 export * from "./model-files.js";
 export * from "./asset-metadata.js";

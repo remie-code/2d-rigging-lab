@@ -29,10 +29,7 @@ import {
   type PackageFileSet,
   type PackageInMemoryFileSet
 } from "@private-2d-rigging-lab/package-format";
-import type {
-  ByteIntakeAssetPreflightInput,
-  ByteIntakePreflightInput
-} from "@private-2d-rigging-lab/validator-core";
+import type { ByteIntakePreflightInput } from "@private-2d-rigging-lab/validator-core";
 
 import {
   createBrowserSamplePackageDocument,
@@ -42,8 +39,6 @@ import {
   createEditorBrowserBinaryStorageEvidence,
   createImportPsdSourceAssetCommandWithBinaryBytes,
   createEditorBrowserSourceBinaryByteRegistration,
-  createSourceByteIntakePreflightAsset,
-  createUnsupportedByteIntakeClaims,
   type EditorBrowserBinaryStorageEvidence,
   type EditorImportPsdSourceAssetWithBinaryBytesCommand
 } from "./binary-byte-registration-command.js";
@@ -115,6 +110,7 @@ import {
   toEvidencePackageFileEntries,
   type EditorEvidencePathSummary
 } from "./evidence-provider.js";
+import { createEditorSessionByteIntakePreflightAssets } from "./session-byte-availability-bridge.js";
 
 export interface EditorSessionAdapter {
   readonly baseDocument: PackageDocumentDto;
@@ -626,126 +622,22 @@ const createSessionBinaryByteEvidence = (
 ): EditorSessionBinaryByteEvidence => {
   const binaryAssetIndex = getAuthoringSessionBinaryAssetIndex(authoringSession);
   const byteIntakeSummaries = getAuthoringSessionByteIntakeSummaries(authoringSession);
-  const packageLocalBinaryFilePaths = getAuthoringSessionBinaryFileEntries(authoringSession).map(
-    (entry) => entry.path
-  );
-  const summarizedBinaryAssetIds = new Set(
-    byteIntakeSummaries.map((summary) => summary.binaryAssetId)
-  );
+  const binaryFileEntries = getAuthoringSessionBinaryFileEntries(authoringSession);
+  const packageLocalBinaryFilePaths = binaryFileEntries.map((entry) => entry.path);
 
   return {
     packageLocalBinaryFilePaths,
     binaryAssetIndex,
     byteIntakeSummaries,
     byteIntakePreflight: {
-      assets: [
-        ...byteIntakeSummaries.map((summary) =>
-          createByteIntakePreflightAssetForSummary(summary, binaryAssetIndex)
-        ),
-        ...createByteIntakePreflightAssetsForDocumentRefs({
-          packageDocument,
-          packageLocalBinaryFilePaths,
-          summarizedBinaryAssetIds
-        })
-      ]
+      assets: createEditorSessionByteIntakePreflightAssets({
+        packageDocument,
+        binaryAssetIndex,
+        byteIntakeSummaries,
+        binaryFileEntries
+      })
     },
     browserStorage: createEditorBrowserBinaryStorageEvidence()
-  };
-};
-
-const createByteIntakePreflightAssetsForDocumentRefs = (input: {
-  readonly packageDocument: PackageDocumentDto;
-  readonly packageLocalBinaryFilePaths: readonly string[];
-  readonly summarizedBinaryAssetIds: ReadonlySet<string>;
-}): readonly ByteIntakeAssetPreflightInput[] => {
-  const packageLocalBinaryFilePathSet = new Set(input.packageLocalBinaryFilePaths);
-
-  return [
-    ...input.packageDocument.assets.sourceManifest.sourceAssets.flatMap((sourceAsset, sourceAssetIndex) => {
-      const binaryAssetRef = sourceAsset.binaryAssetRef;
-      if (
-        binaryAssetRef === undefined ||
-        input.summarizedBinaryAssetIds.has(binaryAssetRef.binaryAssetId)
-      ) {
-        return [];
-      }
-
-      return [{
-        binaryAssetId: binaryAssetRef.binaryAssetId,
-        packageRelativePath: binaryAssetRef.packageRelativePath,
-        digest: binaryAssetRef.digest,
-        byteLength: binaryAssetRef.byteLength,
-        mediaType: binaryAssetRef.mediaType,
-        fileMediaType: binaryAssetRef.mediaType,
-        provenanceId: binaryAssetRef.provenanceId,
-        rightsAssetId: binaryAssetRef.rightsAssetId,
-        sourceFilename: sourceAsset.filePath.split("/").at(-1) ?? sourceAsset.filePath,
-        bytesAvailability: packageLocalBinaryFilePathSet.has(binaryAssetRef.packageRelativePath)
-          ? "available"
-          : binaryAssetRef.storageStatus === "stored-package-local-v1"
-            ? "requiresReupload"
-            : "missing",
-        targetKind: "sourceAsset",
-        targetId: sourceAsset.sourceAssetId,
-        targetPath: `/assets/sourceManifest/sourceAssets/${sourceAssetIndex}/binaryAssetRef`,
-        unsupportedClaims: createUnsupportedByteIntakeClaims()
-      } satisfies ByteIntakeAssetPreflightInput];
-    }),
-    ...(input.packageDocument.assets.textureAtlas?.textures.flatMap((texture, textureIndex) => {
-      const binaryAssetRef = texture.binaryAssetRef;
-      if (
-        binaryAssetRef === undefined ||
-        input.summarizedBinaryAssetIds.has(binaryAssetRef.binaryAssetId)
-      ) {
-        return [];
-      }
-
-      return [{
-        binaryAssetId: binaryAssetRef.binaryAssetId,
-        packageRelativePath: binaryAssetRef.packageRelativePath,
-        digest: binaryAssetRef.digest,
-        byteLength: binaryAssetRef.byteLength,
-        mediaType: binaryAssetRef.mediaType,
-        fileMediaType: binaryAssetRef.mediaType,
-        provenanceId: binaryAssetRef.provenanceId,
-        rightsAssetId: binaryAssetRef.rightsAssetId,
-        bytesAvailability: packageLocalBinaryFilePathSet.has(binaryAssetRef.packageRelativePath)
-          ? "available"
-          : binaryAssetRef.storageStatus === "storage-unsupported-v1"
-            ? "missing"
-            : "requiresReupload",
-        targetKind: "texture",
-        targetId: texture.textureId,
-        targetPath: `/assets/textureAtlas/textures/${textureIndex}/binaryAssetRef`,
-        unsupportedClaims: createUnsupportedByteIntakeClaims()
-      } satisfies ByteIntakeAssetPreflightInput];
-    }) ?? [])
-  ];
-};
-
-const createByteIntakePreflightAssetForSummary = (
-  summary: PackageBinaryByteIntakeSummaryDto,
-  binaryAssetIndex: BinaryAssetIndexFileDto
-): ByteIntakeAssetPreflightInput => {
-  const binaryAssetEntry = binaryAssetIndex.assets.find(
-    (entry) => entry.binaryAssetId === summary.binaryAssetId
-  );
-
-  if (binaryAssetEntry?.sourceAssetId !== undefined) {
-    return createSourceByteIntakePreflightAsset({
-      sourceAssetId: binaryAssetEntry.sourceAssetId,
-      byteIntakeSummary: summary,
-      fileMediaType: summary.mediaType
-    });
-  }
-
-  return {
-    intakeSummary: summary,
-    fileMediaType: summary.mediaType,
-    targetKind: binaryAssetEntry?.textureId === undefined ? "package" : "texture",
-    targetId: binaryAssetEntry?.textureId ?? summary.binaryAssetId,
-    targetPath: `/assets/binaryAssetIndex/assets/${summary.binaryAssetId}`,
-    unsupportedClaims: createUnsupportedByteIntakeClaims()
   };
 };
 

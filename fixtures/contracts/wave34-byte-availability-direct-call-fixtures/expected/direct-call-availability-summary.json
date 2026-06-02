@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "wave34-byte-availability-direct-call-summary-v1",
+  "fixtureId": "wave34-byte-availability-direct-call-fixtures",
+  "cases": [
+    {
+      "caseId": "valid-current-session-bytes-pass",
+      "availability": "available-current-session-bytes-v1",
+      "status": "pass-v1",
+      "currentSessionBytes": "available-current-session-bytes-v1",
+      "currentSessionVerificationStatus": "pass-v1",
+      "requiresReupload": false,
+      "verifiedSummaryStatus": "not-supplied-v1",
+      "issueDetails": []
+    },
+    {
+      "caseId": "stale-verified-summary-without-current-session-fails",
+      "availability": "stale-verified-summary-v1",
+      "status": "fail-v1",
+      "currentSessionBytes": "missing-current-session-bytes-v1",
+      "currentSessionVerificationStatus": "not-supplied-v1",
+      "requiresReupload": false,
+      "verifiedSummaryStatus": "stale-v1",
+      "issueDetails": [
+        {
+          "code": "byteAvailability.currentSessionBytes.missing",
+          "source": "current-session-verification-report-v1",
+          "targetPath": "/currentSessionVerificationReport",
+          "expected": "current-session-verification-report",
+          "actual": "missing"
+        },
+        {
+          "code": "byteAvailability.verifiedSummary.stale",
+          "source": "verified-summary-v1",
+          "targetPath": "/verifiedSummary/summary",
+          "expected": "current-session-verified-bytes",
+          "actual": "missing-current-session-verification-report"
+        }
+      ]
+    },
+    {
+      "caseId": "missing-current-session-bytes-fails",
+      "availability": "missing-current-session-bytes-v1",
+      "status": "fail-v1",
+      "currentSessionBytes": "missing-current-session-bytes-v1",
+      "currentSessionVerificationStatus": "not-supplied-v1",
+      "requiresReupload": false,
+      "verifiedSummaryStatus": "not-supplied-v1",
+      "issueDetails": [
+        {
+          "code": "byteAvailability.currentSessionBytes.missing",
+          "source": "current-session-verification-report-v1",
+          "targetPath": "/currentSessionVerificationReport",
+          "expected": "current-session-verification-report",
+          "actual": "missing"
+        }
+      ]
+    },
+    {
+      "caseId": "caller-requires-reupload-fails",
+      "availability": "requires-reupload-v1",
+      "status": "fail-v1",
+      "currentSessionBytes": "missing-current-session-bytes-v1",
+      "currentSessionVerificationStatus": "not-supplied-v1",
+      "requiresReupload": true,
+      "verifiedSummaryStatus": "not-supplied-v1",
+      "issueDetails": [
+        {
+          "code": "byteAvailability.currentSessionBytes.missing",
+          "source": "current-session-verification-report-v1",
+          "targetPath": "/currentSessionVerificationReport",
+          "expected": "current-session-verification-report",
+          "actual": "missing"
+        },
+        {
+          "code": "byteAvailability.requiresReupload",
+          "source": "caller-reupload-state-v1",
+          "targetPath": "/requiresReupload",
+          "expected": "current-session-bytes",
+          "actual": "requires-reupload"
+        }
+      ]
+    }
+  ],
+  "truthfulness": {
+    "allMisuseCasesFail": true,
+    "validCurrentSessionControlPasses": true
+  }
+}

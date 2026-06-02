@@ -113,7 +113,11 @@ export const validatePackageRuntimeWithBinaryAssets = async (
       })),
       ...(input.byteIntakePreflight === undefined
         ? []
-        : await validateByteIntakePreflight(input.byteIntakePreflight))
+        : await validateByteIntakePreflight({
+          ...input.byteIntakePreflight,
+          packageId: input.byteIntakePreflight.packageId ?? packageResult.packageId,
+          packageRevision: input.byteIntakePreflight.packageRevision ?? packageResult.packageRevision
+        }))
     ];
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format";
-import { validatePackageRuntimeWithBinaryAssets } from "@private-2d-rigging-lab/validator-core";
+import {
+  validatePackageRuntimeWithBinaryAssets,
+  type ValidationCheckResultDto
+} from "@private-2d-rigging-lab/validator-core";
 
 import { createBrowserProjectStore } from "../project-persistence/index.js";
 import type { StorageLike } from "../project-persistence/index.js";
@@ -508,13 +511,10 @@ describe("editor workflow controller", () => {
         bytesAvailability: "requiresReupload"
       })
     ]);
-    expect(report.checks).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        checkId: "binary.bytesMissing",
-        status: "fail",
-        evidence: expect.arrayContaining(["bytesAvailability=requiresReupload"])
-      })
-    ]));
+    expectReuploadPreflightRejectedByIntegratedValidation(report.checks, {
+      binaryAssetId: "bin_workflow_psd_profile_source",
+      packageRelativePath: "assets/sources/workflow/source.psd"
+    });
   });
 
   it("does not treat blocked source intake rights as a successful import", () => {
@@ -1692,6 +1692,31 @@ const createWorkflow = (storage: StorageLike) =>
     }),
     now: () => new Date("2026-05-29T04:00:00.000Z")
   });
+
+const expectReuploadPreflightRejectedByIntegratedValidation = (
+  checks: readonly ValidationCheckResultDto[],
+  expected: {
+    readonly binaryAssetId: string;
+    readonly packageRelativePath: string;
+  }
+): void => {
+  const targetFailEvidence = checks
+    .filter((check) =>
+      check.status === "fail" &&
+      check.evidence.includes(`binaryAssetId=${expected.binaryAssetId}`) &&
+      check.evidence.includes(`packageRelativePath=${expected.packageRelativePath}`)
+    )
+    .flatMap((check) => check.evidence);
+
+  expect(targetFailEvidence).toEqual(expect.arrayContaining([
+    `binaryAssetId=${expected.binaryAssetId}`,
+    `packageRelativePath=${expected.packageRelativePath}`
+  ]));
+  expect(
+    targetFailEvidence.includes("bytesAvailability=requiresReupload") ||
+    targetFailEvidence.includes("requiresReupload=true")
+  ).toBe(true);
+};
 
 const parameterIds = (
   workflow: ReturnType<typeof createEditorWorkflowController>

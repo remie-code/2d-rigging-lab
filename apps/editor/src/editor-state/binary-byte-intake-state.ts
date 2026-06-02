@@ -62,13 +62,18 @@ export const projectEditorBinaryByteIntakeState = (
 ): EditorBinaryByteIntakeState => {
   const packageLocalBinaryFilePaths = [...(input.packageLocalBinaryFilePaths ?? [])].sort();
   const availablePathSet = new Set(packageLocalBinaryFilePaths);
-  const summariesByBinaryAssetId = new Map(
-    (input.byteIntakeSummaries ?? []).map((summary) => [summary.binaryAssetId, summary])
+  const summariesByBinaryAssetRefKey = new Map(
+    (input.byteIntakeSummaries ?? []).map((summary) => [
+      createBinaryAssetRefKey(summary.binaryAssetId, summary.packageRelativePath),
+      summary
+    ])
   );
   const assets = collectBinaryByteReferenceOwners(input).map((owner) =>
     projectBinaryByteIntakeAssetState({
       owner,
-      summary: summariesByBinaryAssetId.get(owner.ref.binaryAssetId),
+      summary: summariesByBinaryAssetRefKey.get(
+        createBinaryAssetRefKey(owner.ref.binaryAssetId, owner.ref.packageRelativePath)
+      ),
       availablePathSet,
       reloadSource: input.reloadSource ?? null
     })
@@ -147,9 +152,7 @@ const projectBinaryByteAvailabilityStatus = (input: {
   }
 
   if (
-    input.availablePathSet.has(input.owner.ref.packageRelativePath) ||
-    input.summary?.availability === "available-package-local-bytes-v1" ||
-    input.summary?.availability === "ephemeral-browser-file-v1"
+    input.availablePathSet.has(input.owner.ref.packageRelativePath)
   ) {
     return "available-current-editor-session-v1";
   }
@@ -192,6 +195,11 @@ const mapValidatorBytesAvailability = (
       return "missing";
   }
 };
+
+const createBinaryAssetRefKey = (
+  binaryAssetId: string,
+  packageRelativePath: string
+): string => `${binaryAssetId}\n${packageRelativePath}`;
 
 const projectBinaryByteIntakeStatusLabel = (
   assets: readonly EditorBinaryByteIntakeAssetState[]

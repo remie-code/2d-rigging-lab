@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "wave34-byte-availability-validator-diagnostics-summary-v1",
+  "fixtureId": "wave34-byte-availability-direct-call-fixtures",
+  "cases": [
+    {
+      "caseId": "valid-current-session-bytes-pass",
+      "diagnostics": []
+    },
+    {
+      "caseId": "stale-verified-summary-without-current-session-fails",
+      "diagnostics": [
+        {
+          "checkId": "byteAvailability.currentSessionBytes.missing",
+          "status": "fail",
+          "severity": "error",
+          "phase": "reference",
+          "targetPath": "/wave34/directCallCases/stale-verified-summary-without-current-session-fails",
+          "availabilityEvidence": [
+            "availability=stale-verified-summary-v1",
+            "availabilityStatus=fail-v1",
+            "currentSessionBytes=missing-current-session-bytes-v1",
+            "currentSessionVerificationStatus=not-supplied-v1",
+            "requiresReupload=false",
+            "verifiedSummaryStatus=stale-v1",
+            "availabilityIssueCode=byteAvailability.currentSessionBytes.missing",
+            "availabilityIssueSource=current-session-verification-report-v1",
+            "availabilityIssueTargetPath=/currentSessionVerificationReport",
+            "expected=current-session-verification-report",
+            "actual=missing",
+            "packageId=pkg_wave34_byte_availability",
+            "packageRevision=34"
+          ]
+        },
+        {
+          "checkId": "byteAvailability.verifiedSummary.stale",
+          "status": "fail",
+          "severity": "error",
+          "phase": "reference",
+          "targetPath": "/wave34/directCallCases/stale-verified-summary-without-current-session-fails",
+          "availabilityEvidence": [
+            "availability=stale-verified-summary-v1",
+            "availabilityStatus=fail-v1",
+            "currentSessionBytes=missing-current-session-bytes-v1",
+            "currentSessionVerificationStatus=not-supplied-v1",
+            "requiresReupload=false",
+            "verifiedSummaryStatus=stale-v1",
+            "availabilityIssueCode=byteAvailability.verifiedSummary.stale",
+            "availabilityIssueSource=verified-summary-v1",
+            "availabilityIssueTargetPath=/verifiedSummary/summary",
+            "expected=current-session-verified-bytes",
+            "actual=missing-current-session-verification-report",
+            "packageId=pkg_wave34_byte_availability",
+            "packageRevision=34"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "missing-current-session-bytes-fails",
+      "diagnostics": [
+        {
+          "checkId": "byteAvailability.currentSessionBytes.missing",
+          "status": "fail",
+          "severity": "error",
+          "phase": "reference",
+          "targetPath": "/wave34/directCallCases/missing-current-session-bytes-fails",
+          "availabilityEvidence": [
+            "availability=missing-current-session-bytes-v1",
+            "availabilityStatus=fail-v1",
+            "currentSessionBytes=missing-current-session-bytes-v1",
+            "currentSessionVerificationStatus=not-supplied-v1",
+            "requiresReupload=false",
+            "verifiedSummaryStatus=not-supplied-v1",
+            "availabilityIssueCode=byteAvailability.currentSessionBytes.missing",
+            "availabilityIssueSource=current-session-verification-report-v1",
+            "availabilityIssueTargetPath=/currentSessionVerificationReport",
+            "expected=current-session-verification-report",
+            "actual=missing",
+            "packageId=pkg_wave34_byte_availability",
+            "packageRevision=34"
+          ]
+        }
+      ]
+    },
+    {
+      "caseId": "caller-requires-reupload-fails",
+      "diagnostics": [
+        {
+          "checkId": "byteAvailability.currentSessionBytes.missing",
+          "status": "fail",
+          "severity": "error",
+          "phase": "reference",
+          "targetPath": "/wave34/directCallCases/caller-requires-reupload-fails",
+          "availabilityEvidence": [
+            "availability=requires-reupload-v1",
+            "availabilityStatus=fail-v1",
+            "currentSessionBytes=missing-current-session-bytes-v1",
+            "currentSessionVerificationStatus=not-supplied-v1",
+            "requiresReupload=true",
+            "verifiedSummaryStatus=not-supplied-v1",
+            "availabilityIssueCode=byteAvailability.currentSessionBytes.missing",
+            "availabilityIssueSource=current-session-verification-report-v1",
+            "availabilityIssueTargetPath=/currentSessionVerificationReport",
+            "expected=current-session-verification-report",
+            "actual=missing",
+            "packageId=pkg_wave34_byte_availability",
+            "packageRevision=34"
+          ]
+        },
+        {
+          "checkId": "byteAvailability.requiresReupload",
+          "status": "fail",
+          "severity": "error",
+          "phase": "reference",
+          "targetPath": "/wave34/directCallCases/caller-requires-reupload-fails",
+          "availabilityEvidence": [
+            "availability=requires-reupload-v1",
+            "availabilityStatus=fail-v1",
+            "currentSessionBytes=missing-current-session-bytes-v1",
+            "currentSessionVerificationStatus=not-supplied-v1",
+            "requiresReupload=true",
+            "verifiedSummaryStatus=not-supplied-v1",
+            "availabilityIssueCode=byteAvailability.requiresReupload",
+            "availabilityIssueSource=caller-reupload-state-v1",
+            "availabilityIssueTargetPath=/requiresReupload",
+            "expected=current-session-bytes",
+            "actual=requires-reupload",
+            "packageId=pkg_wave34_byte_availability",
+            "packageRevision=34"
+          ]
+        }
+      ]
+    }
+  ],
+  "truthfulness": {
+    "staleVerifiedSummaryFails": true,
+    "missingCurrentSessionBytesFails": true,
+    "requiresReuploadFails": true,
+    "validCurrentSessionControlPasses": true
+  }
+}

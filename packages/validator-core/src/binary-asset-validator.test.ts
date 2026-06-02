@@ -329,12 +329,15 @@ describe("binary asset validator diagnostics", () => {
       verifiedRef
     );
     await expect(validateByteIntakePreflight({
+      packageId: "pkg_binary_validator",
+      packageRevision: 0,
       assets: [{
         intakeSummary: createPackageBinaryByteIntakeSummary({
           filename: "summary.psd",
           binaryAssetRef: verifiedRef,
           verificationReport
         }),
+        currentSessionVerificationReport: verificationReport,
         targetKind: "sourceAsset",
         targetId: "src_binary"
       }]

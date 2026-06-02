@@ -2,14 +2,19 @@ import {
   computePackageBinarySha256Digest,
   getPackageBinaryByteLength,
   type BinaryAssetDigestDto,
+  type BinaryAssetReferenceDto,
+  type BinaryAssetStorageStatusDto,
+  type PackageBinaryAssetVerificationReport,
   type PackageBinaryByteAvailabilityDto,
   type PackageBinaryByteIntakeSummaryDto,
+  type PackageBinaryByteVerifiedSummarySnapshotDto,
   type PackageBinaryBytes
 } from "@private-2d-rigging-lab/package-format";
 import type { TargetKind } from "@private-2d-rigging-lab/contracts";
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import { createByteIntakeAvailabilityValidationResult } from "./byte-intake-availability-diagnostics.js";
 
 export type ByteIntakeBytesAvailability =
   | "available"
@@ -39,12 +44,17 @@ export interface ByteIntakeAssetPreflightInput {
   readonly digest?: BinaryAssetDigestDto;
   readonly byteLength?: number;
   readonly mediaType?: string;
+  readonly storageStatus?: BinaryAssetStorageStatusDto;
   readonly fileMediaType?: string;
   readonly provenanceId?: string;
   readonly rightsAssetId?: string;
   readonly sourceFilename?: string;
   readonly bytesAvailability?: ByteIntakeBytesAvailability;
   readonly bytes?: PackageBinaryBytes;
+  readonly binaryAssetRef?: BinaryAssetReferenceDto;
+  readonly currentSessionVerificationReport?: PackageBinaryAssetVerificationReport;
+  readonly verifiedSummary?: PackageBinaryByteVerifiedSummarySnapshotDto;
+  readonly requiresReupload?: boolean;
   readonly targetKind?: Extract<TargetKind, "package" | "sourceAsset" | "texture">;
   readonly targetId?: string;
   readonly targetPath?: string;
@@ -52,6 +62,8 @@ export interface ByteIntakeAssetPreflightInput {
 }
 
 export interface ByteIntakePreflightInput {
+  readonly packageId?: string;
+  readonly packageRevision?: number;
   readonly assets?: readonly ByteIntakeAssetPreflightInput[];
   readonly unsupportedClaims?: readonly ByteIntakeUnsupportedClaimInput[];
 }
@@ -59,6 +71,8 @@ export interface ByteIntakePreflightInput {
 interface ByteIntakeAssetTarget {
   readonly asset: ByteIntakeAssetPreflightInput;
   readonly assetIndex: number;
+  readonly packageId?: string;
+  readonly packageRevision?: number;
   readonly targetKind: Extract<TargetKind, "package" | "sourceAsset" | "texture">;
   readonly targetId: string;
   readonly targetPath: string;
@@ -68,7 +82,9 @@ export const validateByteIntakePreflight = async (
   input: ByteIntakePreflightInput
 ): Promise<readonly ValidationCheckResultDto[]> => {
   const checks: ValidationCheckResultDto[] = [];
-  const assetTargets = (input.assets ?? []).map(createByteIntakeAssetTarget);
+  const assetTargets = (input.assets ?? []).map((asset, assetIndex) =>
+    createByteIntakeAssetTarget(asset, assetIndex, input)
+  );
 
   for (const target of assetTargets) {
     checks.push(...(await validateByteIntakeAssetTarget(target)));
@@ -100,14 +116,27 @@ const validateByteIntakeAssetTarget = async (
     checks.push(createByteIntakeRightsMissingCheck(target));
   }
 
+  const availabilityResult = createByteIntakeAvailabilityValidationResult(target);
+  if (availabilityResult !== undefined) {
+    checks.push(...availabilityResult.checks);
+  }
+
   const bytesAvailability = target.asset.bytesAvailability ?? (
     mapPackageByteAvailability(target.asset.intakeSummary?.availability) ??
     (target.asset.bytes === undefined ? "missing" : "available")
   );
 
   const bytes = target.asset.bytes;
-  if (
-    (bytes === undefined && !hasVerifiedAvailableIntakeSummary(target.asset.intakeSummary)) ||
+  if (availabilityResult !== undefined) {
+    if (
+      bytes !== undefined &&
+      bytesAvailability !== "missing" &&
+      bytesAvailability !== "requiresReupload"
+    ) {
+      checks.push(...(await validateAvailableByteIntakeBytes(target, bytes, bytesAvailability)));
+    }
+  } else if (
+    bytes === undefined ||
     bytesAvailability === "missing" ||
     bytesAvailability === "requiresReupload"
   ) {
@@ -190,7 +219,8 @@ const validateUnsupportedClaims = (input: {
 
 const createByteIntakeAssetTarget = (
   asset: ByteIntakeAssetPreflightInput,
-  assetIndex: number
+  assetIndex: number,
+  preflight: ByteIntakePreflightInput
 ): ByteIntakeAssetTarget => {
   const targetPath = asset.targetPath ?? `/byteIntake/assets/${assetIndex}`;
   const binaryAssetId = getBinaryAssetId(asset);
@@ -198,6 +228,8 @@ const createByteIntakeAssetTarget = (
   return {
     asset,
     assetIndex,
+    ...(preflight.packageId === undefined ? {} : { packageId: preflight.packageId }),
+    ...(preflight.packageRevision === undefined ? {} : { packageRevision: preflight.packageRevision }),
     targetKind: asset.targetKind ?? "package",
     targetId: asset.targetId ?? binaryAssetId,
     targetPath
@@ -433,27 +465,33 @@ const createByteIntakeAssetEvidence = (
 ];
 
 const getBinaryAssetId = (asset: ByteIntakeAssetPreflightInput): string =>
-  asset.binaryAssetId ?? asset.intakeSummary?.binaryAssetId ?? "byte-intake-asset";
+  asset.binaryAssetId ??
+  asset.binaryAssetRef?.binaryAssetId ??
+  asset.intakeSummary?.binaryAssetId ??
+  "byte-intake-asset";
 
 const getPackageRelativePath = (asset: ByteIntakeAssetPreflightInput): string =>
-  asset.packageRelativePath ?? asset.intakeSummary?.packageRelativePath ?? "missing";
+  asset.packageRelativePath ??
+  asset.binaryAssetRef?.packageRelativePath ??
+  asset.intakeSummary?.packageRelativePath ??
+  "missing";
 
 const getExpectedDigest = (
   asset: ByteIntakeAssetPreflightInput
 ): BinaryAssetDigestDto | undefined =>
-  asset.digest ?? asset.intakeSummary?.digest;
+  asset.digest ?? asset.binaryAssetRef?.digest ?? asset.intakeSummary?.digest;
 
 const getExpectedByteLength = (asset: ByteIntakeAssetPreflightInput): number | undefined =>
-  asset.byteLength ?? asset.intakeSummary?.byteLength;
+  asset.byteLength ?? asset.binaryAssetRef?.byteLength ?? asset.intakeSummary?.byteLength;
 
 const getDeclaredMediaType = (asset: ByteIntakeAssetPreflightInput): string | undefined =>
-  asset.mediaType ?? asset.intakeSummary?.mediaType;
+  asset.mediaType ?? asset.binaryAssetRef?.mediaType ?? asset.intakeSummary?.mediaType;
 
 const getProvenanceId = (asset: ByteIntakeAssetPreflightInput): string | undefined =>
-  asset.provenanceId ?? asset.intakeSummary?.provenanceId;
+  asset.provenanceId ?? asset.binaryAssetRef?.provenanceId ?? asset.intakeSummary?.provenanceId;
 
 const getRightsAssetId = (asset: ByteIntakeAssetPreflightInput): string | undefined =>
-  asset.rightsAssetId ?? asset.intakeSummary?.rightsAssetId;
+  asset.rightsAssetId ?? asset.binaryAssetRef?.rightsAssetId ?? asset.intakeSummary?.rightsAssetId;
 
 const getSourceFilename = (asset: ByteIntakeAssetPreflightInput): string | undefined =>
   asset.sourceFilename ?? asset.intakeSummary?.filename;
@@ -482,13 +520,3 @@ const mapPackageByteAvailability = (
       return undefined;
   }
 };
-
-const hasVerifiedAvailableIntakeSummary = (
-  summary: PackageBinaryByteIntakeSummaryDto | undefined
-): boolean =>
-  summary !== undefined &&
-  summary.verificationStatus === "verified-pass-v1" &&
-  (
-    summary.availability === "available-package-local-bytes-v1" ||
-    summary.availability === "ephemeral-browser-file-v1"
-  );

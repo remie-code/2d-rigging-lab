@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "wave34-byte-availability-direct-call-cases-v1",
+  "fixtureId": "wave34-byte-availability-direct-call-fixtures",
+  "packageId": "pkg_wave34_byte_availability",
+  "packageRevision": 34,
+  "cases": [
+    {
+      "caseId": "valid-current-session-bytes-pass",
+      "purpose": "Control case: a direct caller with a current-session verification report may pass without embedding raw bytes in the fixture.",
+      "targetKind": "sourceAsset",
+      "targetId": "src_wave34_byte_availability",
+      "binaryAssetRef": {
+        "referenceKind": "package-binary-asset-ref-v1",
+        "binaryAssetId": "bin_wave34_byte_availability_source",
+        "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+        "digest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "byteLength": 3,
+        "mediaType": "application/octet-stream",
+        "storageStatus": "stored-package-local-v1",
+        "provenanceId": "prov_wave34_byte_availability_source",
+        "rightsAssetId": "src_wave34_byte_availability"
+      },
+      "currentSessionVerificationReport": {
+        "status": "pass",
+        "binaryAssetId": "bin_wave34_byte_availability_source",
+        "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+        "expectedByteLength": 3,
+        "expectedDigest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "expectedMediaType": "application/octet-stream",
+        "actualByteLength": 3,
+        "actualDigest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "actualMediaType": "application/octet-stream",
+        "issues": []
+      }
+    },
+    {
+      "caseId": "stale-verified-summary-without-current-session-fails",
+      "purpose": "A verified-pass summary is stale when no current-session verification report exists.",
+      "targetKind": "sourceAsset",
+      "targetId": "src_wave34_byte_availability",
+      "binaryAssetRef": {
+        "referenceKind": "package-binary-asset-ref-v1",
+        "binaryAssetId": "bin_wave34_byte_availability_source",
+        "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+        "digest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "byteLength": 3,
+        "mediaType": "application/octet-stream",
+        "storageStatus": "stored-package-local-v1",
+        "provenanceId": "prov_wave34_byte_availability_source",
+        "rightsAssetId": "src_wave34_byte_availability"
+      },
+      "verifiedSummary": {
+        "schemaVersion": "package-binary-byte-verified-summary-snapshot-v1",
+        "packageId": "pkg_wave34_byte_availability",
+        "packageRevision": 34,
+        "summary": {
+          "schemaVersion": "package-binary-byte-intake-summary-v1",
+          "intakeKind": "browser-file-input-v1",
+          "filename": "direct-call-source.bytes",
+          "binaryAssetId": "bin_wave34_byte_availability_source",
+          "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+          "digest": {
+            "algorithm": "sha256",
+            "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          },
+          "byteLength": 3,
+          "mediaType": "application/octet-stream",
+          "storageStatus": "stored-package-local-v1",
+          "availability": "available-package-local-bytes-v1",
+          "provenanceId": "prov_wave34_byte_availability_source",
+          "rightsAssetId": "src_wave34_byte_availability",
+          "verificationStatus": "verified-pass-v1"
+        }
+      }
+    },
+    {
+      "caseId": "missing-current-session-bytes-fails",
+      "purpose": "A direct caller that supplies only a binary ref must receive missing-current-session diagnostics.",
+      "targetKind": "sourceAsset",
+      "targetId": "src_wave34_byte_availability",
+      "binaryAssetRef": {
+        "referenceKind": "package-binary-asset-ref-v1",
+        "binaryAssetId": "bin_wave34_byte_availability_source",
+        "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+        "digest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "byteLength": 3,
+        "mediaType": "application/octet-stream",
+        "storageStatus": "stored-package-local-v1",
+        "provenanceId": "prov_wave34_byte_availability_source",
+        "rightsAssetId": "src_wave34_byte_availability"
+      }
+    },
+    {
+      "caseId": "caller-requires-reupload-fails",
+      "purpose": "A browser-local load caller can mark the stored reference as requiring reupload when current-session bytes are absent.",
+      "targetKind": "sourceAsset",
+      "targetId": "src_wave34_byte_availability",
+      "requiresReupload": true,
+      "binaryAssetRef": {
+        "referenceKind": "package-binary-asset-ref-v1",
+        "binaryAssetId": "bin_wave34_byte_availability_source",
+        "packageRelativePath": "assets/sources/wave34/direct-call-source.bytes",
+        "digest": {
+          "algorithm": "sha256",
+          "hex": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        },
+        "byteLength": 3,
+        "mediaType": "application/octet-stream",
+        "storageStatus": "stored-package-local-v1",
+        "provenanceId": "prov_wave34_byte_availability_source",
+        "rightsAssetId": "src_wave34_byte_availability"
+      }
+    }
+  ],
+  "truthfulness": {
+    "rawBytesPersistedInFixture": false,
+    "staleVerifiedSummaryCanSatisfyCurrentSessionBytes": false,
+    "missingCurrentSessionBytesCanPass": false,
+    "requiresReuploadCanPass": false,
+    "parserUsed": false,
+    "imageDecodeUsed": false,
+    "archiveUsed": false
+  }
+}

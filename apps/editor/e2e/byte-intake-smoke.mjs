@@ -285,7 +285,14 @@ const assertByteIntakeVisibleRequiresReupload = async (page, rowTestId, sample) 
   await waitForText(page, rowTestId, "validator bytesAvailability=requiresReupload");
 
   const text = await readText(page, rowTestId);
-  if (text.includes("source filename sample_model.psd") || text.includes("byte intake verified-pass-v1")) {
+  const forbiddenLoadedClaims = [
+    "source filename sample_model.psd",
+    "byte intake verified-pass-v1",
+    "validator bytesAvailability=available",
+    "session availability available in current editor session memory"
+  ].filter((claim) => text.includes(claim));
+
+  if (forbiddenLoadedClaims.length > 0) {
     throw new Error(`Loaded byte intake row still claimed current-session byte verification: ${text}.`);
   }
 };

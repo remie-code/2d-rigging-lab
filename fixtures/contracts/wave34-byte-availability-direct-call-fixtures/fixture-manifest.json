@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave34-byte-availability-direct-call-fixtures",
+  "title": "Wave34 byte availability direct-call misuse guard",
+  "description": "Direct-call fixture cases proving stale verified summaries, missing current-session bytes, and caller-declared reupload requirements cannot pass byte availability or validator preflight silently.",
+  "inputArtifacts": [
+    "direct-call-cases.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "directCallAvailabilityReport",
+      "path": "expected/direct-call-availability-summary.json",
+      "id": "wave34-byte-availability-direct-call-summary",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "validatorDiagnostics",
+      "path": "expected/validator-availability-diagnostics-summary.json",
+      "id": "wave34-byte-availability-validator-diagnostics-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "coversAC": [
+    "AC-MVP-013",
+    "AC-MVP-016"
+  ],
+  "coversScenarios": [
+    "SC-IN-002",
+    "SC-VERIFY-001",
+    "SC-MVP-006"
+  ],
+  "modulesBlocked": [
+    "package-format",
+    "validator-core",
+    "editor-e2e",
+    "fixtures-contract-tests"
+  ],
+  "updateRule": "requires-contract-review",
+  "fixturePolicy": {
+    "bytePolicy": "metadata-only-direct-call-fixture-v1",
+    "rightsClean": true,
+    "containsActualPsdBytes": false,
+    "containsActualPngBytes": false,
+    "containsThirdPartyImageBytes": false,
+    "notes": [
+      "The fixture uses synthetic metadata and precomputed SHA-256 values for tiny deterministic byte reports.",
+      "No binary payload file, PSD parser, image decoder, archive import, or renderer oracle is used.",
+      "The browser e2e guard uses the existing local Wave31 file-input smoke and asserts reupload truthfulness after browser-local save/load."
+    ]
+  },
+  "truthfulness": {
+    "staleVerifiedSummaryCanPass": false,
+    "missingCurrentSessionBytesCanPass": false,
+    "requiresReuploadCanPass": false,
+    "persistentBinaryStorageClaimed": false,
+    "parserSupportClaimed": false,
+    "imageDecodeSupportClaimed": false,
+    "archiveSupportClaimed": false,
+    "fileSystemAccessApiClaimed": false,
+    "dragDropClaimed": false,
+    "fullRendererClaimed": false,
+    "pixelOracleClaimed": false
+  }
+}

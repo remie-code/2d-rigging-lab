@@ -305,6 +305,86 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Binary asset ID metadata does not match the package-local binary entry declaration."
   },
   {
+    checkId: "byteAvailability.currentSessionBytes.missing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Current-session byte evidence is missing for byte-intake validation."
+  },
+  {
+    checkId: "byteAvailability.requiresReupload",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "The caller must reupload binary bytes before validation can treat byte-intake evidence as available."
+  },
+  {
+    checkId: "byteAvailability.verifiedSummary.stale",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "A verified byte summary is stale and cannot stand in for current-session bytes."
+  },
+  {
+    checkId: "byteAvailability.packageId.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability evidence belongs to a different package identity."
+  },
+  {
+    checkId: "byteAvailability.packageRevision.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability evidence belongs to a different package revision."
+  },
+  {
+    checkId: "byteAvailability.binaryAssetRef.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability evidence targets a different binary asset reference."
+  },
+  {
+    checkId: "byteAvailability.digest.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability digest evidence does not match the requested binary asset reference."
+  },
+  {
+    checkId: "byteAvailability.byteLength.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability byte length evidence does not match the requested binary asset reference."
+  },
+  {
+    checkId: "byteAvailability.mediaType.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Byte availability media type evidence does not match the requested binary asset reference."
+  },
+  {
+    checkId: "byteAvailability.digest.unsupported",
+    phase: "reference",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Current-session byte digest verification is unsupported in the current validation environment."
+  },
+  {
     checkId: "binary.referenceMismatch",
     phase: "reference",
     defaultSeverity: "error",
