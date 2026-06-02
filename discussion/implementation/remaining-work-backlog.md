@@ -1,6 +1,6 @@
-# Wave30完了後の残件リスト
+# Wave31完了後の残件リスト
 
-> 状態: 2026-06-02、Wave30完了後の残件バックログ。
+> 状態: 2026-06-02、Wave31完了後の残件バックログ。
 
 ## 目的
 
@@ -19,7 +19,9 @@
 - Wave29で`Canvas Mesh Editing v1`は`implementation-proven`になった。Wave17のrow/button vertex nudgeを、canvas/SVG selection、multi-vertex translate、semantic Preview / Viewer / Runtime evidence、validator mesh diagnostics、fixtures、desktop/mobile e2eへ拡張した。Topology editor、UV editor、full renderer、pixel oracle、real image bytes、file picker/parser/archive、external dependency、Cubism compatibilityは含めていない。
 - Wave30では`Tutorial-like MVP mini model`を候補から選び、1waveで閉じる範囲として`Tutorial-like MVP Mini Model v0`を計画した。これはrights-clean synthetic modelを使って既存のpart / texture / layer / mesh / mask / rig-control keyform / dynamics / Viewer / Validator workflowを一周させる計画であり、real asset bytes、file picker/parser/archive、image decode、full renderer、pixel oracle、Cubism compatibility、public sample distributionは含めない。
 - Wave30で`Tutorial-like MVP Mini Model v0`は`implementation-proven`になった。Rights-clean synthetic mini modelを、recipe / operation log / model diff / package materialization / semantic runtime-viewer evidence / validator readiness / guided editor workflow / desktop-mobile save-load e2e まで一周させた。Real asset bytes、file picker/parser/archive、image decode、full renderer、pixel oracle、texture sampling correctness、standalone viewer、Cubism compatibility、public tutorial asset distributionは含めていない。
-- この文書はWave31以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave31では`Package Binary / File I/O Decision + Browser Byte Intake Pilot v0`を選定した。Wave22のmetadata-only binary boundaryを足場に、browser `<input type=file>`でactual bytesを受け、digest / byteLength / mediaType / rights / provenance / availabilityをpackage-local binary boundary、validator、Editor、desktop-mobile e2eへ載せる計画である。PSD parser、PNG/image decode、archive import/export、drag-drop、File System Access API、external dependency、full renderer、pixel oracle、Cubism compatibilityは含めない。
+- Wave31で`Package Binary / File I/O Decision + Browser Byte Intake Pilot v0`は`implementation-proven`になった。Browser `<input type=file>`でactual bytesを受け、digest / byteLength / mediaType / rights / provenance / availabilityをpackage-local current-session binary boundary、validator、Editor、desktop-mobile e2eへ載せた。PSD parser、PNG/image decode、archive import/export、drag-drop、File System Access API、external dependency、full renderer、pixel oracle、Cubism compatibility、public asset distribution、persistent binary storage guaranteeは含めていない。
+- この文書はWave32以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -50,6 +52,7 @@ Wave30完了後、以下はimplementation-provenとして扱ってよい。
 - Part / Texture / Layer Tree Workflow v1。`createPart` / `updatePart` / `setDrawablePart` / `setDrawableTexture` operation、semantic part hierarchy、drawable part membership、existing texture atlas assignment、editor selection / lock / editor-only hide、validator diagnostics、rights-clean contract fixture、Preview / Viewer evidence、desktop/mobile save-load e2e smokeはWave28で一段閉じた。
 - Canvas Mesh Editing v1。canvas/SVG selection、single/multi-vertex translate、semantic Preview / Viewer / Runtime mesh evidence、validator topology diagnostics、contract fixture、desktop/mobile save-load e2e smokeはWave29で一段閉じた。
 - Tutorial-like MVP Mini Model v0。rights-clean synthetic mini model recipe、operation log/model diff/package materialization、semantic runtime-viewer evidence、validator readiness、guided editor workflow、desktop/mobile save-load e2e smokeはWave30で一段閉じた。
+- Package Binary / File I/O Decision + Browser Byte Intake Pilot v0。browser `<input type=file>` actual-byte intake、package-local current-session byte registration、validator byte availability diagnostics、truthful save/load reupload state、byte-only local sample fixture、desktop/mobile e2e smokeはWave31で一段閉じた。
 
 一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、file picker、archive import/export、actual binary upload、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
@@ -66,8 +69,8 @@ Wave30完了後、以下はimplementation-provenとして扱ってよい。
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| Actual binary byte intake | Wave22はmetadataとin-memory boundaryまで。editor uploadやpersistent byte round-tripはない。 | 進めるなら、既存binary validatorを使った小さなBrowser File API byte-intake pilotから始める。 | 必要。 |
-| File picker / drag-drop boundary | production source intakeに`FileReader`、`showOpenFilePicker`、file inputがない。 | まず`<input type=file>`中心。File System Access APIやdrag-dropは後回し。 | 必要。 |
+| Persistent binary byte round-trip | Wave31でactual bytesのcurrent-session intakeは完了したが、browser-local reload後にraw bytesは永続化されずreuploadが必要。 | archive/filesystem/project import-export戦略と分けて決める。IndexedDB/base64/localStorageなどの方針は独立判断。 | 必要。 |
+| File picker / drag-drop boundary | Wave31で`<input type=file>`は完了したが、drag-drop、File System Access API、directory pickerは未実装。 | 追加するならUX/security/storage方針を先に決める。 | 必要。 |
 | Package archive import/export | browser-local save/loadはあるが、package archive writer/importerがない。 | byte intakeとは別にarchive戦略を決める。ZIP dependencyは承認対象。 | 必要。 |
 | PNG decode / texture bytes materialization | texture previewはdeterministicまたはreference-backedで、実PNG bytesのdecode/renderはない。 | byte intakeとrights-clean fixture policyの後に回す。 | 必要。 |
 | Real PSD parser adapter | 現在のPSD pathはtrusted adapter metadataを受けるだけで、bytesをparseしない。 | byte intake、dependency policy、parser license/provenance review後の大きなwaveとして扱う。 | 必要。 |
@@ -141,13 +144,18 @@ Wave30では、public tutorial asset、demo capture scene、full renderer、pixe
 
 詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave30-plan.md`に固定した。完了根拠は`discussion/implementation/waves/wave30/wave30-final-report.md`と`discussion/implementation/reviews/wave30/wave30-clean-integration-review.md`に記録した。
 
-## Wave31以降の推奨選択肢
+## Wave31完了範囲
 
-1. **Package Binary/File I/O Decision + Byte Intake Pilot v0**
-   real assetsを優先するならこちら。ただし最小scopeは`<input type=file>`で任意binaryを受け、既存package-local binary file-setとbinary validatorでdigest / byteLength / mediaType / rights / provenanceを証明するところまで。PSD parser、PNG decode、archive dependency、public demo asset policyは入れない。
+**Package Binary/File I/O Decision + Byte Intake Pilot v0**
+Wave31で完了済み。最小scopeは`<input type=file>`で任意binaryを受け、既存package-local binary file-setとbinary validatorでdigest / byteLength / mediaType / rights / provenanceを証明するところまで。PSD parser、PNG decode、archive dependency、public demo asset policy、persistent binary storage guaranteeは入れていない。完了根拠は`discussion/implementation/waves/wave31/wave31-final-report.md`と`discussion/implementation/reviews/wave31/wave31-clean-integration-review.md`に記録した。
 
-2. **Full layer tree / part tree UX expansion**
+## Wave32以降の推奨選択肢
+
+1. **Full layer tree / part tree UX expansion**
    Wave28のminimum form-based workflowを足場に、drag-and-drop reorder、rename/delete/reparent completeness、multi-select bulk operations、group transform、または canvas/tree direct manipulation へ広げる候補。real image decodeやrenderer workとは分ける。
+
+2. **Package archive / persistent binary storage decision**
+   Wave31のcurrent-session byte intakeを足場に、package archive writer/importer、filesystem import/export、browser persistence strategy、binary storage policyを決める候補。PSD parserやimage decodeとは分ける。
 
 3. **Mesh topology / UV editor expansion**
    Wave29がCanvas Mesh Editing v1を閉じた後の候補。vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingへ広げる場合は、renderer/pixel oracleやtexture bytesとは別waveで扱う。
@@ -161,8 +169,8 @@ Wave30では、public tutorial asset、demo capture scene、full renderer、pixe
 ## 関連wave前に確認すべき判断
 
 1. Wave27のmask / clipping / opacityとWave28のpart / texture / layer tree workflowはsemantic evidenceで閉じた。次にpixel/full rendererへ進むか、引き続きsemantic authoring / editor workflowを優先するか。
-2. asset I/Oはdecision-onlyから始めるか、minimal actual binary byte-intake pilotまで進めるか。
-3. file inputを許可する場合、`<input type=file>`に限定するか、drag-drop / File System Access APIまで含めるか。
+2. Wave31のbyte-intake pilot後、次はpersistent binary storage / archive import-exportへ進めるか、別のeditor workflowへ戻るか。
+3. file input拡張を許可する場合、drag-drop / File System Access API / directory pickerまで含めるか。
 4. archive import/exportを今project-defined ZIPとして始めるか、browser-local binary byte intake後まで延期するか。
 5. 実PSD/PNG/image fixtureとdemo/public assetに対するrights-clean policyをどこまで厳格にするか。
 6. Wave30のtutorial-like MVP modelはsynthetic mini modelとして完了済み。次にpublic tutorial asset / demo captureへ進む場合、最小仕様とrights policyを改めて決める必要がある。
@@ -170,6 +178,6 @@ Wave30では、public tutorial asset、demo capture scene、full renderer、pixe
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

@@ -25,6 +25,7 @@ export * from "./source-asset-mutations.js";
 export * from "./texture-asset-selectors.js";
 export * from "./texture-asset-mutations.js";
 export * from "./binary-asset-references.js";
+export * from "./binary-byte-registration.js";
 export * from "./keyform-selectors.js";
 export * from "./keyform-mutations.js";
 export * from "./dynamics-mutations.js";

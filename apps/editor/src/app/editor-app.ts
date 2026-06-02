@@ -122,8 +122,12 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.resetDynamicsPreview();
           render();
         },
-        onConfirmSourceIntakeDraft(draft) {
-          workflow.commitSourceIntakeDraft(draft);
+        async onConfirmSourceIntakeDraft(draft, selectedFileBytes) {
+          if (selectedFileBytes === undefined) {
+            workflow.commitSourceIntakeDraft(draft);
+          } else {
+            await workflow.commitSourceIntakeDraftWithSelectedFile(draft, selectedFileBytes);
+          }
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },

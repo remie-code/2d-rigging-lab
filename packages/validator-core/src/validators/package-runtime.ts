@@ -9,6 +9,10 @@ import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 import { buildValidationReport, createDefaultEvidence } from "../report-builder.js";
 import type { ValidationReportDto } from "../validation-report.js";
 import { validateSourceAssetRightsAndProvenance } from "./asset-rights.js";
+import {
+  validateByteIntakePreflight,
+  type ByteIntakePreflightInput
+} from "./byte-intake-preflight.js";
 import { validatePackageBinaryAssets } from "./binary-assets.js";
 import { validateDrawableProvenanceReferences } from "./drawable-provenance.js";
 import { validateDrawableReferences } from "./drawable-references.js";
@@ -36,6 +40,7 @@ export interface PackageRuntimeValidationInput {
 export interface PackageRuntimeBinaryValidationInput extends PackageRuntimeValidationInput {
   readonly binaryFileSet?: PackageInMemoryFileSet;
   readonly binaryAssetIndex?: BinaryAssetIndexFileDto;
+  readonly byteIntakePreflight?: ByteIntakePreflightInput;
 }
 
 export const validatePackageRuntime = (input: PackageRuntimeValidationInput): ValidationReportDto => {
@@ -102,7 +107,10 @@ export const validatePackageRuntimeWithBinaryAssets = async (
         packageDocument: packageResult.packageDocument,
         binaryFileSet: input.binaryFileSet ?? [],
         ...(input.binaryAssetIndex === undefined ? {} : { binaryAssetIndex: input.binaryAssetIndex })
-      }))
+      })),
+      ...(input.byteIntakePreflight === undefined
+        ? []
+        : await validateByteIntakePreflight(input.byteIntakePreflight))
     ];
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()

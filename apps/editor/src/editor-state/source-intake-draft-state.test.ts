@@ -4,6 +4,7 @@ import {
   confirmSourceIntakeDraft,
   createEmptySourceIntakeDraftState,
   createPsdAdapterProfileSourceIntakeDraftState,
+  createSourceIntakeSelectedFileDraft,
   projectSourceIntakeDraftViewModel
 } from "./index.js";
 
@@ -200,6 +201,128 @@ describe("source intake draft state", () => {
       canConfirmDraft: true
     });
     expect(JSON.stringify(viewModel)).not.toMatch(/file picker|parsed from bytes|raster extraction/i);
+  });
+
+  it("projects a browser selected file draft as ephemeral metadata before commit wiring", () => {
+    const selectedFile = createSourceIntakeSelectedFileDraft({
+      name: " sample_model.psd ",
+      size: 4096,
+      type: " application/vnd.adobe.photoshop "
+    });
+    const confirmed = confirmSourceIntakeDraft({
+      intakeMode: "psdAdapterProfile",
+      sourceAssetId: "src_selected_psd",
+      manifestPath: "assets/sources/selected/source.psd",
+      contentHash: "",
+      defaultPartId: "part_root",
+      placementPolicy: "use-metadata",
+      psdProfile: {
+        adapterName: "manual-psd-profile-entry",
+        canvasWidth: 2048,
+        canvasHeight: 3072
+      },
+      selectedFile,
+      layers: [
+        {
+          sourceLayerId: "layer_face",
+          originalName: "Face",
+          normalizedName: "face",
+          groupPath: ["Root", "Head"],
+          bounds: { x: 320, y: 240, width: 512, height: 512 },
+          visibleInSource: true,
+          opacityInSource: 0.8,
+          role: "editableLayer",
+          unsupportedFeatures: [],
+          texturePreviewReference: "assets/sources/selected/face.preview.png",
+          textureId: "tex_face",
+          targetPartId: "part_root"
+        }
+      ],
+      rights: {
+        rightsStatus: "needs_review",
+        creator: "Clean Artist",
+        license: "private-review",
+        redistributionAllowed: false,
+        aiUsed: false,
+        sourceUrl: "",
+        notes: "Selected through browser file input for draft metadata only."
+      }
+    });
+    const viewModel = projectSourceIntakeDraftViewModel(confirmed);
+
+    expect(confirmed).toMatchObject({
+      status: "confirmed",
+      selectedFile: {
+        fileName: "sample_model.psd",
+        byteLength: 4096,
+        declaredMediaType: "application/vnd.adobe.photoshop",
+        storageStatus: "ephemeral-browser-memory-v1",
+        availabilityStatus: "selected-in-current-browser-session-v1",
+        commitStatus: "not-committed-v1"
+      },
+      diagnostics: []
+    });
+    expect(viewModel.selectedFileStatusLabel).toBe("Browser file selected");
+    expect(viewModel.selectedFile).toMatchObject({
+      fileNameLabel: "sample_model.psd",
+      byteLengthLabel: "4096 bytes",
+      declaredMediaTypeLabel: "application/vnd.adobe.photoshop",
+      storageTruthLabel:
+        "Bytes are selected in browser memory only; not committed to package; reupload is required after reload.",
+      rightsDraftLabel: "Needs review / private-review",
+      provenanceDraftLabel: "Clean Artist / No AI use"
+    });
+    expect("operationType" in confirmed).toBe(false);
+    expect(JSON.stringify(viewModel)).not.toMatch(/parsed from bytes|decoded from bytes|archive import|renderer correctness/i);
+  });
+
+  it("keeps selected file validation deterministic before confirming the draft", () => {
+    const rejected = confirmSourceIntakeDraft({
+      sourceAssetId: "src_selected",
+      manifestPath: "assets/sources/selected/source.bin",
+      contentHash: "",
+      defaultPartId: "part_root",
+      placementPolicy: "use-metadata",
+      selectedFile: {
+        fileName: "",
+        byteLength: -1,
+        declaredMediaType: "",
+        storageStatus: "ephemeral-browser-memory-v1",
+        availabilityStatus: "selected-in-current-browser-session-v1",
+        commitStatus: "not-committed-v1"
+      },
+      layers: [
+        {
+          sourceLayerId: "layer_body",
+          originalName: "Body",
+          normalizedName: "body",
+          groupPath: ["Root"],
+          bounds: { x: 0, y: 0, width: 64, height: 64 },
+          visibleInSource: true,
+          opacityInSource: 1,
+          role: "editableLayer",
+          unsupportedFeatures: [],
+          texturePreviewReference: "assets/textures/body.preview.png",
+          textureId: "tex_body",
+          targetPartId: "part_root"
+        }
+      ],
+      rights: {
+        rightsStatus: "cleared",
+        creator: "Clean Artist",
+        license: "original-private-use",
+        redistributionAllowed: false,
+        aiUsed: false,
+        sourceUrl: "",
+        notes: ""
+      }
+    });
+
+    expect(rejected.status).toBe("idle");
+    expect(rejected.diagnostics).toEqual([
+      "Selected file name is required.",
+      "Selected file byte length must be zero or greater."
+    ]);
   });
 
   it("keeps manual PSD profile validation local and wraps long diagnostics as strings", () => {

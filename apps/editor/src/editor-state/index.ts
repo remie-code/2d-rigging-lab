@@ -1,5 +1,6 @@
 export * from "./ai-approval-state.js";
 export * from "./ai-transcript-summary.js";
+export * from "./binary-byte-intake-state.js";
 export * from "./create-drawable-form-state.js";
 export * from "./create-parameter-form-state.js";
 export * from "./composition-authoring-state.js";

@@ -20,7 +20,7 @@
     "sourceAssetId": "src_psd_import_happy_path",
     "fileRef": {
       "packageRelativePath": "assets/sources/psd-import-happy-path/source-reference.psd",
-      "contentHash": "metadata:sample-model-header-shape-synthetic-adapter-result"
+      "contentHash": "metadata:synthetic-psd-profile-fixture-v1"
     },
     "importProfile": "layered-character-psd-profile-v1",
     "requestedLayerRoles": {
@@ -29,7 +29,7 @@
     "adapterResult": {
       "schemaVersion": "psd-adapter-result-v1",
       "sourceProfile": "layered-character-psd-profile-v1",
-      "adapterName": "synthetic-sample-model-profile-fixture",
+      "adapterName": "synthetic-parser-free-profile-fixture",
       "canvas": {
         "width": 2048,
         "height": 3072,
@@ -105,19 +105,20 @@
       "unsupportedFeatures": [],
       "diagnostics": [
         {
-          "checkId": "adapter.sampleHeaderFacts",
+          "checkId": "adapter.syntheticProfileFixture",
           "severity": "info",
-          "message": "Synthetic adapter result follows the rights-cleared sample PSD header shape without fixture PSD bytes.",
+          "message": "Synthetic adapter result is fixture-authored metadata only; no local sample PSD bytes are parsed, decoded, or used as a PSD semantic oracle.",
           "source": {
             "kind": "document",
-            "path": "/sample-characterization/header"
+            "path": "/fixture/synthetic-profile"
           },
           "evidence": [
-            "canvas=2048x3072",
-            "channels=4",
-            "depth=8",
-            "colorMode=RGB",
-            "psdBytesFixture=false"
+            "fixtureAuthoredMetadata=true",
+            "localSampleByteOnly=true",
+            "psdBytesFixture=false",
+            "parserUsed=false",
+            "decodeUsed=false",
+            "rasterExtractionUsed=false"
           ]
         }
       ]

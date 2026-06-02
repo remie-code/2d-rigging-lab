@@ -1,4 +1,8 @@
 import { createEmptyAiApprovalState, type AiApprovalState } from "./ai-approval-state.js";
+import {
+  createEmptyEditorBinaryByteIntakeState,
+  type EditorBinaryByteIntakeState
+} from "./binary-byte-intake-state.js";
 import { createEmptyDrawableFormState, type CreateDrawableFormState } from "./create-drawable-form-state.js";
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
 import {
@@ -71,6 +75,7 @@ export interface EditorSemanticState {
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly sourceIntakeDraft: SourceIntakeDraftState;
+  readonly binaryByteIntake: EditorBinaryByteIntakeState;
   readonly sourceAssets: readonly SourceAssetDto[];
   readonly textureAtlas: TextureAtlasFileDto | null;
   readonly lastOperationResult: OperationResultSummaryState | null;
@@ -102,6 +107,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),
   sourceIntakeDraft: createEmptySourceIntakeDraftState(),
+  binaryByteIntake: createEmptyEditorBinaryByteIntakeState(),
   sourceAssets: [],
   textureAtlas: null,
   lastOperationResult: null,

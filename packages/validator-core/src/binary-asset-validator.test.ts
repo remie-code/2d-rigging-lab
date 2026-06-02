@@ -8,9 +8,11 @@ import {
   BinaryAssetIndexFileSchema,
   BinaryAssetReferenceSchema,
   PackageDocumentSchema,
+  createPackageBinaryByteIntakeSummary,
   computePackageBinarySha256Digest,
   createPackageBinaryFileEntry,
   createPackageInMemoryFileSet,
+  verifyPackageBinaryAssetBytes,
   type BinaryAssetEntryDto,
   type BinaryAssetIndexFileDto,
   type BinaryAssetReferenceDto,
@@ -20,6 +22,10 @@ import {
 
 import { defaultCheckCatalog } from "./check-catalog.js";
 import type { ValidationReportDto } from "./validation-report.js";
+import {
+  validateByteIntakePreflight,
+  type ByteIntakeAssetPreflightInput
+} from "./validators/byte-intake-preflight.js";
 import { validatePackageRuntimeWithBinaryAssets } from "./validators/package-runtime.js";
 
 const SOURCE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
@@ -34,6 +40,7 @@ describe("binary asset validator diagnostics", () => {
     expect(defaultCheckCatalog.has("binary.mediaTypeMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("binary.assetIdMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("binary.referenceMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("byteIntake.unsupportedClaim")).toBe(true);
     expect(defaultCheckCatalog.has("rights.binaryProvenanceMissing")).toBe(true);
     expect(defaultCheckCatalog.has("rights.binaryRightsMissing")).toBe(true);
     expect(defaultCheckCatalog.has("rights.binaryProvenanceMismatch")).toBe(true);
@@ -280,6 +287,212 @@ describe("binary asset validator diagnostics", () => {
       "actual=assets/textures/other-body.bin"
     ]));
   });
+
+  it("keeps valid byte-intake metadata as a validation pass", async () => {
+    const byteIntakeAsset = await createByteIntakeAsset({
+      binaryAssetId: "bin_byte_intake_valid",
+      packageRelativePath: "assets/sources/selected.psd",
+      bytes: SOURCE_BYTES,
+      mediaType: "application/octet-stream",
+      fileMediaType: "application/octet-stream",
+      provenanceId: "prov_source_binary",
+      rightsAssetId: "src_binary"
+    });
+
+    await expect(validateByteIntakePreflight({
+      assets: [byteIntakeAsset],
+      unsupportedClaims: [
+        {
+          claimKind: "parser",
+          status: "notClaimed"
+        }
+      ]
+    })).resolves.toEqual([]);
+
+    const verifiedRef = await createBinaryAssetReference({
+      binaryAssetId: "bin_byte_intake_summary",
+      packageRelativePath: "assets/sources/summary.psd",
+      bytes: SOURCE_BYTES,
+      mediaType: "application/octet-stream",
+      provenanceId: "prov_source_binary",
+      rightsAssetId: "src_binary"
+    });
+    const verificationReport = await verifyPackageBinaryAssetBytes(
+      createPackageInMemoryFileSet([
+        createPackageBinaryFileEntry({
+          path: verifiedRef.packageRelativePath,
+          bytes: SOURCE_BYTES,
+          mediaType: verifiedRef.mediaType,
+          binaryAssetId: verifiedRef.binaryAssetId
+        })
+      ]),
+      verifiedRef
+    );
+    await expect(validateByteIntakePreflight({
+      assets: [{
+        intakeSummary: createPackageBinaryByteIntakeSummary({
+          filename: "summary.psd",
+          binaryAssetRef: verifiedRef,
+          verificationReport
+        }),
+        targetKind: "sourceAsset",
+        targetId: "src_binary"
+      }]
+    })).resolves.toEqual([]);
+
+    const report = await validatePackageRuntimeWithBinaryAssets({
+      packageDocument: createPackageDocument(),
+      byteIntakePreflight: {
+        assets: [byteIntakeAsset]
+      },
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("pass");
+    expect(report.checks).toEqual([]);
+  });
+
+  it("reports byte-intake missing bytes, mismatches, rights gaps, and unsupported parser/decode/archive claims", async () => {
+    const expectedDigest = await computeDigest(SOURCE_BYTES);
+    const mismatchAsset = await createByteIntakeAsset({
+      binaryAssetId: "bin_byte_intake_mismatch",
+      packageRelativePath: "assets/sources/mismatch.psd",
+      bytes: SOURCE_BYTES,
+      mediaType: "image/vnd.adobe.photoshop",
+      fileMediaType: "application/octet-stream",
+      provenanceId: "prov_source_binary",
+      rightsAssetId: "src_binary",
+      byteOverrides: new Uint8Array([0x61])
+    });
+
+    const checks = await validateByteIntakePreflight({
+      assets: [
+        {
+          binaryAssetId: "bin_byte_intake_missing",
+          packageRelativePath: "assets/sources/missing.psd",
+          digest: expectedDigest,
+          byteLength: SOURCE_BYTES.byteLength,
+          mediaType: "application/octet-stream",
+          fileMediaType: "application/octet-stream",
+          bytesAvailability: "requiresReupload",
+          sourceFilename: "missing.psd",
+          targetKind: "sourceAsset",
+          targetId: "src_binary",
+          targetPath: "/byteIntake/assets/0"
+        },
+        mismatchAsset
+      ],
+      unsupportedClaims: [
+        {
+          claimKind: "parser",
+          status: "present",
+          source: "source-intake",
+          evidence: ["parserClaim=psdParser"]
+        },
+        {
+          claimKind: "imageDecode",
+          status: "required",
+          source: "source-intake",
+          evidence: ["decodeClaim=pngDecode"]
+        },
+        {
+          claimKind: "archive",
+          status: "unsupported",
+          source: "source-intake",
+          evidence: ["archiveImportExport=false"]
+        }
+      ]
+    });
+
+    expect(checks.map((check) => check.checkId)).toEqual([
+      "rights.binaryProvenanceMissing",
+      "rights.binaryRightsMissing",
+      "binary.bytesMissing",
+      "binary.byteLengthMismatch",
+      "binary.mediaTypeMismatch",
+      "binary.digestMismatch",
+      "byteIntake.unsupportedClaim",
+      "byteIntake.unsupportedClaim",
+      "byteIntake.unsupportedClaim"
+    ]);
+
+    expect(expectCheckByIdFromChecks(checks, "binary.bytesMissing")).toMatchObject({
+      checkId: "binary.bytesMissing",
+      targetPath: "/byteIntake/assets/0",
+      message: "Byte intake asset bin_byte_intake_missing has no actual bytes available for validation."
+    });
+    expect(expectCheckByIdFromChecks(checks, "binary.bytesMissing").evidence).toEqual(expect.arrayContaining([
+      "bytesAvailability=requiresReupload",
+      "reason=byte-intake-bytes-requiresReupload",
+      "digestVerification=skipped"
+    ]));
+
+    expect(expectCheckByIdFromChecks(checks, "binary.byteLengthMismatch")).toMatchObject({
+      targetPath: "/byteIntake/assets/1"
+    });
+    expect(expectCheckByIdFromChecks(checks, "binary.byteLengthMismatch").evidence).toEqual(expect.arrayContaining([
+      "expectedByteLength=3",
+      "actualByteLength=1",
+      "verificationIssueCode=binary.byteLength.mismatch"
+    ]));
+    expect(expectCheckByIdFromChecks(checks, "binary.mediaTypeMismatch").evidence).toEqual(expect.arrayContaining([
+      "expectedMediaType=image/vnd.adobe.photoshop",
+      "actualMediaType=application/octet-stream",
+      "mediaTypeSource=file-metadata"
+    ]));
+    expect(expectCheckByIdFromChecks(checks, "binary.digestMismatch").evidence).toEqual(expect.arrayContaining([
+      "verificationIssueCode=binary.digest.mismatch",
+      "referenceSource=byteIntake.preflight"
+    ]));
+    expect(expectCheckByIdFromChecks(checks, "rights.binaryProvenanceMissing").evidence).toEqual(expect.arrayContaining([
+      "provenanceId=missing",
+      "reason=byte-intake-provenance-missing"
+    ]));
+    expect(expectCheckByIdFromChecks(checks, "rights.binaryRightsMissing").evidence).toEqual(expect.arrayContaining([
+      "rightsAssetId=missing",
+      "reason=byte-intake-rights-missing"
+    ]));
+
+    const unsupportedChecks = checks.filter((check) => check.checkId === "byteIntake.unsupportedClaim");
+    expect(unsupportedChecks).toEqual([
+      expect.objectContaining({
+        status: "fail",
+        severity: "blocking",
+        targetPath: "/byteIntake/unsupportedClaims/0",
+        evidence: [
+          "claimKind=parser",
+          "claimStatus=present",
+          "claimSource=source-intake",
+          "parserClaim=psdParser"
+        ]
+      }),
+      expect.objectContaining({
+        status: "fail",
+        severity: "blocking",
+        targetPath: "/byteIntake/unsupportedClaims/1",
+        evidence: [
+          "claimKind=imageDecode",
+          "claimStatus=required",
+          "claimSource=source-intake",
+          "decodeClaim=pngDecode"
+        ]
+      }),
+      expect.objectContaining({
+        status: "not_applicable",
+        severity: "info",
+        targetPath: "/byteIntake/unsupportedClaims/2",
+        evidence: [
+          "claimKind=archive",
+          "claimStatus=unsupported",
+          "claimSource=source-intake",
+          "archiveImportExport=false"
+        ]
+      })
+    ]);
+    for (const check of checks) {
+      expect(check.message).not.toMatch(/raster|composit/i);
+    }
+  });
 });
 
 interface BinaryAssetReferenceInput {
@@ -309,6 +522,31 @@ const createBinaryAssetReference = async (
     rightsAssetId: input.rightsAssetId
   });
 };
+
+const createByteIntakeAsset = async (input: {
+  readonly binaryAssetId: string;
+  readonly packageRelativePath: string;
+  readonly bytes: PackageBinaryBytes;
+  readonly mediaType: string;
+  readonly fileMediaType: string;
+  readonly provenanceId: string;
+  readonly rightsAssetId: string;
+  readonly byteOverrides?: PackageBinaryBytes;
+}): Promise<ByteIntakeAssetPreflightInput> => ({
+  binaryAssetId: input.binaryAssetId,
+  packageRelativePath: input.packageRelativePath,
+  digest: await computeDigest(input.bytes),
+  byteLength: input.bytes.byteLength,
+  mediaType: input.mediaType,
+  fileMediaType: input.fileMediaType,
+  provenanceId: input.provenanceId,
+  rightsAssetId: input.rightsAssetId,
+  sourceFilename: getFileName(input.packageRelativePath),
+  bytesAvailability: "available",
+  bytes: input.byteOverrides ?? input.bytes,
+  targetKind: "sourceAsset",
+  targetId: "src_binary"
+});
 
 const createBinaryAssetEntryFromReference = (
   reference: BinaryAssetReferenceDto,
@@ -364,6 +602,24 @@ const expectCheckById = (
   }
 
   return check;
+};
+
+const expectCheckByIdFromChecks = (
+  checks: readonly ValidationReportDto["checks"][number][],
+  checkId: string
+): ValidationReportDto["checks"][number] => {
+  const check = checks.find((candidate) => candidate.checkId === checkId);
+
+  if (check === undefined) {
+    throw new Error(`Expected validation check ${checkId}. Found: ${checks.map((candidate) => candidate.checkId).join(", ")}`);
+  }
+
+  return check;
+};
+
+const getFileName = (path: string): string => {
+  const pathParts = path.split("/");
+  return pathParts[pathParts.length - 1] ?? path;
 };
 
 const createPackageDocument = (input: {

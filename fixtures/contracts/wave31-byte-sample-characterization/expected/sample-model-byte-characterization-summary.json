@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "wave31-byte-sample-characterization-summary-v1",
+  "fixtureId": "wave31-byte-sample-characterization",
+  "source": {
+    "path": "test_data/sample_model.psd",
+    "role": "local-byte-intake-sample-v1",
+    "userProvided": true,
+    "rightsStatus": "cleared",
+    "localTestsOnly": true,
+    "redistributionAllowed": false
+  },
+  "byteEvidence": {
+    "byteLength": 22406225,
+    "digest": {
+      "algorithm": "sha256",
+      "hex": "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+    },
+    "mediaTypeExpectation": {
+      "declaredMediaType": "application/octet-stream",
+      "fallbackWhenBrowserTypeEmpty": true
+    }
+  },
+  "truthfulness": {
+    "fixtureContainsSampleBytes": false,
+    "psdParserUsed": false,
+    "imageDecodeUsed": false,
+    "rasterExtractionUsed": false,
+    "psdSemanticFactsClaimed": false,
+    "publicDistributionClaimed": false
+  },
+  "downstreamUse": {
+    "allowed": [
+      "byte-intake fixture basis",
+      "browser file-input e2e local input basis",
+      "digest and byteLength oracle",
+      "declared media type fallback oracle",
+      "rights/provenance metadata basis"
+    ],
+    "forbidden": [
+      "PSD parser oracle",
+      "PSD layer or header semantic oracle",
+      "image decode oracle",
+      "raster or texture oracle",
+      "public sample asset distribution"
+    ]
+  }
+}

@@ -77,6 +77,7 @@ demo.unsafeDependencyClaim
 | Check ID | Phase | Severity default | Profile behavior | Related AC |
 |----------|-------|------------------|------------------|------------|
 | `pkg.schema.requiredFileMissing` | package_schema | blocking | all: fail | AC-MVP-013 |
+| `byteIntake.unsupportedClaim` | source_import | blocking | all: fail unless the claim is truthfully recorded as unsupported/not applicable | AC-MVP-015, AC-MVP-016 |
 | `asset.psd.unsupportedFeature` | source_import | warning | strict: needs_review/fail by feature | AC-MVP-003 |
 | `rights.provenanceMissing` | rights | error | acceptance: fail | AC-MVP-002 |
 | `ref.drawableTextureMissing` | reference | error | acceptance: fail if visible drawable | AC-MVP-004 |
@@ -212,6 +213,12 @@ Part / layer-tree validation rules:
 - `part.cycle` fires when package part hierarchy edges cannot be topologically ordered.
 - `part.drawableMembershipMismatch` fires when `drawable.partId` and `part.drawableIds` disagree or a part lists a missing drawable.
 - `editorState.staleReference` fires only for stale editor-only `selection`, `lockedIds`, or `editorHiddenIds` references. It must not change runtime semantics, must not hide runtime/package failures, and should remain warning-level unless an acceptance scenario explicitly promotes stale editor evidence to `needs_review`.
+
+Byte-intake preflight validation rules:
+
+- `binary.bytesMissing`, `binary.byteLengthMismatch`, `binary.digestMismatch`, `binary.digestUnsupported`, and `binary.mediaTypeMismatch` may be emitted by byte-intake preflight when actual selected bytes are missing or disagree with recorded intake metadata. Media type comparison is declared file metadata only; it is not image decode or parser evidence.
+- `rights.binaryProvenanceMissing` and `rights.binaryRightsMissing` fire when byte-intake metadata lacks provenance or rights identifiers before package-local binary asset registration.
+- `byteIntake.unsupportedClaim` fires when byte-intake evidence claims parser, image decode, or archive import/export support. Truthfully recording those capabilities as unsupported may produce a non-applicable informational diagnostic instead of a failure.
 
 ## Validation Profiles
 

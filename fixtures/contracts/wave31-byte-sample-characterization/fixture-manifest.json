@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave31-byte-sample-characterization",
+  "title": "Wave31 byte-only sample characterization",
+  "description": "Byte-only characterization basis for the workspace-local user-provided sample PSD. This fixture records deterministic byte length, SHA-256 digest, declared media type expectation, and rights/provenance basis only. It does not include, copy, parse, decode, rasterize, inspect layers, or derive image data from the PSD.",
+  "inputArtifacts": [
+    "../../../test_data/sample_model.psd"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "byteCharacterization",
+      "path": "expected/sample-model-byte-characterization-summary.json",
+      "id": "wave31-byte-sample-characterization-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "coversAC": [
+    "AC-MVP-002",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-SAMPLE-001"
+  ],
+  "modulesBlocked": [
+    "fixtures-contract-tests",
+    "editor-e2e"
+  ],
+  "updateRule": "requires-contract-review",
+  "sampleCharacterization": {
+    "sourcePath": "test_data/sample_model.psd",
+    "inputRole": "local-byte-intake-sample-v1",
+    "byteOnly": true,
+    "bytesCopiedIntoFixture": false,
+    "byteLength": 22406225,
+    "digest": {
+      "algorithm": "sha256",
+      "hex": "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+    },
+    "mediaTypeExpectation": {
+      "declaredMediaType": "application/octet-stream",
+      "browserFileTypeFallback": "Use application/octet-stream when browser File.type is empty or environment-specific.",
+      "notAParserSignal": true
+    }
+  },
+  "rightsAndProvenance": {
+    "source": "User-provided workspace-local sample for this repository's local verification work.",
+    "rightsStatus": "cleared",
+    "license": "user-provided-rights-cleared-local-test-fixture",
+    "redistributionAllowed": false,
+    "publicDistributionAllowed": false,
+    "aiUsed": false,
+    "provenanceBasis": "Wave31 basis treats test_data/sample_model.psd as rights-cleared local test input only."
+  },
+  "truthfulness": {
+    "psdBytesIncludedInFixture": false,
+    "psdBytesParsed": false,
+    "imageBytesDecoded": false,
+    "rasterExtractionClaimed": false,
+    "layerTreeClaimed": false,
+    "headerFactsClaimed": false,
+    "textureMaterializationClaimed": false,
+    "publicAssetDistributionClaimed": false
+  },
+  "nonGoals": [
+    "psd-parser",
+    "psd-layer-extraction",
+    "image-decode",
+    "raster-extraction",
+    "texture-materialization",
+    "photoshop-compatible-compositing",
+    "public-sample-distribution"
+  ]
+}

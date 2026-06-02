@@ -3,6 +3,10 @@ import {
   type EditorSemanticState
 } from "./editor-semantic-state.js";
 import {
+  projectEditorBinaryByteIntakeState,
+  type ProjectEditorBinaryByteIntakeStateInput
+} from "./binary-byte-intake-state.js";
+import {
   applyCreateDrawableDraftResult,
   projectCreateDrawableDefaults,
   projectCreateDrawableDefaultsForSourceSelection
@@ -74,6 +78,7 @@ export interface LoadedPackageSummaryInput {
   readonly parts?: readonly ModelPartDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
   readonly textureAtlas?: TextureAtlasFileDto;
+  readonly binaryByteIntake?: ProjectEditorBinaryByteIntakeStateInput;
   readonly editorState?: EditorStateFileDto;
   readonly tutorialReadinessPreflight?: TutorialReadinessPreflightState;
   readonly canvasSize?: {
@@ -98,6 +103,7 @@ export interface CommittedOperationSummaryInput {
   readonly meshes?: readonly MeshDto[];
   readonly sourceAssets?: readonly SourceAssetDto[];
   readonly textureAtlas?: TextureAtlasFileDto;
+  readonly binaryByteIntake?: ProjectEditorBinaryByteIntakeStateInput;
   readonly editorState?: EditorStateFileDto;
   readonly parts?: readonly ModelPartDto[];
   readonly canvasSize?: {
@@ -163,6 +169,7 @@ export const projectLoadedPackageState = (
     sourceIntakeDraft: createEmptySourceIntakeDraftState({
       defaultPartId: parts[0]?.partId ?? ""
     }),
+    binaryByteIntake: projectEditorBinaryByteIntakeState(input.binaryByteIntake),
     sourceAssets: input.sourceAssets ?? [],
     textureAtlas,
     previewParameters: projectPreviewParameterValues(input.parameters ?? []),
@@ -293,6 +300,10 @@ export const applyCommittedOperationSummary = (
         : state.pendingCreateParameter,
     pendingCreateDrawable,
     sourceAssets,
+    binaryByteIntake:
+      input.binaryByteIntake === undefined
+        ? state.binaryByteIntake
+        : projectEditorBinaryByteIntakeState(input.binaryByteIntake),
     textureAtlas,
     lastOperationResult: projectOperationResultSummary(input.result),
     operationLog: projectOperationLogSummary(input.operationLogEntries),

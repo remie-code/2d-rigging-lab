@@ -57,6 +57,13 @@ describe("source intake panel", () => {
       "Source intake mode"
     );
     expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
+      "Source file draft"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeFileInput)?.type).toBe("file");
+    expect(findByTestId(panel, editorTestIds.sourceIntakeSelectedFile)?.textContent).toContain(
+      "No browser file selected"
+    );
+    expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
       "PSD adapter/profile name"
     );
     expect(findByTestId(panel, editorTestIds.sourceIntakeForm)?.textContent).toContain(
@@ -252,6 +259,186 @@ describe("source intake panel", () => {
     });
   });
 
+  it("shows selected browser file metadata and confirms only the local draft", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" }),
+      (draft) => calls.push(draft)
+    );
+
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/source.psd");
+    setNamedFieldValue(panel, "sourceAssetId", "src_panel_selected_psd");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "private-review");
+    setNamedFieldValue(panel, "sourceLayerId.0", "layer_face");
+    setNamedFieldValue(panel, "originalName.0", "Face");
+    setNamedFieldValue(panel, "normalizedName.0", "face");
+    setNamedFieldValue(panel, "groupPath.0", "Root/Head");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "assets/sources/character/face.preview.png");
+    setNamedFieldValue(panel, "textureId.0", "tex_face");
+    setNamedFieldValue(panel, "targetPartId.0", "part_root");
+    setNamedFieldFiles(panel, "sourceFileDraft", [
+      {
+        name: "sample_model.psd",
+        size: 4096,
+        type: "application/vnd.adobe.photoshop"
+      }
+    ]);
+    findByTestId(panel, editorTestIds.sourceIntakeFileInput)?.emit("change");
+
+    const selectedFileSummary = findByTestId(panel, editorTestIds.sourceIntakeSelectedFile);
+    expect(selectedFileSummary?.textContent).toContain("sample_model.psd");
+    expect(selectedFileSummary?.textContent).toContain("4096 bytes");
+    expect(selectedFileSummary?.textContent).toContain("application/vnd.adobe.photoshop");
+    expect(selectedFileSummary?.textContent).toContain(
+      "Bytes are selected in browser memory only; not committed to package; reupload is required after reload."
+    );
+    expect(selectedFileSummary?.textContent).toContain("Needs review / private-review");
+    expect(selectedFileSummary?.textContent).toContain("Clean Artist / No AI use");
+    expect(selectedFileSummary?.textContent).not.toMatch(
+      /parsed from bytes|decoded from bytes|raster extraction|archive import/i
+    );
+
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      status: "confirmed",
+      intakeMode: "psdAdapterProfile",
+      sourceAssetId: "src_panel_selected_psd",
+      selectedFile: {
+        fileName: "sample_model.psd",
+        byteLength: 4096,
+        declaredMediaType: "application/vnd.adobe.photoshop",
+        storageStatus: "ephemeral-browser-memory-v1",
+        availabilityStatus: "selected-in-current-browser-session-v1",
+        commitStatus: "not-committed-v1"
+      },
+      diagnostics: []
+    });
+    expect("operationType" in (calls[0] as object)).toBe(false);
+  });
+
+  it("shows committed selected file bytes as current-session registered memory in panel and form summaries", () => {
+    const panel = createPanel({
+      ...createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" }),
+      selectedFile: {
+        fileName: "sample_model.psd",
+        byteLength: 4096,
+        declaredMediaType: "application/vnd.adobe.photoshop",
+        storageStatus: "package-local-current-session-memory-v1",
+        availabilityStatus: "available-package-local-bytes-v1",
+        commitStatus: "committed-to-package-binary-boundary-v1"
+      },
+      rights: {
+        rightsStatus: "cleared",
+        creator: "Clean Artist",
+        license: "private-review",
+        redistributionAllowed: false,
+        aiUsed: false,
+        sourceUrl: "",
+        notes: ""
+      },
+      diagnostics: []
+    });
+
+    const storageTruth =
+      "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload.";
+    const panelSummary = findByTestId(panel, editorTestIds.sourceIntakeSummary);
+    const selectedFileSummary = findByTestId(panel, editorTestIds.sourceIntakeSelectedFile);
+    expect(panelSummary?.textContent).toContain(storageTruth);
+    expect(panelSummary?.textContent).not.toContain("not committed to package");
+    expect(selectedFileSummary?.textContent).toContain("sample_model.psd");
+    expect(selectedFileSummary?.textContent).toContain(storageTruth);
+    expect(selectedFileSummary?.textContent).not.toContain("not committed to package");
+    expect(selectedFileSummary?.textContent).not.toMatch(
+      /parsed from bytes|decoded from bytes|raster extraction|archive import/i
+    );
+  });
+
+  it("passes selected browser file bytes to the confirm callback when the File exposes bytes", async () => {
+    const calls: Array<{
+      readonly draft: unknown;
+      readonly selectedFileBytes: unknown;
+    }> = [];
+    const panel = createPanel(
+      createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" }),
+      (draft, selectedFileBytes) => calls.push({ draft, selectedFileBytes })
+    );
+
+    setNamedFieldValue(panel, "manifestPath", "assets/sources/character/source.psd");
+    setNamedFieldValue(panel, "sourceAssetId", "src_panel_selected_psd");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    setNamedFieldValue(panel, "license", "private-review");
+    setNamedFieldValue(panel, "sourceLayerId.0", "layer_face");
+    setNamedFieldValue(panel, "originalName.0", "Face");
+    setNamedFieldValue(panel, "normalizedName.0", "face");
+    setNamedFieldValue(panel, "groupPath.0", "Root/Head");
+    setNamedFieldValue(panel, "texturePreviewReference.0", "assets/sources/character/face.preview.png");
+    setNamedFieldValue(panel, "textureId.0", "tex_face");
+    setNamedFieldValue(panel, "targetPartId.0", "part_root");
+    setNamedFieldFiles(panel, "sourceFileDraft", [
+      {
+        name: "sample_model.psd",
+        size: 3,
+        type: "application/vnd.adobe.photoshop",
+        arrayBuffer: async () => new Uint8Array([0x50, 0x53, 0x44]).buffer
+      }
+    ]);
+    findByTestId(panel, editorTestIds.sourceIntakeFileInput)?.emit("change");
+    findByTestId(panel, editorTestIds.sourceIntakeForm)?.emit("submit");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.draft).toMatchObject({
+      selectedFile: {
+        fileName: "sample_model.psd",
+        byteLength: 3,
+        declaredMediaType: "application/vnd.adobe.photoshop"
+      }
+    });
+    expect(calls[0]?.selectedFileBytes).toMatchObject({
+      fileName: "sample_model.psd",
+      declaredMediaType: "application/vnd.adobe.photoshop",
+      bytes: new Uint8Array([0x50, 0x53, 0x44])
+    });
+  });
+
+  it("refreshes selected file rights and provenance summary after rights draft edits", () => {
+    const panel = createPanel(
+      createPsdAdapterProfileSourceIntakeDraftState({ defaultPartId: "part_root" })
+    );
+
+    setNamedFieldFiles(panel, "sourceFileDraft", [
+      {
+        name: "sample_model.psd",
+        size: 4096,
+        type: "application/vnd.adobe.photoshop"
+      }
+    ]);
+    findByTestId(panel, editorTestIds.sourceIntakeFileInput)?.emit("change");
+
+    const selectedFileSummary = findByTestId(panel, editorTestIds.sourceIntakeSelectedFile);
+    expect(selectedFileSummary?.textContent).toContain("Needs review / No license");
+    expect(selectedFileSummary?.textContent).toContain("No creator / No AI use");
+
+    setNamedFieldValue(panel, "rightsStatus", "cleared");
+    findNamedField(panel, "rightsStatus")?.emit("change");
+    setNamedFieldValue(panel, "creator", "Clean Artist");
+    findNamedField(panel, "creator")?.emit("input");
+    setNamedFieldValue(panel, "license", "original-private-use");
+    findNamedField(panel, "license")?.emit("input");
+    setNamedFieldChecked(panel, "aiUsed", true);
+    findNamedField(panel, "aiUsed")?.emit("change");
+
+    expect(selectedFileSummary?.textContent).toContain("Cleared / original-private-use");
+    expect(selectedFileSummary?.textContent).toContain("Clean Artist / AI used");
+    expect(selectedFileSummary?.textContent).not.toMatch(
+      /parsed from bytes|decoded from bytes|raster extraction|archive import|renderer correctness/i
+    );
+  });
+
   it("keeps invalid draft input local and reports diagnostics", () => {
     const calls: unknown[] = [];
     const panel = createPanel(createEmptySourceIntakeDraftState(), (draft) => calls.push(draft));
@@ -431,6 +618,33 @@ const setNamedFieldChecked = (root: TestElement, name: string, checked: boolean)
   field.checked = checked;
 };
 
+const setNamedFieldFiles = (
+  root: TestElement,
+  name: string,
+  files: readonly TestFile[]
+): void => {
+  const field = findNamedField(root, name);
+  if (field === null) {
+    throw new Error(`Missing file field ${name}`);
+  }
+  field.files = createTestFileList(files);
+};
+
+interface TestFile {
+  readonly name: string;
+  readonly size: number;
+  readonly type: string;
+  readonly arrayBuffer?: () => Promise<ArrayBuffer>;
+}
+
+const createTestFileList = (files: readonly TestFile[]): FileList =>
+  ({
+    length: files.length,
+    item(index: number): File | null {
+      return (files[index] ?? null) as File | null;
+    }
+  }) as FileList;
+
 class TestFormData {
   private readonly fields = new Map<string, string[]>();
 
@@ -470,6 +684,7 @@ class TestElement {
   autocomplete = "";
   required = false;
   checked = false;
+  files: FileList | null = null;
   private ownText = "";
 
   constructor(readonly tagName: string) {}

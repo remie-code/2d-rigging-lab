@@ -41,6 +41,15 @@ export const sourceIntakeLayerRoles = [
 export type SourceIntakeLayerRole = (typeof sourceIntakeLayerRoles)[number];
 
 export type SourceIntakeDraftStatus = "idle" | "confirmed";
+export type SourceIntakeFileStorageStatus =
+  | "ephemeral-browser-memory-v1"
+  | "package-local-current-session-memory-v1";
+export type SourceIntakeFileAvailabilityStatus =
+  | "selected-in-current-browser-session-v1"
+  | "available-package-local-bytes-v1";
+export type SourceIntakeFileCommitStatus =
+  | "not-committed-v1"
+  | "committed-to-package-binary-boundary-v1";
 
 const textureIdPattern = /^tex_[A-Za-z0-9_-]+$/;
 const partIdPattern = /^part_[A-Za-z0-9_-]+$/;
@@ -83,6 +92,21 @@ export interface SourceIntakePsdProfileDraftState {
   readonly canvasHeight: number;
 }
 
+export interface SourceIntakeSelectedFileDraftState {
+  readonly fileName: string;
+  readonly byteLength: number;
+  readonly declaredMediaType: string;
+  readonly storageStatus: SourceIntakeFileStorageStatus;
+  readonly availabilityStatus: SourceIntakeFileAvailabilityStatus;
+  readonly commitStatus: SourceIntakeFileCommitStatus;
+}
+
+export interface SourceIntakeSelectedFileBytes {
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+  readonly declaredMediaType: string;
+}
+
 export interface SourceIntakeDraftState {
   readonly schemaVersion: typeof sourceIntakeDraftSchemaVersion;
   readonly status: SourceIntakeDraftStatus;
@@ -94,6 +118,7 @@ export interface SourceIntakeDraftState {
   readonly defaultPartId: string;
   readonly placementPolicy: SourceIntakePlacementPolicy;
   readonly psdProfile: SourceIntakePsdProfileDraftState;
+  readonly selectedFile: SourceIntakeSelectedFileDraftState | null;
   readonly layers: readonly SourceIntakeLayerDraftState[];
   readonly rights: SourceIntakeRightsDraftState;
   readonly diagnostics: readonly string[];
@@ -112,9 +137,27 @@ export interface SourceIntakeDraftInput {
   readonly defaultPartId: string;
   readonly placementPolicy: SourceIntakePlacementPolicy;
   readonly psdProfile?: SourceIntakePsdProfileDraftState;
+  readonly selectedFile?: SourceIntakeSelectedFileDraftState | null;
   readonly layers: readonly SourceIntakeLayerDraftState[];
   readonly rights: SourceIntakeRightsDraftState;
 }
+
+export interface SourceIntakeSelectedFileDraftInput {
+  readonly name: string;
+  readonly size: number;
+  readonly type?: string;
+}
+
+export const createSourceIntakeSelectedFileDraft = (
+  input: SourceIntakeSelectedFileDraftInput
+): SourceIntakeSelectedFileDraftState => ({
+  fileName: input.name.trim(),
+  byteLength: input.size,
+  declaredMediaType: input.type?.trim() ?? "",
+  storageStatus: "ephemeral-browser-memory-v1",
+  availabilityStatus: "selected-in-current-browser-session-v1",
+  commitStatus: "not-committed-v1"
+});
 
 export const createDefaultSourceIntakeLayerDraft = (
   index: number,
@@ -150,6 +193,7 @@ export const createEmptySourceIntakeDraftState = (
   defaultPartId: input.defaultPartId ?? "",
   placementPolicy: "use-metadata",
   psdProfile: createDefaultPsdProfileDraft(),
+  selectedFile: null,
   layers: [createDefaultSourceIntakeLayerDraft(0, input)],
   rights: {
     rightsStatus: "needs_review",
@@ -196,6 +240,7 @@ export const validateSourceIntakeDraft = (
     | "defaultPartId"
     | "placementPolicy"
     | "psdProfile"
+    | "selectedFile"
     | "layers"
     | "rights"
   >
@@ -234,6 +279,41 @@ export const validateSourceIntakeDraft = (
 
     if (!Number.isFinite(draft.psdProfile.canvasHeight) || draft.psdProfile.canvasHeight <= 0) {
       diagnostics.push("PSD canvas height must be greater than zero.");
+    }
+  }
+
+  if (draft.selectedFile !== null) {
+    if (draft.selectedFile.fileName.trim().length === 0) {
+      diagnostics.push("Selected file name is required.");
+    }
+
+    if (
+      !Number.isFinite(draft.selectedFile.byteLength) ||
+      draft.selectedFile.byteLength < 0
+    ) {
+      diagnostics.push("Selected file byte length must be zero or greater.");
+    }
+
+    if (
+      draft.selectedFile.storageStatus !== "ephemeral-browser-memory-v1" &&
+      draft.selectedFile.storageStatus !== "package-local-current-session-memory-v1"
+    ) {
+      diagnostics.push("Selected file storage status is not supported.");
+    }
+
+    if (
+      draft.selectedFile.availabilityStatus !==
+      "selected-in-current-browser-session-v1" &&
+      draft.selectedFile.availabilityStatus !== "available-package-local-bytes-v1"
+    ) {
+      diagnostics.push("Selected file availability status is not supported.");
+    }
+
+    if (
+      draft.selectedFile.commitStatus !== "not-committed-v1" &&
+      draft.selectedFile.commitStatus !== "committed-to-package-binary-boundary-v1"
+    ) {
+      diagnostics.push("Selected file commit status is not supported.");
     }
   }
 
@@ -330,6 +410,7 @@ const normalizeSourceIntakeDraft = (
   defaultPartId: input.defaultPartId.trim(),
   placementPolicy: input.placementPolicy,
   psdProfile: normalizePsdProfileDraft(input.psdProfile ?? createDefaultPsdProfileDraft()),
+  selectedFile: normalizeSelectedFileDraft(input.selectedFile ?? null),
   layers: input.layers.map(normalizeSourceIntakeLayer),
   rights: {
     rightsStatus: input.rights.rightsStatus,
@@ -355,6 +436,20 @@ const normalizePsdProfileDraft = (
   canvasWidth: profile.canvasWidth,
   canvasHeight: profile.canvasHeight
 });
+
+const normalizeSelectedFileDraft = (
+  selectedFile: SourceIntakeSelectedFileDraftState | null
+): SourceIntakeSelectedFileDraftState | null =>
+  selectedFile === null
+    ? null
+    : {
+        fileName: selectedFile.fileName.trim(),
+        byteLength: selectedFile.byteLength,
+        declaredMediaType: selectedFile.declaredMediaType.trim(),
+        storageStatus: selectedFile.storageStatus,
+        availabilityStatus: selectedFile.availabilityStatus,
+        commitStatus: selectedFile.commitStatus
+      };
 
 const normalizeSourceIntakeLayer = (
   layer: SourceIntakeLayerDraftState

@@ -51,7 +51,6 @@ import {
   createEditorStateFileFromEditorState,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
-  projectCreateDrawableDefaultsForSourceSelection,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   resetViewerParameterValues as resetViewerRuntimeParameterValues,
   selectTutorialTargetInEditorState,
@@ -62,6 +61,7 @@ import {
   type EditorWorkflowViewModel,
   type MeshCanvasHitSelectionCommand,
   type MeshCanvasVertexSelectionCommand,
+  type SourceIntakeSelectedFileBytes,
   type SourceIntakeDraftState,
   type TutorialSelectedTargetState
 } from "../editor-state/index.js";
@@ -77,9 +77,10 @@ import {
   projectLoadedEditorWorkflowState
 } from "./workflow-state-projection.js";
 import {
-  applySourceImportResultToDraft,
+  applySelectedFileBytesToSourceIntakeDraft,
+  createSourceIntakePsdImportCommandWithBinaryBytes,
   createSourceIntakeImportOperationRequest,
-  projectImportedSourceSelection,
+  projectWorkflowSourceIntakeCommitResult,
   type EditorWorkflowSourceImportCommitResult
 } from "./source-intake-workflow.js";
 import {
@@ -266,6 +267,10 @@ export interface EditorWorkflowController {
   toggleDrawableLayerLock(drawableId: string): EditorWorkflowLayerDraftResult;
   toggleDrawableEditorHidden(drawableId: string): EditorWorkflowLayerDraftResult;
   commitSourceIntakeDraft(draft: SourceIntakeDraftState): EditorWorkflowSourceImportCommitResult;
+  commitSourceIntakeDraftWithSelectedFile(
+    draft: SourceIntakeDraftState,
+    selectedFileBytes: SourceIntakeSelectedFileBytes
+  ): Promise<EditorWorkflowSourceImportCommitResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
@@ -544,42 +549,46 @@ export const createEditorWorkflowController = (
       const result = adapter.commitOperation(
         createSourceIntakeImportOperationRequest(draft, adapter.authoringSession.packageRevision)
       );
-      const committedState = applyEditorWorkflowCommitResult(state, adapter, result);
-      const importedSourceSelection = projectImportedSourceSelection(draft);
-      const sourceIntakeDraft = applySourceImportResultToDraft(draft, result);
-      const nextPendingCreateDrawable =
-        result.operationResult.status !== "committed"
-          ? committedState.pendingCreateDrawable
-          : projectCreateDrawableDefaultsForSourceSelection({
-              sourceAssets: committedState.sourceAssets,
-              parts: result.reloadedDocument.model.graph.parts,
-              drawables: result.reloadedDocument.model.drawables.drawables,
-              canvasSize: result.reloadedDocument.model.graph.canvasSize,
-              preferredSourceAssetId: importedSourceSelection.sourceAssetId,
-              ...(importedSourceSelection.sourceLayerId === undefined
-                ? {}
-                : { preferredSourceLayerId: importedSourceSelection.sourceLayerId }),
-              ...(importedSourceSelection.textureId === undefined
-                ? {}
-                : { preferredTextureId: importedSourceSelection.textureId }),
-              ...(importedSourceSelection.partId === undefined
-                ? {}
-                : { preferredPartId: importedSourceSelection.partId })
-            });
+      const outcome = projectWorkflowSourceIntakeCommitResult({
+        state,
+        adapter,
+        draft,
+        result
+      });
 
       latestDrawablePresetResult = null;
       latestSessionPersistenceResult = result;
-      state = {
-        ...committedState,
-        pendingCreateDrawable: nextPendingCreateDrawable,
-        sourceIntakeDraft
-      };
+      state = outcome.state;
       clearDynamicsPreview();
 
-      return {
-        status: result.operationResult.status === "committed" ? "committed" : "rejected",
+      return outcome.result;
+    },
+    async commitSourceIntakeDraftWithSelectedFile(draft, selectedFileBytes) {
+      if (draft.intakeMode !== "psdAdapterProfile") {
+        return this.commitSourceIntakeDraft(draft);
+      }
+
+      const draftWithSelectedFile = applySelectedFileBytesToSourceIntakeDraft(draft, selectedFileBytes);
+      const result = await adapter.commitImportPsdSourceAssetWithBinaryBytes(
+        createSourceIntakePsdImportCommandWithBinaryBytes(
+          draftWithSelectedFile,
+          adapter.authoringSession.packageRevision,
+          selectedFileBytes
+        )
+      );
+      const outcome = projectWorkflowSourceIntakeCommitResult({
+        state,
+        adapter,
+        draft: draftWithSelectedFile,
         result
-      };
+      });
+
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = result;
+      state = outcome.state;
+      clearDynamicsPreview();
+
+      return outcome.result;
     },
     commitSetRightsMetadata(command) {
       const result = adapter.commitSetRightsMetadata(command);

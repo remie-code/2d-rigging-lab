@@ -289,6 +289,14 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Binary asset reference metadata does not match its source manifest, texture atlas, or binary index owner."
   },
   {
+    checkId: "byteIntake.unsupportedClaim",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-015", "AC-MVP-016"],
+    description: "Byte-intake evidence claims parser, image decode, or archive support that Wave31 does not implement."
+  },
+  {
     checkId: "asset.psd.unsupportedFeature",
     phase: "source_import",
     defaultSeverity: "warning",

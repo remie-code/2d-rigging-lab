@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format";
+import { validatePackageRuntimeWithBinaryAssets } from "@private-2d-rigging-lab/validator-core";
 
 import { createBrowserProjectStore } from "../project-persistence/index.js";
 import type { StorageLike } from "../project-persistence/index.js";
@@ -415,6 +416,103 @@ describe("editor workflow controller", () => {
         psdProfile: expect.objectContaining({
           unsupportedFeatureCountLabel: "1 structured unsupported feature"
         })
+      })
+    ]));
+  });
+
+  it("commits selected PSD source bytes and makes browser-local reload require reupload", async () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+
+    const imported = await first.commitSourceIntakeDraftWithSelectedFile(
+      createPsdSourceIntakeDraft(),
+      {
+        fileName: "source.psd",
+        bytes: new Uint8Array([0x50, 0x53, 0x44]),
+        declaredMediaType: "application/octet-stream"
+      }
+    );
+    const saved = first.saveProject();
+    const sourceAsset = imported.result.reloadedDocument.assets.sourceManifest.sourceAssets.find(
+      (candidate) => candidate.sourceAssetId === "src_workflow_psd_profile"
+    );
+    const binaryLabel = first.viewModel.sourceIntake.importedAssets
+      .find((asset) => asset.sourceAssetId === "src_workflow_psd_profile")
+      ?.binaryAssetLabels.join("\n") ?? "";
+
+    expect(imported.status).toBe("committed");
+    expect(imported.result.operationType).toBe("importPsdSourceAsset");
+    expect(imported.result.operationLogJsonl).toContain("binaryAssetRef");
+    expect(imported.result.operationLogJsonl).not.toContain("selectedFile");
+    expect(sourceAsset?.binaryAssetRef).toMatchObject({
+      binaryAssetId: "bin_workflow_psd_profile_source",
+      packageRelativePath: "assets/sources/workflow/source.psd",
+      byteLength: 3,
+      mediaType: "application/octet-stream",
+      storageStatus: "stored-package-local-v1",
+      rightsAssetId: "src_workflow_psd_profile"
+    });
+    expect(first.state.sourceIntakeDraft.selectedFile).toMatchObject({
+      fileName: "source.psd",
+      byteLength: 3,
+      declaredMediaType: "application/octet-stream",
+      storageStatus: "package-local-current-session-memory-v1",
+      availabilityStatus: "available-package-local-bytes-v1",
+      commitStatus: "committed-to-package-binary-boundary-v1"
+    });
+    expect(first.state.binaryByteIntake.assets).toEqual([
+      expect.objectContaining({
+        binaryAssetId: "bin_workflow_psd_profile_source",
+        packageRelativePath: "assets/sources/workflow/source.psd",
+        availabilityStatus: "available-current-editor-session-v1",
+        validatorBytesAvailability: "available",
+        sourceFilename: "source.psd",
+        verificationStatus: "verified-pass-v1"
+      })
+    ]);
+    expect(binaryLabel).toContain("session availability available in current editor session memory");
+    expect(binaryLabel).toContain("validator bytesAvailability=available");
+    expect(binaryLabel).toContain("source filename source.psd");
+    expect(binaryLabel).toContain("byte intake verified-pass-v1");
+    expect(binaryLabel).not.toMatch(/parsed from bytes|decoded from bytes|raster extraction|archive import/i);
+    expect(saved.snapshot.packageFilePaths).not.toContain("assets/sources/workflow/source.psd");
+    expect(saved.snapshot.packageInMemoryFilePaths).toContain("assets/sources/workflow/source.psd");
+
+    const second = createWorkflow(storage);
+    const loaded = second.loadProject();
+    const resavedAfterLoad = second.saveProject();
+    const loadedBinaryLabel = second.viewModel.sourceIntake.importedAssets
+      .find((asset) => asset.sourceAssetId === "src_workflow_psd_profile")
+      ?.binaryAssetLabels.join("\n") ?? "";
+    const report = await validatePackageRuntimeWithBinaryAssets({
+      packageDocument: resavedAfterLoad.snapshot.document,
+      binaryFileSet: resavedAfterLoad.snapshot.packageInMemoryFileSet,
+      byteIntakePreflight: resavedAfterLoad.snapshot.binaryByteEvidence.byteIntakePreflight,
+      createdAt: "2026-06-02T01:00:00.000Z"
+    });
+
+    expect(loaded.status).toBe("loaded");
+    expect(second.state.binaryByteIntake.assets).toEqual([
+      expect.objectContaining({
+        binaryAssetId: "bin_workflow_psd_profile_source",
+        availabilityStatus: "requires-reupload-after-browser-local-load-v1",
+        validatorBytesAvailability: "requiresReupload"
+      })
+    ]);
+    expect(loadedBinaryLabel).toContain("metadata reloaded without bytes; reupload required");
+    expect(loadedBinaryLabel).toContain("validator bytesAvailability=requiresReupload");
+    expect(resavedAfterLoad.snapshot.binaryByteEvidence.byteIntakePreflight.assets).toEqual([
+      expect.objectContaining({
+        binaryAssetId: "bin_workflow_psd_profile_source",
+        packageRelativePath: "assets/sources/workflow/source.psd",
+        bytesAvailability: "requiresReupload"
+      })
+    ]);
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkId: "binary.bytesMissing",
+        status: "fail",
+        evidence: expect.arrayContaining(["bytesAvailability=requiresReupload"])
       })
     ]));
   });

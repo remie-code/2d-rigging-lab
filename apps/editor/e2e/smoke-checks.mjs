@@ -26,6 +26,7 @@ import {
   sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
 import { runAssetIoBoundaryPersistenceSmoke } from "./asset-io-boundary-smoke.mjs";
+import { runByteIntakePersistenceSmoke } from "./byte-intake-smoke.mjs";
 import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
 import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
 import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
@@ -145,6 +146,14 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await resetProject(page);
     await assertSourceIntakeStateAfterReset(page);
     await assertHorizontalOverflow(page, `${viewport.name} final-reset`);
+    const byteIntakeEvidence = await runByteIntakePersistenceSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave31-byte-intake`);
+    await resetProject(page);
+    await assertSourceIntakeStateAfterReset(page);
+    await assertHorizontalOverflow(page, `${viewport.name} post-byte-intake-reset`);
     const dynamicsEvidence = await runDynamicsPersistenceSmoke({
       page,
       viewport
@@ -199,6 +208,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       sourceIntakeEvidence,
       splitPngCompatibilityEvidence,
       assetIoBoundaryEvidence,
+      byteIntakeEvidence,
       dynamicsEvidence,
       viewerRuntimeEvidence,
       rigControlEvidence,

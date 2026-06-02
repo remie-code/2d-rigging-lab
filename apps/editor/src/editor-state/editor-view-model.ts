@@ -319,6 +319,7 @@ export const projectEditorWorkflowViewModel = (
     meshEdit: projectMeshEditViewModel(state),
     sourceIntake: projectSourceIntakeDraftViewModel(state.sourceIntakeDraft, {
       sourceAssets: state.sourceAssets,
+      binaryByteIntake: state.binaryByteIntake,
       ...(state.textureAtlas === null ? {} : { textureAtlas: state.textureAtlas })
     }),
     previewControls: projectPreviewControlsViewModel(state),

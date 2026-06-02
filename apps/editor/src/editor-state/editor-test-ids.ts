@@ -33,6 +33,8 @@ export const editorTestIds = {
   sourceIntakeDiagnostics: "sourceIntake.diagnostics",
   sourceIntakeLayerRows: "sourceIntake.layerRows",
   sourceIntakeAddLayer: "sourceIntake.addLayer",
+  sourceIntakeFileInput: "sourceIntake.fileInput",
+  sourceIntakeSelectedFile: "sourceIntake.selectedFile",
   sourceIntakeManifestPath: "sourceIntake.manifestPath",
   sourceIntakePlacementPolicy: "sourceIntake.placementPolicy",
   sourceIntakeRightsStatus: "sourceIntake.rightsStatus",

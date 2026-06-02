@@ -1,3 +1,4 @@
+export * from "./binary-byte-registration-command.js";
 export * from "./browser-sample-package.js";
 export * from "./composition-command.js";
 export * from "./create-drawable-preset-command.js";

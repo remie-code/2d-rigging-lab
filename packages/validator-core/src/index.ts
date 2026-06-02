@@ -9,6 +9,7 @@ export * from "./operation-evidence-report.js";
 export * from "./validation-diff-builder.js";
 export * from "./validation-report-artifacts.js";
 export * from "./validators/asset-rights.js";
+export * from "./validators/byte-intake-preflight.js";
 export * from "./validators/binary-assets.js";
 export * from "./validators/drawable-provenance.js";
 export * from "./validators/drawable-references.js";

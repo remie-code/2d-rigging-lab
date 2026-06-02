@@ -1,6 +1,7 @@
 import {
   confirmSourceIntakeDraft,
   createDefaultSourceIntakeLayerDraft,
+  createSourceIntakeSelectedFileDraft,
   createSourceIntakeLayerRowTestId,
   editorTestIds,
   sourceIntakeLayerRoles,
@@ -14,13 +15,19 @@ import {
   type SourceIntakeLayerRole,
   type SourceIntakeMode,
   type SourceIntakePlacementPolicy,
-  type SourceIntakeRightsStatus
+  type SourceIntakeRightsDraftState,
+  type SourceIntakeRightsStatus,
+  type SourceIntakeSelectedFileBytes,
+  type SourceIntakeSelectedFileDraftState
 } from "../../editor-state/index.js";
 
 export interface SourceIntakeFormOptions {
   readonly draft: SourceIntakeDraftState;
   readonly viewModel: SourceIntakeDraftViewModel;
-  readonly onConfirmDraft: (draft: SourceIntakeDraftState) => void;
+  readonly onConfirmDraft: (
+    draft: SourceIntakeDraftState,
+    selectedFileBytes?: SourceIntakeSelectedFileBytes
+  ) => unknown | Promise<unknown>;
 }
 
 export const createSourceIntakeForm = (
@@ -40,6 +47,40 @@ export const createSourceIntakeForm = (
   layerRows.className = "source-intake-form__layer-rows";
   layerRows.dataset.testid = editorTestIds.sourceIntakeLayerRows;
   layerRows.setAttribute("aria-label", "Source intake layer rows");
+
+  let selectedFileDraft = options.draft.selectedFile;
+  let selectedBrowserFile: File | null = null;
+  const selectedFileSummary = document.createElement("div");
+  selectedFileSummary.className = "source-intake-form__file-summary";
+  selectedFileSummary.dataset.testid = editorTestIds.sourceIntakeSelectedFile;
+  selectedFileSummary.setAttribute("role", "status");
+  updateSelectedFileDraftSummary(
+    selectedFileSummary,
+    selectedFileDraft,
+    options.draft.rights
+  );
+  const fileInputControl = createFileInputControl({
+    label: "Source file draft",
+    name: "sourceFileDraft",
+    testId: editorTestIds.sourceIntakeFileInput
+  });
+  fileInputControl.input.addEventListener("change", () => {
+    const selectedFile = readFirstSelectedFile(fileInputControl.input);
+    selectedBrowserFile = selectedFile ?? null;
+    selectedFileDraft =
+      selectedFile === undefined
+        ? null
+        : createSourceIntakeSelectedFileDraft({
+            name: selectedFile.name,
+            size: selectedFile.size,
+            type: selectedFile.type
+          });
+    updateSelectedFileDraftSummary(
+      selectedFileSummary,
+      selectedFileDraft,
+      readRightsDraftFromForm(form, options.draft.rights)
+    );
+  });
 
   const requiredSyncCallbacks: Array<() => void> = [];
   const intakeModeControl = createSelectFieldControl({
@@ -102,9 +143,85 @@ export const createSourceIntakeForm = (
   submit.className = "editor-button editor-button--primary";
   submit.dataset.testid = editorTestIds.sourceIntakeSubmit;
   submit.textContent = "Confirm source draft";
+  const placementPolicyControl = createSelectFieldControl({
+    label: "Placement policy",
+    name: "placementPolicy",
+    value: options.draft.placementPolicy,
+    options: sourceIntakePlacementPolicies.map((policy) => ({
+      value: policy,
+      label: formatPlacementPolicy(policy)
+    })),
+    wide: true,
+    testId: editorTestIds.sourceIntakePlacementPolicy
+  });
+  const rightsStatusControl = createSelectFieldControl({
+    label: "Rights status",
+    name: "rightsStatus",
+    value: options.draft.rights.rightsStatus,
+    options: sourceIntakeRightsStatuses.map((status) => ({
+      value: status,
+      label: formatRightsStatus(status)
+    })),
+    testId: editorTestIds.sourceIntakeRightsStatus
+  });
+  const creatorControl = createTextFieldControl({
+    label: "Creator",
+    name: "creator",
+    value: options.draft.rights.creator,
+    required: true
+  });
+  const licenseControl = createTextFieldControl({
+    label: "License",
+    name: "license",
+    value: options.draft.rights.license,
+    required: true
+  });
+  const sourceUrlControl = createTextFieldControl({
+    label: "Source URL",
+    name: "sourceUrl",
+    value: options.draft.rights.sourceUrl,
+    wide: true
+  });
+  const redistributionAllowedControl = createCheckboxFieldControl({
+    label: "Redistribution allowed",
+    name: "redistributionAllowed",
+    checked: options.draft.rights.redistributionAllowed
+  });
+  const aiUsedControl = createCheckboxFieldControl({
+    label: "AI used",
+    name: "aiUsed",
+    checked: options.draft.rights.aiUsed
+  });
+  const notesControl = createTextFieldControl({
+    label: "Rights notes",
+    name: "notes",
+    value: options.draft.rights.notes,
+    wide: true
+  });
+  const refreshSelectedFileRightsSummary = (): void => {
+    updateSelectedFileDraftSummary(
+      selectedFileSummary,
+      selectedFileDraft,
+      readRightsDraftFromForm(form, options.draft.rights)
+    );
+  };
+  rightsStatusControl.select.addEventListener("change", refreshSelectedFileRightsSummary);
+  for (const input of [
+    creatorControl.input,
+    licenseControl.input,
+    sourceUrlControl.input,
+    notesControl.input
+  ]) {
+    input.addEventListener("input", refreshSelectedFileRightsSummary);
+    input.addEventListener("change", refreshSelectedFileRightsSummary);
+  }
+  redistributionAllowedControl.input.addEventListener("change", refreshSelectedFileRightsSummary);
+  aiUsedControl.input.addEventListener("change", refreshSelectedFileRightsSummary);
 
   form.append(
     intakeModeControl.label,
+    fileInputControl.label,
+    selectedFileSummary,
     createTextField({
       label: "Split PNG manifest path / PSD source reference",
       name: "manifestPath",
@@ -146,70 +263,25 @@ export const createSourceIntakeForm = (
       name: "defaultPartId",
       value: options.draft.defaultPartId
     }),
-    createSelectField({
-      label: "Placement policy",
-      name: "placementPolicy",
-      value: options.draft.placementPolicy,
-      options: sourceIntakePlacementPolicies.map((policy) => ({
-        value: policy,
-        label: formatPlacementPolicy(policy)
-      })),
-      wide: true,
-      testId: editorTestIds.sourceIntakePlacementPolicy
-    }),
-    createSelectField({
-      label: "Rights status",
-      name: "rightsStatus",
-      value: options.draft.rights.rightsStatus,
-      options: sourceIntakeRightsStatuses.map((status) => ({
-        value: status,
-        label: formatRightsStatus(status)
-      })),
-      testId: editorTestIds.sourceIntakeRightsStatus
-    }),
-    createTextField({
-      label: "Creator",
-      name: "creator",
-      value: options.draft.rights.creator,
-      required: true
-    }),
-    createTextField({
-      label: "License",
-      name: "license",
-      value: options.draft.rights.license,
-      required: true
-    }),
-    createTextField({
-      label: "Source URL",
-      name: "sourceUrl",
-      value: options.draft.rights.sourceUrl,
-      wide: true
-    }),
-    createCheckboxField({
-      label: "Redistribution allowed",
-      name: "redistributionAllowed",
-      checked: options.draft.rights.redistributionAllowed
-    }),
-    createCheckboxField({
-      label: "AI used",
-      name: "aiUsed",
-      checked: options.draft.rights.aiUsed
-    }),
-    createTextField({
-      label: "Rights notes",
-      name: "notes",
-      value: options.draft.rights.notes,
-      wide: true
-    }),
+    placementPolicyControl.label,
+    rightsStatusControl.label,
+    creatorControl.label,
+    licenseControl.label,
+    sourceUrlControl.label,
+    redistributionAllowedControl.label,
+    aiUsedControl.label,
+    notesControl.label,
     layerRows,
     addLayer,
     diagnostics,
     submit
   );
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const draft = confirmSourceIntakeDraft(readSourceIntakeDraftInput(form, options.draft));
+    const draft = confirmSourceIntakeDraft(
+      readSourceIntakeDraftInput(form, options.draft, selectedFileDraft)
+    );
 
     if (draft.diagnostics.length > 0) {
       diagnostics.replaceChildren(...draft.diagnostics.map(createDiagnosticLine));
@@ -217,7 +289,18 @@ export const createSourceIntakeForm = (
     }
 
     diagnostics.replaceChildren();
-    options.onConfirmDraft(draft);
+    try {
+      const selectedFileBytes = readSelectedBrowserFileBytes(selectedBrowserFile, draft.selectedFile);
+
+      if (selectedFileBytes === undefined) {
+        await options.onConfirmDraft(draft);
+        return;
+      }
+
+      await options.onConfirmDraft(draft, await selectedFileBytes);
+    } catch (error) {
+      diagnostics.replaceChildren(createDiagnosticLine(formatSelectedFileReadError(error)));
+    }
   });
 
   return form;
@@ -255,6 +338,16 @@ interface TextFieldControl {
   readonly input: HTMLInputElement;
 }
 
+interface FileInputControl {
+  readonly label: HTMLLabelElement;
+  readonly input: HTMLInputElement;
+}
+
+interface CheckboxFieldControl {
+  readonly label: HTMLLabelElement;
+  readonly input: HTMLInputElement;
+}
+
 interface SelectFieldControl<TValue extends string> {
   readonly label: HTMLLabelElement;
   readonly select: HTMLSelectElement;
@@ -275,6 +368,26 @@ const createTextFieldControl = (options: TextFieldOptions): TextFieldControl => 
   input.value = options.value;
   input.required = options.required ?? false;
   input.autocomplete = "off";
+  if (options.testId !== undefined) {
+    input.dataset.testid = options.testId;
+  }
+
+  label.append(input);
+  return { label, input };
+};
+
+const createFileInputControl = (options: {
+  readonly label: string;
+  readonly name: string;
+  readonly testId?: string;
+}): FileInputControl => {
+  const label = document.createElement("label");
+  label.className = "editor-field editor-field--wide";
+  label.textContent = options.label;
+
+  const input = document.createElement("input");
+  input.name = options.name;
+  input.type = "file";
   if (options.testId !== undefined) {
     input.dataset.testid = options.testId;
   }
@@ -311,6 +424,12 @@ const createNumberField = (
 };
 
 const createCheckboxField = (options: CheckboxFieldOptions): HTMLLabelElement => {
+  return createCheckboxFieldControl(options).label;
+};
+
+const createCheckboxFieldControl = (
+  options: CheckboxFieldOptions
+): CheckboxFieldControl => {
   const label = document.createElement("label");
   label.className = "source-intake-form__checkbox";
 
@@ -324,7 +443,7 @@ const createCheckboxField = (options: CheckboxFieldOptions): HTMLLabelElement =>
   text.textContent = options.label;
 
   label.append(input, text);
-  return label;
+  return { label, input };
 };
 
 const createSelectField = <TValue extends string>(
@@ -499,7 +618,8 @@ const createLayerMappingSummaryLabel = (
 
 const readSourceIntakeDraftInput = (
   form: HTMLFormElement,
-  fallback: SourceIntakeDraftState
+  fallback: SourceIntakeDraftState,
+  selectedFile: SourceIntakeSelectedFileDraftState | null
 ): SourceIntakeDraftInput => {
   const fields = new FormData(form);
 
@@ -515,6 +635,7 @@ const readSourceIntakeDraftInput = (
       canvasWidth: readNumber(fields, "psdCanvasWidth", fallback.psdProfile.canvasWidth),
       canvasHeight: readNumber(fields, "psdCanvasHeight", fallback.psdProfile.canvasHeight)
     },
+    selectedFile,
     layers: readLayerDrafts(fields, fallback.layers),
     rights: {
       rightsStatus: readRightsStatus(fields, fallback.rights.rightsStatus),
@@ -525,6 +646,111 @@ const readSourceIntakeDraftInput = (
       sourceUrl: readText(fields, "sourceUrl", fallback.rights.sourceUrl),
       notes: readText(fields, "notes", fallback.rights.notes)
     }
+  };
+};
+
+const readFirstSelectedFile = (input: HTMLInputElement): File | undefined => {
+  const files = input.files;
+  if (files === null || files.length === 0) {
+    return undefined;
+  }
+
+  return files.item(0) ?? files[0] ?? undefined;
+};
+
+const readSelectedBrowserFileBytes = (
+  file: File | null,
+  selectedFile: SourceIntakeSelectedFileDraftState | null
+): Promise<SourceIntakeSelectedFileBytes> | undefined => {
+  if (
+    file === null ||
+    selectedFile === null ||
+    typeof file.arrayBuffer !== "function"
+  ) {
+    return undefined;
+  }
+
+  return file.arrayBuffer().then((buffer) => ({
+    fileName: selectedFile.fileName,
+    bytes: new Uint8Array(buffer),
+    declaredMediaType: selectedFile.declaredMediaType
+  }));
+};
+
+const updateSelectedFileDraftSummary = (
+  summary: HTMLElement,
+  selectedFile: SourceIntakeSelectedFileDraftState | null,
+  rights: SourceIntakeRightsDraftState
+): void => {
+  if (selectedFile === null) {
+    summary.textContent = "No browser file selected";
+    return;
+  }
+
+  const facts = document.createElement("dl");
+  facts.className = "source-intake-summary";
+  appendSelectedFileFact(facts, "Filename", selectedFile.fileName || "No filename");
+  appendSelectedFileFact(facts, "Byte length", formatByteLength(selectedFile.byteLength));
+  appendSelectedFileFact(
+    facts,
+    "Declared media type",
+    selectedFile.declaredMediaType || "No declared media type"
+  );
+  appendSelectedFileFact(
+    facts,
+    "Storage",
+    formatSelectedFileStorageTruth(selectedFile)
+  );
+  appendSelectedFileFact(
+    facts,
+    "Rights draft",
+    `${formatRightsStatus(rights.rightsStatus)} / ${rights.license || "No license"}`
+  );
+  appendSelectedFileFact(
+    facts,
+    "Provenance draft",
+    `${rights.creator || "No creator"} / ${rights.aiUsed ? "AI used" : "No AI use"}`
+  );
+
+  summary.replaceChildren(facts);
+};
+
+const formatSelectedFileStorageTruth = (
+  selectedFile: SourceIntakeSelectedFileDraftState
+): string =>
+  selectedFile.commitStatus === "committed-to-package-binary-boundary-v1"
+    ? "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload."
+    : "Bytes are selected in browser memory only; not committed to package; reupload is required after reload.";
+
+const appendSelectedFileFact = (
+  list: HTMLDListElement,
+  label: string,
+  value: string
+): void => {
+  const term = document.createElement("dt");
+  term.textContent = label;
+
+  const description = document.createElement("dd");
+  description.textContent = value;
+  description.style.overflowWrap = "anywhere";
+
+  list.append(term, description);
+};
+
+const readRightsDraftFromForm = (
+  form: HTMLFormElement,
+  fallback: SourceIntakeRightsDraftState
+): SourceIntakeRightsDraftState => {
+  const fields = new FormData(form);
+
+  return {
+    rightsStatus: readRightsStatus(fields, fallback.rightsStatus),
+    creator: readText(fields, "creator", fallback.creator),
+    license: readText(fields, "license", fallback.license),
+    redistributionAllowed: fields.get("redistributionAllowed") === "true",
+    aiUsed: fields.get("aiUsed") === "true",
+    sourceUrl: readText(fields, "sourceUrl", fallback.sourceUrl),
+    notes: readText(fields, "notes", fallback.notes)
   };
 };
 
@@ -628,6 +854,9 @@ const readRightsStatus = (
     : fallback;
 };
 
+const formatByteLength = (byteLength: number): string =>
+  `${byteLength} byte${byteLength === 1 ? "" : "s"}`;
+
 const readLayerRole = (
   fields: FormData,
   name: string,
@@ -666,6 +895,11 @@ const createDiagnosticLine = (diagnostic: string): HTMLElement => {
   line.style.overflowWrap = "anywhere";
 
   return line;
+};
+
+const formatSelectedFileReadError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `Selected browser file bytes could not be read for byte intake: ${message}`;
 };
 
 const formatSourceIntakeMode = (mode: SourceIntakeMode): string => {

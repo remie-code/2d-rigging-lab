@@ -1,5 +1,9 @@
 import {
   createAuthoringSessionFromPackageDocument,
+  getAuthoringSessionBinaryAssetIndex,
+  getAuthoringSessionBinaryFileEntries,
+  getAuthoringSessionByteIntakeSummaries,
+  registerAuthoringSessionBinaryBytes,
   toPackageDocument,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
@@ -15,17 +19,34 @@ import {
   serializeOperationLogEntriesToJsonl
 } from "@private-2d-rigging-lab/operation-core";
 import {
+  createPackageInMemoryFileSet,
   parsePackageDocumentFromFileSet,
   serializePackageDocumentToFileSet,
+  type BinaryAssetIndexFileDto,
   type EditorStateFileDto,
+  type PackageBinaryByteIntakeSummaryDto,
   type PackageDocumentDto,
-  type PackageFileSet
+  type PackageFileSet,
+  type PackageInMemoryFileSet
 } from "@private-2d-rigging-lab/package-format";
+import type {
+  ByteIntakeAssetPreflightInput,
+  ByteIntakePreflightInput
+} from "@private-2d-rigging-lab/validator-core";
 
 import {
   createBrowserSamplePackageDocument,
   EDITOR_BROWSER_SAMPLE_PACKAGE_HASH
 } from "./browser-sample-package.js";
+import {
+  createEditorBrowserBinaryStorageEvidence,
+  createImportPsdSourceAssetCommandWithBinaryBytes,
+  createEditorBrowserSourceBinaryByteRegistration,
+  createSourceByteIntakePreflightAsset,
+  createUnsupportedByteIntakeClaims,
+  type EditorBrowserBinaryStorageEvidence,
+  type EditorImportPsdSourceAssetWithBinaryBytesCommand
+} from "./binary-byte-registration-command.js";
 import {
   createAddDrawableOpacityKeyformOperationRequest,
   createSetMaskRelationOperationRequest,
@@ -75,8 +96,10 @@ import {
   type EditorCreateRotation2dRigControlCommand
 } from "./rig-control-command.js";
 import {
+  createImportPsdSourceAssetOperationRequest,
   createImportSplitPngSourceAssetOperationRequest,
   createSetRightsMetadataOperationRequest,
+  type EditorImportPsdSourceAssetCommand,
   type EditorImportSplitPngSourceAssetCommand,
   type EditorSetRightsMetadataCommand
 } from "./source-import-command.js";
@@ -121,6 +144,10 @@ export interface EditorSessionAdapter {
   commitImportSplitPngSourceAsset(
     command: EditorImportSplitPngSourceAssetCommand
   ): EditorSessionPersistenceResult;
+  commitImportPsdSourceAsset(command: EditorImportPsdSourceAssetCommand): EditorSessionPersistenceResult;
+  commitImportPsdSourceAssetWithBinaryBytes(
+    command: EditorImportPsdSourceAssetWithBinaryBytesCommand
+  ): Promise<EditorSessionPersistenceResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorSessionPersistenceResult;
 }
 
@@ -142,6 +169,9 @@ export interface EditorSessionPersistenceSnapshot {
   readonly packageRevision: number;
   readonly packageFileSet: PackageFileSet;
   readonly packageFilePaths: readonly string[];
+  readonly packageInMemoryFileSet: PackageInMemoryFileSet;
+  readonly packageInMemoryFilePaths: readonly string[];
+  readonly binaryByteEvidence: EditorSessionBinaryByteEvidence;
   readonly generatedArtifactPaths: readonly string[];
   readonly document: PackageDocumentDto;
   readonly parameterIds: readonly string[];
@@ -157,6 +187,9 @@ export interface EditorSessionPersistenceResult {
   readonly packageRevisionAfterCommit: number;
   readonly packageFileSet: PackageFileSet;
   readonly packageFilePaths: readonly string[];
+  readonly packageInMemoryFileSet: PackageInMemoryFileSet;
+  readonly packageInMemoryFilePaths: readonly string[];
+  readonly binaryByteEvidence: EditorSessionBinaryByteEvidence;
   readonly generatedArtifactPaths: readonly string[];
   readonly evidence: EditorEvidencePathSummary;
   readonly reloadedDocument: PackageDocumentDto;
@@ -170,6 +203,14 @@ export interface EditorSessionDrawablePresetResult {
   readonly createDrawable: EditorSessionPersistenceResult;
   readonly generateMesh: EditorSessionPersistenceResult | null;
   readonly finalPersistenceResult: EditorSessionPersistenceResult;
+}
+
+export interface EditorSessionBinaryByteEvidence {
+  readonly packageLocalBinaryFilePaths: readonly string[];
+  readonly binaryAssetIndex: BinaryAssetIndexFileDto;
+  readonly byteIntakeSummaries: readonly PackageBinaryByteIntakeSummaryDto[];
+  readonly byteIntakePreflight: ByteIntakePreflightInput;
+  readonly browserStorage: EditorBrowserBinaryStorageEvidence;
 }
 
 export const createEditorSessionAdapter = (
@@ -344,6 +385,45 @@ export const createEditorSessionAdapter = (
       );
       return this.commitOperation(request);
     },
+    commitImportPsdSourceAsset(command) {
+      const request = createImportPsdSourceAssetOperationRequest(
+        command,
+        authoringSession.packageRevision
+      );
+      return this.commitOperation(request);
+    },
+    async commitImportPsdSourceAssetWithBinaryBytes(command) {
+      const registration = await createEditorBrowserSourceBinaryByteRegistration({
+        operationId: command.operationId,
+        sourceAssetId: command.sourceAssetId,
+        packageRelativePath: command.fileRef.packageRelativePath,
+        selectedFile: command.selectedFile
+      });
+      const request = createImportPsdSourceAssetOperationRequest(
+        createImportPsdSourceAssetCommandWithBinaryBytes(command, registration),
+        authoringSession.packageRevision
+      );
+
+      return commitOperationRequest({
+        request,
+        authoringSession,
+        baseDocument,
+        operationCore,
+        evidenceCollector,
+        generatedArtifactEntries,
+        now,
+        afterCommitted: () => {
+          registerAuthoringSessionBinaryBytes(authoringSession, {
+            binaryAssetRef: registration.binaryAssetRef,
+            bytes: registration.fileEntry.bytes,
+            role: "source-original-v1",
+            sourceAssetId: registration.sourceAssetId,
+            createdByOperationId: registration.operationId,
+            byteIntakeSummary: registration.byteIntakeSummary
+          });
+        }
+      });
+    },
     commitSetRightsMetadata(command) {
       const request = createSetRightsMetadataOperationRequest(
         command,
@@ -362,6 +442,7 @@ const commitOperationRequest = (input: {
   readonly evidenceCollector: ReturnType<typeof createEditorEvidenceCollector>;
   readonly generatedArtifactEntries: PackageFileSet[number][];
   readonly now: () => Date;
+  readonly afterCommitted?: () => void;
 }): EditorSessionPersistenceResult => {
   const packageRevisionBefore = input.authoringSession.packageRevision;
   const evidenceStartIndex = input.evidenceCollector.captures.length;
@@ -386,6 +467,8 @@ const commitOperationRequest = (input: {
     throw new Error(`Committed ${input.request.operationType} did not produce editor evidence artifacts.`);
   }
 
+  input.afterCommitted?.();
+
   const operationLogJsonl = serializeOperationLogEntriesToJsonl(input.operationCore.operationLog.entries);
   const savedDocument = toPackageDocument(input.authoringSession, input.baseDocument, {
     updatedAt: input.now().toISOString()
@@ -398,9 +481,14 @@ const commitOperationRequest = (input: {
     operationLogText: operationLogJsonl,
     generatedArtifacts: input.generatedArtifactEntries
   });
+  const packageInMemoryFileSet = createSessionPackageInMemoryFileSet(
+    packageFileSet,
+    input.authoringSession
+  );
   const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
   const evidence = summarizeEvidencePaths(capture);
   const generatedArtifactPaths = input.generatedArtifactEntries.map((entry) => entry.path);
+  const binaryByteEvidence = createSessionBinaryByteEvidence(input.authoringSession, savedDocument);
 
   return {
     operationType: input.request.operationType,
@@ -411,6 +499,9 @@ const commitOperationRequest = (input: {
     packageRevisionAfterCommit: input.authoringSession.packageRevision,
     packageFileSet,
     packageFilePaths: packageFileSet.map((entry) => entry.path),
+    packageInMemoryFileSet,
+    packageInMemoryFilePaths: packageInMemoryFileSet.map((entry) => entry.path),
+    binaryByteEvidence,
     generatedArtifactPaths,
     evidence,
     reloadedDocument,
@@ -443,6 +534,11 @@ const createPersistenceSnapshot = (input: {
     operationLogText: operationLogJsonl,
     generatedArtifacts: input.generatedArtifactEntries
   });
+  const packageInMemoryFileSet = createSessionPackageInMemoryFileSet(
+    packageFileSet,
+    input.authoringSession
+  );
+  const binaryByteEvidence = createSessionBinaryByteEvidence(input.authoringSession, document);
 
   return {
     operationLogEntries: parseOperationLogEntriesFromJsonl(operationLogJsonl),
@@ -450,6 +546,9 @@ const createPersistenceSnapshot = (input: {
     packageRevision: document.manifest.packageRevision,
     packageFileSet,
     packageFilePaths: packageFileSet.map((entry) => entry.path),
+    packageInMemoryFileSet,
+    packageInMemoryFilePaths: packageInMemoryFileSet.map((entry) => entry.path),
+    binaryByteEvidence,
     generatedArtifactPaths: input.generatedArtifactEntries.map((entry) => entry.path),
     document,
     parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId),
@@ -478,6 +577,144 @@ const applyEditorStateToDocument = (
       ...document.model,
       editorState
     }
+  };
+};
+
+const createSessionPackageInMemoryFileSet = (
+  packageFileSet: PackageFileSet,
+  authoringSession: AuthoringSession
+): PackageInMemoryFileSet =>
+  createPackageInMemoryFileSet([
+    ...packageFileSet,
+    ...getAuthoringSessionBinaryFileEntries(authoringSession)
+  ]);
+
+const createSessionBinaryByteEvidence = (
+  authoringSession: AuthoringSession,
+  packageDocument: PackageDocumentDto
+): EditorSessionBinaryByteEvidence => {
+  const binaryAssetIndex = getAuthoringSessionBinaryAssetIndex(authoringSession);
+  const byteIntakeSummaries = getAuthoringSessionByteIntakeSummaries(authoringSession);
+  const packageLocalBinaryFilePaths = getAuthoringSessionBinaryFileEntries(authoringSession).map(
+    (entry) => entry.path
+  );
+  const summarizedBinaryAssetIds = new Set(
+    byteIntakeSummaries.map((summary) => summary.binaryAssetId)
+  );
+
+  return {
+    packageLocalBinaryFilePaths,
+    binaryAssetIndex,
+    byteIntakeSummaries,
+    byteIntakePreflight: {
+      assets: [
+        ...byteIntakeSummaries.map((summary) =>
+          createByteIntakePreflightAssetForSummary(summary, binaryAssetIndex)
+        ),
+        ...createByteIntakePreflightAssetsForDocumentRefs({
+          packageDocument,
+          packageLocalBinaryFilePaths,
+          summarizedBinaryAssetIds
+        })
+      ]
+    },
+    browserStorage: createEditorBrowserBinaryStorageEvidence()
+  };
+};
+
+const createByteIntakePreflightAssetsForDocumentRefs = (input: {
+  readonly packageDocument: PackageDocumentDto;
+  readonly packageLocalBinaryFilePaths: readonly string[];
+  readonly summarizedBinaryAssetIds: ReadonlySet<string>;
+}): readonly ByteIntakeAssetPreflightInput[] => {
+  const packageLocalBinaryFilePathSet = new Set(input.packageLocalBinaryFilePaths);
+
+  return [
+    ...input.packageDocument.assets.sourceManifest.sourceAssets.flatMap((sourceAsset, sourceAssetIndex) => {
+      const binaryAssetRef = sourceAsset.binaryAssetRef;
+      if (
+        binaryAssetRef === undefined ||
+        input.summarizedBinaryAssetIds.has(binaryAssetRef.binaryAssetId)
+      ) {
+        return [];
+      }
+
+      return [{
+        binaryAssetId: binaryAssetRef.binaryAssetId,
+        packageRelativePath: binaryAssetRef.packageRelativePath,
+        digest: binaryAssetRef.digest,
+        byteLength: binaryAssetRef.byteLength,
+        mediaType: binaryAssetRef.mediaType,
+        fileMediaType: binaryAssetRef.mediaType,
+        provenanceId: binaryAssetRef.provenanceId,
+        rightsAssetId: binaryAssetRef.rightsAssetId,
+        sourceFilename: sourceAsset.filePath.split("/").at(-1) ?? sourceAsset.filePath,
+        bytesAvailability: packageLocalBinaryFilePathSet.has(binaryAssetRef.packageRelativePath)
+          ? "available"
+          : binaryAssetRef.storageStatus === "stored-package-local-v1"
+            ? "requiresReupload"
+            : "missing",
+        targetKind: "sourceAsset",
+        targetId: sourceAsset.sourceAssetId,
+        targetPath: `/assets/sourceManifest/sourceAssets/${sourceAssetIndex}/binaryAssetRef`,
+        unsupportedClaims: createUnsupportedByteIntakeClaims()
+      } satisfies ByteIntakeAssetPreflightInput];
+    }),
+    ...(input.packageDocument.assets.textureAtlas?.textures.flatMap((texture, textureIndex) => {
+      const binaryAssetRef = texture.binaryAssetRef;
+      if (
+        binaryAssetRef === undefined ||
+        input.summarizedBinaryAssetIds.has(binaryAssetRef.binaryAssetId)
+      ) {
+        return [];
+      }
+
+      return [{
+        binaryAssetId: binaryAssetRef.binaryAssetId,
+        packageRelativePath: binaryAssetRef.packageRelativePath,
+        digest: binaryAssetRef.digest,
+        byteLength: binaryAssetRef.byteLength,
+        mediaType: binaryAssetRef.mediaType,
+        fileMediaType: binaryAssetRef.mediaType,
+        provenanceId: binaryAssetRef.provenanceId,
+        rightsAssetId: binaryAssetRef.rightsAssetId,
+        bytesAvailability: packageLocalBinaryFilePathSet.has(binaryAssetRef.packageRelativePath)
+          ? "available"
+          : binaryAssetRef.storageStatus === "storage-unsupported-v1"
+            ? "missing"
+            : "requiresReupload",
+        targetKind: "texture",
+        targetId: texture.textureId,
+        targetPath: `/assets/textureAtlas/textures/${textureIndex}/binaryAssetRef`,
+        unsupportedClaims: createUnsupportedByteIntakeClaims()
+      } satisfies ByteIntakeAssetPreflightInput];
+    }) ?? [])
+  ];
+};
+
+const createByteIntakePreflightAssetForSummary = (
+  summary: PackageBinaryByteIntakeSummaryDto,
+  binaryAssetIndex: BinaryAssetIndexFileDto
+): ByteIntakeAssetPreflightInput => {
+  const binaryAssetEntry = binaryAssetIndex.assets.find(
+    (entry) => entry.binaryAssetId === summary.binaryAssetId
+  );
+
+  if (binaryAssetEntry?.sourceAssetId !== undefined) {
+    return createSourceByteIntakePreflightAsset({
+      sourceAssetId: binaryAssetEntry.sourceAssetId,
+      byteIntakeSummary: summary,
+      fileMediaType: summary.mediaType
+    });
+  }
+
+  return {
+    intakeSummary: summary,
+    fileMediaType: summary.mediaType,
+    targetKind: binaryAssetEntry?.textureId === undefined ? "package" : "texture",
+    targetId: binaryAssetEntry?.textureId ?? summary.binaryAssetId,
+    targetPath: `/assets/binaryAssetIndex/assets/${summary.binaryAssetId}`,
+    unsupportedClaims: createUnsupportedByteIntakeClaims()
   };
 };
 
@@ -515,7 +752,12 @@ const createRejectedPersistenceResult = (input: {
     operationLogText: operationLogJsonl,
     generatedArtifacts: input.generatedArtifactEntries
   });
+  const packageInMemoryFileSet = createSessionPackageInMemoryFileSet(
+    packageFileSet,
+    input.authoringSession
+  );
   const reloadedDocument = parsePackageDocumentFromFileSet(packageFileSet);
+  const binaryByteEvidence = createSessionBinaryByteEvidence(input.authoringSession, savedDocument);
 
   return {
     operationType: input.operationType,
@@ -526,6 +768,9 @@ const createRejectedPersistenceResult = (input: {
     packageRevisionAfterCommit: input.packageRevisionAfterCommit,
     packageFileSet,
     packageFilePaths: packageFileSet.map((entry) => entry.path),
+    packageInMemoryFileSet,
+    packageInMemoryFilePaths: packageInMemoryFileSet.map((entry) => entry.path),
+    binaryByteEvidence,
     generatedArtifactPaths: input.generatedArtifactEntries.map((entry) => entry.path),
     evidence: {
       runtimeArtifactPaths: [],

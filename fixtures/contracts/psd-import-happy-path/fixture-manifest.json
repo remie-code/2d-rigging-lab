@@ -2,7 +2,7 @@
   "schemaVersion": "contract-fixture-manifest-v1",
   "fixtureId": "psd-import-happy-path",
   "title": "Synthetic PSD adapter metadata happy path",
-  "description": "Synthetic parser-free structured PSD adapter metadata based on the rights-cleared sample PSD header shape. This fixture does not include, parse, decode, rasterize, derive, or copy PSD/image bytes.",
+  "description": "Synthetic parser-free structured PSD adapter metadata authored as a contract fixture. This fixture does not include, parse, decode, rasterize, derive, or copy PSD/image bytes, and does not use test_data/sample_model.psd as a PSD semantic oracle.",
   "baselinePackage": "baseline-package.json",
   "requestFiles": [
     "request/import-psd-source-commit.request.json",
@@ -26,7 +26,7 @@
   "truthfulness": {
     "adapterResult": "synthetic structured metadata only",
     "sourceProfileEvidence": "adapter-supplied psdProfile metadata persisted by operation-core",
-    "sampleShapeBasis": "test_data/sample_model.psd safe header facts: 2048x3072 RGB, 8 bits/channel, 4 channels",
+    "sampleByteBasis": "test_data/sample_model.psd is characterized separately by wave31-byte-sample-characterization as byte-only local input: byteLength, digest, media type expectation, and rights/provenance only.",
     "psdBytesIncluded": false,
     "psdBytesParsed": false,
     "imageBytesDecoded": false,

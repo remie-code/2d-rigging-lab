@@ -1,7 +1,8 @@
 import {
   validateSourceIntakeDraft,
   type SourceIntakeDraftState,
-  type SourceIntakeLayerDraftState
+  type SourceIntakeLayerDraftState,
+  type SourceIntakeSelectedFileDraftState
 } from "./source-intake-draft-state.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 import type {
@@ -15,6 +16,10 @@ import type {
   TextureAtlasEntryDto,
   TextureAtlasFileDto
 } from "@private-2d-rigging-lab/package-format";
+import type {
+  EditorBinaryByteIntakeAssetState,
+  EditorBinaryByteIntakeState
+} from "./binary-byte-intake-state.js";
 
 export interface SourceIntakeLayerDraftViewModel {
   readonly sourceLayerId: string;
@@ -37,6 +42,8 @@ export interface SourceIntakeDraftViewModel {
   readonly importProfileLabel: string;
   readonly manifestPathLabel: string;
   readonly sourceReferenceLabel: string;
+  readonly selectedFileStatusLabel: string;
+  readonly selectedFile: SourceIntakeSelectedFileDraftViewModel | null;
   readonly psdAdapterNameLabel: string;
   readonly psdCanvasLabel: string;
   readonly sourceAssetLabel: string;
@@ -53,6 +60,15 @@ export interface SourceIntakeDraftViewModel {
   readonly layerRows: readonly SourceIntakeLayerDraftViewModel[];
   readonly importedAssets: readonly ImportedSourceAssetViewModel[];
   readonly importedAssetCountLabel: string;
+}
+
+export interface SourceIntakeSelectedFileDraftViewModel {
+  readonly fileNameLabel: string;
+  readonly byteLengthLabel: string;
+  readonly declaredMediaTypeLabel: string;
+  readonly storageTruthLabel: string;
+  readonly rightsDraftLabel: string;
+  readonly provenanceDraftLabel: string;
 }
 
 export interface ImportedSourceLayerViewModel {
@@ -101,12 +117,15 @@ export const projectSourceIntakeDraftViewModel = (
   input: {
     readonly sourceAssets?: readonly SourceAssetDto[];
     readonly textureAtlas?: TextureAtlasFileDto;
+    readonly binaryByteIntake?: EditorBinaryByteIntakeState;
   } = {}
 ): SourceIntakeDraftViewModel => {
   const diagnostics = validateSourceIntakeDraft(draft);
   const importedAssets = (input.sourceAssets ?? [])
     .filter((sourceAsset) => sourceAsset.kind !== "generated-fixture-v1")
-    .map((sourceAsset) => projectImportedSourceAssetViewModel(sourceAsset, input.textureAtlas));
+    .map((sourceAsset) =>
+      projectImportedSourceAssetViewModel(sourceAsset, input.textureAtlas, input.binaryByteIntake)
+    );
 
   return {
     sourceModeLabel: formatSourceIntakeMode(draft.intakeMode),
@@ -118,6 +137,12 @@ export const projectSourceIntakeDraftViewModel = (
         : draft.intakeMode === "psdAdapterProfile"
           ? "No PSD source reference"
           : "No split PNG manifest path",
+    selectedFileStatusLabel:
+      draft.selectedFile === null ? "No browser file selected" : "Browser file selected",
+    selectedFile:
+      draft.selectedFile === null
+        ? null
+        : projectSelectedFileDraftViewModel(draft.selectedFile, draft.rights),
     psdAdapterNameLabel:
       draft.psdProfile.adapterName.length > 0
         ? draft.psdProfile.adapterName
@@ -144,6 +169,28 @@ export const projectSourceIntakeDraftViewModel = (
     importedAssetCountLabel: `${importedAssets.length} imported source asset${importedAssets.length === 1 ? "" : "s"}`
   };
 };
+
+const projectSelectedFileDraftViewModel = (
+  selectedFile: SourceIntakeSelectedFileDraftState,
+  rights: SourceIntakeDraftState["rights"]
+): SourceIntakeSelectedFileDraftViewModel => ({
+  fileNameLabel: selectedFile.fileName.length > 0 ? selectedFile.fileName : "No filename",
+  byteLengthLabel: formatByteLength(selectedFile.byteLength),
+  declaredMediaTypeLabel:
+    selectedFile.declaredMediaType.length > 0
+      ? selectedFile.declaredMediaType
+      : "No declared media type",
+  storageTruthLabel: projectSelectedFileStorageTruthLabel(selectedFile),
+  rightsDraftLabel: `${formatRightsStatus(rights.rightsStatus)} / ${rights.license || "No license"}`,
+  provenanceDraftLabel: `${rights.creator || "No creator"} / ${rights.aiUsed ? "AI used" : "No AI use"}`
+});
+
+const projectSelectedFileStorageTruthLabel = (
+  selectedFile: SourceIntakeSelectedFileDraftState
+): string =>
+  selectedFile.commitStatus === "committed-to-package-binary-boundary-v1"
+    ? "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload."
+    : "Bytes are selected in browser memory only; not committed to package; reupload is required after reload.";
 
 const projectSourceIntakeLayerViewModel = (
   layer: SourceIntakeLayerDraftState,
@@ -191,7 +238,8 @@ const projectSourceIntakeStatusLabel = (
 
 export const projectImportedSourceAssetViewModel = (
   sourceAsset: SourceAssetDto,
-  textureAtlas?: TextureAtlasFileDto
+  textureAtlas?: TextureAtlasFileDto,
+  binaryByteIntake?: EditorBinaryByteIntakeState
 ): ImportedSourceAssetViewModel => {
   const psdProfile =
     sourceAsset.psdProfile === undefined ? undefined : projectImportedPsdProfileViewModel(sourceAsset.psdProfile);
@@ -209,7 +257,11 @@ export const projectImportedSourceAssetViewModel = (
     layerCountLabel: `${sourceAsset.layers.length} layer${sourceAsset.layers.length === 1 ? "" : "s"}`,
     diagnosticsLabel:
       sourceAsset.diagnostics.length === 0 ? "No source diagnostics" : sourceAsset.diagnostics.join(", "),
-    binaryAssetLabels: projectImportedSourceBinaryAssetLabels(sourceAsset, textureEntries),
+    binaryAssetLabels: projectImportedSourceBinaryAssetLabels(
+      sourceAsset,
+      textureEntries,
+      binaryByteIntake
+    ),
     ...(psdProfile === undefined ? {} : { psdProfile }),
     layers: sourceAsset.layers.map((layer) => {
       const structuredLayer = structuredLayersById.get(layer.sourceLayerId);
@@ -244,7 +296,8 @@ const projectImportedSourceLayerViewModel = (
     : {
         textureBinaryAssetLabel: formatBinaryAssetReferenceProjection(
           `Texture binary ref ${textureEntry.textureId}`,
-          textureEntry.binaryAssetRef
+          textureEntry.binaryAssetRef,
+          undefined
         )
       }),
   blendModeLabel: formatBlendMode(structuredLayer?.blendMode),
@@ -271,18 +324,26 @@ const projectImportedSourceProfileEvidenceLabel = (
 
 const projectImportedSourceBinaryAssetLabels = (
   sourceAsset: SourceAssetDto,
-  textureEntries: readonly TextureAtlasEntryDto[]
+  textureEntries: readonly TextureAtlasEntryDto[],
+  binaryByteIntake: EditorBinaryByteIntakeState | undefined
 ): readonly string[] => [
   ...(sourceAsset.binaryAssetRef === undefined
     ? []
-    : [formatBinaryAssetReferenceProjection("Source binary ref", sourceAsset.binaryAssetRef)]),
+    : [
+        formatBinaryAssetReferenceProjection(
+          "Source binary ref",
+          sourceAsset.binaryAssetRef,
+          findBinaryByteIntakeAsset(binaryByteIntake, sourceAsset.binaryAssetRef)
+        )
+      ]),
   ...textureEntries.flatMap((textureEntry) =>
     textureEntry.binaryAssetRef === undefined
       ? []
       : [
           formatBinaryAssetReferenceProjection(
             `Texture binary ref ${textureEntry.textureId}`,
-            textureEntry.binaryAssetRef
+            textureEntry.binaryAssetRef,
+            findBinaryByteIntakeAsset(binaryByteIntake, textureEntry.binaryAssetRef)
           )
         ]
   )
@@ -312,7 +373,8 @@ const findTextureEntryForSourceLayer = (
 
 const formatBinaryAssetReferenceProjection = (
   ownerLabel: string,
-  reference: BinaryAssetReferenceDto
+  reference: BinaryAssetReferenceDto,
+  intakeAsset: EditorBinaryByteIntakeAssetState | undefined
 ): string =>
   [
     ownerLabel,
@@ -324,8 +386,28 @@ const formatBinaryAssetReferenceProjection = (
     formatDigest(reference.digest.hex),
     `provenance ${reference.provenanceId}`,
     `rights ${reference.rightsAssetId}`,
+    ...(intakeAsset === undefined
+      ? []
+      : [
+          `session availability ${intakeAsset.availabilityLabel}`,
+          `validator bytesAvailability=${intakeAsset.validatorBytesAvailability}`,
+          ...(intakeAsset.sourceFilename === null ? [] : [`source filename ${intakeAsset.sourceFilename}`]),
+          ...(intakeAsset.verificationStatus === null
+            ? []
+            : [`byte intake ${intakeAsset.verificationStatus}`])
+        ]),
     "metadata only; no editor file import or image decode"
   ].join(" / ");
+
+const findBinaryByteIntakeAsset = (
+  binaryByteIntake: EditorBinaryByteIntakeState | undefined,
+  reference: BinaryAssetReferenceDto
+): EditorBinaryByteIntakeAssetState | undefined =>
+  binaryByteIntake?.assets.find(
+    (asset) =>
+      asset.binaryAssetId === reference.binaryAssetId &&
+      asset.packageRelativePath === reference.packageRelativePath
+  );
 
 const formatBinaryStorageStatus = (
   status: BinaryAssetReferenceDto["storageStatus"]

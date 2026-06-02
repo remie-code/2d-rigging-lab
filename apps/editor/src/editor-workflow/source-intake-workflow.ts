@@ -1,22 +1,35 @@
 import type {
   EditorImportPsdSourceAssetCommand,
+  EditorImportPsdSourceAssetWithBinaryBytesCommand,
   EditorImportSplitPngSourceAssetCommand,
+  EditorSessionAdapter,
   EditorSessionPersistenceResult
 } from "../editor-session/index.js";
 import {
   createImportPsdSourceAssetOperationRequest,
   createImportSplitPngSourceAssetOperationRequest
 } from "../editor-session/index.js";
-import type { SourceIntakeDraftState } from "../editor-state/index.js";
+import {
+  projectCreateDrawableDefaultsForSourceSelection,
+  type EditorSemanticState,
+  type SourceIntakeDraftState,
+  type SourceIntakeSelectedFileBytes
+} from "../editor-state/index.js";
 import {
   PartIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type { OperationRequestDto } from "@private-2d-rigging-lab/operation-core";
+import { applyEditorWorkflowCommitResult } from "./workflow-state-projection.js";
 
 export interface EditorWorkflowSourceImportCommitResult {
   readonly status: "committed" | "rejected";
   readonly result: EditorSessionPersistenceResult;
+}
+
+export interface EditorWorkflowSourceIntakeStateProjection {
+  readonly state: EditorSemanticState;
+  readonly result: EditorWorkflowSourceImportCommitResult;
 }
 
 export type EditorSourceIntakeImportCommand =
@@ -44,6 +57,93 @@ export const createSourceIntakeImportOperationRequest = (
         createSplitPngSourceIntakeImportCommand(draft, packageRevision),
         packageRevision
       );
+
+export const createSourceIntakePsdImportCommandWithBinaryBytes = (
+  draft: SourceIntakeDraftState,
+  packageRevision: number,
+  selectedFileBytes: SourceIntakeSelectedFileBytes
+): EditorImportPsdSourceAssetWithBinaryBytesCommand => {
+  if (draft.intakeMode !== "psdAdapterProfile") {
+    throw new Error("Selected file byte registration is only supported for PSD adapter/profile source intake.");
+  }
+
+  const command = createPsdSourceIntakeImportCommand(draft, packageRevision);
+
+  return {
+    operationId: command.operationId ?? createSourceImportOperationId(draft, packageRevision),
+    sourceAssetId: command.sourceAssetId ?? draft.sourceAssetId,
+    fileRef: {
+      packageRelativePath: draft.manifestPath
+    },
+    ...(command.requestedLayerRoles === undefined
+      ? {}
+      : { requestedLayerRoles: command.requestedLayerRoles }),
+    adapterResult: command.adapterResult,
+    rights: command.rights,
+    selectedFile: {
+      fileName: selectedFileBytes.fileName,
+      bytes: selectedFileBytes.bytes,
+      declaredMediaType: selectedFileBytes.declaredMediaType
+    }
+  };
+};
+
+export const applySelectedFileBytesToSourceIntakeDraft = (
+  draft: SourceIntakeDraftState,
+  selectedFileBytes: SourceIntakeSelectedFileBytes
+): SourceIntakeDraftState => ({
+  ...draft,
+  selectedFile: {
+    fileName: selectedFileBytes.fileName.trim(),
+    byteLength: selectedFileBytes.bytes.byteLength,
+    declaredMediaType: selectedFileBytes.declaredMediaType.trim(),
+    storageStatus: "ephemeral-browser-memory-v1",
+    availabilityStatus: "selected-in-current-browser-session-v1",
+    commitStatus: "not-committed-v1"
+  }
+});
+
+export const projectWorkflowSourceIntakeCommitResult = (input: {
+  readonly state: EditorSemanticState;
+  readonly adapter: EditorSessionAdapter;
+  readonly draft: SourceIntakeDraftState;
+  readonly result: EditorSessionPersistenceResult;
+}): EditorWorkflowSourceIntakeStateProjection => {
+  const committedState = applyEditorWorkflowCommitResult(input.state, input.adapter, input.result);
+  const importedSourceSelection = projectImportedSourceSelection(input.draft);
+  const sourceIntakeDraft = applySourceImportResultToDraft(input.draft, input.result);
+  const nextPendingCreateDrawable =
+    input.result.operationResult.status !== "committed"
+      ? committedState.pendingCreateDrawable
+      : projectCreateDrawableDefaultsForSourceSelection({
+          sourceAssets: committedState.sourceAssets,
+          parts: input.result.reloadedDocument.model.graph.parts,
+          drawables: input.result.reloadedDocument.model.drawables.drawables,
+          canvasSize: input.result.reloadedDocument.model.graph.canvasSize,
+          preferredSourceAssetId: importedSourceSelection.sourceAssetId,
+          ...(importedSourceSelection.sourceLayerId === undefined
+            ? {}
+            : { preferredSourceLayerId: importedSourceSelection.sourceLayerId }),
+          ...(importedSourceSelection.textureId === undefined
+            ? {}
+            : { preferredTextureId: importedSourceSelection.textureId }),
+          ...(importedSourceSelection.partId === undefined
+            ? {}
+            : { preferredPartId: importedSourceSelection.partId })
+        });
+
+  return {
+    state: {
+      ...committedState,
+      pendingCreateDrawable: nextPendingCreateDrawable,
+      sourceIntakeDraft
+    },
+    result: {
+      status: input.result.operationResult.status === "committed" ? "committed" : "rejected",
+      result: input.result
+    }
+  };
+};
 
 const createSplitPngSourceIntakeImportCommand = (
   draft: SourceIntakeDraftState,
@@ -132,9 +232,30 @@ export const applySourceImportResultToDraft = (
   result: EditorSessionPersistenceResult
 ): SourceIntakeDraftState => ({
   ...draft,
+  selectedFile: projectCommittedSelectedFileDraft(draft, result),
   status: result.operationResult.status === "committed" ? "confirmed" : "idle",
   diagnostics: collectSourceImportDiagnostics(result)
 });
+
+const projectCommittedSelectedFileDraft = (
+  draft: SourceIntakeDraftState,
+  result: EditorSessionPersistenceResult
+): SourceIntakeDraftState["selectedFile"] => {
+  if (
+    draft.selectedFile === null ||
+    result.operationResult.status !== "committed" ||
+    !result.binaryByteEvidence.packageLocalBinaryFilePaths.includes(draft.manifestPath)
+  ) {
+    return draft.selectedFile;
+  }
+
+  return {
+    ...draft.selectedFile,
+    storageStatus: "package-local-current-session-memory-v1",
+    availabilityStatus: "available-package-local-bytes-v1",
+    commitStatus: "committed-to-package-binary-boundary-v1"
+  };
+};
 
 const createSourceImportOperationId = (
   draft: SourceIntakeDraftState,

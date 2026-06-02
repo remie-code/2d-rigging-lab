@@ -107,6 +107,15 @@ export const applyEditorWorkflowCommitResult = (
     ...(result.reloadedDocument.assets.textureAtlas === undefined
       ? {}
       : { textureAtlas: result.reloadedDocument.assets.textureAtlas }),
+    binaryByteIntake: {
+      sourceAssets: result.reloadedDocument.assets.sourceManifest.sourceAssets,
+      ...(result.reloadedDocument.assets.textureAtlas === undefined
+        ? {}
+        : { textureAtlas: result.reloadedDocument.assets.textureAtlas }),
+      byteIntakeSummaries: result.binaryByteEvidence.byteIntakeSummaries,
+      packageLocalBinaryFilePaths: result.binaryByteEvidence.packageLocalBinaryFilePaths,
+      reloadSource: "operationCommit"
+    },
     parts: result.reloadedDocument.model.graph.parts,
     ...(result.reloadedDocument.model.editorState === undefined
       ? {}
@@ -160,6 +169,14 @@ export const projectLoadedEditorWorkflowState = (input: {
     ...(input.document.assets.textureAtlas === undefined
       ? {}
       : { textureAtlas: input.document.assets.textureAtlas }),
+    binaryByteIntake: {
+      sourceAssets: input.document.assets.sourceManifest.sourceAssets,
+      ...(input.document.assets.textureAtlas === undefined
+        ? {}
+        : { textureAtlas: input.document.assets.textureAtlas }),
+      packageLocalBinaryFilePaths: [],
+      reloadSource: "browserLocalLoad"
+    },
     canvasSize: input.document.model.graph.canvasSize,
     tutorialReadinessPreflight
   });

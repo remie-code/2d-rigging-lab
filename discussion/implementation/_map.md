@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave30 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave31 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 31 `package-binary-file-io-byte-intake-pilot-v0` completed on 2026-06-02 with browser `<input type=file>` actual-byte intake, digest / byteLength / mediaType / rights / provenance evidence, package-local current-session byte registration, validator diagnostics, truthful save/load reupload state, byte-only local sample fixture, desktop/mobile e2e smoke, final verification, and clean integration review while keeping PSD parser, image decode, archive, drag-drop, File System Access API, external dependencies, full renderer, pixel oracle, Cubism compatibility, public asset distribution, and persistent binary storage guarantees out of scope.
 - Wave 30 `tutorial-like-mvp-mini-model-v0` completed on 2026-06-02 with a rights-clean synthetic mini model recipe, operation log/model diff/package materialization, semantic runtime/viewer tutorial evidence, validator readiness preflight, guided editor workflow, desktop/mobile e2e persistence smoke, final verification, and clean integration review while keeping real asset bytes, file picker/parser/archive, image decode, full renderer, pixel oracle, texture sampling correctness, standalone viewer, public tutorial asset distribution, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 29 `canvas-mesh-editing-v1` completed on 2026-06-02 with bounded canvas/SVG mesh vertex selection, multi-vertex translate, semantic Preview / Viewer / Runtime mesh evidence, validator topology diagnostics, contract fixtures, desktop/mobile e2e persistence smoke, final verification, and clean review path registration while keeping topology/UV editor, full renderer, pixel oracle, real image bytes, file picker/parser/archive, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 0 foundation scaffold is implementation-proven as of 2026-05-28. Evidence is recorded in [reviews/wave0/wave0-foundation-review.md](reviews/wave0/wave0-foundation-review.md), [waves/wave0/wave0-foundation-completion.md](waves/wave0/wave0-foundation-completion.md), and [waves/wave0/integration-review.md](waves/wave0/integration-review.md).
@@ -93,6 +94,7 @@ discussion/implementation/
 | [orchestration/wave28-plan.md](orchestration/wave28-plan.md) | Wave 28 Part / Texture / Layer Tree Workflow v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave29-plan.md](orchestration/wave29-plan.md) | Wave 29 Canvas Mesh Editing v1 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave30-plan.md](orchestration/wave30-plan.md) | Wave 30 Tutorial-like MVP Mini Model v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave31-plan.md](orchestration/wave31-plan.md) | Wave 31 Package Binary / File I/O Decision + Browser Byte Intake Pilot v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -133,6 +135,8 @@ discussion/implementation/
 | [waves/wave29/_map.md](waves/wave29/_map.md) | Wave 29 domain completion reports, review map links, final verification, and final report |
 | [waves/wave30/wave30-final-report.md](waves/wave30/wave30-final-report.md) | Wave 30 final report for Tutorial-like MVP Mini Model v0 |
 | [waves/wave30/_map.md](waves/wave30/_map.md) | Wave 30 domain completion reports, corrective handback, review map links, final verification, and final report |
+| [waves/wave31/wave31-final-report.md](waves/wave31/wave31-final-report.md) | Wave 31 final report for Package Binary / File I/O Decision + Browser Byte Intake Pilot v0 |
+| [waves/wave31/_map.md](waves/wave31/_map.md) | Wave 31 domain completion reports, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -167,6 +171,8 @@ discussion/implementation/
 | [reviews/wave29/wave29-clean-integration-review.md](reviews/wave29/wave29-clean-integration-review.md) | Wave 29 clean integration review |
 | [reviews/wave30/_map.md](reviews/wave30/_map.md) | Wave 30 domain review reports, corrective handback review, and clean integration review |
 | [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md) | Wave 30 clean integration review |
+| [reviews/wave31/_map.md](reviews/wave31/_map.md) | Wave 31 domain review reports and clean integration review |
+| [reviews/wave31/wave31-clean-integration-review.md](reviews/wave31/wave31-clean-integration-review.md) | Wave 31 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

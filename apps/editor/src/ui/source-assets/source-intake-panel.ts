@@ -2,6 +2,7 @@ import {
   createImportedSourceAssetRowTestId,
   editorTestIds,
   type SourceIntakeDraftState,
+  type SourceIntakeSelectedFileBytes,
   type ImportedSourceAssetViewModel,
   type SourceIntakeDraftViewModel
 } from "../../editor-state/index.js";
@@ -10,7 +11,10 @@ import { createSourceIntakeForm } from "./source-intake-form.js";
 export interface SourceIntakePanelOptions {
   readonly draft: SourceIntakeDraftState;
   readonly viewModel: SourceIntakeDraftViewModel;
-  readonly onConfirmDraft: (draft: SourceIntakeDraftState) => void;
+  readonly onConfirmDraft: (
+    draft: SourceIntakeDraftState,
+    selectedFileBytes?: SourceIntakeSelectedFileBytes
+  ) => unknown | Promise<unknown>;
 }
 
 export const createSourceIntakePanel = (options: SourceIntakePanelOptions): HTMLElement => {
@@ -52,6 +56,15 @@ const createSourceIntakeSummary = (
   appendFact(summary, "Status", viewModel.statusLabel);
   appendFact(summary, "Mode", viewModel.sourceModeLabel);
   appendFact(summary, "Reference", viewModel.sourceReferenceLabel);
+  appendFact(summary, "File selection", viewModel.selectedFileStatusLabel);
+  if (viewModel.selectedFile !== null) {
+    appendFact(summary, "Filename", viewModel.selectedFile.fileNameLabel);
+    appendFact(summary, "Byte length", viewModel.selectedFile.byteLengthLabel);
+    appendFact(summary, "Declared media type", viewModel.selectedFile.declaredMediaTypeLabel);
+    appendFact(summary, "Storage", viewModel.selectedFile.storageTruthLabel);
+    appendFact(summary, "File rights draft", viewModel.selectedFile.rightsDraftLabel);
+    appendFact(summary, "File provenance draft", viewModel.selectedFile.provenanceDraftLabel);
+  }
   appendFact(summary, "Source asset", viewModel.sourceAssetLabel);
   appendFact(summary, "Profile", viewModel.importProfileLabel);
   appendFact(summary, "Adapter", viewModel.psdAdapterNameLabel);

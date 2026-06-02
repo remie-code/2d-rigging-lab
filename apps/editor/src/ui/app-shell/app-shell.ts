@@ -3,6 +3,7 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel,
   type MeshCanvasVertexSelectionCommand,
+  type SourceIntakeSelectedFileBytes,
   type TutorialSelectedTargetState
 } from "../../editor-state/index.js";
 import { applyEditorPreviewTextureAssets } from "../../editor-preview/texture-preview-resolution.js";
@@ -93,7 +94,10 @@ export interface EditorAppShellOptions {
   ) => void;
   readonly onRunDynamicsPreview: (frameCount: number) => void;
   readonly onResetDynamicsPreview: () => void;
-  readonly onConfirmSourceIntakeDraft: (draft: EditorSemanticState["sourceIntakeDraft"]) => void;
+  readonly onConfirmSourceIntakeDraft: (
+    draft: EditorSemanticState["sourceIntakeDraft"],
+    selectedFileBytes?: SourceIntakeSelectedFileBytes
+  ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
