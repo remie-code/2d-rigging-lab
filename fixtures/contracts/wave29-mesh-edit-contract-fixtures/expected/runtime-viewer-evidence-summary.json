@@ -39,7 +39,9 @@
           "uvCount": 4,
           "triangleCount": 2,
           "triangleIndexCount": 6,
+          "stableTriangleIdCount": 0,
           "hasStableVertexIds": true,
+          "hasStableTriangleIds": false,
           "hasUvProjection": true,
           "hasTriangles": true
         },

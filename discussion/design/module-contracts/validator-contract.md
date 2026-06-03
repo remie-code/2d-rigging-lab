@@ -89,9 +89,14 @@ demo.unsafeDependencyClaim
 | `ref.drawablePartMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `mesh.triangleIndexOutOfRange` | mesh_semantic | blocking | all: fail | AC-MVP-005 |
 | `mesh.degenerateTriangle` | mesh_semantic | warning | strict: fail or needs_review | AC-MVP-005 |
+| `mesh.duplicateTriangle` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
+| `mesh.orphanedVertex` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
 | `mesh.vertexStableIdsLengthMismatch` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
 | `mesh.uvCountMismatch` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
-| `mesh.runtimeEvidenceMissing` | representative_evaluation | error | viewer/strict/acceptance: fail when required mesh runtime or viewer snapshot evidence is absent or inconsistent | AC-MVP-005, AC-MVP-012, AC-MVP-013 |
+| `mesh.triangleStableIdsLengthMismatch` | mesh_semantic | error | all: fail when optional `triangleStableIds` evidence is present and not aligned with `triangles[]` | AC-MVP-005, AC-MVP-013 |
+| `mesh.uvCoordinateOutOfBounds` | mesh_semantic | error | all: fail | AC-MVP-005, AC-MVP-013 |
+| `mesh.runtimeEvidenceMissing` | representative_evaluation | error | viewer/strict/acceptance: fail when required mesh runtime or viewer snapshot evidence is absent or incomplete | AC-MVP-005, AC-MVP-012, AC-MVP-013 |
+| `mesh.runtimeEvidenceMismatch` | representative_evaluation | error | viewer/strict/acceptance: fail when supplied runtime/viewer mesh evidence identity, topology counts, booleans, bounds, hash, or exposed vertex evidence disagrees with package/runtime evidence | AC-MVP-005, AC-MVP-012, AC-MVP-013 |
 | `part.parentMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.childMissing` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
 | `part.duplicateChild` | reference | error | all: fail | AC-MVP-004, AC-MVP-013 |
@@ -191,9 +196,15 @@ Mesh validation rules:
 
 - `mesh.triangleIndexOutOfRange` fires for each triangle corner whose vertex index is outside the mesh `vertices` array.
 - `mesh.degenerateTriangle` fires for repeated-index or zero-area triangles after triangle indexes are proven in range. It is warning-level by default because it is a mesh-quality issue rather than an editor-selection or package-reference failure.
+- `mesh.duplicateTriangle` fires when two in-range triangles contain the same normalized vertex index triplet, regardless of winding order.
+- `mesh.orphanedVertex` fires when a stable vertex ID for an existing vertex is not referenced by any triangle.
 - `mesh.vertexStableIdsLengthMismatch` fires when `vertexStableIds.length !== vertices.length`; stable vertex refs cannot be used safely for mesh edits until every vertex has one stable ID.
 - `mesh.uvCountMismatch` fires when `uvs.length !== vertices.length`; texture projection evidence is not deterministic while vertex and UV counts disagree.
-- `mesh.runtimeEvidenceMissing` fires only where runtime/viewer mesh evidence is required or supplied but incomplete: missing runtime snapshot, missing runtime drawable mesh evidence for a runtime-visible package drawable, package/runtime mesh ID disagreement, or package/runtime vertex count disagreement.
+- `mesh.triangleStableIdsLengthMismatch` fires only when optional `triangleStableIds` package evidence is present and `triangleStableIds.length !== triangles.length`.
+- `mesh.uvCoordinateOutOfBounds` fires when a UV coordinate is outside the project-defined semantic `[0, 1]` UV domain. This is semantic UV edit evidence only; it does not assert texture sampling or renderer correctness.
+- `mesh.runtimeEvidenceMissing` fires only where runtime/viewer mesh evidence is required or supplied but incomplete: missing runtime snapshot, missing runtime drawable, or missing per-drawable mesh evidence for a runtime-visible package drawable.
+- `mesh.runtimeEvidenceMismatch` fires when supplied runtime/viewer mesh evidence is stale or inconsistent with current package/runtime evidence, including package identity/revision mismatch, package/runtime mesh ID disagreement, package/runtime vertex count disagreement, topology `vertexCount`, `stableVertexIdCount`, `stableTriangleIdCount`, `uvCount`, `triangleCount`, `triangleIndexCount`, mesh-local `topologyRevision`, topology booleans including `hasStableTriangleIds`, runtime mesh bounds/hash self-consistency, or exposed `vertices.length`.
+- Mesh-local `topologyRevision` stale comparison is performed only when package or runtime/viewer mesh topology evidence carries `topologyRevision`. Validator-core must not invent a packageRevision-to-topologyRevision rule; package identity/revision staleness remains separate runtime snapshot identity evidence.
 - `editorState.staleReference` covers stale editor-only selected vertex refs. It remains warning-level and must not be promoted to runtime rendering failure just because the stale ref came from mesh selection state.
 
 Viewer evidence validation rules:

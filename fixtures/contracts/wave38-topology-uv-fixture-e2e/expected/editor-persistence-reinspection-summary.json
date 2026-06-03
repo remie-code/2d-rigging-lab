@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "wave38-topology-uv-editor-persistence-reinspection-summary-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "saveLoadContract": {
+    "browserLocalStorageOnly": true,
+    "operationTypes": [
+      "importPsdSourceAsset",
+      "createDrawable",
+      "generateMesh",
+      "addMeshVertex",
+      "addMeshTriangle",
+      "moveMeshUvPoint"
+    ],
+    "packageRevisionAfterLoad": 6,
+    "topologyRevisionAfterLoad": 3,
+    "vertexCountAfterLoad": 10,
+    "triangleCountAfterLoad": 9,
+    "uvCountAfterLoad": 10,
+    "selectedVertexIdsAfterLoad": [
+      "vtx_wave_38_topology_uv_0_0"
+    ],
+    "reinspectPreviewEvidence": true,
+    "reinspectViewerEvidence": true,
+    "reinspectValidationEvidence": true
+  },
+  "unsupportedTransports": {
+    "archiveExport": false,
+    "fileSystemAccessApi": false,
+    "dragDrop": false
+  }
+}

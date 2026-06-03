@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "wave38-topology-uv-invalid-edit-rejection-summary-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "invalidCases": [
+    {
+      "caseId": "referenced-vertex-remove-blocked",
+      "surface": "editor-ui",
+      "attemptedOperationType": "removeMeshVertex",
+      "blockedReason": "Selected vertex is referenced by a triangle",
+      "operationLogAppended": false,
+      "meshStateCorrupted": false
+    },
+    {
+      "caseId": "stale-topology-add-vertex-rejected",
+      "surface": "editor-ui-command-replay",
+      "attemptedOperationType": "addMeshVertex",
+      "expectedCheckId": "operation.addMeshVertex.topologyRevisionMismatch",
+      "status": "rejected",
+      "operationLogAppended": false,
+      "meshStateCorrupted": false
+    }
+  ]
+}

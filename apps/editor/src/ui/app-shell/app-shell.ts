@@ -8,6 +8,11 @@ import {
   type LayerTreePartRenameDraftCommand,
   type LayerTreePartReparentDraftCommand,
   type MeshCanvasVertexSelectionCommand,
+  type MeshTopologyAddTriangleDraftCommand,
+  type MeshTopologyAddVertexDraftCommand,
+  type MeshTopologyRemoveTriangleDraftCommand,
+  type MeshTopologyRemoveVertexDraftCommand,
+  type MeshUvNudgeDraftCommand,
   type SourceIntakeSelectedFileBytes,
   type TutorialSelectedTargetState
 } from "../../editor-state/index.js";
@@ -103,6 +108,11 @@ export interface EditorAppShellOptions {
   readonly onSelectMeshCanvasVertex: (command: MeshCanvasVertexSelectionCommand) => void;
   readonly onNudgeMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
   readonly onDragMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
+  readonly onAddMeshVertex: (command: MeshTopologyAddVertexDraftCommand) => void;
+  readonly onRemoveSelectedMeshVertex: (command: MeshTopologyRemoveVertexDraftCommand) => void;
+  readonly onAddMeshTriangle: (command: MeshTopologyAddTriangleDraftCommand) => void;
+  readonly onRemoveMeshTriangle: (command: MeshTopologyRemoveTriangleDraftCommand) => void;
+  readonly onNudgeMeshUv: (command: MeshUvNudgeDraftCommand) => void;
   readonly onCommitCreateDynamicsGroup: (command: EditorDynamicsCreateCommand) => void;
   readonly onCommitUpdateDynamicsGroup: (command: EditorUpdateDynamicsGroupCommand) => void;
   readonly onCommitCreateRotation2dRigControl: (
@@ -219,7 +229,12 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onNudgeMeshVertex: options.onNudgeMeshVertex,
     onSelectMeshCanvasVertex: options.onSelectMeshCanvasVertex,
     onNudgeMeshCanvasSelection: options.onNudgeMeshCanvasSelection,
-    onDragMeshCanvasSelection: options.onDragMeshCanvasSelection
+    onDragMeshCanvasSelection: options.onDragMeshCanvasSelection,
+    onAddMeshVertex: options.onAddMeshVertex,
+    onRemoveSelectedMeshVertex: options.onRemoveSelectedMeshVertex,
+    onAddMeshTriangle: options.onAddMeshTriangle,
+    onRemoveMeshTriangle: options.onRemoveMeshTriangle,
+    onNudgeMeshUv: options.onNudgeMeshUv
   });
   const layerTreePanel = createLayerTreePanel({
     viewModel: options.viewModel.layerTree,

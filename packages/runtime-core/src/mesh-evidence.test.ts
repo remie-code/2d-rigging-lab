@@ -3,7 +3,8 @@ import {
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
-  ParameterIdSchema
+  ParameterIdSchema,
+  TriangleIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -38,7 +39,10 @@ describe("runtime mesh edit evidence", () => {
         uvCount: 3,
         triangleCount: 1,
         triangleIndexCount: 3,
+        stableTriangleIdCount: 1,
+        topologyRevision: 7,
         hasStableVertexIds: true,
+        hasStableTriangleIds: true,
         hasUvProjection: true,
         hasTriangles: true
       },
@@ -63,6 +67,40 @@ describe("runtime mesh edit evidence", () => {
         }
       ]
     });
+    expect(candidateDrawable?.mesh?.uvs).toEqual([
+      {
+        vertexIndex: 0,
+        vertexStableId: "vtx_body_0",
+        vertexRef: `${fixture.meshId}.vtx_body_0`,
+        uv: { x: 0, y: 0 }
+      },
+      {
+        vertexIndex: 1,
+        vertexStableId: "vtx_body_1",
+        vertexRef: `${fixture.meshId}.vtx_body_1`,
+        uv: { x: 1, y: 0 }
+      },
+      {
+        vertexIndex: 2,
+        vertexStableId: "vtx_body_2",
+        vertexRef: `${fixture.meshId}.vtx_body_2`,
+        uv: { x: 0, y: 1 }
+      }
+    ]);
+    expect(candidateDrawable?.mesh?.triangles).toEqual([
+      {
+        triangleIndex: 0,
+        triangleStableId: "tri_body_0",
+        triangleRef: `${fixture.meshId}.tri_body_0`,
+        vertexIndices: [0, 1, 2],
+        vertexStableIds: ["vtx_body_0", "vtx_body_1", "vtx_body_2"],
+        vertexRefs: [
+          `${fixture.meshId}.vtx_body_0`,
+          `${fixture.meshId}.vtx_body_1`,
+          `${fixture.meshId}.vtx_body_2`
+        ]
+      }
+    ]);
     expect(evidence.meshEditEvidence.drawables).toEqual([
       {
         drawableId: fixture.drawableId,
@@ -75,6 +113,8 @@ describe("runtime mesh edit evidence", () => {
         vertexHashChanged: true,
         topology: candidateDrawable?.mesh?.topology,
         vertices: candidateDrawable?.mesh?.vertices,
+        uvs: candidateDrawable?.mesh?.uvs,
+        triangles: candidateDrawable?.mesh?.triangles,
         movedVertexRefs: [
           {
             drawableId: fixture.drawableId,
@@ -113,8 +153,37 @@ describe("runtime mesh edit evidence", () => {
       topology: {
         vertexCount: 3,
         stableVertexIdCount: 3,
-        triangleCount: 1
+        triangleCount: 1,
+        stableTriangleIdCount: 1,
+        topologyRevision: 7
       },
+      uvs: [
+        {
+          vertexIndex: 0,
+          vertexStableId: "vtx_body_0",
+          vertexRef: `${fixture.meshId}.vtx_body_0`,
+          uv: { x: 0, y: 0 }
+        },
+        {
+          vertexIndex: 1,
+          vertexStableId: "vtx_body_1",
+          vertexRef: `${fixture.meshId}.vtx_body_1`,
+          uv: { x: 1, y: 0 }
+        },
+        {
+          vertexIndex: 2,
+          vertexStableId: "vtx_body_2",
+          vertexRef: `${fixture.meshId}.vtx_body_2`,
+          uv: { x: 0, y: 1 }
+        }
+      ],
+      triangles: [
+        {
+          triangleIndex: 0,
+          triangleStableId: "tri_body_0",
+          triangleRef: `${fixture.meshId}.tri_body_0`
+        }
+      ],
       movedVertexRefs: [
         {
           vertexIndex: 1,
@@ -237,6 +306,8 @@ const createGraph = (input: {
           { x: 0, y: 1 }
         ],
         triangles: [[0, 1, 2]],
+        triangleStableIds: [TriangleIdSchema.parse("tri_body_0")],
+        topologyRevision: 7,
         vertexStableIds: ["vtx_body_0", "vtx_body_1", "vtx_body_2"],
         vertexCount: input.vertices.length,
         vertexHash: createStableVertexHash(input.vertices)

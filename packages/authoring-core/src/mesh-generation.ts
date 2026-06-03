@@ -1,4 +1,4 @@
-import type { DrawableId, MeshId, ProvenanceId, RectDto } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, MeshId, ProvenanceId, RectDto, TriangleId } from "@private-2d-rigging-lab/contracts";
 import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 
 export type MeshGenerationMethod = "manual-empty" | "auto-grid-v1";
@@ -31,6 +31,8 @@ export const createManualEmptyMesh = (input: {
   uvs: [],
   triangles: [],
   vertexStableIds: [],
+  triangleStableIds: [],
+  topologyRevision: 0,
   bounds: structuredClone(input.bounds),
   generationProvenanceId: input.provenanceId
 });
@@ -47,6 +49,7 @@ const createGridMesh = (input: {
   const uvs: MeshDto["uvs"] = [];
   const vertexStableIds: string[] = [];
   const triangles: MeshDto["triangles"] = [];
+  const triangleStableIds: TriangleId[] = [];
   const token = stripIdPrefix(input.drawableId, "draw_");
 
   for (let row = 0; row <= cells; row += 1) {
@@ -69,7 +72,9 @@ const createGridMesh = (input: {
       const bottomLeft = topLeft + cells + 1;
       const bottomRight = bottomLeft + 1;
       triangles.push([topLeft, topRight, bottomLeft]);
+      triangleStableIds.push(`tri_${token}_${row}_${column}_a` as TriangleId);
       triangles.push([topRight, bottomRight, bottomLeft]);
+      triangleStableIds.push(`tri_${token}_${row}_${column}_b` as TriangleId);
     }
   }
 
@@ -80,6 +85,8 @@ const createGridMesh = (input: {
     uvs,
     triangles,
     vertexStableIds,
+    triangleStableIds,
+    topologyRevision: 0,
     bounds: structuredClone(input.bounds),
     generationProvenanceId: input.provenanceId
   };

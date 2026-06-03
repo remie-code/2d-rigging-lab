@@ -4,11 +4,17 @@ import {
   type EditorSemanticState,
   type EditorWorkflowViewModel,
   type MeshCanvasVertexSelectionCommand,
+  type MeshTopologyAddTriangleDraftCommand,
+  type MeshTopologyAddVertexDraftCommand,
+  type MeshTopologyRemoveTriangleDraftCommand,
+  type MeshTopologyRemoveVertexDraftCommand,
+  type MeshUvNudgeDraftCommand,
   type MeshVertexNudgeViewModelCommand
 } from "../../editor-state/index.js";
 import { createDrawableAuthoringForm } from "./drawable-authoring-form.js";
 import { createDrawableList } from "./drawable-list.js";
 import { createMeshCanvasEditor } from "./mesh-canvas-editor.js";
+import { createMeshTopologyControls } from "./mesh-topology-controls.js";
 import { createMeshVertexControls } from "./mesh-vertex-controls.js";
 
 export interface DrawableAuthoringPanelOptions {
@@ -21,6 +27,11 @@ export interface DrawableAuthoringPanelOptions {
   readonly onSelectMeshCanvasVertex: (command: MeshCanvasVertexSelectionCommand) => void;
   readonly onNudgeMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
   readonly onDragMeshCanvasSelection: (delta: { readonly x: number; readonly y: number }) => void;
+  readonly onAddMeshVertex: (command: MeshTopologyAddVertexDraftCommand) => void;
+  readonly onRemoveSelectedMeshVertex: (command: MeshTopologyRemoveVertexDraftCommand) => void;
+  readonly onAddMeshTriangle: (command: MeshTopologyAddTriangleDraftCommand) => void;
+  readonly onRemoveMeshTriangle: (command: MeshTopologyRemoveTriangleDraftCommand) => void;
+  readonly onNudgeMeshUv: (command: MeshUvNudgeDraftCommand) => void;
 }
 
 export const createDrawableAuthoringPanel = (
@@ -55,6 +66,14 @@ export const createDrawableAuthoringPanel = (
       onSelectVertex: options.onSelectMeshCanvasVertex,
       onNudgeSelection: options.onNudgeMeshCanvasSelection,
       onDragSelection: options.onDragMeshCanvasSelection
+    }),
+    createMeshTopologyControls({
+      viewModel: options.viewModel.meshEdit,
+      onAddVertex: options.onAddMeshVertex,
+      onRemoveSelectedVertex: options.onRemoveSelectedMeshVertex,
+      onAddTriangle: options.onAddMeshTriangle,
+      onRemoveTriangle: options.onRemoveMeshTriangle,
+      onNudgeUv: options.onNudgeMeshUv
     }),
     createMeshVertexControls({
       viewModel: options.viewModel.meshEdit,

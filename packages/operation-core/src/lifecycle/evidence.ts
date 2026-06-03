@@ -59,7 +59,15 @@ export const applyOperationEvidence = (
     generatedValidationReportIds: mergeUnique(
       input.result.generatedValidationReportIds,
       evidence.generatedValidationReportIds
-    )
+    ),
+    ...(evidence.meshTopologyEvidence === undefined
+      ? {}
+      : {
+          meshTopologyEvidence: [
+            ...(input.result.meshTopologyEvidence ?? []),
+            ...evidence.meshTopologyEvidence
+          ]
+        })
   });
 };
 

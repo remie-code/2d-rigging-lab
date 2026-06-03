@@ -24,6 +24,7 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
+import { toModelDiffJsonValue } from "./model-diff-json-value.js";
 
 export const generateMeshOperationHandler: OperationHandler = {
   operationType: "generateMesh",
@@ -194,8 +195,8 @@ const createGenerateMeshResult = (input: {
         fields: [
           {
             path: `/model/meshes/${input.meshAfter.meshId}`,
-            before: input.meshBefore,
-            after: input.meshAfter
+            before: toModelDiffJsonValue(input.meshBefore),
+            after: toModelDiffJsonValue(input.meshAfter)
           },
           {
             path: `/model/meshes/${input.meshAfter.meshId}/vertices`,

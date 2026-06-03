@@ -32,6 +32,13 @@ import {
   UpdatePartPayloadSchema
 } from "./payloads/model-edit.js";
 import {
+  AddMeshTrianglePayloadSchema,
+  AddMeshVertexPayloadSchema,
+  MoveMeshUvPointPayloadSchema,
+  RemoveMeshTrianglePayloadSchema,
+  RemoveMeshVertexPayloadSchema
+} from "./payloads/mesh-topology.js";
+import {
   BindRigControlChildPayloadSchema,
   CreateRotation2dRigControlPayloadSchema,
   CreateWarpLattice2dRigControlPayloadSchema
@@ -48,6 +55,11 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("setDrawableTexture"), payload: SetDrawableTexturePayloadSchema }),
   z.object({ operationType: z.literal("generateMesh"), payload: GenerateMeshPayloadSchema }),
   z.object({ operationType: z.literal("moveMeshVertex"), payload: MoveMeshVertexPayloadSchema }),
+  z.object({ operationType: z.literal("addMeshVertex"), payload: AddMeshVertexPayloadSchema }),
+  z.object({ operationType: z.literal("removeMeshVertex"), payload: RemoveMeshVertexPayloadSchema }),
+  z.object({ operationType: z.literal("addMeshTriangle"), payload: AddMeshTrianglePayloadSchema }),
+  z.object({ operationType: z.literal("removeMeshTriangle"), payload: RemoveMeshTrianglePayloadSchema }),
+  z.object({ operationType: z.literal("moveMeshUvPoint"), payload: MoveMeshUvPointPayloadSchema }),
   z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),
   z.object({ operationType: z.literal("addKeyform"), payload: AddKeyformPayloadSchema }),
   z.object({ operationType: z.literal("addKeyformGrid2d"), payload: AddKeyformGrid2dPayloadSchema }),

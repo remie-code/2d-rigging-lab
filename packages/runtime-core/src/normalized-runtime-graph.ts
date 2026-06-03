@@ -4,10 +4,12 @@ import type {
   KeyformSetId,
   MaskRelationId,
   MeshId,
+  MeshTopologyRevisionDto,
   PartId,
   ParameterId,
   RectDto,
   RigControlId,
+  TriangleId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 
@@ -97,6 +99,8 @@ export interface NormalizedDrawable {
   readonly uvs?: readonly Vec2Dto[];
   readonly triangles?: readonly NormalizedMeshTriangle[];
   readonly vertexStableIds?: readonly string[];
+  readonly triangleStableIds?: readonly TriangleId[];
+  readonly topologyRevision?: MeshTopologyRevisionDto;
   readonly vertexCount: number;
   readonly vertexHash?: string;
 }

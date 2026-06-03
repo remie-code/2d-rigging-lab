@@ -8,6 +8,7 @@ export * from "./dynamics-group-command.js";
 export * from "./evidence-provider.js";
 export * from "./indexeddb-persistent-byte-store.js";
 export * from "./imported-portable-bundle-byte-registration.js";
+export * from "./mesh-topology-command.js";
 export * from "./mesh-vertex-command.js";
 export * from "./part-texture-layer-command.js";
 export * from "./persistent-byte-restore.js";

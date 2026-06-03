@@ -35,6 +35,7 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
+import { toModelDiffJsonValue } from "./model-diff-json-value.js";
 
 export const createDrawableOperationHandler: OperationHandler = {
   operationType: "createDrawable",
@@ -321,7 +322,7 @@ const createCreateDrawableResult = (input: {
       },
       {
         target: meshTarget,
-        fields: [{ path: `/model/meshes/${input.mesh.meshId}`, before: null, after: input.mesh }]
+        fields: [{ path: `/model/meshes/${input.mesh.meshId}`, before: null, after: toModelDiffJsonValue(input.mesh) }]
       },
       {
         target: partTarget,

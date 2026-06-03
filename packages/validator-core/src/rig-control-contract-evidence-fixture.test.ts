@@ -235,6 +235,11 @@ const createDrawableEntry = (
       baseDrawOrder: drawable.baseDrawOrder,
       bounds: drawable.bounds,
       vertices: drawable.vertices,
+      ...(drawable.uvs === undefined ? {} : { uvs: drawable.uvs }),
+      ...(drawable.triangles === undefined ? {} : { triangles: drawable.triangles }),
+      ...(drawable.vertexStableIds === undefined ? {} : { vertexStableIds: drawable.vertexStableIds }),
+      ...(drawable.triangleStableIds === undefined ? {} : { triangleStableIds: drawable.triangleStableIds }),
+      ...(drawable.topologyRevision === undefined ? {} : { topologyRevision: drawable.topologyRevision }),
       vertexCount: drawable.vertices.length
     }
   ];

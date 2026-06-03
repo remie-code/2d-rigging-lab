@@ -1,8 +1,10 @@
 import {
   DrawableIdSchema,
   MeshIdSchema,
+  MeshTopologyRevisionDtoSchema,
   RectDtoSchema,
   RuntimeSnapshotIdSchema,
+  TriangleIdSchema,
   Vec2DtoSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
@@ -23,7 +25,10 @@ export const EvaluatedMeshTopologySummarySchema = z.object({
   uvCount: z.number().int().nonnegative(),
   triangleCount: z.number().int().nonnegative(),
   triangleIndexCount: z.number().int().nonnegative(),
+  stableTriangleIdCount: z.number().int().nonnegative().default(0),
+  topologyRevision: MeshTopologyRevisionDtoSchema.optional(),
   hasStableVertexIds: z.boolean(),
+  hasStableTriangleIds: z.boolean().default(false),
   hasUvProjection: z.boolean(),
   hasTriangles: z.boolean()
 });
@@ -37,13 +42,37 @@ export const EvaluatedMeshVertexSchema = z.object({
 });
 export type EvaluatedMeshVertexDto = z.infer<typeof EvaluatedMeshVertexSchema>;
 
+export const EvaluatedMeshUvSchema = z.object({
+  vertexIndex: z.number().int().nonnegative(),
+  vertexStableId: z.string().optional(),
+  vertexRef: z.string(),
+  uv: Vec2DtoSchema
+});
+export type EvaluatedMeshUvDto = z.infer<typeof EvaluatedMeshUvSchema>;
+
+export const EvaluatedMeshTriangleSchema = z.object({
+  triangleIndex: z.number().int().nonnegative(),
+  triangleStableId: TriangleIdSchema.optional(),
+  triangleRef: z.string(),
+  vertexIndices: z.tuple([
+    z.number().int().nonnegative(),
+    z.number().int().nonnegative(),
+    z.number().int().nonnegative()
+  ]),
+  vertexStableIds: z.tuple([z.string(), z.string(), z.string()]).optional(),
+  vertexRefs: z.tuple([z.string(), z.string(), z.string()])
+});
+export type EvaluatedMeshTriangleDto = z.infer<typeof EvaluatedMeshTriangleSchema>;
+
 export const EvaluatedDrawableMeshEvidenceSchema = z.object({
   drawableId: DrawableIdSchema,
   meshId: MeshIdSchema,
   bounds: RectDtoSchema,
   vertexHash: z.string(),
   topology: EvaluatedMeshTopologySummarySchema,
-  vertices: z.array(EvaluatedMeshVertexSchema).default([])
+  vertices: z.array(EvaluatedMeshVertexSchema).default([]),
+  uvs: z.array(EvaluatedMeshUvSchema).default([]),
+  triangles: z.array(EvaluatedMeshTriangleSchema).default([])
 });
 export type EvaluatedDrawableMeshEvidenceDto = z.infer<typeof EvaluatedDrawableMeshEvidenceSchema>;
 
@@ -70,6 +99,8 @@ export const RuntimeDrawableMeshEditEvidenceSchema = z.object({
   vertexHashChanged: z.boolean(),
   topology: EvaluatedMeshTopologySummarySchema,
   vertices: z.array(EvaluatedMeshVertexSchema).default([]),
+  uvs: z.array(EvaluatedMeshUvSchema).default([]),
+  triangles: z.array(EvaluatedMeshTriangleSchema).default([]),
   movedVertexRefs: z.array(RuntimeMovedMeshVertexRefSchema).default([])
 });
 export type RuntimeDrawableMeshEditEvidenceDto = z.infer<typeof RuntimeDrawableMeshEditEvidenceSchema>;
@@ -85,7 +116,7 @@ export type RuntimeMeshEditEvidenceDto = z.infer<typeof RuntimeMeshEditEvidenceS
 export interface CreateEvaluatedDrawableMeshEvidenceInput {
   readonly drawable: Pick<
     NormalizedDrawable,
-    "drawableId" | "meshId" | "vertexStableIds" | "uvs" | "triangles"
+    "drawableId" | "meshId" | "vertexStableIds" | "triangleStableIds" | "topologyRevision" | "uvs" | "triangles"
   > & {
     readonly bounds: RectDto;
     readonly vertexHash: string;
@@ -101,6 +132,17 @@ export const createEvaluatedDrawableMeshEvidence = (
   const vertices = input.includeVertices
     ? createEvaluatedMeshVertices(input.drawable.meshId, input.drawable.vertices, input.drawable.vertexStableIds)
     : [];
+  const uvs = input.includeVertices
+    ? createEvaluatedMeshUvs(input.drawable.meshId, input.drawable.uvs, input.drawable.vertexStableIds)
+    : [];
+  const triangles = input.includeVertices
+    ? createEvaluatedMeshTriangles({
+        meshId: input.drawable.meshId,
+        triangles: input.drawable.triangles,
+        triangleStableIds: input.drawable.triangleStableIds,
+        vertexStableIds: input.drawable.vertexStableIds
+      })
+    : [];
 
   return EvaluatedDrawableMeshEvidenceSchema.parse({
     drawableId: input.drawable.drawableId,
@@ -110,10 +152,14 @@ export const createEvaluatedDrawableMeshEvidence = (
     topology: createTopologySummary({
       vertexCount: input.drawable.vertexCount,
       ...(input.drawable.vertexStableIds === undefined ? {} : { vertexStableIds: input.drawable.vertexStableIds }),
+      ...(input.drawable.triangleStableIds === undefined ? {} : { triangleStableIds: input.drawable.triangleStableIds }),
+      ...(input.drawable.topologyRevision === undefined ? {} : { topologyRevision: input.drawable.topologyRevision }),
       ...(input.drawable.uvs === undefined ? {} : { uvs: input.drawable.uvs }),
       ...(input.drawable.triangles === undefined ? {} : { triangles: input.drawable.triangles })
     }),
-    vertices
+    vertices,
+    uvs,
+    triangles
   });
 };
 
@@ -151,6 +197,8 @@ export const createRuntimeMeshEditEvidence = (input: {
           vertexHashChanged: baseline === undefined ? false : baseline.vertexHash !== candidate.vertexHash,
           topology: candidateMesh.topology,
           vertices: candidateMesh.vertices,
+          uvs: candidateMesh.uvs,
+          triangles: candidateMesh.triangles,
           movedVertexRefs:
             baseline?.mesh === undefined
               ? []
@@ -180,10 +228,12 @@ export const createMeshVertexRef = (
 
 export const shouldEmitDrawableMeshEvidence = (drawable: Pick<
   NormalizedDrawable,
-  "vertices" | "vertexStableIds" | "uvs" | "triangles"
+  "vertices" | "vertexStableIds" | "triangleStableIds" | "topologyRevision" | "uvs" | "triangles"
 >): boolean =>
   drawable.vertices !== undefined ||
   drawable.vertexStableIds !== undefined ||
+  drawable.triangleStableIds !== undefined ||
+  drawable.topologyRevision !== undefined ||
   drawable.uvs !== undefined ||
   drawable.triangles !== undefined;
 
@@ -198,11 +248,14 @@ type RuntimeMeshEvidenceDrawable = {
 const createTopologySummary = (input: {
   readonly vertexCount: number;
   readonly vertexStableIds?: readonly string[];
+  readonly triangleStableIds?: readonly string[];
+  readonly topologyRevision?: number;
   readonly uvs?: readonly Vec2Dto[];
   readonly triangles?: readonly NormalizedMeshTriangle[];
 }): EvaluatedMeshTopologySummaryDto => {
   const triangleCount = input.triangles?.length ?? 0;
   const stableVertexIdCount = input.vertexStableIds?.length ?? 0;
+  const stableTriangleIdCount = input.triangleStableIds?.length ?? 0;
   const uvCount = input.uvs?.length ?? 0;
 
   return EvaluatedMeshTopologySummarySchema.parse({
@@ -211,7 +264,10 @@ const createTopologySummary = (input: {
     uvCount,
     triangleCount,
     triangleIndexCount: triangleCount * 3,
+    stableTriangleIdCount,
+    ...(input.topologyRevision === undefined ? {} : { topologyRevision: input.topologyRevision }),
     hasStableVertexIds: stableVertexIdCount > 0,
+    hasStableTriangleIds: stableTriangleIdCount > 0,
     hasUvProjection: uvCount > 0,
     hasTriangles: triangleCount > 0
   });
@@ -231,6 +287,54 @@ const createEvaluatedMeshVertices = (
       position: { x: position.x, y: position.y }
     });
   });
+
+const createEvaluatedMeshUvs = (
+  meshId: MeshId,
+  uvs: readonly Vec2Dto[] | undefined,
+  vertexStableIds: readonly string[] | undefined
+): readonly EvaluatedMeshUvDto[] =>
+  (uvs ?? []).map((uv, vertexIndex) => {
+    const vertexStableId = vertexStableIds?.[vertexIndex];
+    return EvaluatedMeshUvSchema.parse({
+      vertexIndex,
+      ...(vertexStableId === undefined ? {} : { vertexStableId }),
+      vertexRef: createMeshVertexRef(meshId, vertexIndex, vertexStableId),
+      uv: { x: uv.x, y: uv.y }
+    });
+  });
+
+const createEvaluatedMeshTriangles = (input: {
+  readonly meshId: MeshId;
+  readonly triangles: readonly NormalizedMeshTriangle[] | undefined;
+  readonly triangleStableIds: readonly string[] | undefined;
+  readonly vertexStableIds: readonly string[] | undefined;
+}): readonly EvaluatedMeshTriangleDto[] =>
+  (input.triangles ?? []).map((triangle, triangleIndex) => {
+    const triangleStableId = input.triangleStableIds?.[triangleIndex];
+    const vertexStableIds = triangle.map((vertexIndex) => input.vertexStableIds?.[vertexIndex]);
+    const allVertexStableIds = vertexStableIds.every((vertexStableId) => vertexStableId !== undefined)
+      ? vertexStableIds as [string, string, string]
+      : undefined;
+
+    return EvaluatedMeshTriangleSchema.parse({
+      triangleIndex,
+      ...(triangleStableId === undefined ? {} : { triangleStableId }),
+      triangleRef: createMeshTriangleRef(input.meshId, triangleIndex, triangleStableId),
+      vertexIndices: [triangle[0], triangle[1], triangle[2]],
+      ...(allVertexStableIds === undefined ? {} : { vertexStableIds: allVertexStableIds }),
+      vertexRefs: [
+        createMeshVertexRef(input.meshId, triangle[0], vertexStableIds[0]),
+        createMeshVertexRef(input.meshId, triangle[1], vertexStableIds[1]),
+        createMeshVertexRef(input.meshId, triangle[2], vertexStableIds[2])
+      ]
+    });
+  });
+
+const createMeshTriangleRef = (
+  meshId: MeshId | string,
+  triangleIndex: number,
+  triangleStableId: string | undefined
+): string => (triangleStableId === undefined ? `${meshId}.triangle.${triangleIndex}` : `${meshId}.${triangleStableId}`);
 
 const createMovedVertexRefs = (input: {
   readonly before: EvaluatedDrawableMeshEvidenceDto;

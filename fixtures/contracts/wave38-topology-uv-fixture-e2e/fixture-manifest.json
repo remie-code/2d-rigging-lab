@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "title": "Wave 38 topology and UV editor e2e fixture",
+  "coversAC": [
+    "AC-MVP-005",
+    "AC-MVP-012",
+    "AC-MVP-013"
+  ],
+  "coversScenarios": [
+    "SC-MESH-001",
+    "SC-MESH-002",
+    "SC-MVP-003",
+    "SC-MVP-004"
+  ],
+  "modulesBlocked": [
+    "editor-ui",
+    "operation-core",
+    "runtime-core",
+    "validator-core"
+  ],
+  "inputArtifacts": [
+    "request/topology-uv-browser-workflow.json",
+    "apps/editor/e2e/topology-uv-persistence-smoke.mjs"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationResult",
+      "path": "expected/operation-chain-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "packageMaterialization",
+      "path": "expected/package-materialization-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "runtimeViewerValidationEvidence",
+      "path": "expected/runtime-viewer-validation-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "editorPersistence",
+      "path": "expected/editor-persistence-reinspection-summary.json",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "invalidTopologyEdit",
+      "path": "expected/invalid-topology-edit-rejection-summary.json",
+      "comparison": "semantic-json"
+    }
+  ],
+  "invalidCases": [
+    {
+      "caseId": "referenced-vertex-remove-blocked",
+      "expectedBehavior": "UI action is disabled with a referenced-vertex reason and no operation-log entry is appended."
+    },
+    {
+      "caseId": "stale-topology-add-vertex-rejected",
+      "expectedCheckIds": [
+        "operation.addMeshVertex.topologyRevisionMismatch"
+      ]
+    }
+  ],
+  "rightsClean": {
+    "source": "browser-generated semantic package, deterministic source-intake metadata, and generated geometry",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  },
+  "runtimeOracle": "semantic runtime, viewer, validator, operation log, and package JSON evidence only",
+  "editorPersistenceBoundary": "browser-local save/load reinspection; no archive or filesystem persistence claim",
+  "updateRule": "requires-contract-review"
+}

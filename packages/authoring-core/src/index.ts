@@ -20,6 +20,7 @@ export * from "./drawable-texture-mutations.js";
 export * from "./mask-relation-mutations.js";
 export * from "./mesh-generation.js";
 export * from "./mesh-mutations.js";
+export * from "./mesh-topology-mutations.js";
 export * from "./drawable-mutations.js";
 export * from "./source-asset-mutations.js";
 export * from "./texture-asset-selectors.js";

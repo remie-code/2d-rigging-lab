@@ -21,6 +21,8 @@ export * from "./layer-tree-view-model.js";
 export * from "./mesh-canvas-selection-state.js";
 export * from "./mesh-edit-state.js";
 export * from "./mesh-edit-view-model.js";
+export * from "./mesh-topology-edit-state.js";
+export * from "./mesh-topology-view-model.js";
 export * from "./operation-log-summary.js";
 export * from "./operation-result-summary.js";
 export * from "./package-identity-state.js";

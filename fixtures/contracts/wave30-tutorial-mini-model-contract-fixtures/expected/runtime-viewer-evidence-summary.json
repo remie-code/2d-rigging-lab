@@ -52,7 +52,7 @@
       "dynamicsGroups": 1
     },
     "frontHairMeshEditPresent": true,
-    "authoredMovedVertexRefsPreservedThroughRuntimeKeyform": false
+    "authoredMovedVertexRefsPreservedThroughRuntimeKeyform": true
   },
   "viewerEvidence": {
     "baselineSnapshotId": "snap_tutorial_mini_model_40",

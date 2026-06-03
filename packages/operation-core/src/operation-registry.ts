@@ -17,6 +17,13 @@ import { deletePartOperationHandler } from "./operations/delete-part.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
+import {
+  addMeshTriangleOperationHandler,
+  addMeshVertexOperationHandler,
+  moveMeshUvPointOperationHandler,
+  removeMeshTriangleOperationHandler,
+  removeMeshVertexOperationHandler
+} from "./operations/mesh-topology.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setDrawablePartOperationHandler } from "./operations/set-drawable-part.js";
@@ -58,6 +65,11 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [setDrawableTextureOperationHandler.operationType, setDrawableTextureOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],
   [moveMeshVertexOperationHandler.operationType, moveMeshVertexOperationHandler],
+  [addMeshVertexOperationHandler.operationType, addMeshVertexOperationHandler],
+  [removeMeshVertexOperationHandler.operationType, removeMeshVertexOperationHandler],
+  [addMeshTriangleOperationHandler.operationType, addMeshTriangleOperationHandler],
+  [removeMeshTriangleOperationHandler.operationType, removeMeshTriangleOperationHandler],
+  [moveMeshUvPointOperationHandler.operationType, moveMeshUvPointOperationHandler],
   [createParameterOperationHandler.operationType, createParameterOperationHandler],
   [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],

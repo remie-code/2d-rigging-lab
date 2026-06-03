@@ -862,6 +862,119 @@ describe("editor workflow controller", () => {
     });
   });
 
+  it("commits add and remove mesh vertex topology edits through the workflow", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const addCommand = workflow.viewModel.meshEdit.topology.addVertex.command;
+    if (addCommand === null) {
+      throw new Error("Expected add mesh vertex command.");
+    }
+
+    const added = workflow.addMeshVertex(addCommand);
+    workflow.selectMeshCanvasVertex({ vertexId: addCommand.vertexId });
+    const removeCommand = workflow.viewModel.meshEdit.topology.removeSelectedVertex.command;
+    if (removeCommand === null) {
+      throw new Error("Expected remove unreferenced vertex command.");
+    }
+    const removed = workflow.removeSelectedMeshVertex(removeCommand);
+    const mesh = removed.result.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === addCommand.meshId
+    );
+
+    expect(added.status).toBe("committed");
+    expect(added.result.operationType).toBe("addMeshVertex");
+    expect(added.result.operationResult.meshTopologyEvidence?.[0]).toMatchObject({
+      operationType: "addMeshVertex",
+      rendererCorrectnessClaim: "none",
+      textureSamplingCorrectnessClaim: "none"
+    });
+    expect(workflow.state.meshEdit.selectedVertexIds).toEqual([]);
+    expect(removed.status).toBe("committed");
+    expect(removed.result.operationType).toBe("removeMeshVertex");
+    expect(mesh?.vertexStableIds).not.toContain(addCommand.vertexId);
+    expect(removed.result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "addMeshVertex",
+      "removeMeshVertex"
+    ]);
+  });
+
+  it("commits add and remove mesh triangle topology edits through the workflow", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const addVertexCommand = workflow.viewModel.meshEdit.topology.addVertex.command;
+    const firstVertex = workflow.viewModel.meshEdit.editableVertices[0];
+    const secondVertex = workflow.viewModel.meshEdit.editableVertices[1];
+    if (addVertexCommand === null || firstVertex === undefined || secondVertex === undefined) {
+      throw new Error("Expected generated mesh vertices.");
+    }
+
+    workflow.addMeshVertex(addVertexCommand);
+    workflow.selectMeshCanvasVertex({ vertexId: firstVertex.vertexId });
+    workflow.selectMeshCanvasVertex({ vertexId: secondVertex.vertexId, mode: "add" });
+    workflow.selectMeshCanvasVertex({ vertexId: addVertexCommand.vertexId, mode: "add" });
+    const addTriangleCommand = workflow.viewModel.meshEdit.topology.addTriangle.command;
+    if (addTriangleCommand === null) {
+      throw new Error("Expected add triangle command.");
+    }
+
+    const added = workflow.addMeshTriangle(addTriangleCommand);
+    const removeTriangleCommand = workflow.viewModel.meshEdit.topology.triangles.find(
+      (triangle) => triangle.triangleId === addTriangleCommand.triangleId
+    )?.remove.command;
+    if (removeTriangleCommand === undefined || removeTriangleCommand === null) {
+      throw new Error("Expected remove triangle command.");
+    }
+    const removed = workflow.removeMeshTriangle(removeTriangleCommand);
+    const mesh = removed.result.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === addTriangleCommand.meshId
+    );
+
+    expect(added.status).toBe("committed");
+    expect(added.result.operationType).toBe("addMeshTriangle");
+    expect(mesh?.triangleStableIds).not.toContain(addTriangleCommand.triangleId);
+    expect(removed.status).toBe("committed");
+    expect(removed.result.operationType).toBe("removeMeshTriangle");
+    expect(removed.result.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "addMeshVertex",
+      "addMeshTriangle",
+      "removeMeshTriangle"
+    ]);
+  });
+
+  it("commits selected mesh UV nudges through the workflow", () => {
+    const workflow = createWorkflow(createMemoryStorage());
+
+    workflow.commitCreateDrawablePreset(createDrawablePresetCommand("star"));
+    const vertex = workflow.state.meshEdit.editableVertices[0];
+    if (vertex === undefined) {
+      throw new Error("Expected generated mesh vertex.");
+    }
+    workflow.selectMeshCanvasVertex({ vertexId: vertex.vertexId });
+    const uvCommand = workflow.viewModel.meshEdit.topology.uvNudges.find(
+      (nudge) => nudge.direction === "right"
+    )?.command;
+    if (uvCommand === undefined || uvCommand === null) {
+      throw new Error("Expected UV nudge command.");
+    }
+
+    const moved = workflow.nudgeMeshUv(uvCommand);
+
+    expect(moved.status).toBe("committed");
+    expect(moved.result.operationType).toBe("moveMeshUvPoint");
+    expect(moved.selectedVertexIds).toEqual([vertex.vertexId]);
+    expect(findMeshUv(moved.result.reloadedDocument, uvCommand.meshId, vertex.vertexIndex)).toEqual({
+      x: vertex.uv.x + 0.05,
+      y: vertex.uv.y
+    });
+    expect(workflow.viewModel.meshEdit.lastMeshEditResultLabel).toBe("moveMeshUvPoint committed");
+  });
+
   it("blocks canvas mesh movement on locked layers without committing an operation", () => {
     const workflow = createWorkflow(createMemoryStorage());
 
@@ -1765,6 +1878,12 @@ const findMeshVertex = (
   meshId: string,
   vertexIndex: number
 ) => document.model.meshes.meshes.find((mesh) => mesh.meshId === meshId)?.vertices[vertexIndex];
+
+const findMeshUv = (
+  document: PackageDocumentDto,
+  meshId: string,
+  vertexIndex: number
+) => document.model.meshes.meshes.find((mesh) => mesh.meshId === meshId)?.uvs[vertexIndex];
 
 const findEditableVertex = (
   workflow: ReturnType<typeof createEditorWorkflowController>,

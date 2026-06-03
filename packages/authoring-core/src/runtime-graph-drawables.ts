@@ -27,6 +27,15 @@ export const createRuntimeDrawableMap = (
           baseDrawOrder: drawable.baseDrawOrder,
           bounds: structuredClone(mesh.bounds),
           vertices: structuredClone(mesh.vertices),
+          uvs: structuredClone(mesh.uvs),
+          triangles: structuredClone(mesh.triangles),
+          vertexStableIds: structuredClone(mesh.vertexStableIds),
+          ...(mesh.triangleStableIds === undefined
+            ? {}
+            : { triangleStableIds: structuredClone(mesh.triangleStableIds) }),
+          ...(mesh.topologyRevision === undefined
+            ? {}
+            : { topologyRevision: mesh.topologyRevision }),
           vertexCount: mesh.vertices.length
         }
       ];

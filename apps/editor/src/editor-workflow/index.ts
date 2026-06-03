@@ -10,4 +10,5 @@ export * from "./part-texture-layer-workflow.js";
 export * from "./portable-bundle-workflow.js";
 export * from "./layer-tree-direct-manipulation-workflow.js";
 export * from "./mesh-canvas-workflow.js";
+export * from "./mesh-topology-workflow.js";
 export * from "./tutorial-mini-model-workflow.js";

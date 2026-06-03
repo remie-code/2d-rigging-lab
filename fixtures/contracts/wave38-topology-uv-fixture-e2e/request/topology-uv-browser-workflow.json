@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "wave38-topology-uv-browser-workflow-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "workflow": [
+    "runSourceIntakeWorkflow",
+    "createDrawable",
+    "generateMesh",
+    "assertReferencedVertexRemoveBlocked",
+    "addMeshVertex",
+    "replayStaleAddMeshVertexRejected",
+    "addMeshTriangle",
+    "assertReferencedAddedVertexRemoveBlocked",
+    "moveMeshUvPoint",
+    "assertPreviewViewerValidatorEvidence",
+    "saveProject",
+    "reloadBrowserPage",
+    "loadProject",
+    "reinspectTopologyUvPackageAndUi"
+  ],
+  "desktopMobileViewports": [
+    "desktop",
+    "mobile"
+  ],
+  "semanticBoundary": {
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "realTextureDecode": false,
+    "automaticTriangulation": false,
+    "atlasPacking": false,
+    "externalDependency": false
+  }
+}

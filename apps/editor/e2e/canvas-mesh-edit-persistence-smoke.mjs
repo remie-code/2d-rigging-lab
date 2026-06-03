@@ -560,7 +560,7 @@ const assertViewerMeshEvidence = async (page, label) => {
   if (
     !rowText.includes(`${smokeDrawable.drawableId}: mesh ${smokeDrawable.meshId}`) ||
     !rowText.includes("9 vertices /") ||
-    !rowText.includes("selected None") ||
+    !rowText.includes(`selected ${selectedVertices.map((vertex) => vertex.vertexId).join(", ")}`) ||
     !rowText.includes("moved None") ||
     !rowText.includes("hash vhash_")
   ) {

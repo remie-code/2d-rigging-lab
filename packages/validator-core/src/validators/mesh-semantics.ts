@@ -41,10 +41,12 @@ type DegenerateTriangleReason = "repeated-index" | "zero-area";
 type MeshRuntimeEvidenceReason =
   | "runtime-snapshot-missing"
   | "runtime-drawable-missing"
+  | "stale-runtime-snapshot-identity"
   | "mesh-id-mismatch"
   | "vertex-count-mismatch"
   | "runtime-mesh-evidence-missing"
   | "runtime-mesh-evidence-inconsistent";
+type MeshRuntimeEvidenceCheckId = "mesh.runtimeEvidenceMissing" | "mesh.runtimeEvidenceMismatch";
 
 interface RuntimeMeshEvidenceLike {
   readonly drawableId?: string;
@@ -62,7 +64,10 @@ interface RuntimeMeshEvidenceLike {
     readonly uvCount?: number;
     readonly triangleCount?: number;
     readonly triangleIndexCount?: number;
+    readonly stableTriangleIdCount?: number;
+    readonly topologyRevision?: number;
     readonly hasStableVertexIds?: boolean;
+    readonly hasStableTriangleIds?: boolean;
     readonly hasUvProjection?: boolean;
     readonly hasTriangles?: boolean;
   };
@@ -116,11 +121,21 @@ const validateMeshVertexTopology = (meshEntry: MeshWithIndex): readonly Validati
     checks.push(createUvCountMismatchCheck(meshEntry));
   }
 
+  if (
+    meshEntry.mesh.triangleStableIds !== undefined &&
+    meshEntry.mesh.triangleStableIds.length !== meshEntry.mesh.triangles.length
+  ) {
+    checks.push(createTriangleStableIdsLengthMismatchCheck(meshEntry));
+  }
+
+  checks.push(...validateMeshUvCoordinateBounds(meshEntry));
+
   return checks;
 };
 
 const validateMeshTriangles = (meshEntry: MeshWithIndex): readonly ValidationCheckResultDto[] => {
   const checks: ValidationCheckResultDto[] = [];
+  const firstTriangleIndexByKey = new Map<string, number>();
 
   meshEntry.mesh.triangles.forEach((triangle, triangleIndex) => {
     const invalidIndexes = triangle
@@ -140,10 +155,61 @@ const validateMeshTriangles = (meshEntry: MeshWithIndex): readonly ValidationChe
     if (degenerateReason !== undefined) {
       checks.push(createDegenerateTriangleCheck(meshEntry, triangleIndex, degenerateReason));
     }
+
+    const duplicateKey = createDuplicateTriangleKey(triangle);
+    const firstTriangleIndex = firstTriangleIndexByKey.get(duplicateKey);
+    if (firstTriangleIndex === undefined) {
+      firstTriangleIndexByKey.set(duplicateKey, triangleIndex);
+      return;
+    }
+
+    checks.push(createDuplicateTriangleCheck(meshEntry, triangleIndex, firstTriangleIndex, duplicateKey));
   });
+
+  checks.push(...validateMeshOrphanedVertices(meshEntry));
 
   return checks;
 };
+
+const validateMeshUvCoordinateBounds = (meshEntry: MeshWithIndex): readonly ValidationCheckResultDto[] =>
+  meshEntry.mesh.uvs.flatMap((uv, uvIndex) => {
+    const outOfBoundsCoordinates = [
+      ...(uv.x < 0 || uv.x > 1 ? ["x"] : []),
+      ...(uv.y < 0 || uv.y > 1 ? ["y"] : [])
+    ];
+
+    return outOfBoundsCoordinates.length === 0
+      ? []
+      : [createUvCoordinateOutOfBoundsCheck(meshEntry, uvIndex, outOfBoundsCoordinates)];
+  });
+
+const validateMeshOrphanedVertices = (meshEntry: MeshWithIndex): readonly ValidationCheckResultDto[] => {
+  const referencedVertexIndexes = createReferencedVertexIndexSet(meshEntry.mesh);
+
+  return meshEntry.mesh.vertexStableIds.slice(0, meshEntry.mesh.vertices.length).flatMap((vertexStableId, vertexIndex) =>
+    referencedVertexIndexes.has(vertexIndex)
+      ? []
+      : [createOrphanedVertexCheck(meshEntry, vertexIndex, vertexStableId, referencedVertexIndexes)]
+  );
+};
+
+const createReferencedVertexIndexSet = (mesh: MeshDto): ReadonlySet<number> => {
+  const referencedVertexIndexes = new Set<number>();
+
+  for (const triangle of mesh.triangles) {
+    for (const vertexIndex of triangle) {
+      if (vertexIndex < mesh.vertices.length) {
+        referencedVertexIndexes.add(vertexIndex);
+      }
+    }
+  }
+
+  return referencedVertexIndexes;
+};
+
+const createDuplicateTriangleKey = (
+  triangle: readonly [number, number, number]
+): string => [...triangle].sort((left, right) => left - right).join(",");
 
 const getDegenerateTriangleReason = (
   mesh: MeshDto,
@@ -189,6 +255,11 @@ const validateRuntimeMeshEvidence = (
     return [];
   }
 
+  const staleIdentityChecks = validateRuntimeSnapshotMeshEvidenceIdentity(indexes);
+  if (staleIdentityChecks.length > 0) {
+    return staleIdentityChecks;
+  }
+
   return visibleDrawableEntries.flatMap((drawableEntry) => {
     const meshEntry = indexes.meshes.find((entry) => entry.mesh.meshId === drawableEntry.drawable.meshId);
     if (meshEntry === undefined) {
@@ -223,6 +294,7 @@ const validateRuntimeMeshEvidence = (
       return [
         createRuntimeMeshEvidenceCheck({
           indexes,
+          checkId: "mesh.runtimeEvidenceMismatch",
           meshEntry,
           drawableEntry,
           reason: "mesh-id-mismatch",
@@ -242,6 +314,7 @@ const validateRuntimeMeshEvidence = (
       return [
         createRuntimeMeshEvidenceCheck({
           indexes,
+          checkId: "mesh.runtimeEvidenceMismatch",
           meshEntry,
           drawableEntry,
           reason: "vertex-count-mismatch",
@@ -287,6 +360,7 @@ const validateRuntimeMeshEvidence = (
       return [
         createRuntimeMeshEvidenceCheck({
           indexes,
+          checkId: "mesh.runtimeEvidenceMismatch",
           meshEntry,
           drawableEntry,
           reason: "runtime-mesh-evidence-inconsistent",
@@ -304,6 +378,41 @@ const validateRuntimeMeshEvidence = (
 
     return [];
   });
+};
+
+const validateRuntimeSnapshotMeshEvidenceIdentity = (
+  indexes: MeshSemanticIndexes
+): readonly ValidationCheckResultDto[] => {
+  const runtimeSnapshot = indexes.runtimeSnapshot;
+  if (runtimeSnapshot === undefined) {
+    return [];
+  }
+
+  const checks: ValidationCheckResultDto[] = [];
+  const packageId = indexes.packageDocument.manifest.packageId;
+  const packageRevision = indexes.packageDocument.manifest.packageRevision;
+
+  if (runtimeSnapshot.packageId !== packageId) {
+    checks.push(createRuntimeMeshEvidenceIdentityMismatchCheck({
+      indexes,
+      targetPath: "/runtimeSnapshot/packageId",
+      field: "packageId",
+      expectedValue: packageId,
+      actualValue: runtimeSnapshot.packageId
+    }));
+  }
+
+  if (runtimeSnapshot.packageRevision !== packageRevision) {
+    checks.push(createRuntimeMeshEvidenceIdentityMismatchCheck({
+      indexes,
+      targetPath: "/runtimeSnapshot/packageRevision",
+      field: "packageRevision",
+      expectedValue: String(packageRevision),
+      actualValue: String(runtimeSnapshot.packageRevision)
+    }));
+  }
+
+  return checks;
 };
 
 const packageRequiresMeshRuntimeEvidence = (packageDocument: PackageDocumentDto): boolean => {
@@ -343,19 +452,46 @@ const collectRuntimeMeshEvidenceMismatches = (input: {
     return mismatches;
   }
 
-  addMismatch(mismatches, "topology.vertexCount", input.runtimeDrawable.vertexCount, topology.vertexCount);
-  addMismatch(mismatches, "topology.triangleIndexCount", (topology.triangleCount ?? 0) * 3, topology.triangleIndexCount);
+  addMismatch(mismatches, "topology.vertexCount", input.meshEntry.mesh.vertices.length, topology.vertexCount);
+  addMismatch(
+    mismatches,
+    "topology.stableVertexIdCount",
+    input.meshEntry.mesh.vertexStableIds.length,
+    topology.stableVertexIdCount
+  );
+  addMismatch(mismatches, "topology.uvCount", input.meshEntry.mesh.uvs.length, topology.uvCount);
+  addMismatch(mismatches, "topology.triangleCount", input.meshEntry.mesh.triangles.length, topology.triangleCount);
+  addMismatch(mismatches, "topology.triangleIndexCount", input.meshEntry.mesh.triangles.length * 3, topology.triangleIndexCount);
+  if (input.meshEntry.mesh.triangleStableIds !== undefined || topology.stableTriangleIdCount !== undefined) {
+    addMismatch(
+      mismatches,
+      "topology.stableTriangleIdCount",
+      input.meshEntry.mesh.triangleStableIds?.length ?? 0,
+      topology.stableTriangleIdCount
+    );
+  }
+  if (input.meshEntry.mesh.topologyRevision !== undefined || topology.topologyRevision !== undefined) {
+    addMismatch(mismatches, "topology.topologyRevision", input.meshEntry.mesh.topologyRevision, topology.topologyRevision);
+  }
   addMismatch(
     mismatches,
     "topology.hasStableVertexIds",
-    (topology.stableVertexIdCount ?? 0) > 0,
+    input.meshEntry.mesh.vertexStableIds.length > 0,
     topology.hasStableVertexIds
   );
-  addMismatch(mismatches, "topology.hasUvProjection", (topology.uvCount ?? 0) > 0, topology.hasUvProjection);
-  addMismatch(mismatches, "topology.hasTriangles", (topology.triangleCount ?? 0) > 0, topology.hasTriangles);
+  if (input.meshEntry.mesh.triangleStableIds !== undefined || topology.hasStableTriangleIds !== undefined) {
+    addMismatch(
+      mismatches,
+      "topology.hasStableTriangleIds",
+      (input.meshEntry.mesh.triangleStableIds?.length ?? 0) > 0,
+      topology.hasStableTriangleIds
+    );
+  }
+  addMismatch(mismatches, "topology.hasUvProjection", input.meshEntry.mesh.uvs.length > 0, topology.hasUvProjection);
+  addMismatch(mismatches, "topology.hasTriangles", input.meshEntry.mesh.triangles.length > 0, topology.hasTriangles);
 
   if (input.runtimeMesh.vertices !== undefined && input.runtimeMesh.vertices.length > 0) {
-    addMismatch(mismatches, "vertices.length", topology.vertexCount, input.runtimeMesh.vertices.length);
+    addMismatch(mismatches, "vertices.length", input.meshEntry.mesh.vertices.length, input.runtimeMesh.vertices.length);
   }
 
   return mismatches;
@@ -455,6 +591,67 @@ const createUvCountMismatchCheck = (meshEntry: MeshWithIndex): ValidationCheckRe
   });
 };
 
+const createTriangleStableIdsLengthMismatchCheck = (meshEntry: MeshWithIndex): ValidationCheckResultDto => {
+  const targetPath = `/model/meshes/meshes/${meshEntry.index}/triangleStableIds`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "mesh.triangleStableIdsLengthMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "mesh_semantic",
+    target: {
+      kind: "mesh",
+      id: meshEntry.mesh.meshId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Mesh ${meshEntry.mesh.meshId} triangleStableIds length does not match triangles length.`,
+    evidence: [
+      `meshId=${meshEntry.mesh.meshId}`,
+      `triangleCount=${meshEntry.mesh.triangles.length}`,
+      `triangleStableIdsCount=${meshEntry.mesh.triangleStableIds?.length ?? 0}`,
+      "reason=triangle-stable-id-count-mismatch"
+    ],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
+    impact: "Mesh topology edit evidence cannot map authored triangles to stable triangle references until every triangle has one stable ID."
+  });
+};
+
+const createUvCoordinateOutOfBoundsCheck = (
+  meshEntry: MeshWithIndex,
+  uvIndex: number,
+  outOfBoundsCoordinates: readonly string[]
+): ValidationCheckResultDto => {
+  const targetPath = `/model/meshes/meshes/${meshEntry.index}/uvs/${uvIndex}`;
+  const uv = meshEntry.mesh.uvs[uvIndex]!;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "mesh.uvCoordinateOutOfBounds",
+    status: "fail",
+    severity: "error",
+    phase: "mesh_semantic",
+    target: {
+      kind: "mesh",
+      id: meshEntry.mesh.meshId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Mesh ${meshEntry.mesh.meshId} UV ${uvIndex} is outside semantic UV bounds.`,
+    evidence: [
+      `meshId=${meshEntry.mesh.meshId}`,
+      `uvIndex=${uvIndex}`,
+      `uv=${uv.x},${uv.y}`,
+      `outOfBoundsCoordinates=${outOfBoundsCoordinates.join(",")}`,
+      "semanticBounds=0..1",
+      "reason=uv-coordinate-out-of-bounds"
+    ],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
+    impact: "The validator cannot treat semantic UV edit evidence as bounded while UV coordinates are outside the project-defined 0..1 UV domain."
+  });
+};
+
 const createTriangleIndexOutOfRangeCheck = (
   meshEntry: MeshWithIndex,
   triangleIndex: number,
@@ -520,6 +717,80 @@ const createDegenerateTriangleCheck = (
   });
 };
 
+const createDuplicateTriangleCheck = (
+  meshEntry: MeshWithIndex,
+  triangleIndex: number,
+  firstTriangleIndex: number,
+  duplicateKey: string
+): ValidationCheckResultDto => {
+  const targetPath = `/model/meshes/meshes/${meshEntry.index}/triangles/${triangleIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "mesh.duplicateTriangle",
+    status: "fail",
+    severity: "error",
+    phase: "mesh_semantic",
+    target: {
+      kind: "mesh",
+      id: meshEntry.mesh.meshId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Mesh ${meshEntry.mesh.meshId} triangle ${triangleIndex} duplicates triangle ${firstTriangleIndex}.`,
+    evidence: [
+      `meshId=${meshEntry.mesh.meshId}`,
+      `triangleIndex=${triangleIndex}`,
+      `triangle=${meshEntry.mesh.triangles[triangleIndex]!.join(",")}`,
+      `duplicateOfTriangleIndex=${firstTriangleIndex}`,
+      `duplicateOfTriangle=${meshEntry.mesh.triangles[firstTriangleIndex]!.join(",")}`,
+      `normalizedTriangle=${duplicateKey}`,
+      "reason=duplicate-triangle"
+    ],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
+    impact: "Duplicate triangle topology makes mesh edit evidence ambiguous because two authored faces cover the same vertex triplet."
+  });
+};
+
+const createOrphanedVertexCheck = (
+  meshEntry: MeshWithIndex,
+  vertexIndex: number,
+  vertexStableId: string,
+  referencedVertexIndexes: ReadonlySet<number>
+): ValidationCheckResultDto => {
+  const targetPath = `/model/meshes/meshes/${meshEntry.index}/vertexStableIds/${vertexIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "mesh.orphanedVertex",
+    status: "fail",
+    severity: "error",
+    phase: "mesh_semantic",
+    target: {
+      kind: "mesh",
+      id: meshEntry.mesh.meshId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Mesh ${meshEntry.mesh.meshId} vertex ${vertexStableId} is not referenced by any triangle.`,
+    evidence: [
+      `meshId=${meshEntry.mesh.meshId}`,
+      `vertexIndex=${vertexIndex}`,
+      `vertexStableId=${vertexStableId}`,
+      `triangleCount=${meshEntry.mesh.triangles.length}`,
+      `referencedVertexIndexes=${formatReferencedVertexIndexes(referencedVertexIndexes)}`,
+      "reason=orphaned-stable-vertex"
+    ],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
+    impact: "Topology edit evidence cannot prove this stable vertex contributes to an authored mesh face."
+  });
+};
+
+const formatReferencedVertexIndexes = (referencedVertexIndexes: ReadonlySet<number>): string => {
+  const indexes = [...referencedVertexIndexes].sort((left, right) => left - right);
+  return indexes.length === 0 ? "none" : indexes.join(",");
+};
+
 const createRuntimeSnapshotMissingCheck = (
   indexes: MeshSemanticIndexes,
   visibleDrawableEntries: readonly DrawableWithIndex[]
@@ -549,6 +820,7 @@ const createRuntimeSnapshotMissingCheck = (
 
 const createRuntimeMeshEvidenceCheck = (input: {
   readonly indexes: MeshSemanticIndexes;
+  readonly checkId?: MeshRuntimeEvidenceCheckId;
   readonly meshEntry: MeshWithIndex;
   readonly drawableEntry: DrawableWithIndex;
   readonly reason: MeshRuntimeEvidenceReason;
@@ -557,7 +829,7 @@ const createRuntimeMeshEvidenceCheck = (input: {
   readonly targetPath: string;
 }): ValidationCheckResultDto =>
   ValidationCheckResultSchema.parse({
-    checkId: "mesh.runtimeEvidenceMissing",
+    checkId: input.checkId ?? "mesh.runtimeEvidenceMissing",
     status: "fail",
     severity: "error",
     phase: "representative_evaluation",
@@ -575,5 +847,37 @@ const createRuntimeMeshEvidenceCheck = (input: {
     relatedAC: ["AC-MVP-005", "AC-MVP-012", "AC-MVP-013"],
     relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
     impact: "Validator cannot prove runtime/viewer mesh renderability while runtime drawable mesh evidence is absent or inconsistent.",
+    snapshotIds: [input.indexes.runtimeSnapshot!.snapshotId as RuntimeSnapshotId]
+  });
+
+const createRuntimeMeshEvidenceIdentityMismatchCheck = (input: {
+  readonly indexes: MeshSemanticIndexes;
+  readonly targetPath: string;
+  readonly field: string;
+  readonly expectedValue: string;
+  readonly actualValue: string;
+}): ValidationCheckResultDto =>
+  ValidationCheckResultSchema.parse({
+    checkId: "mesh.runtimeEvidenceMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "representative_evaluation",
+    target: {
+      kind: "runtimeSnapshot",
+      id: input.indexes.runtimeSnapshot!.snapshotId,
+      path: input.targetPath
+    },
+    targetPath: input.targetPath,
+    message: `Runtime snapshot mesh evidence does not match package field ${input.field}.`,
+    evidence: [
+      `snapshotId=${input.indexes.runtimeSnapshot!.snapshotId}`,
+      `field=${input.field}`,
+      `packageValue=${input.expectedValue}`,
+      `evidenceValue=${input.actualValue}`,
+      "reason=stale-runtime-snapshot-identity"
+    ],
+    relatedAC: ["AC-MVP-005", "AC-MVP-012", "AC-MVP-013"],
+    relatedScenarios: ["SC-MESH-006", "SC-MVP-004"],
+    impact: "Validator cannot trust runtime or viewer mesh evidence while snapshot identity does not match the validated package.",
     snapshotIds: [input.indexes.runtimeSnapshot!.snapshotId as RuntimeSnapshotId]
   });

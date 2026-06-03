@@ -12,6 +12,7 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence.js";
 import { OperationPreconditionResultSchema } from "./operation-precondition.js";
 
 export const OperationResultPreconditionSchema = OperationPreconditionResultSchema;
@@ -32,6 +33,7 @@ export const OperationResultSchema = z.object({
   finalRuntimeState: RuntimeStateDtoSchema.optional(),
   finalRuntimeStateRef: RuntimeStateArtifactRefSchema.optional(),
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
+  meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional(),
   reversible: z.boolean()
 });
 export type OperationResultDto = z.infer<typeof OperationResultSchema>;

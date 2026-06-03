@@ -116,7 +116,9 @@
           "uvCount": 0,
           "triangleCount": 0,
           "triangleIndexCount": 0,
+          "stableTriangleIdCount": 0,
           "hasStableVertexIds": false,
+          "hasStableTriangleIds": false,
           "hasUvProjection": false,
           "hasTriangles": false
         },
@@ -145,7 +147,9 @@
               "y": 2
             }
           }
-        ]
+        ],
+        "uvs": [],
+        "triangles": []
       },
       "diagnostics": []
     },
@@ -270,7 +274,9 @@
           "uvCount": 0,
           "triangleCount": 0,
           "triangleIndexCount": 0,
+          "stableTriangleIdCount": 0,
           "hasStableVertexIds": false,
+          "hasStableTriangleIds": false,
           "hasUvProjection": false,
           "hasTriangles": false
         },
@@ -299,7 +305,9 @@
               "y": 2.75
             }
           }
-        ]
+        ],
+        "uvs": [],
+        "triangles": []
       },
       "diagnostics": []
     },

@@ -8,6 +8,7 @@ export const TargetKindSchema = z.enum([
   "drawable",
   "mesh",
   "vertex",
+  "triangle",
   "parameter",
   "keyformSet",
   "rigControl",

@@ -106,7 +106,7 @@ MVPAvatar_Clean.openpackage/
 | `manifest.json` | `PackageManifestDto` | yes | all model/asset/log/report paths | schema + package validator |
 | `model/graph.json` | `ModelGraphDto` | yes | part tree, drawable membership, rig control roots | package + semantic validator |
 | `model/drawables.json` | `DrawablesFileDto` | yes | source asset, texture, mesh, part, mask | package + runtime validator |
-| `model/meshes.json` | `MeshesFileDto` | yes | drawable IDs, vertex IDs | semantic + runtime validator |
+| `model/meshes.json` | `MeshesFileDto` | yes | drawable IDs, vertex IDs, optional triangle IDs, optional topology revision | semantic + runtime validator |
 | `model/parameters.json` | `ParametersFileDto` | yes | parameter IDs and aliases | semantic + runtime validator |
 | `model/keyforms.json` | `KeyformsFileDto` | yes | target IDs, parameter IDs | semantic + runtime validator |
 | `model/rig-controls.json` | `RigControlsFileDto` | yes | child drawable/rig control IDs | semantic + runtime validator |
@@ -186,6 +186,18 @@ flowchart LR
 
 The mapping flow keeps source provenance reachable from runtime-visible objects while preventing PSD-specific structures from leaking into `runtime-core`.
 
+## Mesh Topology / UV Contract v0
+
+Wave38 adds a semantic topology/UV edit boundary without changing the package file version. Existing meshes may omit the new fields.
+
+| Field | Contract |
+|-------|----------|
+| `topologyRevision` | optional nonnegative integer for mesh topology/UV semantic revision evidence |
+| `triangleStableIds` | optional `tri_...` stable IDs aligned with `triangles[]` when topology operations need stable triangle identity |
+| `vertexStableIds` | existing stable vertex references remain parse-compatible with historical package fixtures, but must be machine-readable tokens without spaces; operation payloads use `VertexIdSchema` for new bounded edits |
+
+The package mesh contract remains semantic. These fields do not claim automatic triangulation, retopology, atlas packing, real texture byte decode, renderer correctness, texture sampling correctness, pixel oracle support, or Cubism compatibility.
+
 ## Package Load Flow
 
 ```mermaid
@@ -251,6 +263,7 @@ import {
   OperationIdSchema,
   ProvenanceIdSchema,
   RectSchema,
+  TriangleIdSchema,
   Vec2Schema,
 } from "./contracts";
 
@@ -335,7 +348,9 @@ export const MeshSchema = z.object({
   vertices: z.array(Vec2Schema),
   uvs: z.array(Vec2Schema),
   triangles: z.array(z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative(), z.number().int().nonnegative()])),
-  vertexStableIds: z.array(z.string()),
+  vertexStableIds: z.array(z.string().regex(/^[A-Za-z0-9_-]+$/)),
+  triangleStableIds: z.array(TriangleIdSchema).optional(),
+  topologyRevision: z.number().int().nonnegative().optional(),
   bounds: RectSchema,
   generationProvenanceId: ProvenanceIdSchema,
 });

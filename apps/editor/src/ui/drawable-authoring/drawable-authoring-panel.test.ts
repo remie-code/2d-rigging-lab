@@ -5,7 +5,8 @@ import {
   PartIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  TriangleIdSchema
 } from "@private-2d-rigging-lab/contracts";
 
 import {
@@ -15,6 +16,8 @@ import {
   createDrawableVisibilityToggleTestId,
   createMeshCanvasNudgeButtonTestId,
   createMeshCanvasVertexTestId,
+  createMeshTopologyActionTestId,
+  createMeshTriangleRemoveButtonTestId,
   createMeshVertexNudgeButtonTestId,
   createMeshVertexRowTestId,
   editorTestIds,
@@ -259,6 +262,102 @@ describe("drawable authoring panel", () => {
     ]);
   });
 
+  it("renders topology and UV controls without unsupported workflow wording", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState({ selectedVertexIds: ["vtx_body_0"] }),
+      () => {},
+      {
+        onAddMeshVertex: (command) => calls.push(["addVertex", command]),
+        onRemoveSelectedMeshVertex: (command) => calls.push(["removeVertex", command]),
+        onRemoveMeshTriangle: (command) => calls.push(["removeTriangle", command]),
+        onNudgeMeshUv: (command) => calls.push(["uv", command])
+      }
+    );
+
+    expect(findByTestId(panel, editorTestIds.meshTopologyControls)?.textContent).toContain(
+      "Mesh Topology / UV"
+    );
+    expect(findByTestId(panel, editorTestIds.meshTopologyStatus)?.textContent).toContain(
+      "Topology r2"
+    );
+    expect(findByTestId(panel, createMeshTopologyActionTestId("addVertex"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createMeshTopologyActionTestId("removeVertex"))?.disabled).toBe(true);
+    expect(findByTestId(panel, createMeshTopologyActionTestId("uvRight"))?.disabled).toBe(false);
+    expect(findByTestId(panel, createMeshTriangleRemoveButtonTestId("mesh_body", "tri_body_0"))?.disabled).toBe(false);
+    expect(findByTestId(panel, editorTestIds.meshTopologyControls)?.textContent).not.toMatch(
+      /automatic triangulation|atlas packing|texture sampling|image decode|pixel|Cubism/i
+    );
+
+    findByTestId(panel, createMeshTopologyActionTestId("addVertex"))?.emit("click");
+    findByTestId(panel, createMeshTopologyActionTestId("removeVertex"))?.emit("click");
+    findByTestId(panel, createMeshTopologyActionTestId("uvRight"))?.emit("click");
+    findByTestId(panel, createMeshTriangleRemoveButtonTestId("mesh_body", "tri_body_0"))?.emit("click");
+
+    expect(calls).toEqual([
+      [
+        "addVertex",
+        expect.objectContaining({
+          operationType: "addMeshVertex",
+          meshId: "mesh_body",
+          vertexId: "vtx_body_editor_2_3",
+          position: { x: 24, y: 16 },
+          uv: { x: 0, y: 0 },
+          expectedTopologyRevision: 2
+        })
+      ],
+      [
+        "uv",
+        expect.objectContaining({
+          operationType: "moveMeshUvPoint",
+          meshId: "mesh_body",
+          uvDeltas: [
+            {
+              vertexId: "vtx_body_0",
+              delta: { x: 0.05, y: 0 }
+            }
+          ]
+        })
+      ],
+      [
+        "removeTriangle",
+        expect.objectContaining({
+          operationType: "removeMeshTriangle",
+          meshId: "mesh_body",
+          triangleId: "tri_body_0"
+        })
+      ]
+    ]);
+  });
+
+  it("enables add triangle only for three selected vertices that do not already form a triangle", () => {
+    const calls: unknown[] = [];
+    const panel = createPanel(
+      createDrawableState({
+        selectedVertexIds: ["vtx_body_0", "vtx_body_2", "vtx_body_3"],
+        includeUnreferencedVertex: true
+      }),
+      () => {},
+      {
+        onAddMeshTriangle: (command) => calls.push(command)
+      }
+    );
+
+    expect(findByTestId(panel, createMeshTopologyActionTestId("addTriangle"))?.disabled).toBe(false);
+
+    findByTestId(panel, createMeshTopologyActionTestId("addTriangle"))?.emit("click");
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        operationType: "addMeshTriangle",
+        meshId: "mesh_body",
+        triangleId: "tri_body_editor_2_1",
+        vertexIds: ["vtx_body_0", "vtx_body_2", "vtx_body_3"],
+        expectedTopologyRevision: 2
+      })
+    ]);
+  });
+
   it("submits a valid generated drawable preset command", () => {
     const state = createDrawableState();
     const calls: unknown[] = [];
@@ -320,7 +419,7 @@ describe("drawable authoring panel", () => {
 const createPanel = (
   state: ReturnType<typeof createDrawableState>,
   onSubmit: Parameters<typeof createDrawableAuthoringPanel>[0]["onCommitCreateDrawable"] = () => {},
-  callbacks: Pick<
+  callbacks: Partial<Pick<
     Parameters<typeof createDrawableAuthoringPanel>[0],
     | "onToggleDrawableRuntimeVisibility"
     | "onMoveDrawableLayer"
@@ -328,19 +427,28 @@ const createPanel = (
     | "onSelectMeshCanvasVertex"
     | "onNudgeMeshCanvasSelection"
     | "onDragMeshCanvasSelection"
-  > = {
-    onToggleDrawableRuntimeVisibility() {},
-    onMoveDrawableLayer() {},
-    onNudgeMeshVertex() {},
-    onSelectMeshCanvasVertex() {},
-    onNudgeMeshCanvasSelection() {},
-    onDragMeshCanvasSelection() {}
-  }
+    | "onAddMeshVertex"
+    | "onRemoveSelectedMeshVertex"
+    | "onAddMeshTriangle"
+    | "onRemoveMeshTriangle"
+    | "onNudgeMeshUv"
+  >> = {}
 ): TestElement =>
   createDrawableAuthoringPanel({
     state,
     viewModel: projectEditorWorkflowViewModel(state),
     onCommitCreateDrawable: onSubmit,
+    onToggleDrawableRuntimeVisibility() {},
+    onMoveDrawableLayer() {},
+    onNudgeMeshVertex() {},
+    onSelectMeshCanvasVertex() {},
+    onNudgeMeshCanvasSelection() {},
+    onDragMeshCanvasSelection() {},
+    onAddMeshVertex() {},
+    onRemoveSelectedMeshVertex() {},
+    onAddMeshTriangle() {},
+    onRemoveMeshTriangle() {},
+    onNudgeMeshUv() {},
     ...callbacks
   }) as unknown as TestElement;
 
@@ -348,6 +456,7 @@ const createDrawableState = (
   options: {
     readonly includeSecondDrawable?: boolean;
     readonly selectedVertexIds?: readonly string[];
+    readonly includeUnreferencedVertex?: boolean;
   } = {}
 ) =>
   projectLoadedPackageState({
@@ -445,15 +554,24 @@ const createDrawableState = (
         vertices: [
           { x: 24, y: 16 },
           { x: 72, y: 16 },
-          { x: 48, y: 80 }
+          { x: 48, y: 80 },
+          ...(options.includeUnreferencedVertex ? [{ x: 72, y: 80 }] : [])
         ],
         uvs: [
           { x: 0, y: 0 },
           { x: 1, y: 0 },
-          { x: 0.5, y: 1 }
+          { x: 0.5, y: 1 },
+          ...(options.includeUnreferencedVertex ? [{ x: 1, y: 1 }] : [])
         ],
         triangles: [[0, 1, 2] as [number, number, number]],
-        vertexStableIds: ["vtx_body_0", "vtx_body_1", "vtx_body_2"],
+        vertexStableIds: [
+          "vtx_body_0",
+          "vtx_body_1",
+          "vtx_body_2",
+          ...(options.includeUnreferencedVertex ? ["vtx_body_3"] : [])
+        ],
+        triangleStableIds: [TriangleIdSchema.parse("tri_body_0")],
+        topologyRevision: 2,
         bounds: { x: 24, y: 16, width: 48, height: 64 },
         generationProvenanceId: ProvenanceIdSchema.parse("prov_body")
       },

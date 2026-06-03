@@ -27,6 +27,8 @@ export const editorTestIds = {
   meshCanvasEditor: "meshCanvas.editor",
   meshCanvasSurface: "meshCanvas.surface",
   meshCanvasStatus: "meshCanvas.status",
+  meshTopologyControls: "meshTopology.controls",
+  meshTopologyStatus: "meshTopology.status",
   sourceIntakePanel: "sourceIntake.panel",
   sourceIntakeForm: "sourceIntake.form",
   sourceIntakeSubmit: "sourceIntake.confirm",
@@ -182,6 +184,15 @@ export const createMeshCanvasVertexTestId = (meshId: string, vertexId: string): 
 export const createMeshCanvasNudgeButtonTestId = (
   direction: "left" | "right" | "up" | "down"
 ): string => `meshCanvas.nudge.${direction}`;
+
+export const createMeshTopologyActionTestId = (
+  action: "addVertex" | "removeVertex" | "addTriangle" | "uvLeft" | "uvRight" | "uvUp" | "uvDown"
+): string => `meshTopology.action.${action}`;
+
+export const createMeshTriangleRemoveButtonTestId = (
+  meshId: string,
+  triangleId: string
+): string => `meshTopology.triangle.remove.${meshId}.${triangleId}`;
 
 export const createSourceIntakeLayerRowTestId = (sourceLayerId: string): string =>
   `sourceIntake.layer.${sourceLayerId}`;

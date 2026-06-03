@@ -3,6 +3,10 @@ import type {
   MeshCanvasEditDisabledReason,
   MeshCanvasVertexHitTargetState
 } from "./mesh-edit-state.js";
+import {
+  projectMeshTopologyControlsViewModel,
+  type MeshTopologyControlsViewModel
+} from "./mesh-topology-view-model.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export type MeshVertexNudgeDirection = "left" | "right" | "up" | "down";
@@ -34,6 +38,7 @@ export interface EditableMeshVertexViewModel {
   readonly hitRadius: number;
   readonly selected: boolean;
   readonly positionLabel: string;
+  readonly uvLabel: string;
   readonly canvasPositionLabel: string;
   readonly nudgeCommands: MeshVertexNudgeCommandSetViewModel;
   readonly nudgeLeftLabel: string;
@@ -87,6 +92,7 @@ export interface MeshCanvasSelectionViewModel {
 
 export interface MeshEditResultViewModel {
   readonly operationId: string;
+  readonly operationType: string;
   readonly status: string;
   readonly diagnosticCount: number;
 }
@@ -95,6 +101,7 @@ export interface MeshEditViewModel {
   readonly selectedMesh: SelectedMeshViewModel | null;
   readonly editableVertices: readonly EditableMeshVertexViewModel[];
   readonly canvasSelection: MeshCanvasSelectionViewModel;
+  readonly topology: MeshTopologyControlsViewModel;
   readonly hasSelectedMesh: boolean;
   readonly hasEditableVertices: boolean;
   readonly canNudgeSelectedMesh: boolean;
@@ -147,6 +154,7 @@ export const projectMeshEditViewModel = (state: EditorSemanticState): MeshEditVi
     selectedMesh: selectedMeshViewModel,
     editableVertices,
     canvasSelection: projectMeshCanvasSelectionViewModel(state.meshEdit),
+    topology: projectMeshTopologyControlsViewModel(state),
     hasSelectedMesh: selectedMesh !== null,
     hasEditableVertices: editableVertices.length > 0,
     canNudgeSelectedMesh: state.meshEdit.canNudgeSelectedMesh,
@@ -164,7 +172,7 @@ export const projectMeshEditViewModel = (state: EditorSemanticState): MeshEditVi
     lastMeshEditResultLabel:
       lastMeshEditResult === null
         ? "No mesh edit committed"
-        : `moveMeshVertex ${lastMeshEditResult.status}`
+        : `${lastMeshEditResult.operationType} ${lastMeshEditResult.status}`
   };
 };
 
@@ -189,6 +197,7 @@ const projectEditableMeshVertexViewModel = (input: {
     hitRadius,
     selected,
     positionLabel: `${formatPreviewNumber(vertex.position.x)}, ${formatPreviewNumber(vertex.position.y)}`,
+    uvLabel: `${formatPreviewNumber(vertex.uv.x)}, ${formatPreviewNumber(vertex.uv.y)}`,
     canvasPositionLabel: `${formatPreviewNumber(canvasPosition.x)}, ${formatPreviewNumber(canvasPosition.y)}`,
     nudgeCommands: {
       left: createMeshVertexNudgeCommand(meshId, vertex.vertexId, "left", {
@@ -286,12 +295,23 @@ const createMeshVertexNudgeCommand = (
 
 const projectLastMeshEditResult = (state: EditorSemanticState): MeshEditResultViewModel | null => {
   const result = state.lastOperationResult;
-  if (result === null || result.operationType !== "moveMeshVertex") {
+  if (
+    result === null ||
+    (
+      result.operationType !== "moveMeshVertex" &&
+      result.operationType !== "addMeshVertex" &&
+      result.operationType !== "removeMeshVertex" &&
+      result.operationType !== "addMeshTriangle" &&
+      result.operationType !== "removeMeshTriangle" &&
+      result.operationType !== "moveMeshUvPoint"
+    )
+  ) {
     return null;
   }
 
   return {
     operationId: result.operationId,
+    operationType: result.operationType,
     status: result.status,
     diagnosticCount: result.diagnosticCount
   };

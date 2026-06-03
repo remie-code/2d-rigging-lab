@@ -432,6 +432,11 @@ const createDrawableEntry = (
       baseDrawOrder: drawable.baseDrawOrder,
       bounds: mesh.bounds,
       vertices: mesh.vertices,
+      ...(mesh.uvs === undefined ? {} : { uvs: mesh.uvs }),
+      ...(mesh.triangles === undefined ? {} : { triangles: mesh.triangles }),
+      ...(mesh.vertexStableIds === undefined ? {} : { vertexStableIds: mesh.vertexStableIds }),
+      ...(mesh.triangleStableIds === undefined ? {} : { triangleStableIds: mesh.triangleStableIds }),
+      ...(mesh.topologyRevision === undefined ? {} : { topologyRevision: mesh.topologyRevision }),
       vertexCount: mesh.vertices.length
     }
   ];

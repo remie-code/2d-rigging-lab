@@ -158,6 +158,13 @@ const createViewerRuntimeGraph = (): NormalizedRuntimeGraph => ({
           { x: 1, y: 0 },
           { x: 0, y: 1 }
         ],
+        uvs: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 }
+        ],
+        triangles: [[0, 1, 2]],
+        vertexStableIds: ["v0", "v1", "v2"],
         vertexCount: 3
       }
     ]

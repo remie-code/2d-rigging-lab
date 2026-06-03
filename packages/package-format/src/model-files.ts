@@ -6,6 +6,10 @@ import {
   KeyformSetIdSchema,
   MaskRelationIdSchema,
   MeshIdSchema,
+  MeshTopologyRevisionDtoSchema,
+  MeshTriangleIndicesDtoSchema,
+  MeshTriangleStableIdSetDtoSchema,
+  MeshVertexStableIdDtoSchema,
   ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
@@ -44,16 +48,15 @@ export const MeshSchema = z.object({
   drawableId: DrawableIdSchema,
   vertices: z.array(Vec2Schema),
   uvs: z.array(Vec2Schema),
-  triangles: z.array(z.tuple([
-    z.number().int().nonnegative(),
-    z.number().int().nonnegative(),
-    z.number().int().nonnegative()
-  ])),
-  vertexStableIds: z.array(z.string()),
+  triangles: z.array(MeshTriangleIndicesDtoSchema),
+  vertexStableIds: z.array(MeshVertexStableIdDtoSchema),
+  triangleStableIds: MeshTriangleStableIdSetDtoSchema.optional(),
+  topologyRevision: MeshTopologyRevisionDtoSchema.optional(),
   bounds: RectSchema,
   generationProvenanceId: ProvenanceIdSchema
 });
 export type MeshDto = z.infer<typeof MeshSchema>;
+export const MeshDtoSchema = MeshSchema;
 
 export const ParameterSchema = z.object({
   parameterId: ParameterIdSchema,

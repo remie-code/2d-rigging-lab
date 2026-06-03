@@ -73,6 +73,18 @@ import {
   type EditorMoveMeshVertexCommand
 } from "./mesh-vertex-command.js";
 import {
+  createAddMeshTriangleOperationRequest,
+  createAddMeshVertexOperationRequest,
+  createMoveMeshUvPointOperationRequest,
+  createRemoveMeshTriangleOperationRequest,
+  createRemoveMeshVertexOperationRequest,
+  type EditorAddMeshTriangleCommand,
+  type EditorAddMeshVertexCommand,
+  type EditorMoveMeshUvPointCommand,
+  type EditorRemoveMeshTriangleCommand,
+  type EditorRemoveMeshVertexCommand
+} from "./mesh-topology-command.js";
+import {
   createDeletePartOperationRequest,
   createPartOperationRequest,
   createSetDrawablePartOperationRequest,
@@ -131,6 +143,11 @@ export interface EditorSessionAdapter {
   ): EditorSessionPersistenceResult;
   commitSetDrawableDrawOrder(command: EditorSetDrawableDrawOrderCommand): EditorSessionPersistenceResult;
   commitMoveMeshVertex(command: EditorMoveMeshVertexCommand): EditorSessionPersistenceResult;
+  commitAddMeshVertex(command: EditorAddMeshVertexCommand): EditorSessionPersistenceResult;
+  commitRemoveMeshVertex(command: EditorRemoveMeshVertexCommand): EditorSessionPersistenceResult;
+  commitAddMeshTriangle(command: EditorAddMeshTriangleCommand): EditorSessionPersistenceResult;
+  commitRemoveMeshTriangle(command: EditorRemoveMeshTriangleCommand): EditorSessionPersistenceResult;
+  commitMoveMeshUvPoint(command: EditorMoveMeshUvPointCommand): EditorSessionPersistenceResult;
   commitCreateDynamicsGroup(command: EditorCreateDynamicsGroupCommand): EditorSessionPersistenceResult;
   commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorSessionPersistenceResult;
   commitCreateRotation2dRigControl(
@@ -340,6 +357,26 @@ export const createEditorSessionAdapter = (
         command,
         authoringSession.packageRevision
       );
+      return this.commitOperation(request);
+    },
+    commitAddMeshVertex(command) {
+      const request = createAddMeshVertexOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitRemoveMeshVertex(command) {
+      const request = createRemoveMeshVertexOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitAddMeshTriangle(command) {
+      const request = createAddMeshTriangleOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitRemoveMeshTriangle(command) {
+      const request = createRemoveMeshTriangleOperationRequest(command, authoringSession.packageRevision);
+      return this.commitOperation(request);
+    },
+    commitMoveMeshUvPoint(command) {
+      const request = createMoveMeshUvPointOperationRequest(command, authoringSession.packageRevision);
       return this.commitOperation(request);
     },
     commitCreateDynamicsGroup(command) {

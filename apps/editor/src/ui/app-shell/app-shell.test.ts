@@ -751,6 +751,11 @@ describe("editor app shell preview panel", () => {
       onSelectMeshCanvasVertex() {},
       onNudgeMeshCanvasSelection() {},
       onDragMeshCanvasSelection() {},
+      onAddMeshVertex() {},
+      onRemoveSelectedMeshVertex() {},
+      onAddMeshTriangle() {},
+      onRemoveMeshTriangle() {},
+      onNudgeMeshUv() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
@@ -810,6 +815,11 @@ describe("editor app shell preview panel", () => {
       onSelectMeshCanvasVertex() {},
       onNudgeMeshCanvasSelection() {},
       onDragMeshCanvasSelection() {},
+      onAddMeshVertex() {},
+      onRemoveSelectedMeshVertex() {},
+      onAddMeshTriangle() {},
+      onRemoveMeshTriangle() {},
+      onNudgeMeshUv() {},
       onCommitCreateDynamicsGroup() {},
       onCommitUpdateDynamicsGroup() {},
       onCommitCreateRotation2dRigControl() {},
@@ -855,6 +865,11 @@ const renderShell = (
     readonly onSelectMeshCanvasVertex?: Parameters<typeof createEditorAppShell>[0]["onSelectMeshCanvasVertex"];
     readonly onNudgeMeshCanvasSelection?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshCanvasSelection"];
     readonly onDragMeshCanvasSelection?: Parameters<typeof createEditorAppShell>[0]["onDragMeshCanvasSelection"];
+    readonly onAddMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onAddMeshVertex"];
+    readonly onRemoveSelectedMeshVertex?: Parameters<typeof createEditorAppShell>[0]["onRemoveSelectedMeshVertex"];
+    readonly onAddMeshTriangle?: Parameters<typeof createEditorAppShell>[0]["onAddMeshTriangle"];
+    readonly onRemoveMeshTriangle?: Parameters<typeof createEditorAppShell>[0]["onRemoveMeshTriangle"];
+    readonly onNudgeMeshUv?: Parameters<typeof createEditorAppShell>[0]["onNudgeMeshUv"];
     readonly onRunDynamicsPreview?: (frameCount: number) => void;
     readonly onResetDynamicsPreview?: () => void;
     readonly onCommitCreateRotation2dRigControl?: Parameters<typeof createEditorAppShell>[0]["onCommitCreateRotation2dRigControl"];
@@ -923,6 +938,11 @@ const renderShell = (
     onSelectMeshCanvasVertex: callbacks.onSelectMeshCanvasVertex ?? (() => {}),
     onNudgeMeshCanvasSelection: callbacks.onNudgeMeshCanvasSelection ?? (() => {}),
     onDragMeshCanvasSelection: callbacks.onDragMeshCanvasSelection ?? (() => {}),
+    onAddMeshVertex: callbacks.onAddMeshVertex ?? (() => {}),
+    onRemoveSelectedMeshVertex: callbacks.onRemoveSelectedMeshVertex ?? (() => {}),
+    onAddMeshTriangle: callbacks.onAddMeshTriangle ?? (() => {}),
+    onRemoveMeshTriangle: callbacks.onRemoveMeshTriangle ?? (() => {}),
+    onNudgeMeshUv: callbacks.onNudgeMeshUv ?? (() => {}),
     onCommitCreateDynamicsGroup() {},
     onCommitUpdateDynamicsGroup() {},
     onCommitCreateRotation2dRigControl: callbacks.onCommitCreateRotation2dRigControl ?? (() => {}),

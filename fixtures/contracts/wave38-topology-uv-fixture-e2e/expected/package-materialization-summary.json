@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "wave38-topology-uv-package-materialization-summary-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "package": {
+    "packageId": "pkg_editor_browser_sample",
+    "packageRevision": 6
+  },
+  "drawable": {
+    "drawableId": "draw_wave_38_topology_uv",
+    "displayName": "Wave 38 Topology UV",
+    "meshId": "mesh_wave_38_topology_uv"
+  },
+  "mesh": {
+    "meshId": "mesh_wave_38_topology_uv",
+    "vertexCount": 10,
+    "uvCount": 10,
+    "triangleCount": 9,
+    "triangleStableIdCount": 9,
+    "topologyRevision": 3,
+    "addedVertex": {
+      "vertexId": "vtx_wave_38_topology_uv_editor_0_9",
+      "vertexIndex": 9,
+      "position": {
+        "x": 98,
+        "y": 42
+      },
+      "uv": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "addedTriangle": {
+      "triangleId": "tri_wave_38_topology_uv_editor_1_8",
+      "triangleIndex": 8,
+      "vertexIndexes": [
+        0,
+        1,
+        9
+      ],
+      "vertexIds": [
+        "vtx_wave_38_topology_uv_0_0",
+        "vtx_wave_38_topology_uv_0_1",
+        "vtx_wave_38_topology_uv_editor_0_9"
+      ]
+    },
+    "uvEdit": {
+      "vertexId": "vtx_wave_38_topology_uv_0_0",
+      "uvAfter": {
+        "x": 0.05,
+        "y": 0
+      }
+    }
+  },
+  "rightsClean": {
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false
+  }
+}

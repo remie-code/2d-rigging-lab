@@ -203,11 +203,15 @@ describe("tutorial runtime/viewer evidence summary", () => {
               uvCount: 0,
               triangleCount: 2,
               triangleIndexCount: 6,
+              stableTriangleIdCount: 0,
               hasStableVertexIds: false,
+              hasStableTriangleIds: false,
               hasUvProjection: false,
               hasTriangles: true
             },
             vertices: [],
+            uvs: [],
+            triangles: [],
             movedVertexRefs: []
           }
         ]

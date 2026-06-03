@@ -1,4 +1,4 @@
-import { VertexIdSchema, type RectDto, type Vec2Dto } from "@private-2d-rigging-lab/contracts";
+import { TriangleIdSchema, VertexIdSchema, type RectDto, type Vec2Dto } from "@private-2d-rigging-lab/contracts";
 import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 
 import type { DrawableListItemState } from "./drawable-list-state.js";
@@ -14,6 +14,8 @@ export interface MeshEditSelectedMeshState {
   readonly bounds: RectDto;
   readonly vertexCount: number;
   readonly triangleCount: number;
+  readonly topologyRevision: number;
+  readonly hasTriangleStableIds: boolean;
   readonly runtimeVisible: boolean;
   readonly editorHidden: boolean;
   readonly locked: boolean;
@@ -23,11 +25,22 @@ export interface EditableMeshVertexState {
   readonly vertexId: string;
   readonly vertexIndex: number;
   readonly position: Vec2Dto;
+  readonly uv: Vec2Dto;
+}
+
+export interface EditableMeshTriangleState {
+  readonly triangleId: string | null;
+  readonly triangleIndex: number;
+  readonly vertexIndexes: readonly [number, number, number];
+  readonly vertexIds: readonly [string, string, string];
+  readonly hasStableId: boolean;
+  readonly removable: boolean;
 }
 
 export interface MeshEditTargetState {
   readonly selectedMesh: MeshEditSelectedMeshState;
   readonly editableVertices: readonly EditableMeshVertexState[];
+  readonly editableTriangles: readonly EditableMeshTriangleState[];
 }
 
 export type MeshCanvasEditDisabledReason =
@@ -62,6 +75,7 @@ export interface MeshCanvasVertexHitTargetState {
 export interface MeshEditState {
   readonly selectedMesh: MeshEditSelectedMeshState | null;
   readonly editableVertices: readonly EditableMeshVertexState[];
+  readonly editableTriangles: readonly EditableMeshTriangleState[];
   readonly meshTargets: readonly MeshEditTargetState[];
   readonly selectedVertexIds: readonly string[];
   readonly canvasProjection: MeshCanvasProjectionState;
@@ -85,6 +99,7 @@ export interface MeshEditReprojectionOptions extends MeshEditProjectionOptions {
 export const createEmptyMeshEditState = (): MeshEditState => ({
   selectedMesh: null,
   editableVertices: [],
+  editableTriangles: [],
   meshTargets: [],
   selectedVertexIds: [],
   canvasProjection: createMeshCanvasProjection(),
@@ -118,11 +133,14 @@ export const projectMeshEditState = (
           bounds: structuredClone(mesh.bounds),
           vertexCount: mesh.vertices.length,
           triangleCount: mesh.triangles.length,
+          topologyRevision: mesh.topologyRevision ?? 0,
+          hasTriangleStableIds: hasAlignedTriangleStableIds(mesh),
           runtimeVisible: drawable.visible,
           editorHidden: editorHiddenIds.has(drawable.drawableId),
           locked: lockedIds.has(drawable.drawableId)
         },
-        editableVertices: projectEditableVertices(mesh)
+        editableVertices: projectEditableVertices(mesh),
+        editableTriangles: projectEditableTriangles(mesh)
       }
     ];
   });
@@ -142,7 +160,7 @@ export const reprojectMeshEditState = (
   const drawablesByMeshId = new Map(
     (options.drawables ?? []).map((drawable) => [drawable.meshId, drawable])
   );
-  const meshTargets = state.meshTargets.flatMap((target) => {
+  const meshTargets: MeshEditTargetState[] = state.meshTargets.flatMap((target): MeshEditTargetState[] => {
     const drawable =
       drawablesByDrawableId.get(target.selectedMesh.drawableId) ??
       drawablesByMeshId.get(target.selectedMesh.meshId);
@@ -171,7 +189,27 @@ export const reprojectMeshEditState = (
           position: {
             x: vertex.position.x,
             y: vertex.position.y
+          },
+          uv: {
+            x: vertex.uv.x,
+            y: vertex.uv.y
           }
+        })),
+        editableTriangles: target.editableTriangles.map((triangle) => ({
+          triangleId: triangle.triangleId,
+          triangleIndex: triangle.triangleIndex,
+          vertexIndexes: [
+            triangle.vertexIndexes[0],
+            triangle.vertexIndexes[1],
+            triangle.vertexIndexes[2]
+          ] as [number, number, number],
+          vertexIds: [
+            triangle.vertexIds[0],
+            triangle.vertexIds[1],
+            triangle.vertexIds[2]
+          ] as [string, string, string],
+          hasStableId: triangle.hasStableId,
+          removable: triangle.removable
         }))
       }
     ];
@@ -236,6 +274,7 @@ const projectMeshEditStateFromTargets = (
   return {
     selectedMesh: selected.selectedMesh,
     editableVertices: selected.editableVertices,
+    editableTriangles: selected.editableTriangles,
     meshTargets,
     selectedVertexIds,
     canvasProjection,
@@ -261,7 +300,37 @@ const projectEditableVertices = (mesh: MeshDto): readonly EditableMeshVertexStat
         position: {
           x: position.x,
           y: position.y
+        },
+        uv: {
+          x: mesh.uvs[vertexIndex]?.x ?? 0,
+          y: mesh.uvs[vertexIndex]?.y ?? 0
         }
+      }
+    ];
+  });
+
+const projectEditableTriangles = (mesh: MeshDto): readonly EditableMeshTriangleState[] =>
+  mesh.triangles.flatMap((triangle, triangleIndex) => {
+    const vertexIds = triangle.map((vertexIndex) => mesh.vertexStableIds[vertexIndex]);
+    const triangleId = mesh.triangleStableIds?.[triangleIndex] ?? null;
+    const removable = triangleId !== null && TriangleIdSchema.safeParse(triangleId).success;
+
+    if (
+      vertexIds[0] === undefined ||
+      vertexIds[1] === undefined ||
+      vertexIds[2] === undefined
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        triangleId,
+        triangleIndex,
+        vertexIndexes: [triangle[0], triangle[1], triangle[2]],
+        vertexIds: [vertexIds[0], vertexIds[1], vertexIds[2]],
+        hasStableId: triangleId !== null,
+        removable
       }
     ];
   });
@@ -389,3 +458,6 @@ const normalizeFiniteNumber = (value: number | undefined, fallback: number): num
 
 const normalizePositiveNumber = (value: number | undefined, fallback: number): number =>
   value === undefined || !Number.isFinite(value) || value <= 0 ? fallback : value;
+
+const hasAlignedTriangleStableIds = (mesh: MeshDto): boolean =>
+  mesh.triangleStableIds !== undefined && mesh.triangleStableIds.length === mesh.triangles.length;

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "wave38-topology-uv-operation-chain-summary-v1",
+  "fixtureId": "wave38-topology-uv-fixture-e2e",
+  "committedOperations": [
+    "importPsdSourceAsset",
+    "createDrawable",
+    "generateMesh",
+    "addMeshVertex",
+    "addMeshTriangle",
+    "moveMeshUvPoint"
+  ],
+  "rejectedOperations": [
+    {
+      "operationType": "addMeshVertex",
+      "status": "rejected",
+      "expectedCheckId": "operation.addMeshVertex.topologyRevisionMismatch",
+      "operationLogAppended": false,
+      "meshStateCorrupted": false
+    }
+  ],
+  "operationLogContract": {
+    "finalOperationLogLength": 6,
+    "rejectedOperationLogged": false,
+    "topologyOperationTypes": [
+      "addMeshVertex",
+      "addMeshTriangle",
+      "moveMeshUvPoint"
+    ]
+  },
+  "nonClaims": {
+    "automaticTriangulation": false,
+    "atlasPacking": false,
+    "rendererCorrectness": false,
+    "textureSamplingCorrectness": false
+  }
+}

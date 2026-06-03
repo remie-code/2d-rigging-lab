@@ -761,6 +761,22 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Mesh triangle has repeated vertices or zero area."
   },
   {
+    checkId: "mesh.duplicateTriangle",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh contains more than one triangle over the same vertex index triplet."
+  },
+  {
+    checkId: "mesh.orphanedVertex",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh contains a stable vertex ID that is not referenced by any triangle."
+  },
+  {
     checkId: "mesh.vertexStableIdsLengthMismatch",
     phase: "mesh_semantic",
     defaultSeverity: "error",
@@ -777,12 +793,36 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Mesh UV count does not match vertices length."
   },
   {
+    checkId: "mesh.triangleStableIdsLengthMismatch",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh triangleStableIds length does not match triangles length."
+  },
+  {
+    checkId: "mesh.uvCoordinateOutOfBounds",
+    phase: "mesh_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-013"],
+    description: "Mesh UV coordinate is outside the project-defined semantic 0..1 UV domain."
+  },
+  {
     checkId: "mesh.runtimeEvidenceMissing",
     phase: "representative_evaluation",
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-005", "AC-MVP-012", "AC-MVP-013"],
     description: "Package mesh cannot be matched to runtime or viewer snapshot evidence."
+  },
+  {
+    checkId: "mesh.runtimeEvidenceMismatch",
+    phase: "representative_evaluation",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-005", "AC-MVP-012", "AC-MVP-013"],
+    description: "Runtime or viewer mesh evidence disagrees with package mesh topology, identity, bounds, hash, or exposed vertex evidence."
   },
   {
     checkId: "rigControl.cycle",

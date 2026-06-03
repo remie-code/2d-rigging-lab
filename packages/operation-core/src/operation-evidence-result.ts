@@ -9,6 +9,8 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence.js";
+
 export const OperationEvidenceResultSchema = z.object({
   runtimeDiff: RuntimeDiffSchema.optional(),
   validationDiff: ValidationDiffSchema.optional(),
@@ -17,7 +19,8 @@ export const OperationEvidenceResultSchema = z.object({
   generatedRuntimeStateSequenceRefs: z.array(RuntimeStateSequenceArtifactRefSchema).default([]),
   finalRuntimeState: RuntimeStateDtoSchema.optional(),
   finalRuntimeStateRef: RuntimeStateArtifactRefSchema.optional(),
-  generatedValidationReportIds: z.array(ValidationReportIdSchema).default([])
+  generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
+  meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional()
 });
 export type OperationEvidenceResultInput = z.input<typeof OperationEvidenceResultSchema>;
 export type OperationEvidenceResultDto = z.infer<typeof OperationEvidenceResultSchema>;

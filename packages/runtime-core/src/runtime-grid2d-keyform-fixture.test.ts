@@ -127,7 +127,9 @@ const MeshTopologyFixtureSchema = z.object({
   uvCount: z.number().int().nonnegative(),
   triangleCount: z.number().int().nonnegative(),
   triangleIndexCount: z.number().int().nonnegative(),
+  stableTriangleIdCount: z.number().int().nonnegative(),
   hasStableVertexIds: z.boolean(),
+  hasStableTriangleIds: z.boolean(),
   hasUvProjection: z.boolean(),
   hasTriangles: z.boolean()
 });
@@ -139,13 +141,35 @@ const MeshVertexFixtureSchema = z.object({
   position: Vec2FixtureSchema
 });
 
+const MeshUvFixtureSchema = z.object({
+  vertexIndex: z.number().int().nonnegative(),
+  vertexStableId: z.string().optional(),
+  vertexRef: z.string().min(1),
+  uv: Vec2FixtureSchema
+});
+
+const MeshTriangleFixtureSchema = z.object({
+  triangleIndex: z.number().int().nonnegative(),
+  triangleStableId: z.string().optional(),
+  triangleRef: z.string().min(1),
+  vertexIndices: z.tuple([
+    z.number().int().nonnegative(),
+    z.number().int().nonnegative(),
+    z.number().int().nonnegative()
+  ]),
+  vertexStableIds: z.tuple([z.string(), z.string(), z.string()]).optional(),
+  vertexRefs: z.tuple([z.string(), z.string(), z.string()])
+});
+
 const DrawableMeshEvidenceFixtureSchema = z.object({
   drawableId: z.string(),
   meshId: z.string(),
   bounds: RectFixtureSchema,
   vertexHash: z.string(),
   topology: MeshTopologyFixtureSchema,
-  vertices: z.array(MeshVertexFixtureSchema)
+  vertices: z.array(MeshVertexFixtureSchema),
+  uvs: z.array(MeshUvFixtureSchema),
+  triangles: z.array(MeshTriangleFixtureSchema)
 });
 
 const RuntimeGrid2dFixtureManifestSchema = z.object({

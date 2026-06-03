@@ -61,6 +61,32 @@
           "y": 96
         }
       ],
+      "uvs": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 1
+        }
+      ],
+      "triangles": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "vertexStableIds": [
+        "vtx_body_0",
+        "vtx_body_1",
+        "vtx_body_2"
+      ],
       "vertexCount": 3
     },
     {
@@ -98,6 +124,32 @@
           "x": 16,
           "y": 36
         }
+      ],
+      "uvs": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 1
+        }
+      ],
+      "triangles": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "vertexStableIds": [
+        "vtx_eye_0",
+        "vtx_eye_1",
+        "vtx_eye_2"
       ],
       "vertexCount": 3
     }

@@ -71,6 +71,11 @@ import {
   type LayerTreePartReparentDraftCommand,
   type MeshCanvasHitSelectionCommand,
   type MeshCanvasVertexSelectionCommand,
+  type MeshTopologyAddTriangleDraftCommand,
+  type MeshTopologyAddVertexDraftCommand,
+  type MeshTopologyRemoveTriangleDraftCommand,
+  type MeshTopologyRemoveVertexDraftCommand,
+  type MeshUvNudgeDraftCommand,
   type SourceIntakeSelectedFileBytes,
   type SourceIntakeDraftState,
   type TutorialSelectedTargetState
@@ -169,6 +174,14 @@ import {
   type EditorWorkflowMeshCanvasMoveResult,
   type EditorWorkflowMeshCanvasSelectionResult
 } from "./mesh-canvas-workflow.js";
+import {
+  commitWorkflowAddMeshTriangle,
+  commitWorkflowAddMeshVertex,
+  commitWorkflowMoveMeshUvPoint,
+  commitWorkflowRemoveMeshTriangle,
+  commitWorkflowRemoveMeshVertex,
+  type EditorWorkflowMeshTopologyCommitResult
+} from "./mesh-topology-workflow.js";
 import {
   commitWorkflowTutorialSmallMeshEdit,
   createWorkflowTutorialMiniModel,
@@ -358,6 +371,11 @@ export interface EditorWorkflowController {
   nudgeMeshCanvasSelection(delta: { readonly x: number; readonly y: number }): EditorWorkflowMeshCanvasMoveResult;
   dragMeshCanvasSelection(delta: { readonly x: number; readonly y: number }): EditorWorkflowMeshCanvasMoveResult;
   nudgeMeshVertex(command: EditorMeshVertexNudgeCommand): EditorWorkflowMeshVertexNudgeResult;
+  addMeshVertex(command: MeshTopologyAddVertexDraftCommand): EditorWorkflowMeshTopologyCommitResult;
+  removeSelectedMeshVertex(command: MeshTopologyRemoveVertexDraftCommand): EditorWorkflowMeshTopologyCommitResult;
+  addMeshTriangle(command: MeshTopologyAddTriangleDraftCommand): EditorWorkflowMeshTopologyCommitResult;
+  removeMeshTriangle(command: MeshTopologyRemoveTriangleDraftCommand): EditorWorkflowMeshTopologyCommitResult;
+  nudgeMeshUv(command: MeshUvNudgeDraftCommand): EditorWorkflowMeshTopologyCommitResult;
   commitCreateDynamicsGroup(command: EditorWorkflowCreateDynamicsGroupCommand): EditorWorkflowDynamicsCreateResult;
   commitUpdateDynamicsGroup(command: EditorUpdateDynamicsGroupCommand): EditorWorkflowDynamicsUpdateResult;
   commitCreateRotation2dRigControl(
@@ -931,6 +949,56 @@ export const createEditorWorkflowController = (
         status: result.operationResult.status === "committed" ? "committed" : "rejected",
         result
       };
+    },
+    addMeshVertex(command) {
+      const outcome = commitWorkflowAddMeshVertex({ adapter, state, command });
+
+      state = outcome.state;
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    removeSelectedMeshVertex(command) {
+      const outcome = commitWorkflowRemoveMeshVertex({ adapter, state, command });
+
+      state = outcome.state;
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    addMeshTriangle(command) {
+      const outcome = commitWorkflowAddMeshTriangle({ adapter, state, command });
+
+      state = outcome.state;
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    removeMeshTriangle(command) {
+      const outcome = commitWorkflowRemoveMeshTriangle({ adapter, state, command });
+
+      state = outcome.state;
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    nudgeMeshUv(command) {
+      const outcome = commitWorkflowMoveMeshUvPoint({ adapter, state, command });
+
+      state = outcome.state;
+      latestDrawablePresetResult = null;
+      latestSessionPersistenceResult = outcome.latestSessionPersistenceResult;
+      clearDynamicsPreview();
+
+      return outcome.result;
     },
     commitCreateDynamicsGroup(command) {
       const outcome = commitWorkflowCreateDynamicsGroup({ adapter, state, command });

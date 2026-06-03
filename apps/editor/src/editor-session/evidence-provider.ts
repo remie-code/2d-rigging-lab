@@ -204,6 +204,12 @@ const createRuntimeEvidenceInput = (
       return createSetDrawOrderEvidenceInput(input);
     case "moveMeshVertex":
       return createMoveMeshVertexEvidenceInput(input);
+    case "addMeshVertex":
+    case "removeMeshVertex":
+    case "addMeshTriangle":
+    case "removeMeshTriangle":
+    case "moveMeshUvPoint":
+      return createMeshTopologyEvidenceInput(input);
     case "createDynamicsGroup":
       return createCreateDynamicsGroupEvidenceInput(input);
     case "updateDynamicsGroup":
@@ -321,6 +327,9 @@ const sanitizeEvidenceTargetToken = (value: string): string =>
 
 const formatEvidenceNumber = (value: number): string =>
   Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+
+const formatOperationArtifactToken = (value: string): string =>
+  value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
 
 const createImportSplitPngSourceAssetEvidenceInput = (
   input: OperationEvidenceProviderInput
@@ -678,6 +687,52 @@ const createMoveMeshVertexEvidenceInput = (
       }
     }
   };
+};
+
+const createMeshTopologyEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    ...collectMeshTopologyRequestTargetIds(input)
+  ]);
+
+  return {
+    artifactLabel: `editor-${formatOperationArtifactToken(input.request.operationType)}`,
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const collectMeshTopologyRequestTargetIds = (
+  input: OperationEvidenceProviderInput
+): readonly string[] => {
+  switch (input.request.operationType) {
+    case "addMeshVertex":
+    case "removeMeshVertex":
+      return [input.request.payload.meshId, input.request.payload.vertexId];
+    case "addMeshTriangle":
+      return [
+        input.request.payload.meshId,
+        input.request.payload.triangleId,
+        ...input.request.payload.vertexIds
+      ];
+    case "removeMeshTriangle":
+      return [input.request.payload.meshId, input.request.payload.triangleId];
+    case "moveMeshUvPoint":
+      return [
+        input.request.payload.meshId,
+        ...input.request.payload.uvDeltas.map((uvDelta) => uvDelta.vertexId)
+      ];
+    default:
+      return [];
+  }
 };
 
 const createCreateDynamicsGroupEvidenceInput = (

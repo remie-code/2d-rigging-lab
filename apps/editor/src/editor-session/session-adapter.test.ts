@@ -814,6 +814,82 @@ describe("editor session persistence adapter", () => {
     );
   });
 
+  it("commits mesh topology and UV edits through the editor session adapter", () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-05-29T02:33:00.000Z")
+    });
+    const preset = adapter.commitCreateDrawablePreset({
+      createOperationId: "op_editor_create_drawable_topology_star",
+      generateOperationId: "op_editor_generate_mesh_topology_star",
+      displayName: "Editor Topology Star",
+      sourceAssetId: "src_generated",
+      sourceLayerId: "layer_body",
+      partId: "part_root",
+      initialBounds: { x: 10, y: 12, width: 20, height: 20 },
+      meshMethod: "auto-grid-v1",
+      densityHint: "low"
+    });
+    const meshBefore = preset.finalPersistenceResult.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === "mesh_editor_topology_star"
+    );
+    if (meshBefore === undefined) {
+      throw new Error("Expected generated topology test mesh.");
+    }
+
+    const added = adapter.commitAddMeshVertex({
+      operationId: "op_editor_add_mesh_vertex_topology_star",
+      meshId: "mesh_editor_topology_star",
+      vertexId: "vtx_editor_topology_star_added",
+      position: { x: 20, y: 22 },
+      uv: { x: 0.5, y: 0.5 },
+      expectedTopologyRevision: meshBefore.topologyRevision ?? 0,
+      intent: "session test add topology vertex"
+    });
+    const meshAfterAdd = added.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === "mesh_editor_topology_star"
+    );
+    if (meshAfterAdd === undefined) {
+      throw new Error("Expected mesh after addMeshVertex.");
+    }
+
+    const movedUv = adapter.commitMoveMeshUvPoint({
+      operationId: "op_editor_move_mesh_uv_topology_star",
+      meshId: "mesh_editor_topology_star",
+      uvDeltas: [
+        {
+          vertexId: "vtx_editor_topology_star_added",
+          delta: { x: 0.05, y: -0.05 }
+        }
+      ],
+      expectedTopologyRevision: meshAfterAdd.topologyRevision ?? 0,
+      intent: "session test UV nudge"
+    });
+    const meshAfterUv = movedUv.reloadedDocument.model.meshes.meshes.find(
+      (candidate) => candidate.meshId === "mesh_editor_topology_star"
+    );
+    const addedVertexIndex = meshAfterUv?.vertexStableIds.indexOf("vtx_editor_topology_star_added") ?? -1;
+
+    expect(preset.status).toBe("committed");
+    expect(added.operationResult.status).toBe("committed");
+    expect(added.operationType).toBe("addMeshVertex");
+    expect(added.operationResult.meshTopologyEvidence?.[0]).toMatchObject({
+      operationType: "addMeshVertex",
+      rendererCorrectnessClaim: "none",
+      textureSamplingCorrectnessClaim: "none"
+    });
+    expect(meshAfterAdd.vertexStableIds).toContain("vtx_editor_topology_star_added");
+    expect(movedUv.operationResult.status).toBe("committed");
+    expect(movedUv.operationType).toBe("moveMeshUvPoint");
+    expect(addedVertexIndex).toBeGreaterThanOrEqual(0);
+    expect(meshAfterUv?.uvs[addedVertexIndex]).toEqual({ x: 0.55, y: 0.45 });
+    expect(movedUv.operationLogEntries.map((entry) => entry.operationType)).toEqual([
+      "createDrawable",
+      "generateMesh",
+      "addMeshVertex",
+      "moveMeshUvPoint"
+    ]);
+  });
+
   it("commits drawable visibility and draw order changes into the persisted package file set", () => {
     const adapter = createEditorSessionAdapter({
       now: () => new Date("2026-05-29T02:35:00.000Z")
