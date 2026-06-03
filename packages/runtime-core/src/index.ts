@@ -24,3 +24,4 @@ export * from "./runtime-evidence.js";
 export * from "./runtime-evidence-artifacts.js";
 export * from "./viewer-evaluation.js";
 export * from "./tutorial-evidence-summary.js";
+export * from "./product-preflight-runtime-bridge.js";

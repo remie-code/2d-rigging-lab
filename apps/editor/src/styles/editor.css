@@ -125,6 +125,18 @@ select {
   box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
 }
 
+.product-preflight-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #d6ddd8;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
+}
+
 .editor-persistence-grid {
   grid-column: 1 / -1;
   display: grid;
@@ -135,6 +147,7 @@ select {
 
 .editor-panel h2,
 .project-persistence-panel h2,
+.product-preflight-panel h2,
 .operation-status h3 {
   margin: 0;
   color: #1f2a2e;
@@ -142,7 +155,8 @@ select {
 }
 
 .editor-panel h2,
-.project-persistence-panel h2 {
+.project-persistence-panel h2,
+.product-preflight-panel h2 {
   font-size: 16px;
 }
 
@@ -311,6 +325,161 @@ select {
 .project-persistence-panel__button:hover:not(:disabled),
 .project-persistence-panel__button:focus-visible:not(:disabled) {
   background: #e1e8e3;
+}
+
+.product-preflight-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.product-preflight-panel__run {
+  min-width: 150px;
+}
+
+.product-preflight-panel__status {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  background: #f8faf9;
+}
+
+.product-preflight-panel__status--ready {
+  border-color: #b8ddcf;
+  background: #eef8f3;
+}
+
+.product-preflight-panel__status--failed {
+  border-color: #e5b9aa;
+  background: #fbede8;
+}
+
+.product-preflight-panel__status-label,
+.product-preflight-panel__status-detail,
+.product-preflight-panel__item-title,
+.product-preflight-panel__item-detail,
+.product-preflight-panel__item-meta,
+.product-preflight-panel__empty {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-preflight-panel__status-label,
+.product-preflight-panel__item-title {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.product-preflight-panel__status-detail,
+.product-preflight-panel__item-detail,
+.product-preflight-panel__empty {
+  color: #60716e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.product-preflight-panel__facts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.product-preflight-panel__facts dt,
+.product-preflight-panel__facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-preflight-panel__facts dt {
+  color: #50615e;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.product-preflight-panel__facts dd {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.product-preflight-panel__section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.product-preflight-panel__section h3 {
+  margin: 0;
+  color: #263033;
+  font-size: 14px;
+}
+
+.product-preflight-panel__category-list,
+.product-preflight-panel__issue-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-preflight-panel__category {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  background: #f8faf9;
+}
+
+.product-preflight-panel__category--pass {
+  border-color: #b8ddcf;
+  background: #eef8f3;
+}
+
+.product-preflight-panel__category--warn,
+.product-preflight-panel__category--not_evaluated {
+  border-color: #ded6c2;
+  background: #fbf7eb;
+}
+
+.product-preflight-panel__category--fail {
+  border-color: #e5b9aa;
+  background: #fbede8;
+}
+
+.product-preflight-panel__category--not_supported {
+  border-color: #d4c2e2;
+  background: #f4eff8;
+}
+
+.product-preflight-panel__issue {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid #e1e6e2;
+}
+
+.product-preflight-panel__issue:first-child {
+  border-top: 0;
+}
+
+.product-preflight-panel__item-meta {
+  color: #50615e;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .project-persistence-panel__transport-capabilities {
@@ -1002,7 +1171,8 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .preview-summary {
+  .preview-summary,
+  .product-preflight-panel__facts {
     grid-template-columns: 1fr;
   }
 }
@@ -1022,7 +1192,8 @@ select {
     padding: 14px;
   }
 
-  .project-persistence-panel {
+  .project-persistence-panel,
+  .product-preflight-panel {
     padding: 14px;
   }
 

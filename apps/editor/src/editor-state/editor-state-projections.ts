@@ -38,6 +38,7 @@ import {
 } from "./package-identity-state.js";
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
+import { createEmptyProductPreflightState } from "./product-preflight-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
 import {
   projectCompositionMaskRelationState,
@@ -327,6 +328,7 @@ export const applyCommittedOperationSummary = (
         ? state.dynamicsPreview
         : createEmptyDynamicsPreviewState()),
     reload,
+    productPreflight: createEmptyProductPreflightState(),
     tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState(
       {
         loadedPackage: state.loadedPackage,

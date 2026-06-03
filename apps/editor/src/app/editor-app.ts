@@ -205,6 +205,10 @@ export function mountEditorApp(root: HTMLElement): void {
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
+        async onRunProductPreflight() {
+          await workflow.runProductPreflight();
+          render();
+        },
         async onExportPortableBundle() {
           const result = await workflow.exportPortableBundle();
           render();

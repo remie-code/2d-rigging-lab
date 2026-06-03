@@ -1,0 +1,391 @@
+{
+  "schemaVersion": "wave39-product-preflight-build-cases-v1",
+  "fixtureId": "wave39-product-preflight-report-states",
+  "createdAt": "2026-06-03T00:00:00.000Z",
+  "packageId": "pkg_wave39ProductPreflight",
+  "packageRevision": 39,
+  "cases": [
+    {
+      "caseId": "pass",
+      "reportId": "preflight_wave39Pass",
+      "validationReport": {
+        "reportId": "val_wave39Pass",
+        "profile": "acceptance",
+        "relatedScenarios": [
+          "SC-MVP-003"
+        ],
+        "evidence": {
+          "operationLogPresent": true,
+          "operationLogPath": "operations/log.jsonl",
+          "runtimeSnapshotIds": [
+            "snap_wave39Pass"
+          ],
+          "supplementalGuiEvidenceRefs": []
+        },
+        "checks": []
+      },
+      "categoryEvidenceRefs": {
+        "assetBytes": [
+          {
+            "evidenceId": "evidence_wave39Pass_byteAvailability",
+            "artifactRef": {
+              "artifactKind": "byteAvailability",
+              "path": "generated/byte-availability/wave39-pass.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic byte availability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "persistenceTransport": [
+          {
+            "evidenceId": "evidence_wave39Pass_transportCapability",
+            "artifactRef": {
+              "artifactKind": "transportCapability",
+              "path": "generated/transport-capability/wave39-pass.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic transport capability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "tutorialDemoReadiness": [
+          {
+            "evidenceId": "evidence_wave39Pass_tutorialReadiness",
+            "artifactRef": {
+              "artifactKind": "tutorialReadiness",
+              "path": "generated/tutorial-readiness/wave39-pass.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic tutorial readiness evidence is supplied.",
+            "producer": "fixture"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "warn",
+      "reportId": "preflight_wave39Warn",
+      "validationReport": {
+        "reportId": "val_wave39Warn",
+        "profile": "acceptance",
+        "relatedScenarios": [
+          "SC-MVP-003"
+        ],
+        "evidence": {
+          "operationLogPresent": true,
+          "operationLogPath": "operations/log.jsonl",
+          "runtimeSnapshotIds": [
+            "snap_wave39Warn"
+          ],
+          "supplementalGuiEvidenceRefs": []
+        },
+        "checks": [
+          {
+            "checkId": "mesh.degenerateTriangle",
+            "status": "warning",
+            "severity": "warning",
+            "phase": "mesh_semantic",
+            "target": {
+              "kind": "mesh",
+              "id": "mesh_wave39"
+            },
+            "message": "Mesh triangle has repeated vertices in semantic fixture evidence.",
+            "evidence": [
+              "fixtureCase=warn"
+            ],
+            "impact": "Warn product preflight category without failing the report."
+          }
+        ]
+      },
+      "categoryEvidenceRefs": {
+        "assetBytes": [
+          {
+            "evidenceId": "evidence_wave39Warn_byteAvailability",
+            "artifactRef": {
+              "artifactKind": "byteAvailability",
+              "path": "generated/byte-availability/wave39-warn.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic byte availability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "persistenceTransport": [
+          {
+            "evidenceId": "evidence_wave39Warn_transportCapability",
+            "artifactRef": {
+              "artifactKind": "transportCapability",
+              "path": "generated/transport-capability/wave39-warn.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic transport capability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "tutorialDemoReadiness": [
+          {
+            "evidenceId": "evidence_wave39Warn_tutorialReadiness",
+            "artifactRef": {
+              "artifactKind": "tutorialReadiness",
+              "path": "generated/tutorial-readiness/wave39-warn.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic tutorial readiness evidence is supplied.",
+            "producer": "fixture"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "fail",
+      "reportId": "preflight_wave39Fail",
+      "validationReport": {
+        "reportId": "val_wave39Fail",
+        "profile": "acceptance",
+        "relatedScenarios": [
+          "SC-MVP-003"
+        ],
+        "evidence": {
+          "operationLogPresent": true,
+          "operationLogPath": "operations/log.jsonl",
+          "runtimeSnapshotIds": [
+            "snap_wave39Fail"
+          ],
+          "supplementalGuiEvidenceRefs": []
+        },
+        "checks": [
+          {
+            "checkId": "mesh.triangleIndexOutOfRange",
+            "status": "fail",
+            "severity": "blocking",
+            "phase": "mesh_semantic",
+            "target": {
+              "kind": "mesh",
+              "id": "mesh_wave39"
+            },
+            "message": "Mesh triangle references a vertex outside the semantic vertex array.",
+            "evidence": [
+              "fixtureCase=fail"
+            ],
+            "impact": "Fail product preflight category with a blocking reason."
+          }
+        ]
+      },
+      "categoryEvidenceRefs": {
+        "assetBytes": [
+          {
+            "evidenceId": "evidence_wave39Fail_byteAvailability",
+            "artifactRef": {
+              "artifactKind": "byteAvailability",
+              "path": "generated/byte-availability/wave39-fail.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic byte availability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "persistenceTransport": [
+          {
+            "evidenceId": "evidence_wave39Fail_transportCapability",
+            "artifactRef": {
+              "artifactKind": "transportCapability",
+              "path": "generated/transport-capability/wave39-fail.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic transport capability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "tutorialDemoReadiness": [
+          {
+            "evidenceId": "evidence_wave39Fail_tutorialReadiness",
+            "artifactRef": {
+              "artifactKind": "tutorialReadiness",
+              "path": "generated/tutorial-readiness/wave39-fail.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic tutorial readiness evidence is supplied.",
+            "producer": "fixture"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "not_supported",
+      "reportId": "preflight_wave39NotSupported",
+      "validationReport": {
+        "reportId": "val_wave39NotSupported",
+        "profile": "acceptance",
+        "relatedScenarios": [
+          "SC-MVP-003"
+        ],
+        "evidence": {
+          "operationLogPresent": true,
+          "operationLogPath": "operations/log.jsonl",
+          "runtimeSnapshotIds": [
+            "snap_wave39NotSupported"
+          ],
+          "supplementalGuiEvidenceRefs": []
+        },
+        "checks": [
+          {
+            "checkId": "tutorial.unsupportedClaim",
+            "status": "not_applicable",
+            "severity": "info",
+            "phase": "tutorial_readiness",
+            "target": {
+              "kind": "validationReport",
+              "id": "val_wave39NotSupported"
+            },
+            "message": "A future product capability is truthfully recorded as unsupported.",
+            "evidence": [
+              "capabilityId=futureProductBoundary",
+              "status=unsupported"
+            ],
+            "impact": "Record unsupported product capability without treating it as pass."
+          }
+        ]
+      },
+      "categoryEvidenceRefs": {
+        "assetBytes": [
+          {
+            "evidenceId": "evidence_wave39NotSupported_byteAvailability",
+            "artifactRef": {
+              "artifactKind": "byteAvailability",
+              "path": "generated/byte-availability/wave39-not-supported.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic byte availability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "persistenceTransport": [
+          {
+            "evidenceId": "evidence_wave39NotSupported_transportCapability",
+            "artifactRef": {
+              "artifactKind": "transportCapability",
+              "path": "generated/transport-capability/wave39-not-supported.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic transport capability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "tutorialDemoReadiness": [
+          {
+            "evidenceId": "evidence_wave39NotSupported_tutorialReadiness",
+            "artifactRef": {
+              "artifactKind": "tutorialReadiness",
+              "path": "generated/tutorial-readiness/wave39-not-supported.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic tutorial readiness evidence is supplied.",
+            "producer": "fixture"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "not_evaluated",
+      "reportId": "preflight_wave39NotEvaluated",
+      "validationReport": {
+        "reportId": "val_wave39NotEvaluated",
+        "profile": "acceptance",
+        "relatedScenarios": [
+          "SC-MVP-003"
+        ],
+        "evidence": {
+          "operationLogPresent": true,
+          "operationLogPath": "operations/log.jsonl",
+          "runtimeSnapshotIds": [],
+          "supplementalGuiEvidenceRefs": []
+        },
+        "checks": []
+      },
+      "categoryEvidenceRefs": {
+        "assetBytes": [
+          {
+            "evidenceId": "evidence_wave39NotEvaluated_byteAvailability",
+            "artifactRef": {
+              "artifactKind": "byteAvailability",
+              "path": "generated/byte-availability/wave39-not-evaluated.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic byte availability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "persistenceTransport": [
+          {
+            "evidenceId": "evidence_wave39NotEvaluated_transportCapability",
+            "artifactRef": {
+              "artifactKind": "transportCapability",
+              "path": "generated/transport-capability/wave39-not-evaluated.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic transport capability evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
+        "tutorialDemoReadiness": [
+          {
+            "evidenceId": "evidence_wave39NotEvaluated_tutorialReadiness",
+            "artifactRef": {
+              "artifactKind": "tutorialReadiness",
+              "path": "generated/tutorial-readiness/wave39-not-evaluated.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic tutorial readiness evidence is supplied.",
+            "producer": "fixture"
+          }
+        ]
+      }
+    }
+  ]
+}

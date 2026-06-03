@@ -353,6 +353,34 @@ export const ValidationReportSchema = z.object({
 export type ValidationReportDto = z.infer<typeof ValidationReportSchema>;
 ```
 
+## Product Preflight Report v0 Hook
+
+Wave39 adds an additive product-level preflight report contract. The authored source of truth is
+`ProductPreflightReportDtoSchema` in `packages/contracts/src/product-preflight-report.ts`.
+
+The product preflight report does not replace `ValidationReportDto` or targeted diagnostics. It
+aggregates diagnostic refs and evidence refs into MVP-wide categories:
+
+- `modelStructure`
+- `authoringWorkflowEvidence`
+- `runtimeViewerEvidence`
+- `meshTopologyUv`
+- `composition`
+- `rigControlDynamics`
+- `assetBytes`
+- `persistenceTransport`
+- `tutorialDemoReadiness`
+- `unsupportedClaims`
+
+Product preflight status uses product-level vocabulary:
+`pass`, `warn`, `fail`, `not_supported`, and `not_evaluated`. `not_supported` and
+`not_evaluated` are explicit outcomes and must not be mapped to `pass`.
+
+The contract records blocking reasons and recommended next actions for human or deterministic
+workflow follow-up. It does not define repair candidate generation, auto-fix, LLM provider use,
+natural-language repair, parser/image decode, archive/filesystem implementation, renderer or pixel
+oracle support, or Cubism compatibility.
+
 ## Diagram Requirements
 
 The validation flow diagrams define phase order and profile-specific call paths. Report schemas and check registry tables remain the source of truth.

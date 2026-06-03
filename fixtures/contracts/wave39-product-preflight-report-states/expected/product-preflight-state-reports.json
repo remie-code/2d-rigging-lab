@@ -1,0 +1,1644 @@
+{
+  "schemaVersion": "wave39-product-preflight-state-reports-v1",
+  "fixtureId": "wave39-product-preflight-report-states",
+  "reports": [
+    {
+      "caseId": "pass",
+      "expectedStatus": "pass",
+      "report": {
+        "schemaVersion": "product-preflight-report-v0",
+        "reportId": "preflight_wave39Pass",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "packageId": "pkg_wave39ProductPreflight",
+        "packageRevision": 39,
+        "validatorVersion": "validator-core-wave2-foundation",
+        "sourceValidationReportIds": [
+          "val_wave39Pass"
+        ],
+        "summary": {
+          "status": "pass",
+          "highestSeverity": "info",
+          "categoryCounts": {
+            "pass": 10,
+            "warn": 0,
+            "fail": 0,
+            "not_supported": 0,
+            "not_evaluated": 0
+          },
+          "blockingReasonCount": 0,
+          "unsupportedClaimCount": 0,
+          "notEvaluatedClaimCount": 0,
+          "evidenceRefCount": 10,
+          "diagnosticRefCount": 0
+        },
+        "categories": [
+          {
+            "category": "modelStructure",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Model structure has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_modelStructure",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Pass.validation.json",
+                  "reportId": "val_wave39Pass"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass contributes Model structure diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "authoringWorkflowEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_operationLog",
+                "artifactRef": {
+                  "artifactKind": "operationLog",
+                  "path": "operations/log.jsonl"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Validation report val_wave39Pass records operation log evidence.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "runtimeViewerEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Runtime/viewer evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_snap_wave39Pass",
+                "artifactRef": {
+                  "artifactKind": "runtimeSnapshot",
+                  "path": "runtime/snapshots/snap_wave39Pass.runtime-snapshot.json",
+                  "snapshotId": "snap_wave39Pass"
+                },
+                "target": {
+                  "kind": "runtimeSnapshot",
+                  "id": "snap_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass records runtime snapshot snap_wave39Pass.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "meshTopologyUv",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Mesh topology and UV evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_meshTopologyUv",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Pass.validation.json",
+                  "reportId": "val_wave39Pass"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass contributes Mesh topology and UV evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "composition",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Composition evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_composition",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Pass.validation.json",
+                  "reportId": "val_wave39Pass"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass contributes Composition evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "rigControlDynamics",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Rig-control and dynamics evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_rigControlDynamics",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Pass.validation.json",
+                  "reportId": "val_wave39Pass"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass contributes Rig-control and dynamics evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "assetBytes",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Asset byte evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Pass_byteAvailability",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave39-pass.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic byte availability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "persistenceTransport",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Persistence and transport evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Pass_transportCapability",
+                "artifactRef": {
+                  "artifactKind": "transportCapability",
+                  "path": "generated/transport-capability/wave39-pass.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic transport capability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "tutorialDemoReadiness",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Tutorial/demo readiness has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Pass_tutorialReadiness",
+                "artifactRef": {
+                  "artifactKind": "tutorialReadiness",
+                  "path": "generated/tutorial-readiness/wave39-pass.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic tutorial readiness evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "unsupportedClaims",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Unsupported product claims has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Pass_unsupportedClaims",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Pass.validation.json",
+                  "reportId": "val_wave39Pass"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Pass"
+                },
+                "summary": "Validation report val_wave39Pass contributes Unsupported product claims diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          }
+        ],
+        "recommendedNextActions": []
+      }
+    },
+    {
+      "caseId": "warn",
+      "expectedStatus": "warn",
+      "report": {
+        "schemaVersion": "product-preflight-report-v0",
+        "reportId": "preflight_wave39Warn",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "packageId": "pkg_wave39ProductPreflight",
+        "packageRevision": 39,
+        "validatorVersion": "validator-core-wave2-foundation",
+        "sourceValidationReportIds": [
+          "val_wave39Warn"
+        ],
+        "summary": {
+          "status": "warn",
+          "highestSeverity": "warning",
+          "categoryCounts": {
+            "pass": 9,
+            "warn": 1,
+            "fail": 0,
+            "not_supported": 0,
+            "not_evaluated": 0
+          },
+          "blockingReasonCount": 0,
+          "unsupportedClaimCount": 0,
+          "notEvaluatedClaimCount": 0,
+          "evidenceRefCount": 10,
+          "diagnosticRefCount": 1
+        },
+        "categories": [
+          {
+            "category": "modelStructure",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Model structure has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_modelStructure",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Warn.validation.json",
+                  "reportId": "val_wave39Warn"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn contributes Model structure diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "authoringWorkflowEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_operationLog",
+                "artifactRef": {
+                  "artifactKind": "operationLog",
+                  "path": "operations/log.jsonl"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Validation report val_wave39Warn records operation log evidence.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "runtimeViewerEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Runtime/viewer evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_snap_wave39Warn",
+                "artifactRef": {
+                  "artifactKind": "runtimeSnapshot",
+                  "path": "runtime/snapshots/snap_wave39Warn.runtime-snapshot.json",
+                  "snapshotId": "snap_wave39Warn"
+                },
+                "target": {
+                  "kind": "runtimeSnapshot",
+                  "id": "snap_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn records runtime snapshot snap_wave39Warn.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "meshTopologyUv",
+            "status": "warn",
+            "severity": "warning",
+            "summary": "Mesh topology and UV evidence has 1 warning diagnostic(s).",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_meshTopologyUv",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Warn.validation.json",
+                  "reportId": "val_wave39Warn"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn contributes Mesh topology and UV evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [
+              {
+                "checkId": "mesh.degenerateTriangle",
+                "reportId": "val_wave39Warn",
+                "diagnosticIndex": 0,
+                "status": "warning",
+                "severity": "warning",
+                "target": {
+                  "kind": "mesh",
+                  "id": "mesh_wave39"
+                },
+                "message": "Mesh triangle has repeated vertices in semantic fixture evidence."
+              }
+            ],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": [
+              {
+                "actionId": "action_meshTopologyUv_mesh_degenerateTriangle_0",
+                "actionKind": "inspectDiagnostic",
+                "summary": "Inspect validator diagnostic mesh.degenerateTriangle before rerunning product preflight.",
+                "targetCategory": "meshTopologyUv"
+              }
+            ]
+          },
+          {
+            "category": "composition",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Composition evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_composition",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Warn.validation.json",
+                  "reportId": "val_wave39Warn"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn contributes Composition evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "rigControlDynamics",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Rig-control and dynamics evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_rigControlDynamics",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Warn.validation.json",
+                  "reportId": "val_wave39Warn"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn contributes Rig-control and dynamics evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "assetBytes",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Asset byte evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Warn_byteAvailability",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave39-warn.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic byte availability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "persistenceTransport",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Persistence and transport evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Warn_transportCapability",
+                "artifactRef": {
+                  "artifactKind": "transportCapability",
+                  "path": "generated/transport-capability/wave39-warn.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic transport capability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "tutorialDemoReadiness",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Tutorial/demo readiness has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Warn_tutorialReadiness",
+                "artifactRef": {
+                  "artifactKind": "tutorialReadiness",
+                  "path": "generated/tutorial-readiness/wave39-warn.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic tutorial readiness evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "unsupportedClaims",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Unsupported product claims has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Warn_unsupportedClaims",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Warn.validation.json",
+                  "reportId": "val_wave39Warn"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Warn"
+                },
+                "summary": "Validation report val_wave39Warn contributes Unsupported product claims diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          }
+        ],
+        "recommendedNextActions": [
+          {
+            "actionId": "action_meshTopologyUv_mesh_degenerateTriangle_0",
+            "actionKind": "inspectDiagnostic",
+            "summary": "Inspect validator diagnostic mesh.degenerateTriangle before rerunning product preflight.",
+            "targetCategory": "meshTopologyUv"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "fail",
+      "expectedStatus": "fail",
+      "report": {
+        "schemaVersion": "product-preflight-report-v0",
+        "reportId": "preflight_wave39Fail",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "packageId": "pkg_wave39ProductPreflight",
+        "packageRevision": 39,
+        "validatorVersion": "validator-core-wave2-foundation",
+        "sourceValidationReportIds": [
+          "val_wave39Fail"
+        ],
+        "summary": {
+          "status": "fail",
+          "highestSeverity": "blocking",
+          "categoryCounts": {
+            "pass": 9,
+            "warn": 0,
+            "fail": 1,
+            "not_supported": 0,
+            "not_evaluated": 0
+          },
+          "blockingReasonCount": 1,
+          "unsupportedClaimCount": 0,
+          "notEvaluatedClaimCount": 0,
+          "evidenceRefCount": 10,
+          "diagnosticRefCount": 1
+        },
+        "categories": [
+          {
+            "category": "modelStructure",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Model structure has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_modelStructure",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Fail.validation.json",
+                  "reportId": "val_wave39Fail"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail contributes Model structure diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "authoringWorkflowEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_operationLog",
+                "artifactRef": {
+                  "artifactKind": "operationLog",
+                  "path": "operations/log.jsonl"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Validation report val_wave39Fail records operation log evidence.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "runtimeViewerEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Runtime/viewer evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_snap_wave39Fail",
+                "artifactRef": {
+                  "artifactKind": "runtimeSnapshot",
+                  "path": "runtime/snapshots/snap_wave39Fail.runtime-snapshot.json",
+                  "snapshotId": "snap_wave39Fail"
+                },
+                "target": {
+                  "kind": "runtimeSnapshot",
+                  "id": "snap_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail records runtime snapshot snap_wave39Fail.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "meshTopologyUv",
+            "status": "fail",
+            "severity": "blocking",
+            "summary": "Mesh topology and UV evidence has 1 failing diagnostic(s).",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_meshTopologyUv",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Fail.validation.json",
+                  "reportId": "val_wave39Fail"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail contributes Mesh topology and UV evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [
+              {
+                "reasonId": "block_meshTopologyUv_0",
+                "reasonCode": "failingDiagnostic",
+                "severity": "blocking",
+                "message": "Mesh triangle references a vertex outside the semantic vertex array.",
+                "evidenceRefs": [],
+                "diagnosticRefs": [
+                  {
+                    "checkId": "mesh.triangleIndexOutOfRange",
+                    "reportId": "val_wave39Fail",
+                    "diagnosticIndex": 0,
+                    "status": "fail",
+                    "severity": "blocking",
+                    "target": {
+                      "kind": "mesh",
+                      "id": "mesh_wave39"
+                    },
+                    "message": "Mesh triangle references a vertex outside the semantic vertex array."
+                  }
+                ],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_meshTopologyUv_mesh_triangleIndexOutOfRange_0",
+                    "actionKind": "inspectDiagnostic",
+                    "summary": "Inspect validator diagnostic mesh.triangleIndexOutOfRange before rerunning product preflight.",
+                    "targetCategory": "meshTopologyUv"
+                  }
+                ]
+              }
+            ],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": [
+              {
+                "actionId": "action_meshTopologyUv_mesh_triangleIndexOutOfRange_0",
+                "actionKind": "inspectDiagnostic",
+                "summary": "Inspect validator diagnostic mesh.triangleIndexOutOfRange before rerunning product preflight.",
+                "targetCategory": "meshTopologyUv"
+              }
+            ]
+          },
+          {
+            "category": "composition",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Composition evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_composition",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Fail.validation.json",
+                  "reportId": "val_wave39Fail"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail contributes Composition evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "rigControlDynamics",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Rig-control and dynamics evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_rigControlDynamics",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Fail.validation.json",
+                  "reportId": "val_wave39Fail"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail contributes Rig-control and dynamics evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "assetBytes",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Asset byte evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Fail_byteAvailability",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave39-fail.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic byte availability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "persistenceTransport",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Persistence and transport evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Fail_transportCapability",
+                "artifactRef": {
+                  "artifactKind": "transportCapability",
+                  "path": "generated/transport-capability/wave39-fail.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic transport capability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "tutorialDemoReadiness",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Tutorial/demo readiness has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39Fail_tutorialReadiness",
+                "artifactRef": {
+                  "artifactKind": "tutorialReadiness",
+                  "path": "generated/tutorial-readiness/wave39-fail.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic tutorial readiness evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "unsupportedClaims",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Unsupported product claims has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39Fail_unsupportedClaims",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39Fail.validation.json",
+                  "reportId": "val_wave39Fail"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39Fail"
+                },
+                "summary": "Validation report val_wave39Fail contributes Unsupported product claims diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          }
+        ],
+        "recommendedNextActions": [
+          {
+            "actionId": "action_meshTopologyUv_mesh_triangleIndexOutOfRange_0",
+            "actionKind": "inspectDiagnostic",
+            "summary": "Inspect validator diagnostic mesh.triangleIndexOutOfRange before rerunning product preflight.",
+            "targetCategory": "meshTopologyUv"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "not_supported",
+      "expectedStatus": "not_supported",
+      "report": {
+        "schemaVersion": "product-preflight-report-v0",
+        "reportId": "preflight_wave39NotSupported",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "packageId": "pkg_wave39ProductPreflight",
+        "packageRevision": 39,
+        "validatorVersion": "validator-core-wave2-foundation",
+        "sourceValidationReportIds": [
+          "val_wave39NotSupported"
+        ],
+        "summary": {
+          "status": "not_supported",
+          "highestSeverity": "warning",
+          "categoryCounts": {
+            "pass": 9,
+            "warn": 0,
+            "fail": 0,
+            "not_supported": 1,
+            "not_evaluated": 0
+          },
+          "blockingReasonCount": 0,
+          "unsupportedClaimCount": 1,
+          "notEvaluatedClaimCount": 0,
+          "evidenceRefCount": 10,
+          "diagnosticRefCount": 1
+        },
+        "categories": [
+          {
+            "category": "modelStructure",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Model structure has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_modelStructure",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotSupported.validation.json",
+                  "reportId": "val_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported contributes Model structure diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "authoringWorkflowEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_operationLog",
+                "artifactRef": {
+                  "artifactKind": "operationLog",
+                  "path": "operations/log.jsonl"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Validation report val_wave39NotSupported records operation log evidence.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "runtimeViewerEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Runtime/viewer evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_snap_wave39NotSupported",
+                "artifactRef": {
+                  "artifactKind": "runtimeSnapshot",
+                  "path": "runtime/snapshots/snap_wave39NotSupported.runtime-snapshot.json",
+                  "snapshotId": "snap_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "runtimeSnapshot",
+                  "id": "snap_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported records runtime snapshot snap_wave39NotSupported.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "meshTopologyUv",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Mesh topology and UV evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_meshTopologyUv",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotSupported.validation.json",
+                  "reportId": "val_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported contributes Mesh topology and UV evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "composition",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Composition evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_composition",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotSupported.validation.json",
+                  "reportId": "val_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported contributes Composition evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "rigControlDynamics",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Rig-control and dynamics evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_rigControlDynamics",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotSupported.validation.json",
+                  "reportId": "val_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported contributes Rig-control and dynamics evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "assetBytes",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Asset byte evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotSupported_byteAvailability",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave39-not-supported.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic byte availability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "persistenceTransport",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Persistence and transport evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotSupported_transportCapability",
+                "artifactRef": {
+                  "artifactKind": "transportCapability",
+                  "path": "generated/transport-capability/wave39-not-supported.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic transport capability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "tutorialDemoReadiness",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Tutorial/demo readiness has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotSupported_tutorialReadiness",
+                "artifactRef": {
+                  "artifactKind": "tutorialReadiness",
+                  "path": "generated/tutorial-readiness/wave39-not-supported.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic tutorial readiness evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "unsupportedClaims",
+            "status": "not_supported",
+            "severity": "warning",
+            "summary": "Unsupported product claims has 1 unsupported capability claim(s) recorded by validator diagnostics.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotSupported_unsupportedClaims",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotSupported.validation.json",
+                  "reportId": "val_wave39NotSupported"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotSupported"
+                },
+                "summary": "Validation report val_wave39NotSupported contributes Unsupported product claims diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [
+              {
+                "claimId": "claim_tutorial_unsupportedClaim_0",
+                "status": "not_supported",
+                "claimKind": "otherUnsupportedCapability",
+                "capabilityLabel": "capabilityId: futureProductBoundary",
+                "explanation": "A future product capability is truthfully recorded as unsupported.",
+                "severity": "warning",
+                "evidenceRefs": [],
+                "diagnosticRefs": [
+                  {
+                    "checkId": "tutorial.unsupportedClaim",
+                    "reportId": "val_wave39NotSupported",
+                    "diagnosticIndex": 0,
+                    "status": "not_applicable",
+                    "severity": "info",
+                    "target": {
+                      "kind": "validationReport",
+                      "id": "val_wave39NotSupported"
+                    },
+                    "message": "A future product capability is truthfully recorded as unsupported."
+                  }
+                ],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_unsupportedClaims_recordUnsupported_0",
+                    "actionKind": "recordUnsupportedBoundary",
+                    "summary": "Keep this validator-recorded unsupported boundary explicit in product preflight output.",
+                    "targetCategory": "unsupportedClaims"
+                  }
+                ]
+              }
+            ],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": [
+              {
+                "actionId": "action_unsupportedClaims_recordUnsupported_0",
+                "actionKind": "recordUnsupportedBoundary",
+                "summary": "Keep this validator-recorded unsupported boundary explicit in product preflight output.",
+                "targetCategory": "unsupportedClaims"
+              }
+            ]
+          }
+        ],
+        "recommendedNextActions": [
+          {
+            "actionId": "action_unsupportedClaims_recordUnsupported_0",
+            "actionKind": "recordUnsupportedBoundary",
+            "summary": "Keep this validator-recorded unsupported boundary explicit in product preflight output.",
+            "targetCategory": "unsupportedClaims"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "not_evaluated",
+      "expectedStatus": "not_evaluated",
+      "report": {
+        "schemaVersion": "product-preflight-report-v0",
+        "reportId": "preflight_wave39NotEvaluated",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "packageId": "pkg_wave39ProductPreflight",
+        "packageRevision": 39,
+        "validatorVersion": "validator-core-wave2-foundation",
+        "sourceValidationReportIds": [
+          "val_wave39NotEvaluated"
+        ],
+        "summary": {
+          "status": "not_evaluated",
+          "highestSeverity": "warning",
+          "categoryCounts": {
+            "pass": 9,
+            "warn": 0,
+            "fail": 0,
+            "not_supported": 0,
+            "not_evaluated": 1
+          },
+          "blockingReasonCount": 0,
+          "unsupportedClaimCount": 0,
+          "notEvaluatedClaimCount": 1,
+          "evidenceRefCount": 9,
+          "diagnosticRefCount": 0
+        },
+        "categories": [
+          {
+            "category": "modelStructure",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Model structure has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_modelStructure",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotEvaluated.validation.json",
+                  "reportId": "val_wave39NotEvaluated"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotEvaluated"
+                },
+                "summary": "Validation report val_wave39NotEvaluated contributes Model structure diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "authoringWorkflowEvidence",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_operationLog",
+                "artifactRef": {
+                  "artifactKind": "operationLog",
+                  "path": "operations/log.jsonl"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Validation report val_wave39NotEvaluated records operation log evidence.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "runtimeViewerEvidence",
+            "status": "not_evaluated",
+            "severity": "warning",
+            "summary": "Runtime/viewer evidence was not evaluated because required evidence is missing.",
+            "evidenceRefs": [],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [
+              {
+                "claimId": "claim_runtimeViewerEvidence_notEvaluated",
+                "status": "not_evaluated",
+                "category": "runtimeViewerEvidence",
+                "evidenceKind": "runtimeSnapshot",
+                "reason": "No runtimeSnapshot evidence was supplied for Runtime/viewer evidence.",
+                "severity": "warning",
+                "requiredEvidenceKinds": [
+                  "runtimeSnapshot"
+                ],
+                "evidenceRefs": [],
+                "diagnosticRefs": [],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_runtimeViewerEvidence_provideEvidence",
+                    "actionKind": "provideEvidence",
+                    "summary": "Provide runtimeSnapshot evidence and rerun product preflight.",
+                    "targetCategory": "runtimeViewerEvidence"
+                  }
+                ]
+              }
+            ],
+            "recommendedNextActions": [
+              {
+                "actionId": "action_runtimeViewerEvidence_provideEvidence",
+                "actionKind": "provideEvidence",
+                "summary": "Provide runtimeSnapshot evidence and rerun product preflight.",
+                "targetCategory": "runtimeViewerEvidence"
+              }
+            ]
+          },
+          {
+            "category": "meshTopologyUv",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Mesh topology and UV evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_meshTopologyUv",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotEvaluated.validation.json",
+                  "reportId": "val_wave39NotEvaluated"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotEvaluated"
+                },
+                "summary": "Validation report val_wave39NotEvaluated contributes Mesh topology and UV evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "composition",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Composition evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_composition",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotEvaluated.validation.json",
+                  "reportId": "val_wave39NotEvaluated"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotEvaluated"
+                },
+                "summary": "Validation report val_wave39NotEvaluated contributes Composition evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "rigControlDynamics",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Rig-control and dynamics evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_rigControlDynamics",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotEvaluated.validation.json",
+                  "reportId": "val_wave39NotEvaluated"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotEvaluated"
+                },
+                "summary": "Validation report val_wave39NotEvaluated contributes Rig-control and dynamics evidence diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "assetBytes",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Asset byte evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotEvaluated_byteAvailability",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave39-not-evaluated.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic byte availability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "persistenceTransport",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Persistence and transport evidence has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotEvaluated_transportCapability",
+                "artifactRef": {
+                  "artifactKind": "transportCapability",
+                  "path": "generated/transport-capability/wave39-not-evaluated.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic transport capability evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "tutorialDemoReadiness",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Tutorial/demo readiness has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_wave39NotEvaluated_tutorialReadiness",
+                "artifactRef": {
+                  "artifactKind": "tutorialReadiness",
+                  "path": "generated/tutorial-readiness/wave39-not-evaluated.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave39ProductPreflight"
+                },
+                "summary": "Semantic tutorial readiness evidence is supplied.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          },
+          {
+            "category": "unsupportedClaims",
+            "status": "pass",
+            "severity": "info",
+            "summary": "Unsupported product claims has no blocking or warning diagnostics in supplied validator evidence.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_val_wave39NotEvaluated_unsupportedClaims",
+                "artifactRef": {
+                  "artifactKind": "validationReport",
+                  "path": "validation/reports/val_wave39NotEvaluated.validation.json",
+                  "reportId": "val_wave39NotEvaluated"
+                },
+                "target": {
+                  "kind": "validationReport",
+                  "id": "val_wave39NotEvaluated"
+                },
+                "summary": "Validation report val_wave39NotEvaluated contributes Unsupported product claims diagnostics.",
+                "producer": "validatorCore"
+              }
+            ],
+            "diagnosticRefs": [],
+            "blockingReasons": [],
+            "unsupportedClaims": [],
+            "notEvaluatedClaims": [],
+            "recommendedNextActions": []
+          }
+        ],
+        "recommendedNextActions": [
+          {
+            "actionId": "action_runtimeViewerEvidence_provideEvidence",
+            "actionKind": "provideEvidence",
+            "summary": "Provide runtimeSnapshot evidence and rerun product preflight.",
+            "targetCategory": "runtimeViewerEvidence"
+          }
+        ]
+      }
+    }
+  ]
+}

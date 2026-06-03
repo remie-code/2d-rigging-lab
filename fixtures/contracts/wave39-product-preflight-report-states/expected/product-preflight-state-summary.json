@@ -1,0 +1,172 @@
+{
+  "schemaVersion": "wave39-product-preflight-state-summary-v1",
+  "fixtureId": "wave39-product-preflight-report-states",
+  "expectedCases": [
+    {
+      "caseId": "pass",
+      "expectedReportStatus": "pass",
+      "expectedCategoryStatuses": {
+        "modelStructure": "pass",
+        "authoringWorkflowEvidence": "pass",
+        "runtimeViewerEvidence": "pass",
+        "meshTopologyUv": "pass",
+        "composition": "pass",
+        "rigControlDynamics": "pass",
+        "assetBytes": "pass",
+        "persistenceTransport": "pass",
+        "tutorialDemoReadiness": "pass",
+        "unsupportedClaims": "pass"
+      },
+      "expectedSummary": {
+        "status": "pass",
+        "highestSeverity": "info",
+        "categoryCounts": {
+          "pass": 10,
+          "warn": 0,
+          "fail": 0,
+          "not_supported": 0,
+          "not_evaluated": 0
+        },
+        "blockingReasonCount": 0,
+        "unsupportedClaimCount": 0,
+        "notEvaluatedClaimCount": 0,
+        "evidenceRefCount": 10,
+        "diagnosticRefCount": 0
+      }
+    },
+    {
+      "caseId": "warn",
+      "expectedReportStatus": "warn",
+      "expectedCategoryStatuses": {
+        "modelStructure": "pass",
+        "authoringWorkflowEvidence": "pass",
+        "runtimeViewerEvidence": "pass",
+        "meshTopologyUv": "warn",
+        "composition": "pass",
+        "rigControlDynamics": "pass",
+        "assetBytes": "pass",
+        "persistenceTransport": "pass",
+        "tutorialDemoReadiness": "pass",
+        "unsupportedClaims": "pass"
+      },
+      "expectedSummary": {
+        "status": "warn",
+        "highestSeverity": "warning",
+        "categoryCounts": {
+          "pass": 9,
+          "warn": 1,
+          "fail": 0,
+          "not_supported": 0,
+          "not_evaluated": 0
+        },
+        "blockingReasonCount": 0,
+        "unsupportedClaimCount": 0,
+        "notEvaluatedClaimCount": 0,
+        "evidenceRefCount": 10,
+        "diagnosticRefCount": 1
+      }
+    },
+    {
+      "caseId": "fail",
+      "expectedReportStatus": "fail",
+      "expectedCategoryStatuses": {
+        "modelStructure": "pass",
+        "authoringWorkflowEvidence": "pass",
+        "runtimeViewerEvidence": "pass",
+        "meshTopologyUv": "fail",
+        "composition": "pass",
+        "rigControlDynamics": "pass",
+        "assetBytes": "pass",
+        "persistenceTransport": "pass",
+        "tutorialDemoReadiness": "pass",
+        "unsupportedClaims": "pass"
+      },
+      "expectedSummary": {
+        "status": "fail",
+        "highestSeverity": "blocking",
+        "categoryCounts": {
+          "pass": 9,
+          "warn": 0,
+          "fail": 1,
+          "not_supported": 0,
+          "not_evaluated": 0
+        },
+        "blockingReasonCount": 1,
+        "unsupportedClaimCount": 0,
+        "notEvaluatedClaimCount": 0,
+        "evidenceRefCount": 10,
+        "diagnosticRefCount": 1
+      }
+    },
+    {
+      "caseId": "not_supported",
+      "expectedReportStatus": "not_supported",
+      "expectedCategoryStatuses": {
+        "modelStructure": "pass",
+        "authoringWorkflowEvidence": "pass",
+        "runtimeViewerEvidence": "pass",
+        "meshTopologyUv": "pass",
+        "composition": "pass",
+        "rigControlDynamics": "pass",
+        "assetBytes": "pass",
+        "persistenceTransport": "pass",
+        "tutorialDemoReadiness": "pass",
+        "unsupportedClaims": "not_supported"
+      },
+      "expectedSummary": {
+        "status": "not_supported",
+        "highestSeverity": "warning",
+        "categoryCounts": {
+          "pass": 9,
+          "warn": 0,
+          "fail": 0,
+          "not_supported": 1,
+          "not_evaluated": 0
+        },
+        "blockingReasonCount": 0,
+        "unsupportedClaimCount": 1,
+        "notEvaluatedClaimCount": 0,
+        "evidenceRefCount": 10,
+        "diagnosticRefCount": 1
+      }
+    },
+    {
+      "caseId": "not_evaluated",
+      "expectedReportStatus": "not_evaluated",
+      "expectedCategoryStatuses": {
+        "modelStructure": "pass",
+        "authoringWorkflowEvidence": "pass",
+        "runtimeViewerEvidence": "not_evaluated",
+        "meshTopologyUv": "pass",
+        "composition": "pass",
+        "rigControlDynamics": "pass",
+        "assetBytes": "pass",
+        "persistenceTransport": "pass",
+        "tutorialDemoReadiness": "pass",
+        "unsupportedClaims": "pass"
+      },
+      "expectedSummary": {
+        "status": "not_evaluated",
+        "highestSeverity": "warning",
+        "categoryCounts": {
+          "pass": 9,
+          "warn": 0,
+          "fail": 0,
+          "not_supported": 0,
+          "not_evaluated": 1
+        },
+        "blockingReasonCount": 0,
+        "unsupportedClaimCount": 0,
+        "notEvaluatedClaimCount": 1,
+        "evidenceRefCount": 9,
+        "diagnosticRefCount": 0
+      }
+    }
+  ],
+  "truthfulnessBoundary": {
+    "semanticJsonOnly": true,
+    "realAssetBytes": false,
+    "demoCompletionClaimed": false,
+    "e2eCompletionClaimed": false
+  }
+}

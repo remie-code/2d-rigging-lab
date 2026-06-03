@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave39-product-preflight-report-states",
+  "title": "Wave39 product preflight report state fixtures",
+  "description": "Rights-clean semantic fixtures proving representative ProductPreflightReportDto states: pass, warn, fail, not_supported, and not_evaluated.",
+  "inputArtifacts": [
+    "request/product-preflight-build-cases.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "productPreflightReportStates",
+      "path": "expected/product-preflight-state-summary.json",
+      "id": "wave39-product-preflight-state-summary",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "productPreflightReports",
+      "path": "expected/product-preflight-state-reports.json",
+      "id": "wave39-product-preflight-state-reports",
+      "comparison": "contract-schema"
+    }
+  ],
+  "coversAC": [
+    "AC-MVP-013",
+    "AC-MVP-016"
+  ],
+  "coversScenarios": [
+    "SC-MVP-004",
+    "SC-MVP-006",
+    "SC-VERIFY-001"
+  ],
+  "modulesBlocked": [
+    "contracts",
+    "validator-core",
+    "fixtures-contract-tests"
+  ],
+  "updateRule": "requires-contract-review",
+  "rightsClean": {
+    "source": "semantic validator report and product preflight report JSON only",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "archiveFilesystem": false,
+    "cubismCompatibility": false
+  },
+  "truthfulness": {
+    "statesCovered": [
+      "pass",
+      "warn",
+      "fail",
+      "not_supported",
+      "not_evaluated"
+    ],
+    "repairClaimed": false,
+    "llmProviderClaimed": false,
+    "demoCompletionClaimed": false,
+    "e2eCompletionClaimed": false,
+    "realParserClaimed": false,
+    "realRendererClaimed": false
+  }
+}

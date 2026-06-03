@@ -61,6 +61,15 @@ export const editorTestIds = {
   projectPersistenceTransportCapabilityList: "projectPersistence.transportCapability.list",
   projectPersistenceStatus: "projectPersistence.status",
   projectPersistenceSummary: "projectPersistence.summary",
+  productPreflightPanel: "productPreflight.panel",
+  productPreflightRun: "productPreflight.run",
+  productPreflightStatus: "productPreflight.status",
+  productPreflightSummary: "productPreflight.summary",
+  productPreflightCategorySummary: "productPreflight.categorySummary",
+  productPreflightBlockingIssues: "productPreflight.blockingIssues",
+  productPreflightWarnings: "productPreflight.warnings",
+  productPreflightUnsupportedClaims: "productPreflight.unsupportedClaims",
+  productPreflightNotEvaluated: "productPreflight.notEvaluated",
   operationLogSummary: "operationLog.summary",
   generatedEvidenceSummary: "evidence.generated.summary",
   reloadSummary: "package.reload.summary",
@@ -207,6 +216,9 @@ export const createProjectPersistenceTransportCapabilityRowTestId = (
 export const createProjectPersistenceTransportUnavailableActionTestId = (
   capabilityId: string
 ): string => `projectPersistence.transportCapability.unavailable.${capabilityId}`;
+
+export const createProductPreflightCategoryRowTestId = (category: string): string =>
+  `productPreflight.category.${category}`;
 
 export const createPreviewParameterControlTestId = (parameterId: string): string =>
   `preview.parameter.${parameterId}`;

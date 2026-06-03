@@ -1,6 +1,6 @@
-# Wave38完了時点の残件リスト
+# Wave39完了時点の残件リスト
 
-> 状態: 2026-06-03、Wave38完了時点の残件バックログ。
+> 状態: 2026-06-04、Wave39完了時点の残件バックログ。
 
 ## 目的
 
@@ -30,7 +30,8 @@
 - Wave36では`Project-defined Portable Package Bundle v0`を選定し、implementation-provenになった。Wave31/Wave34/Wave35を足場に、project-defined JSON bundle + base64 byte payloadでactual bytesをexport/importし、validator `portableBundle.*` diagnostics、Editor export/import workflow、desktop/mobile round-trip e2e、fixture/traceability registrationまで一段閉じた。ZIP/archive、File System Access API、drag-drop、parser/image decode、external dependency、Cubism互換、full renderer、pixel oracleは含めていない。
 - Wave37では`Package Archive / Filesystem Import-Export Decision Boundary v0`を選定し、implementation-provenになった。Wave36のportable JSON bundleを唯一のsupported transportとして維持し、ZIP/archive、File System Access API、directory picker、drag-drop、native filesystemをnon-supported/future-gatedに固定するcapability contract、package-format boundary guard、validator `transportCapability.*` diagnostics、Editor capability UI、desktop/mobile e2e negative oracleまで一段閉じた。Actual ZIP/archive writer/importer、filesystem API、drag-drop implementation、parser/image decode、external dependency、Cubism互換、full renderer、pixel oracleは含めていない。
 - Wave38では`Mesh Topology / UV Editor Expansion v0`を選定し、implementation-provenになった。Wave29のCanvas Mesh Editing v1を足場に、bounded add vertex、remove unreferenced vertex、add triangle、remove triangle、move UV point、topology revision / stable ID evidence、runtime/viewer evidence、validator diagnostics、Editor workflow、desktop/mobile e2e save-load reinspectionまで一段閉じた。Automatic triangulation、retopology algorithm、atlas packing、real texture bytes、image decode、texture sampling correctness、full renderer、pixel oracle、Cubism互換、external dependency、manifest/lockfile変更は含めていない。
-- この文書はWave39以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave39では`MVP-wide Validator Product Report / Preflight v0`を選定し、implementation-provenになった。既存package/runtime/viewer/validator/editor evidenceを横断するProduct Preflight Report contract、validator aggregation、package/runtime/AI observation helper bridge、Editor workflow/UI、rights-clean state fixtures、desktop/mobile save-load rerun e2eまで一段閉じた。AI repair、LLM provider、executable AI preflight command、parser/image decode、archive/filesystem implementation、renderer/pixel oracle、Cubism互換、external dependency、manifest/lockfile変更は含めていない。
+- この文書はWave40以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -69,6 +70,7 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 - Project-defined Portable Package Bundle v0。project-defined JSON bundle、base64 byte payload export/import、digest / byteLength / mediaType verification、validator `portableBundle.*` diagnostics、Editor export/import workflow、desktop/mobile portable bundle round-trip smokeはWave36で一段閉じた。
 - Package Archive / Filesystem Import-Export Decision Boundary v0。transport capability contract、package-format boundary guard、validator `transportCapability.*` diagnostics、Editor truthfulness UI、desktop/mobile e2e negative oracleはWave37で一段閉じた。Only `projectDefinedJsonBundleV0` may claim supported; archive/filesystem transports remain non-supported/future-gated.
 - Mesh Topology / UV Editor Expansion v0。bounded mesh topology operations、UV direct edit、topology revision / stable ID evidence、operation/package/runtime/viewer evidence、validator topology/UV diagnostics、Editor topology/UV controls、desktop/mobile save-load e2e smokeはWave38で一段閉じた。
+- MVP-wide Validator Product Report / Preflight v0。Product preflight contract、validator-core aggregation、package/runtime evidence bridge、AI observation helper/schema、Editor Product Preflight workflow/UI、rights-clean preflight state fixtures、desktop/mobile save-load rerun e2e smokeはWave39で一段閉じた。
 
 一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、automatic triangulation、retopology algorithm、atlas packing、texture sampling correctness、native browser drag-and-drop、multi-select bulk、recursive delete、group transform、File System Access API / directory picker、ZIP/archive import/export、cross-browser-profile/cloud binary persistence、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
@@ -116,8 +118,8 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| AI repair / diff workflow | read、validate、dry-run、approval、transcriptはあるが、repair candidate generation、natural-language repair、standalone diff、rerun validationがproductizedされていない。 | validator/report surfaceが安定してからbounded AI repair waveへ。 | provider/LLM boundaryを含め必要。 |
-| Validator product report / preflight | targeted validatorsは多いが、mesh/mask/rig/dynamics/demo-safe readinessを横断するMVP-wide report/preflightは未完。 | final acceptance runner、public demo、demo-safe capture前のsupport waveとして有効。 | 不要。 |
+| AI repair / diff workflow | read、validate、dry-run、approval、transcript、Product Preflight observation helper/schemaはあるが、repair candidate generation、natural-language repair、standalone diff、rerun validation、executable AI preflight commandがproductizedされていない。 | Wave39 Product Preflightを足場にbounded AI repair / diff waveへ進める候補。ただしprovider/LLM/prompt境界は別判断。 | provider/LLM boundaryを含め必要。 |
+| Final acceptance runner / product gate | Wave39でMVP-wide Product Preflightは実装済みだが、最終acceptance runner、release/demo gate、demo-safe分類、実素材preflightの完全レポートは未完。 | Product Preflightをrunner入力として、どのgateをMVP-blockingにするかを別waveで固定する。 | demo/public gateへ進む場合は必要。 |
 | Demo-safe preflight / capture | policyはあるが、capture scene、自動preflight、disclaimer、public subsetが未実装/未決。 | viewer/product slicesが固まった後に扱う。 | 必要。 |
 | Viewer renderer / standalone viewer / demo capture | Viewerはeditor-internal semantic inspection。full renderer、standalone app、pixel oracle、demo sceneはfuture scope。 | semantic authoring waveには混ぜない。境界変更時だけ扱う。 | 必要。 |
 
@@ -235,7 +237,7 @@ Wave38では、automatic triangulation、retopology algorithm、atlas packing、
 詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave38-plan.md`に固定した。
 完了根拠は`discussion/implementation/waves/wave38/wave38-final-report.md`と`discussion/implementation/reviews/wave38/wave38-clean-integration-review.md`に記録した。
 
-## Wave39以降の推奨選択肢
+## Wave40以降の推奨選択肢
 
 1. **Package archive / filesystem implementation decision**
    Wave37でdecision boundaryは閉じた。次に進めるなら、ZIP/archive writer/importer、filesystem import/export、File System Access API / directory picker、drag-drop、cloud/cross-profile persistenceのどれを実装対象にするかを決める候補。PSD parserやimage decodeとは分ける。
@@ -244,7 +246,7 @@ Wave38では、automatic triangulation、retopology algorithm、atlas packing、
    Wave38でbounded topology / UV editor expansionは閉じた。次に進めるなら、automatic triangulation、freeform retopology、edge tools、UV unwrap、atlas packing、texture sampling correctnessのどれを扱うかを決める候補。Renderer/pixel oracleやtexture bytesとは別waveで扱う。
 
 3. **AI repair / diff workflow**
-   Wave30のtutorial mini modelやvalidator readinessを足場に、repair candidate generation、natural-language repair、standalone diff、rerun validationへ広げる候補。LLM provider / prompt boundary は別判断。
+   Wave39のProduct Preflightと既存AI read / validate / dry-run / approvalを足場に、repair candidate generation、natural-language repair、standalone diff、rerun validationへ広げる候補。LLM provider / prompt boundary は別判断。
 
 4. **Public tutorial / demo asset boundary**
    Wave30はsynthetic semantic fixtureで閉じた。public tutorial asset、demo capture scene、final disclaimer、preflight自動化へ進むなら、rights-clean policyとpublic/private splitを先に固定する。
@@ -266,6 +268,6 @@ Wave38では、automatic triangulation、retopology algorithm、atlas packing、
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33については`discussion/implementation/waves/wave33/wave33-final-report.md`、`discussion/implementation/waves/wave33/_map.md`、`discussion/implementation/reviews/wave33/_map.md`を完了根拠として扱う。Wave34については`discussion/implementation/waves/wave34/wave34-final-report.md`、`discussion/implementation/waves/wave34/_map.md`、`discussion/implementation/reviews/wave34/_map.md`を完了根拠として扱う。Wave35については`discussion/implementation/waves/wave35/wave35-final-report.md`、`discussion/implementation/waves/wave35/_map.md`、`discussion/implementation/reviews/wave35/_map.md`を完了根拠として扱う。Wave36については`discussion/implementation/waves/wave36/wave36-final-report.md`、`discussion/implementation/waves/wave36/_map.md`、`discussion/implementation/reviews/wave36/_map.md`を完了根拠として扱う。Wave37については`discussion/implementation/waves/wave37/wave37-final-report.md`、`discussion/implementation/waves/wave37/_map.md`、`discussion/implementation/reviews/wave37/_map.md`を完了根拠として扱う。Wave38については`discussion/implementation/waves/wave38/wave38-final-report.md`、`discussion/implementation/waves/wave38/_map.md`、`discussion/implementation/reviews/wave38/_map.md`を完了根拠として扱う。Wave39以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33については`discussion/implementation/waves/wave33/wave33-final-report.md`、`discussion/implementation/waves/wave33/_map.md`、`discussion/implementation/reviews/wave33/_map.md`を完了根拠として扱う。Wave34については`discussion/implementation/waves/wave34/wave34-final-report.md`、`discussion/implementation/waves/wave34/_map.md`、`discussion/implementation/reviews/wave34/_map.md`を完了根拠として扱う。Wave35については`discussion/implementation/waves/wave35/wave35-final-report.md`、`discussion/implementation/waves/wave35/_map.md`、`discussion/implementation/reviews/wave35/_map.md`を完了根拠として扱う。Wave36については`discussion/implementation/waves/wave36/wave36-final-report.md`、`discussion/implementation/waves/wave36/_map.md`、`discussion/implementation/reviews/wave36/_map.md`を完了根拠として扱う。Wave37については`discussion/implementation/waves/wave37/wave37-final-report.md`、`discussion/implementation/waves/wave37/_map.md`、`discussion/implementation/reviews/wave37/_map.md`を完了根拠として扱う。Wave38については`discussion/implementation/waves/wave38/wave38-final-report.md`、`discussion/implementation/waves/wave38/_map.md`、`discussion/implementation/reviews/wave38/_map.md`を完了根拠として扱う。Wave39については`discussion/implementation/waves/wave39/wave39-final-report.md`、`discussion/implementation/waves/wave39/_map.md`、`discussion/implementation/reviews/wave39/_map.md`を完了根拠として扱う。Wave40以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

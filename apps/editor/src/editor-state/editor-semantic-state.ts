@@ -22,6 +22,10 @@ import { createEmptyOperationLogSummary, type OperationLogSummaryState } from ".
 import type { LoadedPackageIdentityState } from "./package-identity-state.js";
 import { emptyPackageRevisionState, type PackageRevisionState } from "./package-revision-state.js";
 import type { ParameterListItemState } from "./parameter-list-state.js";
+import {
+  createEmptyProductPreflightState,
+  type ProductPreflightState
+} from "./product-preflight-state.js";
 import type { PreviewParameterValueState } from "./preview-parameter-state.js";
 import type {
   CompositionMaskRelationState,
@@ -77,6 +81,7 @@ export interface EditorSemanticState {
   readonly meshEdit: MeshEditState;
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly viewerRuntime: ViewerRuntimeState;
+  readonly productPreflight: ProductPreflightState;
   readonly tutorialReadinessPreflight: TutorialReadinessPreflightState;
   readonly tutorialGuidedWorkflow: TutorialGuidedWorkflowState;
   readonly pendingCreateParameter: CreateParameterFormState;
@@ -111,6 +116,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   meshEdit: createEmptyMeshEditState(),
   previewParameters: [],
   viewerRuntime: createEmptyViewerRuntimeState(),
+  productPreflight: createEmptyProductPreflightState(),
   tutorialReadinessPreflight: createEmptyTutorialReadinessPreflightState(),
   tutorialGuidedWorkflow: createEmptyTutorialGuidedWorkflowState(),
   pendingCreateParameter: createEmptyParameterFormState(),

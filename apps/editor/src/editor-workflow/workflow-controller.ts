@@ -53,9 +53,11 @@ import {
   applyPreviewParameterValue,
   applyViewerParameterValue,
   closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
+  createFailedProductPreflightState,
   createEditorStateFileFromEditorState,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
+  projectProductPreflightState,
   resetPreviewParameterValues as resetPreviewParameterValueStates,
   resetViewerParameterValues as resetViewerRuntimeParameterValues,
   selectTutorialTargetInEditorState,
@@ -188,6 +190,10 @@ import {
   type EditorWorkflowTutorialCreateResult,
   type EditorWorkflowTutorialSmallEditResult
 } from "./tutorial-mini-model-workflow.js";
+import {
+  runEditorProductPreflightWorkflow,
+  type EditorProductPreflightWorkflowResult
+} from "./product-preflight-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -286,6 +292,15 @@ export interface EditorWorkflowViewerResetResult {
   readonly status: "reset";
   readonly parameterCount: number;
 }
+
+export interface EditorWorkflowProductPreflightFailedResult {
+  readonly status: "failed";
+  readonly message: string;
+}
+
+export type EditorWorkflowProductPreflightResult =
+  | EditorProductPreflightWorkflowResult
+  | EditorWorkflowProductPreflightFailedResult;
 
 export interface EditorWorkflowMeshVertexNudgeNotFoundResult {
   readonly status: "not_found";
@@ -405,6 +420,7 @@ export interface EditorWorkflowController {
   closeViewerRuntimeSurface(): EditorWorkflowViewerSurfaceResult;
   setViewerParameterValue(parameterId: string, value: number): ViewerParameterSetResult;
   resetViewerParameterValues(): EditorWorkflowViewerResetResult;
+  runProductPreflight(): Promise<EditorWorkflowProductPreflightResult>;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
   approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
@@ -1167,6 +1183,32 @@ export const createEditorWorkflowController = (
         parameterCount: viewerRuntime.parameters.length
       };
     },
+    async runProductPreflight() {
+      try {
+        const result = await runEditorProductPreflightWorkflow({
+          adapter,
+          state,
+          ...(options.now === undefined ? {} : { now: options.now })
+        });
+        state = {
+          ...state,
+          productPreflight: projectProductPreflightState(result.report)
+        };
+
+        return result;
+      } catch (error) {
+        const message = formatProductPreflightError(error);
+        state = {
+          ...state,
+          productPreflight: createFailedProductPreflightState(message)
+        };
+
+        return {
+          status: "failed",
+          message
+        };
+      }
+    },
     dryRunAiCreateParameterCommand: aiApprovalActions.dryRunAiCreateParameterCommand,
     approveLatestAiDryRun: aiApprovalActions.approveLatestAiDryRun,
     rejectLatestAiDryRun: aiApprovalActions.rejectLatestAiDryRun,
@@ -1419,6 +1461,9 @@ const isValidMeshVertexNudgeDelta = (delta: {
   Number.isFinite(delta.x) &&
   Number.isFinite(delta.y) &&
   (delta.x !== 0 || delta.y !== 0);
+
+const formatProductPreflightError = (error: unknown): string =>
+  error instanceof Error ? error.message : "Product preflight failed with an unknown error.";
 
 const selectGeneratedArtifactEntries = (input: {
   readonly packageFileSet: PackageFileSet;

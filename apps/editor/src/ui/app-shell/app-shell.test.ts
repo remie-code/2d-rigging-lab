@@ -624,6 +624,25 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.drawableList)).not.toBeNull();
   });
 
+  it("renders Product Preflight and wires the run action", () => {
+    const workflow = createWorkflow();
+    const calls: string[] = [];
+    const shell = renderShell(workflow, {
+      onRunProductPreflight() {
+        calls.push("run");
+      }
+    });
+
+    expect(findByTestId(shell, editorTestIds.productPreflightPanel)?.textContent).toContain(
+      "Product Preflight"
+    );
+    expect(findByTestId(shell, editorTestIds.productPreflightRun)?.disabled).toBe(false);
+
+    findByTestId(shell, editorTestIds.productPreflightRun)?.emit("click");
+
+    expect(calls).toEqual(["run"]);
+  });
+
   it("renders truthful project transport capabilities with only portable JSON actions active", () => {
     const workflow = createWorkflow();
     const calls: unknown[] = [];
@@ -891,6 +910,7 @@ const renderShell = (
     readonly onCreateTutorialMiniModel?: () => void;
     readonly onApplyTutorialSmallEdit?: () => void;
     readonly onSelectTutorialTarget?: Parameters<typeof createEditorAppShell>[0]["onSelectTutorialTarget"];
+    readonly onRunProductPreflight?: Parameters<typeof createEditorAppShell>[0]["onRunProductPreflight"];
     readonly onExportPortableBundle?: Parameters<typeof createEditorAppShell>[0]["onExportPortableBundle"];
     readonly onImportPortableBundleText?: Parameters<typeof createEditorAppShell>[0]["onImportPortableBundleText"];
   } = {}
@@ -960,6 +980,9 @@ const renderShell = (
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
+    ...(callbacks.onRunProductPreflight === undefined
+      ? {}
+      : { onRunProductPreflight: callbacks.onRunProductPreflight }),
     ...(callbacks.onExportPortableBundle === undefined
       ? {}
       : { onExportPortableBundle: callbacks.onExportPortableBundle }),

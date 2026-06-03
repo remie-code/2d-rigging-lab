@@ -5,11 +5,17 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  PRODUCT_PREFLIGHT_REQUIRED_CATEGORY_IDS,
+  ProductPreflightReportDtoSchema
+} from "@private-2d-rigging-lab/contracts";
+
+import {
   AiCapabilitySchema,
   AiCommandNameSchema,
   AiCommandRequestSchema,
   AiCommandResponseSchema
 } from "./index.js";
+import { observeProductPreflightReport } from "./ai-product-preflight-observation.js";
 
 const createParameterOperationRequest = {
   schemaVersion: "operation-request-v1",
@@ -503,6 +509,43 @@ describe("AI command schema foundation", () => {
     ).toBe(false);
   });
 
+  it("does not expose product preflight observation as an executable command", () => {
+    const report = createProductPreflightReport();
+
+    expect(AiCommandNameSchema.safeParse("observeProductPreflightReport").success).toBe(false);
+    expect(
+      AiCommandRequestSchema.safeParse({
+        schemaVersion: "ai-command-request-v1",
+        commandId: "cmd_observe_product_preflight",
+        session: {
+          agentId: "agent_test",
+          capabilities: ["read"]
+        },
+        basis: {
+          packageRevision: 7,
+          relatedAC: [],
+          relatedScenarios: []
+        },
+        command: "observeProductPreflightReport",
+        payload: {
+          report
+        }
+      }).success
+    ).toBe(false);
+    expect(
+      AiCommandResponseSchema.safeParse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: "cmd_observe_product_preflight",
+        status: "ok",
+        evidenceRefs: ["evidence_manifest", "evidence_runtimeSnapshot"],
+        command: "observeProductPreflightReport",
+        payload: observeProductPreflightReport({
+          report
+        })
+      }).success
+    ).toBe(false);
+  });
+
   it("keeps the public index as a barrel-only entrypoint", () => {
     const sourceDirectory = dirname(fileURLToPath(import.meta.url));
     const indexText = readFileSync(join(sourceDirectory, "index.ts"), "utf8");
@@ -515,3 +558,71 @@ describe("AI command schema foundation", () => {
     expect(nonBarrelLines).toEqual([]);
   });
 });
+
+const createProductPreflightReport = (): ReturnType<typeof ProductPreflightReportDtoSchema.parse> =>
+  ProductPreflightReportDtoSchema.parse({
+    schemaVersion: "product-preflight-report-v0",
+    reportId: "preflight_aiObservation",
+    createdAt: "2026-06-03T00:00:00.000Z",
+    packageId: "pkg_aiObservation",
+    packageRevision: 7,
+    packageHash: "sha256-ai-observation",
+    validatorVersion: "validator-test",
+    sourceValidationReportIds: ["val_aiObservation"],
+    summary: {
+      status: "pass",
+      highestSeverity: "info",
+      categoryCounts: {
+        pass: PRODUCT_PREFLIGHT_REQUIRED_CATEGORY_IDS.length,
+        warn: 0,
+        fail: 0,
+        not_supported: 0,
+        not_evaluated: 0
+      },
+      blockingReasonCount: 0,
+      unsupportedClaimCount: 0,
+      notEvaluatedClaimCount: 0,
+      evidenceRefCount: 2,
+      diagnosticRefCount: 0
+    },
+    categories: PRODUCT_PREFLIGHT_REQUIRED_CATEGORY_IDS.map((category) => ({
+      category,
+      status: "pass",
+      severity: "info",
+      summary: `${category} evidence is available.`,
+      evidenceRefs: category === "modelStructure"
+        ? [
+            {
+              evidenceId: "evidence_manifest",
+              artifactRef: {
+                artifactKind: "packageManifest",
+                path: "manifest.json"
+              },
+              target: {
+                kind: "package",
+                id: "pkg_aiObservation"
+              },
+              summary: "Package manifest evidence is available.",
+              producer: "packageFormat"
+            }
+          ]
+        : category === "runtimeViewerEvidence"
+          ? [
+              {
+                evidenceId: "evidence_runtimeSnapshot",
+                artifactRef: {
+                  artifactKind: "runtimeSnapshot",
+                  path: "runtime/snapshots/preflight.runtime-snapshot.json",
+                  snapshotId: "snap_preflight"
+                },
+                target: {
+                  kind: "runtimeSnapshot",
+                  id: "snap_preflight"
+                },
+                summary: "Viewer runtime snapshot evidence is available.",
+                producer: "viewer"
+              }
+            ]
+          : []
+    }))
+  });

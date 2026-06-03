@@ -66,6 +66,7 @@ import { createCreateParameterForm } from "../parameter-operation/create-paramet
 import { createOperationStatusPanel } from "../parameter-operation/operation-status-panel.js";
 import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
+import { createProductPreflightPanel } from "../product-preflight/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
 import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
@@ -141,6 +142,7 @@ export interface EditorAppShellOptions {
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onRunProductPreflight?: () => void | Promise<void>;
   readonly onExportPortableBundle?: () => void | Promise<void>;
   readonly onImportPortableBundleText?: (bundleText: string) => void | Promise<void>;
   readonly onCreateTutorialMiniModel: () => void;
@@ -343,6 +345,14 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       ? {}
       : { onImportPortableBundleText: options.onImportPortableBundleText })
   });
+  const productPreflightPanel = createProductPreflightPanel({
+    state: options.state.productPreflight,
+    isPackageLoaded: options.viewModel.isPackageLoaded,
+    currentPackageRevision: options.state.revision.packageRevision,
+    ...(options.onRunProductPreflight === undefined
+      ? {}
+      : { onRunProductPreflight: options.onRunProductPreflight })
+  });
   const aiApprovalPanel = createAiApprovalPanel({
     viewModel: options.viewModel,
     onDryRunCreateParameter: options.onDryRunAiCreateParameter,
@@ -381,6 +391,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     drawableAuthoringPanel,
     sourceIntakePanel,
     projectPersistencePanel,
+    productPreflightPanel,
     aiApprovalPanel,
     aiTranscriptPanel,
     persistencePanel

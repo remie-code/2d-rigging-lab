@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave38 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave39 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 39 `mvp-validator-product-preflight-report-v0` completed on 2026-06-04 with Product Preflight Report contract, validator-core aggregation, package/runtime evidence bridge helpers, AI observation helper/schema only, Editor Product Preflight workflow/UI, rights-clean fixture registration, desktop/mobile save-load rerun e2e, final verification, and clean integration review while keeping AI repair, LLM provider, executable AI preflight command, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 38 `mesh-topology-uv-editor-expansion-v0` completed on 2026-06-03 with bounded topology / UV contracts, operation and authoring mutations, package/runtime/viewer mesh evidence, validator topology/UV diagnostics, Editor topology/UV controls, rights-clean fixture/e2e registration, desktop/mobile topology/UV save-load smoke, existing Wave29 canvas mesh smoke preservation, final verification, and clean integration review while keeping automatic triangulation, retopology algorithms, atlas packing, real texture bytes, image decode, texture sampling correctness, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
 - Wave 37 `package-archive-filesystem-boundary-v0` completed on 2026-06-03 with a transport capability contract/catalog, package-format boundary guards, validator `transportCapability.*` diagnostics, Editor Project Storage capability UI, desktop/mobile portable bundle e2e preservation, negative forbidden-claim oracles, final verification, and clean integration re-review while keeping ZIP/archive implementation, File System Access API, directory picker, drag-drop implementation, parser/image decode, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
 - Wave 36 `project-defined-portable-package-bundle-v0` completed on 2026-06-03 with project-defined JSON bundle + base64 byte payload export/import, package-format writer/importer behavior, validator `portableBundle.*` diagnostics, Editor export/import workflow, fixture/traceability registration, desktop/mobile portable bundle round-trip e2e smoke, final verification, and clean integration review while keeping ZIP/archive, File System Access API, drag-drop, parser/image decode, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
@@ -109,6 +110,7 @@ discussion/implementation/
 | [orchestration/wave36-plan.md](orchestration/wave36-plan.md) | Wave 36 Project-defined Portable Package Bundle v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave37-plan.md](orchestration/wave37-plan.md) | Wave 37 Package Archive / Filesystem Import-Export Decision Boundary v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave38-plan.md](orchestration/wave38-plan.md) | Wave 38 Mesh Topology / UV Editor Expansion v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave39-plan.md](orchestration/wave39-plan.md) | Wave 39 MVP-wide Validator Product Report / Preflight v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -165,6 +167,8 @@ discussion/implementation/
 | [waves/wave37/_map.md](waves/wave37/_map.md) | Wave 37 domain completion reports, fix loops, review map links, final verification, and final report |
 | [waves/wave38/wave38-final-report.md](waves/wave38/wave38-final-report.md) | Wave 38 final report for Mesh Topology / UV Editor Expansion v0 |
 | [waves/wave38/_map.md](waves/wave38/_map.md) | Wave 38 domain completion reports, final unit fix loop, review map links, final verification, and final report |
+| [waves/wave39/wave39-final-report.md](waves/wave39/wave39-final-report.md) | Wave 39 final report for MVP-wide Validator Product Report / Preflight v0 |
+| [waves/wave39/_map.md](waves/wave39/_map.md) | Wave 39 domain completion reports, JSON mirror decision, final verification, clean review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -215,11 +219,13 @@ discussion/implementation/
 | [reviews/wave37/wave37-clean-integration-review-sylph-final.md](reviews/wave37/wave37-clean-integration-review-sylph-final.md) | Wave 37 final clean integration review |
 | [reviews/wave38/_map.md](reviews/wave38/_map.md) | Wave 38 domain review reports and clean integration review |
 | [reviews/wave38/wave38-clean-integration-review.md](reviews/wave38/wave38-clean-integration-review.md) | Wave 38 clean integration review |
+| [reviews/wave39/_map.md](reviews/wave39/_map.md) | Wave 39 domain review reports and clean integration review |
+| [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) | Wave 39 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Choose the next Wave39 boundary from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
+1. Choose the next Wave40 boundary from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

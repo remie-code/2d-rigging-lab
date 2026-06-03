@@ -35,6 +35,7 @@ import { runCompositionPersistenceSmoke } from "./composition-persistence-smoke.
 import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persistence-smoke.mjs";
 import { runLayerTreeDirectManipulationSmoke } from "./layer-tree-direct-manipulation-smoke.mjs";
 import { runTutorialMiniModelPersistenceSmoke } from "./tutorial-mini-model-persistence-smoke.mjs";
+import { runProductPreflightE2eSmoke } from "./product-preflight-smoke.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -76,6 +77,11 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await assertShellRendered(page);
     const previewEvidence = await runPreviewWorkflow(page, viewport);
     await assertInitialAiApprovalRendered(page);
+    const productPreflightEvidence = await runProductPreflightE2eSmoke({
+      page,
+      viewport
+    });
+    await assertHorizontalOverflow(page, `${viewport.name} wave39-product-preflight`);
     await assertHorizontalOverflow(page, `${viewport.name} initial`);
     await runAiApprovalFlow(page);
     await assertHorizontalOverflow(page, `${viewport.name} post-AI`);
@@ -225,6 +231,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
       previewEvidence,
       sourceIntakeEvidence,
       splitPngCompatibilityEvidence,
+      productPreflightEvidence,
       assetIoBoundaryEvidence,
       byteIntakeEvidence,
       dynamicsEvidence,

@@ -14,3 +14,4 @@ export * from "./ai-inspection-command.js";
 export * from "./ai-operation-log-query.js";
 export * from "./ai-read-command.js";
 export * from "./ai-validation-command.js";
+export * from "./ai-product-preflight-observation.js";
