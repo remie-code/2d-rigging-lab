@@ -203,6 +203,33 @@ sequenceDiagram
   Runtime-->>Reader: load-test snapshot or diagnostics
 ```
 
+## Portable Package Bundle v0 Contract
+
+`portable-package-bundle-v0` is a project-defined JSON bundle for explicit export/import flows. It is not a ZIP, archive, filesystem handle, parser, image decoder, browser-local persistent store, or compatibility package.
+
+The authored Zod source of truth is `packages/package-format/src/portable-package-bundle-contract.ts`.
+
+Required top-level fields:
+
+| Field | Contract |
+|-------|----------|
+| `schemaVersion` | literal `portable-package-bundle-v0` |
+| `bundleKind` | literal `project-defined-json-bundle-v0` |
+| `packageId` | `PackageIdSchema`; must match `packageDocument.manifest.packageId` |
+| `packageRevision` | `PackageRevisionSchema`; must match `packageDocument.manifest.packageRevision` |
+| `packageDocument` | `PackageDocumentDto` project metadata and authored package files |
+| `binaryPayloads[]` | package binary references plus base64 payload evidence |
+
+Each `binaryPayloads[]` entry contains:
+
+| Field | Contract |
+|-------|----------|
+| `binaryAssetRef` | `BinaryAssetReferenceDto`; includes binary asset ID, package-relative path, SHA-256 digest, byte length, media type, storage status, provenance ID, and rights asset ID |
+| `payloadEncoding` | literal `base64-v1` |
+| `payloadBase64` | standard base64 payload string without data URL prefix, whitespace, archive path, filesystem handle, parser profile, or decoded image metadata |
+
+Domain A only defines the DTO/schema boundary. Export writing, import reading, base64 encode/decode, digest recomputation, byteLength verification, validator diagnostics, Editor UI, browser APIs, ZIP/archive handling, File System Access API, parser behavior, and image decode behavior are owned by later domains or are non-goals.
+
 ## TypeScript / Zod Sketches
 
 ## DTO Schema Sketches

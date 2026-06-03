@@ -7,6 +7,8 @@ export interface ProjectPersistencePanelOptions {
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onExportPortableBundle?: () => void | Promise<void>;
+  readonly onImportPortableBundleText?: (bundleText: string) => void | Promise<void>;
 }
 
 export const createProjectPersistencePanel = (
@@ -41,6 +43,20 @@ export const createProjectPersistencePanel = (
       testId: editorTestIds.projectPersistenceReset,
       disabled: false,
       onClick: options.onResetProject
+    }),
+    createActionButton({
+      label: "Export bundle",
+      testId: editorTestIds.projectPersistencePortableExport,
+      disabled: !options.viewModel.isPackageLoaded || options.onExportPortableBundle === undefined,
+      onClick: () => {
+        void options.onExportPortableBundle?.();
+      }
+    }),
+    createPortableBundleImportInput({
+      disabled: options.onImportPortableBundleText === undefined,
+      ...(options.onImportPortableBundleText === undefined
+        ? {}
+        : { onImportPortableBundleText: options.onImportPortableBundleText })
     })
   );
 
@@ -70,6 +86,49 @@ const createActionButton = (options: ActionButtonOptions): HTMLButtonElement => 
   button.addEventListener("click", options.onClick);
 
   return button;
+};
+
+interface PortableBundleImportInputOptions {
+  readonly disabled: boolean;
+  readonly onImportPortableBundleText?: (bundleText: string) => void | Promise<void>;
+}
+
+const createPortableBundleImportInput = (
+  options: PortableBundleImportInputOptions
+): HTMLLabelElement => {
+  const label = document.createElement("label");
+  label.className = "project-persistence-panel__import-label";
+  label.textContent = "Import bundle JSON";
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.className = "project-persistence-panel__file-input";
+  input.dataset.testid = editorTestIds.projectPersistencePortableImportInput;
+  input.disabled = options.disabled;
+  input.setAttribute("accept", "application/json,.json");
+  input.addEventListener("change", () => {
+    void importPortableBundleFile(input, options.onImportPortableBundleText);
+  });
+
+  label.append(input);
+
+  return label;
+};
+
+const importPortableBundleFile = async (
+  input: HTMLInputElement,
+  onImportPortableBundleText:
+    | ((bundleText: string) => void | Promise<void>)
+    | undefined
+): Promise<void> => {
+  const selectedFile = input.files?.[0];
+
+  if (selectedFile === undefined || onImportPortableBundleText === undefined) {
+    return;
+  }
+
+  await onImportPortableBundleText(await selectedFile.text());
+  input.value = "";
 };
 
 const createProjectPersistenceStatus = (
@@ -142,6 +201,30 @@ const summarizeProjectPersistenceResult = (
         label: "Cleared",
         detail: `Sample project restored; ${result.clearResult.storageKey} was cleared.`
       };
+    case "portableExported":
+      return {
+        tone: "success",
+        label: "Bundle exported",
+        detail: formatPortableBundleExportDetail(result)
+      };
+    case "portableExportFailed":
+      return {
+        tone: "failed",
+        label: "Bundle export failed",
+        detail: formatPortableBundleFailureDetail(result)
+      };
+    case "portableImported":
+      return {
+        tone: "success",
+        label: "Bundle imported",
+        detail: formatPortableBundleImportDetail(result)
+      };
+    case "portableImportFailed":
+      return {
+        tone: "failed",
+        label: "Bundle import failed",
+        detail: formatPortableBundleFailureDetail(result)
+      };
   }
 };
 
@@ -193,4 +276,29 @@ const formatPersistentByteRestoreDetail = (
     backendStates.length === 0 ? "no backend state" : `backend states ${backendStates.join(", ")}`;
 
   return `Persistent bytes: ${restore.restoredCount} restored / ${restore.assets.length} checked through same-origin browser-local IndexedDB; ${backendStateLabel}; ${issuesLabel}.`;
+};
+
+const formatPortableBundleExportDetail = (
+  result: Extract<EditorWorkflowPersistenceResult, { readonly status: "portableExported" }>
+): string =>
+  `Portable JSON bundle v0 prepared as ${result.suggestedFilename}; ${result.binaryPayloadCount} binary payloads verified from current editor session bytes.`;
+
+const formatPortableBundleImportDetail = (
+  result: Extract<EditorWorkflowPersistenceResult, { readonly status: "portableImported" }>
+): string => {
+  const registration = result.byteRegistration;
+
+  return `Portable JSON bundle v0 ${result.packageId} r${result.packageRevision} imported; ${registration.registeredCount}/${registration.assetCount} binary assets registered in current session; persistent bytes ${registration.persistentStoredCount}/${registration.persistentStoreAttemptCount} stored through same-origin browser-local IndexedDB, ${registration.persistentUnavailableCount} unavailable.`;
+};
+
+const formatPortableBundleFailureDetail = (
+  result: Extract<
+    EditorWorkflowPersistenceResult,
+    { readonly status: "portableExportFailed" | "portableImportFailed" }
+  >
+): string => {
+  const issueCodes = [...new Set(result.issues.map((issue) => issue.code))];
+  const issueLabel = issueCodes.length === 0 ? "issues none" : `issues ${issueCodes.join(", ")}`;
+
+  return `${result.code}: ${result.message} ${issueLabel}.`;
 };

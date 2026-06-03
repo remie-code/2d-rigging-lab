@@ -82,6 +82,12 @@ import {
   type EditorWorkflowAiDryRunResult
 } from "./workflow-ai-approval-actions.js";
 import {
+  exportEditorWorkflowPortableBundleV0,
+  importEditorWorkflowPortableBundleV0,
+  type EditorWorkflowPortableBundleExportResult,
+  type EditorWorkflowPortableBundleImportResult
+} from "./portable-bundle-workflow.js";
+import {
   applyEditorWorkflowCommitResult,
   createEditorWorkflowState,
   projectLoadedEditorWorkflowState
@@ -250,7 +256,9 @@ export type EditorWorkflowPersistenceResult =
   | EditorWorkflowSaveResult
   | EditorWorkflowLoadResult
   | EditorWorkflowLoadPersistentBytesResult
-  | EditorWorkflowResetResult;
+  | EditorWorkflowResetResult
+  | EditorWorkflowPortableBundleExportResult
+  | EditorWorkflowPortableBundleImportResult;
 
 export interface EditorWorkflowPreviewResetResult {
   readonly status: "reset";
@@ -389,6 +397,8 @@ export interface EditorWorkflowController {
   saveProject(): EditorWorkflowSaveResult;
   loadProject(): EditorWorkflowLoadResult;
   loadProjectWithPersistentBytes(): Promise<EditorWorkflowLoadPersistentBytesResult>;
+  exportPortableBundle(): Promise<EditorWorkflowPortableBundleExportResult>;
+  importPortableBundle(bundle: unknown): Promise<EditorWorkflowPortableBundleImportResult>;
   resetToSamplePackage(): EditorWorkflowResetResult;
 }
 
@@ -1243,6 +1253,36 @@ export const createEditorWorkflowController = (
         persistentByteRestore,
         restoredSnapshot
       };
+      latestProjectPersistenceResult = result;
+
+      return result;
+    },
+    async exportPortableBundle() {
+      const snapshot = adapter.createPersistenceSnapshot({
+        editorState: createEditorStateFileFromEditorState(state)
+      });
+      const result = await exportEditorWorkflowPortableBundleV0({ snapshot });
+
+      latestProjectPersistenceResult = result;
+
+      return result;
+    },
+    async importPortableBundle(bundle) {
+      const result = await importEditorWorkflowPortableBundleV0({
+        bundle,
+        persistentByteStore,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+
+      if (result.status === "portableImported") {
+        adapter = result.adapter;
+        state = result.state;
+        latestSessionPersistenceResult = null;
+        latestDrawablePresetResult = null;
+        aiApprovalActions.reset();
+        clearDynamicsPreview();
+      }
+
       latestProjectPersistenceResult = result;
 
       return result;

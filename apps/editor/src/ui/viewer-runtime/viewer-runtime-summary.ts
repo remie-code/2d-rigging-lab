@@ -406,6 +406,14 @@ const formatProjectPersistence = (
       return `Load failed: ${result.storeResult.reason}`;
     case "reset":
       return "Sample reset";
+    case "portableExported":
+      return `Portable bundle exported r${result.snapshot.packageRevision}`;
+    case "portableExportFailed":
+      return `Portable bundle export failed: ${result.code}`;
+    case "portableImported":
+      return `Portable bundle imported ${result.packageId} r${result.packageRevision}`;
+    case "portableImportFailed":
+      return `Portable bundle import failed: ${result.code}`;
   }
 };
 

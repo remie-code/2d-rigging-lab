@@ -131,6 +131,8 @@ export interface EditorAppShellOptions {
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
+  readonly onExportPortableBundle?: () => void | Promise<void>;
+  readonly onImportPortableBundleText?: (bundleText: string) => void | Promise<void>;
   readonly onCreateTutorialMiniModel: () => void;
   readonly onApplyTutorialSmallEdit: () => void;
   readonly onSelectTutorialTarget: (target: TutorialSelectedTargetState | null) => void;
@@ -318,7 +320,13 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     latestProjectPersistenceResult: options.latestProjectPersistenceResult,
     onSaveProject: options.onSaveProject,
     onLoadProject: options.onLoadProject,
-    onResetProject: options.onResetProject
+    onResetProject: options.onResetProject,
+    ...(options.onExportPortableBundle === undefined
+      ? {}
+      : { onExportPortableBundle: options.onExportPortableBundle }),
+    ...(options.onImportPortableBundleText === undefined
+      ? {}
+      : { onImportPortableBundleText: options.onImportPortableBundleText })
   });
   const aiApprovalPanel = createAiApprovalPanel({
     viewModel: options.viewModel,
@@ -402,8 +410,16 @@ const resolveTextureAtlas = (options: EditorAppShellOptions): TextureAtlasFileDt
     return projectResult.snapshot.document.assets.textureAtlas;
   }
 
+  if (projectResult?.status === "portableExported") {
+    return projectResult.snapshot.document.assets.textureAtlas;
+  }
+
   if (projectResult?.status === "loaded") {
     return parsePackageDocumentFromFileSet(projectResult.packageFileSet).assets.textureAtlas;
+  }
+
+  if (projectResult?.status === "portableImported") {
+    return projectResult.snapshot.document.assets.textureAtlas;
   }
 
   return undefined;

@@ -54,6 +54,8 @@ export const editorTestIds = {
   projectPersistenceSave: "projectPersistence.save",
   projectPersistenceLoad: "projectPersistence.load",
   projectPersistenceReset: "projectPersistence.reset",
+  projectPersistencePortableExport: "projectPersistence.portableExport",
+  projectPersistencePortableImportInput: "projectPersistence.portableImportInput",
   projectPersistenceStatus: "projectPersistence.status",
   projectPersistenceSummary: "projectPersistence.summary",
   operationLogSummary: "operationLog.summary",

@@ -70,7 +70,8 @@ const byteIntakeSmokeViewports = [
 export const runByteIntakePersistenceSmoke = async ({
   page,
   viewport,
-  initialOperationLogEntryCount = 0
+  initialOperationLogEntryCount = 0,
+  stopAfterPersistentRestore = false
 }) => {
   const sample = await readByteSampleSummary();
   const importedSourceRow = createImportedSourceAssetRowTestId(byteIntakeSmoke.sourceAssetId);
@@ -126,6 +127,17 @@ export const runByteIntakePersistenceSmoke = async ({
   await assertByteIntakeVisibleTruthfulness(page, "after byte intake browser-local load");
 
   const screenshot = await page.captureScreenshot(`${viewport.name} wave35 byte intake persistent smoke`);
+
+  if (stopAfterPersistentRestore) {
+    return {
+      viewport: viewport.name,
+      sourceAssetId: byteIntakeSmoke.sourceAssetId,
+      binaryAssetId: byteIntakeSmoke.binaryAssetId,
+      byteLength: sample.byteLength,
+      digestHex: sample.digestHex,
+      screenshot
+    };
+  }
 
   await corruptPersistentByteIndexedDbRecord(page, sample);
   await reloadAndLoadSavedProject(page);

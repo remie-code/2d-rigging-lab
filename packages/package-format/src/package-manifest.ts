@@ -4,6 +4,9 @@ import { PackageIdSchema } from "@private-2d-rigging-lab/contracts";
 
 export const PackageFormatVersionSchema = z.literal("open-model-package-v1");
 export const PackageStableOrderVersionSchema = z.literal("stable-order-v1");
+export const PackageRevisionSchema = z.number().int().nonnegative();
+export type PackageRevisionDto = z.infer<typeof PackageRevisionSchema>;
+export const PackageRevisionDtoSchema = PackageRevisionSchema;
 
 export const RequiredModelFilesSchema = z.object({
   graph: z.literal("model/graph.json"),
@@ -34,7 +37,7 @@ export const PackageManifestSchema = z.object({
   packageId: PackageIdSchema,
   packageDisplayName: z.string(),
   formatVersion: PackageFormatVersionSchema,
-  packageRevision: z.number().int().nonnegative(),
+  packageRevision: PackageRevisionSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   schemaVersions: z.record(z.string(), z.string()),

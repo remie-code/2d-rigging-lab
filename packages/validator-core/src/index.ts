@@ -28,3 +28,4 @@ export * from "./validators/package-runtime.js";
 export * from "./validators/runtime-evidence.js";
 export * from "./validators/viewer-evidence.js";
 export * from "./validators/tutorial-readiness.js";
+export * from "./validators/portable-bundle-integrity.js";

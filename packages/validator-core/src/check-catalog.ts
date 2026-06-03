@@ -497,6 +497,70 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Binary asset reference metadata does not match its source manifest, texture atlas, or binary index owner."
   },
   {
+    checkId: "portableBundle.schemaInvalid",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle evidence does not match the project-defined JSON bundle v0 contract."
+  },
+  {
+    checkId: "portableBundle.unsupportedVersion",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle schemaVersion is not supported by the validator."
+  },
+  {
+    checkId: "portableBundle.missingPayload",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle binary payload evidence is missing required base64 bytes."
+  },
+  {
+    checkId: "portableBundle.missingRequiredBinary",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle evidence is missing a required package binary payload."
+  },
+  {
+    checkId: "portableBundle.digestMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle payload SHA-256 digest does not match binary reference metadata."
+  },
+  {
+    checkId: "portableBundle.byteLengthMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle payload byte length does not match binary reference metadata."
+  },
+  {
+    checkId: "portableBundle.availabilityMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle byte payload evidence conflicts with binary availability metadata."
+  },
+  {
+    checkId: "portableBundle.digestUnsupported",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Portable bundle payload SHA-256 digest verification is unsupported in the current validation environment."
+  },
+  {
     checkId: "byteIntake.unsupportedClaim",
     phase: "source_import",
     defaultSeverity: "blocking",

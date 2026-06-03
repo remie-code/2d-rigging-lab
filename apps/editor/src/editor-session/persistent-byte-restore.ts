@@ -10,6 +10,7 @@ import {
   verifyPackageBinaryAssetBytes,
   type BinaryAssetReferenceDto,
   type BinaryAssetRoleDto,
+  type PackageBinaryBytes,
   type PackageBinaryPersistentByteAvailabilityReportDto,
   type PackageDocumentDto
 } from "@private-2d-rigging-lab/package-format";
@@ -20,7 +21,7 @@ import {
   type EditorPersistentByteStorePutResult
 } from "./persistent-byte-store.js";
 
-interface PersistentBinaryOwner {
+export interface EditorPersistentBinaryOwner {
   readonly ownerKind: "sourceAsset" | "texture";
   readonly ownerId: string;
   readonly role: BinaryAssetRoleDto;
@@ -42,6 +43,14 @@ export type StoreEditorPersistentSourceBinaryBytesResult =
       readonly reason: "source-binary-asset-ref-missing";
       readonly sourceAssetId: string;
     };
+
+export interface StoreEditorPersistentBinaryOwnerBytesInput {
+  readonly persistentByteStore: EditorPersistentByteStore;
+  readonly packageDocument: PackageDocumentDto;
+  readonly owner: EditorPersistentBinaryOwner;
+  readonly bytes: PackageBinaryBytes;
+  readonly now?: () => Date;
+}
 
 export interface RestoreEditorSessionPersistentBinaryBytesInput {
   readonly persistentByteStore: EditorPersistentByteStore;
@@ -67,12 +76,13 @@ export interface EditorSessionPersistentByteRestoreResult {
 export const storeEditorPersistentSourceBinaryBytes = async (
   input: StoreEditorPersistentSourceBinaryBytesInput
 ): Promise<StoreEditorPersistentSourceBinaryBytesResult> => {
-  const sourceAsset = input.packageDocument.assets.sourceManifest.sourceAssets.find(
-    (candidate) => candidate.sourceAssetId === input.sourceAssetId
+  const owner = collectEditorPersistentBinaryOwners(input.packageDocument).find(
+    (candidate) =>
+      candidate.ownerKind === "sourceAsset" &&
+      candidate.ownerId === input.sourceAssetId
   );
-  const binaryAssetRef = sourceAsset?.binaryAssetRef;
 
-  if (binaryAssetRef === undefined) {
+  if (owner === undefined) {
     return {
       status: "skipped",
       reason: "source-binary-asset-ref-missing",
@@ -80,11 +90,23 @@ export const storeEditorPersistentSourceBinaryBytes = async (
     };
   }
 
+  return storeEditorPersistentBinaryOwnerBytes({
+    persistentByteStore: input.persistentByteStore,
+    packageDocument: input.packageDocument,
+    owner,
+    bytes: input.bytes,
+    ...(input.now === undefined ? {} : { now: input.now })
+  });
+};
+
+export const storeEditorPersistentBinaryOwnerBytes = async (
+  input: StoreEditorPersistentBinaryOwnerBytesInput
+): Promise<EditorPersistentByteStorePutResult> => {
   const storedAt = (input.now ?? (() => new Date()))().toISOString();
   const record = createPackageBinaryPersistentByteRecord({
     packageId: input.packageDocument.manifest.packageId,
     packageRevision: input.packageDocument.manifest.packageRevision,
-    binaryAssetRef,
+    binaryAssetRef: input.owner.binaryAssetRef,
     storageBackend: EDITOR_PERSISTENT_BYTE_STORAGE_BACKEND,
     storedAt,
     verifiedAt: storedAt
@@ -100,7 +122,7 @@ export const storeEditorPersistentSourceBinaryBytes = async (
       status: "unavailable",
       storageBackend: EDITOR_PERSISTENT_BYTE_STORAGE_BACKEND,
       storageBackendState: "unavailable-v1",
-      message: `Could not store persistent source bytes: ${formatErrorMessage(error)}`
+      message: `Could not store persistent binary bytes: ${formatErrorMessage(error)}`
     };
   }
 };
@@ -110,7 +132,7 @@ export const restoreEditorSessionPersistentBinaryBytes = async (
 ): Promise<EditorSessionPersistentByteRestoreResult> => {
   const assets: EditorSessionPersistentByteRestoreAssetResult[] = [];
 
-  for (const owner of collectPersistentBinaryOwners(input.packageDocument)) {
+  for (const owner of collectEditorPersistentBinaryOwners(input.packageDocument)) {
     const result = await restorePersistentBinaryOwner({
       persistentByteStore: input.persistentByteStore,
       authoringSession: input.authoringSession,
@@ -132,7 +154,7 @@ const restorePersistentBinaryOwner = async (input: {
   readonly persistentByteStore: EditorPersistentByteStore;
   readonly authoringSession: AuthoringSession;
   readonly packageDocument: PackageDocumentDto;
-  readonly owner: PersistentBinaryOwner;
+  readonly owner: EditorPersistentBinaryOwner;
 }): Promise<EditorSessionPersistentByteRestoreAssetResult> => {
   const stored = await input.persistentByteStore.get({
     binaryAssetRef: input.owner.binaryAssetRef
@@ -207,9 +229,9 @@ const restorePersistentBinaryOwner = async (input: {
   });
 };
 
-const collectPersistentBinaryOwners = (
+export const collectEditorPersistentBinaryOwners = (
   packageDocument: PackageDocumentDto
-): readonly PersistentBinaryOwner[] => [
+): readonly EditorPersistentBinaryOwner[] => [
   ...packageDocument.assets.sourceManifest.sourceAssets.flatMap((sourceAsset) =>
     sourceAsset.binaryAssetRef === undefined
       ? []
@@ -233,7 +255,7 @@ const collectPersistentBinaryOwners = (
 ];
 
 const createRestoreAssetResult = (input: {
-  readonly owner: PersistentBinaryOwner;
+  readonly owner: EditorPersistentBinaryOwner;
   readonly restored: boolean;
   readonly report: PackageBinaryPersistentByteAvailabilityReportDto;
 }): EditorSessionPersistentByteRestoreAssetResult => ({

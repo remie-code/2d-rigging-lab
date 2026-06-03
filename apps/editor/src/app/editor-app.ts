@@ -185,6 +185,22 @@ export function mountEditorApp(root: HTMLElement): void {
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
+        async onExportPortableBundle() {
+          const result = await workflow.exportPortableBundle();
+          render();
+
+          if (result.status === "portableExported") {
+            triggerPortableBundleDownload(root, {
+              bundleJson: result.bundleJson,
+              suggestedFilename: result.suggestedFilename
+            });
+          }
+        },
+        async onImportPortableBundleText(bundleText) {
+          await workflow.importPortableBundle(bundleText);
+          sourceIntakeDraft = workflow.state.sourceIntakeDraft;
+          render();
+        },
         onCreateTutorialMiniModel() {
           workflow.createTutorialMiniModel();
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
@@ -244,3 +260,25 @@ export function mountEditorApp(root: HTMLElement): void {
 
   render();
 }
+
+const triggerPortableBundleDownload = (
+  parent: HTMLElement,
+  bundle: {
+    readonly bundleJson: string;
+    readonly suggestedFilename: string;
+  }
+): void => {
+  const objectUrl = URL.createObjectURL(
+    new Blob([bundle.bundleJson], { type: "application/json" })
+  );
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = bundle.suggestedFilename;
+  link.rel = "noopener";
+  link.style.display = "none";
+
+  parent.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+};
