@@ -38,5 +38,6 @@ export * from "./source-intake-view-model.js";
 export * from "./tutorial-guided-workflow-state.js";
 export * from "./tutorial-guided-workflow-view-model.js";
 export * from "./tutorial-readiness-preflight-state.js";
+export * from "./transport-capability-view-model.js";
 export * from "./viewer-runtime-state.js";
 export * from "./viewer-runtime-view-model.js";

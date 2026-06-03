@@ -20,6 +20,7 @@ import { validateDynamicsSemantics } from "./dynamics-semantic.js";
 import { validateMaskCompositionSemantics } from "./mask-composition.js";
 import { validateMeshSemantics } from "./mesh-semantics.js";
 import { validatePackageSchema } from "./package-schema.js";
+import { validatePackageTransportCapabilityEvidence } from "./package-transport-capability-diagnostics.js";
 import { validatePartLayerSemantics } from "./part-layer-semantics.js";
 import { validatePartRuntimeEvidence } from "./part-runtime-evidence.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
@@ -34,6 +35,8 @@ export interface PackageRuntimeValidationInput {
   readonly runtimeSnapshot?: unknown;
   readonly viewerEvidence?: unknown;
   readonly requireViewerEvidence?: boolean;
+  readonly transportCapabilityEvidence?: unknown;
+  readonly requireTransportCapabilityEvidence?: boolean;
   readonly profile?: string;
   readonly createdAt?: string;
 }
@@ -50,6 +53,13 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
     input.runtimeSnapshot === undefined
       ? undefined
       : validateRuntimeSnapshot(input.runtimeSnapshot, packageResult.packageId);
+  const transportCapabilityChecks = validatePackageTransportCapabilityEvidence({
+    ...(input.transportCapabilityEvidence === undefined ? {} : { transportCapabilityEvidence: input.transportCapabilityEvidence }),
+    ...(input.requireTransportCapabilityEvidence === undefined
+      ? {}
+      : { requireTransportCapabilityEvidence: input.requireTransportCapabilityEvidence }),
+    packageId: packageResult.packageId
+  });
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : collectPackageReferenceChecks(
@@ -78,6 +88,7 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
     profile: input.profile ?? "strict",
     checks: [
       ...packageResult.checks,
+      ...transportCapabilityChecks,
       ...packageReferenceChecks,
       ...viewerEvidenceResult.checks,
       ...(runtimeResult?.checks ?? [])
@@ -97,6 +108,13 @@ export const validatePackageRuntimeWithBinaryAssets = async (
     input.runtimeSnapshot === undefined
       ? undefined
       : validateRuntimeSnapshot(input.runtimeSnapshot, packageResult.packageId);
+  const transportCapabilityChecks = validatePackageTransportCapabilityEvidence({
+    ...(input.transportCapabilityEvidence === undefined ? {} : { transportCapabilityEvidence: input.transportCapabilityEvidence }),
+    ...(input.requireTransportCapabilityEvidence === undefined
+      ? {}
+      : { requireTransportCapabilityEvidence: input.requireTransportCapabilityEvidence }),
+    packageId: packageResult.packageId
+  });
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : [
@@ -139,6 +157,7 @@ export const validatePackageRuntimeWithBinaryAssets = async (
     profile: input.profile ?? "strict",
     checks: [
       ...packageResult.checks,
+      ...transportCapabilityChecks,
       ...packageReferenceChecks,
       ...viewerEvidenceResult.checks,
       ...(runtimeResult?.checks ?? [])

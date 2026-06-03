@@ -1,5 +1,10 @@
 import type { EditorWorkflowPersistenceResult } from "../../editor-workflow/index.js";
-import { editorTestIds, type EditorWorkflowViewModel } from "../../editor-state/index.js";
+import {
+  editorTestIds,
+  projectTransportCapabilityViewRows,
+  type EditorWorkflowViewModel
+} from "../../editor-state/index.js";
+import { createProjectTransportCapabilitySection } from "./project-transport-capability-section.js";
 
 export interface ProjectPersistencePanelOptions {
   readonly viewModel: EditorWorkflowViewModel;
@@ -45,7 +50,7 @@ export const createProjectPersistencePanel = (
       onClick: options.onResetProject
     }),
     createActionButton({
-      label: "Export bundle",
+      label: "Export portable JSON",
       testId: editorTestIds.projectPersistencePortableExport,
       disabled: !options.viewModel.isPackageLoaded || options.onExportPortableBundle === undefined,
       onClick: () => {
@@ -63,6 +68,7 @@ export const createProjectPersistencePanel = (
   panel.append(
     heading,
     actions,
+    createProjectTransportCapabilitySection(projectTransportCapabilityViewRows()),
     createProjectPersistenceStatus(options.latestProjectPersistenceResult)
   );
 
@@ -98,7 +104,7 @@ const createPortableBundleImportInput = (
 ): HTMLLabelElement => {
   const label = document.createElement("label");
   label.className = "project-persistence-panel__import-label";
-  label.textContent = "Import bundle JSON";
+  label.textContent = "Import portable JSON";
 
   const input = document.createElement("input");
   input.type = "file";
@@ -204,25 +210,25 @@ const summarizeProjectPersistenceResult = (
     case "portableExported":
       return {
         tone: "success",
-        label: "Bundle exported",
+        label: "Portable JSON exported",
         detail: formatPortableBundleExportDetail(result)
       };
     case "portableExportFailed":
       return {
         tone: "failed",
-        label: "Bundle export failed",
+        label: "Portable JSON export failed",
         detail: formatPortableBundleFailureDetail(result)
       };
     case "portableImported":
       return {
         tone: "success",
-        label: "Bundle imported",
+        label: "Portable JSON imported",
         detail: formatPortableBundleImportDetail(result)
       };
     case "portableImportFailed":
       return {
         tone: "failed",
-        label: "Bundle import failed",
+        label: "Portable JSON import failed",
         detail: formatPortableBundleFailureDetail(result)
       };
   }

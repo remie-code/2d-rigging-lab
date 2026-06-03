@@ -15,6 +15,8 @@ import {
   createLayerTreePartReparentFormTestId,
   createMeshVertexNudgeButtonTestId,
   createPreviewParameterControlTestId,
+  createProjectPersistenceTransportCapabilityRowTestId,
+  createProjectPersistenceTransportUnavailableActionTestId,
   createRigControlRowTestId,
   createViewerParameterControlTestId,
   editorTestIds,
@@ -622,6 +624,76 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.drawableList)).not.toBeNull();
   });
 
+  it("renders truthful project transport capabilities with only portable JSON actions active", () => {
+    const workflow = createWorkflow();
+    const calls: unknown[] = [];
+    const shell = renderShell(workflow, {
+      onExportPortableBundle() {
+        calls.push(["export"]);
+      },
+      onImportPortableBundleText(bundleText) {
+        calls.push(["import", bundleText]);
+      }
+    });
+    const capabilityList = findByTestId(
+      shell,
+      editorTestIds.projectPersistenceTransportCapabilityList
+    );
+
+    expect(findByTestId(shell, editorTestIds.projectPersistencePanel)?.textContent).toContain(
+      "Export portable JSON"
+    );
+    expect(findByTestId(shell, editorTestIds.projectPersistencePanel)?.textContent).toContain(
+      "Import portable JSON"
+    );
+    expect(findByTestId(shell, editorTestIds.projectPersistencePortableExport)?.disabled).toBe(false);
+    expect(findByTestId(shell, editorTestIds.projectPersistencePortableImportInput)?.disabled).toBe(false);
+
+    findByTestId(shell, editorTestIds.projectPersistencePortableExport)?.emit("click");
+
+    const portableRow = findByTestId(
+      shell,
+      createProjectPersistenceTransportCapabilityRowTestId("projectDefinedJsonBundleV0")
+    );
+    expect(portableRow?.dataset.capabilityStatus).toBe("supported");
+    expect(portableRow?.textContent).toContain("Supported / Available in this editor");
+    expect(portableRow?.textContent).toContain("Issues: none");
+
+    const expectedUnavailableRows = [
+      ["standardArchiveZipV0", "dependency-gated"],
+      ["fileSystemAccessApiV0", "future-gated"],
+      ["directoryPickerV0", "future-gated"],
+      ["dragDropFileIntakeV0", "future-gated"],
+      ["nativeFilesystemPersistenceV0", "unsupported"]
+    ] as const;
+
+    for (const [capabilityId, status] of expectedUnavailableRows) {
+      const row = findByTestId(
+        shell,
+        createProjectPersistenceTransportCapabilityRowTestId(capabilityId)
+      );
+      const unavailableAction = findByTestId(
+        shell,
+        createProjectPersistenceTransportUnavailableActionTestId(capabilityId)
+      );
+
+      expect(row?.dataset.capabilityStatus).toBe(status);
+      expect(row?.textContent).toContain("Unavailable in this editor");
+      expect(unavailableAction?.disabled).toBe(true);
+      unavailableAction?.emit("click");
+    }
+
+    expect(capabilityList?.textContent).toContain("Standard ZIP package archive");
+    expect(capabilityList?.textContent).toContain("File System Access API");
+    expect(capabilityList?.textContent).toContain("Directory picker");
+    expect(capabilityList?.textContent).toContain("Drag-drop file intake");
+    expect(capabilityList?.textContent).not.toContain("ZIP/archive supported");
+    expect(capabilityList?.textContent).not.toContain("filesystem supported");
+    expect(capabilityList?.textContent).not.toContain("parser");
+    expect(capabilityList?.textContent).not.toContain("decode");
+    expect(calls).toEqual([["export"]]);
+  });
+
   it("updates the projected visual and summary after a preview parameter change", () => {
     const workflow = createWorkflow();
     const initialShell = renderShell(workflow);
@@ -804,6 +876,8 @@ const renderShell = (
     readonly onCreateTutorialMiniModel?: () => void;
     readonly onApplyTutorialSmallEdit?: () => void;
     readonly onSelectTutorialTarget?: Parameters<typeof createEditorAppShell>[0]["onSelectTutorialTarget"];
+    readonly onExportPortableBundle?: Parameters<typeof createEditorAppShell>[0]["onExportPortableBundle"];
+    readonly onImportPortableBundleText?: Parameters<typeof createEditorAppShell>[0]["onImportPortableBundleText"];
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -866,6 +940,12 @@ const renderShell = (
     onSaveProject() {},
     onLoadProject() {},
     onResetProject() {},
+    ...(callbacks.onExportPortableBundle === undefined
+      ? {}
+      : { onExportPortableBundle: callbacks.onExportPortableBundle }),
+    ...(callbacks.onImportPortableBundleText === undefined
+      ? {}
+      : { onImportPortableBundleText: callbacks.onImportPortableBundleText }),
     onCreateTutorialMiniModel: callbacks.onCreateTutorialMiniModel ?? (() => {}),
     onApplyTutorialSmallEdit: callbacks.onApplyTutorialSmallEdit ?? (() => {}),
     onSelectTutorialTarget: callbacks.onSelectTutorialTarget ?? (() => {}),

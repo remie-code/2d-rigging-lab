@@ -10,6 +10,8 @@ export * from "./persistent-binary-storage-contract.js";
 export * from "./persistent-binary-storage.js";
 export * from "./portable-package-bundle-contract.js";
 export * from "./portable-package-bundle.js";
+export * from "./package-transport-capabilities.js";
+export * from "./package-transport-boundary.js";
 export * from "./model-graph.js";
 export * from "./model-files.js";
 export * from "./asset-metadata.js";

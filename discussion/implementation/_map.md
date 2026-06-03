@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave36 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave37 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 37 `package-archive-filesystem-boundary-v0` completed on 2026-06-03 with a transport capability contract/catalog, package-format boundary guards, validator `transportCapability.*` diagnostics, Editor Project Storage capability UI, desktop/mobile portable bundle e2e preservation, negative forbidden-claim oracles, final verification, and clean integration re-review while keeping ZIP/archive implementation, File System Access API, directory picker, drag-drop implementation, parser/image decode, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
 - Wave 36 `project-defined-portable-package-bundle-v0` completed on 2026-06-03 with project-defined JSON bundle + base64 byte payload export/import, package-format writer/importer behavior, validator `portableBundle.*` diagnostics, Editor export/import workflow, fixture/traceability registration, desktop/mobile portable bundle round-trip e2e smoke, final verification, and clean integration review while keeping ZIP/archive, File System Access API, drag-drop, parser/image decode, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
 - Wave 35 `browser-local-persistent-binary-storage-v0` completed on 2026-06-03 with same-origin browser-local IndexedDB raw byte persistence, digest / byteLength verified no-reupload reload restore, deterministic validator `persistentByteStorage.*` diagnostics, desktop/mobile persistent-byte e2e smoke, final verification, and clean integration review while keeping portable archive persistence, File System Access API, drag-drop, parser/image decode, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
 - Wave 34 `byte-intake-preflight-direct-call-contract-hardening-v0` completed on 2026-06-03 with direct-call byte availability contract hardening, deterministic validator `byteAvailability.*` diagnostics, editor current-session/reupload truthfulness bridge, direct-call fixtures, desktop/mobile e2e guard, final verification, and clean integration review while keeping persistent binary storage, archive import/export, parser/image decode, drag-drop, File System Access API, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
@@ -67,7 +68,7 @@ discussion/implementation/
 | Path | Purpose |
 |---|---|
 | [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
-| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave36, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
+| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave37, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Current Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -105,6 +106,7 @@ discussion/implementation/
 | [orchestration/wave34-plan.md](orchestration/wave34-plan.md) | Wave 34 Byte Intake Preflight Direct-Call Contract Hardening v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave35-plan.md](orchestration/wave35-plan.md) | Wave 35 Browser-Local Persistent Binary Storage v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave36-plan.md](orchestration/wave36-plan.md) | Wave 36 Project-defined Portable Package Bundle v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave37-plan.md](orchestration/wave37-plan.md) | Wave 37 Package Archive / Filesystem Import-Export Decision Boundary v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -157,6 +159,8 @@ discussion/implementation/
 | [waves/wave35/_map.md](waves/wave35/_map.md) | Wave 35 domain completion reports, review map links, final verification, and final report |
 | [waves/wave36/wave36-final-report.md](waves/wave36/wave36-final-report.md) | Wave 36 final report for Project-defined Portable Package Bundle v0 |
 | [waves/wave36/_map.md](waves/wave36/_map.md) | Wave 36 domain completion reports, fix loop, review map links, final verification, and final report |
+| [waves/wave37/wave37-final-report.md](waves/wave37/wave37-final-report.md) | Wave 37 final report for Package Archive / Filesystem Import-Export Decision Boundary v0 |
+| [waves/wave37/_map.md](waves/wave37/_map.md) | Wave 37 domain completion reports, fix loops, review map links, final verification, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -203,11 +207,13 @@ discussion/implementation/
 | [reviews/wave35/wave35-clean-integration-review.md](reviews/wave35/wave35-clean-integration-review.md) | Wave 35 clean integration review |
 | [reviews/wave36/_map.md](reviews/wave36/_map.md) | Wave 36 domain review reports and clean integration review |
 | [reviews/wave36/wave36-clean-integration-review-sylph.md](reviews/wave36/wave36-clean-integration-review-sylph.md) | Wave 36 clean integration review |
+| [reviews/wave37/_map.md](reviews/wave37/_map.md) | Wave 37 domain review reports and clean integration review |
+| [reviews/wave37/wave37-clean-integration-review-sylph-final.md](reviews/wave37/wave37-clean-integration-review-sylph-final.md) | Wave 37 final clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Choose the next Wave37 boundary from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
+1. Choose the next Wave38 boundary from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

@@ -274,6 +274,13 @@ select {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-persistence-panel__actions > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .project-persistence-panel__button {
@@ -284,14 +291,100 @@ select {
   overflow-wrap: anywhere;
 }
 
+.project-persistence-panel__import-label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.project-persistence-panel__file-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .project-persistence-panel__button:hover:not(:disabled),
 .project-persistence-panel__button:focus-visible:not(:disabled) {
   background: #e1e8e3;
 }
 
+.project-persistence-panel__transport-capabilities {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-persistence-panel__transport-capabilities h3 {
+  margin: 0;
+  color: #263033;
+  font-size: 14px;
+}
+
+.project-persistence-panel__transport-capability-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-persistence-panel__transport-capability-row {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  background: #f8faf9;
+}
+
+.project-persistence-panel__transport-capability-row--supported {
+  border-color: #b8ddcf;
+  background: #eef8f3;
+}
+
+.project-persistence-panel__transport-capability-title,
+.project-persistence-panel__transport-capability-status,
+.project-persistence-panel__transport-capability-summary,
+.project-persistence-panel__transport-capability-detail {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-persistence-panel__transport-capability-title {
+  color: #263033;
+  font-size: 13px;
+}
+
+.project-persistence-panel__transport-capability-status {
+  color: #1d7a73;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.project-persistence-panel__transport-capability-summary,
+.project-persistence-panel__transport-capability-detail {
+  color: #60716e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .project-persistence-panel__status {
   display: grid;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   min-height: 72px;
   padding: 12px;
   border: 1px solid #d7dee8;

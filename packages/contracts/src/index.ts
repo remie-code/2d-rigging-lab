@@ -15,3 +15,4 @@ export * from "./field-change.js";
 export * from "./model-diff.js";
 export * from "./runtime-diff.js";
 export * from "./validation-diff.js";
+export * from "./package-transport-capability.js";

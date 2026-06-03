@@ -561,6 +561,46 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Portable bundle payload SHA-256 digest verification is unsupported in the current validation environment."
   },
   {
+    checkId: "transportCapability.evidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013", "AC-MVP-015", "AC-MVP-016"],
+    description: "Required package transport capability evidence is absent."
+  },
+  {
+    checkId: "transportCapability.schemaInvalid",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013", "AC-MVP-015", "AC-MVP-016"],
+    description: "Package transport capability evidence is malformed or contradicts the transport capability contract."
+  },
+  {
+    checkId: "transportCapability.unsupported",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013", "AC-MVP-015", "AC-MVP-016"],
+    description: "Package transport capability evidence records an unsupported transport boundary."
+  },
+  {
+    checkId: "transportCapability.futureGated",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013", "AC-MVP-015", "AC-MVP-016"],
+    description: "Package transport capability evidence records a future-gated transport boundary."
+  },
+  {
+    checkId: "transportCapability.dependencyGated",
+    phase: "source_import",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013", "AC-MVP-015", "AC-MVP-016"],
+    description: "Package transport capability evidence records a dependency-gated transport boundary."
+  },
+  {
     checkId: "byteIntake.unsupportedClaim",
     phase: "source_import",
     defaultSeverity: "blocking",

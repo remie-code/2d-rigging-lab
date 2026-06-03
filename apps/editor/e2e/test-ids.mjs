@@ -56,6 +56,7 @@ export const editorTestIds = {
   projectPersistenceReset: "projectPersistence.reset",
   projectPersistencePortableExport: "projectPersistence.portableExport",
   projectPersistencePortableImportInput: "projectPersistence.portableImportInput",
+  projectPersistenceTransportCapabilityList: "projectPersistence.transportCapability.list",
   projectPersistenceStatus: "projectPersistence.status",
   projectPersistenceSummary: "projectPersistence.summary",
   operationLogSummary: "operationLog.summary",
@@ -194,6 +195,12 @@ export const createSourceIntakeLayerRowTestId = (sourceLayerId) =>
 
 export const createImportedSourceAssetRowTestId = (sourceAssetId) =>
   `sourceIntake.imported.${sourceAssetId}`;
+
+export const createProjectPersistenceTransportCapabilityRowTestId = (capabilityId) =>
+  `projectPersistence.transportCapability.row.${capabilityId}`;
+
+export const createProjectPersistenceTransportUnavailableActionTestId = (capabilityId) =>
+  `projectPersistence.transportCapability.unavailable.${capabilityId}`;
 
 export const createPreviewParameterControlTestId = (parameterId) =>
   `preview.parameter.${parameterId}`;

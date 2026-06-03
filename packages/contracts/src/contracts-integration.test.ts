@@ -6,7 +6,9 @@ import {
   FieldChangeSchema,
   JsonValueSchema,
   ModelDiffSchema,
+  PACKAGE_TRANSPORT_CAPABILITY_CATALOG,
   PackageIdSchema,
+  PackageTransportCapabilityCatalogDtoSchema,
   RectDtoSchema,
   RuntimeDiffSchema,
   RuntimeEvaluationContextSchema,
@@ -183,5 +185,23 @@ describe("contracts public surface integration", () => {
     expect(runtimeDiff.drawableRuntimeStateChanges).toEqual([]);
     expect(runtimeDiff.drawListChanges).toEqual([]);
     expect(validationDiff.newFailures).toEqual([]);
+  });
+
+  it("exports package transport capability contracts", () => {
+    const catalog = PackageTransportCapabilityCatalogDtoSchema.parse(
+      PACKAGE_TRANSPORT_CAPABILITY_CATALOG
+    );
+    const supportedCapability = catalog.capabilities.find((capability) =>
+      capability.status === "supported"
+    );
+
+    expect(supportedCapability).toMatchObject({
+      capabilityId: "projectDefinedJsonBundleV0",
+      transportKind: "portableBundle",
+      portableBundle: {
+        schemaVersion: "portable-package-bundle-v0",
+        bundleKind: "project-defined-json-bundle-v0"
+      }
+    });
   });
 });

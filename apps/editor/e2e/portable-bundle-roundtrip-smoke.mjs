@@ -9,6 +9,8 @@ import { launchHeadlessBrowser } from "./chrome-launcher.mjs";
 import { createPageSession } from "./page-session.mjs";
 import {
   createImportedSourceAssetRowTestId,
+  createProjectPersistenceTransportCapabilityRowTestId,
+  createProjectPersistenceTransportUnavailableActionTestId,
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
@@ -31,6 +33,40 @@ const portableBundleRoundTripViewports = [
 
 const sampleManifestPath = "assets/sources/uploads/sample_model.psd";
 
+const supportedTransportCapability = {
+  capabilityId: "projectDefinedJsonBundleV0",
+  label: "Portable JSON bundle",
+  status: "supported"
+};
+
+const unavailableTransportCapabilities = [
+  {
+    capabilityId: "standardArchiveZipV0",
+    label: "Standard ZIP package archive",
+    status: "dependency-gated"
+  },
+  {
+    capabilityId: "fileSystemAccessApiV0",
+    label: "File System Access API",
+    status: "future-gated"
+  },
+  {
+    capabilityId: "directoryPickerV0",
+    label: "Directory picker",
+    status: "future-gated"
+  },
+  {
+    capabilityId: "dragDropFileIntakeV0",
+    label: "Drag-drop file intake",
+    status: "future-gated"
+  },
+  {
+    capabilityId: "nativeFilesystemPersistenceV0",
+    label: "Native filesystem persistence",
+    status: "unsupported"
+  }
+];
+
 export const runPortableBundleRoundTripSmoke = async ({ page, viewport }) => {
   const temporaryDirectory = await mkdtemp(
     path.join(tmpdir(), "portable-bundle-roundtrip-")
@@ -46,6 +82,10 @@ export const runPortableBundleRoundTripSmoke = async ({ page, viewport }) => {
       byteIntakeEvidence.sourceAssetId
     );
 
+    await assertProjectTransportCapabilityOracle(
+      page,
+      `before ${viewport.name} portable bundle export`
+    );
     await assertSourceFileNotSelected(page, "after browser-local restore");
     await installPortableBundleExportCapture(page);
 
@@ -59,7 +99,7 @@ export const runPortableBundleRoundTripSmoke = async ({ page, viewport }) => {
       filename: `${viewport.name}-valid.portable-package-bundle-v0.json`,
       bundleJson: exportedBundle.bundleJson
     });
-    await waitForText(page, editorTestIds.projectPersistenceStatus, "Bundle imported");
+    await waitForText(page, editorTestIds.projectPersistenceStatus, "Portable JSON imported");
     await waitForText(
       page,
       editorTestIds.projectPersistenceSummary,
@@ -96,7 +136,7 @@ export const runPortableBundleRoundTripSmoke = async ({ page, viewport }) => {
       filename: `${viewport.name}-digest-mismatch.portable-package-bundle-v0.json`,
       bundleJson: digestMismatchBundleJson
     });
-    await waitForText(page, editorTestIds.projectPersistenceStatus, "Bundle import failed");
+    await waitForText(page, editorTestIds.projectPersistenceStatus, "Portable JSON import failed");
     await waitForText(
       page,
       editorTestIds.projectPersistenceSummary,
@@ -104,7 +144,10 @@ export const runPortableBundleRoundTripSmoke = async ({ page, viewport }) => {
     );
     await waitForText(page, editorTestIds.sourceIntakeImportedSources, "0 imported source assets");
     await assertSourceFileNotSelected(page, "after digest mismatch bundle import failure");
-    await assertNoUnsupportedPortableBundleClaims(page, "after digest mismatch failure");
+    await assertProjectTransportCapabilityOracle(
+      page,
+      `after ${viewport.name} digest mismatch failure`
+    );
 
     return {
       viewport: viewport.name,
@@ -203,7 +246,7 @@ const exportPortableBundle = async (page) => {
   await waitForTextWithStatusSnapshot(
     page,
     editorTestIds.projectPersistenceStatus,
-    "Bundle exported",
+    "Portable JSON exported",
     "portable bundle export"
   );
   await waitForText(
@@ -413,24 +456,163 @@ const assertSourceFileNotSelected = async (page, label) => {
   }
 };
 
-const assertNoUnsupportedPortableBundleClaims = async (page, label) => {
-  const evidence = await page.evaluate((ids) => {
-    const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
-    const text = panel?.textContent ?? "";
-    const unsupportedClaim =
-      /ZIP|archive import|archive export|File System Access|drag-drop|parsed from bytes|decoded from bytes|image decode|raster extraction|full renderer|pixel oracle|Cubism compatibility/i;
+const assertProjectTransportCapabilityOracle = async (page, label) => {
+  await waitForTestId(page, editorTestIds.projectPersistenceTransportCapabilityList);
 
-    return {
-      text,
-      unsupportedClaim: unsupportedClaim.test(text)
-    };
-  }, {
-    panel: editorTestIds.projectPersistencePanel
-  });
+  const supportedRow = {
+    ...supportedTransportCapability,
+    rowTestId: createProjectPersistenceTransportCapabilityRowTestId(
+      supportedTransportCapability.capabilityId
+    ),
+    unavailableActionTestId: createProjectPersistenceTransportUnavailableActionTestId(
+      supportedTransportCapability.capabilityId
+    )
+  };
+  const unavailableRows = unavailableTransportCapabilities.map((capability) => ({
+    ...capability,
+    rowTestId: createProjectPersistenceTransportCapabilityRowTestId(
+      capability.capabilityId
+    ),
+    unavailableActionTestId: createProjectPersistenceTransportUnavailableActionTestId(
+      capability.capabilityId
+    )
+  }));
 
-  if (evidence.unsupportedClaim) {
+  const evidence = await page.evaluate(
+    ({ forbiddenSuccessClaims, ids, supported, unavailable }) => {
+      const byTestId = (testId) =>
+        document.querySelector(`[data-testid="${testId}"]`);
+      const readElementState = (testId) => {
+        const element = byTestId(testId);
+
+        return {
+          disabled:
+            element instanceof HTMLButtonElement || element instanceof HTMLInputElement
+              ? element.disabled
+              : null,
+          exists: element !== null,
+          tagName: element?.tagName ?? null,
+          text: element?.textContent ?? ""
+        };
+      };
+      const readRowState = (row) => {
+        const element = byTestId(row.rowTestId);
+
+        return {
+          capabilityId: row.capabilityId,
+          expectedLabel: row.label,
+          expectedStatus: row.status,
+          exists: element !== null,
+          status: element?.dataset.capabilityStatus ?? null,
+          text: element?.textContent ?? "",
+          unavailableAction: readElementState(row.unavailableActionTestId)
+        };
+      };
+      const panelText =
+        byTestId(ids.projectPersistencePanel)?.textContent ?? "";
+
+      return {
+        forbiddenSuccessClaims: forbiddenSuccessClaims.filter((claim) =>
+          panelText.includes(claim)
+        ),
+        list: readElementState(ids.projectPersistenceTransportCapabilityList),
+        panelText,
+        portableExport: readElementState(ids.projectPersistencePortableExport),
+        portableImport: readElementState(ids.projectPersistencePortableImportInput),
+        supportedRow: readRowState(supported),
+        unavailableRows: unavailable.map(readRowState)
+      };
+    },
+    {
+      forbiddenSuccessClaims: [
+        "ZIP/archive supported",
+        "archive import supported",
+        "archive export supported",
+        "File System Access API available",
+        "directory picker available",
+        "drag-drop import available",
+        "native filesystem available",
+        "parsed from bytes",
+        "decoded from bytes",
+        "image decode",
+        "raster extraction",
+        "full renderer",
+        "pixel oracle",
+        "Cubism compatibility"
+      ],
+      ids: editorTestIds,
+      supported: supportedRow,
+      unavailable: unavailableRows
+    }
+  );
+
+  const failures = [];
+
+  if (!evidence.list.exists) {
+    failures.push("missing transport capability list");
+  }
+  if (evidence.portableExport.tagName !== "BUTTON" || evidence.portableExport.disabled !== false) {
+    failures.push(
+      `portable JSON export action is not enabled: ${JSON.stringify(evidence.portableExport)}`
+    );
+  }
+  if (evidence.portableImport.tagName !== "INPUT" || evidence.portableImport.disabled !== false) {
+    failures.push(
+      `portable JSON import input is not enabled: ${JSON.stringify(evidence.portableImport)}`
+    );
+  }
+
+  const supported = evidence.supportedRow;
+  if (!supported.exists) {
+    failures.push("missing projectDefinedJsonBundleV0 row");
+  }
+  if (supported.status !== "supported") {
+    failures.push(`projectDefinedJsonBundleV0 status is ${supported.status}`);
+  }
+  if (!supported.text.includes("Supported / Available in this editor")) {
+    failures.push(`projectDefinedJsonBundleV0 availability text is missing: ${supported.text}`);
+  }
+  if (supported.unavailableAction.exists) {
+    failures.push("projectDefinedJsonBundleV0 unexpectedly exposes an unavailable action");
+  }
+
+  for (const row of evidence.unavailableRows) {
+    if (!row.exists) {
+      failures.push(`missing ${row.capabilityId} row`);
+      continue;
+    }
+    if (row.status !== row.expectedStatus) {
+      failures.push(
+        `${row.capabilityId} status expected ${row.expectedStatus}, received ${row.status}`
+      );
+    }
+    if (!row.text.includes(row.expectedLabel)) {
+      failures.push(`${row.capabilityId} label is missing: ${row.text}`);
+    }
+    if (!row.text.includes("Unavailable in this editor")) {
+      failures.push(`${row.capabilityId} unavailable text is missing: ${row.text}`);
+    }
+    if (row.text.includes("Supported / Available in this editor")) {
+      failures.push(`${row.capabilityId} masquerades as supported: ${row.text}`);
+    }
+    if (!row.unavailableAction.exists || row.unavailableAction.tagName !== "BUTTON") {
+      failures.push(`${row.capabilityId} missing disabled unavailable button`);
+    } else if (row.unavailableAction.disabled !== true) {
+      failures.push(
+        `${row.capabilityId} unavailable button is enabled: ${JSON.stringify(row.unavailableAction)}`
+      );
+    }
+  }
+
+  if (evidence.forbiddenSuccessClaims.length > 0) {
+    failures.push(
+      `forbidden transport success claims present: ${evidence.forbiddenSuccessClaims.join(", ")}`
+    );
+  }
+
+  if (failures.length > 0) {
     throw new Error(
-      `Portable bundle UI made an unsupported non-goal claim during ${label}: ${evidence.text}`
+      `Transport capability oracle failed during ${label}: ${failures.join("; ")}. Panel=${evidence.panelText}`
     );
   }
 };
