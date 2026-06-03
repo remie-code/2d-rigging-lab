@@ -12,7 +12,8 @@ import {
   projectOperationLogSummary,
   projectReloadSummary,
   projectTutorialGuidedWorkflowState,
-  type EditorSemanticState
+  type EditorSemanticState,
+  type ProjectEditorBinaryByteIntakeStateInput
 } from "../editor-state/index.js";
 import {
   projectTutorialReadinessPreflightFromActiveSession,
@@ -141,6 +142,7 @@ export const projectLoadedEditorWorkflowState = (input: {
   readonly packageFileSet: PackageFileSet;
   readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly generatedArtifactPaths: readonly string[];
+  readonly binaryByteIntake?: ProjectEditorBinaryByteIntakeStateInput;
   readonly now?: () => Date;
 }): EditorSemanticState => {
   const tutorialReadinessPreflight = projectTutorialReadinessPreflightFromPackageDocument({
@@ -169,7 +171,7 @@ export const projectLoadedEditorWorkflowState = (input: {
     ...(input.document.assets.textureAtlas === undefined
       ? {}
       : { textureAtlas: input.document.assets.textureAtlas }),
-    binaryByteIntake: {
+    binaryByteIntake: input.binaryByteIntake ?? {
       sourceAssets: input.document.assets.sourceManifest.sourceAssets,
       ...(input.document.assets.textureAtlas === undefined
         ? {}

@@ -122,7 +122,7 @@ const summarizeProjectPersistenceResult = (
       return {
         tone: "success",
         label: "Loaded",
-        detail: formatSavedProjectDetail(result.storeResult.project)
+        detail: formatLoadedProjectDetail(result)
       };
     case "empty":
       return {
@@ -150,10 +150,47 @@ type SavedProject = Extract<
   { readonly status: "saved" | "loaded" }
 >["storeResult"]["project"];
 
+type LoadedProjectResult = Extract<
+  EditorWorkflowPersistenceResult,
+  { readonly status: "loaded" }
+>;
+
 const formatSavedProjectDetail = (project: SavedProject): string => {
   const operationCount = project.operationLogJsonl
     .split("\n")
     .filter((line) => line.trim().length > 0).length;
 
   return `${project.packageSummary.packageDisplayName} r${project.packageSummary.packageRevision} at ${project.savedAt}; ${operationCount} operations, ${project.generatedArtifactPaths.length} generated artifacts.`;
+};
+
+const formatLoadedProjectDetail = (result: LoadedProjectResult): string => {
+  const baseDetail = formatSavedProjectDetail(result.storeResult.project);
+
+  if (!("persistentByteRestore" in result)) {
+    return `${baseDetail} Persistent bytes were not restored; metadata-only load may require reupload.`;
+  }
+
+  return `${baseDetail} ${formatPersistentByteRestoreDetail(result.persistentByteRestore)}`;
+};
+
+const formatPersistentByteRestoreDetail = (
+  restore: LoadedProjectResult extends infer T
+    ? T extends { readonly persistentByteRestore: infer R }
+      ? R
+      : never
+    : never
+): string => {
+  const issueCodes = [
+    ...new Set(restore.assets.flatMap((asset) =>
+      asset.report.issues.map((issue) => issue.code)
+    ))
+  ];
+  const backendStates = [
+    ...new Set(restore.assets.map((asset) => asset.report.storageBackendState))
+  ];
+  const issuesLabel = issueCodes.length === 0 ? "issues none" : `issues ${issueCodes.join(", ")}`;
+  const backendStateLabel =
+    backendStates.length === 0 ? "no backend state" : `backend states ${backendStates.join(", ")}`;
+
+  return `Persistent bytes: ${restore.restoredCount} restored / ${restore.assets.length} checked through same-origin browser-local IndexedDB; ${backendStateLabel}; ${issuesLabel}.`;
 };

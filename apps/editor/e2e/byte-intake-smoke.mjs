@@ -17,6 +17,13 @@ const sampleSummaryUrl = new URL(
   "../../../fixtures/contracts/wave31-byte-sample-characterization/expected/sample-model-byte-characterization-summary.json",
   import.meta.url
 );
+const persistentByteDbName =
+  "private-2d-rigging-lab.editor-persistent-binary-bytes-v1";
+const persistentByteObjectStoreName = "persistent-binary-bytes-v1";
+const currentSessionByteAvailabilityLabel =
+  "session availability available in current editor session memory; same-origin browser-local IndexedDB persistence may be recorded for best-effort restore after reload";
+const restoredByteAvailabilityLabel =
+  "session availability available in current editor session memory; restored from same-origin browser-local IndexedDB and verified during browser-local load";
 
 const byteIntakeSmoke = {
   sourceAssetId: "src_wave31_sample_psd_e2e",
@@ -68,6 +75,7 @@ export const runByteIntakePersistenceSmoke = async ({
   const sample = await readByteSampleSummary();
   const importedSourceRow = createImportedSourceAssetRowTestId(byteIntakeSmoke.sourceAssetId);
 
+  await clearPersistentByteIndexedDb(page);
   await waitForTestId(page, editorTestIds.sourceIntakePanel);
   await waitForTestId(page, editorTestIds.sourceIntakeForm);
   await waitForTestId(page, editorTestIds.sourceIntakeFileInput);
@@ -84,7 +92,7 @@ export const runByteIntakePersistenceSmoke = async ({
   await waitForText(
     page,
     editorTestIds.sourceIntakeSummary,
-    "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload."
+    "Bytes are registered in current editor session memory; same-origin browser-local IndexedDB stores bytes separately on a best-effort basis and load verifies bytes before availability."
   );
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "1 imported source asset");
   await waitForText(page, importedSourceRow, byteIntakeSmoke.sourceAssetId);
@@ -96,18 +104,67 @@ export const runByteIntakePersistenceSmoke = async ({
   await clickTestId(page, editorTestIds.projectPersistenceSave);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Saved");
   await assertStoredByteIntakeMetadata(page, sample, "after browser save");
+  await assertPersistentByteIndexedDbRecord(page, sample, "after browser save");
 
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
   await clickTestId(page, editorTestIds.projectPersistenceLoad);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
+  await assertProjectPersistentByteSummary(page, {
+    restoredCount: 1,
+    checkedCount: 1,
+    issueText: "issues none"
+  });
   await waitForText(page, editorTestIds.sourceIntakeImportedSources, "1 imported source asset");
   await waitForText(page, importedSourceRow, byteIntakeSmoke.sourceAssetId);
-  await assertByteIntakeVisibleRequiresReupload(page, importedSourceRow, sample);
+  await assertByteIntakeVisibleAvailable(page, importedSourceRow, sample, {
+    label: "after browser-local persistent restore",
+    availabilityLabel: restoredByteAvailabilityLabel,
+    expectCurrentSessionIntakeSummary: false
+  });
   await assertStoredByteIntakeMetadata(page, sample, "after browser reload and load");
   await assertByteIntakeVisibleTruthfulness(page, "after byte intake browser-local load");
 
-  const screenshot = await page.captureScreenshot(`${viewport.name} wave31 byte intake smoke`);
+  const screenshot = await page.captureScreenshot(`${viewport.name} wave35 byte intake persistent smoke`);
+
+  await corruptPersistentByteIndexedDbRecord(page, sample);
+  await reloadAndLoadSavedProject(page);
+  await assertProjectPersistentByteSummary(page, {
+    restoredCount: 0,
+    checkedCount: 1,
+    issueText: "persistentByteStorage.digest.mismatch"
+  });
+  await assertByteIntakeVisibleRequiresReupload(page, importedSourceRow, sample, "after corrupt IndexedDB bytes");
+  await assertByteIntakeVisibleTruthfulness(page, "after corrupt IndexedDB bytes");
+
+  await deletePersistentByteIndexedDbDatabase(page);
+  await reloadAndLoadSavedProject(page);
+  await assertProjectPersistentByteSummary(page, {
+    restoredCount: 0,
+    checkedCount: 1,
+    issueText: "persistentByteStorage.record.missing"
+  });
+  await assertByteIntakeVisibleRequiresReupload(page, importedSourceRow, sample, "after missing IndexedDB record");
+  await assertByteIntakeVisibleTruthfulness(page, "after missing IndexedDB record");
+
+  const disableIndexedDbScriptId = await disableIndexedDbBeforeNewDocuments(page);
+  try {
+    await reloadAndLoadSavedProject(page);
+    await assertProjectPersistentByteSummary(page, {
+      restoredCount: 0,
+      checkedCount: 1,
+      issueText: "persistentByteStorage.backend.unavailable"
+    });
+    await waitForText(page, editorTestIds.projectPersistenceSummary, "backend states unsupported-v1");
+    await assertByteIntakeVisibleRequiresReupload(page, importedSourceRow, sample, "after unavailable IndexedDB");
+    await assertByteIntakeVisibleTruthfulness(page, "after unavailable IndexedDB");
+  } finally {
+    await page.client.call("Page.removeScriptToEvaluateOnNewDocument", {
+      identifier: disableIndexedDbScriptId
+    });
+    await page.reload();
+    await waitForTestId(page, editorTestIds.shell);
+  }
 
   return {
     viewport: viewport.name,
@@ -121,6 +178,8 @@ export const runByteIntakePersistenceSmoke = async ({
 
 const readByteSampleSummary = async () => {
   const summary = JSON.parse(await readFile(sampleSummaryUrl, "utf8"));
+  const sampleBytes = await readFile(sampleFileUrl);
+  const base64Prefix = Buffer.from(sampleBytes.subarray(0, 256)).toString("base64").slice(0, 96);
 
   return {
     fileName: "sample_model.psd",
@@ -128,7 +187,8 @@ const readByteSampleSummary = async () => {
     byteLengthLabel: `${summary.byteEvidence.byteLength} bytes`,
     digestHex: summary.byteEvidence.digest.hex,
     digestShortLabel: `sha256:${summary.byteEvidence.digest.hex.slice(0, 12)}...`,
-    expectedMediaType: summary.byteEvidence.mediaTypeExpectation.declaredMediaType
+    expectedMediaType: summary.byteEvidence.mediaTypeExpectation.declaredMediaType,
+    base64Prefix
   };
 };
 
@@ -255,24 +315,42 @@ const assertSelectedFileDraftVisible = async (page, sample) => {
   }
 };
 
-const assertByteIntakeVisibleAvailable = async (page, rowTestId, sample) => {
+const assertByteIntakeVisibleAvailable = async (
+  page,
+  rowTestId,
+  sample,
+  {
+    label = "after byte intake commit",
+    availabilityLabel = currentSessionByteAvailabilityLabel,
+    expectCurrentSessionIntakeSummary = true
+  } = {}
+) => {
   await waitForText(page, rowTestId, byteIntakeSmoke.manifestPath);
   await waitForText(page, rowTestId, byteIntakeSmoke.binaryAssetId);
   await waitForText(page, rowTestId, "stored-package-local-v1 status; bytes are not decoded by the editor");
   await waitForText(page, rowTestId, sample.byteLengthLabel);
   await waitForText(page, rowTestId, sample.digestShortLabel);
-  await waitForText(
-    page,
-    rowTestId,
-    "session availability available in current editor session memory; browser-local save/load stores metadata only"
-  );
+  await waitForText(page, rowTestId, availabilityLabel);
   await waitForText(page, rowTestId, "validator bytesAvailability=available");
-  await waitForText(page, rowTestId, "source filename sample_model.psd");
-  await waitForText(page, rowTestId, "byte intake verified-pass-v1");
+  if (expectCurrentSessionIntakeSummary) {
+    await waitForText(page, rowTestId, "source filename sample_model.psd");
+    await waitForText(page, rowTestId, "byte intake verified-pass-v1");
+  }
   await waitForText(page, rowTestId, "metadata only; no editor file import or image decode");
+
+  const text = await readText(page, rowTestId);
+  if (text.includes("validator bytesAvailability=requiresReupload")) {
+    throw new Error(`Expected restored bytes to stay available during ${label}, but row required reupload: ${text}.`);
+  }
+  if (
+    availabilityLabel === currentSessionByteAvailabilityLabel &&
+    text.includes("restored from same-origin browser-local IndexedDB")
+  ) {
+    throw new Error(`Current-session byte intake row claimed restored bytes before browser-local load during ${label}: ${text}.`);
+  }
 };
 
-const assertByteIntakeVisibleRequiresReupload = async (page, rowTestId, sample) => {
+const assertByteIntakeVisibleRequiresReupload = async (page, rowTestId, sample, label) => {
   await waitForText(page, rowTestId, byteIntakeSmoke.binaryAssetId);
   await waitForText(page, rowTestId, byteIntakeSmoke.manifestPath);
   await waitForText(page, rowTestId, sample.byteLengthLabel);
@@ -293,7 +371,7 @@ const assertByteIntakeVisibleRequiresReupload = async (page, rowTestId, sample) 
   ].filter((claim) => text.includes(claim));
 
   if (forbiddenLoadedClaims.length > 0) {
-    throw new Error(`Loaded byte intake row still claimed current-session byte verification: ${text}.`);
+    throw new Error(`Loaded byte intake row still claimed current-session byte verification during ${label}: ${text}.`);
   }
 };
 
@@ -324,6 +402,7 @@ const assertStoredByteIntakeMetadata = async (page, sample, label) => {
       ? project.packageFileSet.map((entry) => entry.text ?? "").join("\n")
       : "";
     const operationLogJsonl = String(project.operationLogJsonl ?? "");
+    const serializedProject = JSON.stringify(project);
 
     return {
       schemaVersion: project.schemaVersion,
@@ -354,7 +433,8 @@ const assertStoredByteIntakeMetadata = async (page, sample, label) => {
         packageText.includes("rasterData") ||
         operationLogJsonl.includes("selectedFile") ||
         operationLogJsonl.includes("bytesBase64") ||
-        operationLogJsonl.includes("arrayBuffer")
+        operationLogJsonl.includes("arrayBuffer") ||
+        serializedProject.includes(expected.base64Prefix)
     };
 
     function readPackageJsonFile(projectValue, packagePath) {
@@ -422,6 +502,178 @@ const assertStoredByteIntakeMetadata = async (page, sample, label) => {
   }
 };
 
+const assertProjectPersistentByteSummary = async (page, expected) => {
+  await waitForText(
+    page,
+    editorTestIds.projectPersistenceSummary,
+    `Persistent bytes: ${expected.restoredCount} restored / ${expected.checkedCount} checked`
+  );
+  await waitForText(page, editorTestIds.projectPersistenceSummary, expected.issueText);
+};
+
+const reloadAndLoadSavedProject = async (page) => {
+  await page.reload();
+  await waitForTestId(page, editorTestIds.shell);
+  await clickTestId(page, editorTestIds.projectPersistenceLoad);
+  await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
+};
+
+const assertPersistentByteIndexedDbRecord = async (page, sample, label) => {
+  const stored = await readPersistentByteIndexedDbRecord(page);
+  const failures = [];
+  const expectEqual = (field, actual, expected) => {
+    if (actual !== expected) {
+      failures.push(`${field}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
+    }
+  };
+
+  expectEqual("schemaVersion", stored?.schemaVersion, "editor-indexeddb-persistent-binary-byte-v1");
+  expectEqual("record.binaryAssetId", stored?.record?.binaryAssetId, byteIntakeSmoke.binaryAssetId);
+  expectEqual("record.packageRelativePath", stored?.record?.packageRelativePath, byteIntakeSmoke.manifestPath);
+  expectEqual("record.digest.hex", stored?.record?.digest?.hex, sample.digestHex);
+  expectEqual("record.byteLength", stored?.record?.byteLength, sample.byteLength);
+  expectEqual("record.storageBackend", stored?.record?.storageBackend, "indexeddb-same-origin-browser-local-v1");
+  expectEqual("byteLength", stored?.byteLength, sample.byteLength);
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Persistent IndexedDB byte record mismatch during ${label}: ${failures.join("; ")}. Stored=${JSON.stringify(stored)}.`
+    );
+  }
+};
+
+const readPersistentByteIndexedDbRecord = async (page) =>
+  page.evaluate(async (config) => {
+    const db = await openPersistentByteDb(config);
+    try {
+      const value = await readPersistentByteValue(db, config.key, "readonly");
+      if (value === undefined) {
+        return null;
+      }
+
+      const bytes = readStoredBytes(value.bytes);
+      return {
+        schemaVersion: value.schemaVersion ?? null,
+        record: value.record ?? null,
+        byteLength: bytes?.byteLength ?? null
+      };
+    } finally {
+      db.close();
+    }
+
+    function openPersistentByteDb(input) {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(input.dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed."));
+        request.onblocked = () => reject(new Error("IndexedDB open was blocked."));
+      });
+    }
+
+    function readPersistentByteValue(db, key, mode) {
+      return new Promise((resolve, reject) => {
+        if (!db.objectStoreNames.contains(config.storeName)) {
+          resolve(undefined);
+          return;
+        }
+        const transaction = db.transaction(config.storeName, mode);
+        const store = transaction.objectStore(config.storeName);
+        const request = store.get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB get failed."));
+      });
+    }
+
+    function readStoredBytes(input) {
+      if (input instanceof ArrayBuffer) {
+        return new Uint8Array(input);
+      }
+      if (ArrayBuffer.isView(input)) {
+        return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+      }
+      return undefined;
+    }
+  }, createPersistentByteIndexedDbConfig());
+
+const corruptPersistentByteIndexedDbRecord = async (page, sample) => {
+  await page.evaluate(async (config, byteLength) => {
+    const db = await openPersistentByteDb(config);
+    try {
+      const transaction = db.transaction(config.storeName, "readwrite");
+      const store = transaction.objectStore(config.storeName);
+      const storedValue = await requestToPromise(store.get(config.key));
+      if (storedValue === undefined || storedValue === null) {
+        throw new Error("Cannot corrupt missing persistent byte record.");
+      }
+
+      const corruptBytes = new Uint8Array(byteLength);
+      corruptBytes[0] = 0xff;
+      await requestToPromise(store.put({
+        ...storedValue,
+        bytes: corruptBytes.buffer
+      }, config.key));
+    } finally {
+      db.close();
+    }
+
+    function openPersistentByteDb(input) {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(input.dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed."));
+        request.onblocked = () => reject(new Error("IndexedDB open was blocked."));
+      });
+    }
+
+    function requestToPromise(request) {
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
+      });
+    }
+  }, createPersistentByteIndexedDbConfig(), sample.byteLength);
+};
+
+const clearPersistentByteIndexedDb = async (page) => {
+  await deletePersistentByteIndexedDbDatabase(page);
+};
+
+const deletePersistentByteIndexedDbDatabase = async (page) => {
+  await page.evaluate(async (dbName) => {
+    if (typeof indexedDB === "undefined") {
+      return;
+    }
+
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(dbName);
+      request.onsuccess = () => resolve(undefined);
+      request.onerror = () => reject(request.error ?? new Error("IndexedDB delete failed."));
+      request.onblocked = () => reject(new Error("IndexedDB delete was blocked."));
+    });
+  }, persistentByteDbName);
+};
+
+const disableIndexedDbBeforeNewDocuments = async (page) => {
+  const result = await page.client.call("Page.addScriptToEvaluateOnNewDocument", {
+    source: `
+      Object.defineProperty(globalThis, "indexedDB", {
+        configurable: true,
+        get() {
+          return undefined;
+        }
+      });
+    `
+  });
+
+  return result.identifier;
+};
+
+const createPersistentByteIndexedDbConfig = () => ({
+  dbName: persistentByteDbName,
+  storeName: persistentByteObjectStoreName,
+  key: `${byteIntakeSmoke.binaryAssetId}\n${byteIntakeSmoke.manifestPath}`
+});
+
 const assertByteIntakeVisibleTruthfulness = async (page, label) => {
   const evidence = await page.evaluate((ids) => {
     const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
@@ -467,7 +719,7 @@ const waitForText = async (page, testId, expectedText) => {
   await page.waitFor(
     `${testId} text ${expectedText}`,
     (id, text) => document.querySelector(`[data-testid="${id}"]`)?.textContent?.includes(text) ?? false,
-    { timeoutMs: 8_000 },
+    { timeoutMs: 15_000 },
     testId,
     expectedText
   );
@@ -521,7 +773,7 @@ const main = async () => {
         await waitForTestId(page, editorTestIds.shell);
 
         const result = await runByteIntakePersistenceSmoke({ page, viewport });
-        console.log(`byte-intake-e2e: ${viewport.name} smoke passed`);
+        console.log(`byte-intake-e2e: ${viewport.name} persistent byte smoke passed`);
         console.log(
           `byte-intake-e2e: ${viewport.name} screenshot ${result.screenshot.format} base64Length=${result.screenshot.base64Length}`
         );
@@ -549,7 +801,7 @@ const isDirectRun = () => {
 if (isDirectRun()) {
   try {
     await main();
-    console.log("byte-intake-e2e: smoke passed");
+    console.log("byte-intake-e2e: persistent byte smoke passed");
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

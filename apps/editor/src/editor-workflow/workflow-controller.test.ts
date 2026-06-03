@@ -1682,6 +1682,40 @@ describe("editor workflow controller", () => {
     expect(parameterIds(second)).not.toContain("param_editor_ai_r0_1");
     expect(second.state.operationLog.entryCount).toBe(0);
   });
+
+  it("keeps AI transcript history visible after async persistent byte load", async () => {
+    const storage = createMemoryStorage();
+    const first = createWorkflow(storage);
+    await first.dryRunAiCreateParameterCommand();
+    first.approveLatestAiDryRun();
+    first.saveProject();
+
+    const second = createWorkflow(storage);
+    const loaded = await second.loadProjectWithPersistentBytes();
+
+    expect(loaded.status).toBe("loaded");
+    expect(second.viewModel.aiApproval).toMatchObject({
+      status: "idle",
+      canApproveLatestDryRun: false,
+      canCommitApprovedOperation: false,
+      canRejectPendingDryRun: false
+    });
+    expect(second.viewModel.aiApproval.transcriptEntries).toEqual([
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_editor_ai_dry_run_create_parameter_r0_1",
+        command: "dryRunOperation",
+        status: "ok",
+        operationId: "op_editor_ai_create_parameter_r0_1"
+      }),
+      expect.objectContaining({
+        entryType: "approval",
+        dryRunCommandId: "cmd_editor_ai_dry_run_create_parameter_r0_1",
+        approvalStatus: "approved",
+        operationId: "op_editor_ai_create_parameter_r0_1"
+      })
+    ]);
+  });
 });
 
 const createWorkflow = (storage: StorageLike) =>

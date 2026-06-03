@@ -6,6 +6,8 @@ export * from "./binary-asset.js";
 export * from "./byte-intake.js";
 export * from "./byte-availability-contract.js";
 export * from "./byte-availability.js";
+export * from "./persistent-binary-storage-contract.js";
+export * from "./persistent-binary-storage.js";
 export * from "./model-graph.js";
 export * from "./model-files.js";
 export * from "./asset-metadata.js";

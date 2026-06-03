@@ -189,7 +189,7 @@ const projectSelectedFileStorageTruthLabel = (
   selectedFile: SourceIntakeSelectedFileDraftState
 ): string =>
   selectedFile.commitStatus === "committed-to-package-binary-boundary-v1"
-    ? "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload."
+    ? "Bytes are registered in current editor session memory; same-origin browser-local IndexedDB stores bytes separately on a best-effort basis and load verifies bytes before availability."
     : "Bytes are selected in browser memory only; not committed to package; reupload is required after reload.";
 
 const projectSourceIntakeLayerViewModel = (

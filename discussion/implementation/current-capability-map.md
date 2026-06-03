@@ -1,7 +1,19 @@
 # Current Capability Map
 
-> Status: 2026-06-03 / Wave 34 完了時点の実装状況マップ。
+> Status: 2026-06-03 / Wave 35 完了時点の実装状況マップ。
 > Purpose: 次Wave計画前に、製品・システムとして「何を作るつもりで、何ができていて、何がまだ足りないか」を読むための入口。Wave別 changelog ではない。
+
+## Wave 35 Update
+
+Wave 35 is completed / implementation-proven for the bounded Browser-Local Persistent Binary Storage v0 scope. Domains A-D passed, Domain E final verification passed, and clean integration review passed at [reviews/wave35/wave35-clean-integration-review.md](reviews/wave35/wave35-clean-integration-review.md).
+
+The implemented capability is same-origin browser-local persistent byte recovery:
+
+- Package-format exposes browser-local persistent binary storage records, availability reports, issue codes, backend state, record status, and verification status without embedding raw bytes in saved project JSON.
+- Editor file intake stores selected bytes in IndexedDB and can restore them after browser-local save/load when digest and byteLength verification pass.
+- Validator-core maps persistent storage availability issues to deterministic `persistentByteStorage.*` diagnostics with AI-readable evidence.
+- Desktop/mobile e2e smoke proves file intake -> IndexedDB persistence -> browser-local save/load -> no-reupload availability, plus truthful missing/corrupt fallback.
+- The capability is same-origin / same-browser-profile / best-effort browser storage only. No portable archive persistence, File System Access API, drag-drop, PSD parser, PNG/image decode, external dependency, package manifest/lockfile change, Cubism compatibility, full renderer, standalone viewer, or pixel oracle was added.
 
 ## Wave 34 Update
 
@@ -262,7 +274,7 @@ Wave30 supersedes the older "individual slices exist but no tutorial-like synthe
 | Advanced dynamics / physics | Minimum Open Dynamics v1 は Wave 23 で implementation-proven。 | Cubism Physics互換、direct vertex physics、cloth/collision/IK、timeline bake、full graph editor、automatic tuning、direct rigControl physics output は未実装かつ非目標または future scope。 |
 | Validator | package schema、runtime load/evidence、validation report/artifacts、fixture regressions、Minimum Open Dynamics v1 diagnostics、Wave 27 mask composition diagnostics、Wave29 mesh topology diagnostics、Wave30 tutorial readiness profile / preflight diagnostics、Wave31 byte intake diagnostics、Wave34 `byteAvailability.*` direct-call diagnostics はある。 | MVP全域を単一の製品レポートとして横断する最終 acceptance runner は未完。Tutorial readinessはWave30 synthetic mini modelに限定され、demo-safe分類や実素材preflightの完全レポートではない。Validator contract prose does not yet enumerate every Wave34 `byteAvailability.*` check, though source catalog/tests/fixtures pin behavior. |
 | AI assistant | deterministic command host、read/validate/dry-run/approval/commit、transcript persistenceはある。 | LLM provider、prompt template、natural-language repair、repair candidate generation/ranking、standalone `getDiff`、`rerunValidation` は未実装。 |
-| Package durability | Browser-local save/load/reset はある。Wave 22で binary refs と storage status は browser-local metadata として保存・再読込できる。Wave31でactual selected bytesをcurrent-session package-local binary evidenceとして登録できるが、reload後はreupload stateとして扱う。Wave34でdirect caller / validator / editor session が stale summary、missing current-session bytes、requiresReupload を deterministic に扱う契約を固めた。 | OS filesystem picker、archive writer、project import/export、persistent binary upload/storage、actual binary archive persistence は future work。 |
+| Package durability | Browser-local save/load/reset はある。Wave 22で binary refs と storage status は browser-local metadata として保存・再読込できる。Wave31でactual selected bytesをcurrent-session package-local binary evidenceとして登録できる。Wave34でdirect caller / validator / editor session が stale summary、missing current-session bytes、requiresReupload を deterministic に扱う契約を固めた。Wave35でsame-origin browser-local IndexedDBにraw bytesを保存し、browser-local reload後もdigest / byteLength検証を通ったbytesだけをno-reupload availableへ復元できる。 | OS filesystem picker、archive writer、project import/export、portable binary archive persistence、cross-browser-profile/cloud persistence、quota/private-browsing guarantees は future work。 |
 | Demo-safe capture | track方針とdemo policy文書はある。 | 実際のcapture scene、素材、preflight自動検査、最終disclaimer、配信可能な画面セットは未実装または未決。 |
 
 ## 4. Not Implemented / Future Scope
@@ -275,7 +287,7 @@ Wave30 supersedes the older "individual slices exist but no tutorial-like synthe
 | 高度な物理・animation | Cubism Physics互換、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、AI automatic dynamics tuning、timeline animation editor、motion export、lip sync、video editor。 |
 | 完成素材・法務判断 | 配信用素材、capture scene、最終disclaimer、法務/特許クリア判断、最初にLive2Dへ提案する機能テーマ。 |
 | Future Public Clean Subset | 将来公開する場合の最小subset設計とrights/dependency review。現在MVP外。 |
-| Real PSD / image intake | Actual PSD parser、PSD channel decode、PNG/image decode、raster extraction、Photoshop-compatible compositing、archive import/export、persistent binary upload/storage、image/parser/archive dependency selection。Wave 20-21 はPSD parser-free metadata path、Wave 22 は binary asset reference/storage metadata boundary、Wave31はbrowser `<input type=file>` current-session byte intake に限定しており、parser/decode/materialization/persistent storageを意図的に実装していない。 |
+| Real PSD / image intake | Actual PSD parser、PSD channel decode、PNG/image decode、raster extraction、Photoshop-compatible compositing、archive import/export、portable binary archive persistence、image/parser/archive dependency selection。Wave 20-21 はPSD parser-free metadata path、Wave 22 は binary asset reference/storage metadata boundary、Wave31はbrowser `<input type=file>` current-session byte intake、Wave35はsame-origin browser-local IndexedDB byte restoreに限定しており、parser/decode/materialization/archive persistenceを意図的に実装していない。 |
 
 ## 5. Evidence / Where To Verify
 
@@ -312,7 +324,7 @@ Wave30 supersedes the older "individual slices exist but no tutorial-like synthe
 
 | 候補 | 目的 | 判断ポイント |
 |---|---|---|
-| Package archive / persistent binary storage decision | Wave 31のcurrent-session byte intakeとWave34のdirect-call availability contractを足場に、actual binary bytes の archive/filesystem import-export と persistent package storage を設計する。 | archive / filesystem / browser persistence / dependency approval をどこまで許可するか。PSD parserへ進む前にpersistent storage境界を固めるか。 |
+| Package archive / filesystem import-export decision | Wave31のcurrent-session byte intake、Wave34のdirect-call availability contract、Wave35のsame-origin browser-local IndexedDB byte restoreを足場に、actual binary bytes の portable archive / filesystem import-export と package storage policy を設計する。 | archive / filesystem / dependency approval をどこまで許可するか。Browser-local IndexedDB persistenceを十分とみなすか、portable archive persistenceへ進むか。 |
 | Real texture pipeline expansion | Wave 19-22 の texture preview / adapter metadata / binary ref path を、rights-clean actual PNG bytes/decode/materializationへ広げる。 | PSD raster extractionより先に、PNG texture bytesとpackage-local binary asset lifecycleを実バイトで証明するか。依存関係承認が必要。 |
 | Editor / viewer product workflow expansion | Wave 15のgenerated drawable / mesh slice、Wave 16の最小 layer controls、Wave 17の最小 mesh vertex nudge、Wave 18のmetadata-backed split PNG source intake、Wave 20-21のparser-free PSD adapter/profile intake and structured persistence、Wave 22のbinary ref/missing bytes UX、Wave 23のMinimum Open Dynamics v1、Wave 24のViewer / Runtime inspection surface、Wave 25のMinimum Rig Control v1 workflow、Wave 27のsemantic Composition / Mask / Opacity workflow、Wave 28のminimum part / texture / layer tree workflow、Wave 29のCanvas Mesh Editing v1、Wave30のTutorial-like MVP Mini Model v0、Wave33のLayer Tree Direct Manipulation / Part Tree UX v0 を足場に、MVPの大きな未完領域であるGUI authoringとviewer確認をさらに進める。 | 次に、mesh topology / UV editor、layer tree native drag/drop・multi-select・group transform、advanced dynamics controls、broader rig-control hardening、viewer inspection hardening、standalone viewer/renderer、public tutorial/demo asset、または pixel/full renderer 境界のどれへ進むか。 |
 | Project import/export wave | browser-local persistenceから、package archive / filesystem import/exportへ広げる。 | MVP評価でbrowser-local storageを十分とみなすか、早めに実ファイルの出入口を作るか。Wave 22はactual archive/file I/Oを未実装。 |
@@ -321,7 +333,7 @@ Wave30 supersedes the older "individual slices exist but no tutorial-like synthe
 
 未決の大きな判断:
 
-- Wave31後、real PSD parserへ進む前に、persistent binary storage / package archive / filesystem import-export / image dependency policy を実装 wave として進めるか。
+- Wave35後、real PSD parserへ進む前に、package archive / filesystem import-export / image dependency policy を実装 wave として進めるか。
 - `Private Viewer` を editor-internal Viewer / Runtime surface として段階的に育て続けるか、別viewer app/surfaceとして切り出すか。
 - MVPの次の「一周」証拠を、runtime keyform fixture中心にするか、実際の小さな可動キャラクター制作workflow中心にするか。
 

@@ -24,12 +24,17 @@ import {
 import { projectEditorAiValidation } from "../ai-command-host/editor-ai-validation-projector.js";
 import {
   createEditorSessionAdapter,
+  createEditorIndexedDbPersistentByteStore,
+  restoreEditorSessionPersistentBinaryBytes,
+  storeEditorPersistentSourceBinaryBytes,
   type EditorCreateDrawablePresetCommand,
   type EditorCreateParameterCommand,
   type EditorCreatePartCommand,
+  type EditorPersistentByteStore,
   type EditorMeshVertexNudgeCommand,
   type EditorSessionAdapter,
   type EditorSessionDrawablePresetResult,
+  type EditorSessionPersistentByteRestoreResult,
   type EditorSessionPersistenceResult,
   type EditorSetDrawablePartCommand,
   type EditorSetDrawableTextureCommand,
@@ -194,6 +199,7 @@ export type {
 } from "./layer-tree-direct-manipulation-workflow.js";
 export interface EditorWorkflowControllerOptions {
   readonly projectStore: BrowserProjectStore;
+  readonly persistentByteStore?: EditorPersistentByteStore;
   readonly now?: () => Date;
 }
 
@@ -207,6 +213,12 @@ export interface EditorWorkflowLoadLoadedResult {
   readonly status: "loaded";
   readonly storeResult: Extract<LoadEditorProjectResult, { readonly status: "loaded" }>;
   readonly packageFileSet: PackageFileSet;
+}
+
+export interface EditorWorkflowLoadPersistentBytesLoadedResult
+  extends EditorWorkflowLoadLoadedResult {
+  readonly persistentByteRestore: EditorSessionPersistentByteRestoreResult;
+  readonly restoredSnapshot: EditorSessionPersistenceSnapshot;
 }
 
 export interface EditorWorkflowLoadEmptyResult {
@@ -224,6 +236,11 @@ export type EditorWorkflowLoadResult =
   | EditorWorkflowLoadEmptyResult
   | EditorWorkflowLoadFailedResult;
 
+export type EditorWorkflowLoadPersistentBytesResult =
+  | EditorWorkflowLoadPersistentBytesLoadedResult
+  | EditorWorkflowLoadEmptyResult
+  | EditorWorkflowLoadFailedResult;
+
 export interface EditorWorkflowResetResult {
   readonly status: "reset";
   readonly clearResult: ClearEditorProjectResult;
@@ -232,6 +249,7 @@ export interface EditorWorkflowResetResult {
 export type EditorWorkflowPersistenceResult =
   | EditorWorkflowSaveResult
   | EditorWorkflowLoadResult
+  | EditorWorkflowLoadPersistentBytesResult
   | EditorWorkflowResetResult;
 
 export interface EditorWorkflowPreviewResetResult {
@@ -370,6 +388,7 @@ export interface EditorWorkflowController {
   selectTutorialTarget(target: TutorialSelectedTargetState | null): void;
   saveProject(): EditorWorkflowSaveResult;
   loadProject(): EditorWorkflowLoadResult;
+  loadProjectWithPersistentBytes(): Promise<EditorWorkflowLoadPersistentBytesResult>;
   resetToSamplePackage(): EditorWorkflowResetResult;
 }
 
@@ -380,6 +399,8 @@ export const createEditorWorkflowController = (
     createEditorSessionAdapter({
       ...(options.now === undefined ? {} : { now: options.now })
     });
+  const persistentByteStore =
+    options.persistentByteStore ?? createEditorIndexedDbPersistentByteStore();
 
   let adapter = createSampleAdapter();
   let state = createEditorWorkflowState(adapter, {
@@ -696,6 +717,15 @@ export const createEditorWorkflowController = (
           selectedFileBytes
         )
       );
+      if (result.operationResult.status === "committed") {
+        await storeEditorPersistentSourceBinaryBytes({
+          persistentByteStore,
+          packageDocument: result.reloadedDocument,
+          sourceAssetId: draftWithSelectedFile.sourceAssetId,
+          bytes: selectedFileBytes.bytes,
+          ...(options.now === undefined ? {} : { now: options.now })
+        });
+      }
       const outcome = projectWorkflowSourceIntakeCommitResult({
         state,
         adapter,
@@ -1161,6 +1191,57 @@ export const createEditorWorkflowController = (
         status: "loaded",
         storeResult,
         packageFileSet: project.packageFileSet
+      };
+      latestProjectPersistenceResult = result;
+
+      return result;
+    },
+    async loadProjectWithPersistentBytes() {
+      const loaded = this.loadProject();
+
+      if (loaded.status !== "loaded") {
+        return loaded;
+      }
+
+      const project = loaded.storeResult.project;
+      const document = parsePackageDocumentFromFileSet(project.packageFileSet);
+      const loadedAiApproval = state.aiApproval;
+      const persistentByteRestore = await restoreEditorSessionPersistentBinaryBytes({
+        persistentByteStore,
+        authoringSession: adapter.authoringSession,
+        packageDocument: document
+      });
+      const restoredSnapshot = adapter.createPersistenceSnapshot({
+        editorState: createEditorStateFileFromEditorState(state)
+      });
+      const operationLogEntries = parseOperationLogEntriesFromJsonl(project.operationLogJsonl);
+
+      state = {
+        ...projectLoadedEditorWorkflowState({
+          document,
+          packageFileSet: project.packageFileSet,
+          operationLogEntries,
+          generatedArtifactPaths: project.generatedArtifactPaths,
+          binaryByteIntake: {
+            sourceAssets: document.assets.sourceManifest.sourceAssets,
+            ...(document.assets.textureAtlas === undefined
+              ? {}
+              : { textureAtlas: document.assets.textureAtlas }),
+            byteIntakeSummaries: restoredSnapshot.binaryByteEvidence.byteIntakeSummaries,
+            packageLocalBinaryFilePaths:
+              restoredSnapshot.binaryByteEvidence.packageLocalBinaryFilePaths,
+            reloadSource: "browserLocalLoad"
+          },
+          ...(options.now === undefined ? {} : { now: options.now })
+        }),
+        aiApproval: loadedAiApproval
+      };
+      clearDynamicsPreview();
+
+      const result: EditorWorkflowLoadPersistentBytesResult = {
+        ...loaded,
+        persistentByteRestore,
+        restoredSnapshot
       };
       latestProjectPersistenceResult = result;
 

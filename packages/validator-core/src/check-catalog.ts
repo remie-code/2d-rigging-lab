@@ -385,6 +385,110 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Current-session byte digest verification is unsupported in the current validation environment."
   },
   {
+    checkId: "persistentByteStorage.backend.unavailable",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Browser-local persistent byte storage is unavailable or unsupported for the requested binary asset."
+  },
+  {
+    checkId: "persistentByteStorage.backend.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage evidence was recorded for a different storage backend."
+  },
+  {
+    checkId: "persistentByteStorage.record.missing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "No browser-local persistent byte record is linked to the requested binary asset."
+  },
+  {
+    checkId: "persistentByteStorage.record.unverified",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Browser-local persistent byte record metadata has not been verified."
+  },
+  {
+    checkId: "persistentByteStorage.verification.missing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent bytes were not re-read and verified before validator availability evaluation."
+  },
+  {
+    checkId: "persistentByteStorage.packageId.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage evidence belongs to a different package identity."
+  },
+  {
+    checkId: "persistentByteStorage.packageRevision.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage evidence belongs to a different package revision."
+  },
+  {
+    checkId: "persistentByteStorage.binaryAssetRef.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage evidence targets a different binary asset reference."
+  },
+  {
+    checkId: "persistentByteStorage.digest.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage digest evidence does not match the requested binary asset reference or re-read bytes."
+  },
+  {
+    checkId: "persistentByteStorage.byteLength.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage byte length evidence does not match the requested binary asset reference or re-read bytes."
+  },
+  {
+    checkId: "persistentByteStorage.mediaType.mismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte storage media type evidence does not match the requested binary asset reference or re-read bytes."
+  },
+  {
+    checkId: "persistentByteStorage.bytes.missing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte verification could not find the browser-local stored bytes."
+  },
+  {
+    checkId: "persistentByteStorage.digest.unsupported",
+    phase: "reference",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Persistent byte digest verification is unsupported in the current validation environment."
+  },
+  {
     checkId: "binary.referenceMismatch",
     phase: "reference",
     defaultSeverity: "error",

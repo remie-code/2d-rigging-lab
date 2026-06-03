@@ -15,6 +15,10 @@ import type { TargetKind } from "@private-2d-rigging-lab/contracts";
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
 import { createByteIntakeAvailabilityValidationResult } from "./byte-intake-availability-diagnostics.js";
+import {
+  createPersistentByteAvailabilityValidationResult,
+  type PersistentByteAvailabilityPreflightFields
+} from "./persistent-byte-availability-diagnostics.js";
 
 export type ByteIntakeBytesAvailability =
   | "available"
@@ -37,7 +41,7 @@ export interface ByteIntakeUnsupportedClaimInput {
   readonly evidence?: readonly string[];
 }
 
-export interface ByteIntakeAssetPreflightInput {
+export interface ByteIntakeAssetPreflightInput extends PersistentByteAvailabilityPreflightFields {
   readonly intakeSummary?: PackageBinaryByteIntakeSummaryDto;
   readonly binaryAssetId?: string;
   readonly packageRelativePath?: string;
@@ -116,7 +120,14 @@ const validateByteIntakeAssetTarget = async (
     checks.push(createByteIntakeRightsMissingCheck(target));
   }
 
-  const availabilityResult = createByteIntakeAvailabilityValidationResult(target);
+  const persistentAvailabilityResult = createPersistentByteAvailabilityValidationResult(target);
+  if (persistentAvailabilityResult !== undefined) {
+    checks.push(...persistentAvailabilityResult.checks);
+  }
+
+  const availabilityResult = persistentAvailabilityResult === undefined
+    ? createByteIntakeAvailabilityValidationResult(target)
+    : undefined;
   if (availabilityResult !== undefined) {
     checks.push(...availabilityResult.checks);
   }
@@ -127,7 +138,11 @@ const validateByteIntakeAssetTarget = async (
   );
 
   const bytes = target.asset.bytes;
-  if (availabilityResult !== undefined) {
+  const hasAvailabilityEvidence =
+    availabilityResult !== undefined ||
+    persistentAvailabilityResult !== undefined;
+
+  if (hasAvailabilityEvidence) {
     if (
       bytes !== undefined &&
       bytesAvailability !== "missing" &&

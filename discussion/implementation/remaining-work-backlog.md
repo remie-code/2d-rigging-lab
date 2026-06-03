@@ -1,6 +1,6 @@
-# Wave34完了時点の残件リスト
+# Wave35完了時点の残件リスト
 
-> 状態: 2026-06-03、Wave34完了時点の残件バックログ。
+> 状態: 2026-06-03、Wave35完了時点の残件バックログ。
 
 ## 目的
 
@@ -26,7 +26,8 @@
 - Wave32で`WarpLattice2d Rig Control Authoring / Evaluator v0`は`implementation-proven`になった。Project-defined `warpLattice2d` authoring、`controlPointOffsets` keyform、semantic bilinear evaluator、validator diagnostics、Editor / Preview / Viewer workflow、rights-clean semantic fixture、desktop-mobile e2e save-load reinspectionまで一段閉じた。Cubism deformer互換、full renderer、pixel oracle、full canvas lattice gizmo、PSD/image/archive、File System Access API、external dependency、package manifest/lockfile変更は含めていない。
 - Wave33では`Layer Tree Direct Manipulation / Part Tree UX v0`を選定し、implementation-provenになった。Wave28のminimum form-based workflowを足場に、tree上のrename、reparent、empty-leaf part delete、drawable reassignment、texture assignment、selection / lock / editor-hide維持、Preview / Viewer / Validator evidence、fixture、desktop-mobile e2eまでを一段閉じた。Native browser drag-and-drop、multi-select bulk、recursive delete、group transform、renderer/pixel、PSD/image/archive、external dependencyは含めていない。
 - Wave34では`Byte Intake Preflight Direct-Call Contract Hardening v0`を選定し、implementation-provenになった。Wave31のcurrent-session byte intake境界を、direct caller / validator / editor sessionが誤用しないように、stale verified summary、missing current-session bytes、requiresReupload、availability mismatchをdeterministicに扱う契約・diagnostics・fixtures・e2e guardへ固めた。Persistent binary storage、archive import/export、parser/image decode、drag-drop、File System Access API、external dependency、Cubism互換、full renderer、pixel oracleは含めていない。
-- この文書はWave35以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
+- Wave35では`Browser-Local Persistent Binary Storage v0`を選定し、implementation-provenになった。Wave31/Wave34を足場に、same-origin browser-local IndexedDBへraw bytesを保存し、browser-local reload後にdigest / byteLength検証を通ったbytesだけをno-reupload availableへ復元する契約・Editor workflow・validator diagnostics・desktop/mobile e2eを一段閉じた。Portable archive、File System Access API、drag-drop、parser/image decode、external dependency、Cubism互換、full renderer、pixel oracleは含めていない。
+- この文書はWave36以降の計画前に、残ったproduct directionと判断ゲートを読むための入口として使う。
 
 ## 調査観点
 
@@ -61,8 +62,9 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 - WarpLattice2d Rig Control Authoring / Evaluator v0。project-defined `warpLattice2d` authoring、`controlPointOffsets` keyform、semantic runtime evaluator、validator diagnostics、Editor / Preview / Viewer workflow、rights-clean semantic fixture、desktop/mobile save-load e2e smokeはWave32で一段閉じた。
 - Layer Tree Direct Manipulation / Part Tree UX v0。explicit controlsによるpart rename、reparent、empty-leaf delete、drawable reassignment、texture assignment、pending-delete preflight、Preview / Viewer / Validator evidence、rights-clean fixture、desktop/mobile save-load e2e smokeはWave33で一段閉じた。
 - Byte Intake Preflight Direct-Call Contract Hardening v0。direct-call byte availability contract、validator `byteAvailability.*` diagnostics、editor current-session/reupload truthfulness bridge、direct-call fixtures、desktop/mobile e2e guardはWave34で一段閉じた。
+- Browser-Local Persistent Binary Storage v0。same-origin browser-local IndexedDB byte record、digest / byteLength再検証、no-reupload availability restore、`persistentByteStorage.*` diagnostics、desktop/mobile persistent-byte smokeはWave35で一段閉じた。
 
-一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、native browser drag-and-drop、multi-select bulk、recursive delete、group transform、File System Access API / directory picker、archive import/export、persistent binary upload/storage、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
+一方で、Cubism SDK/Core互換、Cubism形式import/export、`.moc3` / `.model3.json` loading、full renderer、pixel oracle、standalone viewer、real PSD parser、image decode、native browser drag-and-drop、multi-select bulk、recursive delete、group transform、File System Access API / directory picker、portable archive import/export、cross-browser-profile/cloud binary persistence、external HTTP/WebSocket/MCP transport、LLM provider integrationは、まだ実装証明されていない。多くは明示的なfuture scopeまたはnon-claimとして扱う。
 
 ## P0 / 近いwave候補
 
@@ -78,7 +80,7 @@ Wave31完了後、以下はimplementation-provenとして扱ってよい。
 
 | 残件 | 残っている理由 | 推奨扱い | ユーザー判断 |
 |---|---|---|---|
-| Persistent binary byte round-trip | Wave31でactual bytesのcurrent-session intakeは完了したが、browser-local reload後にraw bytesは永続化されずreuploadが必要。 | archive/filesystem/project import-export戦略と分けて決める。IndexedDB/base64/localStorageなどの方針は独立判断。 | 必要。 |
+| Portable binary byte round-trip | Wave35でsame-origin browser-local IndexedDBのraw byte persistence / reload restoreは完了したが、portable archive、filesystem import/export、cross-browser-profile/cloud persistenceは未実装。 | Browser-local IndexedDBとは別waveで扱う。ZIP/archive dependency、File System Access API、project package formatへのraw byte同梱可否を先に決める。 | 必要。 |
 | Drag-drop / File System Access / directory picker boundary | Wave31でbrowser `<input type=file>`は完了したが、drag-drop、File System Access API、directory picker、native filesystem pickerは未実装。 | 追加するならUX/security/storage方針を先に決める。 | 必要。 |
 | Package archive import/export | browser-local save/loadはあるが、package archive writer/importerがない。 | byte intakeとは別にarchive戦略を決める。ZIP dependencyは承認対象。 | 必要。 |
 | PNG decode / texture bytes materialization | texture previewはdeterministicまたはreference-backedで、実PNG bytesのdecode/renderはない。 | Wave31のbyte-intake metadata境界の次に進む場合でも、rights-clean fixture/security policyとimage dependency承認を先に扱う。 | 必要。 |
@@ -210,10 +212,10 @@ Wave34では、persistent binary storage、archive import/export、PSD parser、
 詳細なdomain splitとOrch-Sylph並列投入方針は`discussion/implementation/orchestration/wave34-plan.md`に固定した。
 完了根拠は`discussion/implementation/waves/wave34/wave34-final-report.md`と`discussion/implementation/reviews/wave34/wave34-clean-integration-review.md`に記録した。
 
-## Wave35以降の推奨選択肢
+## Wave36以降の推奨選択肢
 
-1. **Package archive / persistent binary storage decision**
-   Wave31のcurrent-session byte intakeとWave34のdirect-call availability contractを足場に、package archive writer/importer、filesystem import/export、browser persistence strategy、binary storage policyを決める候補。PSD parserやimage decodeとは分ける。
+1. **Package archive / filesystem import-export decision**
+   Wave31のcurrent-session byte intake、Wave34のdirect-call availability contract、Wave35のbrowser-local IndexedDB byte restoreを足場に、portable package archive writer/importer、filesystem import/export、binary storage policyを決める候補。PSD parserやimage decodeとは分ける。
 
 2. **Mesh topology / UV editor expansion**
    Wave29がCanvas Mesh Editing v1を閉じた後の候補。vertex/edge/face creation/delete、retopology、UV direct edit、atlas packingへ広げる場合は、renderer/pixel oracleやtexture bytesとは別waveで扱う。
@@ -230,9 +232,9 @@ Wave34では、persistent binary storage、archive import/export、PSD parser、
 ## 関連wave前に確認すべき判断
 
 1. Wave27のmask / clipping / opacityとWave28のpart / texture / layer tree workflowはsemantic evidenceで閉じた。次にpixel/full rendererへ進むか、引き続きsemantic authoring / editor workflowを優先するか。
-2. Wave31のbyte-intake pilot後、次はpersistent binary storage / archive import-exportへ進めるか、別のeditor workflowへ戻るか。
+2. Wave35のbrowser-local persistent byte restore後、次はportable archive import-export / filesystem import-exportへ進めるか、別のeditor workflowへ戻るか。
 3. file input拡張を許可する場合、drag-drop / File System Access API / directory pickerまで含めるか。
-4. archive import/exportを今project-defined ZIPとして始めるか、persistent binary storage方針決定後まで延期するか。
+4. archive import/exportを今project-defined ZIPとして始めるか、browser-local persistenceで当面十分として延期するか。
 5. 実PSD/PNG/image fixtureとdemo/public assetに対するrights-clean policyをどこまで厳格にするか。
 6. Wave32でproject-defined `warpLattice2d` authoring / evaluator は一段閉じた。次にrig-controlへ進む場合は、canvas lattice gizmo、timeline/multi-control UX、broader properties、direct physics、Cubism deformer互換のどれを扱うかを改めて選ぶ。
 7. mediaType signature sniff / header decode / byte security validationをどの段階で入れるか。
@@ -241,6 +243,6 @@ Wave34では、persistent binary storage、archive import/export、PSD parser、
 
 ## 今後の使い方
 
-次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33については`discussion/implementation/waves/wave33/wave33-final-report.md`、`discussion/implementation/waves/wave33/_map.md`、`discussion/implementation/reviews/wave33/_map.md`を完了根拠として扱う。Wave34については`discussion/implementation/waves/wave34/wave34-final-report.md`、`discussion/implementation/waves/wave34/_map.md`、`discussion/implementation/reviews/wave34/_map.md`を完了根拠として扱う。Wave35以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
+次wave計画では、この文書と`current-capability-map.md`をセットで読む。Wave29については`discussion/implementation/waves/wave29/wave29-final-report.md`、`discussion/implementation/waves/wave29/_map.md`、`discussion/implementation/reviews/wave29/_map.md`を完了根拠として扱う。Wave30については`discussion/implementation/waves/wave30/wave30-final-report.md`、`discussion/implementation/waves/wave30/_map.md`、`discussion/implementation/reviews/wave30/_map.md`を完了根拠として扱う。Wave31については`discussion/implementation/waves/wave31/wave31-final-report.md`、`discussion/implementation/waves/wave31/_map.md`、`discussion/implementation/reviews/wave31/_map.md`を完了根拠として扱う。Wave32については`discussion/implementation/waves/wave32/wave32-final-report.md`、`discussion/implementation/waves/wave32/_map.md`、`discussion/implementation/reviews/wave32/_map.md`を完了根拠として扱う。Wave33については`discussion/implementation/waves/wave33/wave33-final-report.md`、`discussion/implementation/waves/wave33/_map.md`、`discussion/implementation/reviews/wave33/_map.md`を完了根拠として扱う。Wave34については`discussion/implementation/waves/wave34/wave34-final-report.md`、`discussion/implementation/waves/wave34/_map.md`、`discussion/implementation/reviews/wave34/_map.md`を完了根拠として扱う。Wave35については`discussion/implementation/waves/wave35/wave35-final-report.md`、`discussion/implementation/waves/wave35/_map.md`、`discussion/implementation/reviews/wave35/_map.md`を完了根拠として扱う。Wave36以降は、残ったproduct directionから1つを選び、1waveで完了できる範囲に切る。
 
 実装に入る場合は、引き続きUndine -> Orch-Sylph -> Gnome / Review-Sylphの分離を守る。Orch-Sylphは実装とreviewを別コンテキストへ委譲する調整役であり、source実装を直接担当しない。

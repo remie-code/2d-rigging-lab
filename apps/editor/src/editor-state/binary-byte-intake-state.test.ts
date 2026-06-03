@@ -58,7 +58,30 @@ describe("editor binary byte intake state", () => {
       expect.objectContaining({
         binaryAssetId: "bin_editor_state_psd_source",
         availabilityStatus: "available-current-editor-session-v1",
+        availabilityLabel:
+          "available in current editor session memory; same-origin browser-local IndexedDB persistence may be recorded for best-effort restore after reload",
         validatorBytesAvailability: "available"
+      })
+    ]);
+    expect(state.statusLabel).toBe("1 available / 0 reupload required / 0 missing binary byte asset");
+  });
+
+  it("reports restored browser-local persistent bytes as available after load", () => {
+    const state = projectEditorBinaryByteIntakeState({
+      sourceAssets: [createSourceAsset()],
+      packageLocalBinaryFilePaths: ["assets/sources/editor/state-source.psd"],
+      reloadSource: "browserLocalLoad"
+    });
+
+    expect(state.assets).toEqual([
+      expect.objectContaining({
+        binaryAssetId: "bin_editor_state_psd_source",
+        availabilityStatus: "available-current-editor-session-v1",
+        availabilityLabel:
+          "available in current editor session memory; restored from same-origin browser-local IndexedDB and verified during browser-local load",
+        validatorBytesAvailability: "available",
+        sourceFilename: null,
+        verificationStatus: null
       })
     ]);
     expect(state.statusLabel).toBe("1 available / 0 reupload required / 0 missing binary byte asset");

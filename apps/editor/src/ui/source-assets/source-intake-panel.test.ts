@@ -343,7 +343,7 @@ describe("source intake panel", () => {
     });
 
     const storageTruth =
-      "Bytes are registered in current editor session memory; browser-local save/load stores metadata only and requires reupload.";
+      "Bytes are registered in current editor session memory; same-origin browser-local IndexedDB stores bytes separately on a best-effort basis and load verifies bytes before availability.";
     const panelSummary = findByTestId(panel, editorTestIds.sourceIntakeSummary);
     const selectedFileSummary = findByTestId(panel, editorTestIds.sourceIntakeSelectedFile);
     expect(panelSummary?.textContent).toContain(storageTruth);

@@ -175,8 +175,8 @@ export function mountEditorApp(root: HTMLElement): void {
           workflow.saveProject();
           render();
         },
-        onLoadProject() {
-          workflow.loadProject();
+        async onLoadProject() {
+          await workflow.loadProjectWithPersistentBytes();
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },

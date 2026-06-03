@@ -130,7 +130,10 @@ const projectBinaryByteIntakeAssetState = (input: {
     rightsAssetId: input.owner.ref.rightsAssetId,
     storageStatus: input.owner.ref.storageStatus,
     availabilityStatus,
-    availabilityLabel: formatBinaryByteAvailability(availabilityStatus),
+    availabilityLabel: formatBinaryByteAvailability({
+      availability: availabilityStatus,
+      reloadSource: input.reloadSource
+    }),
     validatorBytesAvailability: mapValidatorBytesAvailability(availabilityStatus),
     sourceFilename: input.summary?.filename ?? null,
     verificationStatus: input.summary?.verificationStatus ?? null
@@ -167,12 +170,15 @@ const projectBinaryByteAvailabilityStatus = (input: {
   return "missing-package-local-bytes-v1";
 };
 
-const formatBinaryByteAvailability = (
-  availability: EditorBinaryByteAvailabilityStatus
-): string => {
-  switch (availability) {
+const formatBinaryByteAvailability = (input: {
+  readonly availability: EditorBinaryByteAvailabilityStatus;
+  readonly reloadSource: ReloadSummarySource | null;
+}): string => {
+  switch (input.availability) {
     case "available-current-editor-session-v1":
-      return "available in current editor session memory; browser-local save/load stores metadata only";
+      return input.reloadSource === "browserLocalLoad"
+        ? "available in current editor session memory; restored from same-origin browser-local IndexedDB and verified during browser-local load"
+        : "available in current editor session memory; same-origin browser-local IndexedDB persistence may be recorded for best-effort restore after reload";
     case "requires-reupload-after-browser-local-load-v1":
       return "metadata reloaded without bytes; reupload required before byte validation can pass";
     case "missing-package-local-bytes-v1":
