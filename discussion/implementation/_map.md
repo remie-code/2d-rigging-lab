@@ -21,7 +21,9 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after Wave40 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after Wave41 is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 41 `product-preflight-read-diff-report-ergonomics-v0` completed on 2026-06-05 with Product Preflight report diff contract, deterministic validator diff builder, category/status transition summary, evidence/diagnostic ref changes, rerun affordance, Codex-facing read/diff command helpers, Editor current/previous/proposal-preview comparison workflow, rights-clean fixtures, focused desktop/mobile e2e smoke, final verification, and clean integration review while keeping Product Preflight session-generated/read-only and excluding persisted/exported artifacts, release/demo gates, repo-side repair generation/ranking, LLM/provider/prompt integration, natural-language repair, auto-fix/automatic commit, external transport, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, external dependencies, and package manifest/lockfile changes.
+- Wave 41 final report is [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md); clean integration review is [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md).
 - Wave 40 `codex-facing-rigging-edit-proposal-api-diff-validation-surface-v0` completed on 2026-06-04 with Codex proposal contracts, deterministic operation catalog, proposal validation, dry-run diff preview, preview/post-commit rerun validation / Product Preflight bridge, approval-gated commit lifecycle, transcript/evidence recording, Editor proposal review workflow, rights-clean fixtures, desktop/mobile proposal review e2e, final verification, and clean integration review while keeping repo-side proposal generation/ranking, LLM/provider/prompt integration, natural-language repair, auto-fix/automatic commit, external transport, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 39 `mvp-validator-product-preflight-report-v0` completed on 2026-06-04 with Product Preflight Report contract, validator-core aggregation, package/runtime evidence bridge helpers, AI observation helper/schema only, Editor Product Preflight workflow/UI, rights-clean fixture registration, desktop/mobile save-load rerun e2e, final verification, and clean integration review while keeping AI repair, LLM provider, executable AI preflight command, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, external dependencies, and package manifest/lockfile changes out of scope.
 - Wave 38 `mesh-topology-uv-editor-expansion-v0` completed on 2026-06-03 with bounded topology / UV contracts, operation and authoring mutations, package/runtime/viewer mesh evidence, validator topology/UV diagnostics, Editor topology/UV controls, rights-clean fixture/e2e registration, desktop/mobile topology/UV save-load smoke, existing Wave29 canvas mesh smoke preservation, final verification, and clean integration review while keeping automatic triangulation, retopology algorithms, atlas packing, real texture bytes, image decode, texture sampling correctness, external dependencies, Cubism compatibility, full renderer, pixel oracle, and package manifest/lockfile changes out of scope.
@@ -113,6 +115,7 @@ discussion/implementation/
 | [orchestration/wave38-plan.md](orchestration/wave38-plan.md) | Wave 38 Mesh Topology / UV Editor Expansion v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave39-plan.md](orchestration/wave39-plan.md) | Wave 39 MVP-wide Validator Product Report / Preflight v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave40-plan.md](orchestration/wave40-plan.md) | Wave 40 Codex-facing Rigging Edit Proposal API / Diff Validation Surface v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave41-plan.md](orchestration/wave41-plan.md) | Wave 41 Product Preflight Read / Diff / Report Ergonomics v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -173,6 +176,8 @@ discussion/implementation/
 | [waves/wave39/_map.md](waves/wave39/_map.md) | Wave 39 domain completion reports, JSON mirror decision, final verification, clean review, and final report |
 | [waves/wave40/wave40-final-report.md](waves/wave40/wave40-final-report.md) | Wave 40 final report for Codex-facing Rigging Edit Proposal API / Diff Validation Surface v0 |
 | [waves/wave40/_map.md](waves/wave40/_map.md) | Wave 40 domain completion reports, final verification, clean review, and final report |
+| [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) | Wave 41 final report for Product Preflight Read / Diff / Report Ergonomics v0 |
+| [waves/wave41/_map.md](waves/wave41/_map.md) | Wave 41 domain completion reports, final verification, clean review, and final report |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -227,11 +232,13 @@ discussion/implementation/
 | [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) | Wave 39 clean integration review |
 | [reviews/wave40/_map.md](reviews/wave40/_map.md) | Wave 40 domain review reports and clean integration review |
 | [reviews/wave40/wave40-clean-integration-review.md](reviews/wave40/wave40-clean-integration-review.md) | Wave 40 clean integration review |
+| [reviews/wave41/_map.md](reviews/wave41/_map.md) | Wave 41 domain review reports and clean integration review |
+| [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) | Wave 41 clean integration review |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Use [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md) before choosing the next wave boundary after Wave40.
+1. Choose the next wave boundary from [remaining-work-backlog.md](remaining-work-backlog.md) and [current-capability-map.md](current-capability-map.md).
 2. Keep external HTTP/WebSocket/MCP transport, LLM provider integration, repo-side proposal generation/ranking, and auto-fix in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

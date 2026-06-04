@@ -1,12 +1,13 @@
 # 残作業 Backlog
 
-> 状態: 2026-06-04 / Wave40 完了。
+> 状態: 2026-06-05 / Wave41 完了。
 > 目的: 次の実装境界を選ぶための、残作業と decision gate の簡潔な index。完了済み wave 履歴は final report と map に置き、この backlog には置かない。
 
 ## 受理済み判断
 
 - Wave39 Product Preflight v0 は、Editor run/read/save/load/rerun evidence を持つ truthful で session-generated な read-only product report として `implementation-proven`。
 - Wave40 Codex-facing proposal API / diff validation surface は、Codex-submitted proposal の deterministic operation catalog、schema/catalog/preflight validation、dry-run diff preview、rerun validation / Product Preflight、approval-gated commit、transcript/evidence recording、Editor review workflow、fixtures、desktop/mobile e2e smoke として `implementation-proven`。
+- Wave41 Product Preflight read/diff/report ergonomics は、deterministic Product Preflight report diff、category/status transition summary、evidence/diagnostic ref changes、rerun affordance、Codex-facing read/diff command helpers、Editor comparison workflow、fixtures、desktop/mobile focused e2e smoke として `implementation-proven`。
 - AI inference と repair proposal generation は Codex 側の責務。
 - repo/tool 側の責務は Codex-facing API、state/preflight read、operation catalog、proposal validation、dry-run、diff surface、rerun validation surface、approval-gated commit、transcript、evidence recording。
 - repo-side repair candidate generation、candidate ranking、natural-language repair、LLM provider integration、auto-fix は主張しない。
@@ -18,7 +19,7 @@
 - bounded topology/UV direct edit は実装済み。advanced/freeform topology、unwrap、atlas、texture sampling correctness は未実装。
 - parser-free PSD adapter/profile metadata は存在する。real PSD/PNG parse/decode/raster extraction/materialization は存在しない。
 - Editor Viewer/Preview は semantic inspection/runtime evidence であり、full renderer や pixel oracle ではない。
-- AI command support は deterministic read/inspect/validate/dry-run/commit/log/transcript、Product Preflight observation helper/schema、Codex proposal operation catalog、proposal validation、diff preview/rerun validation bridge、approval lifecycle bridge。inference と proposal generation は実行しない。
+- AI command support は deterministic read/inspect/validate/dry-run/commit/log/transcript、Product Preflight observation/read/diff/rerun affordance helper/schema、Codex proposal operation catalog、proposal validation、diff preview/rerun validation bridge、approval lifecycle bridge。inference と proposal generation は実行しない。
 
 ## 追加判断なしで進められる候補
 
@@ -26,8 +27,8 @@
 
 | 候補 | Scope boundary（範囲境界） | 補足 |
 |---|---|---|
-| Product Preflight follow-up: read/diff/report ergonomics | 既存の Product Preflight v0 に対して、deterministic report comparison、evidence navigation、validation rerun affordance を改善する。 | persistence/export が別途承認されない限り、v0 は session-generated のままにする。 |
-| Documentation/map consistency refresh | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md` は Wave40 final report に合わせて同期済み。今後のwave報告時も同じ非目標境界を維持する。 | 次 wave 完了時に final report / maps / backlog へ反映する。 |
+| Product Preflight follow-up: gate/durability decision prep | Wave41で read/diff/report ergonomics は完了済み。次に Product Preflight を session-only に留めるか、durability/export/gate へ進めるかを判断するための小さな design/report task は追加判断なしに準備できる。 | 実際の persisted/exported artifact、release/demo gate 実装はユーザー判断が必要。 |
+| Documentation/map consistency refresh | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md` は Wave41 final report に合わせて同期済み。今後のwave報告時も同じ非目標境界を維持する。 | 次 wave 完了時に final report / maps / backlog へ反映する。 |
 | Quality gate tightening | Fresh checkout replay、`check:source` blind spots、e2e decomposition、traceability/doc refresh、validator contract doc refresh、schema cleanup、runtime/viewer naming cleanup、dynamics create-flow atomicity。 | 変更は小さく、file-scoped に保つ。 |
 | Product Preflight fixture/traceability sync | warning-gated markdown rows に machine-readable mirror が後で必要になった場合、Wave40 / Wave39 とそれ以前の比較可能な rows をまとめて backfill する。 | 現在の Wave40 / Wave39 review では JSON mirror update なしが受理済み。 |
 
@@ -66,7 +67,7 @@
 
 ## 文書 / 品質負債
 
-- Wave40 Codex-facing proposal intake と deterministic repo-side validation/diff/approval/transcript 境界は final report、map、capability map へ同期済み。
+- Wave41 Product Preflight read/diff/report ergonomics と deterministic repo-side report comparison boundary は final report、map、capability map へ同期済み。
 - Validator contract prose は、新しい byte availability、portable bundle、transport、topology/UV、warp lattice、Product Preflight diagnostics を適切な粒度で列挙するよう refresh するべき。
 - E2E smoke coverage は広い。将来の wave が shared Editor workflow に触れる場合は、分解を継続するべき。
 - Source organization と `check:source` guardrails は、blind spots が見つかった場所で broad refactor なしに tighten するべき。
@@ -85,5 +86,7 @@
 | Wave39 clean integration review | [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) |
 | Wave40 final report | [waves/wave40/wave40-final-report.md](waves/wave40/wave40-final-report.md) |
 | Wave40 clean integration review | [reviews/wave40/wave40-clean-integration-review.md](reviews/wave40/wave40-clean-integration-review.md) |
+| Wave41 final report | [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) |
+| Wave41 clean integration review | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) |
 
 この backlog は [current-capability-map.md](current-capability-map.md) と一緒に使う。wave ごとに decision boundary を1つ選び、完了済み履歴はリンク先 reports に置き、unsupported claims は明示し続ける。

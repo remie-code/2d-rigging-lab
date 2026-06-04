@@ -1,6 +1,6 @@
 # 現在の Capability Map
 
-> 状態: 2026-06-04 / Wave40 完了。
+> 状態: 2026-06-05 / Wave41 完了。
 > 目的: 次の実装境界を計画するための、現在のプロダクト capability map。これは wave ごとの changelog ではない。詳細な wave 履歴は、リンク先の final report と map に置く。
 
 ## 凡例
@@ -19,23 +19,23 @@
 
 現在のプロダクトは Cubism clone ではなく、Cubism runtime/editor compatibility layer でもなく、full renderer でも LLM provider integration でもない。AI推論・修復案設計は Codex 側の責務であり、この repo は Codex が利用する deterministic state、operation、validation、diff、approval、evidence surface を提供する。
 
-## Wave40 時点の現在の実装面
+## Wave41 時点の現在の実装面
 
 | Capability 領域 | 現在の surface | Evidence level | 境界 |
 |---|---|---|---|
 | Authoring / Editor | project save/load/reset、operation lifecycle UI、generated drawable 作成、layer visibility/order control、明示的な part/layer operation、mesh vertex select/drag/nudge、bounded topology/UV control、rig/dynamics/composition workflow、tutorial mini model flow、Product Preflight panel、AI dry-run/approval transcript foundation を備えた browser app。 | `implementation-proven`; 複数の path は `UI/e2e proven`。 | native layer-tree drag/drop、multi-select bulk edit、group transform、reassignment 付き recursive delete、full timeline editor、public demo capture workflow、full renderer はない。 |
 | Rigging / Mesh / Deformation / Dynamics | project-defined `rotation2d` rig control、rig-control keyform、`controlPointOffsets` を持つ `warpLattice2d`、semantic bilinear warp evaluation、Minimum Open Dynamics v1 `scalarDampedFollowV1`、mesh vertex movement、bounded add/remove vertex/triangle、direct UV point movement。 | `implementation-proven`; deformation/runtime output は `semantic evidence only`。 | Cubism deformer/physics compatibility、direct vertex physics、cloth/collision/IK、automatic triangulation、retopology、UV unwrap、atlas packing、texture sampling correctness、pixel oracle はない。 |
-| Validator / Product Preflight | Product Preflight v0 は required categories、statuses、evidence refs、diagnostic refs、blocking reasons、recommended actions、unsupported claims、not-evaluated claims を定義する。validator-core は既存の targeted diagnostics を truthful な product categories に集約し、Editor workflow は current-session evidence と tutorial readiness evidence を report に接続できる。 | `implementation-proven`; Editor run/read/save/load/rerun path は `UI/e2e proven`。 | Product Preflight v0 は session-generated な read-only report。persisted package artifact、release acceptance runner、demo gate、repair system、parser、archive/filesystem validator、renderer oracle、Cubism compatibility proof ではない。 |
+| Validator / Product Preflight | Product Preflight v0 は required categories、statuses、evidence refs、diagnostic refs、blocking reasons、recommended actions、unsupported claims、not-evaluated claims を定義する。validator-core は既存の targeted diagnostics を truthful な product categories に集約し、Product Preflight report pairs を deterministic に比較し、category/status transitions、blocking reason changes、evidence/diagnostic ref changes、recommended action changes、unsupported/not-evaluated claim changes、rerun affordance を返せる。Editor workflow は current-session evidence、tutorial readiness evidence、current/previous/proposal-preview report comparison を report surface に接続できる。 | `implementation-proven`; Editor run/read/save/load/rerun path と Product Preflight diff smoke は `UI/e2e proven`。 | Product Preflight v0 は session-generated な read-only report。persisted package artifact、release acceptance runner、demo gate、repair system、parser、archive/filesystem validator、renderer oracle、Cubism compatibility proof ではない。 |
 | Package / Persistence / Transport | browser-local project save/load/reset、operation log/package materialization、current-session byte evidence、same-origin IndexedDB byte restore、base64 byte round-trip を持つ project-defined portable JSON bundle v0、`projectDefinedJsonBundleV0` のみ supported と主張できる transport capability boundary。 | `implementation-proven`; portable bundle と byte restore flow は `UI/e2e proven`。 | ZIP/archive writer/importer、native filesystem、File System Access API、directory picker、drag-drop implementation、cloud/cross-profile persistence、quota/private-browsing guarantee、OS-level storage guarantee はない。 |
 | Asset I/O | browser file-input の actual byte intake は filename、byteLength、SHA-256 digest、mediaType、rights/provenance、availability を記録する。parser-free PSD adapter/profile metadata と split PNG source metadata は structured semantic evidence として保持される。local sample PSD byte fixture は length/hash のみで特徴づけられる。 | bytes と metadata は `implementation-proven`; PSD/PNG semantics は parse されない。 | PSD layer parse、PSD/PNG decode、raster extraction、texture materialization、compositing、media header sniffing、public asset redistribution proof、parser security boundary はない。 |
-| AI / Codex-facing API | `packages/ai-interface` は deterministic read/inspect/validate/dry-run/commit/operation-log command surface、approval policy、transcript append、in-process Editor host routing、Product Preflight observation helper/schema、Codex proposal operation catalog、proposal validation、approval lifecycle bridge を公開する。`packages/operation-core` / `packages/validator-core` は Codex proposal diff preview と preview/post-commit rerun validation evidence を提供する。Editor は pasted proposal review、validation、diff preview、rerun validation、manual approval、approved commit path を表示できる。 | deterministic command host、proposal validation/diff/rerun/approval/transcript behavior は `implementation-proven`; Editor proposal review path は `UI/e2e proven`。 | inference、proposal generation、repair design、natural-language judgment、repair candidate generation/ranking は Codex の責務。この repo は LLM/provider、prompt loop、auto-fix、automatic commit、external proposal transport、repair reasoning を提供しない。 |
+| AI / Codex-facing API | `packages/ai-interface` は deterministic read/inspect/validate/dry-run/commit/operation-log command surface、approval policy、transcript append、in-process Editor host routing、Product Preflight observation/read/diff/rerun affordance command helpers、Codex proposal operation catalog、proposal validation、approval lifecycle bridge を公開する。`packages/operation-core` / `packages/validator-core` は Codex proposal diff preview、preview/post-commit rerun validation evidence、Product Preflight report diff を提供する。Editor は pasted proposal review、validation、diff preview、rerun validation、Product Preflight comparison、manual approval、approved commit path を表示できる。 | deterministic command host、proposal validation/diff/rerun/approval/transcript behavior と Product Preflight read/diff bridge は `implementation-proven`; Editor proposal review and Product Preflight comparison paths are `UI/e2e proven`。 | inference、proposal generation、repair design、natural-language judgment、repair candidate generation/ranking は Codex の責務。この repo は LLM/provider、prompt loop、auto-fix、automatic commit、external proposal transport、repair reasoning を提供しない。 |
 | Viewer / Preview | Editor embedded runtime-projected SVG preview、parameter slider、Viewer/Runtime inspection、runtime snapshot/diff、diagnostics、semantic composition/mask/opacity evidence、mesh/runtime evidence、Product Preflight evidence input。 | `semantic evidence only`; 一部の Editor flow は `UI/e2e proven`。 | standalone viewer app、full render target、texture sampling correctness、rendered acceptance oracle、pixel-level comparison、Cubism runtime、`.moc3`、`.model3.json` support はない。 |
 
 ## Capability 境界と非対応
 
 ### Implementation-Proven
 
-- Product Preflight v0 contract、validator aggregation、package/runtime bridge helper、Editor panel/workflow、rights-clean fixture、desktop/mobile save-load rerun e2e。
+- Product Preflight v0 contract、validator aggregation、Product Preflight report diff contract/builder、package/runtime bridge helper、AI read/diff/rerun affordance command helpers、Editor panel/comparison workflow、rights-clean fixtures、desktop/mobile save-load rerun e2e、desktop/mobile Product Preflight diff e2e。
 - Codex-facing proposal contract、operation catalog、proposal validation、dry-run diff preview、rerun validation / Product Preflight bridge、approval-gated commit lifecycle、transcript/evidence recording、Editor proposal review workflow、rights-clean fixtures、desktop/mobile proposal review e2e。
 - browser-local project persistence、same-origin IndexedDB byte restore、project-defined portable JSON bundle round-trip。
 - digest/length/mediaType/rights/provenance evidence を伴う browser selected-byte intake。
@@ -73,12 +73,14 @@
 | Wave39 clean integration review | [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) |
 | Wave40 final report | [waves/wave40/wave40-final-report.md](waves/wave40/wave40-final-report.md) |
 | Wave40 clean integration review | [reviews/wave40/wave40-clean-integration-review.md](reviews/wave40/wave40-clean-integration-review.md) |
+| Wave41 final report | [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) |
+| Wave41 clean integration review | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) |
 | 2026-06-04 capability/backlog inventory | [reports/current-capability-backlog-inventory-2026-06-04.md](reports/current-capability-backlog-inventory-2026-06-04.md) |
 | 残作業と decision gates | [remaining-work-backlog.md](remaining-work-backlog.md) |
 
 ## ユーザー判断点
 
-- Wave40 後に優先する次のプロダクト境界: Product Preflight acceptance gates、Product Preflight durability/export、archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration のどれにするか。
+- Wave41 後に優先する次のプロダクト境界: Product Preflight acceptance gates、Product Preflight durability/export、archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration のどれにするか。
 - Product Preflight v0 を session-only のままにするか、persisted/exported package artifact にするか。
 - public rights-clean real assets を許可するか、また private/local fixtures を distributable demo material からどう分離するか。
 - Viewer を editor-internal semantic inspection のままにするか、standalone/full-renderer work に進めるか。

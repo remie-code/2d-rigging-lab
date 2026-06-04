@@ -1,0 +1,298 @@
+{
+  "schemaVersion": "wave41-product-preflight-diff-cases-v1",
+  "fixtureId": "wave41-product-preflight-diff-fixtures",
+  "packageId": "pkg_wave41ProductPreflightDiff",
+  "validatorVersion": "validator-core-wave41-fixture",
+  "rightsClean": {
+    "source": "synthetic semantic Product Preflight report pair specs only",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "archiveFilesystem": false,
+    "cubismCompatibility": false
+  },
+  "cases": [
+    {
+      "caseId": "no-change",
+      "description": "Two session-generated pass reports with no structural Product Preflight diff changes.",
+      "beforeReport": {
+        "reportId": "preflight_wave41NoChangeBefore",
+        "createdAt": "2026-06-05T00:00:00.000Z",
+        "packageRevision": 41,
+        "categoryOverrides": []
+      },
+      "afterReport": {
+        "reportId": "preflight_wave41NoChangeAfter",
+        "createdAt": "2026-06-05T00:01:00.000Z",
+        "packageRevision": 42,
+        "categoryOverrides": []
+      }
+    },
+    {
+      "caseId": "improvement",
+      "description": "A blocking mesh topology diagnostic is removed, producing a deterministic fail-to-pass improvement diff.",
+      "beforeReport": {
+        "reportId": "preflight_wave41ImprovementBefore",
+        "createdAt": "2026-06-05T00:02:00.000Z",
+        "packageRevision": 43,
+        "categoryOverrides": [
+          {
+            "category": "meshTopologyUv",
+            "status": "fail",
+            "severity": "blocking",
+            "summary": "Mesh topology is blocked by a synthetic out-of-range triangle index diagnostic.",
+            "blockingReasons": [
+              {
+                "reasonId": "block_meshTopologyUv_fixture",
+                "reasonCode": "invalidPackageData",
+                "severity": "blocking",
+                "message": "Synthetic mesh topology fixture blocks Product Preflight.",
+                "diagnosticRefs": [
+                  {
+                    "checkId": "mesh.triangleIndexOutOfRange",
+                    "reportId": "val_wave41DiffMesh",
+                    "diagnosticIndex": 0,
+                    "status": "fail",
+                    "severity": "blocking",
+                    "target": {
+                      "kind": "package",
+                      "id": "pkg_wave41ProductPreflightDiff"
+                    },
+                    "message": "Triangle index is outside the synthetic vertex array."
+                  }
+                ],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_meshTopologyUv_inspect_fixture",
+                    "actionKind": "inspectDiagnostic",
+                    "summary": "Inspect the synthetic mesh topology diagnostic before rerunning Product Preflight.",
+                    "targetCategory": "meshTopologyUv"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "afterReport": {
+        "reportId": "preflight_wave41ImprovementAfter",
+        "createdAt": "2026-06-05T00:03:00.000Z",
+        "packageRevision": 44,
+        "categoryOverrides": []
+      }
+    },
+    {
+      "caseId": "regression",
+      "description": "A composition blocking diagnostic is added, producing a deterministic pass-to-fail regression diff.",
+      "beforeReport": {
+        "reportId": "preflight_wave41RegressionBefore",
+        "createdAt": "2026-06-05T00:04:00.000Z",
+        "packageRevision": 45,
+        "categoryOverrides": []
+      },
+      "afterReport": {
+        "reportId": "preflight_wave41RegressionAfter",
+        "createdAt": "2026-06-05T00:05:00.000Z",
+        "packageRevision": 46,
+        "categoryOverrides": [
+          {
+            "category": "composition",
+            "status": "fail",
+            "severity": "blocking",
+            "summary": "Composition is blocked by a synthetic missing mask source diagnostic.",
+            "blockingReasons": [
+              {
+                "reasonId": "block_composition_fixture",
+                "reasonCode": "invalidPackageData",
+                "severity": "blocking",
+                "message": "Synthetic composition fixture blocks Product Preflight.",
+                "diagnosticRefs": [
+                  {
+                    "checkId": "mask.sourceMissing",
+                    "reportId": "val_wave41DiffComposition",
+                    "diagnosticIndex": 0,
+                    "status": "fail",
+                    "severity": "blocking",
+                    "target": {
+                      "kind": "package",
+                      "id": "pkg_wave41ProductPreflightDiff"
+                    },
+                    "message": "Mask source is missing in synthetic semantic evidence."
+                  }
+                ],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_composition_inspect_fixture",
+                    "actionKind": "inspectDiagnostic",
+                    "summary": "Inspect the synthetic composition diagnostic before rerunning Product Preflight.",
+                    "targetCategory": "composition"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "unsupported-not-evaluated-change",
+      "description": "An unsupported boundary changes into a not-evaluated evidence gap without claiming repair or improvement.",
+      "beforeReport": {
+        "reportId": "preflight_wave41UnsupportedBefore",
+        "createdAt": "2026-06-05T00:06:00.000Z",
+        "packageRevision": 47,
+        "categoryOverrides": [
+          {
+            "category": "unsupportedClaims",
+            "status": "not_supported",
+            "severity": "warning",
+            "summary": "A synthetic unsupported product boundary is explicitly recorded.",
+            "unsupportedClaims": [
+              {
+                "claimId": "claim_unsupportedClaims_fixture",
+                "status": "not_supported",
+                "claimKind": "otherUnsupportedCapability",
+                "capabilityLabel": "Synthetic future capability boundary",
+                "explanation": "The fixture records an unsupported future capability boundary without implying repair.",
+                "severity": "warning",
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_unsupportedClaims_record_fixture",
+                    "actionKind": "recordUnsupportedBoundary",
+                    "summary": "Keep the synthetic unsupported boundary explicit.",
+                    "targetCategory": "unsupportedClaims"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "afterReport": {
+        "reportId": "preflight_wave41UnsupportedAfter",
+        "createdAt": "2026-06-05T00:07:00.000Z",
+        "packageRevision": 48,
+        "categoryOverrides": [
+          {
+            "category": "unsupportedClaims",
+            "status": "not_evaluated",
+            "severity": "warning",
+            "summary": "Unsupported boundary evidence was not evaluated because validation evidence is missing.",
+            "notEvaluatedClaims": [
+              {
+                "claimId": "claim_unsupportedClaims_notEvaluated_fixture",
+                "status": "not_evaluated",
+                "category": "unsupportedClaims",
+                "evidenceKind": "validationReport",
+                "reason": "No validation report evidence was supplied for unsupported boundary evaluation.",
+                "severity": "warning",
+                "requiredEvidenceKinds": [
+                  "validationReport"
+                ],
+                "recommendedNextActions": [
+                  {
+                    "actionId": "action_unsupportedClaims_provide_fixture",
+                    "actionKind": "provideEvidence",
+                    "summary": "Provide validation report evidence and rerun Product Preflight manually.",
+                    "targetCategory": "unsupportedClaims"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "evidence-diagnostic-ref-change",
+      "description": "A warning category keeps the same status while its evidence path and diagnostic message change.",
+      "beforeReport": {
+        "reportId": "preflight_wave41EvidenceBefore",
+        "createdAt": "2026-06-05T00:08:00.000Z",
+        "packageRevision": 49,
+        "categoryOverrides": [
+          {
+            "category": "assetBytes",
+            "status": "warn",
+            "severity": "warning",
+            "summary": "Asset byte evidence has a synthetic warning before fixture update.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_assetBytes_fixture",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave41-before.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave41ProductPreflightDiff"
+                },
+                "summary": "Before byte availability evidence.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [
+              {
+                "checkId": "byteAvailability.currentSessionBytes.missing",
+                "reportId": "val_wave41DiffBytes",
+                "diagnosticIndex": 0,
+                "status": "warning",
+                "severity": "warning",
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave41ProductPreflightDiff"
+                },
+                "message": "Before warning: synthetic byte evidence needs review."
+              }
+            ]
+          }
+        ]
+      },
+      "afterReport": {
+        "reportId": "preflight_wave41EvidenceAfter",
+        "createdAt": "2026-06-05T00:09:00.000Z",
+        "packageRevision": 50,
+        "categoryOverrides": [
+          {
+            "category": "assetBytes",
+            "status": "warn",
+            "severity": "warning",
+            "summary": "Asset byte evidence has a synthetic warning after fixture update.",
+            "evidenceRefs": [
+              {
+                "evidenceId": "evidence_assetBytes_fixture",
+                "artifactRef": {
+                  "artifactKind": "byteAvailability",
+                  "path": "generated/byte-availability/wave41-after.json"
+                },
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave41ProductPreflightDiff"
+                },
+                "summary": "After byte availability evidence.",
+                "producer": "fixture"
+              }
+            ],
+            "diagnosticRefs": [
+              {
+                "checkId": "byteAvailability.currentSessionBytes.missing",
+                "reportId": "val_wave41DiffBytes",
+                "diagnosticIndex": 0,
+                "status": "warning",
+                "severity": "warning",
+                "target": {
+                  "kind": "package",
+                  "id": "pkg_wave41ProductPreflightDiff"
+                },
+                "message": "After warning: synthetic byte evidence still needs review."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

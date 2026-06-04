@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave41-product-preflight-diff-fixtures",
+  "title": "Wave41 Product Preflight report diff fixtures",
+  "description": "Rights-clean semantic fixtures proving deterministic Product Preflight report diff cases: no-change, improvement, regression, unsupported/not-evaluated change, and evidence/diagnostic ref change.",
+  "inputArtifacts": [
+    "request/product-preflight-diff-cases.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "productPreflightReportDiffCases",
+      "path": "expected/product-preflight-diff-case-summary.json",
+      "id": "wave41-product-preflight-diff-case-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "coversAC": [
+    "AC-MVP-013",
+    "AC-MVP-014",
+    "AC-MVP-016"
+  ],
+  "coversScenarios": [
+    "SC-AI-002",
+    "SC-AGENT-002",
+    "SC-VERIFY-001",
+    "SC-MVP-006"
+  ],
+  "modulesBlocked": [
+    "contracts",
+    "validator-core",
+    "ai-interface",
+    "fixtures-contract-tests"
+  ],
+  "updateRule": "requires-contract-review",
+  "rightsClean": {
+    "source": "synthetic Product Preflight report pair and expected diff summary JSON only",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "archiveFilesystem": false,
+    "cubismCompatibility": false
+  },
+  "truthfulness": {
+    "statesCovered": [
+      "no-change",
+      "improvement",
+      "regression",
+      "unsupported-not-evaluated-change",
+      "evidence-diagnostic-ref-change"
+    ],
+    "sessionGeneratedReportsOnly": true,
+    "persistedArtifactClaimed": false,
+    "exportedArtifactClaimed": false,
+    "releaseDemoGateClaimed": false,
+    "repoSideRepairGenerationClaimed": false,
+    "repairCandidateGenerationClaimed": false,
+    "candidateRankingClaimed": false,
+    "llmProviderClaimed": false,
+    "naturalLanguageRepairClaimed": false,
+    "autoFixClaimed": false,
+    "automaticCommitClaimed": false,
+    "externalTransportClaimed": false,
+    "realParserClaimed": false,
+    "realRendererClaimed": false
+  }
+}

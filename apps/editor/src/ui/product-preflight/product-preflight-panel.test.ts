@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { editorTestIds, type ProductPreflightState } from "../../editor-state/index.js";
+import {
+  editorTestIds,
+  type ProductPreflightComparisonState,
+  type ProductPreflightState
+} from "../../editor-state/index.js";
 import { createProductPreflightPanel } from "./product-preflight-panel.js";
 
 describe("product preflight panel", () => {
@@ -73,6 +77,33 @@ describe("product preflight panel", () => {
     expect(findByTestId(panel, editorTestIds.productPreflightStatus)?.textContent).toContain(
       "No product preflight report has run"
     );
+  });
+
+  it("renders deterministic report comparison sections when comparison state is supplied", () => {
+    const panel = createProductPreflightPanel({
+      state: createReadyPreflightState(),
+      comparisonState: createReadyComparisonState(),
+      isPackageLoaded: true,
+      currentPackageRevision: 7,
+      onRunProductPreflight() {}
+    }) as unknown as TestElement;
+
+    expect(findByTestId(panel, editorTestIds.productPreflightComparison)?.textContent).toContain(
+      "Deterministic report comparison"
+    );
+    expect(findByTestId(panel, editorTestIds.productPreflightComparisonSummary)?.textContent).toContain(
+      "Previous -> current"
+    );
+    expect(findByTestId(panel, editorTestIds.productPreflightComparisonTransitions)?.textContent).toContain(
+      "meshTopologyUv"
+    );
+    expect(findByTestId(panel, editorTestIds.productPreflightComparisonRefs)?.textContent).toContain(
+      "Evidence added evidence ref"
+    );
+    expect(findByTestId(panel, editorTestIds.productPreflightComparisonRerun)?.textContent).toContain(
+      "manual request available"
+    );
+    expect(panel.textContent.toLowerCase()).not.toContain("auto-fix");
   });
 });
 
@@ -173,6 +204,74 @@ const createReadyPreflightState = (): ProductPreflightState => ({
     evidenceKind: "runtimeSnapshot",
     reason: "No runtime snapshot evidence was supplied.",
     requiredEvidenceLabel: "runtimeSnapshot"
+  }],
+  errorMessage: null
+});
+
+const createReadyComparisonState = (): ProductPreflightComparisonState => ({
+  status: "ready",
+  generatedAt: "2026-06-04T00:00:00.000Z",
+  summaryLabel: "1 deterministic report comparison / 3 structural changes",
+  safetyLabel: "Session-generated reports; manual rerun only; automatic commit disabled.",
+  reportSlots: [
+    {
+      slotKind: "current",
+      label: "Current report",
+      available: true,
+      reportIdLabel: "preflight_editor_fixture",
+      statusLabel: "fail / blocking",
+      packageLabel: "pkg_editor_fixture r7; created 2026-06-04T00:00:00.000Z",
+      refCountLabel: "3 evidence refs / 2 diagnostic refs"
+    },
+    {
+      slotKind: "previous",
+      label: "Previous report",
+      available: true,
+      reportIdLabel: "preflight_editor_previous",
+      statusLabel: "warn / warning",
+      packageLabel: "pkg_editor_fixture r6; created 2026-06-04T00:00:00.000Z",
+      refCountLabel: "1 evidence refs / 1 diagnostic refs"
+    },
+    {
+      slotKind: "proposalPreview",
+      label: "Proposal-preview report",
+      available: false,
+      reportIdLabel: "not available",
+      statusLabel: "not available",
+      packageLabel: "not available",
+      refCountLabel: "0 evidence refs / 0 diagnostic refs"
+    }
+  ],
+  rerunAffordances: [{
+    label: "Current report rerun",
+    sourceReportId: "preflight_editor_fixture",
+    statusLabel: "available / Manual Product Preflight rerun is available.",
+    triggerLabel: "manual request available: manualCurrentSession",
+    safetyLabel: "Automatic rerun disabled / automatic commit disabled"
+  }],
+  comparisons: [{
+    comparisonKind: "previousToCurrent",
+    title: "Previous -> current",
+    reportLabel: "preflight_editor_previous -> preflight_editor_fixture",
+    statusTransitionLabel: "warn -> fail",
+    severityTransitionLabel: "warning -> blocking",
+    changeCountLabel: "3 total / 1 category / 1 evidence ref / 1 diagnostic ref",
+    categoryTransitions: [{
+      category: "meshTopologyUv",
+      statusLabel: "warn -> fail",
+      severityLabel: "warning -> blocking",
+      changedLabel: "changed"
+    }],
+    evidenceRefChanges: [{
+      title: "added evidence ref evidence_editor_fixture",
+      detail: "Editor evidence ref was added.",
+      meta: "category:meshTopologyUv / validationReport:validation/reports/val_editor.validation.json"
+    }],
+    diagnosticRefChanges: [{
+      title: "added diagnostic ref mesh.topology.needsReview",
+      detail: "val_editor / mesh.topology.needsReview / needs_review / warning",
+      meta: "category:meshTopologyUv / val_editor / mesh:mesh_editor"
+    }]
   }],
   errorMessage: null
 });

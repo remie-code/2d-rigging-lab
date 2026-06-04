@@ -10,6 +10,7 @@ import {
   parsePackageDocumentFromFileSet,
   type PackageFileSet
 } from "@private-2d-rigging-lab/package-format";
+import type { ProductPreflightReportDto } from "@private-2d-rigging-lab/contracts";
 
 import {
   createEditorAiCommandHost,
@@ -55,6 +56,7 @@ import {
   closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
   createFailedProductPreflightState,
   createEmptyCodexProposalReviewState,
+  createEmptyProductPreflightComparisonState,
   createEditorStateFileFromEditorState,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
@@ -203,6 +205,7 @@ import {
   type EditorWorkflowCodexProposalApprovalResult,
   type EditorWorkflowCodexProposalReviewResult
 } from "./codex-proposal-review-workflow.js";
+import { runEditorProductPreflightComparisonWorkflow } from "./product-preflight-comparison-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -467,6 +470,7 @@ export const createEditorWorkflowController = (
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
+  let latestProductPreflightReport: ProductPreflightReportDto | null = null;
   const dynamicsPreviewRunner = createWorkflowDynamicsPreviewRunner({
     ...(options.now === undefined ? {} : { now: options.now })
   });
@@ -536,6 +540,32 @@ export const createEditorWorkflowController = (
   });
   const clearDynamicsPreview = (): void => {
     state = dynamicsPreviewRunner.clear(state);
+  };
+  const createWorkflowTimestamp = (): string =>
+    (options.now?.() ?? new Date()).toISOString();
+  const clearProductPreflightReportHistory = (): void => {
+    latestProductPreflightReport = null;
+    state = {
+      ...state,
+      productPreflightComparison: createEmptyProductPreflightComparisonState()
+    };
+  };
+  const recordProductPreflightReportAndProjectComparison = async (input: {
+    readonly currentReport: ProductPreflightReportDto;
+    readonly proposalPreviewRerunResult?:
+      EditorSemanticState["codexProposalReview"]["rerunValidationResultDto"];
+  }): Promise<void> => {
+    const previousReport = latestProductPreflightReport;
+    latestProductPreflightReport = input.currentReport;
+    state = {
+      ...state,
+      productPreflightComparison: await runEditorProductPreflightComparisonWorkflow({
+        currentReport: input.currentReport,
+        previousReport,
+        proposalPreviewRerunResult: input.proposalPreviewRerunResult ?? null,
+        generatedAt: createWorkflowTimestamp()
+      })
+    };
   };
 
   return {
@@ -1208,6 +1238,10 @@ export const createEditorWorkflowController = (
           ...state,
           productPreflight: projectProductPreflightState(result.report)
         };
+        await recordProductPreflightReportAndProjectComparison({
+          currentReport: result.report,
+          proposalPreviewRerunResult: state.codexProposalReview.rerunValidationResultDto
+        });
 
         return result;
       } catch (error) {
@@ -1231,13 +1265,20 @@ export const createEditorWorkflowController = (
         ...(options.now === undefined ? {} : { now: options.now })
       });
       state = outcome.state;
+      if (outcome.result.status === "reviewed") {
+        await recordProductPreflightReportAndProjectComparison({
+          currentReport: outcome.result.productPreflight.report,
+          proposalPreviewRerunResult: state.codexProposalReview.rerunValidationResultDto
+        });
+      }
 
       return outcome.result;
     },
     clearCodexProposalReview() {
       state = {
         ...state,
-        codexProposalReview: createEmptyCodexProposalReviewState()
+        codexProposalReview: createEmptyCodexProposalReviewState(),
+        productPreflightComparison: createEmptyProductPreflightComparisonState()
       };
     },
     requestCodexProposalReviewApproval() {
@@ -1298,6 +1339,7 @@ export const createEditorWorkflowController = (
       latestDrawablePresetResult = null;
       latestProjectPersistenceResult = null;
       aiApprovalActions.reset();
+      clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
       return outcome.result;
@@ -1345,6 +1387,7 @@ export const createEditorWorkflowController = (
             ? { status: "empty", storeResult }
             : { status: "failed", storeResult };
         aiApprovalActions.reset();
+        clearProductPreflightReportHistory();
         latestProjectPersistenceResult = result;
         return result;
       }
@@ -1374,6 +1417,7 @@ export const createEditorWorkflowController = (
       aiApprovalActions.reset({
         transcript: hydrateInMemoryAiCommandTranscript(project.aiCommandTranscript)
       });
+      clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
       const result: EditorWorkflowLoadResult = {
@@ -1425,6 +1469,7 @@ export const createEditorWorkflowController = (
         }),
         aiApproval: loadedAiApproval
       };
+      clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
       const result: EditorWorkflowLoadPersistentBytesResult = {
@@ -1459,6 +1504,7 @@ export const createEditorWorkflowController = (
         latestSessionPersistenceResult = null;
         latestDrawablePresetResult = null;
         aiApprovalActions.reset();
+        clearProductPreflightReportHistory();
         clearDynamicsPreview();
       }
 
@@ -1475,6 +1521,7 @@ export const createEditorWorkflowController = (
       latestSessionPersistenceResult = null;
       latestDrawablePresetResult = null;
       aiApprovalActions.reset();
+      clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
       const result: EditorWorkflowResetResult = {

@@ -1,11 +1,14 @@
 import {
   createProductPreflightCategoryRowTestId,
   editorTestIds,
+  type ProductPreflightComparisonState,
   type ProductPreflightState
 } from "../../editor-state/index.js";
+import { createProductPreflightComparisonSection } from "./product-preflight-comparison-section.js";
 
 export interface ProductPreflightPanelOptions {
   readonly state: ProductPreflightState;
+  readonly comparisonState?: ProductPreflightComparisonState;
   readonly isPackageLoaded: boolean;
   readonly currentPackageRevision: number;
   readonly onRunProductPreflight?: () => void | Promise<void>;
@@ -36,7 +39,10 @@ export const createProductPreflightPanel = (
       createBlockingIssues(options.state),
       createWarnings(options.state),
       createUnsupportedClaims(options.state),
-      createNotEvaluatedClaims(options.state)
+      createNotEvaluatedClaims(options.state),
+      ...(options.comparisonState === undefined
+        ? []
+        : [createProductPreflightComparisonSection(options.comparisonState)])
     );
   }
 

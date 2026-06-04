@@ -30,6 +30,7 @@ export * from "./package-identity-state.js";
 export * from "./package-revision-state.js";
 export * from "./parameter-list-state.js";
 export * from "./part-texture-workflow-view-model.js";
+export * from "./product-preflight-comparison-state.js";
 export * from "./product-preflight-state.js";
 export * from "./preview-parameter-state.js";
 export * from "./reload-summary.js";

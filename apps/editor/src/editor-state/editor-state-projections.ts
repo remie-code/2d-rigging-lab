@@ -40,6 +40,7 @@ import {
 import { projectPackageRevision, type PackageRevisionInput } from "./package-revision-state.js";
 import { projectParameterList, type ParameterProjectionInput } from "./parameter-list-state.js";
 import { createEmptyProductPreflightState } from "./product-preflight-state.js";
+import { createEmptyProductPreflightComparisonState } from "./product-preflight-comparison-state.js";
 import { projectPreviewParameterValues } from "./preview-parameter-state.js";
 import {
   projectCompositionMaskRelationState,
@@ -331,6 +332,7 @@ export const applyCommittedOperationSummary = (
     reload,
     codexProposalReview: createEmptyCodexProposalReviewState(),
     productPreflight: createEmptyProductPreflightState(),
+    productPreflightComparison: createEmptyProductPreflightComparisonState(),
     tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState(
       {
         loadedPackage: state.loadedPackage,

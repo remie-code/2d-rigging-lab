@@ -1,0 +1,301 @@
+{
+  "schemaVersion": "wave41-product-preflight-diff-case-summary-v1",
+  "fixtureId": "wave41-product-preflight-diff-fixtures",
+  "expectedCaseOrder": [
+    "no-change",
+    "improvement",
+    "regression",
+    "unsupported-not-evaluated-change",
+    "evidence-diagnostic-ref-change"
+  ],
+  "expectedCases": [
+    {
+      "caseId": "no-change",
+      "expectedDiffId": "preflightDiff_preflight_wave41NoChangeBefore_preflight_wave41NoChangeAfter",
+      "generatedAt": "2026-06-05T00:01:00.000Z",
+      "expectedSummary": {
+        "beforeStatus": "pass",
+        "afterStatus": "pass",
+        "statusChanged": false,
+        "beforeHighestSeverity": "info",
+        "afterHighestSeverity": "info",
+        "severityChanged": false,
+        "categoryStatusTransitionCount": 10,
+        "changedCategoryStatusCount": 0,
+        "changedCategorySeverityCount": 0,
+        "changedCategoryTransitionCount": 0,
+        "blockingReasonChangeCount": 0,
+        "diagnosticRefChangeCount": 0,
+        "evidenceRefChangeCount": 0,
+        "recommendedActionChangeCount": 0,
+        "unsupportedClaimChangeCount": 0,
+        "notEvaluatedClaimChangeCount": 0,
+        "totalChangeCount": 0
+      },
+      "expectedChangedTransitions": [],
+      "expectedChanges": {
+        "blockingReasonChanges": [],
+        "diagnosticRefChanges": [],
+        "evidenceRefChanges": [],
+        "recommendedActionChanges": [],
+        "unsupportedClaimChanges": [],
+        "notEvaluatedClaimChanges": []
+      }
+    },
+    {
+      "caseId": "improvement",
+      "expectedDiffId": "preflightDiff_preflight_wave41ImprovementBefore_preflight_wave41ImprovementAfter",
+      "generatedAt": "2026-06-05T00:03:00.000Z",
+      "expectedSummary": {
+        "beforeStatus": "fail",
+        "afterStatus": "pass",
+        "statusChanged": true,
+        "beforeHighestSeverity": "blocking",
+        "afterHighestSeverity": "info",
+        "severityChanged": true,
+        "categoryStatusTransitionCount": 10,
+        "changedCategoryStatusCount": 1,
+        "changedCategorySeverityCount": 1,
+        "changedCategoryTransitionCount": 1,
+        "blockingReasonChangeCount": 1,
+        "diagnosticRefChangeCount": 1,
+        "evidenceRefChangeCount": 0,
+        "recommendedActionChangeCount": 1,
+        "unsupportedClaimChangeCount": 0,
+        "notEvaluatedClaimChangeCount": 0,
+        "totalChangeCount": 4
+      },
+      "expectedChangedTransitions": [
+        {
+          "category": "meshTopologyUv",
+          "beforeStatus": "fail",
+          "afterStatus": "pass",
+          "beforeSeverity": "blocking",
+          "afterSeverity": "info"
+        }
+      ],
+      "expectedChanges": {
+        "blockingReasonChanges": [
+          {
+            "changeKind": "removed",
+            "category": "meshTopologyUv",
+            "reasonId": "block_meshTopologyUv_fixture",
+            "reasonCode": "invalidPackageData"
+          }
+        ],
+        "diagnosticRefChanges": [
+          {
+            "changeKind": "removed",
+            "containerKind": "blockingReason",
+            "category": "meshTopologyUv",
+            "reasonId": "block_meshTopologyUv_fixture",
+            "checkId": "mesh.triangleIndexOutOfRange",
+            "beforeMessage": "Triangle index is outside the synthetic vertex array."
+          }
+        ],
+        "evidenceRefChanges": [],
+        "recommendedActionChanges": [
+          {
+            "changeKind": "removed",
+            "containerKind": "blockingReason",
+            "category": "meshTopologyUv",
+            "reasonId": "block_meshTopologyUv_fixture",
+            "actionId": "action_meshTopologyUv_inspect_fixture",
+            "actionKind": "inspectDiagnostic"
+          }
+        ],
+        "unsupportedClaimChanges": [],
+        "notEvaluatedClaimChanges": []
+      }
+    },
+    {
+      "caseId": "regression",
+      "expectedDiffId": "preflightDiff_preflight_wave41RegressionBefore_preflight_wave41RegressionAfter",
+      "generatedAt": "2026-06-05T00:05:00.000Z",
+      "expectedSummary": {
+        "beforeStatus": "pass",
+        "afterStatus": "fail",
+        "statusChanged": true,
+        "beforeHighestSeverity": "info",
+        "afterHighestSeverity": "blocking",
+        "severityChanged": true,
+        "categoryStatusTransitionCount": 10,
+        "changedCategoryStatusCount": 1,
+        "changedCategorySeverityCount": 1,
+        "changedCategoryTransitionCount": 1,
+        "blockingReasonChangeCount": 1,
+        "diagnosticRefChangeCount": 1,
+        "evidenceRefChangeCount": 0,
+        "recommendedActionChangeCount": 1,
+        "unsupportedClaimChangeCount": 0,
+        "notEvaluatedClaimChangeCount": 0,
+        "totalChangeCount": 4
+      },
+      "expectedChangedTransitions": [
+        {
+          "category": "composition",
+          "beforeStatus": "pass",
+          "afterStatus": "fail",
+          "beforeSeverity": "info",
+          "afterSeverity": "blocking"
+        }
+      ],
+      "expectedChanges": {
+        "blockingReasonChanges": [
+          {
+            "changeKind": "added",
+            "category": "composition",
+            "reasonId": "block_composition_fixture",
+            "reasonCode": "invalidPackageData"
+          }
+        ],
+        "diagnosticRefChanges": [
+          {
+            "changeKind": "added",
+            "containerKind": "blockingReason",
+            "category": "composition",
+            "reasonId": "block_composition_fixture",
+            "checkId": "mask.sourceMissing",
+            "afterMessage": "Mask source is missing in synthetic semantic evidence."
+          }
+        ],
+        "evidenceRefChanges": [],
+        "recommendedActionChanges": [
+          {
+            "changeKind": "added",
+            "containerKind": "blockingReason",
+            "category": "composition",
+            "reasonId": "block_composition_fixture",
+            "actionId": "action_composition_inspect_fixture",
+            "actionKind": "inspectDiagnostic"
+          }
+        ],
+        "unsupportedClaimChanges": [],
+        "notEvaluatedClaimChanges": []
+      }
+    },
+    {
+      "caseId": "unsupported-not-evaluated-change",
+      "expectedDiffId": "preflightDiff_preflight_wave41UnsupportedBefore_preflight_wave41UnsupportedAfter",
+      "generatedAt": "2026-06-05T00:07:00.000Z",
+      "expectedSummary": {
+        "beforeStatus": "not_supported",
+        "afterStatus": "not_evaluated",
+        "statusChanged": true,
+        "beforeHighestSeverity": "warning",
+        "afterHighestSeverity": "warning",
+        "severityChanged": false,
+        "categoryStatusTransitionCount": 10,
+        "changedCategoryStatusCount": 1,
+        "changedCategorySeverityCount": 0,
+        "changedCategoryTransitionCount": 1,
+        "blockingReasonChangeCount": 0,
+        "diagnosticRefChangeCount": 0,
+        "evidenceRefChangeCount": 0,
+        "recommendedActionChangeCount": 2,
+        "unsupportedClaimChangeCount": 1,
+        "notEvaluatedClaimChangeCount": 1,
+        "totalChangeCount": 5
+      },
+      "expectedChangedTransitions": [
+        {
+          "category": "unsupportedClaims",
+          "beforeStatus": "not_supported",
+          "afterStatus": "not_evaluated",
+          "beforeSeverity": "warning",
+          "afterSeverity": "warning"
+        }
+      ],
+      "expectedChanges": {
+        "blockingReasonChanges": [],
+        "diagnosticRefChanges": [],
+        "evidenceRefChanges": [],
+        "recommendedActionChanges": [
+          {
+            "changeKind": "removed",
+            "containerKind": "unsupportedClaim",
+            "category": "unsupportedClaims",
+            "claimId": "claim_unsupportedClaims_fixture",
+            "actionId": "action_unsupportedClaims_record_fixture",
+            "actionKind": "recordUnsupportedBoundary"
+          },
+          {
+            "changeKind": "added",
+            "containerKind": "notEvaluatedClaim",
+            "category": "unsupportedClaims",
+            "claimId": "claim_unsupportedClaims_notEvaluated_fixture",
+            "actionId": "action_unsupportedClaims_provide_fixture",
+            "actionKind": "provideEvidence"
+          }
+        ],
+        "unsupportedClaimChanges": [
+          {
+            "changeKind": "removed",
+            "category": "unsupportedClaims",
+            "claimId": "claim_unsupportedClaims_fixture",
+            "claimKind": "otherUnsupportedCapability"
+          }
+        ],
+        "notEvaluatedClaimChanges": [
+          {
+            "changeKind": "added",
+            "category": "unsupportedClaims",
+            "claimId": "claim_unsupportedClaims_notEvaluated_fixture",
+            "evidenceKind": "validationReport"
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "evidence-diagnostic-ref-change",
+      "expectedDiffId": "preflightDiff_preflight_wave41EvidenceBefore_preflight_wave41EvidenceAfter",
+      "generatedAt": "2026-06-05T00:09:00.000Z",
+      "expectedSummary": {
+        "beforeStatus": "warn",
+        "afterStatus": "warn",
+        "statusChanged": false,
+        "beforeHighestSeverity": "warning",
+        "afterHighestSeverity": "warning",
+        "severityChanged": false,
+        "categoryStatusTransitionCount": 10,
+        "changedCategoryStatusCount": 0,
+        "changedCategorySeverityCount": 0,
+        "changedCategoryTransitionCount": 0,
+        "blockingReasonChangeCount": 0,
+        "diagnosticRefChangeCount": 1,
+        "evidenceRefChangeCount": 1,
+        "recommendedActionChangeCount": 0,
+        "unsupportedClaimChangeCount": 0,
+        "notEvaluatedClaimChangeCount": 0,
+        "totalChangeCount": 2
+      },
+      "expectedChangedTransitions": [],
+      "expectedChanges": {
+        "blockingReasonChanges": [],
+        "diagnosticRefChanges": [
+          {
+            "changeKind": "changed",
+            "containerKind": "category",
+            "category": "assetBytes",
+            "checkId": "byteAvailability.currentSessionBytes.missing",
+            "beforeMessage": "Before warning: synthetic byte evidence needs review.",
+            "afterMessage": "After warning: synthetic byte evidence still needs review."
+          }
+        ],
+        "evidenceRefChanges": [
+          {
+            "changeKind": "changed",
+            "containerKind": "category",
+            "category": "assetBytes",
+            "evidenceId": "evidence_assetBytes_fixture",
+            "beforePath": "generated/byte-availability/wave41-before.json",
+            "afterPath": "generated/byte-availability/wave41-after.json"
+          }
+        ],
+        "recommendedActionChanges": [],
+        "unsupportedClaimChanges": [],
+        "notEvaluatedClaimChanges": []
+      }
+    }
+  ]
+}

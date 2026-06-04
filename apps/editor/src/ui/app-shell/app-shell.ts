@@ -356,6 +356,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   });
   const productPreflightPanel = createProductPreflightPanel({
     state: options.state.productPreflight,
+    comparisonState: options.state.productPreflightComparison,
     isPackageLoaded: options.viewModel.isPackageLoaded,
     currentPackageRevision: options.state.revision.packageRevision,
     ...(options.onRunProductPreflight === undefined

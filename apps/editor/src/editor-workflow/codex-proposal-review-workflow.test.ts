@@ -9,6 +9,45 @@ import { createBrowserProjectStore, type StorageLike } from "../project-persiste
 import { createEditorWorkflowController } from "./workflow-controller.js";
 
 describe("Codex proposal review workflow", () => {
+  it("projects current and previous Product Preflight deterministic comparison after rerun", async () => {
+    const workflow = createWorkflow();
+
+    const firstRun = await workflow.runProductPreflight();
+
+    expect(firstRun.status).toBe("completed");
+    if (firstRun.status !== "completed") {
+      throw new Error("Expected first Product Preflight run to complete.");
+    }
+    expect(workflow.state.productPreflightComparison.status).toBe("ready");
+    expect(workflow.state.productPreflightComparison.comparisons).toHaveLength(0);
+    expect(workflow.state.productPreflightComparison.rerunAffordances[0]?.sourceReportId).toBe(
+      firstRun.report.reportId
+    );
+
+    const secondRun = await workflow.runProductPreflight();
+
+    expect(secondRun.status).toBe("completed");
+    if (secondRun.status !== "completed") {
+      throw new Error("Expected second Product Preflight run to complete.");
+    }
+    expect(workflow.state.productPreflightComparison.summaryLabel).toContain(
+      "deterministic report comparison"
+    );
+    expect(workflow.state.productPreflightComparison.reportSlots).toContainEqual(
+      expect.objectContaining({
+        slotKind: "previous",
+        available: true,
+        reportIdLabel: firstRun.report.reportId
+      })
+    );
+    expect(workflow.state.productPreflightComparison.comparisons).toContainEqual(
+      expect.objectContaining({
+        comparisonKind: "previousToCurrent",
+        reportLabel: `${firstRun.report.reportId} -> ${secondRun.report.reportId}`
+      })
+    );
+  });
+
   it("reviews pasted Codex proposal JSON without committing the preview", async () => {
     const workflow = createWorkflow();
     const initialRevision = workflow.state.revision.packageRevision;
@@ -57,6 +96,18 @@ describe("Codex proposal review workflow", () => {
     expect(workflow.state.codexProposalReview.validation?.status).toBe("valid");
     expect(workflow.state.codexProposalReview.diffPreview?.status).toBe("ready");
     expect(workflow.state.codexProposalReview.rerunValidation?.status).toBe("pass");
+    expect(workflow.state.productPreflightComparison.status).toBe("ready");
+    expect(workflow.state.productPreflightComparison.comparisons).toContainEqual(
+      expect.objectContaining({
+        comparisonKind: "currentToProposalPreview"
+      })
+    );
+    expect(workflow.state.productPreflightComparison.reportSlots).toContainEqual(
+      expect.objectContaining({
+        slotKind: "proposalPreview",
+        available: true
+      })
+    );
     expect(workflow.state.codexProposalReview.canRequestApproval).toBe(true);
     expect(workflow.state.revision.packageRevision).toBe(initialRevision);
     expect(workflow.state.parts.some((part) => part.partId === "part_editorWorkflowCodex")).toBe(false);

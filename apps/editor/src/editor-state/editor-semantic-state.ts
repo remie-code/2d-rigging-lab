@@ -27,6 +27,10 @@ import type { LoadedPackageIdentityState } from "./package-identity-state.js";
 import { emptyPackageRevisionState, type PackageRevisionState } from "./package-revision-state.js";
 import type { ParameterListItemState } from "./parameter-list-state.js";
 import {
+  createEmptyProductPreflightComparisonState,
+  type ProductPreflightComparisonState
+} from "./product-preflight-comparison-state.js";
+import {
   createEmptyProductPreflightState,
   type ProductPreflightState
 } from "./product-preflight-state.js";
@@ -86,6 +90,7 @@ export interface EditorSemanticState {
   readonly previewParameters: readonly PreviewParameterValueState[];
   readonly viewerRuntime: ViewerRuntimeState;
   readonly productPreflight: ProductPreflightState;
+  readonly productPreflightComparison: ProductPreflightComparisonState;
   readonly tutorialReadinessPreflight: TutorialReadinessPreflightState;
   readonly tutorialGuidedWorkflow: TutorialGuidedWorkflowState;
   readonly pendingCreateParameter: CreateParameterFormState;
@@ -122,6 +127,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   previewParameters: [],
   viewerRuntime: createEmptyViewerRuntimeState(),
   productPreflight: createEmptyProductPreflightState(),
+  productPreflightComparison: createEmptyProductPreflightComparisonState(),
   tutorialReadinessPreflight: createEmptyTutorialReadinessPreflightState(),
   tutorialGuidedWorkflow: createEmptyTutorialGuidedWorkflowState(),
   pendingCreateParameter: createEmptyParameterFormState(),
