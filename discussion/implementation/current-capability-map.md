@@ -1,410 +1,82 @@
-# Current Capability Map
+# 現在の Capability Map
 
-> Status: 2026-06-04 / Wave 39 完了時点の実装状況マップ。
-> Purpose: 次Wave計画前に、製品・システムとして「何を作るつもりで、何ができていて、何がまだ足りないか」を読むための入口。Wave別 changelog ではない。
+> 状態: 2026-06-04 / Wave39 完了。
+> 目的: 次の実装境界を計画するための、現在のプロダクト capability map。これは wave ごとの changelog ではない。詳細な wave 履歴は、リンク先の final report と map に置く。
 
-## Wave 39 Update
+## 凡例
 
-Wave 39 is completed / implementation-proven for the MVP-wide Validator Product Report / Preflight v0 scope. Domains A-F passed, Domain G final verification passed, and clean integration review is recorded under [reviews/wave39/](reviews/wave39/).
-
-The implemented capability is a truthful product preflight report and Editor-visible workflow, not repair, parser, archive/filesystem, renderer, or compatibility work:
-
-- Contracts define `ProductPreflightReportDto` categories, statuses, severity, evidence refs, diagnostic refs, blocking reasons, recommended next actions, unsupported claims, and not-evaluated claims.
-- Validator-core deterministically aggregates existing targeted diagnostics into product categories while preserving source validation reports and keeping unsupported / not-evaluated outcomes explicit.
-- Package-format and runtime-core expose product preflight evidence-ref bridge helpers; ai-interface exposes deterministic observation helper/schema only, with no executable AI command or host wiring.
-- Editor workflow can run and display Product Preflight with category summary, blocking issues, warnings, not-supported claims, and not-evaluated claims, and clears stale preflight after edits.
-- Rights-clean semantic fixtures cover representative `pass`, `warn`, `fail`, `not_supported`, and `not_evaluated` states; desktop/mobile e2e proves Product Preflight run/read/save/load/rerun behavior through the existing editor smoke path.
-- No AI repair, LLM provider, executable AI preflight command, real PSD/PNG parser, image decode, archive/filesystem implementation, full renderer, pixel oracle, Cubism compatibility, external dependency, package manifest change, or lockfile change was added.
-
-## Wave 38 Update
-
-Wave 38 is completed / implementation-proven for the bounded Mesh Topology / UV Editor Expansion v0 scope. Domains A-E passed, Domain F final verification passed after a narrow stale fixture/test expectation fix, and clean integration review passed at [reviews/wave38/wave38-clean-integration-review.md](reviews/wave38/wave38-clean-integration-review.md).
-
-The implemented capability is semantic bounded topology / UV editing, not automatic triangulation, atlas packing, texture sampling correctness, or renderer proof:
-
-- Contracts define additive topology revision, stable vertex/triangle IDs, triangle vertex triples, UV edit payloads, and operation evidence shapes.
-- Operation, authoring, package, runtime, and Viewer paths support bounded add vertex, remove unreferenced vertex, add triangle from existing vertices, remove triangle by stable ID, and move UV point with deterministic invalid/stale edit rejection.
-- Validator-core reports deterministic topology / UV diagnostics for invalid triangles, duplicate/degenerate triangles, orphaned vertices, UV count/bounds mismatch, stale topology revision, stable triangle evidence mismatch, and runtime/viewer mesh evidence mismatch.
-- Editor UI exposes bounded topology / UV controls and preserves the existing Wave29 canvas vertex move workflow.
-- Desktop/mobile e2e proves topology/UV edit -> Preview / Viewer / Validator evidence -> browser-local save/load reinspection; the existing Wave29 canvas mesh edit smoke also passed.
-- No automatic triangulation, retopology algorithm, atlas packing, real texture bytes, image decode, texture sampling correctness, full renderer, pixel oracle, Cubism compatibility, external dependency, package manifest/lockfile change, ZIP/archive, filesystem API, directory picker, or drag-drop implementation was added.
-
-## Wave 37 Update
-
-Wave 37 is completed / implementation-proven for the bounded Package Archive / Filesystem Import-Export Decision Boundary v0 scope. Domains A-E passed, Domain F final verification passed after a mobile overflow fix and a non-portable false-supported-claim guard fix, and clean integration re-review passed at [reviews/wave37/wave37-clean-integration-review-sylph-final.md](reviews/wave37/wave37-clean-integration-review-sylph-final.md).
-
-The implemented capability is a truthful transport decision boundary, not actual archive/filesystem import-export:
-
-- Contracts define transport capability IDs, statuses, requirement reasons, and canonical catalog evidence. Only `projectDefinedJsonBundleV0` may claim `supported`.
-- Package-format exposes boundary evaluation and required-route guards so ZIP/archive, File System Access API, directory picker, drag-drop, and native filesystem routes resolve deterministically as non-supported or future-gated.
-- Validator-core reports deterministic `transportCapability.*` diagnostics, including schema-invalid evidence when non-portable routes falsely claim `supported`.
-- Editor Project Storage displays the capability truthfully: portable JSON export/import remains available and unavailable transports cannot appear as supported actions.
-- Desktop/mobile e2e proves the existing Wave36 portable JSON bundle route still works and adds negative oracles for forbidden success claims.
-- No ZIP/archive implementation, filesystem API, drag-drop implementation, parser/image decode, external dependency, package manifest/lockfile change, Cubism compatibility, full renderer, or pixel oracle was added.
-
-## Wave 36 Update
-
-Wave 36 is completed / implementation-proven for the bounded Project-defined Portable Package Bundle v0 scope. Domains A-E passed, the package-format large-base64 validation fix loop resolved Domain E's escalation, final verification passed, and clean integration review passed at [reviews/wave36/wave36-clean-integration-review-sylph.md](reviews/wave36/wave36-clean-integration-review-sylph.md).
-
-The implemented capability is a no-dependency project-defined portable JSON bundle round-trip:
-
-- Package-format exposes `portable-package-bundle-v0` DTO/schema boundaries plus writer/importer behavior for base64 payloads, binary reference matching, digest / byteLength / mediaType verification, and deterministic invalid bundle failures.
-- Validator-core maps portable bundle integrity issues to deterministic `portableBundle.*` diagnostics with AI-readable evidence.
-- Editor workflow can export current project bytes into a downloadable JSON bundle and import a bundle through an ordinary browser file input, then register imported bytes into current-session and browser-local persistent byte stores.
-- Desktop/mobile e2e smoke proves byte intake -> persistent restore -> portable bundle export -> reset -> import -> no-reupload availability, plus digest-mismatch negative import.
-- Fixture manifest and traceability matrix register the Wave36 portable bundle round-trip e2e.
-- No ZIP/archive dependency, File System Access API, drag-drop, PSD/PNG parser, image decode, external dependency, package manifest/lockfile change, Cubism compatibility, full renderer, standalone viewer, or pixel oracle was added.
-
-## Wave 35 Update
-
-Wave 35 is completed / implementation-proven for the bounded Browser-Local Persistent Binary Storage v0 scope. Domains A-D passed, Domain E final verification passed, and clean integration review passed at [reviews/wave35/wave35-clean-integration-review.md](reviews/wave35/wave35-clean-integration-review.md).
-
-The implemented capability is same-origin browser-local persistent byte recovery:
-
-- Package-format exposes browser-local persistent binary storage records, availability reports, issue codes, backend state, record status, and verification status without embedding raw bytes in saved project JSON.
-- Editor file intake stores selected bytes in IndexedDB and can restore them after browser-local save/load when digest and byteLength verification pass.
-- Validator-core maps persistent storage availability issues to deterministic `persistentByteStorage.*` diagnostics with AI-readable evidence.
-- Desktop/mobile e2e smoke proves file intake -> IndexedDB persistence -> browser-local save/load -> no-reupload availability, plus truthful missing/corrupt fallback.
-- The capability is same-origin / same-browser-profile / best-effort browser storage only. No portable archive persistence, File System Access API, drag-drop, PSD parser, PNG/image decode, external dependency, package manifest/lockfile change, Cubism compatibility, full renderer, standalone viewer, or pixel oracle was added.
-
-## Wave 34 Update
-
-Wave 34 is completed / implementation-proven for the bounded Byte Intake Preflight Direct-Call Contract Hardening v0 scope. Domains A-D passed, Domain E's clean integration review found one narrow editor current-session evidence blocker, the blocker was delegated to Gnome and accepted by Review-Sylph after fix loop 1, final verification passed, and clean integration review passed at [reviews/wave34/wave34-clean-integration-review.md](reviews/wave34/wave34-clean-integration-review.md).
-
-The implemented capability is direct-call byte availability hardening:
-
-- Package-format exposes a direct-call byte availability report that distinguishes available current-session bytes, missing current-session bytes, requires-reupload state, stale verified summaries, package identity/revision mismatch, binary ref mismatch, digest mismatch, byteLength mismatch, mediaType mismatch, and unsupported verification.
-- Validator-core maps those availability issues to deterministic `byteAvailability.*` diagnostics with structured evidence.
-- Editor session/workflow byte-intake preflight passes current-session verification evidence when raw bytes remain in memory and keeps browser-local reload paths truthful as reupload-required / missing current-session bytes.
-- Direct-call fixture regressions and desktop/mobile e2e guard prove stale summaries, missing current-session bytes, and caller-declared reupload state cannot silently pass.
-- No persistent binary storage, archive import/export, parser/image decode, File System Access API, drag-drop/new file input mechanism, external dependency, package manifest/lockfile change, Cubism compatibility, full renderer, standalone viewer, or pixel oracle was added.
-
-## Wave 33 Update
-
-Wave 33 is completed / implementation-proven for the bounded Layer Tree Direct Manipulation / Part Tree UX v0 scope. Domains A-F passed, Domain G delegated a narrow Wave30 fixture runtime evidence fix to Gnome and accepted it after Review-Sylph review, final verification passed, and clean integration review passed at [reviews/wave33/wave33-clean-integration-review.md](reviews/wave33/wave33-clean-integration-review.md).
-
-The implemented capability is explicit-control layer tree direct manipulation:
-
-- Editor Layer Tree rows can draft and commit part rename, reparent, empty-leaf part delete, drawable part reassignment, and drawable texture assignment through explicit controls.
-- `deletePart` is supported as an empty-leaf-only operation with dry-run / commit / operation log / model diff / package materialization evidence and deterministic non-empty/reference blockers.
-- Runtime / Viewer evidence reflects part display names, parent/child hierarchy, deleted empty-leaf absence, and drawable membership stability.
-- Validator-core reports deterministic duplicate child, non-empty delete, stale runtime/viewer part evidence, and drawable membership mismatch diagnostics.
-- Production Editor workflow/session/app-shell integration preserves committed layer state through browser-local save/load while keeping direct manipulation drafts transient.
-- A rights-clean semantic JSON fixture and desktop/mobile e2e smoke prove rename -> reparent -> reassignment -> texture assignment -> empty-leaf delete -> Preview / Viewer / validation -> save/load reinspection plus pending-delete preflight.
-- No native browser drag-and-drop, multi-select bulk operations, group transform, recursive delete, delete-with-reassign, full renderer, pixel oracle, Cubism compatibility, PSD parser, PNG/image decode, archive import/export, File System Access API, external dependency, package manifest, or lockfile change was added.
-
-## Wave 32 Update
-
-Wave 32 is completed / implementation-proven for the bounded WarpLattice2d Rig Control Authoring / Evaluator v0 scope. Domains A-F passed, Domain G delegated a narrow stale unit-test fix to Gnome and accepted it after Review-Sylph review, final verification passed, and clean integration review passed at [reviews/wave32/wave32-clean-integration-review.md](reviews/wave32/wave32-clean-integration-review.md).
-
-The implemented capability is project-defined semantic `warpLattice2d` authoring and runtime evidence:
-
-- Contract/package schemas now fix positive `domainBounds`, 2x2+ lattice cardinality, row-major rest control points, `controlPointOffsets` keyform convention, and `replace` / `additiveDelta` composition.
-- Editor Rig Controls workflow can create a 2x2 `warpLattice2d`, bind a drawable or rig-control child, add a `controlPointOffsets` keyform, and preserve the evidence through browser-local save/load.
-- Operation/session evidence records create, bind, keyform, operation log, model diff, package materialization, generated runtime evidence, and validation report refs.
-- Runtime-core evaluates `warpLattice2d` as project-defined semantic bilinear deformation with evaluated, disabled, blocked, and unsupported states, recomputing affected drawable bounds/hash through the existing runtime snapshot path.
-- Validator-core reports deterministic warp lattice diagnostics for invalid cardinality/domain/rest points, unsupported property, malformed patch, missing/stale/mismatched runtime evidence, and Viewer evidence gaps.
-- A rights-clean semantic JSON fixture and desktop/mobile e2e smoke prove create -> bind -> keyform -> Preview / Viewer -> save/load reinspection.
-- No Cubism deformer compatibility, full renderer, pixel oracle, full canvas lattice gizmo, PSD parser, PNG/image decode, archive import/export, File System Access API, external dependency, package manifest, or lockfile change was added.
-
-## Wave 31 Update
-
-Wave 31 is completed / implementation-proven for the bounded Package Binary / File I/O Decision + Browser Byte Intake Pilot v0 scope. Domains A-G completed with pass review artifacts, Domain F's narrow app-shell callback bridge was explicitly approved by Undine, Domain H final verification passed, and clean integration review passed at [reviews/wave31/wave31-clean-integration-review.md](reviews/wave31/wave31-clean-integration-review.md).
-
-The implemented capability is current-session browser file byte intake:
-
-- Editor Source Intake can select actual local file bytes through `<input type=file>` and record filename, byteLength, SHA-256 digest, browser-declared or fallback mediaType, rights, provenance, storage status, and availability.
-- Package-format / authoring-core / editor-session register selected bytes into package-local current-session binary evidence and operation/session metadata without serializing raw byte payloads into saved browser-local project data.
-- Validator-core reports deterministic byte availability, missing/reupload, byteLength mismatch, digest mismatch, mediaType mismatch, rights/provenance gap, and unsupported parser/decode/archive diagnostics.
-- Browser-local save/load truthfully restores metadata-only state and requires reupload for actual bytes after reload.
-- `test_data/sample_model.psd` is covered as a workspace-local byte-only fixture and e2e input with byteLength `22406225` and SHA-256 `44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5`.
-- Desktop/mobile e2e smoke verifies file selection, byte evidence, validator state, save/load truthfulness, and reupload diagnostics.
-- No PSD parser, image decode, archive import/export, drag-drop, File System Access API, external dependency, package manifest/lockfile change, persistent browser binary storage guarantee, public asset distribution, Cubism compatibility, full renderer, or pixel oracle was added.
-
-## Wave 30 Update
-
-Wave 30 is completed / implementation-proven for the bounded Tutorial-like MVP Mini Model v0 scope. Domains A-G completed with pass review artifacts, Domain G's initial mobile overflow escalation was cleared by a corrective layout handback, Domain H final verification passed, and clean integration review passed at [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md).
-
-The implemented capability is a rights-clean synthetic tutorial mini model workflow:
-
-- A metadata-only tutorial mini model seed and deterministic operation recipe create a small character graph without real PSD/PNG bytes or binary refs.
-- Operation evidence records 34 operations, operation log refs, model diff refs, package materialization, and no `createWholeModel` shortcut.
-- The model crosses semantic part / texture / layer / mesh / mask-or-opacity / `rotation2d` rig-control keyform / Minimum Open Dynamics v1 evidence.
-- Runtime-core, Preview, and Viewer expose tutorial readiness summary and semantic runtime/viewer evidence while marking rendered correctness as `not_evaluated`.
-- Validator-core reports deterministic tutorial readiness diagnostics for missing required slices, stale/mismatched runtime/viewer evidence, and unsupported real-asset/renderer/public/file-I/O/compatibility claims.
-- Editor UI exposes a guided tutorial workflow that creates the synthetic mini model, projects readiness, applies a small existing mesh edit, and restores readiness after browser-local save/load.
-- Desktop/mobile e2e smoke verifies create -> readiness 7/8 -> small mesh edit -> Preview / Viewer evidence -> save/load -> readiness 8/8 -> reinspection with strict mobile overflow checks.
-- No real asset bytes, file picker, parser, image decode, archive import/export, external dependency, package manifest/lockfile change, public tutorial asset distribution, full renderer, pixel oracle, texture sampling correctness, standalone viewer, or Cubism compatibility claim was added.
-
-## Wave 29 Update
-
-Wave 29 is completed / implementation-proven for the bounded Canvas Mesh Editing v1 scope. Domains A-G completed with pass review artifacts, Domain H final verification passed after a narrow fixture expectation fix, and clean integration review is registered at [reviews/wave29/wave29-clean-integration-review.md](reviews/wave29/wave29-clean-integration-review.md).
-
-The implemented capability is minimum semantic canvas mesh editing:
-
-- Existing `moveMeshVertex` is hardened for multi-vertex translate, deterministic invalid/no-op/duplicate diagnostics, operation log targets, model diff targets, package materialization, and caller-supplied locked target guards.
-- Runtime-core, Preview, and Viewer evidence expose mesh bounds, vertex hashes, moved vertices, topology summary, selected vertices, locked/editor-hidden/runtime-hidden distinction, and viewer-facing mesh evidence.
-- Validator-core reports deterministic mesh topology and editor-selection diagnostics including invalid triangle index, degenerate triangle, vertex stable ID mismatch, UV count mismatch, missing mesh evidence, stale selected vertex refs, and runtime/viewer mesh evidence gaps.
-- Contract fixtures prove generated mesh -> multi-vertex translate -> package materialization -> runtime/viewer evidence -> validator report -> editor selection evidence using semantic JSON only.
-- Editor UI exposes a minimum canvas/SVG mesh edit surface for selecting one or more vertices, draft drag/nudge, committing through the existing operation lifecycle, observing Preview / Viewer evidence, and preserving mesh coordinate plus minimum selection state through browser-local save/load.
-- Desktop/mobile e2e smoke verifies canvas mesh editing, Viewer mesh evidence, save/load, and reinspection after load.
-- No topology editor, UV editor, automatic triangulation, full renderer, pixel oracle, real image bytes, file picker, parser, image decode, archive import/export, external dependency, package manifest/lockfile change, or Cubism compatibility claim was added.
-
-## Wave 28 Update
-
-Wave 28 is completed / implementation-proven for the bounded semantic Part / Texture / Layer Tree Workflow v1 scope. Domains A-G completed with pass review artifacts after Domain G's initial escalation was cleared by R1 mobile overflow remediation, R2 Viewer drawable part evidence remediation, and a final Domain G rerun. Final verification passed; clean integration review passed at [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md).
-
-The implemented capability is a minimum semantic part / texture / layer workflow:
-
-- `createPart`, `updatePart`, `setDrawablePart`, and `setDrawableTexture` are supported operations with dry-run / commit / operation log / model diff / package materialization evidence and deterministic invalid-target diagnostics.
-- Runtime-core, Preview, and Viewer evidence expose part hierarchy, drawable part membership, texture assignment state, runtime visibility, editor-hidden, locked, selected, texture unresolved, and texture-backed states as semantic evidence.
-- Validator-core reports deterministic part parent/child, cycle, drawable membership, missing part/texture, stale editor-state, and runtime evidence diagnostics.
-- Contract fixtures prove part create/update -> drawable reassignment -> existing texture assignment -> package materialization -> runtime/viewer evidence -> validator report -> editor layer-state evidence using rights-clean semantic JSON.
-- Editor UI exposes a minimum form-based layer tree workflow for part create/update, drawable reassignment, existing texture assignment, layer selection, lock, and editor-only hide, and persists editor layer state through browser-local save/load.
-- Desktop/mobile e2e smoke verifies semantic part / texture / layer authoring, Preview / Viewer inspection, save/load, and reinspection after load.
-- No file picker, parser, archive import/export, image decode, actual binary upload, external dependency, Cubism compatibility, pixel oracle, full renderer, full drag-and-drop layer tree, full part tree UX, UV editor, atlas packer, or mesh topology editor was added.
-
-## Wave 27 Update
-
-Wave 27 is completed / implementation-proven for the bounded semantic composition scope. Domains A-F completed with pass review artifacts, Domain G final verification passed, and clean integration review passed.
-
-The implemented capability is Mask / Clipping / Opacity Authoring v1 as project-defined semantic evidence:
-
-- `setMaskRelation` is a supported operation with dry-run / commit / operation log / model diff / package materialization evidence and deterministic mask/target diagnostics.
-- Runtime-core records enabled mask relations as semantic clipping intent in runtime snapshot / diff / evidence and Viewer-facing mask/opacity evidence.
-- Validator-core reports deterministic mask composition diagnostics for missing source/target, self-reference, duplicate relation, missing/stale runtime evidence, runtime evidence mismatch, and opacity evidence gaps.
-- Contract fixtures prove `setMaskRelation` operation -> package masks -> runtime snapshot/diff -> validator report -> Viewer-facing evidence using rights-clean semantic JSON.
-- Editor UI exposes a minimum Composition / Mask / Opacity workflow, projects Preview / Viewer evidence, and preserves authored composition evidence through browser-local save/load.
-- Desktop/mobile e2e smoke verifies semantic composition authoring, Preview / Viewer inspection, save/load, and reinspection after load.
-- No pixel clipping oracle, full renderer, Cubism compatibility, file picker, parser, image decode, archive, actual binary upload, external dependency, or package manifest/lockfile change was added.
-
-## Wave 26 Update
-
-Wave 26 is completed / implementation-proven. Domains A-E completed with pass completion/review artifacts, Domain F final verification passed, and clean integration review passed with no findings.
-
-The implemented capability is Rig Control Keyform / Viewer Hardening for the project-defined `rotation2d` rig-control workflow:
-
-- `addKeyform` can target `rigControl:angleDegrees` with dry-run / commit / operation log / model diff / package materialization evidence and deterministic missing-target / unsupported-property diagnostics.
-- Runtime-core records deterministic keyform-driven `rotation2d` local/world transform evidence, affected drawable evidence, runtime diff paths, invalid patch diagnostics, and `warpLattice2d` unsupported/no-op evidence.
-- Validator-core checks supplied keyform-driven rig-control runtime evidence for snapshot identity, keyform refs, local/world transform evidence, affected target refs, stale/mismatch states, and keeps diagnostics deterministic.
-- Editor UI can author a rig-control angle keyform from the Rig Controls panel, project authored keyform evidence into Preview / Viewer / Runtime surfaces, and restore it through save/load workflow.
-- Desktop/mobile e2e smoke verifies create rig control -> bind child rig control -> bind drawable -> add angle keyform -> inspect Preview / Viewer -> save/load -> reopen Viewer / Runtime and recompute evidence.
-- No warp lattice full evaluator, direct physics, Cubism compatibility, standalone viewer app, full renderer, pixel oracle, file picker, parser, archive, image decode, actual binary upload, external dependency, or package manifest/lockfile change was added.
-
-## Wave 25 Update
-
-Wave 25 is completed / implementation-proven. Domains A-F completed with pass completion/review artifacts, Domain G final verification passed, and clean integration review passed with no findings.
-
-The implemented capability is Minimum Rig Control v1 as a project-defined authoring-to-runtime slice:
-
-- `createRotation2dRigControl` and `bindRigControlChild` are supported operations with dry-run / commit / operation log / model diff / package materialization evidence.
-- Runtime-core can evaluate deterministic parent-before-child `rotation2d` rig-control hierarchy, expose local/world transform state, affected drawable / child rig-control summaries, runtime snapshot/diff/evidence, and blocked invalid hierarchy evidence.
-- Validator-core reports formal deterministic rig-control diagnostics for cycles, missing parent/child targets, invalid child target kinds, parent/child mismatches, and runtime evidence gaps.
-- Contract fixtures prove parent-child rig-control operation -> runtime hierarchy evidence -> validation/viewer-facing evidence and invalid-cycle blocking diagnostics.
-- Editor UI has a Project-defined Rig Controls panel for create/bind workflow, Preview affected-target summary, Viewer / Runtime rig-control evidence, and save/load projection.
-- Desktop/mobile e2e smoke verifies real UI create/bind, Viewer / Runtime inspection, browser-local save/load, persisted package JSON, operation log, runtime artifacts, and validation artifacts.
-- No warp lattice full evaluator, direct physics, Cubism compatibility, standalone viewer app, full renderer, pixel oracle, file picker, parser, archive, image decode, actual binary upload, external dependency, or package manifest/lockfile change was added.
-
-## Wave 24 Update
-
-Wave 24 is completed / implementation-proven. Domains A-E completed with pass completion/review artifacts, Domain F final verification passed, and clean integration review passed with no findings.
-
-The implemented capability is Private Viewer v0 as an editor-internal runtime inspection surface:
-
-- Runtime-core can evaluate active documents or saved package documents in viewer context, apply session-only parameter overrides, and return deterministic viewer runtime snapshot / diff / evidence with `surface: "viewer"`.
-- Editor UI has a distinct Viewer / Runtime surface with package identity, reload/save-load state, parameter sliders, runtime snapshot summary, runtime diff, and validation diagnostics.
-- Validator-core can validate viewer runtime evidence and report deterministic `viewer.runtimeEvidenceMissing` and `viewer.runtimeEvidenceStale` diagnostics with stable runtime snapshot/state refs.
-- Contract fixtures prove semantic preview-vs-viewer equivalence over summary, effective parameters, targeted keyform/drawable/dynamics fields, and runtime diff.
-- Desktop/mobile e2e smoke verifies browser-local save/load -> Viewer / Runtime open -> parameter override -> snapshot/diff/diagnostics observation while preserving preview-state isolation.
-- No standalone viewer app, full renderer, pixel oracle, file picker, parser, archive, image decode, actual binary upload, external dependency, package manifest/lockfile change, or Cubism compatibility claim was added.
-
-## Wave 23 Update
-
-Wave 23 is completed / implementation-proven. Domains A-F completed with pass completion/review artifacts, Domain G final verification passed, and clean integration review passed with no findings.
-
-The implemented capability is Minimum Open Dynamics v1 as a deterministic, parameter-driven vertical slice:
-
-- `createDynamicsGroup` can author a minimal dynamics group through dry-run / commit, operation log, target refs, model diff, and package materialization.
-- Runtime-core can evaluate deterministic scalar dynamics from authored input parameters, project computed dynamics output into effective parameters, and record dynamics state/output in runtime snapshots and diffs.
-- Validator-core reports deterministic AI-readable diagnostics for dynamics parameter relation, producer gaps, duplicate output targets, unsafe settings, output range/clamp evidence, and runtime evidence gaps.
-- Editor UI can create/update a minimal dynamics group, run/reset preview, and show computed output, runtime evidence/diff, and validator diagnostics.
-- Contract fixtures prove operation result, runtime snapshot/diff, validation report, edge diagnostics, and editor-facing evidence for the Minimum Open Dynamics v1 workflow.
-- Desktop/mobile e2e smoke verifies dynamics creation, preview run/reset, browser-local save/load, preview rerun after load, and persisted authored dynamics state.
-- No Cubism Physics compatibility, direct vertex physics, file picker, parser, asset I/O expansion, image decode, actual binary upload, archive import/export, external dependency, or package manifest/lockfile change was added.
-
-## Wave 22 Update
-
-Wave 22 is completed / implementation-proven. Domains A-G completed with pass completion/review artifacts, Domain H final verification passed, and clean integration review passed with no blocking or high findings.
-
-The implemented capability is a real asset I/O boundary foundation, not real asset import:
-
-- Package-format can represent package-local binary asset entries/references with digest, byte length, media type, storage status, rights, and provenance metadata.
-- A mixed in-memory package file-set can hold text entries and binary entries, compute/compare SHA-256 digest metadata, and report missing/mismatch issues.
-- Source/texture metadata can persist package-local binary refs through PSD adapter metadata and split PNG metadata paths without parsing or decoding image bytes.
-- Validator-core can report missing package-local bytes, byte length/digest/media type mismatch, binary asset ID/reference mismatch, and binary rights/provenance gaps.
-- Rights-clean deterministic JSON byte fixtures prove package-local binary reference, package/operation/validator evidence, and digest behavior without adding PSD/PNG/image files.
-- Editor Source Intake and browser e2e display binary availability, missing bytes, and storage unsupported states truthfully and preserve binary refs through browser-local save/load metadata.
-- No real PSD parser, image decode, OS/browser file picker, archive import/export, filesystem I/O, actual binary upload, external parser/image/archive dependency, or real PSD/PNG/image fixture bytes were added.
-
-## Wave 21 Update
-
-Wave 21 is completed / implementation-proven. The parser-free PSD adapter/profile boundary now has structured profile persistence:
-
-- `psd-source-v1` source assets can persist structured `layered-character-psd-profile-v1` adapter evidence, canvas, groups, source layers, unsupported features, adapter diagnostics, compatibility policy, and source layer texture/part relation metadata.
-- `importPsdSourceAsset` materializes trusted adapter metadata into `sourceAsset.psdProfile` while preserving flattened `diagnostics` and `sourceLayer.unsupportedFeatures` compatibility fields.
-- Validator, contract fixtures, editor Source Intake, AI source-asset inspection, and browser e2e now read or verify the structured profile and keep split PNG metadata intake compatibility covered.
-- No real PSD parser, file picker, PSD/image decode, raster extraction, binary package storage, external PSD/image dependency, or dependency manifest change was added.
-
-Remaining major gaps are real PSD parser support, PSD/package binary storage, real PNG/PSD decode, raster preview extraction, OS file picker, binary archive import/export, full atlas packing, UV editing, pixel-level render oracle, canvas/WebGL rendering, and standalone viewer texture rendering.
-
-## Wave 20 Update
-
-Wave 20 is completed / implementation-proven. The system now has a parser-free PSD adapter/profile import boundary:
-
-- Adobe official PSD spec coverage and the rights-cleared `test_data/sample_model.psd` characterization are recorded as Wave 20 basis artifacts.
-- `importPsdSourceAsset` can commit only when a trusted adapter supplies `layered-character-psd-profile-v1` metadata; missing adapter results remain deterministic diagnostics.
-- PSD source profile metadata, source layers/groups, texture preview references, texture IDs, target part IDs, rights/provenance, operation log, source manifest evidence, validator diagnostics, and browser save/load persistence are covered.
-- Editor Source Intake supports manual PSD adapter/profile metadata entry without OS file picker, PSD parser, image decode, raster extraction, or Photoshop-compatible rendering claims.
-- Synthetic contract fixtures and desktop/mobile E2E smoke verify the PSD adapter/profile path, preview truthfulness, createDrawable/generateMesh flow, and persistence.
-- No external PSD/image parser dependency, dependency manifest change, PSD binary fixture, image decode, or raster extraction was added.
-
-Remaining major gaps are real PSD parser support, PSD/package binary storage, real PNG/PSD decode, raster preview extraction, OS file picker, binary archive import/export, full atlas packing, UV editing, pixel-level render oracle, canvas/WebGL rendering, and standalone viewer texture rendering.
-
-## 1. Product Intent / Intended Capability
-
-| 項目 | 現在の意図 |
+| ラベル | 意味 |
 |---|---|
-| 主対象 | 個人利用の **Private 2D Rigging Lab / Prototype**。権利クリーンな2D素材を、独自形式・独自UI・独自runtimeで可動モデル化する実験環境。 |
-| MVPの中心 | rights-clean layered character art -> private GUI editor -> project-defined model package -> private runtime / viewer -> validator / AI assistant -> demo-safe capture の一周。 |
-| 作らないもの | Cubism互換製品ではない。Cubism SDK/Core、Cubism形式 import/export、既存Cubism model loading、`.model3.json` / `.moc3` 等の検査・読み込み・変換は行わない。 |
-| Track分離 | Private Prototypeが実装本体。Streaming Demo Surface、Live2D Feature Proposal、Future Public Clean Subset は混ぜない。 |
-| AIの役割 | 人間のGUI制作を置き換えるのではなく、dry-run、diff、validation、repair suggestion、provenance確認で制作判断を補助する。 |
-| Transport境界 | Runtime / editor / AI command foundation はあるが、HTTP / WebSocket / MCP 等の外部transportは Future scope。MVP境界が変わるまで実装しない。 |
+| `implementation-proven` | source/tests/fixtures と wave 検証記録で裏付けられている。 |
+| `UI/e2e proven` | Editor UI または browser e2e smoke path から実行済み。 |
+| `semantic evidence only` | 決定的な project/runtime evidence はあるが、描画結果や pixel-level correctness は主張しない。 |
+| `future scope` | 可能性のあるプロダクト方向だが、repo には未実装。 |
+| `explicit non-goal` | 方針変更がない限り、現在の Private Prototype 方向には含めない。 |
 
-## 2. Implemented Capabilities
+## プロダクト目的
 
-| 領域 | 現在できていること | 根拠 / 注意 |
-|---|---|---|
-| Monorepo / package基盤 | `packages/*`、`apps/editor`、contract fixtures、typecheck / source guard / e2e smoke の実行基盤がある。 | Wave 0-7 summaries、`rg --files apps packages fixtures`。 |
-| Contract / DTO | ID、diagnostic、package info、runtime state、runtime sequence、model diff、runtime diff、validation diff、artifact refs などの共有contract基盤がある。 | Wave 1、`packages/contracts/src/*`。 |
-| Package / model format | project-defined package、manifest、model graph、asset/model file paths、drawable / mesh / parameter / keyform / rigControl / dynamics 用schema基盤がある。Wave 18で optional `texture-atlas-v1` DTO と source manifest / provenance / rights の file-set materialization を split PNG source intake evidence へ接続した。Wave 20で parser-free PSD adapter result から `psd-source-v1` / `layered-character-psd-profile-v1` source profile evidence を materialize できるようになった。Wave 21で adapter / canvas / group / layer / unsupported feature / diagnostic / compatibility policy を structured `psdProfile` として永続化できるようになった。Wave 22で package-local binary asset entry/reference、digest、byte length、media type、storage status、rights/provenance hooks、text+binary in-memory file-set boundary が追加された。Wave36で project-defined `portable-package-bundle-v0` JSON DTO/schema と base64 payload writer/importer が追加された。Wave38で mesh topology revision、stable vertex/triangle IDs、triangle refs、UV coordinate persistence が additive package mesh schema として確認された。 | Wave 2、Wave 18、Wave 20-22、Wave36、Wave38、`packages/package-format/src/*`、`fixtures/contracts/minimal-valid-package`、`fixtures/contracts/imported-source-package-evidence-preview-consistency`、`fixtures/contracts/psd-import-happy-path`、`fixtures/contracts/psd-unsupported-layer`、`fixtures/contracts/binary-asset-package-local-reference`、`fixtures/contracts/wave38-topology-uv-fixture-e2e`。Wave 22はmetadata/in-memory boundaryであり、Wave36はproject-defined JSON bundleであり ZIP/archive/filesystem persistence ではない。Wave38はsemantic mesh topology / UV persistenceであり automatic triangulation / atlas packing / texture sampling correctness ではない。 |
-| Source asset / rights / provenance intake | Wave 18で metadata-backed `split-png-fallback-v1` の source asset / layer metadata / rights / provenance を GUI から登録し、package source manifest、provenance、rights records、operation log、package file set、validator evidenceへ残せる。Wave 20で manual/profile-driven PSD adapter metadata も source profile、layer/group metadata、texture preview、texture ID、target part、rights/provenance、unsupported feature diagnostics として残せる。Wave 21で PSD metadata は structured profile と flattened compatibility fields の両方で保持される。Wave 22で source asset / texture atlas metadata が package-local binary refs、storage status、digest/byte/media metadata、rights/provenance hooks を保持できる。Blocked rights、missing provenance、missing texture reference、PSD unsupported feature、adapter diagnostics、structured/flattened mismatch、binary missing bytes / mismatch / provenance gap は deterministic diagnostics / validation checks として観測できる。 | Wave 18-22、`packages/authoring-core/src/source-asset-mutations.ts`、`packages/authoring-core/src/binary-asset-references.ts`、`packages/operation-core/src/operations/import-split-png-source-asset.ts`、`packages/operation-core/src/operations/import-psd-source-asset.ts`、`packages/validator-core/src/validators/asset-rights.ts`、`packages/validator-core/src/validators/psd-source-profile.ts`、`packages/validator-core/src/validators/binary-assets.ts`、`apps/editor/src/ui/source-assets`。Metadata/adapter-result/binary-ref only であり、PNG/PSD decode、actual bitmap rendering、PSD raster extraction、actual upload ではない。 |
-| Authoring / operation lifecycle | authoring session、`createParameter`、`addKeyform`、`addKeyformGrid2d`、`createDrawable`、`generateMesh`、`setDrawOrder`、`setRuntimeVisibility`、`moveMeshVertex`、`importSplitPngSourceAsset`、`importPsdSourceAsset`、`setRightsMetadata`、`createDynamicsGroup`、`setMaskRelation`、Wave38 bounded mesh topology / UV operations、dry-run / commit、operation log、operation evidence の基盤がある。Wave30で既存operationを組み合わせた deterministic tutorial mini model recipe が operation log / model diff / package materialization まで implementation-proven になった。 | Wave 3、Wave 11、Wave 15-23、Wave 27-30、Wave38、`packages/authoring-core`、`packages/operation-core`。Wave 18で split PNG source import と rights metadata update が supported operation になった。Wave 20で `importPsdSourceAsset` は adapter result present の場合に commit 可能になった。Wave 21で adapter result から structured `psdProfile` を materialize できる。Wave 23で Minimum Open Dynamics v1 group creation が supported operation になった。Wave 27で semantic mask relation authoring が supported operation になった。Wave38で add/remove bounded topology elements and move UV point operations are supported with deterministic invalid/stale edit rejection. Wave30は新しい全体作成primitiveではなく既存operation recipeであり、PSD binary parser ではない。Wave38はautomatic triangulationやretopology algorithmではない。 |
-| Runtime / validation evidence | operation結果にruntime snapshot / validation report / artifact refs を結び、package-relative artifactとしてmaterializeする基盤がある。Wave 16で drawable draw order / runtime visibility の runtime diff dedicated fields と validation / operation evidence regression が追加された。Wave 17で mesh vertex edit 後の runtime snapshot vertices / bounds / vertex hash と runtime diff `drawableChanges` を evidence fixture で確認できる。Wave 18で source asset rights / provenance / drawable provenance / visible drawable texture reference の validator oracle と imported-source package evidence fixture が追加された。Wave 20で PSD unsupported feature、PSD layer provenance、texture preview relation、source-layer mapping の validator evidence が追加された。Wave 21で structured PSD profile diagnostics、adapter diagnostics、flattened fallback mismatch、non-PSD profile mismatch の evidence が追加された。Wave 22で binary missing bytes、byte length/digest/media type mismatch、binary asset ID/reference mismatch、binary rights/provenance gaps の validator evidence が追加された。Wave 23で dynamics runtime state/output、snapshot/diff、computed parameter projection、semantic diagnostics、runtime evidence gaps が evidence として確認できる。Wave 24で viewer-context runtime snapshot/diff/evidence、final runtime state refs、viewer evidence missing/stale diagnostics、preview-vs-viewer semantic equivalence evidence が追加された。Wave 25で rig-control hierarchy order、transform state、affected targets、snapshot/diff/evidence、blocking hierarchy evidence、formal rig-control validator diagnostics が追加された。Wave 27で semantic mask relation evidence、drawable opacity evidence、runtime mask diff paths、Viewer-facing composition evidence、mask composition diagnostics、and contract fixture evidence が追加された。Wave30で tutorial readiness summary、runtime/viewer tutorial evidence、missing-slice diagnostics、unsupported-claim diagnostics、and editor readiness evidence が追加された。Wave36で `portableBundle.*` integrity diagnostics と digest mismatch negative import evidence が追加された。Wave38で runtime/viewer mesh topology summaries、UV refs、triangle refs、stable triangle counts、topology revision evidence、and deterministic topology/UV diagnostics が追加された。 | Wave 4-5、Wave 13、Wave 16-25、Wave 27-30、Wave36、Wave38、`packages/runtime-core`、`packages/validator-core`、`packages/operation-core`。Wave 22の binary-aware validation は async entrypoint であり existing sync validator path は互換維持。Wave 23の dynamics は Minimum Open Dynamics v1 であり Cubism Physics互換ではない。Wave 24の Viewer / Runtime は semantic inspection surface であり full renderer / pixel oracle ではない。Wave 25の rig control は project-defined semantic workflow であり Cubism deformer / Cubism Viewer compatibility ではない。Wave 27の clipping は semantic intent evidence であり pixel clipping renderer ではない。Wave30の tutorial readiness は semantic evidence only であり full renderer / pixel oracle / texture sampling correctness ではない。Wave36のportable bundle evidenceはproject-defined JSON bundle検証であり ZIP/archive compatibility ではない。Wave38 topology/UV evidence is semantic and does not claim renderer, pixel, texture sampling, atlas, or Cubism compatibility. |
-| Persistence | package file set、operation log JSONL、generated artifact paths、browser-local project save/load/reset、operation log hydration、AI transcript persistence がある。Wave 16で drawable layer order と runtime visibility の save/load smoke が追加された。Wave 17で mesh vertex coordinate と `moveMeshVertex` operation log の browser-local save/load smoke が追加された。Wave 18で source manifest / provenance / rights / drawable relation の browser-local save/load smoke が追加された。Wave 21で structured PSD profile の browser-local save/load projection と contract fixture persistence が確認された。Wave 22で package-local binary refs が browser-local save/load を metadata として survive することを確認した。Wave 24で browser-local save/load 後に Viewer / Runtime snapshot を再計算し、parameter override / diagnostics を確認する desktop/mobile smoke が追加された。Wave 25で rig controls、child binding、operation log、runtime/validation artifacts、Viewer evidence の browser-local save/load smoke が追加された。Wave 27で mask relation と opacity evidence の browser-local save/load smoke が追加された。Wave30で tutorial mini model creation、small mesh edit、Viewer evidence、tutorial readiness restoration、and reinspection after browser-local save/load が desktop/mobile smoke で確認された。Wave35でsame-origin IndexedDB raw byte restore、Wave36でproject-defined portable JSON bundle export/import round-trip、Wave38で topology/UV edit save/load reinspection が確認された。 | Wave 5、Wave 7、Wave 9、Wave 16-18、Wave 21-22、Wave 24-25、Wave 27、Wave 30、Wave35-36、Wave38。OS filesystem / ZIP/archive import-export / cloud or cross-profile persistenceではない。 |
-| Editor UI | Vite + vanilla TypeScript の browser editor があり、sample package、parameter list、`createParameter` form、operation / evidence / package panels、project storage、AI approval / transcript panelsを表示できる。Wave 14で embedded preview panel、preview slider、runtime-projected SVG visual/summaryを実装済み。Wave 15で generated drawable / mesh authoring form、drawable list、result summary、preview observation、save/load persistence smokeを実装済み。Wave 16で drawable list から runtime visibility hide/show と layer move up/down を実行し、preview / operation log / package file set / save-load で確認できる。Wave 17で generated mesh の vertex row から `+X` 等の nudge を実行し、preview SVG polygon、operation log、package file set、save-load で確認できる。Wave 18で Source Intake panel から split PNG manifest / layer / rights / provenance metadata を登録し、imported source layer を existing createDrawable / generateMesh workflow に渡せる。Wave 20で Source Intake に manual PSD adapter/profile metadata mode が追加され、PSD source layer を existing createDrawable / generateMesh / preview / save-load workflow に渡せる。Wave 21で structured PSD profile summary、evidence、AI inspection projection、post-load projection を表示できる。Wave 22で Source Intake が source/texture binary refs、stored/missing/unsupported storage、digest/byte/media metadata、rights/provenance を metadata-only として表示できる。Wave 23で Dynamics panel から minimal dynamics group を作成/更新し、preview run/reset、computed output、runtime evidence/diff、validator diagnostics を確認できる。Wave 24で Viewer / Runtime surface を editor 内に開き、viewer parameter sliders、runtime snapshot summary、runtime diff、validation diagnostics、package identity / save-load state を確認できる。Wave 25で Project-defined Rig Controls panel から `rotation2d` rig control 作成、child drawable / child rig binding、Preview affected-target summary、Viewer / Runtime rig-control evidence、save/load restoration を確認できる。Wave 27で Composition / Mask / Opacity panel から semantic mask relation 作成と最小 opacity keyform authoring を行い、Preview / Viewer / Runtime evidence と save/load restoration を確認できる。Wave 28で minimum part / texture / layer workflow、Wave29で canvas/SVG mesh editing workflow、Wave30で tutorial mini model guided workflow and readiness panel が implementation-proven になった。Wave36で Project persistence panel から portable JSON bundle export/download and import を操作できる。 | Wave 6-9、Wave 14-25、Wave 27-30、Wave36、`apps/editor`。Wave 24-25、Wave 27-30、Wave36はDomain completion / review と final verification を通過し implementation-proven。PSD/binary mode は parser-free / metadata-only であり parser/decode/upload ではない。Wave36 export/import は ordinary browser download/file input and project-defined JSON bundle であり File System Access API、drag-drop、ZIP/archiveではない。Dynamics は Minimum Open Dynamics v1 であり Cubism Physics互換ではない。Rig Controls、Composition、Mesh、Tutorial workflow、and Portable Bundle workflow は project-defined semantic workflow であり Cubism互換ではない。Viewer / Runtime は editor-internal inspection surface であり standalone app / full renderer ではない。 |
-| AI command foundation | transport-independent `ai-interface`、in-process editor AI host、dry-run / approval / commit、transcript、`inspectModel` / `inspectTarget` / `validatePackage` read commandsがある。 | Wave 8-10。LLM providerや外部transportは未実装。 |
-| Keyform authoring | `addKeyform` / `addKeyformGrid2d` のoperation handler、authoring mutation、registry/lifecycle、editor evidence、AI `addKeyform` regressionがある。 | Wave 11。 |
-| Keyform runtime evaluation | Wave 12で runtime-visible keyform evaluation foundation が入り、effective parameter resolution、linear 1D / Grid2D sampling、mesh/drawable target application、snapshot `keyformSamples`、runtime-visible evidence fixtureがある。 | Wave 12。重要な到達点。 |
-| Runtime state / deterministic evaluation | initial `RuntimeStateDto`、state compatibility、runtime snapshot、snapshot comparison、dynamics state/evidenceの基礎がある。 | `packages/runtime-core/src/*` の focused inspection。製品UI上の完全なviewer workflowとは別。 |
-| Runtime diff / Grid2D evidence hardening | Wave 13で runtime diff dedicated fields、Grid2D fixture/evidence、diagnostic regressions、AI/editor `addKeyformGrid2d` runtime-visible evidence が pass。 | Wave 13。Editor / viewer 上の visible preview workflow とは別。 |
-| Dynamics workflow | Wave 23で Minimum Open Dynamics v1 の authoring operation、deterministic runtime sequence、snapshot/diff/evidence、validator diagnostics、editor preview run/reset、fixture evidence、desktop/mobile save-load smoke が implementation-proven。 | [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md), [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md)。Cubism Physics互換、direct vertex physics、cloth/collision/IK、timeline bake、file picker/parser/asset I/O expansion は含まない。 |
-| Rig control workflow | Wave 25で Minimum Rig Control v1 の `rotation2d` authoring operation、child drawable / child rig binding、deterministic runtime hierarchy/evidence、validator diagnostics、contract fixtures、editor Preview / Viewer workflow、desktop/mobile save-load smoke が implementation-proven。Wave 26で `rigControl:angleDegrees` keyform authoring、operation/fixture evidence、runtime local/world transform and affected-target evidence、validator/report hardening、Viewer / Runtime observation、desktop/mobile e2e save-load smoke が implementation-proven。 | [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md), [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md), [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md), [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md)。Cubism deformer / Cubism Viewer compatibility、warp lattice full evaluator、direct physics、canvas rig editor、timeline/multi-control editor、file picker/parser/asset I/O expansion は含まない。 |
-| Composition / mask / opacity workflow | Wave 27で semantic `setMaskRelation` operation、runtime mask relation / opacity evidence、validator composition diagnostics、contract fixtures、Editor Composition / Mask / Opacity UX、Preview / Viewer / Runtime observation、desktop/mobile e2e save-load smoke が implementation-proven。 | [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md), [waves/wave27/_map.md](waves/wave27/_map.md), [reviews/wave27/_map.md](reviews/wave27/_map.md)。Pixel clipping oracle、full renderer、texture masking、Cubism compatibility、file picker/parser/image decode/archive/actual binary upload は含まない。 |
-| Part / texture / layer tree workflow | Wave 28で semantic part hierarchy、part create/update、drawable part reassignment、existing texture atlas assignment、editor layer selection / lock / editor-only hide、Preview / Viewer / Runtime semantic evidence、validator diagnostics、contract fixtures、desktop/mobile e2e save-load smoke が implementation-proven。Wave33で tree row explicit controls による rename、reparent、empty-leaf part delete、drawable reassignment、texture assignment、pending-delete preflight、Preview / Viewer / validation evidence、browser-local save/load reinspection が implementation-proven。 | [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md), [waves/wave28/_map.md](waves/wave28/_map.md), [reviews/wave28/_map.md](reviews/wave28/_map.md), [waves/wave33/wave33-final-report.md](waves/wave33/wave33-final-report.md), [waves/wave33/_map.md](waves/wave33/_map.md), [reviews/wave33/_map.md](reviews/wave33/_map.md)。File picker、parser、archive、image decode、actual binary upload、external dependency、Cubism compatibility、pixel oracle、full renderer、native browser drag-and-drop、multi-select bulk operations、group transform、recursive delete、delete-with-reassign、UV editor、atlas packer、mesh topology editor は含まない。 |
-| Canvas mesh editing / topology / UV workflow | Wave 29で canvas/SVG mesh vertex selection、single/multi-vertex translate、operation lifecycle commit、locked/editor-hidden/runtime-hidden guard、Preview / Viewer / Runtime semantic mesh evidence、validator topology diagnostics、contract fixtures、desktop/mobile e2e save-load smoke が implementation-proven。Wave38で bounded add vertex、remove unreferenced vertex、add triangle from selected existing vertices、remove triangle by stable ID、move UV point、topology revision/stable ID evidence、Preview / Viewer / Validator evidence、and desktop/mobile save-load reinspection が implementation-proven。 | [waves/wave29/wave29-final-report.md](waves/wave29/wave29-final-report.md), [waves/wave29/_map.md](waves/wave29/_map.md), [reviews/wave29/_map.md](reviews/wave29/_map.md), [waves/wave38/wave38-final-report.md](waves/wave38/wave38-final-report.md), [waves/wave38/_map.md](waves/wave38/_map.md), [reviews/wave38/_map.md](reviews/wave38/_map.md)。Automatic triangulation、retopology algorithm、atlas packing、full renderer、pixel oracle、real image bytes、texture sampling correctness、file picker/parser/image decode/archive、external dependency、Cubism compatibility は含まない。 |
-| Tutorial mini model workflow | Wave 30で rights-clean synthetic mini model recipe、operation log/model diff/package materialization、semantic runtime/viewer tutorial evidence、validator readiness report、guided editor workflow、small mesh edit、desktop/mobile save-load e2e smoke が implementation-proven。 | [waves/wave30/wave30-final-report.md](waves/wave30/wave30-final-report.md), [waves/wave30/_map.md](waves/wave30/_map.md), [reviews/wave30/_map.md](reviews/wave30/_map.md), [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md)。Real asset bytes、file picker、parser、image decode、archive、external dependency、public tutorial asset distribution、full renderer、pixel oracle、texture sampling correctness、standalone viewer、Cubism compatibility は含まない。 |
-| Verification posture | Wave 8-38 は final report上、typecheck / tests / source guard / e2e / diff check が pass。Wave 8-38 は clean review が pass。Wave 14では sample-aware regression、Wave 15では operation lifecycle regression、Wave 16では layer controls persistence smoke、Wave 17では mesh vertex edit vertical slice の needs-fix / escalation 解消後にfinal rerunで通過。Wave 18では source intake e2e / persistence smoke、Wave 19では texture-backed preview / part mapping smoke、Wave 20では PSD adapter/profile intake / persistence smoke と parser-free truthfulness scan、Wave 21では structured PSD profile persistence / split PNG compatibility smoke / parser-free scan まで通過した。Wave 22は binary boundary final verification が pass。Wave 23は dynamics final verification が pass。Wave 24は viewer final verification が pass。Wave 25は rig-control final verification と clean integration review が pass。Wave 26は rig-control keyform / viewer hardening final verification と clean integration review が pass。Wave 27は semantic composition final verification が pass。Wave 28は part/texture/layer tree final verification と clean review が pass。Wave 29は canvas mesh editing final verification と clean review が pass。Wave30は tutorial mini model final verification と clean review が pass。Wave31は byte intake final verification と clean review が pass。Wave32は warp lattice final verification と clean review が pass。Wave33は layer tree direct manipulation final verification と clean review が pass after a narrow fixture-local Wave30 runtime evidence fix。Wave34は byte availability direct-call hardening final verification と clean review が pass after one narrow Gnome fix loop。Wave35は browser-local persistent binary storage final verification と clean review が pass。Wave36は project-defined portable package bundle final verification と clean review が pass after a separate large-base64 package-format fix loop。Wave37は package archive / filesystem decision boundary final verification と clean review が pass after two delegated Gnome fix loops。Wave38は mesh topology / UV editor final verification と clean review が pass after one narrow stale fixture/test expectation fix. | 各Wave final report。Wave 22 completion は [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md) と [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md) に記録済み。Wave 23 completion は [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md) と [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md) に記録済み。Wave 24 completion は [waves/wave24/wave24-final-report.md](waves/wave24/wave24-final-report.md) と [reviews/wave24/wave24-clean-integration-review.md](reviews/wave24/wave24-clean-integration-review.md) に記録済み。Wave 25 completion は [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md) と [reviews/wave25/wave25-clean-integration-review.md](reviews/wave25/wave25-clean-integration-review.md) に記録済み。Wave 26 completion は [waves/wave26/wave26-final-report.md](waves/wave26/wave26-final-report.md) と [reviews/wave26/wave26-clean-integration-review.md](reviews/wave26/wave26-clean-integration-review.md) に記録済み。Wave 27 completion は [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md)、[waves/wave27/_map.md](waves/wave27/_map.md)、[reviews/wave27/_map.md](reviews/wave27/_map.md) に記録済み。Wave 28 completion は [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md)、[waves/wave28/_map.md](waves/wave28/_map.md)、[reviews/wave28/_map.md](reviews/wave28/_map.md) に記録済み。Wave 29 completion は [waves/wave29/wave29-final-report.md](waves/wave29/wave29-final-report.md)、[waves/wave29/_map.md](waves/wave29/_map.md)、[reviews/wave29/_map.md](reviews/wave29/_map.md) に記録済み。Wave 30 completion は [waves/wave30/wave30-final-report.md](waves/wave30/wave30-final-report.md)、[waves/wave30/_map.md](waves/wave30/_map.md)、[reviews/wave30/_map.md](reviews/wave30/_map.md) に記録済み。Wave31-Wave38 completion is recorded at [waves/wave31/wave31-final-report.md](waves/wave31/wave31-final-report.md), [waves/wave32/wave32-final-report.md](waves/wave32/wave32-final-report.md), [waves/wave33/wave33-final-report.md](waves/wave33/wave33-final-report.md), [waves/wave34/wave34-final-report.md](waves/wave34/wave34-final-report.md), [waves/wave35/wave35-final-report.md](waves/wave35/wave35-final-report.md), [waves/wave36/wave36-final-report.md](waves/wave36/wave36-final-report.md), [waves/wave37/wave37-final-report.md](waves/wave37/wave37-final-report.md), and [waves/wave38/wave38-final-report.md](waves/wave38/wave38-final-report.md). |
+この repository は現在、project-defined な private 2D model authoring prototype を実装している。deterministic package、editor、runtime、validator、Codex-facing command surface を持ち、semantic authoring evidence、dry-run/approval workflow、browser-local project persistence、Product Preflight reporting を軸にしている。
 
-Wave30 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (161 files / 786 tests), `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed with no source/test fix-required findings.
+現在のプロダクトは Cubism clone ではなく、Cubism runtime/editor compatibility layer でもなく、full renderer でも LLM provider integration でもない。AI推論・修復案設計は Codex 側の責務であり、この repo は Codex が利用する deterministic state、operation、validation、diff、approval、evidence surface を提供する。
 
-Wave31 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (165 files / 804 tests), `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed with no source/test fix-required findings.
+## Wave39 時点の現在の実装面
 
-Wave32 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit`, `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed after a narrow Gnome stale unit-test fix was accepted by Review-Sylph.
+| Capability 領域 | 現在の surface | Evidence level | 境界 |
+|---|---|---|---|
+| Authoring / Editor | project save/load/reset、operation lifecycle UI、generated drawable 作成、layer visibility/order control、明示的な part/layer operation、mesh vertex select/drag/nudge、bounded topology/UV control、rig/dynamics/composition workflow、tutorial mini model flow、Product Preflight panel、AI dry-run/approval transcript foundation を備えた browser app。 | `implementation-proven`; 複数の path は `UI/e2e proven`。 | native layer-tree drag/drop、multi-select bulk edit、group transform、reassignment 付き recursive delete、full timeline editor、public demo capture workflow、full renderer はない。 |
+| Rigging / Mesh / Deformation / Dynamics | project-defined `rotation2d` rig control、rig-control keyform、`controlPointOffsets` を持つ `warpLattice2d`、semantic bilinear warp evaluation、Minimum Open Dynamics v1 `scalarDampedFollowV1`、mesh vertex movement、bounded add/remove vertex/triangle、direct UV point movement。 | `implementation-proven`; deformation/runtime output は `semantic evidence only`。 | Cubism deformer/physics compatibility、direct vertex physics、cloth/collision/IK、automatic triangulation、retopology、UV unwrap、atlas packing、texture sampling correctness、pixel oracle はない。 |
+| Validator / Product Preflight | Wave39 Product Preflight v0 は required categories、statuses、evidence refs、diagnostic refs、blocking reasons、recommended actions、unsupported claims、not-evaluated claims を定義する。validator-core は既存の targeted diagnostics を、truthful な product categories に集約する。 | `implementation-proven`; Editor run/read/save/load/rerun path は `UI/e2e proven`。 | Product Preflight v0 は session-generated な read-only report。persisted package artifact、release acceptance runner、demo gate、repair system、parser、archive/filesystem validator、renderer oracle、Cubism compatibility proof ではない。 |
+| Package / Persistence / Transport | browser-local project save/load/reset、operation log/package materialization、current-session byte evidence、same-origin IndexedDB byte restore、base64 byte round-trip を持つ project-defined portable JSON bundle v0、`projectDefinedJsonBundleV0` のみ supported と主張できる transport capability boundary。 | `implementation-proven`; portable bundle と byte restore flow は `UI/e2e proven`。 | ZIP/archive writer/importer、native filesystem、File System Access API、directory picker、drag-drop implementation、cloud/cross-profile persistence、quota/private-browsing guarantee、OS-level storage guarantee はない。 |
+| Asset I/O | browser file-input の actual byte intake は filename、byteLength、SHA-256 digest、mediaType、rights/provenance、availability を記録する。parser-free PSD adapter/profile metadata と split PNG source metadata は structured semantic evidence として保持される。local sample PSD byte fixture は length/hash のみで特徴づけられる。 | bytes と metadata は `implementation-proven`; PSD/PNG semantics は parse されない。 | PSD layer parse、PSD/PNG decode、raster extraction、texture materialization、compositing、media header sniffing、public asset redistribution proof、parser security boundary はない。 |
+| AI / Codex-facing API | `packages/ai-interface` は deterministic read/inspect/validate/dry-run/commit/operation-log command surface、approval policy、transcript append、in-process Editor host routing、Wave39 Product Preflight observation helper/schema を公開する。 | deterministic command host と transcript behavior は `implementation-proven`。 | inference、repair design、natural-language judgment、repair candidate generation/ranking は Codex の責務。この repo は現時点で LLM/provider、prompt loop、auto-fix、repair reasoning、executable AI Product Preflight command、standalone `getDiff`、rerun-validation command を提供しない。 |
+| Viewer / Preview | Editor embedded runtime-projected SVG preview、parameter slider、Viewer/Runtime inspection、runtime snapshot/diff、diagnostics、semantic composition/mask/opacity evidence、mesh/runtime evidence、Product Preflight evidence input。 | `semantic evidence only`; 一部の Editor flow は `UI/e2e proven`。 | standalone viewer app、full render target、texture sampling correctness、rendered acceptance oracle、pixel-level comparison、Cubism runtime、`.moc3`、`.model3.json` support はない。 |
 
-Wave33 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (170 files / 868 tests), `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed after a narrow Gnome Wave30 fixture runtime evidence fix was accepted by Review-Sylph.
+## Capability 境界と非対応
 
-Wave34 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit`, `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed after one narrow Gnome editor current-session evidence fix was accepted by Review-Sylph.
+### Implementation-Proven
 
-Wave35 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (179 files / 916 tests), `pnpm.cmd test:e2e`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed with no Domain E source fix required.
+- Product Preflight v0 contract、validator aggregation、package/runtime bridge helper、Editor panel/workflow、rights-clean fixture、desktop/mobile save-load rerun e2e。
+- browser-local project persistence、same-origin IndexedDB byte restore、project-defined portable JSON bundle round-trip。
+- digest/length/mediaType/rights/provenance evidence を伴う browser selected-byte intake。
+- parser-free PSD adapter/profile metadata と split PNG source metadata workflow。
+- generated drawable、part/layer operation、mesh vertex movement、bounded topology/UV edit、`rotation2d`、keyform、`warpLattice2d`、dynamics、mask/opacity、Viewer/Runtime inspection、tutorial mini model の semantic editor workflow。
+- read/inspect/validate/dry-run/approval/commit/log/transcript の deterministic AI command host。
 
-Wave36 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (183 files / 936 tests), `pnpm.cmd test:e2e`, `node apps\editor\e2e\portable-bundle-roundtrip-smoke.mjs`, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed with no Domain F source fix required.
+### Semantic Evidence Only
 
-Wave37 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit`, `pnpm.cmd test:e2e`, focused portable bundle smoke, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration re-review passed after delegated mobile overflow and false-supported-claim fixes.
+- mesh、rig、deformation、dynamics、composition、Product Preflight categories に関する Runtime と Viewer の evidence は、project-defined semantic evidence である。
+- Preview/Viewer evidence は state、hash、bounds、diagnostics、diffs を示せるが、rendered pixels、texture sampling correctness、Cubism compatibility は証明しない。
 
-Wave38 final verification also passed: `pnpm.cmd typecheck`, `pnpm.cmd test:unit` (193 files / 994 tests), `pnpm.cmd test:e2e`, focused topology/UV smoke, existing canvas mesh smoke, `pnpm.cmd run check:source`, `pnpm.cmd run check:deps`, scoped `git diff --check`, dependency manifest/lockfile diff check, and forbidden-scope scan. Clean integration review passed after one narrow stale fixture/test expectation fix.
+### 将来範囲
 
-## 3. Partially Implemented / Foundation Exists But Product Workflow Is Incomplete
+- Codex-facing Rigging Edit Proposal API / Diff Validation Surface: Codex-proposed operation を受け取り、schema/preflight を validate し、dry-run し、deterministic diff/evidence を生成し、rerun validation を行い、approval を要求し、commit し、結果を transcript に残す。
+- Product Preflight の durability/export と final acceptance/demo gates。
+- ZIP/archive/filesystem import/export、drag-drop、File System Access API、directory picker、cloud/cross-profile persistence。
+- dependency、security、rights の判断後に行う real PSD/PNG parser/decode/raster/materialization pipeline。
+- advanced topology/UV tool、layer tree UX expansion、advanced dynamics、standalone viewer、renderer/pixel oracle、public/demo asset workflow。
 
-Wave30 supersedes the older "individual slices exist but no tutorial-like synthetic mini model ties them together" gap for the bounded semantic tutorial workflow. Wave33 narrows the former full part-tree UX gap by proving explicit-control tree rename/reparent/delete/reassignment workflow. Wave38 narrows the mesh editor gap by proving bounded topology / UV semantic editing. Remaining GUI/editor gaps are advanced/freeform topology and UV tooling, automatic triangulation/atlas work, native drag-and-drop/multi-select/group-transform layer tree follow-up, real texture/image byte pipelines, public tutorial/demo assets, and renderer/pixel correctness.
+### 方針変更がない限り明示的な Non-Goals
 
-| 領域 | あるもの | まだ製品ワークフローとして不足しているもの |
-|---|---|---|
-| GUI authoring全体 | Browser editor、`createParameter`、project persistence、AI approval panels、embedded preview、generated drawable / deterministic mesh authoring vertical slice。Wave 15でGUIからrights-clean generated drawable / meshを作成し、preview / persistence / evidenceで確認する一周が implementation-proven。Wave 16で複数 drawable の最小 layer workflow として、一覧から draw order move up/down と runtime visibility hide/show を操作し、preview / persistence / evidence で確認できる。Wave 17で generated mesh の単一 vertex row を deterministic に nudge し、preview SVG polygon、operation log、package file set、save-load で確認できる。Wave 18で metadata-backed split PNG source intake から imported source layer を選び、既存 createDrawable / generateMesh / save-load へ進める一周が implementation-proven。Wave 20で manual PSD adapter/profile metadata から imported source layer を existing createDrawable / generateMesh / preview / save-load workflowへ進める一周が implementation-proven。Wave 21でそのPSD metadataが structured profile として保存・再表示される。Wave 22で source/texture binary refs の availability/missing/unsupported 状態を metadata-only として保存・表示できる。Wave 23で minimal dynamics group authoring と preview run/reset が save-load smoke まで implementation-proven。Wave 24で保存済み package / active document を Viewer / Runtime surface で runtime inspection できる。Wave 25で project-defined `rotation2d` rig controls を作成し、child rig/drawable binding、Preview summary、Viewer evidence、save-load を確認できる。Wave 27で Composition / Mask / Opacity panel から semantic mask relation と最小 opacity evidence を作成し、Preview / Viewer / save-load smoke で確認できる。Wave 29で canvas/SVG上のmesh vertex selection、single/multi-vertex translate、operation commit、Preview / Viewer evidence、save-load smokeまで確認できる。Wave30で既存semantic slicesを束ねた tutorial mini model guided workflow、readiness panel、small mesh edit、Preview / Viewer evidence、save-load reinspectionまで確認できる。Wave31でbrowser `<input type=file>` actual-byte intake、current-session binary evidence、validator diagnostics、save/load reupload truthfulnessまで確認できる。Wave33でlayer tree上のexplicit controlsによるrename、reparent、empty-leaf delete、drawable reassignment、texture assignment、Preview / Viewer / validation evidence、save-load reinspectionまで確認できる。Wave38でbounded topology / UV edit controls、add/remove vertex/triangle、UV nudge、Preview / Viewer / Validator evidence、save-load reinspectionまで確認できる。 | Real PSD parser、real PNG/PSD decode/materialization、real texture pipeline、persistent binary upload/storage、archive/file import-export、advanced/freeform topology tools、edge tools、UV unwrap、atlas packing、automatic triangulation、native drag-and-drop layer tree、multi-select bulk operations、group transform、recursive delete、delete-with-reassign、full canvas mask editor、pixel clipping renderer、general opacity timeline editor、advanced dynamics graph/timeline/collision controls、public tutorial asset / demo captureは未完または未検証。Wave 22の到達点は binary asset reference/storage boundary and metadata persistence であり、actual PSD/PNG bitmap rendering ではない。Wave31の到達点は current-session actual-byte intake であり、parser/decode/texture materialization/persistent binary storageではない。Wave 23の到達点は Minimum Open Dynamics v1 であり、Cubism Physics互換や高度な物理simulationではない。Wave 24の到達点は semantic Viewer / Runtime inspection であり、full renderer / standalone viewer app ではない。Wave 25の到達点は semantic Rig Controls workflow であり、Cubism deformer互換、direct physics、canvas rig editor ではない。Wave 27の到達点は semantic composition evidence であり、pixel clipping / full renderer ではない。Wave 29の到達点は semantic canvas mesh editing であり、full rendererではない。Wave30の到達点は rights-clean synthetic semantic tutorial workflow であり、public tutorial asset / full renderer / real image bytes ではない。Wave33の到達点は explicit-control layer tree direct manipulationであり、native drag-and-drop、multi-select、recursive delete、full rendererではない。Wave38の到達点は bounded semantic topology / UV editing であり、automatic triangulation、atlas packing、texture sampling correctness、full rendererではない。 |
-| Private Viewer / editor preview | Runtime core、snapshot/evidence、runtime diff、Grid2D evidenceはある。Wave 14で editor embedded preview panel、preview-only slider、runtime-projected SVG visual/summary、desktop/mobile smoke は implementation-proven。Wave 24で editor-internal Viewer / Runtime surface、viewer parameter sliders、runtime snapshot/diff/diagnostics、package identity、save/load後の viewer snapshot recompute、preview-vs-viewer semantic equivalence fixture が implementation-proven。Wave 27で Viewer / Runtime が semantic mask relation evidence と drawable opacity evidence を表示し、save/load後に再検査できる。 | 残るviewer gapは、standalone viewer app、full renderer / texture pipeline、renderer adapter、pixel-level oracle、demo capture用viewer scene。これらは未完または未検証。 |
-| Rig control | Wave 25で project-defined Minimum Rig Control v1 として、`rotation2d` authoring operation、child drawable / child rig binding、runtime hierarchy/evidence、validator diagnostics、fixtures、editor Preview / Viewer workflow、browser-local persistence smoke まで確認された。Wave 26で `rigControl:angleDegrees` keyform target application、operation/fixture evidence、runtime/validator evidence hardening、editor keyform UX、Viewer / Runtime reinspection、browser-local save/load smoke まで確認された。Wave32で project-defined `warpLattice2d` authoring、`controlPointOffsets` keyform、semantic bilinear evaluator、validator diagnostics、Editor / Preview / Viewer workflow、fixtures、desktop/mobile save-load e2e smoke まで確認された。 | `angleDegrees` / `controlPointOffsets`以外の broader rig-control keyform workflow、canvas lattice gizmo、timeline/multi-control authoring、direct physics output、Cubism deformer compatibility は future scope。 |
-| Advanced dynamics / physics | Minimum Open Dynamics v1 は Wave 23 で implementation-proven。 | Cubism Physics互換、direct vertex physics、cloth/collision/IK、timeline bake、full graph editor、automatic tuning、direct rigControl physics output は未実装かつ非目標または future scope。 |
-| Validator | package schema、runtime load/evidence、validation report/artifacts、fixture regressions、Minimum Open Dynamics v1 diagnostics、Wave 27 mask composition diagnostics、Wave29 mesh topology diagnostics、Wave30 tutorial readiness profile / preflight diagnostics、Wave31 byte intake diagnostics、Wave34 `byteAvailability.*` direct-call diagnostics、Wave37 `transportCapability.*` package transport boundary diagnostics、Wave39 MVP-wide Product Preflight Report aggregation はある。 | 最終 acceptance runner、demo-safe分類や実素材preflightの完全レポートは未完。Tutorial readinessはWave30 synthetic mini modelに限定される。Validator contract prose does not yet enumerate every Wave34 `byteAvailability.*` check, though source catalog/tests/fixtures pin behavior. |
-| AI assistant | deterministic command host、read/validate/dry-run/approval/commit、transcript persistence、Wave39 Product Preflight observation helper/schema はある。 | LLM provider、prompt template、natural-language repair、repair candidate generation/ranking、standalone `getDiff`、`rerunValidation`、executable AI Product Preflight command / host wiring は未実装。 |
-| Package durability | Browser-local save/load/reset はある。Wave 22で binary refs と storage status は browser-local metadata として保存・再読込できる。Wave31でactual selected bytesをcurrent-session package-local binary evidenceとして登録できる。Wave34でdirect caller / validator / editor session が stale summary、missing current-session bytes、requiresReupload を deterministic に扱う契約を固めた。Wave35でsame-origin browser-local IndexedDBにraw bytesを保存し、browser-local reload後もdigest / byteLength検証を通ったbytesだけをno-reupload availableへ復元できる。Wave36でproject-defined portable JSON bundle v0としてactual bytesをbase64同梱し、export/import後にno-reupload availableへ復元できる。Wave37でarchive/filesystem transport capability boundary、package-format guards、validator diagnostics、Editor truthfulness UIが追加され、portable JSON bundleだけがsupportedであることを固定した。 | OS filesystem picker、ZIP/archive writer、File System Access API、drag-drop、cross-browser-profile/cloud persistence、quota/private-browsing guarantees は future work。Wave37はこれらの非対応をtruthfulに表示・診断する境界であり、実装そのものではない。 |
-| Demo-safe capture | track方針とdemo policy文書はある。 | 実際のcapture scene、素材、preflight自動検査、最終disclaimer、配信可能な画面セットは未実装または未決。 |
+- Cubism SDK/Core integration。
+- `.moc3` と `.model3.json` を含む Cubism import/export/load compatibility。
+- Cubism Physics compatibility。
+- repo-side LLM/provider/prompt integration、natural-language repair、repair candidate generation/ranking、auto-fix。
+- Product Preflight、Viewer evidence、PSD metadata、byte intake、portable JSON bundle が parser/decode/archive/filesystem/renderer/pixel/Cubism support を証明するという主張。
 
-## 4. Not Implemented / Future Scope
+## Evidence 入口
 
-| 種別 | 内容 |
+| Evidence | Link |
 |---|---|
-| 明示的な非目標 | Cubism SDK/Core利用、Cubism形式 import/export、既存Cubism model loading、Cubism Editor UI reproduction、Cubism Viewer compatibility。これは「未実装の欠落」ではなく、現在方針で作らないもの。 |
-| 外部接続 | HTTP / WebSocket / MCP transport、LLM provider integration、外部caller向けadapter。Wave 8-12で繰り返し Future scope とされている。 |
-| 公開・配布 | Future SDK、Future integration surface、Future streaming app、OBS output、plugin system、marketplace / registry、public sample distribution、code/binary distribution。 |
-| 高度な物理・animation | Cubism Physics互換、direct vertex physics、direct rigControl physics output、cloth simulation、collision、IK、timeline bake、AI automatic dynamics tuning、timeline animation editor、motion export、lip sync、video editor。 |
-| 完成素材・法務判断 | 配信用素材、capture scene、最終disclaimer、法務/特許クリア判断、最初にLive2Dへ提案する機能テーマ。 |
-| Future Public Clean Subset | 将来公開する場合の最小subset設計とrights/dependency review。現在MVP外。 |
-| Real PSD / image intake | Actual PSD parser、PSD channel decode、PNG/image decode、raster extraction、Photoshop-compatible compositing、ZIP/archive import/export、filesystem import/export、image/parser/archive dependency selection。Wave 20-21 はPSD parser-free metadata path、Wave 22 は binary asset reference/storage metadata boundary、Wave31はbrowser `<input type=file>` current-session byte intake、Wave35はsame-origin browser-local IndexedDB byte restore、Wave36はproject-defined portable JSON bundle byte round-trip、Wave37はarchive/filesystem decision boundaryに限定しており、parser/decode/materialization/ZIP archive/filesystem persistenceを意図的に実装していない。 |
+| Implementation map | [_map.md](_map.md) |
+| Orchestration map | [orchestration/_map.md](orchestration/_map.md) |
+| Wave39 final report | [waves/wave39/wave39-final-report.md](waves/wave39/wave39-final-report.md) |
+| Wave39 clean integration review | [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) |
+| 2026-06-04 capability/backlog inventory | [reports/current-capability-backlog-inventory-2026-06-04.md](reports/current-capability-backlog-inventory-2026-06-04.md) |
+| 残作業と decision gates | [remaining-work-backlog.md](remaining-work-backlog.md) |
 
-## 5. Evidence / Where To Verify
+## ユーザー判断点
 
-| 確認したいこと | 入口 |
-|---|---|
-| 現在の製品方針 | [../concept/modified_concept.md](../concept/modified_concept.md) |
-| MVPの成功条件 / 非目標 | [../acceptance-criteria/03_MVP_Acceptance_Criteria.md](../acceptance-criteria/03_MVP_Acceptance_Criteria.md) |
-| 実装Wave全体の入口 | [_map.md](_map.md) |
-| Orchestration plan一覧 | [orchestration/_map.md](orchestration/_map.md) |
-| Editor UI / persistenceの到達点 | [waves/wave6/wave6-final-report.md](waves/wave6/wave6-final-report.md), [waves/wave7/wave7-final-report.md](waves/wave7/wave7-final-report.md) |
-| AI command / approval / read validation | [waves/wave8/wave8-final-report.md](waves/wave8/wave8-final-report.md), [waves/wave9/wave9-final-report.md](waves/wave9/wave9-final-report.md), [waves/wave10/wave10-final-report.md](waves/wave10/wave10-final-report.md) |
-| Keyform authoring / runtime evaluation / Grid2D evidence | [waves/wave11/wave11-final-report.md](waves/wave11/wave11-final-report.md), [waves/wave12/wave12-final-report.md](waves/wave12/wave12-final-report.md), [waves/wave13/wave13-final-report.md](waves/wave13/wave13-final-report.md) |
-| Editor embedded preview foundation | [waves/wave14/wave14-final-report.md](waves/wave14/wave14-final-report.md), [waves/wave14/integration-review.md](waves/wave14/integration-review.md) |
-| Drawable / layer / mesh vertex editing workflow | [waves/wave15/wave15-final-report.md](waves/wave15/wave15-final-report.md), [waves/wave16/wave16-final-report.md](waves/wave16/wave16-final-report.md), [waves/wave17/wave17-final-report.md](waves/wave17/wave17-final-report.md) |
-| Split PNG source asset / rights / provenance intake | [waves/wave18/wave18-final-report.md](waves/wave18/wave18-final-report.md), [reviews/wave18/wave18-integration-review-and-final-report-review.md](reviews/wave18/wave18-integration-review-and-final-report-review.md) |
-| Texture-backed preview / source layer part mapping | [waves/wave19/wave19-final-report.md](waves/wave19/wave19-final-report.md), [reviews/wave19/wave19-integration-review-and-final-report-review.md](reviews/wave19/wave19-integration-review-and-final-report-review.md) |
-| Parser-free PSD adapter/profile intake | [waves/wave20/wave20-final-report.md](waves/wave20/wave20-final-report.md), [reviews/wave20/wave20-clean-integration-review.md](reviews/wave20/wave20-clean-integration-review.md) |
-| Structured PSD profile persistence | [waves/wave21/wave21-final-report.md](waves/wave21/wave21-final-report.md), [reviews/wave21/wave21-clean-integration-review.md](reviews/wave21/wave21-clean-integration-review.md) |
-| Binary asset reference/storage metadata boundary | [waves/wave22/wave22-final-report.md](waves/wave22/wave22-final-report.md), [waves/wave22/_map.md](waves/wave22/_map.md), [reviews/wave22/wave22-clean-integration-review.md](reviews/wave22/wave22-clean-integration-review.md)。 |
-| Minimum Open Dynamics v1 vertical slice | [waves/wave23/wave23-final-report.md](waves/wave23/wave23-final-report.md), [waves/wave23/_map.md](waves/wave23/_map.md), [reviews/wave23/wave23-clean-integration-review.md](reviews/wave23/wave23-clean-integration-review.md)。 |
-| Private Viewer v0 runtime inspection surface | [waves/wave24/wave24-final-report.md](waves/wave24/wave24-final-report.md), [waves/wave24/_map.md](waves/wave24/_map.md), [reviews/wave24/wave24-clean-integration-review.md](reviews/wave24/wave24-clean-integration-review.md)。 |
-| Minimum Rig Control v1 vertical slice | [waves/wave25/wave25-final-report.md](waves/wave25/wave25-final-report.md), [waves/wave25/_map.md](waves/wave25/_map.md), [reviews/wave25/_map.md](reviews/wave25/_map.md)。 |
-| Mask / Clipping / Opacity Authoring v1 | [waves/wave27/wave27-final-report.md](waves/wave27/wave27-final-report.md), [waves/wave27/_map.md](waves/wave27/_map.md), [reviews/wave27/_map.md](reviews/wave27/_map.md)。 |
-| Part / Texture / Layer Tree Workflow v1 | [waves/wave28/wave28-final-report.md](waves/wave28/wave28-final-report.md), [waves/wave28/_map.md](waves/wave28/_map.md), [reviews/wave28/_map.md](reviews/wave28/_map.md)。Clean review path: [reviews/wave28/wave28-clean-integration-review.md](reviews/wave28/wave28-clean-integration-review.md)。 |
-| Canvas Mesh Editing v1 | [waves/wave29/wave29-final-report.md](waves/wave29/wave29-final-report.md), [waves/wave29/_map.md](waves/wave29/_map.md), [reviews/wave29/_map.md](reviews/wave29/_map.md), [reviews/wave29/wave29-clean-integration-review.md](reviews/wave29/wave29-clean-integration-review.md)。 |
-| Tutorial-like MVP Mini Model v0 | [waves/wave30/wave30-final-report.md](waves/wave30/wave30-final-report.md), [waves/wave30/_map.md](waves/wave30/_map.md), [reviews/wave30/_map.md](reviews/wave30/_map.md), [reviews/wave30/wave30-clean-integration-review.md](reviews/wave30/wave30-clean-integration-review.md)。 |
-| Browser byte intake pilot v0 | [waves/wave31/wave31-final-report.md](waves/wave31/wave31-final-report.md), [waves/wave31/_map.md](waves/wave31/_map.md), [reviews/wave31/_map.md](reviews/wave31/_map.md), [reviews/wave31/wave31-clean-integration-review.md](reviews/wave31/wave31-clean-integration-review.md)。 |
-| WarpLattice2d rig-control authoring / evaluator v0 | [waves/wave32/wave32-final-report.md](waves/wave32/wave32-final-report.md), [waves/wave32/_map.md](waves/wave32/_map.md), [reviews/wave32/_map.md](reviews/wave32/_map.md), [reviews/wave32/wave32-clean-integration-review.md](reviews/wave32/wave32-clean-integration-review.md)。 |
-| Layer Tree Direct Manipulation / Part Tree UX v0 | [waves/wave33/wave33-final-report.md](waves/wave33/wave33-final-report.md), [waves/wave33/_map.md](waves/wave33/_map.md), [reviews/wave33/_map.md](reviews/wave33/_map.md), [reviews/wave33/wave33-clean-integration-review.md](reviews/wave33/wave33-clean-integration-review.md)。 |
-| Byte intake direct-call contract hardening v0 | [waves/wave34/wave34-final-report.md](waves/wave34/wave34-final-report.md), [waves/wave34/_map.md](waves/wave34/_map.md), [reviews/wave34/_map.md](reviews/wave34/_map.md), [reviews/wave34/wave34-clean-integration-review.md](reviews/wave34/wave34-clean-integration-review.md)。 |
-| Browser-local persistent binary storage v0 | [waves/wave35/wave35-final-report.md](waves/wave35/wave35-final-report.md), [waves/wave35/_map.md](waves/wave35/_map.md), [reviews/wave35/_map.md](reviews/wave35/_map.md), [reviews/wave35/wave35-clean-integration-review.md](reviews/wave35/wave35-clean-integration-review.md)。 |
-| Project-defined portable package bundle v0 | [waves/wave36/wave36-final-report.md](waves/wave36/wave36-final-report.md), [waves/wave36/_map.md](waves/wave36/_map.md), [reviews/wave36/_map.md](reviews/wave36/_map.md), [reviews/wave36/wave36-clean-integration-review-sylph.md](reviews/wave36/wave36-clean-integration-review-sylph.md)。 |
-| Package archive / filesystem decision boundary v0 | [waves/wave37/wave37-final-report.md](waves/wave37/wave37-final-report.md), [waves/wave37/_map.md](waves/wave37/_map.md), [reviews/wave37/_map.md](reviews/wave37/_map.md), [reviews/wave37/wave37-clean-integration-review-sylph-final.md](reviews/wave37/wave37-clean-integration-review-sylph-final.md)。 |
-| Mesh Topology / UV Editor Expansion v0 | [waves/wave38/wave38-final-report.md](waves/wave38/wave38-final-report.md), [waves/wave38/_map.md](waves/wave38/_map.md), [reviews/wave38/_map.md](reviews/wave38/_map.md), [reviews/wave38/wave38-clean-integration-review.md](reviews/wave38/wave38-clean-integration-review.md)。 |
-| MVP-wide Validator Product Report / Preflight v0 | [waves/wave39/wave39-final-report.md](waves/wave39/wave39-final-report.md), [waves/wave39/_map.md](waves/wave39/_map.md), [reviews/wave39/_map.md](reviews/wave39/_map.md)。 |
-| Source-level spot check | `packages/contracts`, `packages/package-format`, `packages/authoring-core`, `packages/operation-core`, `packages/runtime-core`, `packages/validator-core`, `packages/ai-interface`, `apps/editor`, `fixtures/contracts` |
-
-## 6. Next-Wave Candidates And Decision Points
-
-| 候補 | 目的 | 判断ポイント |
-|---|---|---|
-| Package archive / filesystem implementation decision | Wave37でtransport capability boundary、truthful diagnostics、Editor capability UIは完了した。次に進める場合は、actual ZIP/archive writer/importer、filesystem import/export、File System Access API / directory picker、drag-drop、cloud/cross-profile persistenceを別waveで扱う。 | ZIP/archive / filesystem / dependency approval をどこまで許可するか。Project-defined JSON bundleとWave37 boundaryで十分とみなすか、archive/filesystem persistenceへ進むか。 |
-| Real texture pipeline expansion | Wave 19-22 の texture preview / adapter metadata / binary ref path を、rights-clean actual PNG bytes/decode/materializationへ広げる。 | PSD raster extractionより先に、PNG texture bytesとpackage-local binary asset lifecycleを実バイトで証明するか。依存関係承認が必要。 |
-| Editor / viewer product workflow expansion | Wave 15のgenerated drawable / mesh slice、Wave 16の最小 layer controls、Wave 17の最小 mesh vertex nudge、Wave 18のmetadata-backed split PNG source intake、Wave 20-21のparser-free PSD adapter/profile intake and structured persistence、Wave 22のbinary ref/missing bytes UX、Wave 23のMinimum Open Dynamics v1、Wave 24のViewer / Runtime inspection surface、Wave 25のMinimum Rig Control v1 workflow、Wave 27のsemantic Composition / Mask / Opacity workflow、Wave 28のminimum part / texture / layer tree workflow、Wave 29のCanvas Mesh Editing v1、Wave30のTutorial-like MVP Mini Model v0、Wave33のLayer Tree Direct Manipulation / Part Tree UX v0、Wave38のbounded mesh topology / UV editor を足場に、MVPの大きな未完領域であるGUI authoringとviewer確認をさらに進める。 | 次に、advanced/freeform topology・UV unwrap・atlas・automatic triangulation、layer tree native drag/drop・multi-select・group transform、advanced dynamics controls、broader rig-control hardening、viewer inspection hardening、standalone viewer/renderer、public tutorial/demo asset、または pixel/full renderer 境界のどれへ進むか。 |
-| Project import/export wave | browser-local persistenceとWave36 project-defined JSON bundleから、package archive / filesystem import/exportへ広げる。 | MVP評価でproject-defined JSON bundleを十分とみなすか、早めにZIP/archive/filesystemの出入口を作るか。 |
-| AI repair / diff wave | AI assistantを「観測と承認」から「修復候補提示」へ進める。 | Wave39でProduct Preflight observation helper/schemaはできたが、repair candidate、standalone diff、rerun validation、LLM provider / prompt boundary は未実装。 |
-| Rig control follow-up hardening | Wave 26で `rigControl:angleDegrees` keyform workflow、Wave32で `warpLattice2d` / `controlPointOffsets` workflow は implementation-proven。次に進めるなら、broader property support、browser-level invalid-submit diagnostics、timeline/multi-control UX、または canvas lattice gizmo へ広げる。 | Direct physics output、Cubism deformer互換、canvas/timeline editor へ広げるかは別判断。 |
-
-未決の大きな判断:
-
-- Wave36後、real PSD parserへ進む前に、ZIP/archive / filesystem import-export / image dependency policy を実装 wave として進めるか。
-- `Private Viewer` を editor-internal Viewer / Runtime surface として段階的に育て続けるか、別viewer app/surfaceとして切り出すか。
-- MVPの次の「一周」証拠を、runtime keyform fixture中心にするか、実際の小さな可動キャラクター制作workflow中心にするか。
-
-Assumptions / uncertainties:
-
-- このマップは指定文書とfocused source tree inspectionに基づく。広範なコードレビューはしていない。
-- 「未完または未検証」は、Wave final reportと現在の入口文書だけでは製品ワークフロー完了を断定できなかった領域を指す。
+- Wave39 後に優先する次のプロダクト境界: Codex-facing proposal/diff validation、Product Preflight acceptance gates、archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration のどれにするか。
+- Product Preflight v0 を session-only のままにするか、persisted/exported package artifact にするか。
+- public rights-clean real assets を許可するか、また private/local fixtures を distributable demo material からどう分離するか。
+- Viewer を editor-internal semantic inspection のままにするか、standalone/full-renderer work に進めるか。

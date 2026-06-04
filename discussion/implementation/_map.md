@@ -111,6 +111,7 @@ discussion/implementation/
 | [orchestration/wave37-plan.md](orchestration/wave37-plan.md) | Wave 37 Package Archive / Filesystem Import-Export Decision Boundary v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave38-plan.md](orchestration/wave38-plan.md) | Wave 38 Mesh Topology / UV Editor Expansion v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave39-plan.md](orchestration/wave39-plan.md) | Wave 39 MVP-wide Validator Product Report / Preflight v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave40-plan.md](orchestration/wave40-plan.md) | Wave 40 Codex-facing Rigging Edit Proposal API / Diff Validation Surface v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -226,6 +227,6 @@ discussion/implementation/
 
 ## Next Actions
 
-1. Choose the next Wave40 boundary from [current-capability-map.md](current-capability-map.md) and [remaining-work-backlog.md](remaining-work-backlog.md).
+1. Use [orchestration/wave40-plan.md](orchestration/wave40-plan.md) as the planned Wave40 boundary: Codex-facing proposal intake, validation, dry-run diff, rerun validation, approval, and evidence surface.
 2. Keep external HTTP/WebSocket/MCP transport and LLM provider integration in Future scope unless the current MVP boundary is explicitly changed.
 3. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.
