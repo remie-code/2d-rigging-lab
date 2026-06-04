@@ -8,6 +8,7 @@
 - Wave39 Product Preflight v0 は、Editor run/read/save/load/rerun evidence を持つ truthful で session-generated な read-only product report として `implementation-proven`。
 - Wave40 Codex-facing proposal API / diff validation surface は、Codex-submitted proposal の deterministic operation catalog、schema/catalog/preflight validation、dry-run diff preview、rerun validation / Product Preflight、approval-gated commit、transcript/evidence recording、Editor review workflow、fixtures、desktop/mobile e2e smoke として `implementation-proven`。
 - Wave41 Product Preflight read/diff/report ergonomics は、deterministic Product Preflight report diff、category/status transition summary、evidence/diagnostic ref changes、rerun affordance、Codex-facing read/diff command helpers、Editor comparison workflow、fixtures、desktop/mobile focused e2e smoke として `implementation-proven`。
+- Product Preflight は、現在の趣味/個人利用ツールの範囲では session-generated read-only report のままにする。Codex は read/diff/rerun affordance から必要なPreflight情報を取得できるため、persisted/exported artifact、CI/release gate、demo gate、Codex以外の外部ツール向けPreflight artifactは、具体的な必要が出るまでスコープ外とする。
 - AI inference と repair proposal generation は Codex 側の責務。
 - repo/tool 側の責務は Codex-facing API、state/preflight read、operation catalog、proposal validation、dry-run、diff surface、rerun validation surface、approval-gated commit、transcript、evidence recording。
 - repo-side repair candidate generation、candidate ranking、natural-language repair、LLM provider integration、auto-fix は主張しない。
@@ -27,17 +28,15 @@
 
 | 候補 | Scope boundary（範囲境界） | 補足 |
 |---|---|---|
-| Product Preflight follow-up: gate/durability decision prep | Wave41で read/diff/report ergonomics は完了済み。次に Product Preflight を session-only に留めるか、durability/export/gate へ進めるかを判断するための小さな design/report task は追加判断なしに準備できる。 | 実際の persisted/exported artifact、release/demo gate 実装はユーザー判断が必要。 |
 | Documentation/map consistency refresh | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md` は Wave41 final report に合わせて同期済み。今後のwave報告時も同じ非目標境界を維持する。 | 次 wave 完了時に final report / maps / backlog へ反映する。 |
-| Quality gate tightening | Fresh checkout replay、`check:source` blind spots、e2e decomposition、traceability/doc refresh、validator contract doc refresh、schema cleanup、runtime/viewer naming cleanup、dynamics create-flow atomicity。 | 変更は小さく、file-scoped に保つ。 |
+| Quality gate tightening | Wave42 `quality-gate-e2e-registry-source-guardrails-v0` として計画済み。Focused e2e registry/replay、`check:source` blind spots、dependency / forbidden-scope guard、traceability/doc refreshを小さく強化する。 | 変更は小さく、file-scoped に保つ。schema cleanup、runtime/viewer naming cleanup、dynamics create-flow atomicityは別wave候補として残す。 |
 | Product Preflight fixture/traceability sync | warning-gated markdown rows に machine-readable mirror が後で必要になった場合、Wave40 / Wave39 とそれ以前の比較可能な rows をまとめて backfill する。 | 現在の Wave40 / Wave39 review では JSON mirror update なしが受理済み。 |
 
 ## ユーザー判断が必要
 
 | 判断 | 方向付けが必要な理由 |
 |---|---|
-| Wave40 後の次の product priority | 実行可能な候補が focus を取り合う: Product Preflight acceptance gates、Product Preflight durability/export、archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration。 |
-| Product Preflight durability | v0 を session-only のままにするか、persisted/exported package artifact と possible release/demo gate input にするかを決める必要がある。 |
+| Wave42 後の次の product priority | 実行可能な候補が focus を取り合う: archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration。Product Preflight durability/export と acceptance/demo gate は、趣味/個人利用では当面スコープ外とする受理済み判断がある。 |
 | Public/demo asset policy | real rights-clean public assets をいつ許可するか、private/local fixtures を distributable demo assets からどう分離するかを決める必要がある。 |
 | Archive/filesystem implementation | project-defined JSON bundle で当面十分か、ZIP/archive、File System Access API、directory picker、drag-drop、native filesystem、cloud/cross-profile persistence を実装するかを決める必要がある。 |
 | Real image/PSD pipeline | real PSD/PNG layer/raster/materialization work の前に、parser/decode dependencies、security posture、fixture policy、acceptance oracle を決める必要がある。 |
@@ -68,6 +67,7 @@
 ## 文書 / 品質負債
 
 - Wave41 Product Preflight read/diff/report ergonomics と deterministic repo-side report comparison boundary は final report、map、capability map へ同期済み。
+- Product Preflight durability/export、CI/release gate、demo gate、外部ツール向けPreflight artifactは、具体的な必要が出るまで保留する。現時点ではCodex-facing read/diff/rerun affordanceとEditor session reportで足りる。
 - Validator contract prose は、新しい byte availability、portable bundle、transport、topology/UV、warp lattice、Product Preflight diagnostics を適切な粒度で列挙するよう refresh するべき。
 - E2E smoke coverage は広い。将来の wave が shared Editor workflow に触れる場合は、分解を継続するべき。
 - Source organization と `check:source` guardrails は、blind spots が見つかった場所で broad refactor なしに tighten するべき。
