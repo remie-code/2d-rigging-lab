@@ -54,6 +54,7 @@ import {
   applyViewerParameterValue,
   closeViewerRuntimeSurface as closeViewerRuntimeStateSurface,
   createFailedProductPreflightState,
+  createEmptyCodexProposalReviewState,
   createEditorStateFileFromEditorState,
   openViewerRuntimeSurface as openViewerRuntimeStateSurface,
   projectEditorWorkflowViewModel,
@@ -194,6 +195,14 @@ import {
   runEditorProductPreflightWorkflow,
   type EditorProductPreflightWorkflowResult
 } from "./product-preflight-workflow.js";
+import {
+  approveCodexProposalReview,
+  commitApprovedCodexProposalReview,
+  requestCodexProposalReviewApproval,
+  reviewCodexProposalText,
+  type EditorWorkflowCodexProposalApprovalResult,
+  type EditorWorkflowCodexProposalReviewResult
+} from "./codex-proposal-review-workflow.js";
 
 export type {
   EditorWorkflowCreateDynamicsGroupCommand,
@@ -421,6 +430,11 @@ export interface EditorWorkflowController {
   setViewerParameterValue(parameterId: string, value: number): ViewerParameterSetResult;
   resetViewerParameterValues(): EditorWorkflowViewerResetResult;
   runProductPreflight(): Promise<EditorWorkflowProductPreflightResult>;
+  reviewCodexProposalText(proposalText: string): Promise<EditorWorkflowCodexProposalReviewResult>;
+  clearCodexProposalReview(): void;
+  requestCodexProposalReviewApproval(): EditorWorkflowCodexProposalApprovalResult;
+  approveCodexProposalReview(): EditorWorkflowCodexProposalApprovalResult;
+  commitApprovedCodexProposalReview(): Promise<EditorWorkflowCodexProposalApprovalResult>;
   dryRunAiCreateParameterCommand(): Promise<EditorWorkflowAiDryRunResult>;
   approveLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
   rejectLatestAiDryRun(): EditorWorkflowAiApprovalDecisionResult;
@@ -1208,6 +1222,61 @@ export const createEditorWorkflowController = (
           message
         };
       }
+    },
+    async reviewCodexProposalText(proposalText) {
+      const outcome = await reviewCodexProposalText({
+        adapter,
+        state,
+        proposalText,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+
+      return outcome.result;
+    },
+    clearCodexProposalReview() {
+      state = {
+        ...state,
+        codexProposalReview: createEmptyCodexProposalReviewState()
+      };
+    },
+    requestCodexProposalReviewApproval() {
+      const outcome = requestCodexProposalReviewApproval({
+        state,
+        aiCommandHost,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+
+      return outcome.result;
+    },
+    approveCodexProposalReview() {
+      const outcome = approveCodexProposalReview({
+        state,
+        aiCommandHost,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+
+      return outcome.result;
+    },
+    async commitApprovedCodexProposalReview() {
+      const outcome = await commitApprovedCodexProposalReview({
+        adapter,
+        state,
+        aiCommandHost,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+      if (outcome.result.latestSessionPersistenceResult !== undefined) {
+        latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+      }
+      if (outcome.result.status === "committed") {
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
     },
     dryRunAiCreateParameterCommand: aiApprovalActions.dryRunAiCreateParameterCommand,
     approveLatestAiDryRun: aiApprovalActions.approveLatestAiDryRun,

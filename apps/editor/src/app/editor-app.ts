@@ -209,6 +209,26 @@ export function mountEditorApp(root: HTMLElement): void {
           await workflow.runProductPreflight();
           render();
         },
+        async onReviewCodexProposalText(proposalText) {
+          await workflow.reviewCodexProposalText(proposalText);
+          render();
+        },
+        onClearCodexProposalReview() {
+          workflow.clearCodexProposalReview();
+          render();
+        },
+        onRequestCodexProposalApproval() {
+          workflow.requestCodexProposalReviewApproval();
+          render();
+        },
+        onRecordCodexProposalApproval() {
+          workflow.approveCodexProposalReview();
+          render();
+        },
+        async onCommitApprovedCodexProposal() {
+          await workflow.commitApprovedCodexProposalReview();
+          render();
+        },
         async onExportPortableBundle() {
           const result = await workflow.exportPortableBundle();
           render();

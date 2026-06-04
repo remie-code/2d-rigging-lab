@@ -333,18 +333,31 @@ const assertProductPreflightReport = (report, label) => {
     }
   }
 
-  const runtimeViewer = byCategory.get("runtimeViewerEvidence");
-  if (runtimeViewer?.status === "not_evaluated") {
-    failures.push("runtimeViewerEvidence stayed not_evaluated even though editor preflight should run viewer evidence");
+  assertEvaluatedCategoryWithEvidence({
+    failures,
+    category: byCategory.get("runtimeViewerEvidence"),
+    categoryName: "runtimeViewerEvidence",
+    reason: "editor preflight should run viewer evidence"
+  });
+
+  const assetBytes = byCategory.get("assetBytes");
+  if (assetBytes?.status !== "pass") {
+    failures.push(`assetBytes status ${JSON.stringify(assetBytes?.status)} did not match pass`);
   }
-  if ((runtimeViewer?.evidenceRefCount ?? 0) < 1) {
-    failures.push("runtimeViewerEvidence did not expose any evidence refs");
-  }
-  if (summaryCounts.not_evaluated < 1 || rowCountTotals.notEvaluated < 1) {
-    failures.push(
-      `expected at least one truthful not_evaluated claim; summary=${summaryCounts.not_evaluated}, rows=${rowCountTotals.notEvaluated}`
-    );
-  }
+  assertEvaluatedCategoryWithEvidence({
+    failures,
+    category: assetBytes,
+    categoryName: "assetBytes",
+    reason: "editor preflight should verify browser package byte availability"
+  });
+
+  assertEvaluatedCategoryWithEvidence({
+    failures,
+    category: byCategory.get("tutorialDemoReadiness"),
+    categoryName: "tutorialDemoReadiness",
+    reason: "editor preflight should verify tutorial demo readiness"
+  });
+
   if (summaryCounts.evidenceRefs < 1) {
     failures.push(`expected evidence refs to be nonzero, received ${summaryCounts.evidenceRefs}`);
   }
@@ -581,6 +594,21 @@ const assertIssueSection = ({ failures, label, section, expectedCount, emptyText
     failures.push(
       `${label} section item count mismatch: expected ${expectedCount}, received ${JSON.stringify(section)}`
     );
+  }
+};
+
+const assertEvaluatedCategoryWithEvidence = ({ failures, category, categoryName, reason }) => {
+  if (category === undefined) {
+    return;
+  }
+
+  if (category.status === "not_evaluated" || category.notEvaluatedCount > 0) {
+    failures.push(
+      `${categoryName} stayed not_evaluated even though ${reason}; status=${category.status}, notEvaluatedClaims=${category.notEvaluatedCount}`
+    );
+  }
+  if (category.evidenceRefCount < 1) {
+    failures.push(`${categoryName} did not expose any evidence refs`);
   }
 };
 

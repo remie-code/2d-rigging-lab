@@ -1,0 +1,203 @@
+{
+  "schemaVersion": "wave40-codex-proposal-cases-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "createdAt": "2026-06-04T00:00:00.000Z",
+  "checkedAt": "2026-06-04T00:00:00.000Z",
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "packageId": "pkg_wave40CodexProposal",
+  "basePackageRevision": 0,
+  "cases": [
+    {
+      "caseId": "valid-proposal",
+      "proposal": {
+        "schemaVersion": "codex-rigging-edit-proposal-v0",
+        "proposalId": "proposal_wave40CodexValid",
+        "createdAt": "2026-06-04T00:00:00.000Z",
+        "source": {
+          "surface": "codex",
+          "agentId": "agent_wave40CodexFixture",
+          "submittedBy": "codex"
+        },
+        "packageContext": {
+          "packageId": "pkg_wave40CodexProposal",
+          "basePackageRevision": 0,
+          "packageHash": "hash_wave40CodexProposal",
+          "productPreflightReportId": "preflight_wave40CodexPass",
+          "productPreflightStatus": "pass",
+          "validationReportIds": [
+            "val_wave40Baseline"
+          ]
+        },
+        "metadata": {
+          "title": "Create Wave40 face part",
+          "summary": "Codex submitted a structured createPart proposal for preview validation.",
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ],
+          "userVisibleRationale": "Adds a semantic face part under the existing root part for review."
+        },
+        "operations": [
+          {
+            "stepId": "step_wave40CreateFacePart",
+            "operationType": "createPart",
+            "operationId": "op_wave40CreateFacePart",
+            "targetRefs": [
+              {
+                "kind": "part",
+                "id": "part_wave40CodexFace"
+              }
+            ],
+            "payload": {
+              "partId": "part_wave40CodexFace",
+              "displayName": "Wave40 Codex Face",
+              "parentPartId": "part_root"
+            },
+            "expectedPreconditions": [
+              {
+                "preconditionKind": "packageRevisionMatches",
+                "summary": "Proposal base package revision matches the preview session."
+              },
+              {
+                "preconditionKind": "preflightAllowsPreview",
+                "summary": "Supplied Product Preflight report is passing."
+              }
+            ],
+            "expectedOutcome": {
+              "summary": "Dry-run preview adds the face part without committing.",
+              "touchedTargetRefs": [
+                {
+                  "kind": "part",
+                  "id": "part_wave40CodexFace"
+                }
+              ],
+              "expectedEvidenceRefs": [
+                "evidence_proposal_wave40CodexValid_preview_wave40CodexValid_diffPreview"
+              ]
+            }
+          }
+        ],
+        "approvalPolicy": {
+          "requiresUserApproval": true,
+          "allowAutomaticCommit": false
+        },
+        "evidenceRefs": []
+      }
+    },
+    {
+      "caseId": "invalid-proposal",
+      "proposal": {
+        "schemaVersion": "codex-rigging-edit-proposal-v0",
+        "proposalId": "proposal_wave40CodexInvalid",
+        "createdAt": "2026-06-04T00:00:00.000Z",
+        "source": {
+          "surface": "codex",
+          "agentId": "agent_wave40CodexFixture",
+          "submittedBy": "codex"
+        },
+        "packageContext": {
+          "packageId": "pkg_wave40CodexProposal",
+          "basePackageRevision": 0,
+          "packageHash": "hash_wave40CodexProposal",
+          "productPreflightReportId": "preflight_wave40CodexPass",
+          "productPreflightStatus": "pass",
+          "validationReportIds": [
+            "val_wave40Baseline"
+          ]
+        },
+        "metadata": {
+          "title": "Invalid Wave40 part proposal",
+          "summary": "Codex submitted a schema-oriented proposal with an invalid createPart payload.",
+          "relatedAC": [
+            "AC-MVP-014"
+          ],
+          "relatedScenarios": [
+            "SC-AGENT-002"
+          ]
+        },
+        "operations": [
+          {
+            "stepId": "step_wave40InvalidCreatePart",
+            "operationType": "createPart",
+            "operationId": "op_wave40InvalidCreatePart",
+            "targetRefs": [
+              {
+                "kind": "part",
+                "id": "part_wave40CodexInvalid"
+              }
+            ],
+            "payload": {
+              "partId": "part_wave40CodexInvalid",
+              "parentPartId": "part_root"
+            },
+            "expectedPreconditions": [],
+            "expectedOutcome": {
+              "summary": "Validation rejects the missing displayName payload field.",
+              "touchedTargetRefs": [],
+              "expectedEvidenceRefs": []
+            }
+          }
+        ],
+        "approvalPolicy": {
+          "requiresUserApproval": true,
+          "allowAutomaticCommit": false
+        },
+        "evidenceRefs": []
+      }
+    },
+    {
+      "caseId": "unsupported-proposal",
+      "proposal": {
+        "schemaVersion": "codex-rigging-edit-proposal-v0",
+        "proposalId": "proposal_wave40CodexUnsupported",
+        "createdAt": "2026-06-04T00:00:00.000Z",
+        "source": {
+          "surface": "codex",
+          "agentId": "agent_wave40CodexFixture",
+          "submittedBy": "codex"
+        },
+        "packageContext": {
+          "packageId": "pkg_wave40CodexProposal",
+          "basePackageRevision": 0,
+          "packageHash": "hash_wave40CodexProposal",
+          "productPreflightReportId": "preflight_wave40CodexPass",
+          "productPreflightStatus": "pass",
+          "validationReportIds": [
+            "val_wave40Baseline"
+          ]
+        },
+        "metadata": {
+          "title": "Unsupported renderer oracle proposal",
+          "summary": "Codex submitted an unsupported operation that must remain non-committable.",
+          "relatedAC": [
+            "AC-MVP-016"
+          ],
+          "relatedScenarios": [
+            "SC-MVP-006"
+          ]
+        },
+        "operations": [
+          {
+            "stepId": "step_wave40RenderPixelOracle",
+            "operationType": "renderPixelOracle",
+            "targetRefs": [],
+            "payload": {},
+            "expectedPreconditions": [],
+            "expectedOutcome": {
+              "summary": "Validation records the renderer pixel oracle boundary as unsupported.",
+              "touchedTargetRefs": [],
+              "expectedEvidenceRefs": []
+            }
+          }
+        ],
+        "approvalPolicy": {
+          "requiresUserApproval": true,
+          "allowAutomaticCommit": false
+        },
+        "evidenceRefs": []
+      }
+    }
+  ]
+}

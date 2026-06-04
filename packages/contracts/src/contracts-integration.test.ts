@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   CheckIdSchema,
+  CodexProposalOperationCatalogDtoSchema,
+  CodexRiggingEditProposalDtoSchema,
   DiagnosticSchema,
   FieldChangeSchema,
   JsonValueSchema,
@@ -203,5 +205,46 @@ describe("contracts public surface integration", () => {
         bundleKind: "project-defined-json-bundle-v0"
       }
     });
+  });
+
+  it("exports Codex proposal contracts", () => {
+    const proposal = CodexRiggingEditProposalDtoSchema.parse({
+      schemaVersion: "codex-rigging-edit-proposal-v0",
+      proposalId: "proposal_integration",
+      createdAt: "2026-06-04T00:00:00.000Z",
+      source: {
+        surface: "codex",
+        agentId: "agent_integration"
+      },
+      packageContext: {
+        packageId: "pkg_integration",
+        basePackageRevision: 1
+      },
+      metadata: {
+        title: "Integration proposal",
+        summary: "Codex proposal public export smoke."
+      },
+      operations: [
+        {
+          stepId: "step_createParameter",
+          operationType: "createParameter",
+          operationId: "op_integrationParameter",
+          payload: {
+            parameterId: "param_integration"
+          }
+        }
+      ]
+    });
+    const catalog = CodexProposalOperationCatalogDtoSchema.safeParse({
+      schemaVersion: "codex-proposal-operation-catalog-v0",
+      catalogId: "catalog_integration",
+      unsupportedBoundaries: []
+    });
+
+    expect(proposal.approvalPolicy).toEqual({
+      requiresUserApproval: true,
+      allowAutomaticCommit: false
+    });
+    expect(catalog.success).toBe(false);
   });
 });

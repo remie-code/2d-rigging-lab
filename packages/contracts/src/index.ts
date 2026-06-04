@@ -18,3 +18,6 @@ export * from "./runtime-diff.js";
 export * from "./validation-diff.js";
 export * from "./package-transport-capability.js";
 export * from "./product-preflight-report.js";
+export * from "./codex-proposal.js";
+export * from "./codex-proposal-operation-catalog.js";
+export * from "./codex-proposal-results.js";

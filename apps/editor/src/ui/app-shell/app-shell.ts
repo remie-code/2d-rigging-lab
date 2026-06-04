@@ -59,6 +59,10 @@ import {
   type EditorDynamicsCreateCommand
 } from "../dynamics-panel/index.js";
 import {
+  createCodexProposalReviewPanel,
+  type CodexProposalReviewPanelCallback
+} from "../codex-proposal-review/index.js";
+import {
   createPackageFileSetPanel,
   createReloadSummaryPanel
 } from "../package-file-set/index.js";
@@ -143,6 +147,11 @@ export interface EditorAppShellOptions {
   readonly onLoadProject: () => void;
   readonly onResetProject: () => void;
   readonly onRunProductPreflight?: () => void | Promise<void>;
+  readonly onReviewCodexProposalText?: (proposalText: string) => void | Promise<void>;
+  readonly onClearCodexProposalReview?: CodexProposalReviewPanelCallback;
+  readonly onRequestCodexProposalApproval?: CodexProposalReviewPanelCallback;
+  readonly onRecordCodexProposalApproval?: CodexProposalReviewPanelCallback;
+  readonly onCommitApprovedCodexProposal?: CodexProposalReviewPanelCallback;
   readonly onExportPortableBundle?: () => void | Promise<void>;
   readonly onImportPortableBundleText?: (bundleText: string) => void | Promise<void>;
   readonly onCreateTutorialMiniModel: () => void;
@@ -353,6 +362,25 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       ? {}
       : { onRunProductPreflight: options.onRunProductPreflight })
   });
+  const codexProposalReviewPanel = createCodexProposalReviewPanel({
+    state: options.state.codexProposalReview,
+    isPackageLoaded: options.viewModel.isPackageLoaded,
+    ...(options.onReviewCodexProposalText === undefined
+      ? {}
+      : { onReviewProposalText: options.onReviewCodexProposalText }),
+    ...(options.onClearCodexProposalReview === undefined
+      ? {}
+      : { onClearReview: options.onClearCodexProposalReview }),
+    ...(options.onRequestCodexProposalApproval === undefined
+      ? {}
+      : { onRequestApproval: options.onRequestCodexProposalApproval }),
+    ...(options.onRecordCodexProposalApproval === undefined
+      ? {}
+      : { onRecordApproval: options.onRecordCodexProposalApproval }),
+    ...(options.onCommitApprovedCodexProposal === undefined
+      ? {}
+      : { onCommitApprovedProposal: options.onCommitApprovedCodexProposal })
+  });
   const aiApprovalPanel = createAiApprovalPanel({
     viewModel: options.viewModel,
     onDryRunCreateParameter: options.onDryRunAiCreateParameter,
@@ -392,6 +420,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     sourceIntakePanel,
     projectPersistencePanel,
     productPreflightPanel,
+    codexProposalReviewPanel,
     aiApprovalPanel,
     aiTranscriptPanel,
     persistencePanel

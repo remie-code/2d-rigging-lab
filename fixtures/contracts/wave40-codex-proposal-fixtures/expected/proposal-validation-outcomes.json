@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "wave40-codex-proposal-validation-outcomes-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "checkedAt": "2026-06-04T00:00:00.000Z",
+  "cases": [
+    {
+      "caseId": "valid-proposal",
+      "proposalId": "proposal_wave40CodexValid",
+      "expectedStatus": "valid",
+      "expectedCanPreview": true,
+      "expectedCanRequestApproval": true,
+      "expectedApprovalReady": true,
+      "expectedOperationStatuses": [
+        {
+          "stepId": "step_wave40CreateFacePart",
+          "operationType": "createPart",
+          "status": "valid",
+          "issueIds": []
+        }
+      ],
+      "expectedIssueCodes": [],
+      "expectedIssueIds": []
+    },
+    {
+      "caseId": "invalid-proposal",
+      "proposalId": "proposal_wave40CodexInvalid",
+      "expectedStatus": "invalid",
+      "expectedCanPreview": false,
+      "expectedCanRequestApproval": false,
+      "expectedApprovalReady": false,
+      "expectedOperationStatuses": [
+        {
+          "stepId": "step_wave40InvalidCreatePart",
+          "operationType": "createPart",
+          "status": "invalid",
+          "issueIds": [
+            "issue_wave40CodexInvalid_001",
+            "issue_wave40CodexInvalid_002"
+          ]
+        }
+      ],
+      "expectedIssueCodes": [
+        "schemaInvalid",
+        "schemaInvalid"
+      ],
+      "expectedIssueIds": [
+        "issue_wave40CodexInvalid_001",
+        "issue_wave40CodexInvalid_002"
+      ]
+    },
+    {
+      "caseId": "unsupported-proposal",
+      "proposalId": "proposal_wave40CodexUnsupported",
+      "expectedStatus": "invalid",
+      "expectedCanPreview": false,
+      "expectedCanRequestApproval": false,
+      "expectedApprovalReady": false,
+      "expectedOperationStatuses": [
+        {
+          "stepId": "step_wave40RenderPixelOracle",
+          "operationType": "renderPixelOracle",
+          "status": "unsupported",
+          "issueIds": [
+            "issue_wave40CodexUnsupported_001",
+            "issue_wave40CodexUnsupported_002"
+          ]
+        }
+      ],
+      "expectedIssueCodes": [
+        "unsupportedOperation",
+        "unsupportedBoundary"
+      ],
+      "expectedIssueIds": [
+        "issue_wave40CodexUnsupported_001",
+        "issue_wave40CodexUnsupported_002"
+      ]
+    }
+  ]
+}

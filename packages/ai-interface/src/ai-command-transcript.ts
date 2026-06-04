@@ -116,6 +116,7 @@ export const appendAiCommandResponseToTranscript = (input: {
 export const appendAiApprovalToTranscript = (input: {
   readonly transcript: AiCommandTranscript;
   readonly record: AiDryRunApprovalRecord;
+  readonly evidenceRefs?: readonly string[];
 }): void => {
   input.transcript.append({
     schemaVersion: "ai-command-transcript-entry-v1",
@@ -123,7 +124,7 @@ export const appendAiApprovalToTranscript = (input: {
     dryRunCommandId: input.record.dryRunCommandId,
     agentId: input.record.agentId,
     approvalStatus: "approved",
-    evidenceRefs: [],
+    evidenceRefs: [...(input.evidenceRefs ?? [])],
     ...(input.record.operationId === undefined
       ? {}
       : { operationId: OperationIdSchema.parse(input.record.operationId) })

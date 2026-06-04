@@ -19,6 +19,7 @@ export * from "./operation-registry.js";
 export * from "./operation-log.js";
 export * from "./operation-log-jsonl.js";
 export * from "./package-revision.js";
+export * from "./codex-proposal-preview.js";
 export * from "./operations/create-drawable.js";
 export * from "./operations/create-part.js";
 export * from "./operations/update-part.js";

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "wave40-codex-proposal-operation-catalog-summary-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "catalogId": "catalog_wave40OperationCatalogV0",
+  "requiredUnsupportedBoundaryKinds": [
+    "repoSideProposalGeneration",
+    "repairCandidateGeneration",
+    "candidateRanking",
+    "llmProvider",
+    "naturalLanguageRepair",
+    "autoFix",
+    "automaticCommit",
+    "externalTransport",
+    "parserImageDecode",
+    "archiveFilesystem",
+    "rendererPixelOracle",
+    "cubismCompatibility"
+  ],
+  "representativeOperations": [
+    {
+      "operationType": "createPart",
+      "availability": "available",
+      "targetKinds": [
+        "part"
+      ],
+      "previewSupport": {
+        "dryRunSupported": true,
+        "standaloneDiffSupported": true,
+        "rerunValidationSupported": true,
+        "productPreflightSupported": true
+      },
+      "unsupportedBoundaryKinds": []
+    },
+    {
+      "operationType": "renderPixelOracle",
+      "availability": "unsupported",
+      "targetKinds": [],
+      "previewSupport": {
+        "dryRunSupported": false,
+        "standaloneDiffSupported": false,
+        "rerunValidationSupported": false,
+        "productPreflightSupported": false
+      },
+      "unsupportedBoundaryKinds": [
+        "rendererPixelOracle"
+      ]
+    }
+  ]
+}

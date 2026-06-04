@@ -21,6 +21,7 @@ import {
   type ProductPreflightReportDto
 } from "@private-2d-rigging-lab/contracts";
 import {
+  buildTutorialMiniModelReadinessReport,
   buildProductPreflightReport,
   CANONICAL_OPERATION_LOG_PATH,
   validatePackageRuntimeWithBinaryAssets,
@@ -88,16 +89,25 @@ export const runEditorProductPreflightWorkflow = async (
     requireTransportCapabilityEvidence: true,
     createdAt
   });
+  const tutorialReadinessReport = buildTutorialMiniModelReadinessReport({
+    packageDocument: snapshot.document,
+    runtimeSnapshot: viewerEvaluation.snapshot,
+    viewerEvidence: viewerEvaluation.evidence,
+    operationLogPresent: true,
+    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
+    createdAt
+  });
   const categoryEvidenceRefs = await createProductPreflightCategoryEvidenceRefs({
     snapshot,
     viewerEvidence: viewerEvaluation.evidence,
-    transportBoundary
+    transportBoundary,
+    tutorialReadinessReport
   });
   const report = buildProductPreflightReport({
     createdAt,
     packageId: snapshot.document.manifest.packageId,
     packageRevision: snapshot.document.manifest.packageRevision,
-    validationReports: [validationReport],
+    validationReports: [validationReport, tutorialReadinessReport],
     categoryEvidenceRefs
   });
 
@@ -112,6 +122,7 @@ const createProductPreflightCategoryEvidenceRefs = async (input: {
   readonly snapshot: ReturnType<EditorSessionAdapter["createPersistenceSnapshot"]>;
   readonly viewerEvidence: ReturnType<typeof evaluateViewerRuntimeFromActiveSession>["evidence"];
   readonly transportBoundary: ReturnType<typeof evaluatePackageTransportBoundary>;
+  readonly tutorialReadinessReport: ValidationReportDto;
 }): Promise<ProductPreflightCategoryEvidenceRefsInput> => {
   const refs: MutableProductPreflightCategoryEvidenceRefsInput = {};
   appendEvidenceRefs(refs, "authoringWorkflowEvidence", [
@@ -138,6 +149,9 @@ const createProductPreflightCategoryEvidenceRefs = async (input: {
     "assetBytes",
     await createByteAvailabilityEvidenceRefs(input.snapshot)
   );
+  appendEvidenceRefs(refs, "tutorialDemoReadiness", [
+    createTutorialReadinessEvidenceRef(input.tutorialReadinessReport)
+  ]);
 
   return refs;
 };
@@ -167,8 +181,13 @@ const createByteAvailabilityEvidenceRefs = async (
   snapshot: ReturnType<EditorSessionAdapter["createPersistenceSnapshot"]>
 ): Promise<readonly ProductPreflightEvidenceRefDto[]> => {
   const evidenceRefs: ProductPreflightEvidenceRefDto[] = [];
+  const binaryAssetRefs = collectBinaryAssetRefs(snapshot.document);
 
-  for (const binaryAssetRef of collectBinaryAssetRefs(snapshot.document)) {
+  if (binaryAssetRefs.length === 0) {
+    return [createNoBinaryAssetByteAvailabilityEvidenceRef(snapshot)];
+  }
+
+  for (const binaryAssetRef of binaryAssetRefs) {
     const verificationReport = await verifyPackageBinaryAssetBytes(
       snapshot.packageInMemoryFileSet,
       binaryAssetRef
@@ -191,6 +210,44 @@ const createByteAvailabilityEvidenceRefs = async (
 
   return evidenceRefs;
 };
+
+const createNoBinaryAssetByteAvailabilityEvidenceRef = (
+  snapshot: ReturnType<EditorSessionAdapter["createPersistenceSnapshot"]>
+): ProductPreflightEvidenceRefDto =>
+  ProductPreflightEvidenceRefDtoSchema.parse({
+    evidenceId: createEvidenceId(
+      "byteAvailabilityNoBinaryAssets",
+      snapshot.document.manifest.packageId,
+      `r${snapshot.document.manifest.packageRevision}`
+    ),
+    artifactRef: {
+      artifactKind: "byteAvailability",
+      path: "generated/byte-availability/no-binary-assets.json"
+    },
+    target: {
+      kind: "package",
+      id: snapshot.document.manifest.packageId
+    },
+    summary: "No package binary asset references require current-session byte availability evidence.",
+    producer: "editor"
+  });
+
+const createTutorialReadinessEvidenceRef = (
+  report: ValidationReportDto
+): ProductPreflightEvidenceRefDto =>
+  ProductPreflightEvidenceRefDtoSchema.parse({
+    evidenceId: createEvidenceId("tutorialReadiness", report.packageId, report.reportId),
+    artifactRef: {
+      artifactKind: "tutorialReadiness",
+      path: `generated/tutorial-readiness/${report.reportId}.json`
+    },
+    target: {
+      kind: "package",
+      id: report.packageId
+    },
+    summary: `Tutorial readiness report ${report.reportId} is available for Product Preflight.`,
+    producer: "editor"
+  });
 
 const collectBinaryAssetRefs = (
   packageDocument: PackageDocumentDto

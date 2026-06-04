@@ -3,6 +3,10 @@ import {
   createEmptyEditorBinaryByteIntakeState,
   type EditorBinaryByteIntakeState
 } from "./binary-byte-intake-state.js";
+import {
+  createEmptyCodexProposalReviewState,
+  type CodexProposalReviewState
+} from "./codex-proposal-review-state.js";
 import { createEmptyDrawableFormState, type CreateDrawableFormState } from "./create-drawable-form-state.js";
 import { createEmptyParameterFormState, type CreateParameterFormState } from "./create-parameter-form-state.js";
 import {
@@ -96,6 +100,7 @@ export interface EditorSemanticState {
   readonly dynamicsPreview: DynamicsPreviewState;
   readonly reload: ReloadSummaryState;
   readonly aiApproval: AiApprovalState;
+  readonly codexProposalReview: CodexProposalReviewState;
 }
 
 export const createInitialEditorSemanticState = (): EditorSemanticState => ({
@@ -130,5 +135,6 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   generatedEvidence: createEmptyGeneratedEvidenceSummary(),
   dynamicsPreview: createEmptyDynamicsPreviewState(),
   reload: createEmptyReloadSummary(),
-  aiApproval: createEmptyAiApprovalState()
+  aiApproval: createEmptyAiApprovalState(),
+  codexProposalReview: createEmptyCodexProposalReviewState()
 });

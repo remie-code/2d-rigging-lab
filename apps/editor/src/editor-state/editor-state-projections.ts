@@ -2,6 +2,7 @@ import {
   createInitialEditorSemanticState,
   type EditorSemanticState
 } from "./editor-semantic-state.js";
+import { createEmptyCodexProposalReviewState } from "./codex-proposal-review-state.js";
 import {
   projectEditorBinaryByteIntakeState,
   type ProjectEditorBinaryByteIntakeStateInput
@@ -328,6 +329,7 @@ export const applyCommittedOperationSummary = (
         ? state.dynamicsPreview
         : createEmptyDynamicsPreviewState()),
     reload,
+    codexProposalReview: createEmptyCodexProposalReviewState(),
     productPreflight: createEmptyProductPreflightState(),
     tutorialGuidedWorkflow: projectTutorialGuidedWorkflowState(
       {

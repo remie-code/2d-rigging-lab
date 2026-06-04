@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "wave40-codex-proposal-rerun-validation-summary-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "caseId": "valid-proposal",
+  "proposalId": "proposal_wave40CodexValid",
+  "previewId": "preview_wave40CodexValid",
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "stateScope": "preview",
+  "expectedStatus": "not_evaluated",
+  "expectedProductPreflightReportId": "preflight_proposal_wave40CodexValid",
+  "expectedProductPreflightStatus": "not_evaluated",
+  "expectedProductPreflightPackageId": "pkg_wave40CodexProposal",
+  "expectedProductPreflightPackageRevision": 1,
+  "expectedDiagnosticCheckIds": [],
+  "expectedEvidenceKinds": [
+    "rerunValidation",
+    "productPreflight"
+  ],
+  "expectedEvidencePaths": [
+    "generated/codex-proposals/proposal_wave40CodexValid.preview_wave40CodexValid.rerun-validation.json",
+    "generated/product-preflight/preflight_proposal_wave40CodexValid.product-preflight.json"
+  ]
+}

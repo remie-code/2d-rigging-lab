@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "wave40-codex-proposal-rerun-validation-report-input-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "reportId": "val_wave40CodexPreview",
+  "createdAt": "2026-06-04T00:00:00.000Z",
+  "packageId": "pkg_wave40CodexProposal",
+  "packageRevision": 1,
+  "packageHash": "hash_wave40CodexProposal_preview",
+  "profile": "strict",
+  "relatedScenarios": [
+    "SC-AGENT-002"
+  ],
+  "evidence": {
+    "operationLogPresent": true,
+    "operationLogPath": "operations/log.jsonl",
+    "runtimeSnapshotIds": [],
+    "supplementalGuiEvidenceRefs": []
+  },
+  "checks": []
+}

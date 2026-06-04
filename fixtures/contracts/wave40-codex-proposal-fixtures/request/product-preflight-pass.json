@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "product-preflight-report-v0",
+  "reportId": "preflight_wave40CodexPass",
+  "createdAt": "2026-06-04T00:00:00.000Z",
+  "packageId": "pkg_wave40CodexProposal",
+  "packageRevision": 0,
+  "packageHash": "hash_wave40CodexProposal",
+  "validatorVersion": "validator-wave40-fixture",
+  "sourceValidationReportIds": [
+    "val_wave40Baseline"
+  ],
+  "summary": {
+    "status": "pass",
+    "highestSeverity": "info",
+    "categoryCounts": {
+      "pass": 10,
+      "warn": 0,
+      "fail": 0,
+      "not_supported": 0,
+      "not_evaluated": 0
+    },
+    "blockingReasonCount": 0,
+    "unsupportedClaimCount": 0,
+    "notEvaluatedClaimCount": 0,
+    "evidenceRefCount": 0,
+    "diagnosticRefCount": 0
+  },
+  "categories": [
+    {
+      "category": "modelStructure",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic model structure evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "authoringWorkflowEvidence",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic authoring workflow evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "runtimeViewerEvidence",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic runtime/viewer evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "meshTopologyUv",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic mesh topology and UV evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "composition",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic composition evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "rigControlDynamics",
+      "status": "pass",
+      "severity": "info",
+      "summary": "Semantic rig control and dynamics evidence passes for the fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "assetBytes",
+      "status": "pass",
+      "severity": "info",
+      "summary": "No real asset bytes are required by this semantic fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "persistenceTransport",
+      "status": "pass",
+      "severity": "info",
+      "summary": "No archive or filesystem transport is required by this semantic fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "tutorialDemoReadiness",
+      "status": "pass",
+      "severity": "info",
+      "summary": "The fixture does not claim demo completion.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    },
+    {
+      "category": "unsupportedClaims",
+      "status": "pass",
+      "severity": "info",
+      "summary": "No unsupported capability is claimed as implemented by this fixture.",
+      "evidenceRefs": [],
+      "diagnosticRefs": [],
+      "blockingReasons": [],
+      "unsupportedClaims": [],
+      "notEvaluatedClaims": [],
+      "recommendedNextActions": []
+    }
+  ],
+  "recommendedNextActions": []
+}

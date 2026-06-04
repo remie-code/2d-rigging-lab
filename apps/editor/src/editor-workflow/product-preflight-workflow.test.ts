@@ -21,8 +21,11 @@ describe("editor product preflight workflow", () => {
 
     expect(workflow.state.productPreflight.status).toBe("ready");
     expect(workflow.state.productPreflight.reportId).toBe("preflight_editor_browser_sample");
+    expect(workflow.state.productPreflight.overallStatus).toBe("fail");
     expect(firstStatuses.get("runtimeViewerEvidence")).not.toBe("not_evaluated");
-    expect(workflow.state.productPreflight.categoryCounts.not_evaluated).toBeGreaterThan(0);
+    expect(firstStatuses.get("assetBytes")).toBe("pass");
+    expect(firstStatuses.get("tutorialDemoReadiness")).not.toBe("not_evaluated");
+    expect(workflow.state.productPreflight.categoryCounts.not_evaluated).toBe(0);
 
     workflow.saveProject();
     workflow.loadProject();
@@ -35,6 +38,7 @@ describe("editor product preflight workflow", () => {
 
     expect(statusByCategory(workflow.state.productPreflight.categories)).toEqual(firstStatuses);
     expect(workflow.state.productPreflight.reportId).toBe("preflight_editor_browser_sample");
+    expect(workflow.state.productPreflight.overallStatus).toBe("fail");
   });
 });
 

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "contract-fixture-manifest-v1",
+  "fixtureId": "wave40-codex-proposal-fixtures",
+  "title": "Wave40 Codex proposal fixtures",
+  "description": "Rights-clean semantic fixtures proving representative Codex-facing proposal validation, unsupported operation, dry-run diff preview, and rerun validation states.",
+  "inputArtifacts": [
+    "request/proposal-cases.json",
+    "request/product-preflight-pass.json",
+    "request/rerun-validation-report-input.json"
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "operationCatalogSummary",
+      "path": "expected/operation-catalog-summary.json",
+      "id": "wave40-codex-proposal-operation-catalog-summary",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "proposalValidationOutcomes",
+      "path": "expected/proposal-validation-outcomes.json",
+      "id": "wave40-codex-proposal-validation-outcomes",
+      "comparison": "semantic-json"
+    },
+    {
+      "kind": "diffPreview",
+      "path": "expected/diff-preview-ready.json",
+      "id": "wave40-codex-proposal-diff-preview-ready",
+      "comparison": "contract-schema"
+    },
+    {
+      "kind": "rerunValidationSummary",
+      "path": "expected/rerun-validation-summary.json",
+      "id": "wave40-codex-proposal-rerun-validation-summary",
+      "comparison": "semantic-json"
+    }
+  ],
+  "coversAC": [
+    "AC-MVP-013",
+    "AC-MVP-014",
+    "AC-MVP-016"
+  ],
+  "coversScenarios": [
+    "SC-AI-002",
+    "SC-AGENT-002",
+    "SC-VERIFY-001",
+    "SC-MVP-006"
+  ],
+  "modulesBlocked": [
+    "contracts",
+    "ai-interface",
+    "operation-core",
+    "validator-core",
+    "fixtures-contract-tests"
+  ],
+  "updateRule": "requires-contract-review",
+  "rightsClean": {
+    "source": "synthetic semantic Codex proposal, Product Preflight, diff preview, and validation report JSON only",
+    "realAssetBytes": false,
+    "imageDecode": false,
+    "externalDependency": false,
+    "parserOracle": false,
+    "rendererOracle": false,
+    "pixelOracle": false,
+    "archiveFilesystem": false,
+    "cubismCompatibility": false
+  },
+  "truthfulness": {
+    "statesCovered": [
+      "valid-proposal",
+      "invalid-proposal",
+      "unsupported-proposal",
+      "diff-preview-ready",
+      "rerun-validation-not-evaluated"
+    ],
+    "repoSideProposalGenerationClaimed": false,
+    "repairCandidateGenerationClaimed": false,
+    "candidateRankingClaimed": false,
+    "llmProviderClaimed": false,
+    "naturalLanguageRepairClaimed": false,
+    "autoFixClaimed": false,
+    "automaticCommitClaimed": false,
+    "externalTransportClaimed": false,
+    "realParserClaimed": false,
+    "realRendererClaimed": false
+  }
+}

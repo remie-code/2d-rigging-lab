@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "codex-proposal-diff-preview-result-v0",
+  "proposalId": "proposal_wave40CodexValid",
+  "previewId": "preview_wave40CodexValid",
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "status": "ready",
+  "summary": "Codex proposal proposal_wave40CodexValid preview is ready with 1 dry-run operation(s).",
+  "previewOnly": true,
+  "committed": false,
+  "basePackageRevision": 0,
+  "previewPackageRevision": 1,
+  "sourceValidationStatus": "valid",
+  "modelDiff": {
+    "schemaVersion": "model-diff-v1",
+    "baseRevision": 0,
+    "candidateRevision": 1,
+    "added": [
+      {
+        "kind": "part",
+        "id": "part_wave40CodexFace"
+      }
+    ],
+    "removed": [],
+    "changed": [
+      {
+        "target": {
+          "kind": "package",
+          "id": "pkg_wave40CodexProposal"
+        },
+        "fields": [
+          {
+            "path": "/model/graph/parts",
+            "before": null,
+            "after": "part_wave40CodexFace"
+          },
+          {
+            "path": "/model/graph/stableOrder",
+            "before": null,
+            "after": "part_wave40CodexFace"
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "part_wave40CodexFace"
+        },
+        "fields": [
+          {
+            "path": "/model/graph/parts/part_wave40CodexFace",
+            "before": null,
+            "after": {
+              "partId": "part_wave40CodexFace",
+              "displayName": "Wave40 Codex Face",
+              "parentPartId": "part_root",
+              "childPartIds": [],
+              "drawableIds": []
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "part_root"
+        },
+        "fields": [
+          {
+            "path": "/model/graph/parts/part_root/childPartIds",
+            "before": [],
+            "after": [
+              "part_wave40CodexFace"
+            ]
+          }
+        ]
+      }
+    ],
+    "operationIds": [
+      "op_wave40CreateFacePart"
+    ]
+  },
+  "diagnostics": [],
+  "evidenceRefs": [
+    {
+      "evidenceId": "evidence_proposal_wave40CodexValid_preview_wave40CodexValid_diffPreview",
+      "evidenceKind": "dryRunDiffPreview",
+      "artifactRef": {
+        "artifactKind": "diffPreview",
+        "path": "generated/codex-proposals/proposal_wave40CodexValid.preview_wave40CodexValid.diff-preview.json"
+      },
+      "target": {
+        "kind": "package",
+        "id": "pkg_wave40CodexProposal"
+      },
+      "summary": "Dry-run diff preview evidence for proposal proposal_wave40CodexValid and preview preview_wave40CodexValid.",
+      "producer": "operationCore"
+    }
+  ]
+}

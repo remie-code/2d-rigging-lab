@@ -8,6 +8,7 @@ export * from "./product-preflight-report.js";
 export * from "./runtime-evidence-report.js";
 export * from "./operation-evidence-report.js";
 export * from "./validation-diff-builder.js";
+export * from "./codex-proposal-rerun-validation.js";
 export * from "./validation-report-artifacts.js";
 export * from "./validators/asset-rights.js";
 export * from "./validators/byte-intake-preflight.js";
