@@ -36,6 +36,26 @@ It prevents Cubism SDK/Core, proprietary Cubism parsers, unlicensed binaries, in
 - Historical research reports.
 - Cubism SDK/Core, Cubism proprietary runtime, Cubism model parsers, Cubism file format libraries, or unlicensed binaries as allowed dependencies.
 
+## Current Automated Guard Entry Points
+
+Wave42 keeps the dependency guard deterministic and local:
+
+- `node scripts/check-dependencies.mjs`
+- `node scripts/check-dependencies-guard-self-test.mjs`
+
+The default guard scans the repository for:
+
+- forbidden dependency names in `package.json` dependency sections;
+- forbidden dependency classes mentioned by `pnpm-lock.yaml`;
+- forbidden Cubism/Live2D asset paths such as `.moc3`, `.cmo3`, `.model3.json`, `.motion3.json`, `.physics3.json`, `.pose3.json`, and `live2dcubismcore` runtime binaries;
+- positive claims that explicit Wave42 non-goals are available, ready, integrated, or otherwise provided.
+
+The self-test covers forbidden dependency names, lockfile mentions, forbidden asset paths, positive non-goal claims, negative assertions, non-goal documentation, and fixture false flags.
+
+Allowed documentation contexts are narrow: negative assertions, explicit non-goal or unsupported wording, fixture metadata that records false availability flags, safety text that says unsupported behavior is disabled, and historical reports/reviews. These contexts do not make the underlying behavior supported.
+
+The guard is not a broad semantic document reviewer. It does not approve dependencies, does not replace dependency proposal/license/provenance review, and does not add parser, archive/filesystem, renderer, Cubism, LLM, auto-fix, external transport, Product Preflight artifact, release, or demo gate capability.
+
 ## Source Documents
 
 ### Primary
@@ -390,6 +410,8 @@ Binaries are difficult to inspect and must be traceable.
 | dependency scan result | dependency tool | reviewer | `generated/dependencies/*.dependency-scan.json` | manifest/lockfile verification |
 | forbidden dependency scan result | dependency tool | reviewer | `generated/dependencies/*.forbidden-dependency-scan.json` | Cubism/proprietary/binary gate |
 | binary checksum record | dependency proposer | reviewer | `generated/dependencies/*.binary-checksum.json` | binary provenance |
+| Wave42 dependency guard result | implementer / reviewer | reviewer, Clean Context Reviewer | `node scripts/check-dependencies.mjs` output | current forbidden dependency, forbidden asset, and positive non-goal claim containment |
+| Wave42 dependency guard self-test result | implementer / reviewer | reviewer, Clean Context Reviewer | `node scripts/check-dependencies-guard-self-test.mjs` output | regression coverage for guard positive and false-positive lanes |
 
 ## Review Checklist
 

@@ -1,6 +1,6 @@
 # 現在の Capability Map
 
-> 状態: 2026-06-05 / Wave41 完了。
+> 状態: 2026-06-05 / Wave42 final documentation pass。Clean integration review recorded。Product capability boundary は Wave41 から変更なし。
 > 目的: 次の実装境界を計画するための、現在のプロダクト capability map。これは wave ごとの changelog ではない。詳細な wave 履歴は、リンク先の final report と map に置く。
 
 ## 凡例
@@ -19,7 +19,7 @@
 
 現在のプロダクトは Cubism clone ではなく、Cubism runtime/editor compatibility layer でもなく、full renderer でも LLM provider integration でもない。AI推論・修復案設計は Codex 側の責務であり、この repo は Codex が利用する deterministic state、operation、validation、diff、approval、evidence surface を提供する。
 
-## Wave41 時点の現在の実装面
+## Wave42 時点の現在の実装面
 
 | Capability 領域 | 現在の surface | Evidence level | 境界 |
 |---|---|---|---|
@@ -30,6 +30,16 @@
 | Asset I/O | browser file-input の actual byte intake は filename、byteLength、SHA-256 digest、mediaType、rights/provenance、availability を記録する。parser-free PSD adapter/profile metadata と split PNG source metadata は structured semantic evidence として保持される。local sample PSD byte fixture は length/hash のみで特徴づけられる。 | bytes と metadata は `implementation-proven`; PSD/PNG semantics は parse されない。 | PSD layer parse、PSD/PNG decode、raster extraction、texture materialization、compositing、media header sniffing、public asset redistribution proof、parser security boundary はない。 |
 | AI / Codex-facing API | `packages/ai-interface` は deterministic read/inspect/validate/dry-run/commit/operation-log command surface、approval policy、transcript append、in-process Editor host routing、Product Preflight observation/read/diff/rerun affordance command helpers、Codex proposal operation catalog、proposal validation、approval lifecycle bridge を公開する。`packages/operation-core` / `packages/validator-core` は Codex proposal diff preview、preview/post-commit rerun validation evidence、Product Preflight report diff を提供する。Editor は pasted proposal review、validation、diff preview、rerun validation、Product Preflight comparison、manual approval、approved commit path を表示できる。 | deterministic command host、proposal validation/diff/rerun/approval/transcript behavior と Product Preflight read/diff bridge は `implementation-proven`; Editor proposal review and Product Preflight comparison paths are `UI/e2e proven`。 | inference、proposal generation、repair design、natural-language judgment、repair candidate generation/ranking は Codex の責務。この repo は LLM/provider、prompt loop、auto-fix、automatic commit、external proposal transport、repair reasoning を提供しない。 |
 | Viewer / Preview | Editor embedded runtime-projected SVG preview、parameter slider、Viewer/Runtime inspection、runtime snapshot/diff、diagnostics、semantic composition/mask/opacity evidence、mesh/runtime evidence、Product Preflight evidence input。 | `semantic evidence only`; 一部の Editor flow は `UI/e2e proven`。 | standalone viewer app、full render target、texture sampling correctness、rendered acceptance oracle、pixel-level comparison、Cubism runtime、`.moc3`、`.model3.json` support はない。 |
+
+## Wave42 Repository Quality Gate Surface
+
+Wave42 は product capability ではなく、既存境界を維持するための repository quality-gate / guard / registry / documentation traceability work である。
+
+- `node scripts/check-wave42-quality-gate-boundary.mjs` は Wave42 guard categories、focused e2e boundary discovery、report shape、explicit non-goal classification policy を検査する。
+- `node scripts/check-source-organization.mjs` と `node scripts/check-source-organization-fixtures.mjs` は barrel-only `index.ts`、exact catch-all filenames、large catch-all-like filenames の guard と fixture regression を担う。
+- `node scripts/check-focused-e2e-registry.mjs` と `node scripts/run-focused-e2e.mjs --list|--check|--id <registryId>` は focused e2e entry の registry consistency、listing、single-entry selection を担う。list/check/dry-run は browser e2e coverage ではない。
+- `node scripts/check-dependencies.mjs` と `node scripts/check-dependencies-guard-self-test.mjs` は forbidden dependency / lockfile / asset path / positive non-goal claim containment と false-positive containment self-test を担う。
+- Wave42 guard entry points は [test-traceability-matrix.md](../tests/traceability/test-traceability-matrix.md) に documentation/traceability として登録済みであり、JSON mirror、Acceptance Runner coverage、Product Preflight artifact、release/demo gate、parser/archive/filesystem/renderer/Cubism support を追加しない。
 
 ## Capability 境界と非対応
 
@@ -76,6 +86,8 @@
 | Wave40 clean integration review | [reviews/wave40/wave40-clean-integration-review.md](reviews/wave40/wave40-clean-integration-review.md) |
 | Wave41 final report | [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) |
 | Wave41 clean integration review | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) |
+| Wave42 final report | [waves/wave42/wave42-final-report.md](waves/wave42/wave42-final-report.md) |
+| Wave42 clean integration review | [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md) |
 | 2026-06-04 capability/backlog inventory | [reports/current-capability-backlog-inventory-2026-06-04.md](reports/current-capability-backlog-inventory-2026-06-04.md) |
 | 残作業と decision gates | [remaining-work-backlog.md](remaining-work-backlog.md) |
 

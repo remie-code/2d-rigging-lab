@@ -44,6 +44,22 @@ This matrix is derived from these workspace-relative sources:
 | Gate | `mvp-blocking`, `warning`, or `optional`. |
 | Owner module | Primary module responsible for the test evidence. |
 
+## Wave42 Quality Gate Entry Point Registration
+
+Wave42 guard registration is documentation/traceability for existing quality gates. It is not a product capability claim, not executable browser coverage by itself, and not a JSON mirror or Acceptance Runner expansion.
+
+| Entry point | Traceability anchor | Scope checked | Coverage claim | Boundary / non-goals |
+|---|---|---|---|---|
+| `node scripts/check-wave42-quality-gate-boundary.mjs` | `AC-MVP-013`, `AC-MVP-016`, `SC-VERIFY-001`, `SC-MVP-006` | Wave42 guard categories, focused e2e boundary discovery, report shape, and explicit non-goal classification policy. | Guard metadata consistency only. | Does not replay focused e2e, add product behavior, or prove parser/archive/filesystem/renderer/Cubism support. |
+| `node scripts/check-source-organization.mjs` | `AC-MVP-013`, `AC-MVP-016`, `SC-VERIFY-001` | Default scan over `packages/**`, `apps/**`, `tests/**`, and implementation-owned `scripts/**` for barrel-only `index.ts`, exact catch-all filenames, and large catch-all-like files over the default 1200-line threshold. | Source organization guard result only. | Does not semantically classify every large file and does not require broad refactors of accepted responsibility files. |
+| `node scripts/check-source-organization-fixtures.mjs` | `AC-MVP-013`, `SC-VERIFY-001` | Regression fixtures for valid barrel `index.ts`, invalid `index.ts` logic, forbidden catch-all filename, and large catch-all-like filename. | Guard self-test only. | Fixture roots are intentionally excluded from the default repository scan. |
+| `node scripts/check-focused-e2e-registry.mjs` | `AC-MVP-013`, `AC-MVP-016`, `SC-VERIFY-001` | Focused e2e registry metadata, entry/path/command drift from the Wave42 boundary, aggregate inclusion truthfulness, and package aggregate script invariance. | Registry consistency only. | Does not run browser e2e and does not expand `pnpm test:e2e`. |
+| `node scripts/run-focused-e2e.mjs --list` | `AC-MVP-013`, `SC-VERIFY-001` | Lists the 19 focused e2e entries, categories, commands, aggregate status, and `noneUntilExactCommandRuns` coverage labels. | Listing is no execution coverage. | A listed entry is not evidence until its exact selected command runs. |
+| `node scripts/run-focused-e2e.mjs --check` | `AC-MVP-013`, `AC-MVP-016`, `SC-VERIFY-001` | Runs the same focused registry check through the combined runner surface. | Registry consistency only. | Does not run browser e2e. |
+| `node scripts/run-focused-e2e.mjs --id <registryId>` or `node scripts/run-focused-e2e.mjs --path <repoPath>` | `AC-MVP-013`, `AC-MVP-016`, `SC-VERIFY-001` | Runs exactly one selected focused smoke script through a shell-free Node spawn; `--dry-run` prints the command and reports `dryRunOnlyNoCoverage`. | Exact selected command is coverage only when non-dry execution exits zero. | Does not claim aggregate coverage and does not create persisted/exported Product Preflight artifacts, release gates, or demo gates. |
+| `node scripts/check-dependencies.mjs` | `AC-MVP-016`, `AC-IN-004`, `AC-EXPORT-006`, `SC-MVP-006`, `SC-IN-004` | Forbidden dependency names, lockfile mentions, forbidden asset paths, and positive claims for explicit Wave42 non-goals. | Dependency/asset/non-goal containment guard result only. | Negative assertions, explicit unsupported/non-goal documentation, fixture false flags, safety disabled text, and historical reports/reviews are allowed contexts; they do not make the unsupported behavior available. |
+| `node scripts/check-dependencies-guard-self-test.mjs` | `AC-MVP-016`, `SC-MVP-006`, `SC-VERIFY-001` | Self-test fixtures for forbidden dependency name, lockfile mention, forbidden asset path, positive non-goal claim, negative assertion, non-goal documentation, and fixture false flag. | Guard self-test only. | Temporary fixture repositories are removed after the self-test and do not add dependencies, assets, parser, renderer, archive/filesystem, Cubism, LLM, auto-fix, or external transport capability. |
+
 ## P0 Test Matrix
 
 | Test ID | MVP AC | Domain AC | Active scenarios | Fixture | Operation flow | Expected artifacts | Expected diagnostics | Oracle | Automation | Gate | Owner module |
@@ -237,6 +253,7 @@ The JSON mirror contains a per-scenario structured audit. In markdown, the activ
 
 - Some fixture files and expected artifacts remain planned only; this deliverable does not create fixture packages or runner outputs.
 - Wave27, Wave28, Wave29, Wave39, Wave40, and Wave41 markdown registration was added for warning-gated semantic contract fixtures, but JSON mirrors were intentionally not edited in the documentation-only or domain-limited scope.
+- Wave42 guard entry points are registered above as quality gate documentation only; they do not add fixture rows, JSON mirror entries, Acceptance Runner coverage, product capability claims, or focused e2e execution coverage by listing/checking alone.
 - Exact visual-review thresholds remain hybrid/manual until capture and semantic snapshot runners exist.
 - Optional/Future-only scenarios are intentionally excluded from P0 gates and should be reintroduced only after scope is reopened.
 

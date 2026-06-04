@@ -21,6 +21,31 @@ Applies to authored source under:
 
 Does not apply to generated files under `generated/**`.
 
+## Current Automated Guard Entry Points
+
+Wave42 adds a deterministic repository guard for this policy:
+
+- `node scripts/check-source-organization.mjs`
+- `node scripts/check-source-organization-fixtures.mjs`
+
+The default repository guard scans `packages/**`, `apps/**`, `tests/**`, and implementation-owned `scripts/**`. It excludes generated/build/vendor directories and the intentional regression fixtures under `scripts/source-organization-fixtures/**`.
+
+The guard enforces only the current policy surface:
+
+- `index.ts` files must remain barrel-only entrypoints.
+- Exact broad catch-all names `types.ts`, `schemas.ts`, `utils.ts`, and `helpers.ts` are forbidden.
+- Large catch-all-like names such as `common.ts`, `shared.ts`, `misc.ts`, `all-*`, `everything-*`, `catch-all-*`, and `kitchen-sink-*` are flagged only when they exceed the default 1200-line threshold.
+
+The guard accepts fixture/test options for scoped regression checks:
+
+- `--root <path>`
+- `--source-root <path>`
+- `--max-large-catch-all-lines <count>`
+
+These options are for guard fixtures and local verification. They are not a reason to weaken the default repository scan.
+
+The guard is intentionally conservative. It does not semantically classify every large file, does not force broad refactors of existing legitimate responsibility files, and does not add or prove any product capability.
+
 ## Required Decisions
 
 ### DEC-FILE-001: `index.ts` is a barrel by default
@@ -95,6 +120,8 @@ Implementation reports and reviews should include:
 - any `index.ts` changes classified as re-export / entrypoint wiring / exception
 - oversized-file exceptions, if any
 - review finding when source organization is blocking or warning
+- `node scripts/check-source-organization.mjs` result when authored source or implementation-owned tooling is changed
+- `node scripts/check-source-organization-fixtures.mjs` result when the source organization guard itself changes
 
 ## Review Checklist
 
