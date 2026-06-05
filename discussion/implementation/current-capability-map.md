@@ -1,6 +1,6 @@
 # 現在の Capability Map
 
-> 状態: 2026-06-05 / Wave42 final documentation pass。Clean integration review recorded。Product capability boundary は Wave41 から変更なし。
+> 状態: 2026-06-05 / Wave43 final documentation pass。Clean integration review は `pass` として記録済み。Product capability boundary は Wave41 から変更なし。
 > 目的: 次の実装境界を計画するための、現在のプロダクト capability map。これは wave ごとの changelog ではない。詳細な wave 履歴は、リンク先の final report と map に置く。
 
 ## 凡例
@@ -19,7 +19,7 @@
 
 現在のプロダクトは Cubism clone ではなく、Cubism runtime/editor compatibility layer でもなく、full renderer でも LLM provider integration でもない。AI推論・修復案設計は Codex 側の責務であり、この repo は Codex が利用する deterministic state、operation、validation、diff、approval、evidence surface を提供する。
 
-## Wave42 時点の現在の実装面
+## Wave43 時点の現在の実装面
 
 | Capability 領域 | 現在の surface | Evidence level | 境界 |
 |---|---|---|---|
@@ -40,6 +40,16 @@ Wave42 は product capability ではなく、既存境界を維持するため�
 - `node scripts/check-focused-e2e-registry.mjs` と `node scripts/run-focused-e2e.mjs --list|--check|--id <registryId>` は focused e2e entry の registry consistency、listing、single-entry selection を担う。list/check/dry-run は browser e2e coverage ではない。
 - `node scripts/check-dependencies.mjs` と `node scripts/check-dependencies-guard-self-test.mjs` は forbidden dependency / lockfile / asset path / positive non-goal claim containment と false-positive containment self-test を担う。
 - Wave42 guard entry points は [test-traceability-matrix.md](../tests/traceability/test-traceability-matrix.md) に documentation/traceability として登録済みであり、JSON mirror、Acceptance Runner coverage、Product Preflight artifact、release/demo gate、parser/archive/filesystem/renderer/Cubism support を追加しない。
+
+## Wave43 Documentation / Traceability / Guard Surface
+
+Wave43 は product capability ではなく、validator/evidence contract consistency work である。
+
+- `validator-contract.md` は Wave31-W42 の byte availability、persistent byte storage、portable bundle、transport capability、topology/UV、warp lattice、Product Preflight、Codex proposal evidence/report surfaces を実装済み範囲とunsupported境界に分けて記録する。
+- `diagnostic-policy.md`、`schema-and-id-conventions.md`、`test-traceability-matrix.md` は現行 check ID、semantic evidence only、Product Preflight report/diff/read/rerun vocabulary、Codex proposal-local/result-local vocabulary を同期する。
+- `node scripts/check-wave43-validator-contract-coverage.mjs` は validator catalog、Domain A matrix、docs/traceability/fixture、Product Preflight source mapping、focused e2e boundary wording の代表 token drift を検査する。これは token-based representative checker であり、semantic parser、full catalog mirror、browser e2e coverage ではない。
+- Domain E は active fixture manifest の validator diagnostic label を `portableBundle.digestMismatch` に合わせた。package-format/editor workflow の `portableBundle.digest.mismatch` issue-code vocabulary は別系統として未変更であり、Wave43 は source/schema behavior change を行わない。
+- Wave43 は Product Preflight persisted/exported artifact、release/demo gate、parser/image decode、archive/filesystem implementation、renderer/pixel oracle、Cubism compatibility、repo-side repair generation/ranking、LLM/provider、natural-language repair、auto-fix、external transport、external dependency、package manifest/lockfile change を追加しない。
 
 ## Capability 境界と非対応
 
@@ -88,11 +98,13 @@ Wave42 は product capability ではなく、既存境界を維持するため�
 | Wave41 clean integration review | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) |
 | Wave42 final report | [waves/wave42/wave42-final-report.md](waves/wave42/wave42-final-report.md) |
 | Wave42 clean integration review | [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md) |
+| Wave43 final report | [waves/wave43/wave43-final-report.md](waves/wave43/wave43-final-report.md) |
+| Wave43 clean integration review | [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) |
 | 2026-06-04 capability/backlog inventory | [reports/current-capability-backlog-inventory-2026-06-04.md](reports/current-capability-backlog-inventory-2026-06-04.md) |
 | 残作業と decision gates | [remaining-work-backlog.md](remaining-work-backlog.md) |
 
 ## ユーザー判断点
 
-- Wave42 後に優先する次のプロダクト境界: archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration のどれにするか。
+- Wave43 後に優先する次のプロダクト境界: archive/filesystem、real parser/decode、renderer/pixel oracle、advanced topology/UV、layer tree UX、public/demo assets、Cubism policy reconsideration のどれにするか。
 - public rights-clean real assets を許可するか、また private/local fixtures を distributable demo material からどう分離するか。
 - Viewer を editor-internal semantic inspection のままにするか、standalone/full-renderer work に進めるか。

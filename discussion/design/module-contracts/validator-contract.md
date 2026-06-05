@@ -9,7 +9,7 @@
 
 ## Purpose and Scope
 
-This document fixes the validator contract for schema, package reference, model semantic, runtime load, representative evaluation, GUI authoring evidence, and AI-readable report checks.
+This document fixes the validator contract for schema, package reference, model semantic, runtime load, representative evaluation, GUI authoring evidence, byte availability evidence, package transport evidence, Product Preflight reports, Codex-facing deterministic proposal evidence, and AI-readable report checks.
 
 It covers:
 
@@ -17,10 +17,11 @@ It covers:
 - validation profiles,
 - severity/status vocabulary,
 - validation report schema,
-- repair candidate schema,
-- relation between Editor warnings, Viewer diagnostics, Acceptance Runner, and AI reports.
+- validation report repair-candidate DTO slots,
+- Product Preflight category/status/evidence vocabulary,
+- relation between Editor warnings, Viewer diagnostics, Acceptance Runner, Product Preflight, Codex proposal evidence, and AI reports.
 
-It does not define UI rendering of diagnostics, automatic repair algorithms, or commercial art quality metrics.
+It does not define UI rendering of diagnostics, automatic repair algorithms, commercial art quality metrics, repo-side proposal generation, repair candidate generation or ranking, LLM provider integration, natural-language repair, auto-fix, automatic commit, parser/image decode, archive/filesystem implementation, external transport, renderer/pixel oracle support, or Cubism compatibility.
 
 ## Basis Separation
 
@@ -47,7 +48,10 @@ It does not define UI rendering of diagnostics, automatic repair algorithms, or 
 | Check registry | `validator-core` | all diagnostics consumers | table + zod ID format | registry |
 | Validation profiles | `validator-core` | editor/viewer/AI/acceptance | zod | profile DTO |
 | Validation report | `validator-core` | editor, viewer, AI, fixtures | zod | JSON report |
-| Repair candidate | `validator-core` + `operation-core` | AI, diagnostics UI | zod | candidate DTO |
+| Validation repair candidate DTO slot | `validator-core` + `operation-core` | AI, diagnostics UI | zod | candidate DTO; generation/ranking is not claimed by this contract |
+| Byte/storage/bundle/transport diagnostics | `validator-core` | editor, AI, Product Preflight, fixtures | check catalog + zod | deterministic evidence diagnostics |
+| Product Preflight report | `contracts` + `validator-core` | editor, AI, fixtures | zod | session report/diff/read/rerun surface |
+| Codex proposal evidence surface | `contracts` + `ai-interface` + `operation-core` + `validator-core` | editor, Codex-facing command helpers, Product Preflight bridge | zod | proposal validation, preview, rerun, and approval evidence DTOs |
 | Acceptance evidence classification | `validator-core` | MVP reviewer | zod + table | report section |
 
 ## TypeScript / Zod Sketches
@@ -70,6 +74,10 @@ mask.sourceMissing
 runtime.loadBlocking
 evidence.guiOperationLogMissing
 demo.unsafeDependencyClaim
+byteAvailability.currentSessionBytes.missing
+persistentByteStorage.record.missing
+portableBundle.schemaInvalid
+transportCapability.unsupported
 ```
 
 ## Check Catalog
@@ -78,11 +86,49 @@ demo.unsafeDependencyClaim
 |----------|-------|------------------|------------------|------------|
 | `pkg.schema.requiredFileMissing` | package_schema | blocking | all: fail | AC-MVP-013 |
 | `byteIntake.unsupportedClaim` | source_import | blocking | all: fail unless the claim is truthfully recorded as unsupported/not applicable | AC-MVP-015, AC-MVP-016 |
+| `binary.bytesMissing` | reference | error | all: fail when package-local or selected binary bytes required by metadata are absent | AC-MVP-002, AC-MVP-004, AC-MVP-013 |
+| `binary.byteLengthMismatch` | reference | error | all: fail when byte length metadata disagrees with available bytes | AC-MVP-004, AC-MVP-013 |
+| `binary.digestMismatch` | reference | error | all: fail when SHA-256 digest metadata disagrees with available bytes | AC-MVP-004, AC-MVP-013 |
+| `binary.digestUnsupported` | reference | warning | strict/acceptance: may fail only when digest evidence is required by fixture/profile | AC-MVP-004, AC-MVP-013 |
+| `binary.mediaTypeMismatch` | reference | error | all: fail when declared media type metadata disagrees with the binary entry declaration; no image decode is implied | AC-MVP-004, AC-MVP-013 |
+| `binary.assetIdMismatch` | reference | error | all: fail when binary asset ID metadata disagrees with the binary entry declaration | AC-MVP-004, AC-MVP-013 |
+| `binary.referenceMismatch` | reference | error | all: fail when binary reference metadata disagrees with source manifest, texture atlas, or binary index owner | AC-MVP-002, AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.currentSessionBytes.missing` | reference | error | all: fail when current-session byte evidence is required and absent | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.requiresReupload` | reference | error | all: fail when the caller must reupload bytes before validator availability can be trusted | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.verifiedSummary.stale` | reference | error | all: fail when verified byte summary evidence is stale for the requested package/binary ref | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.packageId.mismatch` | reference | error | all: fail when byte availability evidence belongs to another package identity | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.packageRevision.mismatch` | reference | error | all: fail when byte availability evidence belongs to another package revision | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.binaryAssetRef.mismatch` | reference | error | all: fail when byte availability evidence targets another binary asset ref | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.digest.mismatch` | reference | error | all: fail when byte availability digest evidence disagrees with the requested binary ref | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.byteLength.mismatch` | reference | error | all: fail when byte availability length evidence disagrees with the requested binary ref | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.mediaType.mismatch` | reference | error | all: fail when declared media type evidence disagrees with the requested binary ref; no media sniff/decode is implied | AC-MVP-004, AC-MVP-013 |
+| `byteAvailability.digest.unsupported` | reference | warning | strict/acceptance: may fail only when digest verification is required by fixture/profile | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.backend.unavailable` | reference | error | all: fail when expected same-origin browser-local storage evidence cannot be used | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.backend.mismatch` | reference | error | all: fail when persistent byte storage evidence names another backend | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.record.missing` | reference | error | all: fail when no browser-local persistent byte record is linked to the binary ref | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.record.unverified` | reference | error | all: fail when stored byte metadata has not been verified | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.verification.missing` | reference | error | all: fail when stored bytes were not re-read and verified before availability evaluation | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.packageId.mismatch` | reference | error | all: fail when persistent storage evidence belongs to another package identity | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.packageRevision.mismatch` | reference | error | all: fail when persistent storage evidence belongs to another package revision | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.binaryAssetRef.mismatch` | reference | error | all: fail when persistent storage evidence targets another binary asset ref | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.digest.mismatch` | reference | error | all: fail when persistent digest evidence disagrees with the requested binary ref or re-read bytes | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.byteLength.mismatch` | reference | error | all: fail when persistent byte length evidence disagrees with the requested binary ref or re-read bytes | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.mediaType.mismatch` | reference | error | all: fail when declared media type evidence disagrees with the requested binary ref or re-read bytes; no media sniff/decode is implied | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.bytes.missing` | reference | error | all: fail when browser-local stored bytes cannot be found during verification | AC-MVP-004, AC-MVP-013 |
+| `persistentByteStorage.digest.unsupported` | reference | warning | strict/acceptance: may fail only when persistent digest verification is required by fixture/profile | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.schemaInvalid` | source_import | blocking | all: fail when project-defined JSON bundle v0 evidence is malformed | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.unsupportedVersion` | source_import | error | all: fail when portable bundle `schemaVersion` is unsupported | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.missingPayload` | source_import | error | all: fail when required base64 byte payload evidence is missing | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.missingRequiredBinary` | source_import | error | all: fail when a required package binary payload is missing from bundle evidence | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.digestMismatch` | source_import | error | all: fail when bundle payload SHA-256 digest disagrees with binary ref metadata | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.byteLengthMismatch` | source_import | error | all: fail when bundle payload byte length disagrees with binary ref metadata | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.availabilityMismatch` | source_import | error | all: fail when bundle byte payload evidence conflicts with binary availability metadata | AC-MVP-004, AC-MVP-013 |
+| `portableBundle.digestUnsupported` | source_import | warning | strict/acceptance: may fail only when bundle digest verification is required by fixture/profile | AC-MVP-004, AC-MVP-013 |
 | `transportCapability.evidenceMissing` | source_import | blocking | all: fail only when transport capability evidence is explicitly required and absent | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
-| `transportCapability.schemaInvalid` | source_import | blocking | all: fail when supplied transport capability evidence does not match the Domain A DTO contract | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
-| `transportCapability.unsupported` | source_import | blocking | all: fail when transport capability evidence records an unsupported transport boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
-| `transportCapability.futureGated` | source_import | blocking | all: fail when transport capability evidence records a future-gated transport boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
-| `transportCapability.dependencyGated` | source_import | blocking | all: fail when transport capability evidence records a dependency-gated transport boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
+| `transportCapability.schemaInvalid` | source_import | blocking | all: fail when supplied transport capability evidence does not match the package transport capability DTO contract | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
+| `transportCapability.unsupported` | source_import | blocking | all: fail when evidence records an unsupported transport capability boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
+| `transportCapability.futureGated` | source_import | blocking | all: fail when evidence records a future-gated transport capability boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
+| `transportCapability.dependencyGated` | source_import | blocking | all: fail when evidence records a dependency-gated transport capability boundary | AC-MVP-013, AC-MVP-015, AC-MVP-016 |
 | `asset.psd.unsupportedFeature` | source_import | warning | strict: needs_review/fail by feature | AC-MVP-003 |
 | `rights.provenanceMissing` | rights | error | acceptance: fail | AC-MVP-002 |
 | `ref.drawableTextureMissing` | reference | error | acceptance: fail if visible drawable | AC-MVP-004 |
@@ -191,6 +237,7 @@ Rig control validation rules:
 - `rigControl.warpLatticeUnsupportedProperty` fires when a `warpLattice2d` keyform targets a property other than `controlPointOffsets`.
 - `rigControl.warpLatticeMalformedPatch` fires when a `controlPointOffsets` keyform patch is not a `Vec2[]` with one offset per rest control point, or uses a composition mode outside `replace` / `additiveDelta`.
 - `rigControl.warpLatticeRuntimeEvidenceMismatch` fires when current runtime evidence for an enabled `warpLattice2d` is present but does not prove evaluated project-defined warp lattice semantics, including stale unsupported/no-op status, domain bounds mismatch, affected target mismatch, missing affected drawable evidence, or mismatched runtime keyform patch shape.
+- Warp lattice diagnostics prove project-defined `warpLattice2d` shape, `controlPointOffsets` keyform patches, affected target refs, and semantic bilinear runtime evidence only. They do not prove Cubism deformers, Cubism Physics, `.moc3`, `.model3.json`, image parser/decode, archive/filesystem transport, renderer output, texture sampling, or pixel-level correctness.
 
 Mesh validation rules:
 
@@ -206,6 +253,7 @@ Mesh validation rules:
 - `mesh.runtimeEvidenceMismatch` fires when supplied runtime/viewer mesh evidence is stale or inconsistent with current package/runtime evidence, including package identity/revision mismatch, package/runtime mesh ID disagreement, package/runtime vertex count disagreement, topology `vertexCount`, `stableVertexIdCount`, `stableTriangleIdCount`, `uvCount`, `triangleCount`, `triangleIndexCount`, mesh-local `topologyRevision`, topology booleans including `hasStableTriangleIds`, runtime mesh bounds/hash self-consistency, or exposed `vertices.length`.
 - Mesh-local `topologyRevision` stale comparison is performed only when package or runtime/viewer mesh topology evidence carries `topologyRevision`. Validator-core must not invent a packageRevision-to-topologyRevision rule; package identity/revision staleness remains separate runtime snapshot identity evidence.
 - `editorState.staleReference` covers stale editor-only selected vertex refs. It remains warning-level and must not be promoted to runtime rendering failure just because the stale ref came from mesh selection state.
+- Mesh topology/UV diagnostics prove bounded project-defined vertex/triangle/UV semantics and optional runtime/viewer semantic evidence only. They do not prove automatic triangulation, retopology, UV unwrap, atlas packing, texture decode, texture sampling correctness, renderer output, pixel oracle results, external dependency behavior, or Cubism compatibility.
 
 Viewer evidence validation rules:
 
@@ -250,12 +298,13 @@ Part / layer-tree validation rules:
 
 Byte-intake preflight validation rules:
 
-- `binary.bytesMissing`, `binary.byteLengthMismatch`, `binary.digestMismatch`, `binary.digestUnsupported`, and `binary.mediaTypeMismatch` may be emitted by byte-intake preflight when actual selected bytes are missing or disagree with recorded intake metadata. Media type comparison is declared file metadata only; it is not image decode or parser evidence.
+- `binary.bytesMissing`, `binary.byteLengthMismatch`, `binary.digestMismatch`, `binary.digestUnsupported`, and `binary.mediaTypeMismatch` may be emitted by byte-intake preflight when actual selected or package-local bytes are missing or disagree with recorded intake metadata. Media type comparison is declared file metadata only; it is not media sniffing, image decode, or parser evidence.
 - `rights.binaryProvenanceMissing` and `rights.binaryRightsMissing` fire when byte-intake metadata lacks provenance or rights identifiers before package-local binary asset registration.
 - `byteIntake.unsupportedClaim` fires when byte-intake evidence claims parser, image decode, or archive import/export support. Truthfully recording those capabilities as unsupported may produce a non-applicable informational diagnostic instead of a failure.
-- `persistentByteStorage.*` checks fire only when byte-intake preflight is given browser-local persistent storage evidence or an explicit persistent-storage expectation. Valid verified same-origin browser-local stored bytes produce no check and may satisfy byte availability without current-session raw bytes. Missing records, missing stored bytes, stale package identity/revision or binary reference evidence, digest/byteLength/mediaType mismatches, corrupt re-read bytes, unavailable/unsupported backend state, and unsupported digest verification are reported with deterministic `persistentByteStorage.*` check IDs and evidence. These diagnostics do not claim portable archive persistence, File System Access API support, parser support, or image decode support.
-- `portableBundle.*` checks validate project-defined JSON portable bundle v0 evidence only. Valid verified bundle evidence produces no check. Unsupported bundle versions, malformed bundle schema, missing base64 payloads, missing required package binary payloads, digest mismatches, byteLength mismatches, availability metadata mismatches, and unsupported digest verification are reported with deterministic `portableBundle.*` check IDs and AI-readable evidence. These diagnostics do not claim ZIP/archive standard compatibility, File System Access API support, parser support, or image decode support.
-- `transportCapability.*` checks validate Domain A package transport capability evidence only. Valid supported `projectDefinedJsonBundleV0` evidence with the portable package bundle v0 binding produces no check. Missing evidence produces `transportCapability.evidenceMissing` only when the caller explicitly requires transport evidence; malformed supplied evidence produces `transportCapability.schemaInvalid`; unsupported, future-gated, and dependency-gated capabilities produce deterministic boundary diagnostics with capability ID, kind, status, gates, and issue evidence. These diagnostics are separate from `portableBundle.*`, `byteAvailability.*`, and `persistentByteStorage.*` and do not claim ZIP/archive standard compatibility, File System Access API support, drag-drop support, native filesystem persistence, parser support, or image decode support.
+- `byteAvailability.*` checks evaluate current-session or package-local byte availability evidence for a requested package/binary ref. Valid current-session or verified package-local byte evidence produces no check. Missing reupload, stale verified summaries, package/revision/binary-ref mismatches, digest/byteLength/mediaType mismatches, and unsupported digest verification are reported with deterministic `byteAvailability.*` check IDs. These diagnostics do not prove parser/decode, PSD/PNG semantics, raster extraction, texture materialization, archive/filesystem support, renderer output, pixel oracle results, or Cubism compatibility.
+- `persistentByteStorage.*` checks fire only when byte-intake preflight is given same-origin browser-local persistent byte storage evidence or an explicit persistent-storage expectation. The implemented backend vocabulary is browser-local IndexedDB evidence such as `indexeddb-same-origin-browser-local-v1`; valid verified re-read bytes produce no check and may satisfy byte availability without current-session raw bytes. Missing records, missing stored bytes, stale package identity/revision or binary reference evidence, digest/byteLength/mediaType mismatches, corrupt re-read bytes, unavailable/unsupported backend state, and unsupported digest verification are reported with deterministic `persistentByteStorage.*` check IDs and evidence. These diagnostics do not claim OS-level durability, cloud or cross-profile persistence, quota or private-browsing guarantees, portable archive persistence, File System Access API support, parser support, image decode support, renderer evidence, or pixel correctness.
+- `portableBundle.*` checks validate project-defined JSON portable bundle v0 evidence only: `portable-package-bundle-v0` / `project-defined-json-bundle-v0` with base64 payload evidence. Valid verified bundle evidence produces no check. Unsupported bundle versions, malformed bundle schema, missing base64 payloads, missing required package binary payloads, digest mismatches, byteLength mismatches, availability metadata mismatches, and unsupported digest verification are reported with deterministic `portableBundle.*` check IDs and AI-readable evidence. These diagnostics do not claim ZIP/archive standard compatibility, native filesystem support, File System Access API support, directory picker or drag-drop support, parser support, image decode support, renderer evidence, or pixel correctness.
+- `transportCapability.*` checks validate package transport capability evidence only. Valid supported `projectDefinedJsonBundleV0` evidence with the portable package bundle v0 binding produces no check. Missing evidence produces `transportCapability.evidenceMissing` only when the caller explicitly requires transport evidence; malformed supplied evidence produces `transportCapability.schemaInvalid`; unsupported, future-gated, and dependency-gated capabilities produce deterministic boundary diagnostics with capability ID, kind, status, gates, and issue evidence. These diagnostics are separate from `portableBundle.*`, `byteAvailability.*`, and `persistentByteStorage.*` and do not claim ZIP/archive standard compatibility, File System Access API support, directory picker or drag-drop support, native filesystem persistence, cloud persistence, parser support, image decode support, renderer output, pixel oracle results, external proposal transport, or Cubism compatibility.
 
 ## Validation Profiles
 
@@ -265,7 +314,7 @@ Byte-intake preflight validation rules:
 | `viewer` | saved package load/inspect diagnostics | package + runtime snapshot | blocks non-loadable package |
 | `strict` | full package validation | package + representative runtime eval | fails on blocking/error |
 | `acceptance` | MVP scenario evidence | operation log, reports, snapshots, package, supplemental evidence | fails missing GUI evidence, acceptance-failing formal diagnostics, or blocking checks |
-| `aiDryRun` | AI proposed operation review | baseline/temp graph, diffs, report | blocks mutation without approval or target ambiguity |
+| `aiDryRun` | AI-readable dry-run and Codex proposal evidence review | baseline/temp graph, diffs, report/proposal evidence | blocks mutation without explicit approval or target ambiguity; does not allow automatic commit |
 
 ## Severity / Status
 
@@ -355,11 +404,9 @@ export type ValidationReportDto = z.infer<typeof ValidationReportSchema>;
 
 ## Product Preflight Report v0 Hook
 
-Wave39 adds an additive product-level preflight report contract. The authored source of truth is
-`ProductPreflightReportDtoSchema` in `packages/contracts/src/product-preflight-report.ts`.
+Wave39-W41 add an additive product-level preflight report, diff, read, and rerun surface. The authored source of truth is `ProductPreflightReportDtoSchema` in `packages/contracts/src/product-preflight-report.ts`; report construction and diagnostic-to-category mapping live in `packages/validator-core/src/product-preflight-report.ts`, with diff support in the Product Preflight report diff modules.
 
-The product preflight report does not replace `ValidationReportDto` or targeted diagnostics. It
-aggregates diagnostic refs and evidence refs into MVP-wide categories:
+The product preflight report does not replace `ValidationReportDto`, the check catalog, or targeted diagnostics. It aggregates targeted diagnostic refs and evidence refs into MVP-wide categories:
 
 - `modelStructure`
 - `authoringWorkflowEvidence`
@@ -376,10 +423,32 @@ Product preflight status uses product-level vocabulary:
 `pass`, `warn`, `fail`, `not_supported`, and `not_evaluated`. `not_supported` and
 `not_evaluated` are explicit outcomes and must not be mapped to `pass`.
 
-The contract records blocking reasons and recommended next actions for human or deterministic
-workflow follow-up. It does not define repair candidate generation, auto-fix, LLM provider use,
-natural-language repair, parser/image decode, archive/filesystem implementation, renderer or pixel
-oracle support, or Cubism compatibility.
+Product Preflight evidence refs use project vocabulary such as `validationReport`, `runtimeSnapshot`, `runtimeState`, `runtimeStateSequence`, `operationLog`, `guiEvidence`, `aiTranscript`, `byteAvailability`, `persistentByteStorage`, `portableBundle`, `transportCapability`, `demoSafePreflight`, and `tutorialReadiness`. Current builder requirements still stay category-specific: for example, byte evidence is evaluated through `byteAvailability` refs and persistence/transport through `transportCapability` refs unless source code changes deliberately expand that requirement. The presence of an artifact kind in the DTO vocabulary is not by itself a persisted package artifact or export promise.
+
+The `assetBytes` category maps `binary.*`, `byteAvailability.*`, `persistentByteStorage.*`, and binary rights/provenance diagnostics to product-level status. The `persistenceTransport` category maps `portableBundle.*` and `transportCapability.*`. The `meshTopologyUv` and `rigControlDynamics` categories aggregate semantic diagnostics and evidence refs only; they do not upgrade runtime/viewer evidence into renderer, texture sampling, pixel oracle, or Cubism proof.
+
+The contract records blocking reasons, unsupported claims, not-evaluated claims, evidence refs, diagnostic refs, and recommended next actions for human or deterministic workflow follow-up. It is a session-generated report/diff/read/rerun surface only. It does not define a persisted or exported Product Preflight artifact, CI/release gate, demo gate, external-tool artifact, repair candidate generation, auto-fix, LLM provider use, natural-language repair, parser/image decode, archive/filesystem implementation, renderer or pixel oracle support, external transport, or Cubism compatibility.
+
+## Codex Proposal Evidence Surface
+
+Wave40-W41 Codex proposal support intersects this validator contract only through deterministic validation, dry-run diff preview, rerun validation, approval evidence, transcript/report refs, and Product Preflight read/diff/rerun bridge behavior.
+
+The relevant DTO surfaces are proposal-local and report-facing:
+
+- `codex-rigging-edit-proposal-v0`
+- `codex-proposal-operation-catalog-v0`
+- `ai-codex-proposal-command-request-v0`
+- `ai-codex-proposal-command-response-v0`
+- `codex-proposal-validation-result-v0`
+- `codex-proposal-diff-preview-result-v0`
+- `codex-proposal-rerun-validation-result-v0`
+- `codex-proposal-approval-evidence-response-v0`
+
+Proposal validation issue codes include schema/catalog/operation support failures such as `schemaInvalid`, `operationCatalogMissing`, `operationCatalogMismatch`, `unsupportedOperation`, and `unsupportedBoundary`. Preview and rerun result DTOs may record proposal-local check IDs such as `codexProposal.preview.unsupportedOperation` and `codexProposal.rerunValidation.staleEvidence`. This contract treats those as Codex proposal report/evidence vocabulary unless a later policy or checker explicitly registers them as catalog-backed validator diagnostics; `check-catalog.ts` does not currently register a `codexProposal.*` family.
+
+The operation catalog records unsupported boundary kinds for repo-side proposal generation, repair candidate generation, candidate ranking, LLM provider integration, natural-language repair, auto-fix, automatic commit, external transport, parser/image decode, archive/filesystem, renderer/pixel oracle, and Cubism compatibility. Recording those boundaries is a deterministic validation/reporting feature; it is not an implementation of any of those capabilities.
+
+Codex proposal approval evidence requires explicit approval state and keeps `automaticCommitAllowed` false. The validator contract does not claim repo-side proposal generation, repair reasoning, repair candidate generation/ranking, natural-language repair conversion, auto-fix, automatic commit, external proposal transport, parser/decode, archive/filesystem package transport, rendered pixel oracle behavior, or Cubism compatibility.
 
 ## Diagram Requirements
 
@@ -412,9 +481,9 @@ sequenceDiagram
   Viewer->>Validator: validatePackage(viewer)
   Validator->>Runtime: load/evaluate summary
   Validator-->>Viewer: viewer diagnostics
-  AI->>Validator: validate dry-run candidate(aiDryRun)
+  AI->>Validator: validate report/proposal evidence(aiDryRun)
   Validator->>Runtime: targeted/full snapshot
-  Validator-->>AI: report + repair candidates
+  Validator-->>AI: report + evidence refs
 ```
 
 ## Editor Warning / Viewer Diagnostics / Acceptance Runner Relation
@@ -423,7 +492,9 @@ sequenceDiagram
 |----------|------|--------------|
 | Editor warnings | `editorIncremental` checks | check ID, target ID, jump target, severity |
 | Viewer diagnostics | `viewer` profile | runtime load diagnostics, package references, snapshot ID |
-| AI-readable report | `strict` or `aiDryRun` | stable IDs, diff refs, repair candidates, provenance |
+| AI-readable report | `strict` or `aiDryRun` | stable IDs, diagnostic/evidence refs, diff refs, provenance; repair-candidate DTO slots may be empty and do not imply generation/ranking |
+| Product Preflight | Product-level report/diff/read/rerun surface | category/status vocabulary, evidence refs, diagnostic refs, blocking reasons, unsupported/not-evaluated claims |
+| Codex proposal review | Proposal-local validation/preview/rerun/approval evidence | operation catalog status, validation issues, dry-run diff refs, rerun validation refs, approval evidence refs |
 | Acceptance Runner | `acceptance` profile | GUI operation log evidence, AC/scenario links, pass/fail status |
 
 ## Traceability
@@ -435,7 +506,12 @@ sequenceDiagram
 | AC-MVP-009, SC-DEF-006 | rig control checks | `invalid-rigControl-cycle`, `parent-child-rigControl-diagonal` |
 | AC-MVP-010, AC-PHYS-001..006, SC-DYN-001..004 | dynamics checks | `minimal-dynamics-hairSway`, `invalid-dynamics-missing-driver`, `invalid-dynamics-missing-output`, `invalid-dynamics-output-target-duplicate`, `invalid-dynamics-cycle`, `dynamics-output-range-clamp`, `dynamics-reset-determinism`, `demo-safe-dynamics-capture` |
 | AC-MVP-013, SC-MVP-004 | `ValidationReportDto` | all validation fixtures |
-| AC-MVP-014, SC-AGENT-002 | `RepairCandidateDto` | `ai-repair-dry-run` |
+| AC-MVP-004, AC-MVP-013 | byte availability / persistent byte storage diagnostics | Wave31 byte characterization, Wave34 byte availability direct-call fixtures, byte-intake smoke path, persistent byte restore tests |
+| AC-MVP-004, AC-MVP-013, AC-MVP-015, AC-MVP-016 | portable bundle / transport capability diagnostics | Wave36 portable bundle round-trip evidence and transport capability contract fixtures |
+| AC-MVP-005, AC-MVP-012, AC-MVP-013 | topology/UV semantic evidence | Wave38 topology/UV persistence smoke and semantic fixture evidence |
+| AC-MVP-009, AC-MVP-010, AC-MVP-012, AC-MVP-013 | warp lattice semantic evidence | Wave32 warp lattice contract fixtures and runtime evidence checks |
+| AC-MVP-013, AC-MVP-015, AC-MVP-016 | Product Preflight v0 report/diff surface | Wave39 Product Preflight states and Wave41 Product Preflight diff fixtures |
+| AC-MVP-014, SC-AGENT-002 | `RepairCandidateDto` slot / Codex proposal deterministic evidence | validation reports with empty repair-candidate slots; Wave40 Codex proposal validation/preview/rerun/approval fixtures |
 | AC-MVP-001, SC-MVP-005 | `evidence.guiOperationLogMissing` | script-only fixture classification |
 
 ## Verification and Fixtures
@@ -456,7 +532,14 @@ sequenceDiagram
 | `demo-unsafe-forbidden-term` | forbidden dependency or compatibility wording on public surfaces | fail report with `demo.unsafeDependencyClaim` |
 | `invalid-mask-reference` | missing mask source/target | fail report |
 | `script-generated-minimal` | viewer-loadable but no GUI evidence | acceptance fail / auxiliary fixture status |
-| `ai-repair-dry-run` | repair candidate and validation diff | report + candidate |
+| `wave34-byte-availability-direct-call-fixtures` | current-session/package-local byte availability evidence | validator availability diagnostics summary; no parser/decode evidence |
+| `byte-intake-smoke.mjs` | selected-byte intake and same-origin browser-local restore path | current-session and browser-local byte evidence; no storage durability guarantee |
+| `portable-bundle-roundtrip-smoke.mjs` | project-defined JSON bundle v0 round trip | portable bundle and transport evidence; no ZIP/archive/filesystem support |
+| `wave32-warp-lattice2d-contract-fixtures` | project-defined warp lattice semantics | semantic bilinear lattice evidence; no Cubism or pixel proof |
+| `wave38-topology-uv-fixture-e2e` | bounded topology/UV semantic edit evidence | semantic topology/UV evidence; no texture sampling proof |
+| `wave39-product-preflight-report-states` | Product Preflight category/status report states | session-generated Product Preflight report DTO |
+| `wave41-product-preflight-diff-fixtures` | Product Preflight report diff/read/rerun affordance evidence | report diff DTO; no persisted/exported Preflight artifact |
+| `wave40-codex-proposal-fixtures` | Codex proposal catalog/validation/preview/rerun/approval evidence | deterministic proposal evidence DTOs; no repo-side proposal generation or auto-fix |
 
 ## Open Questions
 
@@ -482,4 +565,6 @@ Review this file for:
 - check ID coverage against MVP AC and scenarios,
 - severity/status separation,
 - GUI operation log evidence as required MVP evidence,
-- repair candidate consistency with operation-core and AI contracts.
+- validation repair-candidate DTO slot consistency with operation-core and AI contracts,
+- Product Preflight evidence/report boundaries,
+- Codex proposal deterministic evidence boundaries and unsupported capability vocabulary.

@@ -113,7 +113,7 @@ How are diagnostic IDs named?
 
 #### Decision
 
-Diagnostic IDs are machine-readable dotted identifiers with no spaces. They use stable semantic namespaces such as `runtime`, `dynamics`, `demo`, `rights`, `evidence`, `ai`, `mesh`, `mask`, `keyform`, and `rigControl`.
+Diagnostic IDs are machine-readable dotted identifiers with no spaces. They use stable semantic namespaces such as `runtime`, `dynamics`, `demo`, `rights`, `evidence`, `ai`, `mesh`, `mask`, `keyform`, `rigControl`, `binary`, `byteAvailability`, `persistentByteStorage`, `portableBundle`, and `transportCapability`.
 
 Examples:
 
@@ -292,6 +292,13 @@ flowchart TD
 | `ai.dryRunMutatedPackage` | formal | fail | fails `aiDryRun` and acceptance | AI dry-run safety tests |
 | `evidence.guiOperationLogMissing` | formal | fail | fails `acceptance` for GUI-authored MVP candidates | GUI evidence tests |
 | `demo.unsafeDependencyClaim` | formal | fail | fails demo-safe and acceptance where capture/proposal surface is tested | demo-safe tests |
+| `byteAvailability.currentSessionBytes.missing` | formal | error | fails `strict` and `acceptance` when current-session byte evidence is required | Wave34 byte availability direct-call fixtures and Product Preflight diagnostic refs |
+| `persistentByteStorage.record.missing` | formal | error | fails `strict` and `acceptance` only when browser-local persistent storage evidence or an explicit persistent-storage expectation is supplied | persistent byte restore validator/workflow evidence |
+| `portableBundle.digestMismatch` | formal | error | fails `strict` and `acceptance` for project-defined JSON bundle v0 import evidence | Wave36 portable bundle roundtrip evidence |
+| `transportCapability.futureGated` | formal | blocking | fails when transport capability evidence records a future-gated transport boundary | Wave36/Wave37 transport capability evidence |
+| `mesh.uvCountMismatch` | formal | error | fails `strict` and `acceptance` for semantic mesh topology/UV evidence | Wave38 topology/UV evidence |
+| `rigControl.warpLatticeRuntimeEvidenceMismatch` | formal | error | fails `strict` and `acceptance` for project-defined `warpLattice2d` runtime evidence mismatch | Wave32 warp lattice evidence |
+| `tutorial.unsupportedClaim` | formal | blocking | fails `acceptance` when tutorial readiness evidence contains unsupported claims | Product Preflight unsupported-claim fixtures |
 | `dynamics.demoUnsafeInternalName` | formal | warning/error by profile | review or fail for demo-safe depending on fixture | demo-safe dynamics capture tests |
 | `rights.displayNotAllowed` | candidate | warning | notes only until promoted | future rights review only |
 | `rights.sourceUnknown` | candidate | warning | notes only unless explicit expected artifact blocks | future rights review only |
@@ -329,6 +336,21 @@ flowchart TD
 | `dynamics.demoUnsafeInternalName` | info or warning | warning | needs_review or fail by fixture | warning/fail by fixture |
 | candidate diagnostics | note only | note only unless explicit expected artifact blocks | cannot be sole MVP blocker | cannot be sole MVP blocker |
 
+### Table 4: Wave43 Namespace and Evidence Vocabulary Sync
+
+This table records namespace-level policy for current Wave31-Wave42 diagnostic/evidence surfaces without replacing `packages/validator-core/src/check-catalog.ts` or `validator-contract.md`.
+
+| Surface | Classification | Current IDs / vocabulary | Evidence and boundary |
+| --- | --- | --- | --- |
+| Byte availability | formal catalog-backed validator diagnostics | `byteAvailability.*`; representative IDs include `byteAvailability.currentSessionBytes.missing`, `byteAvailability.requiresReupload`, and `byteAvailability.verifiedSummary.stale` | Product Preflight artifact kind `byteAvailability`, category `assetBytes`; proves selected/package-local byte evidence, length, digest, and declared metadata only. |
+| Persistent byte storage | formal catalog-backed validator diagnostics when persistent evidence or an explicit expectation is supplied | `persistentByteStorage.*`; representative IDs include `persistentByteStorage.backend.unavailable`, `persistentByteStorage.record.missing`, `persistentByteStorage.verification.missing`, and mismatch/unsupported variants | Browser-local, same-origin persistent byte evidence with verified reread/fallback only. `persistentByteStorage` is Product Preflight artifact vocabulary, but current builder requirements must not be rewritten here. |
+| Portable bundle | formal catalog-backed validator diagnostics | `portableBundle.*`; representative IDs include `portableBundle.schemaInvalid`, `portableBundle.missingRequiredBinary`, `portableBundle.digestMismatch`, and `portableBundle.availabilityMismatch` | Project-defined JSON portable bundle v0 only; no ZIP/archive, File System Access API, parser, or image decode claim. |
+| Transport capability | formal catalog-backed validator diagnostics | `transportCapability.evidenceMissing`, `transportCapability.schemaInvalid`, `transportCapability.unsupported`, `transportCapability.futureGated`, `transportCapability.dependencyGated` | Capability IDs/status/gates/issues describe supported, unsupported, future-gated, or dependency-gated transport boundaries without making those boundaries available. |
+| Topology/UV | formal catalog-backed validator diagnostics | representative `mesh.*` IDs include `mesh.uvCountMismatch`, `mesh.uvCoordinateOutOfBounds`, `mesh.runtimeEvidenceMissing`, and `mesh.runtimeEvidenceMismatch` | Semantic topology/UV evidence only; no texture sampling, full renderer, or pixel oracle claim. |
+| Warp lattice | formal catalog-backed validator diagnostics | `rigControl.warpLattice*` | Project-defined `warpLattice2d`, `controlPointOffsets`, and semantic bilinear runtime evidence only; no Cubism deformer or Physics compatibility claim. |
+| Product Preflight | report vocabulary over targeted diagnostics/evidence refs, not a separate `productPreflight.*` check family | categories include `modelStructure`, `authoringWorkflowEvidence`, `runtimeViewerEvidence`, `meshTopologyUv`, `composition`, `rigControlDynamics`, `assetBytes`, `persistenceTransport`, `tutorialDemoReadiness`, and `unsupportedClaims`; statuses are `pass`, `warn`, `fail`, `not_supported`, and `not_evaluated` | Session-generated read-only report/diff/read/rerun surface. It is not a persisted/exported package artifact, release gate, demo gate, repair system, parser, archive/filesystem validator, renderer oracle, pixel oracle, or Cubism compatibility proof. |
+| Codex proposal | proposal-local validation/preview/rerun issue and check vocabulary; not catalog-backed formal validator diagnostics in the current `check-catalog.ts` | issue codes include `schemaInvalid`, `operationCatalogMismatch`, `operationCatalogMissing`, `unsupportedOperation`, and `unsupportedBoundary`; local check IDs include `codexProposal.preview.*` and `codexProposal.rerunValidation.*` | Deterministic proposal intake, operation catalog, validation, dry-run diff preview, rerun validation, approval lifecycle, transcript/evidence recording, and Editor review workflow only. It does not add repo-side proposal generation, repair candidate generation/ranking, LLM/provider, natural-language repair, auto-fix, automatic commit, external transport, parser/decode, archive/filesystem, renderer/pixel oracle, or Cubism compatibility. |
+
 ## Rules
 
 1. Formal diagnostics are contract-backed and may be used by MVP blocking tests.
@@ -341,6 +363,8 @@ flowchart TD
 8. Diagnostics must be deterministic for the same package, profile, runtime context, input sequence, fixture manifest, and expected artifact set.
 9. Demo-safe behavior is a facet of validation and acceptance unless a future accepted contract creates a separate profile.
 10. Diagnostic promotion, deprecation, and removal must be reviewed when MVP blocking behavior changes.
+11. Product Preflight category/status/report vocabulary must reference targeted diagnostics and evidence refs; it must not create an implied `productPreflight.*` formal diagnostic family.
+12. `codexProposal.*` preview/rerun check IDs and Codex proposal issue codes remain proposal-local or result-local vocabulary unless a future validator contract/catalog change explicitly promotes them to catalog-backed formal validator diagnostics.
 
 ## Forbidden
 

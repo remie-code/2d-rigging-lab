@@ -21,7 +21,9 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after the Wave42 final documentation pass is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after the Wave43 final documentation pass is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 43 `validator-contract-evidence-naming-consistency-v0` completed Domain A-E implementation/review and final verification on 2026-06-05 with validator/evidence coverage matrix, validator contract prose refresh, diagnostic policy/schema/traceability naming sync, representative validator contract coverage checker, and active fixture manifest validator diagnostic label cleanup while keeping the product capability boundary unchanged and excluding Product Preflight persisted/exported artifacts, release/demo gates, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, repo-side repair generation/ranking, LLM/provider work, natural-language repair, auto-fix, external transport, external dependencies, and package manifest/lockfile changes.
+- Wave 43 final report is [waves/wave43/wave43-final-report.md](waves/wave43/wave43-final-report.md); clean integration review is [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) with `pass` verdict and no blocking findings.
 - Wave 42 `quality-gate-e2e-registry-source-guardrails-v0` completed Domain A-E implementation/review and final verification on 2026-06-05 with Wave42 quality gate boundary checks, source organization guard hardening, focused e2e registry/list/check/single-selection runner, dependency / forbidden-scope guard refinement, and docs/traceability registration while keeping the product capability boundary unchanged and excluding Product Preflight persisted/exported artifacts, release/demo gates, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, repo-side repair generation/ranking, LLM/provider work, natural-language repair, auto-fix, external transport, external dependencies, and package manifest/lockfile changes.
 - Wave 42 final report is [waves/wave42/wave42-final-report.md](waves/wave42/wave42-final-report.md); clean integration review is [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md), with W42-F-001 bookkeeping fixed in the final report/maps.
 - Wave 41 `product-preflight-read-diff-report-ergonomics-v0` completed on 2026-06-05 with Product Preflight report diff contract, deterministic validator diff builder, category/status transition summary, evidence/diagnostic ref changes, rerun affordance, Codex-facing read/diff command helpers, Editor current/previous/proposal-preview comparison workflow, rights-clean fixtures, focused desktop/mobile e2e smoke, final verification, and clean integration review while keeping Product Preflight session-generated/read-only and excluding persisted/exported artifacts, release/demo gates, repo-side repair generation/ranking, LLM/provider/prompt integration, natural-language repair, auto-fix/automatic commit, external transport, parser/image decode, archive/filesystem implementation, renderer/pixel oracle, Cubism compatibility, external dependencies, and package manifest/lockfile changes.
@@ -119,6 +121,7 @@ discussion/implementation/
 | [orchestration/wave40-plan.md](orchestration/wave40-plan.md) | Wave 40 Codex-facing Rigging Edit Proposal API / Diff Validation Surface v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave41-plan.md](orchestration/wave41-plan.md) | Wave 41 Product Preflight Read / Diff / Report Ergonomics v0 dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave42-plan.md](orchestration/wave42-plan.md) | Wave 42 Quality Gate Tightening / E2E Registry and Source Guardrails v0 dependency and Orch-Sylph parallelism plan |
+| [orchestration/wave43-plan.md](orchestration/wave43-plan.md) | Wave 43 Validator Contract / Evidence Naming Consistency v0 dependency and Orch-Sylph parallelism plan |
 | [waves/wave1/_map.md](waves/wave1/_map.md) | Wave 1 domain completion reports, integration review, and final report |
 | [waves/wave2/_map.md](waves/wave2/_map.md) | Wave 2 domain completion reports, integration review, and final report |
 | [waves/wave3/_map.md](waves/wave3/_map.md) | Wave 3 domain completion reports, integration review, and final report |
@@ -182,6 +185,7 @@ discussion/implementation/
 | [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) | Wave 41 final report for Product Preflight Read / Diff / Report Ergonomics v0 |
 | [waves/wave41/_map.md](waves/wave41/_map.md) | Wave 41 domain completion reports, final verification, clean review, and final report |
 | [waves/wave42/wave42-final-report.md](waves/wave42/wave42-final-report.md) | Wave 42 final report for Quality Gate Tightening / E2E Registry and Source Guardrails v0 |
+| [waves/wave43/wave43-final-report.md](waves/wave43/wave43-final-report.md) | Wave 43 final report for Validator Contract / Evidence Naming Consistency v0 |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -240,6 +244,8 @@ discussion/implementation/
 | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) | Wave 41 clean integration review |
 | [reviews/wave42/_map.md](reviews/wave42/_map.md) | Wave 42 domain review reports and clean integration review |
 | [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md) | Wave 42 clean integration review; W42-F-001 bookkeeping fixed in final report/maps |
+| `reviews/wave43/**` | Wave 43 Domain A-E review reports |
+| [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) | Wave 43 clean integration review; verdict `pass`; Clean Integration, Test Adequacy, and Orchestration Compliance all pass |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 

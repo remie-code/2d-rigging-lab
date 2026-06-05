@@ -100,6 +100,11 @@ Examples:
 - `RuntimeStateSequenceArtifactDto` / `RuntimeStateSequenceArtifactDtoSchema`
 - `RuntimeStateArtifactRefDto` / `RuntimeStateArtifactRefDtoSchema`
 - `ValidationReportDto` / `ValidationReportDtoSchema`
+- `ProductPreflightReportDto` / `ProductPreflightReportDtoSchema`
+- `ProductPreflightReportDiffDto` / `ProductPreflightReportDiffDtoSchema`
+- `PackageTransportCapabilityDto` / `PackageTransportCapabilityDtoSchema`
+- `CodexRiggingEditProposalDto` / `CodexRiggingEditProposalDtoSchema`
+- `CodexProposalOperationCatalogDto` / `CodexProposalOperationCatalogDtoSchema`
 
 Internal domain types MAY omit `Dto` when they are not serialized external boundaries.
 
@@ -347,6 +352,28 @@ Treating generated JSON Schema as MVP source of truth was rejected because modul
 
 Schema changes MUST update authored DTO/Zod definitions first, then regenerate derived artifacts and evidence.
 
+### DEC-SCHEMA-010: Wave31-Wave42 report and evidence vocabulary
+
+#### Question
+
+How are newer byte availability, persistent byte storage, portable bundle, transport capability, Product Preflight, and Codex proposal IDs named?
+
+#### Decision
+
+These surfaces use the authored DTO/Zod schemas and machine-readable values listed in Table 4. Product Preflight artifact kinds such as `byteAvailability`, `persistentByteStorage`, `portableBundle`, and `transportCapability` are contract vocabulary; they do not by themselves require every current report builder path to supply every artifact kind. `codexProposal.*` preview/rerun check IDs and Codex proposal issue codes are proposal-local or result-local vocabulary unless a future validator catalog change promotes them.
+
+#### Rationale
+
+Wave31-Wave42 added report/evidence surfaces faster than this policy's examples. Recording their current names prevents agents from inventing alternate IDs or accidentally turning unsupported boundaries into capabilities.
+
+#### Alternatives considered
+
+Copying every validator check ID into this schema policy was rejected. The check catalog remains the detailed source for catalog-backed validator diagnostics.
+
+#### Impact
+
+Schema and ID reviews MUST preserve these exact machine-readable values when documenting or testing the corresponding surface.
+
 ## Required Diagrams
 
 ### Diagram 1: Schema Ownership Flow
@@ -444,6 +471,17 @@ graph TD
 | Legacy runtime profile schema | Explicit runtime evaluation context/options DTOs | Migration review only | Runtime contract and tests no longer mention legacy profile |
 | Legacy diagnostic strings without registry entry | Formal/candidate diagnostic registry entries | Historical reports only | Validator contract registry covers all active diagnostics |
 | Free-form artifact path strings | Contract-owned artifact ref DTOs | Historical evidence only | All active tests use typed refs |
+
+### Table 4: Wave43 Schema and Evidence ID Vocabulary
+
+| Surface | DTO / schema owner | Stable values | Boundary |
+|---|---|---|---|
+| Byte availability | validator diagnostics and Product Preflight artifact refs | check ID family `byteAvailability.*`; artifact kind `byteAvailability`; generated path segment `byte-availability`; Product Preflight category `assetBytes` | Current-session or package-local byte evidence only; media type is declared metadata, not image decode. |
+| Persistent byte storage | validator diagnostics and Product Preflight artifact refs | check ID family `persistentByteStorage.*`; artifact kind `persistentByteStorage`; generated path segment `persistent-byte-storage`; Product Preflight diagnostic category `assetBytes` | Same-origin browser-local persistent byte evidence with verified reread/fallback only. Do not treat it as required Product Preflight builder input or OS/cloud/quota/private-browsing guarantee without a future source/schema change. |
+| Portable bundle | `portableBundle.*` validator diagnostics and transport binding | schema version `portable-package-bundle-v0`; bundle kind `project-defined-json-bundle-v0`; payload encoding `base64-v1`; artifact kind `portableBundle`; Product Preflight category `persistenceTransport` | Project-defined JSON bundle v0 only; no ZIP/archive standard, native filesystem, parser, or image decode claim. |
+| Transport capability | `PackageTransportCapabilityDtoSchema` and `PackageTransportCapabilityCatalogDtoSchema` | schema versions `package-transport-capability-v0` and `package-transport-capabilities-v0`; capability IDs `projectDefinedJsonBundleV0`, `standardArchiveZipV0`, `fileSystemAccessApiV0`, `directoryPickerV0`, `dragDropFileIntakeV0`, `nativeFilesystemPersistenceV0`; statuses `supported`, `unsupported`, `future-gated`, `dependency-gated`; gate statuses `open`, `notRequired`; issue codes `transport.notImplemented`, `transport.unsupported`, `transport.futureScope`, `transport.dependencyApprovalRequired`, `transport.noArchiveCompatibilityClaim`, `transport.noFilesystemCompatibilityClaim`, `transport.noDragDropIntake` | Only `projectDefinedJsonBundleV0` may be documented as currently supported. Other capability records are boundary evidence, not implementation claims. |
+| Product Preflight report | `ProductPreflightReportDtoSchema` and `ProductPreflightReportDiffDtoSchema` | schema versions `product-preflight-report-v0` and `product-preflight-report-diff-v0`; categories `modelStructure`, `authoringWorkflowEvidence`, `runtimeViewerEvidence`, `meshTopologyUv`, `composition`, `rigControlDynamics`, `assetBytes`, `persistenceTransport`, `tutorialDemoReadiness`, `unsupportedClaims`; statuses `pass`, `warn`, `fail`, `not_supported`, `not_evaluated` | Session-generated read-only report/diff/read/rerun surface over targeted diagnostics and evidence refs. It is not a persisted/exported package artifact, release gate, demo gate, or external-tool artifact. |
+| Codex proposal | `CodexRiggingEditProposalDtoSchema`, `CodexProposalOperationCatalogDtoSchema`, `CodexProposalValidationResultDtoSchema`, `CodexProposalDiffPreviewResultDtoSchema`, `CodexProposalRerunValidationResultDtoSchema`, `CodexProposalApprovalEvidenceResponseDtoSchema` | schema versions `codex-rigging-edit-proposal-v0`, `codex-proposal-operation-catalog-v0`, `codex-proposal-validation-result-v0`, `codex-proposal-diff-preview-result-v0`, `codex-proposal-rerun-validation-result-v0`, `codex-proposal-approval-evidence-response-v0`; ID prefixes `proposal_`, `step_`, `preview_`, `approval_`, `evidence_`, `issue_`; issue codes `schemaInvalid`, `operationCatalogMismatch`, `operationCatalogMissing`, `unsupportedOperation`, `unsupportedBoundary`; local check ID families `codexProposal.preview.*` and `codexProposal.rerunValidation.*` | Deterministic proposal validation, preview, rerun, approval, and evidence vocabulary only. The repo does not generate proposals, rank repair candidates, host an LLM/provider, auto-fix, commit automatically, provide external proposal transport, parse/decode images, implement archive/filesystem transport, render pixel oracles, or prove Cubism compatibility. |
 
 ## Rules
 
