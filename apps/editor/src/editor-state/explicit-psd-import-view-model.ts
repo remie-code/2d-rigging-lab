@@ -1,5 +1,6 @@
 import {
   type ExplicitPsdImportState,
+  type ExplicitPsdImportFactState,
   type ExplicitPsdImportTreeRowState
 } from "./explicit-psd-import-state.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
@@ -11,6 +12,7 @@ export interface ExplicitPsdImportFactViewModel {
 
 export interface ExplicitPsdImportTreeRowViewModel {
   readonly nodeRef: string;
+  readonly kind: ExplicitPsdImportTreeRowState["kind"];
   readonly depth: number;
   readonly label: string;
   readonly metaLabel: string;
@@ -25,6 +27,9 @@ export interface ExplicitPsdImportViewModel {
   readonly documentFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly featureFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly persistenceFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly intakeStatusLabel: string;
+  readonly intakeFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly intakeDiagnostics: readonly string[];
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materializationLabels: readonly string[];
@@ -43,6 +48,13 @@ export const projectExplicitPsdImportViewModel = (
   documentFacts: projectDocumentFacts(state),
   featureFacts: projectFeatureFacts(state),
   persistenceFacts: projectPersistenceFacts(state),
+  intakeStatusLabel: projectIntakeStatusLabel(state),
+  intakeFacts: projectIntakeFacts(state),
+  intakeDiagnostics: state.selectedLayerIntake.diagnostics.length === 0
+    ? ["No selected layer intake diagnostics"]
+    : state.selectedLayerIntake.diagnostics.map((diagnostic) =>
+        `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+      ),
   unsupportedFeatureLabels: state.unsupportedFeatureLabels.length === 0
     ? ["No unsupported feature evidence surfaced"]
     : state.unsupportedFeatureLabels,
@@ -173,10 +185,38 @@ const projectPersistenceFacts = (
   { label: "Pixel oracle claim", value: state.persistenceBoundary.rendererPixelOracleClaim }
 ];
 
+const projectIntakeStatusLabel = (state: ExplicitPsdImportState): string => {
+  switch (state.selectedLayerIntake.status) {
+    case "idle":
+      return "No selected layer intake result";
+    case "committed":
+      return "Selected PSD layer added to project";
+    case "rejected":
+      return "Selected PSD layer intake rejected";
+    case "failed":
+      return "Selected PSD layer intake failed";
+  }
+};
+
+const projectIntakeFacts = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportFactViewModel[] =>
+  state.selectedLayerIntake.summaryFacts.length === 0
+    ? [{ label: "Result", value: "No materialized project asset yet" }]
+    : state.selectedLayerIntake.summaryFacts.map(projectFact);
+
+const projectFact = (
+  fact: ExplicitPsdImportFactState
+): ExplicitPsdImportFactViewModel => ({
+  label: fact.label,
+  value: fact.value
+});
+
 const projectTreeRowViewModel = (
   row: ExplicitPsdImportTreeRowState
 ): ExplicitPsdImportTreeRowViewModel => ({
   nodeRef: row.nodeRef,
+  kind: row.kind,
   depth: row.depth,
   label: [
     `${row.kind}: ${row.name}`,

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const operationTypes = [
   "importPsdSourceAsset",
+  "importPsdLayerMaterialization",
   "importSplitPngSourceAsset",
   "createDrawable",
   "createPart",

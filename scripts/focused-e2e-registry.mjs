@@ -108,8 +108,8 @@ const focusedE2eMetadataById = {
   },
   psdImportFocused: {
     purpose:
-      "Replay explicit browser PSD file selection, sample_model.psd parse/layer-tree evidence, save/load session boundary, and parser import containment.",
-    tags: ["assetIo", "psdImport", "browserPersistence", "standaloneDirect"],
+      "Replay explicit browser PSD file selection, sample_model.psd parse/layer-tree evidence, selected-layer texture/part intake, save/load boundary, and parser import containment.",
+    tags: ["assetIo", "psdImport", "selectedLayerIntake", "browserPersistence", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
   rigControlPersistence: {

@@ -176,6 +176,8 @@ const createRuntimeEvidenceInput = (
   switch (input.request.operationType) {
     case "importPsdSourceAsset":
       return createImportPsdSourceAssetEvidenceInput(input);
+    case "importPsdLayerMaterialization":
+      return createImportPsdLayerMaterializationEvidenceInput(input);
     case "importSplitPngSourceAsset":
       return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
@@ -246,6 +248,40 @@ const createImportPsdSourceAssetEvidenceInput = (
 
   return {
     artifactLabel: "editor-import-psd-source-profile",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createImportPsdLayerMaterializationEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "importPsdLayerMaterialization") {
+    throw new Error(
+      `importPsdLayerMaterialization evidence input received ${input.request.operationType}.`
+    );
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.sourceAssetId,
+    input.request.payload.materialization.sourceLayerRef.sourceLayerId,
+    ...(input.request.payload.textureId === undefined ? [] : [input.request.payload.textureId]),
+    ...(input.request.payload.drawableId === undefined ? [] : [input.request.payload.drawableId]),
+    ...(input.request.payload.meshId === undefined ? [] : [input.request.payload.meshId]),
+    ...(input.request.payload.materialization.binaryAssetRef === undefined
+      ? []
+      : [input.request.payload.materialization.binaryAssetRef.binaryAssetId])
+  ]);
+
+  return {
+    artifactLabel: "editor-import-psd-layer-materialization",
     authoredParameterValues: {},
     targetIds,
     baseline: {

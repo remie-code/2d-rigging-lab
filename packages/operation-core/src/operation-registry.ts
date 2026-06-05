@@ -15,6 +15,7 @@ import { createRotation2dRigControlOperationHandler } from "./operations/create-
 import { createWarpLattice2dRigControlOperationHandler } from "./operations/create-warp-lattice2d-rig-control.js";
 import { deletePartOperationHandler } from "./operations/delete-part.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
+import { importPsdLayerMaterializationOperationHandler } from "./operations/import-psd-layer-materialization.js";
 import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
 import {
@@ -56,6 +57,10 @@ export interface OperationHandler {
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
   [importPsdSourceAssetOperationHandler.operationType, importPsdSourceAssetOperationHandler],
+  [
+    importPsdLayerMaterializationOperationHandler.operationType,
+    importPsdLayerMaterializationOperationHandler
+  ],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
   [createPartOperationHandler.operationType, createPartOperationHandler],

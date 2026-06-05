@@ -116,6 +116,9 @@ import {
   type EditorImportSplitPngSourceAssetCommand,
   type EditorSetRightsMetadataCommand
 } from "./source-import-command.js";
+import type {
+  EditorSelectedPsdLayerBinaryByteRegistration
+} from "./selected-psd-layer-binary-registration-command.js";
 import {
   createEditorEvidenceCollector,
   summarizeEvidencePaths,
@@ -174,6 +177,9 @@ export interface EditorSessionAdapter {
   commitImportPsdSourceAssetWithBinaryBytes(
     command: EditorImportPsdSourceAssetWithBinaryBytesCommand
   ): Promise<EditorSessionPersistenceResult>;
+  commitImportPsdLayerMaterializationWithBinaryBytes(
+    command: EditorImportPsdLayerMaterializationWithBinaryBytesCommand
+  ): EditorSessionPersistenceResult;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorSessionPersistenceResult;
 }
 
@@ -229,6 +235,12 @@ export interface EditorSessionDrawablePresetResult {
   readonly createDrawable: EditorSessionPersistenceResult;
   readonly generateMesh: EditorSessionPersistenceResult | null;
   readonly finalPersistenceResult: EditorSessionPersistenceResult;
+}
+
+export interface EditorImportPsdLayerMaterializationWithBinaryBytesCommand {
+  readonly request: Extract<OperationRequestDto, { readonly operationType: "importPsdLayerMaterialization" }>;
+  readonly bytes: Uint8Array | ArrayBuffer;
+  readonly registration: EditorSelectedPsdLayerBinaryByteRegistration;
 }
 
 export interface EditorSessionBinaryByteEvidence {
@@ -484,6 +496,29 @@ export const createEditorSessionAdapter = (
             sourceAssetId: registration.sourceAssetId,
             createdByOperationId: registration.operationId,
             byteIntakeSummary: registration.byteIntakeSummary
+          });
+        }
+      });
+    },
+    commitImportPsdLayerMaterializationWithBinaryBytes(command) {
+      return commitOperationRequest({
+        request: command.request,
+        authoringSession,
+        baseDocument,
+        operationCore,
+        evidenceCollector,
+        generatedArtifactEntries,
+        now,
+        afterCommitted: () => {
+          registerAuthoringSessionBinaryBytes(authoringSession, {
+            binaryAssetRef: command.registration.binaryAssetRef,
+            bytes: command.bytes,
+            role: "texture-raster-v1",
+            textureId: command.registration.textureId,
+            ...(command.request.operationId === undefined
+              ? {}
+              : { createdByOperationId: command.request.operationId }),
+            byteIntakeSummary: command.registration.byteIntakeSummary
           });
         }
       });

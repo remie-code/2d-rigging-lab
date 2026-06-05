@@ -8,6 +8,7 @@ import type {
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import { validatePsdMaterializedAssetDiagnostics } from "./psd-materialized-asset-diagnostics.js";
 import {
   createStructuredProfileMismatchCheck,
   createStructuredProfileMissingCheck,
@@ -49,7 +50,10 @@ export const validatePsdSourceProfiles = (
     });
   });
 
-  return checks;
+  return [
+    ...checks,
+    ...validatePsdMaterializedAssetDiagnostics(packageDocument)
+  ];
 };
 
 interface PsdSourceProfileIndexes {
@@ -128,7 +132,8 @@ const validateMappedLayerProvenance = (
     if (
       provenanceRecord !== undefined &&
       provenanceRecord.assetId === sourceAsset.sourceAssetId &&
-      provenanceRecord.assetKind === "source"
+      (provenanceRecord.assetKind === "source" ||
+        isPrivateLocalMaterializedLayerProvenance(sourceAsset, sourceLayer, drawable.sourceProvenanceId))
     ) {
       return [];
     }
@@ -151,6 +156,23 @@ const validateMappedLayerProvenance = (
     ];
   });
 };
+
+const isPrivateLocalMaterializedLayerProvenance = (
+  sourceAsset: SourceAssetDto,
+  sourceLayer: SourceLayerDto,
+  provenanceId: string
+): boolean =>
+  sourceAsset.psdProfile?.materializationEvidence?.some((materialization) =>
+    materialization.sourceLayerRef.sourceAssetId === sourceAsset.sourceAssetId &&
+    materialization.sourceLayerRef.sourceLayerId === sourceLayer.sourceLayerId &&
+    materialization.binaryAssetRef?.provenanceId === provenanceId &&
+    (
+      materialization.provenance.privacyLabel === "packageLocalAsset" ||
+      materialization.provenance.privacyLabel === "privateLocalFixture"
+    ) &&
+    materialization.provenance.publicDistribution === "notPublicDistributable" &&
+    materialization.provenance.publicDemoAsset === false
+  ) === true;
 
 const createUnsupportedFeatureCheck = (input: {
   readonly sourceAsset: SourceAssetDto;

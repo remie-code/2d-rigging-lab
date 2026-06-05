@@ -1,5 +1,7 @@
 import {
+  DrawableIdSchema,
   JsonValueSchema,
+  MeshIdSchema,
   PartIdSchema,
   RectSchema,
   SourceAssetIdSchema,
@@ -31,8 +33,8 @@ const PSD_LAYER_TREE_EVIDENCE_ID_PATTERN = /^layerTree_[A-Za-z0-9_-]+$/;
 const PSD_MATERIALIZATION_ID_PATTERN = /^mat_[A-Za-z0-9_-]+$/;
 const PSD_OPTIONS_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
 const SHA256_DIGEST_HEX_PATTERN = /^[a-f0-9]{64}$/;
-const LOWERCASE_MEDIA_TYPE_PATTERN =
-  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+const MEDIA_TYPE_PATTERN =
+  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(?:; pixelFormat=rgba8)?$/;
 const NO_WHITESPACE_PATTERN = /^\S+$/;
 
 export const PsdAdapterSourceRefSchema = z.object({
@@ -145,11 +147,12 @@ const PsdAdapterByteLengthSchema = z.number()
   .nonnegative()
   .max(Number.MAX_SAFE_INTEGER);
 
-const PsdAdapterMediaTypeSchema = z.string().regex(LOWERCASE_MEDIA_TYPE_PATTERN);
+const PsdAdapterMediaTypeSchema = z.string().regex(MEDIA_TYPE_PATTERN);
 
 export const PsdAdapterSourceLayerReferenceSchema = z.object({
   sourceAssetId: SourceAssetIdSchema,
   sourceLayerId: z.string().min(1),
+  sourceLayerName: z.string().min(1).optional(),
   sourceLayerPath: z.array(z.string().min(1)).optional()
 }).strict();
 export type PsdAdapterSourceLayerReferenceDto = z.infer<
@@ -165,7 +168,8 @@ export const PsdAdapterLayerMaterializationProvenanceSchema = z.object({
   publicDistribution: z.literal("notPublicDistributable"),
   fixtureId: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional(),
   derivedArtifactPath: z.string().min(1).optional(),
-  generatedBy: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional()
+  generatedBy: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional(),
+  publicDemoAsset: z.literal(false).optional()
 }).strict();
 export type PsdAdapterLayerMaterializationProvenanceDto = z.infer<
   typeof PsdAdapterLayerMaterializationProvenanceSchema
@@ -187,6 +191,8 @@ export const PsdAdapterLayerMaterializationEvidenceSchema = z.object({
   mediaType: PsdAdapterMediaTypeSchema,
   byteLength: PsdAdapterByteLengthSchema,
   digest: PsdAdapterDigestSchema,
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
   binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   provenance: PsdAdapterLayerMaterializationProvenanceSchema,
@@ -290,6 +296,39 @@ export const ImportPsdSourceAssetPayloadSchema = z.object({
   rights: ImportRightsSummarySchema
 });
 export type ImportPsdSourceAssetPayloadDto = z.infer<typeof ImportPsdSourceAssetPayloadSchema>;
+
+const LockedTargetIdsSchema = z.array(z.string().min(1)).default([]);
+
+export const PsdLayerMaterializationDestinationPartSchema = z.discriminatedUnion("destinationKind", [
+  z.object({
+    destinationKind: z.literal("existingPart"),
+    partId: PartIdSchema
+  }).strict(),
+  z.object({
+    destinationKind: z.literal("newPart"),
+    partId: PartIdSchema.optional(),
+    displayName: z.string().min(1),
+    parentPartId: PartIdSchema.optional()
+  }).strict()
+]);
+export type PsdLayerMaterializationDestinationPartDto = z.infer<
+  typeof PsdLayerMaterializationDestinationPartSchema
+>;
+
+export const ImportPsdLayerMaterializationPayloadSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema,
+  materialization: PsdAdapterLayerMaterializationEvidenceSchema,
+  textureId: TextureIdSchema.optional(),
+  drawableId: DrawableIdSchema.optional(),
+  meshId: MeshIdSchema.optional(),
+  drawableDisplayName: z.string().min(1).optional(),
+  destinationPart: PsdLayerMaterializationDestinationPartSchema,
+  initialBounds: RectSchema.optional(),
+  lockedTargetIds: LockedTargetIdsSchema
+}).strict();
+export type ImportPsdLayerMaterializationPayloadDto = z.infer<
+  typeof ImportPsdLayerMaterializationPayloadSchema
+>;
 
 export const SplitPngSourceLayerMetadataSchema = z.object({
   sourceLayerId: z.string().min(1),

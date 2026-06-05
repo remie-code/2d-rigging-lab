@@ -2,12 +2,22 @@ import {
   editorTestIds,
   type ExplicitPsdImportViewModel
 } from "../../editor-state/index.js";
-import type { EditorExplicitPsdImportFileCommand } from "../../editor-workflow/index.js";
+import type {
+  EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdLayerIntakeCommand
+} from "../../editor-workflow/index.js";
 
 export interface ExplicitPsdImportPanelOptions {
   readonly viewModel: ExplicitPsdImportViewModel;
+  readonly destinationParts: readonly {
+    readonly partId: string;
+    readonly label: string;
+  }[];
   readonly onParsePsdFile: (
     command: EditorExplicitPsdImportFileCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeSelectedLayer: (
+    command: EditorExplicitPsdLayerIntakeCommand
   ) => unknown | Promise<unknown>;
 }
 
@@ -26,11 +36,12 @@ export const createExplicitPsdImportPanel = (
   const meta = document.createElement("p");
   meta.className = "editor-panel__meta";
   meta.textContent = options.viewModel.metaLabel;
+  const parseForm = createExplicitPsdImportForm(options);
 
   panel.append(
     heading,
     meta,
-    createExplicitPsdImportForm(options),
+    parseForm.form,
     createFactSection("Parser Session", editorTestIds.explicitPsdImportStatus, [
       { label: "Status", value: options.viewModel.statusLabel },
       { label: "Selected layer", value: options.viewModel.selectedLayerNodeRef }
@@ -51,7 +62,21 @@ export const createExplicitPsdImportPanel = (
       options.viewModel.materializationLabels,
       editorTestIds.explicitPsdImportMaterialization
     ),
-    createLayerTree(options.viewModel),
+    createLayerIntakeForm(options, parseForm.selectedLayerInput),
+    createFactSection(
+      "Selected Layer Intake Result",
+      editorTestIds.explicitPsdImportLayerIntakeResult,
+      [
+        { label: "Status", value: options.viewModel.intakeStatusLabel },
+        ...options.viewModel.intakeFacts
+      ]
+    ),
+    createTextList(
+      "Selected Layer Intake Diagnostics",
+      options.viewModel.intakeDiagnostics,
+      editorTestIds.explicitPsdImportLayerIntakeDiagnostics
+    ),
+    createLayerTree(options.viewModel, parseForm.selectedLayerInput),
     createFactSection(
       "Persistence Boundary",
       editorTestIds.explicitPsdImportPersistence,
@@ -69,7 +94,10 @@ export const createExplicitPsdImportPanel = (
 
 const createExplicitPsdImportForm = (
   options: ExplicitPsdImportPanelOptions
-): HTMLFormElement => {
+): {
+  readonly form: HTMLFormElement;
+  readonly selectedLayerInput: HTMLInputElement;
+} => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
   form.dataset.testid = editorTestIds.explicitPsdImportForm;
@@ -128,7 +156,168 @@ const createExplicitPsdImportForm = (
     }
   });
 
+  return { form, selectedLayerInput: selectedLayer };
+};
+
+const createLayerIntakeForm = (
+  options: ExplicitPsdImportPanelOptions,
+  selectedLayerInput: HTMLInputElement
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "explicit-psd-import-form";
+  form.dataset.testid = editorTestIds.explicitPsdImportLayerIntakeForm;
+  form.setAttribute("aria-label", "Add explicitly selected PSD layer to project");
+
+  const destinationKind = createSelectField({
+    label: "Destination",
+    name: "destinationKind",
+    options: [
+      {
+        value: "existingPart",
+        label: options.destinationParts.length === 0 ? "Existing part unavailable" : "Existing part",
+        disabled: options.destinationParts.length === 0
+      },
+      { value: "newPart", label: "New part" }
+    ],
+    value: options.destinationParts.length === 0 ? "newPart" : "existingPart"
+  });
+  const existingPart = createSelectField({
+    label: "Existing part",
+    name: "destinationExistingPartId",
+    options: options.destinationParts.length === 0
+      ? [{ value: "", label: "No existing parts", disabled: true }]
+      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+    value: options.destinationParts[0]?.partId ?? ""
+  });
+  const newPartName = createTextField({
+    label: "New part name",
+    name: "destinationNewPartName",
+    value: "PSD Layer Part"
+  });
+  const parentPart = createSelectField({
+    label: "New part parent",
+    name: "destinationParentPartId",
+    options: [
+      { value: "", label: "No parent" },
+      ...options.destinationParts.map((part) => ({ value: part.partId, label: part.label }))
+    ],
+    value: options.destinationParts[0]?.partId ?? ""
+  });
+  const drawableName = createTextField({
+    label: "Drawable name",
+    name: "drawableDisplayName",
+    value: selectedLayerLabelFromViewModel(options.viewModel)
+  });
+
+  const diagnostics = document.createElement("div");
+  diagnostics.className = "explicit-psd-import-form__diagnostics";
+  diagnostics.setAttribute("role", "status");
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.explicitPsdImportLayerIntakeSubmit;
+  submit.disabled = options.viewModel.status !== "parsed";
+  submit.textContent = "Add selected layer";
+
+  form.append(
+    destinationKind.field,
+    existingPart.field,
+    newPartName.field,
+    parentPart.field,
+    drawableName.field,
+    diagnostics,
+    submit
+  );
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    diagnostics.replaceChildren();
+
+    const selectedLayerNodeRef = selectedLayerInput.value.trim();
+    const command = createLayerIntakeCommand({
+      selectedLayerNodeRef,
+      destinationKind: destinationKind.select.value,
+      existingPartId: existingPart.select.value,
+      newPartName: newPartName.input.value,
+      parentPartId: parentPart.select.value,
+      drawableDisplayName: drawableName.input.value
+    });
+    if (command.status === "invalid") {
+      diagnostics.replaceChildren(createDiagnosticLine(command.message));
+      return;
+    }
+
+    try {
+      await options.onIntakeSelectedLayer(command.command);
+    } catch (error) {
+      diagnostics.replaceChildren(createDiagnosticLine(formatIntakeError(error)));
+    }
+  });
+
   return form;
+};
+
+const createLayerIntakeCommand = (input: {
+  readonly selectedLayerNodeRef: string;
+  readonly destinationKind: string;
+  readonly existingPartId: string;
+  readonly newPartName: string;
+  readonly parentPartId: string;
+  readonly drawableDisplayName: string;
+}):
+  | { readonly status: "valid"; readonly command: EditorExplicitPsdLayerIntakeCommand }
+  | { readonly status: "invalid"; readonly message: string } => {
+  if (input.selectedLayerNodeRef.length === 0) {
+    return {
+      status: "invalid",
+      message: "Select one parsed PSD layer before adding it to the project."
+    };
+  }
+
+  const drawableDisplayName = input.drawableDisplayName.trim();
+  if (input.destinationKind === "newPart") {
+    const displayName = input.newPartName.trim();
+    if (displayName.length === 0) {
+      return {
+        status: "invalid",
+        message: "New part name is required."
+      };
+    }
+
+    return {
+      status: "valid",
+      command: {
+        selectedLayerNodeRef: input.selectedLayerNodeRef,
+        destinationPart: {
+          destinationKind: "newPart",
+          displayName,
+          ...(input.parentPartId.trim().length === 0
+            ? {}
+            : { parentPartId: input.parentPartId.trim() })
+        },
+        ...(drawableDisplayName.length === 0 ? {} : { drawableDisplayName })
+      }
+    };
+  }
+
+  if (input.existingPartId.trim().length === 0) {
+    return {
+      status: "invalid",
+      message: "Existing destination part is required."
+    };
+  }
+
+  return {
+    status: "valid",
+    command: {
+      selectedLayerNodeRef: input.selectedLayerNodeRef,
+      destinationPart: {
+        destinationKind: "existingPart",
+        partId: input.existingPartId.trim()
+      },
+      ...(drawableDisplayName.length === 0 ? {} : { drawableDisplayName })
+    }
+  };
 };
 
 const readFirstSelectedFile = (input: HTMLInputElement): File | undefined => {
@@ -138,6 +327,78 @@ const readFirstSelectedFile = (input: HTMLInputElement): File | undefined => {
   }
 
   return files.item(0) ?? files[0] ?? undefined;
+};
+
+const createTextField = (options: {
+  readonly label: string;
+  readonly name: string;
+  readonly value: string;
+}): {
+  readonly field: HTMLElement;
+  readonly input: HTMLInputElement;
+} => {
+  const field = document.createElement("label");
+  field.className = "editor-field editor-field--wide";
+  field.textContent = options.label;
+
+  const input = document.createElement("input");
+  input.name = options.name;
+  input.type = "text";
+  input.value = options.value;
+  input.autocomplete = "off";
+  input.style.width = "100%";
+  input.style.boxSizing = "border-box";
+  field.append(input);
+
+  return { field, input };
+};
+
+const createSelectField = (options: {
+  readonly label: string;
+  readonly name: string;
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+    readonly disabled?: boolean;
+  }[];
+  readonly value: string;
+}): {
+  readonly field: HTMLElement;
+  readonly select: HTMLSelectElement;
+} => {
+  const field = document.createElement("label");
+  field.className = "editor-field editor-field--wide";
+  field.textContent = options.label;
+
+  const select = document.createElement("select");
+  select.name = options.name;
+  select.value = options.value;
+  select.style.width = "100%";
+  select.style.boxSizing = "border-box";
+  for (const option of options.options) {
+    const item = document.createElement("option");
+    item.value = option.value;
+    item.textContent = option.label;
+    item.disabled = option.disabled ?? false;
+    select.append(item);
+  }
+  select.value = options.value;
+  field.append(select);
+
+  return { field, select };
+};
+
+const selectedLayerLabelFromViewModel = (
+  viewModel: ExplicitPsdImportViewModel
+): string => {
+  const row = viewModel.treeRows.find((candidate) =>
+    candidate.nodeRef === viewModel.selectedLayerNodeRef
+  );
+  if (row === undefined || row.kind !== "layer") {
+    return "Selected PSD Layer";
+  }
+
+  return row.label.replace(/^layer:\s*/i, "").split(" / ")[0]?.trim() || "Selected PSD Layer";
 };
 
 const createFactSection = (
@@ -168,7 +429,8 @@ const createFactSection = (
 };
 
 const createLayerTree = (
-  viewModel: ExplicitPsdImportViewModel
+  viewModel: ExplicitPsdImportViewModel,
+  selectedLayerInput: HTMLInputElement
 ): HTMLElement => {
   const section = document.createElement("section");
   section.className = "explicit-psd-import-section";
@@ -194,6 +456,18 @@ const createLayerTree = (
     item.className = "explicit-psd-import-tree__row";
     item.style.paddingLeft = `${Math.max(0, row.depth - 1) * 14}px`;
 
+    const choice = document.createElement("input");
+    choice.type = "radio";
+    choice.name = "explicitPsdLayerSelection";
+    choice.value = row.nodeRef;
+    choice.checked = row.nodeRef === viewModel.selectedLayerNodeRef;
+    choice.disabled = row.kind !== "layer";
+    choice.addEventListener("change", () => {
+      if (!choice.disabled && choice.checked) {
+        selectedLayerInput.value = choice.value;
+      }
+    });
+
     const label = document.createElement("span");
     label.className = "explicit-psd-import-tree__label";
     label.textContent = row.label;
@@ -202,7 +476,7 @@ const createLayerTree = (
     meta.className = "explicit-psd-import-tree__meta";
     meta.textContent = row.metaLabel;
 
-    item.append(label, meta);
+    item.append(choice, label, meta);
     list.append(item);
   }
 
@@ -264,4 +538,9 @@ const createDiagnosticLine = (message: string): HTMLElement => {
 const formatParseError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
   return `Explicit PSD parse failed before workflow state update: ${message}`;
+};
+
+const formatIntakeError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `Explicit PSD layer intake failed before workflow state update: ${message}`;
 };

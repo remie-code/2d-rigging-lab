@@ -75,6 +75,14 @@ export const applyOperationEvidence = (
             ...(input.result.psdImportEvidence ?? []),
             ...evidence.psdImportEvidence
           ]
+        }),
+    ...(evidence.psdLayerMaterializationEvidence === undefined
+      ? {}
+      : {
+          psdLayerMaterializationEvidence: [
+            ...(input.result.psdLayerMaterializationEvidence ?? []),
+            ...evidence.psdLayerMaterializationEvidence
+          ]
         })
   });
 };

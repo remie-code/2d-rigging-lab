@@ -50,6 +50,22 @@ interface SelectedLayerResolution {
   readonly sourceLayerPath: readonly string[];
 }
 
+type SelectedNodeResolution =
+  | {
+      readonly kind: "layer";
+      readonly layer: Layer;
+      readonly nodeRef: string;
+      readonly sourceNodePath: readonly string[];
+      readonly displayName: string;
+    }
+  | {
+      readonly kind: "group";
+      readonly group: Group;
+      readonly nodeRef: string;
+      readonly sourceNodePath: readonly string[];
+      readonly displayName: string;
+    };
+
 interface MaterializationProjection {
   readonly materializationEvidence: readonly PsdAdapterLayerMaterializationEvidenceDto[];
   readonly diagnostics: readonly PsdAdapterDiagnosticDto[];
@@ -61,6 +77,66 @@ interface ParsedPsd {
   readonly height: number;
   readonly children: NodeChild[];
 }
+
+export interface BrowserSelectedPsdLayerExtractionOptions {
+  readonly extractionKind: "selectedLayerRasterV1";
+  readonly optionsSchemaVersion: "psd-layer-extraction-options-v1";
+  readonly options: {
+    readonly parserMethod: "Layer.composite(false, false)";
+    readonly effect: false;
+    readonly composed: false;
+    readonly selectedNodeRef: string;
+    readonly outputEncoding: "raw-rgba";
+    readonly channelOrder: "rgba";
+    readonly pixelFormat: "rgba8";
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
+export type BrowserSelectedPsdLayerMaterializationAdapterFailureKind =
+  | "parserFailure"
+  | "missingLayer"
+  | "unsupportedLayerType"
+  | "materializationFailure";
+
+export interface BrowserSelectedPsdLayerMaterializationAdapterInput {
+  readonly source: BrowserPsdParserBridgeSourceEvidence;
+  readonly bytes: Uint8Array;
+  readonly selectedLayerNodeRef: string;
+}
+
+export interface BrowserSelectedPsdLayerMaterializationAdapterSuccess {
+  readonly status: "materialized";
+  readonly parser: PsdAdapterParserEvidenceDto;
+  readonly selectedLayer: {
+    readonly sourceLayerId: string;
+    readonly sourceLayerPath: readonly string[];
+    readonly originalName: string;
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly extraction: BrowserSelectedPsdLayerExtractionOptions;
+  readonly rgbaBytes: Uint8Array;
+}
+
+export interface BrowserSelectedPsdLayerMaterializationAdapterFailure {
+  readonly status: "failed";
+  readonly failureKind: BrowserSelectedPsdLayerMaterializationAdapterFailureKind;
+  readonly severity: "warning" | "error";
+  readonly message: string;
+  readonly parser: PsdAdapterParserEvidenceDto;
+  readonly selectedNode?: {
+    readonly nodeRef: string;
+    readonly nodeType: "group";
+    readonly sourceNodePath: readonly string[];
+    readonly originalName: string;
+  };
+}
+
+export type BrowserSelectedPsdLayerMaterializationAdapterResult =
+  | BrowserSelectedPsdLayerMaterializationAdapterSuccess
+  | BrowserSelectedPsdLayerMaterializationAdapterFailure;
 
 export const parseBrowserPsdBytesWithAdapter = async (
   input: BrowserPsdParserAdapterInput
@@ -174,6 +250,94 @@ export const parseBrowserPsdBytesWithAdapter = async (
           parser
         })
       ]
+    };
+  }
+};
+
+export const materializeSelectedPsdLayerWithAdapter = async (
+  input: BrowserSelectedPsdLayerMaterializationAdapterInput
+): Promise<BrowserSelectedPsdLayerMaterializationAdapterResult> => {
+  const parser = createBrowserPsdParserEvidence();
+  const selectedLayerNodeRef = input.selectedLayerNodeRef.trim();
+
+  if (selectedLayerNodeRef.length === 0) {
+    return {
+      status: "failed",
+      failureKind: "missingLayer",
+      severity: "error",
+      message: "Selected PSD layer node reference is required.",
+      parser
+    };
+  }
+
+  let parsedPsd: ParsedPsd;
+  try {
+    parsedPsd = Psd.parse(toExactArrayBuffer(input.bytes)) as ParsedPsd;
+  } catch (error) {
+    return {
+      status: "failed",
+      failureKind: "parserFailure",
+      severity: "error",
+      message: formatUnknownError(error),
+      parser
+    };
+  }
+
+  const selected = findNodeByNodeRef(parsedPsd, selectedLayerNodeRef);
+  if (selected === undefined) {
+    return {
+      status: "failed",
+      failureKind: "missingLayer",
+      severity: "error",
+      message: `Selected PSD layer node reference was not found: ${selectedLayerNodeRef}`,
+      parser
+    };
+  }
+
+  if (selected.kind !== "layer") {
+    return {
+      status: "failed",
+      failureKind: "unsupportedLayerType",
+      severity: "warning",
+      message: `Selected PSD node is a ${selected.kind}; only explicit layer nodes can be materialized.`,
+      parser,
+      selectedNode: {
+        nodeRef: selected.nodeRef,
+        nodeType: "group",
+        sourceNodePath: selected.sourceNodePath,
+        originalName: selected.displayName
+      }
+    };
+  }
+
+  try {
+    const rgbaBytes = copyPsdRgbaBytes(await selected.layer.composite(false, false));
+    const extraction = createSelectedLayerExtractionOptions({
+      selectedNodeRef: selected.nodeRef,
+      width: selected.layer.width,
+      height: selected.layer.height
+    });
+
+    return {
+      status: "materialized",
+      parser,
+      selectedLayer: {
+        sourceLayerId: selected.nodeRef,
+        sourceLayerPath: selected.sourceNodePath,
+        originalName: selected.displayName,
+        width: selected.layer.width,
+        height: selected.layer.height
+      },
+      extraction,
+      rgbaBytes
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      failureKind: "materializationFailure",
+      severity: "warning",
+      message: formatUnknownError(error),
+      parser
     };
   }
 };
@@ -396,7 +560,7 @@ const createSelectedLayerMaterializationEvidence = async (input: {
     }
 
     const sourceDigest = await computeBrowserPsdSha256Digest(input.sourceBytes);
-    const rgbaBytes = await selected.layer.composite(false, false);
+    const rgbaBytes = copyPsdRgbaBytes(await selected.layer.composite(false, false));
     const rgbaDigest = await computeBrowserPsdSha256Digest(rgbaBytes);
     const materializationEvidence = PsdAdapterLayerMaterializationEvidenceSchema.parse({
       evidenceKind: "psd-layer-materialization-evidence-v1",
@@ -404,11 +568,14 @@ const createSelectedLayerMaterializationEvidence = async (input: {
       sourceLayerRef: {
         sourceAssetId: input.source.sourceAssetId,
         sourceLayerId: selected.nodeRef,
+        sourceLayerName: selected.sourceLayerPath.at(-1) ?? selected.nodeRef,
         sourceLayerPath: selected.sourceLayerPath
       },
-      mediaType: "application/vnd.private-2d-rigging-lab.raw-rgba",
+      mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
       byteLength: rgbaBytes.byteLength,
       digest: rgbaDigest,
+      width: selected.layer.width,
+      height: selected.layer.height,
       provenance: {
         sourceFilePath: `browser-explicit-file/${toSafeToken(input.source.fileName, "selectedPsd")}`,
         sourceDigest,
@@ -416,23 +583,16 @@ const createSelectedLayerMaterializationEvidence = async (input: {
         sourceMediaType: input.source.declaredMediaType ?? "image/vnd.adobe.photoshop",
         privacyLabel: "packageLocalAsset",
         publicDistribution: "notPublicDistributable",
+        publicDemoAsset: false,
         generatedBy: "wave45.browserPsdParserBridge"
       },
       parser: input.parser,
-      extraction: {
-        extractionKind: "selectedLayerRasterV1",
-        optionsSchemaVersion: "psd-layer-extraction-options-v1",
-        options: {
-          parserMethod: "Layer.composite(false, false)",
-          effect: false,
-          composed: false,
-          selectedNodeRef: selected.nodeRef,
-          outputEncoding: "raw-rgba",
-          bytesPersisted: false,
-          width: selected.layer.width,
-          height: selected.layer.height
-        }
-      }
+      extraction: createPsdAdapterLayerExtractionOptions({
+        selectedNodeRef: selected.nodeRef,
+        width: selected.layer.width,
+        height: selected.layer.height,
+        bytesPersisted: false
+      })
     });
 
     return {
@@ -482,20 +642,36 @@ const createSelectedLayerMaterializationEvidence = async (input: {
 const findLayerByNodeRef = (
   parsedPsd: ParsedPsd,
   targetNodeRef: string
-): SelectedLayerResolution | undefined =>
-  findLayerInChildren({
+): SelectedLayerResolution | undefined => {
+  const selected = findNodeByNodeRef(parsedPsd, targetNodeRef);
+  if (selected?.kind !== "layer") {
+    return undefined;
+  }
+
+  return {
+    layer: selected.layer,
+    nodeRef: selected.nodeRef,
+    sourceLayerPath: selected.sourceNodePath
+  };
+};
+
+const findNodeByNodeRef = (
+  parsedPsd: ParsedPsd,
+  targetNodeRef: string
+): SelectedNodeResolution | undefined =>
+  findNodeInChildren({
     children: parsedPsd.children,
     targetNodeRef,
     parentNodeRef: "psd:root",
     parentPath: []
   });
 
-const findLayerInChildren = (input: {
+const findNodeInChildren = (input: {
   readonly children: readonly NodeChild[];
   readonly targetNodeRef: string;
   readonly parentNodeRef: string;
   readonly parentPath: readonly string[];
-}): SelectedLayerResolution | undefined => {
+}): SelectedNodeResolution | undefined => {
   for (let index = 0; index < input.children.length; index += 1) {
     const child = input.children[index];
     if (child === undefined) {
@@ -505,16 +681,28 @@ const findLayerInChildren = (input: {
     const nodeRef = `${input.parentNodeRef}/${kind}[${index}]`;
     const sourceLayerPath = [...input.parentPath, getDisplayNodeName(child, kind, index)];
 
-    if (nodeRef === input.targetNodeRef && isPsdLayer(child)) {
+    if (nodeRef === input.targetNodeRef) {
+      if (isPsdLayer(child)) {
+        return {
+          kind: "layer",
+          layer: child,
+          nodeRef,
+          sourceNodePath: sourceLayerPath,
+          displayName: getDisplayNodeName(child, kind, index)
+        };
+      }
+
       return {
-        layer: child,
+        kind: "group",
+        group: child,
         nodeRef,
-        sourceLayerPath
+        sourceNodePath: sourceLayerPath,
+        displayName: getDisplayNodeName(child, kind, index)
       };
     }
 
     if (!isPsdLayer(child)) {
-      const nested = findLayerInChildren({
+      const nested = findNodeInChildren({
         children: child.children,
         targetNodeRef: input.targetNodeRef,
         parentNodeRef: nodeRef,
@@ -529,6 +717,39 @@ const findLayerInChildren = (input: {
   return undefined;
 };
 
+const createSelectedLayerExtractionOptions = (input: {
+  readonly selectedNodeRef: string;
+  readonly width: number;
+  readonly height: number;
+}): BrowserSelectedPsdLayerExtractionOptions => ({
+  extractionKind: "selectedLayerRasterV1",
+  optionsSchemaVersion: "psd-layer-extraction-options-v1",
+  options: {
+    parserMethod: "Layer.composite(false, false)",
+    effect: false,
+    composed: false,
+    selectedNodeRef: input.selectedNodeRef,
+    outputEncoding: "raw-rgba",
+    channelOrder: "rgba",
+    pixelFormat: "rgba8",
+    width: input.width,
+    height: input.height
+  }
+});
+
+const createPsdAdapterLayerExtractionOptions = (input: {
+  readonly selectedNodeRef: string;
+  readonly width: number;
+  readonly height: number;
+  readonly bytesPersisted: false;
+}) => ({
+  ...createSelectedLayerExtractionOptions(input),
+  options: {
+    ...createSelectedLayerExtractionOptions(input).options,
+    bytesPersisted: input.bytesPersisted
+  }
+});
+
 const computeBrowserPsdSha256Digest = async (
   bytes: Uint8Array | Uint8ClampedArray
 ): Promise<BinaryAssetDigestDto> => {
@@ -542,6 +763,9 @@ const computeBrowserPsdSha256Digest = async (
 
 const toExactArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+const copyPsdRgbaBytes = (bytes: Uint8Array | Uint8ClampedArray): Uint8Array =>
+  new Uint8Array(bytes);
 
 const isPsdLayer = (node: NodeChild): node is Layer => node.type === "Layer";
 

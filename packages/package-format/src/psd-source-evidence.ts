@@ -99,6 +99,7 @@ export type PsdLayerTreeEvidenceDto = z.infer<typeof PsdLayerTreeEvidenceSchema>
 export const PsdSourceLayerReferenceSchema = z.object({
   sourceAssetId: SourceAssetIdSchema,
   sourceLayerId: z.string().min(1),
+  sourceLayerName: z.string().min(1).optional(),
   sourceLayerPath: z.array(z.string().min(1)).optional()
 }).strict();
 export type PsdSourceLayerReferenceDto = z.infer<typeof PsdSourceLayerReferenceSchema>;
@@ -120,7 +121,8 @@ export const PsdLayerMaterializationProvenanceSchema = z.object({
   publicDistribution: z.literal("notPublicDistributable"),
   fixtureId: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional(),
   derivedArtifactPath: z.string().min(1).optional(),
-  generatedBy: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional()
+  generatedBy: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional(),
+  publicDemoAsset: z.literal(false).optional()
 }).strict();
 export type PsdLayerMaterializationProvenanceDto = z.infer<
   typeof PsdLayerMaterializationProvenanceSchema
@@ -142,6 +144,8 @@ export const PsdLayerMaterializationEvidenceSchema = z.object({
   mediaType: BinaryAssetMediaTypeSchema,
   byteLength: BinaryAssetByteLengthSchema,
   digest: BinaryAssetDigestSchema,
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
   binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   provenance: PsdLayerMaterializationProvenanceSchema,

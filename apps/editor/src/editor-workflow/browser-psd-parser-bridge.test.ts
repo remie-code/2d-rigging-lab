@@ -65,13 +65,19 @@ describe("browser PSD parser bridge", () => {
       evidenceKind: "psd-layer-materialization-evidence-v1",
       sourceLayerRef: {
         sourceAssetId: "src_wave45_sample_model_psd",
-        sourceLayerId: "psd:root/layer[0]"
+        sourceLayerId: "psd:root/layer[0]",
+        sourceLayerName: "headwear"
       },
-      mediaType: "application/vnd.private-2d-rigging-lab.raw-rgba",
+      mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
       byteLength: 460800,
+      width: 400,
+      height: 288,
       digest: {
         algorithm: "sha256",
         hex: "671e6a363745b1ce2e8d29c1a63438170fe9511c8884ea42298cf9b8886e5c1a"
+      },
+      provenance: {
+        publicDemoAsset: false
       }
     });
     expect(JSON.stringify(result.adapterResult)).not.toContain("\"children\"");

@@ -729,6 +729,70 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Structured PSD materialization evidence cannot be connected to the referenced source asset or layer."
   },
   {
+    checkId: "asset.psd.materializedAssetAvailable",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset evidence has package-local bytes and texture/drawable/part mapping."
+  },
+  {
+    checkId: "asset.psd.materializedBytesMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized bytes are missing or not package-local current bytes."
+  },
+  {
+    checkId: "asset.psd.materializedSourceCurrentBytesMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave46 PSD source bytes are not currently available for re-materialization."
+  },
+  {
+    checkId: "asset.psd.materializedSourceStale",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset evidence was derived from stale or incomplete source PSD identity metadata."
+  },
+  {
+    checkId: "asset.psd.materializedAssetMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset digest, byte length, media type, dimensions, or package-local path metadata mismatch."
+  },
+  {
+    checkId: "asset.psd.materializedParserExtractionMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset parser, extraction, or source layer reference evidence mismatch."
+  },
+  {
+    checkId: "asset.psd.materializedProvenanceBlocked",
+    phase: "rights",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset lacks private/local non-public provenance or claims public demo asset use."
+  },
+  {
+    checkId: "asset.psd.materializedDestinationMappingMissing",
+    phase: "reference",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave46 PSD selected-layer materialized asset destination texture, drawable, or part mapping is missing or inconsistent."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

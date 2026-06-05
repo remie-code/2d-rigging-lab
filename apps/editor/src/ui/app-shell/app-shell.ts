@@ -33,7 +33,8 @@ import type {
   EditorViewerRuntimeProjection,
   EditorWorkflowSetMaskRelationCommand,
   EditorWorkflowPersistenceResult,
-  EditorExplicitPsdImportFileCommand
+  EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
 import type {
   EditorCreateDrawablePresetCommand,
@@ -147,6 +148,9 @@ export interface EditorAppShellOptions {
   ) => unknown | Promise<unknown>;
   readonly onParseExplicitPsdImportFile: (
     command: EditorExplicitPsdImportFileCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeExplicitPsdLayer: (
+    command: EditorExplicitPsdLayerIntakeCommand
   ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -291,7 +295,12 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   });
   const explicitPsdImportPanel = createExplicitPsdImportPanel({
     viewModel: options.viewModel.explicitPsdImport,
-    onParsePsdFile: options.onParseExplicitPsdImportFile
+    destinationParts: options.state.parts.map((part) => ({
+      partId: part.partId,
+      label: `${part.displayName} / ${part.partId}`
+    })),
+    onParsePsdFile: options.onParseExplicitPsdImportFile,
+    onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer
   });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,

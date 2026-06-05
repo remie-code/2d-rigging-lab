@@ -16,8 +16,8 @@ const PACKAGE_LOCAL_BINARY_ASSET_PATH_PREFIXES = [
 ] as const;
 
 const SHA256_DIGEST_HEX_PATTERN = /^[a-f0-9]{64}$/;
-const LOWERCASE_MEDIA_TYPE_PATTERN =
-  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+const MEDIA_TYPE_PATTERN =
+  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(?:; pixelFormat=rgba8)?$/;
 
 export const BinaryAssetIdSchema = z.string().regex(/^bin_[A-Za-z0-9_-]+$/);
 export type BinaryAssetIdDto = z.infer<typeof BinaryAssetIdSchema>;
@@ -44,7 +44,7 @@ export const BinaryAssetByteLengthSchema = z.number()
   .max(Number.MAX_SAFE_INTEGER);
 export type BinaryAssetByteLengthDto = z.infer<typeof BinaryAssetByteLengthSchema>;
 
-export const BinaryAssetMediaTypeSchema = z.string().regex(LOWERCASE_MEDIA_TYPE_PATTERN);
+export const BinaryAssetMediaTypeSchema = z.string().regex(MEDIA_TYPE_PATTERN);
 export type BinaryAssetMediaTypeDto = z.infer<typeof BinaryAssetMediaTypeSchema>;
 
 export const BinaryAssetStorageStatusSchema = z.enum([

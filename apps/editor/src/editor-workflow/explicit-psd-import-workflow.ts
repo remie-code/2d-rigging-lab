@@ -22,6 +22,7 @@ export interface EditorExplicitPsdImportWorkflowResult {
 export interface EditorExplicitPsdImportWorkflowOutcome {
   readonly state: ExplicitPsdImportState;
   readonly result: EditorExplicitPsdImportWorkflowResult;
+  readonly bridgeResult: BrowserPsdParserBridgeResult;
 }
 
 export const runEditorExplicitPsdImportWorkflow = async (
@@ -47,6 +48,7 @@ export const runEditorExplicitPsdImportWorkflow = async (
       fileName: bridgeResult.source.fileName,
       byteLength: bridgeResult.source.byteLength,
       selectedLayerNodeRef: state.selectedLayerNodeRef
-    }
+    },
+    bridgeResult
   };
 };

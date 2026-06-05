@@ -738,13 +738,16 @@ const isTruthfullyNotEvaluatedDiagnostic = (check: ValidationCheckResultDto): bo
   check.status === "needs_review" &&
   (
     check.checkId === "asset.psd.featureNotEvaluated" ||
-    check.checkId === "asset.psd.materializationEvidenceMissing"
+    check.checkId === "asset.psd.materializationEvidenceMissing" ||
+    check.checkId === "asset.psd.materializedDestinationMappingMissing"
   );
 
 const evidenceKindForNotEvaluatedDiagnostic = (
   checkId: string
 ): ProductPreflightArtifactKindDto =>
   checkId === "asset.psd.materializationEvidenceMissing"
+    ? "sourceMaterialization"
+    : checkId === "asset.psd.materializedDestinationMappingMissing"
     ? "sourceMaterialization"
     : "validationReport";
 

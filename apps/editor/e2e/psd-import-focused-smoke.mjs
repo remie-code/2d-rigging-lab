@@ -7,6 +7,7 @@ import { launchHeadlessBrowser } from "./chrome-launcher.mjs";
 import { createPageSession } from "./page-session.mjs";
 import { startOrReuseEditorServer } from "./vite-server.mjs";
 import {
+  createLayerTreeDrawableRowTestId,
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
@@ -30,6 +31,16 @@ const traceabilityMatrixUrl = new URL(
 );
 
 const selectedLayerNodeRef = "psd:root/layer[0]";
+const materializedMediaType = "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
+const selectedLayerIntake = {
+  destinationPartId: "part_root",
+  destinationKind: "existingPart",
+  drawableDisplayName: "headwear",
+  drawableId: "draw_headwear",
+  textureId: "tex_headwear",
+  binaryAssetId: "bin_headwear_raw_rgba",
+  sourceAssetId: "src_explicit_psd_sample_model_22406225"
+};
 const psdImportFocusedSmokeViewports = [
   {
     name: "desktop",
@@ -46,6 +57,7 @@ export const runPsdImportFocusedSmoke = async ({ page, viewport }) => {
   await waitForTestId(page, editorTestIds.explicitPsdImportForm);
   await waitForTestId(page, editorTestIds.explicitPsdImportFileInput);
   await waitForTestId(page, editorTestIds.explicitPsdImportSubmit);
+  await waitForTestId(page, editorTestIds.explicitPsdImportLayerIntakeSubmit);
   await assertInitialExplicitPsdImportState(page, `${viewport.name} initial`);
   await assertExplicitPsdImportReachable(page, viewport);
 
@@ -61,17 +73,37 @@ export const runPsdImportFocusedSmoke = async ({ page, viewport }) => {
   await assertParsedExplicitPsdImportState(page, sample, `${viewport.name} parsed`);
   await assertNoUnsupportedExplicitPsdImportClaims(page, `${viewport.name} parsed`);
 
+  await clickTestId(page, editorTestIds.explicitPsdImportLayerIntakeSubmit);
+  await waitForText(
+    page,
+    editorTestIds.explicitPsdImportLayerIntakeResult,
+    "Selected PSD layer added to project",
+    60_000
+  );
+  await waitForText(page, editorTestIds.operationStatus, "importPsdLayerMaterialization committed");
+  await waitForOperationLogEntryCount(page, 2);
+  await waitForText(
+    page,
+    editorTestIds.operationLogSummary,
+    "importPsdSourceAsset, importPsdLayerMaterialization"
+  );
+  await assertSelectedLayerIntakeCommittedState(page, sample, `${viewport.name} intake`);
+  await assertNoUnsupportedExplicitPsdImportClaims(page, `${viewport.name} intake`);
+
   await clickTestId(page, editorTestIds.projectPersistenceSave);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Saved");
-  await assertSavedProjectExcludesExplicitPsdPayload(page, sample, `${viewport.name} after save`);
+  await assertSavedProjectIncludesSelectedLayerIntake(page, sample, `${viewport.name} after save`);
 
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
   await clickTestId(page, editorTestIds.projectPersistenceLoad);
   await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
+  await waitForText(page, editorTestIds.projectPersistenceSummary, "Persistent bytes: 1 restored / 1 checked");
   await assertExplicitPsdImportClearedAfterLoad(page, sample, `${viewport.name} after load`);
+  await assertSelectedLayerProjectStateAfterLoad(page, `${viewport.name} after load`);
+  await assertSavedProjectIncludesSelectedLayerIntake(page, sample, `${viewport.name} after load`);
 
-  const screenshot = await page.captureScreenshot(`${viewport.name} wave45 PSD import focused smoke`);
+  const screenshot = await page.captureScreenshot(`${viewport.name} wave46 PSD selected layer focused smoke`);
 
   return {
     viewport: viewport.name,
@@ -80,6 +112,9 @@ export const runPsdImportFocusedSmoke = async ({ page, viewport }) => {
     sourceDigest: sample.sourceDigest,
     materializedByteLength: sample.materializedByteLength,
     materializedDigest: sample.materializedDigest,
+    destinationPartId: selectedLayerIntake.destinationPartId,
+    drawableId: selectedLayerIntake.drawableId,
+    textureId: selectedLayerIntake.textureId,
     screenshot
   };
 };
@@ -102,7 +137,10 @@ const readSampleEvidence = async () => {
     materializedByteLength: materialization.materializationEvidence.byteLength,
     materializedByteLengthLabel: `${materialization.materializationEvidence.byteLength} bytes`,
     materializedDigest: materialization.materializationEvidence.digest.hex,
-    materializedMediaType: materialization.materializationEvidence.mediaType
+    materializedMediaType,
+    materializedDimensionsLabel: "400 x 288",
+    sourcePackagePath: "assets/sources/psd/sample_model_22406225.psd",
+    texturePackagePath: `assets/textures/psd/psd_root_layer_0_${materialization.materializationEvidence.digest.hex.slice(0, 12)}.raw-rgba`
   };
 };
 
@@ -115,6 +153,16 @@ const assertInitialExplicitPsdImportState = async (page, label) => {
     page,
     editorTestIds.explicitPsdImportMaterialization,
     "No selected layer materialization evidence summary"
+  );
+  await waitForText(
+    page,
+    editorTestIds.explicitPsdImportLayerIntakeResult,
+    "No materialized project asset yet"
+  );
+  await waitForText(
+    page,
+    editorTestIds.explicitPsdImportLayerIntakeDiagnostics,
+    "No selected layer intake diagnostics"
   );
   await waitForText(page, editorTestIds.explicitPsdImportDiagnostics, "No PSD parser diagnostics");
 
@@ -201,7 +249,66 @@ const assertParsedExplicitPsdImportState = async (page, sample, label) => {
   }
 };
 
-const assertSavedProjectExcludesExplicitPsdPayload = async (page, sample, label) => {
+const assertSelectedLayerIntakeCommittedState = async (page, sample, label) => {
+  const state = await readExplicitPsdImportState(page);
+  const failures = [];
+  const expectText = (field, text, expected) => {
+    if (!String(text).includes(expected)) {
+      failures.push(`${field} missing ${JSON.stringify(expected)} in ${JSON.stringify(text)}`);
+    }
+  };
+  const expectFact = (section, key, expected) => {
+    if (section[key] !== expected) {
+      failures.push(`${key}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(section[key])}`);
+    }
+  };
+
+  expectText("intakeResult", state.intakeResultText, "Selected PSD layer added to project");
+  expectFact(state.intakeResultFacts, "Materialized digest", `sha256:${sample.materializedDigest}`);
+  expectFact(state.intakeResultFacts, "Materialized byte length", sample.materializedByteLengthLabel);
+  expectFact(state.intakeResultFacts, "Media type", sample.materializedMediaType);
+  expectFact(state.intakeResultFacts, "Dimensions", sample.materializedDimensionsLabel);
+  expectText("texture evidence", state.intakeResultFacts["Texture evidence"], selectedLayerIntake.textureId);
+  expectText("texture evidence", state.intakeResultFacts["Texture evidence"], selectedLayerIntake.binaryAssetId);
+  expectText("texture evidence", state.intakeResultFacts["Texture evidence"], sample.texturePackagePath);
+  expectFact(
+    state.intakeResultFacts,
+    "Drawable evidence",
+    `${selectedLayerIntake.drawableId} -> ${selectedLayerIntake.destinationPartId}`
+  );
+  expectFact(
+    state.intakeResultFacts,
+    "Part destination",
+    `${selectedLayerIntake.destinationKind} / ${selectedLayerIntake.destinationPartId}`
+  );
+  expectText("source layer", state.intakeResultFacts["Source layer"], sample.selectedLayerNodeRef);
+  expectText("source layer", state.intakeResultFacts["Source layer"], sample.selectedLayerName);
+  expectFact(
+    state.intakeResultFacts,
+    "Source PSD",
+    `${sample.sourcePackagePath} / sha256:${sample.sourceDigest} / ${sample.byteLengthLabel}`
+  );
+  expectFact(
+    state.intakeResultFacts,
+    "Provenance",
+    "packageLocalAsset / notPublicDistributable / publicDemoAsset=false"
+  );
+  expectText("persistence", state.intakeResultFacts.Persistence, "packageLocalBinaryAssetRef");
+  expectText("persistence", state.intakeResultFacts.Persistence, "binaryAssetRefOnlyNoInlineBytes");
+  expectText("persistence", state.intakeResultFacts.Persistence, "browserLocalStore=stored:");
+  expectText("intake diagnostics", state.intakeDiagnosticsText, "editor.explicitPsdLayerIntake.committed");
+  expectText(
+    "intake diagnostics",
+    state.intakeDiagnosticsText,
+    "Selected PSD layer materialized bytes were added as a private/local package texture asset."
+  );
+
+  if (failures.length > 0) {
+    throw new Error(`${label} selected layer intake assertions failed: ${failures.join("; ")}.`);
+  }
+};
+
+const assertSavedProjectIncludesSelectedLayerIntake = async (page, sample, label) => {
   const stored = await page.evaluate((storageKey) => {
     const raw = localStorage.getItem(storageKey);
     if (raw === null) {
@@ -209,44 +316,125 @@ const assertSavedProjectExcludesExplicitPsdPayload = async (page, sample, label)
     }
 
     const project = JSON.parse(raw);
+    const graph = readPackageJsonFile(project, "model/graph.json");
+    const drawables = readPackageJsonFile(project, "model/drawables.json");
+    const sourceManifest = readPackageJsonFile(project, "assets/sources/source-manifest.json");
+    const textureAtlas = readPackageJsonFile(project, "assets/textures/texture-atlas.json");
     const serializedProject = JSON.stringify(project);
     const packageText = Array.isArray(project.packageFileSet)
       ? project.packageFileSet.map((entry) => entry.text ?? "").join("\n")
       : "";
     const operationLogJsonl = String(project.operationLogJsonl ?? "");
+    const operationLogEntries = operationLogJsonl
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line));
+    const sourceAsset = sourceManifest?.sourceAssets?.find(
+      (candidate) => candidate.sourceAssetId === "src_explicit_psd_sample_model_22406225"
+    );
+    const texture = textureAtlas?.textures?.find((candidate) => candidate.textureId === "tex_headwear");
+    const drawable = drawables?.drawables?.find((candidate) => candidate.drawableId === "draw_headwear");
+    const rootPart = graph?.parts?.find((candidate) => candidate.partId === "part_root");
+    const materializationOperation = operationLogEntries.find(
+      (entry) => entry.operationType === "importPsdLayerMaterialization"
+    );
 
     return {
       schemaVersion: project.schemaVersion,
       packageId: project.packageSummary?.packageId ?? null,
+      packageRevision: project.packageSummary?.packageRevision ?? null,
       serializedProject,
       packageText,
-      operationLogJsonl
+      operationLogJsonl,
+      operationTypes: operationLogEntries.map((entry) => entry.operationType),
+      sourceAsset: sourceAsset === undefined
+        ? null
+        : {
+            sourceAssetId: sourceAsset.sourceAssetId,
+            filePath: sourceAsset.filePath,
+            binaryAssetRef: sourceAsset.binaryAssetRef ?? null,
+            materializationCount: sourceAsset.psdProfile?.materializationEvidence?.length ?? 0
+          },
+      texture: texture === undefined
+        ? null
+        : {
+            textureId: texture.textureId,
+            sourceAssetId: texture.sourceAssetId,
+            sourceLayerId: texture.sourceLayerId,
+            binaryAssetRef: texture.binaryAssetRef ?? null
+          },
+      drawable: drawable === undefined
+        ? null
+        : {
+            drawableId: drawable.drawableId,
+            displayName: drawable.displayName,
+            partId: drawable.partId,
+            textureId: drawable.textureId
+          },
+      rootPart: rootPart === undefined
+        ? null
+        : {
+            partId: rootPart.partId,
+            drawableIds: rootPart.drawableIds
+          },
+      materializationOperation: materializationOperation === undefined
+        ? null
+        : {
+            operationType: materializationOperation.operationType,
+            targetIds: materializationOperation.targetIds ?? [],
+            json: JSON.stringify(materializationOperation)
+          }
     };
+
+    function readPackageJsonFile(projectValue, packagePath) {
+      if (!Array.isArray(projectValue.packageFileSet)) {
+        return null;
+      }
+
+      const entry = projectValue.packageFileSet.find((candidate) => candidate.path === packagePath);
+      if (typeof entry?.text !== "string") {
+        return null;
+      }
+
+      return JSON.parse(entry.text);
+    }
   }, editorProjectStorageKey);
 
   if (stored === null) {
     throw new Error(`${label} did not save a browser-local project.`);
   }
 
+  const expectedTextureBinaryRef = {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: selectedLayerIntake.binaryAssetId,
+    packageRelativePath: sample.texturePackagePath,
+    digest: {
+      algorithm: "sha256",
+      hex: sample.materializedDigest
+    },
+    byteLength: sample.materializedByteLength,
+    mediaType: sample.materializedMediaType,
+    storageStatus: "stored-package-local-v1",
+    rightsAssetId: selectedLayerIntake.sourceAssetId
+  };
   const forbiddenSerializedClaims = [
-    sample.fileName,
-    sample.sourceDigest,
-    sample.materializedDigest,
     sample.base64Prefix,
     "explicitPsdImport",
-    "browserPsdParser",
     "browser-explicit-file",
-    "@webtoon/psd",
-    sample.selectedLayerNodeRef,
-    sample.materializedByteLengthLabel,
+    "public demo asset",
+    "\"publicDemoAsset\":true",
+    "\"rawParserObject\"",
     "rawRgbaBytes",
     "visualBytes",
-    "raw materialized bytes",
-    "public demo asset"
+    "sourcePsdBytes",
+    "currentPsdFile",
+    "raw materialized bytes"
   ].filter((claim) => stored.serializedProject.includes(claim));
   const forbiddenPackagePayloadClaims = [
     "arrayBuffer",
+    "\"bytes\"",
     "bytesBase64",
+    "payloadBase64",
     "rawRgbaBytes",
     "visualBytes",
     sample.base64Prefix
@@ -255,18 +443,64 @@ const assertSavedProjectExcludesExplicitPsdPayload = async (page, sample, label)
   if (
     stored.schemaVersion !== "editor-project-persistence-v1" ||
     stored.packageId !== "pkg_editor_browser_sample" ||
+    stored.packageRevision !== 2 ||
+    JSON.stringify(stored.operationTypes) !== JSON.stringify(["importPsdSourceAsset", "importPsdLayerMaterialization"]) ||
+    stored.sourceAsset?.sourceAssetId !== selectedLayerIntake.sourceAssetId ||
+    stored.sourceAsset?.filePath !== sample.sourcePackagePath ||
+    stored.sourceAsset?.binaryAssetRef !== null ||
+    stored.sourceAsset?.materializationCount !== 1 ||
+    stored.texture?.textureId !== selectedLayerIntake.textureId ||
+    stored.texture?.sourceAssetId !== selectedLayerIntake.sourceAssetId ||
+    stored.texture?.sourceLayerId !== sample.selectedLayerNodeRef ||
+    !isPartialMatch(stored.texture?.binaryAssetRef, expectedTextureBinaryRef) ||
+    stored.drawable?.drawableId !== selectedLayerIntake.drawableId ||
+    stored.drawable?.displayName !== selectedLayerIntake.drawableDisplayName ||
+    stored.drawable?.partId !== selectedLayerIntake.destinationPartId ||
+    stored.drawable?.textureId !== selectedLayerIntake.textureId ||
+    stored.rootPart?.drawableIds?.includes(selectedLayerIntake.drawableId) !== true ||
+    stored.materializationOperation?.operationType !== "importPsdLayerMaterialization" ||
+    !stored.materializationOperation.targetIds.includes(selectedLayerIntake.textureId) ||
+    !stored.materializationOperation.targetIds.includes(selectedLayerIntake.drawableId) ||
+    !stored.materializationOperation.json.includes("psd-layer-materialization-operation-evidence-v1") ||
+    !stored.materializationOperation.json.includes("rawParserObjectPersistence") ||
+    !stored.materializationOperation.json.includes("notPersisted") ||
+    !stored.materializationOperation.json.includes("sourcePsdBytePersistence") ||
+    !stored.materializationOperation.json.includes("metadataOnlyNoRawBytes") ||
+    !stored.materializationOperation.json.includes("packageLocalAsset") ||
+    !stored.materializationOperation.json.includes("\"publicDemoAsset\":false") ||
     forbiddenSerializedClaims.length > 0 ||
     forbiddenPackagePayloadClaims.length > 0
   ) {
     throw new Error(
-      `${label} saved project persisted explicit PSD parser/materialization payload: ${JSON.stringify({
+      `${label} saved project did not preserve Wave46 selected layer intake boundary: ${JSON.stringify({
         schemaVersion: stored.schemaVersion,
         packageId: stored.packageId,
+        packageRevision: stored.packageRevision,
+        operationTypes: stored.operationTypes,
+        sourceAsset: stored.sourceAsset,
+        texture: stored.texture,
+        drawable: stored.drawable,
+        rootPart: stored.rootPart,
+        materializationOperation: stored.materializationOperation,
         forbiddenSerializedClaims,
         forbiddenPackagePayloadClaims
       })}.`
     );
   }
+};
+
+const isPartialMatch = (actual, expected) => {
+  if (actual === null || actual === undefined) {
+    return false;
+  }
+
+  return Object.entries(expected).every(([key, value]) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return isPartialMatch(actual[key], value);
+    }
+
+    return actual[key] === value;
+  });
 };
 
 const assertExplicitPsdImportClearedAfterLoad = async (page, sample, label) => {
@@ -287,18 +521,74 @@ const assertExplicitPsdImportClearedAfterLoad = async (page, sample, label) => {
   }
 };
 
+const assertSelectedLayerProjectStateAfterLoad = async (page, label) => {
+  await waitForOperationLogEntryCount(page, 2);
+  await waitForText(
+    page,
+    editorTestIds.operationLogSummary,
+    "importPsdSourceAsset, importPsdLayerMaterialization"
+  );
+  await waitForText(
+    page,
+    createLayerTreeDrawableRowTestId(selectedLayerIntake.drawableId),
+    `${selectedLayerIntake.drawableDisplayName} / ${selectedLayerIntake.drawableId}`
+  );
+  await waitForText(
+    page,
+    createLayerTreeDrawableRowTestId(selectedLayerIntake.drawableId),
+    selectedLayerIntake.textureId
+  );
+  await waitForText(
+    page,
+    createLayerTreeDrawableRowTestId(selectedLayerIntake.drawableId),
+    "Texture resolved"
+  );
+  await waitForText(page, editorTestIds.sourceIntakeImportedSources, "1 imported source asset");
+  await waitForText(page, editorTestIds.sourceIntakeImportedSources, selectedLayerIntake.sourceAssetId);
+  await waitForText(
+    page,
+    editorTestIds.sourceIntakeImportedSources,
+    `Texture binary ref ${selectedLayerIntake.textureId}`
+  );
+  await waitForText(page, editorTestIds.sourceIntakeImportedSources, selectedLayerIntake.binaryAssetId);
+  await waitForText(page, editorTestIds.sourceIntakeImportedSources, "restored from same-origin browser-local IndexedDB");
+
+  const importedSourcesText = await readText(page, editorTestIds.sourceIntakeImportedSources);
+  const panelText = await readText(page, editorTestIds.explicitPsdImportPanel);
+  const projectText = await page.evaluate(() => document.body?.textContent ?? "");
+  const forbiddenPositiveClaims = [
+    "public demo asset",
+    "raw parser object persisted",
+    "source PSD bytes persisted"
+  ].filter((claim) => projectText.toLowerCase().includes(claim.toLowerCase()));
+
+  if (
+    forbiddenPositiveClaims.length > 0 ||
+    importedSourcesText.includes("Source binary ref / ") ||
+    panelText.includes("Selected PSD layer added to project")
+  ) {
+    throw new Error(
+      `${label} loaded project boundary mismatch: forbiddenPositiveClaims=${forbiddenPositiveClaims.join(
+        ", "
+      )} importedSources=${importedSourcesText} panel=${panelText}`
+    );
+  }
+};
+
 const assertExplicitPsdImportReachable = async (page, viewport) => {
   const metrics = await page.evaluate((ids) => {
     const panel = document.querySelector(`[data-testid="${ids.panel}"]`);
     const form = document.querySelector(`[data-testid="${ids.form}"]`);
     const fileInput = document.querySelector(`[data-testid="${ids.fileInput}"]`);
     const submit = document.querySelector(`[data-testid="${ids.submit}"]`);
+    const intakeSubmit = document.querySelector(`[data-testid="${ids.intakeSubmit}"]`);
 
     if (
       !(panel instanceof HTMLElement) ||
       !(form instanceof HTMLFormElement) ||
       !(fileInput instanceof HTMLInputElement) ||
-      !(submit instanceof HTMLButtonElement)
+      !(submit instanceof HTMLButtonElement) ||
+      !(intakeSubmit instanceof HTMLButtonElement)
     ) {
       return null;
     }
@@ -318,22 +608,26 @@ const assertExplicitPsdImportReachable = async (page, viewport) => {
     const formRect = form.getBoundingClientRect();
     const inputRect = fileInput.getBoundingClientRect();
     const submitRect = submit.getBoundingClientRect();
+    const intakeSubmitRect = intakeSubmit.getBoundingClientRect();
 
     return {
       panelVisible: rectVisible(panelRect),
       formVisible: rectVisible(formRect),
       fileInputVisible: rectVisible(inputRect),
       submitVisible: rectVisible(submitRect),
+      intakeSubmitVisible: rectVisible(intakeSubmitRect),
       panelWidth: panelRect.width,
       formWidth: formRect.width,
       fileInputWidth: inputRect.width,
-      submitWidth: submitRect.width
+      submitWidth: submitRect.width,
+      intakeSubmitWidth: intakeSubmitRect.width
     };
   }, {
     panel: editorTestIds.explicitPsdImportPanel,
     form: editorTestIds.explicitPsdImportForm,
     fileInput: editorTestIds.explicitPsdImportFileInput,
-    submit: editorTestIds.explicitPsdImportSubmit
+    submit: editorTestIds.explicitPsdImportSubmit,
+    intakeSubmit: editorTestIds.explicitPsdImportLayerIntakeSubmit
   });
 
   if (
@@ -345,7 +639,8 @@ const assertExplicitPsdImportReachable = async (page, viewport) => {
     metrics.panelWidth < 1 ||
     metrics.formWidth < 1 ||
     metrics.fileInputWidth < 1 ||
-    metrics.submitWidth < 1
+    metrics.submitWidth < 1 ||
+    metrics.intakeSubmitWidth < 1
   ) {
     throw new Error(
       `${viewport.name} explicit PSD import panel was not reachable/usable: ${JSON.stringify(metrics)}.`
@@ -427,13 +722,16 @@ const assertFixtureDocsRegistration = async () => {
     "private/local",
     "not a public demo asset",
     "apps/editor/e2e/psd-import-focused-smoke.mjs",
-    "scripts/check-psd-parser-import-boundary.mjs"
+    "scripts/check-psd-parser-import-boundary.mjs",
+    "wave46-psd-selected-layer-focused-e2e-persistence-regression"
   ];
   const requiredTraceabilityTokens = [
     "TC-WAVE45-PSD-IMPORT-FOCUSED-E2E-001",
     "wave45-psd-import-focused-e2e-regression",
+    "TC-WAVE46-PSD-SELECTED-LAYER-E2E-001",
+    "wave46-psd-selected-layer-focused-e2e-persistence-regression",
     "private/local",
-    "no raw or visual bytes",
+    "no source PSD bytes or raw parser objects",
     "check-psd-parser-import-boundary"
   ];
   const missing = [
@@ -446,7 +744,7 @@ const assertFixtureDocsRegistration = async () => {
   ];
 
   if (missing.length > 0) {
-    throw new Error(`Wave45 PSD import fixture/traceability registration missing: ${missing.join(", ")}.`);
+    throw new Error(`Wave45/Wave46 PSD import fixture/traceability registration missing: ${missing.join(", ")}.`);
   }
 };
 
@@ -476,6 +774,9 @@ const readExplicitPsdImportState = async (page) =>
       featureFacts: readFacts(ids.featureSupport),
       featureSupportText: readText(ids.featureSupport),
       materializationText: readText(ids.materialization),
+      intakeResultText: readText(ids.intakeResult),
+      intakeResultFacts: readFacts(ids.intakeResult),
+      intakeDiagnosticsText: readText(ids.intakeDiagnostics),
       layerTreeText: readText(ids.layerTree),
       persistenceFacts: readFacts(ids.persistence),
       diagnosticsText: readText(ids.diagnostics),
@@ -489,6 +790,8 @@ const readExplicitPsdImportState = async (page) =>
     document: editorTestIds.explicitPsdImportDocument,
     featureSupport: editorTestIds.explicitPsdImportFeatureSupport,
     materialization: editorTestIds.explicitPsdImportMaterialization,
+    intakeResult: editorTestIds.explicitPsdImportLayerIntakeResult,
+    intakeDiagnostics: editorTestIds.explicitPsdImportLayerIntakeDiagnostics,
     layerTree: editorTestIds.explicitPsdImportLayerTree,
     persistence: editorTestIds.explicitPsdImportPersistence,
     diagnostics: editorTestIds.explicitPsdImportDiagnostics,
@@ -571,6 +874,25 @@ const waitForText = async (page, testId, expectedText, timeoutMs = 15_000) => {
   );
 };
 
+const waitForOperationLogEntryCount = async (page, expectedCount) => {
+  await page.waitFor(
+    `operation log entry count ${expectedCount}`,
+    (id, count) => {
+      const panel = document.querySelector(`[data-testid="${id}"]`);
+      const terms = [...(panel?.querySelectorAll("dt") ?? [])];
+      const entryTerm = terms.find((term) => term.textContent === "Entries");
+
+      return entryTerm?.nextElementSibling?.textContent === String(count);
+    },
+    { timeoutMs: 15_000 },
+    editorTestIds.operationLogSummary,
+    expectedCount
+  );
+};
+
+const readText = async (page, testId) =>
+  page.evaluate((id) => document.querySelector(`[data-testid="${id}"]`)?.textContent ?? "", testId);
+
 const main = async () => {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
   const browser = locateBrowserExecutable();
@@ -602,7 +924,7 @@ const main = async () => {
 
         const result = await runPsdImportFocusedSmoke({ page, viewport });
         console.log(
-          `psd-import-focused-e2e: ${viewport.name} passed byteLength=${result.byteLength} materializedBytes=${result.materializedByteLength}`
+          `psd-import-focused-e2e: ${viewport.name} passed byteLength=${result.byteLength} materializedBytes=${result.materializedByteLength} drawable=${result.drawableId} texture=${result.textureId}`
         );
         console.log(
           `psd-import-focused-e2e: ${viewport.name} screenshot ${result.screenshot.format} base64Length=${result.screenshot.base64Length}`

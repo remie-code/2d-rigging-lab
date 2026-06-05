@@ -55,6 +55,15 @@ const createSchemaIssueCheck = (
     return warpLatticeSchemaCheck;
   }
 
+  const psdMaterializedProvenanceCheck = createPsdMaterializedProvenanceSchemaIssueCheck(
+    issue,
+    input,
+    packageId
+  );
+  if (psdMaterializedProvenanceCheck !== undefined) {
+    return psdMaterializedProvenanceCheck;
+  }
+
   const path = issue.path.map(String).join(".");
   const target: TargetRefDto = {
     kind: "package",
@@ -77,6 +86,116 @@ const createSchemaIssueCheck = (
     relatedScenarios: [],
     impact: "Validator cannot trust package contents until the required package DTO is present."
   });
+};
+
+const createPsdMaterializedProvenanceSchemaIssueCheck = (
+  issue: z.ZodIssue,
+  input: unknown,
+  packageId: PackageId
+): ValidationCheckResultDto | undefined => {
+  const path = issue.path.map(String);
+  if (
+    path[0] !== "assets" ||
+    path[1] !== "sourceManifest" ||
+    path[2] !== "sourceAssets" ||
+    path[4] !== "psdProfile" ||
+    path[5] !== "materializationEvidence" ||
+    path[7] !== "provenance"
+  ) {
+    return undefined;
+  }
+
+  const provenanceField = path[8] ?? "provenance";
+  if (!isPsdMaterializedProvenanceField(provenanceField)) {
+    return undefined;
+  }
+
+  const sourceAssetIndex = Number.parseInt(path[3] ?? "", 10);
+  const materializationIndex = Number.parseInt(path[6] ?? "", 10);
+  const sourceAssetPath = [
+    "assets",
+    "sourceManifest",
+    "sourceAssets",
+    sourceAssetIndex
+  ];
+  const materializationPath = [
+    ...sourceAssetPath,
+    "psdProfile",
+    "materializationEvidence",
+    materializationIndex
+  ];
+  const sourceAssetId = readObjectString(readNestedValue(input, sourceAssetPath), "sourceAssetId") ??
+    packageId;
+  const materializationId = readObjectString(
+    readNestedValue(input, materializationPath),
+    "materializationId"
+  ) ?? "missing";
+  const actualValue = formatUnknownValue(readNestedValue(input, path));
+  const reason = createPsdMaterializedProvenanceReason(provenanceField, actualValue);
+  const targetPath = `/${path.join("/")}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "asset.psd.materializedProvenanceBlocked",
+    status: "fail",
+    severity: reason === "public-demo-asset-true" ? "blocking" : "error",
+    phase: "rights",
+    target: {
+      kind: "sourceAsset",
+      id: sourceAssetId,
+      path: targetPath
+    },
+    targetPath,
+    message:
+      `PSD materialization ${materializationId} has invalid private/local provenance ` +
+      `at ${targetPath}.`,
+    evidence: [
+      `sourceAssetId=${sourceAssetId}`,
+      `sourceAssetIndex=${sourceAssetIndex}`,
+      `materializationId=${materializationId}`,
+      `materializationIndex=${materializationIndex}`,
+      `provenanceField=${provenanceField}`,
+      `actual=${actualValue}`,
+      `reason=${reason}`,
+      issue.message,
+      "validatorBoundary=no-parser-execution",
+      "rawParserObject=notPersisted",
+      "publicDemoAsset=falseRequired"
+    ],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    relatedScenarios: ["SC-IN-003", "SC-RIGHTS-002"],
+    impact:
+      "Product Preflight must not accept selected PSD layer materialized assets with public demo claims or missing private/local provenance."
+  });
+};
+
+const isPsdMaterializedProvenanceField = (field: string): boolean =>
+  [
+    "sourceFilePath",
+    "sourceDigest",
+    "sourceByteLength",
+    "privacyLabel",
+    "publicDistribution",
+    "publicDemoAsset"
+  ].includes(field);
+
+const createPsdMaterializedProvenanceReason = (
+  field: string,
+  actualValue: string
+): string => {
+  if (field === "publicDemoAsset" && actualValue === "true") {
+    return "public-demo-asset-true";
+  }
+  if (field === "publicDemoAsset") {
+    return "public-demo-asset-flag-invalid";
+  }
+  if (field === "privacyLabel") {
+    return "private-local-privacy-label-missing";
+  }
+  if (field === "publicDistribution") {
+    return "public-distribution-policy-mismatch";
+  }
+
+  return "materialized-provenance-required-field-invalid";
 };
 
 const createInvalidRigControlChildTargetKindCheck = (
@@ -165,6 +284,20 @@ const readObjectString = (input: unknown, key: string): string | undefined => {
 
   const value = (input as Record<string, unknown>)[key];
   return typeof value === "string" ? value : undefined;
+};
+
+const formatUnknownValue = (value: unknown): string => {
+  if (value === undefined) {
+    return "missing";
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null) {
+    return "null";
+  }
+
+  return "non-scalar";
 };
 
 const inferTargetKindFromId = (targetId: string): string => {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createEmptyExplicitPsdImportState,
   editorTestIds,
+  projectExplicitPsdImportStateFromBridgeResult,
   projectExplicitPsdImportViewModel
 } from "../../editor-state/index.js";
 import { createExplicitPsdImportPanel } from "./explicit-psd-import-panel.js";
@@ -29,6 +30,7 @@ describe("explicit PSD import panel", () => {
     expect(findByTestId(panel, editorTestIds.explicitPsdImportPersistence)?.textContent).toContain(
       "sessionEvidenceClearedOnProjectLoadReparseRequiredV1"
     );
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportLayerIntakeSubmit)?.disabled).toBe(true);
   });
 
   it("passes only the user-selected file and selected layer ref to the parse callback", async () => {
@@ -65,21 +67,92 @@ describe("explicit PSD import panel", () => {
       "Select a PSD file before parsing."
     );
   });
+
+  it("lets a parsed layer tree radio update the selected layer for intake", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState()),
+      onIntakeSelectedLayer: (command) => calls.push(command)
+    });
+
+    const secondLayerChoice = findByValue(panel, "layer_headwear");
+    secondLayerChoice.checked = true;
+    secondLayerChoice.emit("change");
+    setNamedFieldValue(panel, "destinationKind", "existingPart");
+    setNamedFieldValue(panel, "destinationExistingPartId", "part_root");
+    setNamedFieldValue(panel, "drawableDisplayName", "Headwear From PSD");
+    findByTestId(panel, editorTestIds.explicitPsdImportLayerIntakeForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(calls).toEqual([{
+      selectedLayerNodeRef: "layer_headwear",
+      destinationPart: {
+        destinationKind: "existingPart",
+        partId: "part_root"
+      },
+      drawableDisplayName: "Headwear From PSD"
+    }]);
+  });
+
+  it("supports creating a new destination part for the selected layer intake", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState()),
+      onIntakeSelectedLayer: (command) => calls.push(command)
+    });
+
+    setNamedFieldValue(panel, "destinationKind", "newPart");
+    setNamedFieldValue(panel, "destinationNewPartName", "Headwear");
+    setNamedFieldValue(panel, "destinationParentPartId", "part_root");
+    setNamedFieldValue(panel, "selectedLayerNodeRef", "layer_headwear");
+    setNamedFieldValue(panel, "drawableDisplayName", "Headwear");
+    findByTestId(panel, editorTestIds.explicitPsdImportLayerIntakeForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(calls).toEqual([{
+      selectedLayerNodeRef: "layer_headwear",
+      destinationPart: {
+        destinationKind: "newPart",
+        displayName: "Headwear",
+        parentPartId: "part_root"
+      },
+      drawableDisplayName: "Headwear"
+    }]);
+  });
 });
 
 const createPanel = (
-  onParsePsdFile: Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = () => {}
-): TestElement =>
+  options: {
+    readonly viewModel?: Parameters<typeof createExplicitPsdImportPanel>[0]["viewModel"];
+    readonly onParsePsdFile?: Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"];
+    readonly onIntakeSelectedLayer?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayer"];
+  } | Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = {}
+): TestElement => {
+  const normalized = typeof options === "function" ? { onParsePsdFile: options } : options;
+  return (
   createExplicitPsdImportPanel({
-    viewModel: projectExplicitPsdImportViewModel(createEmptyExplicitPsdImportState()),
-    onParsePsdFile
-  }) as unknown as TestElement;
+    viewModel: normalized.viewModel ?? projectExplicitPsdImportViewModel(createEmptyExplicitPsdImportState()),
+    destinationParts: [{ partId: "part_root", label: "Root / part_root" }],
+    onParsePsdFile: normalized.onParsePsdFile ?? (() => {}),
+    onIntakeSelectedLayer: normalized.onIntakeSelectedLayer ?? (() => {})
+  }) as unknown as TestElement
+  );
+};
 
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
 
 const findNamedField = (root: TestElement, name: string): TestElement | null =>
   root.queryByPredicate((element) => element.name === name);
+
+const findByValue = (root: TestElement, value: string): TestElement => {
+  const field = root.queryByPredicate((element) => element.value === value);
+  if (field === null) {
+    throw new Error(`Missing value ${value}.`);
+  }
+
+  return field;
+};
 
 const setNamedFieldValue = (root: TestElement, name: string, value: string): void => {
   const field = findNamedField(root, name);
@@ -111,6 +184,69 @@ const createTestFileList = (files: readonly File[]): FileList =>
     }
   }) as FileList;
 
+const createParsedState = () =>
+  projectExplicitPsdImportStateFromBridgeResult({
+    status: "parsed",
+    source: {
+      fileName: "sample_model.psd",
+      declaredMediaType: "image/vnd.adobe.photoshop",
+      byteLength: 16,
+      sizeCapBytes: 32 * 1024 * 1024,
+      intakeKind: "explicitFile",
+      privacy: {
+        publicDistribution: "notPublicDistributable",
+        rawBytesPersistence: "notPersistedByParserBridge"
+      }
+    },
+    adapterResult: {
+      schemaVersion: "psd-adapter-result-v1",
+      sourceProfile: "layered-character-psd-profile-v1",
+      adapterName: "test-browser-psd-adapter",
+      adapterVersion: "0.1.0",
+      intakeKind: "realPsdParseResult",
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        parserVersion: "0.4.0",
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      canvas: { width: 64, height: 64 },
+      sourceGroups: [],
+      sourceLayers: [
+        {
+          sourceLayerId: "layer_face",
+          originalName: "Face",
+          normalizedName: "Face",
+          groupPath: [],
+          sourceOrder: 0,
+          bounds: { x: 0, y: 0, width: 16, height: 16 },
+          visibleInSource: true,
+          opacityInSource: 1,
+          role: "editableLayer",
+          unsupportedFeatures: []
+        },
+        {
+          sourceLayerId: "layer_headwear",
+          originalName: "Headwear",
+          normalizedName: "Headwear",
+          groupPath: [],
+          sourceOrder: 1,
+          bounds: { x: 0, y: 0, width: 8, height: 8 },
+          visibleInSource: true,
+          opacityInSource: 1,
+          role: "editableLayer",
+          unsupportedFeatures: []
+        }
+      ],
+      unsupportedFeatures: [],
+      diagnostics: []
+    },
+    diagnostics: [],
+    errorEvidence: []
+  }, { selectedLayerNodeRef: "layer_face" });
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
@@ -125,6 +261,8 @@ class TestElement {
   name = "";
   autocomplete = "";
   accept = "";
+  checked = false;
+  disabled = false;
   files: FileList | null = null;
   private ownText = "";
 

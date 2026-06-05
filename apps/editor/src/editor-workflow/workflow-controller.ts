@@ -203,6 +203,12 @@ import {
   type EditorExplicitPsdImportWorkflowResult
 } from "./explicit-psd-import-workflow.js";
 import {
+  commitEditorSelectedPsdLayerIntakeWorkflow,
+  type EditorExplicitPsdLayerIntakeCommand,
+  type EditorExplicitPsdLayerIntakeResult
+} from "./selected-psd-layer-intake-workflow.js";
+import type { BrowserPsdParserBridgeResult } from "./browser-psd-parser-bridge-result.js";
+import {
   approveCodexProposalReview,
   commitApprovedCodexProposalReview,
   requestCodexProposalReviewApproval,
@@ -387,6 +393,9 @@ export interface EditorWorkflowController {
   parseExplicitBrowserPsdImportFile(
     command: EditorExplicitPsdImportFileCommand
   ): Promise<EditorExplicitPsdImportWorkflowResult>;
+  commitExplicitPsdLayerIntake(
+    command: EditorExplicitPsdLayerIntakeCommand
+  ): Promise<EditorExplicitPsdLayerIntakeResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
@@ -475,6 +484,8 @@ export const createEditorWorkflowController = (
   let state = createEditorWorkflowState(adapter, {
     ...(options.now === undefined ? {} : { now: options.now })
   });
+  let currentExplicitPsdImportFile: File | undefined;
+  let currentExplicitPsdImportBridgeResult: BrowserPsdParserBridgeResult | undefined;
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
@@ -557,6 +568,10 @@ export const createEditorWorkflowController = (
       ...state,
       productPreflightComparison: createEmptyProductPreflightComparisonState()
     };
+  };
+  const clearExplicitPsdImportCurrentSource = (): void => {
+    currentExplicitPsdImportFile = undefined;
+    currentExplicitPsdImportBridgeResult = undefined;
   };
   const recordProductPreflightReportAndProjectComparison = async (input: {
     readonly currentReport: ProductPreflightReportDto;
@@ -838,10 +853,37 @@ export const createEditorWorkflowController = (
     },
     async parseExplicitBrowserPsdImportFile(command) {
       const outcome = await runEditorExplicitPsdImportWorkflow(command);
+      currentExplicitPsdImportFile = command.file;
+      currentExplicitPsdImportBridgeResult = outcome.bridgeResult;
       state = {
         ...state,
         explicitPsdImport: outcome.state
       };
+
+      return outcome.result;
+    },
+    async commitExplicitPsdLayerIntake(command) {
+      const outcome = await commitEditorSelectedPsdLayerIntakeWorkflow({
+        adapter,
+        state,
+        command,
+        ...(currentExplicitPsdImportFile === undefined
+          ? {}
+          : { currentPsdFile: currentExplicitPsdImportFile }),
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+        persistentByteStore,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+      if (outcome.result.latestSessionPersistenceResult !== null) {
+        latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+      }
+      if (outcome.result.status === "committed") {
+        clearDynamicsPreview();
+      }
 
       return outcome.result;
     },
@@ -1356,6 +1398,7 @@ export const createEditorWorkflowController = (
       latestDrawablePresetResult = null;
       latestProjectPersistenceResult = null;
       aiApprovalActions.reset();
+      clearExplicitPsdImportCurrentSource();
       clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
@@ -1404,6 +1447,7 @@ export const createEditorWorkflowController = (
             ? { status: "empty", storeResult }
             : { status: "failed", storeResult };
         aiApprovalActions.reset();
+        clearExplicitPsdImportCurrentSource();
         clearProductPreflightReportHistory();
         latestProjectPersistenceResult = result;
         return result;
@@ -1434,6 +1478,7 @@ export const createEditorWorkflowController = (
       aiApprovalActions.reset({
         transcript: hydrateInMemoryAiCommandTranscript(project.aiCommandTranscript)
       });
+      clearExplicitPsdImportCurrentSource();
       clearProductPreflightReportHistory();
       clearDynamicsPreview();
 
@@ -1521,6 +1566,7 @@ export const createEditorWorkflowController = (
         latestSessionPersistenceResult = null;
         latestDrawablePresetResult = null;
         aiApprovalActions.reset();
+        clearExplicitPsdImportCurrentSource();
         clearProductPreflightReportHistory();
         clearDynamicsPreview();
       }
@@ -1538,6 +1584,7 @@ export const createEditorWorkflowController = (
       latestSessionPersistenceResult = null;
       latestDrawablePresetResult = null;
       aiApprovalActions.reset();
+      clearExplicitPsdImportCurrentSource();
       clearProductPreflightReportHistory();
       clearDynamicsPreview();
 

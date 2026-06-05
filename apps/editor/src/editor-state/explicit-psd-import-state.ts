@@ -93,6 +93,17 @@ export interface ExplicitPsdImportDiagnosticState {
   readonly message: string;
 }
 
+export interface ExplicitPsdImportFactState {
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface ExplicitPsdLayerIntakeState {
+  readonly status: "idle" | "committed" | "rejected" | "failed";
+  readonly summaryFacts: readonly ExplicitPsdImportFactState[];
+  readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
+}
+
 export interface ExplicitPsdImportPersistenceBoundaryState {
   readonly parserPrivateShapePolicy: "parser-private-shape-excluded-v1";
   readonly rawParserObjectPersistence: "notPersisted";
@@ -114,6 +125,7 @@ export interface ExplicitPsdImportState {
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materialization: readonly ExplicitPsdImportMaterializationState[];
+  readonly selectedLayerIntake: ExplicitPsdLayerIntakeState;
   readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
   readonly persistenceBoundary: ExplicitPsdImportPersistenceBoundaryState;
 }
@@ -152,9 +164,17 @@ export const createEmptyExplicitPsdImportState = (): ExplicitPsdImportState => (
   unsupportedFeatureLabels: [],
   notEvaluatedFeatureLabels: [],
   materialization: [],
+  selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
   diagnostics: [],
   persistenceBoundary: createExplicitPsdImportPersistenceBoundary()
 });
+
+export const createEmptyExplicitPsdLayerIntakeState =
+  (): ExplicitPsdLayerIntakeState => ({
+    status: "idle",
+    summaryFacts: [],
+    diagnostics: []
+  });
 
 export const projectExplicitPsdImportStateFromBridgeResult = (
   input: ExplicitPsdImportBridgeResultInput,
@@ -195,6 +215,7 @@ export const projectExplicitPsdImportStateFromBridgeResult = (
     notEvaluatedFeatureLabels: notEvaluatedFeatures.map(formatFeatureSupportEvidenceLabel),
     materialization:
       adapterResult?.materializationEvidence?.map(projectMaterializationState) ?? [],
+    selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
     diagnostics: [
       ...input.diagnostics.map(projectDiagnosticState),
       ...input.errorEvidence.map((evidence) => ({

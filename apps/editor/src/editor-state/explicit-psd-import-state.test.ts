@@ -216,10 +216,13 @@ const createParsedBridgeResult = (): ExplicitPsdImportBridgeResultInput => ({
         sourceLayerRef: {
           sourceAssetId: SourceAssetIdSchema.parse("src_browser_psd_import"),
           sourceLayerId: "psd:root/group[0]/layer[0]",
+          sourceLayerName: "headwear",
           sourceLayerPath: ["Head", "headwear"]
         },
-        mediaType: "application/vnd.private-2d-rigging-lab.raw-rgba",
+        mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
         byteLength: 460800,
+        width: 400,
+        height: 288,
         digest: {
           algorithm: "sha256",
           hex: "671e6a363745b1ce2e8d29c1a63438170fe9511c8884ea42298cf9b8886e5c1a"
@@ -229,7 +232,8 @@ const createParsedBridgeResult = (): ExplicitPsdImportBridgeResultInput => ({
           sourceByteLength: 22406225,
           sourceMediaType: "image/vnd.adobe.photoshop",
           privacyLabel: "packageLocalAsset",
-          publicDistribution: "notPublicDistributable"
+          publicDistribution: "notPublicDistributable",
+          publicDemoAsset: false
         }
       }
     ],

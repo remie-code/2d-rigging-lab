@@ -153,6 +153,8 @@ const toMaterializationEvidenceSummary = (
     mediaType: evidence.mediaType,
     byteLength: evidence.byteLength,
     digest: structuredClone(evidence.digest),
+    ...(evidence.width === undefined ? {} : { width: evidence.width }),
+    ...(evidence.height === undefined ? {} : { height: evidence.height }),
     ...(evidence.textureId === undefined ? {} : { textureId: evidence.textureId }),
     provenance: structuredClone(evidence.provenance),
     ...(evidence.parser === undefined ? {} : { parser: structuredClone(evidence.parser) }),

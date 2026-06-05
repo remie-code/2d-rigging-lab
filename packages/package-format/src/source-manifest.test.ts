@@ -369,6 +369,116 @@ describe("source manifest PSD structured profile contract", () => {
     expect(serialized).not.toContain("data:image");
   });
 
+  it("serializes Wave46 raw RGBA selected-layer materialization asset evidence", () => {
+    const manifest = createStructuredPsdSourceManifestWithBrowserParseEvidence() as StructuredPsdManifestFixture;
+    const profile = manifest.sourceAssets[0]?.psdProfile;
+    if (profile === undefined) {
+      throw new Error("Expected structured PSD fixture profile.");
+    }
+
+    const parser = profile.adapter.parser;
+    if (parser === undefined) {
+      throw new Error("Expected parser evidence in browser PSD fixture.");
+    }
+
+    profile.materializationEvidence = [
+      {
+        evidenceKind: "psd-layer-materialization-evidence-v1",
+        materializationId: "mat_wave46LayerHeadRawRgba",
+        sourceLayerRef: {
+          sourceAssetId: "src_psd_structured",
+          sourceLayerId: "layer_head",
+          sourceLayerName: "Head",
+          sourceLayerPath: ["Character", "Head", "Head"]
+        },
+        mediaType: WAVE46_RAW_RGBA_MEDIA_TYPE,
+        byteLength: 16,
+        digest: {
+          algorithm: "sha256",
+          hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+        },
+        width: 2,
+        height: 2,
+        binaryAssetRef: {
+          referenceKind: "package-binary-asset-ref-v1",
+          binaryAssetId: "bin_wave46_head_rgba",
+          packageRelativePath: "assets/textures/wave46/head.raw-rgba",
+          digest: {
+            algorithm: "sha256",
+            hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+          },
+          byteLength: 16,
+          mediaType: WAVE46_RAW_RGBA_MEDIA_TYPE,
+          storageStatus: "stored-package-local-v1",
+          provenanceId: "prov_wave46_head_rgba",
+          rightsAssetId: "src_psd_structured"
+        },
+        textureId: "tex_head",
+        provenance: {
+          sourceFilePath: "private/source.psd",
+          sourceDigest: {
+            algorithm: "sha256",
+            hex: "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+          },
+          sourceByteLength: 22406225,
+          sourceMediaType: "image/vnd.adobe.photoshop",
+          privacyLabel: "packageLocalAsset",
+          publicDistribution: "notPublicDistributable",
+          publicDemoAsset: false
+        },
+        parser,
+        extraction: {
+          extractionKind: "selectedLayerRasterV1",
+          optionsSchemaVersion: "psd-layer-extraction-options-v1",
+          options: {
+            channelOrder: "rgba",
+            includeEffects: false,
+            includeHiddenLayers: false,
+            layerSelection: "layer_head"
+          }
+        }
+      }
+    ];
+
+    const parsed = SourceManifestSchema.parse(manifest);
+    const serialized = stringifyJsonDeterministic(parsed);
+    const evidence = parsed.sourceAssets[0]?.psdProfile?.materializationEvidence?.[0];
+
+    expect(evidence).toMatchObject({
+      materializationId: "mat_wave46LayerHeadRawRgba",
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_structured",
+        sourceLayerId: "layer_head",
+        sourceLayerName: "Head"
+      },
+      mediaType: WAVE46_RAW_RGBA_MEDIA_TYPE,
+      byteLength: 16,
+      width: 2,
+      height: 2,
+      binaryAssetRef: {
+        binaryAssetId: "bin_wave46_head_rgba",
+        packageRelativePath: "assets/textures/wave46/head.raw-rgba",
+        mediaType: WAVE46_RAW_RGBA_MEDIA_TYPE
+      },
+      provenance: {
+        privacyLabel: "packageLocalAsset",
+        publicDistribution: "notPublicDistributable",
+        publicDemoAsset: false
+      },
+      parser: {
+        runtime: "browser",
+        parserVersion: "0.4.0"
+      },
+      extraction: {
+        extractionKind: "selectedLayerRasterV1"
+      }
+    });
+    expect(SourceManifestSchema.parse(JSON.parse(serialized))).toEqual(parsed);
+    expect(serialized).not.toContain("rawLayerObject");
+    expect(serialized).not.toContain("rawRgba");
+    expect(serialized).not.toContain("data:image");
+  });
+
   it("rejects parser-private layer objects in real PSD evidence fields", () => {
     const manifest = createStructuredPsdSourceManifestWithRealParseEvidence();
     const sourceAsset = manifest.sourceAssets[0];
@@ -411,6 +521,9 @@ const PSD_COMPATIBILITY_POLICY = {
   flattenedUnsupportedFeaturesFallback:
     "sourceLayer.unsupportedFeatures-feature-id-fallback-v1"
 } as const;
+
+const WAVE46_RAW_RGBA_MEDIA_TYPE =
+  "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
 
 const createStructuredPsdSourceManifest = (): unknown => ({
   schemaVersion: "source-manifest-v1",
