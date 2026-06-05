@@ -238,6 +238,130 @@ describe("source manifest PSD structured profile contract", () => {
       unsupportedFeatures: []
     });
   });
+
+  it("serializes real PSD parse intake evidence without parser private shapes", () => {
+    const manifest = createStructuredPsdSourceManifestWithRealParseEvidence();
+    const parsed = SourceManifestSchema.parse(manifest);
+    const serialized = stringifyJsonDeterministic(parsed);
+    const reparsed = SourceManifestSchema.parse(JSON.parse(serialized));
+    const profile = reparsed.sourceAssets[0]?.psdProfile;
+
+    expect(reparsed).toEqual(parsed);
+    expect(profile?.adapter).toMatchObject({
+      evidenceKind: "real-psd-parse-result-v1",
+      intakeKind: "realPsdParseResult",
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        parserVersion: "0.4.0",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      }
+    });
+    expect(profile?.layerTreeEvidence).toMatchObject({
+      evidenceKind: "psd-layer-tree-evidence-v1",
+      evidenceId: "layerTree_wave44Sample",
+      intakeKind: "realPsdParseResult",
+      groupCount: 1,
+      layerCount: 1,
+      privateShapePolicy: "parser-private-shape-excluded-v1"
+    });
+    expect(profile?.featureSupportEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        featureId: "psd.fullCompositing",
+        status: "notEvaluated",
+        scope: "document"
+      }),
+      expect.objectContaining({
+        featureId: "psd.layerEffects",
+        status: "unsupported",
+        scope: "layer"
+      })
+    ]));
+    expect(profile?.materializationEvidence?.[0]).toMatchObject({
+      evidenceKind: "psd-layer-materialization-evidence-v1",
+      materializationId: "mat_wave44LayerHead",
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_structured",
+        sourceLayerId: "layer_head",
+        sourceLayerPath: ["Character", "Head", "Head"]
+      },
+      mediaType: "image/png",
+      byteLength: 4096,
+      digest: {
+        algorithm: "sha256",
+        hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      textureId: "tex_head",
+      provenance: {
+        sourceFilePath: "test_data/sample_model.psd",
+        sourceDigest: {
+          algorithm: "sha256",
+          hex: "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+        },
+        sourceByteLength: 22406225,
+        sourceMediaType: "image/vnd.adobe.photoshop",
+        privacyLabel: "privateLocalFixture",
+        publicDistribution: "notPublicDistributable",
+        fixtureId: "wave44.sampleModel",
+        derivedArtifactPath: "test_data/derived/wave44/layer_head.png",
+        generatedBy: "wave44.psdSmoke"
+      },
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        parserVersion: "0.4.0",
+        adapterName: "wave44-node-smoke-adapter",
+        adapterVersion: "0.0.0",
+        runtime: "node",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      extraction: {
+        extractionKind: "selectedLayerRasterV1",
+        optionsSchemaVersion: "psd-layer-extraction-options-v1",
+        options: {
+          includeHiddenLayers: false,
+          layerSelection: "layer_head"
+        }
+      }
+    });
+  });
+
+  it("rejects parser-private layer objects in real PSD evidence fields", () => {
+    const manifest = createStructuredPsdSourceManifestWithRealParseEvidence();
+    const sourceAsset = manifest.sourceAssets[0];
+    if (sourceAsset === undefined) {
+      throw new Error("Expected structured PSD fixture source asset.");
+    }
+
+    const profile = sourceAsset.psdProfile;
+    const parser = profile.adapter.parser;
+    if (typeof parser !== "object" || parser === null || Array.isArray(parser)) {
+      throw new Error("Expected parser evidence object.");
+    }
+
+    const result = SourceManifestSchema.safeParse({
+      ...manifest,
+      sourceAssets: [
+        {
+          ...sourceAsset,
+          psdProfile: {
+            ...profile,
+            adapter: {
+              ...profile.adapter,
+              parser: {
+                ...parser,
+                rawLayerObject: { parserPrivate: true }
+              }
+            }
+          }
+        }
+      ]
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
 
 const PSD_COMPATIBILITY_POLICY = {
@@ -370,6 +494,140 @@ const createStructuredPsdSourceManifest = (): unknown => ({
     }
   ]
 });
+
+const createStructuredPsdSourceManifestWithRealParseEvidence = () => {
+  const manifest = createStructuredPsdSourceManifest() as StructuredPsdManifestFixture;
+  const sourceAsset = manifest.sourceAssets[0];
+  if (sourceAsset === undefined) {
+    throw new Error("Expected structured PSD fixture source asset.");
+  }
+
+  const profile = sourceAsset.psdProfile;
+  const sourceLayer = profile.sourceLayers[0];
+  if (sourceLayer === undefined) {
+    throw new Error("Expected structured PSD fixture source layer.");
+  }
+
+  const parser = {
+    evidenceKind: "psd-parser-evidence-v1",
+    parserName: "webtoonPsd",
+    parserPackageName: "@webtoon/psd",
+    parserVersion: "0.4.0",
+    adapterName: "wave44-node-smoke-adapter",
+    adapterVersion: "0.0.0",
+    runtime: "node",
+    privateShapePolicy: "parser-private-shape-excluded-v1"
+  } as const;
+
+  profile.adapter = {
+    ...profile.adapter,
+    adapterVersion: "0.0.0",
+    evidenceKind: "real-psd-parse-result-v1",
+    intakeKind: "realPsdParseResult",
+    parser
+  };
+  profile.layerTreeEvidence = {
+    evidenceKind: "psd-layer-tree-evidence-v1",
+    evidenceId: "layerTree_wave44Sample",
+    intakeKind: "realPsdParseResult",
+    groupCount: profile.sourceGroups.length,
+    layerCount: profile.sourceLayers.length,
+    maxDepth: 2,
+    parser,
+    privateShapePolicy: "parser-private-shape-excluded-v1"
+  };
+  profile.featureSupportEvidence = [
+    {
+      evidenceKind: "psd-feature-support-evidence-v1",
+      featureId: "psd.fullCompositing",
+      status: "notEvaluated",
+      scope: "document",
+      severity: "warning",
+      message: "Photoshop-style full compositing is outside Wave44 evidence.",
+      source: { kind: "document" }
+    },
+    {
+      evidenceKind: "psd-feature-support-evidence-v1",
+      featureId: "psd.layerEffects",
+      status: "unsupported",
+      scope: "layer",
+      severity: "warning",
+      message: "Layer effects are retained as source evidence and not rendered.",
+      source: { kind: "layer", id: "layer_head" },
+      rasterizeCandidate: false,
+      manualConfirmationRequired: true
+    }
+  ];
+  sourceLayer.featureSupportEvidence = [
+    {
+      evidenceKind: "psd-feature-support-evidence-v1",
+      featureId: "psd.layerEffects",
+      status: "unsupported",
+      scope: "layer",
+      severity: "warning",
+      message: "Layer effects are not part of selected layer raster materialization.",
+      source: { kind: "layer", id: "layer_head" },
+      rasterizeCandidate: false,
+      manualConfirmationRequired: true
+    }
+  ];
+  profile.materializationEvidence = [
+    {
+      evidenceKind: "psd-layer-materialization-evidence-v1",
+      materializationId: "mat_wave44LayerHead",
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_structured",
+        sourceLayerId: "layer_head",
+        sourceLayerPath: ["Character", "Head", "Head"]
+      },
+      mediaType: "image/png",
+      byteLength: 4096,
+      digest: {
+        algorithm: "sha256",
+        hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      textureId: "tex_head",
+      provenance: {
+        sourceFilePath: "test_data/sample_model.psd",
+        sourceDigest: {
+          algorithm: "sha256",
+          hex: "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+        },
+        sourceByteLength: 22406225,
+        sourceMediaType: "image/vnd.adobe.photoshop",
+        privacyLabel: "privateLocalFixture",
+        publicDistribution: "notPublicDistributable",
+        fixtureId: "wave44.sampleModel",
+        derivedArtifactPath: "test_data/derived/wave44/layer_head.png",
+        generatedBy: "wave44.psdSmoke"
+      },
+      parser,
+      extraction: {
+        extractionKind: "selectedLayerRasterV1",
+        optionsSchemaVersion: "psd-layer-extraction-options-v1",
+        options: {
+          includeHiddenLayers: false,
+          layerSelection: "layer_head"
+        }
+      }
+    }
+  ];
+
+  return manifest;
+};
+
+type StructuredPsdManifestFixture = {
+  readonly sourceAssets: Array<{
+    readonly psdProfile: {
+      adapter: Record<string, unknown>;
+      sourceGroups: readonly unknown[];
+      sourceLayers: Array<Record<string, unknown>>;
+      layerTreeEvidence?: unknown;
+      featureSupportEvidence?: unknown;
+      materializationEvidence?: unknown;
+    };
+  }>;
+};
 
 interface PsdUnsupportedLayerRequest {
   readonly payload: {

@@ -82,7 +82,7 @@ const REQUIRED_EVIDENCE_KINDS: Readonly<Record<ProductPreflightCategoryDto, read
   meshTopologyUv: ["validationReport"],
   composition: ["validationReport"],
   rigControlDynamics: ["validationReport"],
-  assetBytes: ["byteAvailability"],
+  assetBytes: ["byteAvailability", "sourceMaterialization"],
   persistenceTransport: ["transportCapability"],
   tutorialDemoReadiness: ["tutorialReadiness"],
   unsupportedClaims: ["validationReport"]
@@ -658,7 +658,8 @@ const isTruthfullyUnsupportedDiagnostic = (check: ValidationCheckResultDto): boo
   check.status === "not_applicable" &&
   (
     check.checkId === "byteIntake.unsupportedClaim" ||
-    check.checkId === "tutorial.unsupportedClaim"
+    check.checkId === "tutorial.unsupportedClaim" ||
+    check.checkId === "asset.psd.featureUnsupported"
   );
 
 const mapBlockingReasonCode = (

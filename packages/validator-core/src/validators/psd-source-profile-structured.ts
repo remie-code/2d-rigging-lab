@@ -14,6 +14,7 @@ import type {
 
 import type { ValidationCheckResultDto } from "../validation-report.js";
 import { ValidationCheckResultSchema } from "../validation-report.js";
+import { validatePsdSourceEvidenceDiagnostics } from "./psd-source-evidence-diagnostics.js";
 
 export const hasFlattenedPsdProfileEvidence = (sourceAsset: SourceAssetDto): boolean =>
   sourceAsset.diagnostics.some((diagnostic) => /^psd[.:]/.test(diagnostic)) ||
@@ -82,6 +83,7 @@ export const validateStructuredPsdProfile = (
     }));
   });
 
+  checks.push(...validatePsdSourceEvidenceDiagnostics(sourceAsset, sourceAssetIndex, profile));
   checks.push(...validateStructuredFallbackCompatibility(sourceAsset, sourceAssetIndex, profile));
   return checks;
 };

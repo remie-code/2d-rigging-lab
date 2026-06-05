@@ -8,7 +8,11 @@ import {
   PackageDocumentSchema,
   type PackageDocumentDto
 } from "@private-2d-rigging-lab/package-format";
-import { ProvenanceIdSchema } from "@private-2d-rigging-lab/contracts";
+import {
+  ProvenanceIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema
+} from "@private-2d-rigging-lab/contracts";
 
 import { defaultCheckCatalog } from "./check-catalog.js";
 import type { ValidationReportDto } from "./validation-report.js";
@@ -21,6 +25,16 @@ describe("PSD source profile validator diagnostics", () => {
     expect(defaultCheckCatalog.has("asset.psd.structuredProfileMissing")).toBe(true);
     expect(defaultCheckCatalog.has("asset.psd.structuredProfileMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("asset.psd.flattenedFallbackMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.parserEvidence")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.parserEvidenceUnavailable")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.layerTreeEvidence")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.layerTreeEvidenceMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.layerTreeEvidenceMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.featureUnsupported")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.featureNotEvaluated")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.materializationEvidence")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.materializationEvidenceMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.materializationEvidenceMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("rights.psdLayerProvenanceMissing")).toBe(true);
   });
 
@@ -29,6 +43,224 @@ describe("PSD source profile validator diagnostics", () => {
 
     expect(report.summary.status).toBe("pass");
     expect(report.checks).toEqual([]);
+  });
+
+  it("reports real PSD parser, layer tree, feature support, and materialization evidence without renderer claims", () => {
+    const document = createPsdPackageDocument();
+    const profile = expectPsdProfile(document);
+    const sourceLayer = profile.sourceLayers[0];
+
+    if (sourceLayer === undefined) {
+      throw new Error("Expected structured PSD layer.");
+    }
+
+    profile.adapter.evidenceKind = "real-psd-parse-result-v1";
+    profile.adapter.intakeKind = "realPsdParseResult";
+    profile.adapter.parser = createParserEvidence();
+    profile.layerTreeEvidence = {
+      evidenceKind: "psd-layer-tree-evidence-v1",
+      evidenceId: "layerTree_wave44Synthetic",
+      intakeKind: "realPsdParseResult",
+      groupCount: 1,
+      layerCount: 1,
+      maxDepth: 2,
+      parser: createParserEvidence(),
+      privateShapePolicy: "parser-private-shape-excluded-v1"
+    };
+    profile.featureSupportEvidence = [
+      {
+        evidenceKind: "psd-feature-support-evidence-v1",
+        featureId: "psd.fullCompositing",
+        status: "unsupported",
+        scope: "document",
+        severity: "warning",
+        message: "Full Photoshop-style compositing is outside Wave44 validator evidence.",
+        source: { kind: "document", id: "sample_model" },
+        rasterizeCandidate: false,
+        manualConfirmationRequired: false
+      }
+    ];
+    sourceLayer.featureSupportEvidence = [
+      {
+        evidenceKind: "psd-feature-support-evidence-v1",
+        featureId: "psd.layerEffects",
+        status: "notEvaluated",
+        scope: "layer",
+        severity: "warning",
+        message: "Layer effects were not evaluated by the selected parser evidence.",
+        source: { kind: "layer", id: "psd_layer_body" },
+        rasterizeCandidate: true,
+        manualConfirmationRequired: true,
+        evidenceRefs: ["layerTree_wave44Synthetic"]
+      }
+    ];
+    profile.materializationEvidence = [
+      createMaterializationEvidence()
+    ];
+
+    const report = validatePsdPackage(document);
+
+    expect(report.checks.map((check) => check.checkId)).toEqual([
+      "asset.psd.parserEvidence",
+      "asset.psd.parserEvidence",
+      "asset.psd.parserEvidence",
+      "asset.psd.layerTreeEvidence",
+      "asset.psd.featureUnsupported",
+      "asset.psd.featureNotEvaluated",
+      "asset.psd.materializationEvidence"
+    ]);
+    expect(report.checks.map((check) => check.status)).toEqual([
+      "pass",
+      "pass",
+      "pass",
+      "pass",
+      "not_applicable",
+      "needs_review",
+      "pass"
+    ]);
+
+    const parserCheck = expectCheckById(report, "asset.psd.parserEvidence");
+    expect(parserCheck.evidence).toEqual(expect.arrayContaining([
+      "parserEvidenceKind=psd-parser-evidence-v1",
+      "parserPackageName=@webtoon/psd",
+      "parserVersion=0.4.0",
+      "parserRuntime=node",
+      "privateShapePolicy=parser-private-shape-excluded-v1",
+      "validatorBoundary=no-parser-execution",
+      "photoshopCompositing=notClaimed",
+      "rendererPixelOracle=notClaimed"
+    ]));
+
+    const layerTreeCheck = expectCheckById(report, "asset.psd.layerTreeEvidence");
+    expect(layerTreeCheck.evidence).toEqual(expect.arrayContaining([
+      "layerTreeEvidenceKind=psd-layer-tree-evidence-v1",
+      "layerTreeEvidenceId=layerTree_wave44Synthetic",
+      "layerTreeIntakeKind=realPsdParseResult",
+      "groupCount=1",
+      "layerCount=1",
+      "parserEvidencePresent=true"
+    ]));
+
+    const unsupportedFeatureCheck = expectCheckById(report, "asset.psd.featureUnsupported");
+    expect(unsupportedFeatureCheck).toMatchObject({
+      checkId: "asset.psd.featureUnsupported",
+      status: "not_applicable",
+      severity: "warning",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile/featureSupportEvidence/0"
+    });
+    expect(unsupportedFeatureCheck.evidence).toEqual(expect.arrayContaining([
+      "featureSupportEvidenceKind=psd-feature-support-evidence-v1",
+      "featureId=psd.fullCompositing",
+      "featureStatus=unsupported",
+      "featureScope=document",
+      "featureSourceKind=document"
+    ]));
+
+    const notEvaluatedCheck = expectCheckById(report, "asset.psd.featureNotEvaluated");
+    expect(notEvaluatedCheck).toMatchObject({
+      status: "needs_review",
+      severity: "warning",
+      targetPath: "/assets/sourceManifest/sourceAssets/0/psdProfile/sourceLayers/0/featureSupportEvidence/0"
+    });
+    expect(notEvaluatedCheck.evidence).toEqual(expect.arrayContaining([
+      "featureId=psd.layerEffects",
+      "featureStatus=notEvaluated",
+      "featureEvidenceRef[0]=layerTree_wave44Synthetic"
+    ]));
+
+    const materializationCheck = expectCheckById(report, "asset.psd.materializationEvidence");
+    expect(materializationCheck.evidence).toEqual(expect.arrayContaining([
+      "materializationEvidenceKind=psd-layer-materialization-evidence-v1",
+      "materializationId=mat_wave44Body",
+      "sourceLayerAssetId=src_psd_profile",
+      "sourceLayerId=psd_layer_body",
+      "mediaType=image/png",
+      "byteLength=1024",
+      "digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "binaryAssetId=bin_psd_body",
+      "textureId=tex_psd_body",
+      "privacyLabel=privateLocalFixture",
+      "publicDistribution=notPublicDistributable",
+      "sourceFilePath=test_data/sample_model.psd",
+      "sourceDigest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "fixtureId=wave44.synthetic",
+      "generatedBy=wave44.validatorSyntheticFixture",
+      "parserEvidencePresent=true",
+      "extractionKind=selectedLayerRasterV1"
+    ]));
+  });
+
+  it("fails unavailable or inconsistent real PSD parser and layer tree evidence", () => {
+    const document = createPsdPackageDocument();
+    const profile = expectPsdProfile(document);
+
+    profile.adapter.evidenceKind = "real-psd-parse-result-v1";
+    profile.adapter.intakeKind = "realPsdParseResult";
+
+    const missingReport = validatePsdPackage(document);
+
+    expect(missingReport.summary.status).toBe("fail");
+    expect(missingReport.checks.map((check) => check.checkId)).toEqual([
+      "asset.psd.parserEvidenceUnavailable",
+      "asset.psd.layerTreeEvidenceMissing",
+      "asset.psd.materializationEvidenceMissing"
+    ]);
+    expect(expectCheckById(missingReport, "asset.psd.parserEvidenceUnavailable").evidence).toEqual(
+      expect.arrayContaining([
+        "reason=real-psd-parse-result-missing-parser-evidence",
+        "layerTreeEvidencePresent=false",
+        "materializationEvidenceCount=0"
+      ])
+    );
+
+    profile.adapter.parser = createParserEvidence();
+    profile.layerTreeEvidence = {
+      evidenceKind: "psd-layer-tree-evidence-v1",
+      evidenceId: "layerTree_mismatch",
+      intakeKind: "parserFreeAdapterResult",
+      groupCount: 99,
+      layerCount: 0,
+      privateShapePolicy: "parser-private-shape-excluded-v1"
+    };
+    profile.materializationEvidence = [
+      {
+        ...createMaterializationEvidence(),
+        sourceLayerRef: {
+          sourceAssetId: SourceAssetIdSchema.parse("src_psd_profile"),
+          sourceLayerId: "psd_layer_missing"
+        }
+      }
+    ];
+
+    const mismatchReport = validatePsdPackage(document);
+
+    expect(mismatchReport.summary.status).toBe("fail");
+    expect(mismatchReport.checks.map((check) => check.checkId)).toEqual([
+      "asset.psd.parserEvidence",
+      "asset.psd.parserEvidence",
+      "asset.psd.layerTreeEvidence",
+      "asset.psd.layerTreeEvidenceMismatch",
+      "asset.psd.materializationEvidence",
+      "asset.psd.materializationEvidenceMismatch"
+    ]);
+    expect(expectCheckById(mismatchReport, "asset.psd.layerTreeEvidenceMismatch").evidence).toEqual(
+      expect.arrayContaining([
+        "layerTreeIntakeKind=parserFreeAdapterResult",
+        "expectedIntakeKind=realPsdParseResult",
+        "layerTreeGroupCount=99",
+        "structuredGroupCount=1",
+        "layerTreeLayerCount=0",
+        "structuredLayerCount=1"
+      ])
+    );
+    expect(expectCheckById(mismatchReport, "asset.psd.materializationEvidenceMismatch").evidence).toEqual(
+      expect.arrayContaining([
+        "materializationId=mat_wave44Body",
+        "sourceLayerId=psd_layer_missing",
+        "structuredLayerMatch=false",
+        "flattenedLayerMatch=false"
+      ])
+    );
   });
 
   it("reports structured unsupported PSD layer features as source-targeted diagnostics", () => {
@@ -446,6 +678,71 @@ const expectCheckById = (
 
   return check;
 };
+
+const createParserEvidence = () => ({
+  evidenceKind: "psd-parser-evidence-v1" as const,
+  parserName: "@webtoon/psd",
+  parserPackageName: "@webtoon/psd",
+  parserVersion: "0.4.0",
+  adapterName: "wave44-node-smoke",
+  adapterVersion: "0.1.0",
+  runtime: "node" as const,
+  privateShapePolicy: "parser-private-shape-excluded-v1" as const
+});
+
+const createMaterializationEvidence = () => ({
+  evidenceKind: "psd-layer-materialization-evidence-v1" as const,
+  materializationId: "mat_wave44Body",
+  sourceLayerRef: {
+    sourceAssetId: SourceAssetIdSchema.parse("src_psd_profile"),
+    sourceLayerId: "psd_layer_body",
+    sourceLayerPath: ["Root", "Body"]
+  },
+  mediaType: "image/png",
+  byteLength: 1024,
+  digest: {
+    algorithm: "sha256" as const,
+    hex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  binaryAssetRef: {
+    referenceKind: "package-binary-asset-ref-v1" as const,
+    binaryAssetId: "bin_psd_body",
+    packageRelativePath: "assets/textures/psd/body.materialized.png",
+    digest: {
+      algorithm: "sha256" as const,
+      hex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    byteLength: 1024,
+    mediaType: "image/png",
+    storageStatus: "stored-package-local-v1" as const,
+    provenanceId: ProvenanceIdSchema.parse("prov_psd_texture"),
+    rightsAssetId: "tex_psd_body"
+  },
+  textureId: TextureIdSchema.parse("tex_psd_body"),
+  provenance: {
+    sourceFilePath: "test_data/sample_model.psd",
+    sourceDigest: {
+      algorithm: "sha256" as const,
+      hex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    sourceByteLength: 22406225,
+    sourceMediaType: "image/vnd.adobe.photoshop",
+    privacyLabel: "privateLocalFixture" as const,
+    publicDistribution: "notPublicDistributable" as const,
+    fixtureId: "wave44.synthetic",
+    derivedArtifactPath: "generated/source-materialization/wave44-body.json",
+    generatedBy: "wave44.validatorSyntheticFixture"
+  },
+  parser: createParserEvidence(),
+  extraction: {
+    extractionKind: "selectedLayerRasterV1" as const,
+    optionsSchemaVersion: "psd-layer-extraction-options-v1" as const,
+    options: {
+      effect: false,
+      composed: false
+    }
+  }
+});
 
 const createPsdPackageDocument = (): PackageDocumentDto =>
   PackageDocumentSchema.parse({

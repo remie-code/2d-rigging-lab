@@ -9,6 +9,48 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 
 import { BinaryAssetReferenceSchema } from "./binary-asset.js";
+import {
+  PsdFeatureSupportEvidenceSchema,
+  PsdLayerMaterializationEvidenceSchema,
+  PsdLayerTreeEvidenceSchema,
+  PsdParserEvidenceSchema,
+  PsdParserIntakeKindSchema,
+  PsdProfileSeveritySchema,
+  PsdProfileSourceRefSchema,
+  PsdProfileUnsupportedFeatureScopeSchema
+} from "./psd-source-evidence.js";
+
+export {
+  PsdFeatureSupportEvidenceSchema,
+  PsdFeatureSupportStatusSchema,
+  PsdLayerExtractionOptionsSchema,
+  PsdLayerMaterializationEvidenceSchema,
+  PsdLayerMaterializationPrivacyLabelSchema,
+  PsdLayerMaterializationProvenanceSchema,
+  PsdLayerTreeEvidenceSchema,
+  PsdParserEvidenceSchema,
+  PsdParserIntakeKindSchema,
+  PsdParserRuntimeSchema,
+  PsdProfileSeveritySchema,
+  PsdProfileSourceRefSchema,
+  PsdProfileUnsupportedFeatureScopeSchema,
+  PsdSourceLayerReferenceSchema
+} from "./psd-source-evidence.js";
+export type {
+  PsdFeatureSupportEvidenceDto,
+  PsdFeatureSupportStatusDto,
+  PsdLayerExtractionOptionsDto,
+  PsdLayerMaterializationEvidenceDto,
+  PsdLayerMaterializationPrivacyLabelDto,
+  PsdLayerMaterializationProvenanceDto,
+  PsdLayerTreeEvidenceDto,
+  PsdParserEvidenceDto,
+  PsdParserIntakeKindDto,
+  PsdParserRuntimeDto,
+  PsdProfileSourceRefDto,
+  PsdProfileUnsupportedFeatureScopeDto,
+  PsdSourceLayerReferenceDto
+} from "./psd-source-evidence.js";
 
 export const SourceAssetKindSchema = z.enum([
   "psd-source-v1",
@@ -46,30 +88,7 @@ export const SourceLayerSchema = z.object({
 });
 export type SourceLayerDto = z.infer<typeof SourceLayerSchema>;
 
-export const PsdProfileSeveritySchema = z.enum(["info", "warning", "error"]);
 export type PsdProfileSeverityDto = z.infer<typeof PsdProfileSeveritySchema>;
-
-export const PsdProfileSourceRefSchema = z.object({
-  kind: z.enum(["document", "group", "layer", "mask", "channel", "imageResource", "adapter"]),
-  id: z.string().min(1).optional(),
-  path: z.string().min(1).optional()
-});
-export type PsdProfileSourceRefDto = z.infer<typeof PsdProfileSourceRefSchema>;
-
-export const PsdProfileUnsupportedFeatureScopeSchema = z.enum([
-  "document",
-  "group",
-  "layer",
-  "mask",
-  "channel",
-  "imageResource",
-  "compression",
-  "blendMode",
-  "unknown"
-]);
-export type PsdProfileUnsupportedFeatureScopeDto = z.infer<
-  typeof PsdProfileUnsupportedFeatureScopeSchema
->;
 
 export const PsdProfileUnsupportedFeatureSchema = z.object({
   featureId: z.string().min(1),
@@ -109,9 +128,12 @@ export type PsdProfileBlendModeDto = z.infer<typeof PsdProfileBlendModeSchema>;
 
 export const PsdProfileAdapterEvidenceSchema = z.object({
   adapterName: z.string().min(1),
+  adapterVersion: z.string().min(1).optional(),
   adapterResultSchemaVersion: z.literal("psd-adapter-result-v1"),
   sourceProfile: z.literal("layered-character-psd-profile-v1"),
-  evidenceKind: z.literal("adapter-supplied-metadata-v1")
+  evidenceKind: z.enum(["adapter-supplied-metadata-v1", "real-psd-parse-result-v1"]),
+  intakeKind: PsdParserIntakeKindSchema.optional(),
+  parser: PsdParserEvidenceSchema.optional()
 });
 export type PsdProfileAdapterEvidenceDto = z.infer<typeof PsdProfileAdapterEvidenceSchema>;
 
@@ -138,7 +160,8 @@ export const PsdProfileSourceGroupSchema = z.object({
   bounds: RectSchema.optional(),
   blendMode: PsdProfileBlendModeSchema.optional(),
   targetPartId: PartIdSchema.optional(),
-  unsupportedFeatures: z.array(PsdProfileUnsupportedFeatureSchema).default([])
+  unsupportedFeatures: z.array(PsdProfileUnsupportedFeatureSchema).default([]),
+  featureSupportEvidence: z.array(PsdFeatureSupportEvidenceSchema).optional()
 });
 export type PsdProfileSourceGroupDto = z.infer<typeof PsdProfileSourceGroupSchema>;
 
@@ -157,7 +180,8 @@ export const PsdProfileSourceLayerSchema = z.object({
   unsupportedFeatures: z.array(PsdProfileUnsupportedFeatureSchema).default([]),
   texturePreviewReference: z.string().min(1).optional(),
   textureId: TextureIdSchema.optional(),
-  targetPartId: PartIdSchema.optional()
+  targetPartId: PartIdSchema.optional(),
+  featureSupportEvidence: z.array(PsdFeatureSupportEvidenceSchema).optional()
 });
 export type PsdProfileSourceLayerDto = z.infer<typeof PsdProfileSourceLayerSchema>;
 
@@ -168,6 +192,9 @@ export const LayeredCharacterPsdProfileSchema = z.object({
   sourceGroups: z.array(PsdProfileSourceGroupSchema).default([]),
   sourceLayers: z.array(PsdProfileSourceLayerSchema).default([]),
   unsupportedFeatures: z.array(PsdProfileUnsupportedFeatureSchema).default([]),
+  featureSupportEvidence: z.array(PsdFeatureSupportEvidenceSchema).optional(),
+  layerTreeEvidence: PsdLayerTreeEvidenceSchema.optional(),
+  materializationEvidence: z.array(PsdLayerMaterializationEvidenceSchema).optional(),
   diagnostics: z.array(PsdProfileAdapterDiagnosticSchema).default([]),
   compatibility: PsdProfileCompatibilityPolicySchema
 });

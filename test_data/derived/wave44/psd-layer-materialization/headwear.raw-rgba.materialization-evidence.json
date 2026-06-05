@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "wave44-psd-layer-materialization-pilot-v1",
+  "fixtureId": "wave44.sampleModel.selectedLayerMaterialization",
+  "privacy": {
+    "label": "privateLocalFixture",
+    "publicDistribution": "notPublicDistributable",
+    "publicDemoAsset": false,
+    "derivedRasterBytesPersisted": false
+  },
+  "source": {
+    "path": "test_data/sample_model.psd",
+    "mediaType": "image/vnd.adobe.photoshop",
+    "byteLength": 22406225,
+    "digest": {
+      "algorithm": "sha256",
+      "hex": "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+    }
+  },
+  "selectedLayer": {
+    "nodeRef": "psd:root/layer[0]",
+    "name": "headwear",
+    "sourceLayerPath": [
+      "headwear"
+    ],
+    "bounds": {
+      "left": 808,
+      "top": 92,
+      "width": 400,
+      "height": 288,
+      "right": 1208,
+      "bottom": 380
+    },
+    "visible": true,
+    "hidden": false,
+    "opacity": 255,
+    "composedOpacity": 1
+  },
+  "materializationEvidence": {
+    "evidenceKind": "psd-layer-materialization-evidence-v1",
+    "materializationId": "mat_wave44SampleHeadwearRawRgba",
+    "sourceLayerRef": {
+      "sourceAssetId": "src_wave44_sample_model_psd",
+      "sourceLayerId": "psd:root/layer[0]",
+      "sourceLayerPath": [
+        "headwear"
+      ]
+    },
+    "mediaType": "application/vnd.private-2d-rigging-lab.raw-rgba",
+    "byteLength": 460800,
+    "digest": {
+      "algorithm": "sha256",
+      "hex": "671e6a363745b1ce2e8d29c1a63438170fe9511c8884ea42298cf9b8886e5c1a"
+    },
+    "provenance": {
+      "sourceFilePath": "test_data/sample_model.psd",
+      "sourceDigest": {
+        "algorithm": "sha256",
+        "hex": "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+      },
+      "sourceByteLength": 22406225,
+      "sourceMediaType": "image/vnd.adobe.photoshop",
+      "privacyLabel": "privateLocalFixture",
+      "publicDistribution": "notPublicDistributable",
+      "fixtureId": "wave44.sampleModel",
+      "generatedBy": "wave44.psdLayerMaterialization"
+    },
+    "parser": {
+      "evidenceKind": "psd-parser-evidence-v1",
+      "parserName": "webtoonPsd",
+      "parserPackageName": "@webtoon/psd",
+      "parserVersion": "0.4.0",
+      "adapterName": "wave44-node-layer-materialization-pilot",
+      "adapterVersion": "0.0.0",
+      "runtime": "node",
+      "privateShapePolicy": "parser-private-shape-excluded-v1"
+    },
+    "extraction": {
+      "extractionKind": "selectedLayerRasterV1",
+      "optionsSchemaVersion": "psd-layer-extraction-options-v1",
+      "options": {
+        "parserMethod": "Layer.composite(false, false)",
+        "effect": false,
+        "composed": false,
+        "selectedNodeRef": "psd:root/layer[0]",
+        "layerSelection": "headwear",
+        "outputEncoding": "raw-rgba",
+        "rawChannelOrder": "rgba",
+        "bytesPersisted": false,
+        "width": 400,
+        "height": 288
+      }
+    }
+  },
+  "unsupportedClaims": {
+    "photoshopStyleFinalCompositing": "notEvaluated",
+    "rendererPixelOracle": "notEvaluated",
+    "textureSamplingCorrectness": "notEvaluated",
+    "publicDemoDistribution": "notSupported"
+  }
+}

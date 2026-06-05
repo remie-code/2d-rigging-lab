@@ -9,6 +9,7 @@
     "typecheck:root": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "smoke:wave44:psd-parser": "node scripts/wave44-psd-parser-smoke.mjs --psd test_data/sample_model.psd",
     "test:e2e": "pnpm --filter @private-2d-rigging-lab/editor test:e2e",
     "test:e2e:editor": "node scripts/editor-e2e-smoke.mjs",
     "check:deps": "node scripts/check-dependencies.mjs",
@@ -16,6 +17,7 @@
     "check": "pnpm run typecheck && pnpm run test && pnpm run check:deps && pnpm run check:source"
   },
   "devDependencies": {
+    "@webtoon/psd": "0.4.0",
     "@types/node": "22.15.29",
     "typescript": "5.8.3",
     "vitest": "3.1.4"

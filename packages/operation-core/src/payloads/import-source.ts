@@ -1,4 +1,5 @@
 import {
+  JsonValueSchema,
   PartIdSchema,
   RectSchema,
   SourceAssetIdSchema,
@@ -24,6 +25,15 @@ export type ImportRightsSummaryDto = z.infer<typeof ImportRightsSummarySchema>;
 
 export const PsdAdapterSeveritySchema = z.enum(["info", "warning", "error"]);
 export type PsdAdapterSeverityDto = z.infer<typeof PsdAdapterSeveritySchema>;
+
+const PSD_EVIDENCE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
+const PSD_LAYER_TREE_EVIDENCE_ID_PATTERN = /^layerTree_[A-Za-z0-9_-]+$/;
+const PSD_MATERIALIZATION_ID_PATTERN = /^mat_[A-Za-z0-9_-]+$/;
+const PSD_OPTIONS_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
+const SHA256_DIGEST_HEX_PATTERN = /^[a-f0-9]{64}$/;
+const LOWERCASE_MEDIA_TYPE_PATTERN =
+  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+const NO_WHITESPACE_PATTERN = /^\S+$/;
 
 export const PsdAdapterSourceRefSchema = z.object({
   kind: z.enum(["document", "group", "layer", "mask", "channel", "imageResource", "adapter"]),
@@ -64,6 +74,129 @@ export type PsdAdapterUnsupportedFeatureDto = z.infer<
   typeof PsdAdapterUnsupportedFeatureSchema
 >;
 
+export const PsdAdapterFeatureSupportStatusSchema = z.enum([
+  "unsupported",
+  "notEvaluated"
+]);
+export type PsdAdapterFeatureSupportStatusDto = z.infer<
+  typeof PsdAdapterFeatureSupportStatusSchema
+>;
+
+export const PsdAdapterFeatureSupportEvidenceSchema = z.object({
+  evidenceKind: z.literal("psd-feature-support-evidence-v1"),
+  featureId: z.string().regex(PSD_EVIDENCE_ID_PATTERN),
+  status: PsdAdapterFeatureSupportStatusSchema,
+  scope: PsdAdapterUnsupportedFeatureSchema.shape.scope,
+  severity: PsdAdapterSeveritySchema,
+  message: z.string().min(1),
+  source: PsdAdapterSourceRefSchema.optional(),
+  rasterizeCandidate: z.boolean().optional(),
+  manualConfirmationRequired: z.boolean().optional(),
+  evidenceRefs: z.array(z.string().regex(PSD_EVIDENCE_ID_PATTERN)).optional()
+}).strict();
+export type PsdAdapterFeatureSupportEvidenceDto = z.infer<
+  typeof PsdAdapterFeatureSupportEvidenceSchema
+>;
+
+export const PsdAdapterParserIntakeKindSchema = z.enum([
+  "parserFreeAdapterResult",
+  "realPsdParseResult"
+]);
+export type PsdAdapterParserIntakeKindDto = z.infer<
+  typeof PsdAdapterParserIntakeKindSchema
+>;
+
+export const PsdAdapterParserRuntimeSchema = z.enum(["node", "browser", "unknown"]);
+export type PsdAdapterParserRuntimeDto = z.infer<typeof PsdAdapterParserRuntimeSchema>;
+
+export const PsdAdapterParserEvidenceSchema = z.object({
+  evidenceKind: z.literal("psd-parser-evidence-v1"),
+  parserName: z.string().regex(NO_WHITESPACE_PATTERN),
+  parserPackageName: z.string().regex(NO_WHITESPACE_PATTERN).optional(),
+  parserVersion: z.string().regex(NO_WHITESPACE_PATTERN).optional(),
+  adapterName: z.string().regex(NO_WHITESPACE_PATTERN).optional(),
+  adapterVersion: z.string().regex(NO_WHITESPACE_PATTERN).optional(),
+  runtime: PsdAdapterParserRuntimeSchema.optional(),
+  privateShapePolicy: z.literal("parser-private-shape-excluded-v1")
+}).strict();
+export type PsdAdapterParserEvidenceDto = z.infer<typeof PsdAdapterParserEvidenceSchema>;
+
+export const PsdAdapterLayerTreeEvidenceSchema = z.object({
+  evidenceKind: z.literal("psd-layer-tree-evidence-v1"),
+  evidenceId: z.string().regex(PSD_LAYER_TREE_EVIDENCE_ID_PATTERN),
+  intakeKind: PsdAdapterParserIntakeKindSchema,
+  groupCount: z.number().int().nonnegative(),
+  layerCount: z.number().int().nonnegative(),
+  maxDepth: z.number().int().nonnegative().optional(),
+  parser: PsdAdapterParserEvidenceSchema.optional(),
+  privateShapePolicy: z.literal("parser-private-shape-excluded-v1")
+}).strict();
+export type PsdAdapterLayerTreeEvidenceDto = z.infer<
+  typeof PsdAdapterLayerTreeEvidenceSchema
+>;
+
+const PsdAdapterDigestSchema = z.object({
+  algorithm: z.literal("sha256"),
+  hex: z.string().regex(SHA256_DIGEST_HEX_PATTERN)
+}).strict();
+
+const PsdAdapterByteLengthSchema = z.number()
+  .int()
+  .nonnegative()
+  .max(Number.MAX_SAFE_INTEGER);
+
+const PsdAdapterMediaTypeSchema = z.string().regex(LOWERCASE_MEDIA_TYPE_PATTERN);
+
+export const PsdAdapterSourceLayerReferenceSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema,
+  sourceLayerId: z.string().min(1),
+  sourceLayerPath: z.array(z.string().min(1)).optional()
+}).strict();
+export type PsdAdapterSourceLayerReferenceDto = z.infer<
+  typeof PsdAdapterSourceLayerReferenceSchema
+>;
+
+export const PsdAdapterLayerMaterializationProvenanceSchema = z.object({
+  sourceFilePath: z.string().min(1),
+  sourceDigest: PsdAdapterDigestSchema.optional(),
+  sourceByteLength: PsdAdapterByteLengthSchema.optional(),
+  sourceMediaType: PsdAdapterMediaTypeSchema.optional(),
+  privacyLabel: z.enum(["packageLocalAsset", "privateLocalFixture"]),
+  publicDistribution: z.literal("notPublicDistributable"),
+  fixtureId: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional(),
+  derivedArtifactPath: z.string().min(1).optional(),
+  generatedBy: z.string().regex(PSD_EVIDENCE_ID_PATTERN).optional()
+}).strict();
+export type PsdAdapterLayerMaterializationProvenanceDto = z.infer<
+  typeof PsdAdapterLayerMaterializationProvenanceSchema
+>;
+
+export const PsdAdapterLayerExtractionOptionsSchema = z.object({
+  extractionKind: z.enum(["selectedLayerRasterV1", "texturePreviewRasterV1"]),
+  optionsSchemaVersion: z.literal("psd-layer-extraction-options-v1").optional(),
+  options: z.record(z.string().regex(PSD_OPTIONS_ID_PATTERN), JsonValueSchema).optional()
+}).strict();
+export type PsdAdapterLayerExtractionOptionsDto = z.infer<
+  typeof PsdAdapterLayerExtractionOptionsSchema
+>;
+
+export const PsdAdapterLayerMaterializationEvidenceSchema = z.object({
+  evidenceKind: z.literal("psd-layer-materialization-evidence-v1"),
+  materializationId: z.string().regex(PSD_MATERIALIZATION_ID_PATTERN),
+  sourceLayerRef: PsdAdapterSourceLayerReferenceSchema,
+  mediaType: PsdAdapterMediaTypeSchema,
+  byteLength: PsdAdapterByteLengthSchema,
+  digest: PsdAdapterDigestSchema,
+  binaryAssetRef: BinaryAssetReferenceSchema.optional(),
+  textureId: TextureIdSchema.optional(),
+  provenance: PsdAdapterLayerMaterializationProvenanceSchema,
+  parser: PsdAdapterParserEvidenceSchema.optional(),
+  extraction: PsdAdapterLayerExtractionOptionsSchema.optional()
+}).strict();
+export type PsdAdapterLayerMaterializationEvidenceDto = z.infer<
+  typeof PsdAdapterLayerMaterializationEvidenceSchema
+>;
+
 export const PsdAdapterCanvasSchema = z.object({
   width: z.number().finite().positive(),
   height: z.number().finite().positive(),
@@ -92,7 +225,8 @@ export const PsdAdapterSourceGroupSchema = z.object({
   bounds: RectSchema.optional(),
   blendMode: PsdAdapterBlendModeSchema.optional(),
   targetPartId: PartIdSchema.optional(),
-  unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([])
+  unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
+  featureSupportEvidence: z.array(PsdAdapterFeatureSupportEvidenceSchema).optional()
 });
 export type PsdAdapterSourceGroupDto = z.infer<typeof PsdAdapterSourceGroupSchema>;
 
@@ -122,7 +256,8 @@ export const PsdAdapterSourceLayerSchema = z.object({
   texturePreviewReference: z.string().min(1).optional(),
   texturePreviewBinaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
-  targetPartId: PartIdSchema.optional()
+  targetPartId: PartIdSchema.optional(),
+  featureSupportEvidence: z.array(PsdAdapterFeatureSupportEvidenceSchema).optional()
 });
 export type PsdAdapterSourceLayerDto = z.infer<typeof PsdAdapterSourceLayerSchema>;
 
@@ -130,10 +265,16 @@ export const PsdAdapterResultSchema = z.object({
   schemaVersion: z.literal("psd-adapter-result-v1"),
   sourceProfile: z.literal("layered-character-psd-profile-v1"),
   adapterName: z.string().min(1),
+  adapterVersion: z.string().min(1).optional(),
+  intakeKind: PsdAdapterParserIntakeKindSchema.optional(),
+  parser: PsdAdapterParserEvidenceSchema.optional(),
   canvas: PsdAdapterCanvasSchema,
   sourceGroups: z.array(PsdAdapterSourceGroupSchema).default([]),
   sourceLayers: z.array(PsdAdapterSourceLayerSchema).default([]),
   unsupportedFeatures: z.array(PsdAdapterUnsupportedFeatureSchema).default([]),
+  featureSupportEvidence: z.array(PsdAdapterFeatureSupportEvidenceSchema).optional(),
+  layerTreeEvidence: PsdAdapterLayerTreeEvidenceSchema.optional(),
+  materializationEvidence: z.array(PsdAdapterLayerMaterializationEvidenceSchema).optional(),
   diagnostics: z.array(PsdAdapterDiagnosticSchema).default([])
 });
 export type PsdAdapterResultDto = z.infer<typeof PsdAdapterResultSchema>;

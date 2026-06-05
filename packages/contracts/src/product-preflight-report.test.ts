@@ -163,6 +163,20 @@ describe("product preflight report contract", () => {
     }).success).toBe(false);
   });
 
+  it("allows source materialization evidence refs without parser-specific artifact shapes", () => {
+    expect(ProductPreflightArtifactRefDtoSchema.parse({
+      artifactKind: "sourceMaterialization",
+      path: "generated/source-materialization/wave44-layer-materialization.json"
+    })).toEqual({
+      artifactKind: "sourceMaterialization",
+      path: "generated/source-materialization/wave44-layer-materialization.json"
+    });
+    expect(ProductPreflightArtifactRefDtoSchema.safeParse({
+      artifactKind: "sourceMaterialization",
+      path: "generated/source-materialization/wave44-layer-materialization.txt"
+    }).success).toBe(false);
+  });
+
   it("rejects not-evaluated categories with no missing-evidence explanation", () => {
     const result = ProductPreflightCategoryResultDtoSchema.safeParse({
       category: "runtimeViewerEvidence",

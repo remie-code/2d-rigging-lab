@@ -102,6 +102,7 @@ export const ProductPreflightArtifactKindDtoSchema = z.enum([
   "persistentByteStorage",
   "portableBundle",
   "transportCapability",
+  "sourceMaterialization",
   "demoSafePreflight",
   "tutorialReadiness"
 ]);
@@ -207,6 +208,10 @@ export const ProductPreflightArtifactRefDtoSchema = z.discriminatedUnion("artifa
   z.object({
     artifactKind: z.literal("transportCapability"),
     path: GeneratedJsonArtifactPathDtoSchema("transport-capability")
+  }).strict(),
+  z.object({
+    artifactKind: z.literal("sourceMaterialization"),
+    path: GeneratedJsonArtifactPathDtoSchema("source-materialization")
   }).strict(),
   z.object({
     artifactKind: z.literal("demoSafePreflight"),

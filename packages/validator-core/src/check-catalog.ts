@@ -649,6 +649,86 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Structured PSD unsupported feature details differ from flattened fallback feature IDs."
   },
   {
+    checkId: "asset.psd.parserEvidence",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile records parser provenance evidence without exposing parser-private shapes."
+  },
+  {
+    checkId: "asset.psd.parserEvidenceUnavailable",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile claims real PSD parse intake but parser evidence is unavailable."
+  },
+  {
+    checkId: "asset.psd.layerTreeEvidence",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile records parser-derived layer tree evidence."
+  },
+  {
+    checkId: "asset.psd.layerTreeEvidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile claims real PSD parse intake but layer tree evidence is missing."
+  },
+  {
+    checkId: "asset.psd.layerTreeEvidenceMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD layer tree evidence disagrees with the profile layer/group summary."
+  },
+  {
+    checkId: "asset.psd.featureUnsupported",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD feature support evidence records an unsupported Photoshop feature boundary."
+  },
+  {
+    checkId: "asset.psd.featureNotEvaluated",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD feature support evidence records a Photoshop feature as not evaluated."
+  },
+  {
+    checkId: "asset.psd.materializationEvidence",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile records selected layer raster materialization evidence and provenance."
+  },
+  {
+    checkId: "asset.psd.materializationEvidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD source profile has real parse evidence but no selected layer raster materialization evidence."
+  },
+  {
+    checkId: "asset.psd.materializationEvidenceMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-013"],
+    description: "Structured PSD materialization evidence cannot be connected to the referenced source asset or layer."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

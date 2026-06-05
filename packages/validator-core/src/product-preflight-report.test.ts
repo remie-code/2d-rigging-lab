@@ -144,7 +144,7 @@ describe("product preflight report aggregation", () => {
     ).toEqual([
       ["operationLog", "guiEvidence"],
       ["runtimeSnapshot"],
-      ["byteAvailability"],
+      ["byteAvailability", "sourceMaterialization"],
       ["transportCapability"],
       ["tutorialReadiness"]
     ]);
@@ -183,7 +183,47 @@ describe("product preflight report aggregation", () => {
     expect(assetBytesCategory.notEvaluatedClaims).toEqual([
       expect.objectContaining({
         evidenceKind: "byteAvailability",
-        requiredEvidenceKinds: ["byteAvailability"]
+        requiredEvidenceKinds: ["byteAvailability", "sourceMaterialization"]
+      })
+    ]);
+  });
+
+  it("accepts source materialization evidence as asset byte Product Preflight evidence", () => {
+    const sourceReport = buildValidationReport({
+      reportId: "val_preflightProduct_sourceMaterialization",
+      createdAt: CREATED_AT,
+      packageId: PACKAGE_ID,
+      packageRevision: 7,
+      profile: "strict"
+    });
+
+    const report = buildProductPreflightReport({
+      reportId: "preflight_sourceMaterialization",
+      createdAt: CREATED_AT,
+      validationReports: [sourceReport],
+      categoryEvidenceRefs: {
+        assetBytes: [
+          createEvidenceRef(
+            "evidence_sourceMaterialization",
+            {
+              artifactKind: "sourceMaterialization",
+              path: "generated/source-materialization/psd-body.json"
+            },
+            "Selected PSD layer materialization evidence is supplied."
+          )
+        ]
+      }
+    });
+    const assetBytesCategory = findCategory(report.categories, "assetBytes");
+
+    expect(assetBytesCategory.status).toBe("pass");
+    expect(assetBytesCategory.evidenceRefs).toEqual([
+      expect.objectContaining({
+        evidenceId: "evidence_sourceMaterialization",
+        artifactRef: {
+          artifactKind: "sourceMaterialization",
+          path: "generated/source-materialization/psd-body.json"
+        }
       })
     ]);
   });
@@ -383,6 +423,91 @@ describe("product preflight report aggregation", () => {
         ]
       })
     ]);
+  });
+
+  it("maps PSD unsupported and not-evaluated feature evidence without parser or renderer claims", () => {
+    const unsupportedReport = buildValidationReport({
+      reportId: "val_preflightProduct_psdUnsupported",
+      createdAt: CREATED_AT,
+      packageId: PACKAGE_ID,
+      packageRevision: 7,
+      profile: "acceptance",
+      checks: [
+        createCheck({
+          checkId: "asset.psd.featureUnsupported",
+          status: "not_applicable",
+          severity: "warning",
+          phase: "source_import",
+          message: "PSD feature psd.fullCompositing is unsupported.",
+          evidence: [
+            "featureId=psd.fullCompositing",
+            "featureStatus=unsupported",
+            "photoshopCompositing=notClaimed",
+            "rendererPixelOracle=notClaimed"
+          ]
+        })
+      ]
+    });
+
+    const unsupportedPreflight = buildProductPreflightReport({
+      reportId: "preflight_psdUnsupported",
+      createdAt: CREATED_AT,
+      validationReports: [unsupportedReport]
+    });
+    const unsupportedAssetBytes = findCategory(unsupportedPreflight.categories, "assetBytes");
+
+    expect(unsupportedAssetBytes.status).toBe("not_supported");
+    expect(unsupportedAssetBytes.unsupportedClaims).toEqual([
+      expect.objectContaining({
+        claimKind: "otherUnsupportedCapability",
+        capabilityLabel: "asset.psd.featureUnsupported",
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.featureUnsupported",
+            status: "not_applicable",
+            severity: "warning"
+          })
+        ]
+      })
+    ]);
+
+    const notEvaluatedReport = buildValidationReport({
+      reportId: "val_preflightProduct_psdNotEvaluated",
+      createdAt: CREATED_AT,
+      packageId: PACKAGE_ID,
+      packageRevision: 7,
+      profile: "acceptance",
+      checks: [
+        createCheck({
+          checkId: "asset.psd.featureNotEvaluated",
+          status: "needs_review",
+          severity: "warning",
+          phase: "source_import",
+          message: "PSD feature psd.layerEffects was not evaluated.",
+          evidence: [
+            "featureId=psd.layerEffects",
+            "featureStatus=notEvaluated"
+          ]
+        })
+      ]
+    });
+
+    const notEvaluatedPreflight = buildProductPreflightReport({
+      reportId: "preflight_psdNotEvaluated",
+      createdAt: CREATED_AT,
+      validationReports: [notEvaluatedReport]
+    });
+    const notEvaluatedAssetBytes = findCategory(notEvaluatedPreflight.categories, "assetBytes");
+
+    expect(notEvaluatedAssetBytes.status).toBe("warn");
+    expect(notEvaluatedAssetBytes.diagnosticRefs).toEqual([
+      expect.objectContaining({
+        checkId: "asset.psd.featureNotEvaluated",
+        status: "needs_review",
+        severity: "warning"
+      })
+    ]);
+    expect(notEvaluatedAssetBytes.unsupportedClaims).toEqual([]);
   });
 });
 

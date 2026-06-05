@@ -25,6 +25,14 @@
       "status": "wave0-baseline-approved"
     },
     {
+      "name": "@webtoon/psd",
+      "version": "0.4.0",
+      "purpose": "Parse rights-clean local PSD fixture input by explicit path for the Wave44 Node smoke evidence workflow, including document metadata, layer/group tree evidence, and selected layer raster extraction availability without persisted derived bytes.",
+      "license": "MIT",
+      "scope": "dev:test:fixture-smoke:scripts-only:not-editor-runtime-demo",
+      "status": "wave44-domain-b-explicit-path-node-smoke-approved"
+    },
+    {
       "name": "zod",
       "version": "4.4.3",
       "purpose": "Runtime validation schemas for authored external DTOs, branded ID contracts, package-format DTO parsing, runtime-core DTO parsing, validator-core reports, and operation-core request/result/log DTOs.",

@@ -132,14 +132,30 @@ const createPsdProfileFromAdapterResult = (
   schemaVersion: "layered-character-psd-profile-v1",
   adapter: {
     adapterName: adapterResult.adapterName,
+    ...(adapterResult.adapterVersion === undefined
+      ? {}
+      : { adapterVersion: adapterResult.adapterVersion }),
     adapterResultSchemaVersion: adapterResult.schemaVersion,
     sourceProfile: adapterResult.sourceProfile,
-    evidenceKind: "adapter-supplied-metadata-v1"
+    evidenceKind: adapterResult.intakeKind === "realPsdParseResult"
+      ? "real-psd-parse-result-v1"
+      : "adapter-supplied-metadata-v1",
+    ...(adapterResult.intakeKind === undefined ? {} : { intakeKind: adapterResult.intakeKind }),
+    ...(adapterResult.parser === undefined ? {} : { parser: structuredClone(adapterResult.parser) })
   },
   canvas: structuredClone(adapterResult.canvas),
   sourceGroups: adapterResult.sourceGroups.map(createPsdProfileSourceGroup),
   sourceLayers: adapterResult.sourceLayers.map(createPsdProfileSourceLayer),
   unsupportedFeatures: structuredClone(adapterResult.unsupportedFeatures),
+  ...(adapterResult.featureSupportEvidence === undefined
+    ? {}
+    : { featureSupportEvidence: structuredClone(adapterResult.featureSupportEvidence) }),
+  ...(adapterResult.layerTreeEvidence === undefined
+    ? {}
+    : { layerTreeEvidence: structuredClone(adapterResult.layerTreeEvidence) }),
+  ...(adapterResult.materializationEvidence === undefined
+    ? {}
+    : { materializationEvidence: structuredClone(adapterResult.materializationEvidence) }),
   diagnostics: structuredClone(adapterResult.diagnostics),
   compatibility: PSD_PROFILE_COMPATIBILITY_POLICY
 });
@@ -158,7 +174,10 @@ const createPsdProfileSourceGroup = (
   ...(group.bounds === undefined ? {} : { bounds: structuredClone(group.bounds) }),
   ...(group.blendMode === undefined ? {} : { blendMode: structuredClone(group.blendMode) }),
   ...(group.targetPartId === undefined ? {} : { targetPartId: group.targetPartId }),
-  unsupportedFeatures: structuredClone(group.unsupportedFeatures)
+  unsupportedFeatures: structuredClone(group.unsupportedFeatures),
+  ...(group.featureSupportEvidence === undefined
+    ? {}
+    : { featureSupportEvidence: structuredClone(group.featureSupportEvidence) })
 });
 
 const createPsdProfileSourceLayer = (
@@ -180,7 +199,10 @@ const createPsdProfileSourceLayer = (
     ? {}
     : { texturePreviewReference: resolvePsdTexturePreviewReference(layer) }),
   ...(layer.textureId === undefined ? {} : { textureId: layer.textureId }),
-  ...(layer.targetPartId === undefined ? {} : { targetPartId: layer.targetPartId })
+  ...(layer.targetPartId === undefined ? {} : { targetPartId: layer.targetPartId }),
+  ...(layer.featureSupportEvidence === undefined
+    ? {}
+    : { featureSupportEvidence: structuredClone(layer.featureSupportEvidence) })
 });
 
 const resolvePsdTexturePreviewReference = (
