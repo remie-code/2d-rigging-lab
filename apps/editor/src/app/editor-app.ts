@@ -191,6 +191,10 @@ export function mountEditorApp(root: HTMLElement): void {
           sourceIntakeDraft = workflow.state.sourceIntakeDraft;
           render();
         },
+        async onParseExplicitPsdImportFile(command) {
+          await workflow.parseExplicitBrowserPsdImportFile(command);
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();

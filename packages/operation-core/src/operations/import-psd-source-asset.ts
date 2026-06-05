@@ -17,6 +17,10 @@ import type { OperationResultDto } from "../operation-result.js";
 import { OperationResultSchema } from "../operation-result.js";
 import type { OperationApplyOutcome, OperationHandler } from "../operation-registry.js";
 import {
+  createPsdImportOperationEvidence,
+  type PsdImportOperationEvidenceDto
+} from "../psd-import-operation-evidence.js";
+import {
   createOperationDiagnostic,
   createPreconditionResult,
   createRejectedOperationResult
@@ -159,6 +163,12 @@ const applyImportPsdSourceAsset = (
       provenanceRecord: mutation.provenanceRecord,
       rightsRecord: mutation.rightsRecord,
       textureMaterializations,
+      psdImportEvidence: [
+        createPsdImportOperationEvidence({
+          payload: request.payload,
+          sourceAssetId
+        })
+      ],
       diagnostics: createPsdAdapterResultOperationDiagnostics({
         adapterResult,
         sourceAssetId
@@ -186,6 +196,7 @@ const createImportPsdSourceAssetResult = (input: {
   readonly provenanceRecord: ProvenanceRecord;
   readonly rightsRecord: RightsRecord;
   readonly textureMaterializations: readonly PsdTextureMaterializationResult[];
+  readonly psdImportEvidence: readonly PsdImportOperationEvidenceDto[];
   readonly diagnostics: readonly DiagnosticDto[];
   readonly checkedPartIds: readonly string[];
 }): OperationResultDto => {
@@ -289,6 +300,7 @@ const createImportPsdSourceAssetResult = (input: {
     generatedRuntimeStateRefs: [],
     generatedRuntimeStateSequenceRefs: [],
     generatedValidationReportIds: [],
+    psdImportEvidence: input.psdImportEvidence,
     reversible: true
   });
 };

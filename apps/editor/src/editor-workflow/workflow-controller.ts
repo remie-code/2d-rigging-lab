@@ -198,6 +198,11 @@ import {
   type EditorProductPreflightWorkflowResult
 } from "./product-preflight-workflow.js";
 import {
+  runEditorExplicitPsdImportWorkflow,
+  type EditorExplicitPsdImportFileCommand,
+  type EditorExplicitPsdImportWorkflowResult
+} from "./explicit-psd-import-workflow.js";
+import {
   approveCodexProposalReview,
   commitApprovedCodexProposalReview,
   requestCodexProposalReviewApproval,
@@ -379,6 +384,9 @@ export interface EditorWorkflowController {
     draft: SourceIntakeDraftState,
     selectedFileBytes: SourceIntakeSelectedFileBytes
   ): Promise<EditorWorkflowSourceImportCommitResult>;
+  parseExplicitBrowserPsdImportFile(
+    command: EditorExplicitPsdImportFileCommand
+  ): Promise<EditorExplicitPsdImportWorkflowResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
@@ -825,6 +833,15 @@ export const createEditorWorkflowController = (
       latestSessionPersistenceResult = result;
       state = outcome.state;
       clearDynamicsPreview();
+
+      return outcome.result;
+    },
+    async parseExplicitBrowserPsdImportFile(command) {
+      const outcome = await runEditorExplicitPsdImportWorkflow(command);
+      state = {
+        ...state,
+        explicitPsdImport: outcome.state
+      };
 
       return outcome.result;
     },

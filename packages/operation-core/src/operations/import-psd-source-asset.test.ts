@@ -358,6 +358,98 @@ describe("importPsdSourceAsset operation handler", () => {
     expect(JSON.stringify(profile)).not.toContain("rawLayerObject");
   });
 
+  it("bridges browser-origin parser-free PSD evidence into operation and package summaries", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-06-05T00:20:00.000Z")
+    });
+
+    const outcome = core.commitOperation(
+      session,
+      createImportPsdRequest({
+        dryRun: false,
+        includeRealParseEvidence: true,
+        parserRuntime: "browser"
+      })
+    );
+    const evidence = outcome.result.psdImportEvidence?.[0];
+    const sourceDiagnostics = session.graph.sourceAssets[0]?.diagnostics ?? [];
+    const sourceDiagnosticText = sourceDiagnostics.join("\n");
+    const operationEvidenceText = JSON.stringify(evidence);
+
+    expect(outcome.result.status).toBe("committed");
+    expect(evidence).toMatchObject({
+      schemaVersion: "psd-import-operation-evidence-v1",
+      operationType: "importPsdSourceAsset",
+      sourceAssetId: "src_psd_character",
+      adapterName: "fixture-psd-adapter",
+      parseOrigin: "browserExplicitFileSelection",
+      sourceByteStorage: "metadataOnly",
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      layerTreeEvidence: {
+        evidenceKind: "psd-layer-tree-evidence-v1",
+        intakeKind: "realPsdParseResult",
+        groupCount: 1,
+        layerCount: 1
+      },
+      featureSupport: {
+        evidenceCount: 2,
+        unsupportedCount: 1,
+        notEvaluatedCount: 1,
+        featureIds: ["psd.fullCompositing", "psd.layerEffects"]
+      },
+      persistenceBoundary: {
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        materializedLayerBytePersistence: "summaryOnlyNoRawBytes",
+        photoshopCompositingClaim: "none",
+        rendererPixelOracleClaim: "none",
+        saveLoadSemantics: "parserEvidencePersistsBytesRequireExistingByteStorageV1"
+      }
+    });
+    expect(evidence?.materializationEvidence[0]).toMatchObject({
+      evidenceKind: "psd-layer-materialization-evidence-v1",
+      materializationId: "mat_wave44OperationFace",
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_character",
+        sourceLayerId: "layer_face"
+      },
+      mediaType: "image/png",
+      byteLength: 4096,
+      digest: {
+        algorithm: "sha256",
+        hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      byteStorage: "metadataOnly",
+      materializedBytePersistence: "summaryOnlyNoRawBytes",
+      parser: {
+        runtime: "browser"
+      }
+    });
+    expect(evidence?.materializationEvidence[0]).not.toHaveProperty("binaryAssetRef");
+    expect(outcome.logEntry?.result.psdImportEvidence).toEqual(outcome.result.psdImportEvidence);
+    expect(sourceDiagnostics).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^psd\.parserEvidence:/),
+      expect.stringMatching(/^psd\.layerTreeEvidence:/),
+      expect.stringMatching(/^psd\.featureSupportEvidenceSummary:/),
+      expect.stringMatching(/^psd\.materializationEvidenceSummary:/),
+      expect.stringMatching(/^psd\.persistenceBoundary:/)
+    ]));
+    expect(sourceDiagnosticText).toContain("\"runtime\":\"browser\"");
+    expect(sourceDiagnosticText).toContain("\"rawParserObjectPersistence\":\"notPersisted\"");
+    expect(sourceDiagnosticText).toContain("\"materializedLayerBytePersistence\":\"summaryOnlyNoRawBytes\"");
+    expect(operationEvidenceText).not.toContain("rawLayerObject");
+    expect(operationEvidenceText).not.toContain("rawRgba");
+    expect(operationEvidenceText).not.toContain("data:image");
+    expect(operationEvidenceText).not.toContain("binaryAssetRef");
+  });
+
   it("rejects missing adapter results without parsing PSD bytes", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -438,6 +530,7 @@ const createImportPsdRequest = (options: {
     | "storage-unsupported-v1";
   readonly texturePreviewReference?: string;
   readonly includeRealParseEvidence?: boolean;
+  readonly parserRuntime?: "node" | "browser";
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -477,7 +570,7 @@ const createImportPsdRequest = (options: {
               sourceProfile: "layered-character-psd-profile-v1",
               adapterName: "fixture-psd-adapter",
               ...(options.includeRealParseEvidence === true
-                ? createRealParseAdapterEvidence()
+                ? createRealParseAdapterEvidence(options.parserRuntime ?? "node")
                 : {}),
               canvas: {
                 width: 2048,
@@ -615,7 +708,7 @@ const createBinaryAssetReference = (overrides: {
   rightsAssetId: overrides.rightsAssetId
 });
 
-const createRealParseAdapterEvidence = () => {
+const createRealParseAdapterEvidence = (parserRuntime: "node" | "browser") => {
   const parser = {
     evidenceKind: "psd-parser-evidence-v1",
     parserName: "webtoonPsd",
@@ -623,7 +716,7 @@ const createRealParseAdapterEvidence = () => {
     parserVersion: "0.4.0",
     adapterName: "fixture-psd-adapter",
     adapterVersion: "0.0.0",
-    runtime: "node",
+    runtime: parserRuntime,
     privateShapePolicy: "parser-private-shape-excluded-v1"
   } as const;
 

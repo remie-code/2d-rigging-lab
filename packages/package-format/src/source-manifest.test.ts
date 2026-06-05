@@ -328,6 +328,47 @@ describe("source manifest PSD structured profile contract", () => {
     });
   });
 
+  it("serializes browser-origin parser-free PSD evidence without raw parser or byte payloads", () => {
+    const manifest = createStructuredPsdSourceManifestWithBrowserParseEvidence();
+    const parsed = SourceManifestSchema.parse(manifest);
+    const serialized = stringifyJsonDeterministic(parsed);
+    const reparsed = SourceManifestSchema.parse(JSON.parse(serialized));
+    const profile = reparsed.sourceAssets[0]?.psdProfile;
+
+    expect(reparsed).toEqual(parsed);
+    expect(profile?.adapter).toMatchObject({
+      evidenceKind: "real-psd-parse-result-v1",
+      intakeKind: "realPsdParseResult",
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        adapterName: "wave45-browser-explicit-psd-import-adapter",
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      }
+    });
+    expect(profile?.layerTreeEvidence?.parser?.runtime).toBe("browser");
+    expect(profile?.materializationEvidence?.[0]).toMatchObject({
+      evidenceKind: "psd-layer-materialization-evidence-v1",
+      materializationId: "mat_wave44LayerHead",
+      mediaType: "image/png",
+      byteLength: 4096,
+      digest: {
+        algorithm: "sha256",
+        hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      parser: {
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      }
+    });
+    expect(profile?.materializationEvidence?.[0]).not.toHaveProperty("binaryAssetRef");
+    expect(serialized).not.toContain("rawLayerObject");
+    expect(serialized).not.toContain("rawRgba");
+    expect(serialized).not.toContain("data:image");
+  });
+
   it("rejects parser-private layer objects in real PSD evidence fields", () => {
     const manifest = createStructuredPsdSourceManifestWithRealParseEvidence();
     const sourceAsset = manifest.sourceAssets[0];
@@ -616,15 +657,57 @@ const createStructuredPsdSourceManifestWithRealParseEvidence = () => {
   return manifest;
 };
 
+const createStructuredPsdSourceManifestWithBrowserParseEvidence = () => {
+  const manifest = createStructuredPsdSourceManifestWithRealParseEvidence() as StructuredPsdManifestFixture;
+  const sourceAsset = manifest.sourceAssets[0];
+  if (sourceAsset === undefined) {
+    throw new Error("Expected structured PSD fixture source asset.");
+  }
+
+  const profile = sourceAsset.psdProfile;
+  const adapterParser = profile.adapter.parser;
+  if (adapterParser === undefined) {
+    throw new Error("Expected parser evidence in browser PSD fixture.");
+  }
+
+  const browserParser = {
+    ...adapterParser,
+    adapterName: "wave45-browser-explicit-psd-import-adapter",
+    runtime: "browser"
+  };
+
+  profile.adapter = {
+    ...profile.adapter,
+    adapterName: "wave45-browser-explicit-psd-import-adapter",
+    parser: browserParser
+  };
+
+  if (profile.layerTreeEvidence !== undefined) {
+    profile.layerTreeEvidence = {
+      ...profile.layerTreeEvidence,
+      parser: browserParser
+    };
+  }
+
+  if (profile.materializationEvidence !== undefined) {
+    profile.materializationEvidence = profile.materializationEvidence.map((evidence) => ({
+      ...evidence,
+      parser: browserParser
+    }));
+  }
+
+  return manifest;
+};
+
 type StructuredPsdManifestFixture = {
   readonly sourceAssets: Array<{
     readonly psdProfile: {
-      adapter: Record<string, unknown>;
+      adapter: Record<string, unknown> & { parser?: Record<string, unknown> };
       sourceGroups: readonly unknown[];
       sourceLayers: Array<Record<string, unknown>>;
-      layerTreeEvidence?: unknown;
+      layerTreeEvidence?: Record<string, unknown>;
       featureSupportEvidence?: unknown;
-      materializationEvidence?: unknown;
+      materializationEvidence?: Array<Record<string, unknown>>;
     };
   }>;
 };

@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 
 import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence.js";
+import { PsdImportOperationEvidenceDtoSchema } from "./psd-import-operation-evidence.js";
 
 export const OperationEvidenceResultSchema = z.object({
   runtimeDiff: RuntimeDiffSchema.optional(),
@@ -20,7 +21,8 @@ export const OperationEvidenceResultSchema = z.object({
   finalRuntimeState: RuntimeStateDtoSchema.optional(),
   finalRuntimeStateRef: RuntimeStateArtifactRefSchema.optional(),
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
-  meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional()
+  meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional(),
+  psdImportEvidence: z.array(PsdImportOperationEvidenceDtoSchema).optional()
 });
 export type OperationEvidenceResultInput = z.input<typeof OperationEvidenceResultSchema>;
 export type OperationEvidenceResultDto = z.infer<typeof OperationEvidenceResultSchema>;

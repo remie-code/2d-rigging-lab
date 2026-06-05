@@ -32,7 +32,8 @@ import type {
   EditorWorkflowCreateRotation2dRigControlCommand,
   EditorViewerRuntimeProjection,
   EditorWorkflowSetMaskRelationCommand,
-  EditorWorkflowPersistenceResult
+  EditorWorkflowPersistenceResult,
+  EditorExplicitPsdImportFileCommand
 } from "../../editor-workflow/index.js";
 import type {
   EditorCreateDrawablePresetCommand,
@@ -72,6 +73,7 @@ import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProductPreflightPanel } from "../product-preflight/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
+import { createExplicitPsdImportPanel } from "../explicit-psd-import/index.js";
 import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
@@ -142,6 +144,9 @@ export interface EditorAppShellOptions {
   readonly onConfirmSourceIntakeDraft: (
     draft: EditorSemanticState["sourceIntakeDraft"],
     selectedFileBytes?: SourceIntakeSelectedFileBytes
+  ) => unknown | Promise<unknown>;
+  readonly onParseExplicitPsdImportFile: (
+    command: EditorExplicitPsdImportFileCommand
   ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -284,6 +289,10 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     viewModel: options.viewModel.sourceIntake,
     onConfirmDraft: options.onConfirmSourceIntakeDraft
   });
+  const explicitPsdImportPanel = createExplicitPsdImportPanel({
+    viewModel: options.viewModel.explicitPsdImport,
+    onParsePsdFile: options.onParseExplicitPsdImportFile
+  });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,
     viewModel: options.viewModel,
@@ -419,6 +428,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     layerTreePanel,
     drawableAuthoringPanel,
     sourceIntakePanel,
+    explicitPsdImportPanel,
     projectPersistencePanel,
     productPreflightPanel,
     codexProposalReviewPanel,

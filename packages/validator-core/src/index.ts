@@ -6,6 +6,7 @@ export * from "./validation-report.js";
 export * from "./report-builder.js";
 export * from "./product-preflight-report.js";
 export * from "./product-preflight-report-diff.js";
+export * from "./psd-import-preflight-diagnostics.js";
 export * from "./runtime-evidence-report.js";
 export * from "./operation-evidence-report.js";
 export * from "./validation-diff-builder.js";

@@ -119,7 +119,7 @@ describe("Wave44 PSD fixture evidence regression", () => {
     const assetBytes = expectCategory(productPreflight.categories, "assetBytes");
 
     expect(validationReport.summary.status).toBe("needs_review");
-    expect(assetBytes.status).toBe("warn");
+    expect(assetBytes.status).toBe("not_evaluated");
     expect(assetBytes.evidenceRefs).toEqual([
       expect.objectContaining({
         evidenceId: "evidence_wave44SampleHeadwearRawRgba",
@@ -129,15 +129,26 @@ describe("Wave44 PSD fixture evidence regression", () => {
         }
       })
     ]);
-    expect(assetBytes.diagnosticRefs).toEqual([
-      expect.objectContaining({
-        checkId: "asset.psd.featureNotEvaluated",
-        status: "needs_review",
-        severity: "warning"
-      })
+    expect(assetBytes.diagnosticRefs.map((diagnosticRef) => diagnosticRef.checkId)).toEqual([
+      "asset.psd.parserEvidence",
+      "asset.psd.parserEvidence",
+      "asset.psd.parserEvidence",
+      "asset.psd.layerTreeEvidence",
+      "asset.psd.materializationEvidence"
     ]);
     expect(assetBytes.unsupportedClaims).toEqual([]);
-    expect(assetBytes.notEvaluatedClaims).toEqual([]);
+    expect(assetBytes.notEvaluatedClaims).toEqual([
+      expect.objectContaining({
+        evidenceKind: "validationReport",
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.featureNotEvaluated",
+            status: "needs_review",
+            severity: "warning"
+          })
+        ]
+      })
+    ]);
   });
 });
 

@@ -172,6 +172,18 @@ const buildCategoryResult = (
     return createUnsupportedCategory(category, unsupportedDiagnostics, diagnostics, evidenceRefs);
   }
 
+  const notEvaluatedDiagnostics = diagnostics.filter((diagnostic) =>
+    isTruthfullyNotEvaluatedDiagnostic(diagnostic.check)
+  );
+  if (notEvaluatedDiagnostics.length > 0) {
+    return createDiagnosticNotEvaluatedCategory(
+      category,
+      notEvaluatedDiagnostics,
+      diagnostics,
+      evidenceRefs
+    );
+  }
+
   if (!isCategoryEvaluated(category, context, diagnostics, evidenceRefs)) {
     return createNotEvaluatedCategory(category, evidenceRefs);
   }
@@ -290,6 +302,38 @@ const createUnsupportedCategory = (
   };
 };
 
+const createDiagnosticNotEvaluatedCategory = (
+  category: ProductPreflightCategoryDto,
+  notEvaluatedDiagnostics: readonly SourceDiagnostic[],
+  allDiagnostics: readonly SourceDiagnostic[],
+  evidenceRefs: readonly ProductPreflightEvidenceRefDto[]
+): ProductPreflightCategoryResultDto => {
+  const notEvaluatedClaims = notEvaluatedDiagnostics.map((diagnostic, index) =>
+    createDiagnosticNotEvaluatedClaim(category, diagnostic, index)
+  );
+  const diagnosticRefs = allDiagnostics
+    .filter((diagnostic) => !isTruthfullyNotEvaluatedDiagnostic(diagnostic.check))
+    .map((diagnostic) => diagnostic.diagnosticRef);
+
+  return {
+    category,
+    status: "not_evaluated",
+    severity: "warning",
+    summary: `${CATEGORY_LABELS[category]} has ${notEvaluatedClaims.length} not-evaluated diagnostic claim(s).`,
+    evidenceRefs: [...evidenceRefs],
+    diagnosticRefs,
+    blockingReasons: [],
+    unsupportedClaims: [],
+    notEvaluatedClaims,
+    recommendedNextActions: dedupeActions([
+      ...notEvaluatedClaims.flatMap((claim) => claim.recommendedNextActions),
+      ...diagnosticRefs.map((diagnosticRef, index) =>
+        createInspectDiagnosticAction(category, diagnosticRef, index)
+      )
+    ])
+  };
+};
+
 const createNotEvaluatedCategory = (
   category: ProductPreflightCategoryDto,
   evidenceRefs: readonly ProductPreflightEvidenceRefDto[]
@@ -348,6 +392,34 @@ const createUnsupportedClaim = (
     }
   ]
 });
+
+const createDiagnosticNotEvaluatedClaim = (
+  category: ProductPreflightCategoryDto,
+  diagnostic: SourceDiagnostic,
+  index: number
+): ProductPreflightNotEvaluatedClaimDto => {
+  const evidenceKind = evidenceKindForNotEvaluatedDiagnostic(diagnostic.check.checkId);
+
+  return {
+    claimId: `claim_${sanitizeToken(diagnostic.check.checkId)}_${diagnostic.diagnosticIndex}`,
+    status: "not_evaluated",
+    category,
+    evidenceKind,
+    reason: diagnostic.check.message,
+    severity: diagnostic.check.severity === "info" ? "warning" : diagnostic.check.severity,
+    requiredEvidenceKinds: [evidenceKind],
+    evidenceRefs: [],
+    diagnosticRefs: [diagnostic.diagnosticRef],
+    recommendedNextActions: [
+      {
+        actionId: `action_${sanitizeToken(category)}_provideNotEvaluatedEvidence_${index}`,
+        actionKind: "provideEvidence",
+        summary: `Provide evidence for validator diagnostic ${diagnostic.check.checkId} and rerun product preflight.`,
+        targetCategory: category
+      }
+    ]
+  };
+};
 
 const createNotEvaluatedClaim = (
   category: ProductPreflightCategoryDto
@@ -661,6 +733,20 @@ const isTruthfullyUnsupportedDiagnostic = (check: ValidationCheckResultDto): boo
     check.checkId === "tutorial.unsupportedClaim" ||
     check.checkId === "asset.psd.featureUnsupported"
   );
+
+const isTruthfullyNotEvaluatedDiagnostic = (check: ValidationCheckResultDto): boolean =>
+  check.status === "needs_review" &&
+  (
+    check.checkId === "asset.psd.featureNotEvaluated" ||
+    check.checkId === "asset.psd.materializationEvidenceMissing"
+  );
+
+const evidenceKindForNotEvaluatedDiagnostic = (
+  checkId: string
+): ProductPreflightArtifactKindDto =>
+  checkId === "asset.psd.materializationEvidenceMissing"
+    ? "sourceMaterialization"
+    : "validationReport";
 
 const mapBlockingReasonCode = (
   check: ValidationCheckResultDto

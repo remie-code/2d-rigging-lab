@@ -67,6 +67,14 @@ export const applyOperationEvidence = (
             ...(input.result.meshTopologyEvidence ?? []),
             ...evidence.meshTopologyEvidence
           ]
+        }),
+    ...(evidence.psdImportEvidence === undefined
+      ? {}
+      : {
+          psdImportEvidence: [
+            ...(input.result.psdImportEvidence ?? []),
+            ...evidence.psdImportEvidence
+          ]
         })
   });
 };

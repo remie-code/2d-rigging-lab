@@ -41,8 +41,39 @@ export const createPsdSourceAssetDiagnostics = (
     );
   }
 
+  if (adapterResult.parser !== undefined) {
+    diagnostics.push(`psd.parserEvidence:${stableStringify(adapterResult.parser)}`);
+  }
+
   if (adapterResult.canvas.bounds !== undefined) {
     diagnostics.push(`psd.canvasBounds:${stableStringify(adapterResult.canvas.bounds)}`);
+  }
+
+  if (adapterResult.layerTreeEvidence !== undefined) {
+    diagnostics.push(`psd.layerTreeEvidence:${stableStringify(adapterResult.layerTreeEvidence)}`);
+  }
+
+  const featureSupportSummary = summarizeFeatureSupportEvidence(adapterResult);
+  if (featureSupportSummary.evidenceCount > 0) {
+    diagnostics.push(`psd.featureSupportEvidenceSummary:${stableStringify(featureSupportSummary)}`);
+  }
+
+  if (adapterResult.materializationEvidence !== undefined) {
+    for (const evidence of adapterResult.materializationEvidence) {
+      diagnostics.push(
+        `psd.materializationEvidenceSummary:${stableStringify(toMaterializationDiagnostic(evidence))}`
+      );
+    }
+  }
+
+  if (
+    adapterResult.parser !== undefined ||
+    adapterResult.layerTreeEvidence !== undefined ||
+    adapterResult.materializationEvidence !== undefined
+  ) {
+    diagnostics.push(
+      `psd.persistenceBoundary:${stableStringify(toPersistenceBoundaryDiagnostic(payload))}`
+    );
   }
 
   for (const group of adapterResult.sourceGroups) {
@@ -325,6 +356,59 @@ const toAdapterDiagnostic = (diagnostic: PsdAdapterDiagnosticDto): unknown => ({
   ...(diagnostic.source === undefined ? {} : { source: diagnostic.source }),
   evidence: diagnostic.evidence
 });
+
+const summarizeFeatureSupportEvidence = (adapterResult: PsdAdapterResultDto) => {
+  const evidence = [
+    ...(adapterResult.featureSupportEvidence ?? []),
+    ...adapterResult.sourceGroups.flatMap((group) => group.featureSupportEvidence ?? []),
+    ...adapterResult.sourceLayers.flatMap((layer) => layer.featureSupportEvidence ?? [])
+  ];
+
+  return {
+    evidenceCount: evidence.length,
+    unsupportedCount: evidence.filter((entry) => entry.status === "unsupported").length,
+    notEvaluatedCount: evidence.filter((entry) => entry.status === "notEvaluated").length,
+    featureIds: [...new Set(evidence.map((entry) => entry.featureId))]
+  };
+};
+
+const toMaterializationDiagnostic = (
+  evidence: NonNullable<PsdAdapterResultDto["materializationEvidence"]>[number]
+): unknown => ({
+  evidenceKind: evidence.evidenceKind,
+  materializationId: evidence.materializationId,
+  sourceLayerRef: evidence.sourceLayerRef,
+  mediaType: evidence.mediaType,
+  byteLength: evidence.byteLength,
+  digest: evidence.digest,
+  byteStorage: evidence.binaryAssetRef === undefined ? "metadataOnly" : "binaryAssetRef",
+  ...(evidence.textureId === undefined ? {} : { textureId: evidence.textureId }),
+  provenance: evidence.provenance,
+  ...(evidence.parser === undefined ? {} : { parser: evidence.parser }),
+  ...(evidence.extraction === undefined ? {} : { extraction: evidence.extraction })
+});
+
+const toPersistenceBoundaryDiagnostic = (
+  payload: ImportPsdSourceAssetPayloadDto
+): unknown => {
+  const materializationEvidence = payload.adapterResult?.materializationEvidence ?? [];
+
+  return {
+    parserPrivateShapePolicy: "parser-private-shape-excluded-v1",
+    rawParserObjectPersistence: "notPersisted",
+    sourcePsdBytePersistence: payload.fileRef.binaryAssetRef === undefined
+      ? "metadataOnlyNoRawBytes"
+      : "binaryAssetRefOnlyNoInlineBytes",
+    materializedLayerBytePersistence: materializationEvidence.some(
+      (evidence) => evidence.binaryAssetRef !== undefined
+    )
+      ? "binaryAssetRefOnlyNoInlineBytes"
+      : "summaryOnlyNoRawBytes",
+    photoshopCompositingClaim: "none",
+    rendererPixelOracleClaim: "none",
+    saveLoadSemantics: "parserEvidencePersistsBytesRequireExistingByteStorageV1"
+  };
+};
 
 const toBinaryAssetReferenceDiagnostic = (
   binaryAssetRef: NonNullable<ImportPsdSourceAssetPayloadDto["fileRef"]["binaryAssetRef"]>

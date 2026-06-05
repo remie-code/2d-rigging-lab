@@ -499,15 +499,21 @@ describe("product preflight report aggregation", () => {
     });
     const notEvaluatedAssetBytes = findCategory(notEvaluatedPreflight.categories, "assetBytes");
 
-    expect(notEvaluatedAssetBytes.status).toBe("warn");
-    expect(notEvaluatedAssetBytes.diagnosticRefs).toEqual([
+    expect(notEvaluatedAssetBytes.status).toBe("not_evaluated");
+    expect(notEvaluatedAssetBytes.diagnosticRefs).toEqual([]);
+    expect(notEvaluatedAssetBytes.unsupportedClaims).toEqual([]);
+    expect(notEvaluatedAssetBytes.notEvaluatedClaims).toEqual([
       expect.objectContaining({
-        checkId: "asset.psd.featureNotEvaluated",
-        status: "needs_review",
-        severity: "warning"
+        evidenceKind: "validationReport",
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.featureNotEvaluated",
+            status: "needs_review",
+            severity: "warning"
+          })
+        ]
       })
     ]);
-    expect(notEvaluatedAssetBytes.unsupportedClaims).toEqual([]);
   });
 });
 

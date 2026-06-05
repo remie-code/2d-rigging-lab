@@ -106,6 +106,12 @@ const focusedE2eMetadataById = {
     tags: ["productPreflight", "reportDiff", "codexProposal", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  psdImportFocused: {
+    purpose:
+      "Replay explicit browser PSD file selection, sample_model.psd parse/layer-tree evidence, save/load session boundary, and parser import containment.",
+    tags: ["assetIo", "psdImport", "browserPersistence", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   rigControlPersistence: {
     purpose:
       "Replay rig control authoring, hierarchy evidence, runtime/viewer evidence, and browser save/load persistence checks.",

@@ -14,6 +14,10 @@ import {
   type DynamicsGroupState,
   type DynamicsPreviewState
 } from "./dynamics-authoring-state.js";
+import {
+  createEmptyExplicitPsdImportState,
+  type ExplicitPsdImportState
+} from "./explicit-psd-import-state.js";
 import type { DrawableListItemState } from "./drawable-list-state.js";
 import { createEmptyGeneratedEvidenceSummary, type GeneratedEvidenceSummaryState } from "./generated-evidence-summary.js";
 import {
@@ -96,6 +100,7 @@ export interface EditorSemanticState {
   readonly pendingCreateParameter: CreateParameterFormState;
   readonly pendingCreateDrawable: CreateDrawableFormState;
   readonly sourceIntakeDraft: SourceIntakeDraftState;
+  readonly explicitPsdImport: ExplicitPsdImportState;
   readonly binaryByteIntake: EditorBinaryByteIntakeState;
   readonly sourceAssets: readonly SourceAssetDto[];
   readonly textureAtlas: TextureAtlasFileDto | null;
@@ -133,6 +138,7 @@ export const createInitialEditorSemanticState = (): EditorSemanticState => ({
   pendingCreateParameter: createEmptyParameterFormState(),
   pendingCreateDrawable: createEmptyDrawableFormState(),
   sourceIntakeDraft: createEmptySourceIntakeDraftState(),
+  explicitPsdImport: createEmptyExplicitPsdImportState(),
   binaryByteIntake: createEmptyEditorBinaryByteIntakeState(),
   sourceAssets: [],
   textureAtlas: null,

@@ -93,6 +93,12 @@ export const wave42FocusedE2eRegistryBoundary = {
       category: "productPreflight"
     },
     {
+      id: "psdImportFocused",
+      path: "apps/editor/e2e/psd-import-focused-smoke.mjs",
+      command: "node apps/editor/e2e/psd-import-focused-smoke.mjs",
+      category: "assetIoBoundary"
+    },
+    {
       id: "rigControlPersistence",
       path: "apps/editor/e2e/rig-control-persistence-smoke.mjs",
       command: "node apps/editor/e2e/rig-control-persistence-smoke.mjs",

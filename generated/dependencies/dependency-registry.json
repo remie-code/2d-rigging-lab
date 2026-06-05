@@ -27,10 +27,10 @@
     {
       "name": "@webtoon/psd",
       "version": "0.4.0",
-      "purpose": "Parse rights-clean local PSD fixture input by explicit path for the Wave44 Node smoke evidence workflow, including document metadata, layer/group tree evidence, and selected layer raster extraction availability without persisted derived bytes.",
+      "purpose": "Parse rights-clean local PSD fixture input by explicit path for the Wave44 Node smoke evidence workflow, and allow a narrowly scoped Wave45 Editor/browser explicit PSD import adapter to parse user-selected PSD ArrayBuffer bytes into parser-free session/package evidence. Includes embedded Rust/WebAssembly channel decode artifact boundary review; no raw/visual byte persistence, public demo material, package/runtime/validator direct import, drag-drop, archive/filesystem, renderer/pixel, Cubism, or repair scope.",
       "license": "MIT",
-      "scope": "dev:test:fixture-smoke:scripts-only:not-editor-runtime-demo",
-      "status": "wave44-domain-b-explicit-path-node-smoke-approved"
+      "scope": "dev:test:fixture-smoke:scripts-only;editor:browser:wave45-explicit-psd-import-adapter-only:not-packages-runtime-validator-demo",
+      "status": "wave44-domain-b-explicit-path-node-smoke-approved;wave45-domain-a-editor-browser-explicit-psd-import-adapter-approved-with-embedded-wasm-boundary"
     },
     {
       "name": "zod",

@@ -13,6 +13,10 @@ import {
   type SourceIntakeDraftViewModel
 } from "./source-intake-view-model.js";
 import {
+  projectExplicitPsdImportViewModel,
+  type ExplicitPsdImportViewModel
+} from "./explicit-psd-import-view-model.js";
+import {
   projectViewerRuntimeViewModel,
   type ViewerRuntimeViewModel
 } from "./viewer-runtime-view-model.js";
@@ -63,6 +67,7 @@ export interface EditorWorkflowViewModel {
   readonly partTextureWorkflow: PartTextureWorkflowViewModel;
   readonly meshEdit: MeshEditViewModel;
   readonly sourceIntake: SourceIntakeDraftViewModel;
+  readonly explicitPsdImport: ExplicitPsdImportViewModel;
   readonly previewControls: EditorPreviewControlsViewModel;
   readonly viewerRuntime: ViewerRuntimeViewModel;
   readonly tutorialGuidedWorkflow: TutorialGuidedWorkflowViewModel;
@@ -380,6 +385,7 @@ export const projectEditorWorkflowViewModel = (
       binaryByteIntake: state.binaryByteIntake,
       ...(state.textureAtlas === null ? {} : { textureAtlas: state.textureAtlas })
     }),
+    explicitPsdImport: projectExplicitPsdImportViewModel(state.explicitPsdImport),
     previewControls: projectPreviewControlsViewModel(state),
     viewerRuntime: projectViewerRuntimeViewModel(state.viewerRuntime),
     tutorialGuidedWorkflow: projectTutorialGuidedWorkflowViewModel(state.tutorialGuidedWorkflow),

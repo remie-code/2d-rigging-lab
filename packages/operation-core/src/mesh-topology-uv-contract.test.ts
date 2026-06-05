@@ -5,7 +5,8 @@ import {
   OperationEvidenceResultSchema,
   OperationPayloadSchema,
   OperationRequestSchema,
-  OperationResultSchema
+  OperationResultSchema,
+  PsdImportOperationEvidenceDtoSchema
 } from "./index.js";
 
 const payloadCases = [
@@ -156,5 +157,102 @@ describe("mesh topology and UV operation contracts", () => {
 
     expect(evidenceResult.meshTopologyEvidence?.[0]?.textureSamplingCorrectnessClaim).toBe("none");
     expect(operationResult.meshTopologyEvidence?.[0]?.rendererCorrectnessClaim).toBe("none");
+  });
+
+  it("parses parser-free PSD import operation evidence without raw byte persistence claims", () => {
+    const psdImportEvidence = PsdImportOperationEvidenceDtoSchema.parse({
+      schemaVersion: "psd-import-operation-evidence-v1",
+      operationType: "importPsdSourceAsset",
+      sourceAssetId: "src_psd_character",
+      sourceProfile: "layered-character-psd-profile-v1",
+      adapterResultSchemaVersion: "psd-adapter-result-v1",
+      adapterName: "wave45-browser-explicit-psd-import-adapter",
+      parseOrigin: "browserExplicitFileSelection",
+      sourceByteStorage: "metadataOnly",
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        parserVersion: "0.4.0",
+        adapterName: "wave45-browser-explicit-psd-import-adapter",
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      layerTreeEvidence: {
+        evidenceKind: "psd-layer-tree-evidence-v1",
+        evidenceId: "layerTree_wave45Browser",
+        intakeKind: "realPsdParseResult",
+        groupCount: 1,
+        layerCount: 1,
+        parser: {
+          evidenceKind: "psd-parser-evidence-v1",
+          parserName: "webtoonPsd",
+          runtime: "browser",
+          privateShapePolicy: "parser-private-shape-excluded-v1"
+        },
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      featureSupport: {
+        evidenceCount: 1,
+        unsupportedCount: 0,
+        notEvaluatedCount: 1,
+        featureIds: ["psd.fullCompositing"]
+      },
+      materializationEvidence: [
+        {
+          evidenceKind: "psd-layer-materialization-evidence-v1",
+          materializationId: "mat_wave45BrowserHead",
+          sourceLayerRef: {
+            sourceAssetId: "src_psd_character",
+            sourceLayerId: "layer_head",
+            sourceLayerPath: ["Root", "Head"]
+          },
+          mediaType: "image/png",
+          byteLength: 4096,
+          digest: {
+            algorithm: "sha256",
+            hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+          },
+          provenance: {
+            sourceFilePath: "assets/sources/character/source.psd",
+            privacyLabel: "packageLocalAsset",
+            publicDistribution: "notPublicDistributable"
+          },
+          byteStorage: "metadataOnly",
+          materializedBytePersistence: "summaryOnlyNoRawBytes"
+        }
+      ],
+      persistenceBoundary: {
+        parserPrivateShapePolicy: "parser-private-shape-excluded-v1",
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        materializedLayerBytePersistence: "summaryOnlyNoRawBytes",
+        photoshopCompositingClaim: "none",
+        rendererPixelOracleClaim: "none",
+        saveLoadSemantics: "parserEvidencePersistsBytesRequireExistingByteStorageV1"
+      }
+    });
+
+    const evidenceResult = OperationEvidenceResultSchema.parse({
+      psdImportEvidence: [psdImportEvidence]
+    });
+    const operationResult = OperationResultSchema.parse({
+      schemaVersion: "operation-result-v1",
+      operationId: "op_import_psd_character",
+      status: "dry_run",
+      precondition: {
+        ok: true,
+        diagnostics: []
+      },
+      psdImportEvidence: [psdImportEvidence],
+      reversible: true
+    });
+
+    expect(evidenceResult.psdImportEvidence?.[0]?.parseOrigin).toBe(
+      "browserExplicitFileSelection"
+    );
+    expect(operationResult.psdImportEvidence?.[0]?.materializationEvidence[0])
+      .not.toHaveProperty("binaryAssetRef");
+    expect(JSON.stringify(operationResult.psdImportEvidence)).not.toContain("data:image");
   });
 });

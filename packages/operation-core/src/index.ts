@@ -6,6 +6,7 @@ export * from "./payloads/mesh-topology.js";
 export * from "./payloads/dynamics.js";
 export * from "./payloads/rig-control.js";
 export * from "./mesh-topology-evidence.js";
+export * from "./psd-import-operation-evidence.js";
 export * from "./operation-payload.js";
 export * from "./operation-precondition.js";
 export * from "./operation-request.js";

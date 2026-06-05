@@ -1,6 +1,6 @@
 # 残作業 Backlog
 
-> 状態: 2026-06-05 / Wave44 Domain H final verification bookkeeping。Domains A-G は Review-Sylph `pass` 済み、Domain H final verification は記録済み。Review-Sylph clean integration review は [recorded `pass`](reviews/wave44/wave44-domain-h-clean-integration-review.md)。
+> 状態: 2026-06-05 / Wave45 Domain H final verification / clean integration review。Wave45 final verification と clean integration review は `pass` 済みで、Wave45 final complete / final pass は Domain H report と clean review に記録済み。
 > 目的: 次の実装境界を選ぶための、残作業と decision gate の簡潔な index。完了済み wave 履歴は final report と map に置き、この backlog には置かない。
 
 ## 受理済み判断
@@ -12,6 +12,7 @@
 - Wave43 Validator Contract / Evidence Naming Consistency は product capability ではなく、validator/evidence coverage matrix、validator contract prose refresh、diagnostic policy/schema/traceability naming sync、representative Wave43 checker、active fixture manifest validator diagnostic label cleanup として Domain A-E implementation/review と final verification が完了。Clean integration review は [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) に `pass` として記録済み。
 - 次 wave 選定では「ユーザー判断なしに進められる」ことを優先価値として扱わない。ユーザー判断がプロダクトの正しい方向に必要なら、それは回避すべき負債ではなく、支払うべき設計コストとして扱う。
 - Wave44 は PSD を主入力フォーマットとする real parser/dependency/materialization pilot として final verification bookkeeping 済み。Domains A-F で dependency/security/fixture boundary、`@webtoon/psd@0.4.0` scripts-only dependency、`test_data/sample_model.psd` explicit-path parse smoke、parser-free PSD evidence contracts、selected `headwear` layer raw RGBA materialization evidence JSON、validator/Product Preflight diagnostics、private/local fixture regression が実装・レビュー済み。Domain G documentation refresh は Review-Sylph `pass` 済み、Domain H final verification report は記録済み。Review-Sylph clean integration review は [recorded `pass`](reviews/wave44/wave44-domain-h-clean-integration-review.md)。
+- Wave45 は Editor/browser explicit PSD import adapter scope、browser parser bridge/session evidence、package/operation PSD import evidence bridge、Editor explicit PSD Import layer tree UX、validator/Product Preflight PSD import diagnostics、focused `psdImportFocused` e2e、parser import boundary guard、fixture/traceability registration、Domain G documentation refresh、Domain H final verification / integration bookkeeping、Domain H clean integration review として `pass` 済み。Wave45 final complete / final pass は [Domain H report](waves/wave45/wave45-domain-h-integration-review-and-final-report.md) と [clean integration review](reviews/wave45/wave45-domain-h-clean-integration-review.md) に記録済み。
 - Wave44 では `test_data/sample_model.psd` 由来の派生 artifact を必要に応じて repository に残してよい。ただし private/local fixture 由来として扱い、public distributable demo asset とは分離する。
 - Photoshop 風の最終合成再現は Wave44 の目標ではない。layer order、opacity、blend mode、mask、clipping、effects、color profile などを反映した合成 preview は、将来の Viewer / renderer maturity の範囲として扱う。
 - Product Preflight は、現在の趣味/個人利用ツールの範囲では session-generated read-only report のままにする。Codex は read/diff/rerun affordance から必要なPreflight情報を取得できるため、persisted/exported artifact、CI/release gate、demo gate、Codex以外の外部ツール向けPreflight artifactは、具体的な必要が出るまでスコープ外とする。
@@ -24,7 +25,7 @@
 
 - browser-local project persistence、same-origin IndexedDB byte restore、project-defined portable JSON bundle v0 は実装済み。
 - bounded topology/UV direct edit は実装済み。advanced/freeform topology、unwrap、atlas、texture sampling correctness は未実装。
-- parser-free PSD adapter/profile metadata は存在する。Wave44 A-F で scripts-only explicit-path real PSD parse smoke、layer/group tree evidence、selected layer raw RGBA materialization evidence JSON、PSD evidence validator/Product Preflight diagnostics、private/local fixture regression は存在する。PNG workflow、Editor file picker/drag-drop/browser PSD import UX、general PSD materialization、Photoshop full compositing、renderer/pixel oracle、texture sampling correctness は未実装。
+- parser-free PSD adapter/profile metadata は存在する。Wave44 A-F で scripts-only explicit-path real PSD parse smoke、layer/group tree evidence、selected layer raw RGBA materialization evidence JSON、PSD evidence validator/Product Preflight diagnostics、private/local fixture regression は存在する。Wave45 で Editor/browser explicit PSD import adapter、browser parser bridge/session evidence、package/operation PSD import evidence bridge、Editor explicit PSD Import layer tree UX、validator/Product Preflight PSD import diagnostics、focused `psdImportFocused` e2e、parser import boundary guard、fixture/traceability registration は存在する。PNG workflow、drag-drop、archive/filesystem/File System Access API、general PSD materialization、Photoshop full compositing、renderer/pixel oracle、texture sampling correctness は未実装。
 - Editor Viewer/Preview は semantic inspection/runtime evidence であり、full renderer や pixel oracle ではない。
 - AI command support は deterministic read/inspect/validate/dry-run/commit/log/transcript、Product Preflight observation/read/diff/rerun affordance helper/schema、Codex proposal operation catalog、proposal validation、diff preview/rerun validation bridge、approval lifecycle bridge。inference と proposal generation は実行しない。
 
@@ -34,7 +35,7 @@
 
 | 候補 | Scope boundary（範囲境界） | 補足 |
 |---|---|---|
-| Documentation/map consistency refresh | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md` は Wave43 final report と clean integration review に合わせて同期済み。今後のwave報告時も同じ非目標境界を維持する。 | 次 wave 完了時に final report / maps / backlog へ反映する。 |
+| Documentation/map consistency refresh | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md` は Wave45 final verification / clean integration review pass の範囲に同期済み。今後のwave報告時も同じ非目標境界を維持する。 | Wave45 final complete は Domain H report と clean review の範囲に限定して記録済み。 |
 | Quality gate guard maintenance | Wave42 で追加した boundary guard、source organization fixture guard、focused e2e registry/list/check/single-selection runner、dependency / forbidden-scope guard self-test は、今後 blind spot が見つかった場所で小さく強化する。 | 追加の product capability ではない。schema cleanup、runtime/viewer naming cleanup、dynamics create-flow atomicityは別wave候補として残す。 |
 | Product Preflight fixture/traceability sync | warning-gated markdown rows に machine-readable mirror が後で必要になった場合、Wave40 / Wave39 とそれ以前の比較可能な rows をまとめて backfill する。 | 現在の Wave40 / Wave39 review では JSON mirror update なしが受理済み。 |
 
@@ -42,10 +43,10 @@
 
 | 判断 | 方向付けが必要な理由 |
 |---|---|
-| Wave44 後の次の product priority | Wave44 A-F の parser/materialization evidence pilot 結果、Domain H final verification report、Review-Sylph clean integration review `pass` を踏まえ、Editor file picker / drag-drop、PSD UX integration、renderer/pixel oracle、archive/filesystem、advanced topology/UV、public/demo assets、Cubism policy reconsideration の優先順位を再判断する。Product Preflight durability/export と acceptance/demo gate は、趣味/個人利用では当面スコープ外とする受理済み判断がある。 |
+| Wave45 後の次の product priority | Wave45 final verification / clean integration review pass を踏まえ、drag-drop、archive/filesystem/File System Access API、general PSD materialization、renderer/pixel oracle、advanced topology/UV、public/demo assets、Cubism policy reconsideration の優先順位を再判断する。Product Preflight durability/export と acceptance/demo gate は、趣味/個人利用では当面スコープ外とする受理済み判断がある。 |
 | Public/demo asset policy | real rights-clean public assets をいつ許可するか、private/local fixtures を distributable demo assets からどう分離するかを決める必要がある。 |
 | Archive/filesystem implementation | project-defined JSON bundle で当面十分か、ZIP/archive、File System Access API、directory picker、drag-drop、native filesystem、cloud/cross-profile persistence を実装するかを決める必要がある。 |
-| Real image/PSD pipeline | Wave44 A-F で PSD scripts-only parser smoke と selected-layer materialization evidence pilot は実装済み。次の判断は Editor/browser PSD import UX、general PSD materialization、PNG image set workflow、Photoshop風full compositing、renderer/pixel oracle、texture sampling correctness のどれを優先するか。 |
+| Real image/PSD pipeline | Wave44 A-F で PSD scripts-only parser smoke と selected-layer materialization evidence pilot は実装済み。Wave45 で explicit Editor/browser PSD import UX と focused e2e は final verification / clean integration review `pass` 済み。次の判断は drag-drop、archive/filesystem/File System Access API、general PSD materialization、PNG image set workflow、Photoshop風full compositing、renderer/pixel oracle、texture sampling correctness のどれを優先するか。 |
 | Renderer/viewer direction | semantic editor-internal Viewer/Preview を維持するか、standalone/full-renderer/pixel-oracle work を始めるかを決める必要がある。 |
 | Cubism compatibility policy | 現在の方針では Cubism SDK/Core、import/export、`.moc3`、`.model3.json`、Cubism Physics は non-goals。compatibility 方向には明示的な承認が必要。 |
 
@@ -65,7 +66,7 @@
 
 - Cubism SDK/Core integration、Cubism import/export/load compatibility、`.moc3`、`.model3.json`、Cubism Physics compatibility。
 - full renderer、standalone viewer app、render target、texture sampling correctness、pixel oracle。
-- Wave44 A-F の scripts-only explicit-path PSD parser smoke と selected-layer raw RGBA materialization evidence を超える範囲: Editor file picker/drag-drop/browser import UX、general PSD materialization、PNG image set workflow、texture sampling correctness、Photoshop 風 compositing。
+- Wave44/Wave45 の explicit-path PSD parser smoke、selected-layer raw RGBA materialization evidence、explicit Editor/browser PSD import UX を超える範囲: drag-drop、archive/filesystem/File System Access API、general PSD materialization、PNG image set workflow、texture sampling correctness、Photoshop 風 compositing。
 - ZIP/archive/native filesystem/cloud transport と drag-drop implementation。
 - LLM/provider/prompt integration、repo-side repair reasoning、repair candidate generation/ranking、natural-language repair、auto-fix、automatic commit。
 - direct vertex physics、cloth/collision/IK、full timeline bake、motion export、lip sync、video editor、marketplace/registry/plugin distribution、public SDK。
@@ -105,5 +106,11 @@
 | Wave44 Domain G review | [reviews/wave44/wave44-domain-g-docs-traceability-boundary-refresh-review.md](reviews/wave44/wave44-domain-g-docs-traceability-boundary-refresh-review.md) |
 | Wave44 Domain H final verification report | [waves/wave44/wave44-domain-h-integration-review-and-final-report.md](waves/wave44/wave44-domain-h-integration-review-and-final-report.md) |
 | Wave44 clean integration review | [reviews/wave44/wave44-domain-h-clean-integration-review.md](reviews/wave44/wave44-domain-h-clean-integration-review.md) |
+| Wave45 plan | [orchestration/wave45-plan.md](orchestration/wave45-plan.md) |
+| Wave45 Domain A-G reports | [A](waves/wave45/wave45-domain-a-browser-parser-dependency-scope-trust-boundary-report.md), [B](waves/wave45/wave45-domain-b-browser-psd-parser-bridge-session-evidence-report.md), [C](waves/wave45/wave45-domain-c-package-operation-psd-import-evidence-bridge-report.md), [D](waves/wave45/wave45-domain-d-editor-explicit-psd-import-layer-tree-ux-report.md), [E](waves/wave45/wave45-domain-e-validator-product-preflight-psd-import-diagnostics-report.md), [F](waves/wave45/wave45-domain-f-psd-import-focused-e2e-regression-report.md), [G](waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md) |
+| Wave45 Domain A-E/G/H reviews | [A](reviews/wave45/wave45-domain-a-browser-parser-dependency-scope-trust-boundary-review.md), [B](reviews/wave45/wave45-domain-b-browser-psd-parser-bridge-session-evidence-review.md), [C](reviews/wave45/wave45-domain-c-package-operation-psd-import-evidence-bridge-review.md), [D](reviews/wave45/wave45-domain-d-editor-explicit-psd-import-layer-tree-ux-review.md), [E](reviews/wave45/wave45-domain-e-validator-product-preflight-psd-import-diagnostics-review.md), [G](reviews/wave45/wave45-domain-g-docs-traceability-boundary-refresh-review.md), [H clean](reviews/wave45/wave45-domain-h-clean-integration-review.md) |
+| Wave45 Domain G report | [waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md) |
+| Wave45 Domain H final verification report | [waves/wave45/wave45-domain-h-integration-review-and-final-report.md](waves/wave45/wave45-domain-h-integration-review-and-final-report.md) |
+| Wave45 Domain H clean integration review | [reviews/wave45/wave45-domain-h-clean-integration-review.md](reviews/wave45/wave45-domain-h-clean-integration-review.md) |
 
-この backlog は [current-capability-map.md](current-capability-map.md) と一緒に使う。wave ごとに decision boundary を1つ選び、完了済み履歴はリンク先 reports に置き、unsupported claims は明示し続ける。
+この backlog は [current-capability-map.md](current-capability-map.md) と一緒に使う。wave ごとに decision boundary を1つ選び、完了済み履歴はリンク先 reports に置き、unsupported claims は明示し続ける。Wave45 は Domain H final verification / clean integration review `pass` として記録済みであり、次の wave は新しい decision boundary として扱う。
