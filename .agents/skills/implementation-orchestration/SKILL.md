@@ -1,104 +1,276 @@
 ---
 name: implementation-orchestration
-description: Use for implementation phases that need wave planning, bounded subagent delegation, create-review-fix loops, clean review contexts, persistent review records, and root context protection. Trigger when a user asks an implementation coordinator to run work through Undine -> Orch-Sylph -> Gnome/Review-Sylph style orchestration.
+description: サブエージェントのネスト呼び出しを活用した実装パイプライン。Undine → Orch-Sylph → Gnome/Review-Sylph の構造で、設計からテスト付き実装までを自律的に回す。USE FOR: Phase 2以降の実装フェーズで、複数サブシステムの実装を並列・自律的に進める場合。
 ---
 
-# Implementation Orchestration
+# 実装オーケストレーション
 
-Use this skill to keep implementation runs from collapsing into one overloaded root context.
+サブエージェントのネスト呼び出しを活用して、設計→実装→レビュー→修正のサイクルを自律的に回す実装パイプライン。
 
-## Core Model
+このパイプラインの最重要目的は、最上位オーケストレーターである **Undine の全体コンテキストを保護すること** である。Undine が全体像、依存関係、ユーザー判断、wave gate を保持しているからこそ、大きな実装が安定して進む。Undine 自身が実装・テスト・大規模な差分棚卸しに潜ることは、進行の中枢を削る行為であり、原則として禁止する。
 
-```text
-Undine (L0)
-  -> Orch-Sylph per domain (L1)
-    -> Gnome implementation (L2)
-    -> Review-Sylph independent review (L2)
-  -> Integrator wave review
-  -> final report
+## パターン概要
+
+```
+Undine (設計エージェント・最上位オーケストレーター)
+├── Sylph-Orch-A (ドメインA オーケストレーション) ─┐
+│   ├── Gnome (実装)                               │
+│   ├── Sylph (レビュー) ← ネスト呼び出し          │ 並列
+│   ├── Gnome (差分修正) ← 必要なら                 │
+│   └── ... ループ → 完了報告                       │
+├── Sylph-Orch-B (ドメインB) ──────────────────────│
+│   └── 同上                                       │
+├── Sylph-Orch-C (ドメインC) ──────────────────────┘
+│   └── 同上
+└── 全Orch完了 → Undine 受領・ユーザー報告
 ```
 
-## Context Firewall
+### 役割分担
 
-Keep the root orchestrator's context small.
+| 階層 | エージェント | 役割 |
+|------|------------|------|
+| L0 | **Undine** | 波分割・Orch-Sylph 起動・最終報告 |
+| L1 | **Orch-Sylph** | ドメイン内の実装サイクル管理（コンテキスト収集→Gnome指示→レビュー→判定） |
+| L2 | **Gnome** | 実装（コード・テスト） |
+| L2 | **Review-Sylph** | レビュー（設計 vs 実装の差分レポート + テスト結果確認） |
 
-- Undine owns objective, wave plan, domain split, integration decisions, user questions, and final report.
-- Orch-Sylph owns one domain loop and gathers domain-specific basis documents.
-- Gnome receives only the implementation basis, write scope, tests, and applicable policies for that domain.
-- Review-Sylph receives artifacts, verification summary, and review basis. It must not rely on the implementer's explanation as its only source.
-- Integrator receives completion reports and shared-contract changes.
+## 最優先ルール: Undine コンテキスト保護
 
-Do not load every project policy into Undine by default. Pass detailed policy documents to the subagents that need them.
+Undine のコンテキストは wave 全体を保つための保護資産であり、作業量削減より優先される。
 
-## Required Flow
+- Undine は implementation domain の source code、tests、e2e、domain docs、traceability、large diff inventory を直接作成・修正・精査しない。
+- Undine は「担当 subagent が遅い / 応答しない / 途中で止まった」ことを理由に、自分で実装を埋めない。
+- Undine は大きな調査や棚卸しが必要な場合、調査観点と受け入れ基準を設計し、実調査は Orch-Sylph または research subagent へ委譲する。
+- Undine が直接読む basis は、wave plan、accepted decisions、domain completion reports、review verdicts、ユーザー判断に必要な要約に絞る。
+- Undine が誤って直接作業した成果物は、正規の pass evidence に数えない。未信頼ドラフトとして扱い、Orch-Sylph に独立評価させる。
 
-1. Confirm the upstream wave gate.
-2. Build or load a dependency-aware wave plan.
-3. Launch one Orch-Sylph per independent domain when subagents are available.
-4. Have Orch-Sylph delegate implementation to Gnome and review to Review-Sylph.
-5. Wait for each started domain to reach `pass`, `needs_fix`, `escalate`, or `blocked`.
-6. Run Integrator review before marking a wave complete.
-7. Write or update persistent reports.
+## 必須ネスト分離
 
-If subagents are unavailable, record the fallback and preserve the same review gates.
+実装 wave の実行単位は domain ごとの **Orch-Sylph** である。
 
-## Subagent Call Header
+- Undine は domain を直接実装しない。
+- Orch-Sylph 自身も source implementation をしない。
+- source implementation は必ず別コンテキストの **Gnome** に委譲する。
+- review は必ず別コンテキストの **Review-Sylph** に委譲する。
+- Review-Sylph は Gnome の説明だけに依存せず、basis docs、target files、diff、tests、verification evidence を根拠にする。
+- この分離を維持できない場合、Orch-Sylph は実装せず `escalate` または `blocked` として報告する。
 
-Use a clear call header:
+各 assignment には必ず次の文を含める:
 
 ```text
-[subagent-call] 呼び出し元: <caller>
+Orch-Sylph自身は実装担当ではない。source implementation は必ず別コンテキストの Gnome に委譲し、レビューは必ず別コンテキストの Review-Sylph に委譲すること。これを分離できない場合は実装せず escalate / blocked として報告すること。
 ```
 
-Recommended callers:
+## ⚠️ サブエージェント呼び出しの必須ルール
 
-- `Undine` for L0 -> L1
-- `Orch-Sylph` for L1 -> Gnome/Review-Sylph
-- `Undine - clean context review` for clean review
+**ネスト構造の全階層で、サブエージェント呼び出し時にコンテキスト宣言を付けること。**
 
-## Domain Assignment Must Include
+```
+[subagent-call] 呼び出し元: {エージェント名}
+```
 
-- target and wave
-- dependencies
-- allowed write scope
-- forbidden write scope
-- basis documents
-- applicable policies
-- required tests and verification
-- expected evidence
-- loop limit
-- early escape triggers
+| 呼び出し | プロンプト冒頭 |
+|---------|--------------|
+| Undine → Orch-Sylph | `[subagent-call] 呼び出し元: Undine` |
+| Orch-Sylph → Gnome | `[subagent-call] 呼び出し元: Sylph` |
+| Orch-Sylph → Review-Sylph | `[subagent-call] 呼び出し元: Sylph` |
 
-## Review Rules
+**忘れると、サブエージェントが通常モードと区別できず、想定外の振る舞いをする。**
 
-Every implemented domain needs two review lanes unless explicitly N/A:
+## 波分割ガイドライン
 
-1. Design / Development Compliance Review
-2. Test Adequacy Review
+### 手順
 
-Clean Context Review is an execution mode, not a separate lane.
+1. サブシステム間の依存グラフを描く
+2. **基盤層**（依存なし）と**依存層**（基盤に依存）を特定する
+3. 基盤層を Wave 1、依存層を Wave 2 に分割する
+4. 各波内では全項目を並列で Orch-Sylph を起動する
+5. Wave 1 の完了を確認してから Wave 2 を起動する
 
-## Wait Rules
+### 分割の判断基準
 
-Undine must not cancel, summarize, or mark incomplete domain agents as complete just because they are still running or the root context is long.
+| 基準 | ガイドライン |
+|------|-------------|
+| **依存関係** | 依存元が確実に存在するまで依存先は起動しない |
+| **波の数** | 通常2波で十分。3波以上は依存チェーンが深い場合のみ |
+| **波内の独立性** | 同一波内の項目は相互に依存してはならない |
+| **依存がグループ内で閉じる場合** | 同一 Orch-Sylph 内で順次実装（例: ワールドマップ→酒場） |
 
-If interruption is unavoidable, record the domain as incomplete, blocked, or escalated. Do not pass the wave gate.
+## Orch-Sylph のフロー
 
-## Early Escape
+### ステップ
 
-Stop and escalate when:
+```
+1. コンテキスト収集
+   - 設計文書を読む
+   - テスト設計を読む
+   - AC・シナリオを読む
+   - 既存コード（型定義・関連モジュール）を読む
 
-- source documents conflict
-- module boundary is unclear
-- test oracle is missing
-- user decision is required
-- review findings do not shrink for two consecutive loops
-- dependency approval is required
-- rights/provenance is missing
-- implementation appears to require a forbidden oracle or boundary bypass
+2. Gnome を呼び出して実装
+   - 設計文書・テスト設計・既存コードの場所をプロンプトに含める
+   - テスト実装を含めることを明示する
 
-## Project-Specific Basis
+3. Review-Sylph を呼び出してレビュー
+   - 設計文書・テスト設計のパスを渡す
+   - Gnome が作成/変更したファイルのパスを渡す
+   - テスト実行結果を渡す
 
-When the workspace contains wave plans under `discussion/implementation/orchestration/`, treat the active wave plan as the project-specific execution basis.
+4. レビュー結果で判定
+   - 合格 → 完了報告
+   - 差分あり → コンテキストを整理して Gnome を再呼び出し（ステップ2へ）
+   - ループ上限到達 → 残差分を報告して終了
+```
 
-When a source implementation domain writes authored source, include `discussion/development_convention/source-file-organization-policy.md` in the domain basis.
+### Gnome への指示テンプレート
+
+```markdown
+[subagent-call] 呼び出し元: Sylph
+
+# 実装タスク: {サブシステム名} (#{設計ID})
+
+## 参照ドキュメント
+- 設計文書: `discussion/design/{category}/{file}.md`
+- テスト設計: `discussion/test/{category}/{file}.md`
+- AC: `discussion/acceptance-criteria/{category}/{file}.md`
+- シナリオ: `discussion/scenarios/{category}/{file}.md`
+
+## 既存コード（必要に応じて参照）
+- 型定義: `packages/engine/src/types/...`
+- 関連モジュール: `packages/engine/src/...`
+
+## 実装要件
+1. 設計文書に従ってエンジンコードを実装する
+2. テスト設計に従ってテストを実装する
+3. テストを実行し、全件パスすることを確認する
+
+## 重要な規約
+- エンジンパターン: execute → EngineEvent[] → applyEvents
+- Position型は { x, y, level } — z ではなく level
+- 純関数・副作用なし
+```
+
+### Review-Sylph への指示テンプレート
+
+```markdown
+[subagent-call] 呼び出し元: Sylph
+
+# 実装レビュー: {サブシステム名} (#{設計ID})
+
+## レビュー対象
+- 実装ファイル: {Gnome が作成/変更したファイル一覧}
+- テストファイル: {テストファイル一覧}
+
+## 判定基準ドキュメント
+- 設計文書: `discussion/design/{category}/{file}.md`
+- テスト設計: `discussion/test/{category}/{file}.md`
+
+## テスト実行結果
+{直前の vitest 実行結果}
+
+## レビュー観点
+1. **設計適合**: 設計文書の各セクションが実装に正しく反映されているか
+2. **テスト適合**: テスト設計の各テストケースが正しく実装されているか
+3. **テスト結果**: 全テストがパスしているか
+
+## 報告形式
+- 適合: 件数と主要な確認ポイント
+- 差分: 具体的な箇所と修正指針
+- 裁量判断: 設計未定義だが合理的に実装された箇所
+- 判定: 合格 / 要修正（差分一覧付き）
+
+## レポートファイル出力
+レビュー完了後、レポート内容を以下のパスにファイルとして書き出すこと:
+`discussion/implementation/reviews/{category}/{file}.md`
+- {category} と {file} は設計文書のパスに合わせる（例: 設計が `design/unit/zodiac.md` なら `reviews/unit/zodiac.md`）
+```
+
+## レビュー判定基準
+
+### 合格条件
+
+以下の **両方** を満たすこと:
+
+1. **設計適合**: 設計文書の各セクションの意図が実装に反映されている
+2. **テスト合格**: テスト設計のテストケースが正しく実装され、全件パスしている
+
+### 判定の注意点
+
+- 裁量判断（設計未定義を合理的に実装）は **許容** — 差分ではなく注記として報告
+- テスト設計にない追加テストは **許容** — ただし報告対象
+- テスト設計のテストケースを実装していないのは **要修正**
+
+## ループ制御
+
+- **上限: 5ループ**
+- 通常は 3-4 ループで収束する
+- 5ループ到達時は残差分を報告して終了（Undine が判断する）
+- 各ループで差分が減少しない場合は、設計文書の曖昧性を疑う → Undine にエスカレーション
+
+### 早期脱出条件
+
+**ユーザー判断が必要な設計の漏れ**を検出した場合、ループ回数に関わらず即座にループを中断し、その旨を Undine に報告してターンを返すこと。
+
+- 例: 設計文書に記載のない判断分岐、複数解釈が可能な仕様、他サブシステムとの責務境界が不明確
+- ユーザー判断が必要な状況で実装を続けても混乱が深まるだけ
+- 報告には「何が不明で」「どの設計文書のどの箇所が曖昧か」「実装を進めるために必要な判断は何か」を含める
+
+## レビューレポート出力規約
+
+Review-Sylph のレビューレポートは、口頭報告とは別にファイルとして永続化する。
+
+### 出力先
+
+```
+discussion/implementation/reviews/{category}/{file}.md
+```
+
+- `{category}` と `{file}` は設計文書のパスに合わせる
+  - 例: 設計 `discussion/design/unit/zodiac.md` → レポート `discussion/implementation/reviews/unit/zodiac.md`
+- ディレクトリが存在しない場合は作成する
+
+### レポートの内容
+
+```markdown
+# レビューレポート: {サブシステム名} (#{設計ID})
+
+- 日時: {タイムスタンプ不要 — Git履歴で追跡}
+- ループ: {最終レビュー時のループ番号} / {総ループ数}
+- 判定: 合格 / 要修正
+
+## 設計適合
+{セクションごとの適合状況}
+
+## テスト適合
+{テストケースごとの実装状況}
+
+## テスト結果
+{パス/全体件数、失敗があれば詳細}
+
+## 裁量判断
+{設計未定義だが合理的に実装された箇所}
+
+## 差分・残課題
+{あれば — なければ「なし」}
+```
+
+### 書き出しタイミング
+
+- **最終レビュー完了時**に書き出す（途中ループのレビューは上書きでよい）
+- Orch-Sylph が Review-Sylph の結果を受け取った後、ファイル書き出しを行う
+
+## 完了報告
+
+Orch-Sylph → Undine への最終報告に含める内容:
+
+```markdown
+## 完了報告: {サブシステム名}
+
+- ループ回数: N
+- 作成/変更ファイル: {一覧}
+- テスト結果: {パス/全体件数}
+- レビュー結果: 合格 / 残差分あり
+- レビューレポート: `discussion/implementation/reviews/{category}/{file}.md`
+- 裁量判断: {あれば}
+- 注意事項: {あれば}
+```

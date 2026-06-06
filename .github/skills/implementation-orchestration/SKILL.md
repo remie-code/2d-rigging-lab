@@ -7,6 +7,8 @@ description: サブエージェントのネスト呼び出しを活用した実�
 
 サブエージェントのネスト呼び出しを活用して、設計→実装→レビュー→修正のサイクルを自律的に回す実装パイプライン。
 
+このパイプラインの最重要目的は、最上位オーケストレーターである **Undine の全体コンテキストを保護すること** である。Undine が全体像、依存関係、ユーザー判断、wave gate を保持しているからこそ、大きな実装が安定して進む。Undine 自身が実装・テスト・大規模な差分棚卸しに潜ることは、進行の中枢を削る行為であり、原則として禁止する。
+
 ## パターン概要
 
 ```
@@ -31,6 +33,33 @@ Undine (設計エージェント・最上位オーケストレーター)
 | L1 | **Orch-Sylph** | ドメイン内の実装サイクル管理（コンテキスト収集→Gnome指示→レビュー→判定） |
 | L2 | **Gnome** | 実装（コード・テスト） |
 | L2 | **Review-Sylph** | レビュー（設計 vs 実装の差分レポート + テスト結果確認） |
+
+## 最優先ルール: Undine コンテキスト保護
+
+Undine のコンテキストは wave 全体を保つための保護資産であり、作業量削減より優先される。
+
+- Undine は implementation domain の source code、tests、e2e、domain docs、traceability、large diff inventory を直接作成・修正・精査しない。
+- Undine は「担当 subagent が遅い / 応答しない / 途中で止まった」ことを理由に、自分で実装を埋めない。
+- Undine は大きな調査や棚卸しが必要な場合、調査観点と受け入れ基準を設計し、実調査は Orch-Sylph または research subagent へ委譲する。
+- Undine が直接読む basis は、wave plan、accepted decisions、domain completion reports、review verdicts、ユーザー判断に必要な要約に絞る。
+- Undine が誤って直接作業した成果物は、正規の pass evidence に数えない。未信頼ドラフトとして扱い、Orch-Sylph に独立評価させる。
+
+## 必須ネスト分離
+
+実装 wave の実行単位は domain ごとの **Orch-Sylph** である。
+
+- Undine は domain を直接実装しない。
+- Orch-Sylph 自身も source implementation をしない。
+- source implementation は必ず別コンテキストの **Gnome** に委譲する。
+- review は必ず別コンテキストの **Review-Sylph** に委譲する。
+- Review-Sylph は Gnome の説明だけに依存せず、basis docs、target files、diff、tests、verification evidence を根拠にする。
+- この分離を維持できない場合、Orch-Sylph は実装せず `escalate` または `blocked` として報告する。
+
+各 assignment には必ず次の文を含める:
+
+```text
+Orch-Sylph自身は実装担当ではない。source implementation は必ず別コンテキストの Gnome に委譲し、レビューは必ず別コンテキストの Review-Sylph に委譲すること。これを分離できない場合は実装せず escalate / blocked として報告すること。
+```
 
 ## ⚠️ サブエージェント呼び出しの必須ルール
 
