@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 
 import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence.js";
+import { PsdLayerMaterializationBatchOperationEvidenceDtoSchema } from "./psd-layer-materialization-batch-operation-evidence.js";
 import { PsdLayerMaterializationOperationEvidenceDtoSchema } from "./psd-layer-materialization-operation-evidence.js";
 import { PsdImportOperationEvidenceDtoSchema } from "./psd-import-operation-evidence.js";
 
@@ -24,7 +25,10 @@ export const OperationEvidenceResultSchema = z.object({
   generatedValidationReportIds: z.array(ValidationReportIdSchema).default([]),
   meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional(),
   psdImportEvidence: z.array(PsdImportOperationEvidenceDtoSchema).optional(),
-  psdLayerMaterializationEvidence: z.array(PsdLayerMaterializationOperationEvidenceDtoSchema).optional()
+  psdLayerMaterializationEvidence: z.array(PsdLayerMaterializationOperationEvidenceDtoSchema).optional(),
+  psdLayerMaterializationBatchEvidence: z
+    .array(PsdLayerMaterializationBatchOperationEvidenceDtoSchema)
+    .optional()
 });
 export type OperationEvidenceResultInput = z.input<typeof OperationEvidenceResultSchema>;
 export type OperationEvidenceResultDto = z.infer<typeof OperationEvidenceResultSchema>;

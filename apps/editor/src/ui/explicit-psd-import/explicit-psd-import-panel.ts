@@ -4,6 +4,7 @@ import {
 } from "../../editor-state/index.js";
 import type {
   EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdLayerBatchIntakeCommand,
   EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
 
@@ -18,6 +19,9 @@ export interface ExplicitPsdImportPanelOptions {
   ) => unknown | Promise<unknown>;
   readonly onIntakeSelectedLayer: (
     command: EditorExplicitPsdLayerIntakeCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeSelectedLayersBatch?: (
+    command: EditorExplicitPsdLayerBatchIntakeCommand
   ) => unknown | Promise<unknown>;
 }
 
@@ -44,7 +48,8 @@ export const createExplicitPsdImportPanel = (
     parseForm.form,
     createFactSection("Parser Session", editorTestIds.explicitPsdImportStatus, [
       { label: "Status", value: options.viewModel.statusLabel },
-      { label: "Selected layer", value: options.viewModel.selectedLayerNodeRef }
+      { label: "Selected layer", value: options.viewModel.selectedLayerNodeRef },
+      { label: "Selected leaf layers", value: options.viewModel.selectedLayerBatchLabel }
     ]),
     createFactSection("Source File", editorTestIds.explicitPsdImportSource, options.viewModel.sourceFacts),
     createFactSection("Document", editorTestIds.explicitPsdImportDocument, options.viewModel.documentFacts),
@@ -76,7 +81,26 @@ export const createExplicitPsdImportPanel = (
       options.viewModel.intakeDiagnostics,
       editorTestIds.explicitPsdImportLayerIntakeDiagnostics
     ),
-    createLayerTree(options.viewModel, parseForm.selectedLayerInput),
+    createBatchLayerIntakeForm(options, parseForm.selectedLayerRefsInput),
+    createFactSection(
+      "Selected Leaf Layer Batch Result",
+      editorTestIds.explicitPsdImportBatchIntakeResult,
+      [
+        { label: "Status", value: options.viewModel.batchIntakeStatusLabel },
+        ...options.viewModel.batchIntakeFacts
+      ]
+    ),
+    createTextList(
+      "Selected Leaf Layer Batch Entries",
+      options.viewModel.batchIntakeEntryLabels,
+      editorTestIds.explicitPsdImportBatchIntakeEntries
+    ),
+    createTextList(
+      "Selected Leaf Layer Batch Diagnostics",
+      options.viewModel.batchIntakeDiagnostics,
+      editorTestIds.explicitPsdImportBatchIntakeDiagnostics
+    ),
+    createLayerTree(options.viewModel, parseForm.selectedLayerInput, parseForm.selectedLayerRefsInput),
     createFactSection(
       "Persistence Boundary",
       editorTestIds.explicitPsdImportPersistence,
@@ -97,6 +121,7 @@ const createExplicitPsdImportForm = (
 ): {
   readonly form: HTMLFormElement;
   readonly selectedLayerInput: HTMLInputElement;
+  readonly selectedLayerRefsInput: HTMLTextAreaElement;
 } => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
@@ -126,6 +151,20 @@ const createExplicitPsdImportForm = (
   selectedLayer.dataset.testid = editorTestIds.explicitPsdImportSelectedLayerNodeRef;
   selectedLayerLabel.append(selectedLayer);
 
+  const selectedLayerRefsLabel = document.createElement("label");
+  selectedLayerRefsLabel.className = "editor-field editor-field--wide";
+  selectedLayerRefsLabel.textContent = "Selected PSD leaf layer refs";
+
+  const selectedLayerRefs = document.createElement("textarea");
+  selectedLayerRefs.name = "selectedLayerNodeRefs";
+  selectedLayerRefs.value = options.viewModel.selectedLayerNodeRefs.join("\n");
+  selectedLayerRefs.autocomplete = "off";
+  selectedLayerRefs.rows = 3;
+  selectedLayerRefs.style.width = "100%";
+  selectedLayerRefs.style.boxSizing = "border-box";
+  selectedLayerRefs.dataset.testid = editorTestIds.explicitPsdImportBatchLayerRefs;
+  selectedLayerRefsLabel.append(selectedLayerRefs);
+
   const diagnostics = document.createElement("div");
   diagnostics.className = "explicit-psd-import-form__diagnostics";
   diagnostics.setAttribute("role", "status");
@@ -136,7 +175,7 @@ const createExplicitPsdImportForm = (
   submit.dataset.testid = editorTestIds.explicitPsdImportSubmit;
   submit.textContent = "Parse PSD";
 
-  form.append(fileLabel, selectedLayerLabel, diagnostics, submit);
+  form.append(fileLabel, selectedLayerLabel, selectedLayerRefsLabel, diagnostics, submit);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const file = readFirstSelectedFile(fileInput);
@@ -156,7 +195,7 @@ const createExplicitPsdImportForm = (
     }
   });
 
-  return { form, selectedLayerInput: selectedLayer };
+  return { form, selectedLayerInput: selectedLayer, selectedLayerRefsInput: selectedLayerRefs };
 };
 
 const createLayerIntakeForm = (
@@ -320,6 +359,98 @@ const createLayerIntakeCommand = (input: {
   };
 };
 
+const createBatchLayerIntakeForm = (
+  options: ExplicitPsdImportPanelOptions,
+  selectedLayerRefsInput: HTMLTextAreaElement
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "explicit-psd-import-form";
+  form.dataset.testid = editorTestIds.explicitPsdImportBatchIntakeForm;
+  form.setAttribute("aria-label", "Preflight and add explicitly selected PSD leaf layers");
+
+  const parentPart = createSelectField({
+    label: "Destination parent part",
+    name: "batchDestinationParentPartId",
+    options: options.destinationParts.length === 0
+      ? [{ value: "", label: "No destination parent parts", disabled: true }]
+      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+    value: options.destinationParts[0]?.partId ?? ""
+  });
+
+  const diagnostics = document.createElement("div");
+  diagnostics.className = "explicit-psd-import-form__diagnostics";
+  diagnostics.setAttribute("role", "status");
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.explicitPsdImportBatchIntakeSubmit;
+  submit.disabled =
+    options.viewModel.status !== "parsed" ||
+    options.onIntakeSelectedLayersBatch === undefined ||
+    options.destinationParts.length === 0;
+  submit.textContent = "Preflight and add selected leaf layers";
+
+  form.append(parentPart.field, diagnostics, submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    diagnostics.replaceChildren();
+
+    const command = createBatchLayerIntakeCommand({
+      selectedLayerNodeRefs: parseSelectedLayerRefs(selectedLayerRefsInput.value),
+      parentPartId: parentPart.select.value
+    });
+    if (command.status === "invalid") {
+      diagnostics.replaceChildren(createDiagnosticLine(command.message));
+      return;
+    }
+
+    try {
+      await options.onIntakeSelectedLayersBatch?.(command.command);
+    } catch (error) {
+      diagnostics.replaceChildren(createDiagnosticLine(formatBatchIntakeError(error)));
+    }
+  });
+
+  return form;
+};
+
+const createBatchLayerIntakeCommand = (input: {
+  readonly selectedLayerNodeRefs: readonly string[];
+  readonly parentPartId: string;
+}):
+  | { readonly status: "valid"; readonly command: EditorExplicitPsdLayerBatchIntakeCommand }
+  | { readonly status: "invalid"; readonly message: string } => {
+  if (input.selectedLayerNodeRefs.length === 0) {
+    return {
+      status: "invalid",
+      message: "Select one or more parsed PSD leaf layers before adding them to generated parts."
+    };
+  }
+
+  const parentPartId = input.parentPartId.trim();
+  if (parentPartId.length === 0) {
+    return {
+      status: "invalid",
+      message: "Destination parent part is required for generated part scaffolds."
+    };
+  }
+
+  return {
+    status: "valid",
+    command: {
+      selectedLayerNodeRefs: input.selectedLayerNodeRefs,
+      destinationParentPartId: parentPartId
+    }
+  };
+};
+
+const parseSelectedLayerRefs = (value: string): readonly string[] =>
+  value
+    .split(/[\s,]+/g)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
 const readFirstSelectedFile = (input: HTMLInputElement): File | undefined => {
   const files = input.files;
   if (files === null || files.length === 0) {
@@ -430,7 +561,8 @@ const createFactSection = (
 
 const createLayerTree = (
   viewModel: ExplicitPsdImportViewModel,
-  selectedLayerInput: HTMLInputElement
+  selectedLayerInput: HTMLInputElement,
+  selectedLayerRefsInput: HTMLTextAreaElement
 ): HTMLElement => {
   const section = document.createElement("section");
   section.className = "explicit-psd-import-section";
@@ -451,6 +583,14 @@ const createLayerTree = (
 
   const list = document.createElement("ol");
   list.className = "explicit-psd-import-tree";
+  const batchChoices: HTMLInputElement[] = [];
+  const syncBatchRefs = (): void => {
+    selectedLayerRefsInput.value = batchChoices
+      .filter((choice) => choice.checked && !choice.disabled)
+      .map((choice) => choice.value)
+      .join("\n");
+  };
+
   for (const row of viewModel.treeRows) {
     const item = document.createElement("li");
     item.className = "explicit-psd-import-tree__row";
@@ -465,8 +605,28 @@ const createLayerTree = (
     choice.addEventListener("change", () => {
       if (!choice.disabled && choice.checked) {
         selectedLayerInput.value = choice.value;
+        const batchChoice = batchChoices.find((candidate) => candidate.value === choice.value);
+        if (batchChoice !== undefined && !batchChoice.checked) {
+          batchChoice.checked = true;
+          syncBatchRefs();
+        }
       }
     });
+
+    const batchChoice = document.createElement("input");
+    batchChoice.type = "checkbox";
+    batchChoice.name = "explicitPsdLeafLayerBatchSelection";
+    batchChoice.value = row.nodeRef;
+    batchChoice.checked = viewModel.selectedLayerNodeRefs.includes(row.nodeRef);
+    batchChoice.disabled = row.kind !== "layer";
+    batchChoice.setAttribute(
+      "aria-label",
+      row.kind === "layer"
+        ? `Select PSD leaf layer ${row.nodeRef} for batch`
+        : `PSD group ${row.nodeRef} is not a leaf layer batch target`
+    );
+    batchChoice.addEventListener("change", syncBatchRefs);
+    batchChoices.push(batchChoice);
 
     const label = document.createElement("span");
     label.className = "explicit-psd-import-tree__label";
@@ -476,10 +636,11 @@ const createLayerTree = (
     meta.className = "explicit-psd-import-tree__meta";
     meta.textContent = row.metaLabel;
 
-    item.append(choice, label, meta);
+    item.append(choice, batchChoice, label, meta);
     list.append(item);
   }
 
+  syncBatchRefs();
   section.append(list);
   return section;
 };
@@ -543,4 +704,9 @@ const formatParseError = (error: unknown): string => {
 const formatIntakeError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
   return `Explicit PSD layer intake failed before workflow state update: ${message}`;
+};
+
+const formatBatchIntakeError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `Explicit PSD leaf layer batch intake failed before workflow state update: ${message}`;
 };

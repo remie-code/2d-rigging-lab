@@ -112,6 +112,12 @@ const focusedE2eMetadataById = {
     tags: ["assetIo", "psdImport", "selectedLayerIntake", "browserPersistence", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  psdMultiLayerBatchFocused: {
+    purpose:
+      "Replay explicit browser PSD file selection, Domain A selected leaf layer batch intake, generated part scaffold evidence, save/load boundary, and parser import containment.",
+    tags: ["assetIo", "psdImport", "multiLayerBatch", "browserPersistence", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   rigControlPersistence: {
     purpose:
       "Replay rig control authoring, hierarchy evidence, runtime/viewer evidence, and browser save/load persistence checks.",

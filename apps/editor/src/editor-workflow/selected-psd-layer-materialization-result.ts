@@ -48,6 +48,13 @@ export interface SelectedPsdLayerSourceLayerEvidence {
   readonly sourceLayerId: string;
   readonly sourceLayerPath: readonly string[];
   readonly originalName: string;
+  readonly bounds: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly visibleInSource: boolean;
 }
 
 export interface SelectedPsdLayerMaterializedAssetEvidence {

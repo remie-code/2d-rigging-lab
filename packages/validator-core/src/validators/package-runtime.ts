@@ -24,6 +24,7 @@ import { validatePackageTransportCapabilityEvidence } from "./package-transport-
 import { validatePartLayerSemantics } from "./part-layer-semantics.js";
 import { validatePartRuntimeEvidence } from "./part-runtime-evidence.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
+import { validatePsdMaterializedBatchDiagnostics } from "./psd-materialized-batch-diagnostics.js";
 import { validateRigControlSemantics } from "./rig-control-semantic.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
 import { validateTextureAssetReferences } from "./texture-assets.js";
@@ -37,6 +38,8 @@ export interface PackageRuntimeValidationInput {
   readonly requireViewerEvidence?: boolean;
   readonly transportCapabilityEvidence?: unknown;
   readonly requireTransportCapabilityEvidence?: boolean;
+  readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
+  readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
   readonly profile?: string;
   readonly createdAt?: string;
 }
@@ -62,12 +65,21 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
   });
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
-    : collectPackageReferenceChecks(
-      packageResult.packageDocument,
-      runtimeResult?.snapshot,
-      shouldRequireViewerEvidence(input),
-      input.viewerEvidence
-    );
+    : collectPackageReferenceChecks({
+      packageDocument: packageResult.packageDocument,
+      runtimeSnapshot: runtimeResult?.snapshot,
+      requireRuntimeEvidence: shouldRequireViewerEvidence(input),
+      viewerEvidence: input.viewerEvidence,
+      ...(input.psdLayerMaterializationBatchEvidence === undefined
+        ? {}
+        : { psdLayerMaterializationBatchEvidence: input.psdLayerMaterializationBatchEvidence }),
+      ...(input.requirePsdLayerMaterializationBatchEvidence === undefined
+        ? {}
+        : {
+            requirePsdLayerMaterializationBatchEvidence:
+              input.requirePsdLayerMaterializationBatchEvidence
+          })
+    });
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()
     : validateViewerRuntimeEvidence({
@@ -118,12 +130,21 @@ export const validatePackageRuntimeWithBinaryAssets = async (
   const packageReferenceChecks = packageResult.packageDocument === undefined
     ? []
     : [
-      ...collectPackageReferenceChecks(
-        packageResult.packageDocument,
-        runtimeResult?.snapshot,
-        shouldRequireViewerEvidence(input),
-        input.viewerEvidence
-      ),
+      ...collectPackageReferenceChecks({
+        packageDocument: packageResult.packageDocument,
+        runtimeSnapshot: runtimeResult?.snapshot,
+        requireRuntimeEvidence: shouldRequireViewerEvidence(input),
+        viewerEvidence: input.viewerEvidence,
+        ...(input.psdLayerMaterializationBatchEvidence === undefined
+          ? {}
+          : { psdLayerMaterializationBatchEvidence: input.psdLayerMaterializationBatchEvidence }),
+        ...(input.requirePsdLayerMaterializationBatchEvidence === undefined
+          ? {}
+          : {
+              requirePsdLayerMaterializationBatchEvidence:
+                input.requirePsdLayerMaterializationBatchEvidence
+            })
+      }),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
         binaryFileSet: input.binaryFileSet ?? [],
@@ -169,31 +190,46 @@ export const validatePackageRuntimeWithBinaryAssets = async (
   });
 };
 
-const collectPackageReferenceChecks = (
-  packageDocument: PackageDocumentDto,
-  runtimeSnapshot: RuntimeSnapshotDto | undefined,
-  requireRuntimeEvidence = false,
-  viewerEvidence?: unknown
-) => [
-  ...validatePsdSourceProfiles(packageDocument),
-  ...validateSourceAssetRightsAndProvenance(packageDocument),
-  ...validateDrawableProvenanceReferences(packageDocument),
-  ...validateDrawableReferences(packageDocument),
+interface PackageReferenceChecksInput {
+  readonly packageDocument: PackageDocumentDto;
+  readonly runtimeSnapshot: RuntimeSnapshotDto | undefined;
+  readonly requireRuntimeEvidence?: boolean;
+  readonly viewerEvidence?: unknown;
+  readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
+  readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
+}
+
+const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
+  ...validatePsdSourceProfiles(input.packageDocument),
+  ...validatePsdMaterializedBatchDiagnostics({
+    packageDocument: input.packageDocument,
+    ...(input.psdLayerMaterializationBatchEvidence === undefined
+      ? {}
+      : { batchEvidence: input.psdLayerMaterializationBatchEvidence }),
+    ...(input.requirePsdLayerMaterializationBatchEvidence === undefined
+      ? {}
+      : { requireBatchEvidence: input.requirePsdLayerMaterializationBatchEvidence })
+  }),
+  ...validateSourceAssetRightsAndProvenance(input.packageDocument),
+  ...validateDrawableProvenanceReferences(input.packageDocument),
+  ...validateDrawableReferences(input.packageDocument),
   ...validateMeshSemantics({
-    packageDocument,
-    ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot }),
-    requireRuntimeEvidence
+    packageDocument: input.packageDocument,
+    ...(input.runtimeSnapshot === undefined ? {} : { runtimeSnapshot: input.runtimeSnapshot }),
+    ...(input.requireRuntimeEvidence === undefined
+      ? {}
+      : { requireRuntimeEvidence: input.requireRuntimeEvidence })
   }),
-  ...validatePartLayerSemantics(packageDocument),
+  ...validatePartLayerSemantics(input.packageDocument),
   ...validatePartRuntimeEvidence({
-    packageDocument,
-    ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot }),
-    ...(viewerEvidence === undefined ? {} : { viewerEvidence })
+    packageDocument: input.packageDocument,
+    ...(input.runtimeSnapshot === undefined ? {} : { runtimeSnapshot: input.runtimeSnapshot }),
+    ...(input.viewerEvidence === undefined ? {} : { viewerEvidence: input.viewerEvidence })
   }),
-  ...validateTextureAssetReferences(packageDocument),
-  ...validateMaskCompositionSemantics(packageDocument, runtimeSnapshot),
-  ...validateRigControlSemantics(packageDocument, runtimeSnapshot),
-  ...validateDynamicsSemantics(packageDocument, runtimeSnapshot)
+  ...validateTextureAssetReferences(input.packageDocument),
+  ...validateMaskCompositionSemantics(input.packageDocument, input.runtimeSnapshot),
+  ...validateRigControlSemantics(input.packageDocument, input.runtimeSnapshot),
+  ...validateDynamicsSemantics(input.packageDocument, input.runtimeSnapshot)
 ];
 
 const shouldRequireViewerEvidence = (input: PackageRuntimeValidationInput): boolean =>

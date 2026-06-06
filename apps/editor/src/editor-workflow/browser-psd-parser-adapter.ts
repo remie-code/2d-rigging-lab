@@ -113,6 +113,13 @@ export interface BrowserSelectedPsdLayerMaterializationAdapterSuccess {
     readonly sourceLayerId: string;
     readonly sourceLayerPath: readonly string[];
     readonly originalName: string;
+    readonly bounds: {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    };
+    readonly visibleInSource: boolean;
     readonly width: number;
     readonly height: number;
   };
@@ -325,6 +332,13 @@ export const materializeSelectedPsdLayerWithAdapter = async (
         sourceLayerId: selected.nodeRef,
         sourceLayerPath: selected.sourceNodePath,
         originalName: selected.displayName,
+        bounds: {
+          x: selected.layer.left,
+          y: selected.layer.top,
+          width: Math.max(0, selected.layer.width),
+          height: Math.max(0, selected.layer.height)
+        },
+        visibleInSource: !selected.layer.isHidden,
         width: selected.layer.width,
         height: selected.layer.height
       },

@@ -199,6 +199,10 @@ export function mountEditorApp(root: HTMLElement): void {
           await workflow.commitExplicitPsdLayerIntake(command);
           render();
         },
+        async onIntakeExplicitPsdLayerBatch(command) {
+          await workflow.commitExplicitPsdLayerBatchIntake(command);
+          render();
+        },
         onSaveProject() {
           workflow.saveProject();
           render();

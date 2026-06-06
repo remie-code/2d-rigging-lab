@@ -178,6 +178,8 @@ const createRuntimeEvidenceInput = (
       return createImportPsdSourceAssetEvidenceInput(input);
     case "importPsdLayerMaterialization":
       return createImportPsdLayerMaterializationEvidenceInput(input);
+    case "importPsdLayerMaterializationBatch":
+      return createImportPsdLayerMaterializationBatchEvidenceInput(input);
     case "importSplitPngSourceAsset":
       return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
@@ -282,6 +284,42 @@ const createImportPsdLayerMaterializationEvidenceInput = (
 
   return {
     artifactLabel: "editor-import-psd-layer-materialization",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createImportPsdLayerMaterializationBatchEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "importPsdLayerMaterializationBatch") {
+    throw new Error(
+      `importPsdLayerMaterializationBatch evidence input received ${input.request.operationType}.`
+    );
+  }
+
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.sourceAssetId,
+    input.request.payload.batchId,
+    input.request.payload.destination.parentPartId,
+    ...input.request.payload.entries.flatMap((entry) => [
+      entry.materialization.materializationId,
+      entry.materialization.sourceLayerRef.sourceLayerId,
+      ...(entry.materialization.binaryAssetRef === undefined
+        ? []
+        : [entry.materialization.binaryAssetRef.binaryAssetId])
+    ])
+  ]);
+
+  return {
+    artifactLabel: "editor-import-psd-layer-materialization-batch",
     authoredParameterValues: {},
     targetIds,
     baseline: {

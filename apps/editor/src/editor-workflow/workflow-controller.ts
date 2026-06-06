@@ -207,6 +207,11 @@ import {
   type EditorExplicitPsdLayerIntakeCommand,
   type EditorExplicitPsdLayerIntakeResult
 } from "./selected-psd-layer-intake-workflow.js";
+import {
+  commitEditorSelectedPsdLayerBatchIntakeWorkflow,
+  type EditorExplicitPsdLayerBatchIntakeCommand,
+  type EditorExplicitPsdLayerBatchIntakeResult
+} from "./selected-psd-layer-batch-intake-workflow.js";
 import type { BrowserPsdParserBridgeResult } from "./browser-psd-parser-bridge-result.js";
 import {
   approveCodexProposalReview,
@@ -396,6 +401,9 @@ export interface EditorWorkflowController {
   commitExplicitPsdLayerIntake(
     command: EditorExplicitPsdLayerIntakeCommand
   ): Promise<EditorExplicitPsdLayerIntakeResult>;
+  commitExplicitPsdLayerBatchIntake(
+    command: EditorExplicitPsdLayerBatchIntakeCommand
+  ): Promise<EditorExplicitPsdLayerBatchIntakeResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
@@ -864,6 +872,31 @@ export const createEditorWorkflowController = (
     },
     async commitExplicitPsdLayerIntake(command) {
       const outcome = await commitEditorSelectedPsdLayerIntakeWorkflow({
+        adapter,
+        state,
+        command,
+        ...(currentExplicitPsdImportFile === undefined
+          ? {}
+          : { currentPsdFile: currentExplicitPsdImportFile }),
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+        persistentByteStore,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+      if (outcome.result.latestSessionPersistenceResult !== null) {
+        latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+      }
+      if (outcome.result.status === "committed") {
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    async commitExplicitPsdLayerBatchIntake(command) {
+      const outcome = await commitEditorSelectedPsdLayerBatchIntakeWorkflow({
         adapter,
         state,
         command,

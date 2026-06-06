@@ -793,6 +793,126 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Wave46 PSD selected-layer materialized asset destination texture, drawable, or part mapping is missing or inconsistent."
   },
   {
+    checkId: "asset.psd.materializedBatchEvidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch materialization evidence was required but not supplied for session Product Preflight."
+  },
+  {
+    checkId: "asset.psd.materializedBatchEvidenceMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch materialization evidence is malformed or internally inconsistent."
+  },
+  {
+    checkId: "asset.psd.materializedBatchAvailable",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch materialized assets and generated part scaffold evidence are available."
+  },
+  {
+    checkId: "asset.psd.materializedBatchBytesMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch entry materialized bytes are missing or not package-local current bytes."
+  },
+  {
+    checkId: "asset.psd.materializedBatchEntryMissing",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch entry is marked successful but the package has no matching per-layer materialization evidence."
+  },
+  {
+    checkId: "asset.psd.materializedBatchSourceCurrentBytesMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch source bytes are not currently available for re-materialization."
+  },
+  {
+    checkId: "asset.psd.materializedBatchSourceStale",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch entry was derived from stale or incomplete source PSD identity metadata."
+  },
+  {
+    checkId: "asset.psd.materializedBatchAssetMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch entry digest, byte length, media type, dimensions, or package-local path metadata mismatch."
+  },
+  {
+    checkId: "asset.psd.materializedBatchProvenanceBlocked",
+    phase: "rights",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch entry lacks private/local non-public provenance or claims public demo asset use."
+  },
+  {
+    checkId: "asset.psd.materializedBatchDestinationParentInvalid",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch generated part scaffold references an invalid destination parent part."
+  },
+  {
+    checkId: "asset.psd.materializedBatchGeneratedScaffoldMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch generated part, drawable, mesh, texture, or materialized binary mapping is missing or inconsistent."
+  },
+  {
+    checkId: "asset.psd.materializedBatchDuplicateLayer",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch repeats a source layer ref and must not silently duplicate materialization."
+  },
+  {
+    checkId: "asset.psd.materializedBatchGeneratedScaffoldCollision",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch generated part, drawable, mesh, texture ID, or display name collides."
+  },
+  {
+    checkId: "asset.psd.materializedBatchPreflightBlocked",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch was blocked before commit or failed without available per-layer materialization."
+  },
+  {
+    checkId: "asset.psd.materializedBatchPartialFailure",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave47 PSD selected-layer batch reports partial failure and cannot be summarized as simple success."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

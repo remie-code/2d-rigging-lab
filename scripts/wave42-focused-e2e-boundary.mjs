@@ -99,6 +99,12 @@ export const wave42FocusedE2eRegistryBoundary = {
       category: "assetIoBoundary"
     },
     {
+      id: "psdMultiLayerBatchFocused",
+      path: "apps/editor/e2e/psd-multi-layer-batch-focused-smoke.mjs",
+      command: "node apps/editor/e2e/psd-multi-layer-batch-focused-smoke.mjs",
+      category: "assetIoBoundary"
+    },
+    {
       id: "rigControlPersistence",
       path: "apps/editor/e2e/rig-control-persistence-smoke.mjs",
       command: "node apps/editor/e2e/rig-control-persistence-smoke.mjs",

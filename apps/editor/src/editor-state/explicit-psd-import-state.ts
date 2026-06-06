@@ -8,6 +8,9 @@ import type {
 } from "@private-2d-rigging-lab/operation-core";
 
 export const explicitPsdImportDefaultSelectedLayerNodeRef = "psd:root/layer[0]";
+export const explicitPsdImportDefaultSelectedLayerNodeRefs = [
+  explicitPsdImportDefaultSelectedLayerNodeRef
+] as const;
 
 export type ExplicitPsdImportStatus = "idle" | "parsed" | "rejected" | "failed";
 
@@ -104,6 +107,13 @@ export interface ExplicitPsdLayerIntakeState {
   readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
 }
 
+export interface ExplicitPsdLayerBatchIntakeState {
+  readonly status: "idle" | "committed" | "rejected" | "failed";
+  readonly summaryFacts: readonly ExplicitPsdImportFactState[];
+  readonly entryLabels: readonly string[];
+  readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
+}
+
 export interface ExplicitPsdImportPersistenceBoundaryState {
   readonly parserPrivateShapePolicy: "parser-private-shape-excluded-v1";
   readonly rawParserObjectPersistence: "notPersisted";
@@ -117,6 +127,7 @@ export interface ExplicitPsdImportPersistenceBoundaryState {
 export interface ExplicitPsdImportState {
   readonly status: ExplicitPsdImportStatus;
   readonly selectedLayerNodeRef: string;
+  readonly selectedLayerNodeRefs: readonly string[];
   readonly source: ExplicitPsdImportSourceState | null;
   readonly document: ExplicitPsdImportDocumentState | null;
   readonly treeSummary: ExplicitPsdImportTreeSummaryState | null;
@@ -126,6 +137,7 @@ export interface ExplicitPsdImportState {
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materialization: readonly ExplicitPsdImportMaterializationState[];
   readonly selectedLayerIntake: ExplicitPsdLayerIntakeState;
+  readonly selectedLayerBatchIntake: ExplicitPsdLayerBatchIntakeState;
   readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
   readonly persistenceBoundary: ExplicitPsdImportPersistenceBoundaryState;
 }
@@ -156,6 +168,7 @@ export interface ExplicitPsdImportBridgeResultInput {
 export const createEmptyExplicitPsdImportState = (): ExplicitPsdImportState => ({
   status: "idle",
   selectedLayerNodeRef: explicitPsdImportDefaultSelectedLayerNodeRef,
+  selectedLayerNodeRefs: explicitPsdImportDefaultSelectedLayerNodeRefs,
   source: null,
   document: null,
   treeSummary: null,
@@ -165,6 +178,7 @@ export const createEmptyExplicitPsdImportState = (): ExplicitPsdImportState => (
   notEvaluatedFeatureLabels: [],
   materialization: [],
   selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
+  selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
   diagnostics: [],
   persistenceBoundary: createExplicitPsdImportPersistenceBoundary()
 });
@@ -176,10 +190,19 @@ export const createEmptyExplicitPsdLayerIntakeState =
     diagnostics: []
   });
 
+export const createEmptyExplicitPsdLayerBatchIntakeState =
+  (): ExplicitPsdLayerBatchIntakeState => ({
+    status: "idle",
+    summaryFacts: [],
+    entryLabels: [],
+    diagnostics: []
+  });
+
 export const projectExplicitPsdImportStateFromBridgeResult = (
   input: ExplicitPsdImportBridgeResultInput,
   options: {
     readonly selectedLayerNodeRef?: string;
+    readonly selectedLayerNodeRefs?: readonly string[];
   } = {}
 ): ExplicitPsdImportState => {
   const adapterResult = input.status === "parsed" ? input.adapterResult : undefined;
@@ -189,11 +212,16 @@ export const projectExplicitPsdImportStateFromBridgeResult = (
     adapterResult === undefined ? [] : collectUnsupportedFeatures(adapterResult);
   const notEvaluatedFeatures = featureEvidence.filter((evidence) => evidence.status === "notEvaluated");
   const unsupportedFeatureEvidence = featureEvidence.filter((evidence) => evidence.status === "unsupported");
+  const selectedLayerNodeRef =
+    options.selectedLayerNodeRef?.trim() || explicitPsdImportDefaultSelectedLayerNodeRef;
 
   return {
     status: input.status,
-    selectedLayerNodeRef:
-      options.selectedLayerNodeRef?.trim() || explicitPsdImportDefaultSelectedLayerNodeRef,
+    selectedLayerNodeRef,
+    selectedLayerNodeRefs: normalizeSelectedLayerNodeRefs(
+      options.selectedLayerNodeRefs,
+      selectedLayerNodeRef
+    ),
     source: projectSourceState(input.source),
     document: adapterResult === undefined ? null : projectDocumentState(adapterResult),
     treeSummary: input.treeSummary ?? projectTreeSummaryState(adapterResult),
@@ -216,6 +244,7 @@ export const projectExplicitPsdImportStateFromBridgeResult = (
     materialization:
       adapterResult?.materializationEvidence?.map(projectMaterializationState) ?? [],
     selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
+    selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
     diagnostics: [
       ...input.diagnostics.map(projectDiagnosticState),
       ...input.errorEvidence.map((evidence) => ({
@@ -411,3 +440,16 @@ const projectDiagnosticState = (
 });
 
 const uniqueStrings = (values: readonly string[]): readonly string[] => [...new Set(values)];
+
+const normalizeSelectedLayerNodeRefs = (
+  values: readonly string[] | undefined,
+  fallback: string
+): readonly string[] => {
+  const normalized = uniqueStrings(
+    (values ?? [fallback])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+  );
+
+  return normalized.length === 0 ? [fallback] : normalized;
+};

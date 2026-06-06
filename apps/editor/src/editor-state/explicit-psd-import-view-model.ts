@@ -23,6 +23,8 @@ export interface ExplicitPsdImportViewModel {
   readonly statusLabel: string;
   readonly metaLabel: string;
   readonly selectedLayerNodeRef: string;
+  readonly selectedLayerNodeRefs: readonly string[];
+  readonly selectedLayerBatchLabel: string;
   readonly sourceFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly documentFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly featureFacts: readonly ExplicitPsdImportFactViewModel[];
@@ -30,6 +32,10 @@ export interface ExplicitPsdImportViewModel {
   readonly intakeStatusLabel: string;
   readonly intakeFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly intakeDiagnostics: readonly string[];
+  readonly batchIntakeStatusLabel: string;
+  readonly batchIntakeFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly batchIntakeEntryLabels: readonly string[];
+  readonly batchIntakeDiagnostics: readonly string[];
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materializationLabels: readonly string[];
@@ -44,6 +50,8 @@ export const projectExplicitPsdImportViewModel = (
   statusLabel: projectStatusLabel(state),
   metaLabel: projectMetaLabel(state),
   selectedLayerNodeRef: state.selectedLayerNodeRef,
+  selectedLayerNodeRefs: state.selectedLayerNodeRefs,
+  selectedLayerBatchLabel: projectSelectedLayerBatchLabel(state),
   sourceFacts: projectSourceFacts(state),
   documentFacts: projectDocumentFacts(state),
   featureFacts: projectFeatureFacts(state),
@@ -53,6 +61,16 @@ export const projectExplicitPsdImportViewModel = (
   intakeDiagnostics: state.selectedLayerIntake.diagnostics.length === 0
     ? ["No selected layer intake diagnostics"]
     : state.selectedLayerIntake.diagnostics.map((diagnostic) =>
+        `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+      ),
+  batchIntakeStatusLabel: projectBatchIntakeStatusLabel(state),
+  batchIntakeFacts: projectBatchIntakeFacts(state),
+  batchIntakeEntryLabels: state.selectedLayerBatchIntake.entryLabels.length === 0
+    ? ["No selected leaf layer batch entries"]
+    : state.selectedLayerBatchIntake.entryLabels,
+  batchIntakeDiagnostics: state.selectedLayerBatchIntake.diagnostics.length === 0
+    ? ["No selected leaf layer batch diagnostics"]
+    : state.selectedLayerBatchIntake.diagnostics.map((diagnostic) =>
         `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
       ),
   unsupportedFeatureLabels: state.unsupportedFeatureLabels.length === 0
@@ -204,6 +222,31 @@ const projectIntakeFacts = (
   state.selectedLayerIntake.summaryFacts.length === 0
     ? [{ label: "Result", value: "No materialized project asset yet" }]
     : state.selectedLayerIntake.summaryFacts.map(projectFact);
+
+const projectBatchIntakeStatusLabel = (state: ExplicitPsdImportState): string => {
+  switch (state.selectedLayerBatchIntake.status) {
+    case "idle":
+      return "No selected leaf layer batch result";
+    case "committed":
+      return "Selected PSD leaf layers added to generated parts";
+    case "rejected":
+      return "Selected PSD leaf layer batch rejected";
+    case "failed":
+      return "Selected PSD leaf layer batch failed";
+  }
+};
+
+const projectBatchIntakeFacts = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportFactViewModel[] =>
+  state.selectedLayerBatchIntake.summaryFacts.length === 0
+    ? [{ label: "Result", value: "No selected leaf layer batch materialized yet" }]
+    : state.selectedLayerBatchIntake.summaryFacts.map(projectFact);
+
+const projectSelectedLayerBatchLabel = (state: ExplicitPsdImportState): string =>
+  state.selectedLayerNodeRefs.length === 0
+    ? "No selected PSD leaf layers"
+    : state.selectedLayerNodeRefs.join(", ");
 
 const projectFact = (
   fact: ExplicitPsdImportFactState

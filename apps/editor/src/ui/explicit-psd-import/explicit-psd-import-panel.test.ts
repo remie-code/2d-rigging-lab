@@ -119,6 +119,56 @@ describe("explicit PSD import panel", () => {
       drawableDisplayName: "Headwear"
     }]);
   });
+
+  it("submits an explicit selected leaf layer batch with a destination parent part", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState()),
+      onIntakeSelectedLayersBatch: (command) => calls.push(command)
+    });
+
+    const headwearChoice = findByNameAndValue(
+      panel,
+      "explicitPsdLeafLayerBatchSelection",
+      "layer_headwear"
+    );
+    headwearChoice.checked = true;
+    headwearChoice.emit("change");
+    setNamedFieldValue(panel, "batchDestinationParentPartId", "part_root");
+    findByTestId(panel, editorTestIds.explicitPsdImportBatchIntakeForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportBatchLayerRefs)?.value).toContain(
+      "layer_face"
+    );
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportBatchLayerRefs)?.value).toContain(
+      "layer_headwear"
+    );
+    expect(calls).toEqual([{
+      selectedLayerNodeRefs: ["layer_face", "layer_headwear"],
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
+  it("keeps group rows out of selected leaf layer batch controls and avoids broad import wording", () => {
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState()),
+      onIntakeSelectedLayersBatch: () => {}
+    });
+    const groupChoice = findByNameAndValue(
+      panel,
+      "explicitPsdLeafLayerBatchSelection",
+      "group_accessories"
+    );
+    const text = panel.textContent.toLowerCase();
+
+    expect(groupChoice.disabled).toBe(true);
+    expect(text).not.toContain("import all");
+    expect(text).not.toContain("all-layer");
+    expect(text).not.toContain("all layer");
+    expect(text).not.toContain("recursive");
+    expect(text).not.toContain("group import");
+  });
 });
 
 const createPanel = (
@@ -126,6 +176,7 @@ const createPanel = (
     readonly viewModel?: Parameters<typeof createExplicitPsdImportPanel>[0]["viewModel"];
     readonly onParsePsdFile?: Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"];
     readonly onIntakeSelectedLayer?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayer"];
+    readonly onIntakeSelectedLayersBatch?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayersBatch"];
   } | Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = {}
 ): TestElement => {
   const normalized = typeof options === "function" ? { onParsePsdFile: options } : options;
@@ -134,7 +185,10 @@ const createPanel = (
     viewModel: normalized.viewModel ?? projectExplicitPsdImportViewModel(createEmptyExplicitPsdImportState()),
     destinationParts: [{ partId: "part_root", label: "Root / part_root" }],
     onParsePsdFile: normalized.onParsePsdFile ?? (() => {}),
-    onIntakeSelectedLayer: normalized.onIntakeSelectedLayer ?? (() => {})
+    onIntakeSelectedLayer: normalized.onIntakeSelectedLayer ?? (() => {}),
+    ...(normalized.onIntakeSelectedLayersBatch === undefined
+      ? {}
+      : { onIntakeSelectedLayersBatch: normalized.onIntakeSelectedLayersBatch })
   }) as unknown as TestElement
   );
 };
@@ -149,6 +203,15 @@ const findByValue = (root: TestElement, value: string): TestElement => {
   const field = root.queryByPredicate((element) => element.value === value);
   if (field === null) {
     throw new Error(`Missing value ${value}.`);
+  }
+
+  return field;
+};
+
+const findByNameAndValue = (root: TestElement, name: string, value: string): TestElement => {
+  const field = root.queryByPredicate((element) => element.name === name && element.value === value);
+  if (field === null) {
+    throw new Error(`Missing field ${name}=${value}.`);
   }
 
   return field;
@@ -213,7 +276,18 @@ const createParsedState = () =>
         privateShapePolicy: "parser-private-shape-excluded-v1"
       },
       canvas: { width: 64, height: 64 },
-      sourceGroups: [],
+      sourceGroups: [
+        {
+          sourceGroupId: "group_accessories",
+          originalName: "Accessories",
+          normalizedName: "Accessories",
+          groupPath: ["Accessories"],
+          sourceOrder: 2,
+          visibleInSource: true,
+          opacityInSource: 1,
+          unsupportedFeatures: []
+        }
+      ],
       sourceLayers: [
         {
           sourceLayerId: "layer_face",

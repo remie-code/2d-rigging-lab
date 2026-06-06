@@ -200,7 +200,14 @@ const createSuccessfulMaterializer =
           sourceLayer: {
             sourceLayerId: "layer_headwear",
             sourceLayerPath: ["Headwear"],
-            originalName: "Headwear"
+            originalName: "Headwear",
+            bounds: {
+              x: 0,
+              y: 0,
+              width: 2,
+              height: 2
+            },
+            visibleInSource: true
           },
           parser: {
             evidenceKind: "psd-parser-evidence-v1",

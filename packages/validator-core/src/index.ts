@@ -26,6 +26,7 @@ export * from "./validators/part-runtime-evidence.js";
 export * from "./validators/rig-control-semantic.js";
 export * from "./validators/texture-assets.js";
 export * from "./validators/psd-source-profile.js";
+export * from "./validators/psd-materialized-batch-diagnostics.js";
 export * from "./validators/package-schema.js";
 export * from "./validators/runtime-load.js";
 export * from "./validators/package-runtime.js";

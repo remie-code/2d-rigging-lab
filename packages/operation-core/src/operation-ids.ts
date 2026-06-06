@@ -131,6 +131,12 @@ const operationToken = (request: OperationRequestDto): string => {
     )}`;
   }
 
+  if (request.operationType === "importPsdLayerMaterializationBatch") {
+    return `import_psd_layer_materialization_batch_${sanitizeIdToken(
+      stripIdPrefix(request.payload.batchId, "batch_")
+    )}`;
+  }
+
   if (request.operationType === "createPart") {
     return `create_part_${sanitizeIdToken(
       request.payload.partId?.replace(/^part_/, "") ?? request.payload.displayName

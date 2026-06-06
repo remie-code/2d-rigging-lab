@@ -330,6 +330,33 @@ export type ImportPsdLayerMaterializationPayloadDto = z.infer<
   typeof ImportPsdLayerMaterializationPayloadSchema
 >;
 
+export const PsdLayerMaterializationBatchEntrySchema = z.object({
+  materialization: PsdAdapterLayerMaterializationEvidenceSchema,
+  initialBounds: RectSchema.optional()
+}).strict();
+export type PsdLayerMaterializationBatchEntryDto = z.infer<
+  typeof PsdLayerMaterializationBatchEntrySchema
+>;
+
+export const PsdLayerMaterializationBatchDestinationSchema = z.object({
+  destinationKind: z.literal("generatedPartScaffold"),
+  parentPartId: PartIdSchema
+}).strict();
+export type PsdLayerMaterializationBatchDestinationDto = z.infer<
+  typeof PsdLayerMaterializationBatchDestinationSchema
+>;
+
+export const ImportPsdLayerMaterializationBatchPayloadSchema = z.object({
+  sourceAssetId: SourceAssetIdSchema,
+  batchId: z.string().regex(/^batch_[A-Za-z0-9_-]+$/),
+  destination: PsdLayerMaterializationBatchDestinationSchema,
+  entries: z.array(PsdLayerMaterializationBatchEntrySchema).min(1),
+  lockedTargetIds: LockedTargetIdsSchema
+}).strict();
+export type ImportPsdLayerMaterializationBatchPayloadDto = z.infer<
+  typeof ImportPsdLayerMaterializationBatchPayloadSchema
+>;
+
 export const SplitPngSourceLayerMetadataSchema = z.object({
   sourceLayerId: z.string().min(1),
   imagePath: z.string().min(1).optional(),

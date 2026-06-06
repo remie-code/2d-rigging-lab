@@ -53,6 +53,14 @@ export interface VerifySelectedPsdLayerMaterializedAssetCandidateInput {
   readonly expected?: SelectedPsdLayerMaterializedAssetFreshnessExpectation;
 }
 
+export interface SelectedPsdLayerSourceEvidenceMaterializationInput {
+  readonly source: BrowserPsdParserBridgeSourceEvidence;
+  readonly bytes: PackageBinaryBytes;
+  readonly selectedLayerNodeRef: string;
+  readonly maxRawRgbaByteLength?: number;
+  readonly expectedSource?: SelectedPsdLayerMaterializationSourceExpectation;
+}
+
 export const materializeSelectedPsdLayerFromBrowserFile = async (
   input: SelectedPsdLayerFileMaterializationInput
 ): Promise<SelectedPsdLayerMaterializationResult> => {
@@ -118,13 +126,9 @@ export const materializeSelectedPsdLayerFromArrayBuffer = async (
   });
 };
 
-const materializeSelectedPsdLayerFromSourceEvidence = async (input: {
-  readonly source: BrowserPsdParserBridgeSourceEvidence;
-  readonly bytes: PackageBinaryBytes;
-  readonly selectedLayerNodeRef: string;
-  readonly maxRawRgbaByteLength?: number;
-  readonly expectedSource?: SelectedPsdLayerMaterializationSourceExpectation;
-}): Promise<SelectedPsdLayerMaterializationResult> => {
+export const materializeSelectedPsdLayerFromSourceEvidence = async (
+  input: SelectedPsdLayerSourceEvidenceMaterializationInput
+): Promise<SelectedPsdLayerMaterializationResult> => {
   const bytes = copyPackageBinaryBytes(input.bytes);
   const source = input.source;
   const sizeCapBytes = source.sizeCapBytes;
@@ -423,6 +427,13 @@ const createMaterializedAssetEvidence = (input: {
     readonly sourceLayerId: string;
     readonly sourceLayerPath: readonly string[];
     readonly originalName: string;
+    readonly bounds: {
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    };
+    readonly visibleInSource: boolean;
     readonly width: number;
     readonly height: number;
   };
@@ -455,7 +466,9 @@ const createMaterializedAssetEvidence = (input: {
     sourceLayer: {
       sourceLayerId: input.selectedLayer.sourceLayerId,
       sourceLayerPath: input.selectedLayer.sourceLayerPath,
-      originalName: input.selectedLayer.originalName
+      originalName: input.selectedLayer.originalName,
+      bounds: input.selectedLayer.bounds,
+      visibleInSource: input.selectedLayer.visibleInSource
     },
     parser: input.parser,
     extraction: input.extraction,

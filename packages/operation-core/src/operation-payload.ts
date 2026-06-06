@@ -11,6 +11,7 @@ import {
   UpdateDynamicsGroupPayloadSchema
 } from "./payloads/dynamics.js";
 import {
+  ImportPsdLayerMaterializationBatchPayloadSchema,
   ImportPsdLayerMaterializationPayloadSchema,
   ImportPsdSourceAssetPayloadSchema,
   SplitPngSourceAssetPayloadSchema
@@ -50,6 +51,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({
     operationType: z.literal("importPsdLayerMaterialization"),
     payload: ImportPsdLayerMaterializationPayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("importPsdLayerMaterializationBatch"),
+    payload: ImportPsdLayerMaterializationBatchPayloadSchema
   }),
   z.object({ operationType: z.literal("importSplitPngSourceAsset"), payload: SplitPngSourceAssetPayloadSchema }),
   z.object({ operationType: z.literal("createDrawable"), payload: CreateDrawablePayloadSchema }),

@@ -34,6 +34,7 @@ import type {
   EditorWorkflowSetMaskRelationCommand,
   EditorWorkflowPersistenceResult,
   EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdLayerBatchIntakeCommand,
   EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
 import type {
@@ -151,6 +152,9 @@ export interface EditorAppShellOptions {
   ) => unknown | Promise<unknown>;
   readonly onIntakeExplicitPsdLayer: (
     command: EditorExplicitPsdLayerIntakeCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeExplicitPsdLayerBatch?: (
+    command: EditorExplicitPsdLayerBatchIntakeCommand
   ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -300,7 +304,10 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       label: `${part.displayName} / ${part.partId}`
     })),
     onParsePsdFile: options.onParseExplicitPsdImportFile,
-    onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer
+    onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer,
+    ...(options.onIntakeExplicitPsdLayerBatch === undefined
+      ? {}
+      : { onIntakeSelectedLayersBatch: options.onIntakeExplicitPsdLayerBatch })
   });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,

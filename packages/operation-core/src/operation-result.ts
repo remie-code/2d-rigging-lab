@@ -14,6 +14,7 @@ import { z } from "zod";
 
 import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence.js";
 import { OperationPreconditionResultSchema } from "./operation-precondition.js";
+import { PsdLayerMaterializationBatchOperationEvidenceDtoSchema } from "./psd-layer-materialization-batch-operation-evidence.js";
 import { PsdLayerMaterializationOperationEvidenceDtoSchema } from "./psd-layer-materialization-operation-evidence.js";
 import { PsdImportOperationEvidenceDtoSchema } from "./psd-import-operation-evidence.js";
 
@@ -38,6 +39,9 @@ export const OperationResultSchema = z.object({
   meshTopologyEvidence: z.array(MeshTopologyOperationEvidenceDtoSchema).optional(),
   psdImportEvidence: z.array(PsdImportOperationEvidenceDtoSchema).optional(),
   psdLayerMaterializationEvidence: z.array(PsdLayerMaterializationOperationEvidenceDtoSchema).optional(),
+  psdLayerMaterializationBatchEvidence: z
+    .array(PsdLayerMaterializationBatchOperationEvidenceDtoSchema)
+    .optional(),
   reversible: z.boolean()
 });
 export type OperationResultDto = z.infer<typeof OperationResultSchema>;

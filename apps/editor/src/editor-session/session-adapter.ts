@@ -180,6 +180,9 @@ export interface EditorSessionAdapter {
   commitImportPsdLayerMaterializationWithBinaryBytes(
     command: EditorImportPsdLayerMaterializationWithBinaryBytesCommand
   ): EditorSessionPersistenceResult;
+  commitImportPsdLayerMaterializationBatchWithBinaryBytes(
+    command: EditorImportPsdLayerMaterializationBatchWithBinaryBytesCommand
+  ): EditorSessionPersistenceResult;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorSessionPersistenceResult;
 }
 
@@ -241,6 +244,14 @@ export interface EditorImportPsdLayerMaterializationWithBinaryBytesCommand {
   readonly request: Extract<OperationRequestDto, { readonly operationType: "importPsdLayerMaterialization" }>;
   readonly bytes: Uint8Array | ArrayBuffer;
   readonly registration: EditorSelectedPsdLayerBinaryByteRegistration;
+}
+
+export interface EditorImportPsdLayerMaterializationBatchWithBinaryBytesCommand {
+  readonly request: Extract<OperationRequestDto, { readonly operationType: "importPsdLayerMaterializationBatch" }>;
+  readonly entries: readonly {
+    readonly bytes: Uint8Array | ArrayBuffer;
+    readonly registration: EditorSelectedPsdLayerBinaryByteRegistration;
+  }[];
 }
 
 export interface EditorSessionBinaryByteEvidence {
@@ -520,6 +531,31 @@ export const createEditorSessionAdapter = (
               : { createdByOperationId: command.request.operationId }),
             byteIntakeSummary: command.registration.byteIntakeSummary
           });
+        }
+      });
+    },
+    commitImportPsdLayerMaterializationBatchWithBinaryBytes(command) {
+      return commitOperationRequest({
+        request: command.request,
+        authoringSession,
+        baseDocument,
+        operationCore,
+        evidenceCollector,
+        generatedArtifactEntries,
+        now,
+        afterCommitted: () => {
+          for (const entry of command.entries) {
+            registerAuthoringSessionBinaryBytes(authoringSession, {
+              binaryAssetRef: entry.registration.binaryAssetRef,
+              bytes: entry.bytes,
+              role: "texture-raster-v1",
+              textureId: entry.registration.textureId,
+              ...(command.request.operationId === undefined
+                ? {}
+                : { createdByOperationId: command.request.operationId }),
+              byteIntakeSummary: entry.registration.byteIntakeSummary
+            });
+          }
         }
       });
     },
