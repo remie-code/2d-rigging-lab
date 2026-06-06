@@ -1,5 +1,8 @@
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
-import { InMemoryAiCommandTranscript } from "@private-2d-rigging-lab/ai-interface";
+import {
+  InMemoryAiCommandTranscript,
+  type AiPsdImportPlanCommandHost
+} from "@private-2d-rigging-lab/ai-interface";
 import { describe, expect, it } from "vitest";
 
 import { createBrowserProjectStore, type StorageLike } from "../project-persistence/index.js";
@@ -618,6 +621,76 @@ describe("editor AI command host", () => {
       })
     ]);
   });
+
+  it("routes Codex-facing PSD import-plan commands to the injected in-process host", async () => {
+    const transcript = new InMemoryAiCommandTranscript();
+    const psdStateCalls: string[] = [];
+    const psdImportPlanHost: AiPsdImportPlanCommandHost = {
+      getPsdImportPlanState(payload) {
+        psdStateCalls.push(payload.detail);
+
+        return createEmptyPsdImportPlanCommandResult();
+      },
+      setPsdImportPlanApproval() {
+        throw new Error("setPsdImportPlanApproval should not be called");
+      },
+      preflightPsdImportPlanIntake() {
+        throw new Error("preflightPsdImportPlanIntake should not be called");
+      },
+      executePsdImportPlanIntake() {
+        throw new Error("executePsdImportPlanIntake should not be called");
+      }
+    };
+    const host = createEditorAiCommandHost({
+      transcript,
+      operationHost: {
+        dryRunOperation() {
+          throw new Error("dryRunOperation should not be called");
+        },
+        commitOperation() {
+          throw new Error("commitOperation should not be called");
+        }
+      },
+      readHost: {
+        getEditorState() {
+          throw new Error("getEditorState should not be called");
+        },
+        getOperationLog() {
+          return [];
+        }
+      },
+      psdImportPlanHost
+    });
+
+    const response = await host.execute(
+      createAiRequest({
+        commandId: "cmd_ai_get_psd_import_plan",
+        command: "getPsdImportPlanState",
+        capabilities: ["read"],
+        payload: { detail: "summary" }
+      })
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "getPsdImportPlanState",
+      payload: {
+        result: {
+          schemaVersion: "ai-psd-import-plan-command-result-v0",
+          importPlan: null
+        }
+      }
+    });
+    expect(psdStateCalls).toEqual(["summary"]);
+    expect(transcript.entries).toEqual([
+      expect.objectContaining({
+        entryType: "command",
+        commandId: "cmd_ai_get_psd_import_plan",
+        command: "getPsdImportPlanState",
+        status: "ok"
+      })
+    ]);
+  });
 });
 
 const dryRunAndApproveAiCreateParameter = async (
@@ -664,7 +737,11 @@ const createAiRequest = (input: {
     | "validatePackage"
     | "dryRunOperation"
     | "commitOperation"
-    | "getOperationLog";
+    | "getOperationLog"
+    | "getPsdImportPlanState"
+    | "setPsdImportPlanApproval"
+    | "preflightPsdImportPlanIntake"
+    | "executePsdImportPlanIntake";
   readonly capabilities: readonly ("read" | "dryRunEdit" | "commitWithApproval" | "validate")[];
   readonly payload: unknown;
 }) => ({
@@ -729,6 +806,23 @@ const createWorkflow = (storage: StorageLike) =>
 
 const capitalize = (text: string): string =>
   `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;
+
+const createEmptyPsdImportPlanCommandResult = () => ({
+  schemaVersion: "ai-psd-import-plan-command-result-v0" as const,
+  importPlan: null,
+  latestBatch: {
+    status: "none" as const,
+    selectedLayerNodeRefs: [],
+    approvedLayerNodeRefs: [],
+    generatedResultRefs: [],
+    operationIds: [],
+    evidenceRefs: [],
+    issues: [],
+    diagnostics: []
+  },
+  diagnostics: [],
+  evidenceRefs: []
+});
 
 const createMemoryStorage = (
   entries: readonly (readonly [string, string])[] = []

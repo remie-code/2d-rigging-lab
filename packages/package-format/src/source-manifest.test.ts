@@ -570,6 +570,15 @@ describe("source manifest PSD structured profile contract", () => {
         notApprovedCandidateCount: 1,
         preflightBlockedCount: 1
       },
+      issues: [
+        {
+          issueId: "issue_wave49_hidden_candidate",
+          issueKind: "hiddenCandidate",
+          checkId: "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected",
+          selectedIndex: 0,
+          approvalOrder: 0
+        }
+      ],
       boundary: {
         onlyApprovedLeafRefsPassedToBatch: true,
         rawParserObjectPersistence: "notPersisted",
@@ -1050,6 +1059,23 @@ const createImportPlanApprovalEvidence = () => ({
     notApprovedCandidateCount: 1,
     preflightBlockedCount: 1
   },
+  issues: [
+    {
+      issueId: "issue_wave49_hidden_candidate",
+      issueKind: "hiddenCandidate",
+      checkId: "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected",
+      message: "Hidden layer remains blocked for explicit leaf intake.",
+      targetPath: "/payload/importPlanBridge/approval/blockedCandidates/0",
+      selectedIndex: 0,
+      approvalOrder: 0,
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_structured",
+        sourceLayerId: "layer_shadow_hidden",
+        sourceLayerName: "Hidden shadow",
+        sourceLayerPath: ["Character", "Hidden shadow"]
+      }
+    }
+  ],
   boundary: {
     onlyApprovedLeafRefsPassedToBatch: true,
     rawParserObjectPersistence: "notPersisted",

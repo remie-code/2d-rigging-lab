@@ -350,6 +350,22 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     ])
   },
   {
+    operationType: "importPsdLayerMaterializationBatch",
+    operationFamily: "assetMetadata",
+    displayName: "Import approved PSD leaf materialization batch",
+    summary:
+      "Import externally supplied, explicitly approved PSD leaf materialization evidence through the approval bridge.",
+    targetKinds: ["drawable", "mesh", "part", "sourceAsset", "texture"],
+    payloadSchemaRef: "operation.importPsdLayerMaterializationBatch.payload.v1",
+    requiredInputs: codexInputs("Source PSD asset, destination parent part, and generated result targets.", [
+      "sourceAssetId",
+      "batchId",
+      "destination",
+      "importPlanBridge",
+      "entries"
+    ])
+  },
+  {
     operationType: "importSplitPngSourceAsset",
     operationFamily: "assetMetadata",
     displayName: "Register split PNG source metadata",

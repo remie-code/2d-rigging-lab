@@ -96,6 +96,7 @@ export const createOperationDiagnostic = (input: {
   readonly message: string;
   readonly target: TargetRefDto;
   readonly severity?: DiagnosticDto["severity"];
+  readonly evidence?: readonly string[];
 }): DiagnosticDto => ({
   checkId: input.checkId as DiagnosticDto["checkId"],
   status: "fail",
@@ -103,7 +104,7 @@ export const createOperationDiagnostic = (input: {
   phase: "operation.precondition",
   target: input.target,
   message: input.message,
-  evidence: [],
+  evidence: [...(input.evidence ?? [])],
   relatedAC: [],
   relatedScenarios: [],
   repairCandidateIds: []

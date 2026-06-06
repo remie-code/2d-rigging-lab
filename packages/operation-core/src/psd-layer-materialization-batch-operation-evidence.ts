@@ -10,9 +10,14 @@ import {
 import { z } from "zod";
 
 import { PsdAdapterSourceLayerReferenceSchema } from "./payloads/import-source.js";
-import { PsdImportPlanApprovalBridgeEvidenceSchema } from "./psd-import-plan-approval-evidence.js";
+import {
+  PsdImportPlanApprovalBridgeEvidenceSchema,
+  PsdImportPlanIssueSchema,
+  PsdImportPlanSourceLayerReferenceSchema
+} from "./psd-import-plan-approval-evidence.js";
 
 const PSD_BATCH_ID_PATTERN = /^batch_[A-Za-z0-9_-]+$/;
+const PSD_BATCH_EVIDENCE_ID_PATTERN = /^evidence_[A-Za-z0-9_-]+$/;
 
 export const PSD_BATCH_SELECTED_LAYER_LIMIT = 4;
 export const PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT = 32 * 1024 * 1024;
@@ -48,15 +53,33 @@ export type PsdLayerMaterializationBatchGeneratedTargetsDto = z.infer<
   typeof PsdLayerMaterializationBatchGeneratedTargetsSchema
 >;
 
+export const PsdLayerMaterializationBatchEntryResultRefsSchema = z.object({
+  batchEvidenceId: z.string().regex(PSD_BATCH_EVIDENCE_ID_PATTERN),
+  materializationEvidenceId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
+  materializationId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
+  operationId: OperationIdSchema.optional(),
+  partId: PartIdSchema,
+  drawableId: DrawableIdSchema,
+  meshId: MeshIdSchema,
+  textureId: TextureIdSchema
+}).strict();
+export type PsdLayerMaterializationBatchEntryResultRefsDto = z.infer<
+  typeof PsdLayerMaterializationBatchEntryResultRefsSchema
+>;
+
 export const PsdLayerMaterializationBatchEntryResultSchema = z.object({
   selectedIndex: z.number().int().nonnegative(),
   sourceLayerRef: PsdAdapterSourceLayerReferenceSchema,
+  approvedLeafRef: PsdImportPlanSourceLayerReferenceSchema.optional(),
+  approvalOrder: z.number().int().nonnegative().optional(),
   materializationId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
   materializedByteLength: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   status: PsdLayerMaterializationBatchEntryStatusSchema,
   generated: PsdLayerMaterializationBatchGeneratedTargetsSchema,
+  resultRefs: PsdLayerMaterializationBatchEntryResultRefsSchema.optional(),
   operationId: OperationIdSchema.optional(),
-  diagnostics: z.array(DiagnosticSchema).default([])
+  diagnostics: z.array(DiagnosticSchema).default([]),
+  issues: z.array(PsdImportPlanIssueSchema).default([])
 }).strict();
 export type PsdLayerMaterializationBatchEntryResultDto = z.infer<
   typeof PsdLayerMaterializationBatchEntryResultSchema
@@ -65,6 +88,8 @@ export type PsdLayerMaterializationBatchEntryResultDto = z.infer<
 export const PsdLayerMaterializationBatchOperationEvidenceDtoSchema = z.object({
   schemaVersion: z.literal("psd-layer-materialization-batch-operation-evidence-v1"),
   operationType: z.literal("importPsdLayerMaterializationBatch"),
+  evidenceId: z.string().regex(PSD_BATCH_EVIDENCE_ID_PATTERN).optional(),
+  operationId: OperationIdSchema.optional(),
   batchId: z.string().regex(PSD_BATCH_ID_PATTERN),
   sourceAssetId: SourceAssetIdSchema,
   destination: z.object({
@@ -79,6 +104,7 @@ export const PsdLayerMaterializationBatchOperationEvidenceDtoSchema = z.object({
   totalMaterializedByteLength: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   entries: z.array(PsdLayerMaterializationBatchEntryResultSchema),
   perLayerOperationIds: z.array(OperationIdSchema).default([]),
+  issues: z.array(PsdImportPlanIssueSchema).default([]),
   preflightPolicy: z.object({
     selectedLayerLimit: z.literal(PSD_BATCH_SELECTED_LAYER_LIMIT),
     totalRawRgbaByteLimit: z.literal(PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT),
@@ -102,11 +128,15 @@ type PsdLayerMaterializationBatchOperationEvidenceInput = Omit<
   "preflightPolicy" | "persistenceBoundary"
 >;
 
+export const createPsdLayerMaterializationBatchEvidenceId = (batchId: string): string =>
+  `evidence_${batchId}`;
+
 export const createPsdLayerMaterializationBatchOperationEvidence = (
   input: PsdLayerMaterializationBatchOperationEvidenceInput
 ): PsdLayerMaterializationBatchOperationEvidenceDto =>
   PsdLayerMaterializationBatchOperationEvidenceDtoSchema.parse({
     ...input,
+    evidenceId: input.evidenceId ?? createPsdLayerMaterializationBatchEvidenceId(input.batchId),
     preflightPolicy: {
       selectedLayerLimit: PSD_BATCH_SELECTED_LAYER_LIMIT,
       totalRawRgbaByteLimit: PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT,

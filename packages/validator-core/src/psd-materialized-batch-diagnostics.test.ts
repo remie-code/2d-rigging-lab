@@ -41,6 +41,9 @@ const APPROVAL_DIGEST = {
   hex: "3333333333333333333333333333333333333333333333333333333333333333"
 } as const;
 type BatchEvidenceFixture = {
+  evidenceId?: string;
+  operationId?: string;
+  batchId: string;
   importPlanBridge?: unknown;
   aggregateStatus: "success" | "preflightBlocked" | "partialFailure" | "failure";
   selectedLayerCount: number;
@@ -54,6 +57,8 @@ type BatchEvidenceFixture = {
   entries: Array<{
     selectedIndex: number;
     sourceLayerRef: ReturnType<typeof createSourceLayerRef>;
+    approvedLeafRef?: ReturnType<typeof createImportPlanSourceLayerRef>;
+    approvalOrder?: number;
     materializationId: string;
     materializedByteLength: number;
     generated: {
@@ -63,6 +68,16 @@ type BatchEvidenceFixture = {
       drawableDisplayName: string;
       textureId: string;
       meshId: string;
+    };
+    resultRefs?: {
+      batchEvidenceId: string;
+      materializationEvidenceId: string;
+      materializationId: string;
+      operationId?: string;
+      partId: string;
+      drawableId: string;
+      meshId: string;
+      textureId: string;
     };
     status: "success" | "preflightReady" | "preflightBlocked";
     operationId?: string;
@@ -81,7 +96,36 @@ type BatchEvidenceFixture = {
       relatedAC: string[];
       relatedScenarios: string[];
     }>;
+    issues?: ImportPlanIssueFixture[];
   }>;
+  issues?: ImportPlanIssueFixture[];
+};
+type ImportPlanIssueKind =
+  | "stalePlan"
+  | "staleApproval"
+  | "missingCandidate"
+  | "blockedCandidate"
+  | "notApproved"
+  | "collision"
+  | "destinationParent"
+  | "sourceIdentityMismatch"
+  | "byteUnavailable"
+  | "byteCapExceeded"
+  | "partialFailure"
+  | "unsupportedCandidate"
+  | "hiddenCandidate"
+  | "emptyCandidate"
+  | "currentSessionSourceMissing"
+  | "privateLocalProvenanceFailure";
+type ImportPlanIssueFixture = {
+  issueId?: string;
+  issueKind: ImportPlanIssueKind;
+  checkId?: string;
+  message: string;
+  targetPath?: string;
+  selectedIndex?: number;
+  approvalOrder?: number;
+  sourceLayerRef?: ReturnType<typeof createImportPlanSourceLayerRef>;
 };
 type ImportPlanCandidateStatus =
   | "candidate"
@@ -535,6 +579,169 @@ describe("Wave47 PSD batch materialized asset diagnostics", () => {
     ]);
   });
 
+  it("accepts Domain B generalized result refs and keeps approved leaf result evidence machine-readable", async () => {
+    const fixture = await createWave47BatchFixture();
+    const batchWithResultRefs = addDomainBResultRefs({
+      batchEvidence: {
+        ...fixture.batchEvidence,
+        importPlanBridge: createImportPlanBridge({
+          sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+          approvedLayers: [...LAYER_FIXTURES]
+        })
+      }
+    });
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithResultRefs],
+      createdAt: CREATED_AT
+    });
+    const available = expectCheckById(report, "asset.psd.materializedBatchAvailable");
+
+    expect(report.checks.map((check) => check.checkId)).not.toContain(
+      "asset.psd.materializedBatchEvidenceMismatch"
+    );
+    expect(available.evidence).toEqual(expect.arrayContaining([
+      "batchEvidenceId=evidence_batch_wave47HeadwearEyewear",
+      "batchOperationId=op_wave49_import_plan_batch",
+      "batchIssueKinds=none",
+      "allLayerImport=notClaimed",
+      "rendererPixelOracle=notClaimed"
+    ]));
+    expect(available.evidence.some((entry) =>
+      entry.startsWith("approvedLeafResults=") &&
+      entry.includes("sourceLayerKey:src_wave47_psd:psd_layer_headwear") &&
+      entry.includes("partId:part_root_head_headwear") &&
+      entry.includes("drawableId:draw_root_head_headwear") &&
+      entry.includes("textureId:tex_root_head_headwear")
+    )).toBe(true);
+  });
+
+  it("maps Domain B import-plan issue kinds to stable validator diagnostics", async () => {
+    const fixture = await createWave47BatchFixture();
+    const bridge = createImportPlanBridge({
+      sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+      approvedLayers: [...LAYER_FIXTURES]
+    });
+    bridge.approval.issues = [
+      createImportPlanIssue("stalePlan", 0),
+      createImportPlanIssue("staleApproval", 1),
+      createImportPlanIssue("missingCandidate", 2),
+      createImportPlanIssue("collision", 3),
+      createImportPlanIssue("sourceIdentityMismatch", 4),
+      createImportPlanIssue("byteCapExceeded", 5),
+      createImportPlanIssue("partialFailure", 6),
+      createImportPlanIssue("privateLocalProvenanceFailure", 7)
+    ];
+    const batchWithIssues = addDomainBResultRefs({
+      batchEvidence: {
+        ...fixture.batchEvidence,
+        importPlanBridge: bridge,
+        issues: [
+          createImportPlanIssue("destinationParent", 8),
+          createImportPlanIssue("byteUnavailable", 9)
+        ]
+      }
+    });
+    batchWithIssues.entries[0]!.issues = [
+      createImportPlanIssue("blockedCandidate", 10, LAYER_FIXTURES[0]),
+      createImportPlanIssue("notApproved", 11, LAYER_FIXTURES[0]),
+      createImportPlanIssue("unsupportedCandidate", 12, LAYER_FIXTURES[0]),
+      createImportPlanIssue("hiddenCandidate", 13, LAYER_FIXTURES[0]),
+      createImportPlanIssue("emptyCandidate", 14, LAYER_FIXTURES[0]),
+      createImportPlanIssue("currentSessionSourceMissing", 15, LAYER_FIXTURES[0])
+    ];
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithIssues],
+      createdAt: CREATED_AT
+    });
+
+    expect(report.checks.map((check) => check.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.importPlanCandidateMismatch",
+      "asset.psd.importPlanApprovalMismatch",
+      "asset.psd.importPlanCandidateBlocked",
+      "asset.psd.importPlanNotApprovedCandidateSelected",
+      "asset.psd.importPlanPreflightBlocked",
+      "asset.psd.materializedBatchDestinationParentInvalid",
+      "asset.psd.importPlanSourceStale",
+      "asset.psd.importPlanSourceCurrentBytesMissing",
+      "asset.psd.importPlanPartialState",
+      "asset.psd.importPlanProvenanceBlocked"
+    ]));
+    expect(report.checks.flatMap((check) => check.evidence)).toEqual(expect.arrayContaining([
+      "reportedIssueKind=stalePlan",
+      "reportedIssueKind=staleApproval",
+      "reportedIssueKind=missingCandidate",
+      "reportedIssueKind=blockedCandidate",
+      "reportedIssueKind=notApproved",
+      "reportedIssueKind=collision",
+      "reportedIssueKind=destinationParent",
+      "reportedIssueKind=sourceIdentityMismatch",
+      "reportedIssueKind=byteUnavailable",
+      "reportedIssueKind=byteCapExceeded",
+      "reportedIssueKind=partialFailure",
+      "reportedIssueKind=unsupportedCandidate",
+      "reportedIssueKind=hiddenCandidate",
+      "reportedIssueKind=emptyCandidate",
+      "reportedIssueKind=currentSessionSourceMissing",
+      "reportedIssueKind=privateLocalProvenanceFailure"
+    ]));
+    expect(findAssetBytes(report, "preflight_wave49_domain_b_issue_taxonomy").status)
+      .toBe("fail");
+  });
+
+  it("maps current-session source-missing import-plan issue evidence to Product Preflight not_evaluated", async () => {
+    const fixture = await createWave47BatchFixture();
+    const batchWithMissingSessionIssue = addDomainBResultRefs({
+      batchEvidence: {
+        ...fixture.batchEvidence,
+        importPlanBridge: createImportPlanBridge({
+          sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+          approvedLayers: [...LAYER_FIXTURES]
+        }),
+        issues: [createImportPlanIssue("currentSessionSourceMissing", 0)]
+      }
+    });
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithMissingSessionIssue],
+      createdAt: CREATED_AT
+    });
+    const currentSourceMissing = expectCheckById(
+      report,
+      "asset.psd.importPlanSourceCurrentBytesMissing"
+    );
+    const assetBytes = findAssetBytes(report, "preflight_wave49_current_session_source_missing");
+
+    expect(currentSourceMissing).toMatchObject({
+      status: "needs_review",
+      severity: "warning"
+    });
+    expect(currentSourceMissing.evidence).toEqual(expect.arrayContaining([
+      "reportedIssueKind=currentSessionSourceMissing",
+      "importPlanEvidence=parser-free-session-evidence",
+      "validatorBoundary=no-parser-execution"
+    ]));
+    expect(report.checks.map((check) => check.checkId)).not.toContain(
+      "asset.psd.importPlanEvidenceMismatch"
+    );
+    expect(assetBytes.status).toBe("not_evaluated");
+    expect(assetBytes.notEvaluatedClaims).toEqual([
+      expect.objectContaining({
+        evidenceKind: "sourceMaterialization",
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.importPlanSourceCurrentBytesMissing",
+            status: "needs_review"
+          })
+        ]
+      })
+    ]);
+  });
+
   it("blocks selected import plan candidates that are not approved, unsupported, collision-blocked, or approval mismatched", async () => {
     const fixture = await createWave47BatchFixture();
     const blockedSelectedBridge = createImportPlanBridge({
@@ -657,7 +864,7 @@ describe("Wave47 PSD batch materialized asset diagnostics", () => {
     const check = expectCheckById(report, "asset.psd.importPlanSourceCurrentBytesMissing");
 
     expect(check).toMatchObject({
-      status: "warning",
+      status: "needs_review",
       severity: "warning"
     });
     expect(check.evidence).toEqual(expect.arrayContaining([
@@ -668,7 +875,7 @@ describe("Wave47 PSD batch materialized asset diagnostics", () => {
       "validatorBoundary=no-parser-execution"
     ]));
     expect(findAssetBytes(report, "preflight_wave48_import_plan_current_bytes_missing").status)
-      .toBe("warn");
+      .toBe("not_evaluated");
   });
 
   it("fails import plan approval evidence that is explicitly preflight blocked", async () => {
@@ -1234,6 +1441,46 @@ const createBatchEvidence = (
   }
 });
 
+const addDomainBResultRefs = (input: {
+  readonly batchEvidence: BatchEvidenceFixture;
+}): BatchEvidenceFixture => ({
+  ...input.batchEvidence,
+  evidenceId: `evidence_${input.batchEvidence.batchId}`,
+  operationId: "op_wave49_import_plan_batch",
+  issues: input.batchEvidence.issues ?? [],
+  entries: input.batchEvidence.entries.map((entry) => ({
+    ...entry,
+    approvedLeafRef: createImportPlanSourceLayerRef(LAYER_FIXTURES[entry.selectedIndex]!),
+    approvalOrder: entry.selectedIndex,
+    resultRefs: {
+      batchEvidenceId: `evidence_${input.batchEvidence.batchId}`,
+      materializationEvidenceId: entry.materializationId,
+      materializationId: entry.materializationId,
+      partId: entry.generated.partId,
+      drawableId: entry.generated.drawableId,
+      meshId: entry.generated.meshId,
+      textureId: entry.generated.textureId,
+      ...(entry.operationId === undefined ? {} : { operationId: entry.operationId })
+    },
+    issues: entry.issues ?? []
+  }))
+});
+
+const createImportPlanIssue = (
+  issueKind: ImportPlanIssueKind,
+  issueIndex: number,
+  layer?: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): ImportPlanIssueFixture => ({
+  issueId: `issue_wave49_${issueIndex}_${issueKind}`,
+  issueKind,
+  checkId: `operation.importPsdLayerMaterializationBatch.${issueKind}`,
+  message: `Synthetic ${issueKind} issue for validator taxonomy coverage.`,
+  targetPath: `/payload/importPlan/issues/${issueIndex}`,
+  selectedIndex: issueIndex,
+  approvalOrder: issueIndex,
+  ...(layer === undefined ? {} : { sourceLayerRef: createImportPlanSourceLayerRef(layer) })
+});
+
 const createImportPlanBridge = (input: {
   readonly sourceRef: BinaryAssetReferenceDto;
   readonly approvedLayers: readonly typeof LAYER_FIXTURES[number][];
@@ -1353,6 +1600,7 @@ const createImportPlanBridge = (input: {
           })
         ),
       collisionPreflight: collisionCounts,
+      issues: [] as ImportPlanIssueFixture[],
       boundary: {
         onlyApprovedLeafRefsPassedToBatch: true as const,
         rawParserObjectPersistence: "notPersisted" as const,

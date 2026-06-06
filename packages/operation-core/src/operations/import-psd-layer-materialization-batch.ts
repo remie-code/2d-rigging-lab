@@ -26,12 +26,17 @@ import { OperationRequestSchema, type OperationRequestDto } from "../operation-r
 import { OperationResultSchema, type OperationResultDto } from "../operation-result.js";
 import type { OperationApplyOutcome, OperationHandler } from "../operation-registry.js";
 import {
+  createPsdLayerMaterializationBatchEvidenceId,
   createPsdLayerMaterializationBatchOperationEvidence,
   PSD_BATCH_SELECTED_LAYER_LIMIT,
   PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT,
   type PsdLayerMaterializationBatchEntryResultDto,
   type PsdLayerMaterializationBatchGeneratedTargetsDto
 } from "../psd-layer-materialization-batch-operation-evidence.js";
+import type {
+  PsdImportPlanIssueDto,
+  PsdImportPlanIssueKindDto
+} from "../psd-import-plan-approval-evidence.js";
 import {
   createOperationDiagnostic,
   createPreconditionResult,
@@ -567,9 +572,12 @@ const createCommittedBatchResult = (input: {
   const childEvidence = input.childOutcomes.flatMap(
     (outcome) => outcome.result.psdLayerMaterializationEvidence ?? []
   );
+  const batchEvidenceId = createPsdLayerMaterializationBatchEvidenceId(input.request.payload.batchId);
   const evidence = createPsdLayerMaterializationBatchOperationEvidence({
     schemaVersion: "psd-layer-materialization-batch-operation-evidence-v1",
     operationType: "importPsdLayerMaterializationBatch",
+    evidenceId: batchEvidenceId,
+    operationId: input.operationId,
     batchId: input.request.payload.batchId,
     sourceAssetId: input.request.payload.sourceAssetId,
     destination: input.request.payload.destination,
@@ -581,7 +589,15 @@ const createCommittedBatchResult = (input: {
     successCount: input.plannedEntries.length,
     failureCount: 0,
     totalMaterializedByteLength: getTotalMaterializedByteLength(input.request),
-    entries: input.plannedEntries.map((entry) => createEvidenceEntry(entry, "success", [])),
+    entries: input.plannedEntries.map((entry) =>
+      createEvidenceEntry({
+        entry,
+        status: "success",
+        diagnostics: [],
+        importPlanBridge: input.request.payload.importPlanBridge,
+        batchEvidenceId
+      })
+    ),
     perLayerOperationIds: input.plannedEntries.map((entry) => entry.operationId)
   });
 
@@ -618,18 +634,27 @@ const createRejectedBatchResult = (input: {
 }): OperationResultDto => {
   const diagnostics = flattenDiagnostics(input.diagnostics);
   const hasGlobalBlock = input.diagnostics.globalDiagnostics.length > 0;
+  const batchEvidenceId = createPsdLayerMaterializationBatchEvidenceId(input.request.payload.batchId);
   const entries = input.plannedEntries.map((entry) => {
     const entryDiagnostics = input.diagnostics.entryDiagnostics.get(entry.selectedIndex) ?? [];
-    return createEvidenceEntry(
+    return createEvidenceEntry({
       entry,
-      hasGlobalBlock || entryDiagnostics.length > 0 ? "preflightBlocked" : "preflightReady",
-      entryDiagnostics
-    );
+      status: hasGlobalBlock || entryDiagnostics.length > 0 ? "preflightBlocked" : "preflightReady",
+      diagnostics: entryDiagnostics,
+      importPlanBridge: input.request.payload.importPlanBridge,
+      batchEvidenceId
+    });
   });
   const failureCount = entries.filter((entry) => entry.status === "preflightBlocked").length;
+  const issues = createImportPlanIssues({
+    diagnostics,
+    issueIdPrefix: `${input.request.payload.batchId}_global`
+  });
   const evidence = createPsdLayerMaterializationBatchOperationEvidence({
     schemaVersion: "psd-layer-materialization-batch-operation-evidence-v1",
     operationType: "importPsdLayerMaterializationBatch",
+    evidenceId: batchEvidenceId,
+    operationId: input.operationId,
     batchId: input.request.payload.batchId,
     sourceAssetId: input.request.payload.sourceAssetId,
     destination: input.request.payload.destination,
@@ -642,7 +667,8 @@ const createRejectedBatchResult = (input: {
     failureCount,
     totalMaterializedByteLength: getTotalMaterializedByteLength(input.request),
     entries,
-    perLayerOperationIds: []
+    perLayerOperationIds: [],
+    issues
   });
 
   return OperationResultSchema.parse({
@@ -660,20 +686,174 @@ const createRejectedBatchResult = (input: {
   });
 };
 
-const createEvidenceEntry = (
-  entry: PlannedBatchEntry,
-  status: PsdLayerMaterializationBatchEntryResultDto["status"],
-  diagnostics: readonly DiagnosticDto[]
-): PsdLayerMaterializationBatchEntryResultDto => ({
-  selectedIndex: entry.selectedIndex,
-  sourceLayerRef: entry.request.payload.materialization.sourceLayerRef,
-  materializationId: entry.request.payload.materialization.materializationId,
-  materializedByteLength: entry.request.payload.materialization.byteLength,
-  status,
-  generated: entry.generated,
-  operationId: entry.operationId,
-  diagnostics: [...diagnostics]
-});
+const createEvidenceEntry = (input: {
+  readonly entry: PlannedBatchEntry;
+  readonly status: PsdLayerMaterializationBatchEntryResultDto["status"];
+  readonly diagnostics: readonly DiagnosticDto[];
+  readonly importPlanBridge: ImportPsdLayerMaterializationBatchRequest["payload"]["importPlanBridge"];
+  readonly batchEvidenceId: string;
+}): PsdLayerMaterializationBatchEntryResultDto => {
+  const approvedLeaf = input.importPlanBridge?.approval.approvedLeafRefs[input.entry.selectedIndex];
+  const issues = createImportPlanIssues({
+    diagnostics: input.diagnostics,
+    issueIdPrefix: `${input.batchEvidenceId}_${input.entry.selectedIndex}`,
+    selectedIndex: input.entry.selectedIndex,
+    ...(approvedLeaf?.approvalOrder === undefined ? {} : { approvalOrder: approvedLeaf.approvalOrder }),
+    sourceLayerRef: input.entry.request.payload.materialization.sourceLayerRef
+  });
+
+  return {
+    selectedIndex: input.entry.selectedIndex,
+    sourceLayerRef: input.entry.request.payload.materialization.sourceLayerRef,
+    ...(approvedLeaf === undefined ? {} : { approvedLeafRef: approvedLeaf.sourceLayerRef }),
+    ...(approvedLeaf?.approvalOrder === undefined ? {} : { approvalOrder: approvedLeaf.approvalOrder }),
+    materializationId: input.entry.request.payload.materialization.materializationId,
+    materializedByteLength: input.entry.request.payload.materialization.byteLength,
+    status: input.status,
+    generated: input.entry.generated,
+    resultRefs: {
+      batchEvidenceId: input.batchEvidenceId,
+      materializationEvidenceId: input.entry.request.payload.materialization.materializationId,
+      materializationId: input.entry.request.payload.materialization.materializationId,
+      operationId: input.entry.operationId,
+      partId: input.entry.generated.partId,
+      drawableId: input.entry.generated.drawableId,
+      meshId: input.entry.generated.meshId,
+      textureId: input.entry.generated.textureId
+    },
+    operationId: input.entry.operationId,
+    diagnostics: [...input.diagnostics],
+    issues
+  };
+};
+
+const createImportPlanIssues = (input: {
+  readonly diagnostics: readonly DiagnosticDto[];
+  readonly issueIdPrefix: string;
+  readonly selectedIndex?: number;
+  readonly approvalOrder?: number;
+  readonly sourceLayerRef?: ImportPsdLayerMaterializationRequest["payload"]["materialization"]["sourceLayerRef"];
+}): PsdImportPlanIssueDto[] =>
+  input.diagnostics.map((diagnostic, diagnosticIndex) => {
+    const issueKind = resolveImportPlanIssueKind(diagnostic);
+
+    return {
+      issueId: createImportPlanIssueId(
+        `${input.issueIdPrefix}_${diagnosticIndex}_${issueKind}`
+      ),
+      issueKind,
+      checkId: diagnostic.checkId,
+      message: diagnostic.message,
+      ...(diagnostic.target.path === undefined ? {} : { targetPath: diagnostic.target.path }),
+      ...(input.selectedIndex === undefined ? {} : { selectedIndex: input.selectedIndex }),
+      ...(input.approvalOrder === undefined ? {} : { approvalOrder: input.approvalOrder }),
+      ...(input.sourceLayerRef === undefined ? {} : { sourceLayerRef: input.sourceLayerRef })
+    };
+  });
+
+const resolveImportPlanIssueKind = (diagnostic: DiagnosticDto): PsdImportPlanIssueKindDto => {
+  if (diagnostic.evidence.includes("candidateStatus:hidden")) {
+    return "hiddenCandidate";
+  }
+  if (diagnostic.evidence.includes("candidateStatus:unsupported")) {
+    return "unsupportedCandidate";
+  }
+  if (diagnostic.evidence.includes("candidateStatus:emptyZeroSize")) {
+    return "emptyCandidate";
+  }
+
+  const explicitIssueKind = diagnostic.evidence
+    .find((entry) => entry.startsWith("importPlanIssueKind:"))
+    ?.slice("importPlanIssueKind:".length);
+  if (isPsdImportPlanIssueKind(explicitIssueKind)) {
+    return explicitIssueKind;
+  }
+
+  switch (diagnostic.checkId) {
+    case "operation.importPsdLayerMaterializationBatch.importPlanCandidateDigestMismatch":
+    case "operation.importPsdLayerMaterializationBatch.importPlanCandidateMissing":
+      return diagnostic.checkId.endsWith("CandidateMissing") ? "missingCandidate" : "stalePlan";
+    case "operation.importPsdLayerMaterializationBatch.importPlanApprovalNotApproved":
+    case "operation.importPsdLayerMaterializationBatch.importPlanApprovedLeafCountMismatch":
+    case "operation.importPsdLayerMaterializationBatch.importPlanApprovalMissingLeaf":
+    case "operation.importPsdLayerMaterializationBatch.importPlanApprovedLeafMismatch":
+      return "staleApproval";
+    case "operation.importPsdLayerMaterializationBatch.importPlanNotApprovedCandidateSelected":
+      return "notApproved";
+    case "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected":
+      return "blockedCandidate";
+    case "operation.importPsdLayerMaterializationBatch.duplicateLayerRef":
+    case "operation.importPsdLayerMaterializationBatch.duplicateGeneratedId":
+    case "operation.importPsdLayerMaterializationBatch.idNameCollision":
+    case "operation.importPsdLayerMaterialization.duplicateTexture":
+    case "operation.importPsdLayerMaterialization.duplicateDrawable":
+    case "operation.importPsdLayerMaterialization.duplicateMesh":
+    case "operation.importPsdLayerMaterialization.duplicateDestinationPart":
+      return "collision";
+    case "operation.importPsdLayerMaterializationBatch.missingDestinationParentPart":
+    case "operation.importPsdLayerMaterializationBatch.importPlanDestinationMismatch":
+    case "operation.importPsdLayerMaterialization.missingDestinationPart":
+    case "operation.importPsdLayerMaterialization.missingDestinationParentPart":
+    case "operation.importPsdLayerMaterialization.destinationPartCycle":
+      return "destinationParent";
+    case "operation.importPsdLayerMaterializationBatch.importPlanSourceAssetMismatch":
+    case "operation.importPsdLayerMaterializationBatch.importPlanSourcePsdMismatch":
+    case "operation.importPsdLayerMaterializationBatch.importPlanMaterializationSourceMismatch":
+    case "operation.importPsdLayerMaterialization.sourceAssetMismatch":
+    case "operation.importPsdLayerMaterialization.sourceLayerNameMismatch":
+    case "operation.importPsdLayerMaterialization.sourceLayerPathMismatch":
+    case "operation.importPsdLayerMaterialization.sourcePsdDigestMismatch":
+    case "operation.importPsdLayerMaterialization.sourcePsdByteLengthMismatch":
+    case "operation.importPsdLayerMaterialization.parserEvidenceMismatch":
+    case "operation.importPsdLayerMaterialization.materializedBinaryAssetRefMismatch":
+    case "operation.importPsdLayerMaterialization.materializedRightsAssetMismatch":
+      return "sourceIdentityMismatch";
+    case "operation.importPsdLayerMaterializationBatch.totalByteLengthCapExceeded":
+    case "operation.importPsdLayerMaterializationBatch.layerCountCapExceeded":
+      return "byteCapExceeded";
+    case "operation.importPsdLayerMaterialization.missingMaterializedBinaryAssetRef":
+    case "operation.importPsdLayerMaterialization.materializedBytesUnavailable":
+    case "operation.importPsdLayerMaterialization.missingSourcePsdDigest":
+    case "operation.importPsdLayerMaterialization.missingSourcePsdByteLength":
+    case "operation.importPsdLayerMaterialization.missingMaterializedDimensions":
+    case "operation.importPsdLayerMaterialization.rawRgbaByteLengthMismatch":
+      return "byteUnavailable";
+    case "operation.importPsdLayerMaterialization.missingSourceAsset":
+    case "operation.importPsdLayerMaterialization.missingSourceLayer":
+      return "currentSessionSourceMissing";
+    case "operation.importPsdLayerMaterialization.missingUsableRightsRecord":
+      return "privateLocalProvenanceFailure";
+    default:
+      return "partialFailure";
+  }
+};
+
+const PSD_IMPORT_PLAN_ISSUE_KINDS: ReadonlySet<string> = new Set([
+  "stalePlan",
+  "staleApproval",
+  "missingCandidate",
+  "blockedCandidate",
+  "notApproved",
+  "collision",
+  "destinationParent",
+  "sourceIdentityMismatch",
+  "byteUnavailable",
+  "byteCapExceeded",
+  "partialFailure",
+  "unsupportedCandidate",
+  "hiddenCandidate",
+  "emptyCandidate",
+  "currentSessionSourceMissing",
+  "privateLocalProvenanceFailure"
+]);
+
+const isPsdImportPlanIssueKind = (
+  value: string | undefined
+): value is PsdImportPlanIssueKindDto =>
+  value !== undefined && PSD_IMPORT_PLAN_ISSUE_KINDS.has(value);
+
+const createImportPlanIssueId = (value: string): string =>
+  `issue_${sanitizeIdToken(value)}`;
 
 const combineModelDiffs = (input: {
   readonly operationId: OperationId;

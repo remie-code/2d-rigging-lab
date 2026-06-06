@@ -26,7 +26,8 @@ import {
 import { createEditorWorkflowState } from "./workflow-state-projection.js";
 import type { BrowserPsdParserBridgeResult } from "./browser-psd-parser-bridge-result.js";
 import {
-  commitEditorSelectedPsdLayerBatchIntakeWorkflow
+  commitEditorSelectedPsdLayerBatchIntakeWorkflow,
+  preflightEditorSelectedPsdLayerBatchIntakeWorkflow
 } from "./selected-psd-layer-batch-intake-workflow.js";
 import type {
   SelectedPsdLayerBatchFileMaterializationInput
@@ -37,6 +38,7 @@ import type {
 import type {
   SelectedPsdLayerMaterializedAssetCandidate
 } from "./selected-psd-layer-materialization-result.js";
+import { projectEditorAiPsdImportPlanCommandResult } from "../ai-command-host/editor-ai-psd-import-plan-projector.js";
 
 describe("selected PSD leaf layer batch intake workflow", () => {
   it("commits selected leaf layer materializations into generated parts under a parent part", async () => {
@@ -65,6 +67,9 @@ describe("selected PSD leaf layer batch intake workflow", () => {
     expect(outcome.state.explicitPsdImport.selectedLayerBatchIntake.status).toBe("committed");
     expect(outcome.state.explicitPsdImport.selectedLayerBatchIntake.summaryFacts).toEqual(
       expect.arrayContaining([
+        { label: "Batch evidence id", value: "evidence_batch_src_explicit_psd_sample_model_128_2" },
+        { label: "Aggregate status", value: "success" },
+        { label: "Batch issues", value: "none" },
         { label: "Destination parent part", value: "part_root" },
         { label: "Destination kind", value: "generatedPartScaffold" },
         { label: "Requested / success / failure", value: "2 / 2 / 0" },
@@ -76,6 +81,9 @@ describe("selected PSD leaf layer batch intake workflow", () => {
     );
     expect(outcome.state.explicitPsdImport.selectedLayerBatchIntake.entryLabels.join("\n")).toContain(
       "texture=tex_eyewear"
+    );
+    expect(outcome.state.explicitPsdImport.selectedLayerBatchIntake.entryLabels.join("\n")).toContain(
+      "issues=none"
     );
 
     const snapshot = adapter.createPersistenceSnapshot();
@@ -103,6 +111,62 @@ describe("selected PSD leaf layer batch intake workflow", () => {
     expect(persistentStore.puts.map((put) => put.record.binaryAssetId)).toEqual(
       expect.arrayContaining(["bin_headwear_raw_rgba", "bin_eyewear_raw_rgba"])
     );
+  });
+
+  it("preflights selected leaf layer materializations without mutating the project or persistent bytes", async () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-06-06T00:00:00.000Z")
+    });
+    const state = createParsedEditorState(adapter);
+    const initialMutationState = captureRejectedBatchMutationState(adapter);
+    const persistentStore = createRecordingPersistentStore();
+    const outcome = await preflightEditorSelectedPsdLayerBatchIntakeWorkflow({
+      adapter,
+      state,
+      command: {
+        selectedLayerNodeRefs: ["layer_headwear"],
+        destinationParentPartId: "part_root",
+        importPlanBridge: createImportPlanBridgeForBatchWorkflowTest()
+      },
+      currentPsdFile: createCurrentPsdFile(),
+      parsedBridgeResult: createParsedBridgeResult(),
+      persistentByteStore: persistentStore.store,
+      now: () => new Date("2026-06-06T00:00:00.000Z"),
+      materializeSelectedLayers: createSuccessfulBatchMaterializer([
+        createCandidate("layer_headwear", ["Headwear"], "Headwear", HEADWEAR_DIGEST)
+      ])
+    });
+
+    expect(outcome.state).toBe(state);
+    expect(outcome.result).toMatchObject({
+      status: "dry_run",
+      stage: "operationCommit",
+      selectedLayerNodeRefs: ["layer_headwear"],
+      operationResult: {
+        status: "dry_run",
+        psdLayerMaterializationBatchEvidence: [
+          expect.objectContaining({
+            aggregateStatus: "success",
+            evidenceId: "evidence_batch_src_explicit_psd_sample_model_128_2",
+            entries: [
+              expect.objectContaining({
+                approvedLeafRef: expect.objectContaining({
+                  sourceLayerId: "layer_headwear"
+                }),
+                resultRefs: expect.objectContaining({
+                  partId: "part_headwear",
+                  drawableId: "draw_headwear",
+                  textureId: "tex_headwear",
+                  meshId: "mesh_headwear"
+                })
+              })
+            ]
+          })
+        ]
+      }
+    });
+    expect(captureRejectedBatchMutationState(adapter)).toEqual(initialMutationState);
+    expect(persistentStore.puts).toHaveLength(0);
   });
 
   it("surfaces per-layer materialization failures without committing a partial batch", async () => {
@@ -191,6 +255,92 @@ describe("selected PSD leaf layer batch intake workflow", () => {
     ).toEqual(["layer_headwear"]);
   });
 
+  it("commits an arbitrary approved import-plan leaf ref and exposes per-leaf result refs", async () => {
+    const adapter = createEditorSessionAdapter({
+      now: () => new Date("2026-06-06T00:00:00.000Z")
+    });
+    const persistentStore = createRecordingPersistentStore();
+    const frontHairRef = "psd:root/group[2]/layer[0]";
+    const outcome = await commitEditorSelectedPsdLayerBatchIntakeWorkflow({
+      adapter,
+      state: createParsedEditorState(adapter),
+      command: {
+        selectedLayerNodeRefs: [frontHairRef],
+        destinationParentPartId: "part_root",
+        importPlanBridge: createImportPlanBridgeForBatchWorkflowTest({
+          approvedLayerRef: frontHairRef,
+          approvedLayerName: "front hair",
+          approvedLayerPath: ["front hair"]
+        })
+      },
+      currentPsdFile: createCurrentPsdFile(),
+      parsedBridgeResult: createParsedBridgeResult(),
+      persistentByteStore: persistentStore.store,
+      now: () => new Date("2026-06-06T00:00:00.000Z"),
+      materializeSelectedLayers: createSuccessfulBatchMaterializer([
+        createCandidate(frontHairRef, ["front hair"], "front hair", FRONT_HAIR_DIGEST)
+      ])
+    });
+
+    const batchState = outcome.state.explicitPsdImport.selectedLayerBatchIntake;
+    const entriesText = batchState.entryLabels.join("\n");
+
+    expect(outcome.result.status).toBe("committed");
+    expect(batchState.summaryFacts).toEqual(
+      expect.arrayContaining([
+        { label: "Aggregate status", value: "success" },
+        { label: "Batch issues", value: "none" },
+        { label: "Import plan approval issues", value: "none" },
+        { label: "Approved leaf candidates", value: "1" },
+        { label: "Not-approved / blocked candidates", value: "1 / 0" }
+      ])
+    );
+    expect(entriesText).toContain(frontHairRef);
+    expect(entriesText).toContain("approvalOrder=0");
+    expect(entriesText).toContain("batchEvidence=evidence_batch_src_explicit_psd_sample_model_128_2");
+    expect(entriesText).toContain("materializationEvidence=mat_psd_root_group_2_layer_0");
+    expect(entriesText).toContain("part=part_front_hair");
+    expect(entriesText).toContain("drawable=draw_front_hair");
+    expect(entriesText).toContain("texture=tex_front_hair");
+    expect(entriesText).toContain("mesh=mesh_front_hair");
+    expect(entriesText).toContain("issues=none");
+    expect(
+      outcome.result.latestSessionPersistenceResult?.operationResult.psdLayerMaterializationBatchEvidence?.[0]
+        ?.importPlanBridge?.approval.approvedLeafRefs.map((leaf) => leaf.sourceLayerRef.sourceLayerId)
+    ).toEqual([frontHairRef]);
+
+    const operationResult = outcome.result.latestSessionPersistenceResult?.operationResult;
+    if (operationResult === undefined) {
+      throw new Error("Expected committed front hair batch operation result.");
+    }
+    const aiProjection = projectEditorAiPsdImportPlanCommandResult({
+      state: outcome.state,
+      detail: "full",
+      operationResult,
+      stage: outcome.result.stage,
+      selectedLayerNodeRefs: outcome.result.selectedLayerNodeRefs
+    });
+    expect(aiProjection.latestBatch).toMatchObject({
+      status: "committed",
+      aggregateStatus: "success",
+      approvedLayerNodeRefs: [frontHairRef],
+      generatedResultRefs: [
+        expect.objectContaining({
+          sourceLayerId: frontHairRef,
+          approvalOrder: 0,
+          batchEvidenceId: "evidence_batch_src_explicit_psd_sample_model_128_2",
+          materializationEvidenceId: "mat_psd_root_group_2_layer_0",
+          partId: "part_front_hair",
+          drawableId: "draw_front_hair",
+          textureId: "tex_front_hair",
+          meshId: "mesh_front_hair",
+          issues: []
+        })
+      ],
+      issues: []
+    });
+  });
+
   it("surfaces generated scaffold collisions from the batch operation without project mutation", async () => {
     const adapter = createEditorSessionAdapter();
     const initialMutationState = captureRejectedBatchMutationState(adapter);
@@ -233,6 +383,7 @@ describe("selected PSD leaf layer batch intake workflow", () => {
 const HEADWEAR_DIGEST = "1".repeat(64);
 const EYEWEAR_DIGEST = "3".repeat(64);
 const COPY_DIGEST = "4".repeat(64);
+const FRONT_HAIR_DIGEST = "5".repeat(64);
 const SOURCE_DIGEST = "2".repeat(64);
 const MEDIA_TYPE = "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
 
@@ -390,13 +541,14 @@ const createCandidate = (
   digestHex: string
 ): SelectedPsdLayerMaterializedAssetCandidate => {
   const bytes = new Uint8Array(16);
+  const sourceLayerToken = createTestIdToken(sourceLayerId);
 
   return {
     bytes,
     evidence: {
       evidenceKind: "selected-psd-layer-materialized-asset-candidate-evidence-v1",
-      candidateId: `candidate_${sourceLayerId}`,
-      materializationId: `mat_${sourceLayerId}`,
+      candidateId: `candidate_${sourceLayerToken}`,
+      materializationId: `mat_${sourceLayerToken}`,
       mediaType: MEDIA_TYPE,
       pixelFormat: "rgba8",
       width: 2,
@@ -460,102 +612,124 @@ const createCandidate = (
   };
 };
 
-const createImportPlanBridgeForBatchWorkflowTest = (): PsdImportPlanApprovalBridgeEvidenceDto => ({
-  schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
-  candidatePlan: {
-    schemaVersion: "psd-import-plan-candidate-evidence-v1",
-    evidenceKind: "psd-import-plan-candidate-evidence-v1",
-    planId: "plan_editorBatch",
-    candidatePlanDigest: { algorithm: "sha256", hex: "5".repeat(64) },
-    sourcePsd: createImportPlanSourcePsdIdentity(),
-    parser: {
-      evidenceKind: "psd-parser-evidence-v1",
-      parserName: "webtoonPsd",
-      parserPackageName: "@webtoon/psd",
-      parserVersion: "0.4.0",
-      runtime: "browser",
-      privateShapePolicy: "parser-private-shape-excluded-v1"
+const createImportPlanBridgeForBatchWorkflowTest = (options: {
+  readonly approvedLayerRef?: string;
+  readonly approvedLayerName?: string;
+  readonly approvedLayerPath?: readonly string[];
+} = {}): PsdImportPlanApprovalBridgeEvidenceDto => {
+  const approvedLayerRef = options.approvedLayerRef ?? "layer_headwear";
+  const approvedLayerName = options.approvedLayerName ?? "Headwear";
+  const approvedLayerPath = options.approvedLayerPath ?? ["Headwear"];
+  const notApprovedLayerRef = "layer_eyewear";
+  const notApprovedLayerName = "Eyewear";
+  const notApprovedLayerPath = ["Eyewear"];
+
+  return {
+    schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
+    candidatePlan: {
+      schemaVersion: "psd-import-plan-candidate-evidence-v1",
+      evidenceKind: "psd-import-plan-candidate-evidence-v1",
+      planId: "plan_editorBatch",
+      candidatePlanDigest: { algorithm: "sha256", hex: "5".repeat(64) },
+      sourcePsd: createImportPlanSourcePsdIdentity(),
+      parser: {
+        evidenceKind: "psd-parser-evidence-v1",
+        parserName: "webtoonPsd",
+        parserPackageName: "@webtoon/psd",
+        parserVersion: "0.4.0",
+        runtime: "browser",
+        privateShapePolicy: "parser-private-shape-excluded-v1"
+      },
+      scope: {
+        scopeRef: { kind: "document", id: "psd:root" },
+        scopeDisplayPath: [],
+        discoveryMode: "recursiveLeafCandidatePreview"
+      },
+      candidates: [
+        createImportPlanCandidate(approvedLayerRef, approvedLayerName, approvedLayerPath, 0, ["candidate"]),
+        createImportPlanCandidate(notApprovedLayerRef, notApprovedLayerName, notApprovedLayerPath, 1, [
+          "candidate",
+          "notApproved"
+        ])
+      ],
+      summary: {
+        candidateCount: 2,
+        approvedCandidateCount: 1,
+        notApprovedCandidateCount: 1,
+        blockedCandidateCount: 0,
+        hiddenCandidateCount: 0,
+        unsupportedCandidateCount: 0,
+        duplicateNameCount: 0,
+        duplicateRefCount: 0,
+        generatedIdCollisionCount: 0,
+        generatedNameCollisionCount: 0,
+        byteCapBlockedCount: 0,
+        totalByteEstimate: 32,
+        approvedByteEstimate: 16
+      },
+      boundary: {
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes",
+        publicDemoAsset: false,
+        allLayerOneClickImport: "notProvided",
+        recursiveGroupAutoImport: "notProvided"
+      }
     },
-    scope: {
-      scopeRef: { kind: "document", id: "psd:root" },
-      scopeDisplayPath: [],
-      discoveryMode: "recursiveLeafCandidatePreview"
-    },
-    candidates: [
-      createImportPlanCandidate("layer_headwear", "Headwear", ["Headwear"], 0, ["candidate"]),
-      createImportPlanCandidate("layer_eyewear", "Eyewear", ["Eyewear"], 1, ["candidate", "notApproved"])
-    ],
-    summary: {
-      candidateCount: 2,
-      approvedCandidateCount: 1,
-      notApprovedCandidateCount: 1,
-      blockedCandidateCount: 0,
-      hiddenCandidateCount: 0,
-      unsupportedCandidateCount: 0,
-      duplicateNameCount: 0,
-      duplicateRefCount: 0,
-      generatedIdCollisionCount: 0,
-      generatedNameCollisionCount: 0,
-      byteCapBlockedCount: 0,
-      totalByteEstimate: 32,
-      approvedByteEstimate: 16
-    },
-    boundary: {
-      rawParserObjectPersistence: "notPersisted",
-      sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
-      candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes",
-      publicDemoAsset: false,
-      allLayerOneClickImport: "notProvided",
-      recursiveGroupAutoImport: "notProvided"
+    approval: {
+      schemaVersion: "psd-import-plan-approval-evidence-v1",
+      evidenceKind: "psd-import-plan-approval-evidence-v1",
+      approvalId: "approval_editorBatch",
+      candidatePlanDigest: { algorithm: "sha256", hex: "5".repeat(64) },
+      approvalSelectionDigest: { algorithm: "sha256", hex: "6".repeat(64) },
+      sourcePsd: createImportPlanSourcePsdIdentity(),
+      destination: {
+        destinationKind: "generatedPartScaffold",
+        parentPartId: PartIdSchema.parse("part_root")
+      },
+      approvalStatus: "approved",
+      approvedLeafRefs: [{
+        approvalOrder: 0,
+        sourceLayerRef: createImportPlanSourceLayerRef(approvedLayerRef, approvedLayerName, approvedLayerPath),
+        sourceLayerName: approvedLayerName,
+        sourceLayerPath: [...approvedLayerPath],
+        candidateStatuses: ["candidate"],
+        candidateStatusReasons: [],
+        generatedScaffoldPreview: createImportPlanGeneratedScaffold(
+          approvedLayerPath.join(" / "),
+          "previewReady"
+        ),
+        resolvedGeneratedIds: createImportPlanGeneratedScaffold(approvedLayerPath.join(" / "), "resolved")
+      }],
+      notApprovedCandidates: [
+        createImportPlanCandidate(notApprovedLayerRef, notApprovedLayerName, notApprovedLayerPath, 1, [
+          "candidate",
+          "notApproved"
+        ])
+      ],
+      blockedCandidates: [],
+      collisionPreflight: {
+        duplicateRefCount: 0,
+        duplicateNameCount: 0,
+        generatedIdCollisionCount: 0,
+        generatedNameCollisionCount: 0,
+        byteCapBlockedCount: 0,
+        blockedCandidateCount: 0,
+        notApprovedCandidateCount: 1,
+        preflightBlockedCount: 0
+      },
+      boundary: {
+        onlyApprovedLeafRefsPassedToBatch: true,
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+        publicDemoAsset: false,
+        allLayerOneClickImport: "notProvided",
+        recursiveGroupAutoImport: "notProvided"
+      }
     }
-  },
-  approval: {
-    schemaVersion: "psd-import-plan-approval-evidence-v1",
-    evidenceKind: "psd-import-plan-approval-evidence-v1",
-    approvalId: "approval_editorBatch",
-    candidatePlanDigest: { algorithm: "sha256", hex: "5".repeat(64) },
-    approvalSelectionDigest: { algorithm: "sha256", hex: "6".repeat(64) },
-    sourcePsd: createImportPlanSourcePsdIdentity(),
-    destination: {
-      destinationKind: "generatedPartScaffold",
-      parentPartId: PartIdSchema.parse("part_root")
-    },
-    approvalStatus: "approved",
-    approvedLeafRefs: [{
-      approvalOrder: 0,
-      sourceLayerRef: createImportPlanSourceLayerRef("layer_headwear", "Headwear", ["Headwear"]),
-      sourceLayerName: "Headwear",
-      sourceLayerPath: ["Headwear"],
-      candidateStatuses: ["candidate"],
-      candidateStatusReasons: [],
-      generatedScaffoldPreview: createImportPlanGeneratedScaffold("Headwear", "previewReady"),
-      resolvedGeneratedIds: createImportPlanGeneratedScaffold("Headwear", "resolved")
-    }],
-    notApprovedCandidates: [
-      createImportPlanCandidate("layer_eyewear", "Eyewear", ["Eyewear"], 1, ["candidate", "notApproved"])
-    ],
-    blockedCandidates: [],
-    collisionPreflight: {
-      duplicateRefCount: 0,
-      duplicateNameCount: 0,
-      generatedIdCollisionCount: 0,
-      generatedNameCollisionCount: 0,
-      byteCapBlockedCount: 0,
-      blockedCandidateCount: 0,
-      notApprovedCandidateCount: 1,
-      preflightBlockedCount: 0
-    },
-    boundary: {
-      onlyApprovedLeafRefsPassedToBatch: true,
-      rawParserObjectPersistence: "notPersisted",
-      sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
-      materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
-      publicDemoAsset: false,
-      allLayerOneClickImport: "notProvided",
-      recursiveGroupAutoImport: "notProvided"
-    }
-  }
-});
+  };
+};
 
 const createImportPlanSourcePsdIdentity = (): PsdImportPlanSourcePsdIdentityDto => ({
   sourceAssetId: SourceAssetIdSchema.parse("src_explicit_psd_sample_model_128"),
@@ -604,7 +778,7 @@ const createImportPlanGeneratedScaffold = (
   displayName: string,
   status: "previewReady" | "resolved"
 ): PsdImportPlanGeneratedScaffoldDto => {
-  const token = displayName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const token = createTestIdToken(displayName);
 
   return {
     destinationKind: "generatedPartScaffold",
@@ -619,6 +793,9 @@ const createImportPlanGeneratedScaffold = (
     statusReasons: []
   };
 };
+
+const createTestIdToken = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unnamed";
 
 const createSourceEvidence = (input: SelectedPsdLayerBatchFileMaterializationInput) => ({
   evidenceKind: "browser-psd-source-evidence-v1" as const,
@@ -703,7 +880,8 @@ const createParsedBridgeResult = (): Extract<BrowserPsdParserBridgeResult, { sta
     sourceLayers: [
       createAdapterSourceLayer("layer_headwear", "Headwear", 1),
       createAdapterSourceLayer("layer_eyewear", "Eyewear", 2),
-      createAdapterSourceLayer("layer_headwear_copy", "Headwear", 3)
+      createAdapterSourceLayer("layer_headwear_copy", "Headwear", 3),
+      createAdapterSourceLayer("psd:root/group[2]/layer[0]", "front hair", 4)
     ],
     unsupportedFeatures: [],
     diagnostics: []
@@ -715,12 +893,13 @@ const createParsedBridgeResult = (): Extract<BrowserPsdParserBridgeResult, { sta
 const createAdapterSourceLayer = (
   sourceLayerId: string,
   originalName: string,
-  sourceOrder: number
+  sourceOrder: number,
+  groupPath: readonly string[] = []
 ) => ({
   sourceLayerId,
   originalName,
   normalizedName: originalName,
-  groupPath: [],
+  groupPath: [...groupPath],
   sourceOrder,
   bounds: { x: 0, y: 0, width: 2, height: 2 },
   visibleInSource: true,

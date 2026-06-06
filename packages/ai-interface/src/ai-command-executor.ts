@@ -23,7 +23,18 @@ type DryRunCommandRequest = Extract<AiCommandRequest, { command: "dryRunOperatio
 type CommitCommandRequest = Extract<AiCommandRequest, { command: "commitOperation" }>;
 type UnsupportedReadCommandRequest = Extract<
   AiCommandRequest,
-  { command: "getEditorState" | "inspectModel" | "inspectTarget" | "validatePackage" | "getOperationLog" }
+  {
+    command:
+      | "getEditorState"
+      | "inspectModel"
+      | "inspectTarget"
+      | "validatePackage"
+      | "getOperationLog"
+      | "getPsdImportPlanState"
+      | "setPsdImportPlanApproval"
+      | "preflightPsdImportPlanIntake"
+      | "executePsdImportPlanIntake";
+  }
 >;
 
 export interface AiCommandExecutorOptions {
@@ -67,6 +78,10 @@ export class AiCommandExecutor {
       case "inspectTarget":
       case "validatePackage":
       case "getOperationLog":
+      case "getPsdImportPlanState":
+      case "setPsdImportPlanApproval":
+      case "preflightPsdImportPlanIntake":
+      case "executePsdImportPlanIntake":
         return this.#unsupportedReadCommand(request);
     }
   }
@@ -243,6 +258,28 @@ const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
       };
     case "getOperationLog":
       return { entries: [] };
+    case "getPsdImportPlanState":
+    case "setPsdImportPlanApproval":
+    case "preflightPsdImportPlanIntake":
+    case "executePsdImportPlanIntake":
+      return {
+        result: {
+          schemaVersion: "ai-psd-import-plan-command-result-v0",
+          importPlan: null,
+          latestBatch: {
+            status: "none",
+            selectedLayerNodeRefs: [],
+            approvedLayerNodeRefs: [],
+            generatedResultRefs: [],
+            operationIds: [],
+            evidenceRefs: [],
+            issues: [],
+            diagnostics: []
+          },
+          diagnostics: [],
+          evidenceRefs: []
+        }
+      };
   }
 };
 
@@ -259,6 +296,7 @@ class TranscriptingAiApprovalPolicy implements AiApprovalPolicy {
     readonly dryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }): void {
     this.#policy.recordDryRun(input);
   }
@@ -280,6 +318,7 @@ class TranscriptingAiApprovalPolicy implements AiApprovalPolicy {
     readonly approvedDryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }) {
     return this.#policy.checkCommitApproval(input);
   }

@@ -21,6 +21,8 @@ import type {
   PsdImportPlanApprovedLeafRefDto,
   PsdImportPlanCandidateDto,
   PsdImportPlanGeneratedScaffoldDto,
+  PsdImportPlanIssueDto,
+  PsdImportPlanIssueKindDto,
   PsdImportPlanSourcePsdIdentityDto,
   PsdLayerMaterializationEvidenceDto,
   SourceAssetDto,
@@ -28,6 +30,7 @@ import type {
 } from "@private-2d-rigging-lab/package-format";
 import {
   PsdImportPlanApprovalBridgeEvidenceSchema,
+  PsdImportPlanIssueSchema,
   PsdSourceLayerReferenceSchema
 } from "@private-2d-rigging-lab/package-format";
 import { z } from "zod";
@@ -37,6 +40,7 @@ import { ValidationCheckResultSchema } from "../validation-report.js";
 
 const WAVE47_RAW_RGBA_MEDIA_TYPE =
   "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
+const PSD_BATCH_EVIDENCE_ID_PATTERN = /^evidence_[A-Za-z0-9_-]+$/;
 const PSD_BATCH_SELECTED_LAYER_LIMIT = 4;
 const PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT = 32 * 1024 * 1024;
 const IMPORT_PLAN_BLOCKING_CANDIDATE_STATUSES = new Set<string>([
@@ -72,15 +76,30 @@ type PsdLayerMaterializationBatchGeneratedTargetsDto = z.infer<
   typeof PsdLayerMaterializationBatchGeneratedTargetsSchema
 >;
 
+const PsdLayerMaterializationBatchEntryResultRefsSchema = z.object({
+  batchEvidenceId: z.string().regex(PSD_BATCH_EVIDENCE_ID_PATTERN),
+  materializationEvidenceId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
+  materializationId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
+  operationId: OperationIdSchema.optional(),
+  partId: PartIdSchema,
+  drawableId: DrawableIdSchema,
+  meshId: MeshIdSchema,
+  textureId: TextureIdSchema
+}).strict();
+
 const PsdLayerMaterializationBatchEntrySchema = z.object({
   selectedIndex: z.number().int().nonnegative(),
   sourceLayerRef: PsdSourceLayerReferenceSchema,
+  approvedLeafRef: PsdSourceLayerReferenceSchema.optional(),
+  approvalOrder: z.number().int().nonnegative().optional(),
   materializationId: z.string().regex(/^mat_[A-Za-z0-9_-]+$/),
   materializedByteLength: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   status: z.enum(["success", "preflightReady", "preflightBlocked"]),
   generated: PsdLayerMaterializationBatchGeneratedTargetsSchema,
+  resultRefs: PsdLayerMaterializationBatchEntryResultRefsSchema.optional(),
   operationId: OperationIdSchema.optional(),
-  diagnostics: z.array(DiagnosticSchema).default([])
+  diagnostics: z.array(DiagnosticSchema).default([]),
+  issues: z.array(PsdImportPlanIssueSchema).default([])
 }).strict();
 type PsdLayerMaterializationBatchEntryDto = z.infer<
   typeof PsdLayerMaterializationBatchEntrySchema
@@ -89,6 +108,8 @@ type PsdLayerMaterializationBatchEntryDto = z.infer<
 const PsdLayerMaterializationBatchEvidenceSchema = z.object({
   schemaVersion: z.literal("psd-layer-materialization-batch-operation-evidence-v1"),
   operationType: z.literal("importPsdLayerMaterializationBatch"),
+  evidenceId: z.string().regex(PSD_BATCH_EVIDENCE_ID_PATTERN).optional(),
+  operationId: OperationIdSchema.optional(),
   batchId: z.string().regex(/^batch_[A-Za-z0-9_-]+$/),
   sourceAssetId: SourceAssetIdSchema,
   destination: z.object({
@@ -103,6 +124,7 @@ const PsdLayerMaterializationBatchEvidenceSchema = z.object({
   totalMaterializedByteLength: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   entries: z.array(PsdLayerMaterializationBatchEntrySchema),
   perLayerOperationIds: z.array(OperationIdSchema).default([]),
+  issues: z.array(PsdImportPlanIssueSchema).default([]),
   preflightPolicy: z.object({
     selectedLayerLimit: z.literal(PSD_BATCH_SELECTED_LAYER_LIMIT),
     totalRawRgbaByteLimit: z.literal(PSD_BATCH_TOTAL_RAW_RGBA_BYTE_LIMIT),
@@ -328,6 +350,148 @@ interface ImportPlanCandidateCounts {
   readonly byteCapBlockedCount: number;
 }
 
+interface ReportedImportPlanIssueMapping {
+  readonly checkId: string;
+  readonly status: CheckStatus;
+  readonly severity: Severity;
+  readonly phase: "source_import" | "rights" | "reference";
+  readonly impact: string;
+}
+
+const REPORTED_IMPORT_PLAN_ISSUE_MAPPINGS: Readonly<Record<
+  PsdImportPlanIssueKindDto,
+  ReportedImportPlanIssueMapping
+>> = {
+  stalePlan: {
+    checkId: "asset.psd.importPlanCandidateMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight cannot trust import-plan result evidence when the candidate plan is stale."
+  },
+  staleApproval: {
+    checkId: "asset.psd.importPlanApprovalMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight cannot trust import-plan result evidence when approval evidence is stale."
+  },
+  missingCandidate: {
+    checkId: "asset.psd.importPlanCandidateMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight cannot verify an approved leaf that is absent from parser-free candidate evidence."
+  },
+  blockedCandidate: {
+    checkId: "asset.psd.importPlanCandidateBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must block approved leaves that operation evidence reports as blocked candidates."
+  },
+  notApproved: {
+    checkId: "asset.psd.importPlanNotApprovedCandidateSelected",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Only explicit approved leaf refs may be passed from import-plan preview to batch materialization."
+  },
+  collision: {
+    checkId: "asset.psd.importPlanPreflightBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must not treat collision-blocked import-plan evidence as materialized output."
+  },
+  destinationParent: {
+    checkId: "asset.psd.materializedBatchDestinationParentInvalid",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    impact:
+      "Generated part scaffold evidence cannot be trusted without a valid selected parent part."
+  },
+  sourceIdentityMismatch: {
+    checkId: "asset.psd.importPlanSourceStale",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight cannot trust import-plan result evidence when source identity mismatches."
+  },
+  byteUnavailable: {
+    checkId: "asset.psd.importPlanSourceCurrentBytesMissing",
+    status: "needs_review",
+    severity: "warning",
+    phase: "source_import",
+    impact:
+      "Product Preflight must report import-plan byte-dependent evaluation as not evaluated until bytes are supplied."
+  },
+  byteCapExceeded: {
+    checkId: "asset.psd.importPlanPreflightBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must not treat byte-cap-blocked import-plan evidence as materialized output."
+  },
+  partialFailure: {
+    checkId: "asset.psd.importPlanPartialState",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must block import-plan evidence that mixes committed or materialized entries with failed entries."
+  },
+  unsupportedCandidate: {
+    checkId: "asset.psd.importPlanCandidateBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must block unsupported candidates from materialization."
+  },
+  hiddenCandidate: {
+    checkId: "asset.psd.importPlanCandidateBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must block hidden candidates from materialization."
+  },
+  emptyCandidate: {
+    checkId: "asset.psd.importPlanCandidateBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "source_import",
+    impact:
+      "Product Preflight must block empty candidates from materialization."
+  },
+  currentSessionSourceMissing: {
+    checkId: "asset.psd.importPlanSourceCurrentBytesMissing",
+    status: "needs_review",
+    severity: "warning",
+    phase: "source_import",
+    impact:
+      "Product Preflight must report current-session source evidence as not evaluated until source bytes are supplied."
+  },
+  privateLocalProvenanceFailure: {
+    checkId: "asset.psd.importPlanProvenanceBlocked",
+    status: "fail",
+    severity: "error",
+    phase: "rights",
+    impact:
+      "Product Preflight must not treat import-plan evidence as usable without explicit private/local provenance."
+  }
+};
+
 const validateImportPlanBridgeEvidence = (
   context: BatchValidationContext
 ): readonly ValidationCheckResultDto[] => {
@@ -360,7 +524,8 @@ const validateImportPlanBridgeEvidence = (
     ...validateImportPlanCandidateSummary(bridgeContext),
     ...validateImportPlanApprovalState(bridgeContext),
     ...validateImportPlanPreflightState(bridgeContext),
-    ...validateImportPlanSelectedEntries(bridgeContext)
+    ...validateImportPlanSelectedEntries(bridgeContext),
+    ...validateReportedImportPlanIssues(bridgeContext)
   ];
 };
 
@@ -443,7 +608,7 @@ const validateImportPlanSourceIdentity = (
     checks.push(createImportPlanIssueCheck({
       context,
       checkId: "asset.psd.importPlanSourceCurrentBytesMissing",
-      status: "warning",
+      status: "needs_review",
       severity: "warning",
       phase: "source_import",
       targetPath: `/assets/sourceManifest/sourceAssets/${sourceAssetRecord?.index ?? "unknown"}/binaryAssetRef`,
@@ -713,7 +878,7 @@ const validateImportPlanSelectedEntries = (
 
   return context.batch.entries.flatMap((entry, entryIndex) => {
     const sourceLayerKey = createSourceLayerKey(entry.sourceLayerRef);
-    const approvedLeaf = context.bridge.approval.approvedLeafRefs[entry.selectedIndex];
+    const approvedLeaf = getApprovedLeafForEntry(context, entry);
     const candidate = candidateByLayerKey.get(sourceLayerKey);
 
     return [
@@ -856,8 +1021,12 @@ const validateImportPlanSelectedEntryApproval = (input: {
 }): readonly ValidationCheckResultDto[] => {
   const mismatchReasons = [
     ...(input.approvedLeaf === undefined ? ["approved-leaf-missing"] : []),
+    ...(input.entry.approvedLeafRef !== undefined &&
+    createSourceLayerKey(input.entry.approvedLeafRef) !== input.sourceLayerKey
+      ? ["entry-approved-leaf-ref-source-mismatch"]
+      : []),
     ...(input.approvedLeaf !== undefined &&
-    input.approvedLeaf.approvalOrder !== input.entry.selectedIndex
+    input.approvedLeaf.approvalOrder !== resolveEntryApprovalOrder(input.entry)
       ? ["approval-order-mismatch"]
       : []),
     ...(input.approvedLeaf !== undefined &&
@@ -895,6 +1064,12 @@ const validateImportPlanSelectedEntryApproval = (input: {
             : createSourceLayerKey(input.approvedLeaf.sourceLayerRef)
         }`,
         `approvedLeafApprovalOrder=${input.approvedLeaf?.approvalOrder ?? "missing"}`,
+        `entryApprovalOrder=${input.entry.approvalOrder ?? "missing"}`,
+        `entryApprovedLeafSourceLayerKey=${
+          input.entry.approvedLeafRef === undefined
+            ? "missing"
+            : createSourceLayerKey(input.entry.approvedLeafRef)
+        }`,
         ...createExpectedGeneratedEvidence(input.candidate, input.approvedLeaf),
         `reasons=${mismatchReasons.join(",")}`
       ],
@@ -903,6 +1078,111 @@ const validateImportPlanSelectedEntryApproval = (input: {
     })
   ];
 };
+
+const validateReportedImportPlanIssues = (
+  context: ImportPlanBridgeValidationContext
+): readonly ValidationCheckResultDto[] => [
+  ...(context.bridge.approval.issues?.map((issue, issueIndex) =>
+    createReportedImportPlanIssueCheck({
+      context,
+      issue,
+      issueIndex,
+      issueSource: "approval"
+    })
+  ) ?? []),
+  ...context.batch.issues.map((issue, issueIndex) =>
+    createReportedImportPlanIssueCheck({
+      context,
+      issue,
+      issueIndex,
+      issueSource: "batch"
+    })
+  ),
+  ...context.batch.entries.flatMap((entry, entryIndex) =>
+    entry.issues.map((issue, issueIndex) =>
+      createReportedImportPlanEntryIssueCheck({
+        context,
+        entry,
+        entryIndex,
+        issue,
+        issueIndex,
+        issueSource: "entry"
+      })
+    )
+  )
+];
+
+const createReportedImportPlanIssueCheck = (input: {
+  readonly context: ImportPlanBridgeValidationContext;
+  readonly issue: PsdImportPlanIssueDto;
+  readonly issueIndex: number;
+  readonly issueSource: "approval" | "batch";
+}): ValidationCheckResultDto => {
+  const mapping = REPORTED_IMPORT_PLAN_ISSUE_MAPPINGS[input.issue.issueKind];
+
+  return createImportPlanIssueCheck({
+    context: input.context,
+    checkId: mapping.checkId,
+    status: mapping.status,
+    severity: mapping.severity,
+    phase: mapping.phase,
+    targetPath: input.issue.targetPath ?? `${createBatchTargetPath(input.context)}/issues/${input.issueIndex}`,
+    message:
+      `PSD import plan reports ${input.issue.issueKind} issue in ${input.issueSource} evidence.`,
+    evidence: createReportedIssueEvidence(input),
+    impact: mapping.impact
+  });
+};
+
+const createReportedImportPlanEntryIssueCheck = (input: {
+  readonly context: ImportPlanBridgeValidationContext;
+  readonly entry: PsdLayerMaterializationBatchEntryDto;
+  readonly entryIndex: number;
+  readonly issue: PsdImportPlanIssueDto;
+  readonly issueIndex: number;
+  readonly issueSource: "entry";
+}): ValidationCheckResultDto => {
+  const mapping = REPORTED_IMPORT_PLAN_ISSUE_MAPPINGS[input.issue.issueKind];
+
+  return createImportPlanEntryIssueCheck({
+    context: input.context,
+    entry: input.entry,
+    entryIndex: input.entryIndex,
+    checkId: mapping.checkId,
+    status: mapping.status,
+    severity: mapping.severity,
+    phase: mapping.phase,
+    targetPath:
+      input.issue.targetPath ??
+      `${createEntryTargetPath(input.context, input.entryIndex)}/issues/${input.issueIndex}`,
+    message:
+      `PSD import plan reports ${input.issue.issueKind} issue for approved leaf entry ${input.entryIndex}.`,
+    evidence: createReportedIssueEvidence(input),
+    impact: mapping.impact
+  });
+};
+
+const createReportedIssueEvidence = (input: {
+  readonly context: ImportPlanBridgeValidationContext;
+  readonly issue: PsdImportPlanIssueDto;
+  readonly issueIndex: number;
+  readonly issueSource: "approval" | "batch" | "entry";
+}): readonly string[] => [
+  ...createImportPlanBridgeEvidence(input.context.bridge),
+  `reportedIssueSource=${input.issueSource}`,
+  `reportedIssueIndex=${input.issueIndex}`,
+  `reportedIssueKind=${input.issue.issueKind}`,
+  `reportedIssueId=${input.issue.issueId ?? "missing"}`,
+  `reportedIssueCheckId=${input.issue.checkId ?? "missing"}`,
+  `reportedIssueTargetPath=${input.issue.targetPath ?? "missing"}`,
+  `reportedIssueSelectedIndex=${input.issue.selectedIndex ?? "missing"}`,
+  `reportedIssueApprovalOrder=${input.issue.approvalOrder ?? "missing"}`,
+  `reportedIssueSourceLayerKey=${
+    input.issue.sourceLayerRef === undefined
+      ? "missing"
+      : createSourceLayerKey(input.issue.sourceLayerRef)
+  }`
+];
 
 const validateBatchAggregateStatus = (
   context: BatchValidationContext
@@ -1810,7 +2090,7 @@ const createApprovedLeafEntryMismatchReasons = (
   context: ImportPlanBridgeValidationContext
 ): readonly string[] =>
   context.batch.entries.flatMap((entry) => {
-    const approvedLeaf = context.bridge.approval.approvedLeafRefs[entry.selectedIndex];
+    const approvedLeaf = getApprovedLeafForEntry(context, entry);
     if (approvedLeaf === undefined) {
       return [`entry-${entry.selectedIndex}-approved-leaf-missing`];
     }
@@ -1819,7 +2099,11 @@ const createApprovedLeafEntryMismatchReasons = (
     const approvedLayerKey = createSourceLayerKey(approvedLeaf.sourceLayerRef);
 
     return [
-      ...(approvedLeaf.approvalOrder === entry.selectedIndex
+      ...(entry.approvedLeafRef !== undefined &&
+      createSourceLayerKey(entry.approvedLeafRef) !== entryLayerKey
+        ? [`entry-${entry.selectedIndex}-approved-leaf-ref-source-mismatch`]
+        : []),
+      ...(approvedLeaf.approvalOrder === resolveEntryApprovalOrder(entry)
         ? []
         : [`entry-${entry.selectedIndex}-approval-order-mismatch`]),
       ...(approvedLayerKey === entryLayerKey
@@ -1827,6 +2111,27 @@ const createApprovedLeafEntryMismatchReasons = (
         : [`entry-${entry.selectedIndex}-approved-layer-ref-mismatch`])
     ];
   });
+
+const getApprovedLeafForEntry = (
+  context: ImportPlanBridgeValidationContext,
+  entry: PsdLayerMaterializationBatchEntryDto
+): PsdImportPlanApprovedLeafRefDto | undefined => {
+  const entryApprovedLayerKey =
+    entry.approvedLeafRef === undefined ? undefined : createSourceLayerKey(entry.approvedLeafRef);
+  const entryApprovalOrder = entry.approvalOrder;
+  if (entryApprovedLayerKey !== undefined) {
+    return context.bridge.approval.approvedLeafRefs.find((approvedLeaf) =>
+      createSourceLayerKey(approvedLeaf.sourceLayerRef) === entryApprovedLayerKey &&
+      (entryApprovalOrder === undefined || approvedLeaf.approvalOrder === entryApprovalOrder)
+    );
+  }
+
+  return context.bridge.approval.approvedLeafRefs[entry.selectedIndex];
+};
+
+const resolveEntryApprovalOrder = (
+  entry: PsdLayerMaterializationBatchEntryDto
+): number => entry.approvalOrder ?? entry.selectedIndex;
 
 const createGeneratedApprovalMismatchReasons = (
   entry: PsdLayerMaterializationBatchEntryDto,
@@ -1894,6 +2199,7 @@ const createImportPlanBridgeEvidence = (
   `approvalStatus=${bridge.approval.approvalStatus}`,
   `approvalDestinationParentPartId=${bridge.approval.destination.parentPartId}`,
   `approvedLeafRefCount=${bridge.approval.approvedLeafRefs.length}`,
+  `approvalIssueKinds=${formatImportPlanIssueKinds(bridge.approval.issues ?? [])}`,
   `candidatePlanScopeKind=${bridge.candidatePlan.scope.scopeRef.kind}`,
   `candidatePlanScopeId=${bridge.candidatePlan.scope.scopeRef.id ?? "missing"}`,
   "importPlanDiscoveryMode=recursiveLeafCandidatePreview",
@@ -2167,6 +2473,8 @@ const createBatchEntryIssueCheck = (input: {
 const createCommonBatchEvidence = (
   context: BatchValidationContext
 ): readonly string[] => [
+  `batchEvidenceId=${context.batch.evidenceId ?? "missing"}`,
+  `batchOperationId=${context.batch.operationId ?? "missing"}`,
   `batchId=${context.batch.batchId}`,
   `batchIndex=${context.batchIndex}`,
   `batchSourceAssetId=${context.batch.sourceAssetId}`,
@@ -2176,7 +2484,8 @@ const createCommonBatchEvidence = (
   `selectedLayerCount=${context.batch.selectedLayerCount}`,
   `successCount=${context.batch.successCount}`,
   `failureCount=${context.batch.failureCount}`,
-  `totalMaterializedByteLength=${context.batch.totalMaterializedByteLength}`
+  `totalMaterializedByteLength=${context.batch.totalMaterializedByteLength}`,
+  `batchIssueKinds=${formatImportPlanIssueKinds(context.batch.issues)}`
 ];
 
 const createCommonEntryEvidence = (
@@ -2185,6 +2494,10 @@ const createCommonEntryEvidence = (
 ): readonly string[] => [
   `entryIndex=${entryIndex}`,
   `selectedIndex=${entry.selectedIndex}`,
+  `entryApprovalOrder=${entry.approvalOrder ?? "missing"}`,
+  `entryApprovedLeafSourceLayerKey=${
+    entry.approvedLeafRef === undefined ? "missing" : createSourceLayerKey(entry.approvedLeafRef)
+  }`,
   `entryStatus=${entry.status}`,
   `entrySourceAssetId=${entry.sourceLayerRef.sourceAssetId}`,
   `entrySourceLayerId=${entry.sourceLayerRef.sourceLayerId}`,
@@ -2193,6 +2506,8 @@ const createCommonEntryEvidence = (
   `entryMaterializationId=${entry.materializationId}`,
   `entryMaterializedByteLength=${entry.materializedByteLength}`,
   `entryOperationId=${entry.operationId ?? "missing"}`,
+  `entryResultRefs=${formatEntryResultRefs(entry)}`,
+  `entryIssueKinds=${formatImportPlanIssueKinds(entry.issues)}`,
   ...createGeneratedTargetEvidence(entry.generated)
 ];
 
@@ -2214,6 +2529,7 @@ const createBatchSummaryEvidence = (
 ): readonly string[] => [
   `entryStatuses=${context.batch.entries.map((entry) => `${entry.selectedIndex}:${entry.status}`).join(",")}`,
   `perLayerOperationIds=${context.batch.perLayerOperationIds.join(",") || "none"}`,
+  `approvedLeafResults=${formatApprovedLeafResults(context.batch.entries)}`,
   ...extraEvidence
 ];
 
@@ -2227,6 +2543,47 @@ const createGeneratedTargetEvidence = (
   `generatedPartDisplayName=${generated.partDisplayName}`,
   `generatedDrawableDisplayName=${generated.drawableDisplayName}`
 ];
+
+const formatEntryResultRefs = (
+  entry: PsdLayerMaterializationBatchEntryDto
+): string => {
+  const resultRefs = entry.resultRefs;
+  if (resultRefs === undefined) {
+    return "missing";
+  }
+
+  return [
+    `batchEvidenceId:${resultRefs.batchEvidenceId}`,
+    `materializationEvidenceId:${resultRefs.materializationEvidenceId}`,
+    `materializationId:${resultRefs.materializationId}`,
+    `operationId:${resultRefs.operationId ?? "missing"}`,
+    `partId:${resultRefs.partId}`,
+    `drawableId:${resultRefs.drawableId}`,
+    `meshId:${resultRefs.meshId}`,
+    `textureId:${resultRefs.textureId}`
+  ].join(",");
+};
+
+const formatApprovedLeafResults = (
+  entries: readonly PsdLayerMaterializationBatchEntryDto[]
+): string =>
+  entries.map((entry) => [
+    `selectedIndex:${entry.selectedIndex}`,
+    `approvalOrder:${resolveEntryApprovalOrder(entry)}`,
+    `sourceLayerKey:${createSourceLayerKey(entry.sourceLayerRef)}`,
+    `status:${entry.status}`,
+    `operationId:${entry.operationId ?? entry.resultRefs?.operationId ?? "missing"}`,
+    `partId:${entry.resultRefs?.partId ?? entry.generated.partId}`,
+    `drawableId:${entry.resultRefs?.drawableId ?? entry.generated.drawableId}`,
+    `meshId:${entry.resultRefs?.meshId ?? entry.generated.meshId}`,
+    `textureId:${entry.resultRefs?.textureId ?? entry.generated.textureId}`,
+    `issueKinds:${formatImportPlanIssueKinds(entry.issues)}`
+  ].join(";")).join("|") || "none";
+
+const formatImportPlanIssueKinds = (
+  issues: readonly PsdImportPlanIssueDto[]
+): string =>
+  issues.map((issue) => issue.issueKind).join(",") || "none";
 
 const createMaterializationEvidence = (
   materialization: MaterializationWithIndex

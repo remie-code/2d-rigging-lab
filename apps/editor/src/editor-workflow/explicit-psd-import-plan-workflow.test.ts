@@ -31,7 +31,8 @@ describe("explicit PSD import plan workflow", () => {
         approvedLayerNodeRefs: [
           "psd:root/layer[0]",
           "psd:root/layer[1]",
-          "psd:root/group[0]/layer[0]"
+          "psd:root/group[0]/layer[0]",
+          "psd:root/group[2]/layer[0]"
         ],
         destinationParentPartId: "part_root"
       },
@@ -41,13 +42,19 @@ describe("explicit PSD import plan workflow", () => {
     const viewModel = projectExplicitPsdImportViewModel(outcome.state);
 
     expect(outcome.result.status).toBe("ready");
-    expect(outcome.result.approvedLayerNodeRefs).toEqual(["psd:root/layer[0]"]);
-    expect(outcome.state.selectedLayerNodeRefs).toEqual(["psd:root/layer[0]"]);
+    expect(outcome.result.approvedLayerNodeRefs).toEqual([
+      "psd:root/layer[0]",
+      "psd:root/group[2]/layer[0]"
+    ]);
+    expect(outcome.state.selectedLayerNodeRefs).toEqual([
+      "psd:root/layer[0]",
+      "psd:root/group[2]/layer[0]"
+    ]);
     expect(outcome.state.importPlan).toMatchObject({
       scopeRef: "psd:root",
       destinationParentPartId: "part_root",
-      candidateCount: 3,
-      approvedCount: 1,
+      candidateCount: 4,
+      approvedCount: 2,
       hiddenCount: 1,
       unsupportedCount: 2,
       notApprovedCount: 2
@@ -60,10 +67,21 @@ describe("explicit PSD import plan workflow", () => {
       statuses: ["hidden", "unsupported", "notApproved"],
       approvalBlockedReasons: ["hiddenLayerUnsupported"]
     });
+    expect(outcome.state.importPlan?.candidates.find((candidate) =>
+      candidate.layerRef === "psd:root/group[2]/layer[0]"
+    )).toMatchObject({
+      displayName: "front hair",
+      fullPathLabel: "Hair / front hair",
+      approved: true,
+      statuses: ["candidate"]
+    });
     expect(viewModel.importPlanFacts.map((fact) => `${fact.label}=${fact.value}`).join("\n")).toContain(
       "Destination parent part=part_root"
     );
     expect(viewModel.importPlanCandidateLabels.join("\n")).toContain("part=part_headwear_psd_root_layer_0");
+    expect(viewModel.importPlanCandidateLabels.join("\n")).toContain(
+      "part=part_hair_front_hair_psd_root_group_2_layer_0"
+    );
   });
 });
 
@@ -92,11 +110,11 @@ const createParsedBridgeResult = (): BrowserPsdParserBridgeParsedResult => {
     source,
     threading: createBrowserPsdThreadingEvidence(),
     treeSummary: {
-      groupCount: 1,
-      layerCount: 3,
-      visibleLayerCount: 2,
+      groupCount: 2,
+      layerCount: 4,
+      visibleLayerCount: 3,
       hiddenLayerCount: 1,
-      rasterCandidateLayerCount: 2,
+      rasterCandidateLayerCount: 3,
       maxDepth: 2
     },
     adapterResult: {
@@ -114,20 +132,33 @@ const createParsedBridgeResult = (): BrowserPsdParserBridgeParsedResult => {
         privateShapePolicy: "parser-private-shape-excluded-v1"
       },
       canvas: { width: 64, height: 64 },
-      sourceGroups: [{
-        sourceGroupId: "group_accessories",
-        originalName: "Accessories",
-        normalizedName: "Accessories",
-        groupPath: ["Accessories"],
-        sourceOrder: 2,
-        visibleInSource: true,
-        opacityInSource: 1,
-        unsupportedFeatures: []
-      }],
+      sourceGroups: [
+        {
+          sourceGroupId: "group_accessories",
+          originalName: "Accessories",
+          normalizedName: "Accessories",
+          groupPath: ["Accessories"],
+          sourceOrder: 2,
+          visibleInSource: true,
+          opacityInSource: 1,
+          unsupportedFeatures: []
+        },
+        {
+          sourceGroupId: "group_hair",
+          originalName: "Hair",
+          normalizedName: "Hair",
+          groupPath: ["Hair"],
+          sourceOrder: 4,
+          visibleInSource: true,
+          opacityInSource: 1,
+          unsupportedFeatures: []
+        }
+      ],
       sourceLayers: [
         createLayer("psd:root/layer[0]", "headwear", [], 0),
         createLayer("psd:root/layer[1]", "hidden", [], 1, false),
-        createLayer("psd:root/group[0]/layer[0]", "tie", ["Accessories"], 3, true, "unsupported")
+        createLayer("psd:root/group[0]/layer[0]", "tie", ["Accessories"], 3, true, "unsupported"),
+        createLayer("psd:root/group[2]/layer[0]", "front hair", ["Hair"], 5)
       ],
       unsupportedFeatures: [],
       diagnostics: []

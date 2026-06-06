@@ -30,7 +30,8 @@ export const AiCommandTranscriptApprovalEntrySchema = z.object({
   agentId: z.string().min(1),
   approvalStatus: z.literal("approved"),
   evidenceRefs: z.array(z.string().min(1)).default([]),
-  operationId: OperationIdSchema.optional()
+  operationId: OperationIdSchema.optional(),
+  approvalContextDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional()
 });
 export type AiCommandTranscriptApprovalEntry = z.infer<typeof AiCommandTranscriptApprovalEntrySchema>;
 
@@ -127,6 +128,9 @@ export const appendAiApprovalToTranscript = (input: {
     evidenceRefs: [...(input.evidenceRefs ?? [])],
     ...(input.record.operationId === undefined
       ? {}
-      : { operationId: OperationIdSchema.parse(input.record.operationId) })
+      : { operationId: OperationIdSchema.parse(input.record.operationId) }),
+    ...(input.record.approvalContextDigest === undefined
+      ? {}
+      : { approvalContextDigest: input.record.approvalContextDigest })
   });
 };

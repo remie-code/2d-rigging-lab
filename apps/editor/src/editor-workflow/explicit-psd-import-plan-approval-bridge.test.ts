@@ -16,7 +16,10 @@ describe("explicit PSD import plan approval bridge", () => {
       destinationParentPartId: "part_root"
     });
 
-    expect(collectApprovedPsdImportPlanLeafRefs(plan)).toEqual(["psd:root/layer[0]"]);
+    expect(collectApprovedPsdImportPlanLeafRefs(plan)).toEqual([
+      "psd:root/layer[0]",
+      "psd:root/group[2]/layer[0]"
+    ]);
     expect(bridge).toMatchObject({
       schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
       candidatePlan: {
@@ -28,8 +31,8 @@ describe("explicit PSD import plan approval bridge", () => {
           publicDemoAsset: false
         },
         summary: {
-          candidateCount: 3,
-          approvedCandidateCount: 1,
+          candidateCount: 4,
+          approvedCandidateCount: 2,
           notApprovedCandidateCount: 2,
           blockedCandidateCount: 1
         }
@@ -48,7 +51,8 @@ describe("explicit PSD import plan approval bridge", () => {
       }
     });
     expect(bridge.approval.approvedLeafRefs.map((leaf) => leaf.sourceLayerRef.sourceLayerId)).toEqual([
-      "psd:root/layer[0]"
+      "psd:root/layer[0]",
+      "psd:root/group[2]/layer[0]"
     ]);
     expect(bridge.approval.notApprovedCandidates.map((candidate) =>
       candidate.sourceLayerRef.sourceLayerId
@@ -62,6 +66,14 @@ describe("explicit PSD import plan approval bridge", () => {
       drawableId: "draw_headwear",
       textureId: "tex_headwear",
       meshId: "mesh_headwear",
+      status: "resolved"
+    });
+    expect(bridge.approval.approvedLeafRefs[1]?.resolvedGeneratedIds).toMatchObject({
+      parentPartId: "part_root",
+      partId: "part_hair_front_hair",
+      drawableId: "draw_hair_front_hair",
+      textureId: "tex_hair_front_hair",
+      meshId: "mesh_hair_front_hair",
       status: "resolved"
     });
     expect(JSON.stringify(bridge)).not.toContain("rawBytes");
@@ -123,6 +135,14 @@ const createPlan = (): BrowserPsdImportPlanCandidatePlan => ({
       approvedOrder: 0
     }),
     createCandidate({
+      layerRef: "psd:root/group[2]/layer[0]",
+      displayName: "front hair",
+      fullPath: ["Hair", "front hair"],
+      statuses: ["candidate"],
+      approved: true,
+      approvedOrder: 1
+    }),
+    createCandidate({
       layerRef: "psd:root/layer[1]",
       displayName: "hidden",
       fullPath: ["hidden"],
@@ -139,8 +159,8 @@ const createPlan = (): BrowserPsdImportPlanCandidatePlan => ({
     })
   ],
   summary: {
-    totalLeafCount: 3,
-    eligibleCandidateCount: 2,
+    totalLeafCount: 4,
+    eligibleCandidateCount: 3,
     hiddenCount: 1,
     unsupportedCount: 1,
     emptyZeroSizeCount: 0,
@@ -150,15 +170,15 @@ const createPlan = (): BrowserPsdImportPlanCandidatePlan => ({
     generatedNameCollisionCount: 0,
     byteCapBlockedCount: 0,
     notApprovedCount: 2,
-    requestedApprovalCount: 1,
-    approvedCount: 1,
-    totalRawRgbaByteEstimate: 48,
-    eligibleRawRgbaByteEstimate: 32,
-    requestedApprovalRawRgbaByteEstimate: 16,
-    approvedRawRgbaByteEstimate: 16,
+    requestedApprovalCount: 2,
+    approvedCount: 2,
+    totalRawRgbaByteEstimate: 64,
+    eligibleRawRgbaByteEstimate: 48,
+    requestedApprovalRawRgbaByteEstimate: 32,
+    approvedRawRgbaByteEstimate: 32,
     candidateEnumerationCap: {
       exceeded: false,
-      totalLeafCount: 3,
+      totalLeafCount: 4,
       maxLeafCandidates: 200
     },
     sourceParseCap: {

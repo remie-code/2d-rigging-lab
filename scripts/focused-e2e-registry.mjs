@@ -118,6 +118,12 @@ const focusedE2eMetadataById = {
     tags: ["assetIo", "psdImport", "importPlan", "browserPersistence", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  psdImportPlanCodexFocused: {
+    purpose:
+      "Replay sample_model.psd root import-plan approval for the non-fixed front hair leaf, Codex-facing in-process import-plan commands, stale approval-context rejection, hidden-candidate taxonomy, save/load boundary, and parser import containment.",
+    tags: ["assetIo", "psdImport", "importPlan", "codexCommand", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   psdMultiLayerBatchFocused: {
     purpose:
       "Replay explicit browser PSD file selection, Domain A selected leaf layer batch intake, generated part scaffold evidence, save/load boundary, and parser import containment.",
@@ -167,6 +173,12 @@ const postWave42FocusedE2eRegistryOverlayEntries = [
     id: "psdImportPlanFocused",
     path: "apps/editor/e2e/psd-import-plan-focused-smoke.mjs",
     command: "node apps/editor/e2e/psd-import-plan-focused-smoke.mjs",
+    category: "assetIoBoundary"
+  },
+  {
+    id: "psdImportPlanCodexFocused",
+    path: "apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
+    command: "node apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
     category: "assetIoBoundary"
   }
 ];

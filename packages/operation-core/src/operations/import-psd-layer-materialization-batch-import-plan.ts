@@ -8,6 +8,7 @@ import type { PsdLayerMaterializationBatchGeneratedTargetsDto } from "../psd-lay
 import type {
   PsdImportPlanApprovalBridgeEvidenceDto,
   PsdImportPlanCandidateDto,
+  PsdImportPlanCandidateStatusDto,
   PsdImportPlanGeneratedScaffoldDto,
   PsdImportPlanSourceLayerReferenceDto
 } from "../psd-import-plan-approval-evidence.js";
@@ -22,6 +23,7 @@ const IMPORT_PLAN_BLOCKING_CANDIDATE_STATUSES = new Set([
   "generatedNameCollision",
   "byteCapBlocked"
 ]);
+const IMPORT_PLAN_NOT_APPROVED_STATUS: PsdImportPlanCandidateStatusDto = "notApproved";
 
 export interface ImportPlanBatchEntryForPreflight {
   readonly selectedIndex: number;
@@ -298,7 +300,11 @@ const addImportPlanCandidateStatusDiagnostics = (input: {
       operationId: input.operationId,
       checkId: "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected",
       message: `Approved PSD source layer ${input.sourceLayerKey} has blocking candidate statuses: ${blockingStatuses.join(", ")}.`,
-      path: `/payload/importPlanBridge/candidatePlan/candidates/${input.candidate.candidateIndex}/statuses`
+      path: `/payload/importPlanBridge/candidatePlan/candidates/${input.candidate.candidateIndex}/statuses`,
+      evidence: [
+        "importPlanIssueKind:blockedCandidate",
+        ...blockingStatuses.map((status) => `candidateStatus:${status}`)
+      ]
     })
   );
 };
@@ -310,6 +316,20 @@ const addImportPlanApprovedLeafStatusDiagnostics = (input: {
   readonly statuses: readonly string[];
   readonly entryDiagnostics: Map<number, DiagnosticDto[]>;
 }): void => {
+  if (input.statuses.includes(IMPORT_PLAN_NOT_APPROVED_STATUS)) {
+    addEntryDiagnostic(
+      input.entryDiagnostics,
+      input.selectedIndex,
+      createBatchDiagnostic({
+        operationId: input.operationId,
+        checkId: "operation.importPsdLayerMaterializationBatch.importPlanNotApprovedCandidateSelected",
+        message: `Approved PSD source layer ${input.sourceLayerKey} still carries notApproved approval status.`,
+        path: `/payload/importPlanBridge/approval/approvedLeafRefs/${input.selectedIndex}/candidateStatuses`,
+        evidence: ["importPlanIssueKind:notApproved", "candidateStatus:notApproved"]
+      })
+    );
+  }
+
   const blockingStatuses = input.statuses.filter((status) =>
     IMPORT_PLAN_BLOCKING_CANDIDATE_STATUSES.has(status)
   );
@@ -324,7 +344,11 @@ const addImportPlanApprovedLeafStatusDiagnostics = (input: {
       operationId: input.operationId,
       checkId: "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected",
       message: `Approved PSD source layer ${input.sourceLayerKey} carries blocking approval statuses: ${blockingStatuses.join(", ")}.`,
-      path: `/payload/importPlanBridge/approval/approvedLeafRefs/${input.selectedIndex}/candidateStatuses`
+      path: `/payload/importPlanBridge/approval/approvedLeafRefs/${input.selectedIndex}/candidateStatuses`,
+      evidence: [
+        "importPlanIssueKind:blockedCandidate",
+        ...blockingStatuses.map((status) => `candidateStatus:${status}`)
+      ]
     })
   );
 };
@@ -353,10 +377,12 @@ const createBatchDiagnostic = (input: {
   readonly checkId: string;
   readonly message: string;
   readonly path: string;
+  readonly evidence?: readonly string[];
 }): DiagnosticDto =>
   createOperationDiagnostic({
     checkId: input.checkId,
     message: input.message,
+    ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
     target: {
       kind: "operation",
       id: input.operationId,

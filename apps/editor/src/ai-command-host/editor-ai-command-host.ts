@@ -3,11 +3,13 @@ import {
   AiCommandRequestSchema,
   InMemoryAiApprovalPolicy,
   appendAiCommandResponseToTranscript,
+  executeAiPsdImportPlanCommand,
   executeAiReadCommand,
   type AiApprovalPolicy,
   type AiCommandResponse,
   type AiCommandTranscript,
   type AiOperationCommandHost,
+  type AiPsdImportPlanCommandHost,
   type AiReadCommandHost
 } from "@private-2d-rigging-lab/ai-interface";
 
@@ -25,6 +27,7 @@ export interface EditorAiCommandHost {
 export interface EditorAiCommandHostOptions {
   readonly operationHost: AiOperationCommandHost;
   readonly readHost: AiReadCommandHost;
+  readonly psdImportPlanHost?: AiPsdImportPlanCommandHost;
   readonly approvalPolicy?: AiApprovalPolicy;
   readonly transcript?: AiCommandTranscript;
 }
@@ -57,6 +60,21 @@ export const createEditorAiCommandHost = (
         request.command === "getOperationLog"
       ) {
         return executeAiReadCommand(request, options.readHost, operationExecutor.transcript);
+      }
+
+      if (
+        request.command === "getPsdImportPlanState" ||
+        request.command === "setPsdImportPlanApproval" ||
+        request.command === "preflightPsdImportPlanIntake" ||
+        request.command === "executePsdImportPlanIntake"
+      ) {
+        return executeAiPsdImportPlanCommand(request, {
+          approvalPolicy: operationExecutor.approvalPolicy,
+          transcript: operationExecutor.transcript,
+          ...(options.psdImportPlanHost === undefined
+            ? {}
+            : { host: options.psdImportPlanHost })
+        });
       }
 
       const operation = request.command === "dryRunOperation" ? request.payload : request.payload.operation;

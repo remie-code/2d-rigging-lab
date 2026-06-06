@@ -137,6 +137,40 @@ export const PsdImportPlanCandidateSchema = z.object({
 }).strict();
 export type PsdImportPlanCandidateDto = z.infer<typeof PsdImportPlanCandidateSchema>;
 
+export const PsdImportPlanIssueKindSchema = z.enum([
+  "stalePlan",
+  "staleApproval",
+  "missingCandidate",
+  "blockedCandidate",
+  "notApproved",
+  "collision",
+  "destinationParent",
+  "sourceIdentityMismatch",
+  "byteUnavailable",
+  "byteCapExceeded",
+  "partialFailure",
+  "unsupportedCandidate",
+  "hiddenCandidate",
+  "emptyCandidate",
+  "currentSessionSourceMissing",
+  "privateLocalProvenanceFailure"
+]);
+export type PsdImportPlanIssueKindDto = z.infer<
+  typeof PsdImportPlanIssueKindSchema
+>;
+
+export const PsdImportPlanIssueSchema = z.object({
+  issueId: z.string().regex(/^issue_[A-Za-z0-9_-]+$/).optional(),
+  issueKind: PsdImportPlanIssueKindSchema,
+  checkId: z.string().min(1).optional(),
+  message: z.string().min(1),
+  targetPath: z.string().min(1).optional(),
+  selectedIndex: z.number().int().nonnegative().optional(),
+  approvalOrder: z.number().int().nonnegative().optional(),
+  sourceLayerRef: PsdImportPlanSourceLayerReferenceSchema.optional()
+}).strict();
+export type PsdImportPlanIssueDto = z.infer<typeof PsdImportPlanIssueSchema>;
+
 export const PsdImportPlanSummarySchema = z.object({
   candidateCount: z.number().int().nonnegative(),
   approvedCandidateCount: z.number().int().nonnegative(),
@@ -232,6 +266,7 @@ export const PsdImportPlanApprovalEvidenceSchema = z.object({
   notApprovedCandidates: z.array(PsdImportPlanCandidateSchema).default([]),
   blockedCandidates: z.array(PsdImportPlanCandidateSchema).default([]),
   collisionPreflight: PsdImportPlanCollisionPreflightSummarySchema,
+  issues: z.array(PsdImportPlanIssueSchema).optional(),
   boundary: z.object({
     onlyApprovedLeafRefsPassedToBatch: z.literal(true),
     rawParserObjectPersistence: z.literal("notPersisted"),

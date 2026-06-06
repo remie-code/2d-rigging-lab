@@ -1,7 +1,8 @@
 import {
   hydrateInMemoryAiCommandTranscript,
   serializeAiCommandTranscript,
-  type AiCommandTranscript
+  type AiCommandTranscript,
+  type AiPsdImportPlanExpectedContext
 } from "@private-2d-rigging-lab/ai-interface";
 import {
   parseOperationLogEntriesFromJsonl
@@ -14,6 +15,7 @@ import type { ProductPreflightReportDto } from "@private-2d-rigging-lab/contract
 
 import {
   createEditorAiCommandHost,
+  projectEditorAiPsdImportPlanCommandResult,
   projectEditorAiState,
   type EditorAiCommandHost
 } from "../ai-command-host/index.js";
@@ -219,6 +221,7 @@ import {
 } from "./selected-psd-layer-intake-workflow.js";
 import {
   commitEditorSelectedPsdLayerBatchIntakeWorkflow,
+  preflightEditorSelectedPsdLayerBatchIntakeWorkflow,
   type EditorExplicitPsdLayerBatchIntakeCommand,
   type EditorExplicitPsdLayerBatchIntakeResult
 } from "./selected-psd-layer-batch-intake-workflow.js";
@@ -573,6 +576,148 @@ export const createEditorWorkflowController = (
           return adapter.getOperationLogEntries();
         }
       },
+      psdImportPlanHost: {
+        getPsdImportPlanState(payload) {
+          return projectEditorAiPsdImportPlanCommandResult({
+            state,
+            detail: payload.detail
+          });
+        },
+        async setPsdImportPlanApproval(payload) {
+          if (payload.expectedPlan !== undefined) {
+            assertCurrentImportPlanMatchesExpected(payload.expectedPlan);
+          }
+
+          const outcome = await runEditorExplicitPsdImportPlanPreviewWorkflow({
+            state,
+            command: {
+              scopeRef: payload.scopeRef ??
+                payload.expectedPlan?.scopeRef ??
+                state.explicitPsdImport.importPlan?.scopeRef ??
+                "psd:root",
+              approvedLayerNodeRefs: payload.approvedLayerNodeRefs,
+              destinationParentPartId: payload.destinationParentPartId
+            },
+            ...(currentExplicitPsdImportFile === undefined
+              ? {}
+              : { currentPsdFile: currentExplicitPsdImportFile }),
+            ...(currentExplicitPsdImportBridgeResult === undefined
+              ? {}
+              : { parsedBridgeResult: currentExplicitPsdImportBridgeResult })
+          });
+          currentExplicitPsdImportPlan = outcome.plan;
+          state = {
+            ...state,
+            explicitPsdImport: outcome.state
+          };
+
+          return projectEditorAiPsdImportPlanCommandResult({
+            state,
+            detail: "full"
+          });
+        },
+        async preflightPsdImportPlanIntake(payload) {
+          assertCurrentImportPlanMatchesExpected(payload.expectedPlan);
+          assertCurrentImportPlanApprovalMatches(payload.approvedLayerNodeRefs, payload.destinationParentPartId);
+
+          if (currentExplicitPsdImportPlan === undefined || currentExplicitPsdImportFile === undefined) {
+            throw new Error("Generate an import-plan preview before preflighting approved leaf candidates.");
+          }
+
+          const importPlanBridge = await createEditorPsdImportPlanApprovalBridgeEvidence({
+            plan: currentExplicitPsdImportPlan,
+            sourceAssetId: createExplicitPsdSourceAssetId(currentExplicitPsdImportFile),
+            sourceFilePath: createPsdSourcePackagePath(currentExplicitPsdImportFile),
+            destinationParentPartId: payload.destinationParentPartId
+          });
+          const outcome = await preflightEditorSelectedPsdLayerBatchIntakeWorkflow({
+            adapter,
+            state,
+            command: {
+              selectedLayerNodeRefs: payload.approvedLayerNodeRefs,
+              destinationParentPartId: payload.destinationParentPartId,
+              importPlanBridge
+            },
+            currentPsdFile: currentExplicitPsdImportFile,
+            ...(currentExplicitPsdImportBridgeResult === undefined
+              ? {}
+              : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+            persistentByteStore,
+            ...(options.now === undefined ? {} : { now: options.now })
+          });
+
+          return {
+            result: projectEditorAiPsdImportPlanCommandResult({
+              state: outcome.state,
+              detail: "full",
+              ...(outcome.result.operationResult === undefined
+                ? {}
+                : { operationResult: outcome.result.operationResult }),
+              stage: outcome.result.stage,
+              selectedLayerNodeRefs: outcome.result.selectedLayerNodeRefs
+            }),
+            ...(outcome.result.operationResult === undefined
+              ? {}
+              : { operationResult: outcome.result.operationResult })
+          };
+        },
+        async executePsdImportPlanIntake(payload) {
+          assertCurrentImportPlanMatchesExpected(payload.expectedPlan);
+          assertCurrentImportPlanApprovalMatches(payload.approvedLayerNodeRefs, payload.destinationParentPartId);
+
+          if (currentExplicitPsdImportPlan === undefined || currentExplicitPsdImportFile === undefined) {
+            throw new Error("Generate an import-plan preview before adding approved leaf candidates.");
+          }
+
+          const approvedLayerNodeRefs = collectApprovedPsdImportPlanLeafRefs(currentExplicitPsdImportPlan);
+          if (approvedLayerNodeRefs.length === 0) {
+            throw new Error("Import-plan execution requires at least one approved leaf candidate.");
+          }
+
+          const importPlanBridge = await createEditorPsdImportPlanApprovalBridgeEvidence({
+            plan: currentExplicitPsdImportPlan,
+            sourceAssetId: createExplicitPsdSourceAssetId(currentExplicitPsdImportFile),
+            sourceFilePath: createPsdSourcePackagePath(currentExplicitPsdImportFile),
+            destinationParentPartId: payload.destinationParentPartId.trim()
+          });
+          const outcome = await commitEditorSelectedPsdLayerBatchIntakeWorkflow({
+            adapter,
+            state,
+            command: {
+              selectedLayerNodeRefs: approvedLayerNodeRefs,
+              destinationParentPartId: payload.destinationParentPartId,
+              importPlanBridge
+            },
+            currentPsdFile: currentExplicitPsdImportFile,
+            ...(currentExplicitPsdImportBridgeResult === undefined
+              ? {}
+              : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+            persistentByteStore,
+            ...(options.now === undefined ? {} : { now: options.now })
+          });
+          state = outcome.state;
+          if (outcome.result.latestSessionPersistenceResult !== null) {
+            latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+            latestDrawablePresetResult = null;
+          }
+          if (outcome.result.status === "committed") {
+            clearDynamicsPreview();
+          }
+
+          const operationResult = outcome.result.latestSessionPersistenceResult?.operationResult;
+
+          return {
+            result: projectEditorAiPsdImportPlanCommandResult({
+              state,
+              detail: "full",
+              ...(operationResult === undefined ? {} : { operationResult }),
+              stage: outcome.result.stage,
+              selectedLayerNodeRefs: outcome.result.selectedLayerNodeRefs
+            }),
+            ...(operationResult === undefined ? {} : { operationResult })
+          };
+        }
+      },
       ...(input.transcript === undefined ? {} : { transcript: input.transcript })
     });
   let aiCommandHost = createAiHost();
@@ -587,9 +732,70 @@ export const createEditorWorkflowController = (
     },
     createAiCommandHost: createAiHost
   });
-  const clearDynamicsPreview = (): void => {
+  function assertCurrentImportPlanMatchesExpected(expected: AiPsdImportPlanExpectedContext): void {
+    const plan = state.explicitPsdImport.importPlan;
+    if (plan === null) {
+      throw new Error("No current PSD import-plan preview is available.");
+    }
+
+    const mismatches = [
+      plan.planId === expected.planId ? "" : `planId=${plan.planId}`,
+      plan.candidatePlanDigest === expected.candidatePlanDigest
+        ? ""
+        : `candidatePlanDigest=${plan.candidatePlanDigest}`,
+      expected.sourceDigest === undefined || plan.sourceDigest === expected.sourceDigest
+        ? ""
+        : `sourceDigest=${plan.sourceDigest ?? "none"}`,
+      expected.sourceFileName === undefined || plan.sourceFileName === expected.sourceFileName
+        ? ""
+        : `sourceFileName=${plan.sourceFileName}`,
+      expected.sourceByteLength === undefined || plan.sourceByteLength === expected.sourceByteLength
+        ? ""
+        : `sourceByteLength=${plan.sourceByteLength}`,
+      plan.scopeRef === expected.scopeRef ? "" : `scopeRef=${plan.scopeRef}`,
+      expected.destinationParentPartId === undefined ||
+        (plan.destinationParentPartId ?? null) === expected.destinationParentPartId
+        ? ""
+        : `destinationParentPartId=${plan.destinationParentPartId ?? "none"}`
+    ].filter((value) => value.length > 0);
+
+    if (mismatches.length > 0) {
+      throw new Error(
+        `Current PSD import-plan context does not match expected context: ${mismatches.join(", ")}.`
+      );
+    }
+  }
+  function assertCurrentImportPlanApprovalMatches(
+    approvedLayerNodeRefs: readonly string[],
+    destinationParentPartId: string
+  ): void {
+    const plan = state.explicitPsdImport.importPlan;
+    if (plan === null) {
+      throw new Error("No current PSD import-plan preview is available.");
+    }
+
+    const currentApprovedLayerNodeRefs = plan.candidates
+      .filter((candidate) => candidate.approved)
+      .sort((left, right) =>
+        (left.approvedOrder ?? Number.MAX_SAFE_INTEGER) -
+        (right.approvedOrder ?? Number.MAX_SAFE_INTEGER)
+      )
+      .map((candidate) => candidate.layerRef);
+    if (!orderedStringsEqual(currentApprovedLayerNodeRefs, approvedLayerNodeRefs)) {
+      throw new Error(
+        `Current PSD import-plan approved refs do not match the explicit command refs: current=${currentApprovedLayerNodeRefs.join(",")} requested=${approvedLayerNodeRefs.join(",")}.`
+      );
+    }
+
+    if ((plan.destinationParentPartId ?? "") !== destinationParentPartId.trim()) {
+      throw new Error(
+        `Current PSD import-plan destination parent ${plan.destinationParentPartId ?? "none"} does not match ${destinationParentPartId}.`
+      );
+    }
+  }
+  function clearDynamicsPreview(): void {
     state = dynamicsPreviewRunner.clear(state);
-  };
+  }
   const createWorkflowTimestamp = (): string =>
     (options.now?.() ?? new Date()).toISOString();
   const clearProductPreflightReportHistory = (): void => {
@@ -1759,6 +1965,12 @@ const isValidMeshVertexNudgeDelta = (delta: {
   Number.isFinite(delta.x) &&
   Number.isFinite(delta.y) &&
   (delta.x !== 0 || delta.y !== 0);
+
+const orderedStringsEqual = (
+  left: readonly string[],
+  right: readonly string[]
+): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const formatProductPreflightError = (error: unknown): string =>
   error instanceof Error ? error.message : "Product preflight failed with an unknown error.";

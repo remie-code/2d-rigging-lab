@@ -185,6 +185,34 @@ describe("explicit PSD import panel", () => {
     }]);
   });
 
+  it("updates import-plan preview approval for an arbitrary eligible candidate ref", async () => {
+    const calls: unknown[] = [];
+    const frontHairRef = "psd:root/group[2]/layer[0]";
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithImportPlan({
+        approvedLayerRefs: []
+      })),
+      onGenerateImportPlanPreview: (command) => calls.push(command)
+    });
+
+    const frontHairChoice = findByNameAndValue(
+      panel,
+      "explicitPsdImportPlanCandidateApproval",
+      frontHairRef
+    );
+    frontHairChoice.checked = true;
+    frontHairChoice.emit("change");
+    findByTestId(panel, editorTestIds.explicitPsdImportPlanForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedRefs)?.value).toBe(frontHairRef);
+    expect(calls).toEqual([{
+      scopeRef: "psd:root",
+      approvedLayerNodeRefs: [frontHairRef],
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
   it("submits approved import-plan execution without sending not-approved refs from the panel", async () => {
     const calls: unknown[] = [];
     const panel = createPanel({
@@ -468,15 +496,15 @@ const createParsedStateWithImportPlan = (options: {
     scopeRef: "psd:root",
     scopeLabel: "psd:root",
     destinationParentPartId: "part_root",
-    candidateCount: 3,
-    eligibleCandidateCount: 2,
+    candidateCount: 4,
+    eligibleCandidateCount: 3,
     approvedCount: approvedLayerRefs.length,
-    notApprovedCount: 3 - approvedLayerRefs.length,
+    notApprovedCount: 4 - approvedLayerRefs.length,
     hiddenCount: 1,
     unsupportedCount: 1,
     collisionCount: 0,
     byteCapBlockedCount: 0,
-    totalRawRgbaByteEstimate: 528,
+    totalRawRgbaByteEstimate: 784,
     approvedRawRgbaByteEstimate: approvedLayerRefs.length * 256,
     candidates: [
       {
@@ -522,6 +550,28 @@ const createParsedStateWithImportPlan = (options: {
         generatedDrawableId: "draw_eyewear",
         generatedTextureId: "tex_eyewear",
         generatedMeshId: "mesh_eyewear"
+      },
+      {
+        layerRef: "psd:root/group[2]/layer[0]",
+        displayName: "front hair",
+        fullPathLabel: "Hair / front hair",
+        parentGroupPathLabel: "Hair",
+        boundsLabel: "0,0 8x8",
+        visibleInSource: true,
+        opacityInSource: 1,
+        sourceOrder: 3,
+        rawRgbaByteEstimate: 256,
+        statuses: candidateStatuses("psd:root/group[2]/layer[0]"),
+        statusReasons: ["Visible positive-size leaf is eligible for explicit approval."],
+        defaultSelection: "notApproved" as const,
+        requestedApproval: isApproved("psd:root/group[2]/layer[0]"),
+        approved: isApproved("psd:root/group[2]/layer[0]"),
+        approvedOrder: approvalOrder("psd:root/group[2]/layer[0]"),
+        approvalBlockedReasons: [],
+        generatedPartId: "part_hair_front_hair",
+        generatedDrawableId: "draw_hair_front_hair",
+        generatedTextureId: "tex_hair_front_hair",
+        generatedMeshId: "mesh_hair_front_hair"
       },
       {
         layerRef: "layer_hidden",

@@ -34,6 +34,8 @@ export {
   PsdImportPlanCandidateStatusSchema,
   PsdImportPlanCollisionPreflightSummarySchema,
   PsdImportPlanGeneratedScaffoldSchema,
+  PsdImportPlanIssueKindSchema,
+  PsdImportPlanIssueSchema,
   PsdImportPlanScopeSchema,
   PsdImportPlanSourcePsdIdentitySchema,
   PsdImportPlanSummarySchema
@@ -48,6 +50,8 @@ export type {
   PsdImportPlanCandidateStatusDto,
   PsdImportPlanCollisionPreflightSummaryDto,
   PsdImportPlanGeneratedScaffoldDto,
+  PsdImportPlanIssueDto,
+  PsdImportPlanIssueKindDto,
   PsdImportPlanScopeDto,
   PsdImportPlanSourcePsdIdentityDto,
   PsdImportPlanSummaryDto

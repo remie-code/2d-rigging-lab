@@ -21,7 +21,8 @@ discussion/implementation/
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - Product/system-level status is summarized in [current-capability-map.md](current-capability-map.md). Use it before planning the next wave; it is not a per-wave changelog.
-- Remaining work after the Wave48 final pass is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Remaining work after the Wave49 final pass is summarized in [remaining-work-backlog.md](remaining-work-backlog.md). Use it with the capability map before choosing the next wave boundary.
+- Wave 49 `codex-friendly-explicit-psd-leaf-intake-generalization-v0` is final complete / pass after Domains A-G, Domain H final integration report, and final integration review. It uses [../design/codex-friendly-automation-policy.md](../design/codex-friendly-automation-policy.md) as required basis and is now the latest final implementation-proven baseline.
 - Wave 48 `psd-group-aware-import-plan-explicit-leaf-approval-v0` is final complete / pass after Domains A-G implementation / Review-Sylph `pass` evidence, H-F1/H-F2 blocker fix, Domain H final verification rerun, and clean integration review. The final report is [waves/wave48/wave48-final-integration-report.md](waves/wave48/wave48-final-integration-report.md), and the final review is [reviews/wave48/wave48-final-integration-review.md](reviews/wave48/wave48-final-integration-review.md). The reflected scope covers `psd:root` / group import-plan candidate preview, parser-free candidate/approval digest evidence, explicit eligible leaf approval/unapproval, approved-leaf-only batch intake through the existing Wave47 path, import-plan validator/Product Preflight diagnostics, and focused save/load/portable/parser-boundary regression through `psdImportPlanFocused`.
 - Wave 48 keeps all-layer one-click PSD import, recursive group auto import, group-as-artmesh import, drag/drop/filesystem/archive intake, full renderer/pixel/compositing oracle, Cubism SDK/export/runtime integration, public demo asset, repo-side AI/LLM/autofix, and persisted source PSD bytes/raw parser objects out of current scope.
 - Wave 47 `psd-explicit-multi-layer-batch-intake-part-scaffolding-v0` is final complete / pass after Domains A-G, Domain H final verification / integration bookkeeping, and Domain H clean integration review. Domain G documentation refresh is recorded at [waves/wave47/wave47-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave47/wave47-domain-g-docs-traceability-boundary-refresh-report.md), Domain G Review-Sylph review is recorded at [reviews/wave47/wave47-domain-g-docs-traceability-boundary-refresh-review.md](reviews/wave47/wave47-domain-g-docs-traceability-boundary-refresh-review.md) with verdict `pass`, Domain H final report is recorded at [waves/wave47/wave47-domain-h-integration-review-and-final-report.md](waves/wave47/wave47-domain-h-integration-review-and-final-report.md), and Domain H clean integration review is recorded at [reviews/wave47/wave47-domain-h-clean-integration-review.md](reviews/wave47/wave47-domain-h-clean-integration-review.md) with verdict `pass`. The implementation-proven scope covers explicit PSD import -> explicit multi-leaf selection (`headwear`, `eyewear`, `tie / tie`) -> batch raw RGBA materialization -> private/local project asset intake -> generated texture/drawable/mesh/part scaffold evidence under `part_root` -> focused save/load/persistence boundary regression through `psdMultiLayerBatchFocused`.
@@ -87,7 +88,7 @@ discussion/implementation/
 | Path | Purpose |
 |---|---|
 | [current-capability-map.md](current-capability-map.md) | Product/system-level status map: intended capability, implemented surface, incomplete workflow areas, future scope, and next-wave decision points |
-| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave48 final integration rerun pass, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
+| [remaining-work-backlog.md](remaining-work-backlog.md) | Remaining work backlog after Wave49 final integration pass, including near-term product work, asset I/O decision gates, quality residuals, and recommended next-wave choices |
 | [orchestration/wave0-plan.md](orchestration/wave0-plan.md) | Historical Wave 0 implementation foundation plan |
 | [orchestration/wave1-plan.md](orchestration/wave1-plan.md) | Wave 1 contracts-foundation dependency and Orch-Sylph parallelism plan |
 | [orchestration/wave2-plan.md](orchestration/wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and Orch-Sylph parallelism plan |
@@ -214,6 +215,9 @@ discussion/implementation/
 | `waves/wave48/**` | Wave 48 Domain A-G reports plus Domain H final integration report; Wave48 final integration rerun verdict `pass` |
 | [waves/wave48/wave48-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave48/wave48-domain-g-docs-traceability-boundary-refresh-report.md) | Wave 48 Domain G documentation / traceability boundary refresh report |
 | [waves/wave48/wave48-final-integration-report.md](waves/wave48/wave48-final-integration-report.md) | Wave 48 Domain H final integration rerun report; verdict `pass` |
+| `waves/wave49/**` | Wave 49 Domain A-G reports plus Domain H final integration report; Wave49 final integration verdict `pass` |
+| [waves/wave49/wave49-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave49/wave49-domain-g-docs-traceability-boundary-refresh-report.md) | Wave 49 Domain G documentation / traceability boundary refresh report |
+| [waves/wave49/wave49-final-integration-report.md](waves/wave49/wave49-final-integration-report.md) | Wave 49 Domain H final integration report; verdict `pass` |
 | [reviews/wave1/_map.md](reviews/wave1/_map.md) | Wave 1 domain review reports |
 | [reviews/wave2/_map.md](reviews/wave2/_map.md) | Wave 2 domain review reports |
 | [reviews/wave3/_map.md](reviews/wave3/_map.md) | Wave 3 domain review reports |
@@ -286,12 +290,14 @@ discussion/implementation/
 | [reviews/wave47/wave47-domain-h-clean-integration-review.md](reviews/wave47/wave47-domain-h-clean-integration-review.md) | Wave 47 Domain H clean integration review; verdict `pass`, H-F1/H-F2/H-F3 bookkeeping fix loop resolved |
 | `reviews/wave48/**` | Wave 48 Domain A-G Review-Sylph reports plus Domain H final integration review; Domain H rerun verdict `pass` |
 | [reviews/wave48/wave48-final-integration-review.md](reviews/wave48/wave48-final-integration-review.md) | Wave 48 Domain H final integration rerun review; verdict `pass` |
+| `reviews/wave49/**` | Wave 49 Domain A-G Review-Sylph reports plus Domain H final integration review |
+| [reviews/wave49/wave49-final-integration-review.md](reviews/wave49/wave49-final-integration-review.md) | Wave 49 Domain H final integration review; verdict `pass` |
 | [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) | Source file responsibility and `index.ts` guardrail |
 | `.agents/skills/implementation-orchestration/SKILL.md` | Active orchestration skill basis |
 
 ## Next Actions
 
-1. Treat Wave48 as the latest final implementation-proven baseline before selecting the next wave boundary.
-2. Use Wave48 final pass evidence as the current root/group import-plan preview / explicit approved leaf intake implementation evidence.
+1. Treat Wave49 as the latest final implementation-proven baseline.
+2. Use Wave49 evidence for `front hair` / `psd:root/group[2]/layer[0]`, `psdImportPlanCodexFocused`, result refs/taxonomy, validator/Product Preflight diagnostics, and in-process Codex-facing command parity.
 3. Keep all-layer one-click import, recursive group auto import, group-as-artmesh import, drag/drop/filesystem/archive intake, renderer/pixel/compositing oracle, Cubism, public demo assets, external HTTP/WebSocket/MCP transport, LLM provider integration, repo-side proposal generation/ranking, and auto-fix in Future scope unless the current MVP boundary is explicitly changed.
 4. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source.

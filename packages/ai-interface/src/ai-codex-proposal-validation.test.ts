@@ -51,6 +51,23 @@ describe("AI Codex proposal operation catalog", () => {
     expect(findCatalogOperation(firstCatalog, "setRuntimeVisibility")).toMatchObject({
       targetKinds: ["drawable"]
     });
+    expect(findCatalogOperation(firstCatalog, "importPsdLayerMaterializationBatch")).toMatchObject({
+      availability: "available",
+      targetKinds: ["drawable", "mesh", "part", "sourceAsset", "texture"],
+      payloadSchemaRef: "operation.importPsdLayerMaterializationBatch.payload.v1"
+    });
+    expect(
+      findCatalogOperation(firstCatalog, "importPsdLayerMaterializationBatch")
+        .requiredInputs
+        .filter((input) => input.inputKind === "payloadField")
+        .map((input) => input.inputId)
+    ).toEqual([
+      "payload.batchId",
+      "payload.destination",
+      "payload.entries",
+      "payload.importPlanBridge",
+      "payload.sourceAssetId"
+    ]);
     expect(firstCatalog.operations).toContainEqual(
       expect.objectContaining({
         operationType: "renderPixelOracle",
@@ -394,7 +411,7 @@ const findCatalogOperation = (
 ) => {
   const operation = catalog.operations.find((entry) => entry.operationType === operationType);
   expect(operation).toBeDefined();
-  return operation;
+  return operation!;
 };
 
 const createProposal = (

@@ -7,6 +7,10 @@ export const AiCommandNameSchema = z.enum([
   "validatePackage",
   "dryRunOperation",
   "commitOperation",
-  "getOperationLog"
+  "getOperationLog",
+  "getPsdImportPlanState",
+  "setPsdImportPlanApproval",
+  "preflightPsdImportPlanIntake",
+  "executePsdImportPlanIntake"
 ]);
 export type AiCommandName = z.infer<typeof AiCommandNameSchema>;

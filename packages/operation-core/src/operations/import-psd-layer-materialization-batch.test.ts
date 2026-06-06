@@ -175,6 +175,8 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
     ]);
     expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]).toMatchObject({
       aggregateStatus: "success",
+      evidenceId: "evidence_batch_face_hair",
+      operationId: "op_import_psd_batch",
       importPlanBridge: {
         schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
         candidatePlan: {
@@ -250,8 +252,104 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
         }
       }
     });
+    expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]?.entries).toEqual([
+      expect.objectContaining({
+        selectedIndex: 0,
+        approvalOrder: 0,
+        approvedLeafRef: expect.objectContaining({ sourceLayerId: "layer_face" }),
+        resultRefs: {
+          batchEvidenceId: "evidence_batch_face_hair",
+          materializationEvidenceId: "mat_selectedFace",
+          materializationId: "mat_selectedFace",
+          operationId: "op_import_psd_batch_0_face",
+          partId: "part_face",
+          drawableId: "draw_face",
+          meshId: "mesh_face",
+          textureId: "tex_face"
+        },
+        issues: []
+      }),
+      expect.objectContaining({
+        selectedIndex: 1,
+        approvalOrder: 1,
+        approvedLeafRef: expect.objectContaining({ sourceLayerId: "layer_hair_front" }),
+        resultRefs: {
+          batchEvidenceId: "evidence_batch_face_hair",
+          materializationEvidenceId: "mat_selectedHairFront",
+          materializationId: "mat_selectedHairFront",
+          operationId: "op_import_psd_batch_1_hair_front",
+          partId: "part_hair_front",
+          drawableId: "draw_hair_front",
+          meshId: "mesh_hair_front",
+          textureId: "tex_hair_front"
+        },
+        issues: []
+      })
+    ]);
     expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("rawLayerObject");
     expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("sourcePsdBytes");
+  });
+
+  it("records stable result refs for an arbitrary non-fixed approved eligible leaf", () => {
+    const session = createFixtureSession();
+    const request = createBatchRequest({
+      entries: [createMaterializationEvidence(FRONT_HAIR_LAYER)],
+      importPlanBridge: createImportPlanBridge({
+        approvedLayers: [FRONT_HAIR_LAYER]
+      })
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+    const evidence = outcome.result.psdLayerMaterializationBatchEvidence?.[0];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getPartById(session.graph, PartIdSchema.parse("part_front_hair"))).toMatchObject({
+      partId: "part_front_hair",
+      displayName: "front hair",
+      drawableIds: ["draw_front_hair"]
+    });
+    expect(getTextureAtlasEntryById(session.graph, TextureIdSchema.parse("tex_front_hair"))).toMatchObject({
+      textureId: "tex_front_hair",
+      sourceLayerId: "psd:root/group[2]/layer[0]"
+    });
+    expect(evidence).toMatchObject({
+      aggregateStatus: "success",
+      evidenceId: "evidence_batch_face_hair",
+      operationId: "op_import_psd_batch",
+      entries: [
+        {
+          selectedIndex: 0,
+          approvalOrder: 0,
+          sourceLayerRef: expect.objectContaining({
+            sourceLayerId: "psd:root/group[2]/layer[0]",
+            sourceLayerName: "front hair"
+          }),
+          approvedLeafRef: expect.objectContaining({
+            sourceLayerId: "psd:root/group[2]/layer[0]"
+          }),
+          generated: {
+            partId: "part_front_hair",
+            partDisplayName: "front hair",
+            drawableId: "draw_front_hair",
+            drawableDisplayName: "front hair",
+            textureId: "tex_front_hair",
+            meshId: "mesh_front_hair"
+          },
+          resultRefs: {
+            batchEvidenceId: "evidence_batch_face_hair",
+            materializationEvidenceId: "mat_psd_root_group_2_layer_0",
+            materializationId: "mat_psd_root_group_2_layer_0",
+            operationId: "op_import_psd_batch_0_front_hair",
+            partId: "part_front_hair",
+            drawableId: "draw_front_hair",
+            meshId: "mesh_front_hair",
+            textureId: "tex_front_hair"
+          },
+          issues: []
+        }
+      ],
+      issues: []
+    });
   });
 
   it("rejects stale or mismatched import plan approval evidence before mutating the session", () => {
@@ -317,11 +415,89 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
     );
     expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]?.entries).toEqual([
       expect.objectContaining({ selectedIndex: 0, status: "preflightReady" }),
-      expect.objectContaining({ selectedIndex: 1, status: "preflightBlocked" })
+      expect.objectContaining({
+        selectedIndex: 1,
+        status: "preflightBlocked",
+        issues: [
+          expect.objectContaining({
+            issueKind: "notApproved",
+            checkId:
+              "operation.importPsdLayerMaterializationBatch.importPlanNotApprovedCandidateSelected",
+            selectedIndex: 1,
+            sourceLayerRef: expect.objectContaining({ sourceLayerId: "layer_hair_front" })
+          })
+        ]
+      })
     ]);
+    expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueKind: "notApproved",
+          checkId: "operation.importPsdLayerMaterializationBatch.importPlanNotApprovedCandidateSelected"
+        })
+      ])
+    );
     expect(session.packageRevision).toBe(0);
     expect(session.graph.textureAtlas).toBeUndefined();
     expect(session.graph.drawables).toHaveLength(0);
+    expect(getPartById(session.graph, PartIdSchema.parse("part_root"))?.childPartIds).toEqual([]);
+  });
+
+  it("rejects hidden blocked import-plan candidates with machine-readable issue kind", () => {
+    const session = createFixtureSession();
+    const request = createBatchRequest({
+      entries: [createMaterializationEvidence(HIDDEN_HEADWEAR_LAYER)],
+      importPlanBridge: createImportPlanBridge({
+        approvedLayers: [HIDDEN_HEADWEAR_LAYER],
+        blockedLayers: [HIDDEN_HEADWEAR_LAYER],
+        blockedCandidateStatus: "hidden"
+      })
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+    const evidence = outcome.result.psdLayerMaterializationBatchEvidence?.[0];
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
+      "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected"
+    );
+    expect(evidence).toMatchObject({
+      aggregateStatus: "preflightBlocked",
+      failureCount: 1,
+      entries: [
+        {
+          selectedIndex: 0,
+          status: "preflightBlocked",
+          approvedLeafRef: expect.objectContaining({ sourceLayerId: "psd:root/layer[1]" }),
+          resultRefs: expect.objectContaining({
+            materializationId: "mat_psd_root_layer_1",
+            partId: "part_headwear",
+            drawableId: "draw_headwear",
+            meshId: "mesh_headwear",
+            textureId: "tex_headwear"
+          }),
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              issueKind: "hiddenCandidate",
+              checkId:
+                "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected",
+              sourceLayerRef: expect.objectContaining({ sourceLayerId: "psd:root/layer[1]" })
+            }),
+            expect.objectContaining({
+              issueKind: "blockedCandidate",
+              checkId:
+                "operation.importPsdLayerMaterializationBatch.importPlanBlockedCandidateSelected"
+            })
+          ])
+        }
+      ],
+      issues: expect.arrayContaining([
+        expect.objectContaining({ issueKind: "hiddenCandidate" }),
+        expect.objectContaining({ issueKind: "blockedCandidate" })
+      ])
+    });
+    expect(session.packageRevision).toBe(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
     expect(getPartById(session.graph, PartIdSchema.parse("part_root"))?.childPartIds).toEqual([]);
   });
 
@@ -512,6 +688,8 @@ const createFixtureSession = (): AuthoringSession => ({
         importProfile: "layered-character-psd-profile-v1",
         layers: [
           createSourceLayer(FACE_LAYER),
+          createSourceLayer(FRONT_HAIR_LAYER),
+          createSourceLayer(HIDDEN_HEADWEAR_LAYER),
           createSourceLayer(HAIR_FRONT_LAYER),
           createSourceLayer(ACCESSORY_A_LAYER),
           createSourceLayer(ACCESSORY_B_LAYER)
@@ -665,9 +843,11 @@ const createImportPlanBridge = (options: {
     | "approvalSelectionMismatch"
     | "preflightBlocked";
   readonly approvalCandidatePlanDigest?: FixtureDigest;
+  readonly blockedCandidateStatus?: "unsupported" | "hidden" | "emptyZeroSize";
 }) => {
   const notApprovedLayers = options.notApprovedLayers ?? [];
   const blockedLayers = options.blockedLayers ?? [];
+  const blockedCandidateStatus = options.blockedCandidateStatus ?? "unsupported";
   const candidateLayers = uniqueLayers([
     ...options.approvedLayers,
     ...notApprovedLayers,
@@ -693,7 +873,7 @@ const createImportPlanBridge = (options: {
           layer,
           candidateIndex,
           statuses: blockedLayers.some((blockedLayer) => blockedLayer.sourceLayerId === layer.sourceLayerId)
-            ? ["unsupported", "notApproved"]
+            ? [blockedCandidateStatus, "notApproved"]
             : ["candidate", "notApproved"]
         })
       ),
@@ -702,8 +882,8 @@ const createImportPlanBridge = (options: {
         approvedCandidateCount: 0,
         notApprovedCandidateCount: candidateLayers.length,
         blockedCandidateCount: blockedLayers.length,
-        hiddenCandidateCount: 0,
-        unsupportedCandidateCount: blockedLayers.length,
+        hiddenCandidateCount: blockedCandidateStatus === "hidden" ? blockedLayers.length : 0,
+        unsupportedCandidateCount: blockedCandidateStatus === "unsupported" ? blockedLayers.length : 0,
         duplicateNameCount: countDuplicateDisplayNames(candidateLayers),
         duplicateRefCount: 0,
         generatedIdCollisionCount: 0,
@@ -754,7 +934,7 @@ const createImportPlanBridge = (options: {
         createImportPlanCandidate({
           layer,
           candidateIndex,
-          statuses: ["unsupported", "notApproved"]
+          statuses: [blockedCandidateStatus, "notApproved"]
         })
       ),
       collisionPreflight: {
@@ -793,7 +973,13 @@ const createImportPlanSourcePsdIdentity = () => ({
 const createImportPlanCandidate = (input: {
   readonly layer: LayerFixture;
   readonly candidateIndex: number;
-  readonly statuses: readonly ("candidate" | "unsupported" | "notApproved")[];
+  readonly statuses: readonly (
+    | "candidate"
+    | "unsupported"
+    | "hidden"
+    | "emptyZeroSize"
+    | "notApproved"
+  )[];
 }) => ({
   candidateIndex: input.candidateIndex,
   sourceLayerRef: createImportPlanSourceLayerRef(input.layer),
@@ -805,10 +991,14 @@ const createImportPlanCandidate = (input: {
   opacityInSource: 1,
   byteEstimate: input.layer.byteLength,
   statuses: input.statuses,
-  statusReasons: input.statuses.includes("unsupported")
-    ? ["Unsupported candidate is not eligible for v0 approval."]
+  statusReasons: input.statuses.some((status) =>
+    status === "unsupported" || status === "hidden" || status === "emptyZeroSize"
+  )
+    ? ["Candidate is not eligible for v0 approval."]
     : [],
-  approvalBlockedReasons: input.statuses.includes("unsupported") ? ["unsupported"] : [],
+  approvalBlockedReasons: input.statuses.filter((status) =>
+    status === "unsupported" || status === "hidden" || status === "emptyZeroSize"
+  ),
   generatedScaffoldPreview: createImportPlanGeneratedScaffold(input.layer, "previewReady")
 } as const);
 
@@ -943,6 +1133,44 @@ const HAIR_FRONT_LAYER: LayerFixture = {
   digest: {
     algorithm: "sha256",
     hex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+};
+
+const FRONT_HAIR_LAYER: LayerFixture = {
+  sourceLayerId: "psd:root/group[2]/layer[0]",
+  sourceLayerName: "front hair",
+  groupPath: [],
+  sourceLayerPath: ["front hair"],
+  materializationId: "mat_psd_root_group_2_layer_0",
+  binaryAssetId: "bin_psd_front_hair_rgba",
+  packageRelativePath: "assets/textures/psd/front-hair.raw-rgba",
+  provenanceId: "prov_psd_front_hair_rgba",
+  width: 620,
+  height: 620,
+  byteLength: 1537600,
+  bounds: { x: 692, y: 144, width: 620, height: 620 },
+  digest: {
+    algorithm: "sha256",
+    hex: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+};
+
+const HIDDEN_HEADWEAR_LAYER: LayerFixture = {
+  sourceLayerId: "psd:root/layer[1]",
+  sourceLayerName: "headwear",
+  groupPath: [],
+  sourceLayerPath: ["headwear"],
+  materializationId: "mat_psd_root_layer_1",
+  binaryAssetId: "bin_psd_headwear_hidden_rgba",
+  packageRelativePath: "assets/textures/psd/headwear-hidden.raw-rgba",
+  provenanceId: "prov_psd_headwear_hidden_rgba",
+  width: 400,
+  height: 286,
+  byteLength: 457600,
+  bounds: { x: 807, y: 93, width: 400, height: 286 },
+  digest: {
+    algorithm: "sha256",
+    hex: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   }
 };
 

@@ -21,6 +21,14 @@ export const wave42FocusedE2eRegistryBoundary = {
       category: "assetIoBoundary",
       rationale:
         "Wave48 focused smoke is registered through the focused e2e registry postWave42 overlay; the Wave42 guard tracks it here as intentionally registered boundary data until that overlay is folded into the base boundary."
+    },
+    {
+      id: "psdImportPlanCodexFocused",
+      path: "apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
+      command: "node apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
+      category: "assetIoBoundary",
+      rationale:
+        "Wave49 focused smoke is registered through the focused e2e registry postWave42 overlay; the Wave42 guard tracks it here as intentionally registered boundary data until that overlay is folded into the base boundary."
     }
   ],
   entries: [

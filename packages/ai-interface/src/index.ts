@@ -20,3 +20,5 @@ export * from "./ai-codex-proposal-command.js";
 export * from "./ai-codex-proposal-operation-catalog.js";
 export * from "./ai-codex-proposal-validation.js";
 export * from "./ai-codex-proposal-approval-lifecycle.js";
+export * from "./ai-psd-import-plan-command.js";
+export * from "./ai-psd-import-plan-command-executor.js";

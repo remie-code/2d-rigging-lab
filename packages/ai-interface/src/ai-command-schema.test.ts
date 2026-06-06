@@ -126,6 +126,33 @@ const validationReport = {
   }
 } as const;
 
+const psdImportPlanExpectedContext = {
+  planId: "plan_ai_psd_import_plan",
+  candidatePlanDigest: `sha256:${"a".repeat(64)}`,
+  sourceDigest: `sha256:${"b".repeat(64)}`,
+  sourceFileName: "sample.psd",
+  sourceByteLength: 128,
+  scopeRef: "psd:root",
+  destinationParentPartId: "part_root"
+} as const;
+
+const psdImportPlanResult = {
+  schemaVersion: "ai-psd-import-plan-command-result-v0",
+  importPlan: null,
+  latestBatch: {
+    status: "none",
+    selectedLayerNodeRefs: [],
+    approvedLayerNodeRefs: [],
+    generatedResultRefs: [],
+    operationIds: [],
+    evidenceRefs: [],
+    issues: [],
+    diagnostics: []
+  },
+  diagnostics: [],
+  evidenceRefs: []
+} as const;
+
 describe("AI command schema foundation", () => {
   it("parses valid minimal command requests", () => {
     const editorStateRequest = AiCommandRequestSchema.parse({
@@ -246,6 +273,80 @@ describe("AI command schema foundation", () => {
         surface: "structuredApi"
       }
     });
+    const getPsdImportPlanRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_get_psd_import_plan",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["read"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: [],
+        relatedScenarios: []
+      },
+      command: "getPsdImportPlanState",
+      payload: {}
+    });
+    const setPsdImportPlanApprovalRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_set_psd_import_plan_approval",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["dryRunEdit"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: [],
+        relatedScenarios: []
+      },
+      command: "setPsdImportPlanApproval",
+      payload: {
+        approvedLayerNodeRefs: ["psd:root/layer[0]"],
+        destinationParentPartId: "part_root",
+        expectedPlan: psdImportPlanExpectedContext
+      }
+    });
+    const preflightPsdImportPlanRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_preflight_psd_import_plan",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["dryRunEdit"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: [],
+        relatedScenarios: []
+      },
+      command: "preflightPsdImportPlanIntake",
+      payload: {
+        approvedLayerNodeRefs: ["psd:root/layer[0]"],
+        destinationParentPartId: "part_root",
+        expectedPlan: psdImportPlanExpectedContext
+      }
+    });
+    const executePsdImportPlanRequest = AiCommandRequestSchema.parse({
+      schemaVersion: "ai-command-request-v1",
+      commandId: "cmd_execute_psd_import_plan",
+      session: {
+        agentId: "agent_test",
+        capabilities: ["commitWithApproval"]
+      },
+      basis: {
+        packageRevision: 0,
+        relatedAC: [],
+        relatedScenarios: []
+      },
+      command: "executePsdImportPlanIntake",
+      payload: {
+        approvedLayerNodeRefs: ["psd:root/layer[0]"],
+        destinationParentPartId: "part_root",
+        expectedPlan: psdImportPlanExpectedContext,
+        approvedPreflightCommandId: "cmd_preflight_psd_import_plan",
+        expectedOperationId: "op_ai_psd_import_plan_batch"
+      }
+    });
 
     expect(editorStateRequest).toMatchObject({
       command: "getEditorState",
@@ -294,6 +395,34 @@ describe("AI command schema foundation", () => {
       command: "getOperationLog",
       payload: {
         operationIds: ["op_create_ai_parameter"]
+      }
+    });
+    expect(getPsdImportPlanRequest).toMatchObject({
+      command: "getPsdImportPlanState",
+      payload: {
+        detail: "summary"
+      }
+    });
+    expect(setPsdImportPlanApprovalRequest).toMatchObject({
+      command: "setPsdImportPlanApproval",
+      payload: {
+        approvedLayerNodeRefs: ["psd:root/layer[0]"],
+        destinationParentPartId: "part_root"
+      }
+    });
+    expect(preflightPsdImportPlanRequest).toMatchObject({
+      command: "preflightPsdImportPlanIntake",
+      payload: {
+        expectedPlan: {
+          candidatePlanDigest: psdImportPlanExpectedContext.candidatePlanDigest
+        }
+      }
+    });
+    expect(executePsdImportPlanRequest).toMatchObject({
+      command: "executePsdImportPlanIntake",
+      payload: {
+        approvedPreflightCommandId: "cmd_preflight_psd_import_plan",
+        expectedOperationId: "op_ai_psd_import_plan_batch"
       }
     });
   });
@@ -380,6 +509,26 @@ describe("AI command schema foundation", () => {
         entries: [operationLogEntry]
       }
     });
+    const psdImportPlanStateResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_get_psd_import_plan",
+      status: "ok",
+      command: "getPsdImportPlanState",
+      payload: {
+        result: psdImportPlanResult
+      }
+    });
+    const psdImportPlanPreflightResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_preflight_psd_import_plan",
+      status: "ok",
+      operationResult: dryRunOperationResult,
+      command: "preflightPsdImportPlanIntake",
+      payload: {
+        result: psdImportPlanResult,
+        operationResult: dryRunOperationResult
+      }
+    });
 
     expect(editorStateResponse).toMatchObject({
       payload: {
@@ -439,6 +588,21 @@ describe("AI command schema foundation", () => {
         ]
       }
     });
+    expect(psdImportPlanStateResponse).toMatchObject({
+      payload: {
+        result: {
+          schemaVersion: "ai-psd-import-plan-command-result-v0",
+          importPlan: null
+        }
+      }
+    });
+    expect(psdImportPlanPreflightResponse).toMatchObject({
+      payload: {
+        operationResult: {
+          status: "dry_run"
+        }
+      }
+    });
   });
 
   it("rejects dryRunOperation requests when the operation is not dry-run", () => {
@@ -490,6 +654,10 @@ describe("AI command schema foundation", () => {
     expect(AiCommandNameSchema.parse("inspectModel")).toBe("inspectModel");
     expect(AiCommandNameSchema.parse("inspectTarget")).toBe("inspectTarget");
     expect(AiCommandNameSchema.parse("validatePackage")).toBe("validatePackage");
+    expect(AiCommandNameSchema.parse("getPsdImportPlanState")).toBe("getPsdImportPlanState");
+    expect(AiCommandNameSchema.parse("setPsdImportPlanApproval")).toBe("setPsdImportPlanApproval");
+    expect(AiCommandNameSchema.parse("preflightPsdImportPlanIntake")).toBe("preflightPsdImportPlanIntake");
+    expect(AiCommandNameSchema.parse("executePsdImportPlanIntake")).toBe("executePsdImportPlanIntake");
     expect(AiCommandNameSchema.safeParse("getRuntimeSnapshot").success).toBe(false);
     expect(
       AiCommandRequestSchema.safeParse({

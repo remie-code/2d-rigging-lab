@@ -8,6 +8,7 @@ import {
   type OperationResultDto,
   type PsdAdapterLayerMaterializationEvidenceDto,
   type PsdImportPlanApprovalBridgeEvidenceDto,
+  type PsdImportPlanIssueDto,
   type PsdAdapterResultDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -73,6 +74,27 @@ export interface EditorExplicitPsdLayerBatchIntakeResult {
   readonly selectedLayerNodeRefs: readonly string[];
   readonly latestSessionPersistenceResult: EditorSessionPersistenceResult | null;
   readonly persistentStoreResults?: readonly EditorBatchPersistentStoreResult[];
+}
+
+export type EditorExplicitPsdLayerBatchIntakePreflightResultStatus =
+  | "dry_run"
+  | "rejected"
+  | "failed";
+
+export interface EditorExplicitPsdLayerBatchIntakePreflightResult {
+  readonly status: EditorExplicitPsdLayerBatchIntakePreflightResultStatus;
+  readonly stage:
+    | "currentSource"
+    | "materialization"
+    | "sourceImport"
+    | "operationCommit";
+  readonly selectedLayerNodeRefs: readonly string[];
+  readonly operationResult?: OperationResultDto;
+}
+
+export interface EditorExplicitPsdLayerBatchIntakePreflightOutcome {
+  readonly state: EditorSemanticState;
+  readonly result: EditorExplicitPsdLayerBatchIntakePreflightResult;
 }
 
 export interface EditorExplicitPsdLayerBatchIntakeWorkflowOutcome {
@@ -250,6 +272,84 @@ export const commitEditorSelectedPsdLayerBatchIntakeWorkflow = async (
   };
 };
 
+export const preflightEditorSelectedPsdLayerBatchIntakeWorkflow = async (
+  input: EditorExplicitPsdLayerBatchIntakeWorkflowInput
+): Promise<EditorExplicitPsdLayerBatchIntakePreflightOutcome> => {
+  const selectedLayerNodeRefs = resolveSelectedLayerNodeRefs(input);
+  const currentSourceFailure = validateCurrentSource(input, selectedLayerNodeRefs);
+  if (currentSourceFailure !== null) {
+    return {
+      state: projectStateWithBatchIntake(input.state, currentSourceFailure),
+      result: {
+        status: "failed",
+        stage: "currentSource",
+        selectedLayerNodeRefs
+      }
+    };
+  }
+
+  const parsedBridgeResult = input.parsedBridgeResult;
+  const currentPsdFile = input.currentPsdFile;
+  if (parsedBridgeResult?.status !== "parsed" || currentPsdFile === undefined) {
+    throw new Error("Expected current source validation to reject missing parsed PSD state.");
+  }
+
+  const sourceAssetId = createExplicitPsdSourceAssetId(currentPsdFile);
+  const materialize =
+    input.materializeSelectedLayers ?? materializeSelectedPsdLayersFromBrowserFile;
+  const materializationResult = await materialize({
+    file: currentPsdFile,
+    selectedLayerNodeRefs,
+    sourceAssetId
+  });
+
+  if (materializationResult.status !== "success") {
+    const intake = createBatchMaterializationBlockedIntakeState(materializationResult);
+    return {
+      state: projectStateWithBatchIntake(input.state, intake),
+      result: {
+        status: "failed",
+        stage: "materialization",
+        selectedLayerNodeRefs
+      }
+    };
+  }
+
+  const preflightOutcome = await preflightMaterializationBatchOperation({
+    adapter: input.adapter,
+    state: input.state,
+    command: input.command,
+    parsedBridgeResult,
+    materializationResult,
+    currentPsdFile,
+    sourceAssetId,
+    ...(input.now === undefined ? {} : { now: input.now })
+  });
+  if (preflightOutcome.status === "rejected") {
+    return {
+      state: projectStateWithBatchIntake(input.state, preflightOutcome.intake),
+      result: {
+        status: "rejected",
+        stage: preflightOutcome.stage,
+        selectedLayerNodeRefs,
+        ...(preflightOutcome.operationResult === undefined
+          ? {}
+          : { operationResult: preflightOutcome.operationResult })
+      }
+    };
+  }
+
+  return {
+    state: input.state,
+    result: {
+      status: "dry_run",
+      stage: "operationCommit",
+      selectedLayerNodeRefs,
+      operationResult: preflightOutcome.operationResult
+    }
+  };
+};
+
 const resolveSelectedLayerNodeRefs = (
   input: Pick<EditorExplicitPsdLayerBatchIntakeWorkflowInput, "command" | "state">
 ): readonly string[] => {
@@ -395,11 +495,13 @@ const commitSourceMetadataIfMissing = (input: {
 type BatchOperationPreflightOutcome =
   | {
       readonly status: "accepted";
+      readonly operationResult: OperationResultDto;
     }
   | {
       readonly status: "rejected";
       readonly stage: "sourceImport" | "operationCommit";
       readonly intake: ExplicitPsdLayerBatchIntakeState;
+      readonly operationResult?: OperationResultDto;
     };
 
 const preflightMaterializationBatchOperation = async (input: {
@@ -430,7 +532,8 @@ const preflightMaterializationBatchOperation = async (input: {
     return {
       status: "rejected",
       stage: "sourceImport",
-      intake: sourceImportOutcome.intake
+      intake: sourceImportOutcome.intake,
+      operationResult: sourceImportOutcome.result.operationResult
     };
   }
 
@@ -449,6 +552,7 @@ const preflightMaterializationBatchOperation = async (input: {
     return {
       status: "rejected",
       stage: "operationCommit",
+      operationResult: preflightResult,
       intake: createOperationResultRejectedBatchIntakeState({
         stage: "operationCommit",
         result: preflightResult,
@@ -457,7 +561,7 @@ const preflightMaterializationBatchOperation = async (input: {
     };
   }
 
-  return { status: "accepted" };
+  return { status: "accepted", operationResult: preflightResult };
 };
 
 const commitMaterializationBatchOperation = async (input: {
@@ -668,6 +772,11 @@ const createCommittedBatchIntakeState = (input: {
     status: "committed",
     summaryFacts: [
       { label: "Batch id", value: evidence.batchId },
+      { label: "Batch evidence id", value: evidence.evidenceId ?? "not returned" },
+      { label: "Aggregate status", value: evidence.aggregateStatus },
+      { label: "Batch operation id", value: evidence.operationId ?? input.result.operationResult.operationId },
+      { label: "Per-leaf operation ids", value: evidence.perLayerOperationIds.join(", ") || "none" },
+      { label: "Batch issues", value: formatImportPlanIssueSummary(evidence.issues) },
       {
         label: "Requested / success / failure",
         value: `${evidence.selectedLayerCount} / ${evidence.successCount} / ${evidence.failureCount}`
@@ -692,6 +801,10 @@ const createCommittedBatchIntakeState = (input: {
               value: `sha256:${evidence.importPlanBridge.candidatePlan.candidatePlanDigest.hex}`
             },
             { label: "Import plan approval", value: evidence.importPlanBridge.approval.approvalId },
+            {
+              label: "Import plan approval issues",
+              value: formatImportPlanIssueSummary(evidence.importPlanBridge.approval.issues ?? [])
+            },
             {
               label: "Approved leaf candidates",
               value: String(evidence.importPlanBridge.approval.approvedLeafRefs.length)
@@ -718,12 +831,21 @@ const createCommittedBatchIntakeState = (input: {
         `#${entry.selectedIndex}`,
         entry.sourceLayerRef.sourceLayerId,
         entry.sourceLayerRef.sourceLayerPath?.join(" / ") ?? entry.sourceLayerRef.sourceLayerName,
+        entry.approvalOrder === undefined ? "approvalOrder=none" : `approvalOrder=${entry.approvalOrder}`,
+        entry.resultRefs?.batchEvidenceId === undefined
+          ? "batchEvidence=none"
+          : `batchEvidence=${entry.resultRefs.batchEvidenceId}`,
+        entry.resultRefs?.materializationEvidenceId === undefined
+          ? "materializationEvidence=none"
+          : `materializationEvidence=${entry.resultRefs.materializationEvidenceId}`,
+        `materialization=${entry.resultRefs?.materializationId ?? entry.materializationId}`,
         `part=${entry.generated.partId}`,
         `drawable=${entry.generated.drawableId}`,
         `texture=${entry.generated.textureId}`,
         `mesh=${entry.generated.meshId}`,
         `bytes=${entry.materializedByteLength}`,
         entry.operationId === undefined ? "operation=none" : `operation=${entry.operationId}`,
+        `issues=${formatImportPlanIssueSummary(entry.issues)}`,
         "publicDemoAsset=false"
       ].filter((value): value is string => value !== undefined && value.length > 0).join(" / ")
     ),
@@ -782,7 +904,11 @@ const createOperationResultRejectedBatchIntakeState = (input: {
         ? [{ label: "Batch operation evidence", value: "not returned" }]
         : [
             { label: "Batch id", value: evidence.batchId },
+            { label: "Batch evidence id", value: evidence.evidenceId ?? "not returned" },
+            { label: "Aggregate status", value: evidence.aggregateStatus },
+            { label: "Batch operation id", value: evidence.operationId ?? input.result.operationId },
             { label: "Destination parent part", value: evidence.destination.parentPartId },
+            { label: "Batch issues", value: formatImportPlanIssueSummary(evidence.issues) },
             {
               label: "Operation requested / success / failure",
               value: `${evidence.selectedLayerCount} / ${evidence.successCount} / ${evidence.failureCount}`
@@ -796,12 +922,22 @@ const createOperationResultRejectedBatchIntakeState = (input: {
             entry.status,
             `#${entry.selectedIndex}`,
             entry.sourceLayerRef.sourceLayerId,
+            entry.approvalOrder === undefined ? "approvalOrder=none" : `approvalOrder=${entry.approvalOrder}`,
+            entry.resultRefs?.batchEvidenceId === undefined
+              ? "batchEvidence=none"
+              : `batchEvidence=${entry.resultRefs.batchEvidenceId}`,
+            entry.resultRefs?.materializationEvidenceId === undefined
+              ? "materializationEvidence=none"
+              : `materializationEvidence=${entry.resultRefs.materializationEvidenceId}`,
+            `materialization=${entry.resultRefs?.materializationId ?? entry.materializationId}`,
             `part=${entry.generated.partId}`,
             `drawable=${entry.generated.drawableId}`,
             `texture=${entry.generated.textureId}`,
+            `mesh=${entry.generated.meshId}`,
             entry.diagnostics.length === 0
               ? "diagnostics=none"
               : `diagnostics=${entry.diagnostics.map((diagnostic) => diagnostic.checkId).join(",")}`,
+            `issues=${formatImportPlanIssueSummary(entry.issues)}`,
             "publicDemoAsset=false"
           ].join(" / ")
         ),
@@ -951,6 +1087,27 @@ const formatBatchPersistentStoreResults = (
       ? `${entry.textureId}=stored:${entry.result.storageBackend}`
       : `${entry.textureId}=unavailable:${entry.result.storageBackendState}`;
   }).join(", ");
+
+const formatImportPlanIssueSummary = (
+  issues: readonly PsdImportPlanIssueDto[]
+): string =>
+  issues.length === 0
+    ? "none"
+    : issues.map(formatImportPlanIssue).join(" | ");
+
+const formatImportPlanIssue = (
+  issue: PsdImportPlanIssueDto
+): string =>
+  [
+    issue.issueId ?? issue.issueKind,
+    issue.issueKind,
+    issue.checkId,
+    issue.sourceLayerRef?.sourceLayerId,
+    issue.selectedIndex === undefined ? undefined : `selectedIndex=${issue.selectedIndex}`,
+    issue.approvalOrder === undefined ? undefined : `approvalOrder=${issue.approvalOrder}`,
+    issue.targetPath,
+    issue.message
+  ].filter((value): value is string => value !== undefined && value.length > 0).join(":");
 
 const collectMaterializedEntries = (
   result: SelectedPsdLayerBatchMaterializationResult

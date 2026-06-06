@@ -5,6 +5,7 @@ import {
   InspectModelResultSchema,
   InspectTargetResultSchema
 } from "./ai-inspection-command.js";
+import { AiPsdImportPlanCommandResultSchema } from "./ai-psd-import-plan-command.js";
 import { ValidatePackageResultSchema } from "./ai-validation-command.js";
 
 export const EditorStatePayloadSchema = z
@@ -50,6 +51,34 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
     command: z.literal("getOperationLog"),
     payload: z.object({
       entries: z.array(OperationLogEntrySchema)
+    })
+  }),
+  z.object({
+    command: z.literal("getPsdImportPlanState"),
+    payload: z.object({
+      result: AiPsdImportPlanCommandResultSchema,
+      operationResult: OperationResultSchema.optional()
+    })
+  }),
+  z.object({
+    command: z.literal("setPsdImportPlanApproval"),
+    payload: z.object({
+      result: AiPsdImportPlanCommandResultSchema,
+      operationResult: OperationResultSchema.optional()
+    })
+  }),
+  z.object({
+    command: z.literal("preflightPsdImportPlanIntake"),
+    payload: z.object({
+      result: AiPsdImportPlanCommandResultSchema,
+      operationResult: OperationResultSchema.optional()
+    })
+  }),
+  z.object({
+    command: z.literal("executePsdImportPlanIntake"),
+    payload: z.object({
+      result: AiPsdImportPlanCommandResultSchema,
+      operationResult: OperationResultSchema.optional()
     })
   })
 ]);

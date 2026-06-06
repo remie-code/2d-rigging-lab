@@ -2,6 +2,7 @@ export interface AiDryRunApprovalRecord {
   readonly dryRunCommandId: string;
   readonly agentId: string;
   readonly operationId?: string;
+  readonly approvalContextDigest?: string;
   readonly approved: boolean;
 }
 
@@ -17,6 +18,7 @@ export interface AiApprovalPolicy {
     readonly dryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }): void;
   approveDryRunCommand(input: {
     readonly dryRunCommandId: string;
@@ -26,6 +28,7 @@ export interface AiApprovalPolicy {
     readonly approvedDryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }): AiCommitApprovalCheck;
 }
 
@@ -40,17 +43,22 @@ export class InMemoryAiApprovalPolicy implements AiApprovalPolicy {
     readonly dryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }): void {
     const existing = this.#records.get(input.dryRunCommandId);
     const preservesExistingApproval =
       existing?.approved === true &&
       existing.agentId === input.agentId &&
       existing.operationId !== undefined &&
-      existing.operationId === input.operationId;
+      existing.operationId === input.operationId &&
+      existing.approvalContextDigest === input.approvalContextDigest;
     const record: AiDryRunApprovalRecord = {
       dryRunCommandId: input.dryRunCommandId,
       agentId: input.agentId,
       ...(input.operationId === undefined ? {} : { operationId: input.operationId }),
+      ...(input.approvalContextDigest === undefined
+        ? {}
+        : { approvalContextDigest: input.approvalContextDigest }),
       approved: preservesExistingApproval
     };
 
@@ -77,6 +85,9 @@ export class InMemoryAiApprovalPolicy implements AiApprovalPolicy {
       dryRunCommandId: existing.dryRunCommandId,
       agentId: existing.agentId,
       ...(operationId === undefined ? {} : { operationId }),
+      ...(existing.approvalContextDigest === undefined
+        ? {}
+        : { approvalContextDigest: existing.approvalContextDigest }),
       approved: true
     };
     this.#records.set(input.dryRunCommandId, record);
@@ -88,6 +99,7 @@ export class InMemoryAiApprovalPolicy implements AiApprovalPolicy {
     readonly approvedDryRunCommandId: string;
     readonly agentId: string;
     readonly operationId?: string;
+    readonly approvalContextDigest?: string;
   }): AiCommitApprovalCheck {
     const record = this.#records.get(input.approvedDryRunCommandId);
     if (record === undefined || !record.approved) {
@@ -115,6 +127,32 @@ export class InMemoryAiApprovalPolicy implements AiApprovalPolicy {
       return {
         status: "rejected",
         reason: `Approved dry-run operation ${record.operationId} does not match commit operation ${input.operationId}.`
+      };
+    }
+
+    if (record.approvalContextDigest !== undefined && input.approvalContextDigest === undefined) {
+      return {
+        status: "rejected",
+        reason: `Approved dry-run command ${record.dryRunCommandId} requires a matching approval context digest.`
+      };
+    }
+
+    if (record.approvalContextDigest === undefined && input.approvalContextDigest !== undefined) {
+      return {
+        status: "rejected",
+        reason: `Approved dry-run command ${record.dryRunCommandId} was not recorded with an approval context digest.`
+      };
+    }
+
+    if (
+      record.approvalContextDigest !== undefined &&
+      input.approvalContextDigest !== undefined &&
+      record.approvalContextDigest !== input.approvalContextDigest
+    ) {
+      return {
+        status: "rejected",
+        reason:
+          `Approved dry-run context ${record.approvalContextDigest} does not match commit context ${input.approvalContextDigest}.`
       };
     }
 
