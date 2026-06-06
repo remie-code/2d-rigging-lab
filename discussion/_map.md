@@ -31,14 +31,14 @@
 | [concept/](concept/) | コンセプト、スコープ、方針変更メモ | Private baselineとmemo対応完了状態を記録済み |
 | [acceptance-criteria/](acceptance-criteria/) | 受け入れ基準。後続作業のオラクル | Minimum Open Dynamics v1をCurrent MVPへ復帰済み |
 | [scenarios/](scenarios/) | ACを検証可能な具体シナリオへ精緻化するトピック | Dynamics group / deterministic preview / validation / demo-safe scenarioへ更新済み |
-| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | RuntimeState evidence contractとreview_004対応記録へ更新済み |
+| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | Private baseline設計判断とRuntimeState / RuntimeSequence evidence判断を反映済み。詳細なreview履歴は下層mapへ委譲 |
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave 16 drawable layer controls and visibility authoring計画済み |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave47 final integration / clean review pass が現在のimplementation-proven baseline。Wave48 import plan preview / explicit leaf approval は計画済みで、Domain A passはcurrent-worktree evidence |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
-## 現在の焦点
+## 現在の状態サマリ
 
 | 項目 | 状態 |
 |------|------|
@@ -49,38 +49,17 @@
 | Design contract | 旧Live2D名のPSD profileを `layered-character-psd-profile-v1` に置換済み |
 | Domain AC / scenario | Domain 201-225をCurrent / Optional / Future分類へ整理済み |
 | Design docs | `design/`配下をPrivate baseline語彙へ整理済み |
-| GPT-5.5 Pro review 001 | `memo/gpt-5.5-pro-review/reveiw_001.md` のP0/P1/P2指摘を分類し、反映可能なものは `discussion/design/gpt-5.5-pro-review-001-response.md` と関連文書へ反映済み |
-| GPT-5.5 Pro review 002 | `memo/gpt-5.5-pro-review/review_002.md` のRE3-001〜RE3-020を分類し、Minimum Open Dynamics v1復帰として反映済み。Dynamics詳細はreview_003で上書き |
-| GPT-5.5 Pro review 003 | `memo/gpt-5.5-pro-review/review_003.md` のRE-FINAL-001〜RE-FINAL-018を分類し、explicit RuntimeStateDto、1 group = 1 output、weighted sum、solver固定式、validator/fixture/traceability確定版として反映済み。RuntimeState evidence詳細はreview_004で上書き |
-| GPT-5.5 Pro review 004 | `memo/gpt-5.5-pro-review/review_004.md` のP0/P1/P2を分類し、initial RuntimeState生成、`RuntimeSequenceFrameDto[]`、operation final state evidence、`runtime/states/` artifact方針として反映済み。RuntimeSequence / artifact ref詳細はreview_005で上書き |
-| GPT-5.5 Pro review 005 | `memo/gpt-5.5-pro-review/review_005.md` のP0/P1/P2を分類し、`evaluateRuntimeSequence(frames, ..., context)`、`RuntimeStateArtifactRefSchema`、AI response命名統一、packageHash fallbackとして反映済み。RuntimeState sequence artifact / RuntimeEvaluationContext統合詳細はreview_006で上書き |
-| GPT-5.5 Pro review 006 | `memo/gpt-5.5-pro-review/review_006` の指摘を分類し、単一RuntimeState artifactとRuntimeState sequence artifactの分離、`RuntimeEvaluationContextDto`統合、Operation/AI/Fixture証拠参照規約として反映済み。RuntimeStateSequenceArtifactのinitial/post-frame意味論とdeterministic replay evidence詳細はreview_007で上書き |
-| GPT-5.5 Pro review 007 | `memo/gpt-5.5-pro-review/review_007.md` 相当の指摘を分類し、`RuntimeStateSequenceArtifact.states[0]` initial / `states[i + 1]` post-frame規約、`runtime.stateSequenceLengthMismatch`、sequence evidence fields、`RuntimeEvaluationContextSchema.policy.default({})` として反映済み |
+| GPT-5.5 Pro review responses | review 001-007 の反映済み判断は下層design文書へ委譲。最新のRuntimeState / RuntimeSequence artifact semanticsをreview_004単体から推定しない |
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
-| Implementation Wave 0 | 2026-05-28にmonorepo scaffold / package skeleton / guard scripts / smoke test / persistent reportsを作成し、`pnpm check` 通過。active 開発規約の package 名は `contracts` / `validator-core` に統一済み |
-| Implementation Wave 1 | 2026-05-29に `contracts-foundation` を完了。public barrel export、cross-slice integration test、integration review、final report、full verification pass を [implementation/waves/wave1/wave1-final-report.md](implementation/waves/wave1/wave1-final-report.md) に記録済み |
-| Implementation Wave 2 | 2026-05-29に `package-runtime-validator-foundation` を完了。`package-format` / `runtime-core` / `validator-core` foundation、`minimal-valid-package` fixture、integration review、final report、full verification pass を [implementation/waves/wave2/wave2-final-report.md](implementation/waves/wave2/wave2-final-report.md) に記録済み |
-| Implementation Wave 3 | 2026-05-29に `authoring-operation-foundation` を完了。`authoring-core` session foundation、`operation-core` DTO / dry-run / commit lifecycle、`minimal-operation-create-parameter` fixture、integration review、final report、full verification pass を [implementation/waves/wave3/wave3-final-report.md](implementation/waves/wave3/wave3-final-report.md) に記録済み |
-| Implementation Wave 4 | 2026-05-29に `runtime-validation-evidence-integration` を完了。authoring runtime adapter、runtime evidence helper、validator evidence helper、operation evidence provider hook、runtime/validation evidence fixture、integration review、final report、full verification pass を [implementation/waves/wave4/wave4-final-report.md](implementation/waves/wave4/wave4-final-report.md) に記録済み |
-| Implementation Wave 5 | 2026-05-29に `package-persistence-and-operation-log-foundation` を完了。package revision policy、operation log JSONL、authoring-to-package document adapter、package file set writer、runtime/validation artifact materializers、persisted operation evidence fixture、integration review、final report、full verification pass を [implementation/waves/wave5/wave5-final-report.md](implementation/waves/wave5/wave5-final-report.md) に記録済み |
-| Implementation Wave 6 | 2026-05-29に `editor-ui-operation-persistence-vertical-slice` を完了。Vite + vanilla TypeScript の `apps/editor` でGUIからcreateParameter commit、operation log、evidence、package file set reload summaryまで通し、full verification pass を [implementation/waves/wave6/wave6-final-report.md](implementation/waves/wave6/wave6-final-report.md) に記録済み |
-| Implementation Wave 7 | 2026-05-29に `editor-project-persistence-and-e2e-hardening` を完了。DOM-free core/editor typecheck分離、operation log hydration、browser-local project persistence、save/load/reset UI、durable e2e smoke、integration review、final report、full verification pass を [implementation/waves/wave7/wave7-final-report.md](implementation/waves/wave7/wave7-final-report.md) に記録済み |
-| Implementation Wave 8 | 2026-05-29に `ai-interface-dry-run-command-foundation` を完了。`packages/ai-interface`、AI command schema、dry-run / approval / commit executor、editor in-process AI host、command transcript fixture、integration review、final report、full verification pass を [implementation/waves/wave8/wave8-final-report.md](implementation/waves/wave8/wave8-final-report.md) に記録済み |
-| Implementation Wave 9 | 2026-05-29に `ai-command-approval-ui-and-transcript-persistence` を完了。visible AI approval workflow、browser-local transcript persistence、transcript / operation log correlation、desktop/mobile e2e、clean integration review、final report、full verification pass を [implementation/waves/wave9/wave9-final-report.md](implementation/waves/wave9/wave9-final-report.md) に記録済み |
-| Implementation Wave 10 | 2026-05-29に `ai-read-inspection-validation-command-foundation` を完了。internal `inspectModel` / `inspectTarget` / `validatePackage` command、editor projector、host integration、compact fixture regression、clean review、full verification pass を [implementation/waves/wave10/wave10-final-report.md](implementation/waves/wave10/wave10-final-report.md) に記録済み |
-| Implementation Wave 11 | 2026-05-29に `ai-operation-catalog-expansion-keyform-foundation` を完了。authoring keyform mutation、`addKeyform` / `addKeyformGrid2d` handler、registry/lifecycle、editor evidence、AI `addKeyform` regression、clean review、full verification pass を [implementation/waves/wave11/wave11-final-report.md](implementation/waves/wave11/wave11-final-report.md) に記録済み |
-| Implementation Wave 12 | 2026-05-30に `runtime-keyform-evaluation-foundation` を完了。runtime keyform identity、sampling、target application、snapshot/evidence integration、compact fixture regression、integration review、full verification pass を [implementation/waves/wave12/wave12-final-report.md](implementation/waves/wave12/wave12-final-report.md) に記録済み |
-| Implementation Wave 13 | 2026-05-30に `runtime-diff-and-grid2d-evidence-hardening` を完了。runtime diff専用field、Grid2D fixture/evidence、diagnostic regression、AI/editor `addKeyformGrid2d` runtime-visible evidence、diagnostic alignment gate、integration review、full verification pass を [implementation/waves/wave13/wave13-final-report.md](implementation/waves/wave13/wave13-final-report.md) に記録済み |
-| Implementation Wave 14 | 2026-05-30に `editor-embedded-preview-foundation` を完了。runtime-derived embedded preview projection、preview-ready sample parameter/keyform、preview-only workflow state、embedded preview UI、desktop/mobile e2e、sample-aware AI/editor-session regression needs-fix loop、full verification pass を [implementation/waves/wave14/wave14-final-report.md](implementation/waves/wave14/wave14-final-report.md) に記録済み |
-| Implementation Wave 15 | 2026-05-30に `editor-drawable-mesh-authoring-vertical-slice` を完了。GUIからrights-clean generated drawable / deterministic meshを作成し、operation log、package persistence、save/load、runtime/validation evidence、embedded preview、desktop/mobile e2eで確認する一周を実装。operation lifecycle needs-fix loop後にfull verification pass を [implementation/waves/wave15/wave15-final-report.md](implementation/waves/wave15/wave15-final-report.md) に記録済み |
-| Implementation Wave 16 | `drawable-layer-controls-and-visibility-authoring` を [implementation/orchestration/wave16-plan.md](implementation/orchestration/wave16-plan.md) に計画済み。GUIから drawable の重なり順と runtime visibility を変更し、preview / persistence / evidenceで確認する |
-| Implementation capability map | 次Wave計画前の製品・システム現在地を [implementation/current-capability-map.md](implementation/current-capability-map.md) に記録済み |
+| Implementation baseline | Wave47 final integration / clean integration review `pass` が現在のimplementation-proven baseline。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲 |
+| Current implementation work | Wave48 `psd-group-aware-import-plan-explicit-leaf-approval-v0` は [implementation/orchestration/wave48-plan.md](implementation/orchestration/wave48-plan.md) に計画済み。Domain A report/reviewはcurrent-worktree evidenceとして`pass`だが、Wave48全体は未完了 |
+| Implementation maps | 次Wave判断前は [implementation/current-capability-map.md](implementation/current-capability-map.md) と [implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md) を正として読む |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. Wave 16 を [implementation/orchestration/wave16-plan.md](implementation/orchestration/wave16-plan.md) に沿って起動し、drawable layer controls / runtime visibility authoring を Orch-Sylph domain delegation で実装する。
+1. Wave48を続行する場合は、Domain A pass証跡を前提に [implementation/orchestration/wave48-plan.md](implementation/orchestration/wave48-plan.md) のDomain B/Cから進める。Wave48 Domain H final report / clean review / map sync までは、Wave47をcapability baselineとして扱う。
 2. external HTTP / WebSocket / MCP API work と LLM provider integration は、MVP境界が明示変更されるまで Future scope に留める。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
