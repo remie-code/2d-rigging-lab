@@ -7,6 +7,11 @@ import type {
   PsdAdapterUnsupportedFeatureDto
 } from "@private-2d-rigging-lab/operation-core";
 import type { ExplicitPsdImportPlanState } from "./explicit-psd-import-plan-state.js";
+import {
+  createEmptyExplicitPsdStructuralScaffoldIntakeState,
+  type ExplicitPsdStructuralScaffoldIntakeState,
+  type ExplicitPsdStructuralScaffoldPlanState
+} from "./explicit-psd-structural-scaffold-state.js";
 
 export const explicitPsdImportDefaultSelectedLayerNodeRef = "psd:root/layer[0]";
 export const explicitPsdImportDefaultSelectedLayerNodeRefs = [
@@ -138,8 +143,10 @@ export interface ExplicitPsdImportState {
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materialization: readonly ExplicitPsdImportMaterializationState[];
   readonly importPlan: ExplicitPsdImportPlanState | null;
+  readonly structuralScaffoldPlan: ExplicitPsdStructuralScaffoldPlanState | null;
   readonly selectedLayerIntake: ExplicitPsdLayerIntakeState;
   readonly selectedLayerBatchIntake: ExplicitPsdLayerBatchIntakeState;
+  readonly structuralScaffoldIntake: ExplicitPsdStructuralScaffoldIntakeState;
   readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
   readonly persistenceBoundary: ExplicitPsdImportPersistenceBoundaryState;
 }
@@ -180,8 +187,10 @@ export const createEmptyExplicitPsdImportState = (): ExplicitPsdImportState => (
   notEvaluatedFeatureLabels: [],
   materialization: [],
   importPlan: null,
+  structuralScaffoldPlan: null,
   selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
   selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
+  structuralScaffoldIntake: createEmptyExplicitPsdStructuralScaffoldIntakeState(),
   diagnostics: [],
   persistenceBoundary: createExplicitPsdImportPersistenceBoundary()
 });
@@ -247,8 +256,10 @@ export const projectExplicitPsdImportStateFromBridgeResult = (
     materialization:
       adapterResult?.materializationEvidence?.map(projectMaterializationState) ?? [],
     importPlan: null,
+    structuralScaffoldPlan: null,
     selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
     selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
+    structuralScaffoldIntake: createEmptyExplicitPsdStructuralScaffoldIntakeState(),
     diagnostics: [
       ...input.diagnostics.map(projectDiagnosticState),
       ...input.errorEvidence.map((evidence) => ({

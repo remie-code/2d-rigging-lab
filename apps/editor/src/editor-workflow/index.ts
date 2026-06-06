@@ -18,6 +18,8 @@ export * from "./selected-psd-layer-intake-workflow.js";
 export * from "./explicit-psd-import-workflow.js";
 export * from "./explicit-psd-import-plan-workflow.js";
 export * from "./explicit-psd-import-plan-approval-bridge.js";
+export * from "./browser-psd-structural-scaffold-plan-service.js";
+export * from "./explicit-psd-structural-scaffold-workflow.js";
 export * from "./explicit-psd-source-identity.js";
 export * from "./viewer-runtime-workflow.js";
 export * from "./part-texture-layer-workflow.js";

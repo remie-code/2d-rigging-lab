@@ -4,6 +4,7 @@ import {
   type ExplicitPsdImportTreeRowState
 } from "./explicit-psd-import-state.js";
 import type { ExplicitPsdImportPlanCandidateState } from "./explicit-psd-import-plan-state.js";
+import type { ExplicitPsdStructuralScaffoldNodeState } from "./explicit-psd-structural-scaffold-state.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface ExplicitPsdImportFactViewModel {
@@ -21,6 +22,14 @@ export interface ExplicitPsdImportTreeRowViewModel {
 
 export interface ExplicitPsdImportPlanCandidateViewModel {
   readonly layerRef: string;
+  readonly label: string;
+  readonly approved: boolean;
+  readonly approvalEligible: boolean;
+}
+
+export interface ExplicitPsdStructuralScaffoldNodeViewModel {
+  readonly nodeRef: string;
+  readonly kind: ExplicitPsdStructuralScaffoldNodeState["kind"];
   readonly label: string;
   readonly approved: boolean;
   readonly approvalEligible: boolean;
@@ -52,6 +61,18 @@ export interface ExplicitPsdImportViewModel {
   readonly importPlanCandidateRows: readonly ExplicitPsdImportPlanCandidateViewModel[];
   readonly importPlanCandidateLabels: readonly string[];
   readonly importPlanDiagnostics: readonly string[];
+  readonly structuralScaffoldScopeRef: string;
+  readonly structuralScaffoldDestinationParentPartId: string;
+  readonly structuralScaffoldApprovedNodeRefs: readonly string[];
+  readonly structuralScaffoldStatusLabel: string;
+  readonly structuralScaffoldFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly structuralScaffoldNodeRows: readonly ExplicitPsdStructuralScaffoldNodeViewModel[];
+  readonly structuralScaffoldNodeLabels: readonly string[];
+  readonly structuralScaffoldDiagnostics: readonly string[];
+  readonly structuralScaffoldIntakeStatusLabel: string;
+  readonly structuralScaffoldIntakeFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly structuralScaffoldIntakeEntryLabels: readonly string[];
+  readonly structuralScaffoldIntakeDiagnostics: readonly string[];
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materializationLabels: readonly string[];
@@ -104,6 +125,29 @@ export const projectExplicitPsdImportViewModel = (
   importPlanCandidateRows: projectImportPlanCandidateRows(state),
   importPlanCandidateLabels: projectImportPlanCandidateLabels(state),
   importPlanDiagnostics: projectImportPlanDiagnostics(state),
+  structuralScaffoldScopeRef: state.structuralScaffoldPlan?.scopeRef ?? "psd:root",
+  structuralScaffoldDestinationParentPartId:
+    state.structuralScaffoldPlan?.destinationParentPartId ?? "",
+  structuralScaffoldApprovedNodeRefs: state.structuralScaffoldPlan?.nodes
+    .filter((node) => node.approved)
+    .map((node) => node.nodeRef) ?? [],
+  structuralScaffoldStatusLabel: projectStructuralScaffoldStatusLabel(state),
+  structuralScaffoldFacts: projectStructuralScaffoldFacts(state),
+  structuralScaffoldNodeRows: projectStructuralScaffoldNodeRows(state),
+  structuralScaffoldNodeLabels: projectStructuralScaffoldNodeLabels(state),
+  structuralScaffoldDiagnostics: projectStructuralScaffoldDiagnostics(state),
+  structuralScaffoldIntakeStatusLabel: projectStructuralScaffoldIntakeStatusLabel(state),
+  structuralScaffoldIntakeFacts: projectStructuralScaffoldIntakeFacts(state),
+  structuralScaffoldIntakeEntryLabels:
+    state.structuralScaffoldIntake.entryLabels.length === 0
+      ? ["No structural scaffold entries"]
+      : state.structuralScaffoldIntake.entryLabels,
+  structuralScaffoldIntakeDiagnostics:
+    state.structuralScaffoldIntake.diagnostics.length === 0
+      ? ["No structural scaffold result diagnostics"]
+      : state.structuralScaffoldIntake.diagnostics.map((diagnostic) =>
+          `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+        ),
   unsupportedFeatureLabels: state.unsupportedFeatureLabels.length === 0
     ? ["No unsupported feature evidence surfaced"]
     : state.unsupportedFeatureLabels,
@@ -380,6 +424,129 @@ const projectImportPlanDiagnostics = (
     : state.importPlan.diagnostics.map((diagnostic) =>
         `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
       );
+
+const projectStructuralScaffoldStatusLabel = (state: ExplicitPsdImportState): string => {
+  if (state.structuralScaffoldPlan === null) {
+    return "No structural scaffold preview generated";
+  }
+
+  return state.structuralScaffoldPlan.status === "ready"
+    ? "Structural scaffold preview ready"
+    : "Structural scaffold preview blocked";
+};
+
+const projectStructuralScaffoldFacts = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportFactViewModel[] => {
+  const plan = state.structuralScaffoldPlan;
+  if (plan === null) {
+    return [{ label: "Preview", value: "No structural scaffold preview" }];
+  }
+
+  return [
+    { label: "Plan id", value: plan.structuralPlanId },
+    { label: "Plan digest", value: plan.structuralPlanDigest },
+    { label: "Approval id", value: plan.approvalId },
+    { label: "Approval digest", value: plan.approvalSelectionDigest },
+    { label: "Approval status", value: plan.approvalStatus },
+    { label: "Source", value: `${plan.sourceFilePath} / ${formatByteLength(plan.sourceByteLength)}` },
+    { label: "Source digest", value: plan.sourceDigest },
+    { label: "Scope", value: `${plan.scopeLabel} / ${plan.scopeRef}` },
+    { label: "Destination parent part", value: plan.destinationParentPartId ?? "No destination parent selected" },
+    {
+      label: "Groups / leaves / approved groups / approved leaves",
+      value: [
+        plan.sourceGroupCount,
+        plan.sourceLayerCount,
+        plan.approvedGroupCount,
+        plan.approvedLeafCount
+      ].join(" / ")
+    },
+    {
+      label: "Generated group parts / drawables",
+      value: [plan.generatedGroupPartCount, plan.generatedDrawableCount].join(" / ")
+    },
+    {
+      label: "Hidden leaves / runtime-hidden drawables",
+      value: [plan.hiddenLeafCount, plan.runtimeHiddenDrawableCount].join(" / ")
+    },
+    {
+      label: "Approved byte estimate",
+      value: plan.totalByteEstimate === null ? "No byte estimate" : formatByteLength(plan.totalByteEstimate)
+    }
+  ];
+};
+
+const projectStructuralScaffoldNodeRows = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdStructuralScaffoldNodeViewModel[] =>
+  state.structuralScaffoldPlan?.nodes.map((node) => ({
+    nodeRef: node.nodeRef,
+    kind: node.kind,
+    label: projectStructuralScaffoldNodeLabel(node),
+    approved: node.approved,
+    approvalEligible: node.approvalEligible
+  })) ?? [];
+
+const projectStructuralScaffoldNodeLabels = (
+  state: ExplicitPsdImportState
+): readonly string[] =>
+  state.structuralScaffoldPlan === null || state.structuralScaffoldPlan.nodes.length === 0
+    ? ["No structural scaffold nodes"]
+    : state.structuralScaffoldPlan.nodes.map(projectStructuralScaffoldNodeLabel);
+
+const projectStructuralScaffoldNodeLabel = (
+  node: ExplicitPsdStructuralScaffoldNodeState
+): string =>
+  [
+    node.kind,
+    node.nodeRef,
+    node.fullPathLabel,
+    node.visibleInSource ? "visible" : "hidden",
+    `opacity=${formatPreviewNumber(node.opacityInSource)}`,
+    `bounds=${node.boundsLabel}`,
+    node.initialRuntimeVisibility === null
+      ? "runtime=part-container"
+      : node.initialRuntimeVisibility ? "runtime=visible" : "runtime=hidden",
+    node.generatedPartId === null ? undefined : `part=${node.generatedPartId}`,
+    node.generatedDrawableId === null ? undefined : `drawable=${node.generatedDrawableId}`,
+    node.generatedTextureId === null ? undefined : `texture=${node.generatedTextureId}`,
+    node.generatedMeshId === null ? undefined : `mesh=${node.generatedMeshId}`,
+    `parent=${node.generatedParentPartId}`,
+    node.approved ? "approved=true" : "approved=false",
+    node.approvalEligible ? "approvalEligible=true" : "approvalEligible=false",
+    `status=${node.status}`,
+    node.statusReasons.length === 0 ? "reasons=none" : `reasons=${node.statusReasons.join(" | ")}`
+  ].filter((value): value is string => value !== undefined && value.length > 0).join(" / ");
+
+const projectStructuralScaffoldDiagnostics = (
+  state: ExplicitPsdImportState
+): readonly string[] =>
+  state.structuralScaffoldPlan === null || state.structuralScaffoldPlan.diagnostics.length === 0
+    ? ["No structural scaffold preview diagnostics"]
+    : state.structuralScaffoldPlan.diagnostics.map((diagnostic) =>
+        `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+      );
+
+const projectStructuralScaffoldIntakeStatusLabel = (state: ExplicitPsdImportState): string => {
+  switch (state.structuralScaffoldIntake.status) {
+    case "idle":
+      return "No structural scaffold result";
+    case "committed":
+      return "Structural scaffold added to project";
+    case "rejected":
+      return "Structural scaffold rejected";
+    case "failed":
+      return "Structural scaffold failed";
+  }
+};
+
+const projectStructuralScaffoldIntakeFacts = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportFactViewModel[] =>
+  state.structuralScaffoldIntake.summaryFacts.length === 0
+    ? [{ label: "Result", value: "No structural scaffold executed yet" }]
+    : state.structuralScaffoldIntake.summaryFacts.map(projectFact);
 
 const projectSelectedLayerBatchLabel = (state: ExplicitPsdImportState): string =>
   state.selectedLayerNodeRefs.length === 0

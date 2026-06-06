@@ -180,6 +180,8 @@ const createRuntimeEvidenceInput = (
       return createImportPsdLayerMaterializationEvidenceInput(input);
     case "importPsdLayerMaterializationBatch":
       return createImportPsdLayerMaterializationBatchEvidenceInput(input);
+    case "importPsdStructuralScaffold":
+      return createImportPsdStructuralScaffoldEvidenceInput(input);
     case "importSplitPngSourceAsset":
       return createImportSplitPngSourceAssetEvidenceInput(input);
     case "createDrawable":
@@ -320,6 +322,52 @@ const createImportPsdLayerMaterializationBatchEvidenceInput = (
 
   return {
     artifactLabel: "editor-import-psd-layer-materialization-batch",
+    authoredParameterValues: {},
+    targetIds,
+    baseline: {
+      frame: {
+        authoredParameterValues: {},
+        targetIds
+      }
+    }
+  };
+};
+
+const createImportPsdStructuralScaffoldEvidenceInput = (
+  input: OperationEvidenceProviderInput
+): RuntimeEvidenceInput => {
+  if (input.request.operationType !== "importPsdStructuralScaffold") {
+    throw new Error(
+      `importPsdStructuralScaffold evidence input received ${input.request.operationType}.`
+    );
+  }
+
+  const bridge = input.request.payload.structuralScaffoldBridge;
+  const targetIds = uniqueStrings([
+    ...input.targetIds,
+    input.request.payload.sourceAssetId,
+    input.request.payload.batchId,
+    input.request.payload.destination.parentPartId,
+    bridge.structuralPlan.structuralPlanId,
+    bridge.structuralPlan.structuralPlanDigest.hex,
+    bridge.approval.approvalId,
+    bridge.approval.approvalSelectionDigest.hex,
+    ...bridge.approval.approvedGroupPartScaffolds.flatMap((group) => [
+      group.sourceGroupRef.sourceGroupId,
+      group.generatedParentPartId,
+      group.generatedPartId
+    ]),
+    ...bridge.approval.approvedLeafScaffolds.flatMap((leaf) => [
+      leaf.sourceLayerRef.sourceLayerId,
+      leaf.generatedParentPartId,
+      leaf.generatedDrawableId,
+      leaf.generatedTextureId,
+      leaf.generatedMeshId
+    ])
+  ]);
+
+  return {
+    artifactLabel: "editor-import-psd-structural-scaffold",
     authoredParameterValues: {},
     targetIds,
     baseline: {

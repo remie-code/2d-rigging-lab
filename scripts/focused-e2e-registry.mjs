@@ -124,6 +124,12 @@ const focusedE2eMetadataById = {
     tags: ["assetIo", "psdImport", "importPlan", "codexCommand", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  psdStructuralInitialStateFocused: {
+    purpose:
+      "Replay sample_model.psd structural scaffold preview and execution into editable part containers plus visible/runtime-hidden leaf drawables, save/load restore, Codex-facing state projection, and parser import containment.",
+    tags: ["assetIo", "psdImport", "structuralScaffold", "browserPersistence", "codexCommand", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   psdMultiLayerBatchFocused: {
     purpose:
       "Replay explicit browser PSD file selection, Domain A selected leaf layer batch intake, generated part scaffold evidence, save/load boundary, and parser import containment.",
@@ -179,6 +185,12 @@ const postWave42FocusedE2eRegistryOverlayEntries = [
     id: "psdImportPlanCodexFocused",
     path: "apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
     command: "node apps/editor/e2e/psd-import-plan-codex-focused-smoke.mjs",
+    category: "assetIoBoundary"
+  },
+  {
+    id: "psdStructuralInitialStateFocused",
+    path: "apps/editor/e2e/psd-structural-initial-state-focused-smoke.mjs",
+    command: "node apps/editor/e2e/psd-structural-initial-state-focused-smoke.mjs",
     category: "assetIoBoundary"
   }
 ];

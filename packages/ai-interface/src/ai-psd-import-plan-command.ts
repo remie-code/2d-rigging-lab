@@ -1,12 +1,23 @@
 import type { DiagnosticDto } from "@private-2d-rigging-lab/contracts";
-import { DiagnosticSchema, OperationIdSchema, PartIdSchema } from "@private-2d-rigging-lab/contracts";
+import {
+  DiagnosticSchema,
+  DrawableIdSchema,
+  MeshIdSchema,
+  OperationIdSchema,
+  PartIdSchema,
+  TextureIdSchema
+} from "@private-2d-rigging-lab/contracts";
 import type { OperationResultDto } from "@private-2d-rigging-lab/operation-core";
 import {
   OperationResultSchema,
   PsdImportPlanCandidateStatusSchema,
   PsdImportPlanIssueSchema,
   PsdLayerMaterializationBatchAggregateStatusSchema,
-  PsdLayerMaterializationBatchEntryStatusSchema
+  PsdLayerMaterializationBatchEntryStatusSchema,
+  PsdStructuralScaffoldApprovalStatusSchema,
+  PsdStructuralScaffoldIssueSchema,
+  PsdStructuralScaffoldNodeStatusSchema,
+  PsdStructuralScaffoldOperationAggregateStatusSchema
 } from "@private-2d-rigging-lab/operation-core";
 import { z } from "zod";
 
@@ -144,6 +155,70 @@ export const AiPsdImportPlanStateSchema = z.object({
 }).strict();
 export type AiPsdImportPlanState = z.infer<typeof AiPsdImportPlanStateSchema>;
 
+export const AiPsdStructuralScaffoldGroupPartRefSchema = z.object({
+  sourceGroupId: z.string().min(1),
+  sourceGroupPath: z.array(z.string().min(1)).default([]),
+  sourceOrder: z.number().int().nonnegative(),
+  visibleInSource: z.boolean(),
+  opacityInSource: z.number().min(0).max(1),
+  generatedParentPartId: PartIdSchema,
+  generatedPartId: PartIdSchema.nullable(),
+  status: PsdStructuralScaffoldNodeStatusSchema,
+  statusReasons: z.array(z.string().min(1)).default([])
+}).strict();
+export type AiPsdStructuralScaffoldGroupPartRef = z.infer<
+  typeof AiPsdStructuralScaffoldGroupPartRefSchema
+>;
+
+export const AiPsdStructuralScaffoldLeafDrawableRefSchema = z.object({
+  sourceLayerId: z.string().min(1),
+  sourceLayerPath: z.array(z.string().min(1)).default([]),
+  sourceOrder: z.number().int().nonnegative(),
+  visibleInSource: z.boolean(),
+  opacityInSource: z.number().min(0).max(1),
+  generatedParentPartId: PartIdSchema,
+  generatedDrawableId: DrawableIdSchema.nullable(),
+  generatedTextureId: TextureIdSchema.nullable(),
+  generatedMeshId: MeshIdSchema.nullable(),
+  initialRuntimeVisibility: z.boolean().nullable(),
+  status: PsdStructuralScaffoldNodeStatusSchema,
+  statusReasons: z.array(z.string().min(1)).default([])
+}).strict();
+export type AiPsdStructuralScaffoldLeafDrawableRef = z.infer<
+  typeof AiPsdStructuralScaffoldLeafDrawableRefSchema
+>;
+
+export const AiPsdStructuralScaffoldStateSchema = z.object({
+  status: z.enum(["ready", "blocked"]),
+  structuralPlanId: z.string().regex(/^plan_[A-Za-z0-9_-]+$/),
+  structuralPlanDigest: Sha256DigestRefSchema,
+  approvalId: z.string().regex(/^approval_[A-Za-z0-9_-]+$/),
+  approvalSelectionDigest: Sha256DigestRefSchema,
+  approvalStatus: PsdStructuralScaffoldApprovalStatusSchema,
+  sourceFilePath: z.string().min(1),
+  sourceByteLength: z.number().int().nonnegative(),
+  sourceDigest: Sha256DigestRefSchema,
+  scopeLabel: z.string().min(1),
+  scopeRef: z.string().min(1),
+  destinationParentPartId: PartIdSchema.nullable(),
+  sourceGroupCount: z.number().int().nonnegative(),
+  sourceLayerCount: z.number().int().nonnegative(),
+  approvedGroupCount: z.number().int().nonnegative(),
+  approvedLeafCount: z.number().int().nonnegative(),
+  hiddenLeafCount: z.number().int().nonnegative(),
+  runtimeHiddenDrawableCount: z.number().int().nonnegative(),
+  generatedGroupPartCount: z.number().int().nonnegative(),
+  generatedDrawableCount: z.number().int().nonnegative(),
+  totalByteEstimate: z.number().int().nonnegative().nullable(),
+  approvedNodeRefs: z.array(z.string().min(1)).default([]),
+  groupPartRefs: z.array(AiPsdStructuralScaffoldGroupPartRefSchema).default([]),
+  leafDrawableRefs: z.array(AiPsdStructuralScaffoldLeafDrawableRefSchema).default([]),
+  diagnostics: z.array(AiPsdImportPlanDiagnosticSchema).default([])
+}).strict();
+export type AiPsdStructuralScaffoldState = z.infer<
+  typeof AiPsdStructuralScaffoldStateSchema
+>;
+
 export const AiPsdImportPlanGeneratedResultRefSchema = z.object({
   selectedIndex: z.number().int().nonnegative(),
   sourceLayerId: z.string().min(1),
@@ -162,6 +237,34 @@ export const AiPsdImportPlanGeneratedResultRefSchema = z.object({
 }).strict();
 export type AiPsdImportPlanGeneratedResultRef = z.infer<
   typeof AiPsdImportPlanGeneratedResultRefSchema
+>;
+
+export const AiPsdStructuralScaffoldLatestBatchSchema = z.object({
+  status: z.enum([
+    "none",
+    "preflightReady",
+    "preflightBlocked",
+    "committed",
+    "rejected",
+    "failed"
+  ]),
+  operationStatus: OperationResultSchema.shape.status.optional(),
+  operationId: OperationIdSchema.optional(),
+  batchId: z.string().min(1).optional(),
+  evidenceId: z.string().min(1).optional(),
+  aggregateStatus: PsdStructuralScaffoldOperationAggregateStatusSchema.optional(),
+  sourceAssetId: z.string().min(1).optional(),
+  destinationParentPartId: PartIdSchema.nullable().optional(),
+  approvedNodeRefs: z.array(z.string().min(1)).default([]),
+  generatedGroupPartRefs: z.array(AiPsdStructuralScaffoldGroupPartRefSchema).default([]),
+  generatedLeafDrawableRefs: z.array(AiPsdStructuralScaffoldLeafDrawableRefSchema).default([]),
+  operationIds: z.array(OperationIdSchema).default([]),
+  evidenceRefs: z.array(z.string().min(1)).default([]),
+  issues: z.array(PsdStructuralScaffoldIssueSchema).default([]),
+  diagnostics: z.array(AiPsdImportPlanDiagnosticSchema).default([])
+}).strict();
+export type AiPsdStructuralScaffoldLatestBatch = z.infer<
+  typeof AiPsdStructuralScaffoldLatestBatchSchema
 >;
 
 export const AiPsdImportPlanLatestBatchSchema = z.object({
@@ -194,7 +297,9 @@ export type AiPsdImportPlanLatestBatch = z.infer<
 export const AiPsdImportPlanCommandResultSchema = z.object({
   schemaVersion: z.literal("ai-psd-import-plan-command-result-v0"),
   importPlan: AiPsdImportPlanStateSchema.nullable(),
+  structuralScaffold: AiPsdStructuralScaffoldStateSchema.nullable().optional(),
   latestBatch: AiPsdImportPlanLatestBatchSchema,
+  latestStructuralScaffold: AiPsdStructuralScaffoldLatestBatchSchema.optional(),
   diagnostics: z.array(AiPsdImportPlanDiagnosticSchema).default([]),
   evidenceRefs: z.array(z.string().min(1)).default([])
 }).strict();

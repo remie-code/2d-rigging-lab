@@ -28,6 +28,27 @@ Accepted decisions:
 
 Level 1 convenience must not become hidden suggestion logic. If a command fills defaults, those defaults must be deterministic, documented, and based on explicit user/Codex input rather than image interpretation or semantic guessing.
 
+## 2.5 Structural Expansion Clarification
+
+Structural expansion is not semantic recognition.
+
+Allowed deterministic structural expansion:
+
+- A user or external Codex/LLM explicitly selects or approves a PSD root, group, subtree, or leaf set.
+- The Editor/repo maps the PSD tree structure to project-defined containers and editables without interpreting artistic meaning.
+- PSD groups may become project part containers.
+- PSD leaf layers may become project texture / drawable / mesh scaffold entries.
+- Source names, parentage, source order, visibility, opacity, bounds, stable source refs, generated refs, and evidence may be preserved.
+- Hidden PSD leaf layers may be imported as initially runtime-hidden drawables when explicitly included or covered by an explicit structural approval.
+
+Still disallowed unless this policy is explicitly changed:
+
+- Inferring that a PSD group or layer semantically means `eye`, `hair`, `mouth`, expression, clothing, or any other rigging role.
+- Choosing deformer, parameter, keyform, warp lattice, physics, mask, or rig hierarchy behavior from names, pixels, or artistic intent.
+- Presenting deterministic structural expansion as smart recognition, recommended rigging, or automatic rigging.
+
+In short: explicit structural copying is allowed; hidden interpretation is not.
+
 ## 3. Editor UI Boundary
 
 Allowed Editor UI:
@@ -79,7 +100,8 @@ For PSD intake work after Wave48:
 - PSD import remains explicit and approval-gated.
 - Root/group import-plan preview may enumerate eligible leaf candidates, but execution must operate on explicitly approved leaf refs.
 - Generalizing from fixed sample leaves to arbitrary eligible leaves is acceptable when the user/Codex supplies explicit refs or approval state.
-- This does not imply all-layer one-click import, recursive group auto import, group-as-artmesh import, Photoshop-style group compositing, or rig/deformer inference.
+- Explicit root/group/subtree structural approval may deterministically expand approved PSD groups into project part containers and approved PSD leaf layers into project texture / drawable / mesh scaffold entries.
+- This does not imply semantic all-layer one-click import, smart recursive group auto import, group-as-artmesh import, Photoshop-style group compositing, or rig/deformer inference.
 - The import result should expose stable refs and evidence so Codex can perform later human-equivalent rigging operations through existing APIs.
 
 ## 6. Future Decision Triggers

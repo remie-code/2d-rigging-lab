@@ -14,6 +14,7 @@ export * from "./part-texture-layer-command.js";
 export * from "./persistent-byte-restore.js";
 export * from "./persistent-byte-store.js";
 export * from "./psd-layer-materialization-command.js";
+export * from "./psd-structural-scaffold-command.js";
 export * from "./rig-control-command.js";
 export * from "./selected-psd-layer-binary-registration-command.js";
 export * from "./session-adapter.js";

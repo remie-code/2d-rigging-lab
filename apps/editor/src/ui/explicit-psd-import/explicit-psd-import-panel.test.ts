@@ -290,6 +290,77 @@ describe("explicit PSD import panel", () => {
     }]);
   });
 
+  it("updates structural scaffold preview approval and keeps hidden leaves eligible", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithStructuralScaffold({
+        approvedNodeRefs: []
+      })),
+      onGenerateStructuralScaffoldPreview: (command) => calls.push(command)
+    });
+
+    const hiddenChoice = findByNameAndValue(
+      panel,
+      "explicitPsdStructuralScaffoldApproval",
+      "layer_hidden"
+    );
+    hiddenChoice.checked = true;
+    hiddenChoice.emit("change");
+    findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(hiddenChoice.disabled).toBe(false);
+    expect(findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldApprovedRefs)?.value)
+      .toBe("layer_hidden");
+    expect(calls).toEqual([{
+      scopeRef: "psd:root",
+      approvedNodeRefs: ["layer_hidden"],
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
+  it("blocks stale structural scaffold execution until changed approvals regenerate preview", async () => {
+    const previewCalls: unknown[] = [];
+    const commitCalls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithStructuralScaffold()),
+      onGenerateStructuralScaffoldPreview: (command) => previewCalls.push(command),
+      onCommitStructuralScaffold: (command) => commitCalls.push(command)
+    });
+
+    const hiddenChoice = findByNameAndValue(
+      panel,
+      "explicitPsdStructuralScaffoldApproval",
+      "layer_hidden"
+    );
+    const hairChoice = findByNameAndValue(
+      panel,
+      "explicitPsdStructuralScaffoldApproval",
+      "psd:root/group[2]/layer[0]"
+    );
+    hiddenChoice.checked = false;
+    hiddenChoice.emit("change");
+    hairChoice.checked = true;
+    hairChoice.emit("change");
+    findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldApprovedForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldApprovedSubmit)?.disabled).toBe(true);
+    expect(findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldApprovedForm)?.textContent).toContain(
+      "Update the structural scaffold preview before adding approved structural nodes."
+    );
+    expect(commitCalls).toEqual([]);
+
+    findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(previewCalls).toEqual([{
+      scopeRef: "psd:root",
+      approvedNodeRefs: ["psd:root/group[2]/layer[0]"],
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
   it("keeps group rows out of selected leaf layer batch controls and avoids broad import wording", () => {
     const panel = createPanel({
       viewModel: projectExplicitPsdImportViewModel(createParsedState()),
@@ -319,6 +390,8 @@ const createPanel = (
     readonly onIntakeSelectedLayersBatch?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayersBatch"];
     readonly onGenerateImportPlanPreview?: Parameters<typeof createExplicitPsdImportPanel>[0]["onGenerateImportPlanPreview"];
     readonly onIntakeApprovedImportPlanCandidates?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeApprovedImportPlanCandidates"];
+    readonly onGenerateStructuralScaffoldPreview?: Parameters<typeof createExplicitPsdImportPanel>[0]["onGenerateStructuralScaffoldPreview"];
+    readonly onCommitStructuralScaffold?: Parameters<typeof createExplicitPsdImportPanel>[0]["onCommitStructuralScaffold"];
   } | Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = {}
 ): TestElement => {
   const normalized = typeof options === "function" ? { onParsePsdFile: options } : options;
@@ -336,7 +409,13 @@ const createPanel = (
       : { onGenerateImportPlanPreview: normalized.onGenerateImportPlanPreview }),
     ...(normalized.onIntakeApprovedImportPlanCandidates === undefined
       ? {}
-      : { onIntakeApprovedImportPlanCandidates: normalized.onIntakeApprovedImportPlanCandidates })
+      : { onIntakeApprovedImportPlanCandidates: normalized.onIntakeApprovedImportPlanCandidates }),
+    ...(normalized.onGenerateStructuralScaffoldPreview === undefined
+      ? {}
+      : { onGenerateStructuralScaffoldPreview: normalized.onGenerateStructuralScaffoldPreview }),
+    ...(normalized.onCommitStructuralScaffold === undefined
+      ? {}
+      : { onCommitStructuralScaffold: normalized.onCommitStructuralScaffold })
   }) as unknown as TestElement
   );
 };
@@ -602,6 +681,109 @@ const createParsedStateWithImportPlan = (options: {
       message: "Browser PSD import plan leaf candidates were generated from parser-free session evidence."
     }]
   }
+  });
+};
+
+const createParsedStateWithStructuralScaffold = (options: {
+  readonly approvedNodeRefs?: readonly string[];
+} = {}): ExplicitPsdImportState => {
+  const approvedNodeRefs = options.approvedNodeRefs ?? ["layer_hidden"];
+  const isApproved = (nodeRef: string): boolean => approvedNodeRefs.includes(nodeRef);
+
+  return ({
+    ...createParsedState(),
+    selectedLayerNodeRefs: approvedNodeRefs,
+    structuralScaffoldPlan: {
+      status: "ready" as const,
+      structuralPlanId: "plan_structural_test",
+      structuralPlanDigest: `sha256:${"c".repeat(64)}`,
+      approvalId: "approval_structural_test",
+      approvalSelectionDigest: `sha256:${"d".repeat(64)}`,
+      approvalStatus: "approved",
+      sourceFilePath: "assets/sources/private/sample_model.psd",
+      sourceByteLength: 16,
+      sourceDigest: `sha256:${"e".repeat(64)}`,
+      scopeRef: "psd:root",
+      scopeLabel: "psd:root",
+      destinationParentPartId: "part_root",
+      sourceGroupCount: 1,
+      sourceLayerCount: 3,
+      approvedGroupCount: 0,
+      approvedLeafCount: approvedNodeRefs.length,
+      hiddenLeafCount: isApproved("layer_hidden") ? 1 : 0,
+      runtimeHiddenDrawableCount: isApproved("layer_hidden") ? 1 : 0,
+      generatedGroupPartCount: 0,
+      generatedDrawableCount: approvedNodeRefs.length,
+      totalByteEstimate: approvedNodeRefs.length * 256,
+      approvedNodeRefs,
+      nodes: [
+        {
+          nodeRef: "group_accessories",
+          kind: "group" as const,
+          label: "Accessories",
+          fullPathLabel: "Accessories",
+          sourceOrder: 0,
+          visibleInSource: true,
+          opacityInSource: 1,
+          boundsLabel: "bounds unavailable",
+          approvalEligible: true,
+          approved: isApproved("group_accessories"),
+          generatedParentPartId: "part_root",
+          generatedPartId: "part_accessories",
+          generatedDrawableId: null,
+          generatedTextureId: null,
+          generatedMeshId: null,
+          initialRuntimeVisibility: null,
+          status: "previewReady",
+          statusReasons: []
+        },
+        {
+          nodeRef: "layer_hidden",
+          kind: "leaf" as const,
+          label: "Hidden",
+          fullPathLabel: "Hidden",
+          sourceOrder: 1,
+          visibleInSource: false,
+          opacityInSource: 1,
+          boundsLabel: "0,0 8x8",
+          approvalEligible: true,
+          approved: isApproved("layer_hidden"),
+          generatedParentPartId: "part_root",
+          generatedPartId: null,
+          generatedDrawableId: "draw_hidden_structural",
+          generatedTextureId: "tex_hidden_structural",
+          generatedMeshId: "mesh_hidden_structural",
+          initialRuntimeVisibility: false,
+          status: "previewReady",
+          statusReasons: []
+        },
+        {
+          nodeRef: "psd:root/group[2]/layer[0]",
+          kind: "leaf" as const,
+          label: "front hair",
+          fullPathLabel: "Hair / front hair",
+          sourceOrder: 2,
+          visibleInSource: true,
+          opacityInSource: 1,
+          boundsLabel: "0,0 8x8",
+          approvalEligible: true,
+          approved: isApproved("psd:root/group[2]/layer[0]"),
+          generatedParentPartId: "part_hair",
+          generatedPartId: null,
+          generatedDrawableId: "draw_front_hair_structural",
+          generatedTextureId: "tex_front_hair_structural",
+          generatedMeshId: "mesh_front_hair_structural",
+          initialRuntimeVisibility: true,
+          status: "previewReady",
+          statusReasons: []
+        }
+      ],
+      diagnostics: [{
+        checkId: "browserPsdStructuralScaffold.plan.ready",
+        severity: "info" as const,
+        message: "PSD structural scaffold preview was generated from current parser evidence."
+      }]
+    }
   });
 };
 

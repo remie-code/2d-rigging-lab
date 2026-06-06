@@ -462,7 +462,8 @@ const collectCategoryEvidenceRefs = (
     ...explicitEvidenceRefs,
     ...reportEvidenceRefs,
     ...createOperationLogEvidenceRefs(category, context),
-    ...createRuntimeSnapshotEvidenceRefs(category, context)
+    ...createRuntimeSnapshotEvidenceRefs(category, context),
+    ...createSourceMaterializationEvidenceRefs(category, context)
   ]).filter((evidenceRef) => isAllowedCategoryEvidenceRef(category, evidenceRef));
 };
 
@@ -538,6 +539,35 @@ const createRuntimeSnapshotEvidenceRefs = (
       summary: `Validation report ${report.reportId} records runtime snapshot ${snapshotId}.`,
       producer: "validatorCore"
     }))
+  );
+};
+
+const createSourceMaterializationEvidenceRefs = (
+  category: ProductPreflightCategoryDto,
+  context: ProductPreflightBuildContext
+): ProductPreflightEvidenceRefDto[] => {
+  if (category !== "assetBytes") {
+    return [];
+  }
+
+  return context.validationReports.flatMap((report) =>
+    report.checks
+      .filter((check) =>
+        check.checkId === "asset.psd.structuralScaffoldAvailable" ||
+        check.checkId === "asset.psd.materializedBatchAvailable" ||
+        check.checkId === "asset.psd.materializedAssetAvailable"
+      )
+      .map((check, checkIndex) => ({
+        evidenceId:
+          `evidence_${sanitizeToken(report.reportId)}_${sanitizeToken(check.checkId)}_${checkIndex}`,
+        artifactRef: {
+          artifactKind: "sourceMaterialization",
+          path: `generated/source-materialization/${sanitizeToken(report.reportId)}-${sanitizeToken(check.checkId)}-${checkIndex}.json`
+        },
+        target: check.target,
+        summary: `Validation report ${report.reportId} records ${check.checkId} source materialization evidence.`,
+        producer: "validatorCore"
+      }))
   );
 };
 
@@ -634,6 +664,24 @@ const mapDiagnosticToCategory = (
   }
   if (checkId.startsWith("pkg.schema.")) {
     return "modelStructure";
+  }
+  if (
+    checkId === "asset.psd.structuralScaffoldParentageMismatch" ||
+    checkId === "asset.psd.structuralScaffoldSourceOrderMismatch" ||
+    checkId === "asset.psd.structuralScaffoldGeneratedParentMissing" ||
+    checkId === "asset.psd.structuralScaffoldGeneratedPartMissing" ||
+    checkId === "asset.psd.structuralGroupForbiddenDrawableClaim"
+  ) {
+    return "modelStructure";
+  }
+  if (
+    checkId === "asset.psd.structuralScaffoldGeneratedDrawableMissing" ||
+    checkId === "asset.psd.structuralScaffoldGeneratedTextureMissing" ||
+    checkId === "asset.psd.structuralScaffoldGeneratedMeshMissing" ||
+    checkId === "asset.psd.structuralScaffoldGeneratedRefMismatch" ||
+    checkId === "asset.psd.structuralInitialRuntimeVisibilityMismatch"
+  ) {
+    return "composition";
   }
   if (
     checkId.startsWith("binary.") ||
@@ -742,7 +790,10 @@ const isTruthfullyNotEvaluatedDiagnostic = (check: ValidationCheckResultDto): bo
     check.checkId === "asset.psd.materializedDestinationMappingMissing" ||
     check.checkId === "asset.psd.materializedBatchEvidenceMissing" ||
     check.checkId === "asset.psd.importPlanEvidenceMissing" ||
-    check.checkId === "asset.psd.importPlanSourceCurrentBytesMissing"
+    check.checkId === "asset.psd.importPlanSourceCurrentBytesMissing" ||
+    check.checkId === "asset.psd.structuralScaffoldEvidenceMissing" ||
+    check.checkId === "asset.psd.structuralScaffoldByteUnavailable" ||
+    check.checkId === "asset.psd.structuralScaffoldSourceCurrentBytesMissing"
   );
 
 const evidenceKindForNotEvaluatedDiagnostic = (
@@ -758,6 +809,12 @@ const evidenceKindForNotEvaluatedDiagnostic = (
     ? "sourceMaterialization"
     : checkId === "asset.psd.importPlanSourceCurrentBytesMissing"
     ? "sourceMaterialization"
+    : checkId === "asset.psd.structuralScaffoldEvidenceMissing"
+    ? "sourceMaterialization"
+    : checkId === "asset.psd.structuralScaffoldByteUnavailable"
+    ? "sourceMaterialization"
+    : checkId === "asset.psd.structuralScaffoldSourceCurrentBytesMissing"
+    ? "sourceMaterialization"
     : "validationReport";
 
 const mapBlockingReasonCode = (
@@ -771,6 +828,13 @@ const mapBlockingReasonCode = (
   }
   if (check.checkId.startsWith("rights.")) {
     return "rightsOrProvenanceBlocked";
+  }
+  if (
+    check.checkId.includes("Stale") ||
+    check.checkId.includes("stale") ||
+    check.checkId.includes("ApprovalMismatch")
+  ) {
+    return "staleEvidence";
   }
   if (
     check.checkId.includes("EvidenceMissing") ||

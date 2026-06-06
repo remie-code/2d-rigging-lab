@@ -1009,6 +1009,206 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Wave48 PSD import-plan evidence lacks required private/local non-public provenance or no-raw-byte boundary fields."
   },
   {
+    checkId: "asset.psd.structuralScaffoldEvidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold operation evidence was required but not supplied for session Product Preflight."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldEvidenceMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold operation evidence is malformed or internally inconsistent."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldAvailable",
+    phase: "source_import",
+    defaultSeverity: "info",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold hierarchy and leaf materialization evidence are available."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldPreflightBlocked",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold evidence reports a preflight-blocked operation or issue."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldPartialState",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold evidence reports a failed or partial state that cannot be summarized as available."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldPlanStale",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold plan evidence is stale or absent from stored source profile evidence."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldApprovalMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold approval evidence is stale, mismatched, or not approved."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceCurrentBytesMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold source bytes are not currently available for source identity revalidation."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceStale",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold source identity is stale or mismatched against current source evidence."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceGroupMappingMissing",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold group evidence cannot be resolved to source group metadata."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceLayerMappingMissing",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold leaf evidence cannot be resolved to source layer mapping metadata."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceLayerMappingMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold leaf source metadata disagrees with stored source layer metadata."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldParentageMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold generated parentage does not match source hierarchy or model graph evidence."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldSourceOrderMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold generated order does not preserve sourceOrder when model ordering evidence is available."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedPartMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural group scaffold references a missing generated part container."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedParentMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold references a missing generated parent part."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedDrawableMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural leaf scaffold references a missing generated drawable."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedTextureMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural leaf scaffold references a missing generated texture."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedMeshMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural leaf scaffold references a missing generated mesh."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedRefMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold generated drawable, texture, mesh, or membership refs are inconsistent."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldGeneratedRefCollision",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold generated part, drawable, mesh, or texture refs collide."
+  },
+  {
+    checkId: "asset.psd.structuralInitialRuntimeVisibilityMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural leaf initial runtime visibility does not match source visibility or generated drawable runtime visibility."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldByteUnavailable",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold byte-dependent materialization evidence is unavailable for current Product Preflight evaluation."
+  },
+  {
+    checkId: "asset.psd.structuralScaffoldProvenanceBlocked",
+    phase: "rights",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave50 PSD structural scaffold evidence lacks private/local non-public provenance."
+  },
+  {
+    checkId: "asset.psd.structuralGroupForbiddenDrawableClaim",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave50 PSD structural group scaffold evidence claims forbidden drawable, texture, or mesh refs."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

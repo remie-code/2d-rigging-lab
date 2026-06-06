@@ -18,6 +18,7 @@ import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdLayerMaterializationBatchOperationHandler } from "./operations/import-psd-layer-materialization-batch.js";
 import { importPsdLayerMaterializationOperationHandler } from "./operations/import-psd-layer-materialization.js";
 import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-source-asset.js";
+import { importPsdStructuralScaffoldOperationHandler } from "./operations/import-psd-structural-scaffold.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
 import {
   addMeshTriangleOperationHandler,
@@ -65,6 +66,10 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [
     importPsdLayerMaterializationBatchOperationHandler.operationType,
     importPsdLayerMaterializationBatchOperationHandler
+  ],
+  [
+    importPsdStructuralScaffoldOperationHandler.operationType,
+    importPsdStructuralScaffoldOperationHandler
   ],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],

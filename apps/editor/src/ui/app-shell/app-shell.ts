@@ -36,6 +36,8 @@ import type {
   EditorExplicitPsdImportFileCommand,
   EditorExplicitPsdImportPlanApprovedBatchIntakeCommand,
   EditorExplicitPsdImportPlanPreviewCommand,
+  EditorExplicitPsdStructuralScaffoldCommitCommand,
+  EditorExplicitPsdStructuralScaffoldPreviewCommand,
   EditorExplicitPsdLayerBatchIntakeCommand,
   EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
@@ -163,6 +165,12 @@ export interface EditorAppShellOptions {
   ) => unknown | Promise<unknown>;
   readonly onIntakeApprovedExplicitPsdImportPlan?: (
     command: EditorExplicitPsdImportPlanApprovedBatchIntakeCommand
+  ) => unknown | Promise<unknown>;
+  readonly onGenerateExplicitPsdStructuralScaffoldPreview?: (
+    command: EditorExplicitPsdStructuralScaffoldPreviewCommand
+  ) => unknown | Promise<unknown>;
+  readonly onCommitExplicitPsdStructuralScaffold?: (
+    command: EditorExplicitPsdStructuralScaffoldCommitCommand
   ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -321,7 +329,13 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       : { onGenerateImportPlanPreview: options.onGenerateExplicitPsdImportPlanPreview }),
     ...(options.onIntakeApprovedExplicitPsdImportPlan === undefined
       ? {}
-      : { onIntakeApprovedImportPlanCandidates: options.onIntakeApprovedExplicitPsdImportPlan })
+      : { onIntakeApprovedImportPlanCandidates: options.onIntakeApprovedExplicitPsdImportPlan }),
+    ...(options.onGenerateExplicitPsdStructuralScaffoldPreview === undefined
+      ? {}
+      : { onGenerateStructuralScaffoldPreview: options.onGenerateExplicitPsdStructuralScaffoldPreview }),
+    ...(options.onCommitExplicitPsdStructuralScaffold === undefined
+      ? {}
+      : { onCommitStructuralScaffold: options.onCommitExplicitPsdStructuralScaffold })
   });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,

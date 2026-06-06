@@ -13,6 +13,7 @@ import { MeshTopologyOperationEvidenceDtoSchema } from "./mesh-topology-evidence
 import { PsdLayerMaterializationBatchOperationEvidenceDtoSchema } from "./psd-layer-materialization-batch-operation-evidence.js";
 import { PsdLayerMaterializationOperationEvidenceDtoSchema } from "./psd-layer-materialization-operation-evidence.js";
 import { PsdImportOperationEvidenceDtoSchema } from "./psd-import-operation-evidence.js";
+import { PsdStructuralScaffoldOperationEvidenceDtoSchema } from "./psd-structural-scaffold-evidence.js";
 
 export const OperationEvidenceResultSchema = z.object({
   runtimeDiff: RuntimeDiffSchema.optional(),
@@ -28,6 +29,9 @@ export const OperationEvidenceResultSchema = z.object({
   psdLayerMaterializationEvidence: z.array(PsdLayerMaterializationOperationEvidenceDtoSchema).optional(),
   psdLayerMaterializationBatchEvidence: z
     .array(PsdLayerMaterializationBatchOperationEvidenceDtoSchema)
+    .optional(),
+  psdStructuralScaffoldEvidence: z
+    .array(PsdStructuralScaffoldOperationEvidenceDtoSchema)
     .optional()
 });
 export type OperationEvidenceResultInput = z.input<typeof OperationEvidenceResultSchema>;

@@ -225,8 +225,17 @@ import {
   type EditorExplicitPsdLayerBatchIntakeCommand,
   type EditorExplicitPsdLayerBatchIntakeResult
 } from "./selected-psd-layer-batch-intake-workflow.js";
+import {
+  commitEditorExplicitPsdStructuralScaffoldWorkflow,
+  runEditorExplicitPsdStructuralScaffoldPreviewWorkflow,
+  type EditorExplicitPsdStructuralScaffoldCommitCommand,
+  type EditorExplicitPsdStructuralScaffoldCommitResult,
+  type EditorExplicitPsdStructuralScaffoldPreviewCommand,
+  type EditorExplicitPsdStructuralScaffoldPreviewResult
+} from "./explicit-psd-structural-scaffold-workflow.js";
 import type { BrowserPsdParserBridgeResult } from "./browser-psd-parser-bridge-result.js";
 import type { BrowserPsdImportPlanCandidatePlan } from "./browser-psd-import-plan-candidate-result.js";
+import type { BrowserPsdStructuralScaffoldPlan } from "./browser-psd-structural-scaffold-plan-service.js";
 import {
   createExplicitPsdSourceAssetId,
   createPsdSourcePackagePath
@@ -419,6 +428,9 @@ export interface EditorWorkflowController {
   generateExplicitPsdImportPlanPreview(
     command: EditorExplicitPsdImportPlanPreviewCommand
   ): Promise<EditorExplicitPsdImportPlanPreviewResult>;
+  generateExplicitPsdStructuralScaffoldPreview(
+    command: EditorExplicitPsdStructuralScaffoldPreviewCommand
+  ): Promise<EditorExplicitPsdStructuralScaffoldPreviewResult>;
   commitExplicitPsdLayerIntake(
     command: EditorExplicitPsdLayerIntakeCommand
   ): Promise<EditorExplicitPsdLayerIntakeResult>;
@@ -428,6 +440,9 @@ export interface EditorWorkflowController {
   commitExplicitPsdImportPlanApprovedBatchIntake(
     command: EditorExplicitPsdImportPlanApprovedBatchIntakeCommand
   ): Promise<EditorExplicitPsdLayerBatchIntakeResult>;
+  commitExplicitPsdStructuralScaffold(
+    command: EditorExplicitPsdStructuralScaffoldCommitCommand
+  ): Promise<EditorExplicitPsdStructuralScaffoldCommitResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
     drawableId: string,
@@ -519,6 +534,7 @@ export const createEditorWorkflowController = (
   let currentExplicitPsdImportFile: File | undefined;
   let currentExplicitPsdImportBridgeResult: BrowserPsdParserBridgeResult | undefined;
   let currentExplicitPsdImportPlan: BrowserPsdImportPlanCandidatePlan | undefined;
+  let currentExplicitPsdStructuralScaffoldPlan: BrowserPsdStructuralScaffoldPlan | undefined;
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
@@ -809,6 +825,7 @@ export const createEditorWorkflowController = (
     currentExplicitPsdImportFile = undefined;
     currentExplicitPsdImportBridgeResult = undefined;
     currentExplicitPsdImportPlan = undefined;
+    currentExplicitPsdStructuralScaffoldPlan = undefined;
   };
   const recordProductPreflightReportAndProjectComparison = async (input: {
     readonly currentReport: ProductPreflightReportDto;
@@ -1093,6 +1110,7 @@ export const createEditorWorkflowController = (
       currentExplicitPsdImportFile = command.file;
       currentExplicitPsdImportBridgeResult = outcome.bridgeResult;
       currentExplicitPsdImportPlan = undefined;
+      currentExplicitPsdStructuralScaffoldPlan = undefined;
       state = {
         ...state,
         explicitPsdImport: outcome.state
@@ -1112,6 +1130,25 @@ export const createEditorWorkflowController = (
           : { parsedBridgeResult: currentExplicitPsdImportBridgeResult })
       });
       currentExplicitPsdImportPlan = outcome.plan;
+      state = {
+        ...state,
+        explicitPsdImport: outcome.state
+      };
+
+      return outcome.result;
+    },
+    async generateExplicitPsdStructuralScaffoldPreview(command) {
+      const outcome = await runEditorExplicitPsdStructuralScaffoldPreviewWorkflow({
+        state,
+        command,
+        ...(currentExplicitPsdImportFile === undefined
+          ? {}
+          : { currentPsdFile: currentExplicitPsdImportFile }),
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult })
+      });
+      currentExplicitPsdStructuralScaffoldPlan = outcome.plan;
       state = {
         ...state,
         explicitPsdImport: outcome.state
@@ -1194,6 +1231,34 @@ export const createEditorWorkflowController = (
           importPlanBridge
         },
         currentPsdFile: currentExplicitPsdImportFile,
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+        persistentByteStore,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+      if (outcome.result.latestSessionPersistenceResult !== null) {
+        latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+      }
+      if (outcome.result.status === "committed") {
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    async commitExplicitPsdStructuralScaffold(command) {
+      const outcome = await commitEditorExplicitPsdStructuralScaffoldWorkflow({
+        adapter,
+        state,
+        command,
+        ...(currentExplicitPsdStructuralScaffoldPlan === undefined
+          ? {}
+          : { plan: currentExplicitPsdStructuralScaffoldPlan }),
+        ...(currentExplicitPsdImportFile === undefined
+          ? {}
+          : { currentPsdFile: currentExplicitPsdImportFile }),
         ...(currentExplicitPsdImportBridgeResult === undefined
           ? {}
           : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),

@@ -49,10 +49,20 @@ class FakePsdImportPlanCommandHost implements AiPsdImportPlanCommandHost {
   readonly preflightCalls: PreflightPsdImportPlanIntakePayload[] = [];
   readonly executeCalls: ExecutePsdImportPlanIntakePayload[] = [];
 
+  constructor(
+    private readonly options: {
+      readonly includeStructuralState?: boolean;
+      readonly preflightOperationResult?: OperationResultDto;
+    } = {}
+  ) {}
+
   getPsdImportPlanState(payload: GetPsdImportPlanStatePayload): AiPsdImportPlanCommandResult {
     this.getStateCalls.push(payload);
 
-    return createPsdImportPlanResult({ latestBatchStatus: "none" });
+    return createPsdImportPlanResult({
+      latestBatchStatus: "none",
+      includeStructuralState: this.options.includeStructuralState === true
+    });
   }
 
   setPsdImportPlanApproval(payload: SetPsdImportPlanApprovalPayload): AiPsdImportPlanCommandResult {
@@ -63,12 +73,13 @@ class FakePsdImportPlanCommandHost implements AiPsdImportPlanCommandHost {
 
   preflightPsdImportPlanIntake(payload: PreflightPsdImportPlanIntakePayload) {
     this.preflightCalls.push(payload);
-    const operationResult = createBatchOperationResult("dry_run");
+    const operationResult = this.options.preflightOperationResult ?? createBatchOperationResult("dry_run");
 
     return {
       result: createPsdImportPlanResult({
         latestBatchStatus: "preflightReady",
-        operationResult
+        operationResult,
+        includeStructuralState: this.options.includeStructuralState === true
       }),
       operationResult
     };
@@ -81,7 +92,8 @@ class FakePsdImportPlanCommandHost implements AiPsdImportPlanCommandHost {
     return {
       result: createPsdImportPlanResult({
         latestBatchStatus: "committed",
-        operationResult
+        operationResult,
+        includeStructuralState: this.options.includeStructuralState === true
       }),
       operationResult
     };
@@ -128,6 +140,51 @@ describe("AI PSD import-plan command executor", () => {
       }
     });
     expect(host.getStateCalls).toHaveLength(1);
+  });
+
+  it("exposes structural scaffold plan refs on the current PSD command result", async () => {
+    const host = new FakePsdImportPlanCommandHost({ includeStructuralState: true });
+    const response = await executeAiPsdImportPlanCommand(
+      createAiRequest({
+        commandId: "cmd_get_psd_import_plan_structural",
+        command: "getPsdImportPlanState",
+        capabilities: ["read"],
+        payload: { detail: "full" }
+      }),
+      {
+        host,
+        approvalPolicy: new InMemoryAiApprovalPolicy()
+      }
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "getPsdImportPlanState",
+      payload: {
+        result: {
+          structuralScaffold: {
+            structuralPlanId: "plan_ai_psd_structural",
+            approvalSelectionDigest: `sha256:${"4".repeat(64)}`,
+            approvedNodeRefs: ["psd:root/group[2]", approvedLayerNodeRef],
+            groupPartRefs: [
+              expect.objectContaining({
+                sourceGroupId: "psd:root/group[2]",
+                generatedPartId: "part_psd_group_2"
+              })
+            ],
+            leafDrawableRefs: [
+              expect.objectContaining({
+                sourceLayerId: approvedLayerNodeRef,
+                generatedDrawableId: "draw_front_hair",
+                generatedTextureId: "tex_front_hair",
+                generatedMeshId: "mesh_front_hair",
+                initialRuntimeVisibility: true
+              })
+            ]
+          }
+        }
+      }
+    });
   });
 
   it("requires dryRunEdit before changing approval state", async () => {
@@ -226,6 +283,68 @@ describe("AI PSD import-plan command executor", () => {
       })
     ]);
     expect(host.preflightCalls).toHaveLength(1);
+  });
+
+  it("collects structural scaffold operation evidence refs for Codex-facing dry-runs", async () => {
+    const structuralOperationId = OperationIdSchema.parse("op_ai_psd_structural_scaffold");
+    const structuralOperationResult = createStructuralOperationResult({
+      operationId: structuralOperationId,
+      status: "dry_run"
+    });
+    const host = new FakePsdImportPlanCommandHost({
+      includeStructuralState: true,
+      preflightOperationResult: structuralOperationResult
+    });
+    const response = await executeAiPsdImportPlanCommand(
+      createPreflightRequest(),
+      {
+        host,
+        approvalPolicy: new InMemoryAiApprovalPolicy()
+      }
+    );
+
+    expect(response).toMatchObject({
+      status: "ok",
+      command: "preflightPsdImportPlanIntake",
+      operationResult: {
+        operationId: structuralOperationId,
+        status: "dry_run"
+      },
+      payload: {
+        result: {
+          structuralScaffold: {
+            structuralPlanId: "plan_ai_psd_structural"
+          },
+          latestStructuralScaffold: {
+            status: "preflightReady",
+            operationId: structuralOperationId,
+            generatedGroupPartRefs: [
+              expect.objectContaining({
+                sourceGroupId: "psd:root/group[2]",
+                generatedPartId: "part_psd_group_2"
+              })
+            ],
+            generatedLeafDrawableRefs: [
+              expect.objectContaining({
+                sourceLayerId: approvedLayerNodeRef,
+                initialRuntimeVisibility: true
+              })
+            ]
+          }
+        }
+      }
+    });
+    expect(response.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        `operations/${structuralOperationId}#evidence_batch_ai_psd_structural`,
+        `operations/${structuralOperationId}#psd:root/group[2]`,
+        `operations/${structuralOperationId}#part_psd_group_2`,
+        `operations/${structuralOperationId}#${approvedLayerNodeRef}`,
+        `operations/${structuralOperationId}#draw_front_hair`,
+        `operations/${structuralOperationId}#tex_front_hair`,
+        `operations/${structuralOperationId}#mesh_front_hair`
+      ])
+    );
   });
 
   it("requires approval before executing the approved intake", async () => {
@@ -409,6 +528,7 @@ const createExpectedPlan = () => ({
 const createPsdImportPlanResult = (input: {
   readonly latestBatchStatus: "none" | "preflightReady" | "committed";
   readonly operationResult?: OperationResultDto;
+  readonly includeStructuralState?: boolean;
 }): AiPsdImportPlanCommandResult => ({
   schemaVersion: "ai-psd-import-plan-command-result-v0",
   importPlan: {
@@ -453,10 +573,140 @@ const createPsdImportPlanResult = (input: {
     }],
     diagnostics: []
   },
+  ...(input.includeStructuralState === true
+    ? {
+        structuralScaffold: createStructuralScaffoldState(),
+        latestStructuralScaffold: createLatestStructuralScaffold(input.operationResult)
+      }
+    : {}),
   latestBatch: createLatestBatch(input),
   diagnostics: [],
   evidenceRefs: []
 });
+
+const createStructuralScaffoldState = (): NonNullable<
+  AiPsdImportPlanCommandResult["structuralScaffold"]
+> => ({
+  status: "ready",
+  structuralPlanId: "plan_ai_psd_structural",
+  structuralPlanDigest: `sha256:${"3".repeat(64)}`,
+  approvalId: "approval_ai_psd_structural",
+  approvalSelectionDigest: `sha256:${"4".repeat(64)}`,
+  approvalStatus: "approved",
+  sourceFilePath: "assets/sources/private/sample_model.psd",
+  sourceByteLength: 128,
+  sourceDigest,
+  scopeLabel: "document",
+  scopeRef: "psd:root",
+  destinationParentPartId,
+  sourceGroupCount: 1,
+  sourceLayerCount: 1,
+  approvedGroupCount: 1,
+  approvedLeafCount: 1,
+  hiddenLeafCount: 0,
+  runtimeHiddenDrawableCount: 0,
+  generatedGroupPartCount: 1,
+  generatedDrawableCount: 1,
+  totalByteEstimate: 16,
+  approvedNodeRefs: ["psd:root/group[2]", approvedLayerNodeRef],
+  groupPartRefs: [{
+    sourceGroupId: "psd:root/group[2]",
+    sourceGroupPath: ["hair_front"],
+    sourceOrder: 2,
+    visibleInSource: true,
+    opacityInSource: 1,
+    generatedParentPartId: destinationParentPartId,
+    generatedPartId: PartIdSchema.parse("part_psd_group_2"),
+    status: "approved",
+    statusReasons: []
+  }],
+  leafDrawableRefs: [{
+    sourceLayerId: approvedLayerNodeRef,
+    sourceLayerPath: ["hair_front", "front hair"],
+    sourceOrder: 3,
+    visibleInSource: true,
+    opacityInSource: 1,
+    generatedParentPartId: PartIdSchema.parse("part_psd_group_2"),
+    generatedDrawableId: drawableId,
+    generatedTextureId: textureId,
+    generatedMeshId: meshId,
+    initialRuntimeVisibility: true,
+    status: "approved",
+    statusReasons: []
+  }],
+  diagnostics: []
+});
+
+const createLatestStructuralScaffold = (
+  operationResult: OperationResultDto | undefined
+): AiPsdImportPlanCommandResult["latestStructuralScaffold"] => {
+  if (operationResult === undefined) {
+    return {
+      status: "none",
+      approvedNodeRefs: ["psd:root/group[2]", approvedLayerNodeRef],
+      generatedGroupPartRefs: [],
+      generatedLeafDrawableRefs: [],
+      operationIds: [],
+      evidenceRefs: [],
+      issues: [],
+      diagnostics: []
+    };
+  }
+  const evidence = operationResult.psdStructuralScaffoldEvidence?.[0];
+  if (evidence === undefined) {
+    return {
+      status: "none",
+      approvedNodeRefs: ["psd:root/group[2]", approvedLayerNodeRef],
+      generatedGroupPartRefs: [],
+      generatedLeafDrawableRefs: [],
+      operationIds: [operationResult.operationId],
+      evidenceRefs: [],
+      issues: [],
+      diagnostics: []
+    };
+  }
+
+  return {
+    status: operationResult.status === "dry_run" ? "preflightReady" : "committed",
+    operationStatus: operationResult.status,
+    operationId: operationResult.operationId,
+    batchId: evidence.batchId,
+    evidenceId: evidence.evidenceId,
+    aggregateStatus: evidence.aggregateStatus,
+    sourceAssetId: evidence.sourceAssetId,
+    destinationParentPartId: evidence.destination.parentPartId,
+    approvedNodeRefs: ["psd:root/group[2]", approvedLayerNodeRef],
+    generatedGroupPartRefs: [{
+      sourceGroupId: "psd:root/group[2]",
+      sourceGroupPath: ["hair_front"],
+      sourceOrder: 2,
+      visibleInSource: true,
+      opacityInSource: 1,
+      generatedParentPartId: destinationParentPartId,
+      generatedPartId: PartIdSchema.parse("part_psd_group_2"),
+      status: "resolved",
+      statusReasons: []
+    }],
+    generatedLeafDrawableRefs: [{
+      sourceLayerId: approvedLayerNodeRef,
+      sourceLayerPath: ["hair_front", "front hair"],
+      sourceOrder: 3,
+      visibleInSource: true,
+      opacityInSource: 1,
+      generatedParentPartId: PartIdSchema.parse("part_psd_group_2"),
+      generatedDrawableId: drawableId,
+      generatedTextureId: textureId,
+      generatedMeshId: meshId,
+      initialRuntimeVisibility: true,
+      status: "resolved",
+      statusReasons: []
+    }],
+    operationIds: [operationResult.operationId],
+    evidenceRefs: [`operations/${operationResult.operationId}#${evidence.evidenceId}`],
+    issues: [...evidence.issues],
+    diagnostics: []
+  };
+};
 
 const createLatestBatch = (input: {
   readonly latestBatchStatus: "none" | "preflightReady" | "committed";
@@ -583,3 +833,104 @@ const createSourceLayerRef = () => ({
   sourceLayerName: "front hair",
   sourceLayerPath: ["Hair", "front hair"]
 });
+
+const createStructuralOperationResult = (input: {
+  readonly operationId: string;
+  readonly status: "dry_run" | "committed";
+}): OperationResultDto =>
+  OperationResultSchema.parse({
+    schemaVersion: "operation-result-v1",
+    operationId: input.operationId,
+    status: input.status,
+    precondition: {
+      ok: true,
+      diagnostics: []
+    },
+    diagnostics: [],
+    generatedRuntimeSnapshotIds: [],
+    generatedRuntimeStateRefs: [],
+    generatedRuntimeStateSequenceRefs: [],
+    generatedValidationReportIds: [],
+    psdStructuralScaffoldEvidence: [createStructuralOperationEvidence(input.operationId)],
+    reversible: true
+  });
+
+const createStructuralOperationEvidence = (operationIdValue: string) => ({
+  schemaVersion: "psd-structural-scaffold-operation-evidence-v1",
+  operationType: "importPsdStructuralScaffold",
+  evidenceId: "evidence_batch_ai_psd_structural",
+  operationId: operationIdValue,
+  batchId: "batch_ai_psd_structural",
+  sourceAssetId,
+  destination: {
+    destinationKind: "structuralScaffold",
+    parentPartId: destinationParentPartId
+  },
+  aggregateStatus: "success",
+  generatedGroupPartScaffolds: [{
+    scaffoldKind: "groupPartContainer",
+    sourceGroupRef: {
+      sourceAssetId,
+      sourceGroupId: "psd:root/group[2]",
+      sourceGroupName: "hair_front",
+      sourceGroupPath: ["hair_front"]
+    },
+    sourceGroupName: "hair_front",
+    sourceGroupPath: ["hair_front"],
+    sourceOrder: 2,
+    visibleInSource: true,
+    opacityInSource: 1,
+    generatedParentPartId: destinationParentPartId,
+    generatedPartId: "part_psd_group_2",
+    generatedPartDisplayName: "hair_front",
+    status: "resolved",
+    statusReasons: []
+  }],
+  generatedLeafScaffolds: [createStructuralLeafScaffold("resolved")],
+  issues: [],
+  preflightPolicy: {
+    approvedLeafLimit: 6,
+    approvedGroupLimit: 32,
+    generatedNodeLimit: 64,
+    totalRawRgbaByteLimit: 33554432,
+    mutationPolicy: "preflightBlocksOnAnyFailure",
+    silentPartialSuccess: "forbidden"
+  },
+  persistenceBoundary: {
+    rawParserObjectPersistence: "notPersisted",
+    sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+    materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+    photoshopCompositingClaim: "none",
+    rendererPixelOracleClaim: "none",
+    initialGridMeshGeneration: "notProvided",
+    semanticRecognition: "notProvided",
+    repoProposalGeneration: "notProvided"
+  }
+} as const);
+
+const createStructuralLeafScaffold = (
+  status: "previewReady" | "approved" | "resolved"
+) => ({
+  scaffoldKind: "leafDrawableScaffold",
+  sourceLayerRef: {
+    sourceAssetId,
+    sourceLayerId: approvedLayerNodeRef,
+    sourceLayerName: "front hair",
+    sourceLayerPath: ["hair_front", "front hair"]
+  },
+  sourceLayerName: "front hair",
+  sourceLayerPath: ["hair_front", "front hair"],
+  sourceOrder: 3,
+  visibleInSource: true,
+  opacityInSource: 1,
+  bounds: { x: 0, y: 0, width: 4, height: 4 },
+  byteEstimate: 16,
+  generatedParentPartId: "part_psd_group_2",
+  generatedDrawableId: drawableId,
+  generatedDrawableDisplayName: "front hair",
+  generatedTextureId: textureId,
+  generatedMeshId: meshId,
+  initialRuntimeVisibility: true,
+  status,
+  statusReasons: []
+} as const);

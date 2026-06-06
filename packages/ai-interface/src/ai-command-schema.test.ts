@@ -518,6 +518,85 @@ describe("AI command schema foundation", () => {
         result: psdImportPlanResult
       }
     });
+    const psdStructuralScaffoldStateResponse = AiCommandResponseSchema.parse({
+      schemaVersion: "ai-command-response-v1",
+      commandId: "cmd_get_psd_import_plan_structural",
+      status: "ok",
+      evidenceRefs: ["operations/op_ai_psd_structural#evidence_batch_ai_psd_structural"],
+      command: "getPsdImportPlanState",
+      payload: {
+        result: {
+          ...psdImportPlanResult,
+          structuralScaffold: {
+            status: "ready",
+            structuralPlanId: "plan_ai_psd_structural",
+            structuralPlanDigest: `sha256:${"c".repeat(64)}`,
+            approvalId: "approval_ai_psd_structural",
+            approvalSelectionDigest: `sha256:${"d".repeat(64)}`,
+            approvalStatus: "approved",
+            sourceFilePath: "assets/sources/private/sample.psd",
+            sourceByteLength: 128,
+            sourceDigest: `sha256:${"b".repeat(64)}`,
+            scopeLabel: "document",
+            scopeRef: "psd:root",
+            destinationParentPartId: "part_root",
+            sourceGroupCount: 1,
+            sourceLayerCount: 1,
+            approvedGroupCount: 1,
+            approvedLeafCount: 1,
+            hiddenLeafCount: 0,
+            runtimeHiddenDrawableCount: 0,
+            generatedGroupPartCount: 1,
+            generatedDrawableCount: 1,
+            totalByteEstimate: 16,
+            approvedNodeRefs: ["psd:root/group[2]", "psd:root/group[2]/layer[0]"],
+            groupPartRefs: [{
+              sourceGroupId: "psd:root/group[2]",
+              sourceGroupPath: ["hair_front"],
+              sourceOrder: 2,
+              visibleInSource: true,
+              opacityInSource: 1,
+              generatedParentPartId: "part_root",
+              generatedPartId: "part_psd_group_2",
+              status: "approved",
+              statusReasons: []
+            }],
+            leafDrawableRefs: [{
+              sourceLayerId: "psd:root/group[2]/layer[0]",
+              sourceLayerPath: ["hair_front", "front hair"],
+              sourceOrder: 3,
+              visibleInSource: true,
+              opacityInSource: 1,
+              generatedParentPartId: "part_psd_group_2",
+              generatedDrawableId: "draw_front_hair",
+              generatedTextureId: "tex_front_hair",
+              generatedMeshId: "mesh_front_hair",
+              initialRuntimeVisibility: true,
+              status: "approved",
+              statusReasons: []
+            }],
+            diagnostics: []
+          },
+          latestStructuralScaffold: {
+            status: "preflightReady",
+            operationStatus: "dry_run",
+            operationId: "op_ai_psd_structural",
+            batchId: "batch_ai_psd_structural",
+            evidenceId: "evidence_batch_ai_psd_structural",
+            aggregateStatus: "success",
+            sourceAssetId: "src_ai_psd_profile",
+            destinationParentPartId: "part_root",
+            approvedNodeRefs: ["psd:root/group[2]", "psd:root/group[2]/layer[0]"],
+            generatedGroupPartRefs: [],
+            generatedLeafDrawableRefs: [],
+            operationIds: ["op_ai_psd_structural"],
+            evidenceRefs: ["operations/op_ai_psd_structural#evidence_batch_ai_psd_structural"],
+            issues: [],
+            diagnostics: []
+          }
+        }
+      }
+    });
     const psdImportPlanPreflightResponse = AiCommandResponseSchema.parse({
       schemaVersion: "ai-command-response-v1",
       commandId: "cmd_preflight_psd_import_plan",
@@ -593,6 +672,25 @@ describe("AI command schema foundation", () => {
         result: {
           schemaVersion: "ai-psd-import-plan-command-result-v0",
           importPlan: null
+        }
+      }
+    });
+    expect(psdStructuralScaffoldStateResponse).toMatchObject({
+      payload: {
+        result: {
+          structuralScaffold: {
+            structuralPlanId: "plan_ai_psd_structural",
+            leafDrawableRefs: [
+              expect.objectContaining({
+                sourceLayerId: "psd:root/group[2]/layer[0]",
+                initialRuntimeVisibility: true
+              })
+            ]
+          },
+          latestStructuralScaffold: {
+            status: "preflightReady",
+            operationId: "op_ai_psd_structural"
+          }
         }
       }
     });

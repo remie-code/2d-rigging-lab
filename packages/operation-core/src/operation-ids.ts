@@ -137,6 +137,12 @@ const operationToken = (request: OperationRequestDto): string => {
     )}`;
   }
 
+  if (request.operationType === "importPsdStructuralScaffold") {
+    return `import_psd_structural_scaffold_${sanitizeIdToken(
+      stripIdPrefix(request.payload.batchId, "batch_")
+    )}`;
+  }
+
   if (request.operationType === "createPart") {
     return `create_part_${sanitizeIdToken(
       request.payload.partId?.replace(/^part_/, "") ?? request.payload.displayName

@@ -25,6 +25,7 @@ import { validatePartLayerSemantics } from "./part-layer-semantics.js";
 import { validatePartRuntimeEvidence } from "./part-runtime-evidence.js";
 import { validatePsdSourceProfiles } from "./psd-source-profile.js";
 import { validatePsdMaterializedBatchDiagnostics } from "./psd-materialized-batch-diagnostics.js";
+import { validatePsdStructuralScaffoldDiagnostics } from "./psd-structural-scaffold-diagnostics.js";
 import { validateRigControlSemantics } from "./rig-control-semantic.js";
 import { validateRuntimeSnapshot } from "./runtime-load.js";
 import { validateTextureAssetReferences } from "./texture-assets.js";
@@ -41,6 +42,8 @@ export interface PackageRuntimeValidationInput {
   readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
   readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
   readonly requirePsdImportPlanBridgeEvidence?: boolean;
+  readonly psdStructuralScaffoldEvidence?: readonly unknown[];
+  readonly requirePsdStructuralScaffoldEvidence?: boolean;
   readonly profile?: string;
   readonly createdAt?: string;
 }
@@ -82,7 +85,13 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
           }),
       ...(input.requirePsdImportPlanBridgeEvidence === undefined
         ? {}
-        : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
+        : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence }),
+      ...(input.psdStructuralScaffoldEvidence === undefined
+        ? {}
+        : { psdStructuralScaffoldEvidence: input.psdStructuralScaffoldEvidence }),
+      ...(input.requirePsdStructuralScaffoldEvidence === undefined
+        ? {}
+        : { requirePsdStructuralScaffoldEvidence: input.requirePsdStructuralScaffoldEvidence })
     });
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()
@@ -150,7 +159,13 @@ export const validatePackageRuntimeWithBinaryAssets = async (
             }),
         ...(input.requirePsdImportPlanBridgeEvidence === undefined
           ? {}
-          : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
+          : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence }),
+        ...(input.psdStructuralScaffoldEvidence === undefined
+          ? {}
+          : { psdStructuralScaffoldEvidence: input.psdStructuralScaffoldEvidence }),
+        ...(input.requirePsdStructuralScaffoldEvidence === undefined
+          ? {}
+          : { requirePsdStructuralScaffoldEvidence: input.requirePsdStructuralScaffoldEvidence })
       }),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
@@ -205,6 +220,8 @@ interface PackageReferenceChecksInput {
   readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
   readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
   readonly requirePsdImportPlanBridgeEvidence?: boolean;
+  readonly psdStructuralScaffoldEvidence?: readonly unknown[];
+  readonly requirePsdStructuralScaffoldEvidence?: boolean;
 }
 
 const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
@@ -220,6 +237,15 @@ const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
     ...(input.requirePsdImportPlanBridgeEvidence === undefined
       ? {}
       : { requireImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
+  }),
+  ...validatePsdStructuralScaffoldDiagnostics({
+    packageDocument: input.packageDocument,
+    ...(input.psdStructuralScaffoldEvidence === undefined
+      ? {}
+      : { structuralEvidence: input.psdStructuralScaffoldEvidence }),
+    ...(input.requirePsdStructuralScaffoldEvidence === undefined
+      ? {}
+      : { requireStructuralEvidence: input.requirePsdStructuralScaffoldEvidence })
   }),
   ...validateSourceAssetRightsAndProvenance(input.packageDocument),
   ...validateDrawableProvenanceReferences(input.packageDocument),

@@ -199,6 +199,10 @@ export function mountEditorApp(root: HTMLElement): void {
           await workflow.generateExplicitPsdImportPlanPreview(command);
           render();
         },
+        async onGenerateExplicitPsdStructuralScaffoldPreview(command) {
+          await workflow.generateExplicitPsdStructuralScaffoldPreview(command);
+          render();
+        },
         async onIntakeExplicitPsdLayer(command) {
           await workflow.commitExplicitPsdLayerIntake(command);
           render();
@@ -209,6 +213,10 @@ export function mountEditorApp(root: HTMLElement): void {
         },
         async onIntakeApprovedExplicitPsdImportPlan(command) {
           await workflow.commitExplicitPsdImportPlanApprovedBatchIntake(command);
+          render();
+        },
+        async onCommitExplicitPsdStructuralScaffold(command) {
+          await workflow.commitExplicitPsdStructuralScaffold(command);
           render();
         },
         onSaveProject() {

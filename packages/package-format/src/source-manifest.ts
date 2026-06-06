@@ -14,6 +14,10 @@ import {
   PsdImportPlanCandidateEvidenceSchema
 } from "./psd-import-plan-evidence.js";
 import {
+  PsdStructuralScaffoldApprovalEvidenceSchema,
+  PsdStructuralScaffoldPlanEvidenceSchema
+} from "./psd-structural-scaffold-evidence.js";
+import {
   PsdFeatureSupportEvidenceSchema,
   PsdLayerMaterializationEvidenceSchema,
   PsdLayerTreeEvidenceSchema,
@@ -56,6 +60,36 @@ export type {
   PsdImportPlanSourcePsdIdentityDto,
   PsdImportPlanSummaryDto
 } from "./psd-import-plan-evidence.js";
+export {
+  PsdStructuralScaffoldApprovalBridgeEvidenceSchema,
+  PsdStructuralScaffoldApprovalEvidenceSchema,
+  PsdStructuralScaffoldApprovalStatusSchema,
+  PsdStructuralScaffoldCapPolicySchema,
+  PsdStructuralScaffoldGroupPartSchema,
+  PsdStructuralScaffoldIssueKindSchema,
+  PsdStructuralScaffoldIssueSchema,
+  PsdStructuralScaffoldLeafDrawableSchema,
+  PsdStructuralScaffoldNodeStatusSchema,
+  PsdStructuralScaffoldPlanEvidenceSchema,
+  PsdStructuralScaffoldScopeSchema,
+  PsdStructuralScaffoldSourceGroupReferenceSchema,
+  PsdStructuralScaffoldSummarySchema
+} from "./psd-structural-scaffold-evidence.js";
+export type {
+  PsdStructuralScaffoldApprovalBridgeEvidenceDto,
+  PsdStructuralScaffoldApprovalEvidenceDto,
+  PsdStructuralScaffoldApprovalStatusDto,
+  PsdStructuralScaffoldCapPolicyDto,
+  PsdStructuralScaffoldGroupPartDto,
+  PsdStructuralScaffoldIssueKindDto,
+  PsdStructuralScaffoldIssueDto,
+  PsdStructuralScaffoldLeafDrawableDto,
+  PsdStructuralScaffoldNodeStatusDto,
+  PsdStructuralScaffoldPlanEvidenceDto,
+  PsdStructuralScaffoldScopeDto,
+  PsdStructuralScaffoldSourceGroupReferenceDto,
+  PsdStructuralScaffoldSummaryDto
+} from "./psd-structural-scaffold-evidence.js";
 export {
   PsdFeatureSupportEvidenceSchema,
   PsdFeatureSupportStatusSchema,
@@ -233,6 +267,12 @@ export const LayeredCharacterPsdProfileSchema = z.object({
   materializationEvidence: z.array(PsdLayerMaterializationEvidenceSchema).optional(),
   importPlanCandidateEvidence: z.array(PsdImportPlanCandidateEvidenceSchema).optional(),
   importPlanApprovalEvidence: z.array(PsdImportPlanApprovalEvidenceSchema).optional(),
+  psdStructuralScaffoldPlanEvidence: z
+    .array(PsdStructuralScaffoldPlanEvidenceSchema)
+    .optional(),
+  psdStructuralScaffoldApprovalEvidence: z
+    .array(PsdStructuralScaffoldApprovalEvidenceSchema)
+    .optional(),
   diagnostics: z.array(PsdProfileAdapterDiagnosticSchema).default([]),
   compatibility: PsdProfileCompatibilityPolicySchema
 });

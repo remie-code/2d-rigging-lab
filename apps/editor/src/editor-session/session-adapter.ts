@@ -183,6 +183,9 @@ export interface EditorSessionAdapter {
   commitImportPsdLayerMaterializationBatchWithBinaryBytes(
     command: EditorImportPsdLayerMaterializationBatchWithBinaryBytesCommand
   ): EditorSessionPersistenceResult;
+  commitImportPsdStructuralScaffoldWithBinaryBytes(
+    command: EditorImportPsdStructuralScaffoldWithBinaryBytesCommand
+  ): EditorSessionPersistenceResult;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorSessionPersistenceResult;
 }
 
@@ -248,6 +251,14 @@ export interface EditorImportPsdLayerMaterializationWithBinaryBytesCommand {
 
 export interface EditorImportPsdLayerMaterializationBatchWithBinaryBytesCommand {
   readonly request: Extract<OperationRequestDto, { readonly operationType: "importPsdLayerMaterializationBatch" }>;
+  readonly entries: readonly {
+    readonly bytes: Uint8Array | ArrayBuffer;
+    readonly registration: EditorSelectedPsdLayerBinaryByteRegistration;
+  }[];
+}
+
+export interface EditorImportPsdStructuralScaffoldWithBinaryBytesCommand {
+  readonly request: Extract<OperationRequestDto, { readonly operationType: "importPsdStructuralScaffold" }>;
   readonly entries: readonly {
     readonly bytes: Uint8Array | ArrayBuffer;
     readonly registration: EditorSelectedPsdLayerBinaryByteRegistration;
@@ -535,6 +546,31 @@ export const createEditorSessionAdapter = (
       });
     },
     commitImportPsdLayerMaterializationBatchWithBinaryBytes(command) {
+      return commitOperationRequest({
+        request: command.request,
+        authoringSession,
+        baseDocument,
+        operationCore,
+        evidenceCollector,
+        generatedArtifactEntries,
+        now,
+        afterCommitted: () => {
+          for (const entry of command.entries) {
+            registerAuthoringSessionBinaryBytes(authoringSession, {
+              binaryAssetRef: entry.registration.binaryAssetRef,
+              bytes: entry.bytes,
+              role: "texture-raster-v1",
+              textureId: entry.registration.textureId,
+              ...(command.request.operationId === undefined
+                ? {}
+                : { createdByOperationId: command.request.operationId }),
+              byteIntakeSummary: entry.registration.byteIntakeSummary
+            });
+          }
+        }
+      });
+    },
+    commitImportPsdStructuralScaffoldWithBinaryBytes(command) {
       return commitOperationRequest({
         request: command.request,
         authoringSession,

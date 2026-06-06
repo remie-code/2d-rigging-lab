@@ -361,6 +361,33 @@ const collectOperationEvidenceRefs = (
               ].map((targetId) => `operations/${operationResult.operationId}#${targetId}`))
             ]
       )
+    ]),
+    ...(operationResult.psdStructuralScaffoldEvidence ?? []).flatMap((evidence) => [
+      ...(evidence.evidenceId === undefined
+        ? []
+        : [`operations/${operationResult.operationId}#${evidence.evidenceId}`]),
+      ...(evidence.structuralScaffoldBridge === undefined
+        ? []
+        : [
+            `operations/${operationResult.operationId}#${evidence.structuralScaffoldBridge.structuralPlan.structuralPlanId}`,
+            `operations/${operationResult.operationId}#${evidence.structuralScaffoldBridge.approval.approvalId}`,
+            `operations/${operationResult.operationId}#${evidence.structuralScaffoldBridge.approval.approvalSelectionDigest.algorithm}:${evidence.structuralScaffoldBridge.approval.approvalSelectionDigest.hex}`
+          ]),
+      ...evidence.generatedGroupPartScaffolds.flatMap((group) => [
+        `operations/${operationResult.operationId}#${group.sourceGroupRef.sourceGroupId}`,
+        `operations/${operationResult.operationId}#${group.generatedPartId}`
+      ]),
+      ...evidence.generatedLeafScaffolds.flatMap((leaf) => [
+        `operations/${operationResult.operationId}#${leaf.sourceLayerRef.sourceLayerId}`,
+        `operations/${operationResult.operationId}#${leaf.generatedDrawableId}`,
+        `operations/${operationResult.operationId}#${leaf.generatedTextureId}`,
+        `operations/${operationResult.operationId}#${leaf.generatedMeshId}`
+      ]),
+      ...evidence.issues.flatMap((issue) =>
+        issue.issueId === undefined
+          ? []
+          : [`operations/${operationResult.operationId}#${issue.issueId}`]
+      )
     ])
   ];
 

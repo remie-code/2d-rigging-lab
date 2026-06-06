@@ -91,6 +91,14 @@ export const applyOperationEvidence = (
             ...(input.result.psdLayerMaterializationBatchEvidence ?? []),
             ...evidence.psdLayerMaterializationBatchEvidence
           ]
+        }),
+    ...(evidence.psdStructuralScaffoldEvidence === undefined
+      ? {}
+      : {
+          psdStructuralScaffoldEvidence: [
+            ...(input.result.psdStructuralScaffoldEvidence ?? []),
+            ...evidence.psdStructuralScaffoldEvidence
+          ]
         })
   });
 };

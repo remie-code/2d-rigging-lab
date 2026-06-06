@@ -1,18 +1,29 @@
 import type {
   AiPsdImportPlanCommandResult,
   AiPsdImportPlanDiagnostic,
-  AiPsdImportPlanLatestBatch
+  AiPsdImportPlanLatestBatch,
+  AiPsdStructuralScaffoldLatestBatch
 } from "@private-2d-rigging-lab/ai-interface";
 import { PartIdSchema } from "@private-2d-rigging-lab/contracts";
-import { AiPsdImportPlanCommandResultSchema } from "@private-2d-rigging-lab/ai-interface";
+import {
+  AiPsdImportPlanCommandResultSchema,
+  AiPsdStructuralScaffoldGroupPartRefSchema,
+  AiPsdStructuralScaffoldLatestBatchSchema,
+  AiPsdStructuralScaffoldLeafDrawableRefSchema,
+  AiPsdStructuralScaffoldStateSchema
+} from "@private-2d-rigging-lab/ai-interface";
 import type {
   OperationResultDto,
-  PsdLayerMaterializationBatchOperationEvidenceDto
+  PsdLayerMaterializationBatchOperationEvidenceDto,
+  PsdStructuralScaffoldGroupPartDto,
+  PsdStructuralScaffoldLeafDrawableDto,
+  PsdStructuralScaffoldOperationEvidenceDto
 } from "@private-2d-rigging-lab/operation-core";
 
 import type {
   EditorSemanticState,
-  ExplicitPsdImportPlanCandidateState
+  ExplicitPsdImportPlanCandidateState,
+  ExplicitPsdStructuralScaffoldNodeState
 } from "../editor-state/index.js";
 
 export const projectEditorAiPsdImportPlanCommandResult = (input: {
@@ -25,7 +36,9 @@ export const projectEditorAiPsdImportPlanCommandResult = (input: {
   const result = {
     schemaVersion: "ai-psd-import-plan-command-result-v0" as const,
     importPlan: projectImportPlan(input.state, input.detail),
+    structuralScaffold: projectStructuralScaffold(input.state, input.detail),
     latestBatch: projectLatestBatch(input),
+    ...projectLatestStructuralScaffold(input),
     diagnostics: projectStateDiagnostics(input.state),
     evidenceRefs: [] as readonly string[]
   };
@@ -99,6 +112,95 @@ const projectCandidate = (
     meshId: candidate.generatedMeshId
   }
 });
+
+const projectStructuralScaffold = (
+  state: EditorSemanticState,
+  detail: "summary" | "candidates" | "full"
+): AiPsdImportPlanCommandResult["structuralScaffold"] => {
+  const plan = state.explicitPsdImport.structuralScaffoldPlan;
+  if (plan === null) {
+    return null;
+  }
+
+  const includeNodeRefs = detail !== "summary";
+
+  return AiPsdStructuralScaffoldStateSchema.parse({
+    status: plan.status,
+    structuralPlanId: plan.structuralPlanId,
+    structuralPlanDigest: plan.structuralPlanDigest,
+    approvalId: plan.approvalId,
+    approvalSelectionDigest: plan.approvalSelectionDigest,
+    approvalStatus: plan.approvalStatus,
+    sourceFilePath: plan.sourceFilePath,
+    sourceByteLength: plan.sourceByteLength,
+    sourceDigest: plan.sourceDigest,
+    scopeLabel: plan.scopeLabel,
+    scopeRef: plan.scopeRef,
+    destinationParentPartId: plan.destinationParentPartId === null
+      ? null
+      : PartIdSchema.parse(plan.destinationParentPartId),
+    sourceGroupCount: plan.sourceGroupCount,
+    sourceLayerCount: plan.sourceLayerCount,
+    approvedGroupCount: plan.approvedGroupCount,
+    approvedLeafCount: plan.approvedLeafCount,
+    hiddenLeafCount: plan.hiddenLeafCount,
+    runtimeHiddenDrawableCount: plan.runtimeHiddenDrawableCount,
+    generatedGroupPartCount: plan.generatedGroupPartCount,
+    generatedDrawableCount: plan.generatedDrawableCount,
+    totalByteEstimate: plan.totalByteEstimate,
+    approvedNodeRefs: [...plan.approvedNodeRefs],
+    groupPartRefs: includeNodeRefs
+      ? plan.nodes.filter(isStructuralGroupNode).map(projectStructuralGroupNode)
+      : [],
+    leafDrawableRefs: includeNodeRefs
+      ? plan.nodes.filter(isStructuralLeafNode).map(projectStructuralLeafNode)
+      : [],
+    diagnostics: plan.diagnostics.map(projectDiagnostic)
+  });
+};
+
+const isStructuralGroupNode = (
+  node: ExplicitPsdStructuralScaffoldNodeState
+): node is ExplicitPsdStructuralScaffoldNodeState & { readonly kind: "group" } =>
+  node.kind === "group";
+
+const isStructuralLeafNode = (
+  node: ExplicitPsdStructuralScaffoldNodeState
+): node is ExplicitPsdStructuralScaffoldNodeState & { readonly kind: "leaf" } =>
+  node.kind === "leaf";
+
+const projectStructuralGroupNode = (
+  node: ExplicitPsdStructuralScaffoldNodeState
+) =>
+  AiPsdStructuralScaffoldGroupPartRefSchema.parse({
+    sourceGroupId: node.nodeRef,
+    sourceGroupPath: [...splitPathLabel(node.fullPathLabel)],
+    sourceOrder: node.sourceOrder,
+    visibleInSource: node.visibleInSource,
+    opacityInSource: node.opacityInSource,
+    generatedParentPartId: PartIdSchema.parse(node.generatedParentPartId),
+    generatedPartId: node.generatedPartId === null ? null : PartIdSchema.parse(node.generatedPartId),
+    status: node.status,
+    statusReasons: [...node.statusReasons]
+  });
+
+const projectStructuralLeafNode = (
+  node: ExplicitPsdStructuralScaffoldNodeState
+) =>
+  AiPsdStructuralScaffoldLeafDrawableRefSchema.parse({
+    sourceLayerId: node.nodeRef,
+    sourceLayerPath: [...splitPathLabel(node.fullPathLabel)],
+    sourceOrder: node.sourceOrder,
+    visibleInSource: node.visibleInSource,
+    opacityInSource: node.opacityInSource,
+    generatedParentPartId: PartIdSchema.parse(node.generatedParentPartId),
+    generatedDrawableId: node.generatedDrawableId,
+    generatedTextureId: node.generatedTextureId,
+    generatedMeshId: node.generatedMeshId,
+    initialRuntimeVisibility: node.initialRuntimeVisibility,
+    status: node.status,
+    statusReasons: [...node.statusReasons]
+  });
 
 const projectLatestBatch = (input: {
   readonly state: EditorSemanticState;
@@ -179,6 +281,128 @@ const projectLatestBatch = (input: {
   };
 };
 
+const projectLatestStructuralScaffold = (input: {
+  readonly state: EditorSemanticState;
+  readonly operationResult?: OperationResultDto;
+}): { readonly latestStructuralScaffold?: AiPsdStructuralScaffoldLatestBatch } => {
+  const operationResult = input.operationResult;
+  const evidence = operationResult?.psdStructuralScaffoldEvidence?.[0];
+  if (operationResult !== undefined && evidence !== undefined) {
+    return {
+      latestStructuralScaffold: AiPsdStructuralScaffoldLatestBatchSchema.parse({
+        status: projectStructuralScaffoldStatus(operationResult, evidence),
+        operationStatus: operationResult.status,
+        operationId: operationResult.operationId,
+        batchId: evidence.batchId,
+        ...(evidence.evidenceId === undefined ? {} : { evidenceId: evidence.evidenceId }),
+        aggregateStatus: evidence.aggregateStatus,
+        sourceAssetId: evidence.sourceAssetId,
+        destinationParentPartId: evidence.destination.parentPartId,
+        approvedNodeRefs: collectStructuralApprovedNodeRefsFromEvidence(evidence),
+        generatedGroupPartRefs: evidence.generatedGroupPartScaffolds.map(
+          projectStructuralGroupEvidence
+        ),
+        generatedLeafDrawableRefs: evidence.generatedLeafScaffolds.map(
+          projectStructuralLeafEvidence
+        ),
+        operationIds: [operationResult.operationId],
+        evidenceRefs: collectStructuralEvidenceRefs(operationResult, evidence),
+        issues: [...evidence.issues],
+        diagnostics: [
+          ...operationResult.diagnostics.map(projectDiagnostic),
+          ...evidence.issues.map(projectStructuralIssueDiagnostic)
+        ]
+      })
+    };
+  }
+
+  const intake = input.state.explicitPsdImport.structuralScaffoldIntake;
+  const plan = input.state.explicitPsdImport.structuralScaffoldPlan;
+  if (intake.status === "idle" && plan === null) {
+    return {};
+  }
+
+  return {
+    latestStructuralScaffold: AiPsdStructuralScaffoldLatestBatchSchema.parse({
+      status: intake.status === "idle" ? "none" : intake.status,
+      approvedNodeRefs: [...(plan?.approvedNodeRefs ?? input.state.explicitPsdImport.selectedLayerNodeRefs)],
+      generatedGroupPartRefs:
+        plan?.nodes.filter(isStructuralGroupNode).map(projectStructuralGroupNode) ?? [],
+      generatedLeafDrawableRefs:
+        plan?.nodes.filter(isStructuralLeafNode).map(projectStructuralLeafNode) ?? [],
+      operationIds: [],
+      evidenceRefs: [],
+      issues: [],
+      diagnostics: intake.diagnostics.map(projectDiagnostic)
+    })
+  };
+};
+
+const projectStructuralScaffoldStatus = (
+  operationResult: OperationResultDto,
+  evidence: PsdStructuralScaffoldOperationEvidenceDto
+): AiPsdStructuralScaffoldLatestBatch["status"] => {
+  if (operationResult.status === "committed") {
+    return "committed";
+  }
+  if (operationResult.status === "rejected") {
+    return evidence.aggregateStatus === "preflightBlocked" ? "preflightBlocked" : "rejected";
+  }
+  if (operationResult.status === "dry_run") {
+    return evidence.aggregateStatus === "success" ? "preflightReady" : "preflightBlocked";
+  }
+
+  return "failed";
+};
+
+const projectStructuralGroupEvidence = (
+  group: PsdStructuralScaffoldGroupPartDto
+) =>
+  AiPsdStructuralScaffoldGroupPartRefSchema.parse({
+    sourceGroupId: group.sourceGroupRef.sourceGroupId,
+    sourceGroupPath: [...(group.sourceGroupRef.sourceGroupPath ?? group.sourceGroupPath)],
+    sourceOrder: group.sourceOrder,
+    visibleInSource: group.visibleInSource,
+    opacityInSource: group.opacityInSource,
+    generatedParentPartId: group.generatedParentPartId,
+    generatedPartId: group.generatedPartId,
+    status: group.status,
+    statusReasons: [...group.statusReasons]
+  });
+
+const projectStructuralLeafEvidence = (
+  leaf: PsdStructuralScaffoldLeafDrawableDto
+) =>
+  AiPsdStructuralScaffoldLeafDrawableRefSchema.parse({
+    sourceLayerId: leaf.sourceLayerRef.sourceLayerId,
+    sourceLayerPath: [...(leaf.sourceLayerRef.sourceLayerPath ?? leaf.sourceLayerPath)],
+    sourceOrder: leaf.sourceOrder,
+    visibleInSource: leaf.visibleInSource,
+    opacityInSource: leaf.opacityInSource,
+    generatedParentPartId: leaf.generatedParentPartId,
+    generatedDrawableId: leaf.generatedDrawableId,
+    generatedTextureId: leaf.generatedTextureId,
+    generatedMeshId: leaf.generatedMeshId,
+    initialRuntimeVisibility: leaf.initialRuntimeVisibility,
+    status: leaf.status,
+    statusReasons: [...leaf.statusReasons]
+  });
+
+const collectStructuralApprovedNodeRefsFromEvidence = (
+  evidence: PsdStructuralScaffoldOperationEvidenceDto
+): readonly string[] => [
+  ...evidence.generatedGroupPartScaffolds.map((group) => group.sourceGroupRef.sourceGroupId),
+  ...evidence.generatedLeafScaffolds.map((leaf) => leaf.sourceLayerRef.sourceLayerId)
+];
+
+const projectStructuralIssueDiagnostic = (
+  issue: PsdStructuralScaffoldOperationEvidenceDto["issues"][number]
+): AiPsdImportPlanDiagnostic => ({
+  checkId: issue.checkId ?? issue.issueKind,
+  severity: issue.issueKind === "structuralExpansionCapExceeded" ? "error" : "warning",
+  message: issue.message
+});
+
 const projectBatchStatus = (
   operationResult: OperationResultDto,
   evidence: PsdLayerMaterializationBatchOperationEvidenceDto | undefined
@@ -249,3 +473,34 @@ const collectBatchEvidenceRefs = (
     )
   ].sort();
 };
+
+const collectStructuralEvidenceRefs = (
+  operationResult: OperationResultDto,
+  evidence: PsdStructuralScaffoldOperationEvidenceDto
+): readonly string[] => [
+  ...(evidence.evidenceId === undefined
+    ? []
+    : [`operations/${operationResult.operationId}#${evidence.evidenceId}`]),
+  ...(evidence.structuralScaffoldBridge === undefined
+    ? []
+    : [
+        `operations/${operationResult.operationId}#${evidence.structuralScaffoldBridge.structuralPlan.structuralPlanId}`,
+        `operations/${operationResult.operationId}#${evidence.structuralScaffoldBridge.approval.approvalId}`
+      ]),
+  ...evidence.generatedGroupPartScaffolds.flatMap((group) => [
+    `operations/${operationResult.operationId}#${group.sourceGroupRef.sourceGroupId}`,
+    `operations/${operationResult.operationId}#${group.generatedPartId}`
+  ]),
+  ...evidence.generatedLeafScaffolds.flatMap((leaf) => [
+    `operations/${operationResult.operationId}#${leaf.sourceLayerRef.sourceLayerId}`,
+    `operations/${operationResult.operationId}#${leaf.generatedDrawableId}`,
+    `operations/${operationResult.operationId}#${leaf.generatedTextureId}`,
+    `operations/${operationResult.operationId}#${leaf.generatedMeshId}`
+  ])
+].sort();
+
+const splitPathLabel = (label: string): readonly string[] =>
+  label
+    .split("/")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);

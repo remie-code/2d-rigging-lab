@@ -17,6 +17,7 @@ import { OperationPreconditionResultSchema } from "./operation-precondition.js";
 import { PsdLayerMaterializationBatchOperationEvidenceDtoSchema } from "./psd-layer-materialization-batch-operation-evidence.js";
 import { PsdLayerMaterializationOperationEvidenceDtoSchema } from "./psd-layer-materialization-operation-evidence.js";
 import { PsdImportOperationEvidenceDtoSchema } from "./psd-import-operation-evidence.js";
+import { PsdStructuralScaffoldOperationEvidenceDtoSchema } from "./psd-structural-scaffold-evidence.js";
 
 export const OperationResultPreconditionSchema = OperationPreconditionResultSchema;
 export type OperationResultPreconditionDto = z.infer<typeof OperationResultPreconditionSchema>;
@@ -41,6 +42,9 @@ export const OperationResultSchema = z.object({
   psdLayerMaterializationEvidence: z.array(PsdLayerMaterializationOperationEvidenceDtoSchema).optional(),
   psdLayerMaterializationBatchEvidence: z
     .array(PsdLayerMaterializationBatchOperationEvidenceDtoSchema)
+    .optional(),
+  psdStructuralScaffoldEvidence: z
+    .array(PsdStructuralScaffoldOperationEvidenceDtoSchema)
     .optional(),
   reversible: z.boolean()
 });
