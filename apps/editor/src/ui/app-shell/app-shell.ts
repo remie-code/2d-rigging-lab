@@ -34,6 +34,8 @@ import type {
   EditorWorkflowSetMaskRelationCommand,
   EditorWorkflowPersistenceResult,
   EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdImportPlanApprovedBatchIntakeCommand,
+  EditorExplicitPsdImportPlanPreviewCommand,
   EditorExplicitPsdLayerBatchIntakeCommand,
   EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
@@ -155,6 +157,12 @@ export interface EditorAppShellOptions {
   ) => unknown | Promise<unknown>;
   readonly onIntakeExplicitPsdLayerBatch?: (
     command: EditorExplicitPsdLayerBatchIntakeCommand
+  ) => unknown | Promise<unknown>;
+  readonly onGenerateExplicitPsdImportPlanPreview?: (
+    command: EditorExplicitPsdImportPlanPreviewCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeApprovedExplicitPsdImportPlan?: (
+    command: EditorExplicitPsdImportPlanApprovedBatchIntakeCommand
   ) => unknown | Promise<unknown>;
   readonly onSaveProject: () => void;
   readonly onLoadProject: () => void;
@@ -307,7 +315,13 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer,
     ...(options.onIntakeExplicitPsdLayerBatch === undefined
       ? {}
-      : { onIntakeSelectedLayersBatch: options.onIntakeExplicitPsdLayerBatch })
+      : { onIntakeSelectedLayersBatch: options.onIntakeExplicitPsdLayerBatch }),
+    ...(options.onGenerateExplicitPsdImportPlanPreview === undefined
+      ? {}
+      : { onGenerateImportPlanPreview: options.onGenerateExplicitPsdImportPlanPreview }),
+    ...(options.onIntakeApprovedExplicitPsdImportPlan === undefined
+      ? {}
+      : { onIntakeApprovedImportPlanCandidates: options.onIntakeApprovedExplicitPsdImportPlan })
   });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,

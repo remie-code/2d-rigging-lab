@@ -515,6 +515,50 @@ describe("product preflight report aggregation", () => {
       })
     ]);
   });
+
+  it("maps missing PSD import plan bridge evidence to source materialization not_evaluated", () => {
+    const sourceReport = buildValidationReport({
+      reportId: "val_preflightProduct_psdImportPlanMissing",
+      createdAt: CREATED_AT,
+      packageId: PACKAGE_ID,
+      packageRevision: 7,
+      profile: "acceptance",
+      checks: [
+        createCheck({
+          checkId: "asset.psd.importPlanEvidenceMissing",
+          status: "needs_review",
+          severity: "warning",
+          phase: "source_import",
+          message: "PSD import-plan approval bridge evidence is required but missing.",
+          evidence: [
+            "requiredEvidence=psdImportPlanApprovalBridgeEvidence",
+            "validatorBoundary=no-parser-execution"
+          ]
+        })
+      ]
+    });
+
+    const report = buildProductPreflightReport({
+      reportId: "preflight_psdImportPlanMissing",
+      createdAt: CREATED_AT,
+      validationReports: [sourceReport]
+    });
+    const assetBytes = findCategory(report.categories, "assetBytes");
+
+    expect(assetBytes.status).toBe("not_evaluated");
+    expect(assetBytes.notEvaluatedClaims).toEqual([
+      expect.objectContaining({
+        evidenceKind: "sourceMaterialization",
+        requiredEvidenceKinds: ["sourceMaterialization"],
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.importPlanEvidenceMissing",
+            status: "needs_review"
+          })
+        ]
+      })
+    ]);
+  });
 });
 
 const createEvidenceRef = (

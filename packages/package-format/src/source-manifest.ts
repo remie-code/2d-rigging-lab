@@ -10,6 +10,10 @@ import {
 
 import { BinaryAssetReferenceSchema } from "./binary-asset.js";
 import {
+  PsdImportPlanApprovalEvidenceSchema,
+  PsdImportPlanCandidateEvidenceSchema
+} from "./psd-import-plan-evidence.js";
+import {
   PsdFeatureSupportEvidenceSchema,
   PsdLayerMaterializationEvidenceSchema,
   PsdLayerTreeEvidenceSchema,
@@ -20,6 +24,34 @@ import {
   PsdProfileUnsupportedFeatureScopeSchema
 } from "./psd-source-evidence.js";
 
+export {
+  PsdImportPlanApprovalBridgeEvidenceSchema,
+  PsdImportPlanApprovalEvidenceSchema,
+  PsdImportPlanApprovalStatusSchema,
+  PsdImportPlanApprovedLeafRefSchema,
+  PsdImportPlanCandidateEvidenceSchema,
+  PsdImportPlanCandidateSchema,
+  PsdImportPlanCandidateStatusSchema,
+  PsdImportPlanCollisionPreflightSummarySchema,
+  PsdImportPlanGeneratedScaffoldSchema,
+  PsdImportPlanScopeSchema,
+  PsdImportPlanSourcePsdIdentitySchema,
+  PsdImportPlanSummarySchema
+} from "./psd-import-plan-evidence.js";
+export type {
+  PsdImportPlanApprovalBridgeEvidenceDto,
+  PsdImportPlanApprovalEvidenceDto,
+  PsdImportPlanApprovalStatusDto,
+  PsdImportPlanApprovedLeafRefDto,
+  PsdImportPlanCandidateDto,
+  PsdImportPlanCandidateEvidenceDto,
+  PsdImportPlanCandidateStatusDto,
+  PsdImportPlanCollisionPreflightSummaryDto,
+  PsdImportPlanGeneratedScaffoldDto,
+  PsdImportPlanScopeDto,
+  PsdImportPlanSourcePsdIdentityDto,
+  PsdImportPlanSummaryDto
+} from "./psd-import-plan-evidence.js";
 export {
   PsdFeatureSupportEvidenceSchema,
   PsdFeatureSupportStatusSchema,
@@ -195,6 +227,8 @@ export const LayeredCharacterPsdProfileSchema = z.object({
   featureSupportEvidence: z.array(PsdFeatureSupportEvidenceSchema).optional(),
   layerTreeEvidence: PsdLayerTreeEvidenceSchema.optional(),
   materializationEvidence: z.array(PsdLayerMaterializationEvidenceSchema).optional(),
+  importPlanCandidateEvidence: z.array(PsdImportPlanCandidateEvidenceSchema).optional(),
+  importPlanApprovalEvidence: z.array(PsdImportPlanApprovalEvidenceSchema).optional(),
   diagnostics: z.array(PsdProfileAdapterDiagnosticSchema).default([]),
   compatibility: PsdProfileCompatibilityPolicySchema
 });

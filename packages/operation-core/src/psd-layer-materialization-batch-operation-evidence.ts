@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 
 import { PsdAdapterSourceLayerReferenceSchema } from "./payloads/import-source.js";
+import { PsdImportPlanApprovalBridgeEvidenceSchema } from "./psd-import-plan-approval-evidence.js";
 
 const PSD_BATCH_ID_PATTERN = /^batch_[A-Za-z0-9_-]+$/;
 
@@ -70,6 +71,7 @@ export const PsdLayerMaterializationBatchOperationEvidenceDtoSchema = z.object({
     destinationKind: z.literal("generatedPartScaffold"),
     parentPartId: PartIdSchema
   }).strict(),
+  importPlanBridge: PsdImportPlanApprovalBridgeEvidenceSchema.optional(),
   aggregateStatus: PsdLayerMaterializationBatchAggregateStatusSchema,
   selectedLayerCount: z.number().int().nonnegative(),
   successCount: z.number().int().nonnegative(),

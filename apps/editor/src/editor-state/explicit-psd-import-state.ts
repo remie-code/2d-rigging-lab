@@ -6,6 +6,7 @@ import type {
   PsdAdapterSourceLayerDto,
   PsdAdapterUnsupportedFeatureDto
 } from "@private-2d-rigging-lab/operation-core";
+import type { ExplicitPsdImportPlanState } from "./explicit-psd-import-plan-state.js";
 
 export const explicitPsdImportDefaultSelectedLayerNodeRef = "psd:root/layer[0]";
 export const explicitPsdImportDefaultSelectedLayerNodeRefs = [
@@ -136,6 +137,7 @@ export interface ExplicitPsdImportState {
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materialization: readonly ExplicitPsdImportMaterializationState[];
+  readonly importPlan: ExplicitPsdImportPlanState | null;
   readonly selectedLayerIntake: ExplicitPsdLayerIntakeState;
   readonly selectedLayerBatchIntake: ExplicitPsdLayerBatchIntakeState;
   readonly diagnostics: readonly ExplicitPsdImportDiagnosticState[];
@@ -177,6 +179,7 @@ export const createEmptyExplicitPsdImportState = (): ExplicitPsdImportState => (
   unsupportedFeatureLabels: [],
   notEvaluatedFeatureLabels: [],
   materialization: [],
+  importPlan: null,
   selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
   selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
   diagnostics: [],
@@ -243,6 +246,7 @@ export const projectExplicitPsdImportStateFromBridgeResult = (
     notEvaluatedFeatureLabels: notEvaluatedFeatures.map(formatFeatureSupportEvidenceLabel),
     materialization:
       adapterResult?.materializationEvidence?.map(projectMaterializationState) ?? [],
+    importPlan: null,
     selectedLayerIntake: createEmptyExplicitPsdLayerIntakeState(),
     selectedLayerBatchIntake: createEmptyExplicitPsdLayerBatchIntakeState(),
     diagnostics: [

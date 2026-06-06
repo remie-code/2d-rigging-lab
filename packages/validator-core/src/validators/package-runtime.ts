@@ -40,6 +40,7 @@ export interface PackageRuntimeValidationInput {
   readonly requireTransportCapabilityEvidence?: boolean;
   readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
   readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
+  readonly requirePsdImportPlanBridgeEvidence?: boolean;
   readonly profile?: string;
   readonly createdAt?: string;
 }
@@ -78,7 +79,10 @@ export const validatePackageRuntime = (input: PackageRuntimeValidationInput): Va
         : {
             requirePsdLayerMaterializationBatchEvidence:
               input.requirePsdLayerMaterializationBatchEvidence
-          })
+          }),
+      ...(input.requirePsdImportPlanBridgeEvidence === undefined
+        ? {}
+        : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
     });
   const viewerEvidenceResult = packageResult.packageDocument === undefined
     ? createEmptyViewerEvidenceValidationResult()
@@ -143,7 +147,10 @@ export const validatePackageRuntimeWithBinaryAssets = async (
           : {
               requirePsdLayerMaterializationBatchEvidence:
                 input.requirePsdLayerMaterializationBatchEvidence
-            })
+            }),
+        ...(input.requirePsdImportPlanBridgeEvidence === undefined
+          ? {}
+          : { requirePsdImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
       }),
       ...(await validatePackageBinaryAssets({
         packageDocument: packageResult.packageDocument,
@@ -197,6 +204,7 @@ interface PackageReferenceChecksInput {
   readonly viewerEvidence?: unknown;
   readonly psdLayerMaterializationBatchEvidence?: readonly unknown[];
   readonly requirePsdLayerMaterializationBatchEvidence?: boolean;
+  readonly requirePsdImportPlanBridgeEvidence?: boolean;
 }
 
 const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
@@ -208,7 +216,10 @@ const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
       : { batchEvidence: input.psdLayerMaterializationBatchEvidence }),
     ...(input.requirePsdLayerMaterializationBatchEvidence === undefined
       ? {}
-      : { requireBatchEvidence: input.requirePsdLayerMaterializationBatchEvidence })
+      : { requireBatchEvidence: input.requirePsdLayerMaterializationBatchEvidence }),
+    ...(input.requirePsdImportPlanBridgeEvidence === undefined
+      ? {}
+      : { requireImportPlanBridgeEvidence: input.requirePsdImportPlanBridgeEvidence })
   }),
   ...validateSourceAssetRightsAndProvenance(input.packageDocument),
   ...validateDrawableProvenanceReferences(input.packageDocument),

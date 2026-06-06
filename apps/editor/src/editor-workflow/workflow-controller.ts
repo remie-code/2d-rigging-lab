@@ -203,6 +203,16 @@ import {
   type EditorExplicitPsdImportWorkflowResult
 } from "./explicit-psd-import-workflow.js";
 import {
+  runEditorExplicitPsdImportPlanPreviewWorkflow,
+  type EditorExplicitPsdImportPlanApprovedBatchIntakeCommand,
+  type EditorExplicitPsdImportPlanPreviewCommand,
+  type EditorExplicitPsdImportPlanPreviewResult
+} from "./explicit-psd-import-plan-workflow.js";
+import {
+  collectApprovedPsdImportPlanLeafRefs,
+  createEditorPsdImportPlanApprovalBridgeEvidence
+} from "./explicit-psd-import-plan-approval-bridge.js";
+import {
   commitEditorSelectedPsdLayerIntakeWorkflow,
   type EditorExplicitPsdLayerIntakeCommand,
   type EditorExplicitPsdLayerIntakeResult
@@ -213,6 +223,11 @@ import {
   type EditorExplicitPsdLayerBatchIntakeResult
 } from "./selected-psd-layer-batch-intake-workflow.js";
 import type { BrowserPsdParserBridgeResult } from "./browser-psd-parser-bridge-result.js";
+import type { BrowserPsdImportPlanCandidatePlan } from "./browser-psd-import-plan-candidate-result.js";
+import {
+  createExplicitPsdSourceAssetId,
+  createPsdSourcePackagePath
+} from "./explicit-psd-source-identity.js";
 import {
   approveCodexProposalReview,
   commitApprovedCodexProposalReview,
@@ -398,11 +413,17 @@ export interface EditorWorkflowController {
   parseExplicitBrowserPsdImportFile(
     command: EditorExplicitPsdImportFileCommand
   ): Promise<EditorExplicitPsdImportWorkflowResult>;
+  generateExplicitPsdImportPlanPreview(
+    command: EditorExplicitPsdImportPlanPreviewCommand
+  ): Promise<EditorExplicitPsdImportPlanPreviewResult>;
   commitExplicitPsdLayerIntake(
     command: EditorExplicitPsdLayerIntakeCommand
   ): Promise<EditorExplicitPsdLayerIntakeResult>;
   commitExplicitPsdLayerBatchIntake(
     command: EditorExplicitPsdLayerBatchIntakeCommand
+  ): Promise<EditorExplicitPsdLayerBatchIntakeResult>;
+  commitExplicitPsdImportPlanApprovedBatchIntake(
+    command: EditorExplicitPsdImportPlanApprovedBatchIntakeCommand
   ): Promise<EditorExplicitPsdLayerBatchIntakeResult>;
   commitSetRightsMetadata(command: EditorSetRightsMetadataCommand): EditorWorkflowSourceImportCommitResult;
   setDrawableRuntimeVisibility(
@@ -494,6 +515,7 @@ export const createEditorWorkflowController = (
   });
   let currentExplicitPsdImportFile: File | undefined;
   let currentExplicitPsdImportBridgeResult: BrowserPsdParserBridgeResult | undefined;
+  let currentExplicitPsdImportPlan: BrowserPsdImportPlanCandidatePlan | undefined;
   let latestSessionPersistenceResult: EditorSessionPersistenceResult | null = null;
   let latestDrawablePresetResult: EditorSessionDrawablePresetResult | null = null;
   let latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null = null;
@@ -580,6 +602,7 @@ export const createEditorWorkflowController = (
   const clearExplicitPsdImportCurrentSource = (): void => {
     currentExplicitPsdImportFile = undefined;
     currentExplicitPsdImportBridgeResult = undefined;
+    currentExplicitPsdImportPlan = undefined;
   };
   const recordProductPreflightReportAndProjectComparison = async (input: {
     readonly currentReport: ProductPreflightReportDto;
@@ -863,6 +886,26 @@ export const createEditorWorkflowController = (
       const outcome = await runEditorExplicitPsdImportWorkflow(command);
       currentExplicitPsdImportFile = command.file;
       currentExplicitPsdImportBridgeResult = outcome.bridgeResult;
+      currentExplicitPsdImportPlan = undefined;
+      state = {
+        ...state,
+        explicitPsdImport: outcome.state
+      };
+
+      return outcome.result;
+    },
+    async generateExplicitPsdImportPlanPreview(command) {
+      const outcome = await runEditorExplicitPsdImportPlanPreviewWorkflow({
+        state,
+        command,
+        ...(currentExplicitPsdImportFile === undefined
+          ? {}
+          : { currentPsdFile: currentExplicitPsdImportFile }),
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult })
+      });
+      currentExplicitPsdImportPlan = outcome.plan;
       state = {
         ...state,
         explicitPsdImport: outcome.state
@@ -903,6 +946,48 @@ export const createEditorWorkflowController = (
         ...(currentExplicitPsdImportFile === undefined
           ? {}
           : { currentPsdFile: currentExplicitPsdImportFile }),
+        ...(currentExplicitPsdImportBridgeResult === undefined
+          ? {}
+          : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),
+        persistentByteStore,
+        ...(options.now === undefined ? {} : { now: options.now })
+      });
+      state = outcome.state;
+      if (outcome.result.latestSessionPersistenceResult !== null) {
+        latestSessionPersistenceResult = outcome.result.latestSessionPersistenceResult;
+        latestDrawablePresetResult = null;
+      }
+      if (outcome.result.status === "committed") {
+        clearDynamicsPreview();
+      }
+
+      return outcome.result;
+    },
+    async commitExplicitPsdImportPlanApprovedBatchIntake(command) {
+      if (currentExplicitPsdImportPlan === undefined || currentExplicitPsdImportFile === undefined) {
+        throw new Error("Generate an import-plan preview before adding approved leaf candidates.");
+      }
+
+      const approvedLayerNodeRefs = collectApprovedPsdImportPlanLeafRefs(currentExplicitPsdImportPlan);
+      if (approvedLayerNodeRefs.length === 0) {
+        throw new Error("Import-plan execution requires at least one approved leaf candidate.");
+      }
+
+      const importPlanBridge = await createEditorPsdImportPlanApprovalBridgeEvidence({
+        plan: currentExplicitPsdImportPlan,
+        sourceAssetId: createExplicitPsdSourceAssetId(currentExplicitPsdImportFile),
+        sourceFilePath: createPsdSourcePackagePath(currentExplicitPsdImportFile),
+        destinationParentPartId: command.destinationParentPartId.trim()
+      });
+      const outcome = await commitEditorSelectedPsdLayerBatchIntakeWorkflow({
+        adapter,
+        state,
+        command: {
+          selectedLayerNodeRefs: approvedLayerNodeRefs,
+          destinationParentPartId: command.destinationParentPartId,
+          importPlanBridge
+        },
+        currentPsdFile: currentExplicitPsdImportFile,
         ...(currentExplicitPsdImportBridgeResult === undefined
           ? {}
           : { parsedBridgeResult: currentExplicitPsdImportBridgeResult }),

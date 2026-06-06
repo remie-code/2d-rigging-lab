@@ -147,6 +147,184 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
     expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("sourcePsdBytes");
   });
 
+  it("records import plan approval bridge evidence for approved leaves only", () => {
+    const session = createFixtureSession();
+    const request = createBatchRequest({
+      entries: [
+        createMaterializationEvidence(FACE_LAYER),
+        createMaterializationEvidence(HAIR_FRONT_LAYER)
+      ],
+      importPlanBridge: createImportPlanBridge({
+        approvedLayers: [FACE_LAYER, HAIR_FRONT_LAYER],
+        notApprovedLayers: [ACCESSORY_A_LAYER],
+        blockedLayers: [ACCESSORY_B_LAYER]
+      })
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.parts.map((part) => part.partId)).toEqual([
+      "part_root",
+      "part_face",
+      "part_hair_front"
+    ]);
+    expect(session.graph.drawables.map((drawable) => drawable.drawableId)).toEqual([
+      "draw_face",
+      "draw_hair_front"
+    ]);
+    expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]).toMatchObject({
+      aggregateStatus: "success",
+      importPlanBridge: {
+        schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
+        candidatePlan: {
+          planId: "plan_wave48Root",
+          candidatePlanDigest: PLAN_DIGEST,
+          sourcePsd: {
+            sourceAssetId: "src_psd_character",
+            digest: SOURCE_PSD_DIGEST,
+            byteLength: SOURCE_PSD_BYTE_LENGTH,
+            sourceBytePersistence: "metadataOnlyNoRawBytes",
+            publicDemoAsset: false
+          },
+          candidates: expect.arrayContaining([
+            expect.objectContaining({ sourceLayerName: "Face" }),
+            expect.objectContaining({ sourceLayerName: "Front" }),
+            expect.objectContaining({ sourceLayerName: "Accessory" })
+          ])
+        },
+        approval: {
+          approvalId: "approval_wave48Root",
+          candidatePlanDigest: PLAN_DIGEST,
+          approvalSelectionDigest: APPROVAL_DIGEST,
+          approvalStatus: "approved",
+          approvedLeafRefs: [
+            expect.objectContaining({
+              approvalOrder: 0,
+              sourceLayerName: "Face",
+              resolvedGeneratedIds: expect.objectContaining({
+                status: "resolved",
+                partId: "part_face",
+                drawableId: "draw_face"
+              })
+            }),
+            expect.objectContaining({
+              approvalOrder: 1,
+              sourceLayerName: "Front",
+              resolvedGeneratedIds: expect.objectContaining({
+                status: "resolved",
+                partId: "part_hair_front",
+                drawableId: "draw_hair_front"
+              })
+            })
+          ],
+          notApprovedCandidates: [
+            expect.objectContaining({
+              sourceLayerRef: expect.objectContaining({ sourceLayerId: "layer_accessory_a" }),
+              statuses: ["candidate", "notApproved"]
+            })
+          ],
+          blockedCandidates: [
+            expect.objectContaining({
+              sourceLayerRef: expect.objectContaining({ sourceLayerId: "layer_accessory_b" }),
+              statuses: ["unsupported", "notApproved"]
+            })
+          ],
+          collisionPreflight: {
+            duplicateRefCount: 0,
+            duplicateNameCount: 1,
+            generatedIdCollisionCount: 0,
+            generatedNameCollisionCount: 0,
+            byteCapBlockedCount: 0,
+            blockedCandidateCount: 1,
+            notApprovedCandidateCount: 2,
+            preflightBlockedCount: 1
+          },
+          boundary: {
+            onlyApprovedLeafRefsPassedToBatch: true,
+            rawParserObjectPersistence: "notPersisted",
+            sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+            materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+            publicDemoAsset: false
+          }
+        }
+      }
+    });
+    expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("rawLayerObject");
+    expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("sourcePsdBytes");
+  });
+
+  it("rejects stale or mismatched import plan approval evidence before mutating the session", () => {
+    const session = createFixtureSession();
+    const request = createBatchRequest({
+      entries: [
+        createMaterializationEvidence(FACE_LAYER),
+        createMaterializationEvidence(HAIR_FRONT_LAYER)
+      ],
+      importPlanBridge: createImportPlanBridge({
+        approvedLayers: [FACE_LAYER, HAIR_FRONT_LAYER],
+        approvalStatus: "candidatePlanMismatch",
+        approvalCandidatePlanDigest: OTHER_PLAN_DIGEST
+      })
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual(
+      expect.arrayContaining([
+        "operation.importPsdLayerMaterializationBatch.importPlanCandidateDigestMismatch",
+        "operation.importPsdLayerMaterializationBatch.importPlanApprovalNotApproved"
+      ])
+    );
+    expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]).toMatchObject({
+      aggregateStatus: "preflightBlocked",
+      importPlanBridge: {
+        approval: {
+          approvalStatus: "candidatePlanMismatch",
+          candidatePlanDigest: OTHER_PLAN_DIGEST
+        }
+      },
+      entries: [
+        { selectedIndex: 0, status: "preflightBlocked" },
+        { selectedIndex: 1, status: "preflightBlocked" }
+      ]
+    });
+    expect(session.packageRevision).toBe(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+    expect(session.graph.drawables).toHaveLength(0);
+    expect(getPartById(session.graph, PartIdSchema.parse("part_root"))?.childPartIds).toEqual([]);
+  });
+
+  it("rejects import plan not-approved candidates before materializing approved entries", () => {
+    const session = createFixtureSession();
+    const request = createBatchRequest({
+      entries: [
+        createMaterializationEvidence(FACE_LAYER),
+        createMaterializationEvidence(HAIR_FRONT_LAYER)
+      ],
+      importPlanBridge: createImportPlanBridge({
+        approvedLayers: [FACE_LAYER, HAIR_FRONT_LAYER],
+        notApprovedLayers: [HAIR_FRONT_LAYER]
+      })
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
+      "operation.importPsdLayerMaterializationBatch.importPlanNotApprovedCandidateSelected"
+    );
+    expect(outcome.result.psdLayerMaterializationBatchEvidence?.[0]?.entries).toEqual([
+      expect.objectContaining({ selectedIndex: 0, status: "preflightReady" }),
+      expect.objectContaining({ selectedIndex: 1, status: "preflightBlocked" })
+    ]);
+    expect(session.packageRevision).toBe(0);
+    expect(session.graph.textureAtlas).toBeUndefined();
+    expect(session.graph.drawables).toHaveLength(0);
+    expect(getPartById(session.graph, PartIdSchema.parse("part_root"))?.childPartIds).toEqual([]);
+  });
+
   it("rejects duplicate layer refs before mutating the session", () => {
     const session = createFixtureSession();
     const request = createBatchRequest({
@@ -272,6 +450,7 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
 const createBatchRequest = (options: {
   readonly entries: readonly ReturnType<typeof createMaterializationEvidence>[];
   readonly parentPartId?: string;
+  readonly importPlanBridge?: ReturnType<typeof createImportPlanBridge>;
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -288,6 +467,7 @@ const createBatchRequest = (options: {
         destinationKind: "generatedPartScaffold",
         parentPartId: options.parentPartId ?? "part_root"
       },
+      ...(options.importPlanBridge === undefined ? {} : { importPlanBridge: options.importPlanBridge }),
       entries: options.entries.map((materialization) => ({ materialization })),
       lockedTargetIds: []
     }
@@ -474,6 +654,223 @@ const createTextureBinaryAssetReference = (
   rightsAssetId: "src_psd_character"
 } as const);
 
+const createImportPlanBridge = (options: {
+  readonly approvedLayers: readonly LayerFixture[];
+  readonly notApprovedLayers?: readonly LayerFixture[];
+  readonly blockedLayers?: readonly LayerFixture[];
+  readonly approvalStatus?:
+    | "approved"
+    | "candidatePlanStale"
+    | "candidatePlanMismatch"
+    | "approvalSelectionMismatch"
+    | "preflightBlocked";
+  readonly approvalCandidatePlanDigest?: FixtureDigest;
+}) => {
+  const notApprovedLayers = options.notApprovedLayers ?? [];
+  const blockedLayers = options.blockedLayers ?? [];
+  const candidateLayers = uniqueLayers([
+    ...options.approvedLayers,
+    ...notApprovedLayers,
+    ...blockedLayers
+  ]);
+
+  return {
+    schemaVersion: "psd-import-plan-approval-bridge-evidence-v1",
+    candidatePlan: {
+      schemaVersion: "psd-import-plan-candidate-evidence-v1",
+      evidenceKind: "psd-import-plan-candidate-evidence-v1",
+      planId: "plan_wave48Root",
+      candidatePlanDigest: PLAN_DIGEST,
+      sourcePsd: createImportPlanSourcePsdIdentity(),
+      parser: PSD_PARSER_EVIDENCE,
+      scope: {
+        scopeRef: { kind: "document", id: "psd:root" },
+        scopeDisplayPath: [],
+        discoveryMode: "recursiveLeafCandidatePreview"
+      },
+      candidates: candidateLayers.map((layer, candidateIndex) =>
+        createImportPlanCandidate({
+          layer,
+          candidateIndex,
+          statuses: blockedLayers.some((blockedLayer) => blockedLayer.sourceLayerId === layer.sourceLayerId)
+            ? ["unsupported", "notApproved"]
+            : ["candidate", "notApproved"]
+        })
+      ),
+      summary: {
+        candidateCount: candidateLayers.length,
+        approvedCandidateCount: 0,
+        notApprovedCandidateCount: candidateLayers.length,
+        blockedCandidateCount: blockedLayers.length,
+        hiddenCandidateCount: 0,
+        unsupportedCandidateCount: blockedLayers.length,
+        duplicateNameCount: countDuplicateDisplayNames(candidateLayers),
+        duplicateRefCount: 0,
+        generatedIdCollisionCount: 0,
+        generatedNameCollisionCount: 0,
+        byteCapBlockedCount: 0,
+        totalByteEstimate: candidateLayers.reduce((sum, layer) => sum + layer.byteLength, 0),
+        approvedByteEstimate: options.approvedLayers.reduce((sum, layer) => sum + layer.byteLength, 0)
+      },
+      boundary: {
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes",
+        publicDemoAsset: false,
+        allLayerOneClickImport: "notProvided",
+        recursiveGroupAutoImport: "notProvided"
+      }
+    },
+    approval: {
+      schemaVersion: "psd-import-plan-approval-evidence-v1",
+      evidenceKind: "psd-import-plan-approval-evidence-v1",
+      approvalId: "approval_wave48Root",
+      candidatePlanDigest: options.approvalCandidatePlanDigest ?? PLAN_DIGEST,
+      approvalSelectionDigest: APPROVAL_DIGEST,
+      sourcePsd: createImportPlanSourcePsdIdentity(),
+      destination: {
+        destinationKind: "generatedPartScaffold",
+        parentPartId: "part_root"
+      },
+      approvalStatus: options.approvalStatus ?? "approved",
+      approvedLeafRefs: options.approvedLayers.map((layer, approvalOrder) => ({
+        approvalOrder,
+        sourceLayerRef: createImportPlanSourceLayerRef(layer),
+        sourceLayerName: layer.sourceLayerName,
+        sourceLayerPath: [...layer.sourceLayerPath],
+        candidateStatuses: ["candidate"],
+        candidateStatusReasons: [],
+        generatedScaffoldPreview: createImportPlanGeneratedScaffold(layer, "previewReady"),
+        resolvedGeneratedIds: createImportPlanGeneratedScaffold(layer, "resolved")
+      })),
+      notApprovedCandidates: notApprovedLayers.map((layer, candidateIndex) =>
+        createImportPlanCandidate({
+          layer,
+          candidateIndex,
+          statuses: ["candidate", "notApproved"]
+        })
+      ),
+      blockedCandidates: blockedLayers.map((layer, candidateIndex) =>
+        createImportPlanCandidate({
+          layer,
+          candidateIndex,
+          statuses: ["unsupported", "notApproved"]
+        })
+      ),
+      collisionPreflight: {
+        duplicateRefCount: 0,
+        duplicateNameCount: countDuplicateDisplayNames(candidateLayers),
+        generatedIdCollisionCount: 0,
+        generatedNameCollisionCount: 0,
+        byteCapBlockedCount: 0,
+        blockedCandidateCount: blockedLayers.length,
+        notApprovedCandidateCount: notApprovedLayers.length + blockedLayers.length,
+        preflightBlockedCount: blockedLayers.length
+      },
+      boundary: {
+        onlyApprovedLeafRefsPassedToBatch: true,
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+        publicDemoAsset: false,
+        allLayerOneClickImport: "notProvided",
+        recursiveGroupAutoImport: "notProvided"
+      }
+    }
+  } as const;
+};
+
+const createImportPlanSourcePsdIdentity = () => ({
+  sourceAssetId: "src_psd_character",
+  sourceFilePath: "private/source.psd",
+  digest: SOURCE_PSD_DIGEST,
+  byteLength: SOURCE_PSD_BYTE_LENGTH,
+  mediaType: "image/vnd.adobe.photoshop",
+  sourceBytePersistence: "metadataOnlyNoRawBytes",
+  publicDemoAsset: false
+} as const);
+
+const createImportPlanCandidate = (input: {
+  readonly layer: LayerFixture;
+  readonly candidateIndex: number;
+  readonly statuses: readonly ("candidate" | "unsupported" | "notApproved")[];
+}) => ({
+  candidateIndex: input.candidateIndex,
+  sourceLayerRef: createImportPlanSourceLayerRef(input.layer),
+  sourceLayerName: input.layer.sourceLayerName,
+  sourceLayerPath: [...input.layer.sourceLayerPath],
+  sourceOrder: input.candidateIndex,
+  bounds: input.layer.bounds,
+  visibleInSource: true,
+  opacityInSource: 1,
+  byteEstimate: input.layer.byteLength,
+  statuses: input.statuses,
+  statusReasons: input.statuses.includes("unsupported")
+    ? ["Unsupported candidate is not eligible for v0 approval."]
+    : [],
+  approvalBlockedReasons: input.statuses.includes("unsupported") ? ["unsupported"] : [],
+  generatedScaffoldPreview: createImportPlanGeneratedScaffold(input.layer, "previewReady")
+} as const);
+
+const createImportPlanSourceLayerRef = (layer: LayerFixture) => ({
+  sourceAssetId: "src_psd_character",
+  sourceLayerId: layer.sourceLayerId,
+  sourceLayerName: layer.sourceLayerName,
+  sourceLayerPath: [...layer.sourceLayerPath]
+} as const);
+
+const createImportPlanGeneratedScaffold = (
+  layer: LayerFixture,
+  status: "previewReady" | "resolved"
+) => {
+  const displayName = layer.sourceLayerPath.length > 0
+    ? layer.sourceLayerPath.join(" / ")
+    : layer.sourceLayerName;
+  const token = sanitizeIdToken(displayName);
+
+  return {
+    destinationKind: "generatedPartScaffold",
+    parentPartId: "part_root",
+    partId: `part_${token}`,
+    partDisplayName: displayName,
+    drawableId: `draw_${token}`,
+    drawableDisplayName: displayName,
+    textureId: `tex_${token}`,
+    meshId: `mesh_${token}`,
+    status,
+    statusReasons: []
+  } as const;
+};
+
+const uniqueLayers = (layers: readonly LayerFixture[]): readonly LayerFixture[] => {
+  const seen = new Set<string>();
+  const unique: LayerFixture[] = [];
+
+  for (const layer of layers) {
+    if (seen.has(layer.sourceLayerId)) {
+      continue;
+    }
+
+    seen.add(layer.sourceLayerId);
+    unique.push(layer);
+  }
+
+  return unique;
+};
+
+const countDuplicateDisplayNames = (layers: readonly LayerFixture[]): number => {
+  const counts = new Map<string, number>();
+  for (const layer of layers) {
+    const normalized = layer.sourceLayerName.trim().toLocaleLowerCase();
+    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  }
+
+  return [...counts.values()].filter((count) => count > 1).length;
+};
+
+const sanitizeIdToken = (value: string): string =>
+  value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "unnamed";
+
 type LayerFixture = {
   readonly sourceLayerId: string;
   readonly sourceLayerName: string;
@@ -590,6 +987,18 @@ const ACCESSORY_B_LAYER: LayerFixture = {
 const SOURCE_PSD_DIGEST = {
   algorithm: "sha256",
   hex: "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+} as const;
+const PLAN_DIGEST = {
+  algorithm: "sha256",
+  hex: "1111111111111111111111111111111111111111111111111111111111111111"
+} as const;
+const APPROVAL_DIGEST = {
+  algorithm: "sha256",
+  hex: "2222222222222222222222222222222222222222222222222222222222222222"
+} as const;
+const OTHER_PLAN_DIGEST = {
+  algorithm: "sha256",
+  hex: "3333333333333333333333333333333333333333333333333333333333333333"
 } as const;
 const SOURCE_PSD_BYTE_LENGTH = 22406225;
 const MATERIALIZED_HAIR_DIGEST = HAIR_FRONT_LAYER.digest;

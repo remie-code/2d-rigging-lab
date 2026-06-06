@@ -15,6 +15,7 @@ export * from "./editor-state-projections.js";
 export * from "./editor-test-ids.js";
 export * from "./editor-view-model.js";
 export * from "./explicit-psd-import-state.js";
+export * from "./explicit-psd-import-plan-state.js";
 export * from "./explicit-psd-import-view-model.js";
 export * from "./generated-evidence-summary.js";
 export * from "./layer-tree-direct-manipulation-draft-state.js";

@@ -7,6 +7,7 @@ import {
   type OperationRequestDto,
   type OperationResultDto,
   type PsdAdapterLayerMaterializationEvidenceDto,
+  type PsdImportPlanApprovalBridgeEvidenceDto,
   type PsdAdapterResultDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -36,6 +37,11 @@ import {
   materializeSelectedPsdLayersFromBrowserFile,
   type SelectedPsdLayerBatchFileMaterializationInput
 } from "./selected-psd-layer-batch-materialization-service.js";
+import {
+  createExplicitPsdSourceAssetId,
+  createPsdSourcePackagePath,
+  sanitizePsdImportIdToken
+} from "./explicit-psd-source-identity.js";
 import type {
   SelectedPsdLayerBatchMaterializationEntry,
   SelectedPsdLayerBatchMaterializationFailureEntry,
@@ -49,6 +55,7 @@ import type {
 export interface EditorExplicitPsdLayerBatchIntakeCommand {
   readonly selectedLayerNodeRefs?: readonly string[];
   readonly destinationParentPartId: string;
+  readonly importPlanBridge?: PsdImportPlanApprovalBridgeEvidenceDto;
 }
 
 export type EditorExplicitPsdLayerBatchIntakeResultStatus =
@@ -526,6 +533,9 @@ const prepareMaterializationBatchOperation = async (input: {
       sourceAssetId: input.sourceAssetId,
       batchId: input.materializationResult.batchId,
       destinationParentPartId: input.command.destinationParentPartId.trim(),
+      ...(input.command.importPlanBridge === undefined
+        ? {}
+        : { importPlanBridge: input.command.importPlanBridge }),
       entries: entries.map((entry) => ({
         materialization: entry.materialization
       })),
@@ -673,6 +683,27 @@ const createCommittedBatchIntakeState = (input: {
         label: "Provenance",
         value: "private/local / notPublicDistributable / publicDemoAsset=false"
       },
+      ...(evidence.importPlanBridge === undefined
+        ? []
+        : [
+            { label: "Import plan id", value: evidence.importPlanBridge.candidatePlan.planId },
+            {
+              label: "Import plan digest",
+              value: `sha256:${evidence.importPlanBridge.candidatePlan.candidatePlanDigest.hex}`
+            },
+            { label: "Import plan approval", value: evidence.importPlanBridge.approval.approvalId },
+            {
+              label: "Approved leaf candidates",
+              value: String(evidence.importPlanBridge.approval.approvedLeafRefs.length)
+            },
+            {
+              label: "Not-approved / blocked candidates",
+              value: [
+                evidence.importPlanBridge.approval.collisionPreflight.notApprovedCandidateCount,
+                evidence.importPlanBridge.approval.collisionPreflight.blockedCandidateCount
+              ].join(" / ")
+            }
+          ]),
       {
         label: "Persistence",
         value: [
@@ -963,41 +994,23 @@ const createSourceImportOperationId = (input: {
   readonly sourceAssetId: string;
   readonly packageRevision: number;
 }): string =>
-  `op_editor_import_explicit_psd_source_${sanitizeIdToken(input.sourceAssetId)}_r${input.packageRevision}`;
+  `op_editor_import_explicit_psd_source_${sanitizePsdImportIdToken(input.sourceAssetId)}_r${input.packageRevision}`;
 
 const createLayerMaterializationBatchOperationId = (input: {
   readonly batchId: string;
   readonly packageRevision: number;
 }): string =>
-  `op_editor_import_psd_layer_batch_${sanitizeIdToken(input.batchId)}_r${input.packageRevision}`;
+  `op_editor_import_psd_layer_batch_${sanitizePsdImportIdToken(input.batchId)}_r${input.packageRevision}`;
 
 const createBatchChildOperationId = (input: {
   readonly operationId: string;
   readonly selectedIndex: number;
   readonly partId: string;
 }): string =>
-  `op_${sanitizeIdToken(`${stripIdPrefix(input.operationId, "op_")}_${input.selectedIndex}_${stripIdPrefix(input.partId, "part_")}`)}`;
-
-const createExplicitPsdSourceAssetId = (file: Pick<File, "name" | "size">): string =>
-  `src_explicit_psd_${sanitizeIdToken(removeFileExtension(file.name))}_${file.size}`;
-
-const createPsdSourcePackagePath = (
-  source: Pick<File, "name" | "size"> | { readonly fileName: string; readonly byteLength: number }
-): string => {
-  const fileName = "fileName" in source ? source.fileName : source.name;
-  const byteLength = "byteLength" in source ? source.byteLength : source.size;
-
-  return `assets/sources/psd/${sanitizeIdToken(removeFileExtension(fileName))}_${byteLength}.psd`;
-};
-
-const removeFileExtension = (fileName: string): string =>
-  fileName.replace(/\.[^.\\/]+$/, "");
+  `op_${sanitizePsdImportIdToken(`${stripIdPrefix(input.operationId, "op_")}_${input.selectedIndex}_${stripIdPrefix(input.partId, "part_")}`)}`;
 
 const stripIdPrefix = (value: string, prefix: string): string =>
   value.startsWith(prefix) ? value.slice(prefix.length) : value;
-
-const sanitizeIdToken = (value: string): string =>
-  value.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase() || "selected_layer";
 
 const formatByteLength = (byteLength: number): string =>
   `${byteLength} byte${byteLength === 1 ? "" : "s"}`;

@@ -2,6 +2,7 @@ import {
   OperationRequestSchema,
   type OperationRequestDto,
   type PsdAdapterLayerMaterializationEvidenceDto,
+  type PsdImportPlanApprovalBridgeEvidenceDto,
   type PsdLayerMaterializationDestinationPartDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -22,6 +23,7 @@ export interface EditorImportPsdLayerMaterializationBatchCommand {
   readonly sourceAssetId: string;
   readonly batchId: string;
   readonly destinationParentPartId: string;
+  readonly importPlanBridge?: PsdImportPlanApprovalBridgeEvidenceDto;
   readonly entries: readonly {
     readonly materialization: PsdAdapterLayerMaterializationEvidenceDto;
   }[];
@@ -95,6 +97,7 @@ export const createImportPsdLayerMaterializationBatchOperationRequest = (
         destinationKind: "generatedPartScaffold",
         parentPartId: command.destinationParentPartId
       },
+      ...(command.importPlanBridge === undefined ? {} : { importPlanBridge: command.importPlanBridge }),
       entries: command.entries.map((entry) => ({
         materialization: entry.materialization
       })),

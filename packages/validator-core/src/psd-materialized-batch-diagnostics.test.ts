@@ -28,7 +28,20 @@ const PARENT_PART_ID = "part_wave47_parent";
 const RAW_RGBA_MEDIA_TYPE =
   "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
 const SOURCE_BYTES = new Uint8Array([0x70, 0x73, 0x64, 0x34, 0x37]);
+const PLAN_DIGEST = {
+  algorithm: "sha256",
+  hex: "1111111111111111111111111111111111111111111111111111111111111111"
+} as const;
+const OTHER_PLAN_DIGEST = {
+  algorithm: "sha256",
+  hex: "2222222222222222222222222222222222222222222222222222222222222222"
+} as const;
+const APPROVAL_DIGEST = {
+  algorithm: "sha256",
+  hex: "3333333333333333333333333333333333333333333333333333333333333333"
+} as const;
 type BatchEvidenceFixture = {
+  importPlanBridge?: unknown;
   aggregateStatus: "success" | "preflightBlocked" | "partialFailure" | "failure";
   selectedLayerCount: number;
   successCount: number;
@@ -70,6 +83,39 @@ type BatchEvidenceFixture = {
     }>;
   }>;
 };
+type ImportPlanCandidateStatus =
+  | "candidate"
+  | "hidden"
+  | "unsupported"
+  | "emptyZeroSize"
+  | "duplicateRef"
+  | "duplicateName"
+  | "generatedIdCollision"
+  | "generatedNameCollision"
+  | "byteCapBlocked"
+  | "notApproved";
+type ImportPlanGeneratedStatus =
+  | "previewReady"
+  | "resolved"
+  | "generatedIdCollision"
+  | "generatedNameCollision";
+type FixtureDigest = {
+  readonly algorithm: "sha256";
+  readonly hex: string;
+};
+type ImportPlanLayerFixture = {
+  readonly sourceLayerId: string;
+  readonly sourceLayerName: string;
+  readonly sourceLayerPath: readonly string[];
+  readonly byteLength: number;
+  readonly visibleInSource: boolean;
+  readonly width: number;
+  readonly height: number;
+  readonly partId: string;
+  readonly drawableId: string;
+  readonly meshId: string;
+  readonly textureId: string;
+};
 const LAYER_FIXTURES = [
   {
     sourceLayerId: "psd_layer_headwear",
@@ -108,6 +154,19 @@ const LAYER_FIXTURES = [
     displayName: "Root / Face / Eyewear"
   }
 ] as const;
+const PLAN_HIDDEN_UNSUPPORTED_LAYER: ImportPlanLayerFixture = {
+  sourceLayerId: "psd_layer_hidden_shadow",
+  sourceLayerName: "Hidden shadow",
+  sourceLayerPath: ["Root", "Hidden shadow"],
+  byteLength: 16,
+  visibleInSource: false,
+  width: 2,
+  height: 2,
+  partId: "part_hidden_shadow",
+  drawableId: "draw_hidden_shadow",
+  meshId: "mesh_hidden_shadow",
+  textureId: "tex_hidden_shadow"
+};
 
 describe("Wave47 PSD batch materialized asset diagnostics", () => {
   it("registers batch materialized asset check ids in the catalog", () => {
@@ -126,6 +185,18 @@ describe("Wave47 PSD batch materialized asset diagnostics", () => {
     expect(defaultCheckCatalog.has("asset.psd.materializedBatchGeneratedScaffoldCollision")).toBe(true);
     expect(defaultCheckCatalog.has("asset.psd.materializedBatchPreflightBlocked")).toBe(true);
     expect(defaultCheckCatalog.has("asset.psd.materializedBatchPartialFailure")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanEvidenceMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanEvidenceMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanCandidateMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanCandidateStatusSummary")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanApprovalMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanNotApprovedCandidateSelected")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanCandidateBlocked")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanPreflightBlocked")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanPartialState")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanSourceCurrentBytesMissing")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanSourceStale")).toBe(true);
+    expect(defaultCheckCatalog.has("asset.psd.importPlanProvenanceBlocked")).toBe(true);
   });
 
   it("accepts valid two-layer batch materialized bytes and generated part scaffold as Product Preflight available", async () => {
@@ -412,6 +483,302 @@ describe("Wave47 PSD batch materialized asset diagnostics", () => {
       "validatorBoundary=no-parser-execution"
     ]));
     expect(findAssetBytes(publicDemoReport, "preflight_wave47_public_demo_blocked").status)
+      .toBe("fail");
+  });
+
+  it("surfaces import plan hidden, unsupported, not-approved, collision, and byte-cap candidate evidence as Product Preflight warning", async () => {
+    const fixture = await createWave47BatchFixture();
+    const batchWithImportPlan = {
+      ...fixture.batchEvidence,
+      importPlanBridge: createImportPlanBridge({
+        sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+        approvedLayers: [...LAYER_FIXTURES],
+        notApprovedLayers: [PLAN_HIDDEN_UNSUPPORTED_LAYER]
+      })
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithImportPlan],
+      createdAt: CREATED_AT
+    });
+    const assetBytes = findAssetBytes(report, "preflight_wave48_import_plan_candidate_warning");
+    const summary = expectCheckById(report, "asset.psd.importPlanCandidateStatusSummary");
+
+    expect(report.checks.map((check) => check.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.materializedBatchAvailable",
+      "asset.psd.importPlanCandidateStatusSummary"
+    ]));
+    expect(summary).toMatchObject({
+      status: "warning",
+      severity: "warning"
+    });
+    expect(summary.evidence).toEqual(expect.arrayContaining([
+      "importPlanEvidence=parser-free-session-evidence",
+      "onlyApprovedLeafRefsPassedToBatch=true",
+      "actualHiddenCandidateCount=1",
+      "actualUnsupportedCandidateCount=1",
+      "actualGeneratedIdCollisionCount=1",
+      "actualByteCapBlockedCount=1",
+      "collisionByteCapBlockedCount=1",
+      "collisionPreflightBlockedCount=1",
+      "allLayerImport=notClaimed",
+      "recursiveGroupImport=notClaimed",
+      "rendererPixelOracle=notClaimed"
+    ]));
+    expect(assetBytes.status).toBe("warn");
+    expect(assetBytes.diagnosticRefs).toEqual([
+      expect.objectContaining({
+        checkId: "asset.psd.importPlanCandidateStatusSummary",
+        status: "warning"
+      })
+    ]);
+  });
+
+  it("blocks selected import plan candidates that are not approved, unsupported, collision-blocked, or approval mismatched", async () => {
+    const fixture = await createWave47BatchFixture();
+    const blockedSelectedBridge = createImportPlanBridge({
+      sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+      approvedLayers: [...LAYER_FIXTURES],
+      notApprovedLayers: [LAYER_FIXTURES[0]],
+      approvalStatus: "approvalSelectionMismatch",
+      approvalCandidatePlanDigest: OTHER_PLAN_DIGEST,
+      approvedLeafStatusesByLayerId: {
+        [LAYER_FIXTURES[0].sourceLayerId]: [
+          "hidden",
+          "unsupported",
+          "emptyZeroSize",
+          "byteCapBlocked",
+          "notApproved"
+        ]
+      },
+      candidateStatusesByLayerId: {
+        [LAYER_FIXTURES[0].sourceLayerId]: [
+          "hidden",
+          "unsupported",
+          "emptyZeroSize",
+          "byteCapBlocked",
+          "generatedIdCollision",
+          "notApproved"
+        ]
+      },
+      generatedStatusByLayerId: {
+        [LAYER_FIXTURES[0].sourceLayerId]: "generatedIdCollision"
+      }
+    });
+    const batchWithBlockedPlan = {
+      ...fixture.batchEvidence,
+      importPlanBridge: blockedSelectedBridge
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithBlockedPlan],
+      createdAt: CREATED_AT
+    });
+    const assetBytes = findAssetBytes(report, "preflight_wave48_import_plan_blocked_selected");
+
+    expect(report.checks.map((check) => check.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.importPlanCandidateMismatch",
+      "asset.psd.importPlanApprovalMismatch",
+      "asset.psd.importPlanCandidateBlocked",
+      "asset.psd.importPlanNotApprovedCandidateSelected"
+    ]));
+    expect(expectCheckById(report, "asset.psd.importPlanCandidateBlocked").evidence)
+      .toEqual(expect.arrayContaining([
+        "blockingStatuses=hidden,unsupported,emptyZeroSize,byteCapBlocked,generatedIdCollision",
+        "validatorBoundary=no-parser-execution"
+      ]));
+    expect(expectCheckById(report, "asset.psd.importPlanNotApprovedCandidateSelected").evidence)
+      .toEqual(expect.arrayContaining([
+        "reason=not-approved-candidate-selected",
+        "validatorBoundary=no-parser-execution"
+      ]));
+    expect(assetBytes.status).toBe("fail");
+  });
+
+  it("fails stale import plan source identity evidence before trusting approved candidates", async () => {
+    const fixture = await createWave47BatchFixture();
+    const staleSourceBridge = createImportPlanBridge({
+      sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+      approvedLayers: [...LAYER_FIXTURES]
+    });
+    staleSourceBridge.candidatePlan.sourcePsd.digest = OTHER_PLAN_DIGEST;
+    staleSourceBridge.approval.sourcePsd.byteLength =
+      staleSourceBridge.approval.sourcePsd.byteLength + 1;
+    const batchWithStaleSource = {
+      ...fixture.batchEvidence,
+      importPlanBridge: staleSourceBridge
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithStaleSource],
+      createdAt: CREATED_AT
+    });
+    const check = expectCheckById(report, "asset.psd.importPlanSourceStale");
+
+    expect(check).toMatchObject({
+      status: "fail",
+      severity: "error"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "expectedSourceByteLength=5",
+      "candidatePlanSourceByteLength=5",
+      "approvalSourceByteLength=6",
+      "validatorBoundary=no-parser-execution"
+    ]));
+    expect(check.evidence.some((entry) =>
+      entry.includes("candidate-plan-source-digest-mismatch") &&
+      entry.includes("approval-source-byte-length-mismatch")
+    )).toBe(true);
+    expect(findAssetBytes(report, "preflight_wave48_import_plan_source_stale").status)
+      .toBe("fail");
+  });
+
+  it("warns when import plan evidence has no current package-local source PSD bytes", async () => {
+    const fixture = await createWave47BatchFixture();
+    const missingCurrentBytesDocument = clone(fixture.document);
+    expectSourceAsset(missingCurrentBytesDocument).binaryAssetRef!.storageStatus =
+      "missing-package-local-bytes-v1";
+    const batchWithImportPlan = {
+      ...fixture.batchEvidence,
+      importPlanBridge: createImportPlanBridge({
+        sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+        approvedLayers: [...LAYER_FIXTURES]
+      })
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: missingCurrentBytesDocument,
+      psdLayerMaterializationBatchEvidence: [batchWithImportPlan],
+      createdAt: CREATED_AT
+    });
+    const check = expectCheckById(report, "asset.psd.importPlanSourceCurrentBytesMissing");
+
+    expect(check).toMatchObject({
+      status: "warning",
+      severity: "warning"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "sourceBinaryAssetRef=bin_wave47_psd_source",
+      "sourceBinaryStorageStatus=missing-package-local-bytes-v1",
+      "sourcePsdBytePersistence=metadataOnlyNoRawBytes",
+      "rePlanRequiresReupload=true",
+      "validatorBoundary=no-parser-execution"
+    ]));
+    expect(findAssetBytes(report, "preflight_wave48_import_plan_current_bytes_missing").status)
+      .toBe("warn");
+  });
+
+  it("fails import plan approval evidence that is explicitly preflight blocked", async () => {
+    const fixture = await createWave47BatchFixture();
+    const batchWithPreflightBlockedPlan = {
+      ...fixture.batchEvidence,
+      importPlanBridge: createImportPlanBridge({
+        sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+        approvedLayers: [...LAYER_FIXTURES],
+        approvalStatus: "preflightBlocked"
+      })
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [batchWithPreflightBlockedPlan],
+      createdAt: CREATED_AT
+    });
+    const check = expectCheckById(report, "asset.psd.importPlanPreflightBlocked");
+
+    expect(report.checks.map((candidate) => candidate.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.importPlanApprovalMismatch",
+      "asset.psd.importPlanPreflightBlocked"
+    ]));
+    expect(check).toMatchObject({
+      status: "fail",
+      severity: "error"
+    });
+    expect(check.evidence).toEqual(expect.arrayContaining([
+      "approvalStatus=preflightBlocked",
+      "batchAggregateStatus=success",
+      "batchMutationPolicy=preflightBlocksOnAnyFailure",
+      "validatorBoundary=no-parser-execution"
+    ]));
+    expect(findAssetBytes(report, "preflight_wave48_import_plan_preflight_blocked").status)
+      .toBe("fail");
+  });
+
+  it("maps required-but-missing import plan bridge evidence to Product Preflight not_evaluated", async () => {
+    const fixture = await createWave47BatchFixture();
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [fixture.batchEvidence],
+      requirePsdImportPlanBridgeEvidence: true,
+      createdAt: CREATED_AT
+    });
+    const assetBytes = findAssetBytes(report, "preflight_wave48_import_plan_not_evaluated");
+
+    expect(expectCheckById(report, "asset.psd.importPlanEvidenceMissing")).toMatchObject({
+      status: "needs_review",
+      severity: "warning"
+    });
+    expect(assetBytes.status).toBe("not_evaluated");
+    expect(assetBytes.notEvaluatedClaims).toEqual([
+      expect.objectContaining({
+        evidenceKind: "sourceMaterialization",
+        diagnosticRefs: [
+          expect.objectContaining({
+            checkId: "asset.psd.importPlanEvidenceMissing",
+            status: "needs_review"
+          })
+        ]
+      })
+    ]);
+  });
+
+  it("blocks import plan partial states and malformed private/local provenance boundary fields", async () => {
+    const fixture = await createWave47BatchFixture();
+    const partialBatch = clone(fixture.batchEvidence) as BatchEvidenceFixture;
+    partialBatch.aggregateStatus = "partialFailure";
+    partialBatch.successCount = 1;
+    partialBatch.failureCount = 1;
+    partialBatch.entries[1]!.status = "preflightBlocked";
+    partialBatch.importPlanBridge = createImportPlanBridge({
+      sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+      approvedLayers: [...LAYER_FIXTURES]
+    });
+
+    const partialReport = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [partialBatch],
+      createdAt: CREATED_AT
+    });
+    expect(partialReport.checks.map((check) => check.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.materializedBatchPartialFailure",
+      "asset.psd.importPlanPartialState"
+    ]));
+    expect(findAssetBytes(partialReport, "preflight_wave48_import_plan_partial").status).toBe("fail");
+
+    const malformedBatch = clone(fixture.batchEvidence) as BatchEvidenceFixture;
+    malformedBatch.importPlanBridge = createImportPlanBridge({
+      sourceRef: expectSourceAsset(fixture.document).binaryAssetRef!,
+      approvedLayers: [...LAYER_FIXTURES]
+    });
+    delete (malformedBatch.importPlanBridge as {
+      approval: { sourcePsd: { publicDemoAsset?: boolean } };
+    }).approval.sourcePsd.publicDemoAsset;
+
+    const malformedReport = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdLayerMaterializationBatchEvidence: [malformedBatch],
+      createdAt: CREATED_AT
+    });
+
+    expect(malformedReport.checks.map((check) => check.checkId)).toEqual(expect.arrayContaining([
+      "asset.psd.importPlanEvidenceMismatch",
+      "asset.psd.importPlanProvenanceBlocked"
+    ]));
+    expect(findAssetBytes(malformedReport, "preflight_wave48_import_plan_malformed").status)
       .toBe("fail");
   });
 });
@@ -867,11 +1234,210 @@ const createBatchEvidence = (
   }
 });
 
+const createImportPlanBridge = (input: {
+  readonly sourceRef: BinaryAssetReferenceDto;
+  readonly approvedLayers: readonly typeof LAYER_FIXTURES[number][];
+  readonly notApprovedLayers?: readonly (typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture)[];
+  readonly approvalStatus?:
+    | "approved"
+    | "candidatePlanStale"
+    | "candidatePlanMismatch"
+    | "approvalSelectionMismatch"
+    | "preflightBlocked";
+  readonly approvalCandidatePlanDigest?: FixtureDigest;
+  readonly approvedLeafStatusesByLayerId?: Record<string, readonly ImportPlanCandidateStatus[]>;
+  readonly candidateStatusesByLayerId?: Record<string, readonly ImportPlanCandidateStatus[]>;
+  readonly generatedStatusByLayerId?: Record<string, ImportPlanGeneratedStatus>;
+}) => {
+  const notApprovedLayers = input.notApprovedLayers ?? [];
+  const candidateLayers = uniqueImportPlanLayers([
+    ...input.approvedLayers,
+    ...notApprovedLayers
+  ]);
+  const candidates = candidateLayers.map((layer, candidateIndex) =>
+    createImportPlanCandidate({
+      layer,
+      candidateIndex,
+      statuses: input.candidateStatusesByLayerId?.[layer.sourceLayerId] ??
+        defaultCandidateStatuses(layer, input.approvedLayers),
+      generatedStatus: input.generatedStatusByLayerId?.[layer.sourceLayerId] ?? "previewReady"
+    })
+  );
+  const counts = countImportPlanCandidateStatuses(candidates);
+  const collisionCounts = countImportPlanCollisionPreflight(candidates, notApprovedLayers);
+
+  return {
+    schemaVersion: "psd-import-plan-approval-bridge-evidence-v1" as const,
+    candidatePlan: {
+      schemaVersion: "psd-import-plan-candidate-evidence-v1" as const,
+      evidenceKind: "psd-import-plan-candidate-evidence-v1" as const,
+      planId: "plan_wave48Root",
+      candidatePlanDigest: PLAN_DIGEST,
+      sourcePsd: createImportPlanSourcePsdIdentity(input.sourceRef),
+      parser: createParserEvidence(),
+      scope: {
+        scopeRef: { kind: "document" as const, id: "psd:root" },
+        scopeDisplayPath: [],
+        discoveryMode: "recursiveLeafCandidatePreview" as const
+      },
+      candidates,
+      summary: {
+        candidateCount: candidates.length,
+        approvedCandidateCount: 0,
+        notApprovedCandidateCount: counts.notApprovedCandidateCount,
+        blockedCandidateCount: counts.blockedCandidateCount,
+        hiddenCandidateCount: counts.hiddenCandidateCount,
+        unsupportedCandidateCount: counts.unsupportedCandidateCount,
+        duplicateNameCount: counts.duplicateNameCount,
+        duplicateRefCount: counts.duplicateRefCount,
+        generatedIdCollisionCount: counts.generatedIdCollisionCount,
+        generatedNameCollisionCount: counts.generatedNameCollisionCount,
+        byteCapBlockedCount: counts.byteCapBlockedCount,
+        totalByteEstimate: candidates.reduce((sum, candidate) => sum + (candidate.byteEstimate ?? 0), 0),
+        approvedByteEstimate: input.approvedLayers.reduce((sum, layer) => sum + getLayerByteLength(layer), 0)
+      },
+      boundary: {
+        rawParserObjectPersistence: "notPersisted" as const,
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes" as const,
+        candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes" as const,
+        publicDemoAsset: false as const,
+        allLayerOneClickImport: "notProvided" as const,
+        recursiveGroupAutoImport: "notProvided" as const
+      }
+    },
+    approval: {
+      schemaVersion: "psd-import-plan-approval-evidence-v1" as const,
+      evidenceKind: "psd-import-plan-approval-evidence-v1" as const,
+      approvalId: "approval_wave48Root",
+      candidatePlanDigest: input.approvalCandidatePlanDigest ?? PLAN_DIGEST,
+      approvalSelectionDigest: APPROVAL_DIGEST,
+      sourcePsd: createImportPlanSourcePsdIdentity(input.sourceRef),
+      destination: {
+        destinationKind: "generatedPartScaffold" as const,
+        parentPartId: PARENT_PART_ID
+      },
+      approvalStatus: input.approvalStatus ?? "approved",
+      approvedLeafRefs: input.approvedLayers.map((layer, approvalOrder) => ({
+        approvalOrder,
+        sourceLayerRef: createImportPlanSourceLayerRef(layer),
+        sourceLayerName: layer.originalName,
+        sourceLayerPath: [...layer.groupPath, layer.originalName],
+        candidateStatuses: input.approvedLeafStatusesByLayerId?.[layer.sourceLayerId] ?? ["candidate"],
+        candidateStatusReasons: [],
+        generatedScaffoldPreview: createImportPlanGeneratedScaffold(
+          layer,
+          input.generatedStatusByLayerId?.[layer.sourceLayerId] ?? "previewReady"
+        ),
+        resolvedGeneratedIds: createImportPlanGeneratedScaffold(layer, "resolved")
+      })),
+      notApprovedCandidates: notApprovedLayers.map((layer, candidateIndex) =>
+        createImportPlanCandidate({
+          layer,
+          candidateIndex,
+          statuses: input.candidateStatusesByLayerId?.[layer.sourceLayerId] ??
+            defaultNotApprovedStatuses(layer),
+          generatedStatus: input.generatedStatusByLayerId?.[layer.sourceLayerId] ?? "previewReady"
+        })
+      ),
+      blockedCandidates: notApprovedLayers
+        .filter((layer) => defaultNotApprovedStatuses(layer).some((status) =>
+          status !== "candidate" && status !== "notApproved" && status !== "duplicateName"
+        ))
+        .map((layer, candidateIndex) =>
+          createImportPlanCandidate({
+            layer,
+            candidateIndex,
+            statuses: input.candidateStatusesByLayerId?.[layer.sourceLayerId] ??
+              defaultNotApprovedStatuses(layer),
+            generatedStatus: input.generatedStatusByLayerId?.[layer.sourceLayerId] ?? "previewReady"
+          })
+        ),
+      collisionPreflight: collisionCounts,
+      boundary: {
+        onlyApprovedLeafRefsPassedToBatch: true as const,
+        rawParserObjectPersistence: "notPersisted" as const,
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes" as const,
+        materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes" as const,
+        publicDemoAsset: false as const,
+        allLayerOneClickImport: "notProvided" as const,
+        recursiveGroupAutoImport: "notProvided" as const
+      }
+    }
+  };
+};
+
 const createSourceLayerRef = (layer: typeof LAYER_FIXTURES[number]) => ({
   sourceAssetId: SOURCE_ASSET_ID,
   sourceLayerId: layer.sourceLayerId,
   sourceLayerName: layer.originalName,
   sourceLayerPath: [...layer.groupPath, layer.originalName]
+});
+
+const createImportPlanSourcePsdIdentity = (sourceRef: BinaryAssetReferenceDto) => ({
+  sourceAssetId: SOURCE_ASSET_ID,
+  sourceFilePath: "test_data/sample_model.psd",
+  digest: sourceRef.digest,
+  byteLength: sourceRef.byteLength,
+  mediaType: "image/vnd.adobe.photoshop",
+  sourceBytePersistence: "metadataOnlyNoRawBytes" as const,
+  publicDemoAsset: false as const
+});
+
+const createImportPlanCandidate = (input: {
+  readonly layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture;
+  readonly candidateIndex: number;
+  readonly statuses: readonly ImportPlanCandidateStatus[];
+  readonly generatedStatus: ImportPlanGeneratedStatus;
+}) => ({
+  candidateIndex: input.candidateIndex,
+  sourceLayerRef: createImportPlanSourceLayerRef(input.layer),
+  sourceLayerName: getImportPlanLayerName(input.layer),
+  sourceLayerPath: getImportPlanLayerPath(input.layer),
+  sourceOrder: input.candidateIndex,
+  bounds: {
+    x: 0,
+    y: 0,
+    width: getLayerWidth(input.layer),
+    height: getLayerHeight(input.layer)
+  },
+  visibleInSource: getLayerVisibility(input.layer),
+  opacityInSource: getLayerVisibility(input.layer) ? 1 : 0,
+  byteEstimate: getLayerByteLength(input.layer),
+  statuses: [...input.statuses],
+  statusReasons: input.statuses.filter((status) => status !== "candidate").map((status) =>
+    `status:${status}`
+  ),
+  approvalBlockedReasons: input.statuses.includes("candidate")
+    ? []
+    : ["candidate-not-executable-without-explicit-approval"],
+  generatedScaffoldPreview: createImportPlanGeneratedScaffold(input.layer, input.generatedStatus)
+});
+
+const createImportPlanSourceLayerRef = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+) => ({
+  sourceAssetId: SOURCE_ASSET_ID,
+  sourceLayerId: layer.sourceLayerId,
+  sourceLayerName: getImportPlanLayerName(layer),
+  sourceLayerPath: getImportPlanLayerPath(layer)
+});
+
+const createImportPlanGeneratedScaffold = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture,
+  status: ImportPlanGeneratedStatus
+) => ({
+  destinationKind: "generatedPartScaffold" as const,
+  parentPartId: PARENT_PART_ID,
+  partId: layer.partId,
+  partDisplayName: getImportPlanLayerPath(layer).join(" / "),
+  drawableId: layer.drawableId,
+  drawableDisplayName: getImportPlanLayerPath(layer).join(" / "),
+  textureId: layer.textureId,
+  meshId: layer.meshId,
+  status,
+  statusReasons: status === "generatedIdCollision" || status === "generatedNameCollision"
+    ? [`status:${status}`]
+    : []
 });
 
 const createParserEvidence = () => ({
@@ -896,6 +1462,139 @@ const createExtractionEvidence = (layer: typeof LAYER_FIXTURES[number]) => ({
     layerSelection: layer.sourceLayerId
   }
 });
+
+const defaultCandidateStatuses = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture,
+  approvedLayers: readonly typeof LAYER_FIXTURES[number][]
+): readonly ImportPlanCandidateStatus[] =>
+  approvedLayers.some((approvedLayer) => approvedLayer.sourceLayerId === layer.sourceLayerId)
+    ? ["candidate", "notApproved"]
+    : defaultNotApprovedStatuses(layer);
+
+const defaultNotApprovedStatuses = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): readonly ImportPlanCandidateStatus[] =>
+  getLayerVisibility(layer)
+    ? ["candidate", "notApproved"]
+    : ["hidden", "unsupported", "byteCapBlocked", "generatedIdCollision", "notApproved"];
+
+const uniqueImportPlanLayers = (
+  layers: readonly (typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture)[]
+) => {
+  const seen = new Set<string>();
+  const unique: (typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture)[] = [];
+  for (const layer of layers) {
+    if (seen.has(layer.sourceLayerId)) {
+      continue;
+    }
+    seen.add(layer.sourceLayerId);
+    unique.push(layer);
+  }
+
+  return unique;
+};
+
+const countImportPlanCandidateStatuses = (
+  candidates: readonly ReturnType<typeof createImportPlanCandidate>[]
+) => ({
+  notApprovedCandidateCount: candidates.filter((candidate) =>
+    candidate.statuses.includes("notApproved")
+  ).length,
+  blockedCandidateCount: candidates.filter((candidate) =>
+    candidate.statuses.some((status) =>
+      ["hidden", "unsupported", "emptyZeroSize", "duplicateRef", "generatedIdCollision", "generatedNameCollision", "byteCapBlocked"].includes(status)
+    )
+  ).length,
+  hiddenCandidateCount: candidates.filter((candidate) => candidate.statuses.includes("hidden")).length,
+  unsupportedCandidateCount: candidates.filter((candidate) =>
+    candidate.statuses.includes("unsupported")
+  ).length,
+  duplicateNameCount: countDuplicateDisplayNamesFromCandidates(candidates),
+  duplicateRefCount: countDuplicateSourceRefsFromCandidates(candidates),
+  generatedIdCollisionCount: candidates.filter((candidate) =>
+    candidate.statuses.includes("generatedIdCollision") ||
+    candidate.generatedScaffoldPreview.status === "generatedIdCollision"
+  ).length,
+  generatedNameCollisionCount: candidates.filter((candidate) =>
+    candidate.statuses.includes("generatedNameCollision") ||
+    candidate.generatedScaffoldPreview.status === "generatedNameCollision"
+  ).length,
+  byteCapBlockedCount: candidates.filter((candidate) =>
+    candidate.statuses.includes("byteCapBlocked")
+  ).length
+});
+
+const countImportPlanCollisionPreflight = (
+  candidates: readonly ReturnType<typeof createImportPlanCandidate>[],
+  notApprovedLayers: readonly (typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture)[]
+) => {
+  const counts = countImportPlanCandidateStatuses(candidates);
+
+  return {
+    duplicateRefCount: counts.duplicateRefCount,
+    duplicateNameCount: counts.duplicateNameCount,
+    generatedIdCollisionCount: counts.generatedIdCollisionCount,
+    generatedNameCollisionCount: counts.generatedNameCollisionCount,
+    byteCapBlockedCount: counts.byteCapBlockedCount,
+    blockedCandidateCount: counts.blockedCandidateCount,
+    notApprovedCandidateCount: notApprovedLayers.length,
+    preflightBlockedCount: counts.blockedCandidateCount
+  };
+};
+
+const countDuplicateDisplayNamesFromCandidates = (
+  candidates: readonly ReturnType<typeof createImportPlanCandidate>[]
+): number => {
+  const counts = new Map<string, number>();
+  candidates.forEach((candidate) => {
+    const normalized = candidate.sourceLayerName.trim().toLocaleLowerCase();
+    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  });
+
+  return [...counts.values()].filter((count) => count > 1).length;
+};
+
+const countDuplicateSourceRefsFromCandidates = (
+  candidates: readonly ReturnType<typeof createImportPlanCandidate>[]
+): number => {
+  const counts = new Map<string, number>();
+  candidates.forEach((candidate) => {
+    const key = `${candidate.sourceLayerRef.sourceAssetId}:${candidate.sourceLayerRef.sourceLayerId}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  return [...counts.values()].filter((count) => count > 1).length;
+};
+
+const getImportPlanLayerName = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): string =>
+  "originalName" in layer ? layer.originalName : layer.sourceLayerName;
+
+const getImportPlanLayerPath = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): readonly string[] =>
+  "groupPath" in layer ? [...layer.groupPath, layer.originalName] : layer.sourceLayerPath;
+
+const getLayerByteLength = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): number =>
+  "bytes" in layer ? layer.bytes.byteLength : layer.byteLength;
+
+const getLayerVisibility = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): boolean =>
+  "visibleInSource" in layer ? layer.visibleInSource : true;
+
+const getLayerWidth = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): number =>
+  layer.width;
+
+const getLayerHeight = (
+  layer: typeof LAYER_FIXTURES[number] | ImportPlanLayerFixture
+): number =>
+  layer.height;
 
 const expectSourceAsset = (document: PackageDocumentDto) => {
   const sourceAsset = document.assets.sourceManifest.sourceAssets[0];

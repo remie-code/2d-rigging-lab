@@ -4,6 +4,8 @@ import {
 } from "../../editor-state/index.js";
 import type {
   EditorExplicitPsdImportFileCommand,
+  EditorExplicitPsdImportPlanApprovedBatchIntakeCommand,
+  EditorExplicitPsdImportPlanPreviewCommand,
   EditorExplicitPsdLayerBatchIntakeCommand,
   EditorExplicitPsdLayerIntakeCommand
 } from "../../editor-workflow/index.js";
@@ -22,6 +24,12 @@ export interface ExplicitPsdImportPanelOptions {
   ) => unknown | Promise<unknown>;
   readonly onIntakeSelectedLayersBatch?: (
     command: EditorExplicitPsdLayerBatchIntakeCommand
+  ) => unknown | Promise<unknown>;
+  readonly onGenerateImportPlanPreview?: (
+    command: EditorExplicitPsdImportPlanPreviewCommand
+  ) => unknown | Promise<unknown>;
+  readonly onIntakeApprovedImportPlanCandidates?: (
+    command: EditorExplicitPsdImportPlanApprovedBatchIntakeCommand
   ) => unknown | Promise<unknown>;
 }
 
@@ -67,6 +75,22 @@ export const createExplicitPsdImportPanel = (
       options.viewModel.materializationLabels,
       editorTestIds.explicitPsdImportMaterialization
     ),
+    createImportPlanPreviewForm(options),
+    createFactSection(
+      "Import-Plan Preview",
+      editorTestIds.explicitPsdImportPlanPreview,
+      [
+        { label: "Status", value: options.viewModel.importPlanStatusLabel },
+        ...options.viewModel.importPlanFacts
+      ]
+    ),
+    createImportPlanCandidateList(options),
+    createTextList(
+      "Import-Plan Preview Diagnostics",
+      options.viewModel.importPlanDiagnostics,
+      editorTestIds.explicitPsdImportPlanDiagnostics
+    ),
+    createApprovedImportPlanBatchIntakeForm(options),
     createLayerIntakeForm(options, parseForm.selectedLayerInput),
     createFactSection(
       "Selected Layer Intake Result",
@@ -114,6 +138,211 @@ export const createExplicitPsdImportPanel = (
   );
 
   return panel;
+};
+
+const createImportPlanPreviewForm = (
+  options: ExplicitPsdImportPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "explicit-psd-import-form";
+  form.dataset.testid = editorTestIds.explicitPsdImportPlanForm;
+  form.setAttribute("aria-label", "Create PSD import-plan candidate preview");
+
+  const scopeRef = createTextField({
+    label: "Import-plan scope ref",
+    name: "importPlanScopeRef",
+    value: options.viewModel.importPlanScopeRef
+  });
+  scopeRef.input.dataset.testid = editorTestIds.explicitPsdImportPlanScopeRef;
+
+  const approvedRefsLabel = document.createElement("label");
+  approvedRefsLabel.className = "editor-field editor-field--wide";
+  approvedRefsLabel.textContent = "Approved PSD leaf candidate refs";
+
+  const approvedRefs = document.createElement("textarea");
+  approvedRefs.name = "importPlanApprovedLayerNodeRefs";
+  approvedRefs.value = options.viewModel.importPlanApprovedLayerNodeRefs.join("\n");
+  approvedRefs.autocomplete = "off";
+  approvedRefs.rows = 3;
+  approvedRefs.style.width = "100%";
+  approvedRefs.style.boxSizing = "border-box";
+  approvedRefs.dataset.testid = editorTestIds.explicitPsdImportPlanApprovedRefs;
+  approvedRefs.dataset.lastGeneratedApprovedRefs = serializeSelectedLayerRefs(
+    options.viewModel.importPlanApprovedLayerNodeRefs
+  );
+  approvedRefs.addEventListener("input", () => {
+    updateImportPlanApprovedBatchSubmitState(form);
+  });
+  approvedRefs.addEventListener("change", () => {
+    updateImportPlanApprovedBatchSubmitState(form);
+  });
+  approvedRefsLabel.append(approvedRefs);
+
+  const parentPart = createDestinationParentSelect(
+    options,
+    "Import-plan destination parent part",
+    "importPlanDestinationParentPartId"
+  );
+
+  const diagnostics = document.createElement("div");
+  diagnostics.className = "explicit-psd-import-form__diagnostics";
+  diagnostics.setAttribute("role", "status");
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.explicitPsdImportPlanSubmit;
+  submit.disabled =
+    options.viewModel.status !== "parsed" ||
+    options.onGenerateImportPlanPreview === undefined;
+  submit.textContent = "Update import-plan preview";
+
+  form.append(scopeRef.field, approvedRefsLabel, parentPart.field, diagnostics, submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    diagnostics.replaceChildren();
+
+    try {
+      await options.onGenerateImportPlanPreview?.({
+        scopeRef: scopeRef.input.value.trim(),
+        approvedLayerNodeRefs: parseSelectedLayerRefs(approvedRefs.value),
+        destinationParentPartId: parentPart.select.value
+      });
+    } catch (error) {
+      diagnostics.replaceChildren(createDiagnosticLine(formatImportPlanError(error)));
+    }
+  });
+
+  return form;
+};
+
+const createImportPlanCandidateList = (
+  options: ExplicitPsdImportPanelOptions
+): HTMLElement => {
+  const section = document.createElement("section");
+  section.className = "explicit-psd-import-section";
+  section.dataset.testid = editorTestIds.explicitPsdImportPlanCandidates;
+  section.setAttribute("aria-label", "Import-plan approved leaf candidates");
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Import-Plan Leaf Candidates";
+
+  const list = document.createElement("ul");
+  list.className = "explicit-psd-import-list";
+  for (const row of options.viewModel.importPlanCandidateRows) {
+    const item = document.createElement("li");
+    item.style.overflowWrap = "anywhere";
+
+    const choice = document.createElement("input");
+    choice.type = "checkbox";
+    choice.name = "explicitPsdImportPlanCandidateApproval";
+    choice.value = row.layerRef;
+    choice.checked = row.approved;
+    choice.disabled = !row.approvalEligible;
+    choice.setAttribute(
+      "aria-label",
+      row.approvalEligible
+        ? `Approve PSD leaf candidate ${row.layerRef}`
+        : `PSD leaf candidate ${row.layerRef} is not eligible for approval`
+    );
+    choice.addEventListener("change", () => {
+      syncImportPlanApprovedRefs(section);
+    });
+
+    const label = document.createElement("span");
+    label.textContent = row.label;
+
+    item.append(choice, label);
+    list.append(item);
+  }
+
+  if (options.viewModel.importPlanCandidateRows.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "No import-plan leaf candidates";
+    list.append(item);
+  }
+
+  section.append(heading, list);
+  queueMicrotask(() => syncImportPlanApprovedRefs(section));
+  return section;
+};
+
+const syncImportPlanApprovedRefs = (root: HTMLElement): void => {
+  const form = root.parentElement?.querySelector?.(
+    `[data-testid="${editorTestIds.explicitPsdImportPlanForm}"]`
+  ) as HTMLFormElement | null | undefined;
+  const approvedRefs = form?.querySelector?.(
+    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedRefs}"]`
+  ) as HTMLTextAreaElement | null | undefined;
+  if (approvedRefs === undefined || approvedRefs === null) {
+    return;
+  }
+
+  approvedRefs.value = Array.from(
+    root.querySelectorAll<HTMLInputElement>('input[name="explicitPsdImportPlanCandidateApproval"]')
+  )
+    .filter((choice) => choice.checked && !choice.disabled)
+    .map((choice) => choice.value)
+    .join("\n");
+  updateImportPlanApprovedBatchSubmitState(root);
+};
+
+const createApprovedImportPlanBatchIntakeForm = (
+  options: ExplicitPsdImportPanelOptions
+): HTMLFormElement => {
+  const form = document.createElement("form");
+  form.className = "explicit-psd-import-form";
+  form.dataset.testid = editorTestIds.explicitPsdImportPlanApprovedBatchForm;
+  form.setAttribute("aria-label", "Add approved PSD import-plan leaf candidates");
+
+  const parentPart = createDestinationParentSelect(
+    options,
+    "Approved leaf destination parent part",
+    "importPlanApprovedDestinationParentPartId"
+  );
+
+  const diagnostics = document.createElement("div");
+  diagnostics.className = "explicit-psd-import-form__diagnostics";
+  diagnostics.setAttribute("role", "status");
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "editor-button editor-button--primary";
+  submit.dataset.testid = editorTestIds.explicitPsdImportPlanApprovedBatchSubmit;
+  submit.disabled =
+    options.viewModel.status !== "parsed" ||
+    options.viewModel.importPlanApprovedLayerNodeRefs.length === 0 ||
+    options.destinationParts.length === 0 ||
+    options.onIntakeApprovedImportPlanCandidates === undefined;
+  submit.dataset.baseDisabled = submit.disabled ? "true" : "false";
+  submit.textContent = "Add approved leaf candidates";
+
+  form.append(parentPart.field, diagnostics, submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    diagnostics.replaceChildren();
+
+    const parentPartId = parentPart.select.value.trim();
+    if (parentPartId.length === 0) {
+      diagnostics.replaceChildren(createDiagnosticLine("Destination parent part is required for approved leaf candidates."));
+      return;
+    }
+    if (!isImportPlanApprovedSelectionCurrent(form)) {
+      updateImportPlanApprovedBatchSubmitState(form);
+      diagnostics.replaceChildren(createDiagnosticLine("Update the import-plan preview before adding approved leaf candidates."));
+      return;
+    }
+
+    try {
+      await options.onIntakeApprovedImportPlanCandidates?.({
+        destinationParentPartId: parentPartId
+      });
+    } catch (error) {
+      diagnostics.replaceChildren(createDiagnosticLine(formatImportPlanError(error)));
+    }
+  });
+
+  return form;
 };
 
 const createExplicitPsdImportForm = (
@@ -451,6 +680,55 @@ const parseSelectedLayerRefs = (value: string): readonly string[] =>
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 
+const serializeSelectedLayerRefs = (refs: readonly string[]): string =>
+  refs.join("\n");
+
+const updateImportPlanApprovedBatchSubmitState = (root: HTMLElement): void => {
+  const submit = findInRootOrParent<HTMLButtonElement>(
+    root,
+    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedBatchSubmit}"]`
+  );
+  if (submit === null) {
+    return;
+  }
+
+  const baseDisabled = submit.dataset.baseDisabled === "true";
+  submit.disabled = baseDisabled || !isImportPlanApprovedSelectionCurrent(root);
+};
+
+const isImportPlanApprovedSelectionCurrent = (root: HTMLElement): boolean => {
+  const approvedRefs = findInRootOrParent<HTMLTextAreaElement>(
+    root,
+    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedRefs}"]`
+  );
+  if (approvedRefs === null) {
+    return true;
+  }
+
+  return areStringArraysEqual(
+    parseSelectedLayerRefs(approvedRefs.value),
+    parseSelectedLayerRefs(approvedRefs.dataset.lastGeneratedApprovedRefs ?? "")
+  );
+};
+
+const findInRootOrParent = <T extends HTMLElement>(
+  root: HTMLElement,
+  selector: string
+): T | null => {
+  const localMatch = root.querySelector?.(selector) as T | null | undefined;
+  if (localMatch !== undefined && localMatch !== null) {
+    return localMatch;
+  }
+
+  return root.parentElement?.querySelector?.(selector) as T | null | undefined ?? null;
+};
+
+const areStringArraysEqual = (
+  left: readonly string[],
+  right: readonly string[]
+): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 const readFirstSelectedFile = (input: HTMLInputElement): File | undefined => {
   const files = input.files;
   if (files === null || files.length === 0) {
@@ -518,6 +796,25 @@ const createSelectField = (options: {
 
   return { field, select };
 };
+
+const createDestinationParentSelect = (
+  options: ExplicitPsdImportPanelOptions,
+  label: string,
+  name: string
+): {
+  readonly field: HTMLElement;
+  readonly select: HTMLSelectElement;
+} =>
+  createSelectField({
+    label,
+    name,
+    options: options.destinationParts.length === 0
+      ? [{ value: "", label: "No destination parent parts", disabled: true }]
+      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+    value: options.viewModel.importPlanDestinationParentPartId ||
+      options.destinationParts[0]?.partId ||
+      ""
+  });
 
 const selectedLayerLabelFromViewModel = (
   viewModel: ExplicitPsdImportViewModel
@@ -709,4 +1006,9 @@ const formatIntakeError = (error: unknown): string => {
 const formatBatchIntakeError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
   return `Explicit PSD leaf layer batch intake failed before workflow state update: ${message}`;
+};
+
+const formatImportPlanError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `Explicit PSD import-plan preview failed before workflow state update: ${message}`;
 };

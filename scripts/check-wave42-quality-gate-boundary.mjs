@@ -14,6 +14,11 @@ const machineIdPattern = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)*$/;
 
 const toRepoPath = (filePath) => path.relative(repoRoot, filePath).split(path.sep).join("/");
 
+const getFocusedE2eRegisteredEntries = () => [
+  ...wave42FocusedE2eRegistryBoundary.entries,
+  ...(wave42FocusedE2eRegistryBoundary.postWave42FocusedE2eRegistryEntries ?? [])
+];
+
 const exists = async (repoPath) => {
   try {
     await access(path.join(repoRoot, repoPath));
@@ -104,7 +109,7 @@ const validateGuardCategories = async (findings) => {
 
 const validateFocusedE2eRegistry = async (findings) => {
   const discoveredScripts = await discoverFocusedSmokeScripts();
-  const registryEntries = wave42FocusedE2eRegistryBoundary.entries;
+  const registryEntries = getFocusedE2eRegisteredEntries();
   const registeredPaths = registryEntries.map((entry) => entry.path).sort();
   const registryIds = registryEntries.map((entry) => entry.id);
   const excludedHelpers = new Set(wave42FocusedE2eRegistryBoundary.excludedHelperFiles);
@@ -114,6 +119,10 @@ const validateFocusedE2eRegistry = async (findings) => {
 
   for (const duplicate of hasDuplicates(registryIds)) {
     findings.push(`focused e2e registry: duplicate id ${duplicate}`);
+  }
+
+  for (const duplicate of hasDuplicates(registeredPaths)) {
+    findings.push(`focused e2e registry: duplicate path ${duplicate}`);
   }
 
   for (const entry of registryEntries) {
@@ -240,7 +249,7 @@ const buildBoundaryReport = (findings) => ({
   summary: {
     boundaryVersion: wave42QualityGateBoundaryVersion,
     guardCategoryCount: wave42GuardCategories.length,
-    focusedE2eEntryCount: wave42FocusedE2eRegistryBoundary.entries.length,
+    focusedE2eEntryCount: getFocusedE2eRegisteredEntries().length,
     nonGoalClassificationCount: wave42NonGoalClassificationPolicy.classificationKinds.length,
     explicitNonGoalCount: wave42NonGoalClassificationPolicy.explicitNonGoals.length,
     productCapabilityAdded: false
@@ -279,7 +288,7 @@ const main = async () => {
   if (!process.argv.includes("--json")) {
     console.log(
       `Wave42 quality gate boundary guard passed: ${wave42GuardCategories.length} categories, ` +
-        `${wave42FocusedE2eRegistryBoundary.entries.length} focused e2e entries, ` +
+        `${getFocusedE2eRegisteredEntries().length} focused e2e entries, ` +
         `${wave42NonGoalClassificationPolicy.explicitNonGoals.length} explicit non-goals.`
     );
   }

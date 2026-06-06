@@ -10,6 +10,8 @@ import {
 import { BinaryAssetReferenceSchema } from "@private-2d-rigging-lab/authoring-core";
 import { z } from "zod";
 
+import { PsdImportPlanApprovalBridgeEvidenceSchema } from "../psd-import-plan-approval-evidence.js";
+
 export const ImportSourceFileRefSchema = z.object({
   packageRelativePath: z.string().min(1),
   contentHash: z.string().optional(),
@@ -350,6 +352,7 @@ export const ImportPsdLayerMaterializationBatchPayloadSchema = z.object({
   sourceAssetId: SourceAssetIdSchema,
   batchId: z.string().regex(/^batch_[A-Za-z0-9_-]+$/),
   destination: PsdLayerMaterializationBatchDestinationSchema,
+  importPlanBridge: PsdImportPlanApprovalBridgeEvidenceSchema.optional(),
   entries: z.array(PsdLayerMaterializationBatchEntrySchema).min(1),
   lockedTargetIds: LockedTargetIdsSchema
 }).strict();

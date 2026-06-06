@@ -4,7 +4,9 @@ import {
   createEmptyExplicitPsdImportState,
   editorTestIds,
   projectExplicitPsdImportStateFromBridgeResult,
-  projectExplicitPsdImportViewModel
+  projectExplicitPsdImportViewModel,
+  type ExplicitPsdImportPlanCandidateState,
+  type ExplicitPsdImportState
 } from "../../editor-state/index.js";
 import { createExplicitPsdImportPanel } from "./explicit-psd-import-panel.js";
 
@@ -150,6 +152,116 @@ describe("explicit PSD import panel", () => {
     }]);
   });
 
+  it("updates import-plan preview approval from eligible candidate checkboxes only", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithImportPlan()),
+      onGenerateImportPlanPreview: (command) => calls.push(command)
+    });
+
+    const headwearChoice = findByNameAndValue(
+      panel,
+      "explicitPsdImportPlanCandidateApproval",
+      "layer_headwear"
+    );
+    const hiddenChoice = findByNameAndValue(
+      panel,
+      "explicitPsdImportPlanCandidateApproval",
+      "layer_hidden"
+    );
+    headwearChoice.checked = false;
+    headwearChoice.emit("change");
+    hiddenChoice.checked = true;
+    hiddenChoice.emit("change");
+    findByTestId(panel, editorTestIds.explicitPsdImportPlanForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(hiddenChoice.disabled).toBe(true);
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedRefs)?.value).toBe("");
+    expect(calls).toEqual([{
+      scopeRef: "psd:root",
+      approvedLayerNodeRefs: [],
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
+  it("submits approved import-plan execution without sending not-approved refs from the panel", async () => {
+    const calls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithImportPlan()),
+      onIntakeApprovedImportPlanCandidates: (command) => calls.push(command)
+    });
+
+    findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedBatchForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanPreview)?.textContent).toContain(
+      "sha256:aaaaaaaa"
+    );
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanCandidates)?.textContent).toContain(
+      "layer_hidden"
+    );
+    expect(calls).toEqual([{
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
+  it("blocks stale approved import-plan execution until changed approvals regenerate preview", async () => {
+    const previewCalls: unknown[] = [];
+    const intakeCalls: unknown[] = [];
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithImportPlan()),
+      onGenerateImportPlanPreview: (command) => previewCalls.push(command),
+      onIntakeApprovedImportPlanCandidates: (command) => intakeCalls.push(command)
+    });
+
+    const headwearChoice = findByNameAndValue(
+      panel,
+      "explicitPsdImportPlanCandidateApproval",
+      "layer_headwear"
+    );
+    const eyewearChoice = findByNameAndValue(
+      panel,
+      "explicitPsdImportPlanCandidateApproval",
+      "layer_eyewear"
+    );
+    headwearChoice.checked = false;
+    headwearChoice.emit("change");
+    eyewearChoice.checked = true;
+    eyewearChoice.emit("change");
+    findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedBatchForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedBatchSubmit)?.disabled).toBe(true);
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedBatchForm)?.textContent).toContain(
+      "Update the import-plan preview before adding approved leaf candidates."
+    );
+    expect(intakeCalls).toEqual([]);
+
+    findByTestId(panel, editorTestIds.explicitPsdImportPlanForm)?.emit("submit");
+    await Promise.resolve();
+    expect(previewCalls).toEqual([{
+      scopeRef: "psd:root",
+      approvedLayerNodeRefs: ["layer_eyewear"],
+      destinationParentPartId: "part_root"
+    }]);
+
+    const regeneratedIntakeCalls: unknown[] = [];
+    const regeneratedPanel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithImportPlan({
+        approvedLayerRefs: ["layer_eyewear"]
+      })),
+      onIntakeApprovedImportPlanCandidates: (command) => regeneratedIntakeCalls.push(command)
+    });
+    findByTestId(regeneratedPanel, editorTestIds.explicitPsdImportPlanApprovedBatchForm)?.emit("submit");
+    await Promise.resolve();
+
+    expect(findByTestId(regeneratedPanel, editorTestIds.explicitPsdImportPlanApprovedBatchSubmit)?.disabled).toBe(false);
+    expect(regeneratedIntakeCalls).toEqual([{
+      destinationParentPartId: "part_root"
+    }]);
+  });
+
   it("keeps group rows out of selected leaf layer batch controls and avoids broad import wording", () => {
     const panel = createPanel({
       viewModel: projectExplicitPsdImportViewModel(createParsedState()),
@@ -177,6 +289,8 @@ const createPanel = (
     readonly onParsePsdFile?: Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"];
     readonly onIntakeSelectedLayer?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayer"];
     readonly onIntakeSelectedLayersBatch?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayersBatch"];
+    readonly onGenerateImportPlanPreview?: Parameters<typeof createExplicitPsdImportPanel>[0]["onGenerateImportPlanPreview"];
+    readonly onIntakeApprovedImportPlanCandidates?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeApprovedImportPlanCandidates"];
   } | Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = {}
 ): TestElement => {
   const normalized = typeof options === "function" ? { onParsePsdFile: options } : options;
@@ -188,7 +302,13 @@ const createPanel = (
     onIntakeSelectedLayer: normalized.onIntakeSelectedLayer ?? (() => {}),
     ...(normalized.onIntakeSelectedLayersBatch === undefined
       ? {}
-      : { onIntakeSelectedLayersBatch: normalized.onIntakeSelectedLayersBatch })
+      : { onIntakeSelectedLayersBatch: normalized.onIntakeSelectedLayersBatch }),
+    ...(normalized.onGenerateImportPlanPreview === undefined
+      ? {}
+      : { onGenerateImportPlanPreview: normalized.onGenerateImportPlanPreview }),
+    ...(normalized.onIntakeApprovedImportPlanCandidates === undefined
+      ? {}
+      : { onIntakeApprovedImportPlanCandidates: normalized.onIntakeApprovedImportPlanCandidates })
   }) as unknown as TestElement
   );
 };
@@ -321,6 +441,120 @@ const createParsedState = () =>
     errorEvidence: []
   }, { selectedLayerNodeRef: "layer_face" });
 
+const createParsedStateWithImportPlan = (options: {
+  readonly approvedLayerRefs?: readonly string[];
+} = {}): ExplicitPsdImportState => {
+  const approvedLayerRefs = options.approvedLayerRefs ?? ["layer_headwear"];
+  const isApproved = (layerRef: string): boolean => approvedLayerRefs.includes(layerRef);
+  const approvalOrder = (layerRef: string): number | null => {
+    const index = approvedLayerRefs.indexOf(layerRef);
+    return index < 0 ? null : index;
+  };
+  const candidateStatuses = (layerRef: string): ExplicitPsdImportPlanCandidateState["statuses"] =>
+    isApproved(layerRef) ? ["candidate"] : ["candidate", "notApproved"];
+
+  return ({
+  ...createParsedState(),
+  selectedLayerNodeRefs: approvedLayerRefs,
+  importPlan: {
+    status: "ready" as const,
+    planId: "plan_test",
+    candidatePlanDigest: `sha256:${"a".repeat(64)}`,
+    sourceFileName: "sample_model.psd",
+    sourceByteLength: 16,
+    sourceDigest: `sha256:${"b".repeat(64)}`,
+    sourceProvenanceLabel: "private/local / notPublicDistributable / metadataOnlyNoRawBytes / notPersisted",
+    parserLabel: "webtoonPsd / @webtoon/psd / 0.4.0 / browser",
+    scopeRef: "psd:root",
+    scopeLabel: "psd:root",
+    destinationParentPartId: "part_root",
+    candidateCount: 3,
+    eligibleCandidateCount: 2,
+    approvedCount: approvedLayerRefs.length,
+    notApprovedCount: 3 - approvedLayerRefs.length,
+    hiddenCount: 1,
+    unsupportedCount: 1,
+    collisionCount: 0,
+    byteCapBlockedCount: 0,
+    totalRawRgbaByteEstimate: 528,
+    approvedRawRgbaByteEstimate: approvedLayerRefs.length * 256,
+    candidates: [
+      {
+        layerRef: "layer_headwear",
+        displayName: "Headwear",
+        fullPathLabel: "Headwear",
+        parentGroupPathLabel: null,
+        boundsLabel: "0,0 8x8",
+        visibleInSource: true,
+        opacityInSource: 1,
+        sourceOrder: 1,
+        rawRgbaByteEstimate: 256,
+        statuses: candidateStatuses("layer_headwear"),
+        statusReasons: ["Visible positive-size leaf is eligible for explicit approval."],
+        defaultSelection: "notApproved" as const,
+        requestedApproval: isApproved("layer_headwear"),
+        approved: isApproved("layer_headwear"),
+        approvedOrder: approvalOrder("layer_headwear"),
+        approvalBlockedReasons: [],
+        generatedPartId: "part_headwear",
+        generatedDrawableId: "draw_headwear",
+        generatedTextureId: "tex_headwear",
+        generatedMeshId: "mesh_headwear"
+      },
+      {
+        layerRef: "layer_eyewear",
+        displayName: "Eyewear",
+        fullPathLabel: "Eyewear",
+        parentGroupPathLabel: null,
+        boundsLabel: "0,0 8x8",
+        visibleInSource: true,
+        opacityInSource: 1,
+        sourceOrder: 2,
+        rawRgbaByteEstimate: 256,
+        statuses: candidateStatuses("layer_eyewear"),
+        statusReasons: ["Visible positive-size leaf is eligible for explicit approval."],
+        defaultSelection: "notApproved" as const,
+        requestedApproval: isApproved("layer_eyewear"),
+        approved: isApproved("layer_eyewear"),
+        approvedOrder: approvalOrder("layer_eyewear"),
+        approvalBlockedReasons: [],
+        generatedPartId: "part_eyewear",
+        generatedDrawableId: "draw_eyewear",
+        generatedTextureId: "tex_eyewear",
+        generatedMeshId: "mesh_eyewear"
+      },
+      {
+        layerRef: "layer_hidden",
+        displayName: "Hidden",
+        fullPathLabel: "Hidden",
+        parentGroupPathLabel: null,
+        boundsLabel: "0,0 2x2",
+        visibleInSource: false,
+        opacityInSource: 1,
+        sourceOrder: 2,
+        rawRgbaByteEstimate: 16,
+        statuses: ["hidden", "unsupported", "notApproved"] as const,
+        statusReasons: ["Hidden layer approval is not supported by the v0 import plan."],
+        defaultSelection: "notApproved" as const,
+        requestedApproval: false,
+        approved: false,
+        approvedOrder: null,
+        approvalBlockedReasons: ["hiddenLayerUnsupported"],
+        generatedPartId: "part_hidden",
+        generatedDrawableId: "draw_hidden",
+        generatedTextureId: "tex_hidden",
+        generatedMeshId: "mesh_hidden"
+      }
+    ],
+    diagnostics: [{
+      checkId: "browserPsdImportPlan.candidatePlan.ready",
+      severity: "info" as const,
+      message: "Browser PSD import plan leaf candidates were generated from parser-free session evidence."
+    }]
+  }
+  });
+};
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
@@ -405,6 +639,40 @@ class TestElement {
     }
 
     return null;
+  }
+
+  querySelector(selector: string): TestElement | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
+
+  querySelectorAll<T = TestElement>(selector: string): T[] {
+    const matches: TestElement[] = [];
+    this.collectSelectorMatches(selector, matches);
+    return matches as T[];
+  }
+
+  private collectSelectorMatches(selector: string, matches: TestElement[]): void {
+    if (this.matchesSelector(selector)) {
+      matches.push(this);
+    }
+
+    for (const child of this.children) {
+      child.collectSelectorMatches(selector, matches);
+    }
+  }
+
+  private matchesSelector(selector: string): boolean {
+    const dataTestId = selector.match(/^\[data-testid="(.+)"\]$/)?.[1];
+    if (dataTestId !== undefined) {
+      return this.dataset.testid === dataTestId;
+    }
+
+    const inputName = selector.match(/^input\[name="(.+)"\]$/)?.[1];
+    if (inputName !== undefined) {
+      return this.tagName === "input" && this.name === inputName;
+    }
+
+    return false;
   }
 }
 

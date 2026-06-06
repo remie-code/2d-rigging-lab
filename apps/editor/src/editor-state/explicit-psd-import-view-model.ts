@@ -3,6 +3,7 @@ import {
   type ExplicitPsdImportFactState,
   type ExplicitPsdImportTreeRowState
 } from "./explicit-psd-import-state.js";
+import type { ExplicitPsdImportPlanCandidateState } from "./explicit-psd-import-plan-state.js";
 import { formatBoundsLabel, formatPreviewNumber } from "./view-model-format.js";
 
 export interface ExplicitPsdImportFactViewModel {
@@ -16,6 +17,13 @@ export interface ExplicitPsdImportTreeRowViewModel {
   readonly depth: number;
   readonly label: string;
   readonly metaLabel: string;
+}
+
+export interface ExplicitPsdImportPlanCandidateViewModel {
+  readonly layerRef: string;
+  readonly label: string;
+  readonly approved: boolean;
+  readonly approvalEligible: boolean;
 }
 
 export interface ExplicitPsdImportViewModel {
@@ -36,6 +44,14 @@ export interface ExplicitPsdImportViewModel {
   readonly batchIntakeFacts: readonly ExplicitPsdImportFactViewModel[];
   readonly batchIntakeEntryLabels: readonly string[];
   readonly batchIntakeDiagnostics: readonly string[];
+  readonly importPlanScopeRef: string;
+  readonly importPlanDestinationParentPartId: string;
+  readonly importPlanApprovedLayerNodeRefs: readonly string[];
+  readonly importPlanStatusLabel: string;
+  readonly importPlanFacts: readonly ExplicitPsdImportFactViewModel[];
+  readonly importPlanCandidateRows: readonly ExplicitPsdImportPlanCandidateViewModel[];
+  readonly importPlanCandidateLabels: readonly string[];
+  readonly importPlanDiagnostics: readonly string[];
   readonly unsupportedFeatureLabels: readonly string[];
   readonly notEvaluatedFeatureLabels: readonly string[];
   readonly materializationLabels: readonly string[];
@@ -71,8 +87,23 @@ export const projectExplicitPsdImportViewModel = (
   batchIntakeDiagnostics: state.selectedLayerBatchIntake.diagnostics.length === 0
     ? ["No selected leaf layer batch diagnostics"]
     : state.selectedLayerBatchIntake.diagnostics.map((diagnostic) =>
-        `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+      `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
       ),
+  importPlanScopeRef: state.importPlan?.scopeRef ?? "psd:root",
+  importPlanDestinationParentPartId: state.importPlan?.destinationParentPartId ?? "",
+  importPlanApprovedLayerNodeRefs:
+    state.importPlan?.candidates
+      .filter((candidate) => candidate.approved)
+      .sort((left, right) =>
+        (left.approvedOrder ?? Number.MAX_SAFE_INTEGER) -
+        (right.approvedOrder ?? Number.MAX_SAFE_INTEGER)
+      )
+      .map((candidate) => candidate.layerRef) ?? [],
+  importPlanStatusLabel: projectImportPlanStatusLabel(state),
+  importPlanFacts: projectImportPlanFacts(state),
+  importPlanCandidateRows: projectImportPlanCandidateRows(state),
+  importPlanCandidateLabels: projectImportPlanCandidateLabels(state),
+  importPlanDiagnostics: projectImportPlanDiagnostics(state),
   unsupportedFeatureLabels: state.unsupportedFeatureLabels.length === 0
     ? ["No unsupported feature evidence surfaced"]
     : state.unsupportedFeatureLabels,
@@ -242,6 +273,113 @@ const projectBatchIntakeFacts = (
   state.selectedLayerBatchIntake.summaryFacts.length === 0
     ? [{ label: "Result", value: "No selected leaf layer batch materialized yet" }]
     : state.selectedLayerBatchIntake.summaryFacts.map(projectFact);
+
+const projectImportPlanStatusLabel = (state: ExplicitPsdImportState): string => {
+  if (state.importPlan === null) {
+    return "No import-plan preview generated";
+  }
+
+  return state.importPlan.status === "ready"
+    ? "Import-plan preview ready"
+    : "Import-plan preview blocked";
+};
+
+const projectImportPlanFacts = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportFactViewModel[] => {
+  const plan = state.importPlan;
+  if (plan === null) {
+    return [{ label: "Preview", value: "No candidate plan preview" }];
+  }
+
+  return [
+    { label: "Plan id", value: plan.planId },
+    { label: "Candidate plan digest", value: plan.candidatePlanDigest },
+    { label: "Source", value: `${plan.sourceFileName} / ${formatByteLength(plan.sourceByteLength)}` },
+    { label: "Source digest", value: plan.sourceDigest ?? "No source digest evidence" },
+    { label: "Source provenance", value: plan.sourceProvenanceLabel },
+    { label: "Parser", value: plan.parserLabel },
+    { label: "Scope", value: `${plan.scopeLabel} / ${plan.scopeRef}` },
+    { label: "Destination parent part", value: plan.destinationParentPartId ?? "No destination parent selected" },
+    {
+      label: "Candidates / eligible / approved / not-approved",
+      value: [
+        plan.candidateCount,
+        plan.eligibleCandidateCount,
+        plan.approvedCount,
+        plan.notApprovedCount
+      ].join(" / ")
+    },
+    {
+      label: "Hidden / unsupported / collisions / byte blocked",
+      value: [
+        plan.hiddenCount,
+        plan.unsupportedCount,
+        plan.collisionCount,
+        plan.byteCapBlockedCount
+      ].join(" / ")
+    },
+    {
+      label: "Byte estimate total / approved",
+      value: [
+        formatByteLength(plan.totalRawRgbaByteEstimate),
+        formatByteLength(plan.approvedRawRgbaByteEstimate)
+      ].join(" / ")
+    }
+  ];
+};
+
+const projectImportPlanCandidateRows = (
+  state: ExplicitPsdImportState
+): readonly ExplicitPsdImportPlanCandidateViewModel[] =>
+  state.importPlan?.candidates.map((candidate) => ({
+    layerRef: candidate.layerRef,
+    label: projectImportPlanCandidateLabel(candidate),
+    approved: candidate.approved,
+    approvalEligible: candidate.statuses.includes("candidate") &&
+      candidate.approvalBlockedReasons.length === 0
+  })) ?? [];
+
+const projectImportPlanCandidateLabels = (
+  state: ExplicitPsdImportState
+): readonly string[] =>
+  state.importPlan === null || state.importPlan.candidates.length === 0
+    ? ["No import-plan leaf candidates"]
+    : state.importPlan.candidates.map(projectImportPlanCandidateLabel);
+
+const projectImportPlanCandidateLabel = (
+  candidate: ExplicitPsdImportPlanCandidateState
+): string =>
+  [
+    candidate.layerRef,
+    candidate.fullPathLabel,
+    `name=${candidate.displayName}`,
+    candidate.parentGroupPathLabel === null ? "parent=root" : `parent=${candidate.parentGroupPathLabel}`,
+    candidate.visibleInSource ? "visible" : "hidden",
+    `opacity=${formatPreviewNumber(candidate.opacityInSource)}`,
+    `bounds=${candidate.boundsLabel}`,
+    `statuses=${candidate.statuses.join(",")}`,
+    candidate.statusReasons.length === 0 ? "reasons=none" : `reasons=${candidate.statusReasons.join(" | ")}`,
+    `bytes=${formatByteLength(candidate.rawRgbaByteEstimate)}`,
+    candidate.requestedApproval ? "approval=requested" : "approval=notRequested",
+    candidate.approved ? `approvedOrder=${candidate.approvedOrder ?? "unknown"}` : "approved=false",
+    candidate.approvalBlockedReasons.length === 0
+      ? "approvalBlocked=none"
+      : `approvalBlocked=${candidate.approvalBlockedReasons.join(",")}`,
+    `part=${candidate.generatedPartId}`,
+    `drawable=${candidate.generatedDrawableId}`,
+    `texture=${candidate.generatedTextureId}`,
+    `mesh=${candidate.generatedMeshId}`
+  ].join(" / ");
+
+const projectImportPlanDiagnostics = (
+  state: ExplicitPsdImportState
+): readonly string[] =>
+  state.importPlan === null || state.importPlan.diagnostics.length === 0
+    ? ["No import-plan preview diagnostics"]
+    : state.importPlan.diagnostics.map((diagnostic) =>
+        `${diagnostic.checkId} / ${diagnostic.severity} / ${diagnostic.message}`
+      );
 
 const projectSelectedLayerBatchLabel = (state: ExplicitPsdImportState): string =>
   state.selectedLayerNodeRefs.length === 0

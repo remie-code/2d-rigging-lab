@@ -740,7 +740,8 @@ const isTruthfullyNotEvaluatedDiagnostic = (check: ValidationCheckResultDto): bo
     check.checkId === "asset.psd.featureNotEvaluated" ||
     check.checkId === "asset.psd.materializationEvidenceMissing" ||
     check.checkId === "asset.psd.materializedDestinationMappingMissing" ||
-    check.checkId === "asset.psd.materializedBatchEvidenceMissing"
+    check.checkId === "asset.psd.materializedBatchEvidenceMissing" ||
+    check.checkId === "asset.psd.importPlanEvidenceMissing"
   );
 
 const evidenceKindForNotEvaluatedDiagnostic = (
@@ -751,6 +752,8 @@ const evidenceKindForNotEvaluatedDiagnostic = (
     : checkId === "asset.psd.materializedDestinationMappingMissing"
     ? "sourceMaterialization"
     : checkId === "asset.psd.materializedBatchEvidenceMissing"
+    ? "sourceMaterialization"
+    : checkId === "asset.psd.importPlanEvidenceMissing"
     ? "sourceMaterialization"
     : "validationReport";
 

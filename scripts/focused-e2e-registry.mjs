@@ -112,6 +112,12 @@ const focusedE2eMetadataById = {
     tags: ["assetIo", "psdImport", "selectedLayerIntake", "browserPersistence", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  psdImportPlanFocused: {
+    purpose:
+      "Replay sample_model.psd root import-plan preview, explicit approved leaf selection, approved-leaf-only batch intake, save/load and portable boundaries, and parser import containment.",
+    tags: ["assetIo", "psdImport", "importPlan", "browserPersistence", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   psdMultiLayerBatchFocused: {
     purpose:
       "Replay explicit browser PSD file selection, Domain A selected leaf layer batch intake, generated part scaffold evidence, save/load boundary, and parser import containment.",
@@ -156,6 +162,20 @@ const focusedE2eMetadataById = {
   }
 };
 
+const postWave42FocusedE2eRegistryOverlayEntries = [
+  {
+    id: "psdImportPlanFocused",
+    path: "apps/editor/e2e/psd-import-plan-focused-smoke.mjs",
+    command: "node apps/editor/e2e/psd-import-plan-focused-smoke.mjs",
+    category: "assetIoBoundary"
+  }
+];
+
+const focusedE2eBoundaryEntries = [
+  ...wave42FocusedE2eRegistryBoundary.entries,
+  ...postWave42FocusedE2eRegistryOverlayEntries
+];
+
 const buildFocusedE2eEntry = (boundaryEntry) => {
   const metadata = focusedE2eMetadataById[boundaryEntry.id];
 
@@ -176,12 +196,13 @@ const buildFocusedE2eEntry = (boundaryEntry) => {
 
 export const focusedE2eRegistry = {
   schemaVersion: focusedE2eRegistryVersion,
-  sourceBoundary: "scripts/wave42-focused-e2e-boundary.mjs",
+  sourceBoundary: "scripts/wave42-focused-e2e-boundary.mjs + scripts/focused-e2e-registry.mjs postWave42 overlay",
   root: wave42FocusedE2eRegistryBoundary.root,
   entryKind: wave42FocusedE2eRegistryBoundary.entryKind,
   aggregateEntryPoints: wave42FocusedE2eRegistryBoundary.aggregateEntryPoints,
   aggregateImportSourcePath,
-  entries: wave42FocusedE2eRegistryBoundary.entries.map(buildFocusedE2eEntry)
+  postWave42OverlayEntryIds: postWave42FocusedE2eRegistryOverlayEntries.map((entry) => entry.id),
+  entries: focusedE2eBoundaryEntries.map(buildFocusedE2eEntry)
 };
 
 export const getFocusedE2eEntryById = (id) =>
@@ -197,7 +218,7 @@ export const getFocusedE2eRepoRoot = () => repoRoot;
 export const checkFocusedE2eRegistry = async () => {
   const findings = [];
   const boundaryEntriesById = new Map(
-    wave42FocusedE2eRegistryBoundary.entries.map((entry) => [entry.id, entry])
+    focusedE2eBoundaryEntries.map((entry) => [entry.id, entry])
   );
   const registryIds = focusedE2eRegistry.entries.map((entry) => entry.id);
   const aggregateImportSource = await readRepoFile(aggregateImportSourcePath);
@@ -208,9 +229,9 @@ export const checkFocusedE2eRegistry = async () => {
     findings.push(`focused e2e registry: duplicate id ${duplicate}`);
   }
 
-  if (focusedE2eRegistry.entries.length !== wave42FocusedE2eRegistryBoundary.entries.length) {
+  if (focusedE2eRegistry.entries.length !== focusedE2eBoundaryEntries.length) {
     findings.push(
-      `focused e2e registry: expected ${wave42FocusedE2eRegistryBoundary.entries.length} boundary entries, received ${focusedE2eRegistry.entries.length}`
+      `focused e2e registry: expected ${focusedE2eBoundaryEntries.length} boundary entries, received ${focusedE2eRegistry.entries.length}`
     );
   }
 
@@ -381,6 +402,7 @@ const buildCheckReport = (findings) => ({
       (entry) => entry.aggregateInclusion.status === "standaloneDirectVerification"
     ).length,
     aggregateEntryPoints: focusedE2eRegistry.aggregateEntryPoints,
+    postWave42OverlayEntryCount: postWave42FocusedE2eRegistryOverlayEntries.length,
     productCapabilityAdded: false
   },
   entries: focusedE2eRegistry.entries.map((entry) => ({

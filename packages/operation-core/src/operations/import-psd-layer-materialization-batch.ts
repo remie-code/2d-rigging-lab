@@ -37,6 +37,7 @@ import {
   createPreconditionResult,
   createRejectedOperationResult
 } from "../preconditions.js";
+import { evaluateImportPlanApprovalBridgeDiagnostics } from "./import-psd-layer-materialization-batch-import-plan.js";
 import { importPsdLayerMaterializationOperationHandler } from "./import-psd-layer-materialization.js";
 
 type ImportPsdLayerMaterializationBatchRequest = Extract<
@@ -331,6 +332,29 @@ const evaluateBatchPreconditions = (input: {
     plannedEntries: input.plannedEntries,
     entryDiagnostics
   });
+  const importPlanDiagnostics = evaluateImportPlanApprovalBridgeDiagnostics({
+    operationId: input.operationId,
+    sourceAssetId: input.request.payload.sourceAssetId,
+    destinationParentPartId: input.request.payload.destination.parentPartId,
+    ...(input.request.payload.importPlanBridge === undefined
+      ? {}
+      : { importPlanBridge: input.request.payload.importPlanBridge }),
+    entries: input.plannedEntries.map((entry) => {
+      const provenance = entry.request.payload.materialization.provenance;
+
+      return {
+        selectedIndex: entry.selectedIndex,
+        sourceLayerKey: entry.sourceLayerKey,
+        generated: entry.generated,
+        ...(provenance.sourceDigest === undefined ? {} : { sourceDigest: provenance.sourceDigest }),
+        ...(provenance.sourceByteLength === undefined
+          ? {}
+          : { sourceByteLength: provenance.sourceByteLength })
+      };
+    })
+  });
+  globalDiagnostics.push(...importPlanDiagnostics.globalDiagnostics);
+  mergeEntryDiagnostics(entryDiagnostics, importPlanDiagnostics.entryDiagnostics);
 
   return { globalDiagnostics, entryDiagnostics };
 };
@@ -549,6 +573,9 @@ const createCommittedBatchResult = (input: {
     batchId: input.request.payload.batchId,
     sourceAssetId: input.request.payload.sourceAssetId,
     destination: input.request.payload.destination,
+    ...(input.request.payload.importPlanBridge === undefined
+      ? {}
+      : { importPlanBridge: input.request.payload.importPlanBridge }),
     aggregateStatus: "success",
     selectedLayerCount: input.plannedEntries.length,
     successCount: input.plannedEntries.length,
@@ -606,6 +633,9 @@ const createRejectedBatchResult = (input: {
     batchId: input.request.payload.batchId,
     sourceAssetId: input.request.payload.sourceAssetId,
     destination: input.request.payload.destination,
+    ...(input.request.payload.importPlanBridge === undefined
+      ? {}
+      : { importPlanBridge: input.request.payload.importPlanBridge }),
     aggregateStatus: "preflightBlocked",
     selectedLayerCount: input.plannedEntries.length,
     successCount: 0,
@@ -689,12 +719,18 @@ const createBatchTargetIds = (
   request: ImportPsdLayerMaterializationBatchRequest,
   operationId: OperationId,
   plannedEntries: readonly PlannedBatchEntry[]
-): readonly string[] =>
-  uniqueStrings([
+): readonly string[] => {
+  const importPlanBridge = request.payload.importPlanBridge;
+
+  return uniqueStrings([
     operationId,
     request.payload.batchId,
     request.payload.sourceAssetId,
     request.payload.destination.parentPartId,
+    importPlanBridge?.candidatePlan.planId,
+    importPlanBridge?.candidatePlan.candidatePlanDigest.hex,
+    importPlanBridge?.approval.approvalId,
+    importPlanBridge?.approval.approvalSelectionDigest.hex,
     ...plannedEntries.flatMap((entry) => [
       entry.operationId,
       entry.sourceLayerKey,
@@ -705,7 +741,8 @@ const createBatchTargetIds = (
       entry.generated.meshId,
       entry.generated.textureId
     ].filter((value): value is string => value !== undefined))
-  ]);
+  ].filter((value): value is string => value !== undefined));
+};
 
 const createChildOperationId = (
   operationId: OperationId,
@@ -716,9 +753,11 @@ const createChildOperationId = (
     `op_${sanitizeIdToken(`${stripIdPrefix(operationId, "op_")}_${selectedIndex}_${stripIdPrefix(partId, "part_")}`)}`
   );
 
-const createSourceLayerKey = (
-  sourceLayerRef: ImportPsdLayerMaterializationRequest["payload"]["materialization"]["sourceLayerRef"]
-): string => `${sourceLayerRef.sourceAssetId}:${sourceLayerRef.sourceLayerId}`;
+const createSourceLayerKey = (sourceLayerRef: {
+  readonly sourceAssetId: string;
+  readonly sourceLayerId: string;
+}): string =>
+  `${sourceLayerRef.sourceAssetId}:${sourceLayerRef.sourceLayerId}`;
 
 const getSiblingPartDisplayNames = (
   session: AuthoringSession,
@@ -757,6 +796,16 @@ const addEntryDiagnostic = (
 ): void => {
   const diagnostics = entryDiagnostics.get(selectedIndex) ?? [];
   entryDiagnostics.set(selectedIndex, [...diagnostics, diagnostic]);
+};
+
+const mergeEntryDiagnostics = (
+  target: Map<number, DiagnosticDto[]>,
+  source: ReadonlyMap<number, readonly DiagnosticDto[]>
+): void => {
+  for (const [selectedIndex, diagnostics] of source) {
+    const current = target.get(selectedIndex) ?? [];
+    target.set(selectedIndex, [...current, ...diagnostics]);
+  }
 };
 
 const hasDiagnostics = (diagnostics: IndexedDiagnostics): boolean =>

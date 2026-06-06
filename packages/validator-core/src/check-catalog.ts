@@ -913,6 +913,102 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Wave47 PSD selected-layer batch reports partial failure and cannot be summarized as simple success."
   },
   {
+    checkId: "asset.psd.importPlanEvidenceMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan approval bridge evidence was required but not supplied for session Product Preflight."
+  },
+  {
+    checkId: "asset.psd.importPlanEvidenceMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan candidate or approval bridge evidence is malformed."
+  },
+  {
+    checkId: "asset.psd.importPlanCandidateMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan candidate summary, digest, or selected candidate reference does not match approval or batch evidence."
+  },
+  {
+    checkId: "asset.psd.importPlanCandidateStatusSummary",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan preview records not-approved, hidden, unsupported, duplicate, collision, or byte-cap-blocked candidates without importing them."
+  },
+  {
+    checkId: "asset.psd.importPlanApprovalMismatch",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan approval status, selected leaf refs, destination, generated scaffold preview, or batch entries do not match."
+  },
+  {
+    checkId: "asset.psd.importPlanNotApprovedCandidateSelected",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan evidence shows a not-approved candidate was selected for materialization."
+  },
+  {
+    checkId: "asset.psd.importPlanCandidateBlocked",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan evidence shows a hidden, unsupported, empty, duplicate-ref, generated-collision, or byte-cap-blocked candidate was selected."
+  },
+  {
+    checkId: "asset.psd.importPlanPreflightBlocked",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan approval or batch execution was blocked by collision, byte cap, approval, or preflight evidence."
+  },
+  {
+    checkId: "asset.psd.importPlanPartialState",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan batch evidence reports partial success or partial failure and cannot be summarized as available."
+  },
+  {
+    checkId: "asset.psd.importPlanSourceCurrentBytesMissing",
+    phase: "source_import",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan source bytes are not currently available for re-plan or re-materialization."
+  },
+  {
+    checkId: "asset.psd.importPlanSourceStale",
+    phase: "source_import",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan source identity is stale or mismatched against current source or materialization evidence."
+  },
+  {
+    checkId: "asset.psd.importPlanProvenanceBlocked",
+    phase: "rights",
+    defaultSeverity: "blocking",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-002", "AC-MVP-003", "AC-MVP-013"],
+    description: "Wave48 PSD import-plan evidence lacks required private/local non-public provenance or no-raw-byte boundary fields."
+  },
+  {
     checkId: "rights.recordMissing",
     phase: "rights",
     defaultSeverity: "error",

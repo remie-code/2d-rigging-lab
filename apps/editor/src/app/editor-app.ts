@@ -195,12 +195,20 @@ export function mountEditorApp(root: HTMLElement): void {
           await workflow.parseExplicitBrowserPsdImportFile(command);
           render();
         },
+        async onGenerateExplicitPsdImportPlanPreview(command) {
+          await workflow.generateExplicitPsdImportPlanPreview(command);
+          render();
+        },
         async onIntakeExplicitPsdLayer(command) {
           await workflow.commitExplicitPsdLayerIntake(command);
           render();
         },
         async onIntakeExplicitPsdLayerBatch(command) {
           await workflow.commitExplicitPsdLayerBatchIntake(command);
+          render();
+        },
+        async onIntakeApprovedExplicitPsdImportPlan(command) {
+          await workflow.commitExplicitPsdImportPlanApprovedBatchIntake(command);
           render();
         },
         onSaveProject() {

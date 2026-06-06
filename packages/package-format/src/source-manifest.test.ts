@@ -479,6 +479,110 @@ describe("source manifest PSD structured profile contract", () => {
     expect(serialized).not.toContain("data:image");
   });
 
+  it("serializes Wave48 import plan candidate and approval evidence without raw parser or byte payloads", () => {
+    const manifest = createStructuredPsdSourceManifestWithBrowserParseEvidence() as StructuredPsdManifestFixture;
+    const profile = manifest.sourceAssets[0]?.psdProfile;
+    if (profile === undefined) {
+      throw new Error("Expected structured PSD fixture profile.");
+    }
+
+    profile.importPlanCandidateEvidence = [createImportPlanCandidateEvidence()];
+    profile.importPlanApprovalEvidence = [createImportPlanApprovalEvidence()];
+
+    const parsed = SourceManifestSchema.parse(manifest);
+    const serialized = stringifyJsonDeterministic(parsed);
+    const reparsed = SourceManifestSchema.parse(JSON.parse(serialized));
+    const parsedProfile = reparsed.sourceAssets[0]?.psdProfile;
+
+    expect(reparsed).toEqual(parsed);
+    expect(parsedProfile?.importPlanCandidateEvidence?.[0]).toMatchObject({
+      schemaVersion: "psd-import-plan-candidate-evidence-v1",
+      planId: "plan_wave48Root",
+      candidatePlanDigest: PLAN_DIGEST,
+      sourcePsd: {
+        sourceAssetId: "src_psd_structured",
+        digest: SAMPLE_PSD_DIGEST,
+        byteLength: 22406225,
+        sourceBytePersistence: "metadataOnlyNoRawBytes",
+        publicDemoAsset: false
+      },
+      scope: {
+        scopeRef: { kind: "document", id: "psd:root" },
+        discoveryMode: "recursiveLeafCandidatePreview"
+      },
+      candidates: [
+        expect.objectContaining({
+          sourceLayerName: "Head",
+          statuses: ["candidate", "notApproved"],
+          generatedScaffoldPreview: expect.objectContaining({
+            status: "previewReady",
+            partId: "part_head",
+            drawableId: "draw_head",
+            textureId: "tex_head",
+            meshId: "mesh_head"
+          })
+        }),
+        expect.objectContaining({
+          sourceLayerName: "Hidden shadow",
+          statuses: ["hidden", "notApproved"]
+        })
+      ],
+      boundary: {
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes",
+        publicDemoAsset: false,
+        allLayerOneClickImport: "notProvided",
+        recursiveGroupAutoImport: "notProvided"
+      }
+    });
+    expect(parsedProfile?.importPlanApprovalEvidence?.[0]).toMatchObject({
+      schemaVersion: "psd-import-plan-approval-evidence-v1",
+      approvalId: "approval_wave48RootHead",
+      candidatePlanDigest: PLAN_DIGEST,
+      approvalSelectionDigest: APPROVAL_DIGEST,
+      approvalStatus: "approved",
+      approvedLeafRefs: [
+        expect.objectContaining({
+          approvalOrder: 0,
+          sourceLayerName: "Head",
+          candidateStatuses: ["candidate"],
+          resolvedGeneratedIds: expect.objectContaining({
+            status: "resolved",
+            partId: "part_head",
+            drawableId: "draw_head"
+          })
+        })
+      ],
+      notApprovedCandidates: [
+        expect.objectContaining({
+          sourceLayerName: "Hidden shadow",
+          statuses: ["hidden", "notApproved"]
+        })
+      ],
+      collisionPreflight: {
+        duplicateRefCount: 0,
+        duplicateNameCount: 0,
+        generatedIdCollisionCount: 0,
+        generatedNameCollisionCount: 0,
+        byteCapBlockedCount: 0,
+        blockedCandidateCount: 1,
+        notApprovedCandidateCount: 1,
+        preflightBlockedCount: 1
+      },
+      boundary: {
+        onlyApprovedLeafRefsPassedToBatch: true,
+        rawParserObjectPersistence: "notPersisted",
+        sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+        materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+        publicDemoAsset: false
+      }
+    });
+    expect(serialized).not.toContain("rawLayerObject");
+    expect(serialized).not.toContain("sourcePsdBytes");
+    expect(serialized).not.toContain("data:image");
+  });
+
   it("rejects parser-private layer objects in real PSD evidence fields", () => {
     const manifest = createStructuredPsdSourceManifestWithRealParseEvidence();
     const sourceAsset = manifest.sourceAssets[0];
@@ -524,6 +628,18 @@ const PSD_COMPATIBILITY_POLICY = {
 
 const WAVE46_RAW_RGBA_MEDIA_TYPE =
   "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
+const PLAN_DIGEST = {
+  algorithm: "sha256",
+  hex: "1111111111111111111111111111111111111111111111111111111111111111"
+} as const;
+const APPROVAL_DIGEST = {
+  algorithm: "sha256",
+  hex: "2222222222222222222222222222222222222222222222222222222222222222"
+} as const;
+const SAMPLE_PSD_DIGEST = {
+  algorithm: "sha256",
+  hex: "44ab43238cd2b2af2fb0ce6a7b5073a60e332d03da7666ea274c02e0462294b5"
+} as const;
 
 const createStructuredPsdSourceManifest = (): unknown => ({
   schemaVersion: "source-manifest-v1",
@@ -814,16 +930,177 @@ const createStructuredPsdSourceManifestWithBrowserParseEvidence = () => {
 
 type StructuredPsdManifestFixture = {
   readonly sourceAssets: Array<{
-    readonly psdProfile: {
+    psdProfile: {
       adapter: Record<string, unknown> & { parser?: Record<string, unknown> };
       sourceGroups: readonly unknown[];
       sourceLayers: Array<Record<string, unknown>>;
       layerTreeEvidence?: Record<string, unknown>;
       featureSupportEvidence?: unknown;
       materializationEvidence?: Array<Record<string, unknown>>;
+      importPlanCandidateEvidence?: unknown[];
+      importPlanApprovalEvidence?: unknown[];
     };
   }>;
 };
+
+const createImportPlanGeneratedScaffold = (status: "previewReady" | "resolved") => ({
+  destinationKind: "generatedPartScaffold",
+  parentPartId: "part_root",
+  partId: "part_head",
+  partDisplayName: "Head",
+  drawableId: "draw_head",
+  drawableDisplayName: "Head",
+  textureId: "tex_head",
+  meshId: "mesh_head",
+  status,
+  statusReasons: []
+});
+
+const createImportPlanCandidateEvidence = () => ({
+  schemaVersion: "psd-import-plan-candidate-evidence-v1",
+  evidenceKind: "psd-import-plan-candidate-evidence-v1",
+  planId: "plan_wave48Root",
+  candidatePlanDigest: PLAN_DIGEST,
+  sourcePsd: {
+    sourceAssetId: "src_psd_structured",
+    sourceFilePath: "private/source.psd",
+    digest: SAMPLE_PSD_DIGEST,
+    byteLength: 22406225,
+    mediaType: "image/vnd.adobe.photoshop",
+    sourceBytePersistence: "metadataOnlyNoRawBytes",
+    publicDemoAsset: false
+  },
+  scope: {
+    scopeRef: { kind: "document", id: "psd:root" },
+    scopeDisplayPath: [],
+    discoveryMode: "recursiveLeafCandidatePreview"
+  },
+  candidates: [createApprovedImportPlanCandidate(), createHiddenImportPlanCandidate()],
+  summary: {
+    candidateCount: 2,
+    approvedCandidateCount: 0,
+    notApprovedCandidateCount: 2,
+    blockedCandidateCount: 1,
+    hiddenCandidateCount: 1,
+    unsupportedCandidateCount: 0,
+    duplicateNameCount: 0,
+    duplicateRefCount: 0,
+    generatedIdCollisionCount: 0,
+    generatedNameCollisionCount: 0,
+    byteCapBlockedCount: 0,
+    totalByteEstimate: 48,
+    approvedByteEstimate: 16
+  },
+  boundary: {
+    rawParserObjectPersistence: "notPersisted",
+    sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+    candidateDiscoveryBytePersistence: "metadataOnlyNoRawBytes",
+    publicDemoAsset: false,
+    allLayerOneClickImport: "notProvided",
+    recursiveGroupAutoImport: "notProvided"
+  }
+});
+
+const createImportPlanApprovalEvidence = () => ({
+  schemaVersion: "psd-import-plan-approval-evidence-v1",
+  evidenceKind: "psd-import-plan-approval-evidence-v1",
+  approvalId: "approval_wave48RootHead",
+  candidatePlanDigest: PLAN_DIGEST,
+  approvalSelectionDigest: APPROVAL_DIGEST,
+  sourcePsd: {
+    sourceAssetId: "src_psd_structured",
+    sourceFilePath: "private/source.psd",
+    digest: SAMPLE_PSD_DIGEST,
+    byteLength: 22406225,
+    mediaType: "image/vnd.adobe.photoshop",
+    sourceBytePersistence: "metadataOnlyNoRawBytes",
+    publicDemoAsset: false
+  },
+  destination: {
+    destinationKind: "generatedPartScaffold",
+    parentPartId: "part_root"
+  },
+  approvalStatus: "approved",
+  approvedLeafRefs: [
+    {
+      approvalOrder: 0,
+      sourceLayerRef: {
+        sourceAssetId: "src_psd_structured",
+        sourceLayerId: "layer_head",
+        sourceLayerName: "Head",
+        sourceLayerPath: ["Character", "Head", "Head"]
+      },
+      sourceLayerName: "Head",
+      sourceLayerPath: ["Character", "Head", "Head"],
+      candidateStatuses: ["candidate"],
+      candidateStatusReasons: [],
+      generatedScaffoldPreview: createImportPlanGeneratedScaffold("previewReady"),
+      resolvedGeneratedIds: createImportPlanGeneratedScaffold("resolved")
+    }
+  ],
+  notApprovedCandidates: [createHiddenImportPlanCandidate()],
+  blockedCandidates: [createHiddenImportPlanCandidate()],
+  collisionPreflight: {
+    duplicateRefCount: 0,
+    duplicateNameCount: 0,
+    generatedIdCollisionCount: 0,
+    generatedNameCollisionCount: 0,
+    byteCapBlockedCount: 0,
+    blockedCandidateCount: 1,
+    notApprovedCandidateCount: 1,
+    preflightBlockedCount: 1
+  },
+  boundary: {
+    onlyApprovedLeafRefsPassedToBatch: true,
+    rawParserObjectPersistence: "notPersisted",
+    sourcePsdBytePersistence: "metadataOnlyNoRawBytes",
+    materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes",
+    publicDemoAsset: false,
+    allLayerOneClickImport: "notProvided",
+    recursiveGroupAutoImport: "notProvided"
+  }
+});
+
+const createApprovedImportPlanCandidate = () => ({
+  candidateIndex: 0,
+  sourceLayerRef: {
+    sourceAssetId: "src_psd_structured",
+    sourceLayerId: "layer_head",
+    sourceLayerName: "Head",
+    sourceLayerPath: ["Character", "Head", "Head"]
+  },
+  sourceLayerName: "Head",
+  sourceLayerPath: ["Character", "Head", "Head"],
+  sourceOrder: 5,
+  bounds: { x: 320, y: 128, width: 512, height: 640 },
+  visibleInSource: true,
+  opacityInSource: 0.75,
+  byteEstimate: 16,
+  statuses: ["candidate", "notApproved"],
+  statusReasons: [],
+  approvalBlockedReasons: [],
+  generatedScaffoldPreview: createImportPlanGeneratedScaffold("previewReady")
+});
+
+const createHiddenImportPlanCandidate = () => ({
+  candidateIndex: 1,
+  sourceLayerRef: {
+    sourceAssetId: "src_psd_structured",
+    sourceLayerId: "layer_shadow_hidden",
+    sourceLayerName: "Hidden shadow",
+    sourceLayerPath: ["Character", "Hidden shadow"]
+  },
+  sourceLayerName: "Hidden shadow",
+  sourceLayerPath: ["Character", "Hidden shadow"],
+  sourceOrder: 6,
+  bounds: { x: 0, y: 0, width: 4, height: 4 },
+  visibleInSource: false,
+  opacityInSource: 0,
+  byteEstimate: 32,
+  statuses: ["hidden", "notApproved"],
+  statusReasons: ["Hidden layer approval is outside v0."],
+  approvalBlockedReasons: ["hidden"]
+});
 
 interface PsdUnsupportedLayerRequest {
   readonly payload: {

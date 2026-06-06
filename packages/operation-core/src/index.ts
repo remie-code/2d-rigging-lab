@@ -7,6 +7,7 @@ export * from "./payloads/dynamics.js";
 export * from "./payloads/rig-control.js";
 export * from "./mesh-topology-evidence.js";
 export * from "./psd-import-operation-evidence.js";
+export * from "./psd-import-plan-approval-evidence.js";
 export * from "./psd-layer-materialization-operation-evidence.js";
 export * from "./psd-layer-materialization-batch-operation-evidence.js";
 export * from "./operation-payload.js";
