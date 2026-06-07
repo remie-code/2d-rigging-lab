@@ -4,7 +4,7 @@
 
 ## 1. 役割
 
-Rig Toolは、Authoring Workspace内で選択中part / drawable / meshに対してrig control、binding、parameter、keyformを作成・確認・編集するActive Toolである。
+Rig Toolは、Authoring Workspace内で選択中part / drawable / meshに対してrig control、binding、parameter、keyform、subtree opacity effectを作成・確認・編集するActive Toolである。
 
 Rig Toolは、Editorがsemantic recognitionやauto-rig提案を行う場所ではない。ユーザーまたはCodexが対象と操作を明示し、Editorはその明示入力に基づくdraft、preview、commitを提供する。
 
@@ -17,6 +17,7 @@ Rig Toolで許可する自動処理は、明示対象に対する決定的な初
 - 選択targetのboundsからrotation pivotやwarp lattice boundsの初期値を置く。
 - 選択targetに対するrig draft overlayを中央Canvasに表示する。
 - ユーザーが指定したprimitive、分割数、parameter、key valueに基づいてoperationをcommitする。
+- ユーザーが指定したrig control / deformer相当targetのdescendant subtreeに対し、parameter-driven opacity effectをcommitする。
 
 やらないこと:
 
@@ -57,7 +58,7 @@ rig overlayは中央のCanvas / Preview領域に固定して表示する。専�
 - Toolbox: Rig toolがactiveであることを示す。
 - Structure / Parts: rig対象となるpart / drawable / meshを選択する。既存rig controlの関連targetもここから辿れる。
 - Canvas / Preview: 選択targetにrig overlayを重ねる。draft状態とcommitted状態を区別する。
-- Inspector / Tool Panel: rig primitive、bounds、pivot、lattice分割数、binding、parameter、keyform操作を表示する。
+- Inspector / Tool Panel: rig primitive、bounds、pivot、lattice分割数、binding、parameter、keyform操作、subtree visibility / opacity effectを表示する。
 
 ## 4.1 Canvas Overlay
 
@@ -142,6 +143,8 @@ Applyするまでproject rig controlは変更しない。Apply後に通常operat
 
 Keyform authoringでは、Parameter BarとRig Inspectorが協調する。Parameter Barはactive parameterとcurrent valueを扱い、Rig Inspectorはtarget / property / state patchを扱う。Parameter / Keyform UIの詳細は [parameter-keyform.md](parameter-keyform.md) を参照する。
 
+subtree opacity effectも、この協調の中で扱う。Rig Inspectorは対象subtreeとopacity propertyを扱い、Parameter Barはどのparameterのどの値でopacityを確認・keyform化するかを扱う。
+
 ## 5. Tool State
 
 | State | Canvas | Inspector / Tool Panel | 主な操作 |
@@ -188,7 +191,64 @@ Warp / Latticeは、選択targetに対して格子状の制御点を置き、con
 - 現行Editor draft UXは最小 `2x2` 固定であり、`bilinear-grid-v1` 固定である。
 - Bezier分割数やBezier deformerは現行モデルにはない。後続で必要なら別primitiveまたは新しいmodel設計として扱う。
 
-## 8. 表示する情報
+## 8. Subtree Visibility / Opacity UX
+
+Subtree Visibility / Opacityは、選択中rig control / deformer相当targetの配下要素を、parameter valueに応じてまとめてフェードさせるためのRig Tool内sectionである。
+
+このUXは、単一drawableの静的opacityを編集するものではない。個々のdrawableへ同じopacity keyformを大量に打つ代わりに、rig control / deformer配下のsubtreeへopacity multiplierを適用する。
+
+扱うシナリオ:
+
+```text
+Rig Inspector: target=head_turn_deformer / property=subtreeOpacity
+Parameter Bar: parameter=ParamAngleX / current value=25
+Canvas: current value 25 におけるdescendant subtreeのfade preview
+Action: Add / Update opacity keyform
+```
+
+Inspectorに置くもの:
+
+- effect enabled
+- affected subtree summary
+- scope: selected rig control descendants
+- opacity property: subtree opacity multiplier
+- active parameter summary
+- key value / opacity value pairs
+- interpolation / fade behavior summary
+- add / update keyform action
+- reset effect action
+- Open in Viewer
+
+最小表現:
+
+```text
+Subtree Visibility / Opacity
+  Scope: this rig control descendants
+  Parameter: ParamAngleX
+  Keys:
+    20 -> opacity 1.0
+    30 -> opacity 0.0
+```
+
+「ある値を境にフェードアウトする」表現は、boolean switchではなく、近接したparameter key間のopacity interpolationとして扱う。たとえば `20 -> 1.0`、`30 -> 0.0` のように置くことで、20から30の間で徐々にfadeする。
+
+Canvasに置くもの:
+
+- affected subtree highlight
+- current opacity preview
+- selected rig control / deformer relation
+- disabled / invalid state warning
+
+表示しないもの:
+
+- descendant drawable全件のraw list
+- 各drawableへ展開されたlow-level opacity operation全文
+- raw runtime evidence
+- operation ID
+
+Part単位の表情差分やパーツ差分の切り替え・フェードは、将来のVariant / Expression管理とも関係する。ただし「デフォーマ以下の要素をparameter値でフェードする」シナリオは、Rig Toolのsubtree opacity effectとして扱う。
+
+## 9. 表示する情報
 
 - 選択target名
 - rig status: none / draft / committed / blocked
@@ -196,6 +256,7 @@ Warp / Latticeは、選択targetに対して格子状の制御点を置き、con
 - binding target
 - parameter
 - key value
+- subtree opacity effect status
 - pivot / bounds
 - lattice columns / rows
 - control point count
@@ -203,7 +264,7 @@ Warp / Latticeは、選択targetに対して格子状の制御点を置き、con
 - last operation summary
 - warning count
 
-## 9. 表示しない情報
+## 10. 表示しない情報
 
 - raw evidence全文
 - operation ID全文
@@ -214,16 +275,18 @@ Warp / Latticeは、選択targetに対して格子状の制御点を置き、con
 
 これらは必要に応じてDiagnostics / Evidence ViewやCodex-facing structured surfaceに置く。
 
-## 10. 既存機能との対応
+## 11. 既存機能との対応
 
 現在の実装には、project-defined `rotation2d` rig control、rig-control keyform、`controlPointOffsets` を持つ `warpLattice2d`、semantic bilinear warp evaluation、Minimum Open Dynamics v1が存在する。
 
 画面設計上は、これらを巨大なProject-defined Rig Controls panelから分離し、Rig Active ToolのCanvas overlayとInspector / Tool Panelへ再配置する方向で考える。
 
-## 11. 未決事項
+## 12. 未決事項
 
 - Rig Tool内でRotation / Warp Lattice以外のprimitiveをいつ扱うか。
 - Warp / Latticeの分割数変更を初回実装に含めるか、後続waveに回すか。
 - keyform authoringをRig Tool内に常設するか、parameter/keyform専用sub-panelに分けるか。
+- subtree opacity effectを初期実装に含めるか、後続waveに回すか。
+- subtree opacity effectのscopeをrig control descendantsだけに限定するか、part subtreeも含めるか。
 - Dynamicsの詳細なcoefficient / output binding設計。Dynamics自体は別Active Toolとして扱う。
 - Canvas overlayでcommitted rigとdraft rigをどう視覚的に区別するか。

@@ -6,7 +6,7 @@
 
 Parameter / Keyform UIは、Authoring Workspace全体で共有されるparameter value contextを扱う。
 
-Rig、Mesh deformation、Opacity、Dynamics、Viewer確認は、いずれも「現在どのparameterのどの値を見ているか」に依存する。そのため、Parameter UIは特定toolのInspector内に閉じ込めず、workspace横断の操作領域として扱う。
+Rig、Mesh deformation、Opacity、Subtree opacity、Dynamics、Viewer確認は、いずれも「現在どのparameterのどの値を見ているか」に依存する。そのため、Parameter UIは特定toolのInspector内に閉じ込めず、workspace横断の操作領域として扱う。
 
 ## 2. 基本方針
 
@@ -14,7 +14,7 @@ Rig、Mesh deformation、Opacity、Dynamics、Viewer確認は、いずれも「�
 - 全parameterを常時横並び・縦並びにはしない。
 - keyform詳細、parameter一覧、複雑な2D操作は展開UIへ逃がす。
 - Canvas / Previewの確認を妨げない。
-- Rig / Mesh / Opacity / Dynamicsなどのtool-specific操作はInspectorに置き、parameter current valueはParameter Barに置く。
+- Rig / Mesh / Opacity / Subtree opacity / Dynamicsなどのtool-specific操作はInspectorに置き、parameter current valueはParameter Barに置く。
 
 ## 3. Parameter Bar
 
@@ -78,6 +78,15 @@ Rig Inspector: target=rig_head_warp / property=controlPointOffsets
 Parameter Bar: parameter=ParamAngleX / current value=30
 Canvas: current value 30 のdraft deformation preview
 Action: Add keyform
+```
+
+例: Rig Tool / Subtree Opacity
+
+```text
+Rig Inspector: target=head_turn_deformer / property=subtreeOpacity
+Parameter Bar: parameter=ParamAngleX / current value=25
+Canvas: current value 25 のdescendant subtree fade preview
+Action: Add / Update opacity keyform
 ```
 
 基本フロー:
@@ -163,9 +172,9 @@ expanded状態:
 
 | Tool / View | Parameter UIとの関係 |
 |---|---|
-| Rig Tool | Parameter Barのcurrent valueを使ってrotation / warp lattice keyformをauthoringする。 |
+| Rig Tool | Parameter Barのcurrent valueを使ってrotation / warp lattice / subtree opacity keyformをauthoringする。 |
 | Mesh Tool | 将来mesh deformation keyformを扱う場合、Parameter Barのcurrent valueを使う。 |
-| Composition / Opacity | drawable opacity keyformのauthoringにParameter Barを使う。 |
+| Drawable Inspector / Opacity | 静的opacityはDrawable Inspectorで扱い、opacity keyform authoringではParameter Barのcurrent valueと協調する。 |
 | Dynamics Tool | active input parameterはParameter Barで扱い、group / binding / coefficientはDynamics Inspectorで扱う。本格的なruntime確認はViewer / Runtime Viewへ送る。 |
 | Viewer / Runtime View | より本格的なruntime確認view。Parameter Control Paletteより広い検証文脈を扱う。 |
 

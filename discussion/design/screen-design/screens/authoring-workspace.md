@@ -30,6 +30,8 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 
 Toolboxは機能を呼び出す場所であり、model構造を表示・選択する場所ではない。Parts Treeは常設または即時展開できるStructure / Partsペインとして扱う。Import後の構造整理、mesh対象選択、rig対象選択はこのParts Treeを起点にする。Toolboxの詳細は [../components/toolbox.md](../components/toolbox.md) を参照する。
 
+Drawable選択時、InspectorはDrawable Inspectorとして、draw order、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面とする。Drawable Inspectorの詳細は [../components/drawable-inspector.md](../components/drawable-inspector.md) を参照する。
+
 Parameter BarはToolboxやInspectorとは別の横断領域として、Canvas / Previewの下、Diagnostics Stripの上に置く。常時表示する対象は1つのactive parameterに限定し、全parameter確認は非モーダルのParameter Control Paletteで扱う。詳細は [../components/parameter-keyform.md](../components/parameter-keyform.md) を参照する。
 
 ## 3. Empty State
@@ -74,7 +76,7 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 
 1. 構造整理
    - Parts TreeでPSD group由来のpart container、drawable、hidden rowを確認する。
-   - selectionに応じてInspectorへrename、visibility、lock、source summary、削除/隔離などの編集情報を出す。
+   - selectionに応じてInspectorへrename、draw order summary、editor/runtime visibility、opacity、clipping / mask、lock、source summary、削除/隔離などの編集情報を出す。
    - Canvasは選択中drawableの位置と可視状態を確認する場所として使う。
 2. Mesh作成・調整
    - Parts TreeまたはCanvasでdrawableを選択し、ToolboxのMeshを開く。
@@ -84,9 +86,10 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
    - Mesh Toolの詳細は [../components/mesh-tool.md](../components/mesh-tool.md) を参照する。
 3. Rig準備
    - Parts Treeでpart/drawableを選択し、ToolboxのRigを開く。
-   - Inspectorはrig primitive、draft settings、binding、parameter/keyform接続に必要な controls を出す。
+   - Inspectorはrig primitive、draft settings、binding、parameter/keyform接続、subtree opacity effectに必要な controls を出す。
    - Parameter Barでactive parameterとcurrent valueを操作し、Canvasでその値のpreviewを確認する。
    - RotationやWarp / Latticeのdraft overlayはCanvasに表示し、Applyするまでproject rig controlは変更しない。
+   - rig control / deformer配下の要素をまとめてfadeさせる場合は、Rig ToolのSubtree Visibility / Opacity sectionで扱う。
    - 自動semantic推定やauto-rig提案はEditor通常UIの責務ではない。
    - Rig Toolの詳細は [../components/rig-tool.md](../components/rig-tool.md) を参照する。
 4. Dynamics作成・確認
@@ -107,6 +110,7 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 - Parts Tree: `UX-FEAT-008`, `UX-FEAT-009`
 - Canvas / Preview: `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012`
 - Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025`
+- Drawable Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-010`〜`UX-FEAT-012`, 一部 `UX-FEAT-020`〜`UX-FEAT-023`
 - Dynamics Tool: `UX-FEAT-024`, `UX-FEAT-025`
 - Texture Atlas Task: 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`
 

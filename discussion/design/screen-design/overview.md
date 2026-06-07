@@ -85,6 +85,7 @@ stateDiagram-v2
 | Component | 役割 | 詳細 |
 |---|---|---|
 | Toolbox | Authoring Workspace上でActive Tool、Task、Viewを起動・切り替えるicon launcher。 | [components/toolbox.md](components/toolbox.md) |
+| Drawable Inspector | 選択中drawableのdraw order、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱うInspector。 | [components/drawable-inspector.md](components/drawable-inspector.md) |
 | Mesh Tool | 選択中drawableのinitial mesh generation、mesh overlay編集、Topology / UV編集を扱うActive Tool。 | [components/mesh-tool.md](components/mesh-tool.md) |
 | Rig Tool | 選択中part / drawable / meshに対するrig draft/preview、binding、parameter/keyform authoringを扱うActive Tool。 | [components/rig-tool.md](components/rig-tool.md) |
 | Dynamics Tool | dynamics group、input / output binding、coefficient、lightweight previewを扱うActive Tool。 | [components/dynamics-tool.md](components/dynamics-tool.md) |
