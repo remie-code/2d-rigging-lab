@@ -65,6 +65,19 @@ Wave53 final integration report/review は、Workspace Layout Migration v0 の b
 
 Wave53 は final visual redesign、full panel migration、final modal/task-window/dedicated-view policy、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter Manager / Variant UI 実装を完了していない。legacy support panels には旧 evidence/debug/Codex-heavy UI が残り、duplicate drawable-list hooks は現時点では非blockingだが、将来 legacy list を明示対象にするテストは stable wrapper で scope する必要がある。
 
+## 2.3 Wave54 A-H 実装状況メモ
+
+Wave54 Domains A-H reports/reviews と Domain H verification は `pass` 記録済みである。ただし Domain J final integration/review は未完了なので、これは final Wave54 baseline ではない。
+
+- Generic workspace-scoped Task Window Shell v0 は実装・検証済み。
+- PSD Import は Toolbox から workspace-scoped task window として開き、Close / Back / Escape で Authoring Workspace へ戻る。
+- PSD Import Task Human UI は、primary summary と workflow groups を中心に task window 内で読みやすくなるよう bounded polish 済み。
+- Diagnostics / Evidence View と Codex / Automation View は bounded read-only skeleton として到達可能になった。どちらも final/full view ではなく、legacy panel migration も完了していない。
+- Codex / Automation skeleton は LLM/provider integration、repo-side proposal generation、semantic recognition、auto-rigging、auto-fix、automatic commit、external transport を追加していない。
+- Selector/test-facing hardening により、Parts Tree、legacy Drawable Authoring、PSD Import task window の観測 scope が整理され、`taskWindowRoutingFocused` と既存 PSD focused IDs は Domain H で pass 記録済み。
+
+Wave54 A-H は final visual redesign、full panel migration、final task-window/dedicated-view policy、full Diagnostics / Evidence View、full Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI 実装を完了していない。
+
 ## 3. 現在の問題設定
 
 現在の Editor は起動でき、基本機能も揃い始めている。一方で、人間向けUXはまだ弱い。
@@ -113,7 +126,7 @@ Wave53 は final visual redesign、full panel migration、final modal/task-windo
 - PSD import、structural scaffold、validation、operation history、Codex command surface を人間にどう見せるか
 - どのflowを常時見える高速導線にし、どのflowを必要時に呼び出す形にするか
 
-現時点のユーザー案として、「機能一覧を持つ toolbox 的なものがあり、機能を選択すると、その機能に必要な情報だけを持つ window / modal が開く」という方向性がある。これは候補であり、まだ確定設計ではない。
+Wave54 A-H では、Toolbox task / view item の一部について workspace-scoped task window v0 が実装・検証済みである。ただし、すべての tool / task / view に対する final modal / task-window / side-panel / dedicated-view policy は未確定のままである。
 
 ## 5. Codex-facing structural command parity との関係
 
@@ -176,4 +189,4 @@ Undine は、現在のUI / source / test を広く棚卸ししない。Undine �
 
 ## 9. 次のステップ
 
-次は、Wave51-Wave53で作った基盤を前提に、Diagnostics / Evidence View Separation、Codex / Automation View Separation、PSD Import Task の final placement / final navigation polish を別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。
+次は、Wave51-Wave54 A-Hで作った基盤を前提に、Diagnostics / Evidence View full migration、Codex / Automation View full migration、PSD Import Task の final polish、final task-window/dedicated-view policy、mobile task-window routing registry coverage を別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。

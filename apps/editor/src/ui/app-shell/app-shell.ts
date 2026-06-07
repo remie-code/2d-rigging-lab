@@ -98,11 +98,17 @@ import {
   createWorkspaceParameterBarShellSurface,
   createWorkspaceSupportRegion
 } from "./authoring-workspace-v0-shell.js";
+import { createCodexAutomationViewSkeleton } from "./codex-automation-view-skeleton.js";
+import { createDiagnosticsEvidenceViewSkeleton } from "./diagnostics-evidence-view-skeleton.js";
 import { createPackageStatus } from "./package-status.js";
 import { applyShellSurfaceMetadata, shellSurfaces } from "./shell-surfaces.js";
 import { createTaskShell } from "./task-shell.js";
 
-export type EditorAppShellActiveTask = "psdImport" | null;
+export type EditorAppShellActiveTask =
+  | "psdImport"
+  | "diagnosticsEvidence"
+  | "codexAutomation"
+  | null;
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
@@ -113,6 +119,8 @@ export interface EditorAppShellOptions {
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
   readonly activeTask?: EditorAppShellActiveTask;
   readonly onOpenPsdImportTask?: () => void;
+  readonly onOpenDiagnosticsEvidenceView?: () => void;
+  readonly onOpenCodexAutomationView?: () => void;
   readonly onCloseActiveTask?: () => void;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
   readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
@@ -319,8 +327,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     group: "source-intake"
   });
   const toolboxSurface = createAuthoringToolboxSurface(options);
-  const activeTask =
-    options.activeTask === "psdImport" ? createPsdImportTaskShell(options) : null;
+  const activeTask = createActiveWorkspaceSurfaceShell(options);
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,
     viewModel: options.viewModel,
@@ -564,6 +571,63 @@ const createPsdImportTaskShell = (options: EditorAppShellOptions): HTMLElement =
     content: createPsdImportTaskPanel(createPsdImportTaskContentOptions(options))
   });
 };
+
+const createActiveWorkspaceSurfaceShell = (
+  options: EditorAppShellOptions
+): HTMLElement | null => {
+  switch (options.activeTask ?? null) {
+    case "psdImport":
+      return createPsdImportTaskShell(options);
+    case "diagnosticsEvidence":
+      return createDiagnosticsEvidenceTaskShell(options);
+    case "codexAutomation":
+      return createCodexAutomationTaskShell(options);
+    case null:
+      return null;
+  }
+};
+
+const createDiagnosticsEvidenceTaskShell = (
+  options: EditorAppShellOptions
+): HTMLElement =>
+  createTaskShell({
+    surface: shellSurfaces.diagnosticsEvidenceView,
+    surfaceMetadata: { group: "diagnostics-evidence" },
+    title: "Diagnostics / Evidence",
+    status: "Read-only skeleton for separated evidence and diagnostics details.",
+    back: {
+      ariaLabel: "Back to authoring workspace",
+      label: "Back",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    close: {
+      ariaLabel: "Close Diagnostics / Evidence view",
+      label: "Close",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    content: createDiagnosticsEvidenceViewSkeleton()
+  });
+
+const createCodexAutomationTaskShell = (
+  options: EditorAppShellOptions
+): HTMLElement =>
+  createTaskShell({
+    surface: shellSurfaces.codexAutomationView,
+    surfaceMetadata: { group: "codex-automation" },
+    title: "Codex / Automation",
+    status: "Read-only skeleton for external Codex automation status.",
+    back: {
+      ariaLabel: "Back to authoring workspace",
+      label: "Back",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    close: {
+      ariaLabel: "Close Codex / Automation view",
+      label: "Close",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    content: createCodexAutomationViewSkeleton()
+  });
 
 const createPsdImportTaskPanel = (
   contentOptions: ExplicitPsdImportTaskContentOptions

@@ -12,6 +12,7 @@ import {
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
+import { openExplicitPsdImportTask } from "./selector-scopes.mjs";
 
 const sampleFileUrl = new URL("../../../test_data/sample_model.psd", import.meta.url);
 const sampleSummaryUrl = new URL(
@@ -895,18 +896,6 @@ const waitForTestId = async (page, testId) => {
     { timeoutMs: 8_000 },
     testId
   );
-};
-
-const openExplicitPsdImportTask = async (page) => {
-  const isOpen = await page.evaluate(
-    (panelId) => document.querySelector(`[data-testid="${panelId}"]`) !== null,
-    editorTestIds.explicitPsdImportPanel
-  );
-  if (!isOpen) {
-    await waitForTestId(page, editorTestIds.psdImportTaskOpen);
-    await clickTestId(page, editorTestIds.psdImportTaskOpen);
-  }
-  await waitForTestId(page, editorTestIds.explicitPsdImportPanel);
 };
 
 const waitForText = async (page, testId, expectedText, timeoutMs = 15_000) => {

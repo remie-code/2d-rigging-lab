@@ -37,6 +37,14 @@ export const wave42FocusedE2eRegistryBoundary = {
       category: "assetIoBoundary",
       rationale:
         "Wave50 focused smoke is registered through the focused e2e registry postWave42 overlay; the Wave42 guard tracks it here as intentionally registered boundary data until that overlay is folded into the base boundary."
+    },
+    {
+      id: "taskWindowRoutingFocused",
+      path: "apps/editor/e2e/task-window-routing-focused-smoke.mjs",
+      command: "node apps/editor/e2e/task-window-routing-focused-smoke.mjs",
+      category: "editorAuthoringPersistence",
+      rationale:
+        "Wave54 focused smoke is registered through the focused e2e registry postWave42 overlay; the Wave42 guard tracks it here as intentionally registered boundary data until that overlay is folded into the base boundary."
     }
   ],
   entries: [

@@ -51,6 +51,31 @@ describe("explicit PSD import panel", () => {
     expect(input?.accept).toContain(".psd");
   });
 
+  it("groups task content into workflow and advanced sections while preserving stable hooks", () => {
+    const content = createTaskContent({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState()),
+      onGenerateImportPlanPreview: () => {},
+      onIntakeApprovedImportPlanCandidates: () => {},
+      onGenerateStructuralScaffoldPreview: () => {},
+      onCommitStructuralScaffold: () => {},
+      onIntakeSelectedLayersBatch: () => {}
+    });
+    const workflow = findRequiredByAriaLabel(content, "PSD import task workflow");
+    const advanced = findRequiredByAriaLabel(content, "PSD import advanced workflow controls");
+
+    expect(workflow.textContent).toContain("Source and Parse");
+    expect(workflow.textContent).toContain("Import-Plan Approval");
+    expect(workflow.textContent).toContain("Structural Scaffold Approval");
+    expect(workflow.textContent).toContain("Commit Review");
+    expect(advanced.textContent).toContain("One-Off Selected Layer Intake");
+    expect(advanced.textContent).toContain("Evidence Boundary");
+    expect(findByTestId(workflow, editorTestIds.explicitPsdImportPlanForm)).not.toBeNull();
+    expect(findByTestId(workflow, editorTestIds.explicitPsdStructuralScaffoldForm)).not.toBeNull();
+    expect(findByTestId(advanced, editorTestIds.explicitPsdImportLayerIntakeForm)).not.toBeNull();
+    expect(findByTestId(advanced, editorTestIds.explicitPsdImportBatchIntakeForm)).not.toBeNull();
+    expect(findByTestId(advanced, editorTestIds.explicitPsdImportPersistence)).not.toBeNull();
+  });
+
   it("renders a primary human summary for source, parse, tree, scope, scaffold, warnings, and commit state", () => {
     const content = createTaskContent({
       viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState())
@@ -74,6 +99,25 @@ describe("explicit PSD import panel", () => {
     expect(summaryText).toContain("1 hidden / 1 unsupported / 0 collisions / 0 byte blocked");
     expect(summaryText).toContain("Approval and commit");
     expect(summaryText).toContain("structural commit No structural scaffold result");
+    expect(summaryText).toContain("Source handling");
+    expect(summaryText).toContain("raw bytes not persisted by parser bridge");
+    expect(summaryText).toContain("Next action");
+    expect(summaryText).toContain("Commit the approved structural scaffold");
+  });
+
+  it("keeps parser selection details concise in the parse state section", () => {
+    const content = createTaskContent({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState())
+    });
+    const parseStateText = findByTestId(
+      content,
+      editorTestIds.explicitPsdImportStatus
+    )?.textContent;
+
+    expect(parseStateText).toContain("PSD parsed in browser session");
+    expect(parseStateText).toContain("1 selected PSD leaf layer");
+    expect(parseStateText).not.toContain("layer_face");
+    expect(parseStateText).not.toContain("psd:root");
   });
 
   it("keeps machine-only details out of the primary human summary", () => {

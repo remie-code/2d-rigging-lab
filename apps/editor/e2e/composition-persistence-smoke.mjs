@@ -5,6 +5,10 @@ import {
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
+import {
+  selectorScopes,
+  waitForScopedText
+} from "./selector-scopes.mjs";
 
 const compositionSmoke = {
   packageId: "pkg_editor_browser_sample",
@@ -123,9 +127,15 @@ const createCompositionTargetDrawable = async (page) => {
   await waitForText(page, editorTestIds.operationStatus, "generateMesh committed");
   await waitForOperationLogEntryCount(page, 2);
   await waitForText(page, editorTestIds.operationLogSummary, "createDrawable, generateMesh");
-  await waitForText(page, editorTestIds.drawableList, compositionSmoke.targetDisplayName);
-  await waitForText(
+  await waitForScopedText(
     page,
+    selectorScopes.legacyDrawableAuthoring,
+    editorTestIds.drawableList,
+    compositionSmoke.targetDisplayName
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
     createDrawableRowTestId(compositionSmoke.targetDrawableId),
     compositionSmoke.targetMeshId
   );
@@ -235,9 +245,15 @@ const assertCompositionStateAfterLoad = async (page) => {
     editorTestIds.operationLogSummary,
     "createDrawable, generateMesh, setMaskRelation, addKeyform"
   );
-  await waitForText(page, editorTestIds.drawableList, compositionSmoke.targetDisplayName);
-  await waitForText(
+  await waitForScopedText(
     page,
+    selectorScopes.legacyDrawableAuthoring,
+    editorTestIds.drawableList,
+    compositionSmoke.targetDisplayName
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
     createDrawableRowTestId(compositionSmoke.targetDrawableId),
     compositionSmoke.targetMeshId
   );

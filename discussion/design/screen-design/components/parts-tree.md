@@ -23,7 +23,7 @@ Parts TreeはToolboxではない。Toolboxは作業モードやtaskを呼び出�
 
 Wave53 final integration report/review `pass` により、Parts Tree v0 は Authoring Workspace 左側の Structure / Parts surface として実装・統合済みである。既存 Layer Tree と Drawable List の selection、visibility、draw order callback contract を再利用している。
 
-現時点では legacy Drawable Authoring support panel も残っているため、`drawable.list` / `drawable.row.*` / visibility / move hooks は Parts Tree と legacy panel の両方に出る。Domain E では非blockingと判定済みだが、将来 legacy list を狙うテストや helper は stable wrapper で明示的に scope する必要がある。manual drawable create 入口は legacy support で維持されており、Parts Tree 内の final create UI は未完了である。
+現時点では legacy Drawable Authoring support panel も残っているため、`drawable.list` / `drawable.row.*` / visibility / move hooks は Parts Tree と legacy panel の両方に出る。Wave54 Domain F/H により、e2e helper は Parts Tree と legacy Drawable Authoring を明示的に scope する形へ hardening 済みだが、将来 legacy list を狙うテストや helper も stable wrapper / selector scope helper を使う必要がある。manual drawable create 入口は legacy support で維持されており、Parts Tree 内の final create UI は未完了である。
 
 ## 2. 基本方針
 

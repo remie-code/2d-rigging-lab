@@ -29,6 +29,7 @@ import { createBrowserProjectStore, type StorageLike } from "../../project-persi
 import { aiApprovalTestIds } from "../ai-approval/index.js";
 import { aiTranscriptTestIds } from "../ai-transcript/index.js";
 import { createEditorAppShell } from "./app-shell.js";
+import { diagnosticsEvidenceViewSkeletonTestIds } from "./diagnostics-evidence-view-skeleton.js";
 import { shellSurfaceDefinitions, shellSurfaces } from "./shell-surfaces.js";
 import { workspaceContextSurfaceTestIds } from "./workspace-context-surfaces.js";
 
@@ -716,6 +717,8 @@ describe("editor app shell preview panel", () => {
     expect(launcher?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
     expect(launcher?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
     expect(findByTestId(shell, editorTestIds.explicitPsdImportPanel)).toBeNull();
+    expect(findByTestId(shell, diagnosticsEvidenceViewSkeletonTestIds.root)).toBeNull();
+    expect(findCodexAutomationSkeleton(shell)).toBeNull();
 
     taskEntry?.emit("click");
 
@@ -739,6 +742,11 @@ describe("editor app shell preview panel", () => {
 
     expect(taskEntry?.getAttribute("aria-pressed")).toBe("true");
     expect(taskShell?.dataset.taskShellRegion).toBe("root");
+    expect(taskShell?.dataset.taskWindowScope).toBe("workspace");
+    expect(taskShell?.dataset.taskWindowRegion).toBe("window");
+    expect(taskShell?.getAttribute("role")).toBe("dialog");
+    expect(taskShell?.getAttribute("tabindex")).toBe("-1");
+    expect(taskShell?.getAttribute("aria-keyshortcuts")).toBe("Escape");
     expect(taskShell?.dataset.shellSurfaceId).toBe(shellSurfaces.psdImportTask.id);
     expect(taskShell?.dataset.shellSurfaceKind).toBe(shellSurfaces.psdImportTask.kind);
     expect(psdPanel).not.toBeNull();
@@ -753,8 +761,131 @@ describe("editor app shell preview panel", () => {
 
     findByAriaLabel(shell, "Back to authoring workspace")?.emit("click");
     findByAriaLabel(shell, "Close PSD import task")?.emit("click");
+    const escape = createTestEvent("keydown", "Escape");
+    taskShell?.emit("keydown", escape);
 
-    expect(calls).toEqual(["close", "close"]);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(escape.propagationStopped).toBe(true);
+    expect(calls).toEqual(["close", "close", "close"]);
+  });
+
+  it("routes Diagnostics / Evidence from the Toolbox into a workspace-scoped skeleton task window", () => {
+    const workflow = createWorkflow();
+    const opens: string[] = [];
+    const closedShell = renderShell(workflow, {
+      onOpenDiagnosticsEvidenceView() {
+        opens.push("diagnostics");
+      },
+      onOpenCodexAutomationView() {
+        opens.push("codex");
+      }
+    });
+    const diagnosticsEntry = findByToolboxItem(closedShell, "diagnostics");
+
+    expect(diagnosticsEntry).not.toBeNull();
+    expect(diagnosticsEntry?.disabled).toBe(false);
+    expect(diagnosticsEntry?.getAttribute("aria-pressed")).toBe("false");
+    expect(diagnosticsEntry?.textContent).toContain("Skeleton");
+    expect(findByTestId(closedShell, diagnosticsEvidenceViewSkeletonTestIds.root)).toBeNull();
+
+    diagnosticsEntry?.emit("click");
+    expect(opens).toEqual(["diagnostics"]);
+
+    const closes: string[] = [];
+    const routedShell = renderShell(workflow, {
+      activeTask: "diagnosticsEvidence",
+      onOpenDiagnosticsEvidenceView() {
+        opens.push("diagnostics");
+      },
+      onOpenCodexAutomationView() {
+        opens.push("codex");
+      },
+      onCloseActiveTask() {
+        closes.push("close");
+      }
+    });
+    const taskShell = findByShellSurfaceGroup(routedShell, "diagnostics-evidence");
+    const activeEntry = findByToolboxItem(routedShell, "diagnostics");
+
+    expect(activeEntry?.getAttribute("aria-pressed")).toBe("true");
+    expect(activeEntry?.textContent).toContain("Open");
+    expect(taskShell?.dataset.shellSurfaceId).toBe(shellSurfaces.diagnosticsEvidenceView.id);
+    expect(taskShell?.dataset.shellSurfaceKind).toBe(shellSurfaces.diagnosticsEvidenceView.kind);
+    expect(taskShell?.dataset.taskWindowScope).toBe("workspace");
+    expect(taskShell?.getAttribute("role")).toBe("dialog");
+    expect(findByTestId(taskShell ?? routedShell, diagnosticsEvidenceViewSkeletonTestIds.root)).not.toBeNull();
+    expect(taskShell?.textContent).toContain("Read-only skeleton");
+    expect(findByTestId(routedShell, editorTestIds.explicitPsdImportPanel)).toBeNull();
+
+    findByAriaLabel(routedShell, "Back to authoring workspace")?.emit("click");
+    findByAriaLabel(routedShell, "Close Diagnostics / Evidence view")?.emit("click");
+    const escape = createTestEvent("keydown", "Escape");
+    taskShell?.emit("keydown", escape);
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(escape.propagationStopped).toBe(true);
+    expect(closes).toEqual(["close", "close", "close"]);
+  });
+
+  it("routes Codex / Automation from the Toolbox into a bounded skeleton task window", () => {
+    const workflow = createWorkflow();
+    const opens: string[] = [];
+    const closedShell = renderShell(workflow, {
+      onOpenDiagnosticsEvidenceView() {
+        opens.push("diagnostics");
+      },
+      onOpenCodexAutomationView() {
+        opens.push("codex");
+      }
+    });
+    const codexEntry = findByToolboxItem(closedShell, "codex");
+
+    expect(codexEntry).not.toBeNull();
+    expect(codexEntry?.disabled).toBe(false);
+    expect(codexEntry?.getAttribute("aria-pressed")).toBe("false");
+    expect(codexEntry?.textContent).toContain("Skeleton");
+    expect(findCodexAutomationSkeleton(closedShell)).toBeNull();
+
+    codexEntry?.emit("click");
+    expect(opens).toEqual(["codex"]);
+
+    const closes: string[] = [];
+    const routedShell = renderShell(workflow, {
+      activeTask: "codexAutomation",
+      onOpenDiagnosticsEvidenceView() {
+        opens.push("diagnostics");
+      },
+      onOpenCodexAutomationView() {
+        opens.push("codex");
+      },
+      onCloseActiveTask() {
+        closes.push("close");
+      }
+    });
+    const taskShell = findByShellSurfaceGroup(routedShell, "codex-automation");
+    const activeEntry = findByToolboxItem(routedShell, "codex");
+    const skeleton = findCodexAutomationSkeleton(taskShell ?? routedShell);
+
+    expect(activeEntry?.getAttribute("aria-pressed")).toBe("true");
+    expect(activeEntry?.textContent).toContain("Open");
+    expect(taskShell?.dataset.shellSurfaceId).toBe(shellSurfaces.codexAutomationView.id);
+    expect(taskShell?.dataset.shellSurfaceKind).toBe(shellSurfaces.codexAutomationView.kind);
+    expect(taskShell?.dataset.taskWindowScope).toBe("workspace");
+    expect(taskShell?.getAttribute("role")).toBe("dialog");
+    expect(skeleton).not.toBeNull();
+    expect(skeleton?.textContent).toContain("Bounded read-only skeleton");
+    expect(skeleton?.textContent).toContain("Repo/Editor-side proposal generation unavailable");
+    expect(findByTestId(routedShell, diagnosticsEvidenceViewSkeletonTestIds.root)).toBeNull();
+    expect(findByTestId(routedShell, editorTestIds.explicitPsdImportPanel)).toBeNull();
+
+    findByAriaLabel(routedShell, "Back to authoring workspace")?.emit("click");
+    findByAriaLabel(routedShell, "Close Codex / Automation view")?.emit("click");
+    const escape = createTestEvent("keydown", "Escape");
+    taskShell?.emit("keydown", escape);
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(escape.propagationStopped).toBe(true);
+    expect(closes).toEqual(["close", "close", "close"]);
   });
 
   it("classifies existing panels into named shell surfaces without moving workflows", () => {
@@ -1160,6 +1291,8 @@ const renderShell = (
     readonly onImportPortableBundleText?: Parameters<typeof createEditorAppShell>[0]["onImportPortableBundleText"];
     readonly activeTask?: Parameters<typeof createEditorAppShell>[0]["activeTask"];
     readonly onOpenPsdImportTask?: Parameters<typeof createEditorAppShell>[0]["onOpenPsdImportTask"];
+    readonly onOpenDiagnosticsEvidenceView?: Parameters<typeof createEditorAppShell>[0]["onOpenDiagnosticsEvidenceView"];
+    readonly onOpenCodexAutomationView?: Parameters<typeof createEditorAppShell>[0]["onOpenCodexAutomationView"];
     readonly onCloseActiveTask?: Parameters<typeof createEditorAppShell>[0]["onCloseActiveTask"];
   } = {}
 ): TestElement =>
@@ -1174,6 +1307,12 @@ const renderShell = (
     ...(callbacks.onOpenPsdImportTask === undefined
       ? {}
       : { onOpenPsdImportTask: callbacks.onOpenPsdImportTask }),
+    ...(callbacks.onOpenDiagnosticsEvidenceView === undefined
+      ? {}
+      : { onOpenDiagnosticsEvidenceView: callbacks.onOpenDiagnosticsEvidenceView }),
+    ...(callbacks.onOpenCodexAutomationView === undefined
+      ? {}
+      : { onOpenCodexAutomationView: callbacks.onOpenCodexAutomationView }),
     ...(callbacks.onCloseActiveTask === undefined
       ? {}
       : { onCloseActiveTask: callbacks.onCloseActiveTask }),
@@ -1358,6 +1497,12 @@ const findByClassName = (root: TestElement, className: string): TestElement | nu
 const findByShellSurfaceGroup = (root: TestElement, group: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.shellSurfaceGroup === group);
 
+const findByToolboxItem = (root: TestElement, itemId: string): TestElement | null =>
+  root.queryByPredicate((element) => element.dataset.toolboxItemId === itemId);
+
+const findCodexAutomationSkeleton = (root: TestElement): TestElement | null =>
+  root.queryByPredicate((element) => element.dataset.codexAutomationSkeleton === "true");
+
 const findByWorkspaceRegion = (root: TestElement, region: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.workspaceRegion === region);
 
@@ -1432,11 +1577,20 @@ const readFormFieldValue = (field: TestElement): string => {
   return selected?.value ?? "";
 };
 
+interface TestDomEvent {
+  readonly type: string;
+  readonly key?: string;
+  defaultPrevented: boolean;
+  propagationStopped: boolean;
+  preventDefault(): void;
+  stopPropagation(): void;
+}
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
-  readonly listeners = new Map<string, Array<(event: { preventDefault(): void }) => void>>();
+  readonly listeners = new Map<string, Array<(event: TestDomEvent) => void>>();
   readonly style: Record<string, string> = {};
   readonly classList = {
     add: (...classNames: string[]) => {
@@ -1505,17 +1659,16 @@ class TestElement {
     return this.attributes.get(name) ?? null;
   }
 
-  addEventListener(type: string, listener: (event: { preventDefault(): void }) => void): void {
+  addEventListener(type: string, listener: (event: TestDomEvent) => void): void {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
-  emit(type: string): void {
-    const event = {
-      preventDefault() {}
-    };
+  emit(type: string, event: TestDomEvent = createTestEvent(type)): TestDomEvent {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event);
     }
+
+    return event;
   }
 
   setProperty(name: "value", value: string): void {
@@ -1548,6 +1701,19 @@ class TestElement {
     return this.queryByPredicate((element) => element.tagName === selector);
   }
 }
+
+const createTestEvent = (type: string, key?: string): TestDomEvent => ({
+  type,
+  ...(key === undefined ? {} : { key }),
+  defaultPrevented: false,
+  propagationStopped: false,
+  preventDefault() {
+    this.defaultPrevented = true;
+  },
+  stopPropagation() {
+    this.propagationStopped = true;
+  }
+});
 
 const installTestDocument = (): void => {
   const document = {

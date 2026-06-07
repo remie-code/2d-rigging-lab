@@ -35,11 +35,12 @@ Wave51 は、この画面設計を安全に実装していくための最初の�
 - Wave52 で PSD Import structured observation projector は Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API の最終surfaceではまだない。
 - production `data-testid` behavior dependency guard は standalone script と fixture regression として追加された。Wave52 で `check:testids` が standard `check` に統合され、`check:testids:fixtures` は利用可能だが standard `check` には含めない。
 - Wave53 final integration report/review `pass` により、Authoring Workspace v0 skeleton が live App Shell に統合され、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の基本配置ができた。PSD Import は Toolbox launcher から既存 Task Shell task として開ける。desktop/mobile smoke、既存 PSD focused paths、production `data-testid` guard、source/dependency guards は pass 記録済み。
+- Wave54 Domains A-H reports/reviews と Domain H verification `pass` により、workspace-scoped Task Window Shell v0、Toolboxから開く PSD Import task window route、Diagnostics / Evidence skeleton route、Codex / Automation skeleton route、selector/test-facing scope hardening、`taskWindowRoutingFocused` が実装・検証済み。Codex / Automation skeleton は LLM/provider integration、repo-side proposal generation、semantic recognition、auto-fix、automatic commit、external transport を追加していない。Wave54 final / Domain J は未完了。
 
 未実装範囲:
 
-- この overview に描く final visual redesign、full panel migration、final toolbox polish、modal/window framework は未実装。Wave53 の workspace layout は v0 skeleton に限る。
-- Diagnostics / Evidence View と Codex / Automation View の最終配置・表示は未実装。
+- この overview に描く final visual redesign、full panel migration、final toolbox polish、modal/window framework は未実装。Wave53 の workspace layout は v0 skeleton、Wave54 A-H の task window / separated surfaces は v0/skeleton に限る。
+- Diagnostics / Evidence View と Codex / Automation View は skeleton route として到達可能だが、最終配置・full表示・legacy panel migration は未実装。
 - Mesh generation/tool、Texture Atlas Task、Parameter Manager、Variant / Expression Manager のUI実装は進んでいない。
 - Legacy support panels には旧 evidence/debug/Codex-heavy UI が primary skeleton の下/周辺に残っている。
 
@@ -171,10 +172,10 @@ stateDiagram-v2
 
 ## 7. 未決事項
 
-- Toolboxは Wave53 v0 では左側 launcher として配置済み。最終の visual polish、icon/tooltip behavior、expanded label policy は未決。
-- Tool起動時の最終表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
-- PSD Import taskの最終形はmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
+- Toolboxは Wave53 v0 では左側 launcher として配置済み。Wave54 A-H では PSD Import / Diagnostics / Codex の task-window route が接続済み。最終の visual polish、icon/tooltip behavior、expanded label policy は未決。
+- Tool起動時の最終表現は、Wave54 A-H の workspace-scoped task window v0 を前提にしつつ、modal、task window、side panel、dedicated viewのどれを各tool/viewの基本にするかは未決。
+- PSD Import taskは Wave54 A-H では workspace-scoped task window として開く。final polish と全task/view共通の最終policyは未決。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
-- Wave52後の残債として、PSD Import / structural scaffold の可視DOM/text oracleをさらに structured observation / deterministic API / evidence surface へ移し、Codex-facing read APIや最終test-facing surfaceをどう整理するか。
+- Wave54 A-H後の残債として、PSD Import / structural scaffold の可視DOM/text oracleをさらに structured observation / deterministic API / evidence surface へ移し、Codex-facing read APIや最終test-facing surfaceをどう整理するか。
 - `check:testids:fixtures` を標準 quality gate または CI-only guard path に広げるか。

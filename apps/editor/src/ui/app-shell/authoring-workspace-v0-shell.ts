@@ -82,6 +82,12 @@ export const createAuthoringToolboxSurface = (options: EditorAppShellOptions): H
         case "viewer-runtime":
           options.onOpenViewerRuntimeSurface();
           break;
+        case "diagnostics":
+          options.onOpenDiagnosticsEvidenceView?.();
+          break;
+        case "codex":
+          options.onOpenCodexAutomationView?.();
+          break;
       }
     }
   });
@@ -262,6 +268,7 @@ const createToolboxViewItems = (
     ariaLabel: "Open Viewer / Runtime",
     tooltip: "Viewer / Runtime",
     iconText: "VR",
+    active: options.viewModel.viewerRuntime.isOpen,
     disabled: !options.viewModel.isPackageLoaded,
     ...(options.viewModel.isPackageLoaded ? {} : { disabledReason: "No package loaded" }),
     ...(options.viewModel.viewerRuntime.isOpen ? { status: "Open" } : {})
@@ -272,8 +279,12 @@ const createToolboxViewItems = (
     ariaLabel: "Open Diagnostics / Evidence",
     tooltip: "Diagnostics / Evidence",
     iconText: "DX",
-    disabled: true,
-    disabledReason: "Dedicated view is not available yet"
+    active: options.activeTask === "diagnosticsEvidence",
+    disabled: options.onOpenDiagnosticsEvidenceView === undefined,
+    ...(options.onOpenDiagnosticsEvidenceView === undefined
+      ? { disabledReason: "Diagnostics / Evidence skeleton route unavailable" }
+      : {}),
+    status: options.activeTask === "diagnosticsEvidence" ? "Open" : "Skeleton"
   },
   {
     id: "codex",
@@ -281,8 +292,12 @@ const createToolboxViewItems = (
     ariaLabel: "Open Codex / Automation",
     tooltip: "Codex / Automation",
     iconText: "CX",
-    disabled: true,
-    disabledReason: "Dedicated view is not available yet"
+    active: options.activeTask === "codexAutomation",
+    disabled: options.onOpenCodexAutomationView === undefined,
+    ...(options.onOpenCodexAutomationView === undefined
+      ? { disabledReason: "Codex / Automation skeleton route unavailable" }
+      : {}),
+    status: options.activeTask === "codexAutomation" ? "Open" : "Skeleton"
   }
 ];
 

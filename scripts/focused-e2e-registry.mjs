@@ -148,6 +148,12 @@ const focusedE2eMetadataById = {
     tags: ["assetIo", "sourceIntake", "browserPersistence", "aggregateIncluded"],
     aggregateInclusion: includedInEditorAggregate
   },
+  taskWindowRoutingFocused: {
+    purpose:
+      "Replay Wave54 App Shell task-window routing from the Toolbox for PSD Import, Diagnostics / Evidence, and Codex / Automation skeleton surfaces without PSD parsing or semantic import assertions.",
+    tags: ["appShell", "taskWindow", "routing", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   topologyUvPersistence: {
     purpose:
       "Replay bounded topology and UV edit persistence checks without automatic triangulation, atlas packing, renderer, pixel, or Cubism claims.",
@@ -192,6 +198,12 @@ const postWave42FocusedE2eRegistryOverlayEntries = [
     path: "apps/editor/e2e/psd-structural-initial-state-focused-smoke.mjs",
     command: "node apps/editor/e2e/psd-structural-initial-state-focused-smoke.mjs",
     category: "assetIoBoundary"
+  },
+  {
+    id: "taskWindowRoutingFocused",
+    path: "apps/editor/e2e/task-window-routing-focused-smoke.mjs",
+    command: "node apps/editor/e2e/task-window-routing-focused-smoke.mjs",
+    category: "editorAuthoringPersistence"
   }
 ];
 

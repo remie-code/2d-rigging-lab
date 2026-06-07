@@ -12,6 +12,7 @@ import {
   editorProjectStorageKey,
   editorTestIds
 } from "./test-ids.mjs";
+import { openExplicitPsdImportTask } from "./selector-scopes.mjs";
 
 const sampleFileUrl = new URL("../../../test_data/sample_model.psd", import.meta.url);
 const sampleSummaryUrl = new URL(
@@ -184,7 +185,7 @@ const readSampleEvidence = async () => {
 
 const assertInitialExplicitPsdImportState = async (page, label) => {
   await waitForText(page, editorTestIds.explicitPsdImportStatus, "No PSD selected");
-  await waitForText(page, editorTestIds.explicitPsdImportStatus, targetLayers[0].sourceLayerId);
+  await waitForText(page, editorTestIds.explicitPsdImportStatus, "1 selected PSD leaf layer");
   await waitForText(page, editorTestIds.explicitPsdImportSource, "User-selected PSD file only");
   await waitForText(page, editorTestIds.explicitPsdImportDocument, "No parsed PSD document metadata");
   await waitForText(page, editorTestIds.explicitPsdImportLayerTree, "No parsed PSD layer tree");
@@ -242,9 +243,16 @@ const assertParsedExplicitPsdImportState = async (page, sample, label) => {
       failures.push(`${key}: expected integer >= ${minimum}, received ${JSON.stringify(section[key])}`);
     }
   };
+  const controlFacts = {
+    "Selected layer control": state.selectedLayerControlValue,
+    "Batch layer refs control": state.batchLayerRefsControlValue.trim()
+  };
 
   expectText("status", state.statusText, "PSD parsed in browser session");
+  expectText("status", state.statusText, "1 selected PSD leaf layer");
   expectText("panel", state.panelText, sample.fileName);
+  expectFact(controlFacts, "Selected layer control", targetLayers[0].sourceLayerId);
+  expectFact(controlFacts, "Batch layer refs control", targetLayers[0].sourceLayerId);
   expectFact(state.sourceFacts, "Filename", sample.fileName);
   expectFact(state.sourceFacts, "Byte length", sample.byteLengthLabel);
   expectFact(state.sourceFacts, "Intake", "explicitFile");
@@ -1067,18 +1075,6 @@ const waitForTestId = async (page, testId) => {
     { timeoutMs: 8_000 },
     testId
   );
-};
-
-const openExplicitPsdImportTask = async (page) => {
-  const isOpen = await page.evaluate(
-    (panelId) => document.querySelector(`[data-testid="${panelId}"]`) !== null,
-    editorTestIds.explicitPsdImportPanel
-  );
-  if (!isOpen) {
-    await waitForTestId(page, editorTestIds.psdImportTaskOpen);
-    await clickTestId(page, editorTestIds.psdImportTaskOpen);
-  }
-  await waitForTestId(page, editorTestIds.explicitPsdImportPanel);
 };
 
 const waitForText = async (page, testId, expectedText, timeoutMs = 15_000) => {

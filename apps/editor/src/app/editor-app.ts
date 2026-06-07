@@ -39,6 +39,14 @@ export function mountEditorApp(root: HTMLElement): void {
           activeTask = "psdImport";
           render();
         },
+        onOpenDiagnosticsEvidenceView() {
+          activeTask = "diagnosticsEvidence";
+          render();
+        },
+        onOpenCodexAutomationView() {
+          activeTask = "codexAutomation";
+          render();
+        },
         onCloseActiveTask() {
           activeTask = null;
           render();
@@ -341,10 +349,27 @@ export function mountEditorApp(root: HTMLElement): void {
         }
       })
     );
+
+    focusActiveWorkspaceTaskWindow(root, activeTask);
   };
 
   render();
 }
+
+const focusActiveWorkspaceTaskWindow = (
+  shell: HTMLElement,
+  activeTask: EditorAppShellActiveTask
+): void => {
+  if (activeTask === null) {
+    return;
+  }
+
+  shell
+    .querySelector<HTMLElement>(
+      '[data-task-window-scope="workspace"][data-task-window-region="window"]'
+    )
+    ?.focus();
+};
 
 const triggerPortableBundleDownload = (
   parent: HTMLElement,

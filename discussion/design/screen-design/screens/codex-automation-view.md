@@ -1,6 +1,6 @@
 # Codex / Automation View 画面仕様
 
-> 状態: Draft screen spec。
+> 状態: Draft screen spec。Wave54 Domains A-H `pass` / Domain H verification `pass` により、bounded read-only / status-only skeleton route として到達可能。full view / provider integration は未完了。
 
 ## 1. 役割
 
@@ -43,3 +43,4 @@ Codex / Automation Viewは、Codex proposal review、AI approval、AI transcript
 - Codex-facing structural execute/stale parityをこのviewでどのように示すか。
 - PSD Import TaskのHuman UIをCodex観測用にverbose化せず、deterministic command / operation APIで同等操作を実行できる状態をどう示すか。
 - Wave51ではこのViewの最終UIは未実装。Domain Cはshell surface metadataとして分類し、Domain DはPSD Import Task observationの詳細導線を準備しただけで、Codex / Automation Viewへのpanel migrationやstructural-specific execute/stale parityは後続waveに残る。
+- Wave54 A-H では Codex / Automation は bounded read-only / status-only skeleton route として Toolbox から到達可能になった。これは LLM/provider integration、repo-side proposal generation、semantic recognition、auto-rigging、auto-fix、automatic commit、external transport、または full Codex / Automation View 完成ではない。

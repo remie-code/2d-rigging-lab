@@ -17,6 +17,10 @@ import {
   runSourceIntakeWorkflow,
   sourceIntakeSmoke
 } from "./source-intake-smoke.mjs";
+import {
+  selectorScopes,
+  waitForScopedText
+} from "./selector-scopes.mjs";
 import { startOrReuseEditorServer } from "./vite-server.mjs";
 
 export const topologyUvSmokeViewports = [
@@ -193,10 +197,10 @@ const assertTopologyDrawableCreated = async (page) => {
   const rowId = createDrawableRowTestId(smokeDrawable.drawableId);
 
   await waitForText(page, editorTestIds.drawableResult, "Drawable preset committed");
-  await waitForText(page, rowId, smokeDrawable.displayName);
-  await waitForText(page, rowId, smokeDrawable.drawableId);
-  await waitForText(page, rowId, smokeDrawable.meshId);
-  await waitForText(page, rowId, "9 vertices / 8 triangles");
+  await waitForScopedText(page, selectorScopes.legacyDrawableAuthoring, rowId, smokeDrawable.displayName);
+  await waitForScopedText(page, selectorScopes.legacyDrawableAuthoring, rowId, smokeDrawable.drawableId);
+  await waitForScopedText(page, selectorScopes.legacyDrawableAuthoring, rowId, smokeDrawable.meshId);
+  await waitForScopedText(page, selectorScopes.legacyDrawableAuthoring, rowId, "9 vertices / 8 triangles");
   await waitForText(page, editorTestIds.meshCanvasStatus, smokeDrawable.meshId);
   await waitForText(page, editorTestIds.meshCanvasStatus, "9 canvas targets");
   await waitForText(page, editorTestIds.meshTopologyStatus, smokeDrawable.meshId);
@@ -566,8 +570,18 @@ const assertTopologyUvStateAfterLoad = async (page) => {
     editorTestIds.operationLogSummary,
     "importPsdSourceAsset, createDrawable, generateMesh, addMeshVertex, addMeshTriangle, moveMeshUvPoint"
   );
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "10 vertices / 9 triangles");
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    smokeDrawable.meshId
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "10 vertices / 9 triangles"
+  );
   await waitForText(page, editorTestIds.meshCanvasStatus, smokeDrawable.meshId);
   await waitForText(page, editorTestIds.meshCanvasStatus, "10 canvas targets");
   await waitForText(page, editorTestIds.meshCanvasStatus, "1 selected vertex");

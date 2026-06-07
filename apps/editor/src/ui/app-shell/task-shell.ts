@@ -15,11 +15,15 @@ export interface TaskShellAffordanceOptions {
   readonly onClick?: () => void | Promise<void>;
 }
 
+export type TaskShellState = "ready" | "loading" | "error" | "disabled";
+
 export interface TaskShellOptions {
   readonly surface: ShellSurfaceDefinition;
   readonly surfaceMetadata?: ShellSurfaceMetadataOptions;
   readonly title: string;
   readonly status: string;
+  readonly state?: TaskShellState;
+  readonly stateMessage?: string;
   readonly titleId?: string;
   readonly statusId?: string;
   readonly back?: TaskShellAffordanceOptions | null;
@@ -33,11 +37,33 @@ export interface TaskShellOptions {
 
 export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   const shell = document.createElement("section");
-  shell.className = `editor-task-shell task-shell task-shell--${options.surface.kind}`;
+  const state = options.state ?? "ready";
+  shell.className = [
+    "editor-task-shell",
+    "editor-task-shell--window",
+    `editor-task-shell--state-${state}`,
+    "task-shell",
+    "task-shell--workspace-window",
+    `task-shell--${options.surface.kind}`,
+    `task-shell--state-${state}`
+  ].join(" ");
+  shell.setAttribute("role", "dialog");
+  shell.setAttribute("aria-modal", "false");
   shell.setAttribute("aria-labelledby", resolveTaskShellTitleId(options));
   shell.setAttribute("aria-describedby", resolveTaskShellStatusId(options));
-  assignTaskShellRegion(shell, "root");
+  shell.setAttribute("tabindex", "-1");
+  shell.tabIndex = -1;
+  shell.dataset.taskWindowScope = "workspace";
+  shell.dataset.taskWindowState = state;
+  if (state === "loading") {
+    shell.setAttribute("aria-busy", "true");
+  }
+  if (state === "disabled") {
+    shell.setAttribute("aria-disabled", "true");
+  }
+  assignTaskShellRegion(shell, "root", "window");
   applyShellSurfaceMetadata(shell, options.surface, options.surfaceMetadata);
+  installTaskShellKeyboardAffordances(shell, options);
 
   const header = document.createElement("header");
   header.className = "editor-task-shell__header task-shell__header";
@@ -52,6 +78,7 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   title.className = "editor-task-shell__title task-shell__title";
   title.id = resolveTaskShellTitleId(options);
   title.textContent = options.title;
+  assignTaskWindowRegion(title, "title");
 
   const status = document.createElement("p");
   status.className = "editor-task-shell__status task-shell__status";
@@ -71,6 +98,11 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   }
 
   shell.append(header);
+
+  const stateRegion = createTaskShellStateRegion(options);
+  if (stateRegion !== null) {
+    shell.append(stateRegion);
+  }
 
   const diagnostics = createTaskShellSlotRegion(
     "diagnostics",
@@ -93,6 +125,26 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   }
 
   return shell;
+};
+
+const installTaskShellKeyboardAffordances = (
+  shell: HTMLElement,
+  options: TaskShellOptions
+): void => {
+  if (!canInvokeTaskShellAffordance(options.close)) {
+    return;
+  }
+
+  shell.setAttribute("aria-keyshortcuts", "Escape");
+  shell.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    void options.close?.onClick?.();
+  });
 };
 
 const createTaskShellNavigation = (options: TaskShellOptions): HTMLElement | null => {
@@ -132,6 +184,8 @@ const createTaskShellAffordanceButton = (
   button.type = "button";
   button.textContent = affordance.label ?? defaultLabel;
   button.setAttribute("aria-label", affordance.ariaLabel);
+  button.dataset.taskShellAffordance = kind;
+  button.dataset.taskWindowAffordance = kind;
 
   if (affordance.title !== undefined) {
     button.setAttribute("title", affordance.title);
@@ -154,6 +208,17 @@ const createTaskShellAffordanceButton = (
 
   return button;
 };
+
+const canInvokeTaskShellAffordance = (
+  affordance: TaskShellAffordanceOptions | null | undefined
+): affordance is TaskShellAffordanceOptions & {
+  readonly onClick: () => void | Promise<void>;
+} =>
+  affordance !== undefined &&
+  affordance !== null &&
+  affordance.onClick !== undefined &&
+  affordance.disabled !== true &&
+  affordance.busy !== true;
 
 const createTaskShellActions = (options: TaskShellOptions): HTMLElement | null => {
   const primaryAction = createTaskShellSlotRegion(
@@ -189,6 +254,38 @@ const createTaskShellActions = (options: TaskShellOptions): HTMLElement | null =
   return actions;
 };
 
+const createTaskShellStateRegion = (options: TaskShellOptions): HTMLElement | null => {
+  const state = options.state ?? "ready";
+  if (state === "ready" && options.stateMessage === undefined) {
+    return null;
+  }
+
+  const region = document.createElement("p");
+  region.className = [
+    "editor-task-shell__state",
+    `editor-task-shell__state--${state}`,
+    "task-shell__state",
+    `task-shell__state--${state}`
+  ].join(" ");
+  region.textContent = options.stateMessage ?? createDefaultTaskShellStateMessage(state);
+  region.setAttribute("role", state === "error" ? "alert" : "status");
+  assignTaskShellRegion(region, "state");
+  return region;
+};
+
+const createDefaultTaskShellStateMessage = (state: TaskShellState): string => {
+  switch (state) {
+    case "loading":
+      return "Task is loading.";
+    case "error":
+      return "Task needs attention.";
+    case "disabled":
+      return "Task is currently unavailable.";
+    case "ready":
+      return "";
+  }
+};
+
 const createTaskShellSlotRegion = (
   region: string,
   tagName: keyof HTMLElementTagNameMap,
@@ -221,9 +318,19 @@ const normalizeTaskShellSlot = (slot: TaskShellSlot): readonly HTMLElement[] => 
 
 const assignTaskShellRegion = <ElementType extends HTMLElement>(
   element: ElementType,
-  region: string
+  region: string,
+  taskWindowRegion = region
 ): ElementType => {
   element.dataset.taskShellRegion = region;
+  assignTaskWindowRegion(element, taskWindowRegion);
+  return element;
+};
+
+const assignTaskWindowRegion = <ElementType extends HTMLElement>(
+  element: ElementType,
+  region: string
+): ElementType => {
+  element.dataset.taskWindowRegion = region;
   return element;
 };
 

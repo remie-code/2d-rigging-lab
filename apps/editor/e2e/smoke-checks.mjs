@@ -36,6 +36,16 @@ import { runPartTextureLayerPersistenceSmoke } from "./part-texture-layer-persis
 import { runLayerTreeDirectManipulationSmoke } from "./layer-tree-direct-manipulation-smoke.mjs";
 import { runTutorialMiniModelPersistenceSmoke } from "./tutorial-mini-model-persistence-smoke.mjs";
 import { runProductPreflightE2eSmoke } from "./product-preflight-smoke.mjs";
+import {
+  assertScopedTestIdUnique,
+  assertScopedTextExcludes,
+  assertScopedTextIncludes,
+  clickScopedTestId,
+  readScopedText,
+  selectorScopes,
+  waitForScopedTestId,
+  waitForScopedText
+} from "./selector-scopes.mjs";
 
 const previewSampleParameterId = "param_preview_body_yaw";
 const smokeDrawable = {
@@ -352,23 +362,49 @@ const runCreateDrawableWorkflow = async (
   await waitForTestId(page, editorTestIds.drawableAuthoringPanel);
   await waitForTestId(page, editorTestIds.drawableCreateForm);
   await waitForTestId(page, editorTestIds.drawableCreateSubmit);
-  await waitForTestId(page, editorTestIds.drawableList);
+  await waitForScopedTestId(page, selectorScopes.legacyDrawableAuthoring, editorTestIds.drawableList);
   await scrollTestIdIntoView(page, editorTestIds.drawableAuthoringPanel);
 
   await assertDrawableAuthoringPanelReachable(page, viewport);
   await assertDrawableAuthoringAccessibleNames(page);
-  await assertTextIncludes(page, editorTestIds.drawableList, "Body");
-  await assertTextIncludes(page, editorTestIds.drawableList, "draw_body");
+  await assertScopedTestIdUnique(page, selectorScopes.legacyDrawableAuthoring, editorTestIds.drawableList);
+  await assertScopedTextIncludes(page, selectorScopes.legacyDrawableAuthoring, editorTestIds.drawableList, "Body");
+  await assertScopedTextIncludes(page, selectorScopes.legacyDrawableAuthoring, editorTestIds.drawableList, "draw_body");
 
   await setCreateDrawableFormValues(page, smokeDrawable);
   await clickTestId(page, editorTestIds.drawableCreateSubmit);
 
   await waitForText(page, editorTestIds.drawableResult, "Drawable preset committed");
-  await waitForText(page, editorTestIds.drawableList, smokeDrawable.displayName);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.drawableId);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    editorTestIds.drawableList,
+    smokeDrawable.displayName
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    smokeDrawable.drawableId
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    smokeDrawable.meshId
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "84, 24 / 28 x 36"
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "9 vertices / 8 triangles"
+  );
   await waitForOperationLogEntryCount(page, expectedOperationLogEntryCount);
   await waitForText(page, editorTestIds.operationLogSummary, expectedOperationTypesText);
   await waitForText(page, editorTestIds.generatedEvidenceSummary, "Runtime snapshots");
@@ -461,9 +497,18 @@ const assertPreviewPanelReachable = async (page, viewport) => {
 };
 
 const restoreLoadedTextureBackedPreview = async (page, smokeDrawable) => {
-  await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
+  await clickScopedTestId(
+    page,
+    selectorScopes.partsTree,
+    createDrawableVisibilityToggleTestId(smokeDrawable.drawableId)
+  );
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Visible");
+  await waitForScopedText(
+    page,
+    selectorScopes.partsTree,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "Visible"
+  );
   await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
   await waitForText(page, editorTestIds.previewSummary, "1 pattern / 1 fallback");
   await assertTextureBackedPreviewDrawable(page, smokeDrawable.drawableId);
@@ -675,7 +720,7 @@ const assertDrawableAuthoringAccessibleNames = async (page) => {
     const headingId = panel?.getAttribute("aria-labelledby");
     const form = document.querySelector(`[data-testid="${ids.form}"]`);
     const submit = document.querySelector(`[data-testid="${ids.submit}"]`);
-    const list = document.querySelector(`[data-testid="${ids.list}"]`);
+    const list = panel?.querySelector(`[data-testid="${ids.list}"]`);
     const controlLabels = [...(form?.querySelectorAll("input, select") ?? [])].map((control) => {
       const label = control.closest("label");
       const labelText = label === null
@@ -801,33 +846,56 @@ const setCreateDrawableFormValues = async (page, drawable) => {
   }, drawable);
 };
 
-const readCreatedDrawableState = async (page) =>
-  page.evaluate((ids, drawableId) => {
-    const list = document.querySelector(`[data-testid="${ids.list}"]`);
-    const row = document.querySelector(`[data-testid="${ids.row}"]`);
+const readCreatedDrawableState = async (page) => {
+  const rowText = await readScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId)
+  );
+
+  return page.evaluate((ids, drawableId, listText) => {
     const visual = document.querySelector(`[data-testid="${ids.visual}"]`);
     const summary = document.querySelector(`[data-testid="${ids.summary}"]`);
     const drawable = visual?.querySelector(`[data-drawable-id="${drawableId}"]`);
 
     return {
       drawableId,
-      listText: row?.textContent ?? list?.textContent ?? "",
+      listText,
       previewSummary: summary?.textContent ?? "",
       visualPoints: drawable?.getAttribute("points") ?? ""
     };
   }, {
-    list: editorTestIds.drawableList,
-    row: createDrawableRowTestId(smokeDrawable.drawableId),
     visual: editorTestIds.previewVisual,
     summary: editorTestIds.previewSummary
-  }, smokeDrawable.drawableId);
+  }, smokeDrawable.drawableId, rowText);
+};
 
 const assertCreatedDrawableRestoredAfterLoad = async (page) => {
   await waitForText(page, editorTestIds.drawableResult, "Drawable preset ready");
-  await waitForText(page, editorTestIds.drawableList, smokeDrawable.displayName);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), smokeDrawable.meshId);
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "84, 24 / 28 x 36");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "9 vertices / 8 triangles");
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    editorTestIds.drawableList,
+    smokeDrawable.displayName
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    smokeDrawable.meshId
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "84, 24 / 28 x 36"
+  );
+  await waitForScopedText(
+    page,
+    selectorScopes.legacyDrawableAuthoring,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "9 vertices / 8 triangles"
+  );
 };
 
 const assertInitialAiApprovalRendered = async (page) => {
@@ -1022,8 +1090,8 @@ const resetProject = async (page) => {
   await waitForText(page, editorTestIds.parameterList, "Preview Body Yaw");
   await waitForText(page, editorTestIds.previewSummary, "0 changes");
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 1 total");
-  await assertTextIncludes(page, editorTestIds.drawableList, "Body");
-  await assertTextExcludes(page, editorTestIds.drawableList, smokeDrawable.displayName);
+  await assertScopedTextIncludes(page, selectorScopes.partsTree, editorTestIds.drawableList, "Body");
+  await assertScopedTextExcludes(page, selectorScopes.partsTree, editorTestIds.drawableList, smokeDrawable.displayName);
   await waitForText(page, editorTestIds.aiApprovalStatus, "Idle");
   await waitForTestId(page, editorTestIds.aiTranscriptEmpty);
   await assertElementAbsent(page, editorTestIds.aiTranscriptEvents);

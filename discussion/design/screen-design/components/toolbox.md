@@ -10,7 +10,7 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 
 ## 1.1 実装状況
 
-Wave53 final integration report/review `pass` により、Toolbox v0 は Authoring Workspace 左側の launcher surface として実装・統合済みである。PSD Import はこの launcher から既存 Task Shell task として開ける。現時点の実装は launcher grouping、active/disabled/badge/status、accessible label、`title` tooltip text を扱う v0 であり、final icon set、hover/focus tooltip component、expanded label policy、final visual polish は未完了である。
+Wave53 final integration report/review `pass` により、Toolbox v0 は Authoring Workspace 左側の launcher surface として実装・統合済みである。Wave54 A-H では PSD Import、Diagnostics / Evidence、Codex / Automation を workspace-scoped task window / skeleton route として開ける。現時点の実装は launcher grouping、active/disabled/badge/status、accessible label、`title` tooltip text、bounded task-window route launch を扱う v0 であり、final icon set、hover/focus tooltip component、expanded label policy、final visual polish は未完了である。
 
 ## 2. 基本形
 
@@ -48,7 +48,7 @@ Wave53 final integration report/review `pass` により、Toolbox v0 は Authori
 | Task | まとまった作業画面を開く | Task window / task view | Import, Parameter Manager, Variant / Expression, Texture Atlas, Storage, Validate |
 | View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer, Diagnostics, Codex |
 
-Viewerは専用画面として開く。Diagnostics / Codexは、情報量や作業文脈に応じてdrawer / side view / dedicated viewのいずれかを後続議論で決める。
+Viewerは専用画面として開く。Diagnostics / Codexは、Wave54 A-H では bounded skeleton route として workspace-scoped task window に開けるが、情報量や作業文脈に応じた final drawer / side view / dedicated view policy は後続議論で決める。
 
 ## 4. Icon Policy
 
@@ -98,7 +98,7 @@ Icon候補は最終実装時に利用可能な `lucide` icon名へ調整して�
 
 ## 7. 未決事項
 
-- Toolboxは Wave53 v0 では左端配置済み。final visual / accessibility policy として左端固定を確定するかは未決。
+- Toolboxは Wave53 v0 では左端配置済み。Wave54 A-H では PSD Import / Diagnostics / Codex route 接続済み。final visual / accessibility policy として左端固定を確定するかは未決。
 - label expanded modeを常時提供するか、将来のaccessibility preferenceに回すか。
-- Task itemをmodal、task window、dedicated task viewのどれで開くか。
-- Diagnostics / Codex viewをdrawerにするか、dedicated viewにするか。
+- Task itemは Wave54 A-H で workspace-scoped task window v0 として実装済みだが、全task向け final modal / task-window / dedicated task view policy は未決。
+- Diagnostics / Codex skeleton は Wave54 A-H で task window route として到達可能だが、final viewをdrawerにするか、dedicated viewにするかは未決。

@@ -5,6 +5,12 @@ import {
   createDrawableVisibilityToggleTestId,
   editorTestIds
 } from "./test-ids.mjs";
+import {
+  assertScopedTestIdUnique,
+  clickScopedTestId,
+  selectorScopes,
+  waitForScopedText
+} from "./selector-scopes.mjs";
 
 const sampleBodyDrawableId = "draw_body";
 
@@ -31,37 +37,64 @@ export const runLayerControlsWorkflow = async ({
   });
   await assertLayerControlAccessibleNames(page, smokeDrawable);
 
-  await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
+  await clickScopedTestId(
+    page,
+    selectorScopes.partsTree,
+    createDrawableVisibilityToggleTestId(smokeDrawable.drawableId)
+  );
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Hidden");
+  await waitForScopedText(
+    page,
+    selectorScopes.partsTree,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "Hidden"
+  );
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 2 total");
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 1);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, false);
 
-  await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
+  await clickScopedTestId(
+    page,
+    selectorScopes.partsTree,
+    createDrawableVisibilityToggleTestId(smokeDrawable.drawableId)
+  );
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Visible");
+  await waitForScopedText(
+    page,
+    selectorScopes.partsTree,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "Visible"
+  );
   await waitForText(page, editorTestIds.previewSummary, "2 visible / 2 total");
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 2);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, true);
 
-  await clickTestId(page, createDrawableMoveUpTestId(sampleBodyDrawableId));
+  await clickScopedTestId(page, selectorScopes.partsTree, createDrawableMoveUpTestId(sampleBodyDrawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setDrawOrder committed");
   await waitForLayerOrder(page, [smokeDrawable.drawableId, sampleBodyDrawableId]);
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 3);
 
-  await clickTestId(page, createDrawableMoveDownTestId(sampleBodyDrawableId));
+  await clickScopedTestId(page, selectorScopes.partsTree, createDrawableMoveDownTestId(sampleBodyDrawableId));
   await waitForText(page, editorTestIds.drawableLayerStatus, "setDrawOrder committed");
   await waitForLayerOrder(page, [sampleBodyDrawableId, smokeDrawable.drawableId]);
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 4);
 
-  await clickTestId(page, createDrawableMoveUpTestId(sampleBodyDrawableId));
+  await clickScopedTestId(page, selectorScopes.partsTree, createDrawableMoveUpTestId(sampleBodyDrawableId));
   await waitForLayerOrder(page, [smokeDrawable.drawableId, sampleBodyDrawableId]);
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 5);
 
-  await clickTestId(page, createDrawableVisibilityToggleTestId(smokeDrawable.drawableId));
+  await clickScopedTestId(
+    page,
+    selectorScopes.partsTree,
+    createDrawableVisibilityToggleTestId(smokeDrawable.drawableId)
+  );
   await waitForText(page, editorTestIds.drawableLayerStatus, "setRuntimeVisibility committed");
-  await waitForText(page, createDrawableRowTestId(smokeDrawable.drawableId), "Hidden");
+  await waitForScopedText(
+    page,
+    selectorScopes.partsTree,
+    createDrawableRowTestId(smokeDrawable.drawableId),
+    "Hidden"
+  );
   await waitForText(page, editorTestIds.previewSummary, "1 visible / 2 total");
   await waitForOperationLogEntryCount(page, initialOperationLogEntryCount + 6);
   await assertPreviewDrawablePresent(page, smokeDrawable.drawableId, false);
@@ -167,9 +200,15 @@ export const assertLayerStateAfterLoad = async ({
 };
 
 const assertLayerControlAccessibleNames = async (page, smokeDrawable) => {
-  const names = await page.evaluate((ids) => {
+  await assertScopedTestIdUnique(page, selectorScopes.partsTree, editorTestIds.drawableList);
+  const names = await page.evaluate((ids, scope) => {
+    const scopeRoot = window.__editorE2eSelectorScopes.findScopeRoot(scope);
+    if (!(scopeRoot instanceof HTMLElement)) {
+      throw new Error(`Missing selector scope ${scope.label}.`);
+    }
+
     const readButton = (testId) => {
-      const element = document.querySelector(`[data-testid="${testId}"]`);
+      const element = scopeRoot.querySelector(`[data-testid="${testId}"]`);
 
       if (!(element instanceof HTMLButtonElement)) {
         throw new Error(`Missing layer control button ${testId}.`);
@@ -202,7 +241,7 @@ const assertLayerControlAccessibleNames = async (page, smokeDrawable) => {
     createdVisibility: createDrawableVisibilityToggleTestId(smokeDrawable.drawableId),
     createdMoveUp: createDrawableMoveUpTestId(smokeDrawable.drawableId),
     createdMoveDown: createDrawableMoveDownTestId(smokeDrawable.drawableId)
-  });
+  }, selectorScopes.partsTree);
 
   const expected = {
     statusName: "Drawable layer status",
@@ -276,20 +315,27 @@ const assertLayerControlState = async (
   }
 };
 
-const readLayerControlState = async (page, smokeDrawable) =>
-  page.evaluate((ids, drawableIds) => {
-    const rows = [...(document.querySelector(`[data-testid="${ids.list}"]`)?.querySelectorAll("tbody tr") ?? [])];
+const readLayerControlState = async (page, smokeDrawable) => {
+  await assertScopedTestIdUnique(page, selectorScopes.partsTree, editorTestIds.drawableList);
+
+  return page.evaluate((ids, scope, drawableIds) => {
+    const scopeRoot = window.__editorE2eSelectorScopes.findScopeRoot(scope);
+    if (!(scopeRoot instanceof HTMLElement)) {
+      throw new Error(`Missing selector scope ${scope.label}.`);
+    }
+
+    const rows = [...(scopeRoot.querySelector(`[data-testid="${ids.list}"]`)?.querySelectorAll("tbody tr") ?? [])];
     const order = rows.map((row) => row.getAttribute("data-testid")?.replace("drawable.row.", "") ?? "");
     const rowTextByDrawableId = Object.fromEntries(
       drawableIds.map((drawableId) => [
         drawableId,
-        document.querySelector(`[data-testid="drawable.row.${drawableId}"]`)?.textContent ?? ""
+        scopeRoot.querySelector(`[data-testid="drawable.row.${drawableId}"]`)?.textContent ?? ""
       ])
     );
     const disabledByDrawableId = Object.fromEntries(
       drawableIds.map((drawableId) => {
-        const up = document.querySelector(`[data-testid="drawable.moveUp.${drawableId}"]`);
-        const down = document.querySelector(`[data-testid="drawable.moveDown.${drawableId}"]`);
+        const up = scopeRoot.querySelector(`[data-testid="drawable.moveUp.${drawableId}"]`);
+        const down = scopeRoot.querySelector(`[data-testid="drawable.moveDown.${drawableId}"]`);
 
         if (!(up instanceof HTMLButtonElement) || !(down instanceof HTMLButtonElement)) {
           throw new Error(`Missing move controls for ${drawableId}.`);
@@ -304,7 +350,8 @@ const readLayerControlState = async (page, smokeDrawable) =>
   }, {
     list: editorTestIds.drawableList,
     previewSummary: editorTestIds.previewSummary
-  }, [sampleBodyDrawableId, smokeDrawable.drawableId]);
+  }, selectorScopes.partsTree, [sampleBodyDrawableId, smokeDrawable.drawableId]);
+};
 
 const assertPreviewDrawablePresent = async (page, drawableId, expectedPresent) => {
   const present = await page.evaluate((ids, id) => {
@@ -321,30 +368,21 @@ const assertPreviewDrawablePresent = async (page, drawableId, expectedPresent) =
 };
 
 const waitForLayerOrder = async (page, expectedOrder) => {
+  await assertScopedTestIdUnique(page, selectorScopes.partsTree, editorTestIds.drawableList);
   await page.waitFor(
     `drawable layer order ${expectedOrder.join(", ")}`,
-    (ids, order) => {
-      const rows = [...(document.querySelector(`[data-testid="${ids.list}"]`)?.querySelectorAll("tbody tr") ?? [])];
+    (ids, scope, order) => {
+      const scopeRoot = window.__editorE2eSelectorScopes.findScopeRoot(scope);
+      const rows = [...(scopeRoot?.querySelector(`[data-testid="${ids.list}"]`)?.querySelectorAll("tbody tr") ?? [])];
       const actual = rows.map((row) => row.getAttribute("data-testid")?.replace("drawable.row.", "") ?? "");
 
       return JSON.stringify(actual) === JSON.stringify(order);
     },
     { timeoutMs: 8_000 },
     { list: editorTestIds.drawableList },
+    selectorScopes.partsTree,
     expectedOrder
   );
-};
-
-const clickTestId = async (page, testId) => {
-  await page.evaluate((id) => {
-    const element = document.querySelector(`[data-testid="${id}"]`);
-
-    if (!(element instanceof HTMLElement)) {
-      throw new Error(`Missing element for test id ${id}.`);
-    }
-
-    element.click();
-  }, testId);
 };
 
 const waitForTestId = async (page, testId) => {

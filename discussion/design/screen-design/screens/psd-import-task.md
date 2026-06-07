@@ -1,12 +1,12 @@
 # PSD Import Task 画面仕様
 
-> 状態: Draft screen spec。Wave52 Domains D/E `pass` により、bounded PSD Import Task Migration v0 の実装状況を反映済み。
+> 状態: Draft screen spec。Wave54 Domains A-H `pass` / Domain H verification `pass` により、PSD Import の workspace-scoped task window route と bounded content polish を反映済み。Wave54 final / Domain J は未完了。
 
 ## 1. 役割
 
 PSD Import Taskは、PSD file選択、parse、tree inspection、import preview、approval、commitを行うtask画面である。
 
-通常workspaceを埋め尽くす常設panelではなく、toolboxまたはempty stateから呼び出すtask window / modal / dedicated task panelとして扱う。
+通常workspaceを埋め尽くす常設panelではなく、Wave54 A-H では Toolbox から呼び出す workspace-scoped task window v0 として扱う。全task/view共通の final modal / task-window / dedicated-view policy は未確定である。
 
 PSD import / structural scaffoldには、人間向けUI、Codex-facing surface、test-facing surface、evidence surfaceの4つの観測面がある。PSD Import Taskは人間向けUIの主画面であり、Codexやtestのためにverboseなdebug情報を常時表示しない。
 
@@ -188,5 +188,6 @@ PSD Import Taskからは、必要に応じてDiagnostics / Evidence Viewを開�
 - Wave51 Domain DでPSD Import Task structured observation projectorはpreparedになった。
 - Wave52 Domain D/Eで、PSD Import は Empty / Authoring Workspace から Task Shell task として開けるようになり、default では常設の巨大 workspace panel ではなくなった。Generic Task Shell / Task Chrome と PSD Import Task Human UI が接続され、structured observation projector は Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費されている。
 - Wave52 Domain Eで `psdStructuralInitialStateFocused`、`psdImportPlanCodexFocused`、`psdImportPlanFocused`、`psdMultiLayerBatchFocused`、`psdImportFocused` が pass し、production `data-testid` guard は `check:testids` として standard `check` に統合された。`check:testids:fixtures` は利用可能だが standard `check` には含めない。
-- このtask layoutへの移行は、まだ単なるDOM移動ではない。final task shell placement、final modal/task-window/dedicated-view policy、test-facing structured surfaceの完成、Diagnostics / Evidence Viewへの最終導線は後続waveで決める。
+- Wave54 A-H で、Generic workspace-scoped Task Window Shell v0、Toolboxからの PSD Import task-window route、Close / Back / Escape の workspace return、PSD-specific content polish、task-window scoped selector helper、`taskWindowRoutingFocused` と既存 PSD focused IDs の pass が記録済みである。
+- このtask layoutへの移行は、まだ単なるDOM移動ではない。final task-window/dedicated-view policy、test-facing structured surfaceの完成、Diagnostics / Evidence Viewへの最終導線、mobile task-window routing の登録済み focused gate は後続waveで決める。
 - 目指す姿は、PSD Import Taskを巨大なdebug panelにしないこと。Human UIは判断に必要なsummaryへ絞り、Codex / test / evidenceはそれぞれ専用surfaceへ分離する。
