@@ -35,7 +35,7 @@
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave50 final integration report `pass` が現在のimplementation-proven baseline。Wave50 clean Review-Sylph final integration review は [implementation/reviews/wave50/wave50-final-integration-review.md](implementation/reviews/wave50/wave50-final-integration-review.md) の別成果物で扱い、その verdict を final gate の正とする |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave51 final integration report `pass` が最新 final implementation-proven baseline。Wave51 は screen-design debt foundation として final verification 済みで、clean Review-Sylph review が final gate の権威 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -53,14 +53,14 @@
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Codex-friendly automation | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) で、Editor/repoは提案・推論・自動分類を行わず、外部Codex/LLMが人間同等操作をdeterministic API経由で実行する方針をAccepted user decisionとして記録済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
-| Implementation baseline | Wave50 final integration report `pass` が現在のimplementation-proven baseline。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲 |
-| Current implementation work | Wave50 `explicit-psd-subtree-hierarchy-scaffold-v0` は [implementation/orchestration/wave50-plan.md](implementation/orchestration/wave50-plan.md) に基づき final integration report `pass` まで記録済み。clean Review-Sylph final integration review は [implementation/reviews/wave50/wave50-final-integration-review.md](implementation/reviews/wave50/wave50-final-integration-review.md) の別成果物で扱い、その verdict を final gate の正とする |
+| Implementation baseline | Wave51 final integration report `pass` が最新 final implementation-proven baseline。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲 |
+| Current implementation work | Wave51 `ui-surface-protection-task-shell-foundation-v0` は [implementation/orchestration/wave51-plan.md](implementation/orchestration/wave51-plan.md) に基づき、production `data-testid` behavior coupling removal、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation を final integration `pass` として記録済み。full visual redesign、full panel migration、Mesh / Atlas / Parameter / Variant UI は未実装 |
 | Implementation maps | 次Wave判断前は [implementation/current-capability-map.md](implementation/current-capability-map.md) と [implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md) を正として読む |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 
 ## 次の行動
 
-1. 次の実装判断では [implementation/orchestration/wave50-plan.md](implementation/orchestration/wave50-plan.md)、[implementation/current-capability-map.md](implementation/current-capability-map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Wave50を最新final baselineとして扱う。
+1. 次の実装判断では [implementation/orchestration/wave51-plan.md](implementation/orchestration/wave51-plan.md)、[implementation/current-capability-map.md](implementation/current-capability-map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Wave51を最新final baselineのscreen-design foundationとして扱う。
 2. external HTTP / WebSocket / MCP API work と LLM provider integration は、MVP境界が明示変更されるまで Future scope に留める。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。

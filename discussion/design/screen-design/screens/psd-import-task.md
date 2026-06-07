@@ -183,6 +183,8 @@ PSD Import Taskからは、必要に応じてDiagnostics / Evidence Viewを開�
 
 ## 11. 注意点
 
-- `UX-FEAT-018` / `UX-FEAT-019` は現状production UIが `data-testid` selectorでapproved refsやsubmit disabled状態を同期している。
-- このtask layoutへの移行は、単なるDOM移動ではなく、state synchronization境界の整理が必要になる可能性がある。
+- `UX-FEAT-018` / `UX-FEAT-019` はWave51前の実装ではproduction UIが `data-testid` selectorでapproved refsやsubmit disabled状態を同期していた。
+- Wave51 Domain Bで対象の production behavior coupling は local approval binding へ置き換え済み。stable `data-testid` はtest-facing observation hookとして維持されている。
+- Wave51 Domain DでPSD Import Task structured observation projectorはpreparedになったが、現時点ではUI、E2E、Codex-facing read APIからは未使用。
+- このtask layoutへの移行は、まだ単なるDOM移動ではない。final task shell placement、human summary、test-facing structured surface、Diagnostics / Evidence Viewへの導線は後続waveで決める。
 - 目指す姿は、PSD Import Taskを巨大なdebug panelにしないこと。Human UIは判断に必要なsummaryへ絞り、Codex / test / evidenceはそれぞれ専用surfaceへ分離する。

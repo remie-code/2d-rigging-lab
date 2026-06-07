@@ -85,6 +85,7 @@ import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import { createPackageStatus } from "./package-status.js";
+import { applyShellSurfaceMetadata, shellSurfaces } from "./shell-surfaces.js";
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
@@ -224,10 +225,16 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   const workspace = document.createElement("section");
   workspace.className = "editor-workspace";
   workspace.setAttribute("aria-label", "Editor workspace");
+  applyShellSurfaceMetadata(workspace, shellSurfaces.authoringWorkspace, {
+    group: "legacy-host"
+  });
 
   const parametersPanel = document.createElement("section");
   parametersPanel.className = "editor-panel editor-panel--parameters";
   parametersPanel.setAttribute("aria-labelledby", "editor-parameters-heading");
+  applyShellSurfaceMetadata(parametersPanel, shellSurfaces.authoringWorkspace, {
+    group: "parameter-list"
+  });
 
   const parametersHeading = document.createElement("h2");
   parametersHeading.id = "editor-parameters-heading";
@@ -246,6 +253,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   const operationPanel = document.createElement("section");
   operationPanel.className = "editor-panel editor-panel--operation";
   operationPanel.setAttribute("aria-labelledby", "editor-create-parameter-heading");
+  applyShellSurfaceMetadata(operationPanel, shellSurfaces.authoringWorkspace, {
+    group: "parameter-operation"
+  });
 
   const operationHeading = document.createElement("h2");
   operationHeading.id = "editor-create-parameter-heading";
@@ -275,6 +285,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onAddMeshTriangle: options.onAddMeshTriangle,
     onRemoveMeshTriangle: options.onRemoveMeshTriangle,
     onNudgeMeshUv: options.onNudgeMeshUv
+  });
+  applyShellSurfaceMetadata(drawableAuthoringPanel, shellSurfaces.authoringWorkspace, {
+    group: "drawable-authoring"
   });
   const layerTreePanel = createLayerTreePanel({
     viewModel: options.viewModel.layerTree,
@@ -308,10 +321,16 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onToggleDrawableLock: options.onToggleDrawableLayerLock,
     onToggleDrawableEditorHidden: options.onToggleDrawableEditorHidden
   });
+  applyShellSurfaceMetadata(layerTreePanel, shellSurfaces.authoringWorkspace, {
+    group: "parts-tree"
+  });
   const sourceIntakePanel = createSourceIntakePanel({
     draft: options.state.sourceIntakeDraft,
     viewModel: options.viewModel.sourceIntake,
     onConfirmDraft: options.onConfirmSourceIntakeDraft
+  });
+  applyShellSurfaceMetadata(sourceIntakePanel, shellSurfaces.sourceIntakeTask, {
+    group: "source-intake"
   });
   const explicitPsdImportPanel = createExplicitPsdImportPanel({
     viewModel: options.viewModel.explicitPsdImport,
@@ -337,6 +356,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       ? {}
       : { onCommitStructuralScaffold: options.onCommitExplicitPsdStructuralScaffold })
   });
+  applyShellSurfaceMetadata(explicitPsdImportPanel, shellSurfaces.psdImportTask, {
+    group: "psd-import"
+  });
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,
     viewModel: options.viewModel,
@@ -344,6 +366,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onCommitUpdateDynamicsGroup: options.onCommitUpdateDynamicsGroup,
     onRunDynamicsPreview: options.onRunDynamicsPreview,
     onResetDynamicsPreview: options.onResetDynamicsPreview
+  });
+  applyShellSurfaceMetadata(dynamicsPanel, shellSurfaces.authoringWorkspace, {
+    group: "active-tool-dynamics"
   });
   const rigControlPanel = createRigControlPanel({
     state: options.state,
@@ -357,6 +382,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onDraftAddWarpLattice2dControlPointOffsetsKeyform:
       options.onCommitAddWarpLattice2dControlPointOffsetsKeyform
   });
+  applyShellSurfaceMetadata(rigControlPanel, shellSurfaces.authoringWorkspace, {
+    group: "active-tool-rig"
+  });
   const compositionPanel = createCompositionPanel({
     state: options.state,
     viewModel: options.viewModel,
@@ -364,6 +392,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     viewerRuntimeProjection: options.viewerRuntimeProjection,
     onCommitSetMaskRelation: options.onCommitSetMaskRelation,
     onCommitAddDrawableOpacityKeyform: options.onCommitAddDrawableOpacityKeyform
+  });
+  applyShellSurfaceMetadata(compositionPanel, shellSurfaces.authoringWorkspace, {
+    group: "drawable-composition"
   });
   const textureAtlas = resolveTextureAtlas(options);
   const previewPanel = createPreviewPanel({
@@ -376,23 +407,33 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onSetPreviewParameterValue: options.onSetPreviewParameterValue,
     onResetPreviewParameterValues: options.onResetPreviewParameterValues
   });
+  applyShellSurfaceMetadata(previewPanel, shellSurfaces.authoringWorkspace, {
+    group: "canvas-preview"
+  });
   const tutorialWorkflowPanel = createTutorialWorkflowPanel({
     viewModel: options.viewModel.tutorialGuidedWorkflow,
     onCreateTutorialMiniModel: options.onCreateTutorialMiniModel,
     onApplyTutorialSmallEdit: options.onApplyTutorialSmallEdit,
     onSelectTutorialTarget: options.onSelectTutorialTarget
   });
+  applyShellSurfaceMetadata(tutorialWorkflowPanel, shellSurfaces.tutorialTask, {
+    group: "tutorial-workflow"
+  });
   const viewerRuntimePanel =
     options.viewModel.viewerRuntime.isOpen
-      ? createViewerRuntimePanel({
-          state: options.state,
-          viewModel: options.viewModel,
-          projection: options.viewerRuntimeProjection,
-          latestProjectPersistenceResult: options.latestProjectPersistenceResult,
-          onCloseViewerRuntimeSurface: options.onCloseViewerRuntimeSurface,
-          onSetViewerParameterValue: options.onSetViewerParameterValue,
-          onResetViewerParameterValues: options.onResetViewerParameterValues
-        })
+      ? applyShellSurfaceMetadata(
+          createViewerRuntimePanel({
+            state: options.state,
+            viewModel: options.viewModel,
+            projection: options.viewerRuntimeProjection,
+            latestProjectPersistenceResult: options.latestProjectPersistenceResult,
+            onCloseViewerRuntimeSurface: options.onCloseViewerRuntimeSurface,
+            onSetViewerParameterValue: options.onSetViewerParameterValue,
+            onResetViewerParameterValues: options.onResetViewerParameterValues
+          }),
+          shellSurfaces.viewerRuntimeView,
+          { group: "viewer-runtime" }
+        )
       : null;
   const projectPersistencePanel = createProjectPersistencePanel({
     viewModel: options.viewModel,
@@ -407,6 +448,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       ? {}
       : { onImportPortableBundleText: options.onImportPortableBundleText })
   });
+  applyShellSurfaceMetadata(projectPersistencePanel, shellSurfaces.projectStorageTask, {
+    group: "project-persistence"
+  });
   const productPreflightPanel = createProductPreflightPanel({
     state: options.state.productPreflight,
     comparisonState: options.state.productPreflightComparison,
@@ -415,6 +459,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     ...(options.onRunProductPreflight === undefined
       ? {}
       : { onRunProductPreflight: options.onRunProductPreflight })
+  });
+  applyShellSurfaceMetadata(productPreflightPanel, shellSurfaces.validationTask, {
+    group: "product-preflight"
   });
   const codexProposalReviewPanel = createCodexProposalReviewPanel({
     state: options.state.codexProposalReview,
@@ -435,6 +482,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
       ? {}
       : { onCommitApprovedProposal: options.onCommitApprovedCodexProposal })
   });
+  applyShellSurfaceMetadata(codexProposalReviewPanel, shellSurfaces.codexAutomationView, {
+    group: "proposal-review"
+  });
   const aiApprovalPanel = createAiApprovalPanel({
     viewModel: options.viewModel,
     onDryRunCreateParameter: options.onDryRunAiCreateParameter,
@@ -442,13 +492,22 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     onRejectPendingDryRun: options.onRejectLatestAiDryRun,
     onCommitApprovedOperation: options.onCommitApprovedAiOperation
   });
+  applyShellSurfaceMetadata(aiApprovalPanel, shellSurfaces.codexAutomationView, {
+    group: "ai-approval"
+  });
   const aiTranscriptPanel = createAiTranscriptPanel({
     entries: options.viewModel.aiApproval.transcriptEntries
+  });
+  applyShellSurfaceMetadata(aiTranscriptPanel, shellSurfaces.codexAutomationView, {
+    group: "ai-transcript"
   });
 
   const persistencePanel = document.createElement("section");
   persistencePanel.className = "editor-persistence-grid";
   persistencePanel.setAttribute("aria-label", "Operation persistence evidence");
+  applyShellSurfaceMetadata(persistencePanel, shellSurfaces.diagnosticsEvidenceView, {
+    group: "operation-persistence-evidence"
+  });
 
   persistencePanel.append(
     createOperationLogSummaryPanel(options.state.operationLog),

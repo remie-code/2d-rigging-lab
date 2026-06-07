@@ -8,6 +8,8 @@ Editor UX画面仕様discussionに向けて、現在のEditorに存在する機�
 
 この文書は、画面仕様、優先順位、実装順、テスト更新方針、Codex-facing structural command parity の実装計画を決めない。後続の議論で参照しやすいよう、現行機能を事実ベースで棚卸しし、その後に分類候補を付ける。
 
+Wave51後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで UX-FEAT-018/019 の対象 coupling は除去済みだが、UI placement、DOM/text oracle migration、Diagnostics / Evidence View、Codex / Automation View、full visual redesign は未完了である。
+
 ## 2. 調査したファイル / 根拠
 
 Basis documents:
@@ -89,8 +91,8 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 | UX-FEAT-015 | PSD parse / parser session / parsed layer tree | PSD Import panel | PSD fileをparseし、parsed documentとlayer treeを確認・選択する。 | parser status、source file facts、document facts、unsupported/not evaluated、selected layer、selected leaf batch、parsed PSD layer tree。 | `explicitPsdImport.panel`、`explicitPsdImport.form`、`explicitPsdImport.fileInput`、`explicitPsdImport.status`、`explicitPsdImport.source`、`explicitPsdImport.document`、`explicitPsdImport.layerTree`。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` |
 | UX-FEAT-016 | PSD selected layer intake | PSD Import panel | selected PSD leaf layerを既存partまたは新規partへ追加する。 | destination kind、existing/new part、drawable name、selected layer intake result、diagnostics。 | `explicitPsdImport.layerIntake.form`、`explicitPsdImport.layerIntake.submit`、`explicitPsdImport.layerIntake.result`、`explicitPsdImport.layerIntake.diagnostics`。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts`、`apps/editor/src/editor-workflow/workflow-controller.ts` |
 | UX-FEAT-017 | PSD selected leaf batch intake | PSD Import panel | 明示選択したPSD leaf setをpreflightしてbatch追加する。 | selected leaf refs、destination parent part、batch result、entries、diagnostics。 | `explicitPsdImport.batch.layerRefs`、`explicitPsdImport.batchIntake.form`、`explicitPsdImport.batchIntake.submit`、`explicitPsdImport.batchIntake.result`、`explicitPsdImport.batchIntake.entries`。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` |
-| UX-FEAT-018 | PSD import-plan preview / approval / approved batch execution | PSD Import panel + AI PSD import-plan command surface | scope refとapproved leaf refsを指定し、import-plan previewを作り、候補承認後にapproved batchを追加する。 | plan status、candidate digest、candidate list、approved refs、approval blocked reasons、diagnostics、latest batch generated refs/evidence refs。 | UI: `explicitPsdImport.importPlan.*`。Command: `getPsdImportPlanState`、`setPsdImportPlanApproval`、`preflightPsdImportPlanIntake`、`executePsdImportPlanIntake`。Production UIが`data-testid` selectorでapproved refsとsubmit disabledを同期する。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts`、`apps/editor/src/ai-command-host/editor-ai-command-host.ts`、`packages/ai-interface/src/ai-psd-import-plan-command.ts` |
-| UX-FEAT-019 | PSD structural scaffold preview / approval / commit | PSD Import panel + structural read projection | scope refとapproved PSD group/leaf refsを指定し、part/drawable/texture/mesh scaffold previewを作りcommitする。 | structural plan/digest、approval ID/digest/status、approved nodes、generated group/leaf refs、hidden/runtime visibility、result entries、diagnostics、evidence refs。 | UI: `explicitPsdImport.structuralScaffold.*`。Command surfaceは `getPsdImportPlanState` projectionに `structuralScaffold` / `latestStructuralScaffold` を含むが、structural-specific execute/stale commandは未確認。Production UIが`data-testid` selectorでapproved refsとsubmit disabledを同期する。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts`、`packages/ai-interface/src/ai-psd-import-plan-command.ts`、既存依存棚卸 |
+| UX-FEAT-018 | PSD import-plan preview / approval / approved batch execution | PSD Import panel + AI PSD import-plan command surface | scope refとapproved leaf refsを指定し、import-plan previewを作り、候補承認後にapproved batchを追加する。 | plan status、candidate digest、candidate list、approved refs、approval blocked reasons、diagnostics、latest batch generated refs/evidence refs。 | UI: `explicitPsdImport.importPlan.*`。Command: `getPsdImportPlanState`、`setPsdImportPlanApproval`、`preflightPsdImportPlanIntake`、`executePsdImportPlanIntake`。Wave51前はproduction UIが`data-testid` selectorでapproved refsとsubmit disabledを同期していたが、Wave51 Domain Bで対象箇所は local approval binding へ置き換え済み。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts`、`apps/editor/src/ai-command-host/editor-ai-command-host.ts`、`packages/ai-interface/src/ai-psd-import-plan-command.ts` |
+| UX-FEAT-019 | PSD structural scaffold preview / approval / commit | PSD Import panel + structural read projection | scope refとapproved PSD group/leaf refsを指定し、part/drawable/texture/mesh scaffold previewを作りcommitする。 | structural plan/digest、approval ID/digest/status、approved nodes、generated group/leaf refs、hidden/runtime visibility、result entries、diagnostics、evidence refs。 | UI: `explicitPsdImport.structuralScaffold.*`。Command surfaceは `getPsdImportPlanState` projectionに `structuralScaffold` / `latestStructuralScaffold` を含むが、structural-specific execute/stale commandは未実装。Wave51前はproduction UIが`data-testid` selectorでapproved refsとsubmit disabledを同期していたが、Wave51 Domain Bで対象箇所は local approval binding へ置き換え済み。 | `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts`、`packages/ai-interface/src/ai-psd-import-plan-command.ts`、既存依存棚卸 |
 | UX-FEAT-020 | Composition mask relation authoring | Composition / Mask / Opacity panel | semantic mask relationを作成・更新する。 | relation form、mask/target drawables、enabled state、mask relation list、preview/viewer evidence、operation diagnostics。 | `composition.panel`、`composition.maskRelation.form`、`composition.maskRelation.commit`、`composition.maskRelation.list`、`composition.evidence`、`composition.diagnostics`。 | `apps/editor/src/ui/composition-panel/composition-panel.ts` |
 | UX-FEAT-021 | Drawable opacity keyforms | Composition / Mask / Opacity panel | parameterに対するdrawable opacity keyformを追加する。 | input parameter、drawable、key value、opacity、keyform list、preview/viewer opacity evidence、diagnostics。 | `composition.opacityKeyform.form`、`composition.opacityKeyform.commit`、`composition.opacityKeyform.list`、`composition.evidence`。 | `apps/editor/src/ui/composition-panel/composition-panel.ts` |
 | UX-FEAT-022 | Rotation2d rig control authoring | Project-defined Rig Controls panel | rotation2d controlを作成し、child bindし、angle keyformを追加する。 | control count、create form、bind form、angle keyform form、control list、keyform list、runtime evidence、operation diagnostics。 | `rigControl.panel`、`rigControl.create.form`、`rigControl.bind.form`、`rigControl.keyform.form`、`rigControl.list`、`rigControl.keyform.list`、`rigControl.evidence`、`rigControl.diagnostics`。 | `apps/editor/src/ui/rig-control-panel/rig-control-panel.ts` |
@@ -111,6 +113,14 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 | UX-FEAT-037 | Codex-facing structured command host | DOM外のEditor command host / `packages/ai-interface` | 外部Codex/LLMまたはテストが、Editor stateを読む、targetをinspectする、validateする、operation dry-run/commitする、PSD import-planを操作する。 | structured responses、DTO/schema、operation log entries、validation report、PSD import-plan/structural projection、transcript。 | Command names: `getEditorState`、`inspectModel`、`inspectTarget`、`validatePackage`、`getOperationLog`、`dryRunOperation`、`commitOperation`、`getPsdImportPlanState`、`setPsdImportPlanApproval`、`preflightPsdImportPlanIntake`、`executePsdImportPlanIntake`。 | `apps/editor/src/ai-command-host/editor-ai-command-host.ts`、`packages/ai-interface/src/*`、`apps/editor/src/editor-workflow/workflow-controller.ts` |
 
 機能数: 37。
+
+Wave51実装状況メモ:
+
+- UX-FEAT-018/019 の targeted production `data-testid` behavior coupling は除去済み。
+- UX-FEAT-001 周辺には minimal shell surface metadata が追加されたが、workspace layoutやfinal visual hierarchyは未変更。
+- UX-FEAT-018/019 向けの structured observation projector はpreparedだが、visible UI / E2E / Codex-facing read APIからは未消費。
+- UX-FEAT-028〜036 の Diagnostics / Evidence View分離と UX-FEAT-030〜032 の Codex / Automation View分離は未実装。
+- Mesh / Texture Atlas / Parameter Manager / Variant Manager のUI進捗はWave51ではない。
 
 ## 5. 体験カテゴリ別分類候補
 
@@ -142,7 +152,7 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 |---|---|---|
 | `low` | UX-FEAT-037 | DOM外のstructured command host / DTO/schema中心。UI移動そのものには比較的強い。ただしcommand schema変更は別リスク。 |
 | `medium` | UX-FEAT-001, UX-FEAT-002, UX-FEAT-003, UX-FEAT-005, UX-FEAT-006, UX-FEAT-010, UX-FEAT-020, UX-FEAT-021, UX-FEAT-024, UX-FEAT-026, UX-FEAT-027, UX-FEAT-031, UX-FEAT-032 | `data-testid`、visible text、aria label、disabled/value確認がある。構造化surfaceやtest idを維持すれば移動可能そうだが、visible text依存の更新は必要になり得る。 |
-| `high` | UX-FEAT-004, UX-FEAT-007, UX-FEAT-008, UX-FEAT-009, UX-FEAT-011, UX-FEAT-012, UX-FEAT-013, UX-FEAT-014, UX-FEAT-015, UX-FEAT-016, UX-FEAT-017, UX-FEAT-018, UX-FEAT-019, UX-FEAT-022, UX-FEAT-023, UX-FEAT-025, UX-FEAT-028, UX-FEAT-029, UX-FEAT-030, UX-FEAT-033, UX-FEAT-034, UX-FEAT-035, UX-FEAT-036 | E2E oracleがDOM text、`dt/dd` facts、SVG/data attrs、geometry、aria label、artifact refsに強く依存する。UX-FEAT-018/019はproduction UI内部が`data-testid` selectorで同期しており、単純移動は機能破壊にもなり得る。 |
+| `high` | UX-FEAT-004, UX-FEAT-007, UX-FEAT-008, UX-FEAT-009, UX-FEAT-011, UX-FEAT-012, UX-FEAT-013, UX-FEAT-014, UX-FEAT-015, UX-FEAT-016, UX-FEAT-017, UX-FEAT-018, UX-FEAT-019, UX-FEAT-022, UX-FEAT-023, UX-FEAT-025, UX-FEAT-028, UX-FEAT-029, UX-FEAT-030, UX-FEAT-033, UX-FEAT-034, UX-FEAT-035, UX-FEAT-036 | E2E oracleがDOM text、`dt/dd` facts、SVG/data attrs、geometry、aria label、artifact refsに強く依存する。UX-FEAT-018/019のtargeted production `data-testid` behavior couplingはWave51で除去済みだが、visible DOM/text oracleと未移行UIのリスクは残る。 |
 | `unknown` | なし | 今回確認した範囲では全IDに最低限の根拠を付けた。ただし網羅監査ではないため、細部の未確認は第9章に記録する。 |
 
 補足:
@@ -171,7 +181,7 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 - Viewer / Runtime以外の多くのpanelは、確認範囲では常時workspaceに並ぶ。
 - `editor-test-ids.ts` と `apps/editor/e2e/test-ids.mjs` は広範なtest id mirrorを持つ。
 - E2Eは `data-testid`、`textContent`、`aria-label`、`dt/dd`、form value/disabled、SVG/data attrs、geometryを広く読む。
-- PSD Importのimport-plan/structural scaffold承認UIは、production code内で `data-testid` selectorを使ってapproved refs textareaとsubmit disabled状態を同期している。
+- Wave51前のPSD Import import-plan/structural scaffold承認UIは、production code内で `data-testid` selectorを使ってapproved refs textareaとsubmit disabled状態を同期していた。Wave51 Domain Bで対象箇所は local approval binding へ置き換え済み。
 - Editor command hostはDOMとは別にstructured command surfaceを持つ。
 
 推測:
@@ -185,13 +195,13 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 - すべてのunit tests / E2Eを行単位で完全監査したわけではない。
 - 外部Codex運用が可視DOM textを直接読むかは未確認。
 - Product Preflight command型は `packages/ai-interface` に存在するが、現Editorの `EditorAiCommandHost` command unionには含まれていない。UI整理前に必要なDOM非依存surfaceが足りているかは未決。
-- UX-FEAT-019のstructural scaffoldはread projectionがあるが、structural-specific execute/stale command parityは未確認で、既存棚卸上も未実装扱いである。
+- UX-FEAT-019のstructural scaffoldはread projectionがあるが、structural-specific execute/stale command parityは未実装扱いである。
 
 ## 10. 次にユーザーと議論すべき論点
 
 1. 通常workspaceで常時表示したい最小セットは何か。候補は UX-FEAT-001, UX-FEAT-004, UX-FEAT-005, UX-FEAT-008 と、必要に応じて UX-FEAT-002。
 2. toolbox / modal task / side panel / inspector / drawer のどれを、UX-FEAT-013〜019、UX-FEAT-028〜032、UX-FEAT-033〜036へ適用するか。
-3. PSD Import系、特に UX-FEAT-018/019 は、UI分離前にproduction `data-testid` couplingを解くべきか、既存構造を保ったまま画面仕様だけ決めるか。
+3. PSD Import系、特に UX-FEAT-018/019 は、Wave51でproduction `data-testid` couplingを外した前提で、task shellへの移動、human summary、test-facing structured surface、Diagnostics / Evidence導線をどう分けるか。
 4. Operation/evidence詳細 UX-FEAT-033〜036 を通常UIから外す場合、E2E oracleをどのsurfaceに残すか。
 5. Product Preflight UX-FEAT-028/029 は、人間向けsummaryとmachine/evidence向けdetailsを分けるか。
 6. Codex Proposal Review / AI Approval / AI Transcript UX-FEAT-030〜032 は、通常authoring UIの機能として見せるか、Codex/evidence専用viewとして扱うか。

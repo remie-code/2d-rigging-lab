@@ -24,6 +24,8 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Editor起動直後は、PSD import画面ではなくauthoring workspaceとして見えるべきである。
 - PSD importは通常workspaceから呼び出すtaskであり、常設の巨大panelではなくtask window / modal / dedicated task panelとして扱う方向が有力である。
 - PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
+- Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
+- Wave51 は full visual redesign、full panel migration、final toolbox/modal/window framework、最終的な Diagnostics / Evidence View または Codex / Automation View の配置を完了していない。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
 - Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
@@ -38,10 +40,10 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 ## 次の作業候補
 
-1. [overview.md](overview.md) のGlobal UX Flowと画面一覧をユーザーと確認する。
-2. PSD Import Task layout案をユーザーと確認する。
-3. Diagnostics / Evidence View と Codex / Automation View の分離方針を確認する。
-4. `UX-FEAT-018` / `UX-FEAT-019` のproduction `data-testid` couplingを、Wave51計画前提に含めるか確認する。
+1. Workspace Layout Migration v0として、Authoring Workspace layout、Toolbox、Parts Tree、Canvas、Inspector、Parameter Bar、Diagnostics Stripの実配置を別waveで決める。
+2. PSD Import Task Migration v0として、Wave51で coupling を外した PSD Import / structural scaffold を task shell へ移す。
+3. Diagnostics / Evidence View Separation v0 と Codex / Automation View Separation v0 で、通常authoring UIから debug/evidence/automation details を段階的に分離する。
+4. Texture Atlas Task、Mesh generation/tool、Parameter Manager、Variant / Expression Manager は、置き場所とsurface境界が固まった後の後続waveで扱う。
 
 ## 未決事項
 
@@ -50,3 +52,4 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - PSD Import taskはmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
+- Wave51で追加された production `data-testid` guard を標準の package script / quality gate のどこへ組み込むか。

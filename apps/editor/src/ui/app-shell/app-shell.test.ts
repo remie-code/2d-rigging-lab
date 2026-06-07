@@ -26,7 +26,10 @@ import {
 } from "../../editor-state/index.js";
 import { createEditorWorkflowController } from "../../editor-workflow/workflow-controller.js";
 import { createBrowserProjectStore, type StorageLike } from "../../project-persistence/index.js";
+import { aiApprovalTestIds } from "../ai-approval/index.js";
+import { aiTranscriptTestIds } from "../ai-transcript/index.js";
 import { createEditorAppShell } from "./app-shell.js";
+import { shellSurfaceDefinitions, shellSurfaces } from "./shell-surfaces.js";
 
 describe("editor app shell preview panel", () => {
   let originalFormData: typeof FormData | undefined;
@@ -624,6 +627,128 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.drawableList)).not.toBeNull();
   });
 
+  it("registers the screen-design shell surfaces", () => {
+    expect(shellSurfaceDefinitions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: shellSurfaces.authoringWorkspace.id,
+          kind: "authoring-workspace",
+          label: "Authoring Workspace"
+        }),
+        expect.objectContaining({
+          id: shellSurfaces.psdImportTask.id,
+          kind: "task",
+          label: "PSD Import Task"
+        }),
+        expect.objectContaining({
+          id: shellSurfaces.diagnosticsEvidenceView.id,
+          kind: "view",
+          label: "Diagnostics / Evidence View"
+        }),
+        expect.objectContaining({
+          id: shellSurfaces.codexAutomationView.id,
+          kind: "view",
+          label: "Codex / Automation View"
+        })
+      ])
+    );
+  });
+
+  it("classifies existing panels into named shell surfaces without moving workflows", () => {
+    const workflow = createWorkflow();
+    workflow.openViewerRuntimeSurface();
+    const shell = renderShell(workflow);
+    const workspace = findByClassName(shell, "editor-workspace");
+
+    expect(workspace?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
+    expect(workspace?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
+    expect(workspace?.dataset.shellSurfaceGroup).toBe("legacy-host");
+
+    expectPanelSurface(
+      shell,
+      editorTestIds.previewPanel,
+      shellSurfaces.authoringWorkspace,
+      "canvas-preview"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.layerTreePanel,
+      shellSurfaces.authoringWorkspace,
+      "parts-tree"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.drawableAuthoringPanel,
+      shellSurfaces.authoringWorkspace,
+      "drawable-authoring"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.explicitPsdImportPanel,
+      shellSurfaces.psdImportTask,
+      "psd-import"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.sourceIntakePanel,
+      shellSurfaces.sourceIntakeTask,
+      "source-intake"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.projectPersistencePanel,
+      shellSurfaces.projectStorageTask,
+      "project-persistence"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.productPreflightPanel,
+      shellSurfaces.validationTask,
+      "product-preflight"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.tutorialWorkflowPanel,
+      shellSurfaces.tutorialTask,
+      "tutorial-workflow"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.viewerRuntimePanel,
+      shellSurfaces.viewerRuntimeView,
+      "viewer-runtime"
+    );
+    expectPanelSurface(
+      shell,
+      editorTestIds.codexProposalReviewPanel,
+      shellSurfaces.codexAutomationView,
+      "proposal-review"
+    );
+    expectPanelSurface(
+      shell,
+      aiApprovalTestIds.panel,
+      shellSurfaces.codexAutomationView,
+      "ai-approval"
+    );
+    expectPanelSurface(
+      shell,
+      aiTranscriptTestIds.panel,
+      shellSurfaces.codexAutomationView,
+      "ai-transcript"
+    );
+
+    const diagnosticsSurface = findByShellSurfaceGroup(shell, "operation-persistence-evidence");
+    expect(diagnosticsSurface?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.diagnosticsEvidenceView.id
+    );
+    expect(diagnosticsSurface?.dataset.shellSurfaceKind).toBe(
+      shellSurfaces.diagnosticsEvidenceView.kind
+    );
+    expect(findByTestId(diagnosticsSurface ?? shell, editorTestIds.operationLogSummary)).not.toBeNull();
+    expect(findByTestId(diagnosticsSurface ?? shell, editorTestIds.generatedEvidenceSummary)).not.toBeNull();
+    expect(findByTestId(diagnosticsSurface ?? shell, editorTestIds.reloadSummary)).not.toBeNull();
+  });
+
   it("renders Product Preflight and wires the run action", () => {
     const workflow = createWorkflow();
     const calls: string[] = [];
@@ -1101,11 +1226,31 @@ const createTextureSourceIntakeDraft = (
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
 
+const findByClassName = (root: TestElement, className: string): TestElement | null =>
+  root.queryByPredicate((element) => element.className.split(" ").includes(className));
+
+const findByShellSurfaceGroup = (root: TestElement, group: string): TestElement | null =>
+  root.queryByPredicate((element) => element.dataset.shellSurfaceGroup === group);
+
 const findByTag = (root: TestElement, tagName: string): TestElement | null =>
   root.queryByPredicate((element) => element.tagName === tagName);
 
 const findDrawableShape = (root: TestElement, drawableId: string): TestElement | null =>
   root.queryByPredicate((element) => element.getAttribute("data-drawable-id") === drawableId);
+
+const expectPanelSurface = (
+  root: TestElement,
+  testId: string,
+  surface: (typeof shellSurfaces)[keyof typeof shellSurfaces],
+  group: string
+): void => {
+  const panel = findByTestId(root, testId);
+
+  expect(panel).not.toBeNull();
+  expect(panel?.dataset.shellSurfaceId).toBe(surface.id);
+  expect(panel?.dataset.shellSurfaceKind).toBe(surface.kind);
+  expect(panel?.dataset.shellSurfaceGroup).toBe(group);
+};
 
 const setNamedFieldValue = (
   root: TestElement,

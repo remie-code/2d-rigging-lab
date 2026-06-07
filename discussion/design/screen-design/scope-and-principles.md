@@ -26,11 +26,22 @@
 - toolbox コンポーネントの最終設計
 - renderer / Photoshop compositing 挙動
 - semantic recognition、smart suggestion UI、auto-rigging、deformer / keyform / physics generation、proposal generation
-- 画面仕様discussionと棚卸が終わる前の Wave51 実装範囲
+- 画面仕様discussionと棚卸が終わる前の後続 implementation wave 範囲
 
 preset-based initial mesh generationは、この非ゴールには含めない。これは意味推定や提案ではなく、ユーザーまたはCodexが明示したdrawableとpresetに基づく決定的geometry生成であり、Editor UX上の必須候補として扱う。
 
 texture atlasのsimple deterministic packingも、この非ゴールには含めない。これはvisible drawable、page size、padding、source boundsに基づく決定的な配置処理であり、semantic recognitionやsmart suggestionではない。
+
+## 2.1 Wave51 実装状況メモ
+
+Wave51 は、この screen-design 方針を実装へ移す最初の負債解消waveとして開始済みである。Wave51 Domains A-E の `pass` 記録で主張できる範囲は次に限定する。
+
+- PSD import-plan / structural scaffold の production `data-testid` behavior coupling は対象箇所で除去済み。
+- App Shell には task/view を分類する minimal surface metadata が入ったが、既存の一ページhostとpanel append orderは維持されている。
+- PSD Import Task structured observation projector は prepared 状態で、UI / E2E / Codex-facing read API からは未使用。
+- production `data-testid` guard は standalone script と fixture self-test として存在するが、package scripts には未統合。
+
+Wave51 は full visual redesign、full panel migration、final toolbox/modal/window framework、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter / Variant UI 実装を完了していない。
 
 ## 3. 現在の問題設定
 
@@ -136,11 +147,11 @@ Undine は、現在のUI / source / test を広く棚卸ししない。Undine �
 - 各画面の主要領域
 - 各領域に置く情報カテゴリ
 - 通常の人間向けUIから外すべき情報一覧
-- 未決のままなら Wave51 から外すべき論点
-- 推奨する Wave51 実装範囲
+- 未決のままなら後続 implementation wave から外すべき論点
+- 推奨する後続 screen-design implementation 範囲
 
 この成果物は、完全なvisual design systemやボタン単位の仕様なしに、後続waveを計画できる程度の内容を目指す。
 
 ## 9. 次のステップ
 
-次は、`overview.md` と `screens/*.md` の内容をユーザーと確認し、未決事項を画面別に閉じていく。
+次は、Wave51で作った基盤を前提に、Workspace Layout Migration、PSD Import Task Migration、Diagnostics / Evidence View Separation、Codex / Automation View Separationを別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。

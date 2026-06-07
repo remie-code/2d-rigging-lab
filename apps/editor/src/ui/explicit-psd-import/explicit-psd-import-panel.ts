@@ -41,6 +41,22 @@ export interface ExplicitPsdImportPanelOptions {
   ) => unknown | Promise<unknown>;
 }
 
+interface ApprovalBinding {
+  readonly choices: HTMLInputElement[];
+  readonly lastGeneratedApprovedRefs: readonly string[];
+  approvedRefs: HTMLTextAreaElement | null;
+  approvedSubmit: HTMLButtonElement | null;
+  baseSubmitDisabled: boolean;
+}
+
+const createApprovalBinding = (lastGeneratedApprovedRefs: readonly string[]): ApprovalBinding => ({
+  choices: [],
+  lastGeneratedApprovedRefs: [...lastGeneratedApprovedRefs],
+  approvedRefs: null,
+  approvedSubmit: null,
+  baseSubmitDisabled: true
+});
+
 export const createExplicitPsdImportPanel = (
   options: ExplicitPsdImportPanelOptions
 ): HTMLElement => {
@@ -57,6 +73,10 @@ export const createExplicitPsdImportPanel = (
   meta.className = "editor-panel__meta";
   meta.textContent = options.viewModel.metaLabel;
   const parseForm = createExplicitPsdImportForm(options);
+  const importPlanApproval = createApprovalBinding(options.viewModel.importPlanApprovedLayerNodeRefs);
+  const structuralScaffoldApproval = createApprovalBinding(
+    options.viewModel.structuralScaffoldApprovedNodeRefs
+  );
 
   panel.append(
     heading,
@@ -83,7 +103,7 @@ export const createExplicitPsdImportPanel = (
       options.viewModel.materializationLabels,
       editorTestIds.explicitPsdImportMaterialization
     ),
-    createImportPlanPreviewForm(options),
+    createImportPlanPreviewForm(options, importPlanApproval),
     createFactSection(
       "Import-Plan Preview",
       editorTestIds.explicitPsdImportPlanPreview,
@@ -92,14 +112,14 @@ export const createExplicitPsdImportPanel = (
         ...options.viewModel.importPlanFacts
       ]
     ),
-    createImportPlanCandidateList(options),
+    createImportPlanCandidateList(options, importPlanApproval),
     createTextList(
       "Import-Plan Preview Diagnostics",
       options.viewModel.importPlanDiagnostics,
       editorTestIds.explicitPsdImportPlanDiagnostics
     ),
-    createApprovedImportPlanBatchIntakeForm(options),
-    createStructuralScaffoldPreviewForm(options),
+    createApprovedImportPlanBatchIntakeForm(options, importPlanApproval),
+    createStructuralScaffoldPreviewForm(options, structuralScaffoldApproval),
     createFactSection(
       "Structural Scaffold Preview",
       editorTestIds.explicitPsdStructuralScaffoldPreview,
@@ -108,13 +128,13 @@ export const createExplicitPsdImportPanel = (
         ...options.viewModel.structuralScaffoldFacts
       ]
     ),
-    createStructuralScaffoldNodeList(options),
+    createStructuralScaffoldNodeList(options, structuralScaffoldApproval),
     createTextList(
       "Structural Scaffold Preview Diagnostics",
       options.viewModel.structuralScaffoldDiagnostics,
       editorTestIds.explicitPsdStructuralScaffoldDiagnostics
     ),
-    createApprovedStructuralScaffoldCommitForm(options),
+    createApprovedStructuralScaffoldCommitForm(options, structuralScaffoldApproval),
     createFactSection(
       "Structural Scaffold Result",
       editorTestIds.explicitPsdStructuralScaffoldResult,
@@ -183,7 +203,8 @@ export const createExplicitPsdImportPanel = (
 };
 
 const createImportPlanPreviewForm = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLFormElement => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
@@ -209,14 +230,12 @@ const createImportPlanPreviewForm = (
   approvedRefs.style.width = "100%";
   approvedRefs.style.boxSizing = "border-box";
   approvedRefs.dataset.testid = editorTestIds.explicitPsdImportPlanApprovedRefs;
-  approvedRefs.dataset.lastGeneratedApprovedRefs = serializeSelectedLayerRefs(
-    options.viewModel.importPlanApprovedLayerNodeRefs
-  );
+  approval.approvedRefs = approvedRefs;
   approvedRefs.addEventListener("input", () => {
-    updateImportPlanApprovedBatchSubmitState(form);
+    updateApprovalSubmitState(approval);
   });
   approvedRefs.addEventListener("change", () => {
-    updateImportPlanApprovedBatchSubmitState(form);
+    updateApprovalSubmitState(approval);
   });
   approvedRefsLabel.append(approvedRefs);
 
@@ -259,7 +278,8 @@ const createImportPlanPreviewForm = (
 };
 
 const createImportPlanCandidateList = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLElement => {
   const section = document.createElement("section");
   section.className = "explicit-psd-import-section";
@@ -288,8 +308,9 @@ const createImportPlanCandidateList = (
         : `PSD leaf candidate ${row.layerRef} is not eligible for approval`
     );
     choice.addEventListener("change", () => {
-      syncImportPlanApprovedRefs(section);
+      syncApprovedRefsFromChoices(approval);
     });
+    approval.choices.push(choice);
 
     const label = document.createElement("span");
     label.textContent = row.label;
@@ -305,32 +326,13 @@ const createImportPlanCandidateList = (
   }
 
   section.append(heading, list);
-  queueMicrotask(() => syncImportPlanApprovedRefs(section));
+  queueMicrotask(() => syncApprovedRefsFromChoices(approval));
   return section;
 };
 
-const syncImportPlanApprovedRefs = (root: HTMLElement): void => {
-  const form = root.parentElement?.querySelector?.(
-    `[data-testid="${editorTestIds.explicitPsdImportPlanForm}"]`
-  ) as HTMLFormElement | null | undefined;
-  const approvedRefs = form?.querySelector?.(
-    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedRefs}"]`
-  ) as HTMLTextAreaElement | null | undefined;
-  if (approvedRefs === undefined || approvedRefs === null) {
-    return;
-  }
-
-  approvedRefs.value = Array.from(
-    root.querySelectorAll<HTMLInputElement>('input[name="explicitPsdImportPlanCandidateApproval"]')
-  )
-    .filter((choice) => choice.checked && !choice.disabled)
-    .map((choice) => choice.value)
-    .join("\n");
-  updateImportPlanApprovedBatchSubmitState(root);
-};
-
 const createApprovedImportPlanBatchIntakeForm = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLFormElement => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
@@ -356,7 +358,8 @@ const createApprovedImportPlanBatchIntakeForm = (
     options.viewModel.importPlanApprovedLayerNodeRefs.length === 0 ||
     options.destinationParts.length === 0 ||
     options.onIntakeApprovedImportPlanCandidates === undefined;
-  submit.dataset.baseDisabled = submit.disabled ? "true" : "false";
+  approval.approvedSubmit = submit;
+  approval.baseSubmitDisabled = submit.disabled;
   submit.textContent = "Add approved leaf candidates";
 
   form.append(parentPart.field, diagnostics, submit);
@@ -369,8 +372,8 @@ const createApprovedImportPlanBatchIntakeForm = (
       diagnostics.replaceChildren(createDiagnosticLine("Destination parent part is required for approved leaf candidates."));
       return;
     }
-    if (!isImportPlanApprovedSelectionCurrent(form)) {
-      updateImportPlanApprovedBatchSubmitState(form);
+    if (!isApprovalSelectionCurrent(approval)) {
+      updateApprovalSubmitState(approval);
       diagnostics.replaceChildren(createDiagnosticLine("Update the import-plan preview before adding approved leaf candidates."));
       return;
     }
@@ -388,7 +391,8 @@ const createApprovedImportPlanBatchIntakeForm = (
 };
 
 const createStructuralScaffoldPreviewForm = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLFormElement => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
@@ -414,14 +418,12 @@ const createStructuralScaffoldPreviewForm = (
   approvedRefs.style.width = "100%";
   approvedRefs.style.boxSizing = "border-box";
   approvedRefs.dataset.testid = editorTestIds.explicitPsdStructuralScaffoldApprovedRefs;
-  approvedRefs.dataset.lastGeneratedApprovedRefs = serializeSelectedLayerRefs(
-    options.viewModel.structuralScaffoldApprovedNodeRefs
-  );
+  approval.approvedRefs = approvedRefs;
   approvedRefs.addEventListener("input", () => {
-    updateStructuralScaffoldCommitSubmitState(form);
+    updateApprovalSubmitState(approval);
   });
   approvedRefs.addEventListener("change", () => {
-    updateStructuralScaffoldCommitSubmitState(form);
+    updateApprovalSubmitState(approval);
   });
   approvedRefsLabel.append(approvedRefs);
 
@@ -470,7 +472,8 @@ const createStructuralScaffoldPreviewForm = (
 };
 
 const createStructuralScaffoldNodeList = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLElement => {
   const section = document.createElement("section");
   section.className = "explicit-psd-import-section";
@@ -499,8 +502,9 @@ const createStructuralScaffoldNodeList = (
         : `PSD structural ${row.kind} ${row.nodeRef} is not eligible for approval`
     );
     choice.addEventListener("change", () => {
-      syncStructuralScaffoldApprovedRefs(section);
+      syncApprovedRefsFromChoices(approval);
     });
+    approval.choices.push(choice);
 
     const label = document.createElement("span");
     label.textContent = row.label;
@@ -516,32 +520,13 @@ const createStructuralScaffoldNodeList = (
   }
 
   section.append(heading, list);
-  queueMicrotask(() => syncStructuralScaffoldApprovedRefs(section));
+  queueMicrotask(() => syncApprovedRefsFromChoices(approval));
   return section;
 };
 
-const syncStructuralScaffoldApprovedRefs = (root: HTMLElement): void => {
-  const form = root.parentElement?.querySelector?.(
-    `[data-testid="${editorTestIds.explicitPsdStructuralScaffoldForm}"]`
-  ) as HTMLFormElement | null | undefined;
-  const approvedRefs = form?.querySelector?.(
-    `[data-testid="${editorTestIds.explicitPsdStructuralScaffoldApprovedRefs}"]`
-  ) as HTMLTextAreaElement | null | undefined;
-  if (approvedRefs === undefined || approvedRefs === null) {
-    return;
-  }
-
-  approvedRefs.value = Array.from(
-    root.querySelectorAll<HTMLInputElement>('input[name="explicitPsdStructuralScaffoldApproval"]')
-  )
-    .filter((choice) => choice.checked && !choice.disabled)
-    .map((choice) => choice.value)
-    .join("\n");
-  updateStructuralScaffoldCommitSubmitState(root);
-};
-
 const createApprovedStructuralScaffoldCommitForm = (
-  options: ExplicitPsdImportPanelOptions
+  options: ExplicitPsdImportPanelOptions,
+  approval: ApprovalBinding
 ): HTMLFormElement => {
   const form = document.createElement("form");
   form.className = "explicit-psd-import-form";
@@ -572,7 +557,8 @@ const createApprovedStructuralScaffoldCommitForm = (
     options.viewModel.structuralScaffoldApprovedNodeRefs.length === 0 ||
     options.destinationParts.length === 0 ||
     options.onCommitStructuralScaffold === undefined;
-  submit.dataset.baseDisabled = submit.disabled ? "true" : "false";
+  approval.approvedSubmit = submit;
+  approval.baseSubmitDisabled = submit.disabled;
   submit.textContent = "Add approved structural scaffold";
 
   form.append(parentPart.field, diagnostics, submit);
@@ -585,8 +571,8 @@ const createApprovedStructuralScaffoldCommitForm = (
       diagnostics.replaceChildren(createDiagnosticLine("Destination parent part is required for structural scaffold execution."));
       return;
     }
-    if (!isStructuralScaffoldApprovedSelectionCurrent(form)) {
-      updateStructuralScaffoldCommitSubmitState(form);
+    if (!isApprovalSelectionCurrent(approval)) {
+      updateApprovalSubmitState(approval);
       diagnostics.replaceChildren(createDiagnosticLine("Update the structural scaffold preview before adding approved structural nodes."));
       return;
     }
@@ -941,72 +927,37 @@ const parseSelectedLayerRefs = (value: string): readonly string[] =>
 const serializeSelectedLayerRefs = (refs: readonly string[]): string =>
   refs.join("\n");
 
-const updateImportPlanApprovedBatchSubmitState = (root: HTMLElement): void => {
-  const submit = findInRootOrParent<HTMLButtonElement>(
-    root,
-    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedBatchSubmit}"]`
-  );
-  if (submit === null) {
+const syncApprovedRefsFromChoices = (approval: ApprovalBinding): void => {
+  if (approval.approvedRefs === null) {
     return;
   }
 
-  const baseDisabled = submit.dataset.baseDisabled === "true";
-  submit.disabled = baseDisabled || !isImportPlanApprovedSelectionCurrent(root);
+  approval.approvedRefs.value = serializeSelectedLayerRefs(
+    approval.choices
+      .filter((choice) => choice.checked && !choice.disabled)
+      .map((choice) => choice.value)
+  );
+  updateApprovalSubmitState(approval);
 };
 
-const updateStructuralScaffoldCommitSubmitState = (root: HTMLElement): void => {
-  const submit = findInRootOrParent<HTMLButtonElement>(
-    root,
-    `[data-testid="${editorTestIds.explicitPsdStructuralScaffoldApprovedSubmit}"]`
-  );
-  if (submit === null) {
+const updateApprovalSubmitState = (approval: ApprovalBinding): void => {
+  if (approval.approvedSubmit === null) {
     return;
   }
 
-  const baseDisabled = submit.dataset.baseDisabled === "true";
-  submit.disabled = baseDisabled || !isStructuralScaffoldApprovedSelectionCurrent(root);
+  approval.approvedSubmit.disabled =
+    approval.baseSubmitDisabled || !isApprovalSelectionCurrent(approval);
 };
 
-const isImportPlanApprovedSelectionCurrent = (root: HTMLElement): boolean => {
-  const approvedRefs = findInRootOrParent<HTMLTextAreaElement>(
-    root,
-    `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedRefs}"]`
-  );
-  if (approvedRefs === null) {
+const isApprovalSelectionCurrent = (approval: ApprovalBinding): boolean => {
+  if (approval.approvedRefs === null) {
     return true;
   }
 
   return areStringArraysEqual(
-    parseSelectedLayerRefs(approvedRefs.value),
-    parseSelectedLayerRefs(approvedRefs.dataset.lastGeneratedApprovedRefs ?? "")
+    parseSelectedLayerRefs(approval.approvedRefs.value),
+    approval.lastGeneratedApprovedRefs
   );
-};
-
-const isStructuralScaffoldApprovedSelectionCurrent = (root: HTMLElement): boolean => {
-  const approvedRefs = findInRootOrParent<HTMLTextAreaElement>(
-    root,
-    `[data-testid="${editorTestIds.explicitPsdStructuralScaffoldApprovedRefs}"]`
-  );
-  if (approvedRefs === null) {
-    return true;
-  }
-
-  return areStringArraysEqual(
-    parseSelectedLayerRefs(approvedRefs.value),
-    parseSelectedLayerRefs(approvedRefs.dataset.lastGeneratedApprovedRefs ?? "")
-  );
-};
-
-const findInRootOrParent = <T extends HTMLElement>(
-  root: HTMLElement,
-  selector: string
-): T | null => {
-  const localMatch = root.querySelector?.(selector) as T | null | undefined;
-  if (localMatch !== undefined && localMatch !== null) {
-    return localMatch;
-  }
-
-  return root.parentElement?.querySelector?.(selector) as T | null | undefined ?? null;
 };
 
 const areStringArraysEqual = (

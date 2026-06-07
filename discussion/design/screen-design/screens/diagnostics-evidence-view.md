@@ -47,3 +47,4 @@ Diagnostics / Evidence Viewは、通常authoring UIから分離したdebug/evide
 
 - 人間向けdebug確認にも必要だが、通常authoring UIではない。
 - E2E oracleが集中しているため、移動時にはtest-facing surfaceの扱いを決める必要がある。
+- Wave51ではこのViewの最終UIは未実装。Domain DはPSD Import Task observationから詳細 evidence/debug の availability をこのView向けに分類しただけで、operation log、generated evidence、package file set、reload summary、Product Preflight details の移動は後続waveに残る。

@@ -20,7 +20,24 @@
 - task-local flow
 - ボタン単位の仕様
 - CSSや最終コンポーネント設計
-- Wave51の実装範囲
+- wave別の詳細実装計画
+
+## 1.1 実装状況メモ
+
+Wave51 は、この画面設計を安全に実装していくための最初の負債解消waveとして final integration `pass` 記録済みである。
+
+実装済み範囲:
+
+- PSD import-plan / structural scaffold の production behavior が `data-testid` selector や fragile parent DOM traversal に依存しないよう、対象箇所を local approval binding に置き換えた。
+- App Shell に Authoring Workspace、PSD Import Task、Source Intake Task、Project Storage Task、Validation Task、Tutorial Task、Viewer / Runtime View、Diagnostics / Evidence View、Codex / Automation View の minimal shell surface metadata を追加した。
+- PSD Import Task 用の minimal structured observation projector を追加した。ただしUI、E2E、Codex-facing read APIではまだ消費していない。
+- production `data-testid` behavior dependency guard は standalone script と fixture regression として追加された。
+
+未実装範囲:
+
+- この overview に描く full workspace layout、final visual redesign、full panel migration、final toolbox、modal/window framework は未実装。
+- Diagnostics / Evidence View と Codex / Automation View の最終配置・表示は未実装。
+- Mesh generation/tool、Texture Atlas Task、Parameter Manager、Variant / Expression Manager のUI実装は進んでいない。
 
 ## 2. 基本方針
 
@@ -155,4 +172,5 @@ stateDiagram-v2
 - PSD Import taskはmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
-- `UX-FEAT-018` / `UX-FEAT-019` のproduction `data-testid` couplingを画面分離前に解消する必要があるか。
+- Wave51後の残債として、PSD Import / structural scaffold の可視DOM/text oracleを structured observation / deterministic API / evidence surface へ移し、追加済みPSD Import Task structured observation projectorをUI / E2E / Codex-facing read APIでどう消費するか。
+- Wave51の standalone production `data-testid` guard を package script / standard verification path に組み込むか。

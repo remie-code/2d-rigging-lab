@@ -8,6 +8,8 @@ Editor UX画面仕様discussionに向けて、現在の可視UIが E2E / UI test
 
 この文書は、画面仕様、レイアウト改善、テスト修正方針、Codex-facing command parity の実装計画を決めない。どの表示を仕様として守るべきかも、ここでは判断しない。
 
+Wave51後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで PSD import-plan / structural scaffold の対象 coupling は除去済みで、Domain Eで再導入防止のstandalone guardが追加された。ただし可視DOM/text oracle、Product Preflight current read、structural-specific execute/stale parity、full evidence view migration は未解決である。
+
 ## 2. 調査したファイル / 根拠
 
 Basis:
@@ -126,9 +128,9 @@ Wave48-Wave50補助根拠:
 
 ## 5. UI内部ロジックのDOM/test-id依存
 
-事実:
+Wave51前の事実:
 
-- `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` は production UI 内で `data-testid` selector を使う。
+- `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` は Wave51 前の production UI 内で `data-testid` selector を使っていた。
 - `syncImportPlanApprovedRefs` は import-plan candidate checkbox群から approved refs textareaを同期するため、親DOMから `[data-testid="${editorTestIds.explicitPsdImportPlanForm}"]` と `[data-testid="${editorTestIds.explicitPsdImportPlanApprovedRefs}"]` をqueryする。
 - `syncStructuralScaffoldApprovedRefs` も同様に structural scaffold form / approved refs textarea を `data-testid` で探す。
 - `updateImportPlanApprovedBatchSubmitState`、`updateStructuralScaffoldCommitSubmitState`、`isImportPlanApprovedSelectionCurrent`、`isStructuralScaffoldApprovedSelectionCurrent` も `data-testid` selector と `dataset.lastGeneratedApprovedRefs` / `dataset.baseDisabled` に依存する。
@@ -141,6 +143,12 @@ Wave48-Wave50補助根拠:
 未確認:
 
 - production UI全体で同種の `data-testid` selector 依存が他にもあるかは、`rg` 上は PSD import panel が明確な該当箇所だった。`querySelector("input")` など通常のform内部queryは他componentにもあるが、test id couplingとは別分類にした。
+
+Wave51後の状態:
+
+- Domain Bで上記の targeted coupling は local approval binding へ置き換え済み。既存の stable `data-testid` はtest-facing observation hookとして維持されている。
+- Domain Eで `node scripts/check-production-testid-boundary.mjs` と fixture regression が追加され、production `[data-testid...]` selector strings、`data-testid` readbacks、non-assignment `dataset.testid` reads を検出する。
+- Guardはstandaloneで、package scriptsには未統合。default scan root は `apps/editor/src` の `.ts` / `.tsx` に限られ、dynamic selector construction や間接aliasは検出対象外になり得る。
 
 ## 6. Codex-facing surface のDOM独立性
 
@@ -190,7 +198,7 @@ DOMから独立している主な情報:
 | --- | --- | --- |
 | Operation log / Generated evidence / Package file set / Reload summary | `data-testid`、`dt/dd` facts、operation type sequence、artifact paths、entry countがE2Eで読まれる。 | 多くのE2Eの最終確認、operation persistence evidence確認。 |
 | Product Preflight panel / comparison | summary/category/blocking/warning/unsupported/not-evaluated/comparison/ref textがE2E/UI testsで読まれる。 | `product-preflight-smoke.mjs`、`product-preflight-diff-smoke.mjs`、panel unit tests、Codex proposal workflow tests。 |
-| PSD Import import-plan / structural scaffold facts | file/source/digest/scope/counts/approved refs/generated refs/diagnostics/disabled stateがテストoracle。production UIも `data-testid` selectorで同期。 | PSD focused E2E、explicit PSD panel tests、Wave48/Wave50 stale preview blocking。 |
+| PSD Import import-plan / structural scaffold facts | file/source/digest/scope/counts/approved refs/generated refs/diagnostics/disabled stateがテストoracle。Wave51前のproduction UIは `data-testid` selectorで同期していたが、対象 coupling はWave51で除去済み。 | PSD focused E2E、explicit PSD panel tests、Wave48/Wave50 stale preview blocking、Wave51 production `data-testid` boundary guard。 |
 | Viewer / Runtime evidence | snapshot facts、diff、diagnostics、parameter overrides、mesh/mask/rig/dynamics evidence textが読まれる。 | `viewer-runtime-smoke.mjs`、topology/composition/rig/dynamics E2E、app-shell tests。 |
 | Preview / canvas DOM | SVG attributes、texture data attrs、mesh vertex selection attrs、aria labels、geometry/overflow検査がある。 | preview/drawable/canvas/topology/layer tests。 |
 | AI Approval / AI Transcript / Codex Proposal Review | command names、approval status、operation ID、evidence count、validation/diff/preflight/approval text、button disabledが読まれる。 | `smoke-checks.mjs` AI approval区間、`codex-proposal-review-smoke.mjs`、codex proposal panel tests。 |
@@ -248,7 +256,7 @@ DOMから独立している主な情報:
 
 - UI整理から比較的独立している。ただし structural-specific execute/stale command、Editor current Product Preflight state read、Product Preflight comparison readなどは不足可能性がある。
 
-### 分離単位D: PSD approval controls with production DOM coupling
+### 分離単位D: PSD approval controls after Wave51 coupling removal
 
 対象:
 
@@ -256,11 +264,12 @@ DOMから独立している主な情報:
 
 依存:
 
-- production codeが `data-testid` selector、parent DOM、textarea dataset、submit datasetを使って同期する。
+- Wave51前は production codeが `data-testid` selector、parent DOM、textarea dataset、submit datasetを使って同期していた。
+- Wave51後は local approval binding で同期する。stable `data-testid` はtest-facing observation hookとして残る。
 
 注意:
 
-- 他のevidence panelより危険度が高い。見た目上の分離だけでなく、production state synchronizationの切り離し対象として扱う必要がある。
+- 他のevidence panelより危険度が高いことは変わらない。production state synchronizationの targeted coupling は解消済みだが、task shellへの移動時にはDOM/text oracle、mount/visibility、structured observation消費の設計が必要になる。
 
 ### 分離単位E: Visual/semantic preview DOM
 
@@ -308,6 +317,6 @@ DOMから独立している主な情報:
 - Product Preflight、Codex Proposal Review、AI Approval、AI Transcriptを人間向けworkflowとして見せる範囲と、Codex/evidence向けに残す範囲。
 - PSD import / import-plan / structural scaffold を通常authoring panelに置くか、専用import workflowとして扱うか。
 - 既存E2Eの互換方針。`data-testid` と主要aria labelを維持するのか、可視text oracleを構造化helper/DTO/evidence fileへ寄せるのか。
-- PSD approval controlsのproduction `data-testid` couplingを、画面分離前に解消する必要があるか。
+- Wave51で追加された production `data-testid` boundary guardを、package script / standard verification path に入れるか。
 - Codex-facing structural command parityを、UI整理と独立に後続waveへ回せるか、または画面仕様で境界だけ先に固定すべきか。
 - Product Preflightの現在report/comparisonを、Editor command hostからDOM非依存に読む必要があるか。

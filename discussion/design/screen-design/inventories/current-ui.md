@@ -8,6 +8,8 @@ Editor UXの画面仕様を議論する前提として、現在のEditor UIに�
 
 この文書は画面仕様案ではない。レイアウト変更、画面遷移、情報の削除・移動、テスト更新方針はここでは決めない。
 
+Wave51後の読み方: この棚卸の production `data-testid` coupling 記述は Wave51 前の事実として扱う。Wave51 Domain B で PSD import-plan / structural scaffold の対象 coupling は除去済みだが、巨大1ページ構造、可視DOM/text oracle、Evidence / Codex surface混在の大半は後続waveの負債として残る。
+
 ## 2. 調査したファイル / 根拠
 
 Basis:
@@ -182,7 +184,7 @@ DOMには広範囲に `data-testid` が付与され、E2E側の `apps/editor/e2e
 - 多数のE2Eが `textContent` を読んで、panel text、summary text、`dt`/`dd` のfact、button/label text、禁止文言/期待文言を検証している。
 - `aria-label`、`aria-labelledby`、button text、heading textに依存するE2Eもある。
 - UI unit/component testにも `findByTestId(...).textContent.toContain(...)` 型の検証がある。
-- `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` はpanel内部で `data-testid` をqueryして、approved refs textareaやsubmit disabled状態を同期している。これはtestだけでなくcomponent内部ロジックのtest-id依存として確認できる。
+- Wave51前の `apps/editor/src/ui/explicit-psd-import/explicit-psd-import-panel.ts` はpanel内部で `data-testid` をqueryして、approved refs textareaやsubmit disabled状態を同期していた。これはtestだけでなくcomponent内部ロジックのtest-id依存として確認された。Wave51 Domain Bで対象箇所は local approval binding へ置き換え済み。
 - Codex command hostはDOMとは別に構造化APIを持つ。PSD import-plan/structural scaffold read projectionもこのsurfaceにある。
 
 具体例:
@@ -212,16 +214,18 @@ DOMには広範囲に `data-testid` が付与され、E2E側の `apps/editor/e2e
 - Wave48-Wave50 reportsはEditor/UI/e2e理解に必要なものだけ読んだ。全report横断ではない。
 - `editor-test-ids.ts`、component-local test ids、E2E mirrorの差分は完全監査していない。
 - 現在の `mvp-authoring-runtime/02-gui-editor-screen-spec.md` は既存の意図・案として参照したが、現実装との差分をWave51でどう扱うかは未決定。
+- Wave51 Domain Cで minimal shell surface metadata は追加されたが、router、tab、drawer、modal、final toolbox、full panel migration は未実装である。
+- Wave51 Domain Dで PSD Import Task structured observation projector は追加されたが、UI / E2E / Codex-facing read API からはまだ使っていない。
 - どのdebug/evidence情報を通常UIから隠すべきか、または残すべきかは未決定。
 
 ## 9. 次にユーザーと議論すべき論点
 
-- Wave51で決める「主要画面/view」は、既存の巨大workspaceを整理するだけか、明確な画面遷移・tab・drawerを導入する前提か。
+- Wave51後の次waveで決める「主要画面/view」は、既存の巨大workspaceを整理するだけか、明確な画面遷移・tab・drawerを導入する前提か。
 - 初期表示に必ず置くべき人間向け中核情報は何か。候補はcanvas/preview、parts tree、inspector、parameters、最小diagnostics。
 - Operation log、Generated evidence、Package file set、runtime snapshot/diff、validation check IDs、PSD refs/digestsを通常UIから分離するか。
 - PSD Import / import-plan / structural scaffoldは、通常authoring画面のpanelなのか、専用import workflow画面なのか。
 - Product Preflight、Codex Proposal Review、AI Approval、AI Transcriptをどの階層に置くか。常時表示、drawer、diagnostics/evidence view、またはCodex-facing専用viewのどれに近いか。
 - Viewer / Runtimeをauthoring previewと同列にするか、別view/tabとして扱うか。
 - E2Eの互換方針。既存test idを極力維持するのか、構造化helperや非可視evidence surfaceへ移すのか。
-- Codex-facing structural command parityはWave51 screen specの範囲外に置くか、画面仕様上の境界だけ明示するか。
+- Codex-facing structural command parityは後続screen-design waveの範囲外に置くか、画面仕様上の境界だけ明示するか。
 - semantic recognition、auto-rigging、suggestion UIは既存方針どおり非ゴールとして明示し続けるか。
