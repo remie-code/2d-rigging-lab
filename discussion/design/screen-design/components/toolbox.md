@@ -40,6 +40,8 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 | Task | まとまった作業画面を開く | Task window / task view | Import, Storage, Validate |
 | View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer, Diagnostics, Codex |
 
+Viewerは専用画面として開く。Diagnostics / Codexは、情報量や作業文脈に応じてdrawer / side view / dedicated viewのいずれかを後続議論で決める。
+
 ## 4. Icon Policy
 
 採用候補は `lucide` icons とする。MUIのような総合UIライブラリは、現時点では採用しない。

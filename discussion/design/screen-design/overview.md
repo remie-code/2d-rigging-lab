@@ -52,13 +52,13 @@ stateDiagram-v2
   AuthoringWorkspace --> PsdImportTask: 追加import
   AuthoringWorkspace --> ProjectStorageTask: save/load/export/import
   AuthoringWorkspace --> ValidationTask: Product Preflight
-  AuthoringWorkspace --> ViewerRuntimeView: Viewer/Runtimeを開く
+  AuthoringWorkspace --> ViewerRuntimeView: Viewer/Runtime専用画面を開く
   AuthoringWorkspace --> DiagnosticsEvidenceView: diagnostics/evidenceを開く
   AuthoringWorkspace --> CodexAutomationView: Codex/AI操作を開く
 
   ProjectStorageTask --> AuthoringWorkspace: 完了/戻る
   ValidationTask --> AuthoringWorkspace: summary確認/戻る
-  ViewerRuntimeView --> AuthoringWorkspace: 閉じる
+  ViewerRuntimeView --> AuthoringWorkspace: Authoringへ戻る
   DiagnosticsEvidenceView --> AuthoringWorkspace: 閉じる
   CodexAutomationView --> AuthoringWorkspace: 閉じる
 ```
@@ -71,7 +71,7 @@ stateDiagram-v2
 | PSD Import Task | PSD file選択、parse、tree inspection、preview、approval、commitを行うtask画面。 | [screens/psd-import-task.md](screens/psd-import-task.md) |
 | Project Storage Task | save/load/export/import/resetを扱うtask画面。 | [screens/project-storage-task.md](screens/project-storage-task.md) |
 | Validation Task | Product Preflightの実行、summary確認、details入口を扱うtask画面。 | [screens/validation-task.md](screens/validation-task.md) |
-| Viewer / Runtime View | runtime/viewer確認を行うview。 | [screens/viewer-runtime-view.md](screens/viewer-runtime-view.md) |
+| Viewer / Runtime View | 編集overlayなしでruntime/viewer確認を行う専用画面。 | [screens/viewer-runtime-view.md](screens/viewer-runtime-view.md) |
 | Diagnostics / Evidence View | operation log、generated evidence、package file set、reload summary、full diagnosticsを確認するview/drawer。 | [screens/diagnostics-evidence-view.md](screens/diagnostics-evidence-view.md) |
 | Codex / Automation View | Codex proposal review、AI approval、AI transcript、structured command surface状態を扱うview。 | [screens/codex-automation-view.md](screens/codex-automation-view.md) |
 | Tutorial Task | tutorial/sample workflowを扱うtask画面。 | [screens/tutorial-task.md](screens/tutorial-task.md) |
@@ -90,7 +90,7 @@ stateDiagram-v2
 ```text
 +--------------------------------------------------------------------------------+
 | App Bar                                                                        |
-| Project name / save state / mode / key actions / Viewer toggle                 |
+| Project name / save state / mode / key actions / Viewer shortcut               |
 +----------+---------------------+-----------------------+----------------------+
 | Toolbox  | Structure / Parts   | Canvas / Preview      | Inspector            |
 |          |                     |                       |                      |
