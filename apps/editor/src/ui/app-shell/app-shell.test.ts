@@ -30,6 +30,7 @@ import { aiApprovalTestIds } from "../ai-approval/index.js";
 import { aiTranscriptTestIds } from "../ai-transcript/index.js";
 import { createEditorAppShell } from "./app-shell.js";
 import { shellSurfaceDefinitions, shellSurfaces } from "./shell-surfaces.js";
+import { workspaceContextSurfaceTestIds } from "./workspace-context-surfaces.js";
 
 describe("editor app shell preview panel", () => {
   let originalFormData: typeof FormData | undefined;
@@ -415,6 +416,20 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");
   });
 
+  it("keeps the manual drawable authoring route reachable from the support area", () => {
+    const workflow = createWorkflow();
+    const shell = renderShell(workflow);
+    const support = findByShellSurfaceGroup(shell, "legacy-support");
+    const panel = findByTestId(support ?? shell, editorTestIds.drawableAuthoringPanel);
+
+    expect(support).not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(panel?.dataset.shellSurfaceGroup).toBe("drawable-authoring");
+    expect(panel?.textContent).toContain("Drawable Authoring");
+    expect(findByTestId(panel ?? shell, editorTestIds.drawableCreateForm)).not.toBeNull();
+    expect(findByTestId(panel ?? shell, editorTestIds.drawableCreateSubmit)).not.toBeNull();
+  });
+
   it("wires slider and reset callbacks", () => {
     const workflow = createWorkflow();
     const calls: Array<readonly [string, number]> = [];
@@ -627,6 +642,36 @@ describe("editor app shell preview panel", () => {
     expect(findByTestId(shell, editorTestIds.drawableList)).not.toBeNull();
   });
 
+  it("renders the v0 authoring workspace skeleton with Preview centered", () => {
+    const workflow = createWorkflow();
+    const shell = renderShell(workflow);
+    const workspace = findByClassName(shell, "editor-workspace");
+    const canvasRegion = findByWorkspaceRegion(shell, "canvas-preview");
+    const previewPanel = findByTestId(shell, editorTestIds.previewPanel);
+    const partsTreeSurface = findByShellSurfaceGroup(shell, "parts-tree");
+
+    expect(workspace?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
+    expect(workspace?.dataset.shellSurfaceGroup).toBe("workspace-shell");
+    expect(findByShellSurfaceGroup(shell, "workspace-v0")).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "toolbox")).not.toBeNull();
+    expect(partsTreeSurface).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "canvas-preview")).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "inspector")).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "parameter-bar")).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "diagnostics-strip")).not.toBeNull();
+    expect(findByShellSurfaceGroup(shell, "legacy-support")).not.toBeNull();
+
+    expect(canvasRegion).not.toBeNull();
+    expect(previewPanel).not.toBeNull();
+    expect(previewPanel?.parentElement).toBe(canvasRegion);
+    expect(findByTestId(canvasRegion ?? shell, editorTestIds.previewPanel)).not.toBeNull();
+    expect(findByTestId(partsTreeSurface ?? shell, editorTestIds.layerTreePanel)).not.toBeNull();
+    expect(findByTestId(partsTreeSurface ?? shell, editorTestIds.drawableList)).not.toBeNull();
+    expect(findByTestId(shell, workspaceContextSurfaceTestIds.inspectorSurface)).not.toBeNull();
+    expect(findByTestId(shell, workspaceContextSurfaceTestIds.parameterBarSurface)).not.toBeNull();
+    expect(findByTestId(shell, workspaceContextSurfaceTestIds.diagnosticsStripSurface)).not.toBeNull();
+  });
+
   it("registers the screen-design shell surfaces", () => {
     expect(shellSurfaceDefinitions).toEqual(
       expect.arrayContaining([
@@ -663,11 +708,11 @@ describe("editor app shell preview panel", () => {
       }
     });
     const taskEntry = findByTestId(shell, editorTestIds.psdImportTaskOpen);
-    const launcher = findByShellSurfaceGroup(shell, "task-launcher");
+    const launcher = findByShellSurfaceGroup(shell, "toolbox");
 
-    expect(taskEntry?.textContent).toBe("Import PSD");
+    expect(findByTestId(launcher ?? shell, editorTestIds.psdImportTaskOpen)).toBe(taskEntry);
     expect(taskEntry?.getAttribute("aria-label")).toBe("Import PSD");
-    expect(taskEntry?.getAttribute("aria-expanded")).toBe("false");
+    expect(taskEntry?.getAttribute("aria-pressed")).toBe("false");
     expect(launcher?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
     expect(launcher?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
     expect(findByTestId(shell, editorTestIds.explicitPsdImportPanel)).toBeNull();
@@ -692,7 +737,7 @@ describe("editor app shell preview panel", () => {
     const status = findByTaskShellRegion(taskShell ?? shell, "status");
     const observation = findByAriaLabel(shell, "PSD import task observation summary");
 
-    expect(taskEntry?.getAttribute("aria-expanded")).toBe("true");
+    expect(taskEntry?.getAttribute("aria-pressed")).toBe("true");
     expect(taskShell?.dataset.taskShellRegion).toBe("root");
     expect(taskShell?.dataset.shellSurfaceId).toBe(shellSurfaces.psdImportTask.id);
     expect(taskShell?.dataset.shellSurfaceKind).toBe(shellSurfaces.psdImportTask.kind);
@@ -720,7 +765,13 @@ describe("editor app shell preview panel", () => {
 
     expect(workspace?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
     expect(workspace?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
-    expect(workspace?.dataset.shellSurfaceGroup).toBe("legacy-host");
+    expect(workspace?.dataset.shellSurfaceGroup).toBe("workspace-shell");
+    expect(findByShellSurfaceGroup(shell, "workspace-v0")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
+    );
+    expect(findByShellSurfaceGroup(shell, "legacy-support")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
+    );
 
     expectPanelSurface(
       shell,
@@ -741,7 +792,16 @@ describe("editor app shell preview panel", () => {
       "drawable-authoring"
     );
     expect(findByTestId(shell, editorTestIds.explicitPsdImportPanel)).toBeNull();
-    expect(findByShellSurfaceGroup(shell, "task-launcher")?.dataset.shellSurfaceId).toBe(
+    expect(findByShellSurfaceGroup(shell, "toolbox")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
+    );
+    expect(findByShellSurfaceGroup(shell, "inspector")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
+    );
+    expect(findByShellSurfaceGroup(shell, "parameter-bar")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
+    );
+    expect(findByShellSurfaceGroup(shell, "diagnostics-strip")?.dataset.shellSurfaceId).toBe(
       shellSurfaces.authoringWorkspace.id
     );
     expectPanelSurface(
@@ -1297,6 +1357,9 @@ const findByClassName = (root: TestElement, className: string): TestElement | nu
 
 const findByShellSurfaceGroup = (root: TestElement, group: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.shellSurfaceGroup === group);
+
+const findByWorkspaceRegion = (root: TestElement, region: string): TestElement | null =>
+  root.queryByPredicate((element) => element.dataset.workspaceRegion === region);
 
 const findByTaskShellRegion = (root: TestElement, region: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.taskShellRegion === region);

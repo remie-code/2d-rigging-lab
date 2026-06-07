@@ -99,10 +99,348 @@ select {
 
 .editor-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
   padding: 20px 24px 28px;
+}
+
+.authoring-workspace-v0 {
+  display: grid;
+  grid-template-columns: minmax(64px, 84px) minmax(240px, 320px) minmax(360px, 1fr) minmax(280px, 360px);
+  grid-template-rows: minmax(420px, auto) auto auto;
+  grid-template-areas:
+    "toolbox parts canvas inspector"
+    "parameter parameter parameter parameter"
+    "diagnostics diagnostics diagnostics diagnostics";
+  gap: 14px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.toolbox-surface,
+.parts-tree-surface,
+.workspace-context-surface {
+  min-width: 0;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #d6ddd8;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(38 48 51 / 0.08);
+}
+
+.toolbox-surface {
+  grid-area: toolbox;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.parts-tree-surface {
+  grid-area: parts;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+}
+
+.authoring-workspace-v0__canvas {
+  grid-area: canvas;
+  min-width: 0;
+}
+
+.workspace-context-surface--inspector {
+  grid-area: inspector;
+}
+
+.workspace-context-surface--parameter-bar {
+  grid-area: parameter;
+}
+
+.workspace-context-surface--diagnostics-strip {
+  grid-area: diagnostics;
+}
+
+.authoring-workspace-support {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  min-width: 0;
+}
+
+.editor-task-shell {
+  min-width: 0;
+}
+
+.toolbox-surface h2,
+.toolbox-surface h3,
+.parts-tree-surface h2,
+.parts-tree-surface h3,
+.workspace-context-surface h2,
+.workspace-context-surface h3 {
+  margin: 0;
+  color: #1f2a2e;
+  line-height: 1.2;
+}
+
+.toolbox-surface h2,
+.parts-tree-surface h2,
+.workspace-context-surface h2 {
+  font-size: 15px;
+}
+
+.toolbox-surface__group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid #e1e6e2;
+}
+
+.toolbox-surface__group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.toolbox-surface__group-heading {
+  color: #60716e;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.toolbox-surface__items {
+  display: grid;
+  gap: 8px;
+}
+
+.toolbox-surface__button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px;
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.toolbox-surface__button[aria-pressed="true"] {
+  color: #ffffff;
+  background: #1d7a73;
+  border-color: #16645f;
+}
+
+.toolbox-surface__button:hover:not(:disabled),
+.toolbox-surface__button:focus-visible:not(:disabled) {
+  background: #e1e8e3;
+}
+
+.toolbox-surface__button[aria-pressed="true"]:hover:not(:disabled),
+.toolbox-surface__button[aria-pressed="true"]:focus-visible:not(:disabled) {
+  background: #16645f;
+}
+
+.toolbox-surface__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.toolbox-surface__icon {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.toolbox-surface__badge,
+.toolbox-surface__status {
+  max-width: 100%;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.parts-tree-surface .layer-tree-panel {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.parts-tree-surface__summary,
+.parts-tree-surface__drawable-list,
+.workspace-context-surface__section,
+.workspace-context-surface__parameter-summary,
+.workspace-context-surface__empty-parameter {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.parts-tree-surface__summary-list,
+.workspace-context-surface__key-markers,
+.workspace-context-surface__diagnostics-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 18px;
+  color: #43514f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.parts-tree-surface__summary-overview,
+.parts-tree-surface__draw-order-summary,
+.workspace-context-surface__label,
+.workspace-context-surface__status,
+.workspace-context-surface__fact-line,
+.workspace-context-surface__diagnostics-summary,
+.workspace-context-surface__empty-parameter p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-context-surface {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.workspace-context-surface__section,
+.workspace-context-surface__parameter-summary,
+.workspace-context-surface__empty-parameter {
+  padding: 10px;
+  background: #f8faf9;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.workspace-context-surface__label {
+  color: #263033;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.workspace-context-surface__status,
+.workspace-context-surface__fact-line,
+.workspace-context-surface__diagnostics-summary,
+.workspace-context-surface__empty-parameter p {
+  color: #60716e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workspace-context-surface__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.workspace-context-surface__facts dt,
+.workspace-context-surface__facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-context-surface__facts dt {
+  color: #50615e;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.workspace-context-surface__facts dd {
+  color: #263033;
+  font-size: 12px;
+}
+
+.workspace-context-surface__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-context-surface__action {
+  min-height: 34px;
+  min-width: 0;
+  padding: 7px 10px;
+  color: #263033;
+  background: #eef2ef;
+  border: 1px solid #cbd5d0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.workspace-context-surface__action:hover:not(:disabled),
+.workspace-context-surface__action:focus-visible:not(:disabled) {
+  background: #e1e8e3;
+}
+
+.workspace-context-surface__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.workspace-context-surface__parameter-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, auto);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.workspace-context-surface__parameter-controls input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: #1d7a73;
+}
+
+.workspace-context-surface__key-markers {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  padding-left: 0;
+  list-style: none;
+}
+
+.workspace-context-surface__key-marker {
+  min-width: 0;
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+  background: #fbfcfa;
+  border: 1px solid #e1e6e2;
+  border-radius: 6px;
+}
+
+.workspace-context-surface__key-marker--selected {
+  border-color: #9ecdbf;
+  background: #edf8f2;
+}
+
+.workspace-context-surface__diagnostics-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-context-surface__diagnostics-item--blocking {
+  color: #7a2e16;
+}
+
+.workspace-context-surface__diagnostics-item--warning {
+  color: #6b4a13;
 }
 
 .editor-panel {
@@ -1215,10 +1553,41 @@ select {
   background: #e1e8e3;
 }
 
+@media (max-width: 1120px) {
+  .authoring-workspace-v0 {
+    grid-template-columns: minmax(58px, 74px) minmax(220px, 300px) minmax(0, 1fr);
+    grid-template-areas:
+      "toolbox parts canvas"
+      "inspector inspector inspector"
+      "parameter parameter parameter"
+      "diagnostics diagnostics diagnostics";
+  }
+
+  .authoring-workspace-support {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 860px) {
   .editor-app-bar,
   .editor-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .authoring-workspace-v0 {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "toolbox"
+      "parts"
+      "canvas"
+      "inspector"
+      "parameter"
+      "diagnostics";
+  }
+
+  .toolbox-surface__items {
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
   }
 
   .editor-package-status {
@@ -1231,6 +1600,8 @@ select {
   }
 
   .preview-summary,
+  .workspace-context-surface__facts,
+  .workspace-context-surface__parameter-controls,
   .product-preflight-panel__facts {
     grid-template-columns: 1fr;
   }

@@ -19,6 +19,12 @@ Parts Treeは、Authoring Workspace左側のStructure / Partsペインに置く�
 
 Parts TreeはToolboxではない。Toolboxは作業モードやtaskを呼び出すlauncherであり、Parts Treeはmodel構造を表示・選択・整理する場所である。
 
+## 1.1 実装状況
+
+Wave53 final integration report/review `pass` により、Parts Tree v0 は Authoring Workspace 左側の Structure / Parts surface として実装・統合済みである。既存 Layer Tree と Drawable List の selection、visibility、draw order callback contract を再利用している。
+
+現時点では legacy Drawable Authoring support panel も残っているため、`drawable.list` / `drawable.row.*` / visibility / move hooks は Parts Tree と legacy panel の両方に出る。Domain E では非blockingと判定済みだが、将来 legacy list を狙うテストや helper は stable wrapper で明示的に scope する必要がある。manual drawable create 入口は legacy support で維持されており、Parts Tree 内の final create UI は未完了である。
+
 ## 2. 基本方針
 
 - Parts TreeはAuthoring WorkspaceのStructure / Partsペインに置く。
@@ -131,7 +137,7 @@ Drawable Inspectorとの分担:
 
 ## 10. 未決事項
 
-- manual drawable createの初期UIをParts Tree内に置くか、Drawable Inspectorからも呼べるようにするか。
+- manual drawable createの final UI をParts Tree内に置くか、Drawable Inspectorからも呼べるようにするか。Wave53 v0 では legacy support panel に入口を維持している。
 - row reorder操作の具体UI。
 - editor visibility / runtime visibilityのiconsとtooltip。
 - large hierarchy時のsearch / filter / collapsed state保存。

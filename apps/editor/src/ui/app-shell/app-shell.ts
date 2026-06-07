@@ -61,7 +61,6 @@ import {
 import { createAiApprovalPanel, type AiApprovalPanelCallback } from "../ai-approval/index.js";
 import { createAiTranscriptPanel } from "../ai-transcript/index.js";
 import { createDrawableAuthoringPanel } from "../drawable-authoring/index.js";
-import { createLayerTreePanel } from "../layer-tree/index.js";
 import { createCompositionPanel } from "../composition-panel/index.js";
 import {
   createDynamicsPanel,
@@ -89,6 +88,16 @@ import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
+import {
+  createAuthoringToolboxSurface,
+  createAuthoringWorkspacePrimaryLayout,
+  createCanvasPreviewRegion,
+  createPartsTreeShellSurface,
+  createWorkspaceDiagnosticsStripShellSurface,
+  createWorkspaceInspectorShellSurface,
+  createWorkspaceParameterBarShellSurface,
+  createWorkspaceSupportRegion
+} from "./authoring-workspace-v0-shell.js";
 import { createPackageStatus } from "./package-status.js";
 import { applyShellSurfaceMetadata, shellSurfaces } from "./shell-surfaces.js";
 import { createTaskShell } from "./task-shell.js";
@@ -237,7 +246,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   workspace.className = "editor-workspace";
   workspace.setAttribute("aria-label", "Editor workspace");
   applyShellSurfaceMetadata(workspace, shellSurfaces.authoringWorkspace, {
-    group: "legacy-host"
+    group: "workspace-shell"
   });
 
   const parametersPanel = document.createElement("section");
@@ -300,41 +309,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   applyShellSurfaceMetadata(drawableAuthoringPanel, shellSurfaces.authoringWorkspace, {
     group: "drawable-authoring"
   });
-  const layerTreePanel = createLayerTreePanel({
-    viewModel: options.viewModel.layerTree,
-    workflow: options.viewModel.partTextureWorkflow,
-    onCreatePart: options.onCommitCreatePart,
-    onUpdatePart: options.onCommitUpdatePart,
-    onSetDrawablePart: options.onCommitSetDrawablePart,
-    onSetDrawableTexture: options.onCommitSetDrawableTexture,
-    ...(options.onDraftLayerTreePartRename === undefined
-      ? {}
-      : { onDraftPartRename: options.onDraftLayerTreePartRename }),
-    ...(options.onDraftLayerTreePartReparent === undefined
-      ? {}
-      : { onDraftPartReparent: options.onDraftLayerTreePartReparent }),
-    ...(options.onDraftLayerTreeEmptyLeafPartDelete === undefined
-      ? {}
-      : { onDraftEmptyLeafPartDelete: options.onDraftLayerTreeEmptyLeafPartDelete }),
-    ...(options.onDraftLayerTreeDrawablePartAssignment === undefined
-      ? {}
-      : { onDraftDrawablePartAssignment: options.onDraftLayerTreeDrawablePartAssignment }),
-    ...(options.onDraftLayerTreeDrawableTextureAssignment === undefined
-      ? {}
-      : { onDraftDrawableTextureAssignment: options.onDraftLayerTreeDrawableTextureAssignment }),
-    ...(options.onCommitLayerTreeDirectManipulationDrafts === undefined
-      ? {}
-      : { onCommitDirectManipulationDrafts: options.onCommitLayerTreeDirectManipulationDrafts }),
-    ...(options.onClearLayerTreeDirectManipulationDrafts === undefined
-      ? {}
-      : { onClearDirectManipulationDrafts: options.onClearLayerTreeDirectManipulationDrafts }),
-    onSelectDrawable: options.onSelectDrawableLayer,
-    onToggleDrawableLock: options.onToggleDrawableLayerLock,
-    onToggleDrawableEditorHidden: options.onToggleDrawableEditorHidden
-  });
-  applyShellSurfaceMetadata(layerTreePanel, shellSurfaces.authoringWorkspace, {
-    group: "parts-tree"
-  });
+  const partsTreeSurface = createPartsTreeShellSurface(options);
   const sourceIntakePanel = createSourceIntakePanel({
     draft: options.state.sourceIntakeDraft,
     viewModel: options.viewModel.sourceIntake,
@@ -343,7 +318,7 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   applyShellSurfaceMetadata(sourceIntakePanel, shellSurfaces.sourceIntakeTask, {
     group: "source-intake"
   });
-  const psdImportTaskLauncher = createPsdImportTaskLauncher(options);
+  const toolboxSurface = createAuthoringToolboxSurface(options);
   const activeTask =
     options.activeTask === "psdImport" ? createPsdImportTaskShell(options) : null;
   const dynamicsPanel = createDynamicsPanel({
@@ -397,6 +372,10 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   applyShellSurfaceMetadata(previewPanel, shellSurfaces.authoringWorkspace, {
     group: "canvas-preview"
   });
+  const canvasPreviewRegion = createCanvasPreviewRegion(previewPanel);
+  const inspectorSurface = createWorkspaceInspectorShellSurface(options);
+  const parameterBarSurface = createWorkspaceParameterBarShellSurface(options);
+  const diagnosticsStripSurface = createWorkspaceDiagnosticsStripShellSurface(options);
   const tutorialWorkflowPanel = createTutorialWorkflowPanel({
     viewModel: options.viewModel.tutorialGuidedWorkflow,
     onCreateTutorialMiniModel: options.onCreateTutorialMiniModel,
@@ -507,25 +486,32 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   );
 
   workspace.append(
-    parametersPanel,
-    previewPanel,
-    tutorialWorkflowPanel,
-    ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
-    compositionPanel,
-    rigControlPanel,
-    dynamicsPanel,
-    operationPanel,
-    layerTreePanel,
-    drawableAuthoringPanel,
-    sourceIntakePanel,
-    psdImportTaskLauncher,
+    createAuthoringWorkspacePrimaryLayout({
+      toolboxSurface,
+      partsTreeSurface,
+      canvasPreviewRegion,
+      inspectorSurface,
+      parameterBarSurface,
+      diagnosticsStripSurface
+    }),
     ...(activeTask === null ? [] : [activeTask]),
-    projectPersistencePanel,
-    productPreflightPanel,
-    codexProposalReviewPanel,
-    aiApprovalPanel,
-    aiTranscriptPanel,
-    persistencePanel
+    createWorkspaceSupportRegion([
+      parametersPanel,
+      tutorialWorkflowPanel,
+      ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
+      compositionPanel,
+      rigControlPanel,
+      dynamicsPanel,
+      operationPanel,
+      drawableAuthoringPanel,
+      sourceIntakePanel,
+      projectPersistencePanel,
+      productPreflightPanel,
+      codexProposalReviewPanel,
+      aiApprovalPanel,
+      aiTranscriptPanel,
+      persistencePanel
+    ])
   );
   shell.append(appBar, workspace);
 
@@ -554,32 +540,6 @@ const createAppBarActions = (options: EditorAppShellOptions): HTMLElement => {
   actions.append(viewerRuntime);
 
   return actions;
-};
-
-const createPsdImportTaskLauncher = (options: EditorAppShellOptions): HTMLElement => {
-  const launcher = document.createElement("section");
-  launcher.className = "editor-panel editor-task-launcher editor-task-launcher--psd-import";
-  launcher.setAttribute("aria-label", "PSD import task launcher");
-  applyShellSurfaceMetadata(launcher, shellSurfaces.authoringWorkspace, {
-    group: "task-launcher"
-  });
-
-  const heading = document.createElement("h2");
-  heading.textContent = "Tasks";
-
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "editor-button editor-task-launcher__button";
-  action.dataset.testid = editorTestIds.psdImportTaskOpen;
-  action.textContent = "Import PSD";
-  action.setAttribute("aria-label", "Import PSD");
-  action.setAttribute("aria-expanded", String(options.activeTask === "psdImport"));
-  action.addEventListener("click", () => {
-    options.onOpenPsdImportTask?.();
-  });
-
-  launcher.append(heading, action);
-  return launcher;
 };
 
 const createPsdImportTaskShell = (options: EditorAppShellOptions): HTMLElement => {

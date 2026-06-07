@@ -8,6 +8,10 @@ Toolboxは、Authoring Workspace上でユーザーが次に行う作業モード
 
 Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active Toolとcurrent selectionに応じてInspector / Tool Panelへ表示する。
 
+## 1.1 実装状況
+
+Wave53 final integration report/review `pass` により、Toolbox v0 は Authoring Workspace 左側の launcher surface として実装・統合済みである。PSD Import はこの launcher から既存 Task Shell task として開ける。現時点の実装は launcher grouping、active/disabled/badge/status、accessible label、`title` tooltip text を扱う v0 であり、final icon set、hover/focus tooltip component、expanded label policy、final visual polish は未完了である。
+
 ## 2. 基本形
 
 - icon buttonを縦または横に並べる。
@@ -94,7 +98,7 @@ Icon候補は最終実装時に利用可能な `lucide` icon名へ調整して�
 
 ## 7. 未決事項
 
-- Toolboxを左端固定にするか、上部toolbarにするか。
+- Toolboxは Wave53 v0 では左端配置済み。final visual / accessibility policy として左端固定を確定するかは未決。
 - label expanded modeを常時提供するか、将来のaccessibility preferenceに回すか。
 - Task itemをmodal、task window、dedicated task viewのどれで開くか。
 - Diagnostics / Codex viewをdrawerにするか、dedicated viewにするか。

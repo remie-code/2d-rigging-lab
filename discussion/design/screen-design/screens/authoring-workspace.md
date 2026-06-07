@@ -36,6 +36,12 @@ Drawable選択時、InspectorはDrawable Inspectorとして、draw order、edito
 
 Parameter BarはToolboxやInspectorとは別の横断領域として、Canvas / Previewの下、Diagnostics Stripの上に置く。常時表示する対象は1つのactive parameterに限定し、全parameter確認は非モーダルのParameter Control Paletteで扱う。詳細は [../components/parameter-keyform.md](../components/parameter-keyform.md) を参照する。
 
+## 2.1 実装状況
+
+Wave53 final integration report/review `pass` により、このレイアウトの v0 skeleton は live App Shell に実装済みである。実装済み範囲は App Bar、左 Toolbox、左 Structure / Parts Tree、中央 Canvas / Preview、右 Inspector、下部 Parameter Bar、下部 Diagnostics Strip の基本配置に限る。PSD Import は Toolbox から既存 Task Shell task として開け、default always-visible workspace panel には戻っていない。
+
+これは final visual redesign ではない。legacy support panels には既存の Project Storage、Product Preflight、Viewer / Runtime、Codex/AI support、operation/evidence/debug 系UIが残る。duplicate drawable-list hooks は現時点で非blockingだが、将来 legacy Drawable Authoring list を対象にするテストは `drawableAuthoring.panel` などの stable wrapper で scope する必要がある。
+
 ## 3. Empty State
 
 表示するもの:
@@ -131,6 +137,6 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 
 ## 6. 未決事項
 
-- Toolboxは左端固定か、上部toolbarか。
-- Parts Treeを常に左に置くか、empty stateではcanvas側の導線を優先するか。
+- ToolboxとParts Treeは Wave53 v0 では左側配置済みだが、final visual / accessibility policy は未確定。
+- Empty stateでcanvas側の導線をどこまで優先するか。
 - Inspectorは右固定か、選択中対象に応じてdrawer/side panelとして切り替えるか。

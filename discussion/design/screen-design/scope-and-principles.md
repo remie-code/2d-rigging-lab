@@ -54,6 +54,17 @@ Wave52 final integration report/review の `pass` 記録で主張できる範囲
 
 Wave52 は full workspace visual redesign、final Toolbox placement、final modal/task-window/dedicated-view policy、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter / Variant UI 実装を完了していない。
 
+## 2.2 Wave53 実装状況メモ
+
+Wave53 final integration report/review は、Workspace Layout Migration v0 の bounded implementation pass として次を記録している。
+
+- Authoring Workspace v0 skeleton を App Shell に統合済み。
+- App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の基本配置を実装済み。
+- PSD Import は Toolbox から Task Shell task として開け、default always-visible workspace panel には戻していない。
+- 既存 PSD focused paths、desktop/mobile e2e smoke、production `data-testid` guard、source/dependency guards は Domain E で pass 記録済み。
+
+Wave53 は final visual redesign、full panel migration、final modal/task-window/dedicated-view policy、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter Manager / Variant UI 実装を完了していない。legacy support panels には旧 evidence/debug/Codex-heavy UI が残り、duplicate drawable-list hooks は現時点では非blockingだが、将来 legacy list を明示対象にするテストは stable wrapper で scope する必要がある。
+
 ## 3. 現在の問題設定
 
 現在の Editor は起動でき、基本機能も揃い始めている。一方で、人間向けUXはまだ弱い。
@@ -165,4 +176,4 @@ Undine は、現在のUI / source / test を広く棚卸ししない。Undine �
 
 ## 9. 次のステップ
 
-次は、Wave51-Wave52で作った基盤を前提に、Workspace Layout Migration、Diagnostics / Evidence View Separation、Codex / Automation View Separation、PSD Import Task の final placement / final navigation polish を別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。
+次は、Wave51-Wave53で作った基盤を前提に、Diagnostics / Evidence View Separation、Codex / Automation View Separation、PSD Import Task の final placement / final navigation polish を別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。

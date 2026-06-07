@@ -10,6 +10,12 @@ Rig、Mesh deformation、Opacity、Subtree opacity、Dynamics、Viewer確認は�
 
 Parameter definitionそのものは、Parameter Managerで管理する。Parameter Barはcurrent value操作、Parameter Control Paletteは動作確認、Quick Createは作業中の最低限作成入口である。
 
+## 1.1 実装状況
+
+Wave53 final integration report/review `pass` により、Authoring Workspace 下部に Parameter Bar v0 surface が実装・統合済みである。現時点の v0 は、1つの active parameter の summary、current value slider、key marker summary、reset / add-update / quick create / Parameter Manager launcher callbacks を扱う。
+
+これは full Parameter Manager、Parameter Control Palette、全parameter一覧、全keyform table、2D/grid parameter editing の完成ではない。Parameter Manager / Variant / Expression Manager / advanced keyform authoring は後続waveの範囲である。
+
 ## 2. 基本方針
 
 - 常時表示する対象は、1つのactive parameterに限定する。

@@ -27,7 +27,8 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
 - Wave52 final integration report/review は PSD Import Task Migration v0 の bounded implementation baseline として `pass` 記録済み。PSD Import は Empty / Authoring Workspace から Task Shell task として開け、default では常設の巨大 workspace panel ではなくなった。Generic Task Shell / Task Chrome、PSD Import Task Human UI、narrow observation consumption、focused PSD regressions、standard `check` への `check:testids` 統合までが範囲である。
 - `check:testids:fixtures` は利用可能だが、standard `check` には含めない。
-- Wave52 は full workspace layout / visual redesign、final toolbox、final modal/task-window/dedicated-view policy、最終的な Diagnostics / Evidence View または Codex / Automation View の配置を完了していない。
+- Wave53 final integration report/review は Workspace Layout Migration v0 の bounded implementation baseline として `pass` 記録済み。Authoring Workspace v0 skeleton、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の実配置、Toolbox経由の PSD Import Task entry、desktop/mobile smoke、既存 PSD focused paths、production `data-testid` guard、source/dependency guards の pass 記録を持つ。
+- Wave53 final 後も、full visual redesign、full panel migration、final modal/task-window/dedicated-view policy、最終的な Diagnostics / Evidence View または Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI は未完了である。legacy support panels には旧 evidence/debug/Codex-heavy UI が残る。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
 - Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
@@ -42,15 +43,14 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 ## 次の作業候補
 
-1. Workspace Layout Migration v0として、Authoring Workspace layout、Toolbox、Parts Tree、Canvas、Inspector、Parameter Bar、Diagnostics Stripの実配置を別waveで決める。
-2. Diagnostics / Evidence View Separation v0 と Codex / Automation View Separation v0 で、通常authoring UIから debug/evidence/automation details を段階的に分離する。
-3. PSD Import Task の final Toolbox placement、modal/task-window/dedicated-view policy、Diagnostics / Evidence への最終導線は後続waveで決める。
-4. Texture Atlas Task、Mesh generation/tool、Parameter Manager、Variant / Expression Manager は、置き場所とsurface境界が固まった後の後続waveで扱う。
+1. Diagnostics / Evidence View Separation v0 と Codex / Automation View Separation v0 で、通常authoring UIから debug/evidence/automation details を段階的に分離する。
+2. PSD Import Task の final modal/task-window/dedicated-view policy、Diagnostics / Evidence への最終導線、final navigation polish は後続waveで決める。
+3. Texture Atlas Task、Mesh generation/tool、Parameter Manager、Variant / Expression Manager は、置き場所とsurface境界が固まった後の後続waveで扱う。
 
 ## 未決事項
 
-- Toolboxは左端固定か、上部toolbarか。
-- Tool起動時の表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
+- Toolboxの最終配置は、Wave53 v0 では左側配置で実装済みだが、final visual / accessibility polish としては未確定。
+- Tool起動時の最終表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
 - PSD Import taskはmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。

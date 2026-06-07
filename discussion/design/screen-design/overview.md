@@ -34,12 +34,14 @@ Wave51 は、この画面設計を安全に実装していくための最初の�
 - Wave52 で Generic Task Shell / Task Chrome と PSD Import Task Human UI を実装し、PSD Import は Empty / Authoring Workspace から Task Shell task として開けるようになった。default では常設の巨大 workspace panel として表示されない。
 - Wave52 で PSD Import structured observation projector は Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API の最終surfaceではまだない。
 - production `data-testid` behavior dependency guard は standalone script と fixture regression として追加された。Wave52 で `check:testids` が standard `check` に統合され、`check:testids:fixtures` は利用可能だが standard `check` には含めない。
+- Wave53 final integration report/review `pass` により、Authoring Workspace v0 skeleton が live App Shell に統合され、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の基本配置ができた。PSD Import は Toolbox launcher から既存 Task Shell task として開ける。desktop/mobile smoke、既存 PSD focused paths、production `data-testid` guard、source/dependency guards は pass 記録済み。
 
 未実装範囲:
 
-- この overview に描く full workspace layout、final visual redesign、full panel migration、final toolbox、modal/window framework は未実装。Wave52 の PSD Import task 化は、このうち PSD Import の常設panel解除とtask shell到達性に限る。
+- この overview に描く final visual redesign、full panel migration、final toolbox polish、modal/window framework は未実装。Wave53 の workspace layout は v0 skeleton に限る。
 - Diagnostics / Evidence View と Codex / Automation View の最終配置・表示は未実装。
 - Mesh generation/tool、Texture Atlas Task、Parameter Manager、Variant / Expression Manager のUI実装は進んでいない。
+- Legacy support panels には旧 evidence/debug/Codex-heavy UI が primary skeleton の下/周辺に残っている。
 
 ## 2. 基本方針
 
@@ -169,8 +171,8 @@ stateDiagram-v2
 
 ## 7. 未決事項
 
-- Toolboxは左端固定か、上部toolbarか。
-- Tool起動時の表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
+- Toolboxは Wave53 v0 では左側 launcher として配置済み。最終の visual polish、icon/tooltip behavior、expanded label policy は未決。
+- Tool起動時の最終表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
 - PSD Import taskの最終形はmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。

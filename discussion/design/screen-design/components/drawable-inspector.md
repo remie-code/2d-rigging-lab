@@ -31,6 +31,12 @@ Mesh、Rig、DynamicsのようなActive Toolではなく、選択中drawableに�
 - `UX-FEAT-020` のmask relation authoringと `UX-FEAT-021` のsingle drawable opacity keyformは、当面Drawable Inspector内sectionとParameter / Keyform UIの協調で扱う。専用Composition / Opacity Toolは初期画面設計では作らない。
 - raw evidence、operation ID、generated refs全文は通常表示しない。
 
+## 2.1 実装状況
+
+Wave53 final integration report/review `pass` により、Authoring Workspace 右側に Inspector v0 surface が実装・統合済みである。現時点の Inspector は project / selection / active tool の human-facing summary と callbacks を扱う v0 であり、この文書にある full Drawable Inspector section 群を完成したものではない。
+
+Legacy support panels には既存の Drawable Authoring、composition、rig、dynamics、evidence/debug/Codex-heavy UI が残る。Operation log、evidence path、generated refs、package file set、raw diagnostics、Codex automation details を最終的に通常 UI から分離する作業は Diagnostics / Evidence View Separation と Codex / Automation View Separation の後続waveに残る。
+
 ## 3. 配置
 
 Drawable選択時の基本配置:
