@@ -21,6 +21,7 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 | Select   |  Active tool
 | Mesh     |  Active tool
 | Rig      |  Active tool
+| Dynamics |  Active tool
 |----------|
 | Import   |  Task
 | Atlas    |  Task
@@ -37,7 +38,7 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 
 | 種別 | 役割 | 起動後の主な表示先 | 例 |
 |---|---|---|---|
-| Active Tool | workspace内の作業モードを切り替える | Canvas / Inspector / Tool Panel | Select, Mesh, Rig |
+| Active Tool | workspace内の作業モードを切り替える | Canvas / Inspector / Tool Panel | Select, Mesh, Rig, Dynamics |
 | Task | まとまった作業画面を開く | Task window / task view | Import, Texture Atlas, Storage, Validate |
 | View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer, Diagnostics, Codex |
 
@@ -68,6 +69,7 @@ Viewerは専用画面として開く。Diagnostics / Codexは、情報量や作�
 | Select | Active Tool | `MousePointer2` | Select |
 | Mesh | Active Tool | `Triangle` | Mesh tools |
 | Rig | Active Tool | `Spline` | Rig tools |
+| Dynamics | Active Tool | `Waves` | Dynamics |
 | Import PSD | Task | `FileInput` | Import PSD |
 | Texture Atlas | Task | `LayoutGrid` | Texture Atlas |
 | Storage | Task | `FolderOpen` | Project storage |
@@ -83,6 +85,7 @@ Icon候補は最終実装時に利用可能な `lucide` icon名へ調整して�
 - Mesh toolは、drawable選択中ならそのdrawableのmesh操作をInspector / Tool Panelへ表示する。
 - Mesh toolがactiveでdrawable未選択なら、Parts TreeまたはCanvasでdrawable選択を促すempty tool stateを表示する。
 - Rig toolは、partまたはdrawable選択中ならdeformer/parenting/parameter/keyform操作をInspector / Tool Panelへ表示する。
+- Dynamics toolは、part / drawable / rig control / parameter選択中ならdynamics group、input / output binding、coefficient操作をInspector / Tool Panelへ表示する。
 - Select toolは、Parts TreeとCanvasのselectionを主操作にする。
 
 ## 7. 未決事項

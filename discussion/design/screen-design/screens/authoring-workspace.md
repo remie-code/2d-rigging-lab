@@ -17,6 +17,7 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 | Import   | Parts tree          | Empty state or model  | Project / selection  |
 | Mesh     | PSD group-derived   | preview               | details              |
 | Rig      | part containers     |                       | Part / Drawable /    |
+| Dynamics | drawables / hidden  |                       | Source details       |
 | Atlas    | drawables / hidden  |                       | Source details       |
 | Validate | rows                |                       | Contextual controls  |
 | Automate |                     |                       |                      |
@@ -88,7 +89,13 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
    - RotationやWarp / Latticeのdraft overlayはCanvasに表示し、Applyするまでproject rig controlは変更しない。
    - 自動semantic推定やauto-rig提案はEditor通常UIの責務ではない。
    - Rig Toolの詳細は [../components/rig-tool.md](../components/rig-tool.md) を参照する。
-4. Texture Atlas作成・確認
+4. Dynamics作成・確認
+   - Parts TreeまたはCanvasでpart / drawable / rig control / parameterを選択し、ToolboxのDynamicsを開く。
+   - Inspectorはdynamics group、input parameter、output binding、coefficient、軽いpreview sampleを出す。
+   - 常設の大きなSimulation Controlsは置かず、本格的な時間再生や複数parameter確認はViewer / Runtime Viewへ委譲する。
+   - Canvasには選択中dynamics groupの影響範囲、出力方向、sample valueに対する簡易preview overlayを表示してよい。
+   - Dynamics Toolの詳細は [../components/dynamics-tool.md](../components/dynamics-tool.md) を参照する。
+5. Texture Atlas作成・確認
    - ToolboxのTexture Atlasを開き、visible drawableをtexture pageへ配置する専用Taskへ進む。
    - Texture Atlas Taskでは、drawable対象一覧、page settings、padding、layout preview、unplaced / overflow warningを確認する。
    - Generate Layout Previewはuncommittedであり、Apply Atlasでproject stateへcommitする。
@@ -100,6 +107,7 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 - Parts Tree: `UX-FEAT-008`, `UX-FEAT-009`
 - Canvas / Preview: `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012`
 - Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025`
+- Dynamics Tool: `UX-FEAT-024`, `UX-FEAT-025`
 - Texture Atlas Task: 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`
 
 ## 6. 未決事項

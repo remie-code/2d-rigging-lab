@@ -166,7 +166,7 @@ expanded状態:
 | Rig Tool | Parameter Barのcurrent valueを使ってrotation / warp lattice keyformをauthoringする。 |
 | Mesh Tool | 将来mesh deformation keyformを扱う場合、Parameter Barのcurrent valueを使う。 |
 | Composition / Opacity | drawable opacity keyformのauthoringにParameter Barを使う。 |
-| Dynamics | parameter-driven previewや確認ではParameter Control Paletteを使う。 |
+| Dynamics Tool | active input parameterはParameter Barで扱い、group / binding / coefficientはDynamics Inspectorで扱う。本格的なruntime確認はViewer / Runtime Viewへ送る。 |
 | Viewer / Runtime View | より本格的なruntime確認view。Parameter Control Paletteより広い検証文脈を扱う。 |
 
 ## 8. Tool State

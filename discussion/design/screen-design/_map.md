@@ -24,6 +24,7 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Editor起動直後は、PSD import画面ではなくauthoring workspaceとして見えるべきである。
 - PSD importは通常workspaceから呼び出すtaskであり、常設の巨大panelではなくtask window / modal / dedicated task panelとして扱う方向が有力である。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
+- Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
 - Viewer / Runtime Viewはmodalではなく、Toolbox / App Barから開く専用画面として扱う。編集overlayを出さず、runtime表示、parameter override、warning / diff summaryを確認する。
 - 人間向けUI、debug/evidence表示、Codex-facing surface、test-facing surfaceを分離する必要がある。
 - `UX-FEAT-001`〜`UX-FEAT-037` の機能IDを、今後の画面仕様議論の参照軸として使う。

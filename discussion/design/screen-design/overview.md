@@ -87,6 +87,7 @@ stateDiagram-v2
 | Toolbox | Authoring Workspace上でActive Tool、Task、Viewを起動・切り替えるicon launcher。 | [components/toolbox.md](components/toolbox.md) |
 | Mesh Tool | 選択中drawableのinitial mesh generation、mesh overlay編集、Topology / UV編集を扱うActive Tool。 | [components/mesh-tool.md](components/mesh-tool.md) |
 | Rig Tool | 選択中part / drawable / meshに対するrig draft/preview、binding、parameter/keyform authoringを扱うActive Tool。 | [components/rig-tool.md](components/rig-tool.md) |
+| Dynamics Tool | dynamics group、input / output binding、coefficient、lightweight previewを扱うActive Tool。 | [components/dynamics-tool.md](components/dynamics-tool.md) |
 | Parameter / Keyform | active parameterの現在値操作、keyform authoring、全parameter確認用paletteを扱う横断UI。 | [components/parameter-keyform.md](components/parameter-keyform.md) |
 
 ## 5. 大まかな画面配置
@@ -102,6 +103,7 @@ stateDiagram-v2
 | Select   | PSD group-derived   | preview               | details              |
 | Mesh     | part containers     |                       | Part / Drawable /    |
 | Rig      | drawables / hidden  |                       | Source details       |
+| Dynamics | rows                |                       | Contextual controls  |
 | Atlas    | rows                |                       | Contextual controls  |
 | Validate | rows                |                       | Contextual controls  |
 | Automate |                     |                       |                      |
@@ -121,6 +123,7 @@ stateDiagram-v2
 | Parts Tree | `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019` |
 | Canvas / Preview | `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012` |
 | Inspector / Context Panel | `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025` |
+| Dynamics Tool | `UX-FEAT-024`, `UX-FEAT-025`, 一部 `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-023`, `UX-FEAT-028`, `UX-FEAT-029` |
 | PSD Import Task | `UX-FEAT-013`〜`UX-FEAT-019` |
 | Texture Atlas Task | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Project Storage Task | `UX-FEAT-026`, `UX-FEAT-027`, 一部 `UX-FEAT-035`, `UX-FEAT-036` |

@@ -225,5 +225,5 @@ Warp / Latticeは、選択targetに対して格子状の制御点を置き、con
 - Rig Tool内でRotation / Warp Lattice以外のprimitiveをいつ扱うか。
 - Warp / Latticeの分割数変更を初回実装に含めるか、後続waveに回すか。
 - keyform authoringをRig Tool内に常設するか、parameter/keyform専用sub-panelに分けるか。
-- DynamicsをRig Toolの一部として扱うか、別Active ToolまたはViewとして扱うか。
+- Dynamicsの詳細なcoefficient / output binding設計。Dynamics自体は別Active Toolとして扱う。
 - Canvas overlayでcommitted rigとdraft rigをどう視覚的に区別するか。
