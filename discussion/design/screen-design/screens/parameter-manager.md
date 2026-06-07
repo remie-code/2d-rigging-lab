@@ -215,7 +215,10 @@ Usage / Impact Panelに表示するもの:
 
 ## 11. 関連機能ID
 
-現行の `UX-FEAT-001`〜`UX-FEAT-037` の棚卸では、Parameter Manager専用の機能IDはまだ明示採番されていない。
+現行の `UX-FEAT-001`〜`UX-FEAT-037` の棚卸では、Parameter Managerは次の既存機能の正式ホームになる。
+
+- `UX-FEAT-002`: Parameter list
+- `UX-FEAT-003`: Parameter creation / operation status
 
 関連する既存機能:
 

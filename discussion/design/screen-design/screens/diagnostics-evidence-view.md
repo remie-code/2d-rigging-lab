@@ -31,6 +31,7 @@ Diagnostics / Evidence Viewは、通常authoring UIから分離したdebug/evide
 - Product Preflight details
 - runtime snapshot/diff details
 - source refs / generated refs / evidence paths
+- PSD import / structural scaffold evidence: operation ID、approval ID、plan digest、generated refs、evidence path、batch result、raw parser diagnostics、raw structural scaffold diagnostics
 
 ## 4. 関連機能ID
 
@@ -40,7 +41,7 @@ Diagnostics / Evidence Viewは、通常authoring UIから分離したdebug/evide
 - `UX-FEAT-034`
 - `UX-FEAT-035`
 - `UX-FEAT-036`
-- 一部 `UX-FEAT-007`, `UX-FEAT-014`, `UX-FEAT-025`, `UX-FEAT-030`〜`UX-FEAT-032`
+- 一部 `UX-FEAT-007`, `UX-FEAT-014`, `UX-FEAT-018`, `UX-FEAT-019`, `UX-FEAT-025`, `UX-FEAT-030`〜`UX-FEAT-032`
 
 ## 5. 注意点
 

@@ -28,6 +28,7 @@ Mesh、Rig、DynamicsのようなActive Toolではなく、選択中drawableに�
 - OpacityとClipping / Maskは、drawableに対するInspector sectionとして扱う。
 - 表情差分、パーツ差分、衣装差分のように複数targetをstateとしてまとめる場合は、Variant / Expression Managerの責務とする。
 - デフォーマ / rig control配下の要素をまとめてフェードさせるparameter-driven subtree opacityは、Drawable InspectorではなくRig Toolの責務とする。
+- `UX-FEAT-020` のmask relation authoringと `UX-FEAT-021` のsingle drawable opacity keyformは、当面Drawable Inspector内sectionとParameter / Keyform UIの協調で扱う。専用Composition / Opacity Toolは初期画面設計では作らない。
 - raw evidence、operation ID、generated refs全文は通常表示しない。
 
 ## 3. 配置
@@ -142,6 +143,8 @@ Parameter / Keyformとの関係:
 
 Clipping / Maskはdrawableに対するInspector sectionとして扱う。
 
+`UX-FEAT-020` の正式ホームはこのsectionである。semantic mask relationという棚卸上の名前に引きずられず、ユーザーまたはCodexが明示したmask source drawableとtarget drawableの関係を編集する。
+
 表示するもの:
 
 - mask enabled state
@@ -180,6 +183,19 @@ Drawable Inspectorは、選択中drawableのtexture / mesh / atlas状態をsumma
 
 Drawable Inspector自体でmesh編集やatlas配置を行わない。
 
+## 8.1 Single Drawable Opacity Keyform
+
+`UX-FEAT-021` のsingle drawable opacity keyformは、Drawable InspectorとParameter / Keyform UIが協調して扱う。
+
+役割分担:
+
+- Drawable Inspector: target drawableとopacity propertyを扱う。
+- Parameter Bar: active parameterとcurrent valueを扱う。
+- Canvas / Preview: current valueでのopacity previewを表示する。
+- Diagnostics / Evidence View: raw evidenceやoperation payloadを扱う。
+
+このUXは、rig control / deformer配下のsubtree opacity effectとは別である。subtree opacity effectはRig Toolで扱う。
+
 ## 9. 他UIとの関係
 
 | UI | Drawable Inspectorとの関係 |
@@ -212,8 +228,10 @@ Drawable Inspector自体でmesh編集やatlas配置を行わない。
 - `UX-FEAT-003`: drawable authoring
 - `UX-FEAT-008`: Part / layer tree overview and part management
 - `UX-FEAT-009`: Layer tree direct manipulation
-- `UX-FEAT-010`〜`UX-FEAT-012`: drawable / mesh / texture関連summary
-- 一部 `UX-FEAT-020`〜`UX-FEAT-023`: composition / mask / opacity / rigとの関係
+- `UX-FEAT-010`: Drawable creation / drawable list / layer orderの選択詳細とsummary。list / orderの主ホームはParts Tree。
+- `UX-FEAT-020`: Composition mask relation authoring
+- `UX-FEAT-021`: Drawable opacity keyforms
+- 一部 `UX-FEAT-011` / `UX-FEAT-012`: mesh / texture関連summary
 - 一部 `UX-FEAT-028` / `UX-FEAT-029`: validation
 
 ## 12. 未決事項

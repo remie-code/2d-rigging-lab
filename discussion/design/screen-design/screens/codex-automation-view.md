@@ -27,6 +27,7 @@ Codex / Automation Viewは、Codex proposal review、AI approval、AI transcript
 - AI Transcript
 - structured command host availability
 - Codex-facing structural parityの状態
+- PSD import / structural scaffold command availability: parse / plan / approve / preview / commit / latest result
 
 ## 4. 関連機能ID
 
@@ -40,3 +41,4 @@ Codex / Automation Viewは、Codex proposal review、AI approval、AI transcript
 
 - 通常authoring UIの機能として見せるか、Codex/evidence専用viewとして扱うか。
 - Codex-facing structural execute/stale parityをこのviewでどのように示すか。
+- PSD Import TaskのHuman UIをCodex観測用にverbose化せず、deterministic command / operation APIで同等操作を実行できる状態をどう示すか。

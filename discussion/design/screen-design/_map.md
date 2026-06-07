@@ -23,9 +23,12 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 - Editor起動直後は、PSD import画面ではなくauthoring workspaceとして見えるべきである。
 - PSD importは通常workspaceから呼び出すtaskであり、常設の巨大panelではなくtask window / modal / dedicated task panelとして扱う方向が有力である。
+- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
+- Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
 - Drawable Inspectorは選択中drawableの基本属性を扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面、VisibilityはEditor visibilityとRuntime visibilityを分け、OpacityとClipping / MaskはDrawable Inspector内sectionとして扱う。
+- `UX-FEAT-020` / `UX-FEAT-021` は当面Drawable Inspector内のClipping / Mask sectionとSingle Drawable Opacity Keyform sectionで扱い、専用Composition / Opacity Toolは初期画面設計では作らない。
 - rig control / deformer配下の要素をparameter値でまとめてfadeさせる場合は、単体drawable opacityではなくRig ToolのSubtree Visibility / Opacity effectとして扱う。
 - Parameter Managerはparameter定義、stable id、display name、min/default/max、grouping、usage referenceを専用画面で管理する。Parameter Barはcurrent value操作、Quick Createは軽量作成入口として分ける。
 - Variant / Expression Managerは表情差分、パーツ差分、衣装差分のstate setを専用画面で管理する。初期はexclusive setを基本とし、同時適用 / additive setは将来候補として扱う。

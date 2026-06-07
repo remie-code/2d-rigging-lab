@@ -188,6 +188,8 @@ expanded状態:
 
 Quick Create / Selectは、Rig Tool、Dynamics Tool、Parameter Barなどからparameterが必要になった時に使う軽量入口である。
 
+`UX-FEAT-003` のparameter作成はQuick CreateとParameter Managerが担う。直近operation status、operation log、reload label、diagnosticsの詳細はDiagnostics / Evidence Viewへ分離し、通常UIでは必要なsummaryだけを出す。
+
 置くもの:
 
 - existing parameter selector

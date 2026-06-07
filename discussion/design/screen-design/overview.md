@@ -30,6 +30,7 @@
 - 通常UIには、人間が判断・編集するための情報を出す。
 - operation ID、digest、generated ref、evidence path、package file set、reload summaryなどは通常UIから分離する。
 - Codexが必要とする情報は、可視DOM textではなくdeterministic API、operation evidence、validation report、command host、test-facing structured surfaceで扱う方向を優先する。
+- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分ける。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
 
 ## 3. Global UX Flow
 
@@ -93,6 +94,7 @@ stateDiagram-v2
 | Component | 役割 | 詳細 |
 |---|---|---|
 | Toolbox | Authoring Workspace上でActive Tool、Task、Viewを起動・切り替えるicon launcher。 | [components/toolbox.md](components/toolbox.md) |
+| Parts Tree | part / drawable hierarchy、drawable list、draw order、row操作を扱うStructure / Partsペイン。 | [components/parts-tree.md](components/parts-tree.md) |
 | Drawable Inspector | 選択中drawableのdraw order、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱うInspector。 | [components/drawable-inspector.md](components/drawable-inspector.md) |
 | Mesh Tool | 選択中drawableのinitial mesh generation、mesh overlay編集、Topology / UV編集を扱うActive Tool。 | [components/mesh-tool.md](components/mesh-tool.md) |
 | Rig Tool | 選択中part / drawable / meshに対するrig draft/preview、binding、parameter/keyform authoringを扱うActive Tool。 | [components/rig-tool.md](components/rig-tool.md) |
@@ -131,18 +133,19 @@ stateDiagram-v2
 |---|---|
 | App Bar | `UX-FEAT-001`, `UX-FEAT-026`, `UX-FEAT-027` |
 | Toolbox | `UX-FEAT-006`, `UX-FEAT-013`〜`UX-FEAT-019`, `UX-FEAT-020`〜`UX-FEAT-025`, `UX-FEAT-028`〜`UX-FEAT-032`, `UX-FEAT-037` |
-| Parts Tree | `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019` |
+| Parts Tree | `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-010`, `UX-FEAT-019` |
 | Canvas / Preview | `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012` |
 | Inspector / Context Panel | `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025` |
 | Dynamics Tool | `UX-FEAT-024`, `UX-FEAT-025`, 一部 `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-023`, `UX-FEAT-028`, `UX-FEAT-029` |
-| PSD Import Task | `UX-FEAT-013`〜`UX-FEAT-019` |
-| Parameter Manager | 専用IDは未採番。関連: `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-025`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
+| PSD Import Task | `UX-FEAT-013`〜`UX-FEAT-019` のHuman UI。Codex-facing / test-facing / evidence surfaceは分離 |
+| Parameter Manager | `UX-FEAT-002`, `UX-FEAT-003`, 一部 `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-025`, `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
+| Drawable Inspector / Composition sections | `UX-FEAT-010`, `UX-FEAT-020`, `UX-FEAT-021`, 一部 `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-008`, `UX-FEAT-009` |
 | Variant / Expression Manager | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-007`, `UX-FEAT-008`, `UX-FEAT-009`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Texture Atlas Task | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Project Storage Task | `UX-FEAT-026`, `UX-FEAT-027`, 一部 `UX-FEAT-035`, `UX-FEAT-036` |
 | Validation Task | `UX-FEAT-028`, `UX-FEAT-029` |
-| Diagnostics / Evidence View | `UX-FEAT-033`〜`UX-FEAT-036`, 一部 `UX-FEAT-007`, `UX-FEAT-014`, `UX-FEAT-025`, `UX-FEAT-028`〜`UX-FEAT-032` |
-| Codex / Automation View | `UX-FEAT-030`, `UX-FEAT-031`, `UX-FEAT-032`, `UX-FEAT-037`, 一部 `UX-FEAT-018`, `UX-FEAT-019`, `UX-FEAT-028`, `UX-FEAT-029` |
+| Diagnostics / Evidence View | `UX-FEAT-033`〜`UX-FEAT-036`, 一部 `UX-FEAT-007`, `UX-FEAT-014`, `UX-FEAT-018`, `UX-FEAT-019`, `UX-FEAT-025`, `UX-FEAT-028`〜`UX-FEAT-032` |
+| Codex / Automation View | `UX-FEAT-030`, `UX-FEAT-031`, `UX-FEAT-032`, `UX-FEAT-037`, 一部 `UX-FEAT-018`, `UX-FEAT-019`, `UX-FEAT-028`, `UX-FEAT-029`。PSD ImportのCodex-facing operation availabilityを扱う |
 | Tutorial Task | `UX-FEAT-006` |
 
 ## 7. 未決事項
