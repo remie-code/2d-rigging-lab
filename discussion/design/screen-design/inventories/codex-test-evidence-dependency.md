@@ -8,7 +8,7 @@ Editor UX画面仕様discussionに向けて、現在の可視UIが E2E / UI test
 
 この文書は、画面仕様、レイアウト改善、テスト修正方針、Codex-facing command parity の実装計画を決めない。どの表示を仕様として守るべきかも、ここでは判断しない。
 
-Wave51後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで PSD import-plan / structural scaffold の対象 coupling は除去済みで、Domain Eで再導入防止のstandalone guardが追加された。ただし可視DOM/text oracle、Product Preflight current read、structural-specific execute/stale parity、full evidence view migration は未解決である。
+Wave52後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで PSD import-plan / structural scaffold の対象 coupling は除去済みで、Wave51 Domain Eで再導入防止のguardが追加された。Wave52 Domain Eで production guard は `check:testids` として standard `check` に統合済みで、`check:testids:fixtures` は利用可能だが standard `check` には含めない。PSD Import は Wave52 Domain D/E で Task Shell task として到達可能になり、default では常設の巨大 workspace panel ではなくなった。ただし可視DOM/text oracle、Product Preflight current read、structural-specific execute/stale parity、final Diagnostics / Evidence View migration は未解決である。
 
 ## 2. 調査したファイル / 根拠
 
@@ -144,11 +144,12 @@ Wave51前の事実:
 
 - production UI全体で同種の `data-testid` selector 依存が他にもあるかは、`rg` 上は PSD import panel が明確な該当箇所だった。`querySelector("input")` など通常のform内部queryは他componentにもあるが、test id couplingとは別分類にした。
 
-Wave51後の状態:
+Wave51-Wave52後の状態:
 
 - Domain Bで上記の targeted coupling は local approval binding へ置き換え済み。既存の stable `data-testid` はtest-facing observation hookとして維持されている。
 - Domain Eで `node scripts/check-production-testid-boundary.mjs` と fixture regression が追加され、production `[data-testid...]` selector strings、`data-testid` readbacks、non-assignment `dataset.testid` reads を検出する。
-- Guardはstandaloneで、package scriptsには未統合。default scan root は `apps/editor/src` の `.ts` / `.tsx` に限られ、dynamic selector construction や間接aliasは検出対象外になり得る。
+- Wave52 Domain Eで `check:testids` は standard `check` に統合済み。`check:testids:fixtures` は利用可能だが standard `check` には含めない。
+- default scan root は `apps/editor/src` の `.ts` / `.tsx` に限られ、dynamic selector construction や間接aliasは検出対象外になり得る。
 
 ## 6. Codex-facing surface のDOM独立性
 
@@ -315,8 +316,8 @@ DOMから独立している主な情報:
 - 通常Editor workspaceに残す human primary 情報と、debug/evidence viewへ分ける情報の境界。
 - Operation log / Generated evidence / Package file set / Reload summary を通常UIに常時表示し続けるか、別view/drawer/automation surfaceへ分けるか。
 - Product Preflight、Codex Proposal Review、AI Approval、AI Transcriptを人間向けworkflowとして見せる範囲と、Codex/evidence向けに残す範囲。
-- PSD import / import-plan / structural scaffold を通常authoring panelに置くか、専用import workflowとして扱うか。
+- PSD import / import-plan / structural scaffold は Wave52 で bounded に Task Shell task として扱う実装へ進んだ。final Toolbox placement、final modal/task-window/dedicated-view policy、Diagnostics / Evidence への最終導線はまだ議論が必要。
 - 既存E2Eの互換方針。`data-testid` と主要aria labelを維持するのか、可視text oracleを構造化helper/DTO/evidence fileへ寄せるのか。
-- Wave51で追加された production `data-testid` boundary guardを、package script / standard verification path に入れるか。
+- `check:testids:fixtures` を standard quality gate または CI-only path に広げるか。
 - Codex-facing structural command parityを、UI整理と独立に後続waveへ回せるか、または画面仕様で境界だけ先に固定すべきか。
 - Product Preflightの現在report/comparisonを、Editor command hostからDOM非依存に読む必要があるか。

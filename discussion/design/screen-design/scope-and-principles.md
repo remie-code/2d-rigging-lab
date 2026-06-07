@@ -32,16 +32,27 @@ preset-based initial mesh generationは、この非ゴールには含めない�
 
 texture atlasのsimple deterministic packingも、この非ゴールには含めない。これはvisible drawable、page size、padding、source boundsに基づく決定的な配置処理であり、semantic recognitionやsmart suggestionではない。
 
-## 2.1 Wave51 実装状況メモ
+## 2.1 Wave51-Wave52 実装状況メモ
 
 Wave51 は、この screen-design 方針を実装へ移す最初の負債解消waveとして開始済みである。Wave51 Domains A-E の `pass` 記録で主張できる範囲は次に限定する。
 
 - PSD import-plan / structural scaffold の production `data-testid` behavior coupling は対象箇所で除去済み。
 - App Shell には task/view を分類する minimal surface metadata が入ったが、既存の一ページhostとpanel append orderは維持されている。
 - PSD Import Task structured observation projector は prepared 状態で、UI / E2E / Codex-facing read API からは未使用。
-- production `data-testid` guard は standalone script と fixture self-test として存在するが、package scripts には未統合。
+- production `data-testid` guard は、Wave51 時点では standalone script と fixture self-test として存在し、package scripts には未統合だった。
 
 Wave51 は full visual redesign、full panel migration、final toolbox/modal/window framework、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter / Variant UI 実装を完了していない。
+
+Wave52 final integration report/review の `pass` 記録で主張できる範囲は次に限定する。
+
+- PSD Import は Empty / Authoring Workspace から Task Shell task として開ける。
+- PSD Import は default では常設の巨大 workspace panel ではなくなった。
+- Generic Task Shell / Task Chrome component と PSD Import Task Human UI component は実装・レビュー済み。
+- PSD Import Task structured observation projector は Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API の最終surfaceはまだ未完成。
+- focused PSD regressions は `psdStructuralInitialStateFocused`、`psdImportPlanCodexFocused`、`psdImportPlanFocused`、`psdMultiLayerBatchFocused`、`psdImportFocused` が pass 記録済み。
+- production `data-testid` guard は `check:testids` として standard `check` に統合済み。`check:testids:fixtures` は利用可能だが standard `check` には含めない。
+
+Wave52 は full workspace visual redesign、final Toolbox placement、final modal/task-window/dedicated-view policy、Diagnostics / Evidence View の完成、Codex / Automation View の完成、Mesh / Atlas / Parameter / Variant UI 実装を完了していない。
 
 ## 3. 現在の問題設定
 
@@ -154,4 +165,4 @@ Undine は、現在のUI / source / test を広く棚卸ししない。Undine �
 
 ## 9. 次のステップ
 
-次は、Wave51で作った基盤を前提に、Workspace Layout Migration、PSD Import Task Migration、Diagnostics / Evidence View Separation、Codex / Automation View Separationを別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。
+次は、Wave51-Wave52で作った基盤を前提に、Workspace Layout Migration、Diagnostics / Evidence View Separation、Codex / Automation View Separation、PSD Import Task の final placement / final navigation polish を別waveとして計画する。`overview.md` と `screens/*.md` の未決事項は、各wave planning gateで必要分だけ閉じていく。

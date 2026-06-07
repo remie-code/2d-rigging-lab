@@ -654,6 +654,64 @@ describe("editor app shell preview panel", () => {
     );
   });
 
+  it("renders a minimal PSD import task entry without appending the PSD panel by default", () => {
+    const workflow = createWorkflow();
+    const calls: string[] = [];
+    const shell = renderShell(workflow, {
+      onOpenPsdImportTask() {
+        calls.push("open");
+      }
+    });
+    const taskEntry = findByTestId(shell, editorTestIds.psdImportTaskOpen);
+    const launcher = findByShellSurfaceGroup(shell, "task-launcher");
+
+    expect(taskEntry?.textContent).toBe("Import PSD");
+    expect(taskEntry?.getAttribute("aria-label")).toBe("Import PSD");
+    expect(taskEntry?.getAttribute("aria-expanded")).toBe("false");
+    expect(launcher?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
+    expect(launcher?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
+    expect(findByTestId(shell, editorTestIds.explicitPsdImportPanel)).toBeNull();
+
+    taskEntry?.emit("click");
+
+    expect(calls).toEqual(["open"]);
+  });
+
+  it("renders PSD import inside a task shell with focused-flow hooks and observation summary", () => {
+    const workflow = createWorkflow();
+    const calls: string[] = [];
+    const shell = renderShell(workflow, {
+      activeTask: "psdImport",
+      onCloseActiveTask() {
+        calls.push("close");
+      }
+    });
+    const taskShell = findByShellSurfaceGroup(shell, "psd-import");
+    const psdPanel = findByTestId(shell, editorTestIds.explicitPsdImportPanel);
+    const taskEntry = findByTestId(shell, editorTestIds.psdImportTaskOpen);
+    const status = findByTaskShellRegion(taskShell ?? shell, "status");
+    const observation = findByAriaLabel(shell, "PSD import task observation summary");
+
+    expect(taskEntry?.getAttribute("aria-expanded")).toBe("true");
+    expect(taskShell?.dataset.taskShellRegion).toBe("root");
+    expect(taskShell?.dataset.shellSurfaceId).toBe(shellSurfaces.psdImportTask.id);
+    expect(taskShell?.dataset.shellSurfaceKind).toBe(shellSurfaces.psdImportTask.kind);
+    expect(psdPanel).not.toBeNull();
+    expect(psdPanel?.dataset.shellSurfaceId).toBe(shellSurfaces.psdImportTask.id);
+    expect(findByTestId(psdPanel ?? shell, editorTestIds.explicitPsdImportForm)).not.toBeNull();
+    expect(status?.textContent).toContain("No PSD source loaded.");
+    expect(observation?.dataset.psdImportTaskSchemaVersion).toBe(
+      "explicit-psd-import-task-observation-v1"
+    );
+    expect(observation?.dataset.psdImportTaskParseStatus).toBe("idle");
+    expect(observation?.textContent).toContain("diagnosticsEvidenceView");
+
+    findByAriaLabel(shell, "Back to authoring workspace")?.emit("click");
+    findByAriaLabel(shell, "Close PSD import task")?.emit("click");
+
+    expect(calls).toEqual(["close", "close"]);
+  });
+
   it("classifies existing panels into named shell surfaces without moving workflows", () => {
     const workflow = createWorkflow();
     workflow.openViewerRuntimeSurface();
@@ -682,11 +740,9 @@ describe("editor app shell preview panel", () => {
       shellSurfaces.authoringWorkspace,
       "drawable-authoring"
     );
-    expectPanelSurface(
-      shell,
-      editorTestIds.explicitPsdImportPanel,
-      shellSurfaces.psdImportTask,
-      "psd-import"
+    expect(findByTestId(shell, editorTestIds.explicitPsdImportPanel)).toBeNull();
+    expect(findByShellSurfaceGroup(shell, "task-launcher")?.dataset.shellSurfaceId).toBe(
+      shellSurfaces.authoringWorkspace.id
     );
     expectPanelSurface(
       shell,
@@ -1042,6 +1098,9 @@ const renderShell = (
     readonly onRunProductPreflight?: Parameters<typeof createEditorAppShell>[0]["onRunProductPreflight"];
     readonly onExportPortableBundle?: Parameters<typeof createEditorAppShell>[0]["onExportPortableBundle"];
     readonly onImportPortableBundleText?: Parameters<typeof createEditorAppShell>[0]["onImportPortableBundleText"];
+    readonly activeTask?: Parameters<typeof createEditorAppShell>[0]["activeTask"];
+    readonly onOpenPsdImportTask?: Parameters<typeof createEditorAppShell>[0]["onOpenPsdImportTask"];
+    readonly onCloseActiveTask?: Parameters<typeof createEditorAppShell>[0]["onCloseActiveTask"];
   } = {}
 ): TestElement =>
   createEditorAppShell({
@@ -1051,6 +1110,13 @@ const renderShell = (
     viewerRuntimeProjection: workflow.viewerRuntimeProjection,
     latestPersistenceResult: workflow.latestSessionPersistenceResult,
     latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
+    ...(callbacks.activeTask === undefined ? {} : { activeTask: callbacks.activeTask }),
+    ...(callbacks.onOpenPsdImportTask === undefined
+      ? {}
+      : { onOpenPsdImportTask: callbacks.onOpenPsdImportTask }),
+    ...(callbacks.onCloseActiveTask === undefined
+      ? {}
+      : { onCloseActiveTask: callbacks.onCloseActiveTask }),
     onCommitCreateParameter() {},
     onCommitCreateDrawablePreset() {},
     onCommitCreatePart() {},
@@ -1231,6 +1297,12 @@ const findByClassName = (root: TestElement, className: string): TestElement | nu
 
 const findByShellSurfaceGroup = (root: TestElement, group: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.shellSurfaceGroup === group);
+
+const findByTaskShellRegion = (root: TestElement, region: string): TestElement | null =>
+  root.queryByPredicate((element) => element.dataset.taskShellRegion === region);
+
+const findByAriaLabel = (root: TestElement, ariaLabel: string): TestElement | null =>
+  root.queryByPredicate((element) => element.getAttribute("aria-label") === ariaLabel);
 
 const findByTag = (root: TestElement, tagName: string): TestElement | null =>
   root.queryByPredicate((element) => element.tagName === tagName);

@@ -8,7 +8,7 @@ Editor UX画面仕様discussionに向けて、現在のEditorに存在する機�
 
 この文書は、画面仕様、優先順位、実装順、テスト更新方針、Codex-facing structural command parity の実装計画を決めない。後続の議論で参照しやすいよう、現行機能を事実ベースで棚卸しし、その後に分類候補を付ける。
 
-Wave51後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで UX-FEAT-018/019 の対象 coupling は除去済みだが、UI placement、DOM/text oracle migration、Diagnostics / Evidence View、Codex / Automation View、full visual redesign は未完了である。
+Wave52後の読み方: production `data-testid` coupling に関する記述は Wave51 前の棚卸事実として扱う。Wave51 Domain Bで UX-FEAT-018/019 の対象 coupling は除去済みで、Wave52 final integration report/review により PSD Import は Empty / Authoring Workspace から Task Shell task として到達可能になり、default always-visible workspace panel ではなくなった。Wave52 Domain Eで production `data-testid` guard は standard `check` の `check:testids` に統合済みだが、`check:testids:fixtures` は standard `check` には含めない。final Toolbox placement、modal/task-window/dedicated-view policy、DOM/text oracle migration、Diagnostics / Evidence View、Codex / Automation View、full visual redesign は未完了である。
 
 ## 2. 調査したファイル / 根拠
 
@@ -114,13 +114,15 @@ IDは `UX-FEAT-001` から連番にした。粒度は、ボタン単位ではな
 
 機能数: 37。
 
-Wave51実装状況メモ:
+Wave51-Wave52実装状況メモ:
 
 - UX-FEAT-018/019 の targeted production `data-testid` behavior coupling は除去済み。
 - UX-FEAT-001 周辺には minimal shell surface metadata が追加されたが、workspace layoutやfinal visual hierarchyは未変更。
-- UX-FEAT-018/019 向けの structured observation projector はpreparedだが、visible UI / E2E / Codex-facing read APIからは未消費。
+- UX-FEAT-018/019 向けの structured observation projector は、Wave52で Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API、最終test-facing surface、Diagnostics / Evidence final viewへの接続は未完了。
+- PSD Import は Wave52 で Task Shell task として到達可能になり、default always-visible workspace panel ではなくなった。ただし final Toolbox placement、modal/task-window/dedicated-view policy、full visual redesign は未完了。
+- production `data-testid` guard は Wave52 で standard `check` の `check:testids` に統合済み。`check:testids:fixtures` は利用可能だが standard `check` には含めない。
 - UX-FEAT-028〜036 の Diagnostics / Evidence View分離と UX-FEAT-030〜032 の Codex / Automation View分離は未実装。
-- Mesh / Texture Atlas / Parameter Manager / Variant Manager のUI進捗はWave51ではない。
+- Mesh / Texture Atlas / Parameter Manager / Variant Manager のUI進捗はWave51-Wave52ではない。
 
 ## 5. 体験カテゴリ別分類候補
 

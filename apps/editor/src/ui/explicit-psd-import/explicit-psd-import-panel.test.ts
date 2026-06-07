@@ -8,7 +8,10 @@ import {
   type ExplicitPsdImportPlanCandidateState,
   type ExplicitPsdImportState
 } from "../../editor-state/index.js";
-import { createExplicitPsdImportPanel } from "./explicit-psd-import-panel.js";
+import {
+  createExplicitPsdImportPanel,
+  createExplicitPsdImportTaskContent
+} from "./explicit-psd-import-panel.js";
 
 describe("explicit PSD import panel", () => {
   beforeEach(() => {
@@ -33,6 +36,72 @@ describe("explicit PSD import panel", () => {
       "sessionEvidenceClearedOnProjectLoadReparseRequiredV1"
     );
     expect(findByTestId(panel, editorTestIds.explicitPsdImportLayerIntakeSubmit)?.disabled).toBe(true);
+  });
+
+  it("renders task content without the panel wrapper", () => {
+    const content = createTaskContent({
+      viewModel: projectExplicitPsdImportViewModel(createParsedState())
+    });
+    const input = findByTestId(content, editorTestIds.explicitPsdImportFileInput);
+    const summary = findByAriaLabel(content, "PSD import task human summary");
+
+    expect(findByTestId(content, editorTestIds.explicitPsdImportPanel)).toBeNull();
+    expect(summary?.textContent).toContain("Task Summary");
+    expect(input?.type).toBe("file");
+    expect(input?.accept).toContain(".psd");
+  });
+
+  it("renders a primary human summary for source, parse, tree, scope, scaffold, warnings, and commit state", () => {
+    const content = createTaskContent({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState())
+    });
+    const summaryText = findRequiredByAriaLabel(
+      content,
+      "PSD import task human summary"
+    ).textContent;
+
+    expect(summaryText).toContain("Source");
+    expect(summaryText).toContain("sample_model.psd");
+    expect(summaryText).toContain("Parse state");
+    expect(summaryText).toContain("PSD parsed in browser session");
+    expect(summaryText).toContain("Tree state");
+    expect(summaryText).toContain("1 groups / 2 layers");
+    expect(summaryText).toContain("Import-plan scope");
+    expect(summaryText).toContain("4 candidates / 3 eligible / 1 approved");
+    expect(summaryText).toContain("Structural preview");
+    expect(summaryText).toContain("Structural scaffold preview ready");
+    expect(summaryText).toContain("Warning summary");
+    expect(summaryText).toContain("1 hidden / 1 unsupported / 0 collisions / 0 byte blocked");
+    expect(summaryText).toContain("Approval and commit");
+    expect(summaryText).toContain("structural commit No structural scaffold result");
+  });
+
+  it("keeps machine-only details out of the primary human summary", () => {
+    const content = createTaskContent({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState())
+    });
+    const summaryText = findRequiredByAriaLabel(
+      content,
+      "PSD import task human summary"
+    ).textContent;
+
+    expect(summaryText).not.toContain("sha256:");
+    expect(summaryText).not.toContain("plan_test");
+    expect(summaryText).not.toContain("plan_structural_test");
+    expect(summaryText).not.toContain("approval_structural_test");
+    expect(summaryText).not.toContain("psd:root");
+    expect(summaryText).not.toContain("layer_hidden");
+    expect(summaryText).not.toContain("part_headwear");
+    expect(summaryText).not.toContain("draw_hidden_structural");
+    expect(summaryText).not.toContain("tex_hidden_structural");
+    expect(summaryText).not.toContain("mesh_hidden_structural");
+    expect(summaryText).not.toContain("assets/sources/private");
+    expect(summaryText).not.toContain("browserPsdImportPlan.candidatePlan.ready");
+    expect(summaryText).not.toContain("data-testid");
+    expect(summaryText).not.toContain("explicitPsdImportPanel");
+    expect(summaryText.toLowerCase()).not.toContain("raw parser payload");
+    expect(summaryText.toLowerCase()).not.toContain("approval digest");
+    expect(summaryText.toLowerCase()).not.toContain("operation id");
   });
 
   it("passes only the user-selected file and selected layer ref to the parse callback", async () => {
@@ -382,21 +451,35 @@ describe("explicit PSD import panel", () => {
   });
 });
 
+type PsdImportPanelOptions = Parameters<typeof createExplicitPsdImportPanel>[0];
+
+interface PsdImportTestOptions {
+  readonly viewModel?: PsdImportPanelOptions["viewModel"];
+  readonly onParsePsdFile?: PsdImportPanelOptions["onParsePsdFile"];
+  readonly onIntakeSelectedLayer?: PsdImportPanelOptions["onIntakeSelectedLayer"];
+  readonly onIntakeSelectedLayersBatch?: PsdImportPanelOptions["onIntakeSelectedLayersBatch"];
+  readonly onGenerateImportPlanPreview?: PsdImportPanelOptions["onGenerateImportPlanPreview"];
+  readonly onIntakeApprovedImportPlanCandidates?: PsdImportPanelOptions["onIntakeApprovedImportPlanCandidates"];
+  readonly onGenerateStructuralScaffoldPreview?: PsdImportPanelOptions["onGenerateStructuralScaffoldPreview"];
+  readonly onCommitStructuralScaffold?: PsdImportPanelOptions["onCommitStructuralScaffold"];
+}
+
 const createPanel = (
-  options: {
-    readonly viewModel?: Parameters<typeof createExplicitPsdImportPanel>[0]["viewModel"];
-    readonly onParsePsdFile?: Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"];
-    readonly onIntakeSelectedLayer?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayer"];
-    readonly onIntakeSelectedLayersBatch?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeSelectedLayersBatch"];
-    readonly onGenerateImportPlanPreview?: Parameters<typeof createExplicitPsdImportPanel>[0]["onGenerateImportPlanPreview"];
-    readonly onIntakeApprovedImportPlanCandidates?: Parameters<typeof createExplicitPsdImportPanel>[0]["onIntakeApprovedImportPlanCandidates"];
-    readonly onGenerateStructuralScaffoldPreview?: Parameters<typeof createExplicitPsdImportPanel>[0]["onGenerateStructuralScaffoldPreview"];
-    readonly onCommitStructuralScaffold?: Parameters<typeof createExplicitPsdImportPanel>[0]["onCommitStructuralScaffold"];
-  } | Parameters<typeof createExplicitPsdImportPanel>[0]["onParsePsdFile"] = {}
-): TestElement => {
+  options: PsdImportTestOptions | PsdImportPanelOptions["onParsePsdFile"] = {}
+): TestElement =>
+  createExplicitPsdImportPanel(createOptions(options)) as unknown as TestElement;
+
+const createTaskContent = (
+  options: PsdImportTestOptions | PsdImportPanelOptions["onParsePsdFile"] = {}
+): TestElement =>
+  createExplicitPsdImportTaskContent(createOptions(options)) as unknown as TestElement;
+
+const createOptions = (
+  options: PsdImportTestOptions | PsdImportPanelOptions["onParsePsdFile"] = {}
+): PsdImportPanelOptions => {
   const normalized = typeof options === "function" ? { onParsePsdFile: options } : options;
-  return (
-  createExplicitPsdImportPanel({
+
+  return {
     viewModel: normalized.viewModel ?? projectExplicitPsdImportViewModel(createEmptyExplicitPsdImportState()),
     destinationParts: [{ partId: "part_root", label: "Root / part_root" }],
     onParsePsdFile: normalized.onParsePsdFile ?? (() => {}),
@@ -416,12 +499,23 @@ const createPanel = (
     ...(normalized.onCommitStructuralScaffold === undefined
       ? {}
       : { onCommitStructuralScaffold: normalized.onCommitStructuralScaffold })
-  }) as unknown as TestElement
-  );
+  };
 };
 
 const findByTestId = (root: TestElement, testId: string): TestElement | null =>
   root.queryByPredicate((element) => element.dataset.testid === testId);
+
+const findByAriaLabel = (root: TestElement, label: string): TestElement | null =>
+  root.queryByPredicate((element) => element.getAttribute("aria-label") === label);
+
+const findRequiredByAriaLabel = (root: TestElement, label: string): TestElement => {
+  const element = findByAriaLabel(root, label);
+  if (element === null) {
+    throw new Error(`Missing aria-label ${label}.`);
+  }
+
+  return element;
+};
 
 const findNamedField = (root: TestElement, name: string): TestElement | null =>
   root.queryByPredicate((element) => element.name === name);
@@ -785,6 +879,16 @@ const createParsedStateWithStructuralScaffold = (options: {
       }]
     }
   });
+};
+
+const createParsedStateWithTaskSummaryState = (): ExplicitPsdImportState => {
+  const importPlanState = createParsedStateWithImportPlan();
+  const structuralScaffoldState = createParsedStateWithStructuralScaffold();
+
+  return {
+    ...importPlanState,
+    structuralScaffoldPlan: structuralScaffoldState.structuralScaffoldPlan
+  };
 };
 
 class TestElement {

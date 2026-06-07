@@ -111,7 +111,7 @@ export const runPsdImportPlanFocusedSmoke = async ({ page, viewport }) => {
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "psd-import-plan-focused-"));
 
   try {
-    await waitForTestId(page, editorTestIds.explicitPsdImportPanel);
+    await openExplicitPsdImportTask(page);
     await waitForTestId(page, editorTestIds.explicitPsdImportForm);
     await waitForTestId(page, editorTestIds.explicitPsdImportFileInput);
     await waitForTestId(page, editorTestIds.explicitPsdImportSubmit);
@@ -174,6 +174,7 @@ export const runPsdImportPlanFocusedSmoke = async ({ page, viewport }) => {
     await clickTestId(page, editorTestIds.projectPersistenceLoad);
     await waitForText(page, editorTestIds.projectPersistenceStatus, "Loaded");
     await waitForText(page, editorTestIds.projectPersistenceSummary, "Persistent bytes: 3 restored / 3 checked");
+    await openExplicitPsdImportTask(page);
     await assertExplicitPsdImportClearedAfterLoad(page, sample, `${viewport.name} after load`);
     await assertBatchProjectStateAfterLoad(page, `${viewport.name} after load`);
     await assertSavedProjectIncludesImportPlanBatchIntake(page, sample, `${viewport.name} after load`);
@@ -1450,6 +1451,18 @@ const waitForTestId = async (page, testId) => {
     { timeoutMs: 8_000 },
     testId
   );
+};
+
+const openExplicitPsdImportTask = async (page) => {
+  const isOpen = await page.evaluate(
+    (panelId) => document.querySelector(`[data-testid="${panelId}"]`) !== null,
+    editorTestIds.explicitPsdImportPanel
+  );
+  if (!isOpen) {
+    await waitForTestId(page, editorTestIds.psdImportTaskOpen);
+    await clickTestId(page, editorTestIds.psdImportTaskOpen);
+  }
+  await waitForTestId(page, editorTestIds.explicitPsdImportPanel);
 };
 
 const waitForText = async (page, testId, expectedText, timeoutMs = 15_000) => {

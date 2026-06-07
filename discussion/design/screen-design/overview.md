@@ -24,18 +24,20 @@
 
 ## 1.1 実装状況メモ
 
-Wave51 は、この画面設計を安全に実装していくための最初の負債解消waveとして final integration `pass` 記録済みである。
+Wave51 は、この画面設計を安全に実装していくための最初の負債解消waveとして final integration `pass` 記録済みである。Wave52 final integration report/review は、PSD Import Task Migration v0 の bounded implementation baseline として `pass` 記録済みである。
 
 実装済み範囲:
 
 - PSD import-plan / structural scaffold の production behavior が `data-testid` selector や fragile parent DOM traversal に依存しないよう、対象箇所を local approval binding に置き換えた。
 - App Shell に Authoring Workspace、PSD Import Task、Source Intake Task、Project Storage Task、Validation Task、Tutorial Task、Viewer / Runtime View、Diagnostics / Evidence View、Codex / Automation View の minimal shell surface metadata を追加した。
-- PSD Import Task 用の minimal structured observation projector を追加した。ただしUI、E2E、Codex-facing read APIではまだ消費していない。
-- production `data-testid` behavior dependency guard は standalone script と fixture regression として追加された。
+- PSD Import Task 用の minimal structured observation projector を追加した。
+- Wave52 で Generic Task Shell / Task Chrome と PSD Import Task Human UI を実装し、PSD Import は Empty / Authoring Workspace から Task Shell task として開けるようになった。default では常設の巨大 workspace panel として表示されない。
+- Wave52 で PSD Import structured observation projector は Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API の最終surfaceではまだない。
+- production `data-testid` behavior dependency guard は standalone script と fixture regression として追加された。Wave52 で `check:testids` が standard `check` に統合され、`check:testids:fixtures` は利用可能だが standard `check` には含めない。
 
 未実装範囲:
 
-- この overview に描く full workspace layout、final visual redesign、full panel migration、final toolbox、modal/window framework は未実装。
+- この overview に描く full workspace layout、final visual redesign、full panel migration、final toolbox、modal/window framework は未実装。Wave52 の PSD Import task 化は、このうち PSD Import の常設panel解除とtask shell到達性に限る。
 - Diagnostics / Evidence View と Codex / Automation View の最終配置・表示は未実装。
 - Mesh generation/tool、Texture Atlas Task、Parameter Manager、Variant / Expression Manager のUI実装は進んでいない。
 
@@ -169,8 +171,8 @@ stateDiagram-v2
 
 - Toolboxは左端固定か、上部toolbarか。
 - Tool起動時の表現はmodal、task window、side panel、dedicated viewのどれを基本にするか。
-- PSD Import taskはmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
+- PSD Import taskの最終形はmodalとしてworkspace上に重ねるか、dedicated task viewとして表示するか。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
-- Wave51後の残債として、PSD Import / structural scaffold の可視DOM/text oracleを structured observation / deterministic API / evidence surface へ移し、追加済みPSD Import Task structured observation projectorをUI / E2E / Codex-facing read APIでどう消費するか。
-- Wave51の standalone production `data-testid` guard を package script / standard verification path に組み込むか。
+- Wave52後の残債として、PSD Import / structural scaffold の可視DOM/text oracleをさらに structured observation / deterministic API / evidence surface へ移し、Codex-facing read APIや最終test-facing surfaceをどう整理するか。
+- `check:testids:fixtures` を標準 quality gate または CI-only guard path に広げるか。

@@ -14,7 +14,9 @@
     "test:e2e:editor": "node scripts/editor-e2e-smoke.mjs",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run check:deps && pnpm run check:source"
+    "check:testids": "node scripts/check-production-testid-boundary.mjs",
+    "check:testids:fixtures": "node scripts/check-production-testid-boundary-fixtures.mjs",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run check:deps && pnpm run check:source && pnpm run check:testids"
   },
   "devDependencies": {
     "@webtoon/psd": "0.4.0",

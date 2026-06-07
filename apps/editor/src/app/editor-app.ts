@@ -4,7 +4,10 @@ import {
   type EditorSemanticState
 } from "../editor-state/index.js";
 import { createBrowserProjectStore } from "../project-persistence/index.js";
-import { createEditorAppShell } from "../ui/app-shell/app-shell.js";
+import {
+  createEditorAppShell,
+  type EditorAppShellActiveTask
+} from "../ui/app-shell/app-shell.js";
 
 export function mountEditorApp(root: HTMLElement): void {
   const workflow = createEditorWorkflowController({
@@ -13,6 +16,7 @@ export function mountEditorApp(root: HTMLElement): void {
     })
   });
   let sourceIntakeDraft = workflow.state.sourceIntakeDraft;
+  let activeTask: EditorAppShellActiveTask = null;
 
   const createAppState = (): EditorSemanticState => ({
     ...workflow.state,
@@ -30,6 +34,15 @@ export function mountEditorApp(root: HTMLElement): void {
         viewerRuntimeProjection: workflow.viewerRuntimeProjection,
         latestPersistenceResult: workflow.latestSessionPersistenceResult,
         latestProjectPersistenceResult: workflow.latestProjectPersistenceResult,
+        activeTask,
+        onOpenPsdImportTask() {
+          activeTask = "psdImport";
+          render();
+        },
+        onCloseActiveTask() {
+          activeTask = null;
+          render();
+        },
         onCommitCreateParameter(command) {
           workflow.commitCreateParameter(command);
           render();

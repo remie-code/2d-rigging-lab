@@ -42,6 +42,7 @@ export const editorTestIds = {
   sourceIntakeManifestPath: "sourceIntake.manifestPath",
   sourceIntakePlacementPolicy: "sourceIntake.placementPolicy",
   sourceIntakeRightsStatus: "sourceIntake.rightsStatus",
+  psdImportTaskOpen: "psdImport.task.open",
   explicitPsdImportPanel: "explicitPsdImport.panel",
   explicitPsdImportForm: "explicitPsdImport.form",
   explicitPsdImportFileInput: "explicitPsdImport.fileInput",

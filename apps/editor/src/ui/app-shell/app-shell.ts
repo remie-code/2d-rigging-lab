@@ -2,6 +2,7 @@ import {
   editorTestIds,
   type EditorSemanticState,
   type EditorWorkflowViewModel,
+  type ExplicitPsdImportTaskObservationState,
   type LayerTreeDrawablePartAssignmentDraftCommand,
   type LayerTreeDrawableTextureAssignmentDraftCommand,
   type LayerTreeEmptyLeafPartDeleteDraftCommand,
@@ -14,7 +15,8 @@ import {
   type MeshTopologyRemoveVertexDraftCommand,
   type MeshUvNudgeDraftCommand,
   type SourceIntakeSelectedFileBytes,
-  type TutorialSelectedTargetState
+  type TutorialSelectedTargetState,
+  projectExplicitPsdImportTaskObservation
 } from "../../editor-state/index.js";
 import { applyEditorPreviewTextureAssets } from "../../editor-preview/texture-preview-resolution.js";
 import type { EditorPreviewProjectionDto } from "../../editor-preview/preview-dto.js";
@@ -79,13 +81,19 @@ import { createParameterList } from "../parameter-operation/parameter-list.js";
 import { createPreviewPanel } from "../preview-panel/index.js";
 import { createProductPreflightPanel } from "../product-preflight/index.js";
 import { createProjectPersistencePanel } from "../project-persistence/index.js";
-import { createExplicitPsdImportPanel } from "../explicit-psd-import/index.js";
+import {
+  createExplicitPsdImportTaskContent,
+  type ExplicitPsdImportTaskContentOptions
+} from "../explicit-psd-import/index.js";
 import { createRigControlPanel } from "../rig-control-panel/index.js";
 import { createSourceIntakePanel } from "../source-assets/index.js";
 import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import { createPackageStatus } from "./package-status.js";
 import { applyShellSurfaceMetadata, shellSurfaces } from "./shell-surfaces.js";
+import { createTaskShell } from "./task-shell.js";
+
+export type EditorAppShellActiveTask = "psdImport" | null;
 
 export interface EditorAppShellOptions {
   readonly state: EditorSemanticState;
@@ -94,6 +102,9 @@ export interface EditorAppShellOptions {
   readonly viewerRuntimeProjection: EditorViewerRuntimeProjection | null;
   readonly latestPersistenceResult: EditorSessionPersistenceResult | null;
   readonly latestProjectPersistenceResult: EditorWorkflowPersistenceResult | null;
+  readonly activeTask?: EditorAppShellActiveTask;
+  readonly onOpenPsdImportTask?: () => void;
+  readonly onCloseActiveTask?: () => void;
   readonly onCommitCreateParameter: (command: EditorCreateParameterCommand) => void;
   readonly onCommitCreateDrawablePreset: (command: EditorCreateDrawablePresetCommand) => void;
   readonly onCommitCreatePart: (command: EditorCreatePartCommand) => void;
@@ -332,33 +343,9 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
   applyShellSurfaceMetadata(sourceIntakePanel, shellSurfaces.sourceIntakeTask, {
     group: "source-intake"
   });
-  const explicitPsdImportPanel = createExplicitPsdImportPanel({
-    viewModel: options.viewModel.explicitPsdImport,
-    destinationParts: options.state.parts.map((part) => ({
-      partId: part.partId,
-      label: `${part.displayName} / ${part.partId}`
-    })),
-    onParsePsdFile: options.onParseExplicitPsdImportFile,
-    onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer,
-    ...(options.onIntakeExplicitPsdLayerBatch === undefined
-      ? {}
-      : { onIntakeSelectedLayersBatch: options.onIntakeExplicitPsdLayerBatch }),
-    ...(options.onGenerateExplicitPsdImportPlanPreview === undefined
-      ? {}
-      : { onGenerateImportPlanPreview: options.onGenerateExplicitPsdImportPlanPreview }),
-    ...(options.onIntakeApprovedExplicitPsdImportPlan === undefined
-      ? {}
-      : { onIntakeApprovedImportPlanCandidates: options.onIntakeApprovedExplicitPsdImportPlan }),
-    ...(options.onGenerateExplicitPsdStructuralScaffoldPreview === undefined
-      ? {}
-      : { onGenerateStructuralScaffoldPreview: options.onGenerateExplicitPsdStructuralScaffoldPreview }),
-    ...(options.onCommitExplicitPsdStructuralScaffold === undefined
-      ? {}
-      : { onCommitStructuralScaffold: options.onCommitExplicitPsdStructuralScaffold })
-  });
-  applyShellSurfaceMetadata(explicitPsdImportPanel, shellSurfaces.psdImportTask, {
-    group: "psd-import"
-  });
+  const psdImportTaskLauncher = createPsdImportTaskLauncher(options);
+  const activeTask =
+    options.activeTask === "psdImport" ? createPsdImportTaskShell(options) : null;
   const dynamicsPanel = createDynamicsPanel({
     state: options.state,
     viewModel: options.viewModel,
@@ -531,7 +518,8 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     layerTreePanel,
     drawableAuthoringPanel,
     sourceIntakePanel,
-    explicitPsdImportPanel,
+    psdImportTaskLauncher,
+    ...(activeTask === null ? [] : [activeTask]),
     projectPersistencePanel,
     productPreflightPanel,
     codexProposalReviewPanel,
@@ -567,6 +555,116 @@ const createAppBarActions = (options: EditorAppShellOptions): HTMLElement => {
 
   return actions;
 };
+
+const createPsdImportTaskLauncher = (options: EditorAppShellOptions): HTMLElement => {
+  const launcher = document.createElement("section");
+  launcher.className = "editor-panel editor-task-launcher editor-task-launcher--psd-import";
+  launcher.setAttribute("aria-label", "PSD import task launcher");
+  applyShellSurfaceMetadata(launcher, shellSurfaces.authoringWorkspace, {
+    group: "task-launcher"
+  });
+
+  const heading = document.createElement("h2");
+  heading.textContent = "Tasks";
+
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "editor-button editor-task-launcher__button";
+  action.dataset.testid = editorTestIds.psdImportTaskOpen;
+  action.textContent = "Import PSD";
+  action.setAttribute("aria-label", "Import PSD");
+  action.setAttribute("aria-expanded", String(options.activeTask === "psdImport"));
+  action.addEventListener("click", () => {
+    options.onOpenPsdImportTask?.();
+  });
+
+  launcher.append(heading, action);
+  return launcher;
+};
+
+const createPsdImportTaskShell = (options: EditorAppShellOptions): HTMLElement => {
+  const observation = projectExplicitPsdImportTaskObservation(options.state.explicitPsdImport);
+
+  return createTaskShell({
+    surface: shellSurfaces.psdImportTask,
+    surfaceMetadata: { group: "psd-import" },
+    title: "PSD Import",
+    status: observation.humanSummary.text,
+    back: {
+      ariaLabel: "Back to authoring workspace",
+      label: "Back",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    close: {
+      ariaLabel: "Close PSD import task",
+      label: "Close",
+      ...(options.onCloseActiveTask === undefined ? {} : { onClick: options.onCloseActiveTask })
+    },
+    diagnosticsSummary: createPsdImportTaskObservationSummary(observation),
+    content: createPsdImportTaskPanel(createPsdImportTaskContentOptions(options))
+  });
+};
+
+const createPsdImportTaskPanel = (
+  contentOptions: ExplicitPsdImportTaskContentOptions
+): HTMLElement => {
+  const panel = document.createElement("section");
+  panel.className = "explicit-psd-import-panel explicit-psd-import-panel--task";
+  panel.dataset.testid = editorTestIds.explicitPsdImportPanel;
+  panel.setAttribute("aria-label", "PSD Import");
+  applyShellSurfaceMetadata(panel, shellSurfaces.psdImportTask, {
+    group: "psd-import-panel"
+  });
+  panel.append(createExplicitPsdImportTaskContent(contentOptions));
+  return panel;
+};
+
+const createPsdImportTaskObservationSummary = (
+  observation: ExplicitPsdImportTaskObservationState
+): HTMLElement => {
+  const summary = document.createElement("section");
+  summary.className = "editor-task-observation-summary editor-task-observation-summary--psd-import";
+  summary.setAttribute("aria-label", "PSD import task observation summary");
+  summary.dataset.psdImportTaskSchemaVersion = observation.schemaVersion;
+  summary.dataset.psdImportTaskParseStatus = observation.parseStatus;
+  summary.dataset.psdImportTaskEvidenceStatus = observation.evidenceBoundary.detailStatus;
+
+  const humanSummary = document.createElement("p");
+  humanSummary.textContent = observation.humanSummary.text;
+
+  const evidenceSummary = document.createElement("p");
+  evidenceSummary.textContent = observation.evidenceBoundary.summary;
+
+  summary.append(humanSummary, evidenceSummary);
+  return summary;
+};
+
+const createPsdImportTaskContentOptions = (
+  options: EditorAppShellOptions
+): ExplicitPsdImportTaskContentOptions => ({
+  viewModel: options.viewModel.explicitPsdImport,
+  destinationParts: options.state.parts.map((part) => ({
+    partId: part.partId,
+    label: `${part.displayName} / ${part.partId}`
+  })),
+  onParsePsdFile: options.onParseExplicitPsdImportFile,
+  onIntakeSelectedLayer: options.onIntakeExplicitPsdLayer,
+  ...(options.onIntakeExplicitPsdLayerBatch === undefined
+    ? {}
+    : { onIntakeSelectedLayersBatch: options.onIntakeExplicitPsdLayerBatch }),
+  ...(options.onGenerateExplicitPsdImportPlanPreview === undefined
+    ? {}
+    : { onGenerateImportPlanPreview: options.onGenerateExplicitPsdImportPlanPreview }),
+  ...(options.onIntakeApprovedExplicitPsdImportPlan === undefined
+    ? {}
+    : { onIntakeApprovedImportPlanCandidates: options.onIntakeApprovedExplicitPsdImportPlan }),
+  ...(options.onGenerateExplicitPsdStructuralScaffoldPreview === undefined
+    ? {}
+    : { onGenerateStructuralScaffoldPreview: options.onGenerateExplicitPsdStructuralScaffoldPreview }),
+  ...(options.onCommitExplicitPsdStructuralScaffold === undefined
+    ? {}
+    : { onCommitStructuralScaffold: options.onCommitExplicitPsdStructuralScaffold })
+});
 
 const resolveTextureAtlas = (options: EditorAppShellOptions): TextureAtlasFileDto | undefined => {
   const latestSessionAtlas = options.latestPersistenceResult?.reloadedDocument.assets.textureAtlas;
