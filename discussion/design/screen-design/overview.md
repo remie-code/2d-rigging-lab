@@ -50,6 +50,7 @@ stateDiagram-v2
   TutorialTask --> EmptyWorkspace: cancel
 
   AuthoringWorkspace --> PsdImportTask: 追加import
+  AuthoringWorkspace --> ParameterManager: Parameter Managerを開く
   AuthoringWorkspace --> VariantExpressionManager: Variant/Expressionを開く
   AuthoringWorkspace --> TextureAtlasTask: Texture Atlasを開く
   AuthoringWorkspace --> ProjectStorageTask: save/load/export/import
@@ -58,6 +59,7 @@ stateDiagram-v2
   AuthoringWorkspace --> DiagnosticsEvidenceView: diagnostics/evidenceを開く
   AuthoringWorkspace --> CodexAutomationView: Codex/AI操作を開く
 
+  ParameterManager --> AuthoringWorkspace: apply/cancel/戻る
   VariantExpressionManager --> AuthoringWorkspace: apply/cancel/戻る
   VariantExpressionManager --> ViewerRuntimeView: state切り替え確認
   VariantExpressionManager --> TextureAtlasTask: hidden targetのatlas確認
@@ -76,6 +78,7 @@ stateDiagram-v2
 |---|---|---|
 | Empty / Authoring Workspace | 起動直後、import後、通常編集時の中心画面。parts tree、canvas、inspector、toolboxを持つ。 | [screens/authoring-workspace.md](screens/authoring-workspace.md) |
 | PSD Import Task | PSD file選択、parse、tree inspection、preview、approval、commitを行うtask画面。 | [screens/psd-import-task.md](screens/psd-import-task.md) |
+| Parameter Manager | parameter定義、stable id、display name、min/default/max、grouping、usage referenceを管理する専用画面。 | [screens/parameter-manager.md](screens/parameter-manager.md) |
 | Variant / Expression Manager | 表情差分、パーツ差分、衣装差分のstate setとState Matrixを管理する専用画面。 | [screens/variant-expression-manager.md](screens/variant-expression-manager.md) |
 | Texture Atlas Task | visible drawableを中心にtexture pageへ自動配置し、layout preview / applyを行うtask画面。 | [screens/texture-atlas-task.md](screens/texture-atlas-task.md) |
 | Project Storage Task | save/load/export/import/resetを扱うtask画面。 | [screens/project-storage-task.md](screens/project-storage-task.md) |
@@ -94,7 +97,7 @@ stateDiagram-v2
 | Mesh Tool | 選択中drawableのinitial mesh generation、mesh overlay編集、Topology / UV編集を扱うActive Tool。 | [components/mesh-tool.md](components/mesh-tool.md) |
 | Rig Tool | 選択中part / drawable / meshに対するrig draft/preview、binding、parameter/keyform authoringを扱うActive Tool。 | [components/rig-tool.md](components/rig-tool.md) |
 | Dynamics Tool | dynamics group、input / output binding、coefficient、lightweight previewを扱うActive Tool。 | [components/dynamics-tool.md](components/dynamics-tool.md) |
-| Parameter / Keyform | active parameterの現在値操作、keyform authoring、全parameter確認用paletteを扱う横断UI。 | [components/parameter-keyform.md](components/parameter-keyform.md) |
+| Parameter / Keyform | active parameterの現在値操作、keyform authoring、Quick Create、全parameter確認用paletteを扱う横断UI。 | [components/parameter-keyform.md](components/parameter-keyform.md) |
 
 ## 5. 大まかな画面配置
 
@@ -110,6 +113,7 @@ stateDiagram-v2
 | Mesh     | part containers     |                       | Part / Drawable /    |
 | Rig      | drawables / hidden  |                       | Source details       |
 | Dynamics | rows                |                       | Contextual controls  |
+| Params   | rows                |                       | Contextual controls  |
 | Variant  | rows                |                       | Contextual controls  |
 | Atlas    | rows                |                       | Contextual controls  |
 | Validate | rows                |                       | Contextual controls  |
@@ -132,6 +136,7 @@ stateDiagram-v2
 | Inspector / Context Panel | `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025` |
 | Dynamics Tool | `UX-FEAT-024`, `UX-FEAT-025`, 一部 `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-023`, `UX-FEAT-028`, `UX-FEAT-029` |
 | PSD Import Task | `UX-FEAT-013`〜`UX-FEAT-019` |
+| Parameter Manager | 専用IDは未採番。関連: `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-025`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Variant / Expression Manager | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-007`, `UX-FEAT-008`, `UX-FEAT-009`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Texture Atlas Task | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Project Storage Task | `UX-FEAT-026`, `UX-FEAT-027`, 一部 `UX-FEAT-035`, `UX-FEAT-036` |

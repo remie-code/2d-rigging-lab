@@ -18,6 +18,7 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 | Mesh     | PSD group-derived   | preview               | details              |
 | Rig      | part containers     |                       | Part / Drawable /    |
 | Dynamics | drawables / hidden  |                       | Source details       |
+| Params   | rows                |                       | Contextual controls  |
 | Variant  | drawables / hidden  |                       | Source details       |
 | Atlas    | drawables / hidden  |                       | Source details       |
 | Validate | rows                |                       | Contextual controls  |
@@ -99,12 +100,17 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
    - 常設の大きなSimulation Controlsは置かず、本格的な時間再生や複数parameter確認はViewer / Runtime Viewへ委譲する。
    - Canvasには選択中dynamics groupの影響範囲、出力方向、sample valueに対する簡易preview overlayを表示してよい。
    - Dynamics Toolの詳細は [../components/dynamics-tool.md](../components/dynamics-tool.md) を参照する。
-5. Variant / Expression管理
+5. Parameter定義・整理
+   - ToolboxのParameter Managerを開き、parameter定義、stable id、display name、min/default/max、grouping、usage referenceを管理する専用画面へ進む。
+   - Rig Tool、Dynamics Tool、Parameter BarなどからはQuick Create / Selectを提供し、詳細整理はParameter Managerへ送る。
+   - Parameter Barはcurrent value操作のUIであり、parameter定義そのものの管理画面ではない。
+   - Parameter Managerの詳細は [parameter-manager.md](parameter-manager.md) を参照する。
+6. Variant / Expression管理
    - ToolboxのVariant / Expressionを開き、表情差分、パーツ差分、衣装差分のstate setを管理する専用画面へ進む。
    - 初期はexclusive setを基本にし、同時適用 / additive setは将来候補として扱う。
    - hidden drawableやpart subtreeをState Matrixで管理し、Preview Canvasでstate切り替え結果を確認する。
    - Variant / Expression Managerの詳細は [variant-expression-manager.md](variant-expression-manager.md) を参照する。
-6. Texture Atlas作成・確認
+7. Texture Atlas作成・確認
    - ToolboxのTexture Atlasを開き、visible drawableをtexture pageへ配置する専用Taskへ進む。
    - Texture Atlas Taskでは、drawable対象一覧、page settings、padding、layout preview、unplaced / overflow warningを確認する。
    - Generate Layout Previewはuncommittedであり、Apply Atlasでproject stateへcommitする。
@@ -118,6 +124,7 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 - Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025`
 - Drawable Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-010`〜`UX-FEAT-012`, 一部 `UX-FEAT-020`〜`UX-FEAT-023`
 - Dynamics Tool: `UX-FEAT-024`, `UX-FEAT-025`
+- Parameter Manager: 専用IDは未採番。関連: `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-025`
 - Variant / Expression Manager: 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-007`, `UX-FEAT-008`, `UX-FEAT-009`
 - Texture Atlas Task: 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`
 

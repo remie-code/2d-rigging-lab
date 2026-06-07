@@ -1,12 +1,14 @@
 # Parameter / Keyform コンポーネント仕様
 
-> 状態: Draft component spec。Parameter Bar、Parameter Control Palette、keyform authoringの画面上の役割を定義する。
+> 状態: Draft component spec。Parameter Bar、Parameter Control Palette、Quick Create、keyform authoringの画面上の役割を定義する。
 
 ## 1. 役割
 
 Parameter / Keyform UIは、Authoring Workspace全体で共有されるparameter value contextを扱う。
 
 Rig、Mesh deformation、Opacity、Subtree opacity、Dynamics、Viewer確認は、いずれも「現在どのparameterのどの値を見ているか」に依存する。そのため、Parameter UIは特定toolのInspector内に閉じ込めず、workspace横断の操作領域として扱う。
+
+Parameter definitionそのものは、Parameter Managerで管理する。Parameter Barはcurrent value操作、Parameter Control Paletteは動作確認、Quick Createは作業中の最低限作成入口である。
 
 ## 2. 基本方針
 
@@ -15,6 +17,7 @@ Rig、Mesh deformation、Opacity、Subtree opacity、Dynamics、Viewer確認は�
 - keyform詳細、parameter一覧、複雑な2D操作は展開UIへ逃がす。
 - Canvas / Previewの確認を妨げない。
 - Rig / Mesh / Opacity / Subtree opacity / Dynamicsなどのtool-specific操作はInspectorに置き、parameter current valueはParameter Barに置く。
+- parameter定義、stable id、grouping、usage referenceの詳細管理はParameter Managerへ送る。
 
 ## 3. Parameter Bar
 
@@ -51,6 +54,8 @@ Parameter Barは、現在authoring対象になっている1つのactive paramete
 - add / update keyform action
 - previous / next key action
 - reset default action
+- quick create入口
+- open Parameter Manager入口
 
 表示しないもの:
 
@@ -176,9 +181,34 @@ expanded状態:
 | Mesh Tool | 将来mesh deformation keyformを扱う場合、Parameter Barのcurrent valueを使う。 |
 | Drawable Inspector / Opacity | 静的opacityはDrawable Inspectorで扱い、opacity keyform authoringではParameter Barのcurrent valueと協調する。 |
 | Dynamics Tool | active input parameterはParameter Barで扱い、group / binding / coefficientはDynamics Inspectorで扱う。本格的なruntime確認はViewer / Runtime Viewへ送る。 |
+| Parameter Manager | parameter定義、stable id、display name、min/default/max、grouping、usage referenceを管理する専用画面。 |
 | Viewer / Runtime View | より本格的なruntime確認view。Parameter Control Paletteより広い検証文脈を扱う。 |
 
-## 8. Tool State
+## 8. Quick Create / Select
+
+Quick Create / Selectは、Rig Tool、Dynamics Tool、Parameter Barなどからparameterが必要になった時に使う軽量入口である。
+
+置くもの:
+
+- existing parameter selector
+- create scalar parameter
+- display name
+- stable id auto suggestion
+- min / default / max
+- group
+- create action
+- open Parameter Manager
+
+置かないもの:
+
+- usage reference詳細
+- stable id refactor
+- duplicate id解消の詳細UI
+- validation report全文
+
+Quick Createは作業を止めないための入口であり、Parameter Managerの代替ではない。
+
+## 9. Tool State
 
 | State | Parameter Bar | Palette | Canvas / Preview |
 |---|---|---|---|
@@ -188,10 +218,11 @@ expanded状態:
 | Palette Open | active parameterは維持 | 全parameter slider表示 | all parameter overrides反映 |
 | Blocked | disabled reason表示 | disabled rowsあり | warning / unchanged preview |
 
-## 9. 未決事項
+## 10. 未決事項
 
 - PaletteをCanvas右側floatingにするか、dockable panelにするか。
 - parameter group / category の分類方法。
 - key markerが多い場合の密度表現。
 - 2D / grid parameter編集をParameter Bar拡張に置くか、別panelに置くか。
 - Parameter Control Paletteでの値変更をsession-only previewにするか、viewer/runtime overrideと同じ扱いにするか。
+- Quick Createでstable id auto suggestionをどこまで行うか。
