@@ -30,6 +30,8 @@
 
 preset-based initial mesh generationは、この非ゴールには含めない。これは意味推定や提案ではなく、ユーザーまたはCodexが明示したdrawableとpresetに基づく決定的geometry生成であり、Editor UX上の必須候補として扱う。
 
+texture atlasのsimple deterministic packingも、この非ゴールには含めない。これはvisible drawable、page size、padding、source boundsに基づく決定的な配置処理であり、semantic recognitionやsmart suggestionではない。
+
 ## 3. 現在の問題設定
 
 現在の Editor は起動でき、基本機能も揃い始めている。一方で、人間向けUXはまだ弱い。
@@ -95,7 +97,7 @@ Codex-facing structural command parity は、次の実装候補として重要�
 - 人間向けUIは authoring と inspection に最適化する
 - Codex-facing behavior は deterministic API、operation evidence、validation、approval、commit、test surface で支える
 - 詳細な evidence は存在してよいが、通常の人間向けUIを支配しない
-- Editorが持つ自動処理は、意味推定ではなく明示入力に基づく決定的処理に限定する。preset-based initial mesh generationはこの範囲に入る。
+- Editorが持つ自動処理は、意味推定ではなく明示入力に基づく決定的処理に限定する。preset-based initial mesh generationとtexture atlas simple packingはこの範囲に入る。
 
 この仮定は、棚卸とユーザー議論の中で検証する。
 

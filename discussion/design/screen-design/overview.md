@@ -50,12 +50,15 @@ stateDiagram-v2
   TutorialTask --> EmptyWorkspace: cancel
 
   AuthoringWorkspace --> PsdImportTask: 追加import
+  AuthoringWorkspace --> TextureAtlasTask: Texture Atlasを開く
   AuthoringWorkspace --> ProjectStorageTask: save/load/export/import
   AuthoringWorkspace --> ValidationTask: Product Preflight
   AuthoringWorkspace --> ViewerRuntimeView: Viewer/Runtime専用画面を開く
   AuthoringWorkspace --> DiagnosticsEvidenceView: diagnostics/evidenceを開く
   AuthoringWorkspace --> CodexAutomationView: Codex/AI操作を開く
 
+  TextureAtlasTask --> AuthoringWorkspace: apply/cancel/戻る
+  TextureAtlasTask --> ViewerRuntimeView: apply後にruntime確認
   ProjectStorageTask --> AuthoringWorkspace: 完了/戻る
   ValidationTask --> AuthoringWorkspace: summary確認/戻る
   ViewerRuntimeView --> AuthoringWorkspace: Authoringへ戻る
@@ -69,6 +72,7 @@ stateDiagram-v2
 |---|---|---|
 | Empty / Authoring Workspace | 起動直後、import後、通常編集時の中心画面。parts tree、canvas、inspector、toolboxを持つ。 | [screens/authoring-workspace.md](screens/authoring-workspace.md) |
 | PSD Import Task | PSD file選択、parse、tree inspection、preview、approval、commitを行うtask画面。 | [screens/psd-import-task.md](screens/psd-import-task.md) |
+| Texture Atlas Task | visible drawableを中心にtexture pageへ自動配置し、layout preview / applyを行うtask画面。 | [screens/texture-atlas-task.md](screens/texture-atlas-task.md) |
 | Project Storage Task | save/load/export/import/resetを扱うtask画面。 | [screens/project-storage-task.md](screens/project-storage-task.md) |
 | Validation Task | Product Preflightの実行、summary確認、details入口を扱うtask画面。 | [screens/validation-task.md](screens/validation-task.md) |
 | Viewer / Runtime View | 編集overlayなしでruntime/viewer確認を行う専用画面。 | [screens/viewer-runtime-view.md](screens/viewer-runtime-view.md) |
@@ -98,6 +102,7 @@ stateDiagram-v2
 | Select   | PSD group-derived   | preview               | details              |
 | Mesh     | part containers     |                       | Part / Drawable /    |
 | Rig      | drawables / hidden  |                       | Source details       |
+| Atlas    | rows                |                       | Contextual controls  |
 | Validate | rows                |                       | Contextual controls  |
 | Automate |                     |                       |                      |
 +----------+---------------------+-----------------------+----------------------+
@@ -117,6 +122,7 @@ stateDiagram-v2
 | Canvas / Preview | `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012` |
 | Inspector / Context Panel | `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025` |
 | PSD Import Task | `UX-FEAT-013`〜`UX-FEAT-019` |
+| Texture Atlas Task | 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`, 一部 `UX-FEAT-028`, `UX-FEAT-029`, `UX-FEAT-034` |
 | Project Storage Task | `UX-FEAT-026`, `UX-FEAT-027`, 一部 `UX-FEAT-035`, `UX-FEAT-036` |
 | Validation Task | `UX-FEAT-028`, `UX-FEAT-029` |
 | Diagnostics / Evidence View | `UX-FEAT-033`〜`UX-FEAT-036`, 一部 `UX-FEAT-007`, `UX-FEAT-014`, `UX-FEAT-025`, `UX-FEAT-028`〜`UX-FEAT-032` |

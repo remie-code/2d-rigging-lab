@@ -17,8 +17,9 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 | Import   | Parts tree          | Empty state or model  | Project / selection  |
 | Mesh     | PSD group-derived   | preview               | details              |
 | Rig      | part containers     |                       | Part / Drawable /    |
-| Validate | drawables / hidden  |                       | Source details       |
-| Automate | rows                |                       | Contextual controls  |
+| Atlas    | drawables / hidden  |                       | Source details       |
+| Validate | rows                |                       | Contextual controls  |
+| Automate |                     |                       |                      |
 +----------+---------------------+-----------------------+----------------------+
 | Parameter Bar: active parameter / value slider / key markers / key actions      |
 +--------------------------------------------------------------------------------+
@@ -87,6 +88,11 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
    - RotationやWarp / Latticeのdraft overlayはCanvasに表示し、Applyするまでproject rig controlは変更しない。
    - 自動semantic推定やauto-rig提案はEditor通常UIの責務ではない。
    - Rig Toolの詳細は [../components/rig-tool.md](../components/rig-tool.md) を参照する。
+4. Texture Atlas作成・確認
+   - ToolboxのTexture Atlasを開き、visible drawableをtexture pageへ配置する専用Taskへ進む。
+   - Texture Atlas Taskでは、drawable対象一覧、page settings、padding、layout preview、unplaced / overflow warningを確認する。
+   - Generate Layout Previewはuncommittedであり、Apply Atlasでproject stateへcommitする。
+   - Texture Atlas Taskの詳細は [texture-atlas-task.md](texture-atlas-task.md) を参照する。
 
 ## 5. 関連機能ID
 
@@ -94,6 +100,7 @@ Import直後は、通常編集状態の中でもPost-Import Review状態とし�
 - Parts Tree: `UX-FEAT-008`, `UX-FEAT-009`
 - Canvas / Preview: `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012`
 - Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025`
+- Texture Atlas Task: 専用IDは未採番。関連: `UX-FEAT-004`, `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-019`
 
 ## 6. 未決事項
 
