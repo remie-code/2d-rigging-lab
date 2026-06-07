@@ -20,6 +20,7 @@
 | [initial-design-decisions-and-open-questions.md](initial-design-decisions-and-open-questions.md) | MVP更新前後の設計判断、委任範囲、要調査・要議論事項 | Private baseline語彙へ整理済み |
 | [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) | AI assistant 接続方式と技術スタック方針 | Private baseline語彙へ整理済み |
 | [codex-friendly-automation-policy.md](codex-friendly-automation-policy.md) | Editor/repo は提案・推論・自動分類を持たず、Codex/LLM が人間同等操作を deterministic API で実行するための自動化境界。Wave50の explicit PSD structural expansion は semantic recognition ではなく、明示選択された構造初期状態 scaffold に限定 | Accepted user decision / Wave49-Wave50 basis |
+| [screen-design/](screen-design/_map.md) | GUI Editorを中心とする画面設計、画面遷移、主要領域、表示情報分類、人間向けUIとCodex/evidence surface境界の設計トピック | In discussion |
 | [module-contract-design-decisions.md](module-contract-design-decisions.md) | module contract design の判断ログ | Private baseline語彙へ整理済み。過去判断は参考 |
 | [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) | `memo/gpt-5.5-pro-review/reveiw_001.md` への対応分類と反映結果 | Current response record |
 | [gpt-5.5-pro-review-002-response.md](gpt-5.5-pro-review-002-response.md) | `memo/gpt-5.5-pro-review/review_002.md` へのRE3対応分類とDynamics復帰反映結果 | Historical response record; Dynamics details superseded by review_003 |
@@ -63,5 +64,6 @@
 | AI Agent は Editor に接続するか、package に対して外部処理するか | 3層連携としてDraft設計済み。Future integration surface化はMVP外 |
 | Runtime は Editor preview と Viewer で同一実装にするか | Shared private runtime coreを共有する方針 |
 | GUI Editor の画面仕様としてどの項目を決めるか | Draft設計済み。実装時に詳細化 |
+| Pre-Wave51 Editor UX screen spec | Discussion開始。Sylph棚卸後に画面遷移、主要領域、表示情報分類、人間UI/Codex surface境界をユーザー判断で固定する |
 | RigControl構造の技術的正体 | Private Prototype内のproject-defined構造として整理継続 |
 | Runtime評価セマンティクスの設計判断 | compositionMode、mask opacity 0、missing texture severity、epsilonPolicy は実装前未決 |
