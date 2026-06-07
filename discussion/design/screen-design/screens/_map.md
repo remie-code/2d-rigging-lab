@@ -9,6 +9,7 @@
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [authoring-workspace.md](authoring-workspace.md) | Empty / Authoring Workspaceのレイアウトと表示情報 | Draft screen spec |
 | [psd-import-task.md](psd-import-task.md) | PSD Import Taskの内部遷移とレイアウト | Draft screen spec |
+| [variant-expression-manager.md](variant-expression-manager.md) | Variant / Expression Managerの内部遷移とレイアウト | Draft screen spec |
 | [texture-atlas-task.md](texture-atlas-task.md) | Texture Atlas Taskの内部遷移とレイアウト | Draft screen spec |
 | [project-storage-task.md](project-storage-task.md) | Project Storage Taskの内部遷移とレイアウト | Draft screen spec |
 | [validation-task.md](validation-task.md) | Product Preflight / Validation Taskの内部遷移とレイアウト | Draft screen spec |

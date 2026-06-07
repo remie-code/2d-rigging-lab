@@ -26,6 +26,7 @@ Mesh、Rig、DynamicsのようなActive Toolではなく、選択中drawableに�
 - Parts Tree上で上にあるdrawableほど前面に表示される。実際の描画は、下から上へ描画するものとして扱う。
 - Visibilityは `Editor visibility` と `Runtime visibility` を別概念として扱う。
 - OpacityとClipping / Maskは、drawableに対するInspector sectionとして扱う。
+- 表情差分、パーツ差分、衣装差分のように複数targetをstateとしてまとめる場合は、Variant / Expression Managerの責務とする。
 - デフォーマ / rig control配下の要素をまとめてフェードさせるparameter-driven subtree opacityは、Drawable InspectorではなくRig Toolの責務とする。
 - raw evidence、operation ID、generated refs全文は通常表示しない。
 
@@ -94,6 +95,7 @@ Runtime visibility:
 - runtime / Viewer / exportの初期表示状態を制御する。
 - PSD由来のhidden drawableや表情差分、パーツ差分に関係する。
 - hidden drawableでもruntime切り替え対象として保持される可能性がある。
+- 複数drawable / part subtreeをstateとしてまとめる操作は、Variant / Expression Managerで扱う。
 
 Drawable Inspectorに置くもの:
 
@@ -188,6 +190,7 @@ Drawable Inspector自体でmesh編集やatlas配置を行わない。
 | Rig Tool | 選択part / drawable / meshに対するrig authoringと、parameter-driven subtree opacity effectを行うActive Tool。 |
 | Dynamics Tool | drawable propertyやrig controlがdynamics output候補になる可能性がある。 |
 | Parameter / Keyform | opacity keyformなど、drawable propertyのparameter-driven編集で協調する。 |
+| Variant / Expression Manager | 表情差分、パーツ差分、衣装差分のstate setとState Matrixを扱う。 |
 | Texture Atlas Task | atlas placementは専用Taskで扱い、Drawable Inspectorはsummaryと導線を持つ。 |
 | Viewer / Runtime View | runtime visibility、opacity、maskの結果をruntime相当で確認する。 |
 

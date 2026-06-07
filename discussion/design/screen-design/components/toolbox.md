@@ -24,6 +24,7 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 | Dynamics |  Active tool
 |----------|
 | Import   |  Task
+| Variant  |  Task
 | Atlas    |  Task
 | Storage  |  Task
 | Validate |  Task
@@ -39,7 +40,7 @@ Toolbox自体は作業UI本体ではない。具体的な操作UIは、Active To
 | 種別 | 役割 | 起動後の主な表示先 | 例 |
 |---|---|---|---|
 | Active Tool | workspace内の作業モードを切り替える | Canvas / Inspector / Tool Panel | Select, Mesh, Rig, Dynamics |
-| Task | まとまった作業画面を開く | Task window / task view | Import, Texture Atlas, Storage, Validate |
+| Task | まとまった作業画面を開く | Task window / task view | Import, Variant / Expression, Texture Atlas, Storage, Validate |
 | View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer, Diagnostics, Codex |
 
 Viewerは専用画面として開く。Diagnostics / Codexは、情報量や作業文脈に応じてdrawer / side view / dedicated viewのいずれかを後続議論で決める。
@@ -71,6 +72,7 @@ Viewerは専用画面として開く。Diagnostics / Codexは、情報量や作�
 | Rig | Active Tool | `Spline` | Rig tools |
 | Dynamics | Active Tool | `Waves` | Dynamics |
 | Import PSD | Task | `FileInput` | Import PSD |
+| Variant / Expression | Task | `Smile` | Variant / Expression |
 | Texture Atlas | Task | `LayoutGrid` | Texture Atlas |
 | Storage | Task | `FolderOpen` | Project storage |
 | Validate | Task | `ShieldCheck` | Product Preflight |
