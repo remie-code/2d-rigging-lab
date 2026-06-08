@@ -10,7 +10,7 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 
 ```text
 +--------------------------------------------------------------------------------+
-| App Bar: project / save state / mode / key actions / Viewer / Storage           |
+| App Bar: project / save state / task/view entries / Viewer / Storage            |
 +----------+---------------------+-----------------------+----------------------+
 | Toolbox  | Structure / Parts   | Canvas / Preview      | Inspector            |
 |          |                     |                       |                      |
@@ -50,6 +50,7 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 - PSDを読み込む入口
 - 既存projectを開く入口
 - tutorialを開始する入口
+- Stage empty stateではPSD importを主導線として扱う
 
 表示しないもの:
 
@@ -67,7 +68,7 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 - canvasにimportされたdrawable
 - inspectorに選択中part/drawable/sourceの編集情報
 - diagnostics stripに重要warningのみ
-- import完了summary: generated parts / drawables / hidden drawables / warning count
+- import完了feedback: modal close / Parts Tree update / generated root selection / optional toast
 
 表示しないもの:
 
@@ -79,6 +80,10 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 - reload summary
 
 Import直後は、通常編集状態の中でもPost-Import Review状態として扱う。最初の導線はParts Treeでimport結果を確認し、次に編集対象を選ぶことである。
+
+Import先は、初回importまたは選択なしならproject root直下、part選択中なら選択中part配下、drawable選択中ならその親part配下にする。初期UXではimport先選択をユーザーに求めず、PSD Import Review上で決定済みdestinationを短く表示する。
+
+Import完了後は、生成されたimport root / part groupを選択状態にする。Inspectorは専用のImport Summaryではなく、選択されたpart / groupの通常情報を表示する。Import完了feedbackは、modalが閉じること、Parts Treeに実構造が表示されること、生成rootが選択されることを主にし、必要なら短いtoastに留める。raw refs、operation ID、warning count、diagnostics詳細は通常表示しない。
 
 主要操作:
 

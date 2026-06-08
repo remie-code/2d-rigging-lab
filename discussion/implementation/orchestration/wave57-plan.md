@@ -53,7 +53,7 @@ Wave57 Domain A must delete current `apps/editor` before creating the React app.
 
 ## 4. Adopted Stack
 
-Wave57 must introduce only the agreed initial dependencies:
+Wave57 must use the agreed stack as the architectural baseline:
 
 - `react`
 - `react-dom`
@@ -69,6 +69,19 @@ Wave57 must introduce only the agreed initial dependencies:
 - `zustand`
 - `clsx`
 
+This list is not an exhaustive package allowlist. Gnome may add small supporting packages needed for normal React / Vite / Tailwind development, including type packages, plugins, test utilities, or small helpers, if the reason is recorded in the domain report.
+
+Escalate before adding a dependency that changes or fixes one of these architectural choices:
+
+- UI framework
+- component system / large component kit
+- renderer / canvas engine
+- data fetching architecture
+- routing architecture
+- form architecture
+- browser e2e / visual regression strategy
+- external transport
+
 Do not add:
 
 - `shadcn/ui`
@@ -76,7 +89,6 @@ Do not add:
 - PixiJS
 - browser e2e frameworks
 - visual regression tooling
-- additional state/form/data libraries
 
 ## 5. Initial Source Structure
 
@@ -170,11 +182,10 @@ Wave57 is intentionally compact and should not over-parallelize. This wave does 
 | Batch | Domain | Parallelism | Dependency | Purpose |
 |---|---|---|---|---|
 | 1 | A. React stack app reset | Solo first | Oracle + Wave56 B/C baseline | Delete current `apps/editor`, add dependencies, create React/Vite/Tailwind scaffold |
-| 2 | B. Workspace placeholder composition | Solo after A | A | Build Authoring Workspace placeholder with proper source structure |
-| 3 | C. Validation / source-structure review | Solo after B | B | Run minimal validation and check structure/forbidden content |
-| 4 | D. Map closeout / final clean review | Solo after C | C | Update only required maps, add short closeout, and produce final clean review |
+| 2 | B. Workspace placeholder composition + validation gates | Solo after A | A | Build Authoring Workspace placeholder, run minimal validation, and complete dual review gates |
+| 3 | C. Map closeout / final clean review | Solo after B | B | Update only required maps, add short closeout, and produce final clean review |
 
-Do not split out a final report phase. The closeout should be short and should live in Domain D's report/map updates.
+Do not split out a final report phase. The closeout should be short and should live in Domain C's report/map updates.
 
 ## 9. Domain Assignments
 
@@ -202,7 +213,7 @@ Forbidden:
 - old `apps/editor` source reuse
 - old e2e/testid/focused registry recreation
 - feature implementation beyond scaffold
-- adding dependencies outside the agreed stack
+- adding dependencies that change the agreed architecture without escalation
 
 Required verification:
 
@@ -212,11 +223,13 @@ Required verification:
 - `pnpm run typecheck`
 - `pnpm run check`
 
-### B. `wave57-workspace-placeholder-composition`
+### B. `wave57-workspace-placeholder-composition-validation-gates`
 
 Purpose:
 
 - Build the Authoring Workspace placeholder using React components and the required source structure.
+- Run the minimal validation and structural checks that were previously separated as a review-only domain.
+- Use multiple independent Review-Sylph lanes when practical instead of splitting validation into a separate domain.
 
 Allowed write scope:
 
@@ -236,35 +249,37 @@ Required verification:
 
 - `pnpm --filter @private-2d-rigging-lab/editor typecheck`
 - `pnpm --filter @private-2d-rigging-lab/editor build`
+- `pnpm run typecheck`
+- `pnpm run test:unit`
+- `pnpm run check`
 - forbidden string/source scan over `apps/editor/src/**`
-
-### C. `wave57-validation-source-structure-review`
-
-Purpose:
-
-- Run minimal final validation and source-structure checks.
-
-Allowed write scope:
-
-- narrow non-e2e validation scripts if needed
-- `discussion/implementation/waves/wave57/**`
-- `discussion/implementation/reviews/wave57/**`
-
-Required verification:
-
-- required validation from section 7
 - no `apps/editor/e2e/**`
 - no old e2e/focused/testid standard path
 - source structure matches oracle
 - no forbidden visible/content strings
 
-### D. `wave57-map-closeout-final-clean-review`
+B review gates:
+
+- Review-Sylph 1: UX / source structure review.
+  - Confirm startup workspace placeholder matches the required regions.
+  - Confirm UI is a work-focused editor surface, not a landing/debug/evidence surface.
+  - Confirm `apps/editor/src/` follows the oracle structure and does not become flat.
+  - Confirm `components/` is not used as a dumping ground.
+  - Confirm forbidden visible content is absent.
+- Review-Sylph 2: validation / dependency / process hygiene review.
+  - Confirm required validation passed.
+  - Confirm no dev server, browser e2e, screenshot, visual regression, or long-running process validation was introduced.
+  - Confirm dependency additions follow the oracle, supporting dependency reasons are recorded, and no extra UI architecture was added.
+  - Confirm old e2e/focused/testid guard paths were not restored.
+  - Confirm standard headless baseline remains intact.
+
+### C. `wave57-map-closeout-final-clean-review`
 
 Purpose:
 
 - Update only the required maps to reflect Wave56 abandoned / Wave57 active.
 - Register React Editor Foundation Oracle as accepted basis.
-- Record a short closeout: completed scope, validation passed, dependencies added, explicit non-goals, and next discussion point.
+- Record a short closeout: completed scope, validation passed, dependencies added, supporting dependency reasons, explicit non-goals, and next discussion point.
 - Produce final clean Review-Sylph review for the wave.
 
 Allowed write scope:
@@ -309,7 +324,7 @@ Orch-Sylph自身は実装担当ではない。source implementation は必ず別
 Wave57 passes when:
 
 - Current `apps/editor` is deleted and recreated as a React + Vite + Tailwind app.
-- Agreed dependencies are installed and no extra UI stack is added.
+- Agreed stack is installed, supporting dependencies are justified, and no extra UI architecture is added.
 - `apps/editor/src/` uses the oracle source structure.
 - Authoring Workspace placeholder renders as the startup screen.
 - Required regions exist: App Bar, Toolbox, Parts / Structure Tree, Canvas / Preview, Inspector, Parameter Bar, Task / View entry points.
@@ -317,4 +332,4 @@ Wave57 passes when:
 - Standard headless baseline remains intact.
 - Required validation commands pass.
 - No dev server/browser e2e/visual regression validation is introduced.
-- Domain A-C reports/reviews, Domain D closeout, and final clean review are recorded.
+- Domain A/B reports and reviews, Domain C closeout, and final clean review are recorded.

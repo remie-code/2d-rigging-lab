@@ -4,9 +4,9 @@
 
 ## 1. 役割
 
-PSD Import Taskは、PSD file選択、parse、tree inspection、import preview、approval、commitを行うtask画面である。
+PSD Import Taskは、PSD file選択、parse、Import Review、commitを行うtask画面である。
 
-通常workspaceを埋め尽くす常設panelではなく、Wave54 A-H では Toolbox から呼び出す workspace-scoped task window v0 として扱う。全task/view共通の final modal / task-window / dedicated-view policy は未確定である。
+通常workspaceを埋め尽くす常設panelではなく、Authoring Workspace上に重なる大きめのmodalとして扱う。Workspaceを背後に残しつつ、PSD importという一時taskへユーザーの注意を集中させる。
 
 PSD import / structural scaffoldには、人間向けUI、Codex-facing surface、test-facing surface、evidence surfaceの4つの観測面がある。PSD Import Taskは人間向けUIの主画面であり、Codexやtestのためにverboseなdebug情報を常時表示しない。
 
@@ -15,23 +15,15 @@ PSD import / structural scaffoldには、人間向けUI、Codex-facing surface�
 ```mermaid
 stateDiagram-v2
   [*] --> FileNotSelected
-  FileNotSelected --> Parsed: PSD file selected / parse
-  Parsed --> ParseFailed: parse failed
-  ParseFailed --> FileNotSelected: choose another file
+  FileNotSelected --> Parsing: PSD file selected
+  Parsing --> ParseFailed: parse failed
+  ParseFailed --> Cancelled: cancel
 
-  Parsed --> TreeInspecting: parsed tree ready
-  TreeInspecting --> ImportModeSelected: choose leaf/subtree/root mode
-  ImportModeSelected --> PlanPreview: preview plan
-  PlanPreview --> SelectionAdjusted: change refs/scope
-  SelectionAdjusted --> PlanPreview: preview again
-
-  PlanPreview --> ApprovalReady: warnings reviewed
-  ApprovalReady --> Imported: approve/import
+  Parsing --> ImportReview: import review ready
+  ImportReview --> Imported: import
   Imported --> [*]: return to workspace
 
-  TreeInspecting --> Cancelled: cancel
-  ImportModeSelected --> Cancelled: cancel
-  PlanPreview --> Cancelled: cancel
+  ImportReview --> Cancelled: cancel
   Cancelled --> [*]: return to workspace
 ```
 
@@ -55,43 +47,60 @@ Evidence Surface
 
 | Surface | 役割 | 置くもの |
 |---|---|---|
-| Human UI | ユーザーが何を読み込み、どう展開され、承認してよいか判断する。 | source summary、rights/provenance確認、PSD tree、import scope、scaffold preview、warning summary、approve / commit state |
+| Human UI | ユーザーがEditorに何が作られるか、選んだPSDが期待したものか、importしてよいかを判断する。 | 作成予定Parts構造、PSD単体preview、destination summary、行単位issue badge、import / cancel |
 | Codex-facing Surface | Codexが人間操作と同等の処理をdeterministic APIで実行する。 | parse / plan / approve / preview / commit / latest result operations |
-| Test-facing Surface | E2E / UI testが表示文言やDOM構造に過度依存せず状態を検証する。 | stable `data-testid`、structured state snapshot、status flags、warning count |
+| Test-facing Surface | E2E / UI testが表示文言やDOM構造に過度依存せず状態を検証する。 | stable `data-testid`、structured state snapshot、status flags、hasIssues |
 | Evidence Surface | operationや生成結果の詳細証拠を確認する。 | operation ID、approval ID、plan digest、generated refs、evidence path、raw diagnostics |
 
 ## 4. レイアウト
 
 ```text
 +--------------------------------------------------------------------------------+
-| PSD Import Header                                                              |
-| source summary / rights check / parse / preview / approve / commit / cancel     |
-+--------------------------+----------------------------+------------------------+
-| PSD Structure Tree       | Import Preview             | Import Inspector       |
-| groups / layers          | resulting parts/drawables  | selected node summary  |
-| visible / hidden         | hierarchy scaffold preview | import mode            |
-| selected scope           | warning highlights         | visibility behavior    |
-| approval state           | hidden drawable count      | source summary         |
-+-----------------------------+------------------------------+-------------------+
-| Import Check Strip: hidden drawables / missing bounds / unapproved / stale plan |
+| PSD Import Modal Header                                                        |
+| selected file (secondary) / destination / issue state / Import / Cancel         |
++-----------------------------------------+--------------------------------------+
+| Planned Parts Structure                 | PSD Preview                           |
+| Part Container / Drawable / Hidden rows  | selected PSD only                     |
+| row-level Issue badge + tooltip          | visible layers preview or placeholder |
+| destination context                      | no existing canvas composition        |
++-----------------------------------------+--------------------------------------+
+| Footer: Import / Cancel                                                        |
 +--------------------------------------------------------------------------------+
 ```
 
 ## 5. Human UIに表示するもの
 
-- source summary: filename、parse status、layer/group数、hidden layer数
-- rights / provenance 確認状態
-- PSD tree: group / layer階層、visibility、bounds有無、選択状態
-- import mode: leaf import、selected subtree structural import、root import候補
-- scaffold preview summary: 生成予定part数、drawable数、texture scaffold数、mesh scaffold数、hidden drawable数、blocked/skipped数
-- selected item preview: 選択中group/layerの簡易preview、bounds、visibility、opacity
-- destination: どのproject/part配下へ入るか
-- warnings: zero-size、materialize不可、source bytes不足、unsupported PSD features
-- action summary: parse、preview、approve、commit、cancel
-- approval / commit state
+- 作成予定Parts構造
+  - PSD group由来のPart Container
+  - PSD leaf layer由来のDrawable
+  - hidden layer由来のHidden Drawable
+  - group自体はDrawableにしない
+- destination summary
+  - 初回importまたは選択なし: project root直下
+  - part選択中: 選択中part配下
+  - drawable選択中: その親part配下
+  - 初期UIではdestination pickerを置かず、決定されたdestinationだけを短く表示する
+- PSD単体preview
+  - 目的は「読み込もうとしているPSDが合っているか」を確認すること
+  - 既存Canvas / 既存Parts / import先との合成はしない
+  - visible layerだけを対象にした簡易previewを理想形とする
+  - hidden layerはpreview上では非表示にする
+  - 当面の実装ではplaceholderでよい
+- issue表示
+  - 問題の有無は二値で扱う
+  - 問題のある行に `Issue` badgeを出す
+  - 詳細はtooltipに閉じ、画面上に一覧やraw diagnosticsを常時表示しない
+- action
+  - `Import`
+  - `Cancel`
 
 ## 6. Human UIに通常表示しないもの
 
+- PSD canvas size
+- layer / group / hidden count
+- unsupported要素の一覧
+- warning count
+- choose another file action
 - approval digest
 - operation ID
 - generated ref全文
@@ -105,6 +114,8 @@ Evidence Surface
 - test selector都合の文字列
 
 これらはDiagnostics / Evidence View、Codex-facing structured surface、test-facing structured surfaceへ分離する。
+
+PSD canvas size、layer / group / hidden count、unsupported要素の詳細は、通常ユーザーの主判断材料にしない。必要な場合も、行単位issue tooltipやDiagnostics / Evidence Viewへ寄せる。
 
 ## 7. Codex-facing Surface
 
@@ -138,11 +149,10 @@ Test-facing Surfaceは、E2E / UI testが表示文言やDOM構造へ過度に依
 importTask.state = {
   sourceLoaded,
   parseStatus,
-  selectedScope,
-  approvalStatus,
-  scaffoldPreviewStatus,
+  destination,
+  importReviewStatus,
   commitEnabled,
-  warningCount
+  hasIssues
 }
 ```
 
@@ -190,4 +200,4 @@ PSD Import Taskからは、必要に応じてDiagnostics / Evidence Viewを開�
 - Wave52 Domain Eで `psdStructuralInitialStateFocused`、`psdImportPlanCodexFocused`、`psdImportPlanFocused`、`psdMultiLayerBatchFocused`、`psdImportFocused` が pass し、production `data-testid` guard は `check:testids` として standard `check` に統合された。`check:testids:fixtures` は利用可能だが standard `check` には含めない。
 - Wave54 A-H で、Generic workspace-scoped Task Window Shell v0、Toolboxからの PSD Import task-window route、Close / Back / Escape の workspace return、PSD-specific content polish、task-window scoped selector helper、`taskWindowRoutingFocused` と既存 PSD focused IDs の pass が記録済みである。
 - このtask layoutへの移行は、まだ単なるDOM移動ではない。final task-window/dedicated-view policy、test-facing structured surfaceの完成、Diagnostics / Evidence Viewへの最終導線、mobile task-window routing の登録済み focused gate は後続waveで決める。
-- 目指す姿は、PSD Import Taskを巨大なdebug panelにしないこと。Human UIは判断に必要なsummaryへ絞り、Codex / test / evidenceはそれぞれ専用surfaceへ分離する。
+- 目指す姿は、PSD Import Taskを巨大なdebug panelにしないこと。Human UIは、作成予定Parts構造、PSD単体preview、行単位Issue badge、Import / Cancelへ絞る。Codex / test / evidenceはそれぞれ専用surfaceへ分離する。

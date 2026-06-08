@@ -52,7 +52,7 @@ Wave51 は、この画面設計を安全に実装していくための最初の�
 - 通常UIには、人間が判断・編集するための情報を出す。
 - operation ID、digest、generated ref、evidence path、package file set、reload summaryなどは通常UIから分離する。
 - Codexが必要とする情報は、可視DOM textではなくdeterministic API、operation evidence、validation report、command host、test-facing structured surfaceで扱う方向を優先する。
-- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分ける。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
+- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分ける。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。Human UIの主役はPSD情報ではなく、Editorに作られる予定のParts構造、PSD単体preview、行単位Issue badge、Import / Cancelである。
 
 ## 3. Global UX Flow
 
@@ -100,7 +100,7 @@ stateDiagram-v2
 | Screen | 役割 | 詳細 |
 |---|---|---|
 | Empty / Authoring Workspace | 起動直後、import後、通常編集時の中心画面。parts tree、canvas、inspector、toolboxを持つ。 | [screens/authoring-workspace.md](screens/authoring-workspace.md) |
-| PSD Import Task | PSD file選択、parse、tree inspection、preview、approval、commitを行うtask画面。 | [screens/psd-import-task.md](screens/psd-import-task.md) |
+| PSD Import Task | PSD file選択、parse、Import Review、commitを行うtask画面。Import Reviewでは作成予定Parts構造、PSD単体preview、行単位Issue badgeを確認する。 | [screens/psd-import-task.md](screens/psd-import-task.md) |
 | Parameter Manager | parameter定義、stable id、display name、min/default/max、grouping、usage referenceを管理する専用画面。 | [screens/parameter-manager.md](screens/parameter-manager.md) |
 | Variant / Expression Manager | 表情差分、パーツ差分、衣装差分のstate setとState Matrixを管理する専用画面。 | [screens/variant-expression-manager.md](screens/variant-expression-manager.md) |
 | Texture Atlas Task | visible drawableを中心にtexture pageへ自動配置し、layout preview / applyを行うtask画面。 | [screens/texture-atlas-task.md](screens/texture-atlas-task.md) |
@@ -128,7 +128,7 @@ stateDiagram-v2
 ```text
 +--------------------------------------------------------------------------------+
 | App Bar                                                                        |
-| Project name / save state / mode / key actions / Viewer shortcut               |
+| Project name / save state / task-view entries / key actions / Viewer shortcut  |
 +----------+---------------------+-----------------------+----------------------+
 | Toolbox  | Structure / Parts   | Canvas / Preview      | Inspector            |
 |          |                     |                       |                      |
@@ -174,7 +174,7 @@ stateDiagram-v2
 
 - Toolboxは Wave53 v0 では左側 launcher として配置済み。Wave54 A-H では PSD Import / Diagnostics / Codex の task-window route が接続済み。最終の visual polish、icon/tooltip behavior、expanded label policy は未決。
 - Tool起動時の最終表現は、Wave54 A-H の workspace-scoped task window v0 を前提にしつつ、modal、task window、side panel、dedicated viewのどれを各tool/viewの基本にするかは未決。
-- PSD Import taskは Wave54 A-H では workspace-scoped task window として開く。final polish と全task/view共通の最終policyは未決。
+- PSD Import taskは、目標UXとしてはAuthoring Workspace上に重なる大きめのmodalで開く。全task/view共通の最終policyは、PSD Import以外については未決。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
 - Wave54 A-H後の残債として、PSD Import / structural scaffold の可視DOM/text oracleをさらに structured observation / deterministic API / evidence surface へ移し、Codex-facing read APIや最終test-facing surfaceをどう整理するか。

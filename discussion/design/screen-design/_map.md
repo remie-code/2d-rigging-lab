@@ -15,26 +15,28 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [scope-and-principles.md](scope-and-principles.md) | Editor UX画面設計の目的、非ゴール、問題設定、設計体系、ユーザー判断論点 | Active design basis |
 | [overview.md](overview.md) | 画面体系全体、Global UX Flow、画面一覧、機能IDの大まかな配置 | Draft screen design |
+| [e2e-oracle.md](e2e-oracle.md) | Playwright E2Eが保証する範囲と保証しない範囲。人間のvisual checkとの境界 | Accepted oracle |
 | [screens/](screens/_map.md) | 各画面固有のレイアウト、Task-Local Flow、表示情報、非表示情報、関連機能ID | In discussion |
 | [components/](components/_map.md) | 複数画面で共有するUI概念、常設領域、共通操作部品 | In discussion |
 | [inventories/](inventories/_map.md) | 画面設計の根拠となる現状UI・依存・機能分類の棚卸 | Inventory |
 | [editor-rebuild-purge-policy.md](editor-rebuild-purge-policy.md) | 旧 `apps/editor` GUI / e2e / GUI由来ドキュメントを削除対象として扱い、UX駆動でEditorを再構築する方針 | Accepted / Wave56 basis |
-| [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) | React Editor再構築の技術スタック、source構成、validation境界、非ゴールに関する合意済みオラクル | Accepted / Wave57 basis |
+| [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) | React Editor再構築の技術スタック、source構成、validation境界、非ゴールに関する合意済みオラクル | Accepted / Wave57+ active basis |
 
 ## 現在の焦点
 
 - Editor起動直後は、PSD import画面でもlegacy/debug/evidence/Codex-heavy panel stackでもなく、Primary Human UIとしてのauthoring workspaceに見えるべきである。
 - 旧 `apps/editor` GUI / e2e は再利用候補ではなく削除対象として扱う。以後の再構築は [editor-rebuild-purge-policy.md](editor-rebuild-purge-policy.md) を基準に、目標UXとheadless baselineから組み直す。
 - Wave56は破棄する。ただしWave56 Domain B/Cで完了したheadless baseline / package分離は後続事実として引き継ぐ。
-- Wave57では [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) に従い、`apps/editor` をReact stackで再削除・再作成し、起動直後のAuthoring Workspace placeholderを作る。
-- PSD importは通常workspaceから呼び出すtaskであり、次のUX resetでは既存panel延命ではなくclean human task UIとして扱う。全 tool / view の final modal / task-window / side-panel / dedicated-view policy は未確定である。
-- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
+- Wave57は [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) に従い、`apps/editor` をReact stackで再削除・再作成し、起動直後のAuthoring Workspace placeholderまでを `pass` 記録済みである。Wave57後もこのoracleをEditor再構築のactive basisとして扱う。
+- PSD importは通常workspaceから呼び出すtaskであり、既存panel延命ではなくclean human task UIとして扱う。PSD Import Taskの目標UXはAuthoring Workspace上に重なる大きめのmodalである。Wave58で、fixture PSD選択からImport Review、placeholder preview、planned Editor Parts構造、Import後のWorkspace Parts Tree反映までのv0導線がpass記録済みである。
+- PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。Human UIの主役は、作成予定Parts構造、PSD単体preview、行単位Issue badge、Import / Cancelである。
+- Playwright E2Eは主要ユーザー導線とworkspaceへの状態反映だけを確認する。レイアウト、視認性、余白、pixel差分、Canvas描画品質は人間のvisual check領域であり、E2E oracleにしない。
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
 - Wave52 final integration report/review は PSD Import Task Migration v0 の bounded implementation baseline として `pass` 記録済み。PSD Import は Empty / Authoring Workspace から Task Shell task として開け、default では常設の巨大 workspace panel ではなくなった。Generic Task Shell / Task Chrome、PSD Import Task Human UI、narrow observation consumption、focused PSD regressions、standard `check` への `check:testids` 統合までが範囲である。
 - `check:testids:fixtures` は利用可能だが、standard `check` には含めない。
 - Wave53 final integration report/review は Workspace Layout Migration v0 の bounded implementation baseline として `pass` 記録済み。Authoring Workspace v0 skeleton、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の実配置、Toolbox経由の PSD Import Task entry、desktop/mobile smoke、既存 PSD focused paths、production `data-testid` guard、source/dependency guards の pass 記録を持つ。
 - Wave54 Domains A-H reports/reviews と Domain H verification は `pass` 記録済み。workspace-scoped Task Window Shell v0、Toolboxから開く PSD Import task-window route、Diagnostics / Evidence skeleton route、Codex / Automation skeleton route、selector/test-facing scope hardening、`taskWindowRoutingFocused`、desktop/mobile smoke、既存 PSD focused paths、guard pass が記録済みである。Wave54 final / Domain J は未完了である。
-- Wave54 A-H 後も、full visual redesign、full panel migration、final modal/task-window/dedicated-view policy、最終的な Diagnostics / Evidence View または Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI は未完了である。legacy support panels には旧 evidence/debug/Codex-heavy UI が残る。
+- Wave54 A-H 後も、full visual redesign、full panel migration、最終的な Diagnostics / Evidence View または Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI は未完了である。PSD Import Taskは大きめのmodalを目標UXとする。legacy support panels には旧 evidence/debug/Codex-heavy UI が残る。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
 - Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
@@ -49,15 +51,15 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 ## 次の作業候補
 
-1. [../../implementation/orchestration/wave57-plan.md](../../implementation/orchestration/wave57-plan.md) に従い、React Editor Foundation / Workspace Placeholder v0 を実装する。
-2. Wave57後に、PSD Import、Mesh、Rig、Atlas、Parameter、Variant / Expression、Dynamics、Viewerを新GUIのplaceholder導線から順に実装対象へ昇格する。
+1. Wave57後に、UI verification / browser check strategyを議論してから、validation拡張またはfeature workを増やす。
+2. Wave58のPSD Import E2E v0 baselineを前提に、Mesh、Rig、Atlas、Parameter、Variant / Expression、Dynamics、Viewerを新GUIのplaceholder導線から順に実装対象へ昇格する。
 3. Diagnostics / Evidence View と Codex / Automation View は、旧GUI再利用ではなく新GUI方針で必要になった時点で再設計する。
 
 ## 未決事項
 
 - Toolboxの最終配置は、Wave53 v0 では左側配置で実装済みで、Wave54 A-H では PSD Import / Diagnostics / Codex の task-window route が接続済みだが、final visual / accessibility polish としては未確定。
 - Tool起動時の最終表現は、Wave54 A-H の workspace-scoped task window v0 を前提にしつつ、modal、task window、side panel、dedicated viewのどれを各tool/viewの基本にするか。
-- PSD Import taskは Wave54 A-H では workspace-scoped task window として開く。final polish と全task/view共通の最終policyは未決。
+- PSD Import taskは、目標UXとしてはAuthoring Workspace上の大きめのmodalで開く。全task/view共通の最終policyは、PSD Import以外については未決。
 - Product PreflightとCodex/Automationの通常UI上の位置付け。
 - 通常UIから外したevidence情報を、どの構造化surfaceに残すか。
 - `check:testids:fixtures` を標準 quality gate または CI-only guard path に広げるか。

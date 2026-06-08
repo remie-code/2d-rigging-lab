@@ -33,7 +33,7 @@ Wave57のEditor GUI基盤では次を採用する。
 | UI state | zustand |
 | Class composition | clsx |
 
-具体的な初期依存:
+初期基盤として想定する依存:
 
 - `react`
 - `react-dom`
@@ -48,6 +48,21 @@ Wave57のEditor GUI基盤では次を採用する。
 - `react-resizable-panels`
 - `zustand`
 - `clsx`
+
+この一覧は、採用する技術スタックの基準線であり、完全なpackage allowlistではない。
+
+Gnomeは、通常のReact / Vite / Tailwind開発に自然に必要な補助依存、型依存、plugin、小さなhelperを追加してよい。ただし、追加理由をdomain reportに記録する。
+
+事前escalationが必要な追加:
+
+- UI frameworkを変えるもの。
+- component systemを大型kitへ寄せるもの。
+- renderer / canvas engineを導入するもの。
+- data fetching architectureを導入・固定するもの。
+- routing architectureを導入・固定するもの。
+- form architectureを導入・固定するもの。
+- browser e2e / visual regression戦略を導入するもの。
+- external transportを導入するもの。
 
 ## 4. 採用しないもの
 

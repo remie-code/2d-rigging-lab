@@ -141,10 +141,10 @@ const createStructuralOperationEvidence = () => ({
     }
   ],
   preflightPolicy: {
-    approvedLeafLimit: 6,
-    approvedGroupLimit: 32,
-    generatedNodeLimit: 64,
-    totalRawRgbaByteLimit: 33554432,
+    approvedLeafLimit: 256,
+    approvedGroupLimit: 128,
+    generatedNodeLimit: 512,
+    totalRawRgbaByteLimit: 268435456,
     mutationPolicy: "preflightBlocksOnAnyFailure",
     silentPartialSuccess: "forbidden"
   },
@@ -420,10 +420,10 @@ const STRUCTURAL_SUMMARY = {
 const STRUCTURAL_CAP_POLICY = {
   structuralNodeLimit: 256,
   structuralDepthLimit: 8,
-  approvedGroupLimit: 32,
-  approvedLeafLimit: 6,
-  generatedNodeLimit: 64,
-  totalRawRgbaByteLimit: 33554432
+  approvedGroupLimit: 128,
+  approvedLeafLimit: 256,
+  generatedNodeLimit: 512,
+  totalRawRgbaByteLimit: 268435456
 } as const;
 
 const STRUCTURAL_PLAN_DIGEST = {

@@ -36,10 +36,10 @@ import { ValidationCheckResultSchema } from "../validation-report.js";
 
 const PSD_STRUCTURAL_EVIDENCE_ID_PATTERN = /^evidence_[A-Za-z0-9_-]+$/;
 const PSD_STRUCTURAL_BATCH_ID_PATTERN = /^batch_[A-Za-z0-9_-]+$/;
-const PSD_STRUCTURAL_APPROVED_LEAF_LIMIT = 6;
-const PSD_STRUCTURAL_APPROVED_GROUP_LIMIT = 32;
-const PSD_STRUCTURAL_GENERATED_NODE_LIMIT = 64;
-const PSD_STRUCTURAL_TOTAL_RAW_RGBA_BYTE_LIMIT = 32 * 1024 * 1024;
+const PSD_STRUCTURAL_APPROVED_LEAF_LIMIT = 256;
+const PSD_STRUCTURAL_APPROVED_GROUP_LIMIT = 128;
+const PSD_STRUCTURAL_GENERATED_NODE_LIMIT = 512;
+const PSD_STRUCTURAL_TOTAL_RAW_RGBA_BYTE_LIMIT = 256 * 1024 * 1024;
 
 const PsdStructuralScaffoldOperationEvidenceSchema = z.object({
   schemaVersion: z.literal("psd-structural-scaffold-operation-evidence-v1"),

@@ -889,10 +889,10 @@ const createStructuralOperationEvidence = (operationIdValue: string) => ({
   generatedLeafScaffolds: [createStructuralLeafScaffold("resolved")],
   issues: [],
   preflightPolicy: {
-    approvedLeafLimit: 6,
-    approvedGroupLimit: 32,
-    generatedNodeLimit: 64,
-    totalRawRgbaByteLimit: 33554432,
+    approvedLeafLimit: 256,
+    approvedGroupLimit: 128,
+    generatedNodeLimit: 512,
+    totalRawRgbaByteLimit: 268435456,
     mutationPolicy: "preflightBlocksOnAnyFailure",
     silentPartialSuccess: "forbidden"
   },

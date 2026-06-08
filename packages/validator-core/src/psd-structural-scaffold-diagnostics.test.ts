@@ -391,10 +391,10 @@ const createStructuralFixture = (
     generatedLeafScaffolds: leafScaffolds,
     issues: [] as ReturnType<typeof createStructuralIssue>[],
     preflightPolicy: {
-      approvedLeafLimit: 6,
-      approvedGroupLimit: 32,
-      generatedNodeLimit: 64,
-      totalRawRgbaByteLimit: 32 * 1024 * 1024,
+      approvedLeafLimit: 256,
+      approvedGroupLimit: 128,
+      generatedNodeLimit: 512,
+      totalRawRgbaByteLimit: 256 * 1024 * 1024,
       mutationPolicy: "preflightBlocksOnAnyFailure" as const,
       silentPartialSuccess: "forbidden" as const
     },
@@ -853,10 +853,10 @@ const createSummary = (
 const createCapPolicy = () => ({
   structuralNodeLimit: 256,
   structuralDepthLimit: 8,
-  approvedGroupLimit: 32,
-  approvedLeafLimit: 6,
-  generatedNodeLimit: 64,
-  totalRawRgbaByteLimit: 32 * 1024 * 1024
+  approvedGroupLimit: 128,
+  approvedLeafLimit: 256,
+  generatedNodeLimit: 512,
+  totalRawRgbaByteLimit: 256 * 1024 * 1024
 });
 
 const createStructuralIssue = (

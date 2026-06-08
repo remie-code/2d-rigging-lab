@@ -23,10 +23,10 @@ const PSD_STRUCTURAL_APPROVAL_ID_PATTERN = /^approval_[A-Za-z0-9_-]+$/;
 const PSD_STRUCTURAL_EVIDENCE_ID_PATTERN = /^evidence_[A-Za-z0-9_-]+$/;
 const PSD_STRUCTURAL_BATCH_ID_PATTERN = /^batch_[A-Za-z0-9_-]+$/;
 
-export const PSD_STRUCTURAL_APPROVED_LEAF_LIMIT = 6;
-export const PSD_STRUCTURAL_APPROVED_GROUP_LIMIT = 32;
-export const PSD_STRUCTURAL_GENERATED_NODE_LIMIT = 64;
-export const PSD_STRUCTURAL_TOTAL_RAW_RGBA_BYTE_LIMIT = 32 * 1024 * 1024;
+export const PSD_STRUCTURAL_APPROVED_LEAF_LIMIT = 256;
+export const PSD_STRUCTURAL_APPROVED_GROUP_LIMIT = 128;
+export const PSD_STRUCTURAL_GENERATED_NODE_LIMIT = 512;
+export const PSD_STRUCTURAL_TOTAL_RAW_RGBA_BYTE_LIMIT = 256 * 1024 * 1024;
 
 export const PsdStructuralScaffoldSourceNodeRefSchema = z.object({
   kind: z.enum(["document", "group", "layer"]),
