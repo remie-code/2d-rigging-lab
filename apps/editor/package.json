@@ -4,21 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "test:e2e": "node ../../scripts/editor-e2e-smoke.mjs",
-    "test": "vitest run src --passWithNoTests",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "dependencies": {
-    "@private-2d-rigging-lab/ai-interface": "workspace:*",
-    "@private-2d-rigging-lab/authoring-core": "workspace:*",
-    "@private-2d-rigging-lab/contracts": "workspace:*",
-    "@private-2d-rigging-lab/operation-core": "workspace:*",
-    "@private-2d-rigging-lab/package-format": "workspace:*",
-    "@private-2d-rigging-lab/runtime-core": "workspace:*",
-    "@private-2d-rigging-lab/validator-core": "workspace:*"
+    "dev": "vite --host 127.0.0.1",
+    "build": "pnpm run typecheck && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preview": "vite preview --host 127.0.0.1"
   },
   "devDependencies": {
+    "typescript": "5.8.3",
     "vite": "6.4.2"
   }
 }

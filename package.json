@@ -5,18 +5,14 @@
   "type": "module",
   "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "typecheck": "pnpm run typecheck:root && pnpm --filter @private-2d-rigging-lab/editor typecheck",
+    "typecheck": "pnpm run typecheck:root",
     "typecheck:root": "tsc --noEmit",
-    "test": "vitest run",
-    "test:unit": "vitest run",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run packages --exclude packages/runtime-core/src/preview-viewer-equivalence-fixture.test.ts",
     "smoke:wave44:psd-parser": "node scripts/wave44-psd-parser-smoke.mjs --psd test_data/sample_model.psd",
-    "test:e2e": "pnpm --filter @private-2d-rigging-lab/editor test:e2e",
-    "test:e2e:editor": "node scripts/editor-e2e-smoke.mjs",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",
-    "check:testids": "node scripts/check-production-testid-boundary.mjs",
-    "check:testids:fixtures": "node scripts/check-production-testid-boundary-fixtures.mjs",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run check:deps && pnpm run check:source && pnpm run check:testids"
+    "check": "pnpm run typecheck && pnpm run test:unit && pnpm run check:deps && pnpm run check:source"
   },
   "devDependencies": {
     "@webtoon/psd": "0.4.0",

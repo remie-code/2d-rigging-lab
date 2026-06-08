@@ -18,11 +18,15 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 | [screens/](screens/_map.md) | 各画面固有のレイアウト、Task-Local Flow、表示情報、非表示情報、関連機能ID | In discussion |
 | [components/](components/_map.md) | 複数画面で共有するUI概念、常設領域、共通操作部品 | In discussion |
 | [inventories/](inventories/_map.md) | 画面設計の根拠となる現状UI・依存・機能分類の棚卸 | Inventory |
+| [editor-rebuild-purge-policy.md](editor-rebuild-purge-policy.md) | 旧 `apps/editor` GUI / e2e / GUI由来ドキュメントを削除対象として扱い、UX駆動でEditorを再構築する方針 | Accepted / Wave56 basis |
+| [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) | React Editor再構築の技術スタック、source構成、validation境界、非ゴールに関する合意済みオラクル | Accepted / Wave57 basis |
 
 ## 現在の焦点
 
 - Editor起動直後は、PSD import画面でもlegacy/debug/evidence/Codex-heavy panel stackでもなく、Primary Human UIとしてのauthoring workspaceに見えるべきである。
-- Wave54はworkspace-scoped task routeを実装・検証したが、視覚的なoverlay/window UXとno-scroll-openは未達である。Wave55計画ではPrimary Human UI resetとtask window visual UX gateを優先する。
+- 旧 `apps/editor` GUI / e2e は再利用候補ではなく削除対象として扱う。以後の再構築は [editor-rebuild-purge-policy.md](editor-rebuild-purge-policy.md) を基準に、目標UXとheadless baselineから組み直す。
+- Wave56は破棄する。ただしWave56 Domain B/Cで完了したheadless baseline / package分離は後続事実として引き継ぐ。
+- Wave57では [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) に従い、`apps/editor` をReact stackで再削除・再作成し、起動直後のAuthoring Workspace placeholderを作る。
 - PSD importは通常workspaceから呼び出すtaskであり、次のUX resetでは既存panel延命ではなくclean human task UIとして扱う。全 tool / view の final modal / task-window / side-panel / dedicated-view policy は未確定である。
 - PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
@@ -45,9 +49,9 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 ## 次の作業候補
 
-1. Diagnostics / Evidence View full migration と Codex / Automation View full migration で、Wave54 skeleton から通常authoring UI外への detail 分離を進める。
-2. PSD Import Task の final polish、全task/view向け final modal/task-window/dedicated-view policy、Diagnostics / Evidence への最終導線は後続waveで決める。
-3. Texture Atlas Task、Mesh generation/tool、Parameter Manager、Variant / Expression Manager は、置き場所とsurface境界が固まった後の後続waveで扱う。
+1. [../../implementation/orchestration/wave57-plan.md](../../implementation/orchestration/wave57-plan.md) に従い、React Editor Foundation / Workspace Placeholder v0 を実装する。
+2. Wave57後に、PSD Import、Mesh、Rig、Atlas、Parameter、Variant / Expression、Dynamics、Viewerを新GUIのplaceholder導線から順に実装対象へ昇格する。
+3. Diagnostics / Evidence View と Codex / Automation View は、旧GUI再利用ではなく新GUI方針で必要になった時点で再設計する。
 
 ## 未決事項
 

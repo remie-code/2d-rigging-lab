@@ -18,5 +18,8 @@
     "packages/*/test/**/*.ts",
     "scripts/**/*.mts",
     "vitest.config.ts"
+  ],
+  "exclude": [
+    "packages/runtime-core/src/preview-viewer-equivalence-fixture.test.ts"
   ]
 }

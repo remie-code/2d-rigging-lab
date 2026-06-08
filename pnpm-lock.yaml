@@ -22,29 +22,10 @@ importers:
         version: 3.1.4(@types/node@22.15.29)
 
   apps/editor:
-    dependencies:
-      '@private-2d-rigging-lab/ai-interface':
-        specifier: workspace:*
-        version: link:../../packages/ai-interface
-      '@private-2d-rigging-lab/authoring-core':
-        specifier: workspace:*
-        version: link:../../packages/authoring-core
-      '@private-2d-rigging-lab/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@private-2d-rigging-lab/operation-core':
-        specifier: workspace:*
-        version: link:../../packages/operation-core
-      '@private-2d-rigging-lab/package-format':
-        specifier: workspace:*
-        version: link:../../packages/package-format
-      '@private-2d-rigging-lab/runtime-core':
-        specifier: workspace:*
-        version: link:../../packages/runtime-core
-      '@private-2d-rigging-lab/validator-core':
-        specifier: workspace:*
-        version: link:../../packages/validator-core
     devDependencies:
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
       vite:
         specifier: 6.4.2
         version: 6.4.2(@types/node@22.15.29)

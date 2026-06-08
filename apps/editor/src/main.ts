@@ -1,9 +1,10 @@
-import { mountEditorApp } from "./app/editor-app.js";
+import "./styles.css";
+import { createEditorRoot } from "./editor-root";
 
-const appRoot = document.querySelector<HTMLDivElement>("#app");
+const appContainer = document.querySelector<HTMLElement>("#app");
 
-if (!appRoot) {
-  throw new Error("Editor app root element was not found.");
+if (!appContainer) {
+  throw new Error("Editor container was not found.");
 }
 
-mountEditorApp(appRoot);
+appContainer.replaceChildren(createEditorRoot());
