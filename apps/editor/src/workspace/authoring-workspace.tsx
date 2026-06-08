@@ -1,11 +1,11 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 
 import { AppBar } from "./app-bar";
+import { PsdImportModal } from "../features/psd-import/components/psd-import-modal";
 import { CanvasPreviewPanel } from "./panels/canvas-preview-panel";
 import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
-import { TaskViewEntryBar } from "./task-view-entry-bar";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
 
 function ResizeHandle() {
@@ -16,9 +16,8 @@ function ResizeHandle() {
 
 export function AuthoringWorkspace() {
   return (
-    <main className="flex min-h-screen flex-col bg-[#10100f] text-neutral-100">
+    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
-      <TaskViewEntryBar />
 
       <div className="hidden min-h-0 flex-1 overflow-hidden p-2 xl:block">
         <Group className="h-full min-h-0" orientation="horizontal">
@@ -50,6 +49,7 @@ export function AuthoringWorkspace() {
       </div>
 
       <ParameterBar />
+      <PsdImportModal />
     </main>
   );
 }

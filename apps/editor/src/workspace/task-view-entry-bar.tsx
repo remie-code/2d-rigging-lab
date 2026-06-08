@@ -1,10 +1,19 @@
 import { taskEntries } from "./workspace-data";
+import { useEditorSession } from "../features/editor-session/editor-session-context";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
 import { cn } from "../lib/class-name";
 
 export function TaskViewEntryBar() {
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
+  const { openPsdImport } = useEditorSession();
+
+  const activateEntry = (entry: WorkspaceEntryId) => {
+    setActiveEntry(entry);
+    if (entry === "import") {
+      openPsdImport();
+    }
+  };
 
   return (
     <section className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-800 bg-[#111110] px-4 py-2">
@@ -24,7 +33,7 @@ export function TaskViewEntryBar() {
               selected && "border-amber-500/70 bg-amber-950/30 text-amber-100"
             )}
             key={entry.id}
-            onClick={() => setActiveEntry(entry.id as WorkspaceEntryId)}
+            onClick={() => activateEntry(entry.id as WorkspaceEntryId)}
             type="button"
           >
             <Icon aria-hidden="true" size={15} strokeWidth={1.8} />

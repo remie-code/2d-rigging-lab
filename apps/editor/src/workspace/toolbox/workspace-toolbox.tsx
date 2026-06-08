@@ -1,4 +1,5 @@
 import { toolboxSections } from "../workspace-data";
+import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import { cn } from "../../lib/class-name";
 import {
   useEditorUiStore,
@@ -12,7 +13,15 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveTool = useEditorUiStore((state) => state.setActiveTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
+  const { openPsdImport } = useEditorSession();
   const horizontal = layout === "horizontal";
+
+  const activateEntry = (entry: WorkspaceEntryId) => {
+    setActiveEntry(entry);
+    if (entry === "import") {
+      openPsdImport();
+    }
+  };
 
   return (
     <aside
@@ -50,7 +59,7 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
                     return;
                   }
 
-                  setActiveEntry(item.id as WorkspaceEntryId);
+                  activateEntry(item.id as WorkspaceEntryId);
                 }}
                 pressed={pressed}
               >
