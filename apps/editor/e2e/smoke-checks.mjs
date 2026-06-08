@@ -28,6 +28,7 @@ import {
 import { runAssetIoBoundaryPersistenceSmoke } from "./asset-io-boundary-smoke.mjs";
 import { runByteIntakePersistenceSmoke } from "./byte-intake-smoke.mjs";
 import { runDynamicsPersistenceSmoke } from "./dynamics-persistence-smoke.mjs";
+import { discloseLegacyDebugQuarantineForE2e } from "./internal-surfaces-harness.mjs";
 import { runViewerRuntimePersistenceSmoke } from "./viewer-runtime-smoke.mjs";
 import { runRigControlPersistenceSmoke } from "./rig-control-persistence-smoke.mjs";
 import { runWarpLatticePersistenceSmoke } from "./warp-lattice-persistence-smoke.mjs";
@@ -83,6 +84,7 @@ export const runEditorSmoke = async ({ baseUrl, browserPort, viewport }) => {
     await page.evaluate((storageKey) => localStorage.removeItem(storageKey), editorProjectStorageKey);
     await page.reload();
     await waitForTestId(page, editorTestIds.shell);
+    await discloseLegacyDebugQuarantineForE2e(page);
 
     await assertShellRendered(page);
     const previewEvidence = await runPreviewWorkflow(page, viewport);

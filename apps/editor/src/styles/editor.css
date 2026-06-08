@@ -169,10 +169,28 @@ select {
 }
 
 .editor-task-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: clamp(12px, 3vw, 28px);
+  overflow: hidden;
+}
+
+.editor-task-shell__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(29 37 44 / 0.38);
+}
+
+.editor-task-shell__window {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  justify-self: center;
   width: min(100%, 1120px);
   max-height: min(84vh, 920px);
   min-width: 0;
@@ -185,16 +203,30 @@ select {
 }
 
 .editor-task-shell:focus-visible {
+  outline: 0;
+}
+
+.editor-task-shell:focus-visible .editor-task-shell__window {
   outline: 2px solid #1d7a73;
   outline-offset: 3px;
 }
 
 .editor-task-shell__header {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   min-width: 0;
+}
+
+.editor-task-shell__body {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .editor-task-shell__navigation,
@@ -293,7 +325,7 @@ select {
 
 .editor-task-shell__content {
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .toolbox-surface h2,
@@ -1691,8 +1723,9 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .editor-task-shell {
-    max-height: none;
+  .editor-task-shell__window {
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
   }
 }
 
@@ -1735,7 +1768,13 @@ select {
   }
 
   .editor-task-shell {
+    padding: 14px;
+  }
+
+  .editor-task-shell__window {
     width: 100%;
+    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
     padding: 14px;
   }
 
@@ -1757,6 +1796,15 @@ select {
   .editor-workspace {
     gap: 14px;
     padding: 14px;
+  }
+
+  .editor-task-shell {
+    padding: 10px;
+  }
+
+  .editor-task-shell__window {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
   }
 
   .editor-panel {

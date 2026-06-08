@@ -154,6 +154,12 @@ const focusedE2eMetadataById = {
     tags: ["appShell", "taskWindow", "routing", "standaloneDirect"],
     aggregateInclusion: standaloneDirectVerification
   },
+  taskWindowUxFocused: {
+    purpose:
+      "Replay Wave55 UX gate for PSD Import task-window launch with desktop/mobile no-scroll, viewport geometry, overlay/static-flow, legacy first-viewport absence, forbidden visible primary text, and PNG geometry evidence.",
+    tags: ["appShell", "taskWindow", "uxGate", "geometry", "standaloneDirect"],
+    aggregateInclusion: standaloneDirectVerification
+  },
   topologyUvPersistence: {
     purpose:
       "Replay bounded topology and UV edit persistence checks without automatic triangulation, atlas packing, renderer, pixel, or Cubism claims.",
@@ -203,6 +209,12 @@ const postWave42FocusedE2eRegistryOverlayEntries = [
     id: "taskWindowRoutingFocused",
     path: "apps/editor/e2e/task-window-routing-focused-smoke.mjs",
     command: "node apps/editor/e2e/task-window-routing-focused-smoke.mjs",
+    category: "editorAuthoringPersistence"
+  },
+  {
+    id: "taskWindowUxFocused",
+    path: "apps/editor/e2e/task-window-ux-focused-gate.mjs",
+    command: "node apps/editor/e2e/task-window-ux-focused-gate.mjs",
     category: "editorAuthoringPersistence"
   }
 ];

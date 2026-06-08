@@ -211,8 +211,8 @@ const projectEvidenceBoundaryObservation = (
     structuralScaffoldResultEntryCount,
     rawDetailRefsIncluded: false,
     summary: detailCount === 0
-      ? "No PSD import evidence details are available yet; detailed refs route to diagnosticsEvidenceView."
-      : `${detailCount} PSD import evidence detail groups are available through diagnosticsEvidenceView.`
+      ? "No PSD import evidence details are available yet; detailed refs stay in Diagnostics / Evidence."
+      : `${detailCount} PSD import evidence detail groups are available in Diagnostics / Evidence.`
   };
 };
 
@@ -254,7 +254,7 @@ const projectHumanSummaryText = (input: {
   projectImportPlanSummary(input.importPlan),
   projectStructuralScaffoldSummary(input.structuralScaffold),
   `Warnings: ${input.warningCount}.`,
-  "Details: diagnosticsEvidenceView."
+  "Details are available in Diagnostics / Evidence."
 ].join(" ");
 
 const projectParseSummary = (input: {

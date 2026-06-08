@@ -30,6 +30,10 @@ import { aiApprovalTestIds } from "../ai-approval/index.js";
 import { aiTranscriptTestIds } from "../ai-transcript/index.js";
 import { createEditorAppShell } from "./app-shell.js";
 import { diagnosticsEvidenceViewSkeletonTestIds } from "./diagnostics-evidence-view-skeleton.js";
+import {
+  legacyDebugQuarantineSurfaceMetadata,
+  legacyDebugQuarantineSurfaceTestIds
+} from "./legacy-debug-quarantine-surface.js";
 import { shellSurfaceDefinitions, shellSurfaces } from "./shell-surfaces.js";
 import { workspaceContextSurfaceTestIds } from "./workspace-context-surfaces.js";
 
@@ -405,30 +409,34 @@ describe("editor app shell preview panel", () => {
     ]);
   });
 
-  it("renders source intake draft controls without moving drawable authoring out of the shell", () => {
+  it("keeps source intake and drawable authoring controls reachable inside quarantine", () => {
     const workflow = createWorkflow();
     const shell = renderShell(workflow);
+    const quarantine = findByShellSurfaceGroup(shell, "debug-quarantine");
 
-    expect(findByTestId(shell, editorTestIds.sourceIntakePanel)?.textContent).toContain("Source Intake");
-    expect(findByTestId(shell, editorTestIds.sourceIntakeForm)?.getAttribute("aria-label")).toBe(
+    expect(quarantine?.dataset.internalDebugSurface).toBe("true");
+    expect(findByTestId(quarantine ?? shell, editorTestIds.sourceIntakePanel)?.textContent).toContain("Source Intake");
+    expect(findByTestId(quarantine ?? shell, editorTestIds.sourceIntakeForm)?.getAttribute("aria-label")).toBe(
       "Confirm source intake adapter profile draft"
     );
-    expect(findByTestId(shell, editorTestIds.drawableAuthoringPanel)?.textContent).toContain("Drawable Authoring");
-    expect(findByTestId(shell, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");
+    expect(findByTestId(quarantine ?? shell, editorTestIds.drawableAuthoringPanel)?.textContent).toContain("Drawable Authoring");
+    expect(findByTestId(quarantine ?? shell, editorTestIds.meshVertexControls)?.textContent).toContain("Mesh Vertex Controls");
   });
 
-  it("keeps the manual drawable authoring route reachable from the support area", () => {
+  it("keeps the manual drawable authoring route reachable from the debug quarantine", () => {
     const workflow = createWorkflow();
     const shell = renderShell(workflow);
-    const support = findByShellSurfaceGroup(shell, "legacy-support");
-    const panel = findByTestId(support ?? shell, editorTestIds.drawableAuthoringPanel);
+    const quarantine = findByShellSurfaceGroup(shell, "debug-quarantine");
+    const panel = findByTestId(quarantine ?? shell, editorTestIds.drawableAuthoringPanel);
 
-    expect(support).not.toBeNull();
+    expect(quarantine).not.toBeNull();
+    expect(quarantine?.dataset.quarantineSurface).toBe("true");
+    expect(findByShellSurfaceGroup(shell, "legacy-support")).toBeNull();
     expect(panel).not.toBeNull();
     expect(panel?.dataset.shellSurfaceGroup).toBe("drawable-authoring");
     expect(panel?.textContent).toContain("Drawable Authoring");
-    expect(findByTestId(panel ?? shell, editorTestIds.drawableCreateForm)).not.toBeNull();
-    expect(findByTestId(panel ?? shell, editorTestIds.drawableCreateSubmit)).not.toBeNull();
+    expect(findByTestId(panel ?? quarantine ?? shell, editorTestIds.drawableCreateForm)).not.toBeNull();
+    expect(findByTestId(panel ?? quarantine ?? shell, editorTestIds.drawableCreateSubmit)).not.toBeNull();
   });
 
   it("wires slider and reset callbacks", () => {
@@ -650,9 +658,12 @@ describe("editor app shell preview panel", () => {
     const canvasRegion = findByWorkspaceRegion(shell, "canvas-preview");
     const previewPanel = findByTestId(shell, editorTestIds.previewPanel);
     const partsTreeSurface = findByShellSurfaceGroup(shell, "parts-tree");
+    const quarantine = findByShellSurfaceGroup(shell, "debug-quarantine");
 
     expect(workspace?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
-    expect(workspace?.dataset.shellSurfaceGroup).toBe("workspace-shell");
+    expect(workspace?.dataset.shellSurfaceGroup).toBe("primary-workspace");
+    expect(shell.dataset.primaryHumanShell).toBe("v0");
+    expect(shell.dataset.shellSurfaceGroup).toBe("primary-human-shell");
     expect(findByShellSurfaceGroup(shell, "workspace-v0")).not.toBeNull();
     expect(findByShellSurfaceGroup(shell, "toolbox")).not.toBeNull();
     expect(partsTreeSurface).not.toBeNull();
@@ -660,7 +671,12 @@ describe("editor app shell preview panel", () => {
     expect(findByShellSurfaceGroup(shell, "inspector")).not.toBeNull();
     expect(findByShellSurfaceGroup(shell, "parameter-bar")).not.toBeNull();
     expect(findByShellSurfaceGroup(shell, "diagnostics-strip")).not.toBeNull();
-    expect(findByShellSurfaceGroup(shell, "legacy-support")).not.toBeNull();
+    expect(findByClassName(shell, "authoring-workspace-support")).toBeNull();
+    expect(findByShellSurfaceGroup(shell, "legacy-support")).toBeNull();
+    expect(quarantine?.dataset.shellSurfaceId).toBe(
+      legacyDebugQuarantineSurfaceMetadata.surfaceId
+    );
+    expect(quarantine?.dataset.authoringWorkspaceFlow).toBe("false");
 
     expect(canvasRegion).not.toBeNull();
     expect(previewPanel).not.toBeNull();
@@ -757,7 +773,9 @@ describe("editor app shell preview panel", () => {
       "explicit-psd-import-task-observation-v1"
     );
     expect(observation?.dataset.psdImportTaskParseStatus).toBe("idle");
-    expect(observation?.textContent).toContain("diagnosticsEvidenceView");
+    expect(observation?.dataset.psdImportTaskEvidenceStatus).toBe("empty");
+    expect(observation?.textContent).toContain("Diagnostics / Evidence");
+    expect(observation?.textContent).not.toContain("diagnosticsEvidenceView");
 
     findByAriaLabel(shell, "Back to authoring workspace")?.emit("click");
     findByAriaLabel(shell, "Close PSD import task")?.emit("click");
@@ -888,20 +906,29 @@ describe("editor app shell preview panel", () => {
     expect(closes).toEqual(["close", "close", "close"]);
   });
 
-  it("classifies existing panels into named shell surfaces without moving workflows", () => {
+  it("classifies primary surfaces and quarantined legacy panels without moving workflows", () => {
     const workflow = createWorkflow();
     workflow.openViewerRuntimeSurface();
     const shell = renderShell(workflow);
     const workspace = findByClassName(shell, "editor-workspace");
+    const quarantine = findByShellSurfaceGroup(shell, "debug-quarantine");
 
     expect(workspace?.dataset.shellSurfaceId).toBe(shellSurfaces.authoringWorkspace.id);
     expect(workspace?.dataset.shellSurfaceKind).toBe(shellSurfaces.authoringWorkspace.kind);
-    expect(workspace?.dataset.shellSurfaceGroup).toBe("workspace-shell");
+    expect(workspace?.dataset.shellSurfaceGroup).toBe("primary-workspace");
     expect(findByShellSurfaceGroup(shell, "workspace-v0")?.dataset.shellSurfaceId).toBe(
       shellSurfaces.authoringWorkspace.id
     );
-    expect(findByShellSurfaceGroup(shell, "legacy-support")?.dataset.shellSurfaceId).toBe(
-      shellSurfaces.authoringWorkspace.id
+    expect(findByClassName(shell, "authoring-workspace-support")).toBeNull();
+    expect(findByShellSurfaceGroup(shell, "legacy-support")).toBeNull();
+    expect(quarantine?.dataset.shellSurfaceId).toBe(
+      legacyDebugQuarantineSurfaceMetadata.surfaceId
+    );
+    expect(quarantine?.dataset.quarantineSurface).toBe("true");
+    expect(quarantine?.dataset.authoringWorkspaceFlow).toBe("false");
+    expect(quarantine?.dataset.legacyDebugQuarantinePanelCount).toBe("15");
+    expect(findByTestId(quarantine ?? shell, legacyDebugQuarantineSurfaceTestIds.panelHost)).not.toBe(
+      null
     );
 
     expectPanelSurface(
@@ -917,7 +944,7 @@ describe("editor app shell preview panel", () => {
       "parts-tree"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.drawableAuthoringPanel,
       shellSurfaces.authoringWorkspace,
       "drawable-authoring"
@@ -936,55 +963,58 @@ describe("editor app shell preview panel", () => {
       shellSurfaces.authoringWorkspace.id
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.sourceIntakePanel,
       shellSurfaces.sourceIntakeTask,
       "source-intake"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.projectPersistencePanel,
       shellSurfaces.projectStorageTask,
       "project-persistence"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.productPreflightPanel,
       shellSurfaces.validationTask,
       "product-preflight"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.tutorialWorkflowPanel,
       shellSurfaces.tutorialTask,
       "tutorial-workflow"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.viewerRuntimePanel,
       shellSurfaces.viewerRuntimeView,
       "viewer-runtime"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       editorTestIds.codexProposalReviewPanel,
       shellSurfaces.codexAutomationView,
       "proposal-review"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       aiApprovalTestIds.panel,
       shellSurfaces.codexAutomationView,
       "ai-approval"
     );
     expectPanelSurface(
-      shell,
+      quarantine ?? shell,
       aiTranscriptTestIds.panel,
       shellSurfaces.codexAutomationView,
       "ai-transcript"
     );
 
-    const diagnosticsSurface = findByShellSurfaceGroup(shell, "operation-persistence-evidence");
+    const diagnosticsSurface = findByShellSurfaceGroup(
+      quarantine ?? shell,
+      "operation-persistence-evidence"
+    );
     expect(diagnosticsSurface?.dataset.shellSurfaceId).toBe(
       shellSurfaces.diagnosticsEvidenceView.id
     );

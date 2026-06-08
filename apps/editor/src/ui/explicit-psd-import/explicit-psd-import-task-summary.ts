@@ -16,18 +16,19 @@ export const createExplicitPsdImportTaskSummary = (
   section.setAttribute("aria-label", "PSD import task human summary");
 
   const heading = document.createElement("h3");
-  heading.textContent = "Task Summary";
+  heading.textContent = "Import overview";
 
   const facts = document.createElement("dl");
   facts.className = "source-intake-summary explicit-psd-import-task-summary__facts";
   appendFact(facts, "Source", formatSourceSummary(options.viewModel));
-  appendFact(facts, "Source handling", formatSourceHandlingSummary(options.viewModel));
+  appendFact(facts, "File handling", formatSourceHandlingSummary(options.viewModel));
   appendFact(facts, "Parse state", options.viewModel.statusLabel);
   appendFact(facts, "Tree state", formatTreeSummary(options.viewModel));
-  appendFact(facts, "Import-plan scope", formatImportPlanScopeSummary(options));
+  appendFact(facts, "Import scope", formatImportPlanScopeSummary(options));
   appendFact(facts, "Structural preview", formatStructuralPreviewSummary(options.viewModel));
   appendFact(facts, "Warning summary", formatWarningSummary(options.viewModel));
   appendFact(facts, "Approval and commit", formatApprovalCommitSummary(options.viewModel));
+  appendFact(facts, "Cancel", "Close this task before importing to return without project changes.");
   appendFact(facts, "Next action", formatNextActionSummary(options));
 
   section.append(heading, facts);
@@ -47,7 +48,7 @@ const formatSourceSummary = (viewModel: ExplicitPsdImportViewModel): string => {
 const formatSourceHandlingSummary = (viewModel: ExplicitPsdImportViewModel): string => {
   const rawBytes = findFactValue(viewModel.sourceFacts, "Raw PSD bytes");
   if (rawBytes !== undefined) {
-    return `Local PSD selected; raw bytes ${rawBytes}.`;
+    return "Local PSD selected for this browser session; choose it again after project reload.";
   }
 
   return "Waiting for a user-selected local PSD file.";

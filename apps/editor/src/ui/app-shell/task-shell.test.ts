@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { shellSurfaces } from "./shell-surfaces.js";
@@ -30,6 +32,9 @@ describe("task shell", () => {
     expect(shell.dataset.taskWindowScope).toBe("workspace");
     expect(shell.dataset.taskWindowRegion).toBe("window");
     expect(shell.dataset.taskWindowState).toBe("ready");
+    expect(shell.dataset.taskWindowOverlay).toBe("host");
+    expect(shell.dataset.taskWindowPlacement).toBe("fixed");
+    expect(shell.dataset.taskWindowScroll).toBe("internal");
     expect(shell.getAttribute("role")).toBe("dialog");
     expect(shell.getAttribute("aria-modal")).toBe("false");
     expect(shell.getAttribute("tabindex")).toBe("-1");
@@ -40,6 +45,57 @@ describe("task shell", () => {
     expect(findByTaskWindowRegion(shell, "status")).toBe(status);
     expect(findByRegion(shell, "content")?.textContent).toContain("Save, load");
     expect(shell.getAttribute("aria-describedby")).toBe(status?.id);
+  });
+
+  it("renders workspace overlay, backdrop, window chrome, and internal body regions", () => {
+    const shell = createTaskShell({
+      surface: shellSurfaces.projectStorageTask,
+      surfaceMetadata: { group: "project-storage-overlay" },
+      title: "Project Storage",
+      status: "Ready to save",
+      diagnosticsSummary: createSlotElement("p", "No blocking diagnostics"),
+      content: createSlotElement("p", "Save, load, export, or import a project.")
+    }) as unknown as TestElement;
+
+    const backdrop = findByRegion(shell, "backdrop");
+    const windowRegion = findByRegion(shell, "window");
+    const header = findByRegion(shell, "header");
+    const body = findByRegion(shell, "body");
+    const diagnostics = findByRegion(shell, "diagnostics");
+    const content = findByRegion(shell, "content");
+
+    expect(shell.className).toContain("editor-task-shell--overlay");
+    expect(shell.className).toContain("task-shell--overlay");
+    expect(findByTaskWindowRegion(shell, "window")).toBe(shell);
+    expect(backdrop?.className).toContain("editor-task-shell__backdrop");
+    expect(backdrop?.dataset.taskWindowOverlay).toBe("backdrop");
+    expect(backdrop?.getAttribute("aria-hidden")).toBe("true");
+    expect(windowRegion?.className).toContain("editor-task-shell__window");
+    expect(windowRegion?.dataset.taskWindowOverlay).toBe("surface");
+    expect(windowRegion?.dataset.taskWindowRegion).toBe("window-frame");
+    expect(header?.dataset.taskWindowChrome).toBe("header");
+    expect(body?.className).toContain("editor-task-shell__body");
+    expect(body?.dataset.taskWindowScroll).toBe("internal");
+    expect(diagnostics?.parentElement).toBe(body);
+    expect(content?.parentElement).toBe(body);
+  });
+
+  it("keeps optional task content inside the internal scroll body even when slots are sparse", () => {
+    const shell = createTaskShell({
+      surface: shellSurfaces.tutorialTask,
+      surfaceMetadata: { group: "tutorial-task-scroll-body" },
+      title: "Tutorial",
+      status: "Not started"
+    }) as unknown as TestElement;
+
+    const windowRegion = findByRegion(shell, "window");
+    const body = findByRegion(shell, "body");
+
+    expect(windowRegion).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(body?.parentElement).toBe(windowRegion);
+    expect(body?.dataset.taskWindowScroll).toBe("internal");
+    expect(findByRegion(shell, "content")).toBeNull();
   });
 
   it("renders action, action status, diagnostics, and content slots into stable regions", () => {
@@ -270,6 +326,30 @@ describe("task shell", () => {
     expect(shell.textContent).toContain("Codex Automation");
     expect(shell.textContent).not.toContain("PSD");
   });
+
+  it("has static CSS evidence for fixed viewport overlay and internal body scrolling", () => {
+    const css = readFileSync(new URL("../../styles/editor.css", import.meta.url), "utf8");
+    const overlayBlock = extractCssBlock(css, ".editor-task-shell");
+    const backdropBlock = extractCssBlock(css, ".editor-task-shell__backdrop");
+    const windowBlock = extractCssBlock(css, ".editor-task-shell__window");
+    const bodyBlock = extractCssBlock(css, ".editor-task-shell__body");
+    const contentBlocks = extractCssBlocks(css, ".editor-task-shell__content");
+
+    expect(overlayBlock).toContain("position: fixed;");
+    expect(overlayBlock).toContain("inset: 0;");
+    expect(overlayBlock).toContain("z-index:");
+    expect(overlayBlock).toContain("place-items: center;");
+    expect(overlayBlock).toContain("overflow: hidden;");
+    expect(overlayBlock).not.toContain("position: static;");
+    expect(backdropBlock).toContain("position: absolute;");
+    expect(backdropBlock).toContain("inset: 0;");
+    expect(windowBlock).toContain("position: relative;");
+    expect(windowBlock).toContain("max-height:");
+    expect(windowBlock).toContain("overflow: hidden;");
+    expect(bodyBlock).toContain("overflow: auto;");
+    expect(bodyBlock).toContain("overscroll-behavior: contain;");
+    expect(contentBlocks.some((block) => block.includes("overflow: visible;"))).toBe(true);
+  });
 });
 
 const createSlotElement = (tagName: string, text: string): HTMLElement => {
@@ -286,6 +366,18 @@ const findByTaskWindowRegion = (root: TestElement, region: string): TestElement 
 
 const findByAriaLabel = (root: TestElement, ariaLabel: string): TestElement | null =>
   root.queryByPredicate((element) => element.getAttribute("aria-label") === ariaLabel);
+
+const extractCssBlock = (css: string, selector: string): string => {
+  const blocks = extractCssBlocks(css, selector);
+  expect(blocks.length).toBeGreaterThan(0);
+  return blocks[0] ?? "";
+};
+
+const extractCssBlocks = (css: string, selector: string): readonly string[] => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return Array.from(css.matchAll(new RegExp(`${escapedSelector}\\s*\\{(?<block>[^}]*)\\}`, "gm")))
+    .map((match) => match.groups?.block ?? "");
+};
 
 interface TestDomEvent {
   readonly type: string;

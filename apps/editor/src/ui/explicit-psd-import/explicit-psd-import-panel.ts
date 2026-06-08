@@ -95,148 +95,175 @@ export const createExplicitPsdImportTaskContent = (
 
   content.append(
     createExplicitPsdImportTaskSummary(options),
-    createWorkflowGroup(
-      "PSD Import Workflow",
-      "PSD import task workflow",
+    createHumanTaskSection(
+      "Choose PSD file",
+      "PSD import source selection",
+      parseForm.form,
+      createFactSection("Parse status", editorTestIds.explicitPsdImportStatus, [
+        { label: "Status", value: options.viewModel.statusLabel },
+        { label: "Selected layers", value: formatSelectedLeafLayerCount(options.viewModel) }
+      ]),
+      createFactSection(
+        "Source",
+        editorTestIds.explicitPsdImportSource,
+        projectSourceHumanFacts(options.viewModel),
+        [createHiddenFactList("Source technical facts", options.viewModel.sourceFacts)]
+      ),
+      createFactSection(
+        "Document",
+        editorTestIds.explicitPsdImportDocument,
+        projectDocumentHumanFacts(options.viewModel),
+        [createHiddenFactList("Document technical facts", options.viewModel.documentFacts)]
+      ),
+      createFactSection(
+        "Format review",
+        editorTestIds.explicitPsdImportFeatureSupport,
+        projectFeatureReviewHumanFacts(options.viewModel),
+        [
+          createHiddenFactList("Feature technical facts", options.viewModel.featureFacts),
+          createHiddenTextList("Unsupported feature evidence", options.viewModel.unsupportedFeatureLabels),
+          createHiddenTextList("Not evaluated feature evidence", options.viewModel.notEvaluatedFeatureLabels)
+        ]
+      )
+    ),
+    createHumanTaskSection(
+      "PSD structure",
+      "PSD structure tree",
+      createLayerTree(options.viewModel, parseForm.selectedLayerInput, parseForm.selectedLayerRefsInput)
+    ),
+    createHumanTaskSection(
+      "Scope and preview",
+      "PSD import scope and preview",
       createWorkflowStage(
-        "Source and Parse",
-        parseForm.form,
-        createFactSection("Parse State", editorTestIds.explicitPsdImportStatus, [
-          { label: "Status", value: options.viewModel.statusLabel },
-          { label: "Selected leaf layers", value: formatSelectedLeafLayerCount(options.viewModel) }
-        ]),
-        createFactSection("Source Summary", editorTestIds.explicitPsdImportSource, options.viewModel.sourceFacts),
-        createFactSection("Document Tree", editorTestIds.explicitPsdImportDocument, options.viewModel.documentFacts),
+        "Leaf import preview",
+        createImportPlanPreviewForm(options, importPlanApproval),
         createFactSection(
-          "Feature Review",
-          editorTestIds.explicitPsdImportFeatureSupport,
-          options.viewModel.featureFacts,
-          [
-            createTextList("Unsupported feature evidence", options.viewModel.unsupportedFeatureLabels),
-            createTextList("Not evaluated feature evidence", options.viewModel.notEvaluatedFeatureLabels)
-          ]
+          "Import preview",
+          editorTestIds.explicitPsdImportPlanPreview,
+          projectImportPlanHumanFacts(options),
+          [createHiddenFactList("Import preview technical facts", options.viewModel.importPlanFacts)]
+        ),
+        createImportPlanCandidateList(options, importPlanApproval),
+        createDiagnosticSummarySection(
+          "Import preview warnings",
+          options.viewModel.importPlanDiagnostics,
+          editorTestIds.explicitPsdImportPlanDiagnostics
         )
       ),
       createWorkflowStage(
-        "PSD Tree and Scope",
-        createLayerTree(options.viewModel, parseForm.selectedLayerInput, parseForm.selectedLayerRefsInput)
-      ),
-      createWorkflowStage(
-        "Import-Plan Approval",
-        createImportPlanPreviewForm(options, importPlanApproval),
-        createFactSection(
-          "Import-Plan Preview",
-          editorTestIds.explicitPsdImportPlanPreview,
-          [
-            { label: "Status", value: options.viewModel.importPlanStatusLabel },
-            ...options.viewModel.importPlanFacts
-          ]
-        ),
-        createImportPlanCandidateList(options, importPlanApproval),
-        createTextList(
-          "Import-Plan Preview Diagnostics",
-          options.viewModel.importPlanDiagnostics,
-          editorTestIds.explicitPsdImportPlanDiagnostics
-        ),
-        createApprovedImportPlanBatchIntakeForm(options, importPlanApproval)
-      ),
-      createWorkflowStage(
-        "Structural Scaffold Approval",
+        "Structure scaffold preview",
         createStructuralScaffoldPreviewForm(options, structuralScaffoldApproval),
         createFactSection(
-          "Structural Scaffold Preview",
+          "Structure preview",
           editorTestIds.explicitPsdStructuralScaffoldPreview,
+          projectStructuralScaffoldHumanFacts(options),
           [
-            { label: "Status", value: options.viewModel.structuralScaffoldStatusLabel },
-            ...options.viewModel.structuralScaffoldFacts
+            createHiddenFactList(
+              "Structure preview technical facts",
+              options.viewModel.structuralScaffoldFacts
+            )
           ]
         ),
         createStructuralScaffoldNodeList(options, structuralScaffoldApproval),
-        createTextList(
-          "Structural Scaffold Preview Diagnostics",
+        createDiagnosticSummarySection(
+          "Structure preview warnings",
           options.viewModel.structuralScaffoldDiagnostics,
           editorTestIds.explicitPsdStructuralScaffoldDiagnostics
-        ),
-        createApprovedStructuralScaffoldCommitForm(options, structuralScaffoldApproval)
-      ),
-      createWorkflowStage(
-        "Commit Review",
-        createFactSection(
-          "Structural Scaffold Result",
-          editorTestIds.explicitPsdStructuralScaffoldResult,
-          [
-            { label: "Status", value: options.viewModel.structuralScaffoldIntakeStatusLabel },
-            ...options.viewModel.structuralScaffoldIntakeFacts
-          ]
-        ),
-        createTextList(
-          "Structural Scaffold Entries",
-          options.viewModel.structuralScaffoldIntakeEntryLabels,
-          editorTestIds.explicitPsdStructuralScaffoldEntries
-        ),
-        createTextList(
-          "Structural Scaffold Result Diagnostics",
-          options.viewModel.structuralScaffoldIntakeDiagnostics,
-          editorTestIds.explicitPsdStructuralScaffoldResultDiagnostics
         )
       )
     ),
-    createWorkflowGroup(
-      "Advanced Workflow Controls",
-      "PSD import advanced workflow controls",
+    createHumanTaskSection(
+      "Import and commit",
+      "PSD import commit actions",
       createWorkflowStage(
-        "One-Off Selected Layer Intake",
-        createLayerIntakeForm(options, parseForm.selectedLayerInput),
-        createFactSection(
-          "Selected Layer Intake Result",
-          editorTestIds.explicitPsdImportLayerIntakeResult,
-          [
-            { label: "Status", value: options.viewModel.intakeStatusLabel },
-            ...options.viewModel.intakeFacts
-          ]
-        ),
-        createTextList(
-          "Selected Layer Intake Diagnostics",
-          options.viewModel.intakeDiagnostics,
-          editorTestIds.explicitPsdImportLayerIntakeDiagnostics
-        )
-      ),
-      createWorkflowStage(
-        "Selected Leaf Layer Batch Intake",
-        createBatchLayerIntakeForm(options, parseForm.selectedLayerRefsInput),
-        createFactSection(
-          "Selected Leaf Layer Batch Result",
+        "Approved leaf import",
+        createApprovedImportPlanBatchIntakeForm(options, importPlanApproval),
+        createResultSummarySection(
+          "Approved leaf result",
           editorTestIds.explicitPsdImportBatchIntakeResult,
-          [
-            { label: "Status", value: options.viewModel.batchIntakeStatusLabel },
-            ...options.viewModel.batchIntakeFacts
-          ]
+          options.viewModel.batchIntakeStatusLabel,
+          options.viewModel.batchIntakeFacts
         ),
-        createTextList(
-          "Selected Leaf Layer Batch Entries",
+        createResultListSummarySection(
+          "Approved leaf entries",
           options.viewModel.batchIntakeEntryLabels,
           editorTestIds.explicitPsdImportBatchIntakeEntries
         ),
-        createTextList(
-          "Selected Leaf Layer Batch Diagnostics",
+        createDiagnosticSummarySection(
+          "Approved leaf warnings",
           options.viewModel.batchIntakeDiagnostics,
           editorTestIds.explicitPsdImportBatchIntakeDiagnostics
         )
       ),
       createWorkflowStage(
-        "Evidence Boundary",
-        createTextList(
-          "Selected Layer Materialization",
+        "Approved structure commit",
+        createApprovedStructuralScaffoldCommitForm(options, structuralScaffoldApproval)
+      ),
+      createWorkflowStage(
+        "Commit result",
+        createFactSection(
+          "Structure commit",
+          editorTestIds.explicitPsdStructuralScaffoldResult,
+          projectResultHumanFacts(
+            options.viewModel.structuralScaffoldIntakeStatusLabel,
+            options.viewModel.structuralScaffoldIntakeFacts
+          ),
+          [
+            createHiddenFactList(
+              "Structure commit technical facts",
+              options.viewModel.structuralScaffoldIntakeFacts
+            )
+          ]
+        ),
+        createResultListSummarySection(
+          "Structure commit entries",
+          options.viewModel.structuralScaffoldIntakeEntryLabels,
+          editorTestIds.explicitPsdStructuralScaffoldEntries
+        ),
+        createDiagnosticSummarySection(
+          "Structure commit warnings",
+          options.viewModel.structuralScaffoldIntakeDiagnostics,
+          editorTestIds.explicitPsdStructuralScaffoldResultDiagnostics
+        )
+      )
+    ),
+    createHumanTaskSection(
+      "Additional import actions",
+      "PSD import additional import actions",
+      createWorkflowStage(
+        "Selected layer import",
+        createLayerIntakeForm(options, parseForm.selectedLayerInput),
+        createResultSummarySection(
+          "Selected layer result",
+          editorTestIds.explicitPsdImportLayerIntakeResult,
+          options.viewModel.intakeStatusLabel,
+          options.viewModel.intakeFacts
+        ),
+        createDiagnosticSummarySection(
+          "Selected layer warnings",
+          options.viewModel.intakeDiagnostics,
+          editorTestIds.explicitPsdImportLayerIntakeDiagnostics
+        )
+      ),
+      createWorkflowStage(
+        "Selected leaf batch import",
+        createBatchLayerIntakeForm(options, parseForm.selectedLayerRefsInput)
+      ),
+      createWorkflowStage(
+        "Session notes",
+        createResultListSummarySection(
+          "Selected layer media",
           options.viewModel.materializationLabels,
           editorTestIds.explicitPsdImportMaterialization
         ),
         createFactSection(
-          "Persistence Boundary",
+          "Session persistence",
           editorTestIds.explicitPsdImportPersistence,
-          options.viewModel.persistenceFacts
+          projectPersistenceHumanFacts(options.viewModel),
+          [createHiddenFactList("Persistence technical facts", options.viewModel.persistenceFacts)]
         ),
-        createTextList(
-          "Diagnostics",
+        createDiagnosticSummarySection(
+          "Parser warnings",
           options.viewModel.diagnostics,
           editorTestIds.explicitPsdImportDiagnostics
         )
@@ -247,13 +274,13 @@ export const createExplicitPsdImportTaskContent = (
   return content;
 };
 
-const createWorkflowGroup = (
+const createHumanTaskSection = (
   headingText: string,
   ariaLabel: string,
   ...nodes: readonly HTMLElement[]
 ): HTMLElement => {
   const section = document.createElement("section");
-  section.className = "explicit-psd-import-task-details";
+  section.className = "explicit-psd-import-task-details explicit-psd-import-human-section";
   section.setAttribute("aria-label", ariaLabel);
 
   const heading = document.createElement("h3");
@@ -285,6 +312,214 @@ const formatSelectedLeafLayerCount = (viewModel: ExplicitPsdImportViewModel): st
   return `${count} selected PSD leaf layer${count === 1 ? "" : "s"}`;
 };
 
+const projectSourceHumanFacts = (
+  viewModel: ExplicitPsdImportViewModel
+): readonly { readonly label: string; readonly value: string }[] => {
+  const filename = findFactValue(viewModel.sourceFacts, "Filename");
+  if (filename === undefined) {
+    return [
+      { label: "File", value: "Choose a local PSD file" },
+      { label: "Limit", value: findFactValue(viewModel.sourceFacts, "Size cap") ?? "Browser parser size limit applies" }
+    ];
+  }
+
+  return [
+    { label: "File", value: filename },
+    { label: "Size", value: findFactValue(viewModel.sourceFacts, "Byte length") ?? "Size unavailable" },
+    {
+      label: "Type",
+      value: findFactValue(viewModel.sourceFacts, "Declared media type") ?? "No declared media type"
+    },
+    { label: "Handling", value: "Local browser-session parse" }
+  ];
+};
+
+const projectDocumentHumanFacts = (
+  viewModel: ExplicitPsdImportViewModel
+): readonly { readonly label: string; readonly value: string }[] => {
+  const groups = findFactValue(viewModel.documentFacts, "Groups");
+  const layers = findFactValue(viewModel.documentFacts, "Layers");
+  if (groups === undefined || layers === undefined) {
+    return [{ label: "Tree", value: "No parsed PSD structure yet" }];
+  }
+
+  return [
+    { label: "Canvas", value: findFactValue(viewModel.documentFacts, "Canvas") ?? "Canvas unavailable" },
+    { label: "Groups", value: groups },
+    { label: "Layers", value: layers },
+    { label: "Visible layers", value: findFactValue(viewModel.documentFacts, "Visible layers") ?? "0" },
+    { label: "Hidden layers", value: findFactValue(viewModel.documentFacts, "Hidden layers") ?? "0" },
+    { label: "Raster candidates", value: findFactValue(viewModel.documentFacts, "Raster candidates") ?? "0" }
+  ];
+};
+
+const projectFeatureReviewHumanFacts = (
+  viewModel: ExplicitPsdImportViewModel
+): readonly { readonly label: string; readonly value: string }[] => [
+  { label: "Unsupported items", value: findFactValue(viewModel.featureFacts, "Unsupported") ?? "0" },
+  { label: "Needs review", value: findFactValue(viewModel.featureFacts, "Not evaluated") ?? "0" }
+];
+
+const projectImportPlanHumanFacts = (
+  options: ExplicitPsdImportPanelOptions
+): readonly { readonly label: string; readonly value: string }[] => [
+  { label: "Status", value: options.viewModel.importPlanStatusLabel },
+  { label: "Scope", value: formatPsdScopeLabel(options.viewModel.importPlanScopeRef) },
+  {
+    label: "Target",
+    value: formatDestinationParentLabel(options.destinationParts, options.viewModel.importPlanDestinationParentPartId)
+  },
+  {
+    label: "Candidates",
+    value: formatImportPlanCandidateCounts(
+      findFactValue(options.viewModel.importPlanFacts, "Candidates / eligible / approved / not-approved")
+    )
+  },
+  {
+    label: "Warnings",
+    value: formatImportPlanReviewCounts(
+      findFactValue(options.viewModel.importPlanFacts, "Hidden / unsupported / collisions / byte blocked")
+    )
+  },
+  {
+    label: "Approved size",
+    value: formatApprovedByteEstimate(
+      findFactValue(options.viewModel.importPlanFacts, "Byte estimate total / approved")
+    )
+  }
+];
+
+const projectStructuralScaffoldHumanFacts = (
+  options: ExplicitPsdImportPanelOptions
+): readonly { readonly label: string; readonly value: string }[] => [
+  { label: "Status", value: options.viewModel.structuralScaffoldStatusLabel },
+  { label: "Scope", value: formatPsdScopeLabel(options.viewModel.structuralScaffoldScopeRef) },
+  {
+    label: "Target",
+    value: formatDestinationParentLabel(
+      options.destinationParts,
+      options.viewModel.structuralScaffoldDestinationParentPartId
+    )
+  },
+  {
+    label: "Approval",
+    value: findFactValue(options.viewModel.structuralScaffoldFacts, "Approval status") ??
+      "No structural approval yet"
+  },
+  {
+    label: "Source",
+    value: formatStructuralSourceCounts(
+      findFactValue(options.viewModel.structuralScaffoldFacts, "Groups / leaves / approved groups / approved leaves")
+    )
+  },
+  {
+    label: "Output",
+    value: formatStructuralOutputCounts(
+      findFactValue(options.viewModel.structuralScaffoldFacts, "Generated group parts / drawables")
+    )
+  },
+  {
+    label: "Visibility",
+    value: formatStructuralHiddenCounts(
+      findFactValue(options.viewModel.structuralScaffoldFacts, "Hidden leaves / runtime-hidden drawables")
+    )
+  }
+];
+
+const projectResultHumanFacts = (
+  statusLabel: string,
+  facts: readonly { readonly label: string; readonly value: string }[]
+): readonly { readonly label: string; readonly value: string }[] => {
+  const safeFacts = facts.filter((fact) => isHumanResultFact(fact.label));
+  return [
+    { label: "Status", value: statusLabel },
+    ...(safeFacts.length === 0 ? [{ label: "Result", value: "No committed import result yet" }] : safeFacts)
+  ];
+};
+
+const projectPersistenceHumanFacts = (
+  viewModel: ExplicitPsdImportViewModel
+): readonly { readonly label: string; readonly value: string }[] => [
+  { label: "Parser session", value: "Temporary browser task session" },
+  { label: "Project reload", value: "Re-select the PSD file before generating new previews" },
+  {
+    label: "Save/load",
+    value: humanizePersistenceBoundary(findFactValue(viewModel.persistenceFacts, "Save/load"))
+  }
+];
+
+const createResultSummarySection = (
+  headingText: string,
+  testId: string,
+  statusLabel: string,
+  facts: readonly { readonly label: string; readonly value: string }[]
+): HTMLElement =>
+  createFactSection(headingText, testId, projectResultHumanFacts(statusLabel, facts), [
+    createHiddenFactList(`${headingText} technical facts`, facts)
+  ]);
+
+const createDiagnosticSummarySection = (
+  headingText: string,
+  items: readonly string[],
+  testId: string
+): HTMLElement => {
+  const count = countHumanDiagnostics(items);
+  const message = count === 0
+    ? "No issues need review"
+    : `${count} issue${count === 1 ? "" : "s"} need review before commit`;
+
+  return createFactSection(headingText, testId, [{ label: "Review", value: message }], [
+    createHiddenTextList(`${headingText} technical diagnostics`, items)
+  ]);
+};
+
+const createResultListSummarySection = (
+  headingText: string,
+  items: readonly string[],
+  testId: string
+): HTMLElement => {
+  const count = countHumanDiagnostics(items);
+  const value = count === 0 ? "No committed entries yet" : `${count} committed entr${count === 1 ? "y" : "ies"}`;
+
+  return createFactSection(headingText, testId, [{ label: "Entries", value }], [
+    createHiddenTextList(`${headingText} technical entries`, items)
+  ]);
+};
+
+const isHumanResultFact = (label: string): boolean =>
+  [
+    "Result",
+    "Requested / success / failure",
+    "Materialization requested / success / failure",
+    "Destination kind",
+    "Generated parts",
+    "Generated drawables",
+    "Generated textures",
+    "Generated meshes",
+    "Runtime-hidden drawables"
+  ].includes(label);
+
+const formatApprovedByteEstimate = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 2) {
+    return "No approved size estimate";
+  }
+
+  return counts[1] ?? "No approved size estimate";
+};
+
+const humanizePersistenceBoundary = (value: string | undefined): string => {
+  if (value === undefined) {
+    return "Project state can be saved after committed imports";
+  }
+
+  if (/reparse/i.test(value)) {
+    return "Re-parse required after reload";
+  }
+
+  return "Project state can be saved after committed imports";
+};
+
 const createImportPlanPreviewForm = (
   options: ExplicitPsdImportPanelOptions,
   approval: ApprovalBinding
@@ -300,10 +535,12 @@ const createImportPlanPreviewForm = (
     value: options.viewModel.importPlanScopeRef
   });
   scopeRef.input.dataset.testid = editorTestIds.explicitPsdImportPlanScopeRef;
+  hideTechnicalField(scopeRef.field);
 
   const approvedRefsLabel = document.createElement("label");
   approvedRefsLabel.className = "editor-field editor-field--wide";
   approvedRefsLabel.textContent = "Approved PSD leaf candidates";
+  hideTechnicalField(approvedRefsLabel);
 
   const approvedRefs = document.createElement("textarea");
   approvedRefs.name = "importPlanApprovedLayerNodeRefs";
@@ -339,7 +576,7 @@ const createImportPlanPreviewForm = (
   submit.disabled =
     options.viewModel.status !== "parsed" ||
     options.onGenerateImportPlanPreview === undefined;
-  submit.textContent = "Update import-plan preview";
+  submit.textContent = "Preview approved leaves";
 
   form.append(scopeRef.field, approvedRefsLabel, parentPart.field, diagnostics, submit);
   form.addEventListener("submit", async (event) => {
@@ -370,7 +607,7 @@ const createImportPlanCandidateList = (
   section.setAttribute("aria-label", "Import-plan approved leaf candidates");
 
   const heading = document.createElement("h3");
-  heading.textContent = "Import-Plan Leaf Candidates";
+  heading.textContent = "Leaf candidates";
 
   const list = document.createElement("ul");
   list.className = "explicit-psd-import-list";
@@ -387,8 +624,8 @@ const createImportPlanCandidateList = (
     choice.setAttribute(
       "aria-label",
       row.approvalEligible
-        ? `Approve PSD leaf candidate ${row.layerRef}`
-        : `PSD leaf candidate ${row.layerRef} is not eligible for approval`
+        ? `Approve PSD leaf candidate ${formatImportPlanCandidateName(row.label)}`
+        : `PSD leaf candidate ${formatImportPlanCandidateName(row.label)} is not eligible for approval`
     );
     choice.addEventListener("change", () => {
       syncApprovedRefsFromChoices(approval);
@@ -396,7 +633,7 @@ const createImportPlanCandidateList = (
     approval.choices.push(choice);
 
     const label = document.createElement("span");
-    label.textContent = row.label;
+    label.textContent = formatImportPlanCandidateHumanLabel(row);
 
     item.append(choice, label);
     list.append(item);
@@ -408,7 +645,14 @@ const createImportPlanCandidateList = (
     list.append(item);
   }
 
-  section.append(heading, list);
+  section.append(
+    heading,
+    list,
+    createHiddenTextList(
+      "Import-plan candidate technical rows",
+      options.viewModel.importPlanCandidateLabels
+    )
+  );
   queueMicrotask(() => syncApprovedRefsFromChoices(approval));
   return section;
 };
@@ -443,7 +687,7 @@ const createApprovedImportPlanBatchIntakeForm = (
     options.onIntakeApprovedImportPlanCandidates === undefined;
   approval.approvedSubmit = submit;
   approval.baseSubmitDisabled = submit.disabled;
-  submit.textContent = "Add approved leaf candidates";
+  submit.textContent = "Import approved leaves";
 
   form.append(parentPart.field, diagnostics, submit);
   form.addEventListener("submit", async (event) => {
@@ -488,10 +732,12 @@ const createStructuralScaffoldPreviewForm = (
     value: options.viewModel.structuralScaffoldScopeRef
   });
   scopeRef.input.dataset.testid = editorTestIds.explicitPsdStructuralScaffoldScopeRef;
+  hideTechnicalField(scopeRef.field);
 
   const approvedRefsLabel = document.createElement("label");
   approvedRefsLabel.className = "editor-field editor-field--wide";
   approvedRefsLabel.textContent = "Approved PSD structural nodes";
+  hideTechnicalField(approvedRefsLabel);
 
   const approvedRefs = document.createElement("textarea");
   approvedRefs.name = "structuralScaffoldApprovedNodeRefs";
@@ -515,7 +761,7 @@ const createStructuralScaffoldPreviewForm = (
     name: "structuralScaffoldDestinationParentPartId",
     options: options.destinationParts.length === 0
       ? [{ value: "", label: "No destination parent parts", disabled: true }]
-      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+      : options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) })),
     value: options.viewModel.structuralScaffoldDestinationParentPartId ||
       options.destinationParts[0]?.partId ||
       ""
@@ -533,7 +779,7 @@ const createStructuralScaffoldPreviewForm = (
     options.viewModel.status !== "parsed" ||
     options.onGenerateStructuralScaffoldPreview === undefined ||
     options.destinationParts.length === 0;
-  submit.textContent = "Update structural scaffold preview";
+  submit.textContent = "Preview approved structure";
 
   form.append(scopeRef.field, approvedRefsLabel, parentPart.field, diagnostics, submit);
   form.addEventListener("submit", async (event) => {
@@ -564,7 +810,7 @@ const createStructuralScaffoldNodeList = (
   section.setAttribute("aria-label", "Structural scaffold approved PSD nodes");
 
   const heading = document.createElement("h3");
-  heading.textContent = "Structural Scaffold Nodes";
+  heading.textContent = "Structure nodes";
 
   const list = document.createElement("ul");
   list.className = "explicit-psd-import-list";
@@ -581,8 +827,8 @@ const createStructuralScaffoldNodeList = (
     choice.setAttribute(
       "aria-label",
       row.approvalEligible
-        ? `Approve PSD structural ${row.kind} ${row.nodeRef}`
-        : `PSD structural ${row.kind} ${row.nodeRef} is not eligible for approval`
+        ? `Approve PSD ${row.kind} ${formatStructuralScaffoldNodeName(row.label)}`
+        : `PSD ${row.kind} ${formatStructuralScaffoldNodeName(row.label)} is not eligible for approval`
     );
     choice.addEventListener("change", () => {
       syncApprovedRefsFromChoices(approval);
@@ -590,7 +836,7 @@ const createStructuralScaffoldNodeList = (
     approval.choices.push(choice);
 
     const label = document.createElement("span");
-    label.textContent = row.label;
+    label.textContent = formatStructuralScaffoldNodeHumanLabel(row);
 
     item.append(choice, label);
     list.append(item);
@@ -602,7 +848,14 @@ const createStructuralScaffoldNodeList = (
     list.append(item);
   }
 
-  section.append(heading, list);
+  section.append(
+    heading,
+    list,
+    createHiddenTextList(
+      "Structural scaffold node technical rows",
+      options.viewModel.structuralScaffoldNodeLabels
+    )
+  );
   queueMicrotask(() => syncApprovedRefsFromChoices(approval));
   return section;
 };
@@ -621,7 +874,7 @@ const createApprovedStructuralScaffoldCommitForm = (
     name: "structuralScaffoldApprovedDestinationParentPartId",
     options: options.destinationParts.length === 0
       ? [{ value: "", label: "No destination parent parts", disabled: true }]
-      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+      : options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) })),
     value: options.viewModel.structuralScaffoldDestinationParentPartId ||
       options.destinationParts[0]?.partId ||
       ""
@@ -642,7 +895,7 @@ const createApprovedStructuralScaffoldCommitForm = (
     options.onCommitStructuralScaffold === undefined;
   approval.approvedSubmit = submit;
   approval.baseSubmitDisabled = submit.disabled;
-  submit.textContent = "Add approved structural scaffold";
+  submit.textContent = "Commit approved structure";
 
   form.append(parentPart.field, diagnostics, submit);
   form.addEventListener("submit", async (event) => {
@@ -698,6 +951,7 @@ const createExplicitPsdImportForm = (
   const selectedLayerLabel = document.createElement("label");
   selectedLayerLabel.className = "editor-field editor-field--wide";
   selectedLayerLabel.textContent = "Initial selected layer";
+  hideTechnicalField(selectedLayerLabel);
 
   const selectedLayer = document.createElement("input");
   selectedLayer.name = "selectedLayerNodeRef";
@@ -710,6 +964,7 @@ const createExplicitPsdImportForm = (
   const selectedLayerRefsLabel = document.createElement("label");
   selectedLayerRefsLabel.className = "editor-field editor-field--wide";
   selectedLayerRefsLabel.textContent = "Initial selected PSD leaf layers";
+  hideTechnicalField(selectedLayerRefsLabel);
 
   const selectedLayerRefs = document.createElement("textarea");
   selectedLayerRefs.name = "selectedLayerNodeRefs";
@@ -781,7 +1036,7 @@ const createLayerIntakeForm = (
     name: "destinationExistingPartId",
     options: options.destinationParts.length === 0
       ? [{ value: "", label: "No existing parts", disabled: true }]
-      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+      : options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) })),
     value: options.destinationParts[0]?.partId ?? ""
   });
   const newPartName = createTextField({
@@ -794,7 +1049,7 @@ const createLayerIntakeForm = (
     name: "destinationParentPartId",
     options: [
       { value: "", label: "No parent" },
-      ...options.destinationParts.map((part) => ({ value: part.partId, label: part.label }))
+      ...options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) }))
     ],
     value: options.destinationParts[0]?.partId ?? ""
   });
@@ -929,7 +1184,7 @@ const createBatchLayerIntakeForm = (
     name: "batchDestinationParentPartId",
     options: options.destinationParts.length === 0
       ? [{ value: "", label: "No destination parent parts", disabled: true }]
-      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+      : options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) })),
     value: options.destinationParts[0]?.partId ?? ""
   });
 
@@ -1130,7 +1385,7 @@ const createDestinationParentSelect = (
     name,
     options: options.destinationParts.length === 0
       ? [{ value: "", label: "No destination parent parts", disabled: true }]
-      : options.destinationParts.map((part) => ({ value: part.partId, label: part.label })),
+      : options.destinationParts.map((part) => ({ value: part.partId, label: formatPartOptionLabel(part.label) })),
     value: options.viewModel.importPlanDestinationParentPartId ||
       options.destinationParts[0]?.partId ||
       ""
@@ -1239,8 +1494,8 @@ const createLayerTree = (
     batchChoice.setAttribute(
       "aria-label",
       row.kind === "layer"
-        ? `Select PSD leaf layer ${row.nodeRef} for batch`
-        : `PSD group ${row.nodeRef} is not a leaf layer batch target`
+        ? `Select PSD leaf layer ${formatTreeRowName(row.label)} for batch`
+        : `PSD group ${formatTreeRowName(row.label)} is not a leaf layer batch target`
     );
     batchChoice.addEventListener("change", syncBatchRefs);
     batchChoices.push(batchChoice);
@@ -1251,43 +1506,244 @@ const createLayerTree = (
 
     const meta = document.createElement("span");
     meta.className = "explicit-psd-import-tree__meta";
-    meta.textContent = row.metaLabel;
+    meta.textContent = formatTreeRowHumanMeta(row);
 
     item.append(choice, batchChoice, label, meta);
     list.append(item);
   }
 
   syncBatchRefs();
-  section.append(list);
+  section.append(
+    list,
+    createHiddenTextList(
+      "Parsed PSD layer technical rows",
+      viewModel.treeRows.map((row) => `${row.nodeRef} / ${row.label} / ${row.metaLabel}`)
+    )
+  );
   return section;
 };
 
-const createTextList = (
-  headingText: string,
-  items: readonly string[],
-  testId?: string
+const formatImportPlanCandidateHumanLabel = (
+  row: ExplicitPsdImportViewModel["importPlanCandidateRows"][number]
+): string => {
+  const name = formatImportPlanCandidateName(row.label);
+  const parent = findSegmentValue(row.label, "parent=") ?? "root";
+  const visibility = findBareSegment(row.label, ["visible", "hidden"]) ?? "visibility unknown";
+  const bounds = findSegmentValue(row.label, "bounds=") ?? "bounds unavailable";
+  const approval = row.approved ? "approved" : row.approvalEligible ? "ready for review" : "not eligible";
+
+  return [
+    name,
+    parent === "root" ? "root group" : `in ${parent}`,
+    visibility,
+    bounds,
+    approval
+  ].join(" / ");
+};
+
+const formatImportPlanCandidateName = (label: string): string =>
+  findSegmentValue(label, "name=") ?? findHumanPathSegment(label) ?? "PSD leaf layer";
+
+const formatStructuralScaffoldNodeHumanLabel = (
+  row: ExplicitPsdImportViewModel["structuralScaffoldNodeRows"][number]
+): string => {
+  const name = formatStructuralScaffoldNodeName(row.label);
+  const visibility = findBareSegment(row.label, ["visible", "hidden"]) ?? "visibility unknown";
+  const bounds = findSegmentValue(row.label, "bounds=") ?? "bounds unavailable";
+  const runtime = findSegmentValue(row.label, "runtime=") ?? "runtime pending";
+  const approval = row.approved ? "approved" : row.approvalEligible ? "ready for review" : "not eligible";
+
+  return [name, row.kind, visibility, bounds, runtime, approval].join(" / ");
+};
+
+const formatStructuralScaffoldNodeName = (label: string): string =>
+  findHumanPathSegment(label, 2) ?? "PSD structure node";
+
+const formatTreeRowName = (label: string): string =>
+  label.split(" / ")[0]?.replace(/^(group|layer):\s*/i, "").trim() || "PSD node";
+
+const formatTreeRowHumanMeta = (
+  row: ExplicitPsdImportViewModel["treeRows"][number]
+): string => {
+  const segments = row.metaLabel.split(" / ").map((part) => part.trim()).filter((part) => part.length > 0);
+  const visibility = segments.find((part) => part === "visible" || part === "hidden") ?? "visibility unknown";
+  const opacity = segments.find((part) => part.startsWith("opacity ")) ?? "opacity unknown";
+  const bounds = segments.find(isBoundsLikeLabel) ?? "bounds unavailable";
+  const role = segments.find((part) => part === "group" || part === "editableLayer") ?? row.kind;
+  const unsupported = segments.find((part) => part.startsWith("unsupported ")) === undefined
+    ? "supported"
+    : "needs review";
+
+  return [visibility, opacity, bounds, role, unsupported].join(" / ");
+};
+
+const formatPsdScopeLabel = (scopeRef: string): string => {
+  const normalized = scopeRef.trim();
+  if (normalized.length === 0 || normalized === "psd:root") {
+    return "Full PSD document";
+  }
+
+  return "Selected PSD structure";
+};
+
+const formatDestinationParentLabel = (
+  destinationParts: ExplicitPsdImportPanelOptions["destinationParts"],
+  destinationPartId: string
+): string => {
+  if (destinationPartId.trim().length === 0) {
+    return "No destination parent selected";
+  }
+
+  const partLabel = destinationParts.find((part) => part.partId === destinationPartId)?.label;
+  return partLabel === undefined ? "Selected destination part" : formatPartOptionLabel(partLabel);
+};
+
+const formatPartOptionLabel = (label: string): string =>
+  label.split(" / ")[0]?.trim() || "Project part";
+
+const formatImportPlanCandidateCounts = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 4) {
+    return "No preview candidates yet";
+  }
+
+  return `${counts[0]} total / ${counts[1]} eligible / ${counts[2]} approved / ${counts[3]} waiting`;
+};
+
+const formatImportPlanReviewCounts = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 4) {
+    return "No preview warnings yet";
+  }
+
+  return `${counts[0]} hidden / ${counts[1]} unsupported / ${counts[2]} collisions / ${counts[3]} byte blocked`;
+};
+
+const formatStructuralSourceCounts = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 4) {
+    return "No structure preview counts yet";
+  }
+
+  return `${counts[0]} groups / ${counts[1]} leaves / ${counts[2]} approved groups / ${counts[3]} approved leaves`;
+};
+
+const formatStructuralOutputCounts = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 2) {
+    return "No generated structure yet";
+  }
+
+  return `${counts[0]} part containers / ${counts[1]} drawables`;
+};
+
+const formatStructuralHiddenCounts = (value: string | undefined): string => {
+  const counts = parseDelimitedCounts(value);
+  if (counts.length < 2) {
+    return "No hidden structure preview yet";
+  }
+
+  return `${counts[0]} hidden leaves / ${counts[1]} runtime-hidden drawables`;
+};
+
+const parseDelimitedCounts = (value: string | undefined): readonly string[] =>
+  value?.split(" / ").map((part) => part.trim()).filter((part) => part.length > 0) ?? [];
+
+const findFactValue = (
+  facts: readonly {
+    readonly label: string;
+    readonly value: string;
+  }[],
+  label: string
+): string | undefined =>
+  facts.find((fact) => fact.label === label)?.value;
+
+const findSegmentValue = (label: string, prefix: string): string | undefined =>
+  label
+    .split(" / ")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
+    ?.slice(prefix.length)
+    .trim();
+
+const findBareSegment = (
+  label: string,
+  candidates: readonly string[]
+): string | undefined =>
+  label
+    .split(" / ")
+    .map((part) => part.trim())
+    .find((part) => candidates.includes(part));
+
+const findHumanPathSegment = (label: string, preferredIndex = 1): string | undefined => {
+  const segments = label.split(" / ").map((part) => part.trim()).filter((part) => part.length > 0);
+  const segment = segments[preferredIndex] ?? segments.find((part) => !part.includes("=") && !looksLikeMachineRef(part));
+  if (segment === undefined || looksLikeMachineRef(segment)) {
+    return undefined;
+  }
+
+  return segment;
+};
+
+const looksLikeMachineRef = (value: string): boolean =>
+  /^(?:psd:|layer_|group_|part_|draw_|tex_|mesh_|sha256:)/i.test(value);
+
+const isBoundsLikeLabel = (value: string): boolean =>
+  value === "bounds unavailable" ||
+  /^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?\s+\d+(?:\.\d+)?x\d+(?:\.\d+)?$/u.test(value);
+
+const countHumanDiagnostics = (items: readonly string[]): number =>
+  items.filter((item) => !isEmptyDiagnosticLabel(item)).length;
+
+const isEmptyDiagnosticLabel = (item: string): boolean =>
+  /^No .+diagnostics$/i.test(item.trim()) ||
+  /^No .+entries$/i.test(item.trim()) ||
+  /^No .+summary$/i.test(item.trim()) ||
+  item.trim().toLowerCase() === "no psd parser diagnostics";
+
+const createHiddenFactList = (
+  label: string,
+  facts: readonly {
+    readonly label: string;
+    readonly value: string;
+  }[]
 ): HTMLElement => {
-  const section = document.createElement("section");
-  section.className = "explicit-psd-import-section";
-  if (testId !== undefined) {
-    section.dataset.testid = testId;
+  const list = document.createElement("dl");
+  list.className = "explicit-psd-import-technical-state";
+  list.dataset.psdImportTechnicalState = "true";
+  list.setAttribute("aria-label", label);
+  hideTechnicalField(list);
+
+  for (const fact of facts) {
+    appendFact(list, fact.label, fact.value);
   }
-  section.setAttribute("aria-label", headingText);
 
-  const heading = document.createElement("h3");
-  heading.textContent = headingText;
+  return list;
+};
 
+const createHiddenTextList = (
+  label: string,
+  items: readonly string[]
+): HTMLElement => {
   const list = document.createElement("ul");
-  list.className = "explicit-psd-import-list";
-  for (const itemText of items) {
-    const item = document.createElement("li");
-    item.textContent = itemText;
-    item.style.overflowWrap = "anywhere";
-    list.append(item);
+  list.className = "explicit-psd-import-technical-state";
+  list.dataset.psdImportTechnicalState = "true";
+  list.setAttribute("aria-label", label);
+  hideTechnicalField(list);
+
+  for (const item of items) {
+    const row = document.createElement("li");
+    row.textContent = item;
+    row.style.overflowWrap = "anywhere";
+    list.append(row);
   }
 
-  section.append(heading, list);
-  return section;
+  return list;
+};
+
+const hideTechnicalField = (field: HTMLElement): void => {
+  field.setAttribute("aria-hidden", "true");
+  field.style.display = "none";
 };
 
 const appendFact = (
@@ -1315,25 +1771,25 @@ const createDiagnosticLine = (message: string): HTMLElement => {
 
 const formatParseError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  return `Explicit PSD parse failed before workflow state update: ${message}`;
+  return `PSD parse failed: ${message}`;
 };
 
 const formatIntakeError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  return `Explicit PSD layer intake failed before workflow state update: ${message}`;
+  return `Selected layer import failed: ${message}`;
 };
 
 const formatBatchIntakeError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  return `Explicit PSD leaf layer batch intake failed before workflow state update: ${message}`;
+  return `Selected leaf import failed: ${message}`;
 };
 
 const formatImportPlanError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  return `Explicit PSD import-plan preview failed before workflow state update: ${message}`;
+  return `Leaf import preview failed: ${message}`;
 };
 
 const formatStructuralScaffoldError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  return `Explicit PSD structural scaffold failed before workflow state update: ${message}`;
+  return `Structure preview or commit failed: ${message}`;
 };

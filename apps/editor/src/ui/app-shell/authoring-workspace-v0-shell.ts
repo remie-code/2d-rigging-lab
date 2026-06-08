@@ -167,7 +167,10 @@ export const createWorkspaceDiagnosticsStripShellSurface = (
       warningCount,
       statusLabel: createWorkspaceDiagnosticsStatusLabel(options, blockingCount, warningCount),
       items: createWorkspaceDiagnosticsItems(options),
-      maxVisibleItems: 3
+      maxVisibleItems: 3,
+      ...(options.onOpenDiagnosticsEvidenceView === undefined
+        ? {}
+        : { onOpenDiagnostics: options.onOpenDiagnosticsEvidenceView })
     }),
     shellSurfaces.authoringWorkspace,
     { group: "diagnostics-strip" }
@@ -191,7 +194,7 @@ const createToolboxActionItems = (): readonly ToolboxLauncherItem[] => [
     tooltip: "Mesh tools",
     iconText: "M",
     disabled: true,
-    disabledReason: "Detailed controls are in support panels"
+    disabledReason: "Select a drawable to enable Mesh tools"
   },
   {
     id: "rig",
@@ -200,7 +203,7 @@ const createToolboxActionItems = (): readonly ToolboxLauncherItem[] => [
     tooltip: "Rig tools",
     iconText: "R",
     disabled: true,
-    disabledReason: "Detailed controls are in support panels"
+    disabledReason: "Select a part or drawable to enable Rig tools"
   },
   {
     id: "dynamics",
@@ -209,7 +212,7 @@ const createToolboxActionItems = (): readonly ToolboxLauncherItem[] => [
     tooltip: "Dynamics tools",
     iconText: "D",
     disabled: true,
-    disabledReason: "Detailed controls are in support panels"
+    disabledReason: "Select a parameter or target to enable Dynamics"
   }
 ];
 
@@ -246,16 +249,16 @@ const createToolboxTaskItems = (
     tooltip: "Project storage",
     iconText: "ST",
     disabled: true,
-    disabledReason: "Available in support panels"
+    disabledReason: "Project storage task is not available yet"
   },
   {
     id: "validate",
     label: "Validate",
-    ariaLabel: "Open Product Preflight",
-    tooltip: "Product Preflight",
+    ariaLabel: "Open validation task",
+    tooltip: "Validation",
     iconText: "V",
     disabled: true,
-    disabledReason: "Available in support panels"
+    disabledReason: "Validation task is not available yet"
   }
 ];
 
@@ -377,7 +380,7 @@ const createWorkspaceDiagnosticsItems = (
     : [{
         severity: "blocking" as const,
         label: options.state.productPreflight.errorMessage,
-        targetLabel: "Product Preflight"
+        targetLabel: "Validation"
       }]),
   ...options.state.productPreflight.blockingIssues.map((issue) => ({
     severity: "blocking" as const,

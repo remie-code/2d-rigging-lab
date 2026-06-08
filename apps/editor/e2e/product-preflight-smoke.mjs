@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { locateBrowserExecutable } from "./browser-discovery.mjs";
 import { launchHeadlessBrowser } from "./chrome-launcher.mjs";
+import { discloseLegacyDebugQuarantineForE2e } from "./internal-surfaces-harness.mjs";
 import { createPageSession } from "./page-session.mjs";
 import {
   createProductPreflightCategoryRowTestId,
@@ -63,6 +64,7 @@ const forbiddenSupportClaims = [
 
 export const runProductPreflightE2eSmoke = async ({ page, viewport }) => {
   await waitForTestId(page, editorTestIds.shell);
+  await discloseLegacyDebugQuarantineForE2e(page);
   await waitForTestId(page, editorTestIds.productPreflightPanel);
   await assertInitialProductPreflightState(page, `${viewport.name} initial`);
   await assertProductPreflightReachable(page, viewport);
@@ -687,6 +689,7 @@ const saveProjectToBrowserStorage = async (page, label) => {
 const reloadProjectFromBrowserStorage = async (page, label) => {
   await page.reload();
   await waitForTestId(page, editorTestIds.shell);
+  await discloseLegacyDebugQuarantineForE2e(page);
   await waitForTestId(page, editorTestIds.projectPersistenceLoad);
   await waitForTestId(page, editorTestIds.productPreflightPanel);
   await clickTestId(page, editorTestIds.projectPersistenceLoad);

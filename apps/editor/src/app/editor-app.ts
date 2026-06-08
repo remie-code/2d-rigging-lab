@@ -368,7 +368,7 @@ const focusActiveWorkspaceTaskWindow = (
     .querySelector<HTMLElement>(
       '[data-task-window-scope="workspace"][data-task-window-region="window"]'
     )
-    ?.focus();
+    ?.focus({ preventScroll: true });
 };
 
 const triggerPortableBundleDownload = (

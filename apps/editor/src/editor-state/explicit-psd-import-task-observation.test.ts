@@ -48,8 +48,9 @@ describe("explicit PSD import task observation", () => {
       }
     });
     expect(observation.humanSummary.text).toBe(
-      "No PSD source loaded. No import-plan preview. No structural scaffold preview. Warnings: 0. Details: diagnosticsEvidenceView."
+      "No PSD source loaded. No import-plan preview. No structural scaffold preview. Warnings: 0. Details are available in Diagnostics / Evidence."
     );
+    expect(observation.humanSummary.detailSurface).toBe("diagnosticsEvidenceView");
   });
 
   it("projects parsed import-plan and structural scaffold status flags and warning counts", () => {
@@ -116,7 +117,7 @@ describe("explicit PSD import task observation", () => {
     });
   });
 
-  it("keeps machine-only refs out of the concise human and evidence summaries", () => {
+  it("keeps machine-only refs and route ids out of the concise human and evidence summaries", () => {
     const observation = projectExplicitPsdImportTaskObservation(
       createParsedStateWithPlanAndScaffold()
     );
@@ -132,7 +133,9 @@ describe("explicit PSD import task observation", () => {
     expect(summaries).not.toContain("evidence/psd-import/detail.json");
     expect(summaries).not.toContain("commandPayload");
     expect(summaries).not.toContain("parserPrivatePayload");
-    expect(summaries).toContain("diagnosticsEvidenceView");
+    expect(summaries).not.toContain("diagnosticsEvidenceView");
+    expect(summaries).toContain("Diagnostics / Evidence");
+    expect(observation.evidenceBoundary.detailSurface).toBe("diagnosticsEvidenceView");
   });
 
   it("exposes the projector through the editor-state barrel while keeping implementation file-scoped", () => {

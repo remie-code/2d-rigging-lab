@@ -40,9 +40,11 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   const state = options.state ?? "ready";
   shell.className = [
     "editor-task-shell",
+    "editor-task-shell--overlay",
     "editor-task-shell--window",
     `editor-task-shell--state-${state}`,
     "task-shell",
+    "task-shell--overlay",
     "task-shell--workspace-window",
     `task-shell--${options.surface.kind}`,
     `task-shell--state-${state}`
@@ -55,6 +57,9 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   shell.tabIndex = -1;
   shell.dataset.taskWindowScope = "workspace";
   shell.dataset.taskWindowState = state;
+  shell.dataset.taskWindowOverlay = "host";
+  shell.dataset.taskWindowPlacement = "fixed";
+  shell.dataset.taskWindowScroll = "internal";
   if (state === "loading") {
     shell.setAttribute("aria-busy", "true");
   }
@@ -65,8 +70,15 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
   applyShellSurfaceMetadata(shell, options.surface, options.surfaceMetadata);
   installTaskShellKeyboardAffordances(shell, options);
 
+  const backdrop = createTaskShellBackdrop();
+  const windowRegion = document.createElement("div");
+  windowRegion.className = "editor-task-shell__window task-shell__window";
+  windowRegion.dataset.taskWindowOverlay = "surface";
+  assignTaskShellRegion(windowRegion, "window", "window-frame");
+
   const header = document.createElement("header");
   header.className = "editor-task-shell__header task-shell__header";
+  header.dataset.taskWindowChrome = "header";
   assignTaskShellRegion(header, "header");
 
   const navigation = createTaskShellNavigation(options);
@@ -97,11 +109,16 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
     header.append(actions);
   }
 
-  shell.append(header);
+  windowRegion.append(header);
+
+  const body = document.createElement("div");
+  body.className = "editor-task-shell__body task-shell__body";
+  body.dataset.taskWindowScroll = "internal";
+  assignTaskShellRegion(body, "body");
 
   const stateRegion = createTaskShellStateRegion(options);
   if (stateRegion !== null) {
-    shell.append(stateRegion);
+    body.append(stateRegion);
   }
 
   const diagnostics = createTaskShellSlotRegion(
@@ -111,7 +128,7 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
     options.diagnosticsSummary
   );
   if (diagnostics !== null) {
-    shell.append(diagnostics);
+    body.append(diagnostics);
   }
 
   const content = createTaskShellSlotRegion(
@@ -121,10 +138,21 @@ export const createTaskShell = (options: TaskShellOptions): HTMLElement => {
     options.content
   );
   if (content !== null) {
-    shell.append(content);
+    body.append(content);
   }
 
+  windowRegion.append(body);
+  shell.append(backdrop, windowRegion);
   return shell;
+};
+
+const createTaskShellBackdrop = (): HTMLElement => {
+  const backdrop = document.createElement("div");
+  backdrop.className = "editor-task-shell__backdrop task-shell__backdrop";
+  backdrop.setAttribute("aria-hidden", "true");
+  backdrop.dataset.taskWindowOverlay = "backdrop";
+  assignTaskShellRegion(backdrop, "backdrop");
+  return backdrop;
 };
 
 const installTaskShellKeyboardAffordances = (

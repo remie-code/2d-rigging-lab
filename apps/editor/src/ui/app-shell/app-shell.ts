@@ -90,17 +90,17 @@ import { createTutorialWorkflowPanel } from "../tutorial-workflow/index.js";
 import { createViewerRuntimePanel } from "../viewer-runtime/index.js";
 import {
   createAuthoringToolboxSurface,
-  createAuthoringWorkspacePrimaryLayout,
   createCanvasPreviewRegion,
   createPartsTreeShellSurface,
   createWorkspaceDiagnosticsStripShellSurface,
   createWorkspaceInspectorShellSurface,
-  createWorkspaceParameterBarShellSurface,
-  createWorkspaceSupportRegion
+  createWorkspaceParameterBarShellSurface
 } from "./authoring-workspace-v0-shell.js";
 import { createCodexAutomationViewSkeleton } from "./codex-automation-view-skeleton.js";
 import { createDiagnosticsEvidenceViewSkeleton } from "./diagnostics-evidence-view-skeleton.js";
+import { createLegacyDebugQuarantineSurface } from "./legacy-debug-quarantine-surface.js";
 import { createPackageStatus } from "./package-status.js";
+import { createPrimaryHumanShell } from "./primary-human-shell.js";
 import { applyShellSurfaceMetadata, shellSurfaces } from "./shell-surfaces.js";
 import { createTaskShell } from "./task-shell.js";
 
@@ -228,10 +228,6 @@ export interface EditorAppShellOptions {
 }
 
 export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElement => {
-  const shell = document.createElement("main");
-  shell.className = "editor-shell";
-  shell.dataset.testid = editorTestIds.shell;
-
   const appBar = document.createElement("header");
   appBar.className = "editor-app-bar";
 
@@ -249,13 +245,6 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
 
   titleGroup.append(title, workflowStatus, createAppBarActions(options));
   appBar.append(titleGroup, createPackageStatus(options.state, options.viewModel));
-
-  const workspace = document.createElement("section");
-  workspace.className = "editor-workspace";
-  workspace.setAttribute("aria-label", "Editor workspace");
-  applyShellSurfaceMetadata(workspace, shellSurfaces.authoringWorkspace, {
-    group: "workspace-shell"
-  });
 
   const parametersPanel = document.createElement("section");
   parametersPanel.className = "editor-panel editor-panel--parameters";
@@ -492,37 +481,51 @@ export const createEditorAppShell = (options: EditorAppShellOptions): HTMLElemen
     createReloadSummaryPanel(options.state.reload)
   );
 
-  workspace.append(
-    createAuthoringWorkspacePrimaryLayout({
-      toolboxSurface,
-      partsTreeSurface,
-      canvasPreviewRegion,
-      inspectorSurface,
-      parameterBarSurface,
-      diagnosticsStripSurface
-    }),
-    ...(activeTask === null ? [] : [activeTask]),
-    createWorkspaceSupportRegion([
-      parametersPanel,
-      tutorialWorkflowPanel,
-      ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
-      compositionPanel,
-      rigControlPanel,
-      dynamicsPanel,
-      operationPanel,
-      drawableAuthoringPanel,
-      sourceIntakePanel,
-      projectPersistencePanel,
-      productPreflightPanel,
-      codexProposalReviewPanel,
-      aiApprovalPanel,
-      aiTranscriptPanel,
-      persistencePanel
-    ])
-  );
-  shell.append(appBar, workspace);
+  const legacyDebugQuarantineSurface = createLegacyDebugQuarantineSurface([
+    parametersPanel,
+    tutorialWorkflowPanel,
+    ...(viewerRuntimePanel === null ? [] : [viewerRuntimePanel]),
+    compositionPanel,
+    rigControlPanel,
+    dynamicsPanel,
+    operationPanel,
+    drawableAuthoringPanel,
+    sourceIntakePanel,
+    projectPersistencePanel,
+    productPreflightPanel,
+    codexProposalReviewPanel,
+    aiApprovalPanel,
+    aiTranscriptPanel,
+    persistencePanel
+  ]);
+  const shell = createPrimaryHumanShell({
+    appBarSlot: appBar,
+    toolboxSurface,
+    partsTreeSurface,
+    canvasPreviewRegion,
+    inspectorSurface,
+    parameterBarSurface,
+    diagnosticsStripSurface,
+    taskWindowSurface: activeTask
+  });
+  shell.className = `${shell.className} editor-shell`;
+  shell.dataset.testid = editorTestIds.shell;
+  shell.append(createInternalSurfacesHost([legacyDebugQuarantineSurface]));
 
   return shell;
+};
+
+const createInternalSurfacesHost = (surfaces: readonly HTMLElement[]): HTMLElement => {
+  const host = document.createElement("section");
+  host.className = "editor-internal-surfaces";
+  host.dataset.internalSurfaces = "true";
+  host.dataset.primaryAuthoringSurface = "false";
+  host.dataset.authoringWorkspaceFlow = "false";
+  host.hidden = true;
+  host.setAttribute("hidden", "");
+  host.setAttribute("aria-hidden", "true");
+  host.append(...surfaces);
+  return host;
 };
 
 const createAppBarActions = (options: EditorAppShellOptions): HTMLElement => {

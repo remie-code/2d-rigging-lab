@@ -21,8 +21,9 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 
 ## 現在の焦点
 
-- Editor起動直後は、PSD import画面ではなくauthoring workspaceとして見えるべきである。
-- PSD importは通常workspaceから呼び出すtaskであり、Wave54 A-H では workspace-scoped task window v0 として実装・検証済みである。全 tool / view の final modal / task-window / side-panel / dedicated-view policy は未確定である。
+- Editor起動直後は、PSD import画面でもlegacy/debug/evidence/Codex-heavy panel stackでもなく、Primary Human UIとしてのauthoring workspaceに見えるべきである。
+- Wave54はworkspace-scoped task routeを実装・検証したが、視覚的なoverlay/window UXとno-scroll-openは未達である。Wave55計画ではPrimary Human UI resetとtask window visual UX gateを優先する。
+- PSD importは通常workspaceから呼び出すtaskであり、次のUX resetでは既存panel延命ではなくclean human task UIとして扱う。全 tool / view の final modal / task-window / side-panel / dedicated-view policy は未確定である。
 - PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
 - Wave52 final integration report/review は PSD Import Task Migration v0 の bounded implementation baseline として `pass` 記録済み。PSD Import は Empty / Authoring Workspace から Task Shell task として開け、default では常設の巨大 workspace panel ではなくなった。Generic Task Shell / Task Chrome、PSD Import Task Human UI、narrow observation consumption、focused PSD regressions、standard `check` への `check:testids` 統合までが範囲である。

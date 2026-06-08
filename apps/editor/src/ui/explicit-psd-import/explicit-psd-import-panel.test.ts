@@ -33,7 +33,7 @@ describe("explicit PSD import panel", () => {
       "No PSD selected"
     );
     expect(findByTestId(panel, editorTestIds.explicitPsdImportPersistence)?.textContent).toContain(
-      "sessionEvidenceClearedOnProjectLoadReparseRequiredV1"
+      "Re-select the PSD file"
     );
     expect(findByTestId(panel, editorTestIds.explicitPsdImportLayerIntakeSubmit)?.disabled).toBe(true);
   });
@@ -46,12 +46,13 @@ describe("explicit PSD import panel", () => {
     const summary = findByAriaLabel(content, "PSD import task human summary");
 
     expect(findByTestId(content, editorTestIds.explicitPsdImportPanel)).toBeNull();
-    expect(summary?.textContent).toContain("Task Summary");
+    expect(summary?.textContent).toContain("Import overview");
+    expect(summary?.textContent).not.toContain("Task Summary");
     expect(input?.type).toBe("file");
     expect(input?.accept).toContain(".psd");
   });
 
-  it("groups task content into workflow and advanced sections while preserving stable hooks", () => {
+  it("groups task content into a clean human flow while preserving stable hooks", () => {
     const content = createTaskContent({
       viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState()),
       onGenerateImportPlanPreview: () => {},
@@ -60,20 +61,25 @@ describe("explicit PSD import panel", () => {
       onCommitStructuralScaffold: () => {},
       onIntakeSelectedLayersBatch: () => {}
     });
-    const workflow = findRequiredByAriaLabel(content, "PSD import task workflow");
-    const advanced = findRequiredByAriaLabel(content, "PSD import advanced workflow controls");
+    const source = findRequiredByAriaLabel(content, "PSD import source selection");
+    const preview = findRequiredByAriaLabel(content, "PSD import scope and preview");
+    const commit = findRequiredByAriaLabel(content, "PSD import commit actions");
+    const additional = findRequiredByAriaLabel(content, "PSD import additional import actions");
 
-    expect(workflow.textContent).toContain("Source and Parse");
-    expect(workflow.textContent).toContain("Import-Plan Approval");
-    expect(workflow.textContent).toContain("Structural Scaffold Approval");
-    expect(workflow.textContent).toContain("Commit Review");
-    expect(advanced.textContent).toContain("One-Off Selected Layer Intake");
-    expect(advanced.textContent).toContain("Evidence Boundary");
-    expect(findByTestId(workflow, editorTestIds.explicitPsdImportPlanForm)).not.toBeNull();
-    expect(findByTestId(workflow, editorTestIds.explicitPsdStructuralScaffoldForm)).not.toBeNull();
-    expect(findByTestId(advanced, editorTestIds.explicitPsdImportLayerIntakeForm)).not.toBeNull();
-    expect(findByTestId(advanced, editorTestIds.explicitPsdImportBatchIntakeForm)).not.toBeNull();
-    expect(findByTestId(advanced, editorTestIds.explicitPsdImportPersistence)).not.toBeNull();
+    expect(source.textContent).toContain("Choose PSD file");
+    expect(preview.textContent).toContain("Leaf import preview");
+    expect(preview.textContent).toContain("Structure scaffold preview");
+    expect(commit.textContent).toContain("Approved leaf import");
+    expect(commit.textContent).toContain("Approved structure commit");
+    expect(additional.textContent).toContain("Selected layer import");
+    expect(additional.textContent).toContain("Session notes");
+    expect(content.textContent).not.toContain("Advanced Workflow Controls");
+    expect(content.textContent).not.toContain("Evidence Boundary");
+    expect(findByTestId(preview, editorTestIds.explicitPsdImportPlanForm)).not.toBeNull();
+    expect(findByTestId(preview, editorTestIds.explicitPsdStructuralScaffoldForm)).not.toBeNull();
+    expect(findByTestId(additional, editorTestIds.explicitPsdImportLayerIntakeForm)).not.toBeNull();
+    expect(findByTestId(additional, editorTestIds.explicitPsdImportBatchIntakeForm)).not.toBeNull();
+    expect(findByTestId(additional, editorTestIds.explicitPsdImportPersistence)).not.toBeNull();
   });
 
   it("renders a primary human summary for source, parse, tree, scope, scaffold, warnings, and commit state", () => {
@@ -91,7 +97,7 @@ describe("explicit PSD import panel", () => {
     expect(summaryText).toContain("PSD parsed in browser session");
     expect(summaryText).toContain("Tree state");
     expect(summaryText).toContain("1 groups / 2 layers");
-    expect(summaryText).toContain("Import-plan scope");
+    expect(summaryText).toContain("Import scope");
     expect(summaryText).toContain("4 candidates / 3 eligible / 1 approved");
     expect(summaryText).toContain("Structural preview");
     expect(summaryText).toContain("Structural scaffold preview ready");
@@ -99,8 +105,10 @@ describe("explicit PSD import panel", () => {
     expect(summaryText).toContain("1 hidden / 1 unsupported / 0 collisions / 0 byte blocked");
     expect(summaryText).toContain("Approval and commit");
     expect(summaryText).toContain("structural commit No structural scaffold result");
-    expect(summaryText).toContain("Source handling");
-    expect(summaryText).toContain("raw bytes not persisted by parser bridge");
+    expect(summaryText).toContain("File handling");
+    expect(summaryText).toContain("Local PSD selected for this browser session");
+    expect(summaryText).toContain("Cancel");
+    expect(summaryText).toContain("return without project changes");
     expect(summaryText).toContain("Next action");
     expect(summaryText).toContain("Commit the approved structural scaffold");
   });
@@ -146,6 +154,69 @@ describe("explicit PSD import panel", () => {
     expect(summaryText.toLowerCase()).not.toContain("raw parser payload");
     expect(summaryText.toLowerCase()).not.toContain("approval digest");
     expect(summaryText.toLowerCase()).not.toContain("operation id");
+  });
+
+  it("keeps machine-only details out of visible PSD task copy while preserving control values", () => {
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel(createParsedStateWithTaskSummaryState()),
+      onGenerateImportPlanPreview: () => {},
+      onGenerateStructuralScaffoldPreview: () => {}
+    });
+    const panelText = collectVisibleText(panel);
+
+    expect(panelText).toContain("PSD Import");
+    expect(panelText).toContain("Leaf candidates");
+    expect(panelText).toContain("Structure nodes");
+    expect(panelText).not.toContain("Task Summary");
+    expect(panelText).not.toContain("sha256:");
+    expect(panelText).not.toContain("plan_test");
+    expect(panelText).not.toContain("plan_structural_test");
+    expect(panelText).not.toContain("approval_structural_test");
+    expect(panelText).not.toContain("psd:root");
+    expect(panelText).not.toContain("layer_hidden");
+    expect(panelText).not.toContain("part_headwear");
+    expect(panelText).not.toContain("draw_hidden_structural");
+    expect(panelText).not.toContain("tex_hidden_structural");
+    expect(panelText).not.toContain("mesh_hidden_structural");
+    expect(panelText).not.toContain("assets/sources/private");
+    expect(panelText).not.toContain("browserPsdImportPlan.candidatePlan.ready");
+    expect(panel.textContent).toContain("sha256:");
+    expect(panel.queryByPredicate((element) => element.dataset.psdImportTechnicalState === "true")).not.toBeNull();
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanApprovedRefs)?.value).toBe("layer_headwear");
+    expect(findByTestId(panel, editorTestIds.explicitPsdStructuralScaffoldApprovedRefs)?.value)
+      .toBe("layer_hidden");
+  });
+
+  it("shows separate import-plan and structural scaffold destination targets", () => {
+    const importPlanState = createParsedStateWithImportPlan({
+      destinationParentPartId: "part_plan"
+    });
+    const structuralScaffoldState = createParsedStateWithStructuralScaffold({
+      destinationParentPartId: "part_structural"
+    });
+    const panel = createPanel({
+      viewModel: projectExplicitPsdImportViewModel({
+        ...importPlanState,
+        structuralScaffoldPlan: structuralScaffoldState.structuralScaffoldPlan
+      }),
+      destinationParts: [
+        { partId: "part_plan", label: "Plan Target / part_plan" },
+        { partId: "part_structural", label: "Structure Target / part_structural" }
+      ]
+    });
+    const importPreviewText = findByTestId(
+      panel,
+      editorTestIds.explicitPsdImportPlanPreview
+    )?.textContent;
+    const structuralPreviewText = findByTestId(
+      panel,
+      editorTestIds.explicitPsdStructuralScaffoldPreview
+    )?.textContent;
+
+    expect(importPreviewText).toContain("Plan Target");
+    expect(importPreviewText).not.toContain("Structure Target");
+    expect(structuralPreviewText).toContain("Structure Target");
+    expect(structuralPreviewText).not.toContain("Plan Target");
   });
 
   it("passes only the user-selected file and selected layer ref to the parse callback", async () => {
@@ -337,11 +408,19 @@ describe("explicit PSD import panel", () => {
     await Promise.resolve();
 
     expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanPreview)?.textContent).toContain(
-      "sha256:aaaaaaaa"
+      "Import-plan preview ready"
     );
-    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanCandidates)?.textContent).toContain(
+    expect(findByTestId(panel, editorTestIds.explicitPsdImportPlanPreview)?.textContent).toContain(
+      "4 total / 3 eligible / 1 approved"
+    );
+    const candidateList = findByTestId(panel, editorTestIds.explicitPsdImportPlanCandidates);
+    expect(collectVisibleText(candidateList)).toContain(
+      "Hidden"
+    );
+    expect(collectVisibleText(candidateList)).not.toContain(
       "layer_hidden"
     );
+    expect(candidateList?.textContent).toContain("layer_hidden");
     expect(calls).toEqual([{
       destinationParentPartId: "part_root"
     }]);
@@ -499,6 +578,7 @@ type PsdImportPanelOptions = Parameters<typeof createExplicitPsdImportPanel>[0];
 
 interface PsdImportTestOptions {
   readonly viewModel?: PsdImportPanelOptions["viewModel"];
+  readonly destinationParts?: PsdImportPanelOptions["destinationParts"];
   readonly onParsePsdFile?: PsdImportPanelOptions["onParsePsdFile"];
   readonly onIntakeSelectedLayer?: PsdImportPanelOptions["onIntakeSelectedLayer"];
   readonly onIntakeSelectedLayersBatch?: PsdImportPanelOptions["onIntakeSelectedLayersBatch"];
@@ -525,7 +605,7 @@ const createOptions = (
 
   return {
     viewModel: normalized.viewModel ?? projectExplicitPsdImportViewModel(createEmptyExplicitPsdImportState()),
-    destinationParts: [{ partId: "part_root", label: "Root / part_root" }],
+    destinationParts: normalized.destinationParts ?? [{ partId: "part_root", label: "Root / part_root" }],
     onParsePsdFile: normalized.onParsePsdFile ?? (() => {}),
     onIntakeSelectedLayer: normalized.onIntakeSelectedLayer ?? (() => {}),
     ...(normalized.onIntakeSelectedLayersBatch === undefined
@@ -688,6 +768,7 @@ const createParsedState = () =>
 
 const createParsedStateWithImportPlan = (options: {
   readonly approvedLayerRefs?: readonly string[];
+  readonly destinationParentPartId?: string;
 } = {}): ExplicitPsdImportState => {
   const approvedLayerRefs = options.approvedLayerRefs ?? ["layer_headwear"];
   const isApproved = (layerRef: string): boolean => approvedLayerRefs.includes(layerRef);
@@ -712,7 +793,7 @@ const createParsedStateWithImportPlan = (options: {
     parserLabel: "webtoonPsd / @webtoon/psd / 0.4.0 / browser",
     scopeRef: "psd:root",
     scopeLabel: "psd:root",
-    destinationParentPartId: "part_root",
+    destinationParentPartId: options.destinationParentPartId ?? "part_root",
     candidateCount: 4,
     eligibleCandidateCount: 3,
     approvedCount: approvedLayerRefs.length,
@@ -824,6 +905,7 @@ const createParsedStateWithImportPlan = (options: {
 
 const createParsedStateWithStructuralScaffold = (options: {
   readonly approvedNodeRefs?: readonly string[];
+  readonly destinationParentPartId?: string;
 } = {}): ExplicitPsdImportState => {
   const approvedNodeRefs = options.approvedNodeRefs ?? ["layer_hidden"];
   const isApproved = (nodeRef: string): boolean => approvedNodeRefs.includes(nodeRef);
@@ -843,7 +925,7 @@ const createParsedStateWithStructuralScaffold = (options: {
       sourceDigest: `sha256:${"e".repeat(64)}`,
       scopeRef: "psd:root",
       scopeLabel: "psd:root",
-      destinationParentPartId: "part_root",
+      destinationParentPartId: options.destinationParentPartId ?? "part_root",
       sourceGroupCount: 1,
       sourceLayerCount: 3,
       approvedGroupCount: 0,
@@ -935,6 +1017,9 @@ const createParsedStateWithTaskSummaryState = (): ExplicitPsdImportState => {
   };
 };
 
+const collectVisibleText = (root: TestElement | null | undefined): string =>
+  root?.visibleTextContent ?? "";
+
 class TestElement {
   readonly children: TestElement[] = [];
   readonly dataset: Record<string, string> = {};
@@ -958,6 +1043,14 @@ class TestElement {
 
   get textContent(): string {
     return `${this.ownText}${this.children.map((child) => child.textContent).join("")}`;
+  }
+
+  get visibleTextContent(): string {
+    if (this.style.display === "none" || this.getAttribute("aria-hidden") === "true") {
+      return "";
+    }
+
+    return `${this.ownText}${this.children.map((child) => child.visibleTextContent).join("")}`;
   }
 
   set textContent(value: string | null) {
