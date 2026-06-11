@@ -11,10 +11,8 @@ Mesh、Rig、DynamicsのようなActive Toolではなく、選択中drawableに�
 対象:
 
 - drawable identity / source summary
-- draw order
 - editor visibility
 - runtime visibility
-- lock / editability
 - opacity
 - clipping / mask
 - texture / mesh / atlas summaryへの入口
@@ -25,7 +23,10 @@ Mesh、Rig、DynamicsのようなActive Toolではなく、選択中drawableに�
 - Draw OrderはParts Tree / Structure Treeの順序を基準にする。
 - Parts Tree上で上にあるdrawableほど前面に表示される。実際の描画は、下から上へ描画するものとして扱う。
 - Visibilityは `Editor visibility` と `Runtime visibility` を別概念として扱う。
+- Drawable Inspectorでは、最低限の常用編集としてname、visibility、opacity、clipping / maskを扱う。
 - OpacityとClipping / Maskは、drawableに対するInspector sectionとして扱う。
+- 描画順の変更はParts Treeへ委譲し、Drawable Inspectorでは大きなreorder UIを持たない。
+- PSD source summaryは折り畳みまたは短いsummaryに留め、通常は前面に出しすぎない。
 - 表情差分、パーツ差分、衣装差分のように複数targetをstateとしてまとめる場合は、Variant / Expression Managerの責務とする。
 - デフォーマ / rig control配下の要素をまとめてフェードさせるparameter-driven subtree opacityは、Drawable InspectorではなくRig Toolの責務とする。
 - `UX-FEAT-020` のmask relation authoringと `UX-FEAT-021` のsingle drawable opacity keyformは、当面Drawable Inspector内sectionとParameter / Keyform UIの協調で扱う。専用Composition / Opacity Toolは初期画面設計では作らない。
@@ -69,13 +70,11 @@ Draw Orderは、Parts Tree / Structure Tree上のdrawable順序で扱う。
 
 Drawable Inspectorに置くもの:
 
-- 現在のdraw order summary
-- 前面 / 背面の近傍drawable名
 - Parts Treeで順序変更できることの導線
-- selected drawableをParts Tree上で表示するaction
 
 Drawable Inspectorに置かないもの:
 
+- draw order editor
 - 大規模なreorder専用UI
 - 全drawableの完全な順序表
 - low-level render order trace
@@ -106,6 +105,7 @@ Runtime visibility:
 
 Drawable Inspectorに置くもの:
 
+- name input
 - editor visibility toggle
 - runtime visibility toggle
 - visibility inheritance / part hidden summary
@@ -207,6 +207,7 @@ Drawable Inspector自体でmesh編集やatlas配置を行わない。
 | UI | Drawable Inspectorとの関係 |
 |---|---|
 | Parts Tree | draw order、part membership、selection、editor/runtime visibility状態の主な一覧表示。 |
+| Part Container Inspector | 親part containerのvisibility gateを扱う。親がhiddenの場合、子drawableのeffective visibilityにも影響する。 |
 | Canvas / Preview | selected drawable、mask relation、opacity、visibility状態を視覚確認する。 |
 | Mesh Tool | 選択中drawableのmesh作成・編集を行うActive Tool。 |
 | Rig Tool | 選択part / drawable / meshに対するrig authoringと、parameter-driven subtree opacity effectを行うActive Tool。 |

@@ -76,6 +76,7 @@ describe("importPsdLayerMaterialization operation handler", () => {
       sourceAssetId: "src_psd_character",
       textureId: "tex_face_rgba",
       meshId: "mesh_face_materialized",
+      defaultOpacity: 0.42,
       sourceProvenanceId: "prov_psd_face_rgba"
     });
     expect(session.graph.meshes[0]).toMatchObject({
@@ -456,7 +457,7 @@ const createFixtureSession = (
             groupPath: ["Root", "Head"],
             bounds: { x: 320, y: 240, width: 512, height: 512 },
             visibleInSource: true,
-            opacityInSource: 1,
+            opacityInSource: 0.42,
             role: "editableLayer",
             unsupportedFeatures: [],
             mappedDrawableIds: []

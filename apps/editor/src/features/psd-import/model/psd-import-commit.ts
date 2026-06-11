@@ -1,4 +1,7 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  registerAuthoringSessionBinaryBytes,
+  type AuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import { OperationIdSchema, type DiagnosticDto } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
@@ -58,7 +61,38 @@ export function commitPsdImportPlan(input: {
     );
   }
 
+  registerMaterializedLayerBytes({
+    session: nextSession,
+    plan: input.plan,
+    structuralOperationId: structuralOutcome.result.operationId
+  });
+
   return { session: nextSession };
+}
+
+function registerMaterializedLayerBytes(input: {
+  readonly session: AuthoringSession;
+  readonly plan: PsdImportPlan;
+  readonly structuralOperationId: string;
+}): void {
+  const generatedTextureIdBySourceLayerId = new Map(
+    input.plan.bridge.approval.approvedLeafScaffolds.map((leaf) => [
+      leaf.sourceLayerRef.sourceLayerId,
+      leaf.generatedTextureId
+    ])
+  );
+
+  for (const layerBytes of input.plan.materializedLayerBytes) {
+    const generatedTextureId = generatedTextureIdBySourceLayerId.get(layerBytes.sourceLayerId);
+    registerAuthoringSessionBinaryBytes(input.session, {
+      binaryAssetRef: layerBytes.binaryAssetRef,
+      bytes: layerBytes.bytes,
+      role: "texture-raster-v1",
+      sourceAssetId: input.plan.sourceAssetId,
+      ...(generatedTextureId === undefined ? {} : { textureId: generatedTextureId }),
+      createdByOperationId: input.structuralOperationId
+    });
+  }
 }
 
 function createSourceImportRequest(input: {

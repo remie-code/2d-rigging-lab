@@ -12,9 +12,8 @@ Parts Treeは、Authoring Workspace左側のStructure / Partsペインに置く�
 - PSD group由来のpart container
 - drawable list
 - hidden drawable row
-- selected / locked / editor visibility / runtime visibility state
+- selected / editor visibility / runtime visibility state
 - draw order
-- manual drawable create入口
 - part / drawable direct manipulation
 
 Parts TreeはToolboxではない。Toolboxは作業モードやtaskを呼び出すlauncherであり、Parts Treeはmodel構造を表示・選択・整理する場所である。
@@ -28,12 +27,19 @@ Wave53 final integration report/review `pass` により、Parts Tree v0 は Auth
 ## 2. 基本方針
 
 - Parts TreeはAuthoring WorkspaceのStructure / Partsペインに置く。
+- Part Containerの折り畳み / 展開を扱う。
+- Part Containerの表示トグルを扱う。
+- Drawableの表示トグルを扱う。
 - Draw OrderはParts Tree上の順序で表す。
 - Tree上で上にあるdrawableほど前面に表示される。
 - Tree上で下にあるdrawableほど背面に表示される。
 - 描画処理としては、背面から前面へ、つまりTree下側から上側へ描画される。
-- drawable作成、part membership、draw order変更、visibility row操作の主ホームはParts Treeである。
+- part membership、draw order変更、visibility row操作の主ホームはParts Treeである。
+- Tree選択とCanvas選択は同期する。
+- 名前変更はParts Tree上のinline editまたはInspectorで扱う。
+- 選択中part containerの詳細属性はPart Container Inspectorへ委譲する。
 - 選択中drawableの詳細属性はDrawable Inspectorへ委譲する。
+- 検索 / filter、右クリックmenu、大きなcontext menuは初期UXに含めない。
 
 ## 3. 配置
 
@@ -41,12 +47,12 @@ Wave53 final integration report/review `pass` により、Parts Tree v0 は Auth
 +----------+---------------------+-----------------------+----------------------+
 | Toolbox  | Structure / Parts   | Canvas / Preview      | Inspector            |
 |          |                     |                       |                      |
-| Select   | search / filter     | selected drawable     | selected details     |
+| Select   | part rows           | selected drawable     | selected details     |
 | Mesh     | part rows           | visual preview        | Drawable Inspector   |
 | Rig      | drawable rows       | selection outline     | or Active Tool       |
 | Dynamics | hidden rows         |                       |                      |
 | Params   | visibility icons    |                       |                      |
-| Variant  | lock state          |                       |                      |
+| Variant  | collapse state      |                       |                      |
 | Atlas    | draw order handles  |                       |                      |
 +----------+---------------------+-----------------------+----------------------+
 ```
@@ -57,33 +63,40 @@ Wave53 final integration report/review `pass` により、Parts Tree v0 は Auth
 - drawable rows
 - hidden drawable rows
 - selected state
-- locked state
 - editor visibility
 - runtime visibility
 - part membership
 - draw order
 - row warning badge
-- manual drawable create入口
-- show in canvas action
-- open Drawable Inspector action
+- collapse / expand state
 
 ## 5. 主操作
 
 Parts Treeで扱う操作:
 
-- part create / rename / reparent
-- drawable create
+- part rename / reparent
 - drawable select
+- part container select
 - drawable reorder
 - drawable part assignment
 - editor visibility toggle
 - runtime visibility toggle
-- lock / unlock
-- selected rowをCanvasへ表示
-- selected rowをDrawable Inspectorへ送る
+- part container visibility toggle
+- part container collapse / expand
+- Canvas selectionとの同期
+- drag and dropによる並び替え
+- drag and dropによるcontainer間移動
 
 Parts Treeで扱わない操作:
 
+- 子Drawableのvisibilityを一括で書き換えるsubtree操作
+- 右クリックmenuや大きなrow action menu
+- search / filter
+- selected drawableをCanvas上で追加highlightする専用action
+- lock / unlock
+- part / drawable delete
+- duplicate
+- isolate
 - mesh頂点編集
 - rig draft / keyform authoring
 - dynamics coefficient編集
@@ -97,17 +110,19 @@ Parts Treeで扱わない操作:
 
 `UX-FEAT-010` のうち、drawable listとlayer orderはParts Treeを正式ホームとする。
 
-manual drawable createは、Parts Tree内の軽量作成入口として扱う。PSD import由来のdrawable作成はPSD Import Taskが主導し、Parts Treeは生成後の構造確認と整理を担当する。
+manual drawable createは将来候補とし、初期UXではPSD Import Taskがdrawable作成を主導する。Parts Treeは生成後の構造確認、選択、表示、並び替え、移動を担当する。
 
 Drawable Inspectorとの分担:
 
-- Parts Tree: list、selection、draw order、row state、create入口。
+- Parts Tree: list、selection、draw order、row state、part membership。
 - Drawable Inspector: selected drawableのsource summary、opacity、mask、texture / mesh / atlas summary。
+- Part Container Inspector: selected part containerのname、visibility gate、parent relationship。
 
 ## 7. 他UIとの関係
 
 | UI | Parts Treeとの関係 |
 |---|---|
+| Part Container Inspector | Parts Treeで選択したpart containerの基本属性を表示・編集する。 |
 | Drawable Inspector | Parts Treeで選択したdrawableの詳細属性を表示・編集する。 |
 | Mesh Tool | Parts Treeで選択したdrawableをmesh編集対象にする。 |
 | Rig Tool | Parts Treeで選択したpart / drawable / meshをrig対象にする。 |
@@ -137,7 +152,8 @@ Drawable Inspectorとの分担:
 
 ## 10. 未決事項
 
-- manual drawable createの final UI をParts Tree内に置くか、Drawable Inspectorからも呼べるようにするか。Wave53 v0 では legacy support panel に入口を維持している。
 - row reorder操作の具体UI。
 - editor visibility / runtime visibilityのiconsとtooltip。
-- large hierarchy時のsearch / filter / collapsed state保存。
+- collapsed state保存。
+- manual drawable createの final UI。
+- large hierarchy時にsearch / filterが必要になるタイミング。

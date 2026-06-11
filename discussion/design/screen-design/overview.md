@@ -117,6 +117,7 @@ stateDiagram-v2
 |---|---|---|
 | Toolbox | Authoring Workspace上でActive Tool、Task、Viewを起動・切り替えるicon launcher。 | [components/toolbox.md](components/toolbox.md) |
 | Parts Tree | part / drawable hierarchy、drawable list、draw order、row操作を扱うStructure / Partsペイン。 | [components/parts-tree.md](components/parts-tree.md) |
+| Canvas / Preview | PSD由来drawableをEditor rendererで表示し、zoom / pan / fit / selection / overlay toolbarを扱う中心領域。 | [components/canvas-preview.md](components/canvas-preview.md) |
 | Drawable Inspector | 選択中drawableのdraw order、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱うInspector。 | [components/drawable-inspector.md](components/drawable-inspector.md) |
 | Mesh Tool | 選択中drawableのinitial mesh generation、mesh overlay編集、Topology / UV編集を扱うActive Tool。 | [components/mesh-tool.md](components/mesh-tool.md) |
 | Rig Tool | 選択中part / drawable / meshに対するrig draft/preview、binding、parameter/keyform authoringを扱うActive Tool。 | [components/rig-tool.md](components/rig-tool.md) |

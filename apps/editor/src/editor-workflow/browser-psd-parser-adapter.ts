@@ -27,12 +27,22 @@ export interface BrowserPsdParserInput {
 
 export interface BrowserPsdParserResult {
   readonly adapterResult: PsdAdapterResultDto;
+  readonly materializedLayerBytes: readonly BrowserPsdMaterializedLayerBytes[];
   readonly sourceDigest: {
     readonly algorithm: "sha256";
     readonly hex: string;
   };
   readonly sourceByteLength: number;
   readonly sourceFilePath: string;
+}
+
+export interface BrowserPsdMaterializedLayerBytes {
+  readonly sourceLayerId: string;
+  readonly materializationId: string;
+  readonly binaryAssetRef: NonNullable<PsdAdapterLayerMaterializationEvidenceDto["binaryAssetRef"]>;
+  readonly width: number;
+  readonly height: number;
+  readonly bytes: Uint8Array;
 }
 
 interface ParsedGroupNode {
@@ -114,6 +124,7 @@ export async function parsePsdForEditorImport(
     parentNodeRef: syntheticRootId,
     parentGroupId: syntheticRootId,
     parentPath: syntheticRootPath,
+    parentVisible: true,
     groups,
     layers,
     nextSourceOrder: () => sourceOrder++
@@ -122,10 +133,10 @@ export async function parsePsdForEditorImport(
   const materializedLayers = layers
     .filter((layer) => hasPositiveBounds(layer.bounds))
     .slice(0, input.materializedLayerLimit);
-  const materializationEvidence: PsdAdapterLayerMaterializationEvidenceDto[] = [];
+  const materializedLayerResults: CreatedLayerMaterialization[] = [];
 
   for (const layer of materializedLayers) {
-    materializationEvidence.push(
+    materializedLayerResults.push(
       await createLayerMaterializationEvidence({
         fileName: input.fileName,
         layer,
@@ -136,6 +147,7 @@ export async function parsePsdForEditorImport(
       })
     );
   }
+  const materializationEvidence = materializedLayerResults.map((result) => result.evidence);
 
   const adapterResult: PsdAdapterResultDto = {
     schemaVersion: "psd-adapter-result-v1",
@@ -173,6 +185,7 @@ export async function parsePsdForEditorImport(
 
   return {
     adapterResult,
+    materializedLayerBytes: materializedLayerResults.map((result) => result.layerBytes),
     sourceDigest,
     sourceByteLength: input.bytes.byteLength,
     sourceFilePath: `assets/sources/private/${input.planToken}/${sanitizeFileName(input.fileName)}`
@@ -184,6 +197,7 @@ function walkPsdChildren(input: {
   readonly parentNodeRef: string;
   readonly parentGroupId: string;
   readonly parentPath: readonly string[];
+  readonly parentVisible: boolean;
   readonly groups: ParsedGroupNode[];
   readonly layers: ParsedLayerNode[];
   readonly nextSourceOrder: () => number;
@@ -210,7 +224,7 @@ function walkPsdChildren(input: {
         groupPath: input.parentPath,
         sourceOrder: input.nextSourceOrder(),
         bounds,
-        visibleInSource: !child.isHidden,
+        visibleInSource: input.parentVisible && !child.isHidden,
         opacityInSource: normalizeOpacity(child.opacity),
         layer: child
       });
@@ -221,12 +235,14 @@ function walkPsdChildren(input: {
     }
 
     const group = child as Group;
+    const groupVisible = input.parentVisible && !isNodeHidden(group);
     const groupPath = [...input.parentPath, normalizeDisplayName(group.name, `Group ${index + 1}`)];
     const groupBounds = walkPsdChildren({
       children: group.children,
       parentNodeRef: nodeRef,
       parentGroupId: nodeRef,
       parentPath: groupPath,
+      parentVisible: groupVisible,
       groups: input.groups,
       layers: input.layers,
       nextSourceOrder: input.nextSourceOrder
@@ -240,7 +256,7 @@ function walkPsdChildren(input: {
       parentGroupId: input.parentGroupId,
       groupPath,
       sourceOrder: input.nextSourceOrder(),
-      visibleInSource: true,
+      visibleInSource: groupVisible,
       opacityInSource: normalizeOpacity(group.opacity),
       ...(groupBounds === undefined ? {} : { bounds: groupBounds })
     });
@@ -259,14 +275,25 @@ async function createLayerMaterializationEvidence(input: {
   readonly sourceAssetId: SourceAssetId;
   readonly sourceDigest: { readonly algorithm: "sha256"; readonly hex: string };
   readonly sourceByteLength: number;
-}): Promise<PsdAdapterLayerMaterializationEvidenceDto> {
+}): Promise<CreatedLayerMaterialization> {
   const rgbaBytes = await input.layer.layer.composite(false, false);
   const digest = await sha256Bytes(rgbaBytes);
   const layerToken = sanitizeIdToken(input.layer.sourceLayerId);
   const textureId = TextureIdSchema.parse(`tex_${input.planToken}_${layerToken}`);
   const provenanceId = ProvenanceIdSchema.parse(`prov_${input.planToken}_${layerToken}`);
+  const binaryAssetRef = {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: `bin_${input.planToken}_${layerToken}_rgba`,
+    packageRelativePath: `assets/textures/psd/${input.planToken}/${layerToken}.raw-rgba`,
+    digest,
+    byteLength: rgbaBytes.byteLength,
+    mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+    storageStatus: "stored-package-local-v1",
+    provenanceId,
+    rightsAssetId: input.sourceAssetId
+  } as const;
 
-  return {
+  const evidence: PsdAdapterLayerMaterializationEvidenceDto = {
     evidenceKind: "psd-layer-materialization-evidence-v1",
     materializationId: `mat_${input.planToken}_${layerToken}`,
     sourceLayerRef: {
@@ -280,17 +307,7 @@ async function createLayerMaterializationEvidence(input: {
     digest,
     width: input.layer.bounds.width,
     height: input.layer.bounds.height,
-    binaryAssetRef: {
-      referenceKind: "package-binary-asset-ref-v1",
-      binaryAssetId: `bin_${input.planToken}_${layerToken}_rgba`,
-      packageRelativePath: `assets/textures/psd/${input.planToken}/${layerToken}.raw-rgba`,
-      digest,
-      byteLength: rgbaBytes.byteLength,
-      mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
-      storageStatus: "stored-package-local-v1",
-      provenanceId,
-      rightsAssetId: input.sourceAssetId
-    },
+    binaryAssetRef,
     textureId,
     provenance: {
       sourceFilePath: input.fileName,
@@ -315,6 +332,23 @@ async function createLayerMaterializationEvidence(input: {
       }
     }
   };
+
+  return {
+    evidence,
+    layerBytes: {
+      sourceLayerId: input.layer.sourceLayerId,
+      materializationId: evidence.materializationId,
+      binaryAssetRef,
+      width: input.layer.bounds.width,
+      height: input.layer.bounds.height,
+      bytes: new Uint8Array(rgbaBytes)
+    }
+  };
+}
+
+interface CreatedLayerMaterialization {
+  readonly evidence: PsdAdapterLayerMaterializationEvidenceDto;
+  readonly layerBytes: BrowserPsdMaterializedLayerBytes;
 }
 
 export function createPsdSourceAssetId(planToken: string): SourceAssetId {
@@ -388,6 +422,10 @@ function unionBounds(bounds: readonly RectLike[]): RectLike | undefined {
 
 function hasPositiveBounds(bounds: RectLike): boolean {
   return bounds.width > 0 && bounds.height > 0;
+}
+
+function isNodeHidden(node: NodeChild): boolean {
+  return "isHidden" in node && node.isHidden;
 }
 
 function normalizeDisplayName(value: string, fallback: string): string {

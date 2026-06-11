@@ -30,9 +30,11 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 +--------------------------------------------------------------------------------+
 ```
 
-Toolboxは機能を呼び出す場所であり、model構造を表示・選択する場所ではない。Parts Treeは常設または即時展開できるStructure / Partsペインとして扱う。Import後の構造整理、mesh対象選択、rig対象選択はこのParts Treeを起点にする。Parts Treeの詳細は [../components/parts-tree.md](../components/parts-tree.md) を参照する。Toolboxの詳細は [../components/toolbox.md](../components/toolbox.md) を参照する。
+Toolboxは機能を呼び出す場所であり、model構造を表示・選択する場所ではない。Parts Treeは常設または即時展開できるStructure / Partsペインとして扱う。Import後の構造整理、mesh対象選択、rig対象選択はこのParts Treeを起点にする。Parts Treeの詳細は [../components/parts-tree.md](../components/parts-tree.md) を参照する。Toolboxの詳細は [../components/toolbox.md](../components/toolbox.md) を参照する。Canvas / PreviewはPSD由来drawableをEditor rendererで表示し、zoom / pan / fit、selection、overlay toolbarを扱う中心領域である。Canvas / Previewの詳細は [../components/canvas-preview.md](../components/canvas-preview.md) を参照する。
 
-Drawable選択時、InspectorはDrawable Inspectorとして、draw order、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面とする。Drawable Inspectorの詳細は [../components/drawable-inspector.md](../components/drawable-inspector.md) を参照する。
+Part Container選択時、InspectorはPart Container Inspectorとして、name、visibility gate、親子関係の確認を扱う。Part Containerを非表示にすると配下drawableのeffective visibilityはhiddenになるが、子Drawable個別のvisibility設定は変更しない。Part Container Inspectorの詳細は [../components/part-container-inspector.md](../components/part-container-inspector.md) を参照する。
+
+Drawable選択時、InspectorはDrawable Inspectorとして、name、editor/runtime visibility、opacity、clipping / mask、texture / mesh / atlas summaryを扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面とし、順序変更はParts Treeへ委譲する。Drawable Inspectorの詳細は [../components/drawable-inspector.md](../components/drawable-inspector.md) を参照する。
 
 Parameter BarはToolboxやInspectorとは別の横断領域として、Canvas / Previewの下、Diagnostics Stripの上に置く。常時表示する対象は1つのactive parameterに限定し、全parameter確認は非モーダルのParameter Control Paletteで扱う。詳細は [../components/parameter-keyform.md](../components/parameter-keyform.md) を参照する。
 
@@ -65,7 +67,7 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 表示するもの:
 
 - parts treeにPSD group由来のpart container
-- canvasにimportされたdrawable
+- canvasにimportされたdrawable。PSD canvas sizeをStage基準にし、visible drawableをbounds / source order / opacity / normal alpha blend / clippingに従って表示する
 - inspectorに選択中part/drawable/sourceの編集情報
 - diagnostics stripに重要warningのみ
 - import完了feedback: modal close / Parts Tree update / generated root selection / optional toast
@@ -81,6 +83,8 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 
 Import直後は、通常編集状態の中でもPost-Import Review状態として扱う。最初の導線はParts Treeでimport結果を確認し、次に編集対象を選ぶことである。
 
+Canvas / Previewは、import直後にFit Artwork相当の表示へ寄せる。透明余白を含むPSD座標系を確認したい場合はFit Canvasを使う。Canvas上部には小さいtoolbarを置き、zoom系、fit系、overlay toggle、Isolate Selectedをまとめる。Canvas上での移動・変形・複数選択・marquee selectionはこの段階の通常操作に含めない。
+
 Import先は、初回importまたは選択なしならproject root直下、part選択中なら選択中part配下、drawable選択中ならその親part配下にする。初期UXではimport先選択をユーザーに求めず、PSD Import Review上で決定済みdestinationを短く表示する。
 
 Import完了後は、生成されたimport root / part groupを選択状態にする。Inspectorは専用のImport Summaryではなく、選択されたpart / groupの通常情報を表示する。Import完了feedbackは、modalが閉じること、Parts Treeに実構造が表示されること、生成rootが選択されることを主にし、必要なら短いtoastに留める。raw refs、operation ID、warning count、diagnostics詳細は通常表示しない。
@@ -89,8 +93,8 @@ Import完了後は、生成されたimport root / part groupを選択状態に�
 
 1. 構造整理
    - Parts TreeでPSD group由来のpart container、drawable、hidden rowを確認する。
-   - drawable list、draw order、manual drawable create入口、editor/runtime visibility row操作はParts Treeを主ホームにする。
-   - selectionに応じてInspectorへrename、draw order summary、editor/runtime visibility、opacity、clipping / mask、lock、source summary、削除/隔離などの編集情報を出す。
+   - drawable list、draw order、editor/runtime visibility row操作、part container visibility、折り畳み / 展開はParts Treeを主ホームにする。
+   - selectionに応じてInspectorへrename、visibility、opacity、clipping / mask、source summaryなどの基本編集情報を出す。
    - Canvasは選択中drawableの位置と可視状態を確認する場所として使う。
 2. Mesh作成・調整
    - Parts TreeまたはCanvasでdrawableを選択し、ToolboxのMeshを開く。
@@ -134,6 +138,7 @@ Import完了後は、生成されたimport root / part groupを選択状態に�
 - Parts Tree: `UX-FEAT-008`, `UX-FEAT-009`, `UX-FEAT-010`
 - Canvas / Preview: `UX-FEAT-004`, `UX-FEAT-005`, `UX-FEAT-011`, `UX-FEAT-012`
 - Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`〜`UX-FEAT-025`
+- Part Container Inspector: `UX-FEAT-002`, `UX-FEAT-008`, `UX-FEAT-009`
 - Drawable Inspector: `UX-FEAT-002`, `UX-FEAT-003`, `UX-FEAT-010`〜`UX-FEAT-012`, `UX-FEAT-020`, `UX-FEAT-021`
 - Dynamics Tool: `UX-FEAT-024`, `UX-FEAT-025`
 - Parameter Manager: `UX-FEAT-002`, `UX-FEAT-003`, 関連: `UX-FEAT-007`, `UX-FEAT-020`〜`UX-FEAT-025`

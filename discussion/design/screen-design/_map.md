@@ -29,6 +29,7 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Wave56は破棄する。ただしWave56 Domain B/Cで完了したheadless baseline / package分離は後続事実として引き継ぐ。
 - Wave57は [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) に従い、`apps/editor` をReact stackで再削除・再作成し、起動直後のAuthoring Workspace placeholderまでを `pass` 記録済みである。Wave57後もこのoracleをEditor再構築のactive basisとして扱う。
 - PSD importは通常workspaceから呼び出すtaskであり、既存panel延命ではなくclean human task UIとして扱う。PSD Import Taskの目標UXはAuthoring Workspace上に重なる大きめのmodalである。Wave58で、fixture PSD選択からImport Review、placeholder preview、planned Editor Parts構造、Import後のWorkspace Parts Tree反映までのv0導線がpass記録済みである。
+- Canvas / PreviewはPSD由来drawableをEditor rendererで表示する中心領域であり、PSD描画を後回しにしない。MVPではPSD canvas基準、visible drawable配置、source order描画、opacity、normal alpha blend、clipping、selection overlay、zoom / pan / fit、Canvas toolbarを扱う。Photoshop pixel perfect parityやペイント機能は非ゴールである。
 - PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。Human UIの主役は、作成予定Parts構造、PSD単体preview、行単位Issue badge、Import / Cancelである。
 - Playwright E2Eは主要ユーザー導線とworkspaceへの状態反映だけを確認する。レイアウト、視認性、余白、pixel差分、Canvas描画品質は人間のvisual check領域であり、E2E oracleにしない。
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
@@ -39,6 +40,7 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Wave54 A-H 後も、full visual redesign、full panel migration、最終的な Diagnostics / Evidence View または Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI は未完了である。PSD Import Taskは大きめのmodalを目標UXとする。legacy support panels には旧 evidence/debug/Codex-heavy UI が残る。
 - Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
 - Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
+- Parts Tree / Inspector v0では、Part ContainerとDrawableの基本UXを分ける。Part Container Inspectorはnameとvisibility gateを扱い、子Drawable個別のvisibilityを破壊しない。Drawable Inspectorはname、visibility、opacity、clipping / maskを扱う。Parts Treeは折り畳み、表示トグル、選択同期、drag and dropによる並び替え / container間移動、Tree順 = Draw Orderを扱う。子要素数サマリ、subtree一括表示 / 非表示、container opacity、右クリックmenu、search / filterは初期UXに含めない。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
 - Drawable Inspectorは選択中drawableの基本属性を扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面、VisibilityはEditor visibilityとRuntime visibilityを分け、OpacityとClipping / MaskはDrawable Inspector内sectionとして扱う。
 - `UX-FEAT-020` / `UX-FEAT-021` は当面Drawable Inspector内のClipping / Mask sectionとSingle Drawable Opacity Keyform sectionで扱い、専用Composition / Opacity Toolは初期画面設計では作らない。

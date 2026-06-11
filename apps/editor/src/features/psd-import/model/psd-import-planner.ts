@@ -196,6 +196,7 @@ export async function createPsdImportPlan(
     sourceFilePath: parsed.sourceFilePath,
     sourceContentHash: `sha256:${parsed.sourceDigest.hex}`,
     adapterResult: parsed.adapterResult,
+    materializedLayerBytes: parsed.materializedLayerBytes,
     bridge: {
       schemaVersion: "psd-structural-scaffold-approval-bridge-evidence-v1",
       structuralPlan,

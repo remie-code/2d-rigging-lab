@@ -5,6 +5,7 @@ import type {
   PsdStructuralScaffoldCapPolicyDto,
   PsdStructuralScaffoldIssueDto
 } from "@private-2d-rigging-lab/operation-core";
+import type { BrowserPsdMaterializedLayerBytes } from "../../../editor-workflow/browser-psd-parser-adapter";
 
 export type PsdImportReviewRowKind = "Part Container" | "Drawable" | "Hidden Drawable";
 
@@ -29,6 +30,7 @@ export interface PsdImportPlan {
   readonly sourceFilePath: string;
   readonly sourceContentHash: string;
   readonly adapterResult: PsdAdapterResultDto;
+  readonly materializedLayerBytes: readonly BrowserPsdMaterializedLayerBytes[];
   readonly bridge: PsdStructuralScaffoldApprovalBridgeEvidenceDto;
   readonly capPolicy: PsdStructuralScaffoldCapPolicyDto;
   readonly destination: PsdImportDestination;

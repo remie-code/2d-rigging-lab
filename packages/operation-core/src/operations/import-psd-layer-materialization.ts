@@ -274,7 +274,7 @@ const materializeLayerIntoSession = (input: {
     sourceAssetId: input.targets.sourceAssetId,
     textureId: input.targets.textureId,
     meshId: input.targets.meshId,
-    defaultOpacity: 1,
+    defaultOpacity: clampOpacity(input.sourceLayer.opacityInSource),
     runtimeVisibility: true,
     baseDrawOrder: drawOrderEntry.baseDrawOrder,
     sourceProvenanceId: binaryAssetRef.provenanceId
@@ -1058,6 +1058,14 @@ const resolveInitialBounds = (
   }
 
   return structuredClone(sourceLayer.bounds);
+};
+
+const clampOpacity = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.max(0, Math.min(1, value));
 };
 
 const getRequiredSourceAsset = (

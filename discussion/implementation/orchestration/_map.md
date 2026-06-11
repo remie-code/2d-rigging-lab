@@ -65,12 +65,13 @@
 | [wave56-plan.md](wave56-plan.md) | Wave 56 Legacy Editor Purge / Fresh Workspace Placeholder v0 dependency and Orch-Sylph plan | Abandoned; Domain B/C headless baseline/package separation fact carries forward only |
 | [wave57-plan.md](wave57-plan.md) | Wave 57 React Editor Foundation / Workspace Placeholder v0 dependency and Orch-Sylph plan | Completed / pass through Domain C closeout; rebuilds `apps/editor` with React stack, B dual review gates, minimal validation, and no dedicated final-report domain |
 | [wave58-plan.md](wave58-plan.md) | Wave 58 PSD Import E2E v0 dependency and Orch-Sylph plan | Completed / pass; Domain A implementation and dual reviews recorded, Domain B closeout and clean integration review recorded |
+| [wave59-plan.md](wave59-plan.md) | Wave 59 Canvas Renderer / PSD Drawable Display v0 dependency and Orch-Sylph plan | Completed / pass; Domain A implementation and three review lanes recorded, Domain B closeout and final clean integration review recorded |
 
 ## Current Decision
 
 - The active orchestration basis is `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans under `discussion/implementation/`.
 - The previous `/goal`-oriented development convention policy has been discarded.
-- Current Editor GUI basis: Wave57 is complete / pass under [wave57-plan.md](wave57-plan.md) with concise closeout at [../waves/wave57/wave57-domain-c-map-closeout-report.md](../waves/wave57/wave57-domain-c-map-closeout-report.md). Wave58 is complete / pass under [wave58-plan.md](wave58-plan.md), adding the bounded PSD Import E2E v0 path using the accepted screen-design docs and [../../design/screen-design/e2e-oracle.md](../../design/screen-design/e2e-oracle.md). Wave56 is abandoned as an implementation wave, but its Domain B/C headless baseline/package separation fact carries forward.
+- Current Editor GUI basis: Wave57 is complete / pass under [wave57-plan.md](wave57-plan.md) with concise closeout at [../waves/wave57/wave57-domain-c-map-closeout-report.md](../waves/wave57/wave57-domain-c-map-closeout-report.md). Wave58 is complete / pass under [wave58-plan.md](wave58-plan.md), adding the bounded PSD Import E2E v0 path using the accepted screen-design docs and [../../design/screen-design/e2e-oracle.md](../../design/screen-design/e2e-oracle.md). Wave59 is complete / pass under [wave59-plan.md](wave59-plan.md), adding Canvas Renderer / PSD Drawable Display v0 while explicitly leaving PSD clipping extraction blocked by parser/product boundary. Wave56 is abandoned as an implementation wave, but its Domain B/C headless baseline/package separation fact carries forward.
 - Wave 0 is complete and provides the package/test/check scaffold.
 - Wave 1 `contracts-foundation` completed on 2026-05-29. The final domain was `wave1-contracts-integration`.
 - Wave 1 public integration keeps `packages/contracts/src/index.ts` as a barrel-only export surface.

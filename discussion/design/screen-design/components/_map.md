@@ -9,6 +9,8 @@
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [toolbox.md](toolbox.md) | Toolbox、Active Tool、Task、View launcher、icon policyの定義 | Draft component spec |
 | [parts-tree.md](parts-tree.md) | Parts Tree、part/drawable hierarchy、drawable list、draw order、row操作UXの定義 | Draft component spec |
+| [canvas-preview.md](canvas-preview.md) | Canvas / Preview、PSD由来drawable描画、view navigation、selection、overlay toolbar UXの定義 | Draft component spec |
+| [part-container-inspector.md](part-container-inspector.md) | Part Container Inspector、name、visibility gate、配下drawable effective visibility UXの定義 | Draft component spec |
 | [drawable-inspector.md](drawable-inspector.md) | Drawable Inspector、draw order、visibility、opacity、clipping / mask UXの定義 | Draft component spec |
 | [mesh-tool.md](mesh-tool.md) | Mesh Active Tool、preset-based initial mesh generation、mesh edit UXの定義 | Draft component spec |
 | [rig-tool.md](rig-tool.md) | Rig Active Tool、rig draft/preview、rotation、warp/lattice、keyform authoring UXの定義 | Draft component spec |
