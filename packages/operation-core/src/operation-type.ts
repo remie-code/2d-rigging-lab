@@ -7,6 +7,7 @@ export const operationTypes = [
   "importPsdStructuralScaffold",
   "importSplitPngSourceAsset",
   "createDrawable",
+  "updateDrawable",
   "createPart",
   "updatePart",
   "deletePart",

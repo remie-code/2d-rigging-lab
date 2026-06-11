@@ -34,6 +34,7 @@ import { setDrawableTextureOperationHandler } from "./operations/set-drawable-te
 import { setMaskRelationOperationHandler } from "./operations/set-mask-relation.js";
 import { setRightsMetadataOperationHandler } from "./operations/set-rights-metadata.js";
 import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-visibility.js";
+import { updateDrawableOperationHandler } from "./operations/update-drawable.js";
 import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
 
@@ -73,6 +74,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   ],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
+  [updateDrawableOperationHandler.operationType, updateDrawableOperationHandler],
   [createPartOperationHandler.operationType, createPartOperationHandler],
   [updatePartOperationHandler.operationType, updatePartOperationHandler],
   [deletePartOperationHandler.operationType, deletePartOperationHandler],

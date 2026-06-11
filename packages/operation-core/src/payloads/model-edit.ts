@@ -35,6 +35,25 @@ export const CreateDrawablePayloadSchema = z.object({
 });
 export type CreateDrawablePayloadDto = z.infer<typeof CreateDrawablePayloadSchema>;
 
+export const UpdateDrawablePayloadSchema = z
+  .object({
+    drawableId: DrawableIdSchema,
+    displayName: z.string().min(1).refine((value) => value.trim().length > 0, {
+      message: "displayName must not be blank"
+    }).optional(),
+    defaultOpacity: z.number().min(0).max(1).optional(),
+    lockedTargetIds: z.array(z.string().min(1)).default([])
+  })
+  .refine(
+    (payload) =>
+      payload.displayName !== undefined || payload.defaultOpacity !== undefined,
+    {
+      message: "updateDrawable requires displayName or defaultOpacity",
+      path: ["displayName"]
+    }
+  );
+export type UpdateDrawablePayloadDto = z.infer<typeof UpdateDrawablePayloadSchema>;
+
 const LockedTargetIdsSchema = z.array(z.string().min(1)).default([]);
 
 export const CreatePartPayloadSchema = z.object({

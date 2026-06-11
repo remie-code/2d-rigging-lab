@@ -125,6 +125,10 @@ const operationToken = (request: OperationRequestDto): string => {
     return `create_drawable_${sanitizeIdToken(request.payload.displayName)}`;
   }
 
+  if (request.operationType === "updateDrawable") {
+    return `update_drawable_${sanitizeIdToken(stripIdPrefix(request.payload.drawableId, "draw_"))}`;
+  }
+
   if (request.operationType === "importPsdLayerMaterialization") {
     return `import_psd_layer_materialization_${sanitizeIdToken(
       request.payload.materialization.sourceLayerRef.sourceLayerId

@@ -174,6 +174,14 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "updateDrawable",
+    payload: {
+      drawableId: "draw_face",
+      displayName: "Face Paint",
+      defaultOpacity: 0.75
+    }
+  },
+  {
     operationType: "createPart",
     payload: {
       partId: "part_face",
@@ -333,6 +341,7 @@ describe("operation-core DTO schemas", () => {
       "importPsdSourceAsset",
       "importSplitPngSourceAsset",
       "createParameter",
+      "updateDrawable",
       "createPart",
       "updatePart",
       "deletePart",

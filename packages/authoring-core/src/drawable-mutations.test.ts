@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { AuthoringMutationError } from "./authoring-mutations.js";
-import { createDrawableWithMesh } from "./drawable-mutations.js";
+import { createDrawableWithMesh, updateDrawable } from "./drawable-mutations.js";
 import { createGeneratedMesh, createManualEmptyMesh } from "./mesh-generation.js";
 import { replaceDrawableMesh } from "./mesh-mutations.js";
 
@@ -73,6 +73,88 @@ describe("drawable and mesh authoring mutations", () => {
     );
     expect(session.graph.drawOrder).toHaveLength(1);
     expect(session.authoringRevision).toBe(revisionAfterFirstCreate);
+  });
+
+  it("updates drawable display name and default opacity", () => {
+    const session = createFixtureSession();
+    const drawable = createFixtureDrawable();
+    const mesh = createManualEmptyMesh({
+      meshId: drawable.meshId,
+      drawableId: drawable.drawableId,
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      provenanceId: drawable.sourceProvenanceId
+    });
+    createDrawableWithMesh(session, { drawable, mesh });
+
+    const result = updateDrawable(session, {
+      drawableId: drawable.drawableId,
+      displayName: "Body Paint",
+      defaultOpacity: 0.5
+    });
+
+    expect(result.drawableBefore).toMatchObject({
+      displayName: "Body",
+      defaultOpacity: 1
+    });
+    expect(result.drawableAfter).toMatchObject({
+      displayName: "Body Paint",
+      defaultOpacity: 0.5
+    });
+    expect(session.graph.drawables[0]).toMatchObject({
+      displayName: "Body Paint",
+      defaultOpacity: 0.5
+    });
+    expect(session.authoringRevision).toBe(2);
+    expect(session.dirty).toBe(true);
+  });
+
+  it("rejects missing, invalid, and no-op drawable updates", () => {
+    const session = createFixtureSession();
+    const drawable = createFixtureDrawable();
+    const mesh = createManualEmptyMesh({
+      meshId: drawable.meshId,
+      drawableId: drawable.drawableId,
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      provenanceId: drawable.sourceProvenanceId
+    });
+    createDrawableWithMesh(session, { drawable, mesh });
+    const revisionAfterCreate = session.authoringRevision;
+
+    expect(() =>
+      updateDrawable(session, {
+        drawableId: DrawableIdSchema.parse("draw_missing"),
+        displayName: "Missing"
+      })
+    ).toThrow(expect.objectContaining({ code: "missing_drawable" }) as AuthoringMutationError);
+
+    expect(() =>
+      updateDrawable(session, {
+        drawableId: drawable.drawableId,
+        displayName: "   "
+      })
+    ).toThrow(
+      expect.objectContaining({ code: "invalid_drawable_display_name" }) as AuthoringMutationError
+    );
+
+    expect(() =>
+      updateDrawable(session, {
+        drawableId: drawable.drawableId,
+        defaultOpacity: 1.2
+      })
+    ).toThrow(
+      expect.objectContaining({ code: "invalid_drawable_opacity" }) as AuthoringMutationError
+    );
+
+    expect(() =>
+      updateDrawable(session, {
+        drawableId: drawable.drawableId,
+        displayName: drawable.displayName,
+        defaultOpacity: drawable.defaultOpacity
+      })
+    ).toThrow(
+      expect.objectContaining({ code: "no_op_drawable_update" }) as AuthoringMutationError
+    );
+    expect(session.authoringRevision).toBe(revisionAfterCreate);
   });
 
   it("replaces the drawable mesh with deterministic grid geometry", () => {

@@ -308,6 +308,7 @@ function drawSelectionOverlay(
   for (const drawable of projection.drawables) {
     if (
       (!drawable.selected && !drawable.selectedBySubtree) ||
+      !drawable.visible ||
       drawable.bounds.width <= 0 ||
       drawable.bounds.height <= 0
     ) {

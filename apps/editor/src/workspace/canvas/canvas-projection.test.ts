@@ -132,6 +132,28 @@ describe("canvas render projection", () => {
     expect(hiddenOnlyProjection.selectedDrawableIds).toEqual(new Set([DRAW_HIDDEN]));
     expect(hasIsolatableCanvasSelection(hiddenOnlyProjection)).toBe(false);
   });
+
+  it("applies editor-only part hidden gates to render and hit-test visibility", () => {
+    const session = createFixtureSession();
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_FRONT
+      },
+      { editorHiddenPartIds: new Set([PART_FACE]) }
+    );
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(
+      projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)?.visible
+    ).toBe(false);
+    expect(projection.hasRenderableArtwork).toBe(false);
+    expect(hitTestTopmostDrawable(projection, { x: 6, y: 6 })).toBeUndefined();
+    expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)).toMatchObject({
+      runtimeVisibility: true
+    });
+  });
 });
 
 function createFixtureSession(): AuthoringSession {

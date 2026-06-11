@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,3 +79,120 @@ test("imports a fixture PSD and reflects the generated structure in the workspac
   );
   await expect(canvas).toHaveAttribute("data-selected-drawable-count", "1");
 });
+
+test("edits imported parts and drawables through the Parts Tree and Inspector", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  const visibleDrawableRow = drawableRows
+    .filter({ has: page.getByRole("button", { name: "Hide drawable" }) })
+    .first();
+  await expect(visibleDrawableRow).toBeVisible();
+
+  await rowNameButton(visibleDrawableRow).click();
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable"
+  );
+
+  const originalDrawableName = (await visibleInput(page, "Name").inputValue()).trim();
+  const editedDrawableName = `${originalDrawableName} edited`;
+  await visibleInput(page, "Name").fill(editedDrawableName);
+  await visibleInput(page, "Name").press("Enter");
+  await expect(visibleDrawableRow).toContainText(editedDrawableName);
+
+  await visibleInput(page, "Opacity percent").fill("40");
+  await visibleInput(page, "Opacity percent").press("Enter");
+  await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
+
+  const renderableBeforeHide = await readRenderableCount(canvas);
+  expect(renderableBeforeHide).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Hide selected drawable" }).click();
+  await expect(canvas).toHaveAttribute(
+    "data-renderable-drawable-count",
+    String(renderableBeforeHide - 1)
+  );
+  await page.getByRole("button", { name: "Show selected drawable" }).click();
+  await expect(canvas).toHaveAttribute(
+    "data-renderable-drawable-count",
+    String(renderableBeforeHide)
+  );
+
+  const clippingSource = visibleInput(page, "Clipping source");
+  const firstClipValue = await clippingSource.locator("option").nth(1).getAttribute("value");
+  if (firstClipValue !== null) {
+    await clippingSource.selectOption(firstClipValue);
+    await expect(clippingSource).toHaveValue(firstClipValue);
+    await expect(canvas).toHaveAttribute("data-mask-relation-count", /^[1-9]\d*$/);
+    await clippingSource.selectOption("");
+    await expect(clippingSource).toHaveValue("");
+  }
+
+  const partRow = page
+    .locator('[data-row-kind="part"]:visible')
+    .filter({ has: page.getByRole("button", { name: "Hide part container" }) })
+    .first();
+  await rowNameButton(partRow).click();
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Part"
+  );
+
+  const originalPartName = (await visibleInput(page, "Name").inputValue()).trim();
+  const editedPartName = `${originalPartName} group`;
+  await visibleInput(page, "Name").fill(editedPartName);
+  await visibleInput(page, "Name").press("Enter");
+  await expect(partRow).toContainText(editedPartName);
+
+  const renderableBeforePartGate = await readRenderableCount(canvas);
+  expect(renderableBeforePartGate).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Hide selected part container" }).click();
+  await expect(canvas).toHaveAttribute("data-renderable-drawable-count", "0");
+  await page.getByRole("button", { name: "Show selected part container" }).click();
+  await expect(canvas).toHaveAttribute(
+    "data-renderable-drawable-count",
+    String(renderableBeforePartGate)
+  );
+});
+
+test("reorders drawable rows with Parts Tree drag and drop", async ({ page }) => {
+  await importFixturePsd(page);
+
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  await expect(drawableRows.nth(1)).toBeVisible();
+  const firstNameBefore = (await rowNameButton(drawableRows.nth(0)).innerText()).trim();
+  const secondNameBefore = (await rowNameButton(drawableRows.nth(1)).innerText()).trim();
+  expect(secondNameBefore).not.toBe(firstNameBefore);
+
+  await drawableRows.nth(1).dragTo(drawableRows.nth(0), {
+    targetPosition: { x: 8, y: 2 }
+  });
+
+  await expect(rowNameButton(drawableRows.nth(0))).toHaveText(secondNameBefore);
+});
+
+async function importFixturePsd(page: Page): Promise<void> {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Import PSD" }).first().click();
+  await page.getByLabel("PSD file").setInputFiles(fixturePsdPath);
+  await expect(page.getByTestId("psd-import-review")).toBeVisible();
+  await page.getByRole("button", { name: "Import" }).click();
+  await expect(page.getByRole("dialog", { name: "Import PSD" })).toBeHidden();
+  await expect(page.locator('[data-testid="parts-tree"]:visible').first()).toContainText(
+    "sample_model import"
+  );
+}
+
+function rowNameButton(row: Locator): Locator {
+  return row.locator("button").last();
+}
+
+async function readRenderableCount(canvas: Locator): Promise<number> {
+  const value = await canvas.getAttribute("data-renderable-drawable-count");
+  return Number(value ?? "0");
+}
+
+function visibleInput(page: Page, label: string): Locator {
+  return page.locator(`[aria-label="${label}"]:visible`).first();
+}

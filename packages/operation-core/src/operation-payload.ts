@@ -32,6 +32,7 @@ import {
   SetMaskRelationPayloadSchema,
   SetRightsMetadataPayloadSchema,
   SetRuntimeVisibilityPayloadSchema,
+  UpdateDrawablePayloadSchema,
   UpdatePartPayloadSchema
 } from "./payloads/model-edit.js";
 import {
@@ -63,6 +64,7 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   }),
   z.object({ operationType: z.literal("importSplitPngSourceAsset"), payload: SplitPngSourceAssetPayloadSchema }),
   z.object({ operationType: z.literal("createDrawable"), payload: CreateDrawablePayloadSchema }),
+  z.object({ operationType: z.literal("updateDrawable"), payload: UpdateDrawablePayloadSchema }),
   z.object({ operationType: z.literal("createPart"), payload: CreatePartPayloadSchema }),
   z.object({ operationType: z.literal("updatePart"), payload: UpdatePartPayloadSchema }),
   z.object({ operationType: z.literal("deletePart"), payload: DeletePartPayloadSchema }),

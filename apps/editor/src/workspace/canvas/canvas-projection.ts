@@ -61,6 +61,10 @@ export interface CanvasRenderProjection {
   readonly contentKey: string;
 }
 
+export interface CanvasProjectionOptions {
+  readonly editorHiddenPartIds?: ReadonlySet<PartId>;
+}
+
 const DEFAULT_VIEW: CanvasViewState = {
   zoom: 1,
   pan: { x: 0, y: 0 }
@@ -72,9 +76,11 @@ const FIT_PADDING = 48;
 
 export function createCanvasRenderProjection(
   session: AuthoringSession,
-  selection: EditorSelection | null
+  selection: EditorSelection | null,
+  options: CanvasProjectionOptions = {}
 ): CanvasRenderProjection {
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
+  const editorHiddenPartIds = options.editorHiddenPartIds ?? new Set<PartId>();
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const textureEntriesById = new Map(
     session.graph.textureAtlas?.textures.map((texture) => [texture.textureId, texture]) ?? []
@@ -105,6 +111,9 @@ export function createCanvasRenderProjection(
           : binaryEntriesByPath.get(binaryAssetRef.packageRelativePath);
       const sourceLayer = sourceLayerByDrawableId.get(drawable.drawableId);
       const partAncestorIds = collectPartAncestorIds(drawable.partId, partsById);
+      const hiddenByPart =
+        editorHiddenPartIds.has(drawable.partId) ||
+        partAncestorIds.some((partId) => editorHiddenPartIds.has(partId));
       const selected = selection?.kind === "drawable" && selection.id === drawable.drawableId;
       const selectedBySubtree =
         !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
@@ -126,7 +135,7 @@ export function createCanvasRenderProjection(
             }),
         bounds: structuredClone(mesh.bounds),
         frontOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
-        visible: drawable.runtimeVisibility,
+        visible: drawable.runtimeVisibility && !hiddenByPart,
         opacity: clamp(drawable.defaultOpacity, 0, 1),
         selected,
         selectedBySubtree,
@@ -144,13 +153,8 @@ export function createCanvasRenderProjection(
   const selectedVisibleDrawables = visibleDrawables.filter((drawable) =>
     selectedDrawableIds.has(drawable.drawableId)
   );
-  const selectedDrawables = drawables.filter((drawable) =>
-    selectedDrawableIds.has(drawable.drawableId)
-  );
   const artworkBounds = unionRects(renderableDrawables.map((drawable) => drawable.bounds));
-  const selectionBounds =
-    unionRects(selectedVisibleDrawables.map((drawable) => drawable.bounds)) ??
-    unionRects(selectedDrawables.map((drawable) => drawable.bounds));
+  const selectionBounds = unionRects(selectedVisibleDrawables.map((drawable) => drawable.bounds));
 
   return {
     canvasBounds: resolveProjectionCanvasBounds(session),

@@ -75,7 +75,7 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 const POINTER_CLICK_SLOP = 4;
 
 export function CanvasPreviewPanel() {
-  const { selectDrawable, selection, session } = useEditorSession();
+  const { editorHiddenPartIds, selectDrawable, selection, session } = useEditorSession();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const bitmapCacheRef = useRef(createCanvasBitmapCache());
@@ -95,10 +95,14 @@ export function CanvasPreviewPanel() {
     isolateSelected: false
   });
   const projection = useMemo(
-    () => createCanvasRenderProjection(session, selection),
-    [selection, session]
+    () => createCanvasRenderProjection(session, selection, { editorHiddenPartIds }),
+    [editorHiddenPartIds, selection, session]
   );
   const selectedDrawableCount = projection.selectedDrawableIds.size;
+  const selectedDrawableOpacity = useMemo(
+    () => projection.drawables.find((drawable) => drawable.selected)?.opacity,
+    [projection]
+  );
   const canIsolateSelection = useMemo(
     () => hasIsolatableCanvasSelection(projection),
     [projection]
@@ -427,6 +431,7 @@ export function CanvasPreviewPanel() {
             data-primary-hit-screen-y={primaryHitScreenPoint?.y ?? ""}
             data-renderable-drawable-count={renderableDrawableCount}
             data-selected-drawable-count={selectedDrawableCount}
+            data-selected-drawable-opacity={selectedDrawableOpacity?.toFixed(2) ?? ""}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {

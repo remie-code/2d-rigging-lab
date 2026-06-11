@@ -25,6 +25,13 @@ export interface CreateDrawableWithMeshMutationResult {
   readonly authoringRevision: AuthoringRevision;
 }
 
+export interface UpdateDrawableMutationResult {
+  readonly session: AuthoringSession;
+  readonly drawableBefore: DrawableDto;
+  readonly drawableAfter: DrawableDto;
+  readonly authoringRevision: AuthoringRevision;
+}
+
 export const createDrawableWithMesh = (
   session: AuthoringSession,
   input: {
@@ -121,4 +128,71 @@ const mapDrawableToSourceLayer = (
   if (sourceLayer !== undefined && !sourceLayer.mappedDrawableIds.includes(drawable.drawableId)) {
     sourceLayer.mappedDrawableIds.push(drawable.drawableId);
   }
+};
+
+export const updateDrawable = (
+  session: AuthoringSession,
+  input: {
+    readonly drawableId: DrawableDto["drawableId"];
+    readonly displayName?: string;
+    readonly defaultOpacity?: number;
+  }
+): UpdateDrawableMutationResult => {
+  const drawable = session.graph.drawables.find(
+    (candidate) => candidate.drawableId === input.drawableId
+  );
+  if (drawable === undefined) {
+    throw new AuthoringMutationError(
+      "missing_drawable",
+      `Drawable does not exist: ${input.drawableId}.`
+    );
+  }
+
+  if (input.displayName !== undefined && input.displayName.trim().length === 0) {
+    throw new AuthoringMutationError(
+      "invalid_drawable_display_name",
+      `Drawable display name must not be blank: ${input.drawableId}.`
+    );
+  }
+
+  if (
+    input.defaultOpacity !== undefined &&
+    (input.defaultOpacity < 0 || input.defaultOpacity > 1)
+  ) {
+    throw new AuthoringMutationError(
+      "invalid_drawable_opacity",
+      `Drawable opacity must be between 0 and 1: ${input.defaultOpacity}.`
+    );
+  }
+
+  const displayNameChanged =
+    input.displayName !== undefined && input.displayName !== drawable.displayName;
+  const opacityChanged =
+    input.defaultOpacity !== undefined && input.defaultOpacity !== drawable.defaultOpacity;
+  if (!displayNameChanged && !opacityChanged) {
+    throw new AuthoringMutationError(
+      "no_op_drawable_update",
+      `Drawable ${input.drawableId} is already up to date.`
+    );
+  }
+
+  const drawableBefore = structuredClone(drawable);
+  if (input.displayName !== undefined) {
+    drawable.displayName = input.displayName;
+  }
+
+  if (input.defaultOpacity !== undefined) {
+    drawable.defaultOpacity = input.defaultOpacity;
+  }
+
+  const drawableAfter = structuredClone(drawable);
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    drawableBefore,
+    drawableAfter,
+    authoringRevision: session.authoringRevision
+  };
 };
