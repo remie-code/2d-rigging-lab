@@ -378,6 +378,7 @@ const createSourceGroupEvidence = (sourceGroup: PsdProfileSourceGroupDto): reado
   `sourceGroupOrder=${sourceGroup.sourceOrder}`,
   `groupPath=${sourceGroup.groupPath.join("/") || "root"}`,
   `visibleInSource=${sourceGroup.visibleInSource}`,
+  `localVisibleInSource=${sourceGroup.localVisibleInSource ?? sourceGroup.visibleInSource}`,
   `opacityInSource=${sourceGroup.opacityInSource}`,
   `targetPartId=${sourceGroup.targetPartId ?? "missing"}`
 ];
@@ -389,6 +390,7 @@ const createSourceLayerEvidence = (sourceLayer: PsdProfileSourceLayerDto): reado
   `groupPath=${sourceLayer.groupPath.join("/") || "root"}`,
   `sourceLayerRole=${sourceLayer.role}`,
   `visibleInSource=${sourceLayer.visibleInSource}`,
+  `localVisibleInSource=${sourceLayer.localVisibleInSource ?? sourceLayer.visibleInSource}`,
   `opacityInSource=${sourceLayer.opacityInSource}`,
   `targetPartId=${sourceLayer.targetPartId ?? "missing"}`,
   `textureId=${sourceLayer.textureId ?? "missing"}`,

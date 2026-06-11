@@ -21,7 +21,7 @@ describe("wave30 tutorial mini model recipe foundation", () => {
   it("creates a deterministic committed operation request sequence without a whole-model operation", () => {
     const requests = createTutorialMiniModelOperationRequests();
 
-    expect(requests).toHaveLength(34);
+    expect(requests).toHaveLength(36);
     expect(requests.slice(0, 2).map((request) => ({
       operationId: request.operationId,
       operationType: request.operationType,
@@ -73,7 +73,9 @@ describe("wave30 tutorial mini model recipe foundation", () => {
       "generateMesh",
       "moveMeshVertex",
       "setMaskRelation",
-      "setDrawOrder",
+      "moveStructureChild",
+      "moveStructureChild",
+      "moveStructureChild",
       "createRotation2dRigControl",
       "createDynamicsGroup",
       "addKeyform",
@@ -135,9 +137,9 @@ describe("wave30 tutorial mini model recipe foundation", () => {
     ]));
     expect(summarizeOperationAudit(result.appliedOperations)).toEqual({
       schemaVersion: "wave30-tutorial-mini-model-operation-audit-v1",
-      operationCount: 34,
+      operationCount: 36,
       rejectedOperationCount: 0,
-      finalOperationLogLength: 34,
+      finalOperationLogLength: 36,
       operationIdsMatchModelDiff: true,
       changedTargetKinds: expect.arrayContaining([
         "drawable",
@@ -166,7 +168,7 @@ describe("wave30 tutorial mini model recipe foundation", () => {
     expect(summarizeTutorialPackage(document)).toEqual({
       schemaVersion: "wave30-tutorial-mini-model-package-summary-v1",
       packageId: TUTORIAL_MINI_MODEL_IDS.packageId,
-      packageRevision: 34,
+      packageRevision: 36,
       partIds: [
         TUTORIAL_MINI_MODEL_IDS.parts.body,
         TUTORIAL_MINI_MODEL_IDS.parts.head,

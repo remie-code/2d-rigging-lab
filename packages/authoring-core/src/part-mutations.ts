@@ -6,6 +6,11 @@ import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { getPartById } from "./drawable-selectors.js";
+import {
+  appendPartOrderedChild,
+  createPartChildEntry,
+  removePartOrderedChild
+} from "./part-children-order.js";
 import { addStableOrderId } from "./stable-order-mutations.js";
 
 export interface CreatePartMutationResult {
@@ -54,7 +59,7 @@ export const createPart = (
   addStableOrderId(session.graph, storedPart.partId);
 
   if (parent !== undefined) {
-    parent.childPartIds.push(storedPart.partId);
+    appendPartOrderedChild(session.graph, parent, createPartChildEntry(storedPart.partId));
   }
 
   const parentAfter = parent === undefined ? undefined : structuredClone(parent);
@@ -90,7 +95,7 @@ export const deletePart = (
   const stableOrderBefore = [...session.graph.stableOrder];
 
   if (parent !== undefined) {
-    parent.childPartIds = parent.childPartIds.filter((childPartId) => childPartId !== part.partId);
+    removePartOrderedChild(session.graph, parent, createPartChildEntry(part.partId));
   }
 
   session.graph.parts = session.graph.parts.filter((candidate) => candidate.partId !== part.partId);
@@ -151,11 +156,11 @@ export const updatePart = (
 
   if (parentChanged) {
     if (oldParent !== undefined) {
-      oldParent.childPartIds = oldParent.childPartIds.filter((childPartId) => childPartId !== part.partId);
+      removePartOrderedChild(session.graph, oldParent, createPartChildEntry(part.partId));
     }
 
-    if (newParent !== undefined && !newParent.childPartIds.includes(part.partId)) {
-      newParent.childPartIds.push(part.partId);
+    if (newParent !== undefined) {
+      appendPartOrderedChild(session.graph, newParent, createPartChildEntry(part.partId));
     }
 
     if (nextParentPartId === undefined) {

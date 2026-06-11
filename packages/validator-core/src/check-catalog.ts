@@ -137,6 +137,30 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Part childPartIds contains the same child part more than once."
   },
   {
+    checkId: "part.orderedChildrenDuplicate",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part mixed ordered children contains the same part or drawable more than once."
+  },
+  {
+    checkId: "part.orderedChildrenTargetMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part mixed ordered children references a missing part or drawable."
+  },
+  {
+    checkId: "part.orderedChildrenMembershipMismatch",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    description: "Part mixed ordered children disagrees with parent, childPartIds, or drawableIds membership."
+  },
+  {
     checkId: "part.parentChildMismatch",
     phase: "reference",
     defaultSeverity: "error",

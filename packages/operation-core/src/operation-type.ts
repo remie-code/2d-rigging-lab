@@ -11,6 +11,7 @@ export const operationTypes = [
   "createPart",
   "updatePart",
   "deletePart",
+  "moveStructureChild",
   "setDrawablePart",
   "setDrawableTexture",
   "generateMesh",

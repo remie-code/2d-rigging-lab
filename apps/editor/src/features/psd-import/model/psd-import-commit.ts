@@ -23,6 +23,7 @@ export class PsdImportCommitError extends Error {
 
 export interface CommitPsdImportPlanResult {
   readonly session: AuthoringSession;
+  readonly editorHiddenPartIds: PsdImportPlan["editorHiddenPartIds"];
 }
 
 export function commitPsdImportPlan(input: {
@@ -67,7 +68,10 @@ export function commitPsdImportPlan(input: {
     structuralOperationId: structuralOutcome.result.operationId
   });
 
-  return { session: nextSession };
+  return {
+    session: nextSession,
+    editorHiddenPartIds: input.plan.editorHiddenPartIds
+  };
 }
 
 function registerMaterializedLayerBytes(input: {

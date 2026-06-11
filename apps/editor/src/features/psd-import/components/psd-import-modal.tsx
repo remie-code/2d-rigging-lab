@@ -5,15 +5,19 @@ import {
   EyeOff,
   FileInput,
   Folder,
-  Image,
   Loader2
 } from "lucide-react";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { useEditorSession } from "../../editor-session/editor-session-context";
 import { cn } from "../../../lib/class-name";
 import { Tooltip } from "../../../ui/tooltip";
 import { createPsdImportPlan } from "../model/psd-import-planner";
+import {
+  createPsdImportPreview,
+  type PsdImportPreview,
+  type PsdImportPreviewLayer
+} from "../model/psd-import-preview";
 import type { PsdImportPlan, PsdImportReviewRow } from "../model/psd-import-types";
 
 type PsdImportTaskState =
@@ -241,17 +245,7 @@ function ReviewState({
         <div className="border-b border-neutral-800 px-3 py-2">
           <h3 className="text-sm font-semibold text-neutral-100">PSD Preview</h3>
         </div>
-        <div
-          className="grid flex-1 place-items-center p-5"
-          data-testid="psd-import-preview-placeholder"
-        >
-          <div className="flex max-w-56 flex-col items-center gap-3 text-center text-neutral-400">
-            <span className="flex size-12 items-center justify-center rounded-md border border-neutral-700 bg-neutral-950 text-neutral-300">
-              <Image aria-hidden="true" size={22} strokeWidth={1.8} />
-            </span>
-            <span className="text-sm font-medium text-neutral-200">Preview placeholder</span>
-          </div>
-        </div>
+        <PsdPreview plan={plan} />
       </aside>
 
       {importing ? (
@@ -263,6 +257,101 @@ function ReviewState({
   );
 }
 
+function PsdPreview({ plan }: { readonly plan: PsdImportPlan }) {
+  const preview = useMemo(() => createPsdImportPreview(plan), [plan]);
+  const canvasWidth = Math.max(1, preview.canvasBounds.width);
+  const canvasHeight = Math.max(1, preview.canvasBounds.height);
+
+  return (
+    <div
+      className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4"
+      data-canvas-height={String(canvasHeight)}
+      data-canvas-width={String(canvasWidth)}
+      data-preview-ready={preview.layers.length > 0 ? "true" : "false"}
+      data-testid="psd-import-preview"
+      data-visible-layer-count={String(preview.layers.length)}
+    >
+      {preview.layers.length === 0 ? (
+        <div className="text-sm font-medium text-neutral-400">No visible layers</div>
+      ) : (
+        <div
+          aria-label="Selected PSD preview"
+          className="relative max-h-full max-w-full overflow-hidden border border-neutral-800 bg-neutral-950"
+          data-testid="psd-import-preview-canvas"
+          role="img"
+          style={{
+            aspectRatio: `${canvasWidth} / ${canvasHeight}`,
+            width: "100%"
+          }}
+        >
+          {preview.layers.map((layer) => (
+            <PsdPreviewLayerCanvas
+              key={layer.sourceLayerId}
+              layer={layer}
+              preview={preview}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PsdPreviewLayerCanvas({
+  layer,
+  preview
+}: {
+  readonly layer: PsdImportPreviewLayer;
+  readonly preview: PsdImportPreview;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const left = ((layer.bounds.x - preview.canvasBounds.x) / preview.canvasBounds.width) * 100;
+  const top = ((layer.bounds.y - preview.canvasBounds.y) / preview.canvasBounds.height) * 100;
+  const width = (layer.bounds.width / preview.canvasBounds.width) * 100;
+  const height = (layer.bounds.height / preview.canvasBounds.height) * 100;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) {
+      return;
+    }
+
+    canvas.width = layer.pixelWidth;
+    canvas.height = layer.pixelHeight;
+    const context = canvas.getContext("2d");
+    if (context === null) {
+      return;
+    }
+
+    const imageData = new ImageData(
+      new Uint8ClampedArray(layer.bytes),
+      layer.pixelWidth,
+      layer.pixelHeight
+    );
+    context.clearRect(0, 0, layer.pixelWidth, layer.pixelHeight);
+    context.putImageData(imageData, 0, 0);
+  }, [layer]);
+
+  return (
+    <canvas
+      aria-hidden="true"
+      data-opacity={layer.opacity.toFixed(3)}
+      data-source-layer-id={layer.sourceLayerId}
+      data-source-order={String(layer.sourceOrder)}
+      ref={canvasRef}
+      style={{
+        height: `${height}%`,
+        left: `${left}%`,
+        opacity: layer.opacity,
+        position: "absolute",
+        top: `${top}%`,
+        width: `${width}%`,
+        zIndex: layer.zIndex
+      }}
+    />
+  );
+}
+
 function ReviewRow({ row }: { readonly row: PsdImportReviewRow }) {
   const Icon =
     row.kind === "Part Container" ? Folder : row.kind === "Hidden Drawable" ? EyeOff : Eye;
@@ -270,8 +359,10 @@ function ReviewRow({ row }: { readonly row: PsdImportReviewRow }) {
   return (
     <div
       className="grid min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950/60 px-2 py-1.5"
+      data-effective-visible={row.effectiveVisibleInSource ? "true" : "false"}
+      data-local-visible={row.localVisibleInSource ? "true" : "false"}
       style={{ marginLeft: `${row.depth * 18}px` }}
-      title={`${row.kind}: ${row.name}`}
+      title={`${row.kind}: ${row.name}${row.visibilityLabel === undefined ? "" : ` (${row.visibilityLabel})`}`}
     >
       <span
         aria-label={row.kind}
@@ -279,7 +370,12 @@ function ReviewRow({ row }: { readonly row: PsdImportReviewRow }) {
       >
         <Icon aria-hidden="true" size={14} strokeWidth={1.8} />
       </span>
-      <div className="min-w-0 truncate text-sm font-medium text-neutral-100">{row.name}</div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium text-neutral-100">{row.name}</div>
+        {row.visibilityLabel === undefined ? null : (
+          <div className="truncate text-xs text-neutral-500">{row.visibilityLabel}</div>
+        )}
+      </div>
       {row.hasIssue ? (
         <Tooltip label={row.issueTooltip ?? "This row needs attention before import."} side="left">
           <span className="inline-flex h-6 items-center gap-1 rounded border border-amber-600/70 bg-amber-950/50 px-2 text-xs font-semibold text-amber-200">

@@ -147,6 +147,83 @@ describe("Wave50 PSD structural scaffold Product Preflight diagnostics", () => {
     expect(composition.status).toBe("fail");
   });
 
+  it("allows local-visible leaves under hidden source groups to remain runtime visible", () => {
+    const fixture = createStructuralFixture({ storeStructuralEvidence: false });
+    const sourceAsset = fixture.document.assets.sourceManifest.sourceAssets[0]!;
+    const profile = sourceAsset.psdProfile!;
+    const markGroupParentHidden = (group: {
+      visibleInSource: boolean;
+      localVisibleInSource?: boolean;
+      effectiveVisibleInSource?: boolean;
+    }) => {
+      group.visibleInSource = false;
+      group.localVisibleInSource = false;
+      group.effectiveVisibleInSource = false;
+    };
+    const markLeafParentHidden = (leaf: {
+      visibleInSource: boolean;
+      localVisibleInSource?: boolean;
+      effectiveVisibleInSource?: boolean;
+      initialRuntimeVisibility: boolean;
+    }) => {
+      leaf.visibleInSource = false;
+      leaf.localVisibleInSource = true;
+      leaf.effectiveVisibleInSource = false;
+      leaf.initialRuntimeVisibility = true;
+    };
+
+    markGroupParentHidden(fixture.evidence.generatedGroupPartScaffolds[0]!);
+    markGroupParentHidden(
+      fixture.evidence.structuralScaffoldBridge!.structuralPlan.plannedGroupPartScaffolds[0]!
+    );
+    markGroupParentHidden(
+      fixture.evidence.structuralScaffoldBridge!.approval.approvedGroupPartScaffolds[0]!
+    );
+    markLeafParentHidden(fixture.evidence.generatedLeafScaffolds[0]!);
+    markLeafParentHidden(
+      fixture.evidence.structuralScaffoldBridge!.structuralPlan.plannedLeafScaffolds[0]!
+    );
+    markLeafParentHidden(
+      fixture.evidence.structuralScaffoldBridge!.approval.approvedLeafScaffolds[0]!
+    );
+    sourceAsset.layers[0] = {
+      ...sourceAsset.layers[0]!,
+      visibleInSource: false,
+      localVisibleInSource: true,
+      effectiveVisibleInSource: false
+    };
+    profile.sourceGroups[0] = {
+      ...profile.sourceGroups[0]!,
+      visibleInSource: false,
+      localVisibleInSource: false,
+      effectiveVisibleInSource: false
+    };
+    profile.sourceLayers[0] = {
+      ...profile.sourceLayers[0]!,
+      visibleInSource: false,
+      localVisibleInSource: true,
+      effectiveVisibleInSource: false
+    };
+
+    const report = validatePackageRuntime({
+      packageDocument: fixture.document,
+      psdStructuralScaffoldEvidence: [fixture.evidence],
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("pass");
+    expect(report.checks.map((check) => check.checkId)).not.toContain(
+      "asset.psd.structuralInitialRuntimeVisibilityMismatch"
+    );
+    expect(expectCheckById(report, "asset.psd.structuralScaffoldAvailable").evidence).toEqual(
+      expect.arrayContaining([
+        "effectiveHiddenLeafCount=2",
+        "hiddenLeafCount=1",
+        "runtimeHiddenDrawableCount=1"
+      ])
+    );
+  });
+
   it("diagnoses missing generated group parent, leaf parent, drawable, texture, and mesh refs", () => {
     const fixture = createStructuralFixture({ storeStructuralEvidence: false });
     fixture.evidence.generatedGroupPartScaffolds[0]!.generatedParentPartId = "part_wave50_missing_group_parent";
@@ -548,6 +625,12 @@ const createPackageDocument = (input: {
             groupPath: leaf.sourceLayerPath.slice(0, -1),
             bounds: leaf.bounds,
             visibleInSource: leaf.visibleInSource,
+            ...(leaf.localVisibleInSource === undefined
+              ? {}
+              : { localVisibleInSource: leaf.localVisibleInSource }),
+            ...(leaf.effectiveVisibleInSource === undefined
+              ? {}
+              : { effectiveVisibleInSource: leaf.effectiveVisibleInSource }),
             opacityInSource: leaf.opacityInSource,
             role: "editableLayer" as const,
             unsupportedFeatures: [],
@@ -580,8 +663,14 @@ const createPackageDocument = (input: {
                 normalizedName: "hair",
                 groupPath: ["Hair"],
                 sourceOrder: input.groupScaffold.sourceOrder,
-                visibleInSource: true,
-                opacityInSource: 1,
+                visibleInSource: input.groupScaffold.visibleInSource,
+                ...(input.groupScaffold.localVisibleInSource === undefined
+                  ? {}
+                  : { localVisibleInSource: input.groupScaffold.localVisibleInSource }),
+                ...(input.groupScaffold.effectiveVisibleInSource === undefined
+                  ? {}
+                  : { effectiveVisibleInSource: input.groupScaffold.effectiveVisibleInSource }),
+                opacityInSource: input.groupScaffold.opacityInSource,
                 bounds: input.groupScaffold.bounds,
                 unsupportedFeatures: []
               }
@@ -597,6 +686,12 @@ const createPackageDocument = (input: {
               sourceOrder: leaf.sourceOrder,
               bounds: leaf.bounds,
               visibleInSource: leaf.visibleInSource,
+              ...(leaf.localVisibleInSource === undefined
+                ? {}
+                : { localVisibleInSource: leaf.localVisibleInSource }),
+              ...(leaf.effectiveVisibleInSource === undefined
+                ? {}
+                : { effectiveVisibleInSource: leaf.effectiveVisibleInSource }),
               opacityInSource: leaf.opacityInSource,
               role: "editableLayer" as const,
               unsupportedFeatures: []
@@ -678,6 +773,8 @@ const createGroupScaffold = () => ({
   sourceGroupPath: ["Hair"],
   sourceOrder: 0,
   visibleInSource: true,
+  localVisibleInSource: true,
+  effectiveVisibleInSource: true,
   opacityInSource: 1,
   bounds: { x: 0, y: 0, width: 256, height: 256 },
   generatedParentPartId: PARENT_PART_ID,
@@ -693,36 +790,48 @@ const createLeafScaffold = (input: {
   readonly sourceLayerPath: readonly string[];
   readonly sourceOrder: number;
   readonly visibleInSource: boolean;
+  readonly localVisibleInSource?: boolean;
+  readonly effectiveVisibleInSource?: boolean;
   readonly generatedDrawableId: string;
   readonly generatedMeshId: string;
   readonly generatedTextureId: string;
   readonly generatedParentPartId?: string;
-}) => ({
-  scaffoldKind: "leafDrawableScaffold" as const,
-  sourceLayerRef: createSourceLayerRef(
-    input.sourceLayerId,
-    input.sourceLayerName,
-    input.sourceLayerPath
-  ),
-  ...(input.generatedParentPartId === PARENT_PART_ID
-    ? {}
-    : { sourceParentGroupRef: createSourceGroupRef() }),
-  sourceLayerName: input.sourceLayerName,
-  sourceLayerPath: [...input.sourceLayerPath],
-  sourceOrder: input.sourceOrder,
-  visibleInSource: input.visibleInSource,
-  opacityInSource: input.visibleInSource ? 1 : 0,
-  bounds: { x: 0, y: 0, width: 64, height: 64 },
-  byteEstimate: 64 * 64 * 4,
-  generatedParentPartId: input.generatedParentPartId ?? GROUP_PART_ID,
-  generatedDrawableId: input.generatedDrawableId,
-  generatedDrawableDisplayName: input.sourceLayerPath.join(" / "),
-  generatedTextureId: input.generatedTextureId,
-  generatedMeshId: input.generatedMeshId,
-  initialRuntimeVisibility: input.visibleInSource,
-  status: "resolved" as const,
-  statusReasons: []
-});
+}) => {
+  const localVisibleInSource = input.localVisibleInSource ?? input.visibleInSource;
+
+  return {
+    scaffoldKind: "leafDrawableScaffold" as const,
+    sourceLayerRef: createSourceLayerRef(
+      input.sourceLayerId,
+      input.sourceLayerName,
+      input.sourceLayerPath
+    ),
+    ...(input.generatedParentPartId === PARENT_PART_ID
+      ? {}
+      : { sourceParentGroupRef: createSourceGroupRef() }),
+    sourceLayerName: input.sourceLayerName,
+    sourceLayerPath: [...input.sourceLayerPath],
+    sourceOrder: input.sourceOrder,
+    visibleInSource: input.visibleInSource,
+    ...(input.localVisibleInSource === undefined
+      ? {}
+      : { localVisibleInSource: input.localVisibleInSource }),
+    ...(input.effectiveVisibleInSource === undefined
+      ? {}
+      : { effectiveVisibleInSource: input.effectiveVisibleInSource }),
+    opacityInSource: localVisibleInSource ? 1 : 0,
+    bounds: { x: 0, y: 0, width: 64, height: 64 },
+    byteEstimate: 64 * 64 * 4,
+    generatedParentPartId: input.generatedParentPartId ?? GROUP_PART_ID,
+    generatedDrawableId: input.generatedDrawableId,
+    generatedDrawableDisplayName: input.sourceLayerPath.join(" / "),
+    generatedTextureId: input.generatedTextureId,
+    generatedMeshId: input.generatedMeshId,
+    initialRuntimeVisibility: localVisibleInSource,
+    status: "resolved" as const,
+    statusReasons: []
+  };
+};
 
 const createBridge = (
   groupScaffold: ReturnType<typeof createGroupScaffold>,
@@ -844,7 +953,9 @@ const createSummary = (
   approvedLeafCount: leafScaffolds.length,
   generatedGroupPartCount: 1,
   generatedDrawableCount: leafScaffolds.length,
-  hiddenLeafCount: leafScaffolds.filter((leaf) => !leaf.visibleInSource).length,
+  hiddenLeafCount: leafScaffolds.filter(
+    (leaf) => !(leaf.localVisibleInSource ?? leaf.visibleInSource)
+  ).length,
   runtimeHiddenDrawableCount: leafScaffolds.filter((leaf) => !leaf.initialRuntimeVisibility).length,
   structuralDepth: 2,
   totalByteEstimate: leafScaffolds.reduce((total, leaf) => total + (leaf.byteEstimate ?? 0), 0)

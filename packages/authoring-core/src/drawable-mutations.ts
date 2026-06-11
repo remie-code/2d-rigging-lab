@@ -15,6 +15,7 @@ import {
   hasDrawable,
   hasMesh
 } from "./drawable-selectors.js";
+import { appendPartOrderedChild, createDrawableChildEntry } from "./part-children-order.js";
 import { upsertProvenanceRecord } from "./mesh-mutations.js";
 import { addStableOrderId } from "./stable-order-mutations.js";
 
@@ -109,8 +110,8 @@ const assertCanCreateDrawableWithMesh = (
 
 const addDrawableToPart = (session: AuthoringSession, drawable: DrawableDto): void => {
   const part = getPartById(session.graph, drawable.partId);
-  if (part !== undefined && !part.drawableIds.includes(drawable.drawableId)) {
-    part.drawableIds.push(drawable.drawableId);
+  if (part !== undefined) {
+    appendPartOrderedChild(session.graph, part, createDrawableChildEntry(drawable.drawableId));
   }
 };
 

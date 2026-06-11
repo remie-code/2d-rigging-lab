@@ -233,6 +233,11 @@ const createParentChildFieldChanges = (mutation: ReturnType<typeof updatePart>) 
           target: createPartTarget(mutation.oldParentAfter.partId),
           fields: [
             {
+              path: `/model/graph/parts/${mutation.oldParentAfter.partId}/children`,
+              before: mutation.oldParentBefore.children ?? [],
+              after: mutation.oldParentAfter.children ?? []
+            },
+            {
               path: `/model/graph/parts/${mutation.oldParentAfter.partId}/childPartIds`,
               before: mutation.oldParentBefore.childPartIds,
               after: mutation.oldParentAfter.childPartIds
@@ -246,6 +251,11 @@ const createParentChildFieldChanges = (mutation: ReturnType<typeof updatePart>) 
         {
           target: createPartTarget(mutation.newParentAfter.partId),
           fields: [
+            {
+              path: `/model/graph/parts/${mutation.newParentAfter.partId}/children`,
+              before: mutation.newParentBefore.children ?? [],
+              after: mutation.newParentAfter.children ?? []
+            },
             {
               path: `/model/graph/parts/${mutation.newParentAfter.partId}/childPartIds`,
               before: mutation.newParentBefore.childPartIds,

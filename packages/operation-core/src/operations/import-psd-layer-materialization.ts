@@ -923,6 +923,11 @@ const createImportPsdLayerMaterializationResult = (input: {
         target: partTarget,
         fields: [
           {
+            path: `/model/graph/parts/${input.targets.partId}/children`,
+            before: toModelDiffJsonValue(input.mutation.partBefore?.children ?? []),
+            after: toModelDiffJsonValue(input.mutation.partAfter.children ?? [])
+          },
+          {
             path: `/model/graph/parts/${input.targets.partId}/drawableIds`,
             before: input.mutation.partBefore?.drawableIds ?? [],
             after: input.mutation.partAfter.drawableIds

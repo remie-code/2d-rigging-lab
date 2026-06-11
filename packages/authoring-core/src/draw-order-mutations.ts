@@ -7,6 +7,11 @@ import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringGraph } from "./authoring-graph.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { getDrawableById } from "./drawable-selectors.js";
+import {
+  flattenDrawableIdsByPartOrder,
+  syncDrawableChildrenToDrawOrder,
+  syncDrawOrderToPartOrder
+} from "./part-children-order.js";
 
 export const createNextDrawOrderEntry = (
   graph: AuthoringGraph,
@@ -50,8 +55,12 @@ export const setDrawableDrawOrders = (
 ): DrawOrderMutationResult => {
   assertUniqueUpdateDrawableIds(updates);
   const drawOrderBefore = structuredClone(session.graph.drawOrder);
-  const drawablesBefore = new Map(
-    updates.map((update) => {
+  const partsBefore = structuredClone(session.graph.parts);
+  const drawablesBefore = new Map(session.graph.drawables.map((drawable) => [
+    drawable.drawableId,
+    structuredClone(drawable)
+  ]));
+  updates.forEach((update) => {
       const drawable = getDrawableById(session.graph, update.drawableId);
       if (drawable === undefined) {
         throw new AuthoringMutationError(
@@ -74,10 +83,7 @@ export const setDrawableDrawOrders = (
           `Drawable ${update.drawableId} has duplicate draw order entries.`
         );
       }
-
-      return [update.drawableId, structuredClone(drawable)] as const;
-    })
-  );
+    });
   const projectedDrawOrder = structuredClone(drawOrderBefore);
 
   for (const update of updates) {
@@ -90,42 +96,46 @@ export const setDrawableDrawOrders = (
   }
 
   normalizeStableDrawOrderEntries(projectedDrawOrder);
-  const drawableBaseOrderWillChange = updates.some(
-    (update) => drawablesBefore.get(update.drawableId)?.baseDrawOrder !== update.baseDrawOrder
-  );
-  if (drawOrderEntriesEqual(drawOrderBefore, projectedDrawOrder) && !drawableBaseOrderWillChange) {
+  const projectedGraph = structuredClone(session.graph);
+  applyDrawOrderUpdates(projectedGraph, updates);
+  normalizeStableDrawOrderEntries(projectedGraph.drawOrder);
+  const requestedDrawableOrder = getDrawableIdsByDrawOrder(projectedGraph.drawOrder);
+  syncDrawableChildrenToDrawOrder(projectedGraph);
+  const representedDrawableOrder = flattenDrawableIdsByPartOrder(projectedGraph);
+  if (!arrayEqual(requestedDrawableOrder, representedDrawableOrder)) {
+    throw new AuthoringMutationError(
+      "draw_order_structure_conflict",
+      "setDrawOrder cannot move drawables across Part Container block boundaries; use moveStructureChild."
+    );
+  }
+
+  syncDrawOrderToPartOrder(projectedGraph);
+  if (
+    drawOrderEntriesEqual(drawOrderBefore, projectedGraph.drawOrder) &&
+    partsEqual(partsBefore, projectedGraph.parts) &&
+    drawablesEqual(session.graph.drawables, projectedGraph.drawables)
+  ) {
     throw new AuthoringMutationError(
       "no_op_draw_order_update",
       "Requested draw order is already applied."
     );
   }
 
-  for (const update of updates) {
-    const drawable = getDrawableById(session.graph, update.drawableId);
-    const drawOrderEntry = session.graph.drawOrder.find((entry) => entry.drawableId === update.drawableId);
-
-    if (drawable === undefined || drawOrderEntry === undefined) {
-      throw new Error(`Expected draw order preflight to resolve ${update.drawableId}.`);
-    }
-
-    drawable.baseDrawOrder = update.baseDrawOrder;
-    drawOrderEntry.baseDrawOrder = update.baseDrawOrder;
-  }
-
-  normalizeStableDrawOrderEntries(session.graph.drawOrder);
+  session.graph.parts = projectedGraph.parts;
+  session.graph.drawables = projectedGraph.drawables;
+  session.graph.drawOrder = projectedGraph.drawOrder;
   const drawOrderAfter = structuredClone(session.graph.drawOrder);
 
-  const drawableChanges = updates
-    .map((update) => {
-      const before = drawablesBefore.get(update.drawableId);
-      const after = getDrawableById(session.graph, update.drawableId);
-      if (before === undefined || after === undefined) {
-        throw new Error(`Expected drawable change state for ${update.drawableId}.`);
+  const drawableChanges = session.graph.drawables
+    .map((afterDrawable) => {
+      const before = drawablesBefore.get(afterDrawable.drawableId);
+      if (before === undefined) {
+        throw new Error(`Expected drawable change state for ${afterDrawable.drawableId}.`);
       }
 
       return {
         before,
-        after: structuredClone(after)
+        after: structuredClone(afterDrawable)
       };
     })
     .filter((change) => change.before.baseDrawOrder !== change.after.baseDrawOrder);
@@ -140,6 +150,23 @@ export const setDrawableDrawOrders = (
     drawOrderAfter,
     authoringRevision: session.authoringRevision
   };
+};
+
+const applyDrawOrderUpdates = (
+  graph: AuthoringGraph,
+  updates: readonly DrawOrderUpdateInput[]
+): void => {
+  for (const update of updates) {
+    const drawable = graph.drawables.find((candidate) => candidate.drawableId === update.drawableId);
+    const drawOrderEntry = graph.drawOrder.find((entry) => entry.drawableId === update.drawableId);
+
+    if (drawable === undefined || drawOrderEntry === undefined) {
+      throw new Error(`Expected draw order preflight to resolve ${update.drawableId}.`);
+    }
+
+    drawable.baseDrawOrder = update.baseDrawOrder;
+    drawOrderEntry.baseDrawOrder = update.baseDrawOrder;
+  }
 };
 
 const nextDrawOrderValue = (entries: readonly DrawOrderEntryDto[]): number => {
@@ -207,3 +234,30 @@ const drawOrderEntriesEqual = (
       leftEntry.keyformSetId === rightEntry.keyformSetId
     );
   });
+
+const getDrawableIdsByDrawOrder = (entries: readonly DrawOrderEntryDto[]): readonly DrawableId[] =>
+  [...entries]
+    .sort((left, right) => {
+      const stableDelta = left.stableOrder - right.stableOrder;
+      if (stableDelta !== 0) {
+        return stableDelta;
+      }
+
+      return left.drawableId.localeCompare(right.drawableId);
+    })
+    .map((entry) => entry.drawableId);
+
+const partsEqual = (
+  left: readonly AuthoringGraph["parts"][number][],
+  right: readonly AuthoringGraph["parts"][number][]
+): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+const drawablesEqual = (
+  left: readonly AuthoringGraph["drawables"][number][],
+  right: readonly AuthoringGraph["drawables"][number][]
+): boolean => JSON.stringify(left) === JSON.stringify(right);
+
+const arrayEqual = <TValue>(
+  left: readonly TValue[],
+  right: readonly TValue[]
+): boolean => left.length === right.length && left.every((value, index) => right[index] === value);

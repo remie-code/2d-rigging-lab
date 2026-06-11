@@ -32,6 +32,7 @@
         "/model/graph/stableOrder",
         "/model/drawables/draw_wave29_mesh",
         "/model/meshes/mesh_wave29_mesh",
+        "/model/graph/parts/children",
         "/model/graph/parts/drawableIds",
         "/assets/sourceManifest/sourceAssets"
       ],

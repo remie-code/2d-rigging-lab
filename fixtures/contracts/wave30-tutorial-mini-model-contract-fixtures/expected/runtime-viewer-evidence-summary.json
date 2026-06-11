@@ -2,7 +2,7 @@
   "schemaVersion": "wave30-tutorial-mini-model-runtime-viewer-evidence-summary-v1",
   "packageRef": {
     "packageId": "pkg_tutorial_mini_model",
-    "packageRevision": 34,
+    "packageRevision": 36,
     "packageHash": "sha256:tutorial-mini-model-final-v1"
   },
   "semanticReadiness": {
@@ -28,8 +28,8 @@
       "snap_tutorial_mini_model_30",
       "snap_tutorial_mini_model_31"
     ],
-    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r34-wave30-tutorial-mini-model-contract-final-f31.runtime-state.json",
-    "finalRuntimeStateSequenceRef": "runtime/state-sequences/pkg_tutorial_mini_model-r34-wave30-tutorial-mini-model-contract.runtime-state-sequence.json",
+    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r36-wave30-tutorial-mini-model-contract-final-f31.runtime-state.json",
+    "finalRuntimeStateSequenceRef": "runtime/state-sequences/pkg_tutorial_mini_model-r36-wave30-tutorial-mini-model-contract.runtime-state-sequence.json",
     "requiredSliceEvidencePresent": {
       "parts": true,
       "layers": true,
@@ -57,7 +57,7 @@
   "viewerEvidence": {
     "baselineSnapshotId": "snap_tutorial_mini_model_40",
     "snapshotId": "snap_tutorial_mini_model_41",
-    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r34-viewer-f41.runtime-state.json",
+    "finalRuntimeStateRef": "runtime/states/pkg_tutorial_mini_model-r36-viewer-f41.runtime-state.json",
     "surface": "viewer",
     "runtimeDiffEquivalent": true,
     "targetIds": [

@@ -109,6 +109,7 @@ export async function createPsdImportPlan(
     groupScaffolds,
     leafScaffolds
   });
+  const editorHiddenPartIds = createEditorHiddenPartIds(groupScaffolds);
   const planDigest = await sha256Text(`plan:${token}:${parsed.sourceDigest.hex}`);
   const approvalDigest = await sha256Text(`approval:${token}:${plannedLayers.map((layer) => layer.sourceLayerId).join("|")}`);
   const sourcePsd = {
@@ -205,6 +206,7 @@ export async function createPsdImportPlan(
     capPolicy: STRUCTURAL_CAP_POLICY,
     destination: input.destination,
     importRootPartId: groupPartIds.get("psd:root") ?? input.destination.parentPartId,
+    editorHiddenPartIds,
     reviewRows,
     hasIssues: reviewRows.some((row) => row.hasIssue),
     issues
@@ -283,6 +285,12 @@ function createGroupScaffold(input: {
     sourceGroupPath: [...input.group.groupPath],
     sourceOrder: input.group.sourceOrder,
     visibleInSource: input.group.visibleInSource,
+    ...(input.group.localVisibleInSource === undefined
+      ? {}
+      : { localVisibleInSource: input.group.localVisibleInSource }),
+    ...(input.group.effectiveVisibleInSource === undefined
+      ? {}
+      : { effectiveVisibleInSource: input.group.effectiveVisibleInSource }),
     opacityInSource: input.group.opacityInSource,
     ...(input.group.bounds === undefined ? {} : { bounds: input.group.bounds }),
     generatedParentPartId,
@@ -322,6 +330,12 @@ function createLeafScaffold(input: {
     sourceLayerPath: [...input.layer.groupPath, input.layer.originalName],
     sourceOrder: input.layer.sourceOrder,
     visibleInSource: input.layer.visibleInSource,
+    ...(input.layer.localVisibleInSource === undefined
+      ? {}
+      : { localVisibleInSource: input.layer.localVisibleInSource }),
+    ...(input.layer.effectiveVisibleInSource === undefined
+      ? {}
+      : { effectiveVisibleInSource: input.layer.effectiveVisibleInSource }),
     opacityInSource: input.layer.opacityInSource,
     bounds: input.layer.bounds,
     byteEstimate: input.layer.bounds.width * input.layer.bounds.height * 4,
@@ -330,7 +344,7 @@ function createLeafScaffold(input: {
     generatedDrawableDisplayName: input.generatedDisplayName,
     generatedTextureId: TextureIdSchema.parse(`tex_${leafToken}`),
     generatedMeshId: MeshIdSchema.parse(`mesh_${leafToken}`),
-    initialRuntimeVisibility: input.layer.visibleInSource,
+    initialRuntimeVisibility: isSourceLocallyVisible(input.layer),
     status: "previewReady",
     statusReasons: []
   };
@@ -396,6 +410,9 @@ function createReviewRows(input: {
       depth,
       kind: "Part Container",
       name: group.generatedPartDisplayName,
+      localVisibleInSource: isSourceLocallyVisible(group),
+      effectiveVisibleInSource: isSourceEffectivelyVisible(group),
+      ...createVisibilityProjection("group", group),
       ...createIssueProjection(
         group.status,
         group.statusReasons,
@@ -429,6 +446,9 @@ function createReviewRows(input: {
         depth: depth + 1,
         kind: child.value.initialRuntimeVisibility ? "Drawable" : "Hidden Drawable",
         name: child.value.generatedDrawableDisplayName,
+        localVisibleInSource: isSourceLocallyVisible(child.value),
+        effectiveVisibleInSource: isSourceEffectivelyVisible(child.value),
+        ...createVisibilityProjection("leaf", child.value),
         ...createIssueProjection(
           child.value.status,
           child.value.statusReasons,
@@ -472,6 +492,28 @@ function createIssueProjection(
   };
 }
 
+function createVisibilityProjection(
+  kind: "group" | "leaf",
+  source: {
+    readonly visibleInSource: boolean;
+    readonly localVisibleInSource?: boolean | undefined;
+    readonly effectiveVisibleInSource?: boolean | undefined;
+  }
+): Pick<PsdImportReviewRow, "visibilityLabel"> {
+  const localVisible = isSourceLocallyVisible(source);
+  if (!localVisible) {
+    return {
+      visibilityLabel: kind === "group" ? "Hidden Part Container" : "Layer hidden in PSD"
+    };
+  }
+
+  return isSourceEffectivelyVisible(source)
+    ? {}
+    : {
+        visibilityLabel: "Hidden by parent group"
+      };
+}
+
 function createGroupRef(
   group: PsdAdapterSourceGroupDto,
   sourceAssetId: SourceAssetId
@@ -510,7 +552,10 @@ function createSummary(input: {
   readonly groupScaffolds: readonly PsdStructuralScaffoldGroupPartDto[];
   readonly leafScaffolds: readonly PsdStructuralScaffoldLeafDrawableDto[];
 }): PsdStructuralScaffoldSummaryDto {
-  const hiddenLeafCount = input.leafScaffolds.filter((leaf) => !leaf.visibleInSource).length;
+  const hiddenLeafCount = input.leafScaffolds.filter((leaf) => !isSourceLocallyVisible(leaf)).length;
+  const runtimeHiddenDrawableCount = input.leafScaffolds.filter(
+    (leaf) => !leaf.initialRuntimeVisibility
+  ).length;
 
   return {
     sourceGroupCount: input.sourceGroupCount,
@@ -520,13 +565,35 @@ function createSummary(input: {
     generatedGroupPartCount: input.groupScaffolds.length,
     generatedDrawableCount: input.leafScaffolds.length,
     hiddenLeafCount,
-    runtimeHiddenDrawableCount: hiddenLeafCount,
+    runtimeHiddenDrawableCount,
     structuralDepth: Math.max(0, ...input.groupScaffolds.map((group) => group.sourceGroupPath.length)),
     totalByteEstimate: input.leafScaffolds.reduce(
       (total, leaf) => total + (leaf.byteEstimate ?? 0),
       0
     )
   };
+}
+
+function createEditorHiddenPartIds(
+  groupScaffolds: readonly PsdStructuralScaffoldGroupPartDto[]
+): readonly PartId[] {
+  return groupScaffolds
+    .filter((group) => !isSourceLocallyVisible(group))
+    .map((group) => group.generatedPartId);
+}
+
+function isSourceLocallyVisible(source: {
+  readonly visibleInSource: boolean;
+  readonly localVisibleInSource?: boolean | undefined;
+}): boolean {
+  return source.localVisibleInSource ?? source.visibleInSource;
+}
+
+function isSourceEffectivelyVisible(source: {
+  readonly visibleInSource: boolean;
+  readonly effectiveVisibleInSource?: boolean | undefined;
+}): boolean {
+  return source.effectiveVisibleInSource ?? source.visibleInSource;
 }
 
 function compareGroupOrder(

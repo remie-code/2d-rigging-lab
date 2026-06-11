@@ -140,6 +140,14 @@ Focus controls:
 
 Mesh overlay / Deformer overlayは、対象toolや該当データがない場合はdisabledまたはinactiveにしてよい。
 
+Mesh overlayの初期方針:
+
+- overlay toggleは表示状態だけを変え、project stateを変更しない。
+- v0では選択中Drawableのmeshだけを表示する。
+- Mesh Tool中はpreview確認のためmesh overlayを表示する。
+- Apply前のdraft meshは、committed meshと区別できる見た目にする。
+- hidden DrawableをMesh Toolで扱う場合、編集previewとして一時表示してよいが、model visibilityは変更しない。
+
 ## 7. 関連画面
 
 - Authoring Workspace: [../screens/authoring-workspace.md](../screens/authoring-workspace.md)

@@ -30,10 +30,14 @@ Wave53 final integration report/review `pass` により、Parts Tree v0 は Auth
 - Part Containerの折り畳み / 展開を扱う。
 - Part Containerの表示トグルを扱う。
 - Drawableの表示トグルを扱う。
+- Parts Treeはファイルツリーではなく、描画順つきの階層スタックとして扱う。
+- 同じ親Container配下では、Part ContainerとDrawableを混在した1本のordered children listとして表示する。
+- 同じ親Container配下で、Containerを先にまとめ、その後にDrawableをまとめる表示にはしない。
 - Draw OrderはParts Tree上の順序で表す。
 - Tree上で上にあるdrawableほど前面に表示される。
 - Tree上で下にあるdrawableほど背面に表示される。
 - 描画処理としては、背面から前面へ、つまりTree下側から上側へ描画される。
+- Part ContainerはDrawableではないが、配下Drawable全体を持つ描画順ブロックとして順序に参加する。
 - part membership、draw order変更、visibility row操作の主ホームはParts Treeである。
 - Tree選択とCanvas選択は同期する。
 - 名前変更はParts Tree上のinline editまたはInspectorで扱う。
@@ -56,6 +60,50 @@ Wave53 final integration report/review `pass` により、Parts Tree v0 は Auth
 | Atlas    | draw order handles  |                       |                      |
 +----------+---------------------+-----------------------+----------------------+
 ```
+
+## 3.1 階層スタック表示
+
+Parts Treeは、構造と描画順を同時に扱う階層スタックである。
+
+同じ親Container配下では、Part ContainerとDrawableを分けず、混在した順序を保つ。
+
+例:
+
+```text
+Project Root
+  hair_front          [Part Container]
+  front hair          [Drawable]
+  hair_f_l            [Drawable]
+  表情                [Part Container]
+  hair_f_r            [Drawable]
+```
+
+この順序は、同じ親配下の描画順と一致する。Treeで上にあるものほど前面であり、下にあるものほど背面である。
+
+Containerは直接描画されないが、配下Drawable群をまとめた描画順ブロックとして扱う。
+
+```text
+A Drawable
+B Container
+  B-1 Drawable
+  B-2 Drawable
+C Drawable
+```
+
+この場合、`B Container` の配下Drawable群は、`A Drawable` と `C Drawable` の間にあるまとまりとして描画順に参加する。ContainerをDnDで動かすと、配下全体がまとまって前後に移動する。
+
+避ける表示:
+
+```text
+Project Root
+  hair_front          [Part Container]
+  表情                [Part Container]
+  front hair          [Drawable]
+  hair_f_l            [Drawable]
+  hair_f_r            [Drawable]
+```
+
+これはファイルブラウザ的だが、描画順を正しく表せないため、Parts Treeの最終UXとして採用しない。
 
 ## 4. 表示するもの
 
@@ -105,6 +153,43 @@ Parts Treeで扱わない操作:
 - parameter定義管理
 
 これらは各Active Tool、Task、Managerへ委譲する。
+
+## 5.1 DnD Semantics
+
+DnDは、所属Containerの変更だけでは不十分である。Parts TreeのDnDは、階層変更と描画順変更を同時に扱う。
+
+必要な操作:
+
+- Drawableを同じContainer内で上下に並び替える。
+- Drawableを別Containerへ移動する。
+- Part Containerを同じ親Container内で上下に並び替える。
+- Part Containerを別Container配下へ移動する。
+
+Drop位置:
+
+- target rowの上側へdrop: targetの前へ移動。
+- target rowの下側へdrop: targetの後へ移動。
+- Part Container rowの中央または内側へdrop: target Containerの中へ移動。
+
+drop feedback:
+
+- 前 / 後 / 中 のどこにdropされるかを視覚的に示す。
+- Containerの中へdropする場合は、そのContainerがdrop targetであることを示す。
+- 無効なdrop先ではdropできないことを示す。
+
+禁止するdrop:
+
+- 自分自身の配下へContainerを移動する循環構造。
+- DrawableをProject Root直下など、model上所属できない場所へ移動すること。
+- Tree表示順とCanvas描画順が矛盾する中途半端な移動。
+
+DnD後の期待:
+
+- Tree表示順が更新される。
+- Canvas描画順が同じルールで更新される。
+- selectionは移動した行に残る。
+- Inspectorは移動後の所属 / draw orderを反映する。
+- Part Containerを移動した場合、配下Drawable群もまとまって移動したものとして扱われる。
 
 ## 6. Drawable Creation / List / Layer Order
 
@@ -157,3 +242,5 @@ Drawable Inspectorとの分担:
 - collapsed state保存。
 - manual drawable createの final UI。
 - large hierarchy時にsearch / filterが必要になるタイミング。
+- mixed ordered children listをmodel / package上でどう表現するか。
+- Container blockのCanvas draw order projectionをどの層で正規化するか。

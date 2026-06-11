@@ -61,7 +61,7 @@ Evidence Surface
 +-----------------------------------------+--------------------------------------+
 | Planned Parts Structure                 | PSD Preview                           |
 | Part Container / Drawable / Hidden rows  | selected PSD only                     |
-| row-level Issue badge + tooltip          | visible layers preview or placeholder |
+| row-level Issue badge + tooltip          | visible layer/group preview           |
 | destination context                      | no existing canvas composition        |
 +-----------------------------------------+--------------------------------------+
 | Footer: Import / Cancel                                                        |
@@ -74,6 +74,7 @@ Evidence Surface
   - PSD group由来のPart Container
   - PSD leaf layer由来のDrawable
   - hidden layer由来のHidden Drawable
+  - hidden group由来のPart Container editor-hidden gate
   - group自体はDrawableにしない
 - destination summary
   - 初回importまたは選択なし: project root直下
@@ -83,9 +84,12 @@ Evidence Surface
 - PSD単体preview
   - 目的は「読み込もうとしているPSDが合っているか」を確認すること
   - 既存Canvas / 既存Parts / import先との合成はしない
-  - visible layerだけを対象にした簡易previewを理想形とする
+  - visible layer / visible groupだけを対象にした簡易previewを理想形とする
   - hidden layerはpreview上では非表示にする
-  - 当面の実装ではplaceholderでよい
+  - hidden group配下のlayerはpreview上では非表示にする
+  - PSD canvas boundsに収めて表示する
+  - layer opacityは可能なら反映する
+  - clippingはImport Review previewの必須要件にしない
 - issue表示
   - 問題の有無は二値で扱う
   - 問題のある行に `Issue` badgeを出す
@@ -116,6 +120,83 @@ Evidence Surface
 これらはDiagnostics / Evidence View、Codex-facing structured surface、test-facing structured surfaceへ分離する。
 
 PSD canvas size、layer / group / hidden count、unsupported要素の詳細は、通常ユーザーの主判断材料にしない。必要な場合も、行単位issue tooltipやDiagnostics / Evidence Viewへ寄せる。
+
+## 6.1 PSD Preview
+
+PSD Previewは、これからimportするPSD単体がユーザーの意図したファイルかを確認するための表示である。
+
+表示対象:
+
+- 選択されたPSDファイルだけ。
+- PSD内でeffective visibleなlayer。
+- visible group配下のvisible layer。
+- 可能ならlayer opacity。
+
+表示対象にしないもの:
+
+- 既存workspace model。
+- import先との合成結果。
+- hidden layer。
+- hidden group配下のlayer。
+- clipping再現。
+- Photoshop pixel perfect parity。
+- debug / evidence / parser detail。
+
+このpreviewは、Workspace Canvasにimport後modelを描く機能とは別である。Workspace CanvasはEditor modelにcommitされたdrawableを描く。PSD Previewはimport前のファイル確認に限る。
+
+## 6.2 Hidden Group Import Semantics
+
+PSD groupがhiddenの場合、そのgroupに対応するPart Containerはeditor-only hidden gateを持つ。
+
+```text
+PSD hidden group
+  -> Part Container editor-hidden
+  -> descendants are effectively hidden in Editor Canvas
+  -> child Drawable runtime visibility is not rewritten merely because the parent group was hidden
+```
+
+この挙動はWave60で定義したPart Container visibilityと同じ意味である。
+
+- hidden groupはPart Containerとして作る。
+- group自体をDrawableにはしない。
+- hidden groupの子Drawable個別visibilityは破壊しない。
+- parent containerをvisibleに戻すと、子Drawable個別visibilityに従って表示される。
+- runtime / export初期状態には影響させない。
+- runtimeに出る表示切替は、Variant / Expression、parameter-driven opacityなどの各機能で扱う。
+
+leaf layer自体がhiddenの場合は、従来どおりHidden Drawableとして扱う。hidden group由来のeditor-hidden gateとは別概念である。
+
+### 6.2.1 Parser Adapter Note
+
+`@webtoon/psd` v0.4.0 の public APIでは、Layerは `isHidden` を公開しているが、Groupは `isHidden` を公開していない。したがって、public APIだけに依存するとPSD groupのhidden状態を取得できず、hidden groupがvisible groupとしてimportされる可能性がある。
+
+実装でhidden groupを扱う場合、次のどちらかが必要になる。
+
+1. PSD parser adapter内だけで、`@webtoon/psd` の runtime private shapeを限定的に読む。
+2. 別のPSD layer record解析経路を追加し、group frameのhidden flagを取得する。
+
+当面の現実的な方針は1である。`Group` instanceのruntime shapeには `layerFrame.layerProperties.hidden` が残っているため、adapter内に小さなcompatibility shimを置けば読める。
+
+```ts
+type WebtoonPsdGroupPrivateShape = {
+  readonly layerFrame?: {
+    readonly layerProperties?: {
+      readonly hidden?: boolean;
+    };
+  };
+};
+```
+
+このprivate shape参照は、PSD Import adapterの境界内に閉じ込める。UI、operation payload、package schema、validatorはprivate parser objectへ依存しない。
+
+実装時の注意:
+
+- public `Layer.isHidden` をLayer hiddenの第一候補にする。
+- Group hiddenはadapter-local helperで `layerFrame.layerProperties.hidden === true` を読む。
+- private fieldが存在しない場合はvisible扱いにfallbackし、parse全体を壊さない。
+- fallbackが発生したことをDiagnostics / Evidence側に残すかは後続判断とする。Human UIにraw parser detailを常時表示しない。
+- adapter unit testには、Group-like objectのprivate hidden shapeを読むケースと、shapeが欠落しても落ちないケースを入れる。
+- このshimは `@webtoon/psd` versionに依存するため、parser version update時の確認対象にする。
 
 ## 7. Codex-facing Surface
 

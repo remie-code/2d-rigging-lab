@@ -120,6 +120,12 @@ const createSourceLayerFromAdapterLayer = (input: {
   groupPath: [...input.layer.groupPath],
   bounds: structuredClone(input.layer.bounds),
   visibleInSource: input.layer.visibleInSource,
+  ...(input.layer.localVisibleInSource === undefined
+    ? {}
+    : { localVisibleInSource: input.layer.localVisibleInSource }),
+  ...(input.layer.effectiveVisibleInSource === undefined
+    ? {}
+    : { effectiveVisibleInSource: input.layer.effectiveVisibleInSource }),
   opacityInSource: input.layer.opacityInSource,
   role: input.payload.requestedLayerRoles[input.layer.sourceLayerId] ?? input.layer.role,
   unsupportedFeatures: input.layer.unsupportedFeatures.map((feature) => feature.featureId),
@@ -170,6 +176,12 @@ const createPsdProfileSourceGroup = (
   groupPath: [...group.groupPath],
   sourceOrder: group.sourceOrder,
   visibleInSource: group.visibleInSource,
+  ...(group.localVisibleInSource === undefined
+    ? {}
+    : { localVisibleInSource: group.localVisibleInSource }),
+  ...(group.effectiveVisibleInSource === undefined
+    ? {}
+    : { effectiveVisibleInSource: group.effectiveVisibleInSource }),
   opacityInSource: group.opacityInSource,
   ...(group.bounds === undefined ? {} : { bounds: structuredClone(group.bounds) }),
   ...(group.blendMode === undefined ? {} : { blendMode: structuredClone(group.blendMode) }),
@@ -191,6 +203,12 @@ const createPsdProfileSourceLayer = (
   sourceOrder: layer.sourceOrder,
   bounds: structuredClone(layer.bounds),
   visibleInSource: layer.visibleInSource,
+  ...(layer.localVisibleInSource === undefined
+    ? {}
+    : { localVisibleInSource: layer.localVisibleInSource }),
+  ...(layer.effectiveVisibleInSource === undefined
+    ? {}
+    : { effectiveVisibleInSource: layer.effectiveVisibleInSource }),
   opacityInSource: layer.opacityInSource,
   role: layer.role,
   ...(layer.blendMode === undefined ? {} : { blendMode: structuredClone(layer.blendMode) }),

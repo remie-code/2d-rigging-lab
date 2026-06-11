@@ -45,6 +45,7 @@
       "changedFieldPaths": [
         "/model/graph/parts/part_face/displayName",
         "/model/graph/parts/part_face/parentPartId",
+        "/model/graph/parts/part_root/children",
         "/model/graph/parts/part_root/childPartIds"
       ],
       "packageRevisionAfter": 2,
@@ -73,7 +74,9 @@
       ],
       "changedFieldPaths": [
         "/model/drawables/draw_eye/partId",
+        "/model/graph/parts/part_root/children",
         "/model/graph/parts/part_root/drawableIds",
+        "/model/graph/parts/part_face/children",
         "/model/graph/parts/part_face/drawableIds"
       ],
       "packageRevisionAfter": 3,

@@ -21,7 +21,8 @@
       ],
       "modelDiffPaths": [
         "/model/drawOrder/entries",
-        "/model/drawables/draw_back/baseDrawOrder"
+        "/model/drawables/draw_back/baseDrawOrder",
+        "/model/drawables/draw_front/baseDrawOrder"
       ],
       "runtimeSnapshots": {
         "baseline": {
@@ -55,13 +56,13 @@
             {
               "drawableId": "draw_front",
               "visible": true,
-              "baseDrawOrder": 10,
+              "baseDrawOrder": 0,
               "evaluatedDrawOrder": 0
             },
             {
               "drawableId": "draw_back",
               "visible": true,
-              "baseDrawOrder": 20,
+              "baseDrawOrder": 1,
               "evaluatedDrawOrder": 1
             }
           ]
@@ -76,7 +77,7 @@
             "visibleBefore": true,
             "visibleAfter": true,
             "baseDrawOrderBefore": 10,
-            "baseDrawOrderAfter": 10,
+            "baseDrawOrderAfter": 0,
             "evaluatedDrawOrderBefore": 1,
             "evaluatedDrawOrderAfter": 0
           },
@@ -87,7 +88,7 @@
             "visibleBefore": true,
             "visibleAfter": true,
             "baseDrawOrderBefore": 0,
-            "baseDrawOrderAfter": 20,
+            "baseDrawOrderAfter": 1,
             "evaluatedDrawOrderBefore": 0,
             "evaluatedDrawOrderAfter": 1
           }
@@ -177,13 +178,13 @@
             {
               "drawableId": "draw_front",
               "visible": true,
-              "baseDrawOrder": 10,
+              "baseDrawOrder": 0,
               "evaluatedDrawOrder": 0
             },
             {
               "drawableId": "draw_back",
               "visible": true,
-              "baseDrawOrder": 20,
+              "baseDrawOrder": 1,
               "evaluatedDrawOrder": 1
             }
           ]
@@ -197,13 +198,13 @@
             {
               "drawableId": "draw_front",
               "visible": false,
-              "baseDrawOrder": 10,
+              "baseDrawOrder": 0,
               "evaluatedDrawOrder": 0
             },
             {
               "drawableId": "draw_back",
               "visible": true,
-              "baseDrawOrder": 20,
+              "baseDrawOrder": 1,
               "evaluatedDrawOrder": 1
             }
           ]
@@ -217,8 +218,8 @@
             "opacityAfter": 1,
             "visibleBefore": true,
             "visibleAfter": false,
-            "baseDrawOrderBefore": 10,
-            "baseDrawOrderAfter": 10,
+            "baseDrawOrderBefore": 0,
+            "baseDrawOrderAfter": 0,
             "evaluatedDrawOrderBefore": 0,
             "evaluatedDrawOrderAfter": 0
           }
@@ -305,13 +306,13 @@
             {
               "drawableId": "draw_front",
               "visible": false,
-              "baseDrawOrder": 10,
+              "baseDrawOrder": 0,
               "evaluatedDrawOrder": 0
             },
             {
               "drawableId": "draw_back",
               "visible": true,
-              "baseDrawOrder": 20,
+              "baseDrawOrder": 1,
               "evaluatedDrawOrder": 1
             }
           ]
@@ -326,13 +327,13 @@
             {
               "drawableId": "draw_front",
               "visible": true,
-              "baseDrawOrder": 10,
+              "baseDrawOrder": 0,
               "evaluatedDrawOrder": 0
             },
             {
               "drawableId": "draw_back",
               "visible": true,
-              "baseDrawOrder": 20,
+              "baseDrawOrder": 1,
               "evaluatedDrawOrder": 1
             }
           ]
@@ -346,8 +347,8 @@
             "opacityAfter": 1,
             "visibleBefore": false,
             "visibleAfter": true,
-            "baseDrawOrderBefore": 10,
-            "baseDrawOrderAfter": 10,
+            "baseDrawOrderBefore": 0,
+            "baseDrawOrderAfter": 0,
             "evaluatedDrawOrderBefore": 0,
             "evaluatedDrawOrderAfter": 0
           }

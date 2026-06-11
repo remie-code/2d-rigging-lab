@@ -9,16 +9,21 @@ import type {
   ProjectInspectorProjection
 } from "../../features/editor-session/model/session-tree";
 import { cn } from "../../lib/class-name";
+import { useEditorUiStore } from "../../state/editor-ui-store";
+import { MeshToolInspector } from "./mesh-tool-inspector";
 import { WorkspacePanel } from "./panel-frame";
 
 export function InspectorPanel() {
   const session = useEditorSession();
   const { inspector } = session;
+  const activeTool = useEditorUiStore((state) => state.activeTool);
 
   return (
     <WorkspacePanel overline="Context" title="Inspector">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
-        {inspector.kind === "Part" ? (
+        {activeTool === "mesh" ? (
+          <MeshToolInspector />
+        ) : inspector.kind === "Part" ? (
           <PartContainerInspector inspector={inspector} />
         ) : inspector.kind === "Drawable" ? (
           <DrawableInspector inspector={inspector} />

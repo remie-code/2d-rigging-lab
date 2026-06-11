@@ -35,7 +35,7 @@ describe("editor session commands", () => {
 
     expect(result.committed).toBe(true);
     expect(findDrawablePart(result.session, DRAW_B)).toBe(PART_A);
-    expect(projectedDrawableOrder(result.session)).toEqual([DRAW_A, DRAW_B, DRAW_C]);
+    expect(projectedDrawableOrder(result.session)).toEqual([DRAW_C, DRAW_B, DRAW_A]);
     expect(globalDrawableOrder(result.session)).toEqual(projectedDrawableOrder(result.session));
     expect(findDrawablePart(session, DRAW_B)).toBe(PART_B);
   });

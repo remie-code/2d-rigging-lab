@@ -31,24 +31,34 @@ describe("draw order authoring mutations", () => {
         }),
         after: expect.objectContaining({
           drawableId: "draw_back",
-          baseDrawOrder: 20
+          baseDrawOrder: 1
+        })
+      },
+      {
+        before: expect.objectContaining({
+          drawableId: "draw_front",
+          baseDrawOrder: 1
+        }),
+        after: expect.objectContaining({
+          drawableId: "draw_front",
+          baseDrawOrder: 0
         })
       }
     ]);
     expect(session.graph.drawables.map((drawable) => [drawable.drawableId, drawable.baseDrawOrder])).toEqual([
-      ["draw_back", 20],
-      ["draw_front", 10]
+      ["draw_back", 1],
+      ["draw_front", 0]
     ]);
     expect(session.graph.drawOrder).toEqual([
       {
-        drawableId: "draw_back",
-        baseDrawOrder: 20,
-        stableOrder: 1
+        drawableId: "draw_front",
+        baseDrawOrder: 0,
+        stableOrder: 0
       },
       {
-        drawableId: "draw_front",
-        baseDrawOrder: 10,
-        stableOrder: 0
+        drawableId: "draw_back",
+        baseDrawOrder: 1,
+        stableOrder: 1
       }
     ]);
     expect(session.authoringRevision).toBe(1);
@@ -56,8 +66,8 @@ describe("draw order authoring mutations", () => {
 
     const runtimeGraph = toRuntimeGraph(session);
     expect(runtimeGraph.drawOrder).toEqual([
-      { drawableId: "draw_back", drawOrder: 1 },
-      { drawableId: "draw_front", drawOrder: 0 }
+      { drawableId: "draw_front", drawOrder: 0 },
+      { drawableId: "draw_back", drawOrder: 1 }
     ]);
   });
 
@@ -133,12 +143,22 @@ const createFixtureSession = (): AuthoringSession => ({
         partId: PartIdSchema.parse("part_root"),
         displayName: "Root",
         childPartIds: [],
-        drawableIds: [DrawableIdSchema.parse("draw_back"), DrawableIdSchema.parse("draw_front")]
+        drawableIds: [DrawableIdSchema.parse("draw_back"), DrawableIdSchema.parse("draw_front")],
+        children: [
+          {
+            kind: "drawable",
+            drawableId: DrawableIdSchema.parse("draw_back")
+          },
+          {
+            kind: "drawable",
+            drawableId: DrawableIdSchema.parse("draw_front")
+          }
+        ]
       }
     ],
     drawables: [
       createFixtureDrawable("draw_back", "mesh_back", "Back", 0),
-      createFixtureDrawable("draw_front", "mesh_front", "Front", 10)
+      createFixtureDrawable("draw_front", "mesh_front", "Front", 1)
     ],
     meshes: [
       createFixtureMesh("mesh_back", "draw_back", { x: 0, y: 0, width: 16, height: 16 }),
@@ -157,7 +177,7 @@ const createFixtureSession = (): AuthoringSession => ({
       },
       {
         drawableId: DrawableIdSchema.parse("draw_front"),
-        baseDrawOrder: 10,
+        baseDrawOrder: 1,
         stableOrder: 1
       }
     ],

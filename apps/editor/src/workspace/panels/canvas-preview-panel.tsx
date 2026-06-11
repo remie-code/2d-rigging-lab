@@ -7,6 +7,7 @@ import {
   Move,
   Scan,
   SquareDashed,
+  Triangle,
   ZoomIn,
   ZoomOut
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import { cn } from "../../lib/class-name";
+import { useEditorUiStore } from "../../state/editor-ui-store";
 import { IconButton } from "../../ui/icon-button";
 import {
   createCanvasRenderProjection,
@@ -75,7 +77,11 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 const POINTER_CLICK_SLOP = 4;
 
 export function CanvasPreviewPanel() {
-  const { editorHiddenPartIds, selectDrawable, selection, session } = useEditorSession();
+  const { editorHiddenPartIds, meshDraft, selectDrawable, selection, session } = useEditorSession();
+  const activeTool = useEditorUiStore((state) => state.activeTool);
+  const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
+  const setMeshOverlayVisible = useEditorUiStore((state) => state.setMeshOverlayVisible);
+  const toggleMeshOverlayVisible = useEditorUiStore((state) => state.toggleMeshOverlayVisible);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const bitmapCacheRef = useRef(createCanvasBitmapCache());
@@ -88,15 +94,29 @@ export function CanvasPreviewPanel() {
   const [view, setView] = useState<CanvasViewState>(DEFAULT_VIEW);
   const [spacePressed, setSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [overlays, setOverlays] = useState<CanvasOverlayState>({
+  const [overlays, setOverlays] = useState<Omit<CanvasOverlayState, "mesh">>({
     grid: true,
     canvasBounds: true,
     selectionBounds: true,
     isolateSelected: false
   });
+  const renderOverlays = useMemo<CanvasOverlayState>(
+    () => ({
+      ...overlays,
+      mesh: meshOverlayVisible
+    }),
+    [meshOverlayVisible, overlays]
+  );
   const projection = useMemo(
-    () => createCanvasRenderProjection(session, selection, { editorHiddenPartIds }),
-    [editorHiddenPartIds, selection, session]
+    () =>
+      createCanvasRenderProjection(session, selection, {
+        editorHiddenPartIds,
+        meshDraft,
+        ...(activeTool === "mesh" && selection?.kind === "drawable"
+          ? { meshPreviewDrawableId: selection.id }
+          : {})
+      }),
+    [activeTool, editorHiddenPartIds, meshDraft, selection, session]
   );
   const selectedDrawableCount = projection.selectedDrawableIds.size;
   const selectedDrawableOpacity = useMemo(
@@ -108,6 +128,7 @@ export function CanvasPreviewPanel() {
     [projection]
   );
   const isolateSelectedActive = overlays.isolateSelected && canIsolateSelection;
+  const meshOverlayActive = meshOverlayVisible && projection.meshOverlay !== undefined;
   const renderableDrawableCount = useMemo(
     () =>
       projection.drawables.filter((drawable) => drawable.visible && isRenderableDrawable(drawable))
@@ -180,10 +201,16 @@ export function CanvasPreviewPanel() {
       canvas,
       projection,
       view,
-      overlays,
+      overlays: renderOverlays,
       cache: bitmapCacheRef.current
     });
-  }, [overlays, projection, view, viewport]);
+  }, [projection, renderOverlays, view, viewport]);
+
+  useEffect(() => {
+    if (activeTool === "mesh") {
+      setMeshOverlayVisible(true);
+    }
+  }, [activeTool, setMeshOverlayVisible]);
 
   useEffect(() => {
     const setSpaceActive = (active: boolean) => {
@@ -241,7 +268,7 @@ export function CanvasPreviewPanel() {
     setView((current) => nudgeZoomAtViewportCenter(current, viewport, 1 / 1.2));
   }, [viewport]);
 
-  const toggleOverlay = useCallback((key: keyof CanvasOverlayState) => {
+  const toggleOverlay = useCallback((key: keyof Omit<CanvasOverlayState, "mesh">) => {
     setOverlays((current) => ({ ...current, [key]: !current[key] }));
   }, []);
 
@@ -400,6 +427,14 @@ export function CanvasPreviewPanel() {
         >
           <CircleOff aria-hidden="true" size={15} strokeWidth={1.8} />
         </ToolbarButton>
+        <ToolbarButton
+          disabled={projection.selectedDrawableIds.size !== 1}
+          label="Mesh overlay"
+          onClick={toggleMeshOverlayVisible}
+          pressed={meshOverlayActive}
+        >
+          <Triangle aria-hidden="true" size={15} strokeWidth={1.8} />
+        </ToolbarButton>
       </div>
     </>
   );
@@ -432,6 +467,17 @@ export function CanvasPreviewPanel() {
             data-renderable-drawable-count={renderableDrawableCount}
             data-selected-drawable-count={selectedDrawableCount}
             data-selected-drawable-opacity={selectedDrawableOpacity?.toFixed(2) ?? ""}
+            data-mesh-overlay-status={meshOverlayActive ? projection.meshOverlay?.status ?? "" : ""}
+            data-mesh-overlay-triangle-count={
+              meshOverlayActive ? String(projection.meshOverlay?.mesh.triangles.length ?? 0) : "0"
+            }
+            data-mesh-overlay-vertex-count={
+              meshOverlayActive ? String(projection.meshOverlay?.mesh.vertices.length ?? 0) : "0"
+            }
+            data-mesh-overlay-visible={String(meshOverlayActive)}
+            data-mesh-preview-drawable-visible={String(
+              projection.drawables.some((drawable) => drawable.meshPreview && drawable.visible)
+            )}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {

@@ -14,6 +14,7 @@ import {
   canReparentPart,
   createDrawableReorderEntries,
   createInspectorProjection,
+  createStructureMoveDrop,
   createStructureTreeRows
 } from "./session-tree";
 
@@ -34,8 +35,8 @@ describe("editor session tree projection", () => {
     expect(rows.map((row) => [row.kind, row.name, row.effectiveHidden])).toEqual([
       ["part", "Root", false],
       ["part", "Face", true],
-      ["part", "Eye", true],
       ["drawable", "Front", true],
+      ["part", "Eye", true],
       ["drawable", "Back", true],
       ["drawable", "Hidden", true]
     ]);
@@ -79,12 +80,115 @@ describe("editor session tree projection", () => {
     ]);
   });
 
+  it("derives legacy mixed row order from drawOrder when stored children are absent", () => {
+    const session = createFixtureSession();
+    const facePart = session.graph.parts.find((part) => part.partId === PART_FACE)!;
+    const eyePart = session.graph.parts.find((part) => part.partId === PART_EYE)!;
+    const hiddenDrawable = session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_HIDDEN)!;
+
+    facePart.children = undefined;
+    facePart.childPartIds = [PART_EYE];
+    facePart.drawableIds = [DRAW_FRONT, DRAW_BACK];
+    eyePart.children = undefined;
+    eyePart.drawableIds = [DRAW_HIDDEN];
+    hiddenDrawable.partId = PART_EYE;
+    session.graph.drawOrder = [
+      { drawableId: DRAW_FRONT, baseDrawOrder: 0, stableOrder: 0 },
+      { drawableId: DRAW_HIDDEN, baseDrawOrder: 1, stableOrder: 1 },
+      { drawableId: DRAW_BACK, baseDrawOrder: 2, stableOrder: 2 }
+    ];
+
+    const rows = createStructureTreeRows(session, null);
+
+    expect(rows.map((row) => [row.kind, row.name])).toEqual([
+      ["part", "Root"],
+      ["part", "Face"],
+      ["drawable", "Front"],
+      ["part", "Eye"],
+      ["drawable", "Hidden"],
+      ["drawable", "Back"]
+    ]);
+  });
+
   it("rejects part reparent cycles for DnD boundary checks", () => {
     const session = createFixtureSession();
 
     expect(canReparentPart(session, PART_FACE, PART_EYE)).toBe(false);
     expect(canReparentPart(session, PART_EYE, PART_ROOT)).toBe(true);
     expect(canReparentPart(session, PART_ROOT, PART_EYE)).toBe(false);
+  });
+
+  it("resolves structure DnD before, after, and inside intent for mixed rows", () => {
+    const session = createFixtureSession();
+    const rows = createStructureTreeRows(session, null);
+    const faceRow = rows.find((row) => row.kind === "part" && row.id === PART_FACE);
+    const eyeRow = rows.find((row) => row.kind === "part" && row.id === PART_EYE);
+    const frontRow = rows.find((row) => row.kind === "drawable" && row.id === DRAW_FRONT);
+
+    expect(faceRow).toBeDefined();
+    expect(eyeRow).toBeDefined();
+    expect(frontRow).toBeDefined();
+
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "drawable", drawableId: DRAW_BACK },
+        eyeRow!,
+        "before"
+      )
+    ).toEqual({
+      moved: { kind: "drawable", drawableId: DRAW_BACK },
+      drop: { placement: "before", target: { kind: "part", partId: PART_EYE } }
+    });
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "part", partId: PART_EYE },
+        frontRow!,
+        "after"
+      )
+    ).toEqual({
+      moved: { kind: "part", partId: PART_EYE },
+      drop: { placement: "after", target: { kind: "drawable", drawableId: DRAW_FRONT } }
+    });
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "drawable", drawableId: DRAW_BACK },
+        eyeRow!,
+        "inside"
+      )
+    ).toEqual({
+      moved: { kind: "drawable", drawableId: DRAW_BACK },
+      drop: { placement: "inside", parentPartId: PART_EYE }
+    });
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "drawable", drawableId: DRAW_BACK },
+        rows[0]!,
+        "inside"
+      )
+    ).toEqual({
+      moved: { kind: "drawable", drawableId: DRAW_BACK },
+      drop: { placement: "inside", parentPartId: PART_ROOT }
+    });
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "part", partId: PART_FACE },
+        eyeRow!,
+        "inside"
+      )
+    ).toBeUndefined();
+    expect(
+      createStructureMoveDrop(
+        session,
+        { kind: "part", partId: PART_ROOT },
+        faceRow!,
+        "after"
+      )
+    ).toBeUndefined();
   });
 });
 
@@ -106,21 +210,46 @@ function createFixtureSession(): AuthoringSession {
           partId: PART_ROOT,
           displayName: "Root",
           childPartIds: [PART_FACE],
-          drawableIds: []
+          drawableIds: [],
+          children: [
+            {
+              kind: "part",
+              partId: PART_FACE
+            }
+          ]
         },
         {
           partId: PART_FACE,
           displayName: "Face",
           parentPartId: PART_ROOT,
           childPartIds: [PART_EYE],
-          drawableIds: [DRAW_BACK, DRAW_FRONT, DRAW_HIDDEN]
+          drawableIds: [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN],
+          children: [
+            {
+              kind: "drawable",
+              drawableId: DRAW_FRONT
+            },
+            {
+              kind: "part",
+              partId: PART_EYE
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_BACK
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_HIDDEN
+            }
+          ]
         },
         {
           partId: PART_EYE,
           displayName: "Eye",
           parentPartId: PART_FACE,
           childPartIds: [],
-          drawableIds: []
+          drawableIds: [],
+          children: []
         }
       ],
       drawables: [

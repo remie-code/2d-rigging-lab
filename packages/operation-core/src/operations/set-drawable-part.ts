@@ -221,6 +221,11 @@ const createPartDrawableIdsChange = (before: ModelPart, after: ModelPart) => ({
   target: createPartTarget(after.partId),
   fields: [
     {
+      path: `/model/graph/parts/${after.partId}/children`,
+      before: before.children ?? [],
+      after: after.children ?? []
+    },
+    {
       path: `/model/graph/parts/${after.partId}/drawableIds`,
       before: before.drawableIds,
       after: after.drawableIds

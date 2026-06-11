@@ -8,11 +8,13 @@ import {
   Layers
 } from "lucide-react";
 import { useState, type DragEvent } from "react";
+import type { StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import {
-  canReparentPart,
+  createStructureMoveDrop,
+  type StructureDropPlacement,
   type StructureTreeRow
 } from "../../features/editor-session/model/session-tree";
 import { cn } from "../../lib/class-name";
@@ -27,9 +29,7 @@ type DragPayload = {
 
 export function StructureTreePanel() {
   const {
-    reparentDrawable,
-    reparentPart,
-    reorderDrawable,
+    moveStructureChild,
     selectDrawable,
     selectPart,
     session,
@@ -39,7 +39,10 @@ export function StructureTreePanel() {
     setDrawableRuntimeVisibility
   } = useEditorSession();
   const [dragging, setDragging] = useState<DragPayload | null>(null);
-  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [dropIntent, setDropIntent] = useState<{
+    readonly key: string;
+    readonly placement: StructureDropPlacement;
+  } | null>(null);
 
   const selectRow = (row: StructureTreeRow) => {
     if (row.kind === "part") {
@@ -55,6 +58,11 @@ export function StructureTreePanel() {
       <div
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto p-2"
         data-testid="parts-tree"
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setDropIntent(null);
+          }
+        }}
         role="tree"
       >
         {structureRows.map((row) => (
@@ -65,23 +73,41 @@ export function StructureTreePanel() {
                 ? "border-teal-500/80 bg-teal-950/35"
                 : "border-neutral-800 bg-neutral-950/45 hover:border-neutral-700",
               row.effectiveHidden && !row.selected ? "opacity-55" : "",
-              dropTargetKey === rowKey(row) ? "border-amber-400/80 bg-amber-950/25" : ""
+              dropIntent?.key === rowKey(row) && dropIntent.placement === "inside"
+                ? "border-amber-400/80 bg-amber-950/25"
+                : "",
+              dropIntent?.key === rowKey(row) && dropIntent.placement === "before"
+                ? "shadow-[inset_0_2px_0_rgba(251,191,36,0.9)]"
+                : "",
+              dropIntent?.key === rowKey(row) && dropIntent.placement === "after"
+                ? "shadow-[inset_0_-2px_0_rgba(251,191,36,0.9)]"
+                : ""
             )}
             data-row-id={row.id}
             data-row-kind={row.kind}
+            data-drop-placement={dropIntent?.key === rowKey(row) ? dropIntent.placement : undefined}
             data-tree-order={row.kind === "drawable" ? row.order : undefined}
             data-testid={row.selected ? "parts-tree-selected-row" : "parts-tree-row"}
             draggable={row.draggable}
             key={rowKey(row)}
             onDragEnd={() => {
               setDragging(null);
-              setDropTargetKey(null);
+              setDropIntent(null);
             }}
             onDragOver={(event) => {
-              if (dragging !== null && canDropOnRow(session, dragging, row)) {
+              const placement = resolveStructureDropPlacement(event, row);
+              if (dragging !== null && canDropOnRow(session, dragging, row, placement)) {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
-                setDropTargetKey(rowKey(row));
+                setDropIntent({ key: rowKey(row), placement });
+                return;
+              }
+
+              setDropIntent((current) => current?.key === rowKey(row) ? null : current);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setDropIntent((current) => current?.key === rowKey(row) ? null : current);
               }
             }}
             onDragStart={(event) => {
@@ -97,29 +123,18 @@ export function StructureTreePanel() {
             }}
             onDrop={(event) => {
               const payload = readDragPayload(event, dragging);
+              const placement = resolveStructureDropPlacement(event, row);
               setDragging(null);
-              setDropTargetKey(null);
-              if (payload === null || !canDropOnRow(session, payload, row)) {
+              setDropIntent(null);
+              if (payload === null || !canDropOnRow(session, payload, row, placement)) {
                 return;
               }
 
               event.preventDefault();
-              if (payload.kind === "drawable" && row.kind === "drawable") {
-                reorderDrawable(
-                  payload.id as DrawableId,
-                  row.id,
-                  resolveDrawableDropPlacement(event)
-                );
-                return;
-              }
-
-              if (payload.kind === "drawable" && row.kind === "part") {
-                reparentDrawable(payload.id as DrawableId, row.id);
-                return;
-              }
-
-              if (payload.kind === "part" && row.kind === "part") {
-                reparentPart(payload.id as PartId, row.id);
+              const moved = toStructureOrderItem(payload);
+              const move = createStructureMoveDrop(session, moved, row, placement);
+              if (move !== undefined) {
+                moveStructureChild(move.moved, move.drop);
               }
             }}
             role="treeitem"
@@ -219,22 +234,10 @@ function visibilityLabel(row: StructureTreeRow): string {
 function canDropOnRow(
   session: ReturnType<typeof useEditorSession>["session"],
   payload: DragPayload,
-  row: StructureTreeRow
+  row: StructureTreeRow,
+  placement: StructureDropPlacement
 ): boolean {
-  if (payload.kind === "drawable" && row.kind === "drawable") {
-    return payload.id !== row.id;
-  }
-
-  if (payload.kind === "drawable" && row.kind === "part") {
-    const drawable = session.graph.drawables.find((candidate) => candidate.drawableId === payload.id);
-    return drawable !== undefined && drawable.partId !== row.id;
-  }
-
-  if (payload.kind === "part" && row.kind === "part") {
-    return canReparentPart(session, payload.id as PartId, row.id);
-  }
-
-  return false;
+  return createStructureMoveDrop(session, toStructureOrderItem(payload), row, placement) !== undefined;
 }
 
 function readDragPayload(
@@ -254,7 +257,29 @@ function readDragPayload(
   }
 }
 
-function resolveDrawableDropPlacement(event: DragEvent<HTMLElement>): "before" | "after" {
+function resolveStructureDropPlacement(
+  event: DragEvent<HTMLElement>,
+  row: StructureTreeRow
+): StructureDropPlacement {
   const rect = event.currentTarget.getBoundingClientRect();
-  return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  const ratio = (event.clientY - rect.top) / Math.max(1, rect.height);
+  if (row.kind === "part") {
+    if (ratio < 0.28) {
+      return "before";
+    }
+
+    if (ratio > 0.72) {
+      return "after";
+    }
+
+    return "inside";
+  }
+
+  return ratio < 0.5 ? "before" : "after";
+}
+
+function toStructureOrderItem(payload: DragPayload): StructureOrderItem {
+  return payload.kind === "part"
+    ? { kind: "part", partId: payload.id as PartId }
+    : { kind: "drawable", drawableId: payload.id as DrawableId };
 }

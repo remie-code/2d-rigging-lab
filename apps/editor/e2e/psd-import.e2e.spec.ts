@@ -23,7 +23,10 @@ test("imports a fixture PSD and reflects the generated structure in the workspac
   await expect(review.getByLabel("Part Container").first()).toBeVisible();
   await expect(review.getByLabel("Drawable").first()).toBeVisible();
   await expect(review.getByLabel("Hidden Drawable").first()).toBeVisible();
-  await expect(page.getByTestId("psd-import-preview-placeholder")).toBeVisible();
+  const preview = page.getByTestId("psd-import-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("data-preview-ready", "true");
+  await expect(preview).toHaveAttribute("data-visible-layer-count", /^[1-9]\d*$/);
 
   await page.getByRole("button", { name: "Import" }).click();
 
@@ -172,12 +175,90 @@ test("reorders drawable rows with Parts Tree drag and drop", async ({ page }) =>
   await expect(rowNameButton(drawableRows.nth(0))).toHaveText(secondNameBefore);
 });
 
+test("generates an initial mesh draft for a selected hidden Drawable and applies it", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  const visibleDrawableRow = drawableRows
+    .filter({ has: page.getByRole("button", { name: "Hide drawable" }) })
+    .first();
+  await rowNameButton(visibleDrawableRow).click();
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable"
+  );
+
+  await page.getByRole("button", { name: "Hide selected drawable" }).click();
+  await page.getByRole("button", { name: /^Mesh$/ }).first().click();
+
+  const meshInspector = page.locator('[data-testid="mesh-tool-inspector"]:visible').first();
+  const meshStatus = page.locator('[data-testid="mesh-tool-status"]:visible').first();
+
+  await expect(meshInspector).toBeVisible();
+  await expect(canvas).toHaveAttribute("data-mesh-preview-drawable-visible", "true");
+  await page.getByRole("button", { name: "Preview Standard mesh" }).click();
+  await expect(meshStatus).toHaveText("Draft preview");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-vertex-count", /^[1-9]\d*$/);
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-triangle-count", /^[1-9]\d*$/);
+
+  const partRow = page
+    .locator('[data-row-kind="part"]:visible')
+    .filter({ has: page.getByRole("button", { name: "Hide part container" }) })
+    .first();
+  await rowNameButton(partRow).click();
+  const meshPicker = page.locator('[data-testid="mesh-tool-drawable-picker"]:visible').first();
+  await expect(meshPicker).toBeVisible();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "");
+
+  const pickerButton = meshPicker.locator("button").first();
+  const pickedDrawableName = (await pickerButton.locator("span").first().innerText()).trim();
+  await pickerButton.click();
+  await expect(meshInspector).toBeVisible();
+  await expect(meshInspector).toContainText(pickedDrawableName);
+  await page.getByRole("button", { name: "Preview Standard mesh" }).click();
+  await expect(meshStatus).toHaveText("Draft preview");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
+
+  await page.getByRole("button", { name: "Select" }).first().click();
+  await expect(meshInspector).toBeHidden();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "");
+
+  await page.getByRole("button", { name: /^Mesh$/ }).first().click();
+  await expect(meshInspector).toBeVisible();
+  await page.getByRole("button", { name: "Preview Standard mesh" }).click();
+  await expect(meshStatus).toHaveText("Draft preview");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
+
+  await page.getByRole("button", { name: "Apply mesh" }).click();
+  await expect(meshStatus).toHaveText("Generated");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "committed");
+
+  await page.getByRole("button", { name: "Regenerate mesh" }).click();
+  await expect(meshStatus).toHaveText("Replacement draft");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(meshStatus).toHaveText("Generated");
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "committed");
+
+  await page.getByRole("button", { name: /^Show mesh overlay/ }).click();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "false");
+  await page.getByRole("button", { name: /^Show mesh overlay/ }).click();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
+});
+
 async function importFixturePsd(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "Import PSD" }).first().click();
   await page.getByLabel("PSD file").setInputFiles(fixturePsdPath);
   await expect(page.getByTestId("psd-import-review")).toBeVisible();
-  await page.getByRole("button", { name: "Import" }).click();
+  await page
+    .getByRole("dialog", { name: "Import PSD" })
+    .getByRole("button", { name: "Import" })
+    .click();
   await expect(page.getByRole("dialog", { name: "Import PSD" })).toBeHidden();
   await expect(page.locator('[data-testid="parts-tree"]:visible').first()).toContainText(
     "sample_model import"

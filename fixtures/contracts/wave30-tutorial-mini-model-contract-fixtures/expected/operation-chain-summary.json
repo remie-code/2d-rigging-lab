@@ -1,10 +1,10 @@
 {
   "schemaVersion": "wave30-tutorial-mini-model-operation-chain-summary-v1",
   "recipeId": "tutorial-mini-model-recipe-v1",
-  "operationCount": 34,
-  "finalPackageRevision": 34,
-  "finalAuthoringRevision": 34,
-  "operationLogLength": 34,
+  "operationCount": 36,
+  "finalPackageRevision": 36,
+  "finalAuthoringRevision": 36,
+  "operationLogLength": 36,
   "operationTypesByCount": {
     "addKeyform": 3,
     "createDrawable": 8,
@@ -14,7 +14,7 @@
     "createRotation2dRigControl": 1,
     "generateMesh": 8,
     "moveMeshVertex": 1,
-    "setDrawOrder": 1,
+    "moveStructureChild": 3,
     "setDrawableTexture": 1,
     "setMaskRelation": 1
   },
@@ -37,7 +37,6 @@
     "keyformSet",
     "maskRelation",
     "mesh",
-    "package",
     "parameter",
     "part",
     "rigControl",

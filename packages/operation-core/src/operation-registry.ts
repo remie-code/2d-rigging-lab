@@ -28,6 +28,7 @@ import {
   removeMeshVertexOperationHandler
 } from "./operations/mesh-topology.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
+import { moveStructureChildOperationHandler } from "./operations/move-structure-child.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setDrawablePartOperationHandler } from "./operations/set-drawable-part.js";
 import { setDrawableTextureOperationHandler } from "./operations/set-drawable-texture.js";
@@ -78,6 +79,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [createPartOperationHandler.operationType, createPartOperationHandler],
   [updatePartOperationHandler.operationType, updatePartOperationHandler],
   [deletePartOperationHandler.operationType, deletePartOperationHandler],
+  [moveStructureChildOperationHandler.operationType, moveStructureChildOperationHandler],
   [setDrawablePartOperationHandler.operationType, setDrawablePartOperationHandler],
   [setDrawableTextureOperationHandler.operationType, setDrawableTextureOperationHandler],
   [generateMeshOperationHandler.operationType, generateMeshOperationHandler],

@@ -334,6 +334,9 @@ const toSourceGroupDiagnostic = (group: PsdAdapterSourceGroupDto): unknown => ({
   groupPath: group.groupPath,
   sourceOrder: group.sourceOrder,
   visibleInSource: group.visibleInSource,
+  ...(group.localVisibleInSource === undefined
+    ? {}
+    : { localVisibleInSource: group.localVisibleInSource }),
   opacityInSource: group.opacityInSource,
   ...(group.bounds === undefined ? {} : { bounds: group.bounds }),
   ...(group.targetPartId === undefined ? {} : { targetPartId: group.targetPartId })

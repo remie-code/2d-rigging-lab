@@ -5,7 +5,10 @@ import {
   getMeshById,
   getPartById,
   getSourceAssetById,
-  getTextureAtlasEntryById
+  getTextureAtlasEntryById,
+  createDrawableChildEntry,
+  createPartChildEntry,
+  reorderChildrenBySourceOrder
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
@@ -41,6 +44,7 @@ import {
   createRejectedOperationResult
 } from "../preconditions.js";
 import { createLockedTargetDiagnostics } from "./locked-targets.js";
+import { toModelDiffJsonValue } from "./model-diff-json-value.js";
 import { importPsdLayerMaterializationOperationHandler } from "./import-psd-layer-materialization.js";
 import { createPartOperationHandler } from "./create-part.js";
 import { setRuntimeVisibilityOperationHandler } from "./set-runtime-visibility.js";
@@ -204,6 +208,20 @@ const applyImportPsdStructuralScaffold = (
     };
   }
 
+  const importedSourceOrderEntries = createImportedSourceOrderEntries(
+    planned.groupScaffolds,
+    planned.leafScaffolds
+  );
+  const sourceOrderBefore = captureStructuralSourceOrderState(
+    mutationSession,
+    importedSourceOrderEntries
+  );
+  reorderChildrenBySourceOrder(mutationSession, importedSourceOrderEntries);
+  const sourceOrderChanges = createStructuralSourceOrderChanges({
+    session: mutationSession,
+    before: sourceOrderBefore,
+    after: captureStructuralSourceOrderState(mutationSession, importedSourceOrderEntries)
+  });
   replaceAuthoringSession(session, mutationSession);
 
   return {
@@ -216,7 +234,8 @@ const applyImportPsdStructuralScaffold = (
       finalRevision: mutationSession.authoringRevision,
       childOutcomes,
       groupScaffolds: planned.groupScaffolds,
-      leafScaffolds: planned.leafScaffolds
+      leafScaffolds: planned.leafScaffolds,
+      sourceOrderChanges
     }),
     targetIds: planned.targetIds,
     candidateSession: session
@@ -472,6 +491,10 @@ const findGroupPlanMismatches = (
   ...(sameStringArray(planned.sourceGroupPath, approved.sourceGroupPath) ? [] : ["sourceGroupPath"]),
   ...(planned.sourceOrder === approved.sourceOrder ? [] : ["sourceOrder"]),
   ...(planned.visibleInSource === approved.visibleInSource ? [] : ["visibleInSource"]),
+  ...(planned.localVisibleInSource === approved.localVisibleInSource ? [] : ["localVisibleInSource"]),
+  ...(planned.effectiveVisibleInSource === approved.effectiveVisibleInSource
+    ? []
+    : ["effectiveVisibleInSource"]),
   ...(planned.opacityInSource === approved.opacityInSource ? [] : ["opacityInSource"]),
   ...(sameOptionalRect(planned.bounds, approved.bounds) ? [] : ["bounds"]),
   ...(planned.generatedParentPartId === approved.generatedParentPartId ? [] : ["generatedParentPartId"]),
@@ -493,6 +516,10 @@ const findLeafPlanMismatches = (
   ...(sameStringArray(planned.sourceLayerPath, approved.sourceLayerPath) ? [] : ["sourceLayerPath"]),
   ...(planned.sourceOrder === approved.sourceOrder ? [] : ["sourceOrder"]),
   ...(planned.visibleInSource === approved.visibleInSource ? [] : ["visibleInSource"]),
+  ...(planned.localVisibleInSource === approved.localVisibleInSource ? [] : ["localVisibleInSource"]),
+  ...(planned.effectiveVisibleInSource === approved.effectiveVisibleInSource
+    ? []
+    : ["effectiveVisibleInSource"]),
   ...(planned.opacityInSource === approved.opacityInSource ? [] : ["opacityInSource"]),
   ...(sameRect(planned.bounds, approved.bounds) ? [] : ["bounds"]),
   ...(planned.generatedParentPartId === approved.generatedParentPartId ? [] : ["generatedParentPartId"]),
@@ -929,6 +956,31 @@ const addSourceGroupMismatchDiagnostics = (
     }));
   }
 
+  const sourceGroupLocalVisible = sourceGroup.localVisibleInSource ?? sourceGroup.visibleInSource;
+  const groupLocalVisible = group.localVisibleInSource ?? group.visibleInSource;
+  if (sourceGroupLocalVisible !== groupLocalVisible) {
+    addGroupDiagnostic(groupDiagnostics, groupKey, createStructuralDiagnostic({
+      operationId: input.operationId,
+      issueKind: "sourceIdentityMismatch",
+      checkId: "groupLocalVisibilityMismatch",
+      message: `Structural group local visibility ${groupLocalVisible} does not match current source group local visibility ${sourceGroupLocalVisible}.`,
+      path: "/payload/structuralScaffoldBridge/approval/approvedGroupPartScaffolds"
+    }));
+  }
+
+  const sourceGroupEffectiveVisible =
+    sourceGroup.effectiveVisibleInSource ?? sourceGroup.visibleInSource;
+  const groupEffectiveVisible = group.effectiveVisibleInSource ?? group.visibleInSource;
+  if (sourceGroupEffectiveVisible !== groupEffectiveVisible) {
+    addGroupDiagnostic(groupDiagnostics, groupKey, createStructuralDiagnostic({
+      operationId: input.operationId,
+      issueKind: "sourceIdentityMismatch",
+      checkId: "groupEffectiveVisibilityMismatch",
+      message: `Structural group effective visibility ${groupEffectiveVisible} does not match current source group effective visibility ${sourceGroupEffectiveVisible}.`,
+      path: "/payload/structuralScaffoldBridge/approval/approvedGroupPartScaffolds"
+    }));
+  }
+
   if (sourceGroup.opacityInSource !== group.opacityInSource) {
     addGroupDiagnostic(groupDiagnostics, groupKey, createStructuralDiagnostic({
       operationId: input.operationId,
@@ -1045,12 +1097,13 @@ const addLeafDiagnostics = (input: {
       }));
     }
 
-    if (leaf.initialRuntimeVisibility !== leaf.visibleInSource) {
+    const leafLocalVisible = leaf.localVisibleInSource ?? leaf.visibleInSource;
+    if (leaf.initialRuntimeVisibility !== leafLocalVisible) {
       addLeafDiagnostic(input.leafDiagnostics, leafKey, createStructuralDiagnostic({
         operationId: input.operationId,
         issueKind: "initialRuntimeVisibilityMismatch",
         checkId: "initialRuntimeVisibilityMismatch",
-        message: `Structural leaf ${leafKey} initial runtime visibility must match source visibility.`,
+        message: `Structural leaf ${leafKey} initial runtime visibility must match source local visibility.`,
         path: "/payload/structuralScaffoldBridge/approval/approvedLeafScaffolds"
       }));
     }
@@ -1193,6 +1246,31 @@ const addSourceLayerMismatchDiagnostics = (
       issueKind: "sourceIdentityMismatch",
       checkId: "leafVisibilityMismatch",
       message: `Structural leaf visibility ${leaf.visibleInSource} does not match current source layer visibility ${sourceLayer.visibleInSource}.`,
+      path: "/payload/structuralScaffoldBridge/approval/approvedLeafScaffolds"
+    }));
+  }
+
+  const sourceLayerLocalVisible = sourceLayer.localVisibleInSource ?? sourceLayer.visibleInSource;
+  const leafLocalVisible = leaf.localVisibleInSource ?? leaf.visibleInSource;
+  if (sourceLayerLocalVisible !== leafLocalVisible) {
+    addLeafDiagnostic(leafDiagnostics, leafKey, createStructuralDiagnostic({
+      operationId: input.operationId,
+      issueKind: "sourceIdentityMismatch",
+      checkId: "leafLocalVisibilityMismatch",
+      message: `Structural leaf local visibility ${leafLocalVisible} does not match current source layer local visibility ${sourceLayerLocalVisible}.`,
+      path: "/payload/structuralScaffoldBridge/approval/approvedLeafScaffolds"
+    }));
+  }
+
+  const sourceLayerEffectiveVisible =
+    sourceLayer.effectiveVisibleInSource ?? sourceLayer.visibleInSource;
+  const leafEffectiveVisible = leaf.effectiveVisibleInSource ?? leaf.visibleInSource;
+  if (sourceLayerEffectiveVisible !== leafEffectiveVisible) {
+    addLeafDiagnostic(leafDiagnostics, leafKey, createStructuralDiagnostic({
+      operationId: input.operationId,
+      issueKind: "sourceIdentityMismatch",
+      checkId: "leafEffectiveVisibilityMismatch",
+      message: `Structural leaf effective visibility ${leafEffectiveVisible} does not match current source layer effective visibility ${sourceLayerEffectiveVisible}.`,
       path: "/payload/structuralScaffoldBridge/approval/approvedLeafScaffolds"
     }));
   }
@@ -1497,6 +1575,7 @@ const createCommittedStructuralResult = (input: {
   readonly childOutcomes: readonly OperationApplyOutcome[];
   readonly groupScaffolds: readonly PsdStructuralScaffoldGroupPartDto[];
   readonly leafScaffolds: readonly PsdStructuralScaffoldLeafDrawableDto[];
+  readonly sourceOrderChanges: ModelDiffDto["changed"];
 }): OperationResultDto => {
   const structuralEvidence = createStructuralOperationEvidence({
     request: input.request,
@@ -1516,7 +1595,8 @@ const createCommittedStructuralResult = (input: {
       operationId: input.operationId,
       baseRevision: input.baseRevision,
       finalRevision: input.finalRevision,
-      childOutcomes: input.childOutcomes
+      childOutcomes: input.childOutcomes,
+      extraChanged: input.sourceOrderChanges
     }),
     runtimeDiff: undefined,
     validationDiff: undefined,
@@ -1714,6 +1794,7 @@ const combineModelDiffs = (input: {
   readonly baseRevision: number;
   readonly finalRevision: number;
   readonly childOutcomes: readonly OperationApplyOutcome[];
+  readonly extraChanged?: ModelDiffDto["changed"];
 }): ModelDiffDto => {
   const childDiffs = input.childOutcomes.flatMap((outcome) =>
     outcome.result.modelDiff === undefined ? [] : [outcome.result.modelDiff]
@@ -1725,7 +1806,7 @@ const combineModelDiffs = (input: {
     candidateRevision: input.finalRevision,
     added: [...uniqueTargetRefs(childDiffs.flatMap((diff) => diff.added))],
     removed: [...uniqueTargetRefs(childDiffs.flatMap((diff) => diff.removed))],
-    changed: childDiffs.flatMap((diff) => diff.changed),
+    changed: [...childDiffs.flatMap((diff) => diff.changed), ...(input.extraChanged ?? [])],
     operationIds: [input.operationId, ...input.childOutcomes.map((outcome) => outcome.result.operationId)]
   };
 };
@@ -1856,6 +1937,123 @@ const compareGroupSourceOrder = (
   }
 
   return left.sourceGroupRef.sourceGroupId.localeCompare(right.sourceGroupRef.sourceGroupId);
+};
+
+const createImportedSourceOrderEntries = (
+  groups: readonly PsdStructuralScaffoldGroupPartDto[],
+  leaves: readonly PsdStructuralScaffoldLeafDrawableDto[]
+) => [
+  ...groups.map((group) => ({
+    parentPartId: group.generatedParentPartId,
+    child: createPartChildEntry(group.generatedPartId),
+    sourceOrder: group.sourceOrder,
+    stableId: group.sourceGroupRef.sourceGroupId
+  })),
+  ...leaves.map((leaf) => ({
+    parentPartId: leaf.generatedParentPartId,
+    child: createDrawableChildEntry(leaf.generatedDrawableId),
+    sourceOrder: leaf.sourceOrder,
+    stableId: leaf.sourceLayerRef.sourceLayerId
+  }))
+];
+
+type ImportedSourceOrderEntry = ReturnType<typeof createImportedSourceOrderEntries>[number];
+
+interface StructuralSourceOrderState {
+  readonly parents: ReadonlyMap<string, {
+    readonly children: readonly unknown[];
+    readonly childPartIds: readonly string[];
+    readonly drawableIds: readonly string[];
+  }>;
+  readonly drawOrder: readonly unknown[];
+}
+
+const captureStructuralSourceOrderState = (
+  session: AuthoringSession,
+  entries: readonly ImportedSourceOrderEntry[]
+): StructuralSourceOrderState => {
+  const parentIds = [...new Set(entries.map((entry) => entry.parentPartId))];
+  return {
+    parents: new Map(
+      parentIds.flatMap((parentPartId) => {
+        const parent = getPartById(session.graph, parentPartId);
+        if (parent === undefined) {
+          return [];
+        }
+
+        return [
+          [
+            parentPartId,
+            {
+              children: structuredClone(parent.children ?? []),
+              childPartIds: [...parent.childPartIds],
+              drawableIds: [...parent.drawableIds]
+            }
+          ] as const
+        ];
+      })
+    ),
+    drawOrder: structuredClone(session.graph.drawOrder)
+  };
+};
+
+const createStructuralSourceOrderChanges = (input: {
+  readonly session: AuthoringSession;
+  readonly before: StructuralSourceOrderState;
+  readonly after: StructuralSourceOrderState;
+}): ModelDiffDto["changed"] => {
+  const parentChanges = [...input.after.parents.entries()].flatMap(([parentPartId, afterParent]) => {
+    const beforeParent = input.before.parents.get(parentPartId);
+    if (beforeParent === undefined) {
+      return [];
+    }
+
+    const fields = [
+      {
+        path: `/model/graph/parts/${parentPartId}/children`,
+        before: toModelDiffJsonValue(beforeParent.children),
+        after: toModelDiffJsonValue(afterParent.children)
+      },
+      {
+        path: `/model/graph/parts/${parentPartId}/childPartIds`,
+        before: toModelDiffJsonValue(beforeParent.childPartIds),
+        after: toModelDiffJsonValue(afterParent.childPartIds)
+      },
+      {
+        path: `/model/graph/parts/${parentPartId}/drawableIds`,
+        before: toModelDiffJsonValue(beforeParent.drawableIds),
+        after: toModelDiffJsonValue(afterParent.drawableIds)
+      }
+    ].filter((field) => !jsonEqual(field.before, field.after));
+
+    return fields.length === 0
+      ? []
+      : [
+          {
+            target: createPartTarget(parentPartId),
+            fields
+          }
+        ];
+  });
+  const drawOrderChanged = !jsonEqual(input.before.drawOrder, input.after.drawOrder);
+
+  return [
+    ...parentChanges,
+    ...(drawOrderChanged
+      ? [
+          {
+            target: { kind: "package", id: input.session.packageIdentity.packageId } satisfies TargetRefDto,
+            fields: [
+              {
+                path: "/model/drawOrder/entries",
+                before: toModelDiffJsonValue(input.before.drawOrder),
+                after: toModelDiffJsonValue(input.after.drawOrder)
+              }
+            ]
+          }
+        ]
+      : [])
+  ];
 };
 
 const parentPartExistsOrWillBeGenerated = (
@@ -2159,6 +2357,9 @@ const uniqueTargetRefs = (refs: readonly TargetRefDto[]): readonly TargetRefDto[
 };
 
 const uniqueStrings = (values: readonly string[]): readonly string[] => [...new Set(values)];
+
+const jsonEqual = (left: unknown, right: unknown): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
 
 const replaceAuthoringSession = (
   target: AuthoringSession,

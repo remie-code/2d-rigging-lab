@@ -1,4 +1,10 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  createStructureDrawOrderIndex,
+  getPartOrderedChildren,
+  type StructureOrderDrop,
+  type StructureOrderItem,
+  type AuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "./editor-selection";
@@ -14,6 +20,7 @@ interface StructureTreeRowBase {
   readonly effectiveHidden: boolean;
   readonly canToggleVisibility: boolean;
   readonly draggable: boolean;
+  readonly parentPartId?: PartId;
 }
 
 export type StructureTreeRow =
@@ -87,6 +94,7 @@ export interface DrawableReorderEntry {
 }
 
 export type DrawableDropPlacement = "before" | "after";
+export type StructureDropPlacement = "before" | "after" | "inside";
 
 type ModelPart = AuthoringSession["graph"]["parts"][number];
 type Drawable = AuthoringSession["graph"]["drawables"][number];
@@ -100,7 +108,7 @@ export function createStructureTreeRows(
   const drawablesById = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable])
   );
-  const drawOrderByDrawableId = createDrawOrderIndex(session);
+  const drawOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
   const collapsedPartIds = state.collapsedPartIds ?? new Set<PartId>();
   const editorHiddenPartIds = state.editorHiddenPartIds ?? new Set<PartId>();
   const roots = session.graph.parts.filter((part) => part.parentPartId === undefined);
@@ -118,11 +126,13 @@ export function createStructureTreeRows(
     const effectiveHidden = ancestorHidden || editorHidden;
     const canToggleVisibility = part.partId !== ROOT_PART_ID;
     const collapsed = collapsedPartIds.has(part.partId);
-    const canCollapse = part.childPartIds.length > 0 || part.drawableIds.length > 0;
+    const children = getPartOrderedChildren(session.graph, part);
+    const canCollapse = children.length > 0;
     rows.push({
       id: part.partId,
       kind: "part",
       depth,
+      ...(part.parentPartId === undefined ? {} : { parentPartId: part.parentPartId }),
       name: part.displayName,
       detail:
         part.partId === ROOT_PART_ID
@@ -145,20 +155,16 @@ export function createStructureTreeRows(
       return;
     }
 
-    for (const childPartId of part.childPartIds) {
-      const childPart = partsById.get(childPartId);
-      if (childPart !== undefined) {
-        appendPart(childPart, depth + 1, effectiveHidden);
+    for (const child of children) {
+      if (child.kind === "part") {
+        const childPart = partsById.get(child.partId);
+        if (childPart !== undefined) {
+          appendPart(childPart, depth + 1, effectiveHidden);
+        }
+        continue;
       }
-    }
 
-    const drawableIds = [...part.drawableIds].sort(
-      (left, right) =>
-        (drawOrderByDrawableId.get(left) ?? Number.MAX_SAFE_INTEGER) -
-        (drawOrderByDrawableId.get(right) ?? Number.MAX_SAFE_INTEGER)
-    );
-    for (const drawableId of drawableIds) {
-      const drawable = drawablesById.get(drawableId);
+      const drawable = drawablesById.get(child.drawableId);
       if (drawable !== undefined) {
         appendDrawable(drawable, depth + 1, effectiveHidden);
       }
@@ -171,6 +177,7 @@ export function createStructureTreeRows(
       id: drawable.drawableId,
       kind: "drawable",
       depth,
+      parentPartId: drawable.partId,
       name: drawable.displayName,
       detail:
         hiddenByPart && drawable.runtimeVisibility
@@ -310,6 +317,50 @@ export function createDrawableTreeOrderEntries(
   }));
 }
 
+export function createStructureMoveDrop(
+  session: AuthoringSession,
+  moved: StructureOrderItem,
+  targetRow: StructureTreeRow,
+  placement: StructureDropPlacement
+): { readonly moved: StructureOrderItem; readonly drop: StructureOrderDrop } | undefined {
+  const drop = createStructureDropFromRow(targetRow, placement);
+  if (drop === undefined || !canMoveStructureChildToDrop(session, moved, drop)) {
+    return undefined;
+  }
+
+  return { moved, drop };
+}
+
+export function canMoveStructureChildToDrop(
+  session: AuthoringSession,
+  moved: StructureOrderItem,
+  drop: StructureOrderDrop
+): boolean {
+  if (drop.placement !== "inside" && structureItemsEqual(moved, drop.target)) {
+    return false;
+  }
+
+  const destinationPart = resolveDropDestinationPart(session, drop);
+  if (destinationPart === undefined) {
+    return false;
+  }
+
+  if (moved.kind === "drawable") {
+    return true;
+  }
+
+  const movedPart = findPart(session, moved.partId);
+  if (movedPart === undefined || movedPart.parentPartId === undefined) {
+    return false;
+  }
+
+  if (destinationPart.partId === moved.partId) {
+    return false;
+  }
+
+  return !isDescendantPart(session, moved.partId, destinationPart.partId);
+}
+
 export function canReparentPart(
   session: AuthoringSession,
   partId: PartId,
@@ -369,8 +420,45 @@ function resolveParentLabel(session: AuthoringSession, part: ModelPart): string 
   return findPart(session, part.parentPartId)?.displayName ?? "Missing part";
 }
 
-function createDrawOrderIndex(session: AuthoringSession): ReadonlyMap<DrawableId, number> {
-  return new Map(session.graph.drawOrder.map((entry) => [entry.drawableId, entry.stableOrder]));
+function createStructureDropFromRow(
+  row: StructureTreeRow,
+  placement: StructureDropPlacement
+): StructureOrderDrop | undefined {
+  if (placement === "inside") {
+    return row.kind === "part" ? { placement: "inside", parentPartId: row.id } : undefined;
+  }
+
+  return {
+    placement,
+    target: row.kind === "part" ? { kind: "part", partId: row.id } : { kind: "drawable", drawableId: row.id }
+  };
+}
+
+function resolveDropDestinationPart(
+  session: AuthoringSession,
+  drop: StructureOrderDrop
+): ModelPart | undefined {
+  if (drop.placement === "inside") {
+    return findPart(session, drop.parentPartId);
+  }
+
+  if (drop.target.kind === "part") {
+    const targetPart = findPart(session, drop.target.partId);
+    return targetPart?.parentPartId === undefined ? undefined : findPart(session, targetPart.parentPartId);
+  }
+
+  const targetDrawable = findDrawable(session, drop.target.drawableId);
+  return targetDrawable === undefined ? undefined : findPart(session, targetDrawable.partId);
+}
+
+function structureItemsEqual(left: StructureOrderItem, right: StructureOrderItem): boolean {
+  return (
+    left.kind === right.kind &&
+    (left.kind === "part"
+      ? left.partId === (right as Extract<StructureOrderItem, { readonly kind: "part" }>).partId
+      : left.drawableId ===
+        (right as Extract<StructureOrderItem, { readonly kind: "drawable" }>).drawableId)
+  );
 }
 
 function getDrawableIdsByProjectedTreeOrder(session: AuthoringSession): DrawableId[] {
@@ -386,14 +474,15 @@ function getDrawableIdsByProjectedTreeOrder(session: AuthoringSession): Drawable
 }
 
 function getDrawableIdsByGlobalDrawOrder(session: AuthoringSession): DrawableId[] {
-  const drawOrderByDrawableId = createDrawOrderIndex(session);
+  const drawOrderByDrawableId = createGlobalDrawOrderIndex(session);
 
   return session.graph.drawables
     .map((drawable) => drawable.drawableId)
     .sort(
       (left, right) =>
         (drawOrderByDrawableId.get(left) ?? Number.MAX_SAFE_INTEGER) -
-        (drawOrderByDrawableId.get(right) ?? Number.MAX_SAFE_INTEGER)
+          (drawOrderByDrawableId.get(right) ?? Number.MAX_SAFE_INTEGER) ||
+        left.localeCompare(right)
     );
 }
 
@@ -443,7 +532,7 @@ function createClippingOptions(
   session: AuthoringSession,
   selectedDrawableId: DrawableId
 ): DrawableInspectorProjection["clippingOptions"] {
-  const drawOrderByDrawableId = createDrawOrderIndex(session);
+  const drawOrderByDrawableId = createGlobalDrawOrderIndex(session);
 
   return session.graph.drawables
     .filter((drawable) => drawable.drawableId !== selectedDrawableId)
@@ -456,6 +545,10 @@ function createClippingOptions(
       drawableId: drawable.drawableId,
       displayName: drawable.displayName
     }));
+}
+
+function createGlobalDrawOrderIndex(session: AuthoringSession): ReadonlyMap<DrawableId, number> {
+  return new Map(session.graph.drawOrder.map((entry) => [entry.drawableId, entry.stableOrder]));
 }
 
 function isDescendantPart(

@@ -397,6 +397,16 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     requiredInputs: codexInputs("Mesh and vertex deltas.", ["meshId", "vertexDeltas", "intent"])
   },
   {
+    operationType: "moveStructureChild",
+    operationFamily: "modelStructure",
+    displayName: "Move structure child",
+    summary:
+      "Move a part container or drawable before, after, or inside a part-tree row while preserving mixed draw-stack order.",
+    targetKinds: ["part", "drawable"],
+    payloadSchemaRef: "operation.moveStructureChild.payload.v1",
+    requiredInputs: codexInputs("Moved structure child and drop placement.", ["moved", "drop"])
+  },
+  {
     operationType: "removeMeshTriangle",
     operationFamily: "meshTopologyUv",
     displayName: "Remove mesh triangle",

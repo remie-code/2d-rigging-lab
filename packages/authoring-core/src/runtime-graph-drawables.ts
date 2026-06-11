@@ -4,6 +4,7 @@ import type {
 } from "@private-2d-rigging-lab/runtime-core";
 
 import type { AuthoringGraph } from "./authoring-graph.js";
+import { flattenDrawableIdsByPartOrder } from "./part-children-order.js";
 
 export const createRuntimeDrawableMap = (
   graph: AuthoringGraph
@@ -44,7 +45,7 @@ export const createRuntimeDrawableMap = (
 };
 
 export const createRuntimeDrawOrder = (graph: AuthoringGraph): readonly NormalizedDrawOrderEntry[] =>
-  graph.drawOrder.map((entry) => ({
-    drawableId: entry.drawableId,
-    drawOrder: entry.stableOrder
+  flattenDrawableIdsByPartOrder(graph).map((drawableId, drawOrder) => ({
+    drawableId,
+    drawOrder
   }));

@@ -9,6 +9,7 @@ export interface CanvasOverlayState {
   readonly grid: boolean;
   readonly canvasBounds: boolean;
   readonly selectionBounds: boolean;
+  readonly mesh: boolean;
   readonly isolateSelected: boolean;
 }
 
@@ -71,6 +72,10 @@ export function renderCanvasProjection(input: {
     drawSelectionOverlay(context, input.projection, input.view.zoom);
   }
 
+  if (input.overlays.mesh) {
+    drawMeshOverlay(context, input.projection, input.view.zoom);
+  }
+
   context.restore();
 }
 
@@ -93,14 +98,14 @@ function drawDrawableStack(
       .filter((mask): mask is CanvasRenderableDrawable =>
         mask !== undefined && mask.visible && isRenderableDrawable(mask)
       );
-    if (drawable.maskSourceDrawableIds.length > 0 && maskSources.length === 0) {
+    if (!drawable.meshPreview && drawable.maskSourceDrawableIds.length > 0 && maskSources.length === 0) {
       continue;
     }
 
     context.save();
     context.globalAlpha = resolveDrawableAlpha(drawable, overlays, hasSelection);
 
-    if (maskSources.length > 0) {
+    if (!drawable.meshPreview && maskSources.length > 0) {
       drawClippedDrawable(context, drawable, maskSources, cache);
     } else {
       drawDrawableImage(context, drawable, cache);
@@ -108,6 +113,54 @@ function drawDrawableStack(
 
     context.restore();
   }
+}
+
+function drawMeshOverlay(
+  context: CanvasRenderingContext2D,
+  projection: CanvasRenderProjection,
+  zoom: number
+): void {
+  const overlay = projection.meshOverlay;
+  if (overlay === undefined) {
+    return;
+  }
+
+  const color =
+    overlay.status === "draft"
+      ? "rgba(251, 191, 36, 0.96)"
+      : "rgba(45, 212, 191, 0.94)";
+  context.save();
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = 1.25 / zoom;
+  context.setLineDash(overlay.status === "draft" ? [7 / zoom, 5 / zoom] : []);
+
+  for (const triangle of overlay.mesh.triangles) {
+    const [aIndex, bIndex, cIndex] = triangle;
+    const a = overlay.mesh.vertices[aIndex];
+    const b = overlay.mesh.vertices[bIndex];
+    const c = overlay.mesh.vertices[cIndex];
+    if (a === undefined || b === undefined || c === undefined) {
+      continue;
+    }
+
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    context.lineTo(b.x, b.y);
+    context.lineTo(c.x, c.y);
+    context.closePath();
+    context.stroke();
+  }
+
+  context.setLineDash([]);
+  const radius = Math.max(2 / zoom, 1.25 / zoom);
+  for (const vertex of overlay.mesh.vertices) {
+    context.beginPath();
+    context.arc(vertex.x, vertex.y, radius, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  context.restore();
 }
 
 function drawDrawableImage(

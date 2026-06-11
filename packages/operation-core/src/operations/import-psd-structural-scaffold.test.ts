@@ -51,14 +51,26 @@ describe("importPsdStructuralScaffold operation handler", () => {
     expect(session.packageRevision).toBe(1);
     expect(getPartById(session.graph, PartIdSchema.parse("part_root"))).toMatchObject({
       childPartIds: ["part_psd_group_hair_front"],
-      drawableIds: ["draw_headwear_hidden"]
+      drawableIds: ["draw_headwear_hidden"],
+      children: [
+        { kind: "drawable", drawableId: "draw_headwear_hidden" },
+        { kind: "part", partId: "part_psd_group_hair_front" }
+      ]
     });
     expect(getPartById(session.graph, PartIdSchema.parse("part_psd_group_hair_front"))).toMatchObject({
       partId: "part_psd_group_hair_front",
       displayName: "hair_front",
       parentPartId: "part_root",
-      drawableIds: ["draw_front_hair_structural"]
+      drawableIds: ["draw_front_hair_structural"],
+      children: [{ kind: "drawable", drawableId: "draw_front_hair_structural" }]
     });
+    expect(outcome.result.modelDiff?.changed.flatMap((change) =>
+      change.fields.map((field) => field.path)
+    )).toEqual(expect.arrayContaining([
+      "/model/graph/parts/part_root/children",
+      "/model/graph/parts/part_psd_group_hair_front/children",
+      "/model/drawOrder/entries"
+    ]));
     expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_front_hair_structural"))).toMatchObject({
       drawableId: "draw_front_hair_structural",
       displayName: "front hair",
@@ -118,6 +130,177 @@ describe("importPsdStructuralScaffold operation handler", () => {
     expect(outcome.result.psdLayerMaterializationEvidence).toHaveLength(2);
     expect(JSON.stringify(outcome.result.psdStructuralScaffoldEvidence)).not.toContain("rawRgba");
     expect(JSON.stringify(outcome.result.psdStructuralScaffoldEvidence)).not.toContain("sourcePsdBytes");
+  });
+
+  it("keeps parent-hidden child drawables runtime-visible while scaffold evidence records effective hidden", () => {
+    const session = createFixtureSession();
+    const sourceAsset = session.graph.sourceAssets[0]!;
+    const profile = sourceAsset.psdProfile!;
+    sourceAsset.layers.push(
+      createSourceLayer({
+        sourceLayerId: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerId,
+        originalName: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerName,
+        groupPath: ["hidden_parent"],
+        visibleInSource: false,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: false,
+        bounds: { x: 20, y: 30, width: 64, height: 64 }
+      })
+    );
+    profile.sourceGroups.push({
+      sourceGroupId: "psd:root/group[5]",
+      originalName: "hidden_parent",
+      normalizedName: "hidden_parent",
+      groupPath: ["hidden_parent"],
+      sourceOrder: 5,
+      visibleInSource: false,
+      localVisibleInSource: false,
+      effectiveVisibleInSource: false,
+      opacityInSource: 1,
+      bounds: { x: 20, y: 30, width: 64, height: 64 },
+      unsupportedFeatures: []
+    });
+    profile.sourceLayers.push({
+      sourceLayerId: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerId,
+      originalName: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerName,
+      normalizedName: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerName,
+      parentGroupId: "psd:root/group[5]",
+      groupPath: ["hidden_parent"],
+      sourceOrder: 6,
+      bounds: { x: 20, y: 30, width: 64, height: 64 },
+      visibleInSource: false,
+      localVisibleInSource: true,
+      effectiveVisibleInSource: false,
+      opacityInSource: 1,
+      role: "editableLayer",
+      unsupportedFeatures: []
+    });
+    profile.materializationEvidence?.push(createMaterializationEvidence(PARENT_HIDDEN_VISIBLE_LAYER));
+
+    const request = createStructuralRequest({
+      plannedGroupPartScaffolds: [createHiddenParentGroupScaffold("previewReady")],
+      approvedGroupPartScaffolds: [createHiddenParentGroupScaffold("approved")],
+      plannedLeafScaffolds: [createParentHiddenVisibleLeafScaffold("previewReady")],
+      approvedLeafScaffolds: [createParentHiddenVisibleLeafScaffold("approved")]
+    });
+    const outcome = createOperationCore({
+      now: () => new Date("2026-06-07T00:00:00.000Z")
+    }).commitOperation(session, request);
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_parent_hidden_child"))).toMatchObject({
+      drawableId: "draw_parent_hidden_child",
+      partId: "part_psd_group_hidden_parent",
+      runtimeVisibility: true
+    });
+    expect(outcome.result.psdStructuralScaffoldEvidence?.[0]).toMatchObject({
+      generatedGroupPartScaffolds: [
+        expect.objectContaining({
+          generatedPartId: "part_psd_group_hidden_parent",
+          localVisibleInSource: false,
+          effectiveVisibleInSource: false
+        })
+      ],
+      generatedLeafScaffolds: [
+        expect.objectContaining({
+          generatedDrawableId: "draw_parent_hidden_child",
+          visibleInSource: false,
+          localVisibleInSource: true,
+          effectiveVisibleInSource: false,
+          initialRuntimeVisibility: true
+        })
+      ]
+    });
+  });
+
+  it("keeps child drawable runtime visible when only its source parent group is hidden", () => {
+    const session = createFixtureSession();
+    const sourceAsset = session.graph.sourceAssets[0]!;
+    const profile = sourceAsset.psdProfile!;
+    sourceAsset.layers[0] = {
+      ...sourceAsset.layers[0]!,
+      visibleInSource: false,
+      localVisibleInSource: true
+    };
+    profile.sourceGroups[0] = {
+      ...profile.sourceGroups[0]!,
+      visibleInSource: false,
+      localVisibleInSource: false
+    };
+    profile.sourceLayers[0] = {
+      ...profile.sourceLayers[0]!,
+      visibleInSource: false,
+      localVisibleInSource: true
+    };
+    const hiddenParentGroupPreview = {
+      ...createGroupPartScaffold("previewReady"),
+      visibleInSource: false,
+      localVisibleInSource: false
+    } as const;
+    const hiddenParentGroupApproval = {
+      ...hiddenParentGroupPreview,
+      status: "approved",
+      statusReasons: []
+    } as const;
+    const parentHiddenLeafPreview = {
+      ...createVisibleLeafScaffold("previewReady"),
+      visibleInSource: false,
+      localVisibleInSource: true,
+      initialRuntimeVisibility: true
+    } as const;
+    const parentHiddenLeafApproval = {
+      ...parentHiddenLeafPreview,
+      status: "approved",
+      statusReasons: []
+    } as const;
+
+    const outcome = createOperationCore({
+      now: () => new Date("2026-06-07T00:00:00.000Z")
+    }).commitOperation(
+      session,
+      createStructuralRequest({
+        plannedGroupPartScaffolds: [hiddenParentGroupPreview],
+        approvedGroupPartScaffolds: [hiddenParentGroupApproval],
+        plannedLeafScaffolds: [
+          parentHiddenLeafPreview,
+          createHiddenLeafScaffold("previewReady")
+        ],
+        approvedLeafScaffolds: [
+          parentHiddenLeafApproval,
+          createHiddenLeafScaffold("approved")
+        ]
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getPartById(session.graph, PartIdSchema.parse("part_psd_group_hair_front"))).toMatchObject({
+      partId: "part_psd_group_hair_front",
+      parentPartId: "part_root"
+    });
+    expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_front_hair_structural"))).toMatchObject({
+      drawableId: "draw_front_hair_structural",
+      runtimeVisibility: true
+    });
+    expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_headwear_hidden"))).toMatchObject({
+      drawableId: "draw_headwear_hidden",
+      runtimeVisibility: false
+    });
+    expect(outcome.result.psdStructuralScaffoldEvidence?.[0]?.generatedGroupPartScaffolds[0])
+      .toMatchObject({
+        visibleInSource: false,
+        localVisibleInSource: false
+      });
+    expect(outcome.result.psdStructuralScaffoldEvidence?.[0]?.generatedLeafScaffolds)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceLayerRef: expect.objectContaining({
+            sourceLayerId: "psd:root/group[2]/layer[0]"
+          }),
+          visibleInSource: false,
+          localVisibleInSource: true,
+          initialRuntimeVisibility: true
+        })
+      ]));
   });
 
   it("rejects stale approval evidence before mutating the session", () => {
@@ -521,6 +704,66 @@ const createHiddenLeafScaffold = (
   statusReasons: []
 } as const);
 
+const createHiddenParentGroupScaffold = (
+  status: "previewReady" | "approved" | "resolved" = "previewReady"
+) => ({
+  scaffoldKind: "groupPartContainer",
+  sourceGroupRef: {
+    sourceAssetId: SOURCE_ASSET_ID,
+    sourceGroupId: "psd:root/group[5]",
+    sourceGroupName: "hidden_parent",
+    sourceGroupPath: ["hidden_parent"]
+  },
+  sourceGroupName: "hidden_parent",
+  sourceGroupPath: ["hidden_parent"],
+  sourceOrder: 5,
+  visibleInSource: false,
+  localVisibleInSource: false,
+  effectiveVisibleInSource: false,
+  opacityInSource: 1,
+  bounds: { x: 20, y: 30, width: 64, height: 64 },
+  generatedParentPartId: "part_root",
+  generatedPartId: "part_psd_group_hidden_parent",
+  generatedPartDisplayName: "hidden_parent",
+  status,
+  statusReasons: []
+} as const);
+
+const createParentHiddenVisibleLeafScaffold = (
+  status: "previewReady" | "approved" | "resolved" = "previewReady"
+) => ({
+  scaffoldKind: "leafDrawableScaffold",
+  sourceLayerRef: {
+    sourceAssetId: SOURCE_ASSET_ID,
+    sourceLayerId: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerId,
+    sourceLayerName: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerName,
+    sourceLayerPath: [...PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerPath]
+  },
+  sourceParentGroupRef: {
+    sourceAssetId: SOURCE_ASSET_ID,
+    sourceGroupId: "psd:root/group[5]",
+    sourceGroupName: "hidden_parent",
+    sourceGroupPath: ["hidden_parent"]
+  },
+  sourceLayerName: PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerName,
+  sourceLayerPath: [...PARENT_HIDDEN_VISIBLE_LAYER.sourceLayerPath],
+  sourceOrder: 6,
+  visibleInSource: false,
+  localVisibleInSource: true,
+  effectiveVisibleInSource: false,
+  opacityInSource: 1,
+  bounds: { x: 20, y: 30, width: 64, height: 64 },
+  byteEstimate: PARENT_HIDDEN_VISIBLE_LAYER.byteLength,
+  generatedParentPartId: "part_psd_group_hidden_parent",
+  generatedDrawableId: "draw_parent_hidden_child",
+  generatedDrawableDisplayName: "visible child",
+  generatedTextureId: PARENT_HIDDEN_VISIBLE_LAYER.textureId,
+  generatedMeshId: "mesh_parent_hidden_child",
+  initialRuntimeVisibility: true,
+  status,
+  statusReasons: []
+} as const);
+
 const createFixtureSession = (options: FixtureSessionOptions = {}): AuthoringSession => ({
   packageIdentity: {
     packageId: PackageIdSchema.parse("pkg_psd_structural_scaffold_test"),
@@ -680,6 +923,8 @@ const createSourceLayer = (input: {
   readonly originalName: string;
   readonly groupPath: readonly string[];
   readonly visibleInSource: boolean;
+  readonly localVisibleInSource?: boolean;
+  readonly effectiveVisibleInSource?: boolean;
   readonly bounds: {
     readonly x: number;
     readonly y: number;
@@ -694,6 +939,12 @@ const createSourceLayer = (input: {
   groupPath: [...input.groupPath],
   bounds: input.bounds,
   visibleInSource: input.visibleInSource,
+  ...(input.localVisibleInSource === undefined
+    ? {}
+    : { localVisibleInSource: input.localVisibleInSource }),
+  ...(input.effectiveVisibleInSource === undefined
+    ? {}
+    : { effectiveVisibleInSource: input.effectiveVisibleInSource }),
   opacityInSource: 1,
   role: "editableLayer" as const,
   unsupportedFeatures: [],
@@ -864,6 +1115,24 @@ const HIDDEN_HEADWEAR_LAYER = {
   }
 } as const;
 
+const PARENT_HIDDEN_VISIBLE_LAYER = {
+  sourceLayerId: "psd:root/group[5]/layer[0]",
+  sourceLayerName: "visible child",
+  sourceLayerPath: ["hidden_parent", "visible child"],
+  materializationId: "mat_psd_root_group_5_layer_0",
+  binaryAssetId: "bin_psd_parent_hidden_child_rgba",
+  packageRelativePath: "assets/textures/psd/parent-hidden-child.raw-rgba",
+  provenanceId: "prov_psd_parent_hidden_child_rgba",
+  textureId: "tex_parent_hidden_child",
+  width: 64,
+  height: 64,
+  byteLength: 16384,
+  digest: {
+    algorithm: "sha256",
+    hex: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+} as const;
+
 type StructuralRequestOptions = {
   readonly approvalStatus?:
     | "approved"
@@ -883,7 +1152,10 @@ type FixtureSessionOptions = {
   readonly extraParts?: AuthoringSession["graph"]["parts"];
 };
 
-type LayerFixture = typeof FRONT_HAIR_LAYER | typeof HIDDEN_HEADWEAR_LAYER;
+type LayerFixture =
+  | typeof FRONT_HAIR_LAYER
+  | typeof HIDDEN_HEADWEAR_LAYER
+  | typeof PARENT_HIDDEN_VISIBLE_LAYER;
 
 type FixtureDigest = {
   readonly algorithm: "sha256";

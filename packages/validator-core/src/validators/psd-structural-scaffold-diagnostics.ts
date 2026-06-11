@@ -290,7 +290,7 @@ const REPORTED_STRUCTURAL_ISSUE_MAPPINGS: Readonly<Record<
     severity: "error",
     phase: "reference",
     impact:
-      "Hidden PSD leaves must become runtime-hidden drawables and visible leaves must keep their initial runtime visibility."
+      "PSD leaf local visibility must define initial runtime visibility; parent-hidden groups are editor-only gates."
   },
   structuralExpansionCapExceeded: {
     checkId: "asset.psd.structuralScaffoldPreflightBlocked",
@@ -934,6 +934,22 @@ const validateGroupSourceMapping = (
     ...(sourceGroup.visibleInSource === context.group.visibleInSource
       ? []
       : [`visibleInSource:expected=${sourceGroup.visibleInSource},actual=${context.group.visibleInSource}`]),
+    ...((sourceGroup.localVisibleInSource ?? sourceGroup.visibleInSource) ===
+      (context.group.localVisibleInSource ?? context.group.visibleInSource)
+      ? []
+      : [
+          `localVisibleInSource:expected=${
+            sourceGroup.localVisibleInSource ?? sourceGroup.visibleInSource
+          },actual=${context.group.localVisibleInSource ?? context.group.visibleInSource}`
+        ]),
+    ...((sourceGroup.effectiveVisibleInSource ?? sourceGroup.visibleInSource) ===
+      (context.group.effectiveVisibleInSource ?? context.group.visibleInSource)
+      ? []
+      : [
+          `effectiveVisibleInSource:expected=${
+            sourceGroup.effectiveVisibleInSource ?? sourceGroup.visibleInSource
+          },actual=${context.group.effectiveVisibleInSource ?? context.group.visibleInSource}`
+        ]),
     ...(sourceGroup.opacityInSource === context.group.opacityInSource
       ? []
       : [`opacityInSource:expected=${sourceGroup.opacityInSource},actual=${context.group.opacityInSource}`]),
@@ -1175,6 +1191,14 @@ const validateLeafSourceMapping = (
 ): readonly ValidationCheckResultDto[] => {
   const sourceOrder = profileLayer?.sourceOrder;
   const visibleInSource = profileLayer?.visibleInSource ?? flattenedLayer?.visibleInSource;
+  const localVisibleInSource =
+    profileLayer?.localVisibleInSource ??
+    flattenedLayer?.localVisibleInSource ??
+    visibleInSource;
+  const effectiveVisibleInSource =
+    profileLayer?.effectiveVisibleInSource ??
+    flattenedLayer?.effectiveVisibleInSource ??
+    visibleInSource;
   const opacityInSource = profileLayer?.opacityInSource ?? flattenedLayer?.opacityInSource;
   const bounds = profileLayer?.bounds ?? flattenedLayer?.bounds;
   const parentGroupId = profileLayer?.parentGroupId;
@@ -1187,6 +1211,23 @@ const validateLeafSourceMapping = (
     ...(visibleInSource === undefined || visibleInSource === context.leaf.visibleInSource
       ? []
       : [`visibleInSource:expected=${visibleInSource},actual=${context.leaf.visibleInSource}`]),
+    ...(localVisibleInSource === undefined ||
+    localVisibleInSource === (context.leaf.localVisibleInSource ?? context.leaf.visibleInSource)
+      ? []
+      : [
+          `localVisibleInSource:expected=${localVisibleInSource},actual=${
+            context.leaf.localVisibleInSource ?? context.leaf.visibleInSource
+          }`
+        ]),
+    ...(effectiveVisibleInSource === undefined ||
+    effectiveVisibleInSource ===
+      (context.leaf.effectiveVisibleInSource ?? context.leaf.visibleInSource)
+      ? []
+      : [
+          `effectiveVisibleInSource:expected=${effectiveVisibleInSource},actual=${
+            context.leaf.effectiveVisibleInSource ?? context.leaf.visibleInSource
+          }`
+        ]),
     ...(opacityInSource === undefined || opacityInSource === context.leaf.opacityInSource
       ? []
       : [`opacityInSource:expected=${opacityInSource},actual=${context.leaf.opacityInSource}`]),
@@ -1324,12 +1365,16 @@ const validateGeneratedDrawable = (
         `drawableRuntimeVisibility=${drawable.drawable.runtimeVisibility}`,
         `initialRuntimeVisibility=${context.leaf.initialRuntimeVisibility}`,
         `visibleInSource=${context.leaf.visibleInSource}`,
+        `localVisibleInSource=${context.leaf.localVisibleInSource ?? context.leaf.visibleInSource}`,
+        `effectiveVisibleInSource=${context.leaf.effectiveVisibleInSource ?? context.leaf.visibleInSource}`,
         `hiddenLeafRuntimeVisibility=${
-          context.leaf.visibleInSource ? "not-hidden-source" : drawable.drawable.runtimeVisibility
+          (context.leaf.localVisibleInSource ?? context.leaf.visibleInSource)
+            ? "not-hidden-local-source"
+            : drawable.drawable.runtimeVisibility
         }`
       ],
       impact:
-        "Hidden PSD leaves must be generated as runtime-hidden drawables, and visible PSD leaves must stay runtime-visible."
+        "Hidden PSD leaves must be generated as runtime-hidden drawables; parent-hidden groups must not rewrite child runtime visibility."
     }));
   }
 
@@ -1653,7 +1698,16 @@ const createStructuralAvailableCheck = (
       `structuralScaffoldAvailability=available`,
       `generatedGroupPartCount=${context.evidence.generatedGroupPartScaffolds.length}`,
       `generatedLeafScaffoldCount=${context.evidence.generatedLeafScaffolds.length}`,
-      `hiddenLeafCount=${context.evidence.generatedLeafScaffolds.filter((leaf) => !leaf.visibleInSource).length}`,
+      `hiddenLeafCount=${
+        context.evidence.generatedLeafScaffolds.filter(
+          (leaf) => !(leaf.localVisibleInSource ?? leaf.visibleInSource)
+        ).length
+      }`,
+      `effectiveHiddenLeafCount=${
+        context.evidence.generatedLeafScaffolds.filter(
+          (leaf) => !(leaf.effectiveVisibleInSource ?? leaf.visibleInSource)
+        ).length
+      }`,
       `runtimeHiddenDrawableCount=${
         context.evidence.generatedLeafScaffolds.filter((leaf) => !leaf.initialRuntimeVisibility).length
       }`,
@@ -1787,11 +1841,13 @@ const createRawVisibilityMismatchChecks = (input: {
   const leafEntries = collectRawLeafObjects(input.candidate, input.evidenceIndex);
   return leafEntries.flatMap((entry) => {
     const visibleInSource = getObjectBoolean(entry.value, "visibleInSource");
+    const localVisibleInSource = getObjectBoolean(entry.value, "localVisibleInSource");
     const initialRuntimeVisibility = getObjectBoolean(entry.value, "initialRuntimeVisibility");
+    const sourceRuntimeVisibility = localVisibleInSource ?? visibleInSource;
     if (
-      visibleInSource === undefined ||
+      sourceRuntimeVisibility === undefined ||
       initialRuntimeVisibility === undefined ||
-      visibleInSource === initialRuntimeVisibility
+      sourceRuntimeVisibility === initialRuntimeVisibility
     ) {
       return [];
     }
@@ -1813,13 +1869,14 @@ const createRawVisibilityMismatchChecks = (input: {
         evidence: [
           `structuralEvidenceIndex=${input.evidenceIndex}`,
           `visibleInSource=${visibleInSource}`,
+          `localVisibleInSource=${sourceRuntimeVisibility}`,
           `initialRuntimeVisibility=${initialRuntimeVisibility}`,
           "reason=evidence-initial-runtime-visibility-mismatch"
         ],
         relatedAC: ["AC-MVP-003", "AC-MVP-004", "AC-MVP-013"],
         relatedScenarios: ["SC-IN-003", "SC-PART-001", "SC-MVP-004"],
         impact:
-          "Hidden PSD leaves must be represented as initially runtime-hidden drawables, and visible leaves as runtime-visible drawables."
+          "PSD leaf local visibility must define initial runtime visibility; parent-hidden groups are editor-only gates."
       })
     ];
   });
@@ -1894,6 +1951,9 @@ const createGroupEvidence = (
   `sourceParentGroupId=${group.sourceParentGroupRef?.sourceGroupId ?? "missing"}`,
   `sourceOrder=${group.sourceOrder}`,
   `sourceGroupPath=${group.sourceGroupPath.join("/") || "root"}`,
+  `visibleInSource=${group.visibleInSource}`,
+  `localVisibleInSource=${group.localVisibleInSource ?? group.visibleInSource}`,
+  `effectiveVisibleInSource=${group.effectiveVisibleInSource ?? group.visibleInSource}`,
   `generatedParentPartId=${group.generatedParentPartId}`,
   `generatedPartId=${group.generatedPartId}`,
   `groupStatus=${group.status}`,
@@ -1908,6 +1968,8 @@ const createLeafEvidence = (
   `sourceOrder=${leaf.sourceOrder}`,
   `sourceLayerPath=${leaf.sourceLayerPath.join("/") || leaf.sourceLayerRef.sourceLayerId}`,
   `visibleInSource=${leaf.visibleInSource}`,
+  `localVisibleInSource=${leaf.localVisibleInSource ?? leaf.visibleInSource}`,
+  `effectiveVisibleInSource=${leaf.effectiveVisibleInSource ?? leaf.visibleInSource}`,
   `initialRuntimeVisibility=${leaf.initialRuntimeVisibility}`,
   `generatedParentPartId=${leaf.generatedParentPartId}`,
   `generatedDrawableId=${leaf.generatedDrawableId}`,

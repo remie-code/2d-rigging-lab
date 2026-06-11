@@ -6,6 +6,11 @@ import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { getDrawableById, getPartById } from "./drawable-selectors.js";
+import {
+  appendPartOrderedChild,
+  createDrawableChildEntry,
+  removePartOrderedChild
+} from "./part-children-order.js";
 
 export interface DrawablePartMutationResult {
   readonly session: AuthoringSession;
@@ -55,14 +60,10 @@ export const setDrawablePart = (
     previousPart?.partId === nextPart.partId ? structuredClone(nextPart) : structuredClone(nextPart);
 
   if (previousPart !== undefined) {
-    previousPart.drawableIds = previousPart.drawableIds.filter(
-      (drawableId) => drawableId !== input.drawableId
-    );
+    removePartOrderedChild(session.graph, previousPart, createDrawableChildEntry(input.drawableId));
   }
 
-  if (!nextPart.drawableIds.includes(input.drawableId)) {
-    nextPart.drawableIds.push(input.drawableId);
-  }
+  appendPartOrderedChild(session.graph, nextPart, createDrawableChildEntry(input.drawableId));
 
   drawable.partId = input.partId;
 

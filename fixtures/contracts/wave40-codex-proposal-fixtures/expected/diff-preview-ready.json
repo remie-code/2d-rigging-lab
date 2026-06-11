@@ -66,6 +66,16 @@
         },
         "fields": [
           {
+            "path": "/model/graph/parts/part_root/children",
+            "before": [],
+            "after": [
+              {
+                "kind": "part",
+                "partId": "part_wave40CodexFace"
+              }
+            ]
+          },
+          {
             "path": "/model/graph/parts/part_root/childPartIds",
             "before": [],
             "after": [

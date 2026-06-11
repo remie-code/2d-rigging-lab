@@ -86,6 +86,103 @@ describe("generateMesh operation handler", () => {
     expect(session.authoringRevision).toBe(1);
   });
 
+  it("commits auto-grid-v1 from drawable texture alpha bounds when raw RGBA bytes are available", () => {
+    const session = createFixtureSessionWithTextureBytes();
+    const request = createGenerateMeshRequest({ dryRun: false, densityHint: "low" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]).toMatchObject({
+      bounds: { x: 4, y: 8, width: 4, height: 4 },
+      vertices: [
+        { x: 5, y: 9 },
+        { x: 7, y: 9 },
+        { x: 5, y: 11 },
+        { x: 7, y: 11 }
+      ],
+      uvs: [
+        { x: 0.25, y: 0.25 },
+        { x: 0.75, y: 0.25 },
+        { x: 0.25, y: 0.75 },
+        { x: 0.75, y: 0.75 }
+      ],
+      triangles: [
+        [0, 1, 2],
+        [1, 3, 2]
+      ]
+    });
+    expect(toRuntimeGraph(session).drawables.get(DrawableIdSchema.parse("draw_body"))).toMatchObject({
+      vertexCount: 4
+    });
+  });
+
+  it("commits the provided preview mesh geometry instead of regenerating on apply", () => {
+    const session = createFixtureSessionWithTextureBytes();
+    const previewMesh = createPreviewMesh(session);
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      densityHint: "high",
+      previewMesh
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]).toMatchObject({
+      vertices: previewMesh.vertices,
+      uvs: previewMesh.uvs,
+      triangles: previewMesh.triangles,
+      vertexStableIds: previewMesh.vertexStableIds,
+      generationProvenanceId: "prov_generate_body_mesh"
+    });
+    expect(toRuntimeGraph(session).drawables.get(DrawableIdSchema.parse("draw_body"))).toMatchObject({
+      vertexCount: 3
+    });
+  });
+
+  it("rejects a preview mesh with an out-of-range triangle vertex reference", () => {
+    const session = createFixtureSessionWithTextureBytes();
+    const meshBefore = structuredClone(session.graph.meshes[0]);
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      previewMesh: createPreviewMesh(session, {
+        triangles: [[0, 1, 999] as [number, number, number]]
+      })
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]).toMatchObject({
+      checkId: "operation.generateMesh.previewMeshTriangleIndexOutOfRange",
+      target: { kind: "mesh", id: "mesh_body", path: "/payload/previewMesh/triangles/0" }
+    });
+    expect(session.graph.meshes[0]).toEqual(meshBefore);
+    expect(session.authoringRevision).toBe(0);
+  });
+
+  it("rejects a preview mesh with a degenerate repeated-index triangle", () => {
+    const session = createFixtureSessionWithTextureBytes();
+    const meshBefore = structuredClone(session.graph.meshes[0]);
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      previewMesh: createPreviewMesh(session, {
+        triangles: [[0, 1, 1] as [number, number, number]]
+      })
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]).toMatchObject({
+      checkId: "operation.generateMesh.previewMeshDegenerateTriangle",
+      target: { kind: "mesh", id: "mesh_body", path: "/payload/previewMesh/triangles/0" }
+    });
+    expect(session.graph.meshes[0]).toEqual(meshBefore);
+    expect(session.authoringRevision).toBe(0);
+  });
+
   it("rejects missing drawable and missing mesh preconditions", () => {
     const missingDrawableSession = createFixtureSession();
     missingDrawableSession.graph.drawables = [];
@@ -141,6 +238,7 @@ const createGenerateMeshRequest = (options: {
   readonly dryRun: boolean;
   readonly method?: "manual-empty" | "auto-grid-v1" | "auto-outline-v1";
   readonly densityHint?: "low" | "medium" | "high";
+  readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -153,7 +251,8 @@ const createGenerateMeshRequest = (options: {
     payload: {
       drawableId: "draw_body",
       method: options.method ?? "auto-grid-v1",
-      ...(options.densityHint === undefined ? {} : { densityHint: options.densityHint })
+      ...(options.densityHint === undefined ? {} : { densityHint: options.densityHint }),
+      ...(options.previewMesh === undefined ? {} : { previewMesh: options.previewMesh })
     }
   });
 
@@ -186,6 +285,81 @@ const createFixtureSessionWithGeneratedMesh = (): AuthoringSession => {
       [1, 3, 2]
     ],
     vertexStableIds: ["vtx_body_0_0", "vtx_body_0_1", "vtx_body_1_0", "vtx_body_1_1"]
+  };
+  return session;
+};
+
+const createPreviewMesh = (
+  session: AuthoringSession,
+  overrides: Partial<AuthoringSession["graph"]["meshes"][number]> = {}
+): AuthoringSession["graph"]["meshes"][number] => ({
+  ...session.graph.meshes[0]!,
+  vertices: [
+    { x: 9, y: 10 },
+    { x: 12, y: 10 },
+    { x: 9, y: 14 }
+  ],
+  uvs: [
+    { x: 0.1, y: 0.2 },
+    { x: 0.6, y: 0.2 },
+    { x: 0.1, y: 0.9 }
+  ],
+  triangles: [[0, 1, 2] as [number, number, number]],
+  vertexStableIds: ["vtx_preview_0", "vtx_preview_1", "vtx_preview_2"],
+  generationProvenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_draw_body"),
+  ...overrides
+});
+
+const createFixtureSessionWithTextureBytes = (): AuthoringSession => {
+  const session = createFixtureSession();
+  const bytes = createAlphaBytes(4, 4, [
+    [1, 1],
+    [2, 1],
+    [1, 2],
+    [2, 2]
+  ]);
+  session.graph.meshes[0] = {
+    ...session.graph.meshes[0]!,
+    bounds: { x: 4, y: 8, width: 4, height: 4 }
+  };
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: TextureIdSchema.parse("tex_body"),
+        filePath: "assets/textures/body.raw-rgba",
+        sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+        binaryAssetRef: {
+          referenceKind: "package-binary-asset-ref-v1",
+          binaryAssetId: "bin_body_rgba",
+          packageRelativePath: "assets/textures/body.raw-rgba",
+          digest: {
+            algorithm: "sha256",
+            hex: "0".repeat(64)
+          },
+          byteLength: bytes.byteLength,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          storageStatus: "stored-package-local-v1",
+          provenanceId: ProvenanceIdSchema.parse("prov_create_body"),
+          rightsAssetId: "rights_body"
+        }
+      }
+    ]
+  };
+  session.binaryAssets = {
+    fileEntries: [
+      {
+        path: "assets/textures/body.raw-rgba",
+        bytes,
+        mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+        binaryAssetId: "bin_body_rgba"
+      }
+    ],
+    binaryAssetIndex: {
+      schemaVersion: "binary-asset-index-v1",
+      assets: []
+    },
+    byteIntakeSummaries: []
   };
   return session;
 };
@@ -255,3 +429,21 @@ const createFixtureSession = (): AuthoringSession => ({
     rightsRecords: []
   }
 });
+
+function createAlphaBytes(
+  width: number,
+  height: number,
+  opaquePixels: readonly (readonly [number, number])[]
+): Uint8Array {
+  const bytes = new Uint8Array(width * height * 4);
+
+  for (const [x, y] of opaquePixels) {
+    const index = (y * width + x) * 4;
+    bytes[index] = 255;
+    bytes[index + 1] = 255;
+    bytes[index + 2] = 255;
+    bytes[index + 3] = 255;
+  }
+
+  return bytes;
+}

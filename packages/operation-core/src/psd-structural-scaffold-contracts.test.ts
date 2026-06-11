@@ -84,6 +84,26 @@ describe("PSD structural scaffold operation DTO contracts", () => {
     ).toBe(false);
 
     expect(
+      PsdStructuralScaffoldLeafDrawableSchema.safeParse({
+        ...createVisibleLeafScaffold(),
+        visibleInSource: false,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: false,
+        initialRuntimeVisibility: true
+      }).success
+    ).toBe(true);
+
+    expect(
+      PsdStructuralScaffoldLeafDrawableSchema.safeParse({
+        ...createVisibleLeafScaffold(),
+        visibleInSource: false,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: false,
+        initialRuntimeVisibility: false
+      }).success
+    ).toBe(false);
+
+    expect(
       ImportPsdStructuralScaffoldPayloadSchema.safeParse({
         ...createStructuralPayload(),
         capPolicy: {

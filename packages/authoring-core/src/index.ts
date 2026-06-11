@@ -15,6 +15,8 @@ export * from "./stable-order-mutations.js";
 export * from "./draw-order-mutations.js";
 export * from "./runtime-visibility-mutations.js";
 export * from "./part-mutations.js";
+export * from "./part-children-order.js";
+export * from "./structure-order-mutations.js";
 export * from "./drawable-part-mutations.js";
 export * from "./drawable-texture-mutations.js";
 export * from "./mask-relation-mutations.js";

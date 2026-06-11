@@ -1,8 +1,10 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import type { StructureOrderDrop, StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
 import type { DiagnosticDto, DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
   OperationRequestSchema,
+  type GenerateMeshPayloadDto,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -237,6 +239,38 @@ export function commitDrawableReorder(
     : { committed: false, session, diagnostics };
 }
 
+export function commitStructureMove(
+  session: AuthoringSession,
+  moved: StructureOrderItem,
+  drop: StructureOrderDrop
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "moveStructureChild",
+    payload: {
+      moved,
+      drop,
+      lockedTargetIds: []
+    }
+  });
+}
+
+export function commitGenerateMesh(
+  session: AuthoringSession,
+  drawableId: DrawableId,
+  densityHint: GenerateMeshPayloadDto["densityHint"],
+  previewMesh?: AuthoringSession["graph"]["meshes"][number]
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "generateMesh",
+    payload: {
+      drawableId,
+      method: "auto-grid-v1",
+      ...(densityHint === undefined ? {} : { densityHint }),
+      ...(previewMesh === undefined ? {} : { previewMesh })
+    }
+  });
+}
+
 export function commitDrawableReparent(
   session: AuthoringSession,
   drawableId: DrawableId,
@@ -247,16 +281,13 @@ export function commitDrawableReparent(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
-  const reparentResult = commitOperationInPlace(nextSession, {
-    operationType: "setDrawablePart",
-    payload: {
-      drawableId,
-      partId,
-      lockedTargetIds: []
-    }
+  return commitStructureMove(session, {
+    kind: "drawable",
+    drawableId
+  }, {
+    placement: "inside",
+    parentPartId: partId
   });
-  return commitTreeDrawOrderSync(session, nextSession, reparentResult);
 }
 
 export function commitPartReparent(
@@ -269,16 +300,13 @@ export function commitPartReparent(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
-  const reparentResult = commitOperationInPlace(nextSession, {
-    operationType: "updatePart",
-    payload: {
-      partId,
-      parentPartId,
-      lockedTargetIds: []
-    }
+  return commitStructureMove(session, {
+    kind: "part",
+    partId
+  }, {
+    placement: "inside",
+    parentPartId
   });
-  return commitTreeDrawOrderSync(session, nextSession, reparentResult);
 }
 
 function commitTreeDrawOrderSync(

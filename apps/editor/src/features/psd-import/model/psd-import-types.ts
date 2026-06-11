@@ -14,6 +14,9 @@ export interface PsdImportReviewRow {
   readonly depth: number;
   readonly kind: PsdImportReviewRowKind;
   readonly name: string;
+  readonly localVisibleInSource: boolean;
+  readonly effectiveVisibleInSource: boolean;
+  readonly visibilityLabel?: string;
   readonly hasIssue: boolean;
   readonly issueTooltip?: string;
 }
@@ -35,6 +38,7 @@ export interface PsdImportPlan {
   readonly capPolicy: PsdStructuralScaffoldCapPolicyDto;
   readonly destination: PsdImportDestination;
   readonly importRootPartId: PartId;
+  readonly editorHiddenPartIds: readonly PartId[];
   readonly reviewRows: readonly PsdImportReviewRow[];
   readonly hasIssues: boolean;
   readonly issues: readonly PsdStructuralScaffoldIssueDto[];

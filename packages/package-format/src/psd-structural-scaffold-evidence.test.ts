@@ -54,11 +54,33 @@ describe("PSD structural scaffold package evidence contract", () => {
     ).toBe(false);
   });
 
-  it("rejects leaf scaffolds whose initial runtime visibility diverges from source visibility", () => {
+  it("rejects leaf scaffolds whose initial runtime visibility diverges from local source visibility", () => {
     expect(
       PsdStructuralScaffoldLeafDrawableSchema.safeParse({
         ...createHiddenLeafScaffold(),
         initialRuntimeVisibility: true
+      }).success
+    ).toBe(false);
+  });
+
+  it("allows parent-hidden leaves to keep runtime visibility from local layer visibility", () => {
+    expect(
+      PsdStructuralScaffoldLeafDrawableSchema.safeParse({
+        ...createVisibleLeafScaffold(),
+        visibleInSource: false,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: false,
+        initialRuntimeVisibility: true
+      }).success
+    ).toBe(true);
+
+    expect(
+      PsdStructuralScaffoldLeafDrawableSchema.safeParse({
+        ...createVisibleLeafScaffold(),
+        visibleInSource: false,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: false,
+        initialRuntimeVisibility: false
       }).success
     ).toBe(false);
   });

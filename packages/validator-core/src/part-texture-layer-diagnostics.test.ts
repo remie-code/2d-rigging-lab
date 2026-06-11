@@ -27,6 +27,7 @@ const HEAD_PART_ID = PartIdSchema.parse("part_head");
 const EMPTY_LEAF_PART_ID = PartIdSchema.parse("part_emptyLeaf");
 const BODY_DRAWABLE_ID = DrawableIdSchema.parse("draw_body");
 const EYE_DRAWABLE_ID = DrawableIdSchema.parse("draw_eye");
+const MISSING_DRAWABLE_ID = DrawableIdSchema.parse("draw_missing");
 const BODY_MESH_ID = MeshIdSchema.parse("mesh_body");
 const EYE_MESH_ID = MeshIdSchema.parse("mesh_eye");
 const SOURCE_ASSET_ID = SourceAssetIdSchema.parse("src_layers");
@@ -50,6 +51,9 @@ describe("part, texture, and editor layer diagnostics", () => {
     expect(catalog.has("part.parentMissing")).toBe(true);
     expect(catalog.has("part.childMissing")).toBe(true);
     expect(catalog.has("part.duplicateChild")).toBe(true);
+    expect(catalog.has("part.orderedChildrenDuplicate")).toBe(true);
+    expect(catalog.has("part.orderedChildrenTargetMissing")).toBe(true);
+    expect(catalog.has("part.orderedChildrenMembershipMismatch")).toBe(true);
     expect(catalog.has("part.parentChildMismatch")).toBe(true);
     expect(catalog.has("part.cycle")).toBe(true);
     expect(catalog.has("part.drawableMembershipMismatch")).toBe(true);
@@ -249,6 +253,298 @@ describe("part, texture, and editor layer diagnostics", () => {
         ]
       })
     ]);
+  });
+
+  it("accepts mixed ordered children when membership mirrors match", () => {
+    const mixedOrderBaseDocument = clonePackageDocument(createPackageDocument());
+    const mixedOrderDocument = withGraphParts(mixedOrderBaseDocument, [
+      {
+        ...mixedOrderBaseDocument.model.graph.parts[0]!,
+        children: [
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          },
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          }
+        ]
+      },
+      {
+        ...mixedOrderBaseDocument.model.graph.parts[1]!,
+        children: [
+          {
+            kind: "drawable",
+            drawableId: EYE_DRAWABLE_ID
+          }
+        ]
+      }
+    ]);
+
+    const report = validatePackageRuntime({
+      packageDocument: mixedOrderDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(report.checks).toEqual([]);
+  });
+
+  it("reports mixed ordered children duplicates and membership mismatches deterministically", () => {
+    const duplicateBaseDocument = clonePackageDocument(createPackageDocument());
+    const duplicateDocument = withGraphParts(duplicateBaseDocument, [
+      {
+        ...duplicateBaseDocument.model.graph.parts[0]!,
+        drawableIds: [BODY_DRAWABLE_ID, BODY_DRAWABLE_ID],
+        children: [
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          },
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          },
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          }
+        ]
+      },
+      duplicateBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const duplicateReport = validatePackageRuntime({
+      packageDocument: duplicateDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(duplicateReport.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.orderedChildrenDuplicate",
+        status: "fail",
+        severity: "error",
+        targetPath: "/model/graph/parts/0/children/1",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `orderedChild=drawable:${BODY_DRAWABLE_ID}`,
+          "firstChildIndex=0",
+          "duplicateChildIndex=1",
+          "reason=duplicate-ordered-child"
+        ]
+      }),
+      expect.objectContaining({
+        checkId: "part.orderedChildrenMembershipMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/model/graph/parts/0/children",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `childPartIds=${HEAD_PART_ID}`,
+          `drawableIds=${BODY_DRAWABLE_ID},${BODY_DRAWABLE_ID}`,
+          "reason=drawableIds-mismatch"
+        ]
+      })
+    ]);
+
+    const mismatchBaseDocument = clonePackageDocument(createPackageDocument());
+    const mismatchDocument = withGraphParts(mismatchBaseDocument, [
+      {
+        ...mismatchBaseDocument.model.graph.parts[0]!,
+        children: [
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          }
+        ]
+      },
+      mismatchBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const mismatchReport = validatePackageRuntime({
+      packageDocument: mismatchDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(mismatchReport.checks).toEqual([
+      expect.objectContaining({
+        checkId: "part.orderedChildrenMembershipMismatch",
+        status: "fail",
+        severity: "error",
+        targetPath: "/model/graph/parts/0/children",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `childPartIds=${HEAD_PART_ID}`,
+          `drawableIds=${BODY_DRAWABLE_ID}`,
+          "reason=childPartIds-mismatch"
+        ]
+      })
+    ]);
+  });
+
+  it("reports ordered children missing targets and parent mismatches deterministically", () => {
+    const missingPartBaseDocument = clonePackageDocument(createPackageDocument());
+    const missingPartDocument = withGraphParts(missingPartBaseDocument, [
+      {
+        ...missingPartBaseDocument.model.graph.parts[0]!,
+        childPartIds: [MISSING_PART_ID, HEAD_PART_ID],
+        children: [
+          {
+            kind: "part",
+            partId: MISSING_PART_ID
+          },
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          },
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          }
+        ]
+      },
+      missingPartBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const missingPartReport = validatePackageRuntime({
+      packageDocument: missingPartDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(missingPartReport.checks).toContainEqual(
+      expect.objectContaining({
+        checkId: "part.orderedChildrenTargetMissing",
+        targetPath: "/model/graph/parts/0/children/0",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `orderedChild=part:${MISSING_PART_ID}`,
+          "orderedChildIndex=0",
+          "orderedChildMatch=missing"
+        ]
+      })
+    );
+
+    const missingDrawableBaseDocument = clonePackageDocument(createPackageDocument());
+    const missingDrawableDocument = withGraphParts(missingDrawableBaseDocument, [
+      {
+        ...missingDrawableBaseDocument.model.graph.parts[0]!,
+        drawableIds: [BODY_DRAWABLE_ID, MISSING_DRAWABLE_ID],
+        children: [
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          },
+          {
+            kind: "drawable",
+            drawableId: MISSING_DRAWABLE_ID
+          },
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          }
+        ]
+      },
+      missingDrawableBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const missingDrawableReport = validatePackageRuntime({
+      packageDocument: missingDrawableDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(missingDrawableReport.checks).toContainEqual(
+      expect.objectContaining({
+        checkId: "part.orderedChildrenTargetMissing",
+        targetPath: "/model/graph/parts/0/children/1",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          `orderedChild=drawable:${MISSING_DRAWABLE_ID}`,
+          "orderedChildIndex=1",
+          "orderedChildMatch=missing"
+        ]
+      })
+    );
+
+    const partParentMismatchBaseDocument = clonePackageDocument(createPackageDocument());
+    const { parentPartId: _removedParentPartId, ...headPartWithoutParent } =
+      partParentMismatchBaseDocument.model.graph.parts[1]!;
+    const partParentMismatchDocument = withGraphParts(partParentMismatchBaseDocument, [
+      {
+        ...partParentMismatchBaseDocument.model.graph.parts[0]!,
+        children: [
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          },
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          }
+        ]
+      },
+      headPartWithoutParent
+    ]);
+
+    const partParentMismatchReport = validatePackageRuntime({
+      packageDocument: partParentMismatchDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(partParentMismatchReport.checks).toContainEqual(
+      expect.objectContaining({
+        checkId: "part.orderedChildrenMembershipMismatch",
+        targetPath: "/model/graph/parts/0/children/0",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          "orderedChildIndex=0",
+          `childPartIds=${HEAD_PART_ID}`,
+          `drawableIds=${BODY_DRAWABLE_ID}`,
+          "reason=part-parent-mismatch"
+        ]
+      })
+    );
+
+    const drawableParentMismatchBaseDocument = clonePackageDocument(createPackageDocument());
+    const drawableParentMismatchDocument = withGraphParts(drawableParentMismatchBaseDocument, [
+      {
+        ...drawableParentMismatchBaseDocument.model.graph.parts[0]!,
+        drawableIds: [BODY_DRAWABLE_ID, EYE_DRAWABLE_ID],
+        children: [
+          {
+            kind: "drawable",
+            drawableId: BODY_DRAWABLE_ID
+          },
+          {
+            kind: "drawable",
+            drawableId: EYE_DRAWABLE_ID
+          },
+          {
+            kind: "part",
+            partId: HEAD_PART_ID
+          }
+        ]
+      },
+      drawableParentMismatchBaseDocument.model.graph.parts[1]!
+    ]);
+
+    const drawableParentMismatchReport = validatePackageRuntime({
+      packageDocument: drawableParentMismatchDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(drawableParentMismatchReport.checks).toContainEqual(
+      expect.objectContaining({
+        checkId: "part.orderedChildrenMembershipMismatch",
+        targetPath: "/model/graph/parts/0/children/1",
+        evidence: [
+          `partId=${ROOT_PART_ID}`,
+          "orderedChildIndex=1",
+          `childPartIds=${HEAD_PART_ID}`,
+          `drawableIds=${BODY_DRAWABLE_ID},${EYE_DRAWABLE_ID}`,
+          "reason=drawable-parent-mismatch"
+        ]
+      })
+    );
   });
 
   it("reports part parent/child mismatch and part cycles deterministically", () => {

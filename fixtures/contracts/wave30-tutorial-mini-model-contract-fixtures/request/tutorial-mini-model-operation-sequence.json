@@ -1,7 +1,7 @@
 {
   "schemaVersion": "wave30-tutorial-mini-model-operation-sequence-v1",
   "recipeId": "tutorial-mini-model-recipe-v1",
-  "operationCount": 34,
+  "operationCount": 36,
   "operationIds": [
     "op_tutorial_create_part_body",
     "op_tutorial_create_part_head",
@@ -31,7 +31,9 @@
     "op_tutorial_generate_mesh_arm",
     "op_tutorial_move_front_hair_mesh_vertices",
     "op_tutorial_set_eye_mask_relation",
-    "op_tutorial_set_draw_order",
+    "op_tutorial_move_body_drawable_before_head",
+    "op_tutorial_move_arm_before_head",
+    "op_tutorial_move_head_drawable_before_face",
     "op_tutorial_create_head_rotation_rig",
     "op_tutorial_create_hair_sway_dynamics",
     "op_tutorial_add_head_rotation_keyform",
@@ -67,7 +69,9 @@
     "generateMesh",
     "moveMeshVertex",
     "setMaskRelation",
-    "setDrawOrder",
+    "moveStructureChild",
+    "moveStructureChild",
+    "moveStructureChild",
     "createRotation2dRigControl",
     "createDynamicsGroup",
     "addKeyform",
@@ -108,7 +112,9 @@
     30,
     31,
     32,
-    33
+    33,
+    34,
+    35
   ],
   "dryRunValues": [
     false

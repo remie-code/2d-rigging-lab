@@ -1,6 +1,6 @@
 import {
   createDryRunAuthoringSession,
-  createGeneratedMesh,
+  createGeneratedMeshForDrawable,
   getDrawableById,
   getMeshById,
   replaceDrawableMesh
@@ -70,6 +70,16 @@ const applyGenerateMesh = (
     drawableMissing: drawable === undefined,
     meshMissing: drawable !== undefined && existingMesh === undefined
   });
+  if (drawable !== undefined && existingMesh !== undefined) {
+    preconditionDiagnostics.push(
+      ...evaluatePreviewMeshPreconditions({
+        previewMesh: request.payload.previewMesh,
+        drawableId: drawable.drawableId,
+        meshId: existingMesh.meshId,
+        method: request.payload.method
+      })
+    );
+  }
 
   if (preconditionDiagnostics.length > 0 || drawable === undefined || existingMesh === undefined) {
     return {
@@ -81,14 +91,40 @@ const applyGenerateMesh = (
 
   const baseRevision = session.authoringRevision;
   const provenanceId = createProvenanceId(operationId);
-  const mesh = createGeneratedMesh({
-    meshId: existingMesh.meshId,
-    drawableId: drawable.drawableId,
-    bounds: existingMesh.bounds,
-    provenanceId,
-    method: request.payload.method === "manual-empty" ? "manual-empty" : "auto-grid-v1",
-    ...(request.payload.densityHint === undefined ? {} : { densityHint: request.payload.densityHint })
-  });
+  let mesh: Parameters<typeof replaceDrawableMesh>[1];
+  if (request.payload.previewMesh !== undefined) {
+    mesh = {
+      ...structuredClone(request.payload.previewMesh),
+      generationProvenanceId: provenanceId
+    };
+  } else {
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: drawable.drawableId,
+      provenanceId,
+      method: request.payload.method === "manual-empty" ? "manual-empty" : "auto-grid-v1",
+      ...(request.payload.densityHint === undefined ? {} : { densityHint: request.payload.densityHint })
+    });
+    if (generated === undefined) {
+      return {
+        result: createRejectedOperationResult({
+          operationId,
+          diagnostics: [
+            createOperationDiagnostic({
+              checkId: "operation.generateMesh.missingMesh",
+              message: `Drawable ${request.payload.drawableId} references a missing mesh.`,
+              target: { kind: "drawable", id: request.payload.drawableId, path: "/meshId" }
+            })
+          ]
+        }),
+        targetIds,
+        candidateSession: session
+      };
+    }
+
+    mesh = generated.mesh;
+  }
+
   const provenanceRecord = createMeshProvenanceRecord({
     operationId,
     provenanceId,
@@ -148,6 +184,107 @@ const evaluateGenerateMeshPreconditions = (input: {
       })
     );
   }
+
+  return diagnostics;
+};
+
+const evaluatePreviewMeshPreconditions = (input: {
+  readonly previewMesh: Extract<OperationRequestDto, { operationType: "generateMesh" }>["payload"]["previewMesh"];
+  readonly drawableId: string;
+  readonly meshId: string;
+  readonly method: Extract<OperationRequestDto, { operationType: "generateMesh" }>["payload"]["method"];
+}): DiagnosticDto[] => {
+  const diagnostics: DiagnosticDto[] = [];
+
+  if (input.previewMesh === undefined) {
+    return diagnostics;
+  }
+  const previewMesh = input.previewMesh;
+
+  if (input.method !== "auto-grid-v1") {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.generateMesh.previewMeshUnsupportedMethod",
+        message: "previewMesh commits are only supported for auto-grid-v1 generated mesh drafts.",
+        target: { kind: "drawable", id: input.drawableId, path: "/payload/method" }
+      })
+    );
+  }
+
+  if (previewMesh.drawableId !== input.drawableId) {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.generateMesh.previewMeshDrawableMismatch",
+        message: `Preview mesh drawable ${previewMesh.drawableId} does not match target drawable ${input.drawableId}.`,
+        target: { kind: "drawable", id: previewMesh.drawableId, path: "/payload/previewMesh/drawableId" }
+      })
+    );
+  }
+
+  if (previewMesh.meshId !== input.meshId) {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.generateMesh.previewMeshIdMismatch",
+        message: `Preview mesh ${previewMesh.meshId} does not match target mesh ${input.meshId}.`,
+        target: { kind: "mesh", id: previewMesh.meshId, path: "/payload/previewMesh/meshId" }
+      })
+    );
+  }
+
+  if (
+    previewMesh.vertices.length !== previewMesh.uvs.length ||
+    previewMesh.vertices.length !== previewMesh.vertexStableIds.length
+  ) {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.generateMesh.previewMeshVertexCardinalityMismatch",
+        message: "Preview mesh vertices, uvs, and vertexStableIds must have matching lengths.",
+        target: { kind: "mesh", id: previewMesh.meshId, path: "/payload/previewMesh" }
+      })
+    );
+  }
+
+  if (
+    previewMesh.triangleStableIds !== undefined &&
+    previewMesh.triangleStableIds.length !== previewMesh.triangles.length
+  ) {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.generateMesh.previewMeshTriangleCardinalityMismatch",
+        message: "Preview mesh triangles and triangleStableIds must have matching lengths.",
+        target: { kind: "mesh", id: previewMesh.meshId, path: "/payload/previewMesh" }
+      })
+    );
+  }
+
+  previewMesh.triangles.forEach((triangle, triangleIndex) => {
+    const [a, b, c] = triangle;
+    const path = `/payload/previewMesh/triangles/${triangleIndex}`;
+
+    if (
+      a >= previewMesh.vertices.length ||
+      b >= previewMesh.vertices.length ||
+      c >= previewMesh.vertices.length
+    ) {
+      diagnostics.push(
+        createOperationDiagnostic({
+          checkId: "operation.generateMesh.previewMeshTriangleIndexOutOfRange",
+          message: `Preview mesh triangle ${triangleIndex} references a vertex outside the vertex array.`,
+          target: { kind: "mesh", id: previewMesh.meshId, path }
+        })
+      );
+    }
+
+    if (a === b || a === c || b === c) {
+      diagnostics.push(
+        createOperationDiagnostic({
+          checkId: "operation.generateMesh.previewMeshDegenerateTriangle",
+          message: `Preview mesh triangle ${triangleIndex} repeats a vertex index.`,
+          target: { kind: "mesh", id: previewMesh.meshId, path }
+        })
+      );
+    }
+  });
 
   return diagnostics;
 };

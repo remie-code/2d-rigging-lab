@@ -28,7 +28,9 @@
       "changedFieldPaths": [
         "/model/graph/parts/part_wave33_head/displayName",
         "/model/graph/parts/part_wave33_head/parentPartId",
+        "/model/graph/parts/part_root/children",
         "/model/graph/parts/part_root/childPartIds",
+        "/model/graph/parts/part_wave33_parent/children",
         "/model/graph/parts/part_wave33_parent/childPartIds"
       ],
       "packageRevisionAfter": 1,
@@ -51,7 +53,9 @@
       "removedTargets": [],
       "changedFieldPaths": [
         "/model/drawables/draw_body/partId",
+        "/model/graph/parts/part_root/children",
         "/model/graph/parts/part_root/drawableIds",
+        "/model/graph/parts/part_wave33_head/children",
         "/model/graph/parts/part_wave33_head/drawableIds"
       ],
       "packageRevisionAfter": 2,

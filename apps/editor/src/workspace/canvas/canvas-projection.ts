@@ -1,7 +1,13 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  createStructureDrawOrderIndex,
+  getPartOrderedChildren,
+  type AuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RectDto } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
+
+type MeshDto = AuthoringSession["graph"]["meshes"][number];
 
 export interface CanvasPoint {
   readonly x: number;
@@ -33,6 +39,7 @@ export interface CanvasRenderableDrawable {
   readonly opacity: number;
   readonly selected: boolean;
   readonly selectedBySubtree: boolean;
+  readonly meshPreview: boolean;
   readonly renderBytes?: Uint8Array;
   readonly renderWidth: number;
   readonly renderHeight: number;
@@ -49,6 +56,12 @@ export interface CanvasMaskRelationProjection {
   readonly targetDrawableIds: readonly DrawableId[];
 }
 
+export interface CanvasMeshOverlayProjection {
+  readonly drawableId: DrawableId;
+  readonly mesh: MeshDto;
+  readonly status: "draft" | "committed";
+}
+
 export interface CanvasRenderProjection {
   readonly canvasBounds: RectDto;
   readonly artworkBounds?: RectDto;
@@ -57,12 +70,18 @@ export interface CanvasRenderProjection {
   readonly selectedPartId?: PartId;
   readonly drawables: readonly CanvasRenderableDrawable[];
   readonly maskRelations: readonly CanvasMaskRelationProjection[];
+  readonly meshOverlay?: CanvasMeshOverlayProjection;
   readonly hasRenderableArtwork: boolean;
   readonly contentKey: string;
 }
 
 export interface CanvasProjectionOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
+  readonly meshDraft?: {
+    readonly drawableId: DrawableId;
+    readonly mesh: MeshDto;
+  } | null;
+  readonly meshPreviewDrawableId?: DrawableId;
 }
 
 const DEFAULT_VIEW: CanvasViewState = {
@@ -89,11 +108,11 @@ export function createCanvasRenderProjection(
     session.binaryAssets?.fileEntries.map((entry) => [entry.path, entry]) ?? []
   );
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
-  const frontOrderByDrawableId = new Map(
-    session.graph.drawOrder.map((entry) => [entry.drawableId, entry.stableOrder])
-  );
+  const frontOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
   const selectedDrawableIds = resolveSelectedDrawableIds(session, selection, partsById);
   const selectedPartId = selection?.kind === "part" ? selection.id : undefined;
+  const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
+  const meshPreviewDrawableId = options.meshPreviewDrawableId;
   const maskSourcesByTargetId = createMaskSourceIndex(session);
 
   const drawables = session.graph.drawables
@@ -117,6 +136,7 @@ export function createCanvasRenderProjection(
       const selected = selection?.kind === "drawable" && selection.id === drawable.drawableId;
       const selectedBySubtree =
         !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
+      const meshPreview = meshPreviewDrawableId === drawable.drawableId;
 
       return {
         drawableId: drawable.drawableId,
@@ -135,10 +155,11 @@ export function createCanvasRenderProjection(
             }),
         bounds: structuredClone(mesh.bounds),
         frontOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
-        visible: drawable.runtimeVisibility && !hiddenByPart,
+        visible: meshPreview || (drawable.runtimeVisibility && !hiddenByPart),
         opacity: clamp(drawable.defaultOpacity, 0, 1),
         selected,
         selectedBySubtree,
+        meshPreview,
         ...(binaryEntry === undefined ? {} : { renderBytes: binaryEntry.bytes }),
         renderWidth: Math.round(mesh.bounds.width),
         renderHeight: Math.round(mesh.bounds.height),
@@ -155,6 +176,15 @@ export function createCanvasRenderProjection(
   );
   const artworkBounds = unionRects(renderableDrawables.map((drawable) => drawable.bounds));
   const selectionBounds = unionRects(selectedVisibleDrawables.map((drawable) => drawable.bounds));
+  const meshOverlay =
+    selectedDrawableId === undefined
+      ? undefined
+      : resolveSelectedMeshOverlay({
+          selectedDrawableId,
+          meshesById,
+          session,
+          draft: options.meshDraft ?? null
+        });
 
   return {
     canvasBounds: resolveProjectionCanvasBounds(session),
@@ -170,8 +200,38 @@ export function createCanvasRenderProjection(
         sourceDrawableIds: [...relation.maskDrawableIds],
         targetDrawableIds: [...relation.targetDrawableIds]
       })),
+    ...(meshOverlay === undefined ? {} : { meshOverlay }),
     hasRenderableArtwork: renderableDrawables.length > 0,
     contentKey: createProjectionContentKey(session, drawables)
+  };
+}
+
+function resolveSelectedMeshOverlay(input: {
+  readonly selectedDrawableId: DrawableId;
+  readonly session: AuthoringSession;
+  readonly meshesById: ReadonlyMap<string, MeshDto>;
+  readonly draft: CanvasProjectionOptions["meshDraft"];
+}): CanvasMeshOverlayProjection | undefined {
+  if (input.draft?.drawableId === input.selectedDrawableId) {
+    return {
+      drawableId: input.selectedDrawableId,
+      mesh: input.draft.mesh,
+      status: "draft"
+    };
+  }
+
+  const drawable = input.session.graph.drawables.find(
+    (candidate) => candidate.drawableId === input.selectedDrawableId
+  );
+  const mesh = drawable === undefined ? undefined : input.meshesById.get(drawable.meshId);
+  if (mesh === undefined || mesh.vertices.length === 0 || mesh.triangles.length === 0) {
+    return undefined;
+  }
+
+  return {
+    drawableId: input.selectedDrawableId,
+    mesh,
+    status: "committed"
   };
 }
 
@@ -372,12 +432,13 @@ function resolveSelectedDrawableIds(
       return;
     }
 
-    for (const drawableId of part.drawableIds) {
-      result.add(drawableId);
-    }
+    for (const child of getPartOrderedChildren(session.graph, part)) {
+      if (child.kind === "drawable") {
+        result.add(child.drawableId);
+        continue;
+      }
 
-    for (const childPartId of part.childPartIds) {
-      visitPart(childPartId);
+      visitPart(child.partId);
     }
   };
 

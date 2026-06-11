@@ -38,17 +38,21 @@ describe("setDrawOrder operation handler", () => {
     expect(outcome.result.status).toBe("dry_run");
     expect(outcome.candidateSession).not.toBe(session);
     expect(session.graph.drawables[0]?.baseDrawOrder).toBe(0);
-    expect(outcome.candidateSession.graph.drawables[0]?.baseDrawOrder).toBe(20);
+    expect(outcome.candidateSession.graph.drawables[0]?.baseDrawOrder).toBe(1);
     expect(outcome.candidateSession.graph.drawOrder).toEqual([
-      { drawableId: "draw_back", baseDrawOrder: 20, stableOrder: 1 },
-      { drawableId: "draw_front", baseDrawOrder: 10, stableOrder: 0 }
+      { drawableId: "draw_front", baseDrawOrder: 0, stableOrder: 0 },
+      { drawableId: "draw_back", baseDrawOrder: 1, stableOrder: 1 }
+    ]);
+    expect(outcome.candidateSession.graph.parts[0]?.children).toEqual([
+      { kind: "drawable", drawableId: "draw_front" },
+      { kind: "drawable", drawableId: "draw_back" }
     ]);
     expect(outcome.result.modelDiff?.changed[0]).toMatchObject({
       target: { kind: "package", id: "pkg_set_draw_order_operation_test", path: "/model/drawOrder/entries" }
     });
     expect(toRuntimeGraph(outcome.candidateSession).drawOrder).toEqual([
-      { drawableId: "draw_back", drawOrder: 1 },
-      { drawableId: "draw_front", drawOrder: 0 }
+      { drawableId: "draw_front", drawOrder: 0 },
+      { drawableId: "draw_back", drawOrder: 1 }
     ]);
   });
 
@@ -70,11 +74,11 @@ describe("setDrawOrder operation handler", () => {
     expect(session.authoringRevision).toBe(1);
     expect(session.graph.drawables[0]).toMatchObject({
       drawableId: "draw_back",
-      baseDrawOrder: 20
+      baseDrawOrder: 1
     });
     expect(toRuntimeGraph(session).drawOrder).toEqual([
-      { drawableId: "draw_back", drawOrder: 1 },
-      { drawableId: "draw_front", drawOrder: 0 }
+      { drawableId: "draw_front", drawOrder: 0 },
+      { drawableId: "draw_back", drawOrder: 1 }
     ]);
   });
 
@@ -159,6 +163,22 @@ describe("setDrawOrder operation handler", () => {
     });
     expect(outcome.result.modelDiff?.changed).toEqual([
       {
+        target: { kind: "package", id: "pkg_set_draw_order_operation_test", path: "/model/drawOrder/entries" },
+        fields: [
+          {
+            path: "/model/drawOrder/entries",
+            before: [
+              { drawableId: "draw_back", baseDrawOrder: 0, stableOrder: 0 },
+              { drawableId: "draw_front", baseDrawOrder: 10, stableOrder: 1 }
+            ],
+            after: [
+              { drawableId: "draw_back", baseDrawOrder: 0, stableOrder: 0 },
+              { drawableId: "draw_front", baseDrawOrder: 1, stableOrder: 1 }
+            ]
+          }
+        ]
+      },
+      {
         target: { kind: "drawable", id: "draw_back" },
         fields: [
           {
@@ -167,9 +187,44 @@ describe("setDrawOrder operation handler", () => {
             after: 0
           }
         ]
+      },
+      {
+        target: { kind: "drawable", id: "draw_front" },
+        fields: [
+          {
+            path: "/model/drawables/draw_front/baseDrawOrder",
+            before: 10,
+            after: 1
+          }
+        ]
       }
     ]);
     expect(session.authoringRevision).toBe(1);
+  });
+
+  it("rejects draw-order payloads that cross Part Container block boundaries", () => {
+    const session = createMixedContainerFixtureSession();
+    const request = createSetDrawOrderRequest({
+      dryRun: false,
+      entries: [
+        { drawableId: "draw_back", baseDrawOrder: 0 },
+        { drawableId: "draw_front", baseDrawOrder: 1 },
+        { drawableId: "draw_eye", baseDrawOrder: 2 }
+      ]
+    });
+
+    const outcome = setDrawOrderOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics[0]).toMatchObject({
+      checkId: "operation.setDrawOrder.structureConflict"
+    });
+    expect(session.graph.drawOrder.map((entry) => [entry.drawableId, entry.baseDrawOrder])).toEqual([
+      ["draw_front", 0],
+      ["draw_eye", 1],
+      ["draw_back", 2]
+    ]);
+    expect(session.authoringRevision).toBe(0);
   });
 });
 
@@ -243,15 +298,69 @@ const createFixtureSession = (): AuthoringSession => ({
   }
 });
 
+const createMixedContainerFixtureSession = (): AuthoringSession => ({
+  ...createFixtureSession(),
+  graph: {
+    ...createFixtureSession().graph,
+    parts: [
+      {
+        partId: PartIdSchema.parse("part_root"),
+        displayName: "Root",
+        childPartIds: [PartIdSchema.parse("part_eye")],
+        drawableIds: [
+          DrawableIdSchema.parse("draw_front"),
+          DrawableIdSchema.parse("draw_back")
+        ],
+        children: [
+          { kind: "drawable", drawableId: DrawableIdSchema.parse("draw_front") },
+          { kind: "part", partId: PartIdSchema.parse("part_eye") },
+          { kind: "drawable", drawableId: DrawableIdSchema.parse("draw_back") }
+        ]
+      },
+      {
+        partId: PartIdSchema.parse("part_eye"),
+        displayName: "Eye",
+        parentPartId: PartIdSchema.parse("part_root"),
+        childPartIds: [],
+        drawableIds: [DrawableIdSchema.parse("draw_eye")],
+        children: [{ kind: "drawable", drawableId: DrawableIdSchema.parse("draw_eye") }]
+      }
+    ],
+    drawables: [
+      createFixtureDrawable("draw_front", "mesh_front", "Front", 0),
+      createFixtureDrawable("draw_eye", "mesh_eye", "Eye", 1, "part_eye"),
+      createFixtureDrawable("draw_back", "mesh_back", "Back", 2)
+    ],
+    meshes: [
+      createFixtureMesh("mesh_front", "draw_front"),
+      createFixtureMesh("mesh_eye", "draw_eye"),
+      createFixtureMesh("mesh_back", "draw_back")
+    ],
+    drawOrder: [
+      { drawableId: DrawableIdSchema.parse("draw_front"), baseDrawOrder: 0, stableOrder: 0 },
+      { drawableId: DrawableIdSchema.parse("draw_eye"), baseDrawOrder: 1, stableOrder: 1 },
+      { drawableId: DrawableIdSchema.parse("draw_back"), baseDrawOrder: 2, stableOrder: 2 }
+    ],
+    stableOrder: [
+      PartIdSchema.parse("part_root"),
+      PartIdSchema.parse("part_eye"),
+      DrawableIdSchema.parse("draw_front"),
+      DrawableIdSchema.parse("draw_eye"),
+      DrawableIdSchema.parse("draw_back")
+    ]
+  }
+});
+
 const createFixtureDrawable = (
   drawableId: string,
   meshId: string,
   displayName: string,
-  baseDrawOrder: number
+  baseDrawOrder: number,
+  partId = "part_root"
 ) => ({
   drawableId: DrawableIdSchema.parse(drawableId),
   displayName,
-  partId: PartIdSchema.parse("part_root"),
+  partId: PartIdSchema.parse(partId),
   sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
   textureId: TextureIdSchema.parse(`tex_${drawableId.replace(/^draw_/, "")}`),
   meshId: MeshIdSchema.parse(meshId),

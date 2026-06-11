@@ -260,17 +260,47 @@ const addCompositionRequests = (addRequest: AddTutorialRequest): void => {
     targetDrawableIds: [TUTORIAL_MINI_MODEL_IDS.drawables.eye],
     enabled: true
   });
-  addRequest("setDrawOrder", "op_tutorial_set_draw_order", {
-    entries: [
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.body, baseDrawOrder: 10 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.arm, baseDrawOrder: 20 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.head, baseDrawOrder: 30 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.face, baseDrawOrder: 40 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.mouth, baseDrawOrder: 50 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.eyeMask, baseDrawOrder: 60 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.eye, baseDrawOrder: 70 },
-      { drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.frontHair, baseDrawOrder: 80 }
-    ]
+  addRequest("moveStructureChild", "op_tutorial_move_body_drawable_before_head", {
+    moved: {
+      kind: "drawable",
+      drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.body
+    },
+    drop: {
+      placement: "before",
+      target: {
+        kind: "part",
+        partId: TUTORIAL_MINI_MODEL_IDS.parts.head
+      }
+    },
+    lockedTargetIds: []
+  });
+  addRequest("moveStructureChild", "op_tutorial_move_arm_before_head", {
+    moved: {
+      kind: "part",
+      partId: TUTORIAL_MINI_MODEL_IDS.parts.arm
+    },
+    drop: {
+      placement: "before",
+      target: {
+        kind: "part",
+        partId: TUTORIAL_MINI_MODEL_IDS.parts.head
+      }
+    },
+    lockedTargetIds: []
+  });
+  addRequest("moveStructureChild", "op_tutorial_move_head_drawable_before_face", {
+    moved: {
+      kind: "drawable",
+      drawableId: TUTORIAL_MINI_MODEL_IDS.drawables.head
+    },
+    drop: {
+      placement: "before",
+      target: {
+        kind: "part",
+        partId: TUTORIAL_MINI_MODEL_IDS.parts.face
+      }
+    },
+    lockedTargetIds: []
   });
 };
 

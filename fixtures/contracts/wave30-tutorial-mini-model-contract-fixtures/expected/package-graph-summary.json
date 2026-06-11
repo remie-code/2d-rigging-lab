@@ -1,7 +1,7 @@
 {
   "schemaVersion": "wave30-tutorial-mini-model-package-graph-summary-v1",
   "packageId": "pkg_tutorial_mini_model",
-  "packageRevision": 34,
+  "packageRevision": 36,
   "updatedAt": "2026-06-02T00:00:00.000Z",
   "canvasSize": {
     "width": 320,

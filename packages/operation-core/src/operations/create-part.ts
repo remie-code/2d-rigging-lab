@@ -218,6 +218,11 @@ const createCreatePartResult = (input: {
             target: parentTarget,
             fields: [
               {
+                path: `/model/graph/parts/${parentTarget.id}/children`,
+                before: input.parentBefore.children ?? [],
+                after: input.parentAfter.children ?? []
+              },
+              {
                 path: `/model/graph/parts/${parentTarget.id}/childPartIds`,
                 before: input.parentBefore.childPartIds,
                 after: input.parentAfter.childPartIds
@@ -263,7 +268,8 @@ const partToJson = (part: ModelPart) => ({
   displayName: part.displayName,
   ...(part.parentPartId === undefined ? {} : { parentPartId: part.parentPartId }),
   childPartIds: [...part.childPartIds],
-  drawableIds: [...part.drawableIds]
+  drawableIds: [...part.drawableIds],
+  ...(part.children === undefined ? {} : { children: structuredClone(part.children) })
 });
 
 type ModelPart = AuthoringSession["graph"]["parts"][number];

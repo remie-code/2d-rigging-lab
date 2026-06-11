@@ -54,6 +54,8 @@ interface ParsedGroupNode {
   readonly groupPath: readonly string[];
   readonly sourceOrder: number;
   readonly visibleInSource: boolean;
+  readonly localVisibleInSource: boolean;
+  readonly effectiveVisibleInSource: boolean;
   readonly opacityInSource: number;
   readonly bounds?: RectLike;
 }
@@ -68,9 +70,23 @@ interface ParsedLayerNode {
   readonly sourceOrder: number;
   readonly bounds: RectLike;
   readonly visibleInSource: boolean;
+  readonly localVisibleInSource: boolean;
+  readonly effectiveVisibleInSource: boolean;
   readonly opacityInSource: number;
   readonly layer: Layer;
 }
+
+type WebtoonPsdPublicHiddenShape = {
+  readonly isHidden?: unknown;
+};
+
+type WebtoonPsdGroupPrivateHiddenShape = {
+  readonly layerFrame?: {
+    readonly layerProperties?: {
+      readonly hidden?: unknown;
+    };
+  };
+};
 
 interface RectLike {
   readonly x: number;
@@ -108,6 +124,8 @@ export async function parsePsdForEditorImport(
       groupPath: syntheticRootPath,
       sourceOrder: sourceOrder++,
       visibleInSource: true,
+      localVisibleInSource: true,
+      effectiveVisibleInSource: true,
       opacityInSource: 1,
       bounds: {
         x: 0,
@@ -124,7 +142,7 @@ export async function parsePsdForEditorImport(
     parentNodeRef: syntheticRootId,
     parentGroupId: syntheticRootId,
     parentPath: syntheticRootPath,
-    parentVisible: true,
+    parentEffectiveVisible: true,
     groups,
     layers,
     nextSourceOrder: () => sourceOrder++
@@ -197,7 +215,7 @@ function walkPsdChildren(input: {
   readonly parentNodeRef: string;
   readonly parentGroupId: string;
   readonly parentPath: readonly string[];
-  readonly parentVisible: boolean;
+  readonly parentEffectiveVisible: boolean;
   readonly groups: ParsedGroupNode[];
   readonly layers: ParsedLayerNode[];
   readonly nextSourceOrder: () => number;
@@ -209,6 +227,8 @@ function walkPsdChildren(input: {
     const nodeRef = `${input.parentNodeRef}/${nodeKind}[${index}]`;
 
     if (child.type === "Layer") {
+      const localVisible = !isPsdNodeHiddenForEditorImport(child);
+      const effectiveVisible = input.parentEffectiveVisible && localVisible;
       const bounds = {
         x: child.left,
         y: child.top,
@@ -224,7 +244,9 @@ function walkPsdChildren(input: {
         groupPath: input.parentPath,
         sourceOrder: input.nextSourceOrder(),
         bounds,
-        visibleInSource: input.parentVisible && !child.isHidden,
+        visibleInSource: effectiveVisible,
+        localVisibleInSource: localVisible,
+        effectiveVisibleInSource: effectiveVisible,
         opacityInSource: normalizeOpacity(child.opacity),
         layer: child
       });
@@ -235,14 +257,15 @@ function walkPsdChildren(input: {
     }
 
     const group = child as Group;
-    const groupVisible = input.parentVisible && !isNodeHidden(group);
+    const localVisible = !isPsdNodeHiddenForEditorImport(group);
+    const effectiveVisible = input.parentEffectiveVisible && localVisible;
     const groupPath = [...input.parentPath, normalizeDisplayName(group.name, `Group ${index + 1}`)];
     const groupBounds = walkPsdChildren({
       children: group.children,
       parentNodeRef: nodeRef,
       parentGroupId: nodeRef,
       parentPath: groupPath,
-      parentVisible: groupVisible,
+      parentEffectiveVisible: effectiveVisible,
       groups: input.groups,
       layers: input.layers,
       nextSourceOrder: input.nextSourceOrder
@@ -256,7 +279,9 @@ function walkPsdChildren(input: {
       parentGroupId: input.parentGroupId,
       groupPath,
       sourceOrder: input.nextSourceOrder(),
-      visibleInSource: groupVisible,
+      visibleInSource: effectiveVisible,
+      localVisibleInSource: localVisible,
+      effectiveVisibleInSource: effectiveVisible,
       opacityInSource: normalizeOpacity(group.opacity),
       ...(groupBounds === undefined ? {} : { bounds: groupBounds })
     });
@@ -364,6 +389,8 @@ function toAdapterGroup(group: ParsedGroupNode): PsdAdapterSourceGroupDto {
     groupPath: [...group.groupPath],
     sourceOrder: group.sourceOrder,
     visibleInSource: group.visibleInSource,
+    localVisibleInSource: group.localVisibleInSource,
+    effectiveVisibleInSource: group.effectiveVisibleInSource,
     opacityInSource: group.opacityInSource,
     ...(group.bounds === undefined ? {} : { bounds: group.bounds }),
     unsupportedFeatures: []
@@ -380,6 +407,8 @@ function toAdapterLayer(layer: ParsedLayerNode): PsdAdapterSourceLayerDto {
     sourceOrder: layer.sourceOrder,
     bounds: layer.bounds,
     visibleInSource: layer.visibleInSource,
+    localVisibleInSource: layer.localVisibleInSource,
+    effectiveVisibleInSource: layer.effectiveVisibleInSource,
     opacityInSource: layer.opacityInSource,
     role: "editableLayer",
     unsupportedFeatures: []
@@ -424,8 +453,15 @@ function hasPositiveBounds(bounds: RectLike): boolean {
   return bounds.width > 0 && bounds.height > 0;
 }
 
-function isNodeHidden(node: NodeChild): boolean {
-  return "isHidden" in node && node.isHidden;
+export function isPsdNodeHiddenForEditorImport(node: NodeChild): boolean {
+  const publicHidden = (node as WebtoonPsdPublicHiddenShape).isHidden;
+  if (typeof publicHidden === "boolean") {
+    return publicHidden;
+  }
+
+  const privateGroupHidden = (node as unknown as WebtoonPsdGroupPrivateHiddenShape)
+    .layerFrame?.layerProperties?.hidden;
+  return privateGroupHidden === true;
 }
 
 function normalizeDisplayName(value: string, fallback: string): string {

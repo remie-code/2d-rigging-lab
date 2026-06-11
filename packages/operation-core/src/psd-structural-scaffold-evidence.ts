@@ -82,6 +82,8 @@ export const PsdStructuralScaffoldGroupPartSchema = z.object({
   sourceGroupPath: z.array(z.string().min(1)).default([]),
   sourceOrder: z.number().int().nonnegative(),
   visibleInSource: z.boolean(),
+  localVisibleInSource: z.boolean().optional(),
+  effectiveVisibleInSource: z.boolean().optional(),
   opacityInSource: z.number().min(0).max(1),
   bounds: RectSchema.optional(),
   generatedParentPartId: PartIdSchema,
@@ -102,6 +104,8 @@ export const PsdStructuralScaffoldLeafDrawableSchema = z.object({
   sourceLayerPath: z.array(z.string().min(1)).default([]),
   sourceOrder: z.number().int().nonnegative(),
   visibleInSource: z.boolean(),
+  localVisibleInSource: z.boolean().optional(),
+  effectiveVisibleInSource: z.boolean().optional(),
   opacityInSource: z.number().min(0).max(1),
   bounds: RectSchema,
   byteEstimate: PsdImportPlanByteLengthSchema.optional(),
@@ -114,11 +118,12 @@ export const PsdStructuralScaffoldLeafDrawableSchema = z.object({
   status: PsdStructuralScaffoldNodeStatusSchema,
   statusReasons: z.array(z.string().min(1)).default([])
 }).strict().superRefine((leaf, context) => {
-  if (leaf.initialRuntimeVisibility !== leaf.visibleInSource) {
+  const localVisibleInSource = leaf.localVisibleInSource ?? leaf.visibleInSource;
+  if (leaf.initialRuntimeVisibility !== localVisibleInSource) {
     context.addIssue({
       code: "custom",
       path: ["initialRuntimeVisibility"],
-      message: "Initial runtime visibility must match the source PSD leaf visibility."
+      message: "Initial runtime visibility must match the source PSD leaf local visibility."
     });
   }
 });

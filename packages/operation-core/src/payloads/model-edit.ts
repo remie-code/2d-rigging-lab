@@ -2,6 +2,10 @@ import {
   DrawableIdSchema,
   MaskRelationIdSchema,
   MeshIdSchema,
+  MeshTopologyRevisionDtoSchema,
+  MeshTriangleIndicesDtoSchema,
+  MeshTriangleStableIdSetDtoSchema,
+  MeshVertexStableIdDtoSchema,
   ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
@@ -88,6 +92,34 @@ export const DeletePartPayloadSchema = z.object({
 });
 export type DeletePartPayloadDto = z.infer<typeof DeletePartPayloadSchema>;
 
+export const StructureOrderItemSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("part"),
+    partId: PartIdSchema
+  }),
+  z.object({
+    kind: z.literal("drawable"),
+    drawableId: DrawableIdSchema
+  })
+]);
+export type StructureOrderItemDto = z.infer<typeof StructureOrderItemSchema>;
+
+export const MoveStructureChildPayloadSchema = z.object({
+  moved: StructureOrderItemSchema,
+  drop: z.discriminatedUnion("placement", [
+    z.object({
+      placement: z.literal("inside"),
+      parentPartId: PartIdSchema
+    }),
+    z.object({
+      placement: z.enum(["before", "after"]),
+      target: StructureOrderItemSchema
+    })
+  ]),
+  lockedTargetIds: LockedTargetIdsSchema
+});
+export type MoveStructureChildPayloadDto = z.infer<typeof MoveStructureChildPayloadSchema>;
+
 export const SetDrawablePartPayloadSchema = z.object({
   drawableId: DrawableIdSchema,
   partId: PartIdSchema,
@@ -102,10 +134,24 @@ export const SetDrawableTexturePayloadSchema = z.object({
 });
 export type SetDrawableTexturePayloadDto = z.infer<typeof SetDrawableTexturePayloadSchema>;
 
+const PreviewMeshPayloadSchema = z.object({
+  meshId: MeshIdSchema,
+  drawableId: DrawableIdSchema,
+  bounds: RectSchema,
+  vertices: z.array(Vec2Schema),
+  uvs: z.array(Vec2Schema),
+  triangles: z.array(MeshTriangleIndicesDtoSchema),
+  vertexStableIds: z.array(MeshVertexStableIdDtoSchema),
+  triangleStableIds: MeshTriangleStableIdSetDtoSchema.optional(),
+  topologyRevision: MeshTopologyRevisionDtoSchema.optional(),
+  generationProvenanceId: ProvenanceIdSchema
+});
+
 export const GenerateMeshPayloadSchema = z.object({
   drawableId: DrawableIdSchema,
   method: z.enum(["manual-empty", "auto-grid-v1", "auto-outline-v1"]),
-  densityHint: z.enum(["low", "medium", "high"]).optional()
+  densityHint: z.enum(["low", "medium", "high"]).optional(),
+  previewMesh: PreviewMeshPayloadSchema.optional()
 });
 export type GenerateMeshPayloadDto = z.infer<typeof GenerateMeshPayloadSchema>;
 

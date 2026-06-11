@@ -326,7 +326,18 @@ const createCreateDrawableResult = (input: {
       },
       {
         target: partTarget,
-        fields: [{ path: "/model/graph/parts/drawableIds", before: null, after: input.drawable.drawableId }]
+        fields: [
+          {
+            path: "/model/graph/parts/children",
+            before: null,
+            after: toModelDiffJsonValue({ kind: "drawable", drawableId: input.drawable.drawableId })
+          },
+          {
+            path: "/model/graph/parts/drawableIds",
+            before: null,
+            after: input.drawable.drawableId
+          }
+        ]
       },
       {
         target: sourceTarget,

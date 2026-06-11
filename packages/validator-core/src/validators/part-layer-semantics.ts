@@ -80,6 +80,7 @@ const validatePartHierarchy = (indexes: PartLayerIndexes): readonly ValidationCh
   for (const partEntry of indexes.parts) {
     checks.push(...validatePartParentReference(partEntry, indexes));
     checks.push(...validatePartChildReferences(partEntry, indexes));
+    checks.push(...validatePartOrderedChildren(partEntry, indexes));
   }
 
   const cycle = findFirstPartCycle(indexes);
@@ -187,6 +188,60 @@ const validateDrawableMembership = (indexes: PartLayerIndexes): readonly Validat
         }));
       }
     });
+  }
+
+  return checks;
+};
+
+const validatePartOrderedChildren = (
+  partEntry: PartWithIndex,
+  indexes: PartLayerIndexes
+): readonly ValidationCheckResultDto[] => {
+  const children = partEntry.part.children;
+  if (children === undefined) {
+    return [];
+  }
+
+  const checks: ValidationCheckResultDto[] = [];
+  const seenChildKeys = new Map<string, number>();
+  const orderedPartIds: string[] = [];
+  const orderedDrawableIds: string[] = [];
+
+  children.forEach((child, childIndex) => {
+    const childKey = child.kind === "part" ? `part:${child.partId}` : `drawable:${child.drawableId}`;
+    const firstIndex = seenChildKeys.get(childKey);
+    if (firstIndex !== undefined) {
+      checks.push(createPartOrderedChildDuplicateCheck(partEntry, childKey, firstIndex, childIndex));
+      return;
+    }
+
+    seenChildKeys.set(childKey, childIndex);
+    if (child.kind === "part") {
+      orderedPartIds.push(child.partId);
+      const childPart = indexes.partsById.get(child.partId);
+      if (childPart === undefined) {
+        checks.push(createPartOrderedChildMissingCheck(partEntry, childKey, childIndex));
+      } else if (childPart.part.parentPartId !== partEntry.part.partId) {
+        checks.push(createPartOrderedChildrenMismatchCheck(partEntry, childIndex, "part-parent-mismatch"));
+      }
+      return;
+    }
+
+    orderedDrawableIds.push(child.drawableId);
+    const drawable = indexes.drawablesById.get(child.drawableId);
+    if (drawable === undefined) {
+      checks.push(createPartOrderedChildMissingCheck(partEntry, childKey, childIndex));
+    } else if (drawable.drawable.partId !== partEntry.part.partId) {
+      checks.push(createPartOrderedChildrenMismatchCheck(partEntry, childIndex, "drawable-parent-mismatch"));
+    }
+  });
+
+  if (!sameStringArray(orderedPartIds, partEntry.part.childPartIds)) {
+    checks.push(createPartOrderedChildrenMismatchCheck(partEntry, undefined, "childPartIds-mismatch"));
+  }
+
+  if (!sameStringArray(orderedDrawableIds, partEntry.part.drawableIds)) {
+    checks.push(createPartOrderedChildrenMismatchCheck(partEntry, undefined, "drawableIds-mismatch"));
   }
 
   return checks;
@@ -406,6 +461,108 @@ const createPartDuplicateChildCheck = (
   });
 };
 
+const createPartOrderedChildDuplicateCheck = (
+  partEntry: PartWithIndex,
+  childKey: string,
+  firstChildIndex: number,
+  duplicateChildIndex: number
+): ValidationCheckResultDto => {
+  const targetPath = `/model/graph/parts/${partEntry.index}/children/${duplicateChildIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "part.orderedChildrenDuplicate",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    target: {
+      kind: "part",
+      id: partEntry.part.partId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Part ${partEntry.part.partId} lists ordered child ${childKey} more than once.`,
+    evidence: [
+      `partId=${partEntry.part.partId}`,
+      `orderedChild=${childKey}`,
+      `firstChildIndex=${firstChildIndex}`,
+      `duplicateChildIndex=${duplicateChildIndex}`,
+      "reason=duplicate-ordered-child"
+    ],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    relatedScenarios: ["SC-PART-001", "SC-MVP-004"],
+    impact: "The part tree cannot derive a deterministic mixed draw stack while a child appears multiple times under the same parent."
+  });
+};
+
+const createPartOrderedChildMissingCheck = (
+  partEntry: PartWithIndex,
+  childKey: string,
+  childIndex: number
+): ValidationCheckResultDto => {
+  const targetPath = `/model/graph/parts/${partEntry.index}/children/${childIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "part.orderedChildrenTargetMissing",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    target: {
+      kind: "part",
+      id: partEntry.part.partId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Part ${partEntry.part.partId} references missing ordered child ${childKey}.`,
+    evidence: [
+      `partId=${partEntry.part.partId}`,
+      `orderedChild=${childKey}`,
+      `orderedChildIndex=${childIndex}`,
+      "orderedChildMatch=missing"
+    ],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    relatedScenarios: ["SC-PART-001", "SC-MVP-004"],
+    impact: "The part tree cannot derive a deterministic mixed draw stack while an ordered child reference is unresolved."
+  });
+};
+
+const createPartOrderedChildrenMismatchCheck = (
+  partEntry: PartWithIndex,
+  childIndex: number | undefined,
+  reason:
+    | "part-parent-mismatch"
+    | "drawable-parent-mismatch"
+    | "childPartIds-mismatch"
+    | "drawableIds-mismatch"
+): ValidationCheckResultDto => {
+  const targetPath = childIndex === undefined
+    ? `/model/graph/parts/${partEntry.index}/children`
+    : `/model/graph/parts/${partEntry.index}/children/${childIndex}`;
+
+  return ValidationCheckResultSchema.parse({
+    checkId: "part.orderedChildrenMembershipMismatch",
+    status: "fail",
+    severity: "error",
+    phase: "reference",
+    target: {
+      kind: "part",
+      id: partEntry.part.partId,
+      path: targetPath
+    },
+    targetPath,
+    message: `Part ${partEntry.part.partId} mixed ordered children disagree with part membership.`,
+    evidence: [
+      `partId=${partEntry.part.partId}`,
+      ...(childIndex === undefined ? [] : [`orderedChildIndex=${childIndex}`]),
+      `childPartIds=${partEntry.part.childPartIds.join(",")}`,
+      `drawableIds=${partEntry.part.drawableIds.join(",")}`,
+      `reason=${reason}`
+    ],
+    relatedAC: ["AC-MVP-004", "AC-MVP-013"],
+    relatedScenarios: ["SC-PART-001", "SC-MVP-004"],
+    impact: "The editor and operation layer cannot share one mixed draw-stack authority while ordered children and membership mirrors disagree."
+  });
+};
+
 const createPartParentChildMismatchCheck = (input: {
   readonly partEntry: PartWithIndex;
   readonly relatedPartEntry: PartWithIndex;
@@ -562,3 +719,6 @@ const createEditorStateStaleReferenceCheck = (
     impact: "Selection, lock, and editor-only hide state remain editor metadata, but stale references should be cleaned before final authoring evidence is accepted."
   });
 };
+
+const sameStringArray = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);

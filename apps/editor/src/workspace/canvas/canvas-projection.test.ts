@@ -22,6 +22,7 @@ import {
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
+const PART_NESTED_BLOCK = PartIdSchema.parse("part_nested_block");
 const PART_HIDDEN_ONLY = PartIdSchema.parse("part_hidden_only");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_fixture_psd");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_fixture");
@@ -52,6 +53,13 @@ describe("canvas render projection", () => {
     expect(projection.canvasBounds).toEqual({ x: -160, y: -120, width: 320, height: 240 });
     expect(projection.hasRenderableArtwork).toBe(true);
     expect(projection.selectedDrawableIds.has(DRAW_FRONT)).toBe(true);
+    expect(projection.drawables.map((drawable) => [drawable.drawableId, drawable.frontOrder])).toEqual([
+      [DRAW_TARGET, 4],
+      [DRAW_MASK, 3],
+      [DRAW_HIDDEN, 2],
+      [DRAW_BACK, 1],
+      [DRAW_FRONT, 0]
+    ]);
 
     const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
     expect(front?.opacity).toBe(0.42);
@@ -95,6 +103,32 @@ describe("canvas render projection", () => {
     const zoomed = zoomViewAtScreenPoint(view, pointer, view.zoom * 2);
     expect(screenToCanvasPoint(pointer, zoomed).x).toBeCloseTo(before.x);
     expect(screenToCanvasPoint(pointer, zoomed).y).toBeCloseTo(before.y);
+  });
+
+  it("flattens nested Part Container blocks for Canvas draw order and subtree selection", () => {
+    const session = createNestedContainerBlockSession();
+    const projection = createCanvasRenderProjection(session, {
+      kind: "part",
+      id: PART_FACE
+    });
+
+    expect(projection.drawables.map((drawable) => [drawable.drawableId, drawable.frontOrder])).toEqual([
+      [DRAW_TARGET, 4],
+      [DRAW_HIDDEN, 3],
+      [DRAW_BACK, 2],
+      [DRAW_MASK, 1],
+      [DRAW_FRONT, 0]
+    ]);
+    expect(projection.selectedDrawableIds).toEqual(
+      new Set([DRAW_FRONT, DRAW_MASK, DRAW_BACK, DRAW_HIDDEN, DRAW_TARGET])
+    );
+    expect(hitTestTopmostDrawable(projection, { x: 30, y: 30 })).toBe(DRAW_MASK);
+
+    const nestedProjection = createCanvasRenderProjection(session, {
+      kind: "part",
+      id: PART_NESTED_BLOCK
+    });
+    expect(nestedProjection.selectedDrawableIds).toEqual(new Set([DRAW_MASK]));
   });
 
   it("allows isolate only when selection contains visible renderable drawables", () => {
@@ -154,6 +188,95 @@ describe("canvas render projection", () => {
       runtimeVisibility: true
     });
   });
+
+  it("projects draft mesh overlay only for the selected Drawable", () => {
+    const session = createFixtureSession();
+    const draftMesh = {
+      ...createMesh(MESH_FRONT, DRAW_FRONT, 5, 5, 20, 20),
+      vertices: [
+        { x: 6, y: 6 },
+        { x: 18, y: 6 },
+        { x: 6, y: 18 }
+      ],
+      uvs: [
+        { x: 0.05, y: 0.05 },
+        { x: 0.65, y: 0.05 },
+        { x: 0.05, y: 0.65 }
+      ],
+      triangles: [[0, 1, 2]] as [number, number, number][],
+      vertexStableIds: ["vtx_draft_0", "vtx_draft_1", "vtx_draft_2"]
+    };
+
+    const selectedProjection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_FRONT
+      },
+      {
+        meshDraft: {
+          drawableId: DRAW_FRONT,
+          mesh: draftMesh
+        }
+      }
+    );
+
+    expect(selectedProjection.meshOverlay).toMatchObject({
+      drawableId: DRAW_FRONT,
+      status: "draft",
+      mesh: {
+        vertices: draftMesh.vertices,
+        triangles: draftMesh.triangles
+      }
+    });
+
+    const otherSelectionProjection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_BACK
+      },
+      {
+        meshDraft: {
+          drawableId: DRAW_FRONT,
+          mesh: draftMesh
+        }
+      }
+    );
+
+    expect(otherSelectionProjection.meshOverlay).toMatchObject({
+      drawableId: DRAW_BACK,
+      status: "committed",
+      mesh: {
+        meshId: MESH_BACK
+      }
+    });
+  });
+
+  it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
+    const session = createFixtureSession();
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_HIDDEN
+      },
+      {
+        meshPreviewDrawableId: DRAW_HIDDEN
+      }
+    );
+
+    const hidden = projection.drawables.find((drawable) => drawable.drawableId === DRAW_HIDDEN);
+    expect(hidden).toMatchObject({
+      visible: true,
+      meshPreview: true
+    });
+    expect(projection.hasRenderableArtwork).toBe(true);
+    expect(hitTestTopmostDrawable(projection, { x: 26, y: 26 })).toBe(DRAW_HIDDEN);
+    expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_HIDDEN)).toMatchObject({
+      runtimeVisibility: false
+    });
+  });
 });
 
 function createFixtureSession(): AuthoringSession {
@@ -207,14 +330,42 @@ function createFixtureSession(): AuthoringSession {
           partId: PART_ROOT,
           displayName: "Root",
           childPartIds: [PART_FACE],
-          drawableIds: []
+          drawableIds: [],
+          children: [
+            {
+              kind: "part",
+              partId: PART_FACE
+            }
+          ]
         },
         {
           partId: PART_FACE,
           displayName: "Face",
           parentPartId: PART_ROOT,
           childPartIds: [],
-          drawableIds: [DRAW_BACK, DRAW_FRONT, DRAW_HIDDEN, DRAW_MASK, DRAW_TARGET]
+          drawableIds: [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN, DRAW_MASK, DRAW_TARGET],
+          children: [
+            {
+              kind: "drawable",
+              drawableId: DRAW_FRONT
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_BACK
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_HIDDEN
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_MASK
+            },
+            {
+              kind: "drawable",
+              drawableId: DRAW_TARGET
+            }
+          ]
         }
       ],
       drawables: [
@@ -340,6 +491,75 @@ function createHiddenOnlyPartSession(): AuthoringSession {
     childPartIds: [],
     drawableIds: [DRAW_HIDDEN]
   });
+
+  return session;
+}
+
+function createNestedContainerBlockSession(): AuthoringSession {
+  const session = createFixtureSession();
+  const facePart = session.graph.parts.find((part) => part.partId === PART_FACE);
+  const maskDrawable = session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_MASK);
+
+  if (facePart === undefined || maskDrawable === undefined) {
+    throw new Error("Expected nested container fixture source graph.");
+  }
+
+  facePart.childPartIds = [PART_NESTED_BLOCK];
+  facePart.drawableIds = [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN, DRAW_TARGET];
+  facePart.children = [
+    {
+      kind: "drawable",
+      drawableId: DRAW_FRONT
+    },
+    {
+      kind: "part",
+      partId: PART_NESTED_BLOCK
+    },
+    {
+      kind: "drawable",
+      drawableId: DRAW_BACK
+    },
+    {
+      kind: "drawable",
+      drawableId: DRAW_HIDDEN
+    },
+    {
+      kind: "drawable",
+      drawableId: DRAW_TARGET
+    }
+  ];
+  maskDrawable.partId = PART_NESTED_BLOCK;
+  maskDrawable.baseDrawOrder = 1;
+  session.graph.parts.push({
+    partId: PART_NESTED_BLOCK,
+    displayName: "Nested block",
+    parentPartId: PART_FACE,
+    childPartIds: [],
+    drawableIds: [DRAW_MASK],
+    children: [
+      {
+        kind: "drawable",
+        drawableId: DRAW_MASK
+      }
+    ]
+  });
+  session.graph.drawOrder = [
+    { drawableId: DRAW_FRONT, baseDrawOrder: 0, stableOrder: 0 },
+    { drawableId: DRAW_MASK, baseDrawOrder: 1, stableOrder: 1 },
+    { drawableId: DRAW_BACK, baseDrawOrder: 2, stableOrder: 2 },
+    { drawableId: DRAW_HIDDEN, baseDrawOrder: 3, stableOrder: 3 },
+    { drawableId: DRAW_TARGET, baseDrawOrder: 4, stableOrder: 4 }
+  ];
+  session.graph.stableOrder = [
+    PART_ROOT,
+    PART_FACE,
+    PART_NESTED_BLOCK,
+    DRAW_FRONT,
+    DRAW_MASK,
+    DRAW_BACK,
+    DRAW_HIDDEN,
+    DRAW_TARGET
+  ];
 
   return session;
 }

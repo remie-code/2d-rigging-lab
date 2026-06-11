@@ -205,6 +205,7 @@ const createSetDrawOrderMutationDiagnostic = (
     missing_drawable: "operation.setDrawOrder.missingDrawable",
     missing_draw_order_entry: "operation.setDrawOrder.missingDrawOrderEntry",
     duplicate_draw_order_entry: "operation.setDrawOrder.duplicateEntry",
+    draw_order_structure_conflict: "operation.setDrawOrder.structureConflict",
     no_op_draw_order_update: "operation.setDrawOrder.noOp"
   };
 

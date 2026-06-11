@@ -203,6 +203,19 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "moveStructureChild",
+    payload: {
+      moved: {
+        kind: "drawable",
+        drawableId: "draw_face"
+      },
+      drop: {
+        placement: "inside",
+        parentPartId: "part_head"
+      }
+    }
+  },
+  {
     operationType: "setDrawablePart",
     payload: {
       drawableId: "draw_face",
@@ -345,6 +358,7 @@ describe("operation-core DTO schemas", () => {
       "createPart",
       "updatePart",
       "deletePart",
+      "moveStructureChild",
       "setDrawablePart",
       "setDrawableTexture",
       "createDynamicsGroup",

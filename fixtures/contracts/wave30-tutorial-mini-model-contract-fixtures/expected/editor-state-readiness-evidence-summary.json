@@ -3,7 +3,7 @@
   "source": "fixture-editor-semantic-state",
   "recipeId": "tutorialMiniModelV0",
   "packageId": "pkg_tutorial_mini_model",
-  "packageRevision": 34,
+  "packageRevision": 36,
   "selectedTarget": {
     "kind": "mesh",
     "id": "mesh_tutorial_front_hair"
