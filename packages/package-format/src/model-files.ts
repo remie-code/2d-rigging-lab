@@ -29,6 +29,8 @@ import {
   isWarpLattice2dControlPointOffsetsTarget
 } from "@private-2d-rigging-lab/contracts";
 
+import { WarpDeformerMetadataSchema } from "./warp-deformer-contract.js";
+
 export const DrawableSchema = z.object({
   drawableId: DrawableIdSchema,
   displayName: z.string(),
@@ -223,6 +225,7 @@ const WarpLattice2dRigControlSchema = z.object({
   latticeRows: WarpLattice2dLatticeRowsSchema,
   restControlPoints: z.array(Vec2Schema),
   interpolationMethod: WarpLattice2dInterpolationMethodSchema,
+  warpDeformer: WarpDeformerMetadataSchema.optional(),
   enabled: z.boolean()
 });
 
@@ -248,6 +251,23 @@ export const RigControlSchema = RigControlBaseSchema.superRefine((rigControl, co
       message: `warpLattice2d restControlPoints length must equal latticeColumns * latticeRows (${getWarpLattice2dControlPointCount(rigControl)}).`
     });
   }
+
+  if (rigControl.warpDeformer === undefined) {
+    return;
+  }
+
+  if (
+    rigControl.warpDeformer.transformGrid.columns !== rigControl.latticeColumns ||
+    rigControl.warpDeformer.transformGrid.rows !== rigControl.latticeRows
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["warpDeformer", "transformGrid"],
+      message:
+        "warpDeformer transformGrid columns/rows must match latticeColumns/latticeRows storage."
+    });
+  }
+
 });
 
 export type RigControlDto = z.infer<typeof RigControlSchema>;

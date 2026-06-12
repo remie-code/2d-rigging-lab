@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { createWarpDeformerMetadata } from "@private-2d-rigging-lab/package-format";
+
 import { defaultCheckCatalog } from "./check-catalog.js";
 import type { ValidationCheckResultDto } from "./validation-report.js";
 import { validatePackageRuntime } from "./validators/package-runtime.js";
@@ -24,6 +26,9 @@ describe("validator warpLattice2d diagnostics", () => {
     expect(defaultCheckCatalog.has("rigControl.warpLatticeUnsupportedProperty")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.warpLatticeMalformedPatch")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.warpLatticeRuntimeEvidenceMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.warpDeformerInvalidDivisions")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.warpDeformerTransformGridMismatch")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.warpDeformerBezierSurfaceCardinalityMismatch")).toBe(true);
   });
 
   it("accepts valid warp lattice package and evaluated runtime evidence", () => {
@@ -42,6 +47,34 @@ describe("validator warpLattice2d diagnostics", () => {
     expect(report.summary.status).toBe("pass");
     expect(report.checks).toEqual([]);
     expect(report.evidence.runtimeSnapshotIds).toEqual(["snap_warp_validator_0"]);
+  });
+
+  it("accepts valid Warp Deformer metadata with stored Bezier edit surface", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createWarpPackage({
+        rigControls: [
+          createWarpRigControl({
+            enabled: false,
+            warpDeformer: createWarpDeformerMetadata({
+              domainBounds: {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2
+              },
+              transformColumns: 2,
+              transformRows: 2,
+              bezierColumns: 3,
+              bezierRows: 2
+            })
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("pass");
+    expect(report.checks).toEqual([]);
   });
 
   it("maps invalid lattice cardinality and domain bounds schema issues to warp lattice diagnostics", () => {
@@ -97,6 +130,97 @@ describe("validator warpLattice2d diagnostics", () => {
         ]
       }
     ]);
+  });
+
+  it("maps invalid Warp Deformer division schema issues to a stable diagnostic", () => {
+    const metadata = createWarpDeformerMetadataFixture();
+    const report = validatePackageRuntime({
+      packageDocument: createWarpPackage({
+        rigControls: [
+          createWarpRigControl({
+            enabled: false,
+            warpDeformer: {
+              ...metadata,
+              transformGrid: {
+                ...metadata.transformGrid,
+                columns: 1
+              }
+            }
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(toCheckIds(report.checks)).toEqual([
+      "rigControl.warpDeformerInvalidDivisions",
+      "rigControl.warpDeformerTransformGridMismatch"
+    ]);
+    expect(report.checks[0]?.evidence).toContain("transformColumns=1");
+  });
+
+  it("maps Warp Deformer transform storage mismatches to a stable diagnostic", () => {
+    const metadata = createWarpDeformerMetadataFixture();
+    const report = validatePackageRuntime({
+      packageDocument: createWarpPackage({
+        rigControls: [
+          createWarpRigControl({
+            enabled: false,
+            warpDeformer: {
+              ...metadata,
+              transformGrid: {
+                ...metadata.transformGrid,
+                columns: 3
+              }
+            }
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(toCheckIds(report.checks)).toEqual(["rigControl.warpDeformerTransformGridMismatch"]);
+    expect(report.checks[0]?.evidence).toEqual(
+      expect.arrayContaining([
+        "latticeColumns=2",
+        "latticeRows=2",
+        "transformColumns=3",
+        "transformRows=2"
+      ])
+    );
+  });
+
+  it("maps malformed Warp Deformer Bezier surface cardinality to a stable diagnostic", () => {
+    const metadata = createWarpDeformerMetadataFixture();
+    const report = validatePackageRuntime({
+      packageDocument: createWarpPackage({
+        rigControls: [
+          createWarpRigControl({
+            enabled: false,
+            warpDeformer: {
+              ...metadata,
+              bezierEditSurface: {
+                ...metadata.bezierEditSurface,
+                handles: metadata.bezierEditSurface.handles.slice(0, 5)
+              }
+            }
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(toCheckIds(report.checks)).toEqual([
+      "rigControl.warpDeformerBezierSurfaceCardinalityMismatch"
+    ]);
+    expect(report.checks[0]?.evidence).toEqual(
+      expect.arrayContaining([
+        "bezierColumns=3",
+        "bezierRows=2",
+        "expectedBezierPointCount=6",
+        "actualBezierHandleCount=5"
+      ])
+    );
   });
 
   it("reports rest control points that do not fit inside domain bounds", () => {
@@ -183,6 +307,59 @@ describe("validator warpLattice2d diagnostics", () => {
           "rigControlId=rig_warp",
           "targetProperty=controlPointOffsets",
           "warpLattice2d controlPointOffsets statePatch must be a control-point-ordered Vec2[] with at least four entries."
+        ]
+      }
+    ]);
+  });
+
+  it("reports syntactically valid Warp Deformer keyform patches with incompatible control point cardinality", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createWarpPackage({
+        parameters: [createAuthoredParameter()],
+        rigControls: [
+          createWarpRigControl({
+            enabled: false,
+            latticeColumns: 5,
+            latticeRows: 4,
+            restControlPoints: createGridPoints({
+              columns: 5,
+              rows: 4
+            }),
+            warpDeformer: createWarpDeformerMetadata({
+              domainBounds: {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2
+              },
+              transformColumns: 5,
+              transformRows: 4,
+              bezierColumns: 3,
+              bezierRows: 2
+            })
+          })
+        ],
+        keyformSets: [
+          createWarpControlPointOffsetsKeyformSet({
+            statePatch: createControlPointOffsetsPatch()
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "rigControl.warpLatticeMalformedPatch",
+        targetPath: "/model/keyforms/keyformSets/0/keys/0/statePatch",
+        evidence: [
+          "keyformSetId=keyset_rig_warp_controlPointOffsets_param_faceYaw",
+          "rigControlId=rig_warp",
+          "targetProperty=controlPointOffsets",
+          "statePatchShape=malformed",
+          "expectedStatePatch=Vec2[]",
+          "expectedControlPointOffsetCount=20",
+          "actualControlPointOffsetCount=4"
         ]
       }
     ]);
@@ -532,6 +709,20 @@ const createWarpRigControl = (overrides: Record<string, unknown> = {}) => ({
   ...overrides
 });
 
+const createWarpDeformerMetadataFixture = () =>
+  createWarpDeformerMetadata({
+    domainBounds: {
+      x: 0,
+      y: 0,
+      width: 2,
+      height: 2
+    },
+    transformColumns: 2,
+    transformRows: 2,
+    bezierColumns: 3,
+    bezierRows: 2
+  });
+
 const createWarpControlPointOffsetsKeyformSet = (overrides: {
   readonly keyformSetId?: string;
   readonly property?: string;
@@ -562,6 +753,27 @@ const createControlPointOffsetsPatch = () => [
   { x: 0, y: 0.25 },
   { x: 0.25, y: 0.25 }
 ];
+
+const createGridPoints = (input: {
+  readonly columns: number;
+  readonly rows: number;
+}) => {
+  const points: { readonly x: number; readonly y: number }[] = [];
+
+  for (let row = 0; row < input.rows; row += 1) {
+    for (let column = 0; column < input.columns; column += 1) {
+      points.push({
+        x: 2 * toUnitGridPosition(column, input.columns),
+        y: 2 * toUnitGridPosition(row, input.rows)
+      });
+    }
+  }
+
+  return points;
+};
+
+const toUnitGridPosition = (index: number, size: number): number =>
+  size <= 1 ? 0 : index / (size - 1);
 
 const createRuntimeSnapshot = (overrides: {
   readonly packageId?: string;

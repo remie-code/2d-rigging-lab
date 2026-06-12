@@ -292,6 +292,27 @@ const operationPayloads = [
     }
   },
   {
+    operationType: "createWarpDeformer",
+    payload: {
+      partId: "part_head",
+      displayName: "Head Warp Deformer",
+      parentRigControlId: "rig_head_rotation",
+      childDrawableIds: ["draw_face"],
+      childRigControlIds: [],
+      domainBounds: {
+        x: 320,
+        y: 240,
+        width: 512,
+        height: 512
+      },
+      transformColumns: 5,
+      transformRows: 4,
+      bezierColumns: 3,
+      bezierRows: 2,
+      bezierEditType: "cubicBezierSurfaceV1"
+    }
+  },
+  {
     operationType: "bindRigControlChild",
     payload: {
       parentRigControlId: "rig_head_rotation",
@@ -366,6 +387,7 @@ describe("operation-core DTO schemas", () => {
       "setMaskRelation",
       "createRotation2dRigControl",
       "createWarpLattice2dRigControl",
+      "createWarpDeformer",
       "bindRigControlChild"
     ]);
   });

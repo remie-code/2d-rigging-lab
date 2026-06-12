@@ -3,11 +3,13 @@ import {
   getPartOrderedChildren,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
-import type { DrawableId, PartId, RectDto } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
+type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
+type WarpLatticeRigControlDto = Extract<RigControlDto, { readonly kind: "warpLattice2d" }>;
 
 export interface CanvasPoint {
   readonly x: number;
@@ -62,6 +64,19 @@ export interface CanvasMeshOverlayProjection {
   readonly status: "draft" | "committed";
 }
 
+export interface CanvasDeformerOverlayProjection {
+  readonly rigControlId?: RigControlId;
+  readonly displayName: string;
+  readonly domainBounds: RectDto;
+  readonly transformColumns: number;
+  readonly transformRows: number;
+  readonly bezierColumns: number;
+  readonly bezierRows: number;
+  readonly childDrawableIds: readonly DrawableId[];
+  readonly childRigControlIds: readonly RigControlId[];
+  readonly status: "draft" | "committed";
+}
+
 export interface CanvasRenderProjection {
   readonly canvasBounds: RectDto;
   readonly artworkBounds?: RectDto;
@@ -71,6 +86,7 @@ export interface CanvasRenderProjection {
   readonly drawables: readonly CanvasRenderableDrawable[];
   readonly maskRelations: readonly CanvasMaskRelationProjection[];
   readonly meshOverlay?: CanvasMeshOverlayProjection;
+  readonly deformerOverlay?: CanvasDeformerOverlayProjection;
   readonly hasRenderableArtwork: boolean;
   readonly contentKey: string;
 }
@@ -80,6 +96,16 @@ export interface CanvasProjectionOptions {
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
+  } | null;
+  readonly deformerDraft?: {
+    readonly displayName: string;
+    readonly domainBounds: RectDto;
+    readonly transformColumns: number;
+    readonly transformRows: number;
+    readonly bezierColumns: number;
+    readonly bezierRows: number;
+    readonly childDrawableIds: readonly DrawableId[];
+    readonly childRigControlIds: readonly RigControlId[];
   } | null;
   readonly meshPreviewDrawableId?: DrawableId;
 }
@@ -101,6 +127,9 @@ export function createCanvasRenderProjection(
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
   const editorHiddenPartIds = options.editorHiddenPartIds ?? new Set<PartId>();
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
+  const rigControlsById = new Map(
+    session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
+  );
   const textureEntriesById = new Map(
     session.graph.textureAtlas?.textures.map((texture) => [texture.textureId, texture]) ?? []
   );
@@ -109,7 +138,12 @@ export function createCanvasRenderProjection(
   );
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
   const frontOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
-  const selectedDrawableIds = resolveSelectedDrawableIds(session, selection, partsById);
+  const selectedDrawableIds = resolveSelectedDrawableIds(
+    session,
+    selection,
+    partsById,
+    rigControlsById
+  );
   const selectedPartId = selection?.kind === "part" ? selection.id : undefined;
   const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
   const meshPreviewDrawableId = options.meshPreviewDrawableId;
@@ -185,6 +219,11 @@ export function createCanvasRenderProjection(
           session,
           draft: options.meshDraft ?? null
         });
+  const deformerOverlay = resolveDeformerOverlay({
+    selection,
+    rigControlsById,
+    draft: options.deformerDraft ?? null
+  });
 
   return {
     canvasBounds: resolveProjectionCanvasBounds(session),
@@ -201,8 +240,51 @@ export function createCanvasRenderProjection(
         targetDrawableIds: [...relation.targetDrawableIds]
       })),
     ...(meshOverlay === undefined ? {} : { meshOverlay }),
+    ...(deformerOverlay === undefined ? {} : { deformerOverlay }),
     hasRenderableArtwork: renderableDrawables.length > 0,
     contentKey: createProjectionContentKey(session, drawables)
+  };
+}
+
+function resolveDeformerOverlay(input: {
+  readonly selection: EditorSelection | null;
+  readonly rigControlsById: ReadonlyMap<RigControlId, RigControlDto>;
+  readonly draft: CanvasProjectionOptions["deformerDraft"];
+}): CanvasDeformerOverlayProjection | undefined {
+  if (input.draft !== null && input.draft !== undefined) {
+    return {
+      displayName: input.draft.displayName,
+      domainBounds: structuredClone(input.draft.domainBounds),
+      transformColumns: input.draft.transformColumns,
+      transformRows: input.draft.transformRows,
+      bezierColumns: input.draft.bezierColumns,
+      bezierRows: input.draft.bezierRows,
+      childDrawableIds: [...input.draft.childDrawableIds],
+      childRigControlIds: [...input.draft.childRigControlIds],
+      status: "draft"
+    };
+  }
+
+  if (input.selection?.kind !== "rigControl") {
+    return undefined;
+  }
+
+  const rigControl = input.rigControlsById.get(input.selection.id);
+  if (rigControl === undefined || !isWarpLatticeRigControl(rigControl)) {
+    return undefined;
+  }
+
+  return {
+    rigControlId: rigControl.rigControlId,
+    displayName: rigControl.displayName,
+    domainBounds: structuredClone(rigControl.domainBounds),
+    transformColumns: rigControl.warpDeformer?.transformGrid.columns ?? rigControl.latticeColumns,
+    transformRows: rigControl.warpDeformer?.transformGrid.rows ?? rigControl.latticeRows,
+    bezierColumns: rigControl.warpDeformer?.bezierEditSurface.columns ?? rigControl.latticeColumns,
+    bezierRows: rigControl.warpDeformer?.bezierEditSurface.rows ?? rigControl.latticeRows,
+    childDrawableIds: [...rigControl.childDrawableIds],
+    childRigControlIds: [...rigControl.childRigControlIds],
+    status: "committed"
   };
 }
 
@@ -415,10 +497,15 @@ function createSourceLayerIndex(
 function resolveSelectedDrawableIds(
   session: AuthoringSession,
   selection: EditorSelection | null,
-  partsById: ReadonlyMap<PartId, AuthoringSession["graph"]["parts"][number]>
+  partsById: ReadonlyMap<PartId, AuthoringSession["graph"]["parts"][number]>,
+  rigControlsById: ReadonlyMap<RigControlId, RigControlDto>
 ): ReadonlySet<DrawableId> {
   if (selection?.kind === "drawable") {
     return new Set([selection.id]);
+  }
+
+  if (selection?.kind === "rigControl") {
+    return collectRigControlDrawableIds(selection.id, rigControlsById);
   }
 
   if (selection?.kind !== "part") {
@@ -444,6 +531,38 @@ function resolveSelectedDrawableIds(
 
   visitPart(selection.id);
   return result;
+}
+
+function collectRigControlDrawableIds(
+  rigControlId: RigControlId,
+  rigControlsById: ReadonlyMap<RigControlId, RigControlDto>
+): ReadonlySet<DrawableId> {
+  const result = new Set<DrawableId>();
+  const visited = new Set<string>();
+  const visitRigControl = (currentRigControlId: RigControlId) => {
+    const rigControl = rigControlsById.get(currentRigControlId);
+    if (rigControl === undefined || visited.has(currentRigControlId)) {
+      return;
+    }
+
+    visited.add(currentRigControlId);
+    for (const drawableId of rigControl.childDrawableIds) {
+      result.add(drawableId);
+    }
+
+    for (const childRigControlId of rigControl.childRigControlIds) {
+      visitRigControl(childRigControlId);
+    }
+  };
+
+  visitRigControl(rigControlId);
+  return result;
+}
+
+function isWarpLatticeRigControl(
+  rigControl: RigControlDto
+): rigControl is WarpLatticeRigControlDto {
+  return rigControl.kind === "warpLattice2d";
 }
 
 function collectPartAncestorIds(

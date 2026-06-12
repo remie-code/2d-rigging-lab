@@ -45,6 +45,7 @@ import {
 } from "./payloads/mesh-topology.js";
 import {
   BindRigControlChildPayloadSchema,
+  CreateWarpDeformerPayloadSchema,
   CreateRotation2dRigControlPayloadSchema,
   CreateWarpLattice2dRigControlPayloadSchema
 } from "./payloads/rig-control.js";
@@ -103,6 +104,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({
     operationType: z.literal("createWarpLattice2dRigControl"),
     payload: CreateWarpLattice2dRigControlPayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("createWarpDeformer"),
+    payload: CreateWarpDeformerPayloadSchema
   }),
   z.object({ operationType: z.literal("bindRigControlChild"), payload: BindRigControlChildPayloadSchema }),
   z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),

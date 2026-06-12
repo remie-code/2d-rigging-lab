@@ -8,6 +8,7 @@ import {
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { createPackageBinaryFileEntry } from "@private-2d-rigging-lab/package-format";
+import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 import { describe, expect, it } from "vitest";
 
 import { createInitialAuthoringRevision } from "./authoring-revision.js";
@@ -16,8 +17,112 @@ import {
   createAlphaAwareGridMesh,
   createGeneratedMeshForDrawable
 } from "./mesh-generation.js";
+import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
 
 describe("alpha-aware mesh generation", () => {
+  it("generates an auto-outline mesh whose boundary vertices follow the alpha contour", () => {
+    const mesh = createAutoOutlineMesh({
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 8, height: 8 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 8, height: 8 },
+      rgbaBytes: createAlphaBytes(8, 8, [
+        [1, 1],
+        [2, 1],
+        [3, 1],
+        [1, 2],
+        [2, 2],
+        [3, 2],
+        [1, 3],
+        [2, 3],
+        [1, 4],
+        [2, 4],
+        [1, 5],
+        [2, 5]
+      ]),
+      densityHint: "medium"
+    });
+
+    expect(mesh.status).toBe("generated");
+    if (mesh.status !== "generated") {
+      return;
+    }
+
+    expect(mesh.alphaBounds).toEqual({ x: 1, y: 1, width: 3, height: 5 });
+    expect(mesh.mesh.vertices).toContainEqual({ x: 4, y: 1 });
+    expect(mesh.mesh.vertices).toContainEqual({ x: 3, y: 3 });
+    expect(mesh.mesh.vertices).not.toContainEqual({ x: 8, y: 8 });
+    expect(mesh.mesh.triangles.length).toBeGreaterThan(0);
+    expect(countTransparentCentroidTriangles(mesh.mesh, createAlphaSet([[3, 3], [3, 4], [3, 5]]))).toBe(0);
+  });
+
+  it("uses denser auto-outline boundary and interior points for Large Motion than Standard or Low Motion", () => {
+    const rgbaBytes = createAlphaBytesFromPredicate(18, 18, (x, y) => {
+      const dx = x - 8.5;
+      const dy = y - 8.5;
+      return dx * dx + dy * dy <= 46;
+    });
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 18, height: 18 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 18, height: 18 },
+      rgbaBytes
+    };
+
+    const large = createAutoOutlineMesh({ ...baseInput, densityHint: "high" });
+    const standard = createAutoOutlineMesh({ ...baseInput, densityHint: "medium" });
+    const low = createAutoOutlineMesh({ ...baseInput, densityHint: "low" });
+
+    expect(large.status).toBe("generated");
+    expect(standard.status).toBe("generated");
+    expect(low.status).toBe("generated");
+    if (large.status !== "generated" || standard.status !== "generated" || low.status !== "generated") {
+      return;
+    }
+
+    expect(large.mesh.vertices.length).toBeGreaterThan(standard.mesh.vertices.length);
+    expect(standard.mesh.vertices.length).toBeGreaterThan(low.mesh.vertices.length);
+    expect(large.mesh.triangles.length).toBeGreaterThan(standard.mesh.triangles.length);
+    expect(standard.mesh.triangles.length).toBeGreaterThan(low.mesh.triangles.length);
+  });
+
+  it("generates deterministic auto-outline meshes and falls back explicitly when alpha is empty", () => {
+    const session = createFixtureSession({ includeBytes: true });
+    const first = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v1",
+      densityHint: "medium"
+    });
+    const second = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v1",
+      densityHint: "medium"
+    });
+
+    expect(first).toEqual(second);
+    expect(first?.source).toBe("outline-rgba");
+
+    const emptyAlphaSession = createFixtureSession({ includeBytes: true, opaquePixels: [] });
+    const fallback = createGeneratedMeshForDrawable({
+      session: emptyAlphaSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v1",
+      densityHint: "low"
+    });
+
+    expect(fallback?.source).toBe("bounds-grid");
+    expect(fallback?.fallbackReason).toBe("alpha-empty");
+    expect(fallback?.mesh.vertices).toHaveLength(4);
+  });
+
   it("generates vertices and UVs from the drawable texture alpha bounds while preserving texture bounds", () => {
     const mesh = createAlphaAwareGridMesh({
       meshId: MeshIdSchema.parse("mesh_body"),
@@ -98,13 +203,19 @@ describe("alpha-aware mesh generation", () => {
   });
 });
 
-function createFixtureSession({ includeBytes }: { readonly includeBytes: boolean }): AuthoringSession {
-  const bytes = createAlphaBytes(4, 4, [
+function createFixtureSession({
+  includeBytes,
+  opaquePixels = [
     [1, 1],
     [2, 1],
     [1, 2],
     [2, 2]
-  ]);
+  ]
+}: {
+  readonly includeBytes: boolean;
+  readonly opaquePixels?: readonly (readonly [number, number])[];
+}): AuthoringSession {
+  const bytes = createAlphaBytes(4, 4, opaquePixels);
 
   return {
     packageIdentity: {
@@ -234,4 +345,40 @@ function createAlphaBytes(
   }
 
   return bytes;
+}
+
+function createAlphaBytesFromPredicate(
+  width: number,
+  height: number,
+  predicate: (x: number, y: number) => boolean
+): Uint8Array {
+  const pixels: [number, number][] = [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (predicate(x, y)) {
+        pixels.push([x, y]);
+      }
+    }
+  }
+
+  return createAlphaBytes(width, height, pixels);
+}
+
+function createAlphaSet(pixels: readonly (readonly [number, number])[]): ReadonlySet<string> {
+  return new Set(pixels.map(([x, y]) => `${x}:${y}`));
+}
+
+function countTransparentCentroidTriangles(
+  mesh: MeshDto,
+  transparentPixels: ReadonlySet<string>
+): number {
+  return mesh.triangles.filter((triangle) => {
+    const [aIndex, bIndex, cIndex] = triangle;
+    const a = mesh.vertices[aIndex]!;
+    const b = mesh.vertices[bIndex]!;
+    const c = mesh.vertices[cIndex]!;
+    const centroidX = Math.floor((a.x + b.x + c.x) / 3);
+    const centroidY = Math.floor((a.y + b.y + c.y) / 3);
+    return transparentPixels.has(`${centroidX}:${centroidY}`);
+  }).length;
 }

@@ -250,6 +250,61 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
 });
 
+test("creates a Warp Deformer draft from a selected Drawable and reflects it in the Deformer Tree", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  await page.getByRole("button", { name: /^Rig$/ }).first().click();
+  await expect(page.locator('[data-testid="rig-tool-target-picker"]:visible').first()).toBeVisible();
+
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  const visibleDrawableRow = drawableRows
+    .filter({ has: page.getByRole("button", { name: "Hide drawable" }) })
+    .first();
+  const selectedDrawableName = (await rowNameButton(visibleDrawableRow).innerText()).trim();
+  await rowNameButton(visibleDrawableRow).click();
+
+  await page.getByRole("button", { name: "Create Warp Deformer" }).click();
+  await expect(page.locator('[data-testid="rig-tool-inspector"]:visible').first()).toContainText(
+    "Draft"
+  );
+  await expect(visibleInput(page, "Transform columns control points")).toHaveValue("5");
+  await expect(visibleInput(page, "Transform rows control points")).toHaveValue("5");
+  await expect(visibleInput(page, "Bezier columns")).toHaveValue("3");
+  await expect(visibleInput(page, "Bezier rows")).toHaveValue("3");
+  await expect(visibleInput(page, "Bezier edit type")).toHaveValue("cubicBezierSurfaceV1");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-visible", "true");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-status", "draft");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-transform-columns", "5");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-child-drawable-count", "1");
+
+  await page.getByRole("button", { name: "Deformers" }).click();
+  await expect(page.locator('[data-testid="deformer-tree-draft-summary"]:visible').first()).toContainText(
+    "Draft Warp Deformer"
+  );
+  await expect(page.locator('[data-testid="deformer-tree-empty"]:visible').first()).toBeVisible();
+  await page.getByRole("button", { name: "Parts" }).click();
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible').first()).toContainText(
+    selectedDrawableName
+  );
+
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-status", "committed");
+  await expect(page.locator('[data-testid="rig-tool-inspector"]:visible').first()).toContainText(
+    "Warp Deformer"
+  );
+
+  await page.getByRole("button", { name: "Deformers" }).click();
+  await expect(page.locator('[data-row-kind="warp-deformer"]:visible').first()).toContainText(
+    "Warp Deformer"
+  );
+  await expect(page.locator('[data-testid="deformer-tree-drawable-ref"]:visible').first()).toContainText(
+    selectedDrawableName
+  );
+});
+
 async function importFixturePsd(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "Import PSD" }).first().click();

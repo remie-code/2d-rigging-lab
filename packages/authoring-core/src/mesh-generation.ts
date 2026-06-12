@@ -3,9 +3,17 @@ import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
 import { getDrawableById, getMeshById } from "./drawable-selectors.js";
+import {
+  createAutoOutlineMesh,
+  type AutoOutlineFailureReason
+} from "./mesh-outline-generation.js";
 
-export type MeshGenerationMethod = "manual-empty" | "auto-grid-v1";
+export type MeshGenerationMethod = "manual-empty" | "auto-grid-v1" | "auto-outline-v1";
 export type MeshDensityHint = "low" | "medium" | "high";
+export type DrawableGeneratedMeshSource = "outline-rgba" | "alpha-aware-rgba" | "bounds-grid";
+export type MeshGenerationFallbackReason =
+  | "texture-bytes-unavailable"
+  | AutoOutlineFailureReason;
 
 export interface DrawableGeneratedMeshInput {
   readonly session: AuthoringSession;
@@ -17,8 +25,9 @@ export interface DrawableGeneratedMeshInput {
 
 export interface DrawableGeneratedMeshResult {
   readonly mesh: MeshDto;
-  readonly source: "alpha-aware-rgba" | "bounds-grid";
+  readonly source: DrawableGeneratedMeshSource;
   readonly alphaBounds?: RectDto;
+  readonly fallbackReason?: MeshGenerationFallbackReason;
 }
 
 export interface AlphaAwareGridMeshInput {
@@ -77,6 +86,35 @@ export const createGeneratedMeshForDrawable = (
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
   if (textureBytes !== undefined) {
+    if (input.method === "auto-outline-v1") {
+      const outlineMesh = createAutoOutlineMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+
+      if (outlineMesh.status === "generated") {
+        return {
+          mesh: outlineMesh.mesh,
+          source: "outline-rgba",
+          alphaBounds: outlineMesh.alphaBounds
+        };
+      }
+
+      return createFallbackGridMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        fallbackReason: outlineMesh.reason,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(outlineMesh.alphaBounds === undefined ? {} : { alphaBounds: outlineMesh.alphaBounds })
+      });
+    }
+
     const alphaMesh = createAlphaAwareGridMesh({
       meshId: existingMesh.meshId,
       drawableId: drawable.drawableId,
@@ -96,16 +134,13 @@ export const createGeneratedMeshForDrawable = (
     }
   }
 
-  return {
-    mesh: createGridMesh({
-      meshId: existingMesh.meshId,
-      drawableId: drawable.drawableId,
-      bounds: existingMesh.bounds,
-      provenanceId: input.provenanceId,
-      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
-    }),
-    source: "bounds-grid"
-  };
+  return createFallbackGridMeshResult({
+    existingMesh,
+    drawableId: drawable.drawableId,
+    provenanceId: input.provenanceId,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(textureBytes === undefined ? { fallbackReason: "texture-bytes-unavailable" } : {})
+  });
 };
 
 export const createManualEmptyMesh = (input: {
@@ -180,6 +215,26 @@ const createGridMesh = (input: {
     generationProvenanceId: input.provenanceId
   };
 };
+
+const createFallbackGridMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly fallbackReason?: MeshGenerationFallbackReason;
+  readonly alphaBounds?: RectDto;
+}): DrawableGeneratedMeshResult => ({
+  mesh: createGridMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  }),
+  source: "bounds-grid",
+  ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason }),
+  ...(input.alphaBounds === undefined ? {} : { alphaBounds: input.alphaBounds })
+});
 
 export const createAlphaAwareGridMesh = (
   input: AlphaAwareGridMeshInput

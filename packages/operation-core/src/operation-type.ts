@@ -34,6 +34,7 @@ export const operationTypes = [
   "runDynamicsPreviewSequence",
   "createRotation2dRigControl",
   "createWarpLattice2dRigControl",
+  "createWarpDeformer",
   "bindRigControlChild",
   "setMaskRelation",
   "setDrawOrder",

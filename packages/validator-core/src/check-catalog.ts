@@ -1505,6 +1505,30 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "warpLattice2d runtime evidence disagrees with package lattice shape, domain, affected drawables, or keyform patch evidence."
   },
   {
+    checkId: "rigControl.warpDeformerInvalidDivisions",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "Warp Deformer transform or Bezier divisions are not valid positive control point counts."
+  },
+  {
+    checkId: "rigControl.warpDeformerTransformGridMismatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "Warp Deformer transformGrid does not match the stored warpLattice2d latticeColumns/latticeRows."
+  },
+  {
+    checkId: "rigControl.warpDeformerBezierSurfaceCardinalityMismatch",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-010", "AC-MVP-013"],
+    description: "Warp Deformer Bezier edit surface cardinality does not match bezier columns * rows."
+  },
+  {
     checkId: "dynamics.requiredGroupMissing",
     phase: "dynamics_semantic",
     defaultSeverity: "error",

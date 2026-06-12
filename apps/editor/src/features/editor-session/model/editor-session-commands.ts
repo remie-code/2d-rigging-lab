@@ -1,9 +1,11 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { StructureOrderDrop, StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
-import type { DiagnosticDto, DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
+import type { DiagnosticDto, DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
+  createRigControlIdFromDisplayName,
   OperationRequestSchema,
+  type CreateWarpDeformerPayloadDto,
   type GenerateMeshPayloadDto,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
@@ -18,6 +20,10 @@ export interface EditorSessionCommandResult {
   readonly committed: boolean;
   readonly session: AuthoringSession;
   readonly diagnostics: readonly DiagnosticDto[];
+}
+
+export interface CreateWarpDeformerCommandResult extends EditorSessionCommandResult {
+  readonly rigControlId?: RigControlId;
 }
 
 type OperationDraft = {
@@ -258,17 +264,31 @@ export function commitGenerateMesh(
   session: AuthoringSession,
   drawableId: DrawableId,
   densityHint: GenerateMeshPayloadDto["densityHint"],
-  previewMesh?: AuthoringSession["graph"]["meshes"][number]
+  previewMesh?: AuthoringSession["graph"]["meshes"][number],
+  method: GenerateMeshPayloadDto["method"] = "auto-outline-v1"
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "generateMesh",
     payload: {
       drawableId,
-      method: "auto-grid-v1",
+      method,
       ...(densityHint === undefined ? {} : { densityHint }),
       ...(previewMesh === undefined ? {} : { previewMesh })
     }
   });
+}
+
+export function commitCreateWarpDeformer(
+  session: AuthoringSession,
+  payload: CreateWarpDeformerPayloadDto
+): CreateWarpDeformerCommandResult {
+  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
+  const result = commitSingleOperation(session, {
+    operationType: "createWarpDeformer",
+    payload
+  });
+
+  return result.committed ? { ...result, rigControlId } : result;
 }
 
 export function commitDrawableReparent(

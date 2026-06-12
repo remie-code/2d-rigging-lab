@@ -6,6 +6,7 @@ import {
   MousePointer2,
   Move,
   Scan,
+  Spline,
   SquareDashed,
   Triangle,
   ZoomIn,
@@ -77,10 +78,13 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 const POINTER_CLICK_SLOP = 4;
 
 export function CanvasPreviewPanel() {
-  const { editorHiddenPartIds, meshDraft, selectDrawable, selection, session } = useEditorSession();
+  const { editorHiddenPartIds, meshDraft, rigDraft, selectDrawable, selection, session } = useEditorSession();
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
+  const deformerOverlayVisible = useEditorUiStore((state) => state.deformerOverlayVisible);
+  const setDeformerOverlayVisible = useEditorUiStore((state) => state.setDeformerOverlayVisible);
   const setMeshOverlayVisible = useEditorUiStore((state) => state.setMeshOverlayVisible);
+  const toggleDeformerOverlayVisible = useEditorUiStore((state) => state.toggleDeformerOverlayVisible);
   const toggleMeshOverlayVisible = useEditorUiStore((state) => state.toggleMeshOverlayVisible);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -94,7 +98,7 @@ export function CanvasPreviewPanel() {
   const [view, setView] = useState<CanvasViewState>(DEFAULT_VIEW);
   const [spacePressed, setSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [overlays, setOverlays] = useState<Omit<CanvasOverlayState, "mesh">>({
+  const [overlays, setOverlays] = useState<Omit<CanvasOverlayState, "mesh" | "deformer">>({
     grid: true,
     canvasBounds: true,
     selectionBounds: true,
@@ -103,20 +107,22 @@ export function CanvasPreviewPanel() {
   const renderOverlays = useMemo<CanvasOverlayState>(
     () => ({
       ...overlays,
-      mesh: meshOverlayVisible
+      mesh: meshOverlayVisible,
+      deformer: deformerOverlayVisible
     }),
-    [meshOverlayVisible, overlays]
+    [deformerOverlayVisible, meshOverlayVisible, overlays]
   );
   const projection = useMemo(
     () =>
       createCanvasRenderProjection(session, selection, {
         editorHiddenPartIds,
         meshDraft,
+        deformerDraft: rigDraft,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
           : {})
       }),
-    [activeTool, editorHiddenPartIds, meshDraft, selection, session]
+    [activeTool, editorHiddenPartIds, meshDraft, rigDraft, selection, session]
   );
   const selectedDrawableCount = projection.selectedDrawableIds.size;
   const selectedDrawableOpacity = useMemo(
@@ -129,6 +135,7 @@ export function CanvasPreviewPanel() {
   );
   const isolateSelectedActive = overlays.isolateSelected && canIsolateSelection;
   const meshOverlayActive = meshOverlayVisible && projection.meshOverlay !== undefined;
+  const deformerOverlayActive = deformerOverlayVisible && projection.deformerOverlay !== undefined;
   const renderableDrawableCount = useMemo(
     () =>
       projection.drawables.filter((drawable) => drawable.visible && isRenderableDrawable(drawable))
@@ -213,6 +220,12 @@ export function CanvasPreviewPanel() {
   }, [activeTool, setMeshOverlayVisible]);
 
   useEffect(() => {
+    if (activeTool === "rig") {
+      setDeformerOverlayVisible(true);
+    }
+  }, [activeTool, setDeformerOverlayVisible]);
+
+  useEffect(() => {
     const setSpaceActive = (active: boolean) => {
       spacePressedRef.current = active;
       setSpacePressed(active);
@@ -268,7 +281,7 @@ export function CanvasPreviewPanel() {
     setView((current) => nudgeZoomAtViewportCenter(current, viewport, 1 / 1.2));
   }, [viewport]);
 
-  const toggleOverlay = useCallback((key: keyof Omit<CanvasOverlayState, "mesh">) => {
+  const toggleOverlay = useCallback((key: keyof Omit<CanvasOverlayState, "mesh" | "deformer">) => {
     setOverlays((current) => ({ ...current, [key]: !current[key] }));
   }, []);
 
@@ -435,6 +448,14 @@ export function CanvasPreviewPanel() {
         >
           <Triangle aria-hidden="true" size={15} strokeWidth={1.8} />
         </ToolbarButton>
+        <ToolbarButton
+          disabled={projection.deformerOverlay === undefined}
+          label="Deformer overlay"
+          onClick={toggleDeformerOverlayVisible}
+          pressed={deformerOverlayActive}
+        >
+          <Spline aria-hidden="true" size={15} strokeWidth={1.8} />
+        </ToolbarButton>
       </div>
     </>
   );
@@ -478,6 +499,27 @@ export function CanvasPreviewPanel() {
             data-mesh-preview-drawable-visible={String(
               projection.drawables.some((drawable) => drawable.meshPreview && drawable.visible)
             )}
+            data-deformer-overlay-bezier-columns={
+              deformerOverlayActive ? String(projection.deformerOverlay?.bezierColumns ?? 0) : "0"
+            }
+            data-deformer-overlay-bezier-rows={
+              deformerOverlayActive ? String(projection.deformerOverlay?.bezierRows ?? 0) : "0"
+            }
+            data-deformer-overlay-child-drawable-count={
+              deformerOverlayActive
+                ? String(projection.deformerOverlay?.childDrawableIds.length ?? 0)
+                : "0"
+            }
+            data-deformer-overlay-status={
+              deformerOverlayActive ? projection.deformerOverlay?.status ?? "" : ""
+            }
+            data-deformer-overlay-transform-columns={
+              deformerOverlayActive ? String(projection.deformerOverlay?.transformColumns ?? 0) : "0"
+            }
+            data-deformer-overlay-transform-rows={
+              deformerOverlayActive ? String(projection.deformerOverlay?.transformRows ?? 0) : "0"
+            }
+            data-deformer-overlay-visible={String(deformerOverlayActive)}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {

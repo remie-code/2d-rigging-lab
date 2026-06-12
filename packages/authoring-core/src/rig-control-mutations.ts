@@ -11,7 +11,11 @@ import type {
   RigControlId,
   TargetRefDto
 } from "@private-2d-rigging-lab/contracts";
-import type { RigControlDto } from "@private-2d-rigging-lab/package-format";
+import {
+  getWarpDeformerBezierControlPointCount,
+  hasWarpDeformerBezierSurfaceCardinality,
+  type RigControlDto
+} from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringGraph } from "./authoring-graph.js";
 import { AuthoringMutationError } from "./authoring-mutations.js";
@@ -248,6 +252,51 @@ const assertWarpLattice2dRigControlShape = (rigControl: WarpLattice2dRigControlD
     throw new AuthoringMutationError(
       "invalid_warp_lattice_interpolation",
       `warpLattice2d interpolationMethod is not supported: ${rigControl.interpolationMethod}`
+    );
+  }
+
+  assertWarpDeformerShape(rigControl);
+};
+
+const assertWarpDeformerShape = (rigControl: WarpLattice2dRigControlDto): void => {
+  const metadata = rigControl.warpDeformer;
+  if (metadata === undefined) {
+    return;
+  }
+
+  if (
+    metadata.transformGrid.columns !== rigControl.latticeColumns ||
+    metadata.transformGrid.rows !== rigControl.latticeRows
+  ) {
+    throw new AuthoringMutationError(
+      "invalid_warp_deformer_transform_grid",
+      `warpDeformer transformGrid must match latticeColumns/latticeRows for ${rigControl.rigControlId}`
+    );
+  }
+
+  const expectedBezierCount = getWarpDeformerBezierControlPointCount(metadata.bezierEditSurface);
+  if (!hasWarpDeformerBezierSurfaceCardinality(metadata.bezierEditSurface)) {
+    throw new AuthoringMutationError(
+      "invalid_warp_deformer_bezier_surface",
+      `warpDeformer bezierEditSurface must contain ${expectedBezierCount} rest control points and handles for ${rigControl.rigControlId}`
+    );
+  }
+
+  if (
+    metadata.bezierEditSurface.restControlPoints.some(
+      (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y)
+    ) ||
+    metadata.bezierEditSurface.handles.some(
+      (handle) =>
+        !Number.isFinite(handle.inTangent.x) ||
+        !Number.isFinite(handle.inTangent.y) ||
+        !Number.isFinite(handle.outTangent.x) ||
+        !Number.isFinite(handle.outTangent.y)
+    )
+  ) {
+    throw new AuthoringMutationError(
+      "invalid_warp_deformer_bezier_surface",
+      `warpDeformer bezierEditSurface must contain finite Vec2 values for ${rigControl.rigControlId}`
     );
   }
 };

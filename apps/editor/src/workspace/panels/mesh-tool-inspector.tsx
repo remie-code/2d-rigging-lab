@@ -132,6 +132,7 @@ export function MeshToolInspector() {
     setMeshOverlayVisible(true);
   };
   const alphaBounds = currentDraft?.alphaBounds;
+  const fallbackReason = currentDraft?.fallbackReason;
 
   return (
     <>
@@ -159,7 +160,10 @@ export function MeshToolInspector() {
           <SummaryRow label="Preset" value={preset.label} />
           <SummaryRow label="Vertices" testId="mesh-tool-vertex-count" value={String(summaryMesh?.vertices.length ?? 0)} />
           <SummaryRow label="Triangles" testId="mesh-tool-triangle-count" value={String(summaryMesh?.triangles.length ?? 0)} />
-          <SummaryRow label="Source" testId="mesh-tool-source" value={currentDraft?.source === "alpha-aware-rgba" ? "Alpha-aware" : "Bounds grid"} />
+          <SummaryRow label="Source" testId="mesh-tool-source" value={formatMeshSource(currentDraft?.source)} />
+          {fallbackReason === undefined ? null : (
+            <SummaryRow label="Fallback" value={formatFallbackReason(fallbackReason)} />
+          )}
           {alphaBounds === undefined ? null : (
             <SummaryRow label="Alpha bounds" value={formatRect(alphaBounds)} />
           )}
@@ -388,6 +392,37 @@ function formatMeshStatus(mesh: MeshDto | undefined): string {
 
 function formatRect(rect: RectDto): string {
   return `${formatNumber(rect.x)}, ${formatNumber(rect.y)}, ${formatNumber(rect.width)} x ${formatNumber(rect.height)}`;
+}
+
+function formatMeshSource(source: string | undefined): string {
+  switch (source) {
+    case "outline-rgba":
+      return "Auto outline";
+    case "alpha-aware-rgba":
+      return "Alpha-aware grid";
+    case "bounds-grid":
+    case undefined:
+      return "Bounds grid";
+    default:
+      return source;
+  }
+}
+
+function formatFallbackReason(reason: string): string {
+  switch (reason) {
+    case "texture-bytes-unavailable":
+      return "Texture bytes unavailable";
+    case "invalid-rgba":
+      return "Invalid texture bytes";
+    case "alpha-empty":
+      return "Alpha mask empty";
+    case "contour-extraction-failed":
+      return "Outline extraction failed";
+    case "triangulation-failed":
+      return "Triangulation failed";
+    default:
+      return reason;
+  }
 }
 
 function formatNumber(value: number): string {

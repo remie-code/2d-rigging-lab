@@ -1,4 +1,5 @@
 import type {
+  CanvasDeformerOverlayProjection,
   CanvasRenderableDrawable,
   CanvasRenderProjection,
   CanvasViewState
@@ -10,6 +11,7 @@ export interface CanvasOverlayState {
   readonly canvasBounds: boolean;
   readonly selectionBounds: boolean;
   readonly mesh: boolean;
+  readonly deformer: boolean;
   readonly isolateSelected: boolean;
 }
 
@@ -72,6 +74,10 @@ export function renderCanvasProjection(input: {
     drawSelectionOverlay(context, input.projection, input.view.zoom);
   }
 
+  if (input.overlays.deformer) {
+    drawDeformerOverlay(context, input.projection, input.view.zoom);
+  }
+
   if (input.overlays.mesh) {
     drawMeshOverlay(context, input.projection, input.view.zoom);
   }
@@ -112,6 +118,101 @@ function drawDrawableStack(
     }
 
     context.restore();
+  }
+}
+
+function drawDeformerOverlay(
+  context: CanvasRenderingContext2D,
+  projection: CanvasRenderProjection,
+  zoom: number
+): void {
+  const overlay = projection.deformerOverlay;
+  if (overlay === undefined) {
+    return;
+  }
+
+  const color =
+    overlay.status === "draft"
+      ? "rgba(251, 191, 36, 0.98)"
+      : "rgba(45, 212, 191, 0.96)";
+  const guideColor =
+    overlay.status === "draft"
+      ? "rgba(125, 211, 252, 0.46)"
+      : "rgba(251, 113, 133, 0.36)";
+
+  context.save();
+  context.lineWidth = 1.5 / zoom;
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.setLineDash(overlay.status === "draft" ? [8 / zoom, 5 / zoom] : []);
+  context.strokeRect(
+    overlay.domainBounds.x,
+    overlay.domainBounds.y,
+    overlay.domainBounds.width,
+    overlay.domainBounds.height
+  );
+
+  drawDeformerGridLines(context, overlay, zoom, "transform", color);
+  drawDeformerControlPoints(context, overlay, zoom, color);
+
+  context.strokeStyle = guideColor;
+  context.lineWidth = 1 / zoom;
+  context.setLineDash([2 / zoom, 5 / zoom]);
+  drawDeformerGridLines(context, overlay, zoom, "bezier", guideColor);
+  context.restore();
+}
+
+function drawDeformerGridLines(
+  context: CanvasRenderingContext2D,
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number,
+  kind: "transform" | "bezier",
+  color: string
+): void {
+  const columns = kind === "transform" ? overlay.transformColumns : overlay.bezierColumns;
+  const rows = kind === "transform" ? overlay.transformRows : overlay.bezierRows;
+  const bounds = overlay.domainBounds;
+  const right = bounds.x + bounds.width;
+  const bottom = bounds.y + bounds.height;
+
+  context.strokeStyle = color;
+  context.beginPath();
+  for (let column = 0; column < columns; column += 1) {
+    const x = bounds.x + bounds.width * toUnitGridPosition(column, columns);
+    context.moveTo(x, bounds.y);
+    context.lineTo(x, bottom);
+  }
+
+  for (let row = 0; row < rows; row += 1) {
+    const y = bounds.y + bounds.height * toUnitGridPosition(row, rows);
+    context.moveTo(bounds.x, y);
+    context.lineTo(right, y);
+  }
+
+  context.stroke();
+  context.lineWidth = kind === "transform" ? 1.5 / zoom : 1 / zoom;
+}
+
+function drawDeformerControlPoints(
+  context: CanvasRenderingContext2D,
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number,
+  color: string
+): void {
+  const radius = Math.max(2.5 / zoom, 1.5 / zoom);
+  context.fillStyle = color;
+  for (let row = 0; row < overlay.transformRows; row += 1) {
+    for (let column = 0; column < overlay.transformColumns; column += 1) {
+      context.beginPath();
+      context.arc(
+        overlay.domainBounds.x + overlay.domainBounds.width * toUnitGridPosition(column, overlay.transformColumns),
+        overlay.domainBounds.y + overlay.domainBounds.height * toUnitGridPosition(row, overlay.transformRows),
+        radius,
+        0,
+        Math.PI * 2
+      );
+      context.fill();
+    }
   }
 }
 
@@ -413,6 +514,10 @@ function chooseGridInterval(zoom: number): number {
   }
 
   return 250;
+}
+
+function toUnitGridPosition(index: number, size: number): number {
+  return size <= 1 ? 0 : index / (size - 1);
 }
 
 function unionStageBounds(drawables: readonly CanvasRenderableDrawable[]): {

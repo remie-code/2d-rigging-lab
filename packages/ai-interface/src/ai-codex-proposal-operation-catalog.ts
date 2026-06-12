@@ -302,6 +302,24 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     ])
   },
   {
+    operationType: "createWarpDeformer",
+    operationFamily: "rigControl",
+    displayName: "Create Warp Deformer",
+    summary:
+      "Create a project-defined Warp Deformer with transform grid divisions and a stored Bezier edit surface.",
+    targetKinds: ["rigControl", "part", "drawable"],
+    payloadSchemaRef: "operation.createWarpDeformer.payload.v1",
+    requiredInputs: codexInputs("New Warp Deformer, part, domain bounds, and division settings.", [
+      "partId",
+      "displayName",
+      "domainBounds",
+      "transformColumns",
+      "transformRows",
+      "bezierColumns",
+      "bezierRows"
+    ])
+  },
+  {
     operationType: "createWarpLattice2dRigControl",
     operationFamily: "rigControl",
     displayName: "Create warpLattice2d rig control",

@@ -15,10 +15,13 @@ type EditorUiState = {
   activeTool: WorkspaceToolId;
   activeEntry: WorkspaceEntryId;
   meshOverlayVisible: boolean;
+  deformerOverlayVisible: boolean;
   setActiveTool: (tool: WorkspaceToolId) => void;
   setActiveEntry: (entry: WorkspaceEntryId) => void;
   setMeshOverlayVisible: (visible: boolean) => void;
   toggleMeshOverlayVisible: () => void;
+  setDeformerOverlayVisible: (visible: boolean) => void;
+  toggleDeformerOverlayVisible: () => void;
 };
 
 export const useEditorUiStore = create<EditorUiState>((set) => ({
@@ -26,9 +29,13 @@ export const useEditorUiStore = create<EditorUiState>((set) => ({
   activeTool: "select",
   activeEntry: "import",
   meshOverlayVisible: false,
+  deformerOverlayVisible: false,
   setActiveTool: (tool) => set({ activeTool: tool }),
   setActiveEntry: (entry) => set({ activeEntry: entry }),
   setMeshOverlayVisible: (visible) => set({ meshOverlayVisible: visible }),
   toggleMeshOverlayVisible: () =>
-    set((state) => ({ meshOverlayVisible: !state.meshOverlayVisible }))
+    set((state) => ({ meshOverlayVisible: !state.meshOverlayVisible })),
+  setDeformerOverlayVisible: (visible) => set({ deformerOverlayVisible: visible }),
+  toggleDeformerOverlayVisible: () =>
+    set((state) => ({ deformerOverlayVisible: !state.deformerOverlayVisible }))
 }));

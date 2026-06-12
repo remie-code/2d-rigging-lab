@@ -114,7 +114,9 @@ export type AuthoringMutationErrorCode =
   | "invalid_warp_lattice_domain_bounds"
   | "invalid_warp_lattice_grid"
   | "invalid_warp_lattice_rest_control_points"
-  | "invalid_warp_lattice_interpolation";
+  | "invalid_warp_lattice_interpolation"
+  | "invalid_warp_deformer_transform_grid"
+  | "invalid_warp_deformer_bezier_surface";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

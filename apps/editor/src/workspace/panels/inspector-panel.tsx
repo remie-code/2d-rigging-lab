@@ -12,6 +12,7 @@ import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 import { MeshToolInspector } from "./mesh-tool-inspector";
 import { WorkspacePanel } from "./panel-frame";
+import { RigToolInspector } from "./rig-tool-inspector";
 
 export function InspectorPanel() {
   const session = useEditorSession();
@@ -23,6 +24,8 @@ export function InspectorPanel() {
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
         {activeTool === "mesh" ? (
           <MeshToolInspector />
+        ) : activeTool === "rig" ? (
+          <RigToolInspector />
         ) : inspector.kind === "Part" ? (
           <PartContainerInspector inspector={inspector} />
         ) : inspector.kind === "Drawable" ? (

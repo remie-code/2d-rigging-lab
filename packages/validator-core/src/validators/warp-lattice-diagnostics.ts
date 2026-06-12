@@ -124,6 +124,63 @@ const validateWarpLatticeStaticShape = (
     }));
   }
 
+  checks.push(...validateWarpDeformerMetadata(entry));
+
+  return checks;
+};
+
+const validateWarpDeformerMetadata = (
+  entry: WarpLatticeEntry
+): readonly ValidationCheckResultDto[] => {
+  const metadata = entry.rigControl.warpDeformer;
+  if (metadata === undefined) {
+    return [];
+  }
+
+  const checks: ValidationCheckResultDto[] = [];
+  if (
+    metadata.transformGrid.columns !== entry.rigControl.latticeColumns ||
+    metadata.transformGrid.rows !== entry.rigControl.latticeRows
+  ) {
+    checks.push(createWarpLatticeCheck({
+      checkId: "rigControl.warpDeformerTransformGridMismatch",
+      phase: "rigControl_semantic",
+      target: createRigControlTarget(entry, "warpDeformer/transformGrid"),
+      targetPath: `${rigControlBasePath(entry.index)}/warpDeformer/transformGrid`,
+      message: `Warp Deformer ${entry.rigControl.rigControlId} has transformGrid values that do not match stored lattice dimensions.`,
+      evidence: [
+        `rigControlId=${entry.rigControl.rigControlId}`,
+        `latticeColumns=${entry.rigControl.latticeColumns}`,
+        `latticeRows=${entry.rigControl.latticeRows}`,
+        `transformColumns=${metadata.transformGrid.columns}`,
+        `transformRows=${metadata.transformGrid.rows}`
+      ],
+      impact: "The Editor and runtime would disagree about the Warp Deformer's transform control point grid."
+    }));
+  }
+
+  const expectedBezierCount = metadata.bezierEditSurface.columns * metadata.bezierEditSurface.rows;
+  const actualRestCount = metadata.bezierEditSurface.restControlPoints.length;
+  const actualHandleCount = metadata.bezierEditSurface.handles.length;
+  if (actualRestCount !== expectedBezierCount || actualHandleCount !== expectedBezierCount) {
+    checks.push(createWarpLatticeCheck({
+      checkId: "rigControl.warpDeformerBezierSurfaceCardinalityMismatch",
+      phase: "rigControl_semantic",
+      target: createRigControlTarget(entry, "warpDeformer/bezierEditSurface"),
+      targetPath: `${rigControlBasePath(entry.index)}/warpDeformer/bezierEditSurface`,
+      message: `Warp Deformer ${entry.rigControl.rigControlId} has malformed Bezier edit surface cardinality.`,
+      evidence: [
+        `rigControlId=${entry.rigControl.rigControlId}`,
+        `bezierColumns=${metadata.bezierEditSurface.columns}`,
+        `bezierRows=${metadata.bezierEditSurface.rows}`,
+        `expectedBezierPointCount=${expectedBezierCount}`,
+        `actualBezierRestControlPointCount=${actualRestCount}`,
+        `actualBezierHandleCount=${actualHandleCount}`
+      ],
+      impact: "The Editor cannot deterministically map Bezier edit points and handles to the stored Warp Deformer surface."
+    }));
+  }
+
   return checks;
 };
 
@@ -466,7 +523,10 @@ const createWarpLatticeCheck = (input: {
     | "rigControl.warpLatticeRestControlPointMismatch"
     | "rigControl.warpLatticeUnsupportedProperty"
     | "rigControl.warpLatticeMalformedPatch"
-    | "rigControl.warpLatticeRuntimeEvidenceMismatch";
+    | "rigControl.warpLatticeRuntimeEvidenceMismatch"
+    | "rigControl.warpDeformerInvalidDivisions"
+    | "rigControl.warpDeformerTransformGridMismatch"
+    | "rigControl.warpDeformerBezierSurfaceCardinalityMismatch";
   readonly phase: "rigControl_semantic" | "rigControl_evaluation";
   readonly target: TargetRefDto;
   readonly targetPath: string;

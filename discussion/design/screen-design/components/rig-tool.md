@@ -150,7 +150,7 @@ subtree opacity effectも、この協調の中で扱う。Rig Inspectorは対象
 | State | Canvas | Inspector / Tool Panel | 主な操作 |
 |---|---|---|---|
 | No Target Selected | 通常previewまたはempty state | part / drawable / mesh選択を促す | Parts Tree / Canvasでtarget選択 |
-| Rig Draft | 未commit rig overlay | primitive、bounds/pivot/lattice設定、Apply / Cancel | draft設定、preview確認、commit |
+| Rig Draft | 未commit rig overlay | primitive、bounds/pivot/deformer設定、Apply / Cancel | draft設定、preview確認、commit |
 | Keyform Authoring | parameter valueに応じたpreview overlay | parameter選択/作成、key value、state patch、Add keyform | keyform作成 |
 | Rig Edit | committed rig overlay | existing rig summary、binding、keyform list、編集入口 | rig確認・編集 |
 | Blocked | 対象は表示するが編集不可状態を示す | disabled reasonを人間向けに表示 | mesh作成、unlock、visible化、別target選択 |
@@ -172,24 +172,134 @@ UX:
 - `rotation2d` rig controlとangle keyformは既存概念として存在する。
 - 画面設計上は、巨大なProject-defined Rig Controls panelではなく、Rig ToolのDraft / Keyform Authoringへ再配置する。
 
-## 7. Warp / Lattice UX
+## 7. Warp Deformer UX
 
-Warp / Latticeは、選択targetに対して格子状の制御点を置き、controlPointOffsets keyformで変形するprimitiveである。
+Warp Deformerは、選択targetに対して2D変形領域を作り、子Drawable / 子Deformerを変形するprimitiveである。
+
+ユーザー向け概念として、Bezier編集は別primitiveではなくWarp Deformerが持つ機能として扱う。内部的には、Warp Deformerは「編集しやすいBezier edit surface」と「実際に変形を評価するtransform grid / lattice」を持つ。
+
+```text
+Warp Deformer
+  Bezier edit surface
+    - Bezier divisions
+    - Bezier edit type
+    - Bezier control points / handles
+
+  Transform grid / lattice
+    - Transform divisions
+    - Evaluation control points
+    - Child drawable / child deformer deformation
+```
+
+この分離はユーザーに別primitiveとして見せるためではなく、Inspector項目と内部model構造を整理するためのものである。
 
 あるべき画面:
 
-- InspectorでWarp / Latticeを選ぶ。
-- Inspectorからlattice columns / lattice rowsを変更できる。
-- columns / rowsを変更するとCanvasのlattice preview overlayが更新される。
+- InspectorでWarp Deformerを選ぶ。
+- InspectorからTransform divisionsを変更できる。
+- InspectorからBezier divisionsを変更できる。
+- Transform divisionsやBezier divisionsを変更するとCanvasのdeformer preview overlayが更新される。
 - boundsはtarget boundsから初期配置されるが、Inspectorから変更できる。
-- ApplyでwarpLattice2d rig controlを作り、targetへbindする。
+- ApplyでWarp Deformer rig controlを作り、targetへbindする。
 - keyform authoringではparameter、key value、control point offsetsを編集する。
 
 現状実装との関係:
 
 - データ契約上、`warpLattice2d` は `latticeColumns` / `latticeRows` を持つ。
 - 現行Editor draft UXは最小 `2x2` 固定であり、`bilinear-grid-v1` 固定である。
-- Bezier分割数やBezier deformerは現行モデルにはない。後続で必要なら別primitiveまたは新しいmodel設計として扱う。
+- Wave62候補では、Warp Deformerを最初からTransform divisionsとBezier divisionsを持つ構造として扱う。これは将来UI項目ではなく、内部構造に関わる初期設計対象である。
+
+### 7.1 Transform Divisions
+
+Transform divisionsは、Warp Deformerが子Drawable / 子Deformerを実際に変形評価するための格子解像度である。
+
+Cubism風UIの「変換の分割数」に相当する。ユーザー向けには「変形をどれだけ細かく計算するか」と説明できる。
+
+Inspectorに置くもの:
+
+- Transform columns
+- Transform rows
+- Cell count summary
+- Reset to preset
+
+設計上の注意:
+
+- `columns / rows` が制御点数なのかcell数なのかをUI文言で曖昧にしない。
+- 初期UIでは `Transform divisions: 5 x 5` のように扱ってよいが、内部modelでは control point count と cell count の関係を明確にする。
+- 変換分割数を変更すると、既存keyformやrest control pointsとの互換が壊れる可能性があるため、生成済みkeyformがある場合は確認またはdisabledにする。
+
+### 7.2 Bezier Divisions
+
+Bezier divisionsは、Warp Deformerの形状をユーザーが曲線的に編集するための編集面の分割数である。
+
+これは別primitiveではなく、Warp Deformerの編集しやすさを支える上位表現として扱う。Bezier edit surfaceから、実際に評価されるTransform grid / latticeへ変換される。
+
+Inspectorに置くもの:
+
+- Bezier columns
+- Bezier rows
+- Bezier edit type
+- Reset bezier control points
+
+Canvas overlayに置くもの:
+
+- Bezier control points
+- Bezier handles / control lines
+- Transform gridとの対応が分かる補助表示
+
+設計上の注意:
+
+- Bezier divisionsを変更するとBezier control points / handlesの数が変わる。
+- Bezier edit surfaceとTransform gridの対応を決定的にする。
+- 初期実装ではBezier control pointの高度な手動編集まで完了しなくてもよいが、Warp Deformerのmodel構造には最初からBezier edit surfaceを考慮する。
+- Bezier edit typeは、初期は1種類に固定してreadonly表示でもよい。ただし将来の編集type追加を妨げない形にする。
+
+### 7.3 Warp Deformer Inspector項目の層分け
+
+Warp Deformerが設定可能な項目と、初期Inspectorで触れる項目は分けて考える。
+
+設定可能な項目:
+
+- name
+- stable id
+- parent deformer
+- bound children
+- domain bounds
+- opacity multiplier
+- multiply color
+- screen color
+- Transform divisions
+- Bezier divisions
+- Bezier edit type
+- Bezier control points / handles
+- rest shape
+- compatibility / migration metadata
+
+初期Inspectorで触る項目:
+
+- name
+- parent deformer
+- bound children summary
+- domain bounds
+- Transform divisions
+- Bezier divisions
+- Bezier edit type readonly or fixed default
+- reset / fit actions
+- Apply / Cancel
+
+初期Inspectorでは通常隠す項目:
+
+- stable id
+- rest shape raw data
+- compatibility metadata
+- raw control point arrays
+- operation / evidence refs
+
+Appearance項目として後続に回してよいもの:
+
+- opacity multiplier
+- multiply color
+- screen color
 
 ## 8. Subtree Visibility / Opacity UX
 

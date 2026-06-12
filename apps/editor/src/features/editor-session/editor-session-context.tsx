@@ -5,7 +5,7 @@ import type {
   StructureOrderItem
 } from "@private-2d-rigging-lab/authoring-core";
 import { createGeneratedMeshForDrawable } from "@private-2d-rigging-lab/authoring-core";
-import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
   createContext,
   useCallback,
@@ -25,6 +25,7 @@ import {
   commitDrawableReorder,
   commitDrawableReparent,
   commitDrawableRuntimeVisibility,
+  commitCreateWarpDeformer,
   commitGenerateMesh,
   commitStructureMove,
   commitPartNameEdit,
@@ -40,6 +41,16 @@ import {
 } from "./model/mesh-tool-state";
 import { mergeEditorHiddenPartIds } from "./model/editor-hidden-part-state";
 import {
+  createDeformerTreeRows,
+  createWarpDeformerDraftForDrawable,
+  createWarpDeformerPayloadFromDraft,
+  fitWarpDeformerDraftToChildren,
+  resetWarpDeformerDraft,
+  updateWarpDeformerDraft,
+  type DeformerTreeRow,
+  type WarpDeformerDraft
+} from "./model/rig-tool-state";
+import {
   createInspectorProjection,
   createStructureTreeRows,
   resolveDestinationPart,
@@ -54,6 +65,7 @@ export interface MeshToolDraft {
   readonly mesh: AuthoringSession["graph"]["meshes"][number];
   readonly source: DrawableGeneratedMeshResult["source"];
   readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
+  readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
 }
 
 interface EditorSessionContextValue {
@@ -62,13 +74,16 @@ interface EditorSessionContextValue {
   readonly collapsedPartIds: ReadonlySet<PartId>;
   readonly editorHiddenPartIds: ReadonlySet<PartId>;
   readonly meshDraft: MeshToolDraft | null;
+  readonly rigDraft: WarpDeformerDraft | null;
   readonly structureRows: readonly StructureTreeRow[];
+  readonly deformerRows: readonly DeformerTreeRow[];
   readonly inspector: InspectorProjection;
   readonly psdImportOpen: boolean;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
   readonly selectPart: (partId: PartId) => void;
   readonly selectDrawable: (drawableId: DrawableId) => void;
+  readonly selectRigControl: (rigControlId: RigControlId) => void;
   readonly togglePartCollapse: (partId: PartId) => void;
   readonly togglePartEditorVisibility: (partId: PartId) => void;
   readonly updatePartName: (partId: PartId, displayName: string) => void;
@@ -96,6 +111,12 @@ interface EditorSessionContextValue {
   ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
+  readonly startWarpDeformerDraftForDrawable: (drawableId: DrawableId) => void;
+  readonly updateWarpDeformerDraft: (patch: Partial<WarpDeformerDraft>) => void;
+  readonly fitWarpDeformerDraft: () => void;
+  readonly resetWarpDeformerDraft: () => void;
+  readonly applyWarpDeformerDraft: () => void;
+  readonly cancelWarpDeformerDraft: () => void;
   readonly resolvePsdImportDestination: () => {
     readonly parentPartId: PartId;
     readonly label: string;
@@ -116,6 +137,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     () => new Set()
   );
   const [meshDraft, setMeshDraft] = useState<MeshToolDraft | null>(null);
+  const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [psdImportOpen, setPsdImportOpen] = useState(false);
   const structureRows = useMemo(
     () =>
@@ -125,6 +147,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       }),
     [collapsedPartIds, editorHiddenPartIds, session, selection]
   );
+  const deformerRows = useMemo(
+    () => createDeformerTreeRows(session, selection),
+    [session, selection]
+  );
   const inspector = useMemo(
     () => createInspectorProjection(session, selection, { editorHiddenPartIds }),
     [editorHiddenPartIds, session, selection]
@@ -133,6 +159,12 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   useEffect(() => {
     if (activeTool !== "mesh") {
       setMeshDraft(null);
+    }
+  }, [activeTool]);
+
+  useEffect(() => {
+    if (activeTool !== "rig") {
+      setRigDraft(null);
     }
   }, [activeTool]);
 
@@ -246,6 +278,11 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     setSelection({ kind: "drawable", id: drawableId });
   }, []);
 
+  const selectRigControl = useCallback((rigControlId: RigControlId) => {
+    setMeshDraft(null);
+    setSelection({ kind: "rigControl", id: rigControlId });
+  }, []);
+
   const cancelMeshDraft = useCallback(() => {
     setMeshDraft(null);
   }, []);
@@ -257,7 +294,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         session,
         drawableId,
         provenanceId: createMeshPreviewProvenanceId(drawableId, presetId),
-        method: "auto-grid-v1",
+        method: "auto-outline-v1",
         densityHint: preset.densityHint
       });
 
@@ -271,7 +308,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         presetId,
         mesh: generated.mesh,
         source: generated.source,
-        ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds })
+        ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+        ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason })
       });
     },
     [session]
@@ -288,7 +326,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         currentSession,
         meshDraft.drawableId,
         preset.densityHint,
-        meshDraft.mesh
+        meshDraft.mesh,
+        "auto-outline-v1"
       );
       if (result.committed) {
         setMeshDraft(null);
@@ -304,6 +343,67 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     });
   }, [meshDraft]);
 
+  const startWarpDeformerDraftForDrawable = useCallback(
+    (drawableId: DrawableId) => {
+      const draft = createWarpDeformerDraftForDrawable(session, drawableId);
+      if (draft === undefined) {
+        setRigDraft(null);
+        return;
+      }
+
+      setMeshDraft(null);
+      setSelection({ kind: "drawable", id: drawableId });
+      setRigDraft(draft);
+    },
+    [session]
+  );
+
+  const updateRigDraft = useCallback((patch: Partial<WarpDeformerDraft>) => {
+    setRigDraft((current) =>
+      current === null ? current : updateWarpDeformerDraft(current, patch)
+    );
+  }, []);
+
+  const fitRigDraft = useCallback(() => {
+    setRigDraft((current) =>
+      current === null ? current : fitWarpDeformerDraftToChildren(session, current)
+    );
+  }, [session]);
+
+  const resetRigDraft = useCallback(() => {
+    setRigDraft((current) =>
+      current === null ? current : resetWarpDeformerDraft(session, current)
+    );
+  }, [session]);
+
+  const cancelRigDraft = useCallback(() => {
+    setRigDraft(null);
+  }, []);
+
+  const applyRigDraft = useCallback(() => {
+    if (rigDraft === null) {
+      return;
+    }
+
+    const payload = createWarpDeformerPayloadFromDraft(rigDraft);
+    setSession((currentSession) => {
+      const result = commitCreateWarpDeformer(currentSession, payload);
+      if (result.committed) {
+        setRigDraft(null);
+        if (result.rigControlId !== undefined) {
+          setSelection({ kind: "rigControl", id: result.rigControlId });
+        }
+        return result.session;
+      }
+
+      if (result.diagnostics.length > 0) {
+        console.warn("Editor command was rejected.", result.diagnostics);
+      }
+
+      return currentSession;
+    });
+  }, [rigDraft]);
+
   const value = useMemo<EditorSessionContextValue>(
     () => ({
       collapsedPartIds,
@@ -311,13 +411,16 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       session,
       selection,
       meshDraft,
+      rigDraft,
       structureRows,
+      deformerRows,
       inspector,
       psdImportOpen,
       openPsdImport: () => setPsdImportOpen(true),
       closePsdImport: () => setPsdImportOpen(false),
       selectPart,
       selectDrawable,
+      selectRigControl,
       togglePartCollapse,
       togglePartEditorVisibility,
       updatePartName: (partId, displayName) =>
@@ -352,6 +455,12 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       previewMeshDraft,
       applyMeshDraft,
       cancelMeshDraft,
+      startWarpDeformerDraftForDrawable,
+      updateWarpDeformerDraft: updateRigDraft,
+      fitWarpDeformerDraft: fitRigDraft,
+      resetWarpDeformerDraft: resetRigDraft,
+      applyWarpDeformerDraft: applyRigDraft,
+      cancelWarpDeformerDraft: cancelRigDraft,
       resolvePsdImportDestination,
       commitPsdImport
     }),
@@ -361,20 +470,29 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       applyMeshDraft,
       cancelMeshDraft,
       commitPsdImport,
+      cancelRigDraft,
+      deformerRows,
       editorHiddenPartIds,
+      fitRigDraft,
       inspector,
       meshDraft,
       psdImportOpen,
       previewMeshDraft,
+      applyRigDraft,
+      resetRigDraft,
       resolvePsdImportDestination,
+      rigDraft,
       selection,
       selectDrawable,
       selectPart,
+      selectRigControl,
       session,
+      startWarpDeformerDraftForDrawable,
       structureRows,
       moveStructureChild,
       togglePartCollapse,
-      togglePartEditorVisibility
+      togglePartEditorVisibility,
+      updateRigDraft
     ]
   );
 

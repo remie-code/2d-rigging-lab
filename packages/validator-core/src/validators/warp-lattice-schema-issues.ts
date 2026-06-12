@@ -50,6 +50,73 @@ const createWarpLatticeRigControlSchemaCheck = (
     return undefined;
   }
 
+  if (isDivisionIssuePath(path)) {
+    return createWarpLatticeCheck({
+      checkId: "rigControl.warpDeformerInvalidDivisions",
+      target: createRigControlTarget(packageId, rigControlId, path),
+      targetPath: path.join("."),
+      message: `Warp Deformer ${rigControlId ?? "unknown"} has invalid division counts.`,
+      evidence: [
+        `rigControlId=${rigControlId ?? "unknown"}`,
+        `latticeColumns=${readObjectNumber(rigControl, "latticeColumns") ?? "unknown"}`,
+        `latticeRows=${readObjectNumber(rigControl, "latticeRows") ?? "unknown"}`,
+        `transformColumns=${readNestedNumber(rigControl, ["warpDeformer", "transformGrid", "columns"]) ?? "unknown"}`,
+        `transformRows=${readNestedNumber(rigControl, ["warpDeformer", "transformGrid", "rows"]) ?? "unknown"}`,
+        `bezierColumns=${readNestedNumber(rigControl, ["warpDeformer", "bezierEditSurface", "columns"]) ?? "unknown"}`,
+        `bezierRows=${readNestedNumber(rigControl, ["warpDeformer", "bezierEditSurface", "rows"]) ?? "unknown"}`,
+        issue.message
+      ],
+      impact: "Warp Deformer transform and Bezier divisions must be integer control point counts of at least 2."
+    });
+  }
+
+  if (path[4] === "warpDeformer" && path[5] === "transformGrid") {
+    return createWarpLatticeCheck({
+      checkId: "rigControl.warpDeformerTransformGridMismatch",
+      target: createRigControlTarget(packageId, rigControlId, path),
+      targetPath: path.join("."),
+      message: `Warp Deformer ${rigControlId ?? "unknown"} has mismatched transformGrid storage.`,
+      evidence: [
+        `rigControlId=${rigControlId ?? "unknown"}`,
+        `latticeColumns=${readObjectNumber(rigControl, "latticeColumns") ?? "unknown"}`,
+        `latticeRows=${readObjectNumber(rigControl, "latticeRows") ?? "unknown"}`,
+        `transformColumns=${readNestedNumber(rigControl, ["warpDeformer", "transformGrid", "columns"]) ?? "unknown"}`,
+        `transformRows=${readNestedNumber(rigControl, ["warpDeformer", "transformGrid", "rows"]) ?? "unknown"}`,
+        issue.message
+      ],
+      impact: "The Editor and runtime would disagree about the Warp Deformer's transform control point grid."
+    });
+  }
+
+  if (
+    path[4] === "warpDeformer" &&
+    path[5] === "bezierEditSurface" &&
+    (path[6] === "restControlPoints" || path[6] === "handles")
+  ) {
+    const surface = readNestedValue(rigControl, ["warpDeformer", "bezierEditSurface"]);
+    const bezierColumns = readObjectNumber(surface, "columns");
+    const bezierRows = readObjectNumber(surface, "rows");
+    const expectedCount = bezierColumns === undefined || bezierRows === undefined
+      ? "unknown"
+      : String(bezierColumns * bezierRows);
+    return createWarpLatticeCheck({
+      checkId: "rigControl.warpDeformerBezierSurfaceCardinalityMismatch",
+      target: createRigControlTarget(packageId, rigControlId, path),
+      targetPath: path.join("."),
+      message: `Warp Deformer ${rigControlId ?? "unknown"} has malformed Bezier edit surface cardinality.`,
+      evidence: [
+        `rigControlId=${rigControlId ?? "unknown"}`,
+        `bezierColumns=${bezierColumns ?? "unknown"}`,
+        `bezierRows=${bezierRows ?? "unknown"}`,
+        `expectedBezierPointCount=${expectedCount}`,
+        `actualBezierRestControlPointCount=${readObjectArray(surface, "restControlPoints")?.length ?? "unknown"}`,
+        `actualBezierHandleCount=${readObjectArray(surface, "handles")?.length ?? "unknown"}`,
+        issue.message
+      ],
+      impact: "The Editor cannot deterministically map Bezier edit points and handles to the stored Warp Deformer surface."
+    });
+  }
+
   if (path[4] === "restControlPoints") {
     const latticeColumns = readObjectNumber(rigControl, "latticeColumns");
     const latticeRows = readObjectNumber(rigControl, "latticeRows");
@@ -148,7 +215,10 @@ const createWarpLatticeCheck = (input: {
   readonly checkId:
     | "rigControl.warpLatticeCardinalityMismatch"
     | "rigControl.warpLatticeDomainBoundsInvalid"
-    | "rigControl.warpLatticeMalformedPatch";
+    | "rigControl.warpLatticeMalformedPatch"
+    | "rigControl.warpDeformerInvalidDivisions"
+    | "rigControl.warpDeformerTransformGridMismatch"
+    | "rigControl.warpDeformerBezierSurfaceCardinalityMismatch";
   readonly target: TargetRefDto;
   readonly targetPath: string;
   readonly message: string;
@@ -217,6 +287,22 @@ const readObjectNumber = (input: unknown, key: string): number | undefined => {
   const value = (input as Record<string, unknown>)[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
+
+const readNestedNumber = (input: unknown, path: readonly string[]): number | undefined => {
+  const value = readNestedValue(input, path);
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const isDivisionIssuePath = (path: readonly string[]): boolean =>
+  path[4] === "latticeColumns" ||
+  path[4] === "latticeRows" ||
+  (
+    path[4] === "warpDeformer" &&
+    (
+      (path[5] === "transformGrid" && (path[6] === "columns" || path[6] === "rows")) ||
+      (path[5] === "bezierEditSurface" && (path[6] === "columns" || path[6] === "rows"))
+    )
+  );
 
 const readObjectArray = (input: unknown, key: string): readonly unknown[] | undefined => {
   if (typeof input !== "object" || input === null || !(key in input)) {

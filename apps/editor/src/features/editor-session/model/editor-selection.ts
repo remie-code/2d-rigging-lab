@@ -1,4 +1,4 @@
-import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 export type EditorSelection =
   | {
@@ -8,4 +8,8 @@ export type EditorSelection =
   | {
       readonly kind: "drawable";
       readonly id: DrawableId;
+    }
+  | {
+      readonly kind: "rigControl";
+      readonly id: RigControlId;
     };

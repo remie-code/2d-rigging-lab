@@ -14,6 +14,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  commitCreateWarpDeformer,
   commitDrawableReorder,
   commitDrawableReparent,
   commitPartReparent
@@ -58,6 +59,51 @@ describe("editor session commands", () => {
     expect(result.session.graph.parts.find((part) => part.partId === PART_B)?.parentPartId).toBe(PART_A);
     expect(projectedDrawableOrder(result.session)).toEqual([DRAW_B, DRAW_A, DRAW_C]);
     expect(globalDrawableOrder(result.session)).toEqual(projectedDrawableOrder(result.session));
+  });
+
+  it("commits a Warp Deformer through the package operation contract", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B, DRAW_C]);
+    const result = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Part A Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 4,
+      bezierColumns: 3,
+      bezierRows: 2,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+
+    expect(result.committed).toBe(true);
+    expect(result.rigControlId).toBeDefined();
+    expect(session.graph.rigControls).toHaveLength(0);
+
+    const rigControl = result.session.graph.rigControls.find(
+      (candidate) => candidate.rigControlId === result.rigControlId
+    );
+    expect(rigControl).toMatchObject({
+      kind: "warpLattice2d",
+      displayName: "Part A Warp",
+      partId: PART_A,
+      childDrawableIds: [DRAW_A],
+      latticeColumns: 5,
+      latticeRows: 4,
+      warpDeformer: {
+        userFacingKind: "warpDeformer",
+        transformGrid: {
+          columns: 5,
+          rows: 4,
+          pointCountSemantics: "controlPointCount"
+        },
+        bezierEditSurface: {
+          columns: 3,
+          rows: 2,
+          editType: "cubicBezierSurfaceV1"
+        }
+      }
+    });
   });
 });
 

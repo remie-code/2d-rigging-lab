@@ -218,19 +218,39 @@ describe("generateMesh operation handler", () => {
     });
   });
 
-  it("rejects auto-outline-v1 until an outline extraction pipeline exists", () => {
-    const session = createFixtureSession();
+  it("commits auto-outline-v1 from drawable texture alpha contour when raw RGBA bytes are available", () => {
+    const session = createFixtureSessionWithTextureBytes();
     const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v1" });
 
     const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
 
-    expect(outcome.result.status).toBe("rejected");
-    expect(outcome.result.diagnostics[0]).toMatchObject({
-      checkId: "operation.generateMesh.unsupportedMethod",
-      target: { kind: "drawable", id: "draw_body", path: "/payload/method" }
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]).toMatchObject({
+      vertices: [
+        { x: 5, y: 9 },
+        { x: 7, y: 9 },
+        { x: 7, y: 11 },
+        { x: 5, y: 11 }
+      ],
+      uvs: [
+        { x: 0.25, y: 0.25 },
+        { x: 0.75, y: 0.25 },
+        { x: 0.75, y: 0.75 },
+        { x: 0.25, y: 0.75 }
+      ],
+      triangles: [
+        [1, 2, 0],
+        [2, 3, 0]
+      ],
+      generationProvenanceId: "prov_generate_body_mesh"
     });
-    expect(session.graph.meshes[0]?.vertices).toEqual([]);
-    expect(session.authoringRevision).toBe(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual([
+      "generateMesh:auto-outline-v1",
+      "meshSource:outline-rgba"
+    ]);
+    expect(toRuntimeGraph(session).drawables.get(DrawableIdSchema.parse("draw_body"))).toMatchObject({
+      vertexCount: 4
+    });
   });
 });
 

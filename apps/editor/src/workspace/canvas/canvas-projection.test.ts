@@ -6,6 +6,7 @@ import {
   PackageIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -36,6 +37,7 @@ const MESH_FRONT = MeshIdSchema.parse("mesh_front");
 const MESH_HIDDEN = MeshIdSchema.parse("mesh_hidden");
 const MESH_MASK = MeshIdSchema.parse("mesh_mask");
 const MESH_TARGET = MeshIdSchema.parse("mesh_target");
+const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
 const TEX_FRONT = TextureIdSchema.parse("tex_front");
 const TEX_HIDDEN = TextureIdSchema.parse("tex_hidden");
@@ -253,6 +255,58 @@ describe("canvas render projection", () => {
     });
   });
 
+  it("projects draft and committed Warp Deformer overlays for Canvas", () => {
+    const session = createFixtureSession();
+    const draftProjection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_FRONT
+      },
+      {
+        deformerDraft: {
+          displayName: "Front Warp Draft",
+          domainBounds: { x: 5, y: 5, width: 20, height: 20 },
+          transformColumns: 5,
+          transformRows: 4,
+          bezierColumns: 3,
+          bezierRows: 2,
+          childDrawableIds: [DRAW_FRONT],
+          childRigControlIds: []
+        }
+      }
+    );
+
+    expect(draftProjection.deformerOverlay).toMatchObject({
+      displayName: "Front Warp Draft",
+      status: "draft",
+      transformColumns: 5,
+      transformRows: 4,
+      bezierColumns: 3,
+      bezierRows: 2,
+      childDrawableIds: [DRAW_FRONT]
+    });
+
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+    const committedProjection = createCanvasRenderProjection(session, {
+      kind: "rigControl",
+      id: RIG_FACE_WARP
+    });
+
+    expect(committedProjection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(committedProjection.deformerOverlay).toMatchObject({
+      rigControlId: RIG_FACE_WARP,
+      displayName: "Face Warp",
+      status: "committed",
+      transformColumns: 4,
+      transformRows: 3,
+      bezierColumns: 3,
+      bezierRows: 2,
+      childDrawableIds: [DRAW_FRONT]
+    });
+  });
+
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
     const session = createFixtureSession();
     const projection = createCanvasRenderProjection(
@@ -466,6 +520,90 @@ function createFixtureSession(): AuthoringSession {
       provenanceRecords: [],
       rightsRecords: []
     }
+  };
+}
+
+function createWarpDeformerRigControl() {
+  return {
+    kind: "warpLattice2d" as const,
+    rigControlId: RIG_FACE_WARP,
+    displayName: "Face Warp",
+    partId: PART_FACE,
+    childDrawableIds: [DRAW_FRONT],
+    childRigControlIds: [],
+    bindSpace: "rigControlLocalRest" as const,
+    domainBounds: { x: 5, y: 5, width: 20, height: 20 },
+    latticeColumns: 4,
+    latticeRows: 3,
+    restControlPoints: [
+      { x: 5, y: 5 },
+      { x: 12, y: 5 },
+      { x: 18, y: 5 },
+      { x: 25, y: 5 },
+      { x: 5, y: 15 },
+      { x: 12, y: 15 },
+      { x: 18, y: 15 },
+      { x: 25, y: 15 },
+      { x: 5, y: 25 },
+      { x: 12, y: 25 },
+      { x: 18, y: 25 },
+      { x: 25, y: 25 }
+    ],
+    interpolationMethod: "bilinear-grid-v1" as const,
+    warpDeformer: {
+      schemaVersion: "warp-deformer-foundation-v0" as const,
+      userFacingKind: "warpDeformer" as const,
+      transformGrid: {
+        columns: 4,
+        rows: 3,
+        pointCountSemantics: "controlPointCount" as const
+      },
+      bezierEditSurface: {
+        columns: 3,
+        rows: 2,
+        editType: "cubicBezierSurfaceV1" as const,
+        pointOrder: "rowMajorYThenXFromDomainMinV1" as const,
+        restControlPoints: [
+          { x: 5, y: 5 },
+          { x: 15, y: 5 },
+          { x: 25, y: 5 },
+          { x: 5, y: 25 },
+          { x: 15, y: 25 },
+          { x: 25, y: 25 }
+        ],
+        handles: [
+          createZeroBezierHandle(),
+          createZeroBezierHandle(),
+          createZeroBezierHandle(),
+          createZeroBezierHandle(),
+          createZeroBezierHandle(),
+          createZeroBezierHandle()
+        ],
+        restSurfaceGeneration: {
+          kind: "domainBoundsGridV1" as const,
+          sourceDomainBounds: { x: 5, y: 5, width: 20, height: 20 },
+          columns: 3,
+          rows: 2,
+          pointOrder: "rowMajorYThenXFromDomainMinV1" as const,
+          handlePolicy: "zeroTangentsV1" as const
+        }
+      },
+      compatibility: {
+        storageKind: "warpLattice2d" as const,
+        transformStorage: "latticeColumnsRows" as const,
+        restControlPointStorage: "restControlPoints" as const,
+        runtimeEvaluation: "bilinearGridV1" as const,
+        bezierEvaluation: "storedNotEvaluatedV0" as const
+      }
+    },
+    enabled: true
+  };
+}
+
+function createZeroBezierHandle() {
+  return {
+    inTangent: { x: 0, y: 0 },
+    outTangent: { x: 0, y: 0 }
   };
 }
 

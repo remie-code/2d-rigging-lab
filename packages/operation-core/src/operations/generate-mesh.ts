@@ -92,17 +92,20 @@ const applyGenerateMesh = (
   const baseRevision = session.authoringRevision;
   const provenanceId = createProvenanceId(operationId);
   let mesh: Parameters<typeof replaceDrawableMesh>[1];
+  let generatedSource: string | undefined;
+  let fallbackReason: string | undefined;
   if (request.payload.previewMesh !== undefined) {
     mesh = {
       ...structuredClone(request.payload.previewMesh),
       generationProvenanceId: provenanceId
     };
+    generatedSource = "previewMesh";
   } else {
     const generated = createGeneratedMeshForDrawable({
       session,
       drawableId: drawable.drawableId,
       provenanceId,
-      method: request.payload.method === "manual-empty" ? "manual-empty" : "auto-grid-v1",
+      method: request.payload.method,
       ...(request.payload.densityHint === undefined ? {} : { densityHint: request.payload.densityHint })
     });
     if (generated === undefined) {
@@ -123,6 +126,8 @@ const applyGenerateMesh = (
     }
 
     mesh = generated.mesh;
+    generatedSource = generated.source;
+    fallbackReason = generated.fallbackReason;
   }
 
   const provenanceRecord = createMeshProvenanceRecord({
@@ -130,7 +135,9 @@ const applyGenerateMesh = (
     provenanceId,
     meshId: mesh.meshId,
     actor: request.actor,
-    method: request.payload.method
+    method: request.payload.method,
+    ...(generatedSource === undefined ? {} : { generatedSource }),
+    ...(fallbackReason === undefined ? {} : { fallbackReason })
   });
   const mutation = replaceDrawableMesh(session, mesh, provenanceRecord);
 
@@ -175,16 +182,6 @@ const evaluateGenerateMeshPreconditions = (input: {
     );
   }
 
-  if (input.request.payload.method === "auto-outline-v1") {
-    diagnostics.push(
-      createOperationDiagnostic({
-        checkId: "operation.generateMesh.unsupportedMethod",
-        message: "auto-outline-v1 requires an outline extraction pipeline and is outside the Wave 15 foundation.",
-        target: { kind: "drawable", id: input.request.payload.drawableId, path: "/payload/method" }
-      })
-    );
-  }
-
   return diagnostics;
 };
 
@@ -201,11 +198,11 @@ const evaluatePreviewMeshPreconditions = (input: {
   }
   const previewMesh = input.previewMesh;
 
-  if (input.method !== "auto-grid-v1") {
+  if (input.method !== "auto-grid-v1" && input.method !== "auto-outline-v1") {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.generateMesh.previewMeshUnsupportedMethod",
-        message: "previewMesh commits are only supported for auto-grid-v1 generated mesh drafts.",
+        message: "previewMesh commits are only supported for generated mesh drafts.",
         target: { kind: "drawable", id: input.drawableId, path: "/payload/method" }
       })
     );
@@ -295,6 +292,8 @@ const createMeshProvenanceRecord = (input: {
   readonly meshId: string;
   readonly actor: string;
   readonly method: string;
+  readonly generatedSource?: string;
+  readonly fallbackReason?: string;
 }): ProvenanceRecord => ({
   provenanceId: input.provenanceId,
   assetId: input.meshId,
@@ -304,7 +303,11 @@ const createMeshProvenanceRecord = (input: {
   license: "internal-authoring-generated",
   redistributionAllowed: false,
   aiUsed: input.actor === "ai",
-  transformHistory: [`generateMesh:${input.method}`],
+  transformHistory: [
+    `generateMesh:${input.method}`,
+    ...(input.generatedSource === undefined ? [] : [`meshSource:${input.generatedSource}`]),
+    ...(input.fallbackReason === undefined ? [] : [`fallback:${input.fallbackReason}`])
+  ],
   relatedOperationIds: [input.operationId]
 });
 

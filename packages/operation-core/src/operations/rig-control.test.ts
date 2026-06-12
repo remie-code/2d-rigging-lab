@@ -145,6 +145,111 @@ describe("rig control operation handlers", () => {
     ]);
   });
 
+  it("dry-runs and commits createWarpDeformer with transform and Bezier divisions", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore({
+      now: () => new Date("2026-06-01T00:10:00.000Z")
+    });
+    core.commitOperation(session, createRotation2dRigControlRequest({ dryRun: false }));
+
+    const dryRun = core.dryRunOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: true,
+        basePackageRevision: 1,
+        parentRigControlId: "rig_head_rotation",
+        childDrawableIds: ["draw_body"]
+      })
+    );
+
+    expect(dryRun.status).toBe("dry_run");
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_warp_deformer"))).toBeUndefined();
+    expect(session.packageRevision).toBe(1);
+    expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
+    expect(core.operationLog.entries).toHaveLength(1);
+
+    const outcome = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        parentRigControlId: "rig_head_rotation",
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    const rigControl = getRigControlById(
+      session.graph,
+      RigControlIdSchema.parse("rig_head_warp_deformer")
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(2);
+    expect(core.operationLog.entries).toHaveLength(2);
+    expect(outcome.logEntry?.operationType).toBe("createWarpDeformer");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "rig_head_warp_deformer",
+      "part_root",
+      "rig_head_rotation",
+      "draw_body"
+    ]);
+    expect(rigControl).toMatchObject({
+      kind: "warpLattice2d",
+      parentId: "rig_head_rotation",
+      childDrawableIds: ["draw_body"],
+      domainBounds: { x: 0, y: 0, width: 1, height: 1 },
+      latticeColumns: 5,
+      latticeRows: 4,
+      interpolationMethod: "bilinear-grid-v1",
+      warpDeformer: {
+        schemaVersion: "warp-deformer-foundation-v0",
+        userFacingKind: "warpDeformer",
+        transformGrid: {
+          columns: 5,
+          rows: 4,
+          pointCountSemantics: "controlPointCount"
+        },
+        bezierEditSurface: {
+          columns: 3,
+          rows: 2,
+          editType: "cubicBezierSurfaceV1"
+        },
+        compatibility: {
+          storageKind: "warpLattice2d",
+          runtimeEvaluation: "bilinearGridV1",
+          bezierEvaluation: "storedNotEvaluatedV0"
+        }
+      }
+    });
+    if (rigControl?.kind !== "warpLattice2d") {
+      throw new Error("Expected committed Warp Deformer storage rig control.");
+    }
+    expect(rigControl.restControlPoints).toHaveLength(20);
+    expect(rigControl.warpDeformer?.bezierEditSurface.restControlPoints).toHaveLength(6);
+    expect(rigControl.warpDeformer?.bezierEditSurface.handles).toHaveLength(6);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).toMatchObject({
+      childRigControlIds: ["rig_head_warp_deformer"]
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
+    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+      { kind: "rigControl", id: "rig_head_warp_deformer" },
+      {
+        kind: "part",
+        id: "part_root",
+        path: "/model/rigControls/rigControls/rig_head_warp_deformer/partId"
+      },
+      {
+        kind: "rigControl",
+        id: "rig_head_rotation",
+        path: "/model/rigControls/rigControls/rig_head_rotation/childRigControlIds"
+      },
+      {
+        kind: "drawable",
+        id: "draw_body",
+        path: "/model/rigControls/rigControls/rig_head_warp_deformer/childDrawableIds"
+      }
+    ]);
+  });
+
   it("commits bindRigControlChild for drawable children", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -310,6 +415,41 @@ const createWarpLattice2dRigControlRequest = (options: {
     latticeColumns: 2,
     latticeRows: 2,
     interpolationMethod: "bilinear-grid-v1"
+  }
+});
+
+const createWarpDeformerRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+  readonly displayName?: string;
+  readonly parentRigControlId?: string;
+  readonly childDrawableIds?: readonly string[];
+  readonly childRigControlIds?: readonly string[];
+}) => ({
+  schemaVersion: "operation-request-v1",
+  operationId: `op_create_${(options.displayName ?? "Head Warp Deformer").toLowerCase().replaceAll(" ", "_")}`,
+  actor: "test",
+  surface: "testFixture",
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
+  operationType: "createWarpDeformer",
+  payload: {
+    partId: "part_root",
+    displayName: options.displayName ?? "Head Warp Deformer",
+    ...(options.parentRigControlId === undefined ? {} : { parentRigControlId: options.parentRigControlId }),
+    childDrawableIds: options.childDrawableIds ?? [],
+    childRigControlIds: options.childRigControlIds ?? [],
+    domainBounds: {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1
+    },
+    transformColumns: 5,
+    transformRows: 4,
+    bezierColumns: 3,
+    bezierRows: 2,
+    bezierEditType: "cubicBezierSurfaceV1"
   }
 });
 

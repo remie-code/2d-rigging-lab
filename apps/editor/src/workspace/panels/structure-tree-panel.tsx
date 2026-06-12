@@ -5,9 +5,10 @@ import {
   EyeOff,
   Folder,
   GripVertical,
-  Layers
+  Layers,
+  Spline
 } from "lucide-react";
-import { useState, type DragEvent } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 import type { StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
@@ -18,9 +19,11 @@ import {
   type StructureTreeRow
 } from "../../features/editor-session/model/session-tree";
 import { cn } from "../../lib/class-name";
+import { DeformerTreeView } from "./deformer-tree-view";
 import { WorkspacePanel } from "./panel-frame";
 
 const TREE_ROW_DRAG_TYPE = "application/x-private-2d-parts-tree-row";
+type StructurePaneView = "parts" | "deformers";
 
 type DragPayload = {
   readonly kind: "part" | "drawable";
@@ -38,6 +41,7 @@ export function StructureTreePanel() {
     togglePartEditorVisibility,
     setDrawableRuntimeVisibility
   } = useEditorSession();
+  const [view, setView] = useState<StructurePaneView>("parts");
   const [dragging, setDragging] = useState<DragPayload | null>(null);
   const [dropIntent, setDropIntent] = useState<{
     readonly key: string;
@@ -53,9 +57,38 @@ export function StructureTreePanel() {
     selectDrawable(row.id);
   };
 
+  const actions = (
+    <div
+      aria-label="Structure view"
+      className="flex rounded-md border border-neutral-800 bg-neutral-950 p-0.5"
+      role="group"
+    >
+      <StructureViewButton
+        active={view === "parts"}
+        label="Parts"
+        onClick={() => setView("parts")}
+      >
+        <Layers aria-hidden="true" size={13} strokeWidth={1.8} />
+      </StructureViewButton>
+      <StructureViewButton
+        active={view === "deformers"}
+        label="Deformers"
+        onClick={() => setView("deformers")}
+      >
+        <Spline aria-hidden="true" size={13} strokeWidth={1.8} />
+      </StructureViewButton>
+    </div>
+  );
+
   return (
-    <WorkspacePanel className="h-full" overline="Hierarchy" title="Parts / Structure Tree">
-      <div
+    <WorkspacePanel
+      actions={actions}
+      className="h-full"
+      overline="Hierarchy"
+      title={view === "parts" ? "Parts / Structure Tree" : "Deformer Tree"}
+    >
+      {view === "parts" ? (
+        <div
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto p-2"
         data-testid="parts-tree"
         onDragLeave={(event) => {
@@ -210,8 +243,40 @@ export function StructureTreePanel() {
             </button>
           </div>
         ))}
-      </div>
+        </div>
+      ) : (
+        <DeformerTreeView />
+      )}
     </WorkspacePanel>
+  );
+}
+
+function StructureViewButton({
+  active,
+  children,
+  label,
+  onClick
+}: {
+  readonly active: boolean;
+  readonly children: ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={cn(
+        "flex h-7 items-center gap-1 rounded px-2 text-xs font-medium transition",
+        active
+          ? "bg-teal-950/70 text-teal-100"
+          : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+      <span>{label}</span>
+    </button>
   );
 }
 
