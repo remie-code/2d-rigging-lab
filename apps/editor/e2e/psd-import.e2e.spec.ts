@@ -159,6 +159,54 @@ test("edits imported parts and drawables through the Parts Tree and Inspector", 
   );
 });
 
+test("authors drawable opacity keyforms from the Parameter Bar and Inspector", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  const visibleDrawableRow = drawableRows
+    .filter({ has: page.getByRole("button", { name: "Hide drawable" }) })
+    .first();
+  await rowNameButton(visibleDrawableRow).click();
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable"
+  );
+
+  const parameterBar = page.getByTestId("parameter-bar");
+  await expect(parameterBar).toBeVisible();
+  await expect(visibleInput(page, "Active parameter")).toHaveValue("param_face_angle_x");
+
+  const binding = page.getByTestId("parameter-binding-opacity").first();
+  await expect(binding).toBeVisible();
+  await expect(binding).toContainText("Keyform: None");
+
+  await binding.getByRole("button", { name: "Ends", exact: true }).click();
+  await expect(page.getByTestId("parameter-key-marker-summary")).toContainText("-30");
+  await expect(page.getByTestId("parameter-key-marker-summary")).toContainText("30");
+
+  await binding.getByRole("button", { name: "Ends + Center", exact: true }).click();
+  await expect(binding).toContainText("Keyform: Exists");
+
+  await binding.getByLabel("Drawable opacity value").fill("0.4");
+  await binding.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
+
+  await visibleInput(page, "Parameter numeric value").fill("30");
+  await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "1.00");
+
+  await visibleInput(page, "Parameter numeric value").fill("0");
+  await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
+
+  await binding.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(binding).toContainText("Keyform: None");
+  await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "1.00");
+
+  await binding.getByRole("button", { name: "Add Keyform Here", exact: true }).click();
+  await expect(binding).toContainText("Keyform: Exists");
+});
+
 test("reorders drawable rows with Parts Tree drag and drop", async ({ page }) => {
   await importFixturePsd(page);
 

@@ -7,6 +7,7 @@ import {
   OperationRequestSchema,
   type CreateRotation2dRigControlPayloadDto,
   type CreateWarpDeformerPayloadDto,
+  type EditKeyformKeyPayloadDto,
   type GenerateMeshPayloadDto,
   type UpdateRigControlPayloadDto,
   type OperationRequestDto
@@ -31,6 +32,10 @@ export interface CreateWarpDeformerCommandResult extends EditorSessionCommandRes
 export interface CreateRotationDeformerCommandResult extends EditorSessionCommandResult {
   readonly rigControlId?: RigControlId;
 }
+
+type EditorCreateWarpDeformerPayloadDto =
+  Omit<CreateWarpDeformerPayloadDto, "opacityMultiplier"> &
+    Partial<Pick<CreateWarpDeformerPayloadDto, "opacityMultiplier">>;
 
 type OperationDraft = {
   readonly operationType: OperationRequestDto["operationType"];
@@ -286,12 +291,15 @@ export function commitGenerateMesh(
 
 export function commitCreateWarpDeformer(
   session: AuthoringSession,
-  payload: CreateWarpDeformerPayloadDto
+  payload: EditorCreateWarpDeformerPayloadDto
 ): CreateWarpDeformerCommandResult {
   const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
   const result = commitSingleOperation(session, {
     operationType: "createWarpDeformer",
-    payload
+    payload: {
+      ...payload,
+      opacityMultiplier: payload.opacityMultiplier ?? 1
+    }
   });
 
   return result.committed ? { ...result, rigControlId } : result;
@@ -361,6 +369,16 @@ export function commitUpdateRigControl(
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "updateRigControl",
+    payload
+  });
+}
+
+export function commitEditKeyformKey(
+  session: AuthoringSession,
+  payload: EditKeyformKeyPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "editKeyformKey",
     payload
   });
 }

@@ -18,8 +18,8 @@ import { AuthoringMutationError } from "./authoring-mutations.js";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
-import { hasParameter } from "./graph-selectors.js";
 import { hasKeyformSet } from "./keyform-selectors.js";
+import { hasInitializedParameter } from "./parameter-surface.js";
 
 export interface CreateKeyformSetMutationResult<TKeyformSet extends KeyformSetDto = KeyformSetDto> {
   readonly session: AuthoringSession;
@@ -90,7 +90,7 @@ const assertParameterExists = (
   session: AuthoringSession,
   parameterId: KeyformParameterId
 ): void => {
-  if (!hasParameter(session.graph, parameterId)) {
+  if (!hasInitializedParameter(session.graph, parameterId)) {
     throw new AuthoringMutationError(
       "missing_parameter",
       `Parameter does not exist: ${parameterId}`
@@ -210,7 +210,8 @@ const supportedTargetProperties = {
     "restScale",
     "controlPoints",
     "restControlPoints",
-    "controlPointOffsets"
+    "controlPointOffsets",
+    "opacityMultiplier"
   ]),
   drawable: new Set([
     "opacity",

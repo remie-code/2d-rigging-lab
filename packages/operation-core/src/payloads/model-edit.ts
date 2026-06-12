@@ -149,7 +149,13 @@ const PreviewMeshPayloadSchema = z.object({
 
 export const GenerateMeshPayloadSchema = z.object({
   drawableId: DrawableIdSchema,
-  method: z.enum(["manual-empty", "auto-grid-v1", "auto-outline-v1", "auto-outline-v2"]),
+  method: z.enum([
+    "manual-empty",
+    "auto-grid-v1",
+    "auto-outline-v1",
+    "auto-outline-v2",
+    "auto-outline-v3-envelope"
+  ]),
   densityHint: z.enum(["low", "medium", "high"]).optional(),
   previewMesh: PreviewMeshPayloadSchema.optional()
 });
@@ -199,6 +205,44 @@ export const CreateParameterPayloadSchema = z
   });
 export type CreateParameterPayloadDto = z.infer<typeof CreateParameterPayloadSchema>;
 
+export const UpdateParameterPayloadSchema = z
+  .object({
+    parameterId: ParameterIdSchema,
+    displayName: z.string().min(1).optional(),
+    min: z.number().finite().optional(),
+    max: z.number().finite().optional(),
+    default: z.number().finite().optional(),
+    recommendedUiStep: z.number().positive().optional()
+  })
+  .refine(
+    (payload) =>
+      payload.displayName !== undefined ||
+      payload.min !== undefined ||
+      payload.max !== undefined ||
+      payload.default !== undefined ||
+      payload.recommendedUiStep !== undefined,
+    {
+      message: "updateParameter requires at least one editable field",
+      path: ["displayName"]
+    }
+  )
+  .refine(
+    (payload) =>
+      payload.min === undefined ||
+      payload.max === undefined ||
+      payload.min <= payload.max,
+    {
+      message: "min must be less than or equal to max",
+      path: ["min"]
+    }
+  );
+export type UpdateParameterPayloadDto = z.infer<typeof UpdateParameterPayloadSchema>;
+
+export const DeleteParameterPayloadSchema = z.object({
+  parameterId: ParameterIdSchema
+});
+export type DeleteParameterPayloadDto = z.infer<typeof DeleteParameterPayloadSchema>;
+
 export const KeyformStatePatchSchema = z.object({
   propertyPath: z.string().min(1),
   value: StatePatchValueSchema,
@@ -216,6 +260,47 @@ export const AddKeyformPayloadSchema = z.object({
   statePatch: KeyformStatePatchSchema
 });
 export type AddKeyformPayloadDto = z.infer<typeof AddKeyformPayloadSchema>;
+
+const LinearKeyformBindingPayloadSchema = z.object({
+  target: TargetRefSchema,
+  targetProperty: z.string().min(1),
+  parameterId: ParameterIdSchema,
+  interpolation: z.literal("linear-1d-v1"),
+  compositionMode: z.enum(["replace", "additiveDelta", "multiplyOpacity"]).optional()
+});
+
+export const EditKeyformKeyPayloadSchema = z.discriminatedUnion("action", [
+  LinearKeyformBindingPayloadSchema.extend({
+    action: z.literal("addCurrent"),
+    keyValue: z.number().finite(),
+    statePatch: KeyformStatePatchSchema
+  }),
+  LinearKeyformBindingPayloadSchema.extend({
+    action: z.literal("updateCurrent"),
+    keyValue: z.number().finite(),
+    statePatch: KeyformStatePatchSchema
+  }),
+  LinearKeyformBindingPayloadSchema.extend({
+    action: z.literal("deleteCurrent"),
+    keyValue: z.number().finite()
+  }),
+  LinearKeyformBindingPayloadSchema.extend({
+    action: z.literal("createEnds"),
+    statePatches: z.object({
+      min: KeyformStatePatchSchema,
+      max: KeyformStatePatchSchema
+    })
+  }),
+  LinearKeyformBindingPayloadSchema.extend({
+    action: z.literal("createEndsCenter"),
+    statePatches: z.object({
+      min: KeyformStatePatchSchema,
+      default: KeyformStatePatchSchema,
+      max: KeyformStatePatchSchema
+    })
+  })
+]);
+export type EditKeyformKeyPayloadDto = z.infer<typeof EditKeyformKeyPayloadSchema>;
 
 export const AddKeyformGrid2dPayloadSchema = z.object({
   target: TargetRefSchema,

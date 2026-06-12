@@ -31,6 +31,10 @@ import {
 import { moveDrawableRigControlBindingOperationHandler } from "./operations/move-drawable-rig-control-binding.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { moveStructureChildOperationHandler } from "./operations/move-structure-child.js";
+import {
+  deleteParameterOperationHandler,
+  updateParameterOperationHandler
+} from "./operations/parameter-definition.js";
 import { reparentRigControlOperationHandler } from "./operations/reparent-rig-control.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setDrawablePartOperationHandler } from "./operations/set-drawable-part.js";
@@ -42,6 +46,7 @@ import { updateDrawableOperationHandler } from "./operations/update-drawable.js"
 import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
 import { updateRigControlOperationHandler } from "./operations/update-rig-control.js";
+import { editKeyformKeyOperationHandler } from "./operations/edit-keyform-key.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -94,7 +99,10 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [removeMeshTriangleOperationHandler.operationType, removeMeshTriangleOperationHandler],
   [moveMeshUvPointOperationHandler.operationType, moveMeshUvPointOperationHandler],
   [createParameterOperationHandler.operationType, createParameterOperationHandler],
+  [updateParameterOperationHandler.operationType, updateParameterOperationHandler],
+  [deleteParameterOperationHandler.operationType, deleteParameterOperationHandler],
   [addKeyformOperationHandler.operationType, addKeyformOperationHandler],
+  [editKeyformKeyOperationHandler.operationType, editKeyformKeyOperationHandler],
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
   [createDynamicsGroupOperationHandler.operationType, createDynamicsGroupOperationHandler],
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],

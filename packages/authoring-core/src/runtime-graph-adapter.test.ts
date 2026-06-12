@@ -83,13 +83,15 @@ describe("authoring runtime graph adapter", () => {
     );
 
     expect(result.snapshot.drawList).toEqual(["draw_body"]);
-    expect(result.snapshot.parameters).toEqual([
-      expect.objectContaining({
-        parameterId: parameter.parameterId,
-        authoredValue: 0.5,
-        effectiveValue: 0.5
-      })
-    ]);
+    expect(result.snapshot.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          parameterId: parameter.parameterId,
+          authoredValue: 0.5,
+          effectiveValue: 0.5
+        })
+      ])
+    );
   });
 
   it("preserves current DTO-backed runtime collections from an authoring graph", () => {

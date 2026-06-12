@@ -19,6 +19,7 @@ import { validateDrawableReferences } from "./drawable-references.js";
 import { validateDynamicsSemantics } from "./dynamics-semantic.js";
 import { validateMaskCompositionSemantics } from "./mask-composition.js";
 import { validateMeshSemantics } from "./mesh-semantics.js";
+import { validateParameterKeyformPackage } from "./parameter-keyform-package.js";
 import { validatePackageSchema } from "./package-schema.js";
 import { validatePackageTransportCapabilityEvidence } from "./package-transport-capability-diagnostics.js";
 import { validatePartLayerSemantics } from "./part-layer-semantics.js";
@@ -264,6 +265,7 @@ const collectPackageReferenceChecks = (input: PackageReferenceChecksInput) => [
     ...(input.viewerEvidence === undefined ? {} : { viewerEvidence: input.viewerEvidence })
   }),
   ...validateTextureAssetReferences(input.packageDocument),
+  ...validateParameterKeyformPackage(input.packageDocument),
   ...validateMaskCompositionSemantics(input.packageDocument, input.runtimeSnapshot),
   ...validateRigControlSemantics(input.packageDocument, input.runtimeSnapshot),
   ...validateDynamicsSemantics(input.packageDocument, input.runtimeSnapshot)

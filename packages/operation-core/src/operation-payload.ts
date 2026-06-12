@@ -23,6 +23,8 @@ import {
   CreateDrawablePayloadSchema,
   CreatePartPayloadSchema,
   CreateParameterPayloadSchema,
+  DeleteParameterPayloadSchema,
+  EditKeyformKeyPayloadSchema,
   DeletePartPayloadSchema,
   GenerateMeshPayloadSchema,
   MoveStructureChildPayloadSchema,
@@ -34,6 +36,7 @@ import {
   SetRightsMetadataPayloadSchema,
   SetRuntimeVisibilityPayloadSchema,
   UpdateDrawablePayloadSchema,
+  UpdateParameterPayloadSchema,
   UpdatePartPayloadSchema
 } from "./payloads/model-edit.js";
 import {
@@ -84,7 +87,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("removeMeshTriangle"), payload: RemoveMeshTrianglePayloadSchema }),
   z.object({ operationType: z.literal("moveMeshUvPoint"), payload: MoveMeshUvPointPayloadSchema }),
   z.object({ operationType: z.literal("createParameter"), payload: CreateParameterPayloadSchema }),
+  z.object({ operationType: z.literal("updateParameter"), payload: UpdateParameterPayloadSchema }),
+  z.object({ operationType: z.literal("deleteParameter"), payload: DeleteParameterPayloadSchema }),
   z.object({ operationType: z.literal("addKeyform"), payload: AddKeyformPayloadSchema }),
+  z.object({ operationType: z.literal("editKeyformKey"), payload: EditKeyformKeyPayloadSchema }),
   z.object({ operationType: z.literal("addKeyformGrid2d"), payload: AddKeyformGrid2dPayloadSchema }),
   z.object({ operationType: z.literal("createDynamicsGroup"), payload: CreateDynamicsGroupPayloadSchema }),
   z.object({ operationType: z.literal("updateDynamicsGroup"), payload: UpdateDynamicsGroupPayloadSchema }),

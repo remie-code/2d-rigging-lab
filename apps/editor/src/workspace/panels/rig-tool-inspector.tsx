@@ -29,6 +29,8 @@ import {
   type WarpDeformerReadModel,
   type WarpDeformerTargetOption
 } from "../../features/editor-session/model/rig-tool-state";
+import { createRigControlParameterBindings } from "../../features/editor-session/model/parameter-keyform-state";
+import { ParameterBindingSection } from "./parameter-binding-section";
 
 export function RigToolInspector() {
   const {
@@ -550,6 +552,10 @@ export function CommittedWarpDeformerInspector({
         </div>
       </section>
 
+      <ParameterBindingSection
+        bindings={createRigControlParameterBindings(session, readModel.rigControlId)}
+      />
+
       <ParentDeformerActions
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
@@ -792,6 +798,9 @@ function CommittedRotationDeformerInspector({
           />
         </div>
       </section>
+      <ParameterBindingSection
+        bindings={createRigControlParameterBindings(session, readModel.rigControlId)}
+      />
       <ParentDeformerActions
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}

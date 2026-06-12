@@ -280,6 +280,72 @@ describe("generateMesh operation handler", () => {
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:refinementIterations="))).toBe(true);
   });
 
+  it("commits auto-outline-v3-envelope and records envelope provenance metrics", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 36, height: 32 },
+      meshBounds: { x: 4, y: 8, width: 36, height: 32 },
+      opaquePixels: createPixelsFromPredicate(36, 32, (x, y) => {
+        const dx = (x - 16.5) / 10;
+        const dy = (y - 15.5) / 8;
+        const body = dx * dx + dy * dy <= 1;
+        const tail = x >= 23 && x <= 30 && y >= 13 && y <= 18;
+        const notch = x >= 8 && x <= 14 && y >= 18 && y <= 26;
+        return (body || tail) && !notch;
+      })
+    });
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v3-envelope" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v3-envelope",
+        "meshSource:outline-v3-envelope-rgba",
+        "meshQuality:triangulationMode=interim-delaunay-envelope-filter",
+        "meshQuality:envelopeAlgorithm=auto-outline-v3-envelope",
+        "meshQuality:envelopeOutsideSamples=0"
+      ])
+    );
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:envelopeAreaRatio="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:envelopeTransparentSamples="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.includes("constrained-triangulation-deferred"))).toBe(true);
+  });
+
+  it("records v3-specific fallback to a generated auto-outline-v2 mesh in operation provenance", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 20, height: 20 },
+      meshBounds: { x: 0, y: 0, width: 20, height: 20 },
+      opaquePixels: createPixelsFromPredicate(20, 20, (x, y) => x >= 5 && x <= 7 && y >= 5 && y <= 8)
+    });
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v3-envelope",
+      densityHint: "high"
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertexStableIds.some((id) => id.includes("_outline_v2_"))).toBe(true);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v3-envelope",
+        "meshSource:outline-v2-rgba",
+        "fallback:auto-outline-v3-envelope:envelope-generation-failed",
+        "meshQuality:triangulationMode=interim-delaunay-alpha-filter"
+      ])
+    );
+    expect(
+      session.graph.provenanceRecords.at(-1)?.transformHistory.some((entry) =>
+        entry.startsWith("fallback:auto-outline-v2:")
+      )
+    ).toBe(false);
+  });
+
   it("records auto-outline-v2 fallback chain in operation provenance", () => {
     const session = createFixtureSessionWithTextureBytes([]);
     const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2" });
@@ -296,11 +362,34 @@ describe("generateMesh operation handler", () => {
       ])
     );
   });
+
+  it("records auto-outline-v3-envelope fallback chain in operation provenance", () => {
+    const session = createFixtureSessionWithTextureBytes([]);
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v3-envelope" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v3-envelope",
+        "meshSource:bounds-grid",
+        "fallback:auto-outline-v3-envelope:alpha-empty",
+        "fallback:auto-outline-v2:alpha-empty",
+        "fallback:auto-outline-v1:alpha-empty"
+      ])
+    );
+  });
 });
 
 const createGenerateMeshRequest = (options: {
   readonly dryRun: boolean;
-  readonly method?: "manual-empty" | "auto-grid-v1" | "auto-outline-v1" | "auto-outline-v2";
+  readonly method?:
+    | "manual-empty"
+    | "auto-grid-v1"
+    | "auto-outline-v1"
+    | "auto-outline-v2"
+    | "auto-outline-v3-envelope";
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];
 }): OperationRequestDto =>
@@ -430,6 +519,59 @@ const createFixtureSessionWithTextureBytes = (
   return session;
 };
 
+const createFixtureSessionWithSizedTextureBytes = (input: {
+  readonly textureSize: { readonly width: number; readonly height: number };
+  readonly meshBounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly opaquePixels: readonly (readonly [number, number])[];
+}): AuthoringSession => {
+  const session = createFixtureSession();
+  const bytes = createAlphaBytes(input.textureSize.width, input.textureSize.height, input.opaquePixels);
+  session.graph.meshes[0] = {
+    ...session.graph.meshes[0]!,
+    bounds: input.meshBounds
+  };
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: TextureIdSchema.parse("tex_body"),
+        filePath: "assets/textures/body.raw-rgba",
+        sourceAssetId: SourceAssetIdSchema.parse("src_generated"),
+        binaryAssetRef: {
+          referenceKind: "package-binary-asset-ref-v1",
+          binaryAssetId: "bin_body_rgba",
+          packageRelativePath: "assets/textures/body.raw-rgba",
+          digest: {
+            algorithm: "sha256",
+            hex: "0".repeat(64)
+          },
+          byteLength: bytes.byteLength,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          storageStatus: "stored-package-local-v1",
+          provenanceId: ProvenanceIdSchema.parse("prov_create_body"),
+          rightsAssetId: "rights_body"
+        }
+      }
+    ]
+  };
+  session.binaryAssets = {
+    fileEntries: [
+      {
+        path: "assets/textures/body.raw-rgba",
+        bytes,
+        mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+        binaryAssetId: "bin_body_rgba"
+      }
+    ],
+    binaryAssetIndex: {
+      schemaVersion: "binary-asset-index-v1",
+      assets: []
+    },
+    byteIntakeSummaries: []
+  };
+  return session;
+};
+
 const createFixtureSession = (): AuthoringSession => ({
   packageIdentity: {
     packageId: PackageIdSchema.parse("pkg_generate_mesh_operation_test"),
@@ -512,4 +654,21 @@ function createAlphaBytes(
   }
 
   return bytes;
+}
+
+function createPixelsFromPredicate(
+  width: number,
+  height: number,
+  predicate: (x: number, y: number) => boolean
+): readonly (readonly [number, number])[] {
+  const pixels: [number, number][] = [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (predicate(x, y)) {
+        pixels.push([x, y]);
+      }
+    }
+  }
+
+  return pixels;
 }

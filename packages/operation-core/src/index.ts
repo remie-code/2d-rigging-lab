@@ -41,6 +41,8 @@ export * from "./operations/import-psd-structural-scaffold.js";
 export * from "./operations/generate-mesh.js";
 export * from "./operations/mesh-topology.js";
 export * from "./operations/create-parameter.js";
+export * from "./operations/parameter-definition.js";
+export * from "./operations/edit-keyform-key.js";
 export * from "./operations/create-dynamics-group.js";
 export * from "./operations/update-dynamics-group.js";
 export * from "./operations/create-rotation2d-rig-control.js";

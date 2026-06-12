@@ -6,7 +6,9 @@ import { CanvasPreviewPanel } from "./panels/canvas-preview-panel";
 import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
+import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
+import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
 
 function ResizeHandle() {
   return (
@@ -15,38 +17,58 @@ function ResizeHandle() {
 }
 
 export function AuthoringWorkspace() {
+  const activeEntry = useEditorUiStore((state) => state.activeEntry);
+
+  return <AuthoringWorkspaceContent activeEntry={activeEntry} />;
+}
+
+export function AuthoringWorkspaceContent({
+  activeEntry
+}: {
+  readonly activeEntry: WorkspaceEntryId;
+}) {
+  const showParameterManager = activeEntry === "parameters";
+
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      <div className="hidden min-h-0 flex-1 overflow-hidden p-2 xl:block">
-        <Group className="h-full min-h-0" orientation="horizontal">
-          <Panel defaultSize="48px" maxSize="56px" minSize="48px">
-            <WorkspaceToolbox />
-          </Panel>
-          <ResizeHandle />
-          <Panel defaultSize="280px" maxSize="360px" minSize="240px">
-            <StructureTreePanel />
-          </Panel>
-          <ResizeHandle />
-          <Panel defaultSize={55} minSize="520px">
-            <CanvasPreviewPanel />
-          </Panel>
-          <ResizeHandle />
-          <Panel defaultSize="320px" maxSize="420px" minSize="280px">
-            <InspectorPanel />
-          </Panel>
-        </Group>
-      </div>
-
-      <div className="grid min-h-0 flex-1 gap-2 overflow-auto p-2 xl:hidden">
-        <div className="h-24 overflow-hidden rounded-md border border-neutral-800">
-          <WorkspaceToolbox layout="horizontal" />
+      {showParameterManager ? (
+        <div className="min-h-0 flex-1 overflow-hidden p-2">
+          <ParameterManagerScreen />
         </div>
-        <StructureTreePanel />
-        <CanvasPreviewPanel />
-        <InspectorPanel />
-      </div>
+      ) : (
+        <>
+          <div className="hidden min-h-0 flex-1 overflow-hidden p-2 xl:block">
+            <Group className="h-full min-h-0" orientation="horizontal">
+              <Panel defaultSize="48px" maxSize="56px" minSize="48px">
+                <WorkspaceToolbox />
+              </Panel>
+              <ResizeHandle />
+              <Panel defaultSize="280px" maxSize="360px" minSize="240px">
+                <StructureTreePanel />
+              </Panel>
+              <ResizeHandle />
+              <Panel defaultSize={55} minSize="520px">
+                <CanvasPreviewPanel />
+              </Panel>
+              <ResizeHandle />
+              <Panel defaultSize="320px" maxSize="420px" minSize="280px">
+                <InspectorPanel />
+              </Panel>
+            </Group>
+          </div>
+
+          <div className="grid min-h-0 flex-1 gap-2 overflow-auto p-2 xl:hidden">
+            <div className="h-24 overflow-hidden rounded-md border border-neutral-800">
+              <WorkspaceToolbox layout="horizontal" />
+            </div>
+            <StructureTreePanel />
+            <CanvasPreviewPanel />
+            <InspectorPanel />
+          </div>
+        </>
+      )}
 
       <ParameterBar />
       <PsdImportModal />

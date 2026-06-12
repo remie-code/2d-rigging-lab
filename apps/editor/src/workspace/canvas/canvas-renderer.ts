@@ -178,7 +178,7 @@ function drawRotationDeformerOverlay(
     y: overlay.domainBounds.y + overlay.domainBounds.height / 2
   };
   const radius = Math.max(12 / zoom, Math.min(overlay.domainBounds.width, overlay.domainBounds.height) * 0.28);
-  const angleRadians = ((overlay.restAngleDegrees ?? 0) * Math.PI) / 180;
+  const angleRadians = ((overlay.evaluatedAngleDegrees ?? overlay.restAngleDegrees ?? 0) * Math.PI) / 180;
 
   context.save();
   context.strokeStyle = color;
@@ -223,6 +223,31 @@ function drawDeformerGridLines(
 ): void {
   const columns = kind === "transform" ? overlay.transformColumns : overlay.bezierColumns;
   const rows = kind === "transform" ? overlay.transformRows : overlay.bezierRows;
+  if (kind === "transform" && hasControlPointOffsets(overlay, columns, rows)) {
+    context.strokeStyle = color;
+    context.beginPath();
+    for (let row = 0; row < rows; row += 1) {
+      const first = getDeformerGridPoint(overlay, 0, row);
+      context.moveTo(first.x, first.y);
+      for (let column = 1; column < columns; column += 1) {
+        const point = getDeformerGridPoint(overlay, column, row);
+        context.lineTo(point.x, point.y);
+      }
+    }
+
+    for (let column = 0; column < columns; column += 1) {
+      const first = getDeformerGridPoint(overlay, column, 0);
+      context.moveTo(first.x, first.y);
+      for (let row = 1; row < rows; row += 1) {
+        const point = getDeformerGridPoint(overlay, column, row);
+        context.lineTo(point.x, point.y);
+      }
+    }
+    context.stroke();
+    context.lineWidth = 1.5 / zoom;
+    return;
+  }
+
   const bounds = overlay.domainBounds;
   const right = bounds.x + bounds.width;
   const bottom = bounds.y + bounds.height;
@@ -255,10 +280,11 @@ function drawDeformerControlPoints(
   context.fillStyle = color;
   for (let row = 0; row < overlay.transformRows; row += 1) {
     for (let column = 0; column < overlay.transformColumns; column += 1) {
+      const point = getDeformerGridPoint(overlay, column, row);
       context.beginPath();
       context.arc(
-        overlay.domainBounds.x + overlay.domainBounds.width * toUnitGridPosition(column, overlay.transformColumns),
-        overlay.domainBounds.y + overlay.domainBounds.height * toUnitGridPosition(row, overlay.transformRows),
+        point.x,
+        point.y,
         radius,
         0,
         Math.PI * 2
@@ -570,6 +596,34 @@ function chooseGridInterval(zoom: number): number {
 
 function toUnitGridPosition(index: number, size: number): number {
   return size <= 1 ? 0 : index / (size - 1);
+}
+
+function getDeformerGridPoint(
+  overlay: CanvasDeformerOverlayProjection,
+  column: number,
+  row: number
+): { readonly x: number; readonly y: number } {
+  const base = {
+    x: overlay.domainBounds.x + overlay.domainBounds.width * toUnitGridPosition(column, overlay.transformColumns),
+    y: overlay.domainBounds.y + overlay.domainBounds.height * toUnitGridPosition(row, overlay.transformRows)
+  };
+  const offset = overlay.controlPointOffsets?.[row * overlay.transformColumns + column];
+  if (offset === undefined) {
+    return base;
+  }
+
+  return {
+    x: base.x + offset.x,
+    y: base.y + offset.y
+  };
+}
+
+function hasControlPointOffsets(
+  overlay: CanvasDeformerOverlayProjection,
+  columns: number,
+  rows: number
+): boolean {
+  return (overlay.controlPointOffsets?.length ?? 0) >= columns * rows;
 }
 
 function unionStageBounds(drawables: readonly CanvasRenderableDrawable[]): {

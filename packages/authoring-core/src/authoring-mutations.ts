@@ -3,10 +3,15 @@ import type { ParameterDto } from "@private-2d-rigging-lab/package-format";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
-import { hasParameter } from "./graph-selectors.js";
+import { hasInitializedParameter } from "./parameter-surface.js";
 
 export type AuthoringMutationErrorCode =
   | "duplicate_parameter"
+  | "missing_parameter"
+  | "preset_parameter_locked"
+  | "invalid_parameter_range"
+  | "parameter_in_use"
+  | "no_op_parameter_update"
   | "duplicate_source_asset"
   | "duplicate_source_layer"
   | "duplicate_drawable"
@@ -84,11 +89,16 @@ export type AuthoringMutationErrorCode =
   | "empty_uv_delta"
   | "duplicate_uv_delta"
   | "no_op_mesh_uv_update"
-  | "missing_parameter"
   | "missing_keyform_target"
   | "unsupported_keyform_target_property"
   | "unsupported_keyform_composition_mode"
   | "invalid_warp_lattice_control_point_offsets_patch"
+  | "missing_keyform_binding"
+  | "duplicate_linear_keyform_key"
+  | "missing_linear_keyform_key"
+  | "keyform_key_out_of_range"
+  | "incompatible_keyform_target_property"
+  | "invalid_keyform_patch_shape"
   | "duplicate_keyform_grid_axis_parameter"
   | "duplicate_keyform_grid_coordinate"
   | "duplicate_dynamics_group"
@@ -147,7 +157,7 @@ export const createParameter = (
   session: AuthoringSession,
   parameter: ParameterDto
 ): CreateParameterMutationResult => {
-  if (hasParameter(session.graph, parameter.parameterId)) {
+  if (hasInitializedParameter(session.graph, parameter.parameterId)) {
     throw new AuthoringMutationError(
       "duplicate_parameter",
       `Parameter already exists: ${parameter.parameterId}`

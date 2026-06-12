@@ -1,7 +1,8 @@
 import {
+  AuthoringMutationError,
   createDryRunAuthoringSession,
   createParameter,
-  getParameterById
+  hasInitializedParameter
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { DiagnosticDto, ModelDiffDto, OperationId, ParameterId, TargetRefDto } from "@private-2d-rigging-lab/contracts";
@@ -69,10 +70,6 @@ const applyCreateParameter = (
   const parameter = {
     parameterId,
     displayName: request.payload.displayName,
-    ...(request.payload.semanticRole === undefined ? {} : { semanticRole: request.payload.semanticRole }),
-    ...(request.payload.projectPresetAlias === undefined
-      ? {}
-      : { projectPresetAlias: request.payload.projectPresetAlias }),
     valueSource: request.payload.valueSource,
     min: request.payload.min,
     max: request.payload.max,
@@ -80,7 +77,23 @@ const applyCreateParameter = (
     recommendedUiStep: request.payload.recommendedUiStep
   } satisfies Parameters<typeof createParameter>[1];
 
-  const mutation = createParameter(session, parameter);
+  let mutation: ReturnType<typeof createParameter>;
+  try {
+    mutation = createParameter(session, parameter);
+  } catch (error) {
+    if (!(error instanceof AuthoringMutationError) || error.code !== "duplicate_parameter") {
+      throw error;
+    }
+
+    return {
+      result: createRejectedOperationResult({
+        operationId,
+        diagnostics: [createDuplicateParameterDiagnostic(parameterId)]
+      }),
+      targetIds: [parameterId],
+      candidateSession: session
+    };
+  }
   const result = createCreateParameterResult({
     operationId,
     status,
@@ -100,18 +113,19 @@ const evaluateCreateParameterPreconditions = (
   session: AuthoringSession,
   parameterId: ParameterId
 ): DiagnosticDto[] => {
-  if (getParameterById(session.graph, parameterId) !== undefined) {
-    return [
-      createOperationDiagnostic({
-        checkId: "operation.createParameter.duplicateParameter",
-        message: `Parameter already exists: ${parameterId}.`,
-        target: { kind: "parameter", id: parameterId }
-      })
-    ];
+  if (hasInitializedParameter(session.graph, parameterId)) {
+    return [createDuplicateParameterDiagnostic(parameterId)];
   }
 
   return [];
 };
+
+const createDuplicateParameterDiagnostic = (parameterId: ParameterId): DiagnosticDto =>
+  createOperationDiagnostic({
+    checkId: "operation.createParameter.duplicateParameter",
+    message: `Parameter already exists: ${parameterId}.`,
+    target: { kind: "parameter", id: parameterId }
+  });
 
 const createCreateParameterResult = (input: {
   readonly operationId: OperationId;

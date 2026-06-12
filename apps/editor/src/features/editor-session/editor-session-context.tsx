@@ -5,8 +5,19 @@ import type {
   StructureOrderItem
 } from "@private-2d-rigging-lab/authoring-core";
 import { createGeneratedMeshForDrawable } from "@private-2d-rigging-lab/authoring-core";
-import type { DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
-import type { UpdateRigControlPayloadDto } from "@private-2d-rigging-lab/operation-core";
+import type {
+  DrawableId,
+  ParameterId,
+  PartId,
+  RigControlId
+} from "@private-2d-rigging-lab/contracts";
+import type {
+  CreateParameterPayloadDto,
+  DeleteParameterPayloadDto,
+  EditKeyformKeyPayloadDto,
+  UpdateParameterPayloadDto,
+  UpdateRigControlPayloadDto
+} from "@private-2d-rigging-lab/operation-core";
 import {
   createContext,
   useCallback,
@@ -26,6 +37,7 @@ import {
   commitDrawableReorder,
   commitDrawableReparent,
   commitDrawableRuntimeVisibility,
+  commitEditKeyformKey,
   commitBindDrawableToRigControl,
   commitCreateRotationDeformer,
   commitCreateWarpDeformer,
@@ -40,6 +52,20 @@ import {
 } from "./model/editor-session-commands";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { EditorSelection } from "./model/editor-selection";
+import {
+  clampParameterValue,
+  createParameterBarProjection,
+  formatKeyformFeedback,
+  listEditorParameters,
+  resolveActiveParameterId,
+  type ParameterBarProjection,
+  type ParameterValueMap
+} from "./model/parameter-keyform-state";
+import {
+  commitCreateCustomParameter,
+  commitDeleteCustomParameter,
+  commitUpdateCustomParameter
+} from "./model/parameter-definition-commands";
 import {
   createMeshPreviewProvenanceId,
   getMeshGenerationPreset,
@@ -92,10 +118,18 @@ interface EditorSessionContextValue {
   readonly deformerRows: readonly DeformerTreeRow[];
   readonly drawablePoolItems: readonly DrawablePoolItem[];
   readonly inspector: InspectorProjection;
+  readonly parameterBar: ParameterBarProjection;
+  readonly activeParameterId: ParameterId | null;
+  readonly parameterValues: ParameterValueMap;
   readonly rigOperationFeedback: string | null;
+  readonly parameterOperationFeedback: string | null;
   readonly psdImportOpen: boolean;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
+  readonly openParameterManager: () => void;
+  readonly setActiveParameterId: (parameterId: ParameterId) => void;
+  readonly setActiveParameterValue: (value: number) => void;
+  readonly resetActiveParameterValue: () => void;
   readonly selectPart: (partId: PartId) => void;
   readonly selectDrawable: (drawableId: DrawableId) => void;
   readonly selectRigControl: (rigControlId: RigControlId) => void;
@@ -148,6 +182,16 @@ interface EditorSessionContextValue {
     parentRigControlId: RigControlId | null
   ) => void;
   readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
+  readonly editKeyformKey: (payload: EditKeyformKeyPayloadDto) => void;
+  readonly createCustomParameter: (
+    payload: CreateParameterPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateCustomParameter: (
+    payload: UpdateParameterPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteCustomParameter: (
+    payload: DeleteParameterPayloadDto
+  ) => EditorSessionCommandResult;
   readonly resolvePsdImportDestination: () => {
     readonly parentPartId: PartId;
     readonly label: string;
@@ -159,8 +203,11 @@ const EditorSessionContext = createContext<EditorSessionContextValue | null>(nul
 
 export function EditorSessionProvider({ children }: { readonly children: ReactNode }) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
+  const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
   const [session, setSession] = useState<AuthoringSession>(() => createEmptyAuthoringSession());
   const [selection, setSelection] = useState<EditorSelection | null>(null);
+  const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
+  const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
     () => new Set()
   );
@@ -170,7 +217,12 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   const [meshDraft, setMeshDraft] = useState<MeshToolDraft | null>(null);
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
+  const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
   const [psdImportOpen, setPsdImportOpen] = useState(false);
+  const resolvedActiveParameterId = useMemo(
+    () => resolveActiveParameterId(session, activeParameterId),
+    [activeParameterId, session]
+  );
   const structureRows = useMemo(
     () =>
       createStructureTreeRows(session, selection, {
@@ -191,6 +243,16 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     () => createInspectorProjection(session, selection, { editorHiddenPartIds }),
     [editorHiddenPartIds, session, selection]
   );
+  const parameterBar = useMemo(
+    () => createParameterBarProjection(session, resolvedActiveParameterId, parameterValues),
+    [parameterValues, resolvedActiveParameterId, session]
+  );
+
+  useEffect(() => {
+    if (activeParameterId !== resolvedActiveParameterId) {
+      setActiveParameterIdState(resolvedActiveParameterId);
+    }
+  }, [activeParameterId, resolvedActiveParameterId]);
 
   useEffect(() => {
     if (activeTool !== "mesh") {
@@ -207,6 +269,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   useEffect(() => {
     setRigOperationFeedback(null);
   }, [selection]);
+
+  useEffect(() => {
+    setParameterOperationFeedback(null);
+  }, [resolvedActiveParameterId, selection]);
 
   useEffect(() => {
     setMeshDraft((current) => {
@@ -285,6 +351,117 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     },
     []
   );
+
+  const editKeyformKey = useCallback((payload: EditKeyformKeyPayloadDto) => {
+    setSession((currentSession) => {
+      const result = commitEditKeyformKey(currentSession, payload);
+      if (result.committed) {
+        setParameterOperationFeedback(null);
+        return result.session;
+      }
+
+      if (result.diagnostics.length > 0) {
+        setParameterOperationFeedback(formatKeyformFeedback(result.diagnostics));
+        console.warn("Parameter keyform command was rejected.", result.diagnostics);
+      } else {
+        setParameterOperationFeedback("No keyform change was applied.");
+      }
+
+      return currentSession;
+    });
+  }, []);
+
+  const applyParameterDefinitionCommand = useCallback(
+    (command: (currentSession: AuthoringSession) => EditorSessionCommandResult) => {
+      const result = command(session);
+      if (result.committed) {
+        setSession(result.session);
+        setParameterOperationFeedback(null);
+        return result;
+      }
+
+      if (result.diagnostics.length > 0) {
+        setParameterOperationFeedback(formatParameterCommandFeedback(result));
+        console.warn("Parameter definition command was rejected.", result.diagnostics);
+      } else {
+        setParameterOperationFeedback("No Parameter definition change was applied.");
+      }
+
+      return result;
+    },
+    [session]
+  );
+
+  const createCustomParameter = useCallback(
+    (payload: CreateParameterPayloadDto) =>
+      applyParameterDefinitionCommand((currentSession) =>
+        commitCreateCustomParameter(currentSession, payload)
+      ),
+    [applyParameterDefinitionCommand]
+  );
+
+  const updateCustomParameter = useCallback(
+    (payload: UpdateParameterPayloadDto) =>
+      applyParameterDefinitionCommand((currentSession) =>
+        commitUpdateCustomParameter(currentSession, payload)
+      ),
+    [applyParameterDefinitionCommand]
+  );
+
+  const deleteCustomParameter = useCallback(
+    (payload: DeleteParameterPayloadDto) =>
+      applyParameterDefinitionCommand((currentSession) =>
+        commitDeleteCustomParameter(currentSession, payload)
+      ),
+    [applyParameterDefinitionCommand]
+  );
+
+  const setActiveParameterId = useCallback((parameterId: ParameterId) => {
+    setActiveParameterIdState(parameterId);
+  }, []);
+
+  const setActiveParameterValue = useCallback(
+    (value: number) => {
+      if (resolvedActiveParameterId === null) {
+        return;
+      }
+
+      const parameter = listEditorParameters(session).find(
+        (candidate) => candidate.parameterId === resolvedActiveParameterId
+      );
+      if (parameter === undefined) {
+        return;
+      }
+
+      setParameterValues((current) => ({
+        ...current,
+        [resolvedActiveParameterId]: clampParameterValue(parameter, value)
+      }));
+    },
+    [resolvedActiveParameterId, session]
+  );
+
+  const resetActiveParameterValue = useCallback(() => {
+    if (resolvedActiveParameterId === null) {
+      return;
+    }
+
+    const parameter = listEditorParameters(session).find(
+      (candidate) => candidate.parameterId === resolvedActiveParameterId
+    );
+    if (parameter === undefined) {
+      return;
+    }
+
+    setParameterValues((current) => ({
+      ...current,
+      [resolvedActiveParameterId]: parameter.default
+    }));
+  }, [resolvedActiveParameterId, session]);
+
+  const openParameterManager = useCallback(() => {
+    setActiveEntry("parameters");
+  }, [setActiveEntry]);
 
   const togglePartCollapse = useCallback((partId: PartId) => {
     setCollapsedPartIds((current) => {
@@ -596,10 +773,18 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       deformerRows,
       drawablePoolItems,
       inspector,
+      parameterBar,
+      activeParameterId: resolvedActiveParameterId,
+      parameterValues,
       rigOperationFeedback,
+      parameterOperationFeedback,
       psdImportOpen,
       openPsdImport: () => setPsdImportOpen(true),
       closePsdImport: () => setPsdImportOpen(false),
+      openParameterManager,
+      setActiveParameterId,
+      setActiveParameterValue,
+      resetActiveParameterValue,
       selectPart,
       selectDrawable,
       selectRigControl,
@@ -650,6 +835,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       moveDrawableRigControlBinding,
       reparentRigControl,
       updateRigControl,
+      editKeyformKey,
+      createCustomParameter,
+      updateCustomParameter,
+      deleteCustomParameter,
       resolvePsdImportDestination,
       commitPsdImport
     }),
@@ -664,31 +853,43 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       createParentRotationDeformerForRigControl,
       createParentWarpDeformerForRigControl,
       createRotationDeformerForDrawable,
+      createCustomParameter,
       deformerRows,
+      deleteCustomParameter,
       drawablePoolItems,
+      editKeyformKey,
       editorHiddenPartIds,
       fitRigDraft,
       inspector,
       meshDraft,
       moveDrawableRigControlBinding,
+      openParameterManager,
+      parameterBar,
+      parameterOperationFeedback,
+      parameterValues,
       psdImportOpen,
       previewMeshDraft,
       applyRigDraft,
       reparentRigControl,
+      resetActiveParameterValue,
       resetRigDraft,
       resolvePsdImportDestination,
       rigOperationFeedback,
       rigDraft,
       selection,
+      resolvedActiveParameterId,
       selectDrawable,
       selectPart,
       selectRigControl,
       session,
+      setActiveParameterId,
+      setActiveParameterValue,
       startWarpDeformerDraftForDrawable,
       structureRows,
       moveStructureChild,
       togglePartCollapse,
       togglePartEditorVisibility,
+      updateCustomParameter,
       updateRigControl,
       updateRigDraft
     ]
@@ -710,4 +911,8 @@ export function useEditorSession() {
 
 function formatCommandFeedback(result: EditorSessionCommandResult): string {
   return result.diagnostics[0]?.message ?? "Rig operation was rejected.";
+}
+
+function formatParameterCommandFeedback(result: EditorSessionCommandResult): string {
+  return result.diagnostics[0]?.message ?? "Parameter definition operation was rejected.";
 }

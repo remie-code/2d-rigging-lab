@@ -1465,6 +1465,70 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Rig control static opacity multiplier must stay within the normalized 0..1 range."
   },
   {
+    checkId: "parameter.duplicateId",
+    phase: "package_schema",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Parameter ids must be unique within the package parameter file."
+  },
+  {
+    checkId: "parameter.presetLockedMutation",
+    phase: "package_schema",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Preset parameter role, group, range, and sign convention fields must match the locked catalog."
+  },
+  {
+    checkId: "keyform.duplicateSetId",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Keyform set ids must be unique within the package keyforms file."
+  },
+  {
+    checkId: "keyform.parameterMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Keyform parameter axes must reference stored or preset-initialized parameters."
+  },
+  {
+    checkId: "keyform.keyOutOfRange",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Keyform positions must stay within the referenced parameter range."
+  },
+  {
+    checkId: "keyform.targetMissing",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Keyform targets must reference an existing drawable, mesh, rig control, or draw-order entry."
+  },
+  {
+    checkId: "keyform.unsupportedTargetProperty",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Keyform targets must use a runtime-supported target/property pair."
+  },
+  {
+    checkId: "keyform.linear1dDuplicateKey",
+    phase: "reference",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-013"],
+    description: "Linear 1D keyform sets must not store duplicate key positions."
+  },
+  {
     checkId: "rigControl.parentChildMismatch",
     phase: "rigControl_semantic",
     defaultSeverity: "error",

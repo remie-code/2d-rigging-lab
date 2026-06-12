@@ -6,6 +6,11 @@ import {
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
+import {
+  createEvaluatedParameterKeyformState,
+  type EvaluatedParameterKeyformState,
+  type ParameterValueMap
+} from "../../features/editor-session/model/parameter-keyform-state";
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
@@ -76,6 +81,8 @@ export interface CanvasDeformerOverlayProjection {
   readonly bezierRows: number;
   readonly pivot?: CanvasPoint;
   readonly restAngleDegrees?: number;
+  readonly evaluatedAngleDegrees?: number;
+  readonly controlPointOffsets?: readonly CanvasPoint[];
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
   readonly status: "draft" | "committed";
@@ -112,6 +119,7 @@ export interface CanvasProjectionOptions {
     readonly childRigControlIds: readonly RigControlId[];
   } | null;
   readonly meshPreviewDrawableId?: DrawableId;
+  readonly parameterValues?: ParameterValueMap;
 }
 
 const DEFAULT_VIEW: CanvasViewState = {
@@ -152,7 +160,14 @@ export function createCanvasRenderProjection(
   const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
   const meshPreviewDrawableId = options.meshPreviewDrawableId;
   const maskSourcesByTargetId = createMaskSourceIndex(session);
-  const opacityMultiplierByDrawableId = createDrawableRigOpacityMultiplierIndex(session);
+  const evaluatedKeyforms = createEvaluatedParameterKeyformState(
+    session,
+    options.parameterValues ?? {}
+  );
+  const opacityMultiplierByDrawableId = createDrawableRigOpacityMultiplierIndex(
+    session,
+    evaluatedKeyforms.rigOpacityMultiplierById
+  );
 
   const drawables = session.graph.drawables
     .map((drawable): CanvasRenderableDrawable | undefined => {
@@ -196,7 +211,9 @@ export function createCanvasRenderProjection(
         frontOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
         visible: meshPreview || (drawable.runtimeVisibility && !hiddenByPart),
         opacity: clamp(
-          drawable.defaultOpacity * (opacityMultiplierByDrawableId.get(drawable.drawableId) ?? 1),
+          (evaluatedKeyforms.drawableOpacityById.get(drawable.drawableId) ??
+            drawable.defaultOpacity) *
+            (opacityMultiplierByDrawableId.get(drawable.drawableId) ?? 1),
           0,
           1
         ),
@@ -231,6 +248,7 @@ export function createCanvasRenderProjection(
   const deformerOverlay = resolveDeformerOverlay({
     selection,
     rigControlsById,
+    evaluatedKeyforms,
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
     draft: options.deformerDraft ?? null
   });
@@ -259,6 +277,7 @@ export function createCanvasRenderProjection(
 function resolveDeformerOverlay(input: {
   readonly selection: EditorSelection | null;
   readonly rigControlsById: ReadonlyMap<RigControlId, RigControlDto>;
+  readonly evaluatedKeyforms: EvaluatedParameterKeyformState;
   readonly selectionBounds?: RectDto;
   readonly draft: CanvasProjectionOptions["deformerDraft"];
 }): CanvasDeformerOverlayProjection | undefined {
@@ -287,6 +306,9 @@ function resolveDeformerOverlay(input: {
   }
 
   if (isRotationRigControl(rigControl)) {
+    const evaluatedAngleDegrees = input.evaluatedKeyforms.rigAngleDegreesById.get(
+      rigControl.rigControlId
+    );
     return {
       kind: "rotation",
       rigControlId: rigControl.rigControlId,
@@ -303,7 +325,8 @@ function resolveDeformerOverlay(input: {
       bezierColumns: 0,
       bezierRows: 0,
       pivot: structuredClone(rigControl.pivot),
-      restAngleDegrees: rigControl.restAngleDegrees,
+      restAngleDegrees: evaluatedAngleDegrees ?? rigControl.restAngleDegrees,
+      ...(evaluatedAngleDegrees === undefined ? {} : { evaluatedAngleDegrees }),
       childDrawableIds: [...rigControl.childDrawableIds],
       childRigControlIds: [...rigControl.childRigControlIds],
       status: "committed"
@@ -314,6 +337,10 @@ function resolveDeformerOverlay(input: {
     return undefined;
   }
 
+  const controlPointOffsets = input.evaluatedKeyforms.rigControlPointOffsetsById.get(
+    rigControl.rigControlId
+  );
+
   return {
     kind: "warp",
     rigControlId: rigControl.rigControlId,
@@ -323,6 +350,11 @@ function resolveDeformerOverlay(input: {
     transformRows: rigControl.warpDeformer?.transformGrid.rows ?? rigControl.latticeRows,
     bezierColumns: rigControl.warpDeformer?.bezierEditSurface.columns ?? rigControl.latticeColumns,
     bezierRows: rigControl.warpDeformer?.bezierEditSurface.rows ?? rigControl.latticeRows,
+    ...(controlPointOffsets === undefined
+      ? {}
+      : {
+          controlPointOffsets
+        }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
     status: "committed"
@@ -601,7 +633,8 @@ function collectRigControlDrawableIds(
 }
 
 function createDrawableRigOpacityMultiplierIndex(
-  session: AuthoringSession
+  session: AuthoringSession,
+  evaluatedRigOpacityMultiplierById: ReadonlyMap<RigControlId, number>
 ): ReadonlyMap<DrawableId, number> {
   const rigControlsById = new Map(
     session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
@@ -622,7 +655,11 @@ function createDrawableRigOpacityMultiplierIndex(
     }
 
     visited.add(rigControlId);
-    const multiplier = inheritedMultiplier * (rigControl.opacityMultiplier ?? 1);
+    const multiplier =
+      inheritedMultiplier *
+      (evaluatedRigOpacityMultiplierById.get(rigControlId) ??
+        rigControl.opacityMultiplier ??
+        1);
     for (const drawableId of rigControl.childDrawableIds) {
       result.set(drawableId, (result.get(drawableId) ?? 1) * multiplier);
     }

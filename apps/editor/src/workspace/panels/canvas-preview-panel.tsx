@@ -78,7 +78,15 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 const POINTER_CLICK_SLOP = 4;
 
 export function CanvasPreviewPanel() {
-  const { editorHiddenPartIds, meshDraft, rigDraft, selectDrawable, selection, session } = useEditorSession();
+  const {
+    editorHiddenPartIds,
+    meshDraft,
+    parameterValues,
+    rigDraft,
+    selectDrawable,
+    selection,
+    session
+  } = useEditorSession();
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
   const deformerOverlayVisible = useEditorUiStore((state) => state.deformerOverlayVisible);
@@ -118,11 +126,12 @@ export function CanvasPreviewPanel() {
         editorHiddenPartIds,
         meshDraft,
         deformerDraft: rigDraft,
+        parameterValues,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
           : {})
       }),
-    [activeTool, editorHiddenPartIds, meshDraft, rigDraft, selection, session]
+    [activeTool, editorHiddenPartIds, meshDraft, parameterValues, rigDraft, selection, session]
   );
   const selectedDrawableCount = projection.selectedDrawableIds.size;
   const selectedDrawableOpacity = useMemo(
@@ -523,6 +532,16 @@ export function CanvasPreviewPanel() {
               deformerOverlayActive
                 ? String(projection.deformerOverlay?.restAngleDegrees ?? "")
                 : ""
+            }
+            data-deformer-overlay-evaluated-angle={
+              deformerOverlayActive
+                ? String(projection.deformerOverlay?.evaluatedAngleDegrees ?? "")
+                : ""
+            }
+            data-deformer-overlay-control-point-offset-count={
+              deformerOverlayActive
+                ? String(projection.deformerOverlay?.controlPointOffsets?.length ?? 0)
+                : "0"
             }
             data-deformer-overlay-status={
               deformerOverlayActive ? projection.deformerOverlay?.status ?? "" : ""

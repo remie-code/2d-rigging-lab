@@ -86,6 +86,15 @@ export const createTextureIdFromDrawableId = (drawableId: DrawableId): TextureId
   TextureIdSchema.parse(`tex_${stripIdPrefix(drawableId, "draw_")}`);
 
 export const createKeyformSetIdFromOperationRequest = (request: OperationRequestDto): KeyformSetId => {
+  if (request.operationType === "editKeyformKey") {
+    return createLinearKeyformSetIdForBinding({
+      targetKind: request.payload.target.kind,
+      targetId: request.payload.target.id,
+      targetProperty: request.payload.targetProperty,
+      parameterId: request.payload.parameterId
+    });
+  }
+
   if (request.operationType === "addKeyform") {
     return KeyformSetIdSchema.parse(
       `keyset_${[
@@ -114,11 +123,34 @@ export const createKeyformSetIdFromOperationRequest = (request: OperationRequest
   throw new Error(`Cannot create keyform set id for ${request.operationType}.`);
 };
 
+export const createLinearKeyformSetIdForBinding = (input: {
+  readonly targetKind: string;
+  readonly targetId: string;
+  readonly targetProperty: string;
+  readonly parameterId: ParameterId;
+}): KeyformSetId =>
+  KeyformSetIdSchema.parse(
+    `keyset_${[
+      input.targetKind,
+      input.targetId,
+      input.targetProperty,
+      stripIdPrefix(input.parameterId, "param_")
+    ].map(sanitizeIdToken).join("_")}`
+  );
+
 const operationToken = (request: OperationRequestDto): string => {
   if (request.operationType === "createParameter") {
     return `create_parameter_${sanitizeIdToken(
       request.payload.parameterId?.replace(/^param_/, "") ?? request.payload.displayName
     )}`;
+  }
+
+  if (request.operationType === "updateParameter") {
+    return `update_parameter_${sanitizeIdToken(stripIdPrefix(request.payload.parameterId, "param_"))}`;
+  }
+
+  if (request.operationType === "deleteParameter") {
+    return `delete_parameter_${sanitizeIdToken(stripIdPrefix(request.payload.parameterId, "param_"))}`;
   }
 
   if (request.operationType === "createDrawable") {
@@ -193,6 +225,10 @@ const operationToken = (request: OperationRequestDto): string => {
       request.payload.method,
       request.payload.densityHint ?? "default"
     ].map(sanitizeIdToken).join("_")}`;
+  }
+
+  if (request.operationType === "editKeyformKey") {
+    return `edit_keyform_${sanitizeIdToken(request.payload.action)}_${stripIdPrefix(createKeyformSetIdFromOperationRequest(request), "keyset_")}`;
   }
 
   if (request.operationType === "addKeyform" || request.operationType === "addKeyformGrid2d") {

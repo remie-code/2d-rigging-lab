@@ -12,7 +12,8 @@ import {
   ProvenanceIdSchema,
   RigControlIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  type RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +23,7 @@ import {
   commitCreateWarpDeformer,
   commitDrawableReorder,
   commitDrawableReparent,
+  commitEditKeyformKey,
   commitGenerateMesh,
   commitMoveDrawableRigControlBinding,
   commitPartReparent,
@@ -388,6 +390,117 @@ describe("editor session commands", () => {
     );
   });
 
+  it("commits drawable opacity keyform add, update, and delete through the editor command wrapper", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const parameterId = ParameterIdSchema.parse("param_face_angle_x");
+    const add = commitEditKeyformKey(session, {
+      action: "addCurrent",
+      target: { kind: "drawable", id: DRAW_A },
+      targetProperty: "opacity",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1",
+      statePatch: {
+        propertyPath: "opacity",
+        value: 0.5
+      }
+    });
+    expect(add.committed).toBe(true);
+    expect(session.graph.keyformSets).toEqual([]);
+    expect(findDrawableOpacityKeyformSet(add.session)?.keys).toEqual([
+      { value: 0, statePatch: 0.5 }
+    ]);
+
+    const update = commitEditKeyformKey(add.session, {
+      action: "updateCurrent",
+      target: { kind: "drawable", id: DRAW_A },
+      targetProperty: "opacity",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1",
+      statePatch: {
+        propertyPath: "opacity",
+        value: 0.25
+      }
+    });
+    expect(update.committed).toBe(true);
+    expect(findDrawableOpacityKeyformSet(update.session)?.keys).toEqual([
+      { value: 0, statePatch: 0.25 }
+    ]);
+
+    const deleted = commitEditKeyformKey(update.session, {
+      action: "deleteCurrent",
+      target: { kind: "drawable", id: DRAW_A },
+      targetProperty: "opacity",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1"
+    });
+    expect(deleted.committed).toBe(true);
+    expect(findDrawableOpacityKeyformSet(deleted.session)).toBeUndefined();
+  });
+
+  it("commits Rotation rig-control angle keyform add, update, and delete through the editor command wrapper", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const rotation = commitCreateRotationDeformer(session, {
+      partId: PART_A,
+      displayName: "Drawable A Rotation",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 16, y: 16 },
+      restAngleDegrees: 0
+    });
+    expect(rotation.committed).toBe(true);
+    const rigControlId = rotation.rigControlId!;
+    const parameterId = ParameterIdSchema.parse("param_face_angle_x");
+
+    const add = commitEditKeyformKey(rotation.session, {
+      action: "addCurrent",
+      target: { kind: "rigControl", id: rigControlId },
+      targetProperty: "angleDegrees",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1",
+      statePatch: {
+        propertyPath: "angleDegrees",
+        value: 15
+      }
+    });
+    expect(add.committed).toBe(true);
+    expect(findRigControlKeyformSet(add.session, rigControlId, "angleDegrees")?.keys).toEqual([
+      { value: 0, statePatch: 15 }
+    ]);
+
+    const update = commitEditKeyformKey(add.session, {
+      action: "updateCurrent",
+      target: { kind: "rigControl", id: rigControlId },
+      targetProperty: "angleDegrees",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1",
+      statePatch: {
+        propertyPath: "angleDegrees",
+        value: -20
+      }
+    });
+    expect(update.committed).toBe(true);
+    expect(findRigControlKeyformSet(update.session, rigControlId, "angleDegrees")?.keys).toEqual([
+      { value: 0, statePatch: -20 }
+    ]);
+
+    const deleted = commitEditKeyformKey(update.session, {
+      action: "deleteCurrent",
+      target: { kind: "rigControl", id: rigControlId },
+      targetProperty: "angleDegrees",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1"
+    });
+    expect(deleted.committed).toBe(true);
+    expect(findRigControlKeyformSet(deleted.session, rigControlId, "angleDegrees")).toBeUndefined();
+  });
+
   it("creates parent Warp and Rotation Deformers above selected Deformers", () => {
     const session = createFixtureSession([DRAW_A, DRAW_B]);
     const child = commitCreateWarpDeformer(session, {
@@ -584,6 +697,30 @@ function globalDrawableOrder(session: AuthoringSession) {
 
 function findDrawablePart(session: AuthoringSession, drawableId: typeof DRAW_A) {
   return session.graph.drawables.find((drawable) => drawable.drawableId === drawableId)?.partId;
+}
+
+function findDrawableOpacityKeyformSet(session: AuthoringSession) {
+  return session.graph.keyformSets.find(
+    (keyformSet) =>
+      keyformSet.evaluator === "linear-1d-v1" &&
+      keyformSet.target.kind === "drawable" &&
+      keyformSet.target.id === DRAW_A &&
+      keyformSet.target.property === "opacity"
+  );
+}
+
+function findRigControlKeyformSet(
+  session: AuthoringSession,
+  rigControlId: RigControlId,
+  targetProperty: string
+) {
+  return session.graph.keyformSets.find(
+    (keyformSet) =>
+      keyformSet.evaluator === "linear-1d-v1" &&
+      keyformSet.target.kind === "rigControl" &&
+      keyformSet.target.id === rigControlId &&
+      keyformSet.target.property === targetProperty
+  );
 }
 
 function createFixtureSession(drawableOrder: readonly (typeof DRAW_A)[]): AuthoringSession {

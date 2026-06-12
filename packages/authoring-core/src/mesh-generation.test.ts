@@ -21,6 +21,7 @@ import {
 import { computeMeshQualityMetrics } from "./mesh-quality-metrics.js";
 import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
 import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
+import { createAutoOutlineV3EnvelopeMesh } from "./mesh-outline-v3-envelope-generation.js";
 
 describe("alpha-aware mesh generation", () => {
   it("generates an auto-outline mesh whose boundary vertices follow the alpha contour", () => {
@@ -221,6 +222,113 @@ describe("alpha-aware mesh generation", () => {
     expect(minPairwiseDistance(interiorVertices)).toBeGreaterThan(1.5);
   });
 
+  it("generates deterministic auto-outline-v3 envelope meshes with coarser counts and envelope metrics", () => {
+    const alphaPixels = createPixelsFromPredicate(40, 36, (x, y) => {
+      const dx = (x - 18.5) / 12;
+      const dy = (y - 17.5) / 9;
+      const body = dx * dx + dy * dy <= 1;
+      const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+      const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+      return (body || tail) && !notch;
+    });
+    const rgbaBytes = createAlphaBytes(40, 36, alphaPixels);
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 40, height: 36 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 40, height: 36 },
+      rgbaBytes,
+      densityHint: "medium" as const
+    };
+
+    const first = createAutoOutlineV3EnvelopeMesh(baseInput);
+    const second = createAutoOutlineV3EnvelopeMesh(baseInput);
+    const v2 = createAutoOutlineV2Mesh(baseInput);
+
+    expect(first).toEqual(second);
+    expect(first.status).toBe("generated");
+    expect(v2.status).toBe("generated");
+    if (first.status !== "generated" || v2.status !== "generated") {
+      return;
+    }
+
+    expect(first.mesh.vertices.length).toBeLessThanOrEqual(v2.mesh.vertices.length);
+    expect(first.mesh.triangles.length).toBeLessThanOrEqual(v2.mesh.triangles.length);
+    expect(first.qualityMetrics.triangulationMode).toBe("interim-delaunay-envelope-filter");
+    expect(first.envelopeMetrics.algorithmId).toBe("auto-outline-v3-envelope");
+    expect(first.envelopeMetrics.envelopeAreaRatio).toBeGreaterThan(1);
+    expect(first.envelopeMetrics.transparentSampleCount).toBeGreaterThan(0);
+    expect(first.envelopeMetrics.outsideTriangleSampleCount).toBe(0);
+    expect(first.envelopeMetrics.supportRingCount).toBeGreaterThanOrEqual(1);
+    expect(first.envelopeMetrics.provenance).toContain("constrained-triangulation-deferred");
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v3_envelope_boundary_"))).toBe(true);
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v3_envelope_support_0_"))).toBe(true);
+    expect(first.qualityMetrics.envelopeMetrics).toEqual(first.envelopeMetrics);
+
+    const independentSamples = countV3EnvelopeSampleClasses(first.mesh, createAlphaSet(alphaPixels));
+    expect(independentSamples.outsideEnvelope).toBe(0);
+    expect(independentSamples.transparentInsideEnvelope).toBeGreaterThan(0);
+  });
+
+  it("keeps auto-outline-v3 envelope counts no greater than v2 across representative fixtures and densities", () => {
+    const fixtures = [
+      {
+        name: "notched-tail",
+        width: 40,
+        height: 36,
+        predicate: (x: number, y: number): boolean => {
+          const dx = (x - 18.5) / 12;
+          const dy = (y - 17.5) / 9;
+          const body = dx * dx + dy * dy <= 1;
+          const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+          const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+          return (body || tail) && !notch;
+        }
+      },
+      {
+        name: "round-body",
+        width: 40,
+        height: 40,
+        predicate: (x: number, y: number): boolean => {
+          const dx = x - 19.5;
+          const dy = y - 19.5;
+          return dx * dx + dy * dy <= 210;
+        }
+      }
+    ];
+    const densities = ["low", "medium", "high"] as const;
+
+    for (const fixture of fixtures) {
+      for (const densityHint of densities) {
+        const baseInput = {
+          meshId: MeshIdSchema.parse("mesh_body"),
+          drawableId: DrawableIdSchema.parse("draw_body"),
+          bounds: { x: 0, y: 0, width: fixture.width, height: fixture.height },
+          provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+          textureSize: { width: fixture.width, height: fixture.height },
+          rgbaBytes: createAlphaBytesFromPredicate(fixture.width, fixture.height, fixture.predicate),
+          densityHint
+        };
+        const v2 = createAutoOutlineV2Mesh(baseInput);
+        const v3 = createAutoOutlineV3EnvelopeMesh(baseInput);
+
+        expect(v2.status, `${fixture.name}:${densityHint}:v2`).toBe("generated");
+        expect(v3.status, `${fixture.name}:${densityHint}:v3`).toBe("generated");
+        if (v2.status !== "generated" || v3.status !== "generated") {
+          continue;
+        }
+
+        expect(v3.mesh.vertices.length, `${fixture.name}:${densityHint}:vertices`).toBeLessThanOrEqual(
+          v2.mesh.vertices.length
+        );
+        expect(v3.mesh.triangles.length, `${fixture.name}:${densityHint}:triangles`).toBeLessThanOrEqual(
+          v2.mesh.triangles.length
+        );
+      }
+    }
+  });
+
   it("improves representative fan and oversized triangle metrics compared with auto-outline-v1", () => {
     const rgbaBytes = createAlphaBytesFromPredicate(32, 28, (x, y) => {
       const dx = (x - 14.5) / 11;
@@ -306,6 +414,67 @@ describe("alpha-aware mesh generation", () => {
       { method: "auto-outline-v1", reason: "alpha-empty" }
     ]);
     expect(v2Fallback?.mesh.vertices).toHaveLength(4);
+
+    const v3Fallback = createGeneratedMeshForDrawable({
+      session: emptyAlphaSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v3-envelope",
+      densityHint: "low"
+    });
+
+    expect(v3Fallback?.source).toBe("bounds-grid");
+    expect(v3Fallback?.fallbackReason).toBe("alpha-empty");
+    expect(v3Fallback?.fallbackSteps).toEqual([
+      { method: "auto-outline-v3-envelope", reason: "alpha-empty" },
+      { method: "auto-outline-v2", reason: "alpha-empty" },
+      { method: "auto-outline-v1", reason: "alpha-empty" }
+    ]);
+    expect(v3Fallback?.mesh.vertices).toHaveLength(4);
+  });
+
+  it("falls back from a v3-specific envelope failure to a generated v2 mesh", () => {
+    const opaquePixels = createPixelsFromPredicate(20, 20, (x, y) => x >= 5 && x <= 7 && y >= 5 && y <= 8);
+    const directInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 20, height: 20 },
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      textureSize: { width: 20, height: 20 },
+      rgbaBytes: createAlphaBytes(20, 20, opaquePixels),
+      densityHint: "high" as const
+    };
+    const v3 = createAutoOutlineV3EnvelopeMesh(directInput);
+    const v2 = createAutoOutlineV2Mesh(directInput);
+
+    expect(v3).toMatchObject({ status: "failed", reason: "envelope-generation-failed" });
+    expect(v2.status).toBe("generated");
+
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 20, height: 20 },
+      meshBounds: { x: 0, y: 0, width: 20, height: 20 },
+      opaquePixels
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v3-envelope",
+      densityHint: "high"
+    });
+
+    expect(generated?.source).toBe("outline-v2-rgba");
+    expect(generated?.fallbackReason).toBe("envelope-generation-failed");
+    expect(generated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v3-envelope", reason: "envelope-generation-failed" }
+    ]);
+    expect(generated?.qualityMetrics).toMatchObject({
+      fallbackReason: "envelope-generation-failed",
+      triangulationMode: "interim-delaunay-alpha-filter"
+    });
+    expect(generated?.mesh.vertexStableIds.some((id) => id.includes("_outline_v2_"))).toBe(true);
   });
 
   it("routes auto-outline-v2 as an explicit drawable generation method with quality summary", () => {
@@ -334,6 +503,41 @@ describe("alpha-aware mesh generation", () => {
       triangulationMode: "interim-delaunay-alpha-filter"
     });
     expect(generated?.qualityMetrics?.maxEdgeLength).toBeGreaterThan(0);
+  });
+
+  it("routes auto-outline-v3-envelope as an explicit drawable generation sidecar with envelope summary", () => {
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 36, height: 32 },
+      meshBounds: { x: 10, y: 20, width: 36, height: 32 },
+      opaquePixels: createPixelsFromPredicate(36, 32, (x, y) => {
+        const dx = (x - 16.5) / 10;
+        const dy = (y - 15.5) / 8;
+        const body = dx * dx + dy * dy <= 1;
+        const tail = x >= 23 && x <= 30 && y >= 13 && y <= 18;
+        const notch = x >= 8 && x <= 14 && y >= 18 && y <= 26;
+        return (body || tail) && !notch;
+      })
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v3-envelope",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v3-envelope-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "interim-delaunay-envelope-filter",
+      envelopeMetrics: {
+        algorithmId: "auto-outline-v3-envelope",
+        outsideTriangleSampleCount: 0
+      }
+    });
+    expect(generated?.qualityMetrics?.envelopeMetrics?.transparentSampleCount).toBeGreaterThan(0);
   });
 
   it("generates vertices and UVs from the drawable texture alpha bounds while preserving texture bounds", () => {
@@ -632,6 +836,152 @@ function countTransparentSampledTriangles(
     ];
     return samples.some((sample) => !alphaPixels.has(`${Math.floor(sample.x)}:${Math.floor(sample.y)}`));
   }).length;
+}
+
+function countV3EnvelopeSampleClasses(
+  mesh: MeshDto,
+  alphaPixels: ReadonlySet<string>
+): { readonly outsideEnvelope: number; readonly transparentInsideEnvelope: number } {
+  const boundaryVertices = mesh.vertices.filter((_vertex, index) =>
+    mesh.vertexStableIds[index]?.includes("_outline_v3_envelope_boundary_")
+  );
+  const envelope = convexHull(boundaryVertices);
+  let outsideEnvelope = 0;
+  let transparentInsideEnvelope = 0;
+
+  expect(envelope.length).toBeGreaterThanOrEqual(3);
+
+  for (const triangle of mesh.triangles) {
+    const [aIndex, bIndex, cIndex] = triangle;
+    const a = mesh.vertices[aIndex]!;
+    const b = mesh.vertices[bIndex]!;
+    const c = mesh.vertices[cIndex]!;
+    const centroid = {
+      x: (a.x + b.x + c.x) / 3,
+      y: (a.y + b.y + c.y) / 3
+    };
+    const samples = [
+      centroid,
+      midpoint(a, b),
+      midpoint(b, c),
+      midpoint(c, a),
+      midpoint(a, centroid),
+      midpoint(b, centroid),
+      midpoint(c, centroid)
+    ];
+
+    for (const sample of samples) {
+      if (!isPointInsidePolygon(sample, envelope)) {
+        outsideEnvelope += 1;
+        continue;
+      }
+
+      if (!alphaPixels.has(`${Math.floor(sample.x)}:${Math.floor(sample.y)}`)) {
+        transparentInsideEnvelope += 1;
+      }
+    }
+  }
+
+  return {
+    outsideEnvelope,
+    transparentInsideEnvelope
+  };
+}
+
+function convexHull(points: readonly MeshDto["vertices"][number][]): readonly MeshDto["vertices"][number][] {
+  const sorted = [...dedupeVertices(points)].sort((left, right) => left.x - right.x || left.y - right.y);
+  if (sorted.length <= 3) {
+    return sorted;
+  }
+
+  const lower: MeshDto["vertices"][number][] = [];
+  for (const point of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, point) <= 0) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+
+  const upper: MeshDto["vertices"][number][] = [];
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const point = sorted[index]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, point) <= 0) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+function dedupeVertices(
+  points: readonly MeshDto["vertices"][number][]
+): readonly MeshDto["vertices"][number][] {
+  const seen = new Set<string>();
+  const result: MeshDto["vertices"][number][] = [];
+  for (const point of points) {
+    const key = `${point.x}:${point.y}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(point);
+  }
+
+  return result;
+}
+
+function isPointInsidePolygon(
+  point: MeshDto["vertices"][number],
+  polygon: readonly MeshDto["vertices"][number][]
+): boolean {
+  for (let index = 0; index < polygon.length; index += 1) {
+    if (isPointOnSegment(point, polygon[index]!, polygon[(index + 1) % polygon.length]!)) {
+      return true;
+    }
+  }
+
+  let inside = false;
+  for (let index = 0, previousIndex = polygon.length - 1; index < polygon.length; previousIndex = index, index += 1) {
+    const a = polygon[index]!;
+    const b = polygon[previousIndex]!;
+    const intersects =
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function isPointOnSegment(
+  point: MeshDto["vertices"][number],
+  start: MeshDto["vertices"][number],
+  end: MeshDto["vertices"][number]
+): boolean {
+  if (Math.abs(cross(start, end, point)) > 0.000001) {
+    return false;
+  }
+
+  return (
+    point.x >= Math.min(start.x, end.x) - 0.000001 &&
+    point.x <= Math.max(start.x, end.x) + 0.000001 &&
+    point.y >= Math.min(start.y, end.y) - 0.000001 &&
+    point.y <= Math.max(start.y, end.y) + 0.000001
+  );
+}
+
+function cross(
+  a: MeshDto["vertices"][number],
+  b: MeshDto["vertices"][number],
+  c: MeshDto["vertices"][number]
+): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
 function fractionalKey(value: number): number {

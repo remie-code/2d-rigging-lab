@@ -379,6 +379,7 @@ export function createWarpDeformerPayloadFromDraft(
       : { insertBeforeChild: normalized.insertBeforeChild }),
     childDrawableIds: [...normalized.childDrawableIds],
     childRigControlIds: [...normalized.childRigControlIds],
+    opacityMultiplier: 1,
     domainBounds: structuredClone(normalized.domainBounds),
     transformColumns: normalized.transformColumns,
     transformRows: normalized.transformRows,

@@ -9,6 +9,10 @@ import {
 } from "./mesh-outline-generation.js";
 import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
 import {
+  createAutoOutlineV3EnvelopeMesh,
+  type AutoOutlineV3EnvelopeFailureReason
+} from "./mesh-outline-v3-envelope-generation.js";
+import {
   computeMeshQualityMetrics,
   type MeshGenerationQualityMetrics
 } from "./mesh-quality-metrics.js";
@@ -17,19 +21,22 @@ export type MeshGenerationMethod =
   | "manual-empty"
   | "auto-grid-v1"
   | "auto-outline-v1"
-  | "auto-outline-v2";
+  | "auto-outline-v2"
+  | "auto-outline-v3-envelope";
 export type MeshDensityHint = "low" | "medium" | "high";
 export type DrawableGeneratedMeshSource =
+  | "outline-v3-envelope-rgba"
   | "outline-v2-rgba"
   | "outline-rgba"
   | "alpha-aware-rgba"
   | "bounds-grid";
 export type MeshGenerationFallbackReason =
   | "texture-bytes-unavailable"
+  | AutoOutlineV3EnvelopeFailureReason
   | AutoOutlineFailureReason;
 
 export interface MeshGenerationFallbackStep {
-  readonly method: "auto-outline-v2" | "auto-outline-v1";
+  readonly method: "auto-outline-v3-envelope" | "auto-outline-v2" | "auto-outline-v1";
   readonly reason: MeshGenerationFallbackReason;
 }
 
@@ -106,6 +113,107 @@ export const createGeneratedMeshForDrawable = (
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
   if (textureBytes !== undefined) {
+    if (input.method === "auto-outline-v3-envelope") {
+      const outlineV3Mesh = createAutoOutlineV3EnvelopeMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+
+      if (outlineV3Mesh.status === "generated") {
+        return {
+          mesh: outlineV3Mesh.mesh,
+          source: "outline-v3-envelope-rgba",
+          alphaBounds: outlineV3Mesh.alphaBounds,
+          qualityMetrics: outlineV3Mesh.qualityMetrics
+        };
+      }
+
+      const outlineV2Mesh = createAutoOutlineV2Mesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const fallbackSteps = [
+        {
+          method: "auto-outline-v3-envelope",
+          reason: outlineV3Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV2Mesh.status === "generated") {
+        return {
+          mesh: outlineV2Mesh.mesh,
+          source: "outline-v2-rgba",
+          alphaBounds: outlineV2Mesh.alphaBounds,
+          fallbackReason: outlineV3Mesh.reason,
+          fallbackSteps,
+          qualityMetrics: {
+            ...outlineV2Mesh.qualityMetrics,
+            fallbackReason: outlineV3Mesh.reason
+          }
+        };
+      }
+
+      const outlineV1Fallback = createAutoOutlineMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const v2FallbackSteps = [
+        ...fallbackSteps,
+        {
+          method: "auto-outline-v2",
+          reason: outlineV2Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV1Fallback.status === "generated") {
+        return {
+          mesh: outlineV1Fallback.mesh,
+          source: "outline-rgba",
+          alphaBounds: outlineV1Fallback.alphaBounds,
+          fallbackReason: outlineV3Mesh.reason,
+          fallbackSteps: v2FallbackSteps,
+          qualityMetrics: computeMeshQualityMetrics(outlineV1Fallback.mesh, {
+            refinementIterationCount: 0,
+            fallbackReason: outlineV3Mesh.reason,
+            triangulationMode: "ordinary-delaunay-alpha-filter"
+          })
+        };
+      }
+
+      const fallbackAlphaBounds =
+        outlineV1Fallback.alphaBounds ?? outlineV2Mesh.alphaBounds ?? outlineV3Mesh.alphaBounds;
+      return createFallbackGridMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        fallbackReason: outlineV1Fallback.reason,
+        fallbackSteps: [
+          ...v2FallbackSteps,
+          {
+            method: "auto-outline-v1",
+            reason: outlineV1Fallback.reason
+          }
+        ],
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(fallbackAlphaBounds === undefined ? {} : { alphaBounds: fallbackAlphaBounds })
+      });
+    }
+
     if (input.method === "auto-outline-v2") {
       const outlineV2Mesh = createAutoOutlineV2Mesh({
         meshId: existingMesh.meshId,
@@ -239,9 +347,18 @@ export const createGeneratedMeshForDrawable = (
     provenanceId: input.provenanceId,
     ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
     ...(textureBytes === undefined ? { fallbackReason: "texture-bytes-unavailable" } : {}),
-    ...(textureBytes === undefined && input.method === "auto-outline-v2"
+    ...(textureBytes === undefined &&
+    (input.method === "auto-outline-v2" || input.method === "auto-outline-v3-envelope")
       ? {
           fallbackSteps: [
+            ...(input.method === "auto-outline-v3-envelope"
+              ? [
+                  {
+                    method: "auto-outline-v3-envelope" as const,
+                    reason: "texture-bytes-unavailable" as const
+                  }
+                ]
+              : []),
             {
               method: "auto-outline-v2",
               reason: "texture-bytes-unavailable"

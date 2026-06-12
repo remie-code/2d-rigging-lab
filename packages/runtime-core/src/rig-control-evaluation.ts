@@ -21,6 +21,7 @@ import type {
 } from "./normalized-runtime-graph.js";
 import type { EvaluatedDrawableDto } from "./snapshot.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
+import { applyRigControlOpacityMultiplierSamples } from "./rig-control-opacity-keyform-state.js";
 import { applyRotation2dSamples } from "./rig-control-keyform-state.js";
 import {
   createAffectedDrawableIds,
@@ -231,9 +232,15 @@ const evaluateRotation2dRigControl = (input: {
   readonly hierarchyIndex: number;
   readonly diagnostics: DiagnosticDto[];
 }): EvaluatedRigControlInternal => {
+  const opacityMultiplier = applyRigControlOpacityMultiplierSamples({
+    rigControl: input.rigControl,
+    baseOpacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
+    samples: input.samples.filter(isOpacityMultiplierSample),
+    diagnostics: input.diagnostics
+  });
   const localState = applyRotation2dSamples({
     rigControl: input.rigControl,
-    samples: input.samples,
+    samples: input.samples.filter((sample) => !isOpacityMultiplierSample(sample)),
     diagnostics: input.diagnostics
   });
   const localTransform = createRotation2dTransformState(localState);
@@ -262,7 +269,7 @@ const evaluateRotation2dRigControl = (input: {
       evaluationStatus: input.rigControl.enabled ? "evaluated" : "disabled",
       childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
       childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
-      opacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
+      opacityMultiplier,
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       localTransform,
@@ -280,9 +287,15 @@ const evaluateWarpLatticeRigControl = (input: {
   readonly hierarchyIndex: number;
   readonly diagnostics: DiagnosticDto[];
 }): EvaluatedRigControlInternal => {
+  const opacityMultiplier = applyRigControlOpacityMultiplierSamples({
+    rigControl: input.rigControl,
+    baseOpacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
+    samples: input.samples.filter(isOpacityMultiplierSample),
+    diagnostics: input.diagnostics
+  });
   const latticeEvaluation = evaluateWarpLattice2dState({
     rigControl: input.rigControl,
-    samples: input.samples,
+    samples: input.samples.filter((sample) => !isOpacityMultiplierSample(sample)),
     diagnostics: input.diagnostics
   });
 
@@ -298,7 +311,7 @@ const evaluateWarpLatticeRigControl = (input: {
       evaluationStatus: latticeEvaluation.evaluationStatus,
       childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
       childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
-      opacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
+      opacityMultiplier,
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       bounds: input.rigControl.domainBounds,
@@ -389,11 +402,14 @@ const applyRigControlOpacityMultiplier = (
         return currentOpacity;
       }
 
-      return currentOpacity * (effect.rigControl.opacityMultiplier ?? 1);
+      return currentOpacity * effect.evaluated.dto.opacityMultiplier;
     }, opacity),
     0,
     1
   );
+
+const isOpacityMultiplierSample = (sample: RuntimeKeyformSample): boolean =>
+  sample.targetMetadata.targetProperty === "opacityMultiplier";
 
 const createRigControlEffectChain = (input: {
   readonly graph: NormalizedRuntimeGraph;

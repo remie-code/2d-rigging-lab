@@ -8,9 +8,11 @@ import type {
   PartInspectorProjection,
   ProjectInspectorProjection
 } from "../../features/editor-session/model/session-tree";
+import { createDrawableOpacityBinding } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 import { MeshToolInspector } from "./mesh-tool-inspector";
+import { ParameterBindingSection } from "./parameter-binding-section";
 import { WorkspacePanel } from "./panel-frame";
 import { RigToolInspector } from "./rig-tool-inspector";
 
@@ -130,6 +132,7 @@ function DrawableInspector({
   readonly inspector: DrawableInspectorProjection;
 }) {
   const {
+    session,
     setDrawableMaskSource,
     setDrawableRuntimeVisibility,
     updateDrawableName,
@@ -172,6 +175,10 @@ function DrawableInspector({
         </option>
       )),
     [inspector.clippingOptions]
+  );
+  const parameterBinding = useMemo(
+    () => createDrawableOpacityBinding(session, inspector.drawableId),
+    [inspector.drawableId, session]
   );
 
   return (
@@ -241,6 +248,8 @@ function DrawableInspector({
           </div>
         </div>
       </section>
+
+      <ParameterBindingSection bindings={parameterBinding === undefined ? [] : [parameterBinding]} />
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase text-neutral-500">

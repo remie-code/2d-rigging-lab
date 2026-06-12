@@ -7,7 +7,33 @@ export interface MeshGenerationQualityMetrics {
   readonly maxVertexValence: number;
   readonly refinementIterationCount: number;
   readonly fallbackReason?: string;
-  readonly triangulationMode?: "ordinary-delaunay-alpha-filter" | "interim-delaunay-alpha-filter";
+  readonly triangulationMode?:
+    | "ordinary-delaunay-alpha-filter"
+    | "interim-delaunay-alpha-filter"
+    | "interim-delaunay-envelope-filter";
+  readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
+}
+
+export interface MeshGenerationEnvelopeMetrics {
+  readonly algorithmId: "auto-outline-v3-envelope";
+  readonly preset: "low" | "medium" | "high";
+  readonly padding: number;
+  readonly alphaArea: number;
+  readonly envelopeArea: number;
+  readonly envelopeAreaRatio: number;
+  readonly selectedContourVertexCount: number;
+  readonly simplifiedContourVertexCount: number;
+  readonly envelopeBoundaryVertexCount: number;
+  readonly supportRingCount: number;
+  readonly interiorPointCount: number;
+  readonly transparentSampleCount: number;
+  readonly outsideTriangleSampleCount: number;
+  readonly cleanupMode:
+    | "convex-hull-envelope"
+    | "convex-hull-after-self-intersection"
+    | "reduced-padding-convex-hull-envelope";
+  readonly provenance: readonly string[];
+  readonly fallbackReason?: string;
 }
 
 export const computeMeshQualityMetrics = (
@@ -16,6 +42,7 @@ export const computeMeshQualityMetrics = (
     readonly refinementIterationCount: number;
     readonly fallbackReason?: string;
     readonly triangulationMode?: MeshGenerationQualityMetrics["triangulationMode"];
+    readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
   }
 ): MeshGenerationQualityMetrics => {
   const neighborsByVertex = new Map<number, Set<number>>();
@@ -76,7 +103,8 @@ export const computeMeshQualityMetrics = (
     maxVertexValence,
     refinementIterationCount: options.refinementIterationCount,
     ...(options.fallbackReason === undefined ? {} : { fallbackReason: options.fallbackReason }),
-    ...(options.triangulationMode === undefined ? {} : { triangulationMode: options.triangulationMode })
+    ...(options.triangulationMode === undefined ? {} : { triangulationMode: options.triangulationMode }),
+    ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics })
   };
 };
 

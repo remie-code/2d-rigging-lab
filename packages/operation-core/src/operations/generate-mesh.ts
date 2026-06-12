@@ -211,7 +211,8 @@ const evaluatePreviewMeshPreconditions = (input: {
   if (
     input.method !== "auto-grid-v1" &&
     input.method !== "auto-outline-v1" &&
-    input.method !== "auto-outline-v2"
+    input.method !== "auto-outline-v2" &&
+    input.method !== "auto-outline-v3-envelope"
   ) {
     diagnostics.push(
       createOperationDiagnostic({
@@ -349,7 +350,34 @@ const formatQualityMetricsForTransformHistory = (
     `meshQuality:refinementIterations=${metrics.refinementIterationCount}`,
     ...(metrics.triangulationMode === undefined
       ? []
-      : [`meshQuality:triangulationMode=${metrics.triangulationMode}`])
+      : [`meshQuality:triangulationMode=${metrics.triangulationMode}`]),
+    ...formatEnvelopeMetricsForTransformHistory(metrics)
+  ];
+};
+
+const formatEnvelopeMetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const envelope = metrics.envelopeMetrics;
+  if (envelope === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:envelopeAlgorithm=${envelope.algorithmId}`,
+    `meshQuality:envelopePreset=${envelope.preset}`,
+    `meshQuality:envelopePadding=${formatMetric(envelope.padding)}`,
+    `meshQuality:envelopeAreaRatio=${formatMetric(envelope.envelopeAreaRatio)}`,
+    `meshQuality:envelopeBoundaryVertices=${envelope.envelopeBoundaryVertexCount}`,
+    `meshQuality:envelopeSupportRings=${envelope.supportRingCount}`,
+    `meshQuality:envelopeInteriorPoints=${envelope.interiorPointCount}`,
+    `meshQuality:envelopeTransparentSamples=${envelope.transparentSampleCount}`,
+    `meshQuality:envelopeOutsideSamples=${envelope.outsideTriangleSampleCount}`,
+    `meshQuality:envelopeCleanup=${envelope.cleanupMode}`,
+    `meshQuality:envelopeProvenance=${envelope.provenance.join(">")}`,
+    ...(envelope.fallbackReason === undefined
+      ? []
+      : [`meshQuality:envelopeFallback=${envelope.fallbackReason}`])
   ];
 };
 

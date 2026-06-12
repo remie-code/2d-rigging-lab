@@ -30,6 +30,13 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 
 import { WarpDeformerMetadataSchema } from "./warp-deformer-contract.js";
+import {
+  ParameterGroupSchema,
+  ParameterKindSchema,
+  ParameterLockedFieldSchema,
+  ParameterSignConventionSchema,
+  ParameterTypeSchema
+} from "./parameter-metadata.js";
 
 export const DrawableSchema = z.object({
   drawableId: DrawableIdSchema,
@@ -63,13 +70,19 @@ export const MeshDtoSchema = MeshSchema;
 export const ParameterSchema = z.object({
   parameterId: ParameterIdSchema,
   displayName: z.string(),
+  kind: ParameterKindSchema.optional(),
+  parameterType: ParameterTypeSchema.optional(),
+  group: ParameterGroupSchema.optional(),
   semanticRole: z.enum(["eye", "brow", "mouth", "face", "body", "arm", "hair", "dynamics", "custom"]).optional(),
   projectPresetAlias: z.string().optional(),
+  presetRole: z.string().min(1).optional(),
   valueSource: z.enum(["authoredInput", "computedDynamics", "debugOverride"]).default("authoredInput"),
   min: z.number().finite(),
   max: z.number().finite(),
   default: z.number().finite(),
-  recommendedUiStep: z.number().positive()
+  recommendedUiStep: z.number().positive(),
+  signConvention: ParameterSignConventionSchema.optional(),
+  lockedFields: z.array(ParameterLockedFieldSchema).optional()
 });
 export type ParameterDto = z.infer<typeof ParameterSchema>;
 

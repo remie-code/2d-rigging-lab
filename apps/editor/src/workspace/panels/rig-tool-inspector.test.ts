@@ -104,14 +104,13 @@ function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {
     bezierEditSurface: {
       columns: 3,
       rows: 3,
-      editType: "cubicBezierSurfaceV1",
-      pointOrder: "rowMajorYThenXFromDomainMinV1"
+      editType: "cubicBezierSurfaceV1"
     },
     evaluationBoundary: {
       transformEvaluation: "bilinearGridV1",
       bezierEvaluation: "storedNotEvaluatedV0"
     },
-    legacyDefaulted: false
+    bezierSurfaceStatus: "stored"
   };
 }
 
