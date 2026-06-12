@@ -21,6 +21,13 @@ interface DrawableEntry {
   readonly index: number;
 }
 
+interface ChildBindingEntry {
+  readonly parentEntry: RigControlEntry;
+  readonly childId: string;
+  readonly childIndex: number;
+  readonly childCollection: "childDrawableIds" | "childRigControlIds";
+}
+
 export const validateRigControlSemantics = (
   packageDocument: PackageDocumentDto,
   runtimeSnapshot?: RuntimeSnapshotDto
@@ -73,6 +80,7 @@ const validateRigControlReferences = (input: {
   readonly drawablesById: ReadonlyMap<string, DrawableEntry>;
 }): readonly ValidationCheckResultDto[] => {
   const checks: ValidationCheckResultDto[] = [];
+  const drawableBindingsByChildId = new Map<string, ChildBindingEntry[]>();
 
   for (const entry of input.rigControlEntries) {
     if (
@@ -81,6 +89,19 @@ const validateRigControlReferences = (input: {
     ) {
       checks.push(createParentMissingCheck(entry));
     }
+
+    checks.push(
+      ...createDuplicateChildBindingChecks({
+        entry,
+        childCollection: "childRigControlIds",
+        childIds: entry.rigControl.childRigControlIds
+      }),
+      ...createDuplicateChildBindingChecks({
+        entry,
+        childCollection: "childDrawableIds",
+        childIds: entry.rigControl.childDrawableIds
+      })
+    );
 
     entry.rigControl.childRigControlIds.forEach((childRigControlId, childIndex) => {
       const childEntry = input.rigControlsById.get(childRigControlId);
@@ -94,12 +115,27 @@ const validateRigControlReferences = (input: {
       }
     });
 
+    const seenDrawableIdsForParent = new Set<string>();
     entry.rigControl.childDrawableIds.forEach((childDrawableId, childIndex) => {
+      if (!seenDrawableIdsForParent.has(childDrawableId)) {
+        seenDrawableIdsForParent.add(childDrawableId);
+        const bindings = drawableBindingsByChildId.get(childDrawableId) ?? [];
+        bindings.push({
+          parentEntry: entry,
+          childId: childDrawableId,
+          childIndex,
+          childCollection: "childDrawableIds"
+        });
+        drawableBindingsByChildId.set(childDrawableId, bindings);
+      }
+
       if (input.drawablesById.get(childDrawableId) === undefined) {
         checks.push(createChildDrawableMissingCheck(entry, childDrawableId, childIndex));
       }
     });
   }
+
+  checks.push(...createDrawableMultipleParentsChecks(drawableBindingsByChildId));
 
   return checks;
 };
@@ -216,6 +252,41 @@ const canonicalizeCycle = (cycle: readonly string[]): readonly string[] => {
   return [...canonical, canonical[0] ?? ""].filter((value) => value.length > 0);
 };
 
+const createDuplicateChildBindingChecks = (input: {
+  readonly entry: RigControlEntry;
+  readonly childCollection: "childDrawableIds" | "childRigControlIds";
+  readonly childIds: readonly string[];
+}): readonly ValidationCheckResultDto[] => {
+  const firstIndexByChildId = new Map<string, number>();
+  const checks: ValidationCheckResultDto[] = [];
+
+  input.childIds.forEach((childId, childIndex) => {
+    const firstIndex = firstIndexByChildId.get(childId);
+    if (firstIndex === undefined) {
+      firstIndexByChildId.set(childId, childIndex);
+      return;
+    }
+
+    checks.push(createDuplicateChildBindingCheck({
+      entry: input.entry,
+      childId,
+      firstIndex,
+      duplicateIndex: childIndex,
+      childCollection: input.childCollection
+    }));
+  });
+
+  return checks;
+};
+
+const createDrawableMultipleParentsChecks = (
+  drawableBindingsByChildId: ReadonlyMap<string, readonly ChildBindingEntry[]>
+): readonly ValidationCheckResultDto[] =>
+  [...drawableBindingsByChildId.entries()]
+    .filter(([, bindings]) => bindings.length > 1)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([drawableId, bindings]) => createDrawableMultipleParentsCheck(drawableId, bindings));
+
 const createParentMissingCheck = (entry: RigControlEntry): ValidationCheckResultDto =>
   createRigControlCheck({
     checkId: "rigControl.parentMissing",
@@ -288,6 +359,67 @@ const createChildDrawableMissingCheck = (
     ],
     impact: "The rig control hierarchy cannot affect a drawable that is absent from the package graph."
   });
+
+const createDuplicateChildBindingCheck = (input: {
+  readonly entry: RigControlEntry;
+  readonly childId: string;
+  readonly firstIndex: number;
+  readonly duplicateIndex: number;
+  readonly childCollection: "childDrawableIds" | "childRigControlIds";
+}): ValidationCheckResultDto =>
+  createRigControlCheck({
+    checkId: "rigControl.duplicateChild",
+    status: "fail",
+    severity: "error",
+    phase: "rigControl_semantic",
+    target: {
+      kind: input.childCollection === "childDrawableIds" ? "drawable" : "rigControl",
+      id: input.childId,
+      path: `${rigControlBasePath(input.entry.index)}/${input.childCollection}/${input.duplicateIndex}`
+    },
+    targetPath: `${rigControlBasePath(input.entry.index)}/${input.childCollection}/${input.duplicateIndex}`,
+    message:
+      `Rig control ${input.entry.rigControl.rigControlId} lists child ${input.childId} ` +
+      `more than once in ${input.childCollection}.`,
+    evidence: [
+      `rigControlId=${input.entry.rigControl.rigControlId}`,
+      `childCollection=${input.childCollection}`,
+      `childId=${input.childId}`,
+      `firstIndex=${input.firstIndex}`,
+      `duplicateIndex=${input.duplicateIndex}`
+    ],
+    impact: "Duplicate rig control child entries make binding operations ambiguous and must be removed."
+  });
+
+const createDrawableMultipleParentsCheck = (
+  drawableId: string,
+  bindings: readonly ChildBindingEntry[]
+): ValidationCheckResultDto => {
+  const firstBinding = bindings[0];
+  if (firstBinding === undefined) {
+    throw new Error("Expected at least one drawable binding.");
+  }
+
+  return createRigControlCheck({
+    checkId: "rigControl.drawableMultipleParents",
+    status: "fail",
+    severity: "error",
+    phase: "rigControl_semantic",
+    target: {
+      kind: "drawable",
+      id: drawableId,
+      path: `${rigControlBasePath(firstBinding.parentEntry.index)}/${firstBinding.childCollection}/${firstBinding.childIndex}`
+    },
+    targetPath: `${rigControlBasePath(firstBinding.parentEntry.index)}/${firstBinding.childCollection}/${firstBinding.childIndex}`,
+    message: `Drawable ${drawableId} is bound under more than one rig control.`,
+    evidence: [
+      `drawableId=${drawableId}`,
+      `parentRigControlIds=${bindings.map((binding) => binding.parentEntry.rigControl.rigControlId).join(",")}`,
+      `parentCount=${bindings.length}`
+    ],
+    impact: "A drawable can have only one deformer parent, otherwise subtree transforms and opacity are ambiguous."
+  });
+};
 
 const createParentChildMismatchCheck = (
   entry: RigControlEntry,

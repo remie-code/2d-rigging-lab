@@ -56,7 +56,7 @@ rig overlayは中央のCanvas / Preview領域に固定して表示する。専�
 領域ごとの役割:
 
 - Toolbox: Rig toolがactiveであることを示す。
-- Structure / Parts: rig対象となるpart / drawable / meshを選択する。既存rig controlの関連targetもここから辿れる。
+- Structure / Parts: rig対象となるpart / drawable / meshを選択する。Rig Tool中は左ペイン内でParts / Deformersを切り替え、既存rig controlの関連targetも辿れる。
 - Canvas / Preview: 選択targetにrig overlayを重ねる。draft状態とcommitted状態を区別する。
 - Inspector / Tool Panel: rig primitive、bounds、pivot、lattice分割数、binding、parameter、keyform操作、subtree visibility / opacity effectを表示する。
 
@@ -145,6 +145,82 @@ Keyform authoringでは、Parameter BarとRig Inspectorが協調する。Paramet
 
 subtree opacity effectも、この協調の中で扱う。Rig Inspectorは対象subtreeとopacity propertyを扱い、Parameter Barはどのparameterのどの値でopacityを確認・keyform化するかを扱う。
 
+## 4.3 Deformer Tree / Drawable Pool
+
+Rig Tool中の左ペインは、Parts TreeとDeformer Treeを切り替えて使う。Parts Treeはpart / drawableの所属、描画順、構造を扱う。Deformer Treeはdeformer hierarchyとbindingを扱う。両者は同じモデルを別の観点で見るUIであり、Deformer Tree上のdrawable表示はParts Treeの実体移動ではなくbinding referenceである。
+
+Deformer viewの基本構造:
+
+```text
+Deformers
+  Deformer Hierarchy
+    - headwear Warp Deformer
+      - headwear
+      - child Warp Deformer
+
+  Drawable Pool  [collapsed by default]
+    - Unbound Drawables
+      - hair_f_l
+      - hair_f_r
+      - mouth
+```
+
+`Drawable Pool` は必要に応じて折りたためる領域にし、初期状態では折りたたむ。理由は、通常作業では既存deformer hierarchyを確認する時間の方が長く、全drawable候補を常時表示するとDeformer Treeの視認性を壊すためである。
+
+`Unbound Drawables` は「Parts Treeに未所属」という意味ではない。ここでのunboundは、deformerにまだbindされていない、または現在のdeformer hierarchy上でbinding先を持たないdrawable referenceを指す。UI文言として日本語にする場合も「未所属」ではなく「未バインドDrawable」など、Parts所属と混同しない表現を使う。
+
+Deformer Tree内のDnD:
+
+- `Drawable Pool` のdrawableをdeformer rowへDnDすると、そのdrawableをdeformerへbindする。
+- 既存のbound drawable referenceを別deformer rowへDnDすると、binding先deformerを変更する。
+- deformer rowを別deformer rowへDnDすると、parent deformerを変更する。
+- これらの操作はParts Tree上のpart所属、drawable所属、draw orderを変更しない。
+- 循環するdeformer parent変更、存在しないtargetへのdrop、同じbindingの重複などは無効化する。
+
+表示上の注意:
+
+- Deformer Tree内のdrawable rowは、Parts Treeのdrawable実体ではなくbinding referenceとして見える必要がある。
+- Drawable Poolは候補置き場であり、通常のhierarchy本体より視覚的に一段控えめにする。
+- Drawable Poolを展開したままでも、Deformer Hierarchyが主役であることが崩れないようにする。
+
+## 4.4 Deformer Creation / Insertion
+
+Drawable、Part Container、既存Deformerのどれを選んでいるかで、Create操作の意味は変わる。
+
+Drawable選択時:
+
+- Inspectorには `Create Rotation Deformer` と `Create Warp Deformer` の両方を出す。
+- 作成されるdeformerは選択drawableをbound childにする。
+- 選択drawableが既存deformer配下にある場合、新しいdeformerは既存親deformerとdrawableの間に挿入する。
+
+```text
+Before:
+  headwear Warp Deformer
+    headwear
+
+Action:
+  select headwear -> Create Warp Deformer
+
+After:
+  headwear Warp Deformer
+    headwear Warp Deformer 2
+      headwear
+```
+
+この挿入動作により、既存のdeformer hierarchyを保ったまま、選択drawableだけに追加のdeformerを重ねられる。root直下に同じdrawableをbindしたsibling deformerを作る挙動は、通常のCreate操作としては避ける。
+
+既存Deformer選択時:
+
+- Inspectorには `Create Parent Rotation Deformer` と `Create Parent Warp Deformer` を出せる。
+- parent作成は、選択deformerの上位に新しいdeformerを挿入する操作である。
+- child deformerを新規作成する操作が必要な場合は、別の明示actionとして扱う。
+
+Part Container選択時:
+
+- Container自体はDrawableではないため、直接meshやdrawable変形対象にはしない。
+- 配下drawableまたは配下deformerを選ぶpickerを出すか、container配下をまとめるparent deformer作成として扱う。
+- どちらにするかは操作名で明示し、暗黙にsemantic groupingやauto-rigをしない。
+
 ## 5. Tool State
 
 | State | Canvas | Inspector / Tool Panel | 主な操作 |
@@ -162,6 +238,7 @@ Rotationは、選択part / drawableに対して回転制御を作るprimitiveで
 UX:
 
 - InspectorでRotationを選ぶ。
+- Drawable選択時のRig Inspectorには、Warp DeformerだけでなくRotation Deformer作成入口も出す。
 - Canvasにtarget bounds、pivot、rotation guideを表示する。
 - pivotはtarget boundsから初期配置するが、Inspectorから変更できる。
 - Applyでrotation2d rig controlを作り、targetへbindする。
@@ -284,6 +361,7 @@ Warp Deformerが設定可能な項目と、初期Inspectorで触れる項目は�
 - Transform divisions
 - Bezier divisions
 - Bezier edit type readonly or fixed default
+- opacity multiplier
 - reset / fit actions
 - Apply / Cancel
 
@@ -297,9 +375,20 @@ Warp Deformerが設定可能な項目と、初期Inspectorで触れる項目は�
 
 Appearance項目として後続に回してよいもの:
 
-- opacity multiplier
 - multiply color
 - screen color
+
+Deformer Inspectorで扱うopacityは、選択deformer subtreeにかかる静的なopacity multiplierである。これはparameter値に応じてfadeするSubtree Visibility / Opacityとは別であり、Keyform Authoringなしに常時効く基本属性として扱う。
+
+Deformer Inspectorの編集方針:
+
+- nameは後から変更できる。
+- parent deformerは後から変更できる。ただし循環する変更は無効化する。
+- bound childrenはsummaryを表示し、追加 / 移動はDeformer TreeのDnDやDrawable Poolから行う。
+- domain boundsはfit / resetできる。数値編集を置く場合も、raw payloadではなく人間向けのboundsとして出す。
+- Transform divisionsとBezier divisionsは後から変更できる。ただしkeyformやrest surfaceとの互換が壊れる場合は確認またはdisabledにする。
+- opacity multiplierは静的な見た目調整として編集できる。
+- Bezier edit typeは初期ではreadonlyまたは固定defaultでよい。
 
 ## 8. Subtree Visibility / Opacity UX
 
@@ -362,7 +451,7 @@ Part単位の表情差分やパーツ差分の切り替え・フェードは、�
 
 - 選択target名
 - rig status: none / draft / committed / blocked
-- primitive: Rotation / Warp Lattice
+- primitive: Rotation / Warp Deformer
 - binding target
 - parameter
 - key value
@@ -393,8 +482,8 @@ Part単位の表情差分やパーツ差分の切り替え・フェードは、�
 
 ## 12. 未決事項
 
-- Rig Tool内でRotation / Warp Lattice以外のprimitiveをいつ扱うか。
-- Warp / Latticeの分割数変更を初回実装に含めるか、後続waveに回すか。
+- Rig Tool内でRotation / Warp Deformer以外のprimitiveをいつ扱うか。
+- Warp Deformerの分割数変更、parent変更、opacity multiplier編集、Drawable Pool binding DnDをどのwaveで実装するか。
 - keyform authoringをRig Tool内に常設するか、parameter/keyform専用sub-panelに分けるか。
 - subtree opacity effectを初期実装に含めるか、後続waveに回すか。
 - subtree opacity effectのscopeをrig control descendantsだけに限定するか、part subtreeも含めるか。

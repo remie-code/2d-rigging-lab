@@ -255,112 +255,35 @@ Wave61で実装された `auto-grid-v1` は、初期操作導線とpreview -> Ap
 
 このため、次の改善対象は既存 `auto-grid-v1` の微調整ではなく、輪郭抽出を含む新しい生成モードとして定義する。
 
-### 6.2 次候補: auto-outline-v1
+### 6.2 Mesh生成アルゴリズム参照
 
-次に目指すmesh生成は `auto-outline-v1` として扱う。これはsemantic recognitionではなく、Drawable自身のRGBA alpha maskだけを入力にした決定的な幾何処理である。
+この文書はMesh ToolのUXを扱う。Drawable RGBA alpha maskからどのように初期meshを生成するかの詳細アルゴリズムは、画面仕様ではなく [../../mesh-generation/auto-outline-v2.md](../../mesh-generation/auto-outline-v2.md) を正とする。
 
-目的:
+Mesh Tool側が持つ責務:
 
-- 透明領域の外側に大きな三角形を作らない。
-- alpha輪郭に沿って境界頂点を配置する。
-- 内部にはpresetに応じた密度の点を置く。
-- Large Motionでは輪郭・内部ともに細かく、Standard / Low Motionでは段階的に粗くする。
-- preview -> Apply の既存UXを維持する。
+- presetを選ばせる。
+- preview mesh overlayを表示する。
+- Applyするまでproject meshを変更しない。
+- Regenerate draftを既存meshとは区別して表示する。
+- fallback / blocked / warningを人間向けに短く表示する。
 
-入力:
+アルゴリズム側が持つ責務:
 
-- 対象Drawable。
-- 対象Drawableのtexture RGBA bytes。
-- texture width / height。
-- Drawable mesh bounds。
-- preset: `large-motion` / `standard` / `low-motion`。
-- alpha threshold。
+- Drawable自身のRGBA alpha maskを入力にする。
+- semantic recognitionやpreset自動選択を行わない。
+- presetに応じて輪郭点、内部点、triangle品質を決定的に生成する。
+- 同じ入力から同じmeshを返す。
+- fallback条件とquality summaryを返す。
 
-出力:
+現在の生成モードの位置付け:
 
-- `MeshDto`
-  - vertices
-  - uvs
-  - triangles
-  - vertexStableIds
-  - triangleStableIds
-  - bounds
-  - generationProvenanceId
+| Algorithm | 位置付け | 備考 |
+|---|---|---|
+| `auto-grid-v1` | Wave61以前の最小fallback | 矩形grid由来。Cubism風輪郭追従ではない |
+| `auto-outline-v1` | Wave62の輪郭追従初期版 | 矩形gridより大きく改善。ただし扇状集中、大きすぎるtriangle、grid由来の矩形感が残る |
+| `auto-outline-v2` | 次候補 | curvature-aware boundary resampling、inset ring、blue-noise / Poisson-like interior sampling、constrained triangulation、quality refinementを目指す |
 
-推奨アルゴリズム:
-
-```text
-RGBA bytes
-  -> alpha mask thresholding
-  -> alpha bounds
-  -> contour extraction
-  -> contour simplification by preset
-  -> interior point sampling by preset
-  -> triangulation
-  -> reject triangles whose centroid is outside alpha mask
-  -> map pixel coordinates to stage coordinates and UV
-  -> deterministic stable IDs
-```
-
-詳細:
-
-1. Alpha mask作成
-   - `alpha > threshold` を塗り領域とする。
-   - threshold初期値は8前後でよい。
-   - 完全透明、bytes欠落、dimension不整合の場合は `auto-grid-v1` fallbackを許可する。
-
-2. Contour extraction
-   - alpha maskから外周輪郭を抽出する。
-   - 実装候補は marching squares または境界pixel tracing。
-   - 最初は最大外周と主要な穴だけでよい。細かな穴やノイズは削ってよい。
-   - 輪郭点はpixel座標で保持する。
-
-3. Contour simplification
-   - 輪郭点をそのまま全部使わず、presetごとに間引く。
-   - Large Motion: 輪郭を細かく保つ。
-   - Standard: 中程度に簡略化。
-   - Low Motion: 強めに簡略化。
-   - Ramer-Douglas-Peucker相当、または距離ベースの決定的間引きでよい。
-
-4. Interior point sampling
-   - alpha bounds内にpresetごとの格子点を置く。
-   - alpha mask内にある点だけ採用する。
-   - 輪郭から近すぎる点は重複防止のため除外してよい。
-   - 顔や髪のような広い内部領域が、外周だけの細長い三角形にならないように内部点を入れる。
-
-5. Triangulation
-   - 推奨は既存ライブラリ利用。候補はDelaunay系の軽量ライブラリ。
-   - 外周制約付きtriangulationが重い場合、初期版はDelaunay後にtriangle centroidでalpha mask外を除外してよい。
-   - triangleの3頂点が同一、重複、面積ほぼ0の場合は除外する。
-   - 生成結果が空または極端に少ない場合はfallbackする。
-
-6. Coordinate mapping
-   - pixel x/yをtexture bounds比率へ変換する。
-   - UVは `x / textureWidth`, `y / textureHeight`。
-   - stage座標は既存mesh boundsへ線形変換する。
-   - 座標丸めは既存 `roundCoordinate` 相当で決定的に行う。
-
-7. Determinism
-   - 同じRGBA、preset、thresholdなら同じmeshになる。
-   - point ordering、triangle ordering、stable id生成をsortして固定する。
-   - floating point丸めを統一する。
-
-Preset差分案:
-
-| Preset | 輪郭点 | 内部点 | 期待する見た目 |
-|---|---|---|---|
-| Large Motion | 多い | 多い | 髪・袖・揺れ物の輪郭を細かく追う |
-| Standard | 中 | 中 | 汎用的で破綻しにくい |
-| Low Motion | 少ない | 少ない | 硬い部品向けの軽量mesh |
-
-非ゴール:
-
-- パーツ名からpresetを自動選択しない。
-- 顔、髪、服などの意味理解をしない。
-- Photoshop合成結果やclipping後形状を使ったmesh生成はしない。
-- 手動頂点編集UIを同時に実装しない。
-
-Acceptance Criteria:
+UX上のAcceptance Criteria:
 
 - Large Motion presetで、alpha輪郭に沿った境界頂点列が生成される。
 - 透明領域だけを大きく覆う矩形三角形が主結果にならない。
@@ -369,28 +292,15 @@ Acceptance Criteria:
 - Apply前はproject meshを変更しない。
 - 既存meshがある場合はRegenerate draftとして表示し、Applyで置換する。
 - hidden Drawableは編集previewとして一時表示できるが、visibility状態は変更しない。
-- `auto-grid-v1` fallbackがあり、bytes欠落などで操作全体が壊れない。
-
-初期実装単位の推奨:
-
-1. 選択中drawableに対するpreset-based initial mesh generation。
-2. 生成meshのCanvas overlay確認。
-3. preview -> Apply。
-4. 生成済みmeshのRegenerate。既存meshを破棄して置き換えるだけでよい。
-
-後続候補:
-
-- vertex drag / nudge による微調整。
-- 選択part配下のdrawableへ一括生成。ただし当面不要。
-- mesh未生成drawableすべてへ一括生成。ただし当面不要。
-- `auto-outline-v1` の品質改善。初期版で不足する穴処理、輪郭簡略化、triangulation品質を改善する。
+- fallbackがあり、bytes欠落などで操作全体が壊れない。
 
 当面不要:
 
 - 手動頂点編集。
 - 辺 / 頂点追加削除。
 - 詳細な分割数UI。
-- 高度な自動メッシュ品質調整。
+- 複数Drawableへの一括生成。
+- presetのsemantic自動選択。
 
 ## 7. 表示する情報
 

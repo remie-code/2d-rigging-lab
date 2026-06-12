@@ -4,20 +4,29 @@ import {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  commitBindDrawableToRigControl,
+  commitCreateRotationDeformer,
   commitCreateWarpDeformer,
   commitDrawableReorder,
   commitDrawableReparent,
-  commitPartReparent
+  commitGenerateMesh,
+  commitMoveDrawableRigControlBinding,
+  commitPartReparent,
+  commitReparentRigControl,
+  commitUpdateRigControl
 } from "./editor-session-commands";
 import { createStructureTreeRows, type StructureTreeRow } from "./session-tree";
 
@@ -104,6 +113,457 @@ describe("editor session commands", () => {
         }
       }
     });
+  });
+
+  it("routes Deformer Tree bind, rebind, and reparent operations without changing Parts or draw order", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B, DRAW_C]);
+    const parentResult = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Parent Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    const targetResult = commitCreateWarpDeformer(parentResult.session, {
+      partId: PART_B,
+      displayName: "Target Warp",
+      childDrawableIds: [DRAW_B],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+
+    const parentRigControlId = parentResult.rigControlId!;
+    const targetRigControlId = targetResult.rigControlId!;
+    const partsBefore = targetResult.session.graph.drawables.map((drawable) => [
+      drawable.drawableId,
+      drawable.partId
+    ]);
+    const drawOrderBefore = globalDrawableOrder(targetResult.session);
+
+    const poolBind = commitBindDrawableToRigControl(
+      targetResult.session,
+      DRAW_C,
+      parentRigControlId
+    );
+    expect(poolBind.committed).toBe(true);
+    expect(
+      poolBind.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === parentRigControlId
+      )?.childDrawableIds
+    ).toEqual([DRAW_A, DRAW_C]);
+
+    const rebind = commitMoveDrawableRigControlBinding(
+      poolBind.session,
+      DRAW_A,
+      targetRigControlId
+    );
+    expect(rebind.committed).toBe(true);
+    expect(
+      rebind.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === parentRigControlId
+      )?.childDrawableIds
+    ).toEqual([DRAW_C]);
+    expect(
+      rebind.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === targetRigControlId
+      )?.childDrawableIds
+    ).toEqual([DRAW_B, DRAW_A]);
+
+    const reparent = commitReparentRigControl(
+      rebind.session,
+      targetRigControlId,
+      parentRigControlId
+    );
+    expect(reparent.committed).toBe(true);
+    expect(
+      reparent.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === targetRigControlId
+      )?.parentId
+    ).toBe(parentRigControlId);
+    expect(reparent.session.graph.drawables.map((drawable) => [drawable.drawableId, drawable.partId])).toEqual(
+      partsBefore
+    );
+    expect(globalDrawableOrder(reparent.session)).toEqual(drawOrderBefore);
+  });
+
+  it("maps invalid Deformer Tree drops to rejected operation results without mutating", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const parentResult = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Parent Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+
+    const rejected = commitMoveDrawableRigControlBinding(
+      parentResult.session,
+      DRAW_A,
+      parentResult.rigControlId!
+    );
+    expect(rejected.committed).toBe(false);
+    expect(rejected.diagnostics[0]?.checkId).toBe(
+      "operation.moveDrawableRigControlBinding.noOp"
+    );
+    expect(rejected.session).toBe(parentResult.session);
+    expect(
+      parentResult.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === parentResult.rigControlId
+      )?.childDrawableIds
+    ).toEqual([DRAW_A]);
+
+    const missingTarget = commitBindDrawableToRigControl(
+      parentResult.session,
+      DRAW_B,
+      RigControlIdSchema.parse("rig_missing_target")
+    );
+    expect(missingTarget.committed).toBe(false);
+    expect(missingTarget.diagnostics[0]?.checkId).toBe(
+      "operation.bindRigControlChild.missingParentRigControl"
+    );
+  });
+
+  it("surfaces duplicate and root no-op rig operation rejections without mutating", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const sourceResult = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Source Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    const targetResult = commitCreateWarpDeformer(sourceResult.session, {
+      partId: PART_B,
+      displayName: "Target Warp",
+      childDrawableIds: [DRAW_B],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    const rigControlsBefore = structuredClone(targetResult.session.graph.rigControls);
+    const rootIdsBefore = [...targetResult.session.graph.rigControlRootIds];
+
+    const alreadyBound = commitBindDrawableToRigControl(
+      targetResult.session,
+      DRAW_A,
+      targetResult.rigControlId!
+    );
+    expect(alreadyBound.committed).toBe(false);
+    expect(alreadyBound.diagnostics[0]?.checkId).toBe(
+      "operation.bindRigControlChild.childAlreadyParented"
+    );
+    expect(alreadyBound.diagnostics[0]?.message).toContain(String(sourceResult.rigControlId));
+    expect(alreadyBound.session).toBe(targetResult.session);
+    expect(targetResult.session.graph.rigControls).toEqual(rigControlsBefore);
+    expect(targetResult.session.graph.rigControlRootIds).toEqual(rootIdsBefore);
+
+    const rootNoOp = commitReparentRigControl(
+      targetResult.session,
+      sourceResult.rigControlId!,
+      null
+    );
+    expect(rootNoOp.committed).toBe(false);
+    expect(rootNoOp.diagnostics[0]?.checkId).toBe("operation.reparentRigControl.noOp");
+    expect(rootNoOp.session).toBe(targetResult.session);
+    expect(targetResult.session.graph.rigControls).toEqual(rigControlsBefore);
+    expect(targetResult.session.graph.rigControlRootIds).toEqual(rootIdsBefore);
+  });
+
+  it("commits Rotation Deformer creation and Deformer Inspector updates, rejecting cardinality conflicts", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const rotation = commitCreateRotationDeformer(session, {
+      partId: PART_A,
+      displayName: "Drawable A Rotation",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 10, y: 20 },
+      restAngleDegrees: 0
+    });
+    expect(rotation.committed).toBe(true);
+    expect(
+      rotation.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rotation.rigControlId
+      )
+    ).toMatchObject({
+      kind: "rotation2d",
+      childDrawableIds: [DRAW_A]
+    });
+
+    const warp = commitCreateWarpDeformer(rotation.session, {
+      partId: PART_B,
+      displayName: "Drawable B Warp",
+      childDrawableIds: [DRAW_B],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    const updated = commitUpdateRigControl(warp.session, {
+      rigControlId: warp.rigControlId!,
+      displayName: "Drawable B Warp Updated",
+      domainBounds: { x: 2, y: 3, width: 48, height: 40 },
+      opacityMultiplier: 0.5,
+      transformColumns: 6,
+      transformRows: 4,
+      bezierColumns: 4,
+      bezierRows: 2
+    });
+    expect(updated.committed).toBe(true);
+    expect(
+      updated.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === warp.rigControlId
+      )
+    ).toMatchObject({
+      displayName: "Drawable B Warp Updated",
+      domainBounds: { x: 2, y: 3, width: 48, height: 40 },
+      opacityMultiplier: 0.5,
+      latticeColumns: 6,
+      latticeRows: 4,
+      warpDeformer: {
+        transformGrid: {
+          rows: 4
+        },
+        bezierEditSurface: {
+          columns: 4,
+          rows: 2
+        }
+      }
+    });
+
+    updated.session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_drawable_b_warp_offsets"),
+      target: {
+        kind: "rigControl",
+        id: warp.rigControlId!,
+        property: "controlPointOffsets"
+      },
+      parameterId: ParameterIdSchema.parse("param_drawable_b_warp"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        {
+          value: 0,
+          statePatch: Array.from({ length: 24 }, () => ({ x: 0, y: 0 }))
+        }
+      ]
+    });
+
+    const rejected = commitUpdateRigControl(updated.session, {
+      rigControlId: warp.rigControlId!,
+      transformRows: 6
+    });
+    expect(rejected.committed).toBe(false);
+    expect(rejected.diagnostics[0]?.checkId).toBe(
+      "operation.updateRigControl.keyformCardinalityConflict"
+    );
+  });
+
+  it("creates parent Warp and Rotation Deformers above selected Deformers", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const child = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Child Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(child.committed).toBe(true);
+
+    const parentWarp = commitCreateWarpDeformer(child.session, {
+      partId: PART_A,
+      displayName: "Parent Warp",
+      childDrawableIds: [],
+      childRigControlIds: [child.rigControlId!],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(parentWarp.committed).toBe(true);
+    expect(
+      parentWarp.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === child.rigControlId
+      )?.parentId
+    ).toBe(parentWarp.rigControlId);
+    expect(parentWarp.session.graph.rigControlRootIds).toEqual([parentWarp.rigControlId]);
+
+    const parentRotation = commitCreateRotationDeformer(parentWarp.session, {
+      partId: PART_A,
+      displayName: "Parent Rotation",
+      childDrawableIds: [],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 16, y: 16 },
+      restAngleDegrees: 0,
+      parentRigControlId: parentWarp.rigControlId!,
+      insertBeforeChild: {
+        kind: "rigControl",
+        id: child.rigControlId!
+      }
+    });
+    expect(parentRotation.committed).toBe(true);
+    const warpAfter = parentRotation.session.graph.rigControls.find(
+      (rigControl) => rigControl.rigControlId === parentWarp.rigControlId
+    );
+    const childAfter = parentRotation.session.graph.rigControls.find(
+      (rigControl) => rigControl.rigControlId === child.rigControlId
+    );
+    expect(warpAfter?.childRigControlIds).toEqual([parentRotation.rigControlId]);
+    expect(childAfter?.parentId).toBe(parentRotation.rigControlId);
+  });
+
+  it("rejects cycle and missing-target Deformer reparent operations without mutating", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const parent = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Parent Warp",
+      childDrawableIds: [],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    const child = commitCreateWarpDeformer(parent.session, {
+      partId: PART_A,
+      displayName: "Child Warp",
+      parentRigControlId: parent.rigControlId!,
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+
+    const cycle = commitReparentRigControl(child.session, parent.rigControlId!, child.rigControlId!);
+    expect(cycle.committed).toBe(false);
+    expect(cycle.diagnostics[0]?.checkId).toBe("operation.reparentRigControl.cycle");
+    expect(cycle.session).toBe(child.session);
+
+    const missing = commitReparentRigControl(
+      child.session,
+      child.rigControlId!,
+      RigControlIdSchema.parse("rig_missing_parent")
+    );
+    expect(missing.committed).toBe(false);
+    expect(missing.diagnostics[0]?.checkId).toBe(
+      "operation.reparentRigControl.missingParentRigControl"
+    );
+  });
+
+  it("defaults Mesh Tool generation commands to auto-outline-v2", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const bytes = createAlphaBytes(4, 4, [
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2]
+    ]);
+    session.graph.meshes = [
+      {
+        meshId: MeshIdSchema.parse("mesh_a"),
+        drawableId: DRAW_A,
+        vertices: [],
+        uvs: [],
+        triangles: [],
+        vertexStableIds: [],
+        triangleStableIds: [],
+        topologyRevision: 0,
+        bounds: { x: 0, y: 0, width: 4, height: 4 },
+        generationProvenanceId: ProvenanceIdSchema.parse("prov_a")
+      }
+    ];
+    session.graph.textureAtlas = {
+      schemaVersion: "texture-atlas-v1",
+      textures: [
+        {
+          textureId: TextureIdSchema.parse("tex_a"),
+          filePath: "assets/textures/a.raw-rgba",
+          sourceAssetId: SourceAssetIdSchema.parse("src_fixture"),
+          binaryAssetRef: {
+            referenceKind: "package-binary-asset-ref-v1",
+            binaryAssetId: "bin_a_rgba",
+            packageRelativePath: "assets/textures/a.raw-rgba",
+            digest: {
+              algorithm: "sha256",
+              hex: "0".repeat(64)
+            },
+            byteLength: bytes.byteLength,
+            mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+            storageStatus: "stored-package-local-v1",
+            provenanceId: ProvenanceIdSchema.parse("prov_a"),
+            rightsAssetId: "rights_a"
+          }
+        }
+      ]
+    };
+    session.binaryAssets = {
+      fileEntries: [
+        {
+          path: "assets/textures/a.raw-rgba",
+          bytes,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          binaryAssetId: "bin_a_rgba"
+        }
+      ],
+      binaryAssetIndex: {
+        schemaVersion: "binary-asset-index-v1",
+        assets: []
+      },
+      byteIntakeSummaries: []
+    };
+
+    const result = commitGenerateMesh(session, DRAW_A, "medium");
+
+    expect(result.committed).toBe(true);
+    expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2",
+        "meshSource:outline-v2-rgba"
+      ])
+    );
   });
 });
 
@@ -208,4 +668,22 @@ function createDrawable(drawableId: typeof DRAW_A, partId: typeof PART_A) {
     baseDrawOrder: 0,
     sourceProvenanceId: ProvenanceIdSchema.parse(`prov_${token}`)
   };
+}
+
+function createAlphaBytes(
+  width: number,
+  height: number,
+  opaquePixels: readonly (readonly [number, number])[]
+): Uint8Array {
+  const bytes = new Uint8Array(width * height * 4);
+
+  for (const [x, y] of opaquePixels) {
+    const index = (y * width + x) * 4;
+    bytes[index] = 255;
+    bytes[index + 1] = 255;
+    bytes[index + 2] = 255;
+    bytes[index + 3] = 255;
+  }
+
+  return bytes;
 }

@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
   RigControlIdSchema,
@@ -23,7 +25,11 @@ import { getRigControlById } from "./rig-control-selectors.js";
 import {
   bindRigControlChild,
   createRotation2dRigControl,
-  createWarpLattice2dRigControl
+  createWarpLattice2dRigControl,
+  insertRigControlBetweenParentAndChild,
+  moveDrawableRigControlBinding,
+  reparentRigControl,
+  updateRigControl
 } from "./rig-control-mutations.js";
 import { AuthoringMutationError } from "./authoring-mutations.js";
 import { toPackageDocument } from "./to-package-document.js";
@@ -145,6 +151,179 @@ describe("rig control authoring mutations", () => {
         parentId: "rig_parent"
       })
     ]);
+  });
+
+  it("moves a drawable deformer binding without changing parts membership or draw order", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_source", "Source", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    createRotation2dRigControl(session, createRotationRigControl("rig_target", "Target"));
+    const partsBefore = structuredClone(session.graph.parts);
+    const drawablesBefore = structuredClone(session.graph.drawables);
+    const drawOrderBefore = structuredClone(session.graph.drawOrder);
+
+    const result = moveDrawableRigControlBinding(session, {
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      targetRigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(result.sourceRigControlBefore.childDrawableIds).toEqual(["draw_body"]);
+    expect(result.sourceRigControlAfter.childDrawableIds).toEqual([]);
+    expect(result.targetRigControlAfter.childDrawableIds).toEqual(["draw_body"]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_source"))).toMatchObject({
+      childDrawableIds: []
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_target"))).toMatchObject({
+      childDrawableIds: ["draw_body"]
+    });
+    expect(session.graph.parts).toEqual(partsBefore);
+    expect(session.graph.drawables).toEqual(drawablesBefore);
+    expect(session.graph.drawOrder).toEqual(drawOrderBefore);
+  });
+
+  it("reparents child rig controls and rejects cycles", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_child", "Child"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_target", "Target"));
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_child" }
+    });
+
+    const result = reparentRigControl(session, {
+      childRigControlId: RigControlIdSchema.parse("rig_child"),
+      parentRigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(result.childRigControlBefore.parentId).toBe("rig_parent");
+    expect(result.childRigControlAfter.parentId).toBe("rig_target");
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent"))).toMatchObject({
+      childRigControlIds: []
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_target"))).toMatchObject({
+      childRigControlIds: ["rig_child"]
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent", "rig_target"]);
+
+    let caught: unknown;
+    try {
+      reparentRigControl(session, {
+        childRigControlId: RigControlIdSchema.parse("rig_target"),
+        parentRigControlId: RigControlIdSchema.parse("rig_child")
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AuthoringMutationError);
+    expect((caught as AuthoringMutationError).code).toBe("rig_control_cycle");
+  });
+
+  it("inserts a rig control between an existing parent and drawable child", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_parent", "Parent", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+
+    const result = insertRigControlBetweenParentAndChild(
+      session,
+      createWarpLatticeRigControl("rig_inserted_warp", "Inserted Warp", {
+        childDrawableIds: ["draw_body"]
+      }),
+      {
+        parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+        child: { kind: "drawable", id: "draw_body" }
+      }
+    );
+
+    expect(result.parentRigControlBefore.childDrawableIds).toEqual(["draw_body"]);
+    expect(result.parentRigControlAfter.childDrawableIds).toEqual([]);
+    expect(result.parentRigControlAfter.childRigControlIds).toEqual(["rig_inserted_warp"]);
+    expect(result.rigControl).toMatchObject({
+      rigControlId: "rig_inserted_warp",
+      parentId: "rig_parent",
+      childDrawableIds: ["draw_body"],
+      opacityMultiplier: 1
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+  });
+
+  it("updates committed rig control fields and rejects division cardinality changes with keyforms", () => {
+    const session = createFixtureSession();
+    createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_face_warp", "Face Warp", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+
+    const result = updateRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_face_warp"),
+      displayName: "Face Warp Updated",
+      opacityMultiplier: 0.5,
+      domainBounds: { x: 0, y: 0, width: 120, height: 80 },
+      bezierColumns: 3,
+      bezierRows: 2
+    });
+
+    expect(result.rigControlAfter).toMatchObject({
+      displayName: "Face Warp Updated",
+      opacityMultiplier: 0.5,
+      domainBounds: { x: 0, y: 0, width: 120, height: 80 }
+    });
+    if (result.rigControlAfter.kind !== "warpLattice2d") {
+      throw new Error("Expected warpLattice2d update result.");
+    }
+    expect(result.rigControlAfter.warpDeformer?.bezierEditSurface).toMatchObject({
+      columns: 3,
+      rows: 2
+    });
+
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_face_warp_offsets"),
+      target: {
+        kind: "rigControl",
+        id: "rig_face_warp",
+        property: "controlPointOffsets"
+      },
+      parameterId: ParameterIdSchema.parse("param_face_warp"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        {
+          value: 1,
+          statePatch: [
+            { x: 0, y: 0 },
+            { x: 0, y: 0 },
+            { x: 0, y: 0 },
+            { x: 0, y: 0 }
+          ]
+        }
+      ]
+    });
+
+    let caught: unknown;
+    try {
+      updateRigControl(session, {
+        rigControlId: RigControlIdSchema.parse("rig_face_warp"),
+        transformColumns: 3
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AuthoringMutationError);
+    expect((caught as AuthoringMutationError).code).toBe("rig_control_keyform_cardinality_conflict");
   });
 
   it("rejects a rig control binding that would introduce a cycle", () => {

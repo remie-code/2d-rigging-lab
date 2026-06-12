@@ -1,5 +1,7 @@
 import type { DrawableId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
+import type { UpdateRigControlPayloadDto } from "@private-2d-rigging-lab/operation-core";
 import {
+  AlertCircle,
   Check,
   GitBranch,
   Maximize2,
@@ -7,17 +9,22 @@ import {
   Spline,
   X
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import { cn } from "../../lib/class-name";
 import {
+  createDeformerParentOptions,
   createWarpDeformerParentOptions,
   createWarpDeformerTargetOptions,
+  findRotationDeformerReadModel,
   findWarpDeformerReadModel,
   formatControlPointGrid,
   formatRectSummary,
+  resolveWarpDeformerChildrenBounds,
   summarizeWarpDeformerChildren,
   WARP_DEFORMER_BEZIER_EDIT_TYPE,
+  type RotationDeformerReadModel,
   type WarpDeformerDraft,
   type WarpDeformerReadModel,
   type WarpDeformerTargetOption
@@ -30,9 +37,15 @@ export function RigToolInspector() {
     fitWarpDeformerDraft,
     resetWarpDeformerDraft,
     rigDraft,
+    rigOperationFeedback,
     selection,
     session,
+    createParentRotationDeformerForRigControl,
+    createParentWarpDeformerForRigControl,
+    createRotationDeformerForDrawable,
+    reparentRigControl,
     startWarpDeformerDraftForDrawable,
+    updateRigControl,
     updateWarpDeformerDraft
   } = useEditorSession();
   const parentOptions = useMemo(() => createWarpDeformerParentOptions(session), [session]);
@@ -47,6 +60,7 @@ export function RigToolInspector() {
         draft={rigDraft}
         onApply={applyWarpDeformerDraft}
         onCancel={cancelWarpDeformerDraft}
+        feedback={rigOperationFeedback}
         onFit={fitWarpDeformerDraft}
         onReset={resetWarpDeformerDraft}
         onUpdate={updateWarpDeformerDraft}
@@ -57,18 +71,38 @@ export function RigToolInspector() {
   }
 
   if (selection?.kind === "rigControl") {
-    const readModel = findWarpDeformerReadModel(session, selection.id);
-    return readModel === undefined ? (
-      <RigToolEmptyState title="Rig" summary="Select a Warp Deformer" />
+    const warpReadModel = findWarpDeformerReadModel(session, selection.id);
+    const rotationReadModel = findRotationDeformerReadModel(session, selection.id);
+    return warpReadModel !== undefined ? (
+      <CommittedWarpDeformerInspector
+        feedback={rigOperationFeedback}
+        onCreateParentRotation={createParentRotationDeformerForRigControl}
+        onCreateParentWarp={createParentWarpDeformerForRigControl}
+        onReparent={reparentRigControl}
+        onUpdate={updateRigControl}
+        readModel={warpReadModel}
+        session={session}
+      />
+    ) : rotationReadModel !== undefined ? (
+      <CommittedRotationDeformerInspector
+        feedback={rigOperationFeedback}
+        onCreateParentRotation={createParentRotationDeformerForRigControl}
+        onCreateParentWarp={createParentWarpDeformerForRigControl}
+        onReparent={reparentRigControl}
+        onUpdate={updateRigControl}
+        readModel={rotationReadModel}
+        session={session}
+      />
     ) : (
-      <CommittedWarpDeformerInspector readModel={readModel} session={session} />
+      <RigToolEmptyState title="Rig" summary="Select a Warp Deformer" />
     );
   }
 
   if (selection?.kind === "drawable" && targetOptions[0] !== undefined) {
     return (
       <WarpDeformerSingleTargetStart
-        onStart={startWarpDeformerDraftForDrawable}
+        onCreateRotation={createRotationDeformerForDrawable}
+        onStartWarp={startWarpDeformerDraftForDrawable}
         target={targetOptions[0]}
       />
     );
@@ -87,15 +121,17 @@ export function RigToolInspector() {
 }
 
 function WarpDeformerSingleTargetStart({
-  onStart,
+  onCreateRotation,
+  onStartWarp,
   target
 }: {
-  readonly onStart: (drawableId: DrawableId) => void;
+  readonly onCreateRotation: (drawableId: DrawableId) => void;
+  readonly onStartWarp: (drawableId: DrawableId) => void;
   readonly target: WarpDeformerTargetOption;
 }) {
   return (
     <>
-      <RigToolHeader title="Warp Deformer" />
+      <RigToolHeader title="Rig Deformer" />
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <SectionTitle icon={<Spline aria-hidden="true" size={13} strokeWidth={1.8} />}>
           Target
@@ -105,14 +141,24 @@ function WarpDeformerSingleTargetStart({
           <SummaryRow label="Part" value={target.partDisplayName} />
           <SummaryRow label="Bounds" value={formatRectSummary(target.bounds)} />
         </div>
-        <button
-          className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/55 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
-          onClick={() => onStart(target.drawableId)}
-          type="button"
-        >
-          <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
-          Create Warp Deformer
-        </button>
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          <button
+            className="flex min-h-8 w-full items-center justify-center gap-2 rounded border border-neutral-700 bg-neutral-950 px-3 text-xs font-semibold text-neutral-100 transition hover:border-neutral-500"
+            onClick={() => onCreateRotation(target.drawableId)}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Rotation Deformer
+          </button>
+          <button
+            className="flex min-h-8 w-full items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/55 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
+            onClick={() => onStartWarp(target.drawableId)}
+            type="button"
+          >
+            <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Warp Deformer
+          </button>
+        </div>
       </section>
     </>
   );
@@ -168,6 +214,7 @@ function WarpDeformerTargetPicker({
 
 function WarpDeformerDraftEditor({
   draft,
+  feedback,
   onApply,
   onCancel,
   onFit,
@@ -177,6 +224,7 @@ function WarpDeformerDraftEditor({
   session
 }: {
   readonly draft: WarpDeformerDraft;
+  readonly feedback: string | null;
   readonly onApply: () => void;
   readonly onCancel: () => void;
   readonly onFit: () => void;
@@ -215,14 +263,16 @@ function WarpDeformerDraftEditor({
             <select
               aria-label="Parent deformer"
               className="h-8 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500"
-              onChange={(event) =>
+              disabled={draft.insertBeforeChild !== undefined}
+              onChange={(event) => {
+                const parentRigControlId = event.currentTarget.value;
                 onUpdate({
                   parentRigControlId:
-                    event.currentTarget.value.length === 0
+                    parentRigControlId.length === 0
                       ? undefined
-                      : (event.currentTarget.value as RigControlId)
-                })
-              }
+                      : (parentRigControlId as RigControlId)
+                });
+              }}
               value={draft.parentRigControlId ?? ""}
             >
               <option value="">None</option>
@@ -235,6 +285,14 @@ function WarpDeformerDraftEditor({
           </label>
           <SummaryBlock
             rows={[
+              ...(draft.insertBeforeChild === undefined
+                ? []
+                : [
+                    {
+                      label: "Insertion",
+                      value: "Locked between current parent and child"
+                    }
+                  ]),
               {
                 label: "Bound children",
                 value: summarizeWarpDeformerChildren(
@@ -335,6 +393,8 @@ function WarpDeformerDraftEditor({
         />
       </section>
 
+      <OperationFeedback feedback={feedback} />
+
       <div className="grid grid-cols-2 gap-2">
         <button
           className="flex min-h-9 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-3 text-xs font-semibold text-neutral-300 transition hover:border-neutral-700"
@@ -357,13 +417,79 @@ function WarpDeformerDraftEditor({
   );
 }
 
-function CommittedWarpDeformerInspector({
+export function CommittedWarpDeformerInspector({
+  feedback,
+  onCreateParentRotation,
+  onCreateParentWarp,
+  onReparent,
+  onUpdate,
   readModel,
   session
 }: {
+  readonly feedback: string | null;
+  readonly onCreateParentRotation: (rigControlId: RigControlId) => void;
+  readonly onCreateParentWarp: (rigControlId: RigControlId) => void;
+  readonly onReparent: (childRigControlId: RigControlId, parentRigControlId: RigControlId | null) => void;
+  readonly onUpdate: ReturnType<typeof useEditorSession>["updateRigControl"];
   readonly readModel: WarpDeformerReadModel;
   readonly session: ReturnType<typeof useEditorSession>["session"];
 }) {
+  const [editState, setEditState] = useState(() => createWarpEditState(readModel));
+  const parentOptions = useMemo(
+    () => createDeformerParentOptions(session, readModel.rigControlId),
+    [readModel.rigControlId, session]
+  );
+  const childBounds = useMemo(
+    () =>
+      resolveWarpDeformerChildrenBounds(
+        session,
+        readModel.childDrawableIds,
+        readModel.childRigControlIds
+      ),
+    [readModel.childDrawableIds, readModel.childRigControlIds, session]
+  );
+  const divisionsDisabled = readModel.hasKeyforms;
+  const updateBounds = (patch: Partial<RectDto>) => {
+    setEditState((current) => ({
+      ...current,
+      domainBounds: {
+        ...current.domainBounds,
+        ...patch
+      }
+    }));
+  };
+  const apply = () => {
+    const nextParentId =
+      editState.parentRigControlId.length === 0
+        ? undefined
+        : (editState.parentRigControlId as RigControlId);
+    if (nextParentId !== readModel.parentRigControlId) {
+      onReparent(readModel.rigControlId, nextParentId ?? null);
+    }
+
+    const payload = createWarpUpdatePayload(readModel, editState, divisionsDisabled);
+    if (payload !== undefined) {
+      onUpdate(payload);
+    }
+  };
+
+  useEffect(() => {
+    setEditState(createWarpEditState(readModel));
+  }, [
+    readModel.bezierEditSurface.columns,
+    readModel.bezierEditSurface.rows,
+    readModel.displayName,
+    readModel.domainBounds.height,
+    readModel.domainBounds.width,
+    readModel.domainBounds.x,
+    readModel.domainBounds.y,
+    readModel.opacityMultiplier,
+    readModel.parentRigControlId,
+    readModel.rigControlId,
+    readModel.transformGrid.columns,
+    readModel.transformGrid.rows
+  ]);
+
   return (
     <>
       <RigToolHeader title={readModel.displayName} />
@@ -374,41 +500,476 @@ function CommittedWarpDeformerInspector({
         <SectionTitle icon={<Spline aria-hidden="true" size={13} strokeWidth={1.8} />}>
           Warp Deformer
         </SectionTitle>
-        <SummaryBlock
-          rows={[
-            { label: "Name", value: readModel.displayName },
-            { label: "Parent deformer", value: readModel.parentRigControlId ?? "None" },
-            {
-              label: "Bound children",
-              value: summarizeWarpDeformerChildren(
-                session,
-                readModel.childDrawableIds,
-                readModel.childRigControlIds
-              )
-            },
-            { label: "Domain bounds", value: formatRectSummary(readModel.domainBounds) },
-            {
-              label: "Transform control points",
-              value: formatControlPointGrid(
-                readModel.transformGrid.columns,
-                readModel.transformGrid.rows
-              )
-            },
-            {
-              label: "Bezier divisions",
-              value: formatControlPointGrid(
-                readModel.bezierEditSurface.columns,
-                readModel.bezierEditSurface.rows
-              )
-            },
-            { label: "Bezier edit type", value: readModel.bezierEditSurface.editType },
-            { label: "Transform evaluation", value: readModel.evaluationBoundary.transformEvaluation },
-            { label: "Bezier evaluation", value: readModel.evaluationBoundary.bezierEvaluation }
-          ]}
+        <div className="mt-3 flex flex-col gap-3">
+          <LabeledInput
+            label="Name"
+            onChange={(displayName) => setEditState((current) => ({ ...current, displayName }))}
+            value={editState.displayName}
+          />
+          <label className="flex flex-col gap-1 text-xs text-neutral-500">
+            Parent deformer
+            <select
+              aria-label="Parent deformer"
+              className="h-8 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500"
+              onChange={(event) => {
+                const parentRigControlId = event.currentTarget.value;
+                setEditState((current) => ({
+                  ...current,
+                  parentRigControlId
+                }));
+              }}
+              value={editState.parentRigControlId}
+            >
+              <option value="">None</option>
+              {parentOptions.map((option) => (
+                <option key={option.rigControlId} value={option.rigControlId}>
+                  {option.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <SummaryBlock
+            rows={[
+              {
+                label: "Bound children",
+                value: summarizeWarpDeformerChildren(
+                  session,
+                  readModel.childDrawableIds,
+                  readModel.childRigControlIds
+                )
+              },
+              { label: "Bezier edit type", value: readModel.bezierEditSurface.editType },
+              { label: "Transform evaluation", value: readModel.evaluationBoundary.transformEvaluation },
+              { label: "Bezier evaluation", value: readModel.evaluationBoundary.bezierEvaluation },
+              {
+                label: "Keyform lock",
+                value: readModel.hasKeyforms ? "Division edits disabled" : "No keyform lock"
+              }
+            ]}
+          />
+        </div>
+      </section>
+
+      <ParentDeformerActions
+        onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
+        onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
+      />
+
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Domain bounds</SectionTitle>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <NumberField
+            label="Domain bounds x"
+            onChange={(x) => updateBounds({ x })}
+            value={editState.domainBounds.x}
+          />
+          <NumberField
+            label="Domain bounds y"
+            onChange={(y) => updateBounds({ y })}
+            value={editState.domainBounds.y}
+          />
+          <NumberField
+            label="Domain bounds width"
+            min={1}
+            onChange={(width) => updateBounds({ width })}
+            value={editState.domainBounds.width}
+          />
+          <NumberField
+            label="Domain bounds height"
+            min={1}
+            onChange={(height) => updateBounds({ height })}
+            value={editState.domainBounds.height}
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <ActionButton
+            label="Fit bounds"
+            onClick={() => {
+              if (childBounds !== undefined) {
+                setEditState((current) => ({ ...current, domainBounds: childBounds }));
+              }
+            }}
+          >
+            <Maximize2 aria-hidden="true" size={14} strokeWidth={1.8} />
+          </ActionButton>
+          <ActionButton
+            label="Reset bounds"
+            onClick={() =>
+              setEditState((current) => ({
+                ...current,
+                domainBounds: structuredClone(readModel.domainBounds)
+              }))
+            }
+          >
+            <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+          </ActionButton>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Transform divisions (control point counts)</SectionTitle>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <NumberField
+            disabled={divisionsDisabled}
+            label="Transform columns control points"
+            min={2}
+            onChange={(transformColumns) =>
+              setEditState((current) => ({ ...current, transformColumns }))
+            }
+            value={editState.transformColumns}
+          />
+          <NumberField
+            disabled={divisionsDisabled}
+            label="Transform rows control points"
+            min={2}
+            onChange={(transformRows) =>
+              setEditState((current) => ({ ...current, transformRows }))
+            }
+            value={editState.transformRows}
+          />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Bezier divisions</SectionTitle>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <NumberField
+            disabled={divisionsDisabled}
+            label="Bezier columns"
+            min={2}
+            onChange={(bezierColumns) =>
+              setEditState((current) => ({ ...current, bezierColumns }))
+            }
+            value={editState.bezierColumns}
+          />
+          <NumberField
+            disabled={divisionsDisabled}
+            label="Bezier rows"
+            min={2}
+            onChange={(bezierRows) => setEditState((current) => ({ ...current, bezierRows }))}
+            value={editState.bezierRows}
+          />
+        </div>
+        <input
+          aria-label="Bezier edit type"
+          className="mt-3 h-8 w-full rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-400"
+          readOnly
+          value={WARP_DEFORMER_BEZIER_EDIT_TYPE}
         />
       </section>
+
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Opacity</SectionTitle>
+        <NumberField
+          label="Opacity multiplier"
+          max={1}
+          min={0}
+          onChange={(opacityMultiplier) =>
+            setEditState((current) => ({ ...current, opacityMultiplier }))
+          }
+          step={0.01}
+          value={editState.opacityMultiplier}
+        />
+      </section>
+
+      <OperationFeedback feedback={feedback} />
+      <button
+        className="flex min-h-9 items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/60 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
+        onClick={apply}
+        type="button"
+      >
+        <Check aria-hidden="true" size={14} strokeWidth={1.8} />
+        Apply Deformer Edits
+      </button>
     </>
   );
+}
+
+function CommittedRotationDeformerInspector({
+  feedback,
+  onCreateParentRotation,
+  onCreateParentWarp,
+  onReparent,
+  onUpdate,
+  readModel,
+  session
+}: {
+  readonly feedback: string | null;
+  readonly onCreateParentRotation: (rigControlId: RigControlId) => void;
+  readonly onCreateParentWarp: (rigControlId: RigControlId) => void;
+  readonly onReparent: (childRigControlId: RigControlId, parentRigControlId: RigControlId | null) => void;
+  readonly onUpdate: ReturnType<typeof useEditorSession>["updateRigControl"];
+  readonly readModel: RotationDeformerReadModel;
+  readonly session: ReturnType<typeof useEditorSession>["session"];
+}) {
+  const [editState, setEditState] = useState(() => createRotationEditState(readModel));
+  const parentOptions = useMemo(
+    () => createDeformerParentOptions(session, readModel.rigControlId),
+    [readModel.rigControlId, session]
+  );
+  const apply = () => {
+    const nextParentId =
+      editState.parentRigControlId.length === 0
+        ? undefined
+        : (editState.parentRigControlId as RigControlId);
+    if (nextParentId !== readModel.parentRigControlId) {
+      onReparent(readModel.rigControlId, nextParentId ?? null);
+    }
+
+    const payload = createRotationUpdatePayload(readModel, editState);
+    if (payload !== undefined) {
+      onUpdate(payload);
+    }
+  };
+
+  useEffect(() => {
+    setEditState(createRotationEditState(readModel));
+  }, [
+    readModel.displayName,
+    readModel.opacityMultiplier,
+    readModel.parentRigControlId,
+    readModel.rigControlId
+  ]);
+
+  return (
+    <>
+      <RigToolHeader title={readModel.displayName} />
+      <section
+        className="rounded-md border border-teal-800/70 bg-teal-950/20 p-3"
+        data-testid="rig-tool-inspector"
+      >
+        <SectionTitle icon={<RotateCcw aria-hidden="true" size={13} strokeWidth={1.8} />}>
+          Rotation Deformer
+        </SectionTitle>
+        <div className="mt-3 flex flex-col gap-3">
+          <LabeledInput
+            label="Name"
+            onChange={(displayName) => setEditState((current) => ({ ...current, displayName }))}
+            value={editState.displayName}
+          />
+          <label className="flex flex-col gap-1 text-xs text-neutral-500">
+            Parent deformer
+            <select
+              aria-label="Parent deformer"
+              className="h-8 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500"
+              onChange={(event) => {
+                const parentRigControlId = event.currentTarget.value;
+                setEditState((current) => ({
+                  ...current,
+                  parentRigControlId
+                }));
+              }}
+              value={editState.parentRigControlId}
+            >
+              <option value="">None</option>
+              {parentOptions.map((option) => (
+                <option key={option.rigControlId} value={option.rigControlId}>
+                  {option.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <SummaryBlock
+            rows={[
+              {
+                label: "Bound children",
+                value: summarizeWarpDeformerChildren(
+                  session,
+                  readModel.childDrawableIds,
+                  readModel.childRigControlIds
+                )
+              },
+              {
+                label: "Pivot",
+                value: `${formatInputNumber(readModel.pivot.x)}, ${formatInputNumber(readModel.pivot.y)}`
+              },
+              { label: "Rest angle", value: `${formatInputNumber(readModel.restAngleDegrees)} deg` },
+              {
+                label: "Keyform lock",
+                value: readModel.hasKeyforms ? "Rotation keyforms present" : "No keyforms"
+              }
+            ]}
+          />
+        </div>
+      </section>
+      <ParentDeformerActions
+        onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
+        onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
+      />
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Opacity</SectionTitle>
+        <NumberField
+          label="Opacity multiplier"
+          max={1}
+          min={0}
+          onChange={(opacityMultiplier) =>
+            setEditState((current) => ({ ...current, opacityMultiplier }))
+          }
+          step={0.01}
+          value={editState.opacityMultiplier}
+        />
+      </section>
+      <OperationFeedback feedback={feedback} />
+      <button
+        className="flex min-h-9 items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/60 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
+        onClick={apply}
+        type="button"
+      >
+        <Check aria-hidden="true" size={14} strokeWidth={1.8} />
+        Apply Deformer Edits
+      </button>
+    </>
+  );
+}
+
+interface WarpEditState {
+  readonly displayName: string;
+  readonly parentRigControlId: string;
+  readonly domainBounds: RectDto;
+  readonly transformColumns: number;
+  readonly transformRows: number;
+  readonly bezierColumns: number;
+  readonly bezierRows: number;
+  readonly opacityMultiplier: number;
+}
+
+interface RotationEditState {
+  readonly displayName: string;
+  readonly parentRigControlId: string;
+  readonly opacityMultiplier: number;
+}
+
+function createWarpEditState(readModel: WarpDeformerReadModel): WarpEditState {
+  return {
+    displayName: readModel.displayName,
+    parentRigControlId: readModel.parentRigControlId ?? "",
+    domainBounds: structuredClone(readModel.domainBounds),
+    transformColumns: readModel.transformGrid.columns,
+    transformRows: readModel.transformGrid.rows,
+    bezierColumns: readModel.bezierEditSurface.columns,
+    bezierRows: readModel.bezierEditSurface.rows,
+    opacityMultiplier: readModel.opacityMultiplier
+  };
+}
+
+function createRotationEditState(readModel: RotationDeformerReadModel): RotationEditState {
+  return {
+    displayName: readModel.displayName,
+    parentRigControlId: readModel.parentRigControlId ?? "",
+    opacityMultiplier: readModel.opacityMultiplier
+  };
+}
+
+export function createWarpUpdatePayload(
+  readModel: WarpDeformerReadModel,
+  editState: WarpEditState,
+  divisionsDisabled: boolean
+): UpdateRigControlPayloadDto | undefined {
+  const payload: UpdateRigControlPayloadDto = {
+    rigControlId: readModel.rigControlId
+  };
+
+  addStringChange(payload, "displayName", readModel.displayName, editState.displayName.trim());
+  if (!sameRect(readModel.domainBounds, editState.domainBounds)) {
+    payload.domainBounds = structuredClone(editState.domainBounds);
+  }
+  if (!divisionsDisabled) {
+    addNumberChange(
+      payload,
+      "transformColumns",
+      readModel.transformGrid.columns,
+      editState.transformColumns
+    );
+    addNumberChange(
+      payload,
+      "transformRows",
+      readModel.transformGrid.rows,
+      editState.transformRows
+    );
+    addNumberChange(
+      payload,
+      "bezierColumns",
+      readModel.bezierEditSurface.columns,
+      editState.bezierColumns
+    );
+    addNumberChange(
+      payload,
+      "bezierRows",
+      readModel.bezierEditSurface.rows,
+      editState.bezierRows
+    );
+  }
+  addNumberChange(
+    payload,
+    "opacityMultiplier",
+    readModel.opacityMultiplier,
+    clampNumber(editState.opacityMultiplier, 0, 1)
+  );
+
+  return hasUpdateFields(payload) ? payload : undefined;
+}
+
+function createRotationUpdatePayload(
+  readModel: RotationDeformerReadModel,
+  editState: RotationEditState
+): UpdateRigControlPayloadDto | undefined {
+  const payload: UpdateRigControlPayloadDto = {
+    rigControlId: readModel.rigControlId
+  };
+
+  addStringChange(payload, "displayName", readModel.displayName, editState.displayName.trim());
+  addNumberChange(
+    payload,
+    "opacityMultiplier",
+    readModel.opacityMultiplier,
+    clampNumber(editState.opacityMultiplier, 0, 1)
+  );
+
+  return hasUpdateFields(payload) ? payload : undefined;
+}
+
+function addStringChange(
+  payload: UpdateRigControlPayloadDto,
+  key: "displayName",
+  before: string,
+  after: string
+): void {
+  if (after.length > 0 && before !== after) {
+    payload[key] = after;
+  }
+}
+
+function addNumberChange(
+  payload: UpdateRigControlPayloadDto,
+  key:
+    | "transformColumns"
+    | "transformRows"
+    | "bezierColumns"
+    | "bezierRows"
+    | "opacityMultiplier",
+  before: number,
+  after: number
+): void {
+  if (Number.isFinite(after) && before !== after) {
+    payload[key] = after;
+  }
+}
+
+function hasUpdateFields(payload: UpdateRigControlPayloadDto): boolean {
+  return Object.keys(payload).some((key) => key !== "rigControlId");
+}
+
+function sameRect(left: RectDto, right: RectDto): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function RigToolEmptyState({
@@ -457,6 +1018,50 @@ function SectionTitle({
   );
 }
 
+function OperationFeedback({ feedback }: { readonly feedback: string | null }) {
+  return feedback === null ? null : (
+    <div
+      className="flex items-start gap-2 rounded-md border border-amber-800 bg-amber-950/25 px-2 py-2 text-xs text-amber-100"
+      data-testid="rig-tool-operation-feedback"
+    >
+      <AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={13} strokeWidth={1.8} />
+      <span>{feedback}</span>
+    </div>
+  );
+}
+
+function ParentDeformerActions({
+  onCreateParentRotation,
+  onCreateParentWarp
+}: {
+  readonly onCreateParentRotation: () => void;
+  readonly onCreateParentWarp: () => void;
+}) {
+  return (
+    <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+      <SectionTitle>Create parent deformer</SectionTitle>
+      <div className="mt-3 grid grid-cols-1 gap-2">
+        <button
+          className="flex min-h-8 w-full items-center justify-center gap-2 rounded border border-neutral-700 bg-neutral-950 px-3 text-xs font-semibold text-neutral-100 transition hover:border-neutral-500"
+          onClick={onCreateParentRotation}
+          type="button"
+        >
+          <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+          Create Parent Rotation Deformer
+        </button>
+        <button
+          className="flex min-h-8 w-full items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/55 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
+          onClick={onCreateParentWarp}
+          type="button"
+        >
+          <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
+          Create Parent Warp Deformer
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function LabeledInput({
   label,
   onChange,
@@ -480,14 +1085,20 @@ function LabeledInput({
 }
 
 function NumberField({
+  disabled = false,
   label,
+  max,
   min,
   onChange,
+  step,
   value
 }: {
+  readonly disabled?: boolean;
   readonly label: string;
+  readonly max?: number;
   readonly min?: number;
   readonly onChange: (value: number) => void;
+  readonly step?: number;
   readonly value: number;
 }) {
   return (
@@ -495,7 +1106,12 @@ function NumberField({
       {label}
       <input
         aria-label={label}
-        className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500"
+        className={cn(
+          "h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500",
+          disabled ? "cursor-not-allowed text-neutral-600" : ""
+        )}
+        disabled={disabled}
+        max={max}
         min={min}
         onChange={(event) => {
           const numeric = Number(event.currentTarget.value);
@@ -503,6 +1119,7 @@ function NumberField({
             onChange(numeric);
           }
         }}
+        step={step}
         type="number"
         value={formatInputNumber(value)}
       />

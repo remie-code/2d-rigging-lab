@@ -47,7 +47,10 @@ import {
   BindRigControlChildPayloadSchema,
   CreateWarpDeformerPayloadSchema,
   CreateRotation2dRigControlPayloadSchema,
-  CreateWarpLattice2dRigControlPayloadSchema
+  CreateWarpLattice2dRigControlPayloadSchema,
+  MoveDrawableRigControlBindingPayloadSchema,
+  ReparentRigControlPayloadSchema,
+  UpdateRigControlPayloadSchema
 } from "./payloads/rig-control.js";
 
 export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
@@ -110,6 +113,18 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
     payload: CreateWarpDeformerPayloadSchema
   }),
   z.object({ operationType: z.literal("bindRigControlChild"), payload: BindRigControlChildPayloadSchema }),
+  z.object({
+    operationType: z.literal("moveDrawableRigControlBinding"),
+    payload: MoveDrawableRigControlBindingPayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("reparentRigControl"),
+    payload: ReparentRigControlPayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("updateRigControl"),
+    payload: UpdateRigControlPayloadSchema
+  }),
   z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),
   z.object({ operationType: z.literal("setDrawOrder"), payload: SetDrawOrderPayloadSchema }),
   z.object({ operationType: z.literal("setRuntimeVisibility"), payload: SetRuntimeVisibilityPayloadSchema }),

@@ -54,6 +54,7 @@ export const EvaluatedRigControlSchema = z.object({
   evaluationStatus: z.enum(["evaluated", "disabled", "unsupported", "blocked"]),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
   childRigControlIds: z.array(RigControlIdSchema).default([]),
+  opacityMultiplier: z.number().min(0).max(1).default(1),
   affectedDrawableIds: z.array(DrawableIdSchema).default([]),
   affectedRigControlIds: z.array(RigControlIdSchema).default([]),
   bounds: RectDtoSchema.optional(),
@@ -214,6 +215,7 @@ const evaluateBlockedRigControlNode = (input: {
     evaluationStatus: "blocked",
     childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
     childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
+    opacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
     affectedDrawableIds: input.affectedDrawableIds,
     affectedRigControlIds: input.descendantRigControlIds,
     ...(input.rigControl.kind === "warpLattice2d" ? { bounds: input.rigControl.domainBounds } : {})
@@ -260,6 +262,7 @@ const evaluateRotation2dRigControl = (input: {
       evaluationStatus: input.rigControl.enabled ? "evaluated" : "disabled",
       childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
       childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
+      opacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       localTransform,
@@ -295,6 +298,7 @@ const evaluateWarpLatticeRigControl = (input: {
       evaluationStatus: latticeEvaluation.evaluationStatus,
       childDrawableIds: sortDrawableIds(input.rigControl.childDrawableIds),
       childRigControlIds: sortRigControlIds(input.rigControl.childRigControlIds),
+      opacityMultiplier: input.rigControl.opacityMultiplier ?? 1,
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       bounds: input.rigControl.domainBounds,
@@ -342,20 +346,30 @@ const applyRigControlTransformsToDrawables = (input: {
 
   return input.drawables.map((drawable) => {
     const directRigControl = directRigControlByDrawableId.get(drawable.drawableId);
-    if (directRigControl === undefined || drawable.vertices === undefined) {
+    if (directRigControl === undefined) {
       return drawable;
+    }
+
+    const effects = createRigControlEffectChain({
+      graph: input.graph,
+      directRigControl,
+      evaluatedById: input.evaluatedById
+    });
+    const opacity = applyRigControlOpacityMultiplier(drawable.opacity, effects);
+    if (drawable.vertices === undefined) {
+      return {
+        ...drawable,
+        opacity
+      };
     }
 
     const transformedVertices = applyRigControlEffectChainToVertices({
       vertices: drawable.vertices,
-      effects: createRigControlEffectChain({
-        graph: input.graph,
-        directRigControl,
-        evaluatedById: input.evaluatedById
-      })
+      effects
     });
     return {
       ...drawable,
+      opacity,
       vertices: transformedVertices,
       bounds: computeBoundsFromVertices(transformedVertices),
       vertexHash: createStableVertexHash(transformedVertices, {
@@ -364,6 +378,22 @@ const applyRigControlTransformsToDrawables = (input: {
     };
   });
 };
+
+const applyRigControlOpacityMultiplier = (
+  opacity: number,
+  effects: readonly RigControlEffect[]
+): number =>
+  clamp(
+    effects.reduce((currentOpacity, effect) => {
+      if (!effect.rigControl.enabled || effect.evaluated.dto.evaluationStatus === "blocked") {
+        return currentOpacity;
+      }
+
+      return currentOpacity * (effect.rigControl.opacityMultiplier ?? 1);
+    }, opacity),
+    0,
+    1
+  );
 
 const createRigControlEffectChain = (input: {
   readonly graph: NormalizedRuntimeGraph;
@@ -445,6 +475,8 @@ const createDuplicateDrawableParentDiagnostic = (
     message: `Drawable ${drawableId} is referenced by more than one rig control; first parent wins deterministically.`,
     evidence: [`drawableId=${drawableId}`]
   });
+
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const extractRotationDegrees = (matrix: Affine2dMatrixDto): number => {
   const radians = Math.atan2(matrix.b, matrix.a);

@@ -9,6 +9,7 @@ import type { EditorSelection } from "../../features/editor-session/model/editor
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
+type RotationRigControlDto = Extract<RigControlDto, { readonly kind: "rotation2d" }>;
 type WarpLatticeRigControlDto = Extract<RigControlDto, { readonly kind: "warpLattice2d" }>;
 
 export interface CanvasPoint {
@@ -65,6 +66,7 @@ export interface CanvasMeshOverlayProjection {
 }
 
 export interface CanvasDeformerOverlayProjection {
+  readonly kind: "warp" | "rotation";
   readonly rigControlId?: RigControlId;
   readonly displayName: string;
   readonly domainBounds: RectDto;
@@ -72,6 +74,8 @@ export interface CanvasDeformerOverlayProjection {
   readonly transformRows: number;
   readonly bezierColumns: number;
   readonly bezierRows: number;
+  readonly pivot?: CanvasPoint;
+  readonly restAngleDegrees?: number;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
   readonly status: "draft" | "committed";
@@ -148,6 +152,7 @@ export function createCanvasRenderProjection(
   const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
   const meshPreviewDrawableId = options.meshPreviewDrawableId;
   const maskSourcesByTargetId = createMaskSourceIndex(session);
+  const opacityMultiplierByDrawableId = createDrawableRigOpacityMultiplierIndex(session);
 
   const drawables = session.graph.drawables
     .map((drawable): CanvasRenderableDrawable | undefined => {
@@ -190,7 +195,11 @@ export function createCanvasRenderProjection(
         bounds: structuredClone(mesh.bounds),
         frontOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
         visible: meshPreview || (drawable.runtimeVisibility && !hiddenByPart),
-        opacity: clamp(drawable.defaultOpacity, 0, 1),
+        opacity: clamp(
+          drawable.defaultOpacity * (opacityMultiplierByDrawableId.get(drawable.drawableId) ?? 1),
+          0,
+          1
+        ),
         selected,
         selectedBySubtree,
         meshPreview,
@@ -222,6 +231,7 @@ export function createCanvasRenderProjection(
   const deformerOverlay = resolveDeformerOverlay({
     selection,
     rigControlsById,
+    ...(selectionBounds === undefined ? {} : { selectionBounds }),
     draft: options.deformerDraft ?? null
   });
 
@@ -249,10 +259,12 @@ export function createCanvasRenderProjection(
 function resolveDeformerOverlay(input: {
   readonly selection: EditorSelection | null;
   readonly rigControlsById: ReadonlyMap<RigControlId, RigControlDto>;
+  readonly selectionBounds?: RectDto;
   readonly draft: CanvasProjectionOptions["deformerDraft"];
 }): CanvasDeformerOverlayProjection | undefined {
   if (input.draft !== null && input.draft !== undefined) {
     return {
+      kind: "warp",
       displayName: input.draft.displayName,
       domainBounds: structuredClone(input.draft.domainBounds),
       transformColumns: input.draft.transformColumns,
@@ -270,11 +282,40 @@ function resolveDeformerOverlay(input: {
   }
 
   const rigControl = input.rigControlsById.get(input.selection.id);
-  if (rigControl === undefined || !isWarpLatticeRigControl(rigControl)) {
+  if (rigControl === undefined) {
+    return undefined;
+  }
+
+  if (isRotationRigControl(rigControl)) {
+    return {
+      kind: "rotation",
+      rigControlId: rigControl.rigControlId,
+      displayName: rigControl.displayName,
+      domainBounds:
+        input.selectionBounds ?? {
+          x: rigControl.pivot.x - 16,
+          y: rigControl.pivot.y - 16,
+          width: 32,
+          height: 32
+        },
+      transformColumns: 0,
+      transformRows: 0,
+      bezierColumns: 0,
+      bezierRows: 0,
+      pivot: structuredClone(rigControl.pivot),
+      restAngleDegrees: rigControl.restAngleDegrees,
+      childDrawableIds: [...rigControl.childDrawableIds],
+      childRigControlIds: [...rigControl.childRigControlIds],
+      status: "committed"
+    };
+  }
+
+  if (!isWarpLatticeRigControl(rigControl)) {
     return undefined;
   }
 
   return {
+    kind: "warp",
     rigControlId: rigControl.rigControlId,
     displayName: rigControl.displayName,
     domainBounds: structuredClone(rigControl.domainBounds),
@@ -559,10 +600,55 @@ function collectRigControlDrawableIds(
   return result;
 }
 
+function createDrawableRigOpacityMultiplierIndex(
+  session: AuthoringSession
+): ReadonlyMap<DrawableId, number> {
+  const rigControlsById = new Map(
+    session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
+  );
+  const result = new Map<DrawableId, number>();
+  const visited = new Set<RigControlId>();
+  const roots = [
+    ...session.graph.rigControlRootIds,
+    ...session.graph.rigControls
+      .filter((rigControl) => rigControl.parentId === undefined)
+      .map((rigControl) => rigControl.rigControlId)
+  ].filter((rigControlId, index, rigControlIds) => rigControlIds.indexOf(rigControlId) === index);
+
+  const visitRigControl = (rigControlId: RigControlId, inheritedMultiplier: number) => {
+    const rigControl = rigControlsById.get(rigControlId);
+    if (rigControl === undefined || visited.has(rigControlId)) {
+      return;
+    }
+
+    visited.add(rigControlId);
+    const multiplier = inheritedMultiplier * (rigControl.opacityMultiplier ?? 1);
+    for (const drawableId of rigControl.childDrawableIds) {
+      result.set(drawableId, (result.get(drawableId) ?? 1) * multiplier);
+    }
+    for (const childRigControlId of rigControl.childRigControlIds) {
+      visitRigControl(childRigControlId, multiplier);
+    }
+  };
+
+  for (const rootId of roots) {
+    visitRigControl(rootId, 1);
+  }
+  for (const rigControl of session.graph.rigControls) {
+    visitRigControl(rigControl.rigControlId, 1);
+  }
+
+  return result;
+}
+
 function isWarpLatticeRigControl(
   rigControl: RigControlDto
 ): rigControl is WarpLatticeRigControlDto {
   return rigControl.kind === "warpLattice2d";
+}
+
+function isRotationRigControl(rigControl: RigControlDto): rigControl is RotationRigControlDto {
+  return rigControl.kind === "rotation2d";
 }
 
 function collectPartAncestorIds(

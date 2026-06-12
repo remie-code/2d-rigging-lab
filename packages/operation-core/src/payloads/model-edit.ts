@@ -149,7 +149,7 @@ const PreviewMeshPayloadSchema = z.object({
 
 export const GenerateMeshPayloadSchema = z.object({
   drawableId: DrawableIdSchema,
-  method: z.enum(["manual-empty", "auto-grid-v1", "auto-outline-v1"]),
+  method: z.enum(["manual-empty", "auto-grid-v1", "auto-outline-v1", "auto-outline-v2"]),
   densityHint: z.enum(["low", "medium", "high"]).optional(),
   previewMesh: PreviewMeshPayloadSchema.optional()
 });

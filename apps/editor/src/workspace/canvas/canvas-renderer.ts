@@ -140,6 +140,11 @@ function drawDeformerOverlay(
       ? "rgba(125, 211, 252, 0.46)"
       : "rgba(251, 113, 133, 0.36)";
 
+  if (overlay.kind === "rotation") {
+    drawRotationDeformerOverlay(context, overlay, zoom, color);
+    return;
+  }
+
   context.save();
   context.lineWidth = 1.5 / zoom;
   context.strokeStyle = color;
@@ -159,6 +164,53 @@ function drawDeformerOverlay(
   context.lineWidth = 1 / zoom;
   context.setLineDash([2 / zoom, 5 / zoom]);
   drawDeformerGridLines(context, overlay, zoom, "bezier", guideColor);
+  context.restore();
+}
+
+function drawRotationDeformerOverlay(
+  context: CanvasRenderingContext2D,
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number,
+  color: string
+): void {
+  const pivot = overlay.pivot ?? {
+    x: overlay.domainBounds.x + overlay.domainBounds.width / 2,
+    y: overlay.domainBounds.y + overlay.domainBounds.height / 2
+  };
+  const radius = Math.max(12 / zoom, Math.min(overlay.domainBounds.width, overlay.domainBounds.height) * 0.28);
+  const angleRadians = ((overlay.restAngleDegrees ?? 0) * Math.PI) / 180;
+
+  context.save();
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = 1.5 / zoom;
+  context.setLineDash([]);
+  context.strokeRect(
+    overlay.domainBounds.x,
+    overlay.domainBounds.y,
+    overlay.domainBounds.width,
+    overlay.domainBounds.height
+  );
+
+  context.beginPath();
+  context.arc(pivot.x, pivot.y, Math.max(3 / zoom, 1.5 / zoom), 0, Math.PI * 2);
+  context.fill();
+
+  context.beginPath();
+  context.moveTo(pivot.x - 7 / zoom, pivot.y);
+  context.lineTo(pivot.x + 7 / zoom, pivot.y);
+  context.moveTo(pivot.x, pivot.y - 7 / zoom);
+  context.lineTo(pivot.x, pivot.y + 7 / zoom);
+  context.stroke();
+
+  context.beginPath();
+  context.arc(pivot.x, pivot.y, radius, -Math.PI * 0.25, Math.PI * 0.25);
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(pivot.x, pivot.y);
+  context.lineTo(pivot.x + Math.cos(angleRadians) * radius, pivot.y + Math.sin(angleRadians) * radius);
+  context.stroke();
   context.restore();
 }
 

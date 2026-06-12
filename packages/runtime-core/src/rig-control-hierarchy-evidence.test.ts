@@ -76,6 +76,18 @@ describe("runtime rig control hierarchy evidence", () => {
     ]);
   });
 
+  it("applies static deformer opacity multipliers through descendant drawable chains", () => {
+    const graph = createOpacityMultiplierRigControlGraph();
+    const result = evaluateSingleFrame(graph, 0, 0);
+
+    expect(expectRigControl(result.snapshot.rigControls, "rig_parent").opacityMultiplier).toBe(0.5);
+    expect(expectRigControl(result.snapshot.rigControls, "rig_child").opacityMultiplier).toBe(0.4);
+    expect(result.snapshot.drawables[0]).toMatchObject({
+      drawableId: "draw_child",
+      opacity: 0.2
+    });
+  });
+
   it("exposes rig control transform changes and affected drawable targets through runtime diff/evidence", () => {
     const graph = createRotationRigControlGraph();
     const baseline = evaluateSingleFrame(graph, 0, 0);
@@ -517,6 +529,39 @@ const createCycleRigControlGraph = (): NormalizedRuntimeGraph => {
           ...childRigControl,
           childRigControlIds: [parentRigId],
           restAngleDegrees: 45
+        }
+      ]
+    ]),
+    keyformBindings: []
+  };
+};
+
+const createOpacityMultiplierRigControlGraph = (): NormalizedRuntimeGraph => {
+  const graph = createRotationRigControlGraph();
+  const parentRigId = RigControlIdSchema.parse("rig_parent");
+  const childRigId = RigControlIdSchema.parse("rig_child");
+  const parentRigControl = graph.rigControls.get(parentRigId);
+  const childRigControl = graph.rigControls.get(childRigId);
+
+  if (parentRigControl?.kind !== "rotation2d" || childRigControl?.kind !== "rotation2d") {
+    throw new Error("Expected rotation2d test rig controls");
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        parentRigId,
+        {
+          ...parentRigControl,
+          opacityMultiplier: 0.5
+        }
+      ],
+      [
+        childRigId,
+        {
+          ...childRigControl,
+          opacityMultiplier: 0.4
         }
       ]
     ]),

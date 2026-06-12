@@ -2,16 +2,21 @@ import {
   DrawableIdSchema,
   RigControlIdSchema,
   WarpLattice2dBindSpaceSchema,
+  createWarpLattice2dControlPointSlots,
+  getWarpLattice2dControlPointCount,
   WarpLattice2dDomainBoundsSchema,
   WarpLattice2dInterpolationMethodSchema,
   hasWarpLattice2dControlPointCardinality
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DrawableId,
+  RectDto,
   RigControlId,
-  TargetRefDto
+  TargetRefDto,
+  Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import {
+  createWarpDeformerMetadata,
   getWarpDeformerBezierControlPointCount,
   hasWarpDeformerBezierSurfaceCardinality,
   type RigControlDto
@@ -68,19 +73,94 @@ export interface BindRigControlChildMutationResult {
   readonly authoringRevision: AuthoringRevision;
 }
 
+export interface MoveDrawableRigControlBindingInput {
+  readonly drawableId: DrawableId;
+  readonly targetRigControlId: RigControlId;
+}
+
+export interface MoveDrawableRigControlBindingMutationResult {
+  readonly session: AuthoringSession;
+  readonly drawableId: DrawableId;
+  readonly sourceRigControlBefore: RigControlDto;
+  readonly sourceRigControlAfter: RigControlDto;
+  readonly targetRigControlBefore: RigControlDto;
+  readonly targetRigControlAfter: RigControlDto;
+  readonly authoringRevision: AuthoringRevision;
+}
+
+export interface ReparentRigControlInput {
+  readonly childRigControlId: RigControlId;
+  readonly parentRigControlId?: RigControlId | null;
+}
+
+export interface ReparentRigControlMutationResult {
+  readonly session: AuthoringSession;
+  readonly childRigControlBefore: RigControlDto;
+  readonly childRigControlAfter: RigControlDto;
+  readonly previousParentRigControlChange?: RigControlMutationChange;
+  readonly newParentRigControlChange?: RigControlMutationChange;
+  readonly rigControlRootIdsBefore: readonly RigControlId[];
+  readonly rigControlRootIdsAfter: readonly RigControlId[];
+  readonly authoringRevision: AuthoringRevision;
+}
+
+export interface InsertRigControlBetweenParentAndChildInput {
+  readonly parentRigControlId: RigControlId;
+  readonly child: TargetRefDto;
+}
+
+export interface InsertRigControlBetweenParentAndChildMutationResult {
+  readonly session: AuthoringSession;
+  readonly rigControl: RigControlDto;
+  readonly parentRigControlBefore: RigControlDto;
+  readonly parentRigControlAfter: RigControlDto;
+  readonly childRigControlChange?: RigControlMutationChange;
+  readonly child: TargetRefDto;
+  readonly rigControlRootIdsBefore: readonly RigControlId[];
+  readonly rigControlRootIdsAfter: readonly RigControlId[];
+  readonly authoringRevision: AuthoringRevision;
+}
+
+export interface UpdateRigControlInput {
+  readonly rigControlId: RigControlId;
+  readonly displayName?: string;
+  readonly domainBounds?: RectDto;
+  readonly transformColumns?: number;
+  readonly transformRows?: number;
+  readonly bezierColumns?: number;
+  readonly bezierRows?: number;
+  readonly opacityMultiplier?: number;
+}
+
+export interface UpdateRigControlMutationResult {
+  readonly session: AuthoringSession;
+  readonly rigControlBefore: RigControlDto;
+  readonly rigControlAfter: RigControlDto;
+  readonly authoringRevision: AuthoringRevision;
+}
+
+interface WarpLattice2dRigControlFieldUpdate {
+  readonly domainBounds: RectDto;
+  readonly latticeColumns: number;
+  readonly latticeRows: number;
+  readonly restControlPoints: Vec2Dto[];
+  readonly warpDeformer: WarpLattice2dRigControlDto["warpDeformer"];
+}
+
 export const createRotation2dRigControl = (
   session: AuthoringSession,
   rigControl: Rotation2dRigControlDto
 ): CreateRotation2dRigControlMutationResult => {
   assertUniqueRigControlId(session, rigControl.rigControlId);
   assertPartExists(session, rigControl);
+  assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
   assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
   assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
   assertChildDrawablesCanBind(session, rigControl.childDrawableIds);
   assertChildRigControlsCanBind(session.graph, rigControl.rigControlId, rigControl.childRigControlIds);
 
   const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
-  const storedRigControl = structuredClone(rigControl);
+  const storedRigControl = withDefaultOpacityMultiplier(rigControl);
   session.graph.rigControls.push(storedRigControl);
   addStableOrderId(session.graph, storedRigControl.rigControlId);
   addRigControlRootId(session.graph, storedRigControl.rigControlId);
@@ -110,13 +190,14 @@ export const createWarpLattice2dRigControl = (
   assertWarpLattice2dRigControlShape(rigControl);
   assertUniqueRigControlId(session, rigControl.rigControlId);
   assertPartExists(session, rigControl);
+  assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
   assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
   assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
   assertChildDrawablesCanBind(session, rigControl.childDrawableIds);
   assertChildRigControlsCanBind(session.graph, rigControl.rigControlId, rigControl.childRigControlIds);
 
   const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
-  const storedRigControl = structuredClone(rigControl);
+  const storedRigControl = withDefaultOpacityMultiplier(rigControl);
   session.graph.rigControls.push(storedRigControl);
   addStableOrderId(session.graph, storedRigControl.rigControlId);
   addRigControlRootId(session.graph, storedRigControl.rigControlId);
@@ -187,6 +268,354 @@ export const bindRigControlChild = (
     child: input.child,
     rigControlRootIdsBefore,
     rigControlRootIdsAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const moveDrawableRigControlBinding = (
+  session: AuthoringSession,
+  input: MoveDrawableRigControlBindingInput
+): MoveDrawableRigControlBindingMutationResult => {
+  if (getDrawableById(session.graph, input.drawableId) === undefined) {
+    throw new AuthoringMutationError(
+      "missing_drawable",
+      `Rig control child drawable does not exist: ${input.drawableId}`
+    );
+  }
+
+  const targetRigControl = getRigControlById(session.graph, input.targetRigControlId);
+  if (targetRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Target rig control does not exist: ${input.targetRigControlId}`
+    );
+  }
+
+  const sourceParents = findRigControlsWithDrawableChild(session.graph, input.drawableId);
+  if (sourceParents.length === 0) {
+    throw new AuthoringMutationError(
+      "missing_rig_control_child_binding",
+      `Drawable ${input.drawableId} is not bound to a rig control`
+    );
+  }
+  if (sourceParents.length > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Drawable ${input.drawableId} is bound under multiple rig controls`
+    );
+  }
+
+  const sourceRigControl = sourceParents[0];
+  if (sourceRigControl === undefined) {
+    throw new Error("Expected one drawable source rig control after length check.");
+  }
+  if (sourceRigControl.rigControlId === targetRigControl.rigControlId) {
+    throw new AuthoringMutationError(
+      "no_op_rig_control_child_binding",
+      `Drawable ${input.drawableId} is already bound to rig control ${targetRigControl.rigControlId}`
+    );
+  }
+  if (targetRigControl.childDrawableIds.includes(input.drawableId)) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Target rig control ${targetRigControl.rigControlId} already lists drawable ${input.drawableId}`
+    );
+  }
+
+  const sourceRigControlBefore = structuredClone(sourceRigControl);
+  const targetRigControlBefore = structuredClone(targetRigControl);
+  sourceRigControl.childDrawableIds = sourceRigControl.childDrawableIds.filter(
+    (childDrawableId) => childDrawableId !== input.drawableId
+  );
+  targetRigControl.childDrawableIds.push(input.drawableId);
+  const sourceRigControlAfter = structuredClone(sourceRigControl);
+  const targetRigControlAfter = structuredClone(targetRigControl);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    drawableId: input.drawableId,
+    sourceRigControlBefore,
+    sourceRigControlAfter,
+    targetRigControlBefore,
+    targetRigControlAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const reparentRigControl = (
+  session: AuthoringSession,
+  input: ReparentRigControlInput
+): ReparentRigControlMutationResult => {
+  const childRigControl = getRigControlById(session.graph, input.childRigControlId);
+  if (childRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Child rig control does not exist: ${input.childRigControlId}`
+    );
+  }
+
+  const newParentRigControl =
+    input.parentRigControlId === undefined || input.parentRigControlId === null
+      ? undefined
+      : getRigControlById(session.graph, input.parentRigControlId);
+  if (
+    input.parentRigControlId !== undefined &&
+    input.parentRigControlId !== null &&
+    newParentRigControl === undefined
+  ) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Target parent rig control does not exist: ${input.parentRigControlId}`
+    );
+  }
+  if (input.parentRigControlId === input.childRigControlId) {
+    throw new AuthoringMutationError(
+      "rig_control_self_child",
+      `Rig control cannot be its own parent: ${input.childRigControlId}`
+    );
+  }
+  if (
+    input.parentRigControlId !== undefined &&
+    input.parentRigControlId !== null &&
+    isRigControlDescendant(session.graph, input.childRigControlId, input.parentRigControlId)
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_cycle",
+      `Reparenting ${input.childRigControlId} under ${input.parentRigControlId} would create a rig control cycle`
+    );
+  }
+
+  assertCoherentRigControlParentState(session.graph, childRigControl);
+
+  const currentParentRigControl =
+    childRigControl.parentId === undefined
+      ? undefined
+      : getRigControlById(session.graph, childRigControl.parentId);
+  if (
+    childRigControl.parentId === (input.parentRigControlId ?? undefined) &&
+    coherentRootMembership(session.graph, childRigControl)
+  ) {
+    throw new AuthoringMutationError(
+      "no_op_rig_control_child_binding",
+      `Rig control ${input.childRigControlId} already has the requested parent`
+    );
+  }
+  if (
+    newParentRigControl !== undefined &&
+    newParentRigControl.childRigControlIds.includes(input.childRigControlId)
+  ) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Target parent ${newParentRigControl.rigControlId} already lists child rig control ${input.childRigControlId}`
+    );
+  }
+
+  const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
+  const childRigControlBefore = structuredClone(childRigControl);
+  const previousParentRigControlBefore =
+    currentParentRigControl === undefined ? undefined : structuredClone(currentParentRigControl);
+  const newParentRigControlBefore =
+    newParentRigControl === undefined ? undefined : structuredClone(newParentRigControl);
+
+  if (currentParentRigControl !== undefined) {
+    currentParentRigControl.childRigControlIds = currentParentRigControl.childRigControlIds.filter(
+      (childRigControlId) => childRigControlId !== input.childRigControlId
+    );
+  }
+
+  if (newParentRigControl === undefined) {
+    delete childRigControl.parentId;
+    addRigControlRootId(session.graph, childRigControl.rigControlId);
+  } else {
+    childRigControl.parentId = newParentRigControl.rigControlId;
+    newParentRigControl.childRigControlIds.push(childRigControl.rigControlId);
+    removeRigControlRootId(session.graph, childRigControl.rigControlId);
+  }
+
+  const previousParentRigControlChange =
+    currentParentRigControl === undefined || previousParentRigControlBefore === undefined
+      ? undefined
+      : {
+          before: previousParentRigControlBefore,
+          after: structuredClone(currentParentRigControl)
+        };
+  const newParentRigControlChange =
+    newParentRigControl === undefined || newParentRigControlBefore === undefined
+      ? undefined
+      : {
+          before: newParentRigControlBefore,
+          after: structuredClone(newParentRigControl)
+        };
+  const rigControlRootIdsAfter = cloneDto(session.graph.rigControlRootIds);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    childRigControlBefore,
+    childRigControlAfter: structuredClone(childRigControl),
+    ...(previousParentRigControlChange === undefined ? {} : { previousParentRigControlChange }),
+    ...(newParentRigControlChange === undefined ? {} : { newParentRigControlChange }),
+    rigControlRootIdsBefore,
+    rigControlRootIdsAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const insertRigControlBetweenParentAndChild = (
+  session: AuthoringSession,
+  rigControl: RigControlDto,
+  input: InsertRigControlBetweenParentAndChildInput
+): InsertRigControlBetweenParentAndChildMutationResult => {
+  if (rigControl.kind === "warpLattice2d") {
+    assertWarpLattice2dRigControlShape(rigControl);
+  }
+  assertUniqueRigControlId(session, rigControl.rigControlId);
+  assertPartExists(session, rigControl);
+  assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
+  assertInsertionPayloadChildren(rigControl, input.child);
+
+  const parentRigControl = getRigControlById(session.graph, input.parentRigControlId);
+  if (parentRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Parent rig control does not exist: ${input.parentRigControlId}`
+    );
+  }
+
+  const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
+  const parentRigControlBefore = structuredClone(parentRigControl);
+  let childRigControlChange: RigControlMutationChange | undefined;
+  const storedRigControl = withDefaultOpacityMultiplier({
+    ...rigControl,
+    parentId: parentRigControl.rigControlId
+  } as RigControlDto);
+
+  if (input.child.kind === "drawable") {
+    const childDrawableId = parseDrawableChildId(input.child);
+    assertDrawableInsertionSource(session.graph, parentRigControl, childDrawableId);
+    parentRigControl.childDrawableIds = parentRigControl.childDrawableIds.filter(
+      (candidate) => candidate !== childDrawableId
+    );
+    parentRigControl.childRigControlIds.push(storedRigControl.rigControlId);
+  } else if (input.child.kind === "rigControl") {
+    const childRigControlId = parseRigControlChildId(input.child);
+    const childRigControl = assertRigControlInsertionSource(
+      session.graph,
+      parentRigControl,
+      childRigControlId
+    );
+    const childRigControlBefore = structuredClone(childRigControl);
+    parentRigControl.childRigControlIds = parentRigControl.childRigControlIds.map(
+      (candidate) => candidate === childRigControlId ? storedRigControl.rigControlId : candidate
+    );
+    childRigControl.parentId = storedRigControl.rigControlId;
+    childRigControlChange = {
+      before: childRigControlBefore,
+      after: structuredClone(childRigControl)
+    };
+  } else {
+    throw new AuthoringMutationError(
+      "invalid_rig_control_child_kind",
+      `Rig control insertion child must be drawable or rigControl: ${input.child.kind}`
+    );
+  }
+
+  session.graph.rigControls.push(storedRigControl);
+  addStableOrderId(session.graph, storedRigControl.rigControlId);
+  const parentRigControlAfter = structuredClone(parentRigControl);
+  const rigControlRootIdsAfter = cloneDto(session.graph.rigControlRootIds);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    rigControl: storedRigControl,
+    parentRigControlBefore,
+    parentRigControlAfter,
+    ...(childRigControlChange === undefined ? {} : { childRigControlChange }),
+    child: input.child,
+    rigControlRootIdsBefore,
+    rigControlRootIdsAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const updateRigControl = (
+  session: AuthoringSession,
+  input: UpdateRigControlInput
+): UpdateRigControlMutationResult => {
+  const rigControl = getRigControlById(session.graph, input.rigControlId);
+  if (rigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Rig control does not exist: ${input.rigControlId}`
+    );
+  }
+  if (input.displayName !== undefined && input.displayName.trim().length === 0) {
+    throw new AuthoringMutationError(
+      "invalid_rig_control_display_name",
+      `Rig control displayName must not be empty: ${input.rigControlId}`
+    );
+  }
+  assertRigControlOpacityMultiplier(input.opacityMultiplier);
+
+  const rigControlBefore = structuredClone(rigControl);
+  const warpFieldsWereProvided =
+    input.domainBounds !== undefined ||
+    input.transformColumns !== undefined ||
+    input.transformRows !== undefined ||
+    input.bezierColumns !== undefined ||
+    input.bezierRows !== undefined;
+  if (warpFieldsWereProvided) {
+    if (rigControl.kind !== "warpLattice2d") {
+      throw new AuthoringMutationError(
+        "unsupported_rig_control_update_field",
+        `Only warpLattice2d rig controls can update domain bounds or division fields: ${input.rigControlId}`
+      );
+    }
+  }
+
+  const warpFieldUpdate =
+    warpFieldsWereProvided && rigControl.kind === "warpLattice2d"
+      ? createWarpLattice2dRigControlFieldUpdate(session.graph, rigControl, input)
+      : undefined;
+  const previewRigControlAfter = structuredClone(rigControl);
+  if (input.displayName !== undefined) {
+    previewRigControlAfter.displayName = input.displayName;
+  }
+  if (input.opacityMultiplier !== undefined) {
+    previewRigControlAfter.opacityMultiplier = input.opacityMultiplier;
+  }
+  if (warpFieldUpdate !== undefined) {
+    if (previewRigControlAfter.kind !== "warpLattice2d") {
+      throw new Error("Expected warpLattice2d preview after update precondition.");
+    }
+    applyWarpLattice2dRigControlFieldUpdate(previewRigControlAfter, warpFieldUpdate);
+  }
+
+  if (JSON.stringify(rigControlBefore) === JSON.stringify(previewRigControlAfter)) {
+    throw new AuthoringMutationError(
+      "no_op_rig_control_update",
+      `Rig control ${input.rigControlId} is already up to date`
+    );
+  }
+
+  Object.assign(rigControl, structuredClone(previewRigControlAfter));
+  const rigControlAfter = structuredClone(rigControl);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    rigControlBefore,
+    rigControlAfter,
     authoringRevision: session.authoringRevision
   };
 };
@@ -331,6 +760,62 @@ const assertUniqueChildIds = (
   }
 };
 
+const assertRigControlOpacityMultiplier = (opacityMultiplier: number | undefined): void => {
+  if (opacityMultiplier === undefined) {
+    return;
+  }
+
+  if (!Number.isFinite(opacityMultiplier) || opacityMultiplier < 0 || opacityMultiplier > 1) {
+    throw new AuthoringMutationError(
+      "invalid_rig_control_opacity_multiplier",
+      `Rig control opacityMultiplier must be between 0 and 1: ${opacityMultiplier}`
+    );
+  }
+};
+
+const assertInsertionPayloadChildren = (
+  rigControl: RigControlDto,
+  child: TargetRefDto
+): void => {
+  const childDrawableIds = rigControl.childDrawableIds;
+  const childRigControlIds = rigControl.childRigControlIds;
+
+  if (child.kind === "drawable") {
+    const childDrawableId = parseDrawableChildId(child);
+    if (
+      childDrawableIds.length !== 1 ||
+      childDrawableIds[0] !== childDrawableId ||
+      childRigControlIds.length !== 0
+    ) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        "Insertion create requires exactly the inserted drawable as the new rig control child"
+      );
+    }
+    return;
+  }
+
+  if (child.kind === "rigControl") {
+    const childRigControlId = parseRigControlChildId(child);
+    if (
+      childRigControlIds.length !== 1 ||
+      childRigControlIds[0] !== childRigControlId ||
+      childDrawableIds.length !== 0
+    ) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        "Insertion create requires exactly the inserted rig control as the new rig control child"
+      );
+    }
+    return;
+  }
+
+  throw new AuthoringMutationError(
+    "invalid_rig_control_child_kind",
+    `Rig control insertion child must be drawable or rigControl: ${child.kind}`
+  );
+};
+
 const assertChildDrawablesCanBind = (
   session: AuthoringSession,
   childDrawableIds: readonly DrawableId[]
@@ -351,6 +836,94 @@ const assertChildDrawablesCanBind = (
       );
     }
   }
+};
+
+const assertDrawableInsertionSource = (
+  graph: AuthoringGraph,
+  parentRigControl: RigControlDto,
+  childDrawableId: DrawableId
+): void => {
+  if (getDrawableById(graph, childDrawableId) === undefined) {
+    throw new AuthoringMutationError(
+      "missing_drawable",
+      `Rig control child drawable does not exist: ${childDrawableId}`
+    );
+  }
+
+  const parentChildCount = countOccurrences(parentRigControl.childDrawableIds, childDrawableId);
+  if (parentChildCount === 0) {
+    throw new AuthoringMutationError(
+      "missing_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} does not list drawable ${childDrawableId}`
+    );
+  }
+  if (parentChildCount > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} lists drawable ${childDrawableId} more than once`
+    );
+  }
+
+  const existingParents = findRigControlsWithDrawableChild(graph, childDrawableId);
+  if (existingParents.length > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Drawable ${childDrawableId} is bound under multiple rig controls`
+    );
+  }
+  if (existingParents[0]?.rigControlId !== parentRigControl.rigControlId) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      `Drawable ${childDrawableId} is not bound under parent ${parentRigControl.rigControlId}`
+    );
+  }
+};
+
+const assertRigControlInsertionSource = (
+  graph: AuthoringGraph,
+  parentRigControl: RigControlDto,
+  childRigControlId: RigControlId
+): RigControlDto => {
+  const childRigControl = getRigControlById(graph, childRigControlId);
+  if (childRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Child rig control does not exist: ${childRigControlId}`
+    );
+  }
+
+  const parentChildCount = countOccurrences(parentRigControl.childRigControlIds, childRigControlId);
+  if (parentChildCount === 0) {
+    throw new AuthoringMutationError(
+      "missing_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} does not list child rig control ${childRigControlId}`
+    );
+  }
+  if (parentChildCount > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} lists child rig control ${childRigControlId} more than once`
+    );
+  }
+
+  const existingParents = findRigControlsWithRigControlChild(graph, childRigControlId);
+  if (existingParents.length > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Rig control ${childRigControlId} is listed under multiple parent rig controls`
+    );
+  }
+  if (
+    childRigControl.parentId !== parentRigControl.rigControlId ||
+    existingParents[0]?.rigControlId !== parentRigControl.rigControlId
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      `Rig control ${childRigControlId} is not coherently bound under parent ${parentRigControl.rigControlId}`
+    );
+  }
+
+  return childRigControl;
 };
 
 const assertChildRigControlsCanBind = (
@@ -388,6 +961,150 @@ const assertChildRigControlsCanBind = (
       );
     }
   }
+};
+
+const assertCoherentRigControlParentState = (
+  graph: AuthoringGraph,
+  childRigControl: RigControlDto
+): void => {
+  const listedParents = findRigControlsWithRigControlChild(graph, childRigControl.rigControlId);
+  if (listedParents.length > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Rig control ${childRigControl.rigControlId} is listed under multiple parent rig controls`
+    );
+  }
+
+  const rootCount = countOccurrences(graph.rigControlRootIds, childRigControl.rigControlId);
+  if (childRigControl.parentId === undefined) {
+    if (listedParents.length > 0) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        `Root rig control ${childRigControl.rigControlId} is still listed under a parent rig control`
+      );
+    }
+    if (rootCount !== 1) {
+      throw new AuthoringMutationError(
+        "illegal_rig_control_root_state",
+        `Root rig control ${childRigControl.rigControlId} must appear exactly once in rigControlRootIds`
+      );
+    }
+    return;
+  }
+
+  const parentRigControl = getRigControlById(graph, childRigControl.parentId);
+  if (parentRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Rig control parent does not exist: ${childRigControl.parentId}`
+    );
+  }
+  if (
+    listedParents.length !== 1 ||
+    listedParents[0]?.rigControlId !== childRigControl.parentId ||
+    countOccurrences(parentRigControl.childRigControlIds, childRigControl.rigControlId) !== 1
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      `Rig control ${childRigControl.rigControlId} parentId and parent child list disagree`
+    );
+  }
+  if (rootCount !== 0) {
+    throw new AuthoringMutationError(
+      "illegal_rig_control_root_state",
+      `Child rig control ${childRigControl.rigControlId} must not appear in rigControlRootIds`
+    );
+  }
+};
+
+const coherentRootMembership = (
+  graph: AuthoringGraph,
+  childRigControl: RigControlDto
+): boolean => {
+  const rootCount = countOccurrences(graph.rigControlRootIds, childRigControl.rigControlId);
+  return childRigControl.parentId === undefined ? rootCount === 1 : rootCount === 0;
+};
+
+const createWarpLattice2dRigControlFieldUpdate = (
+  graph: AuthoringGraph,
+  rigControl: WarpLattice2dRigControlDto,
+  input: UpdateRigControlInput
+): WarpLattice2dRigControlFieldUpdate => {
+  const nextDomainBounds = input.domainBounds ?? rigControl.domainBounds;
+  if (!WarpLattice2dDomainBoundsSchema.safeParse(nextDomainBounds).success) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_domain_bounds",
+      `warpLattice2d domainBounds must have positive width and height: ${JSON.stringify(nextDomainBounds)}`
+    );
+  }
+
+  const nextTransformColumns = input.transformColumns ?? rigControl.latticeColumns;
+  const nextTransformRows = input.transformRows ?? rigControl.latticeRows;
+  if (!isValidDivisionCount(nextTransformColumns) || !isValidDivisionCount(nextTransformRows)) {
+    throw new AuthoringMutationError(
+      "invalid_warp_lattice_grid",
+      `warpLattice2d transform grid must be at least 2x2: ${nextTransformColumns}x${nextTransformRows}`
+    );
+  }
+
+  const currentBezierSurface = rigControl.warpDeformer?.bezierEditSurface;
+  const nextBezierColumns = input.bezierColumns ?? currentBezierSurface?.columns ?? rigControl.latticeColumns;
+  const nextBezierRows = input.bezierRows ?? currentBezierSurface?.rows ?? rigControl.latticeRows;
+  if (!isValidDivisionCount(nextBezierColumns) || !isValidDivisionCount(nextBezierRows)) {
+    throw new AuthoringMutationError(
+      "invalid_warp_deformer_bezier_surface",
+      `warpDeformer Bezier divisions must be at least 2x2: ${nextBezierColumns}x${nextBezierRows}`
+    );
+  }
+
+  const transformCardinalityChanged =
+    getWarpLattice2dControlPointCount(rigControl) !==
+    nextTransformColumns * nextTransformRows;
+  const currentBezierCount = currentBezierSurface === undefined
+    ? rigControl.latticeColumns * rigControl.latticeRows
+    : getWarpDeformerBezierControlPointCount(currentBezierSurface);
+  const bezierCardinalityChanged = currentBezierCount !== nextBezierColumns * nextBezierRows;
+  if (
+    (transformCardinalityChanged || bezierCardinalityChanged) &&
+    graph.keyformSets.some((keyformSet) =>
+      keyformSet.target.kind === "rigControl" &&
+      keyformSet.target.id === rigControl.rigControlId
+    )
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_keyform_cardinality_conflict",
+      `Rig control ${rigControl.rigControlId} has keyforms and cannot change transform or Bezier cardinality`
+    );
+  }
+
+  return {
+    domainBounds: structuredClone(nextDomainBounds),
+    latticeColumns: nextTransformColumns,
+    latticeRows: nextTransformRows,
+    restControlPoints: createRestControlPoints({
+      domainBounds: nextDomainBounds,
+      latticeColumns: nextTransformColumns,
+      latticeRows: nextTransformRows
+    }),
+    warpDeformer: createWarpDeformerMetadata({
+      domainBounds: nextDomainBounds,
+      transformColumns: nextTransformColumns,
+      transformRows: nextTransformRows,
+      bezierColumns: nextBezierColumns,
+      bezierRows: nextBezierRows
+    })
+  };
+};
+
+const applyWarpLattice2dRigControlFieldUpdate = (
+  rigControl: WarpLattice2dRigControlDto,
+  update: WarpLattice2dRigControlFieldUpdate
+): void => {
+  rigControl.domainBounds = structuredClone(update.domainBounds);
+  rigControl.latticeColumns = update.latticeColumns;
+  rigControl.latticeRows = update.latticeRows;
+  rigControl.restControlPoints = structuredClone(update.restControlPoints);
+  rigControl.warpDeformer = structuredClone(update.warpDeformer);
 };
 
 const bindDrawableChild = (
@@ -524,6 +1241,18 @@ const findRigControlWithDrawableChild = (
 ): RigControlDto | undefined =>
   graph.rigControls.find((rigControl) => rigControl.childDrawableIds.includes(drawableId));
 
+const findRigControlsWithDrawableChild = (
+  graph: AuthoringGraph,
+  drawableId: DrawableId
+): readonly RigControlDto[] =>
+  graph.rigControls.filter((rigControl) => rigControl.childDrawableIds.includes(drawableId));
+
+const findRigControlsWithRigControlChild = (
+  graph: AuthoringGraph,
+  childRigControlId: RigControlId
+): readonly RigControlDto[] =>
+  graph.rigControls.filter((rigControl) => rigControl.childRigControlIds.includes(childRigControlId));
+
 const isRigControlDescendant = (
   graph: AuthoringGraph,
   startRigControlId: RigControlId,
@@ -561,5 +1290,32 @@ const addRigControlRootId = (graph: AuthoringGraph, rigControlId: RigControlId):
 const removeRigControlRootId = (graph: AuthoringGraph, rigControlId: RigControlId): void => {
   graph.rigControlRootIds = graph.rigControlRootIds.filter((rootId) => rootId !== rigControlId);
 };
+
+const createRestControlPoints = (input: {
+  readonly domainBounds: RectDto;
+  readonly latticeColumns: number;
+  readonly latticeRows: number;
+}): Vec2Dto[] =>
+  createWarpLattice2dControlPointSlots(input).map((slot) => ({
+    x: input.domainBounds.x + input.domainBounds.width * toUnitGridPosition(slot.column, input.latticeColumns),
+    y: input.domainBounds.y + input.domainBounds.height * toUnitGridPosition(slot.row, input.latticeRows)
+  }));
+
+const withDefaultOpacityMultiplier = <TRigControl extends RigControlDto>(
+  rigControl: TRigControl
+): TRigControl => {
+  const storedRigControl = structuredClone(rigControl);
+  storedRigControl.opacityMultiplier = storedRigControl.opacityMultiplier ?? 1;
+  return storedRigControl;
+};
+
+const isValidDivisionCount = (value: number): boolean =>
+  Number.isInteger(value) && value >= 2;
+
+const countOccurrences = <TValue>(values: readonly TValue[], expected: TValue): number =>
+  values.filter((value) => value === expected).length;
+
+const toUnitGridPosition = (index: number, size: number): number =>
+  size <= 1 ? 0 : index / (size - 1);
 
 const cloneDto = <TValue>(value: TValue): TValue => structuredClone(value);

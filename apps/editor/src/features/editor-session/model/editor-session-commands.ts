@@ -5,8 +5,10 @@ import {
   createOperationCore,
   createRigControlIdFromDisplayName,
   OperationRequestSchema,
+  type CreateRotation2dRigControlPayloadDto,
   type CreateWarpDeformerPayloadDto,
   type GenerateMeshPayloadDto,
+  type UpdateRigControlPayloadDto,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -23,6 +25,10 @@ export interface EditorSessionCommandResult {
 }
 
 export interface CreateWarpDeformerCommandResult extends EditorSessionCommandResult {
+  readonly rigControlId?: RigControlId;
+}
+
+export interface CreateRotationDeformerCommandResult extends EditorSessionCommandResult {
   readonly rigControlId?: RigControlId;
 }
 
@@ -265,7 +271,7 @@ export function commitGenerateMesh(
   drawableId: DrawableId,
   densityHint: GenerateMeshPayloadDto["densityHint"],
   previewMesh?: AuthoringSession["graph"]["meshes"][number],
-  method: GenerateMeshPayloadDto["method"] = "auto-outline-v1"
+  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2"
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "generateMesh",
@@ -289,6 +295,74 @@ export function commitCreateWarpDeformer(
   });
 
   return result.committed ? { ...result, rigControlId } : result;
+}
+
+export function commitCreateRotationDeformer(
+  session: AuthoringSession,
+  payload: CreateRotation2dRigControlPayloadDto
+): CreateRotationDeformerCommandResult {
+  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
+  const result = commitSingleOperation(session, {
+    operationType: "createRotation2dRigControl",
+    payload
+  });
+
+  return result.committed ? { ...result, rigControlId } : result;
+}
+
+export function commitBindDrawableToRigControl(
+  session: AuthoringSession,
+  drawableId: DrawableId,
+  parentRigControlId: RigControlId
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "bindRigControlChild",
+    payload: {
+      parentRigControlId,
+      child: {
+        kind: "drawable",
+        id: drawableId
+      }
+    }
+  });
+}
+
+export function commitMoveDrawableRigControlBinding(
+  session: AuthoringSession,
+  drawableId: DrawableId,
+  targetRigControlId: RigControlId
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "moveDrawableRigControlBinding",
+    payload: {
+      drawableId,
+      targetRigControlId
+    }
+  });
+}
+
+export function commitReparentRigControl(
+  session: AuthoringSession,
+  childRigControlId: RigControlId,
+  parentRigControlId: RigControlId | null
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "reparentRigControl",
+    payload: {
+      childRigControlId,
+      parentRigControlId
+    }
+  });
+}
+
+export function commitUpdateRigControl(
+  session: AuthoringSession,
+  payload: UpdateRigControlPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "updateRigControl",
+    payload
+  });
 }
 
 export function commitDrawableReparent(

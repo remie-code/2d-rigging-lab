@@ -28,8 +28,10 @@ import {
   removeMeshTriangleOperationHandler,
   removeMeshVertexOperationHandler
 } from "./operations/mesh-topology.js";
+import { moveDrawableRigControlBindingOperationHandler } from "./operations/move-drawable-rig-control-binding.js";
 import { moveMeshVertexOperationHandler } from "./operations/move-mesh-vertex.js";
 import { moveStructureChildOperationHandler } from "./operations/move-structure-child.js";
+import { reparentRigControlOperationHandler } from "./operations/reparent-rig-control.js";
 import { setDrawOrderOperationHandler } from "./operations/set-draw-order.js";
 import { setDrawablePartOperationHandler } from "./operations/set-drawable-part.js";
 import { setDrawableTextureOperationHandler } from "./operations/set-drawable-texture.js";
@@ -39,6 +41,7 @@ import { setRuntimeVisibilityOperationHandler } from "./operations/set-runtime-v
 import { updateDrawableOperationHandler } from "./operations/update-drawable.js";
 import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
+import { updateRigControlOperationHandler } from "./operations/update-rig-control.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -99,6 +102,9 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [createWarpLattice2dRigControlOperationHandler.operationType, createWarpLattice2dRigControlOperationHandler],
   [createWarpDeformerOperationHandler.operationType, createWarpDeformerOperationHandler],
   [bindRigControlChildOperationHandler.operationType, bindRigControlChildOperationHandler],
+  [moveDrawableRigControlBindingOperationHandler.operationType, moveDrawableRigControlBindingOperationHandler],
+  [reparentRigControlOperationHandler.operationType, reparentRigControlOperationHandler],
+  [updateRigControlOperationHandler.operationType, updateRigControlOperationHandler],
   [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],

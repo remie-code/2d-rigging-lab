@@ -20,6 +20,7 @@ import {
   screenToCanvasPoint,
   zoomViewAtScreenPoint
 } from "./canvas-projection";
+import { commitUpdateRigControl } from "../../features/editor-session/model/editor-session-commands";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
@@ -38,6 +39,7 @@ const MESH_HIDDEN = MeshIdSchema.parse("mesh_hidden");
 const MESH_MASK = MeshIdSchema.parse("mesh_mask");
 const MESH_TARGET = MeshIdSchema.parse("mesh_target");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
+const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
 const TEX_FRONT = TextureIdSchema.parse("tex_front");
 const TEX_HIDDEN = TextureIdSchema.parse("tex_hidden");
@@ -278,6 +280,7 @@ describe("canvas render projection", () => {
     );
 
     expect(draftProjection.deformerOverlay).toMatchObject({
+      kind: "warp",
       displayName: "Front Warp Draft",
       status: "draft",
       transformColumns: 5,
@@ -296,6 +299,7 @@ describe("canvas render projection", () => {
 
     expect(committedProjection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
     expect(committedProjection.deformerOverlay).toMatchObject({
+      kind: "warp",
       rigControlId: RIG_FACE_WARP,
       displayName: "Face Warp",
       status: "committed",
@@ -305,6 +309,53 @@ describe("canvas render projection", () => {
       bezierRows: 2,
       childDrawableIds: [DRAW_FRONT]
     });
+
+    const updated = commitUpdateRigControl(session, {
+      rigControlId: RIG_FACE_WARP,
+      opacityMultiplier: 0.25,
+      transformColumns: 5
+    });
+    expect(updated.committed).toBe(true);
+    const updatedProjection = createCanvasRenderProjection(updated.session, {
+      kind: "rigControl",
+      id: RIG_FACE_WARP
+    });
+
+    expect(updatedProjection.deformerOverlay).toMatchObject({
+      kind: "warp",
+      rigControlId: RIG_FACE_WARP,
+      status: "committed",
+      transformColumns: 5
+    });
+    expect(
+      updatedProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)?.opacity
+    ).toBeCloseTo(0.105);
+  });
+
+  it("projects committed Rotation Deformer overlays for Canvas", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createRotationDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "rigControl",
+      id: RIG_FACE_ROTATION
+    });
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(projection.deformerOverlay).toMatchObject({
+      kind: "rotation",
+      rigControlId: RIG_FACE_ROTATION,
+      displayName: "Face Rotation",
+      status: "committed",
+      domainBounds: { x: 5, y: 5, width: 20, height: 20 },
+      pivot: { x: 15, y: 15 },
+      restAngleDegrees: 12,
+      childDrawableIds: [DRAW_FRONT]
+    });
+    expect(
+      projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)?.opacity
+    ).toBeCloseTo(0.336);
   });
 
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
@@ -596,6 +647,23 @@ function createWarpDeformerRigControl() {
         bezierEvaluation: "storedNotEvaluatedV0" as const
       }
     },
+    enabled: true
+  };
+}
+
+function createRotationDeformerRigControl() {
+  return {
+    kind: "rotation2d" as const,
+    rigControlId: RIG_FACE_ROTATION,
+    displayName: "Face Rotation",
+    partId: PART_FACE,
+    childDrawableIds: [DRAW_FRONT],
+    childRigControlIds: [],
+    opacityMultiplier: 0.8,
+    pivot: { x: 15, y: 15 },
+    restAngleDegrees: 12,
+    restTranslation: { x: 0, y: 0 },
+    restScale: { x: 1, y: 1 },
     enabled: true
   };
 }

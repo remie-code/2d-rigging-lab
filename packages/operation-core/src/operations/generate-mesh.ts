@@ -5,7 +5,11 @@ import {
   getMeshById,
   replaceDrawableMesh
 } from "@private-2d-rigging-lab/authoring-core";
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import type {
+  AuthoringSession,
+  MeshGenerationFallbackStep,
+  MeshGenerationQualityMetrics
+} from "@private-2d-rigging-lab/authoring-core";
 import type {
   DiagnosticDto,
   ModelDiffDto,
@@ -94,6 +98,8 @@ const applyGenerateMesh = (
   let mesh: Parameters<typeof replaceDrawableMesh>[1];
   let generatedSource: string | undefined;
   let fallbackReason: string | undefined;
+  let fallbackSteps: readonly MeshGenerationFallbackStep[] | undefined;
+  let qualityMetrics: MeshGenerationQualityMetrics | undefined;
   if (request.payload.previewMesh !== undefined) {
     mesh = {
       ...structuredClone(request.payload.previewMesh),
@@ -128,6 +134,8 @@ const applyGenerateMesh = (
     mesh = generated.mesh;
     generatedSource = generated.source;
     fallbackReason = generated.fallbackReason;
+    fallbackSteps = generated.fallbackSteps;
+    qualityMetrics = generated.qualityMetrics;
   }
 
   const provenanceRecord = createMeshProvenanceRecord({
@@ -137,7 +145,9 @@ const applyGenerateMesh = (
     actor: request.actor,
     method: request.payload.method,
     ...(generatedSource === undefined ? {} : { generatedSource }),
-    ...(fallbackReason === undefined ? {} : { fallbackReason })
+    ...(fallbackReason === undefined ? {} : { fallbackReason }),
+    ...(fallbackSteps === undefined ? {} : { fallbackSteps }),
+    ...(qualityMetrics === undefined ? {} : { qualityMetrics })
   });
   const mutation = replaceDrawableMesh(session, mesh, provenanceRecord);
 
@@ -198,7 +208,11 @@ const evaluatePreviewMeshPreconditions = (input: {
   }
   const previewMesh = input.previewMesh;
 
-  if (input.method !== "auto-grid-v1" && input.method !== "auto-outline-v1") {
+  if (
+    input.method !== "auto-grid-v1" &&
+    input.method !== "auto-outline-v1" &&
+    input.method !== "auto-outline-v2"
+  ) {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.generateMesh.previewMeshUnsupportedMethod",
@@ -294,6 +308,8 @@ const createMeshProvenanceRecord = (input: {
   readonly method: string;
   readonly generatedSource?: string;
   readonly fallbackReason?: string;
+  readonly fallbackSteps?: readonly MeshGenerationFallbackStep[];
+  readonly qualityMetrics?: MeshGenerationQualityMetrics;
 }): ProvenanceRecord => ({
   provenanceId: input.provenanceId,
   assetId: input.meshId,
@@ -306,12 +322,39 @@ const createMeshProvenanceRecord = (input: {
   transformHistory: [
     `generateMesh:${input.method}`,
     ...(input.generatedSource === undefined ? [] : [`meshSource:${input.generatedSource}`]),
-    ...(input.fallbackReason === undefined ? [] : [`fallback:${input.fallbackReason}`])
+    ...(input.fallbackSteps === undefined
+      ? input.fallbackReason === undefined
+        ? []
+        : [`fallback:${input.fallbackReason}`]
+      : input.fallbackSteps.map((step) => `fallback:${step.method}:${step.reason}`)),
+    ...formatQualityMetricsForTransformHistory(input.qualityMetrics)
   ],
   relatedOperationIds: [input.operationId]
 });
 
 type ProvenanceRecord = AuthoringSession["graph"]["provenanceRecords"][number];
+
+const formatQualityMetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics | undefined
+): readonly string[] => {
+  if (metrics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:maxEdgeLength=${formatMetric(metrics.maxEdgeLength)}`,
+    `meshQuality:maxTriangleArea=${formatMetric(metrics.maxTriangleArea)}`,
+    `meshQuality:minAngleDegrees=${formatMetric(metrics.minAngleDegrees)}`,
+    `meshQuality:maxVertexValence=${metrics.maxVertexValence}`,
+    `meshQuality:refinementIterations=${metrics.refinementIterationCount}`,
+    ...(metrics.triangulationMode === undefined
+      ? []
+      : [`meshQuality:triangulationMode=${metrics.triangulationMode}`])
+  ];
+};
+
+const formatMetric = (value: number): string =>
+  Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 
 const createGenerateMeshResult = (input: {
   readonly operationId: OperationId;

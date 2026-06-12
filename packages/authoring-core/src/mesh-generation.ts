@@ -7,13 +7,31 @@ import {
   createAutoOutlineMesh,
   type AutoOutlineFailureReason
 } from "./mesh-outline-generation.js";
+import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
+import {
+  computeMeshQualityMetrics,
+  type MeshGenerationQualityMetrics
+} from "./mesh-quality-metrics.js";
 
-export type MeshGenerationMethod = "manual-empty" | "auto-grid-v1" | "auto-outline-v1";
+export type MeshGenerationMethod =
+  | "manual-empty"
+  | "auto-grid-v1"
+  | "auto-outline-v1"
+  | "auto-outline-v2";
 export type MeshDensityHint = "low" | "medium" | "high";
-export type DrawableGeneratedMeshSource = "outline-rgba" | "alpha-aware-rgba" | "bounds-grid";
+export type DrawableGeneratedMeshSource =
+  | "outline-v2-rgba"
+  | "outline-rgba"
+  | "alpha-aware-rgba"
+  | "bounds-grid";
 export type MeshGenerationFallbackReason =
   | "texture-bytes-unavailable"
   | AutoOutlineFailureReason;
+
+export interface MeshGenerationFallbackStep {
+  readonly method: "auto-outline-v2" | "auto-outline-v1";
+  readonly reason: MeshGenerationFallbackReason;
+}
 
 export interface DrawableGeneratedMeshInput {
   readonly session: AuthoringSession;
@@ -28,6 +46,8 @@ export interface DrawableGeneratedMeshResult {
   readonly source: DrawableGeneratedMeshSource;
   readonly alphaBounds?: RectDto;
   readonly fallbackReason?: MeshGenerationFallbackReason;
+  readonly fallbackSteps?: readonly MeshGenerationFallbackStep[];
+  readonly qualityMetrics?: MeshGenerationQualityMetrics;
 }
 
 export interface AlphaAwareGridMeshInput {
@@ -86,6 +106,75 @@ export const createGeneratedMeshForDrawable = (
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
   if (textureBytes !== undefined) {
+    if (input.method === "auto-outline-v2") {
+      const outlineV2Mesh = createAutoOutlineV2Mesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+
+      if (outlineV2Mesh.status === "generated") {
+        return {
+          mesh: outlineV2Mesh.mesh,
+          source: "outline-v2-rgba",
+          alphaBounds: outlineV2Mesh.alphaBounds,
+          qualityMetrics: outlineV2Mesh.qualityMetrics
+        };
+      }
+
+      const outlineV1Fallback = createAutoOutlineMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const fallbackSteps = [
+        {
+          method: "auto-outline-v2",
+          reason: outlineV2Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV1Fallback.status === "generated") {
+        return {
+          mesh: outlineV1Fallback.mesh,
+          source: "outline-rgba",
+          alphaBounds: outlineV1Fallback.alphaBounds,
+          fallbackReason: outlineV2Mesh.reason,
+          fallbackSteps,
+          qualityMetrics: computeMeshQualityMetrics(outlineV1Fallback.mesh, {
+            refinementIterationCount: 0,
+            fallbackReason: outlineV2Mesh.reason,
+            triangulationMode: "ordinary-delaunay-alpha-filter"
+          })
+        };
+      }
+
+      const fallbackAlphaBounds = outlineV1Fallback.alphaBounds ?? outlineV2Mesh.alphaBounds;
+      return createFallbackGridMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        fallbackReason: outlineV1Fallback.reason,
+        fallbackSteps: [
+          ...fallbackSteps,
+          {
+            method: "auto-outline-v1",
+            reason: outlineV1Fallback.reason
+          }
+        ],
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(fallbackAlphaBounds === undefined ? {} : { alphaBounds: fallbackAlphaBounds })
+      });
+    }
+
     if (input.method === "auto-outline-v1") {
       const outlineMesh = createAutoOutlineMesh({
         meshId: existingMesh.meshId,
@@ -101,7 +190,11 @@ export const createGeneratedMeshForDrawable = (
         return {
           mesh: outlineMesh.mesh,
           source: "outline-rgba",
-          alphaBounds: outlineMesh.alphaBounds
+          alphaBounds: outlineMesh.alphaBounds,
+          qualityMetrics: computeMeshQualityMetrics(outlineMesh.mesh, {
+            refinementIterationCount: 0,
+            triangulationMode: "ordinary-delaunay-alpha-filter"
+          })
         };
       }
 
@@ -110,6 +203,12 @@ export const createGeneratedMeshForDrawable = (
         drawableId: drawable.drawableId,
         provenanceId: input.provenanceId,
         fallbackReason: outlineMesh.reason,
+        fallbackSteps: [
+          {
+            method: "auto-outline-v1",
+            reason: outlineMesh.reason
+          }
+        ],
         ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
         ...(outlineMesh.alphaBounds === undefined ? {} : { alphaBounds: outlineMesh.alphaBounds })
       });
@@ -139,7 +238,17 @@ export const createGeneratedMeshForDrawable = (
     drawableId: drawable.drawableId,
     provenanceId: input.provenanceId,
     ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
-    ...(textureBytes === undefined ? { fallbackReason: "texture-bytes-unavailable" } : {})
+    ...(textureBytes === undefined ? { fallbackReason: "texture-bytes-unavailable" } : {}),
+    ...(textureBytes === undefined && input.method === "auto-outline-v2"
+      ? {
+          fallbackSteps: [
+            {
+              method: "auto-outline-v2",
+              reason: "texture-bytes-unavailable"
+            }
+          ]
+        }
+      : {})
   });
 };
 
@@ -222,6 +331,7 @@ const createFallbackGridMeshResult = (input: {
   readonly provenanceId: ProvenanceId;
   readonly densityHint?: MeshDensityHint;
   readonly fallbackReason?: MeshGenerationFallbackReason;
+  readonly fallbackSteps?: readonly MeshGenerationFallbackStep[];
   readonly alphaBounds?: RectDto;
 }): DrawableGeneratedMeshResult => ({
   mesh: createGridMesh({
@@ -233,6 +343,7 @@ const createFallbackGridMeshResult = (input: {
   }),
   source: "bounds-grid",
   ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason }),
+  ...(input.fallbackSteps === undefined ? {} : { fallbackSteps: input.fallbackSteps }),
   ...(input.alphaBounds === undefined ? {} : { alphaBounds: input.alphaBounds })
 });
 

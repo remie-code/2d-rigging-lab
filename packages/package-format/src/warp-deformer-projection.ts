@@ -23,6 +23,7 @@ export interface WarpDeformerReadProjectionDto {
   readonly parentRigControlId?: string;
   readonly childDrawableIds: readonly string[];
   readonly childRigControlIds: readonly string[];
+  readonly opacityMultiplier: number;
   readonly domainBounds: WarpDeformerStorageRigControlDto["domainBounds"];
   readonly transformGrid: WarpDeformerTransformGridDto;
   readonly bezierEditSurface: WarpDeformerBezierEditSurfaceDto;
@@ -64,6 +65,7 @@ export const projectWarpDeformerReadModel = (
     ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
+    opacityMultiplier: rigControl.opacityMultiplier ?? 1,
     domainBounds: structuredClone(rigControl.domainBounds),
     transformGrid: structuredClone(transformGrid),
     bezierEditSurface: structuredClone(bezierEditSurface),

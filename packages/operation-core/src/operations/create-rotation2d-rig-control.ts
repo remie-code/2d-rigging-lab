@@ -1,7 +1,9 @@
 import {
   AuthoringMutationError,
+  bindRigControlChild,
   createDryRunAuthoringSession,
-  createRotation2dRigControl
+  createRotation2dRigControl,
+  insertRigControlBetweenParentAndChild
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type {
@@ -30,6 +32,25 @@ type CreateRotation2dRigControlRequest = Extract<
 >;
 type PackageRotation2dRigControl = Parameters<typeof createRotation2dRigControl>[1];
 type CreateRotation2dRigControlMutation = ReturnType<typeof createRotation2dRigControl>;
+type BindRigControlChildMutation = ReturnType<typeof bindRigControlChild>;
+type InsertRigControlBetweenParentAndChildMutation = ReturnType<typeof insertRigControlBetweenParentAndChild>;
+
+type CreateRotation2dRigControlApplyMutation =
+  | {
+      readonly mode: "create";
+      readonly createMutation: CreateRotation2dRigControlMutation;
+      readonly parentBindMutation?: BindRigControlChildMutation;
+      readonly rigControlRootIdsBefore: readonly RigControlId[];
+      readonly rigControlRootIdsAfter: readonly RigControlId[];
+      readonly authoringRevision: number;
+    }
+  | {
+      readonly mode: "insert";
+      readonly insertMutation: InsertRigControlBetweenParentAndChildMutation;
+      readonly rigControlRootIdsBefore: readonly RigControlId[];
+      readonly rigControlRootIdsAfter: readonly RigControlId[];
+      readonly authoringRevision: number;
+    };
 
 export const createRotation2dRigControlOperationHandler: OperationHandler = {
   operationType: "createRotation2dRigControl",
@@ -71,22 +92,112 @@ const applyCreateRotation2dRigControl = (
   const rigControl = createPackageRotation2dRigControl(request, rigControlId);
   const targetIds = createCreateRotation2dRigControlTargetIds(request, rigControlId);
   const baseRevision = session.authoringRevision;
-
-  try {
-    const mutation = createRotation2dRigControl(session, rigControl);
-    const result = createCreateRotation2dRigControlResult({
-      operationId,
-      status,
-      baseRevision,
-      candidateRevision: mutation.authoringRevision,
-      packageId: session.packageIdentity.packageId,
-      mutation
-    });
-
+  if (request.payload.insertBeforeChild !== undefined && request.payload.parentRigControlId === undefined) {
     return {
-      result,
+      result: createRejectedOperationResult({
+        operationId,
+        diagnostics: [
+          createOperationDiagnostic({
+            checkId: "operation.createRotation2dRigControl.missingInsertionParent",
+            message: "Insertion create requires parentRigControlId.",
+            target: { kind: "rigControl", id: rigControlId, path: "/payload/parentRigControlId" }
+          })
+        ]
+      }),
       targetIds,
       candidateSession: session
+    };
+  }
+
+  const preflight =
+    status === "committed"
+      ? tryCreateRotation2dRigControlMutations(createDryRunAuthoringSession(session), rigControl, request)
+      : undefined;
+  if (preflight !== undefined && "diagnostic" in preflight) {
+    return {
+      result: createRejectedOperationResult({
+        operationId,
+        diagnostics: [preflight.diagnostic]
+      }),
+      targetIds,
+      candidateSession: session
+    };
+  }
+
+  const applied = tryCreateRotation2dRigControlMutations(session, rigControl, request);
+  if ("diagnostic" in applied) {
+    return {
+      result: createRejectedOperationResult({
+        operationId,
+        diagnostics: [applied.diagnostic]
+      }),
+      targetIds,
+      candidateSession: session
+    };
+  }
+
+  const result = createCreateRotation2dRigControlResult({
+    operationId,
+    status,
+    baseRevision,
+    candidateRevision: applied.mutation.authoringRevision,
+    packageId: session.packageIdentity.packageId,
+    mutation: applied.mutation
+  });
+
+  return {
+    result,
+    targetIds,
+    candidateSession: session
+  };
+};
+
+const tryCreateRotation2dRigControlMutations = (
+  session: AuthoringSession,
+  rigControl: PackageRotation2dRigControl,
+  request: CreateRotation2dRigControlRequest
+):
+  | { readonly mutation: CreateRotation2dRigControlApplyMutation }
+  | { readonly diagnostic: DiagnosticDto } => {
+  try {
+    if (request.payload.insertBeforeChild !== undefined) {
+      const insertMutation = insertRigControlBetweenParentAndChild(session, rigControl, {
+        parentRigControlId: request.payload.parentRigControlId as RigControlId,
+        child: request.payload.insertBeforeChild
+      });
+      return {
+        mutation: {
+          mode: "insert",
+          insertMutation,
+          rigControlRootIdsBefore: insertMutation.rigControlRootIdsBefore,
+          rigControlRootIdsAfter: insertMutation.rigControlRootIdsAfter,
+          authoringRevision: insertMutation.authoringRevision
+        }
+      };
+    }
+
+    const createMutation = createRotation2dRigControl(session, rigControl);
+    const parentBindMutation =
+      request.payload.parentRigControlId === undefined
+        ? undefined
+        : bindRigControlChild(session, {
+            parentRigControlId: request.payload.parentRigControlId,
+            child: {
+              kind: "rigControl",
+              id: createMutation.rigControl.rigControlId
+            }
+          });
+
+    return {
+      mutation: {
+        mode: "create",
+        createMutation,
+        ...(parentBindMutation === undefined ? {} : { parentBindMutation }),
+        rigControlRootIdsBefore: createMutation.rigControlRootIdsBefore,
+        rigControlRootIdsAfter:
+          parentBindMutation?.rigControlRootIdsAfter ?? createMutation.rigControlRootIdsAfter,
+        authoringRevision: parentBindMutation?.authoringRevision ?? createMutation.authoringRevision
+      }
     };
   } catch (error) {
     if (!(error instanceof AuthoringMutationError)) {
@@ -94,12 +205,7 @@ const applyCreateRotation2dRigControl = (
     }
 
     return {
-      result: createRejectedOperationResult({
-        operationId,
-        diagnostics: [createCreateRotation2dRigControlMutationDiagnostic(error, rigControl)]
-      }),
-      targetIds,
-      candidateSession: session
+      diagnostic: createCreateRotation2dRigControlMutationDiagnostic(error, rigControl)
     };
   }
 };
@@ -112,8 +218,9 @@ const createPackageRotation2dRigControl = (
   rigControlId,
   displayName: request.payload.displayName,
   partId: request.payload.partId,
-  childDrawableIds: [...request.payload.childDrawableIds],
-  childRigControlIds: [...request.payload.childRigControlIds],
+  childDrawableIds: createRotationChildDrawableIds(request),
+  childRigControlIds: createRotationChildRigControlIds(request),
+  opacityMultiplier: request.payload.opacityMultiplier,
   pivot: structuredClone(request.payload.pivot),
   restAngleDegrees: request.payload.restAngleDegrees,
   restTranslation: { x: 0, y: 0 },
@@ -121,15 +228,29 @@ const createPackageRotation2dRigControl = (
   enabled: true
 });
 
+const createRotationChildDrawableIds = (
+  request: CreateRotation2dRigControlRequest
+): PackageRotation2dRigControl["childDrawableIds"] =>
+  request.payload.insertBeforeChild?.kind === "drawable"
+    ? [request.payload.insertBeforeChild.id]
+    : [...request.payload.childDrawableIds];
+
+const createRotationChildRigControlIds = (
+  request: CreateRotation2dRigControlRequest
+): PackageRotation2dRigControl["childRigControlIds"] =>
+  request.payload.insertBeforeChild?.kind === "rigControl"
+    ? [request.payload.insertBeforeChild.id]
+    : [...request.payload.childRigControlIds];
+
 const createCreateRotation2dRigControlResult = (input: {
   readonly operationId: OperationId;
   readonly status: "dry_run" | "committed";
   readonly baseRevision: number;
   readonly candidateRevision: number;
   readonly packageId: string;
-  readonly mutation: CreateRotation2dRigControlMutation;
+  readonly mutation: CreateRotation2dRigControlApplyMutation;
 }): OperationResultDto => {
-  const rigControl = input.mutation.rigControl;
+  const rigControl = getCreatedRigControl(input.mutation);
   const rigControlTarget: TargetRefDto = {
     kind: "rigControl",
     id: rigControl.rigControlId
@@ -144,14 +265,16 @@ const createCreateRotation2dRigControlResult = (input: {
     id: childDrawableId,
     path: `/model/rigControls/rigControls/${rigControl.rigControlId}/childDrawableIds`
   }));
-  const childRigControlTargets = input.mutation.childRigControlChanges.map((change): TargetRefDto => ({
+  const childRigControlTargets = getCreatedChildRigControlChanges(input.mutation).map((change): TargetRefDto => ({
     kind: "rigControl",
     id: change.after.rigControlId,
     path: `/model/rigControls/rigControls/${change.after.rigControlId}/parentId`
   }));
+  const parentTarget = getParentTarget(input.mutation);
   const checkedTargetRefs = [
     rigControlTarget,
     partTarget,
+    ...(parentTarget === undefined ? [] : [parentTarget]),
     ...childDrawableTargets,
     ...childRigControlTargets
   ];
@@ -189,7 +312,7 @@ const createCreateRotation2dRigControlResult = (input: {
 const createCreateRotation2dRigControlChanges = (input: {
   readonly packageId: string;
   readonly rigControl: PackageRotation2dRigControl;
-  readonly mutation: CreateRotation2dRigControlMutation;
+  readonly mutation: CreateRotation2dRigControlApplyMutation;
 }): ModelDiffDto["changed"] => {
   const rigControlPath = `/model/rigControls/rigControls/${input.rigControl.rigControlId}`;
   const changes: ModelDiffDto["changed"] = [
@@ -256,7 +379,7 @@ const createCreateRotation2dRigControlChanges = (input: {
     });
   }
 
-  for (const childRigControlChange of input.mutation.childRigControlChanges) {
+  for (const childRigControlChange of getCreatedChildRigControlChanges(input.mutation)) {
     changes.push({
       target: {
         kind: "rigControl",
@@ -272,10 +395,81 @@ const createCreateRotation2dRigControlChanges = (input: {
     });
   }
 
+  const parentListChange = getParentListChange(input.mutation);
+  if (parentListChange !== undefined) {
+    changes.push(parentListChange);
+  }
+
   return changes;
 };
 
-const rootIdsChanged = (mutation: CreateRotation2dRigControlMutation): boolean =>
+const getCreatedRigControl = (
+  mutation: CreateRotation2dRigControlApplyMutation
+): PackageRotation2dRigControl =>
+  mutation.mode === "create"
+    ? mutation.createMutation.rigControl
+    : mutation.insertMutation.rigControl as PackageRotation2dRigControl;
+
+const getCreatedChildRigControlChanges = (
+  mutation: CreateRotation2dRigControlApplyMutation
+) =>
+  mutation.mode === "create"
+    ? mutation.createMutation.childRigControlChanges
+    : mutation.insertMutation.childRigControlChange === undefined
+      ? []
+      : [mutation.insertMutation.childRigControlChange];
+
+const getParentTarget = (
+  mutation: CreateRotation2dRigControlApplyMutation
+): TargetRefDto | undefined => {
+  const parentId = mutation.mode === "create"
+    ? mutation.parentBindMutation?.parentRigControlAfter.rigControlId
+    : mutation.insertMutation.parentRigControlAfter.rigControlId;
+  if (parentId === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "rigControl",
+    id: parentId,
+    path: `/model/rigControls/rigControls/${parentId}/childRigControlIds`
+  };
+};
+
+const getParentListChange = (
+  mutation: CreateRotation2dRigControlApplyMutation
+): ModelDiffDto["changed"][number] | undefined => {
+  const parentBefore = mutation.mode === "create"
+    ? mutation.parentBindMutation?.parentRigControlBefore
+    : mutation.insertMutation.parentRigControlBefore;
+  const parentAfter = mutation.mode === "create"
+    ? mutation.parentBindMutation?.parentRigControlAfter
+    : mutation.insertMutation.parentRigControlAfter;
+  if (parentBefore === undefined || parentAfter === undefined) {
+    return undefined;
+  }
+
+  return {
+    target: {
+      kind: "rigControl",
+      id: parentAfter.rigControlId
+    },
+    fields: [
+      {
+        path: `/model/rigControls/rigControls/${parentAfter.rigControlId}/childDrawableIds`,
+        before: [...parentBefore.childDrawableIds],
+        after: [...parentAfter.childDrawableIds]
+      },
+      {
+        path: `/model/rigControls/rigControls/${parentAfter.rigControlId}/childRigControlIds`,
+        before: [...parentBefore.childRigControlIds],
+        after: [...parentAfter.childRigControlIds]
+      }
+    ].filter((field) => JSON.stringify(field.before) !== JSON.stringify(field.after))
+  };
+};
+
+const rootIdsChanged = (mutation: CreateRotation2dRigControlApplyMutation): boolean =>
   JSON.stringify(mutation.rigControlRootIdsBefore) !== JSON.stringify(mutation.rigControlRootIdsAfter);
 
 const createCreateRotation2dRigControlMutationDiagnostic = (
@@ -321,6 +515,24 @@ const createCreateRotation2dRigControlMutationDiagnostic = (
         message: error.message,
         target: { kind: "rigControl", id: rigControl.rigControlId }
       });
+    case "duplicate_rig_control_child_binding":
+      return createOperationDiagnostic({
+        checkId: "operation.createRotation2dRigControl.duplicateBinding",
+        message: error.message,
+        target: { kind: "rigControl", id: rigControl.rigControlId }
+      });
+    case "missing_rig_control_child_binding":
+      return createOperationDiagnostic({
+        checkId: "operation.createRotation2dRigControl.missingInsertionChildBinding",
+        message: error.message,
+        target: { kind: "rigControl", id: rigControl.rigControlId }
+      });
+    case "rig_control_parent_child_mismatch":
+      return createOperationDiagnostic({
+        checkId: "operation.createRotation2dRigControl.parentChildMismatch",
+        message: error.message,
+        target: { kind: "rigControl", id: rigControl.rigControlId }
+      });
     case "rig_control_self_child":
     case "rig_control_cycle":
       return createOperationDiagnostic({
@@ -333,6 +545,12 @@ const createCreateRotation2dRigControlMutationDiagnostic = (
         checkId: "operation.createRotation2dRigControl.childAlreadyParented",
         message: error.message,
         target: { kind: "rigControl", id: rigControl.rigControlId }
+      });
+    case "invalid_rig_control_opacity_multiplier":
+      return createOperationDiagnostic({
+        checkId: "operation.createRotation2dRigControl.invalidOpacityMultiplier",
+        message: error.message,
+        target: { kind: "rigControl", id: rigControl.rigControlId, path: "/payload/opacityMultiplier" }
       });
     default:
       return createOperationDiagnostic({
@@ -350,6 +568,8 @@ const createCreateRotation2dRigControlTargetIds = (
   [
     rigControlId,
     request.payload.partId,
+    ...(request.payload.parentRigControlId === undefined ? [] : [request.payload.parentRigControlId]),
+    ...(request.payload.insertBeforeChild === undefined ? [] : [request.payload.insertBeforeChild.id]),
     ...request.payload.childDrawableIds,
     ...request.payload.childRigControlIds
   ].filter((targetId, index, targetIds) => targetIds.indexOf(targetId) === index);

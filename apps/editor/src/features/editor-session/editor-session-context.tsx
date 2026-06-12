@@ -6,6 +6,7 @@ import type {
 } from "@private-2d-rigging-lab/authoring-core";
 import { createGeneratedMeshForDrawable } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
+import type { UpdateRigControlPayloadDto } from "@private-2d-rigging-lab/operation-core";
 import {
   createContext,
   useCallback,
@@ -25,11 +26,16 @@ import {
   commitDrawableReorder,
   commitDrawableReparent,
   commitDrawableRuntimeVisibility,
+  commitBindDrawableToRigControl,
+  commitCreateRotationDeformer,
   commitCreateWarpDeformer,
   commitGenerateMesh,
+  commitMoveDrawableRigControlBinding,
   commitStructureMove,
   commitPartNameEdit,
   commitPartReparent,
+  commitReparentRigControl,
+  commitUpdateRigControl,
   type EditorSessionCommandResult
 } from "./model/editor-session-commands";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
@@ -41,13 +47,18 @@ import {
 } from "./model/mesh-tool-state";
 import { mergeEditorHiddenPartIds } from "./model/editor-hidden-part-state";
 import {
+  createDrawablePoolItems,
   createDeformerTreeRows,
+  createRotationDeformerPayloadForDrawable,
+  createRotationDeformerParentPayloadForRigControl,
+  createWarpDeformerParentPayloadForRigControl,
   createWarpDeformerDraftForDrawable,
   createWarpDeformerPayloadFromDraft,
   fitWarpDeformerDraftToChildren,
   resetWarpDeformerDraft,
   updateWarpDeformerDraft,
   type DeformerTreeRow,
+  type DrawablePoolItem,
   type WarpDeformerDraft
 } from "./model/rig-tool-state";
 import {
@@ -66,6 +77,8 @@ export interface MeshToolDraft {
   readonly source: DrawableGeneratedMeshResult["source"];
   readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
   readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
+  readonly fallbackSteps?: DrawableGeneratedMeshResult["fallbackSteps"];
+  readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
 }
 
 interface EditorSessionContextValue {
@@ -77,7 +90,9 @@ interface EditorSessionContextValue {
   readonly rigDraft: WarpDeformerDraft | null;
   readonly structureRows: readonly StructureTreeRow[];
   readonly deformerRows: readonly DeformerTreeRow[];
+  readonly drawablePoolItems: readonly DrawablePoolItem[];
   readonly inspector: InspectorProjection;
+  readonly rigOperationFeedback: string | null;
   readonly psdImportOpen: boolean;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
@@ -117,6 +132,22 @@ interface EditorSessionContextValue {
   readonly resetWarpDeformerDraft: () => void;
   readonly applyWarpDeformerDraft: () => void;
   readonly cancelWarpDeformerDraft: () => void;
+  readonly createRotationDeformerForDrawable: (drawableId: DrawableId) => void;
+  readonly createParentRotationDeformerForRigControl: (rigControlId: RigControlId) => void;
+  readonly createParentWarpDeformerForRigControl: (rigControlId: RigControlId) => void;
+  readonly bindDrawableToRigControl: (
+    drawableId: DrawableId,
+    parentRigControlId: RigControlId
+  ) => void;
+  readonly moveDrawableRigControlBinding: (
+    drawableId: DrawableId,
+    targetRigControlId: RigControlId
+  ) => void;
+  readonly reparentRigControl: (
+    childRigControlId: RigControlId,
+    parentRigControlId: RigControlId | null
+  ) => void;
+  readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
   readonly resolvePsdImportDestination: () => {
     readonly parentPartId: PartId;
     readonly label: string;
@@ -138,6 +169,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   );
   const [meshDraft, setMeshDraft] = useState<MeshToolDraft | null>(null);
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
+  const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [psdImportOpen, setPsdImportOpen] = useState(false);
   const structureRows = useMemo(
     () =>
@@ -149,6 +181,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   );
   const deformerRows = useMemo(
     () => createDeformerTreeRows(session, selection),
+    [session, selection]
+  );
+  const drawablePoolItems = useMemo(
+    () => createDrawablePoolItems(session, selection),
     [session, selection]
   );
   const inspector = useMemo(
@@ -167,6 +203,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       setRigDraft(null);
     }
   }, [activeTool]);
+
+  useEffect(() => {
+    setRigOperationFeedback(null);
+  }, [selection]);
 
   useEffect(() => {
     setMeshDraft((current) => {
@@ -212,6 +252,32 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
 
         if (result.diagnostics.length > 0) {
           console.warn("Editor command was rejected.", result.diagnostics);
+        }
+
+        return currentSession;
+      });
+    },
+    []
+  );
+
+  const applyRigCommand = useCallback(
+    (
+      command: (currentSession: AuthoringSession) => EditorSessionCommandResult,
+      onCommitted?: (result: EditorSessionCommandResult) => void
+    ) => {
+      setSession((currentSession) => {
+        const result = command(currentSession);
+        if (result.committed) {
+          setRigOperationFeedback(null);
+          onCommitted?.(result);
+          return result.session;
+        }
+
+        if (result.diagnostics.length > 0) {
+          setRigOperationFeedback(formatCommandFeedback(result));
+          console.warn("Rig command was rejected.", result.diagnostics);
+        } else {
+          setRigOperationFeedback("No Rig change was applied.");
         }
 
         return currentSession;
@@ -294,7 +360,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         session,
         drawableId,
         provenanceId: createMeshPreviewProvenanceId(drawableId, presetId),
-        method: "auto-outline-v1",
+        method: "auto-outline-v2",
         densityHint: preset.densityHint
       });
 
@@ -309,7 +375,9 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         mesh: generated.mesh,
         source: generated.source,
         ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
-        ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason })
+        ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
+        ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
+        ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
       });
     },
     [session]
@@ -327,7 +395,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         meshDraft.drawableId,
         preset.densityHint,
         meshDraft.mesh,
-        "auto-outline-v1"
+        "auto-outline-v2"
       );
       if (result.committed) {
         setMeshDraft(null);
@@ -386,23 +454,135 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     }
 
     const payload = createWarpDeformerPayloadFromDraft(rigDraft);
-    setSession((currentSession) => {
-      const result = commitCreateWarpDeformer(currentSession, payload);
-      if (result.committed) {
+    applyRigCommand(
+      (currentSession) => commitCreateWarpDeformer(currentSession, payload),
+      (result) => {
         setRigDraft(null);
-        if (result.rigControlId !== undefined) {
-          setSelection({ kind: "rigControl", id: result.rigControlId });
+        const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+        if (rigControlId !== undefined) {
+          setSelection({ kind: "rigControl", id: rigControlId });
         }
-        return result.session;
+      }
+    );
+  }, [applyRigCommand, rigDraft]);
+
+  const createRotationDeformerForDrawable = useCallback(
+    (drawableId: DrawableId) => {
+      const payload = createRotationDeformerPayloadForDrawable(session, drawableId);
+      if (payload === undefined) {
+        setRigOperationFeedback("Rotation Deformer could not be created for the selected Drawable.");
+        return;
       }
 
-      if (result.diagnostics.length > 0) {
-        console.warn("Editor command was rejected.", result.diagnostics);
+      setRigDraft(null);
+      setMeshDraft(null);
+      applyRigCommand(
+        (currentSession) => commitCreateRotationDeformer(currentSession, payload),
+        (result) => {
+          const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+          setSelection(
+            rigControlId === undefined
+              ? { kind: "drawable", id: drawableId }
+              : { kind: "rigControl", id: rigControlId }
+          );
+        }
+      );
+    },
+    [applyRigCommand, session]
+  );
+
+  const createParentRotationDeformerForRigControl = useCallback(
+    (rigControlId: RigControlId) => {
+      const payload = createRotationDeformerParentPayloadForRigControl(session, rigControlId);
+      if (payload === undefined) {
+        setRigOperationFeedback("Parent Rotation Deformer could not be created.");
+        return;
       }
 
-      return currentSession;
-    });
-  }, [rigDraft]);
+      setRigDraft(null);
+      setMeshDraft(null);
+      applyRigCommand(
+        (currentSession) => commitCreateRotationDeformer(currentSession, payload),
+        (result) => {
+          const parentRigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+          setSelection(
+            parentRigControlId === undefined
+              ? { kind: "rigControl", id: rigControlId }
+              : { kind: "rigControl", id: parentRigControlId }
+          );
+        }
+      );
+    },
+    [applyRigCommand, session]
+  );
+
+  const createParentWarpDeformerForRigControl = useCallback(
+    (rigControlId: RigControlId) => {
+      const payload = createWarpDeformerParentPayloadForRigControl(session, rigControlId);
+      if (payload === undefined) {
+        setRigOperationFeedback("Parent Warp Deformer could not be created.");
+        return;
+      }
+
+      setRigDraft(null);
+      setMeshDraft(null);
+      applyRigCommand(
+        (currentSession) => commitCreateWarpDeformer(currentSession, payload),
+        (result) => {
+          const parentRigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+          setSelection(
+            parentRigControlId === undefined
+              ? { kind: "rigControl", id: rigControlId }
+              : { kind: "rigControl", id: parentRigControlId }
+          );
+        }
+      );
+    },
+    [applyRigCommand, session]
+  );
+
+  const bindDrawableToRigControl = useCallback(
+    (drawableId: DrawableId, parentRigControlId: RigControlId) => {
+      applyRigCommand(
+        (currentSession) =>
+          commitBindDrawableToRigControl(currentSession, drawableId, parentRigControlId),
+        () => setSelection({ kind: "drawable", id: drawableId })
+      );
+    },
+    [applyRigCommand]
+  );
+
+  const moveDrawableRigControlBinding = useCallback(
+    (drawableId: DrawableId, targetRigControlId: RigControlId) => {
+      applyRigCommand(
+        (currentSession) =>
+          commitMoveDrawableRigControlBinding(currentSession, drawableId, targetRigControlId),
+        () => setSelection({ kind: "drawable", id: drawableId })
+      );
+    },
+    [applyRigCommand]
+  );
+
+  const reparentRigControl = useCallback(
+    (childRigControlId: RigControlId, parentRigControlId: RigControlId | null) => {
+      applyRigCommand(
+        (currentSession) =>
+          commitReparentRigControl(currentSession, childRigControlId, parentRigControlId),
+        () => setSelection({ kind: "rigControl", id: childRigControlId })
+      );
+    },
+    [applyRigCommand]
+  );
+
+  const updateRigControl = useCallback(
+    (payload: UpdateRigControlPayloadDto) => {
+      applyRigCommand(
+        (currentSession) => commitUpdateRigControl(currentSession, payload),
+        () => setSelection({ kind: "rigControl", id: payload.rigControlId })
+      );
+    },
+    [applyRigCommand]
+  );
 
   const value = useMemo<EditorSessionContextValue>(
     () => ({
@@ -414,7 +594,9 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       rigDraft,
       structureRows,
       deformerRows,
+      drawablePoolItems,
       inspector,
+      rigOperationFeedback,
       psdImportOpen,
       openPsdImport: () => setPsdImportOpen(true),
       closePsdImport: () => setPsdImportOpen(false),
@@ -461,6 +643,13 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       resetWarpDeformerDraft: resetRigDraft,
       applyWarpDeformerDraft: applyRigDraft,
       cancelWarpDeformerDraft: cancelRigDraft,
+      createRotationDeformerForDrawable,
+      createParentRotationDeformerForRigControl,
+      createParentWarpDeformerForRigControl,
+      bindDrawableToRigControl,
+      moveDrawableRigControlBinding,
+      reparentRigControl,
+      updateRigControl,
       resolvePsdImportDestination,
       commitPsdImport
     }),
@@ -471,16 +660,24 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       cancelMeshDraft,
       commitPsdImport,
       cancelRigDraft,
+      bindDrawableToRigControl,
+      createParentRotationDeformerForRigControl,
+      createParentWarpDeformerForRigControl,
+      createRotationDeformerForDrawable,
       deformerRows,
+      drawablePoolItems,
       editorHiddenPartIds,
       fitRigDraft,
       inspector,
       meshDraft,
+      moveDrawableRigControlBinding,
       psdImportOpen,
       previewMeshDraft,
       applyRigDraft,
+      reparentRigControl,
       resetRigDraft,
       resolvePsdImportDestination,
+      rigOperationFeedback,
       rigDraft,
       selection,
       selectDrawable,
@@ -492,6 +689,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       moveStructureChild,
       togglePartCollapse,
       togglePartEditorVisibility,
+      updateRigControl,
       updateRigDraft
     ]
   );
@@ -508,4 +706,8 @@ export function useEditorSession() {
   }
 
   return context;
+}
+
+function formatCommandFeedback(result: EditorSessionCommandResult): string {
+  return result.diagnostics[0]?.message ?? "Rig operation was rejected.";
 }

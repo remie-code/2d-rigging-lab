@@ -510,6 +510,20 @@ export function CanvasPreviewPanel() {
                 ? String(projection.deformerOverlay?.childDrawableIds.length ?? 0)
                 : "0"
             }
+            data-deformer-overlay-kind={
+              deformerOverlayActive ? projection.deformerOverlay?.kind ?? "" : ""
+            }
+            data-deformer-overlay-pivot-x={
+              deformerOverlayActive ? String(projection.deformerOverlay?.pivot?.x ?? "") : ""
+            }
+            data-deformer-overlay-pivot-y={
+              deformerOverlayActive ? String(projection.deformerOverlay?.pivot?.y ?? "") : ""
+            }
+            data-deformer-overlay-rest-angle={
+              deformerOverlayActive
+                ? String(projection.deformerOverlay?.restAngleDegrees ?? "")
+                : ""
+            }
             data-deformer-overlay-status={
               deformerOverlayActive ? projection.deformerOverlay?.status ?? "" : ""
             }

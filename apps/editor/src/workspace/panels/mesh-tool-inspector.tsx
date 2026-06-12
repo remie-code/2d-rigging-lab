@@ -133,6 +133,8 @@ export function MeshToolInspector() {
   };
   const alphaBounds = currentDraft?.alphaBounds;
   const fallbackReason = currentDraft?.fallbackReason;
+  const fallbackSummary = formatFallbackSummary(currentDraft?.fallbackSteps, fallbackReason);
+  const qualityMetrics = currentDraft?.qualityMetrics;
 
   return (
     <>
@@ -161,11 +163,20 @@ export function MeshToolInspector() {
           <SummaryRow label="Vertices" testId="mesh-tool-vertex-count" value={String(summaryMesh?.vertices.length ?? 0)} />
           <SummaryRow label="Triangles" testId="mesh-tool-triangle-count" value={String(summaryMesh?.triangles.length ?? 0)} />
           <SummaryRow label="Source" testId="mesh-tool-source" value={formatMeshSource(currentDraft?.source)} />
-          {fallbackReason === undefined ? null : (
-            <SummaryRow label="Fallback" value={formatFallbackReason(fallbackReason)} />
+          {fallbackSummary === undefined ? null : (
+            <SummaryRow label="Fallback" value={fallbackSummary} />
           )}
           {alphaBounds === undefined ? null : (
             <SummaryRow label="Alpha bounds" value={formatRect(alphaBounds)} />
+          )}
+          {qualityMetrics === undefined ? null : (
+            <>
+              <SummaryRow label="Max edge" value={formatNumber(qualityMetrics.maxEdgeLength)} />
+              <SummaryRow label="Max area" value={formatNumber(qualityMetrics.maxTriangleArea)} />
+              <SummaryRow label="Min angle" value={`${formatNumber(qualityMetrics.minAngleDegrees)} deg`} />
+              <SummaryRow label="Max valence" value={String(qualityMetrics.maxVertexValence)} />
+              <SummaryRow label="Refinement" value={String(qualityMetrics.refinementIterationCount)} />
+            </>
           )}
         </div>
       </section>
@@ -396,6 +407,8 @@ function formatRect(rect: RectDto): string {
 
 function formatMeshSource(source: string | undefined): string {
   switch (source) {
+    case "outline-v2-rgba":
+      return "Auto outline v2";
     case "outline-rgba":
       return "Auto outline";
     case "alpha-aware-rgba":
@@ -406,6 +419,19 @@ function formatMeshSource(source: string | undefined): string {
     default:
       return source;
   }
+}
+
+function formatFallbackSummary(
+  steps: readonly { readonly method: string; readonly reason: string }[] | undefined,
+  fallbackReason: string | undefined
+): string | undefined {
+  if (steps !== undefined && steps.length > 0) {
+    return steps
+      .map((step) => `${step.method}: ${formatFallbackReason(step.reason)}`)
+      .join(" > ");
+  }
+
+  return fallbackReason === undefined ? undefined : formatFallbackReason(fallbackReason);
 }
 
 function formatFallbackReason(reason: string): string {

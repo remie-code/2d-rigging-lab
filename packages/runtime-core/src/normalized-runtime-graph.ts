@@ -172,6 +172,7 @@ export interface NormalizedRotation2dRigControl {
   readonly parentId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
+  readonly opacityMultiplier?: number;
   readonly pivot: Vec2Dto;
   readonly restAngleDegrees: number;
   readonly restTranslation: Vec2Dto;
@@ -185,6 +186,7 @@ export interface NormalizedWarpLattice2dRigControl {
   readonly parentId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
+  readonly opacityMultiplier?: number;
   readonly bindSpace: "rigControlLocalRest";
   readonly domainBounds: RectDto;
   readonly latticeColumns: number;

@@ -50,6 +50,11 @@ const createSchemaIssueCheck = (
     return rigControlChildKindCheck;
   }
 
+  const rigControlOpacityCheck = createRigControlOpacityMultiplierRangeCheck(issue, input, packageId);
+  if (rigControlOpacityCheck !== undefined) {
+    return rigControlOpacityCheck;
+  }
+
   const warpLatticeSchemaCheck = createWarpLatticeSchemaIssueCheck(issue, input, packageId);
   if (warpLatticeSchemaCheck !== undefined) {
     return warpLatticeSchemaCheck;
@@ -249,6 +254,57 @@ const createInvalidRigControlChildTargetKindCheck = (
     relatedAC: ["AC-MVP-009", "AC-MVP-013"],
     relatedScenarios: ["SC-MVP-002", "SC-MVP-004"],
     impact: "The package cannot resolve a rig control child binding whose stored collection and target kind disagree."
+  });
+};
+
+const createRigControlOpacityMultiplierRangeCheck = (
+  issue: z.ZodIssue,
+  input: unknown,
+  packageId: PackageId
+): ValidationCheckResultDto | undefined => {
+  const path = issue.path.map(String);
+  if (
+    path[0] !== "model" ||
+    path[1] !== "rigControls" ||
+    path[2] !== "rigControls" ||
+    path[3] === undefined ||
+    path[4] !== "opacityMultiplier"
+  ) {
+    return undefined;
+  }
+
+  const rigControl = readNestedValue(input, path.slice(0, 4));
+  const rigControlId = readObjectString(rigControl, "rigControlId");
+  const actual = formatUnknownValue(readNestedValue(input, path));
+  const target: TargetRefDto = rigControlId === undefined
+    ? {
+        kind: "package",
+        id: packageId,
+        path: path.join(".")
+      }
+    : {
+        kind: "rigControl",
+        id: rigControlId,
+        path: path.join(".")
+      };
+
+  return ValidationCheckResultSchema.parse({
+    checkId: CheckIdSchema.parse("rigControl.opacityMultiplierRange"),
+    status: "fail",
+    severity: "error",
+    phase: "rigControl_semantic",
+    target,
+    targetPath: path.join("."),
+    message: `Rig control ${rigControlId ?? "unknown"} has opacityMultiplier outside the 0..1 range.`,
+    evidence: [
+      `rigControlId=${rigControlId ?? "unknown"}`,
+      `opacityMultiplier=${actual}`,
+      "expectedRange=0..1",
+      issue.message
+    ],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    relatedScenarios: ["SC-DEF-002"],
+    impact: "Static deformer opacity cannot be applied deterministically outside the normalized opacity range."
   });
 };
 

@@ -22,6 +22,8 @@ export * from "./drawable-texture-mutations.js";
 export * from "./mask-relation-mutations.js";
 export * from "./mesh-generation.js";
 export * from "./mesh-outline-generation.js";
+export * from "./mesh-outline-v2-generation.js";
+export * from "./mesh-quality-metrics.js";
 export * from "./mesh-mutations.js";
 export * from "./mesh-topology-mutations.js";
 export * from "./drawable-mutations.js";

@@ -1441,6 +1441,30 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Rig control child binding is stored under a child collection that does not match the target ID kind."
   },
   {
+    checkId: "rigControl.duplicateChild",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control child collections contain the same child target more than once."
+  },
+  {
+    checkId: "rigControl.drawableMultipleParents",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "A drawable is bound under more than one rig control at the same time."
+  },
+  {
+    checkId: "rigControl.opacityMultiplierRange",
+    phase: "rigControl_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-009", "AC-MVP-013"],
+    description: "Rig control static opacity multiplier must stay within the normalized 0..1 range."
+  },
+  {
     checkId: "rigControl.parentChildMismatch",
     phase: "rigControl_semantic",
     defaultSeverity: "error",

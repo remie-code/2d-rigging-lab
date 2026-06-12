@@ -21,6 +21,9 @@ describe("validator rig control semantic checks", () => {
     expect(defaultCheckCatalog.has("rigControl.parentMissing")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.childMissing")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.invalidChildTargetKind")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.duplicateChild")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.drawableMultipleParents")).toBe(true);
+    expect(defaultCheckCatalog.has("rigControl.opacityMultiplierRange")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.parentChildMismatch")).toBe(true);
     expect(defaultCheckCatalog.has("rigControl.runtimeEvidenceMissing")).toBe(true);
   });
@@ -217,6 +220,114 @@ describe("validator rig control semantic checks", () => {
     ]);
   });
 
+  it("emits deterministic diagnostics for duplicate deformer child bindings", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createRigControlPackage({
+        graphRootIds: [RIG_PARENT_ID, RIG_CHILD_ID],
+        rigControls: [
+          createRotationRigControl(RIG_PARENT_ID, {
+            childDrawableIds: [DRAWABLE_ID, DRAWABLE_ID]
+          }),
+          createRotationRigControl(RIG_CHILD_ID, {
+            childDrawableIds: [DRAWABLE_ID]
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("fail");
+    expect(report.checks.filter(isDuplicateBindingCheck).map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "rigControl.duplicateChild",
+        targetId: DRAWABLE_ID,
+        targetPath: "/model/rigControls/rigControls/0/childDrawableIds/1",
+        severity: "error",
+        evidence: [
+          "rigControlId=rig_parent",
+          "childCollection=childDrawableIds",
+          `childId=${DRAWABLE_ID}`,
+          "firstIndex=0",
+          "duplicateIndex=1"
+        ]
+      },
+      {
+        checkId: "rigControl.drawableMultipleParents",
+        targetId: DRAWABLE_ID,
+        targetPath: "/model/rigControls/rigControls/1/childDrawableIds/0",
+        severity: "error",
+        evidence: [
+          `drawableId=${DRAWABLE_ID}`,
+          "parentRigControlIds=rig_child,rig_parent",
+          "parentCount=2"
+        ]
+      }
+    ]);
+  });
+
+  it("emits a deterministic diagnostic for duplicate child rig-control bindings", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createRigControlPackage({
+        graphRootIds: [RIG_PARENT_ID],
+        rigControls: [
+          createRotationRigControl(RIG_PARENT_ID, {
+            childRigControlIds: [RIG_CHILD_ID, RIG_CHILD_ID]
+          }),
+          createRotationRigControl(RIG_CHILD_ID, {
+            parentId: RIG_PARENT_ID
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("fail");
+    expect(report.checks.filter(isDuplicateBindingCheck).map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "rigControl.duplicateChild",
+        targetId: RIG_CHILD_ID,
+        targetPath: "/model/rigControls/rigControls/0/childRigControlIds/1",
+        severity: "error",
+        evidence: [
+          "rigControlId=rig_parent",
+          "childCollection=childRigControlIds",
+          `childId=${RIG_CHILD_ID}`,
+          "firstIndex=0",
+          "duplicateIndex=1"
+        ]
+      }
+    ]);
+  });
+
+  it("emits a deterministic diagnostic for invalid static opacity multipliers", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createRigControlPackage({
+        rigControls: [
+          createRotationRigControl(RIG_PARENT_ID, {
+            opacityMultiplier: 1.2
+          })
+        ]
+      }),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("fail");
+    expect(report.checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "rigControl.opacityMultiplierRange",
+        targetId: RIG_PARENT_ID,
+        targetPath: "model.rigControls.rigControls.0.opacityMultiplier",
+        severity: "error",
+        evidence: [
+          "rigControlId=rig_parent",
+          "opacityMultiplier=1.2",
+          "expectedRange=0..1",
+          "Too big: expected number to be <=1"
+        ]
+      }
+    ]);
+  });
+
   it("emits a deterministic diagnostic for invalid child target kind", () => {
     const report = validatePackageRuntime({
       packageDocument: createRigControlPackage({
@@ -336,6 +447,10 @@ const toDiagnosticSummary = (check: ValidationCheckResultDto) => ({
   severity: check.severity,
   evidence: check.evidence
 });
+
+const isDuplicateBindingCheck = (check: ValidationCheckResultDto): boolean =>
+  check.checkId === "rigControl.duplicateChild" ||
+  check.checkId === "rigControl.drawableMultipleParents";
 
 const createRigControlPackage = (overrides: {
   readonly graphRootIds?: readonly string[];

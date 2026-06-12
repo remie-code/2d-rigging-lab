@@ -8,7 +8,10 @@ import type {
   RectDto,
   RigControlId
 } from "@private-2d-rigging-lab/contracts";
-import type { CreateWarpDeformerPayloadDto } from "@private-2d-rigging-lab/operation-core";
+import type {
+  CreateRotation2dRigControlPayloadDto,
+  CreateWarpDeformerPayloadDto
+} from "@private-2d-rigging-lab/operation-core";
 
 import type { EditorSelection } from "./editor-selection";
 
@@ -19,13 +22,16 @@ export const DEFAULT_WARP_DEFORMER_BEZIER_ROWS = 3;
 export const WARP_DEFORMER_BEZIER_EDIT_TYPE = "cubicBezierSurfaceV1" as const;
 
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
+type RotationRigControlDto = Extract<RigControlDto, { readonly kind: "rotation2d" }>;
 type WarpLatticeRigControlDto = Extract<RigControlDto, { readonly kind: "warpLattice2d" }>;
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
+type InsertRigControlChild = NonNullable<CreateWarpDeformerPayloadDto["insertBeforeChild"]>;
 
 export interface WarpDeformerDraft {
   readonly displayName: string;
   readonly partId: PartId;
   readonly parentRigControlId?: RigControlId | undefined;
+  readonly insertBeforeChild?: InsertRigControlChild | undefined;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
   readonly domainBounds: RectDto;
@@ -53,6 +59,8 @@ export interface WarpDeformerReadModel {
   readonly parentRigControlId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
+  readonly opacityMultiplier: number;
+  readonly hasKeyforms: boolean;
   readonly domainBounds: RectDto;
   readonly transformGrid: {
     readonly columns: number;
@@ -71,6 +79,38 @@ export interface WarpDeformerReadModel {
   };
 }
 
+export interface RotationDeformerReadModel {
+  readonly kind: "rotationDeformer";
+  readonly storageKind: "rotation2d";
+  readonly rigControlId: RigControlId;
+  readonly displayName: string;
+  readonly partId: PartId;
+  readonly parentRigControlId?: RigControlId;
+  readonly childDrawableIds: readonly DrawableId[];
+  readonly childRigControlIds: readonly RigControlId[];
+  readonly opacityMultiplier: number;
+  readonly hasKeyforms: boolean;
+  readonly pivot: {
+    readonly x: number;
+    readonly y: number;
+  };
+  readonly restAngleDegrees: number;
+}
+
+export type DeformerReadModel = WarpDeformerReadModel | RotationDeformerReadModel;
+
+export interface DeformerParentOption {
+  readonly rigControlId: RigControlId;
+  readonly displayName: string;
+}
+
+export interface DrawablePoolItem {
+  readonly drawableId: DrawableId;
+  readonly displayName: string;
+  readonly partDisplayName: string;
+  readonly selected: boolean;
+}
+
 export type DeformerTreeRow =
   | {
       readonly kind: "warpDeformer";
@@ -85,6 +125,19 @@ export type DeformerTreeRow =
       readonly transformLabel: string;
       readonly bezierLabel: string;
       readonly legacyDefaulted: boolean;
+    }
+  | {
+      readonly kind: "rotationDeformer";
+      readonly rigControlId: RigControlId;
+      readonly depth: number;
+      readonly displayName: string;
+      readonly detail: string;
+      readonly selected: boolean;
+      readonly parentRigControlId?: RigControlId;
+      readonly childDrawableCount: number;
+      readonly childRigControlCount: number;
+      readonly transformLabel: string;
+      readonly opacityMultiplier: number;
     }
   | {
       readonly kind: "drawableRef";
@@ -105,9 +158,20 @@ export function createWarpDeformerDraftForDrawable(
     return undefined;
   }
 
+  const parentRigControlId = findDrawableRigControlParentId(session, drawableId);
+
   return {
     displayName: `${drawable.displayName} Warp Deformer`,
     partId: drawable.partId,
+    ...(parentRigControlId === undefined
+      ? {}
+      : {
+          parentRigControlId,
+          insertBeforeChild: {
+            kind: "drawable",
+            id: drawableId
+          }
+        }),
     childDrawableIds: [drawable.drawableId],
     childRigControlIds: [],
     domainBounds: resolveDrawableBounds(session, drawable.drawableId),
@@ -116,6 +180,110 @@ export function createWarpDeformerDraftForDrawable(
     bezierColumns: DEFAULT_WARP_DEFORMER_BEZIER_COLUMNS,
     bezierRows: DEFAULT_WARP_DEFORMER_BEZIER_ROWS,
     bezierEditType: WARP_DEFORMER_BEZIER_EDIT_TYPE
+  };
+}
+
+export function createRotationDeformerPayloadForDrawable(
+  session: AuthoringSession,
+  drawableId: DrawableId
+): CreateRotation2dRigControlPayloadDto | undefined {
+  const drawable = findDrawable(session, drawableId);
+  if (drawable === undefined) {
+    return undefined;
+  }
+
+  const bounds = resolveDrawableBounds(session, drawable.drawableId);
+  const parentRigControlId = findDrawableRigControlParentId(session, drawableId);
+
+  return {
+    partId: drawable.partId,
+    displayName: `${drawable.displayName} Rotation Deformer`,
+    childDrawableIds: [drawable.drawableId],
+    childRigControlIds: [],
+    opacityMultiplier: 1,
+    pivot: {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2
+    },
+    restAngleDegrees: 0,
+    ...(parentRigControlId === undefined
+      ? {}
+      : {
+          parentRigControlId,
+          insertBeforeChild: {
+            kind: "drawable",
+            id: drawableId
+          }
+        })
+  };
+}
+
+export function createWarpDeformerParentPayloadForRigControl(
+  session: AuthoringSession,
+  childRigControlId: RigControlId
+): CreateWarpDeformerPayloadDto | undefined {
+  const childRigControl = findRigControl(session, childRigControlId);
+  if (childRigControl === undefined) {
+    return undefined;
+  }
+
+  const bounds = resolveRigControlBounds(session, childRigControlId);
+
+  return {
+    partId: childRigControl.partId,
+    displayName: `${childRigControl.displayName} Parent Warp Deformer`,
+    ...(childRigControl.parentId === undefined
+      ? { childRigControlIds: [childRigControlId] }
+      : {
+          parentRigControlId: childRigControl.parentId,
+          childRigControlIds: [],
+          insertBeforeChild: {
+            kind: "rigControl",
+            id: childRigControlId
+          }
+        }),
+    childDrawableIds: [],
+    opacityMultiplier: 1,
+    domainBounds: bounds,
+    transformColumns: DEFAULT_WARP_DEFORMER_TRANSFORM_COLUMNS,
+    transformRows: DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS,
+    bezierColumns: DEFAULT_WARP_DEFORMER_BEZIER_COLUMNS,
+    bezierRows: DEFAULT_WARP_DEFORMER_BEZIER_ROWS,
+    bezierEditType: WARP_DEFORMER_BEZIER_EDIT_TYPE
+  };
+}
+
+export function createRotationDeformerParentPayloadForRigControl(
+  session: AuthoringSession,
+  childRigControlId: RigControlId
+): CreateRotation2dRigControlPayloadDto | undefined {
+  const childRigControl = findRigControl(session, childRigControlId);
+  if (childRigControl === undefined) {
+    return undefined;
+  }
+
+  const bounds = resolveRigControlBounds(session, childRigControlId);
+
+  return {
+    partId: childRigControl.partId,
+    displayName: `${childRigControl.displayName} Parent Rotation Deformer`,
+    ...(childRigControl.parentId === undefined
+      ? { childRigControlIds: [childRigControlId] }
+      : {
+          parentRigControlId: childRigControl.parentId,
+          childRigControlIds: [],
+          insertBeforeChild: {
+            kind: "rigControl",
+            id: childRigControlId
+          }
+        }),
+    childDrawableIds: [],
+    opacityMultiplier: 1,
+    pivot: {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2
+    },
+    restAngleDegrees: 0
   };
 }
 
@@ -165,6 +333,7 @@ export function updateWarpDeformerDraft(
     ...draft,
     ...patch,
     domainBounds: patch.domainBounds ?? draft.domainBounds,
+    insertBeforeChild: patch.insertBeforeChild ?? draft.insertBeforeChild,
     childDrawableIds: patch.childDrawableIds ?? draft.childDrawableIds,
     childRigControlIds: patch.childRigControlIds ?? draft.childRigControlIds
   });
@@ -205,6 +374,9 @@ export function createWarpDeformerPayloadFromDraft(
     ...(normalized.parentRigControlId === undefined
       ? {}
       : { parentRigControlId: normalized.parentRigControlId }),
+    ...(normalized.insertBeforeChild === undefined
+      ? {}
+      : { insertBeforeChild: normalized.insertBeforeChild }),
     childDrawableIds: [...normalized.childDrawableIds],
     childRigControlIds: [...normalized.childRigControlIds],
     domainBounds: structuredClone(normalized.domainBounds),
@@ -220,7 +392,7 @@ export function createDeformerTreeRows(
   session: AuthoringSession,
   selection: EditorSelection | null
 ): readonly DeformerTreeRow[] {
-  const readModels = createWarpDeformerReadModels(session);
+  const readModels = createDeformerReadModels(session);
   const readModelsById = new Map(readModels.map((readModel) => [readModel.rigControlId, readModel]));
   const drawableLabels = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable.displayName])
@@ -236,30 +408,7 @@ export function createDeformerTreeRows(
     }
 
     visited.add(rigControlId);
-    rows.push({
-      kind: "warpDeformer",
-      rigControlId,
-      depth,
-      displayName: readModel.displayName,
-      detail: readModel.bezierSurfaceStatus === "stored" ? "Warp Deformer" : "Legacy warp lattice",
-      selected: selection?.kind === "rigControl" && selection.id === rigControlId,
-      ...(readModel.parentRigControlId === undefined
-        ? {}
-        : { parentRigControlId: readModel.parentRigControlId }),
-      childDrawableCount: readModel.childDrawableIds.length,
-      childRigControlCount: readModel.childRigControlIds.filter((childId) =>
-        readModelsById.has(childId)
-      ).length,
-      transformLabel: formatControlPointGrid(
-        readModel.transformGrid.columns,
-        readModel.transformGrid.rows
-      ),
-      bezierLabel: formatControlPointGrid(
-        readModel.bezierEditSurface.columns,
-        readModel.bezierEditSurface.rows
-      ),
-      legacyDefaulted: readModel.bezierSurfaceStatus === "legacyDefaulted"
-    });
+    rows.push(createDeformerTreeDeformerRow(readModel, depth, selection, readModelsById));
 
     for (const childRigControlId of readModel.childRigControlIds) {
       appendDeformer(childRigControlId, depth + 1);
@@ -289,12 +438,49 @@ export function createDeformerTreeRows(
   return rows;
 }
 
+export function createDrawablePoolItems(
+  session: AuthoringSession,
+  selection: EditorSelection | null
+): readonly DrawablePoolItem[] {
+  const boundDrawableIds = new Set(
+    session.graph.rigControls.flatMap((rigControl) => rigControl.childDrawableIds)
+  );
+  const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
+
+  return session.graph.drawables
+    .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
+    .map((drawable) => ({
+      drawableId: drawable.drawableId,
+      displayName: drawable.displayName,
+      partDisplayName: partsById.get(drawable.partId)?.displayName ?? "Missing part",
+      selected: selection?.kind === "drawable" && selection.id === drawable.drawableId
+    }));
+}
+
+export function createDeformerReadModels(
+  session: AuthoringSession
+): readonly DeformerReadModel[] {
+  return session.graph.rigControls
+    .map((rigControl): DeformerReadModel | undefined => {
+      if (isWarpLatticeRigControl(rigControl)) {
+        return projectEditorWarpDeformerReadModel(session, rigControl);
+      }
+      if (isRotationRigControl(rigControl)) {
+        return projectEditorRotationDeformerReadModel(session, rigControl);
+      }
+
+      return undefined;
+    })
+    .filter(isDefined)
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
 export function createWarpDeformerReadModels(
   session: AuthoringSession
 ): readonly WarpDeformerReadModel[] {
   return session.graph.rigControls
     .filter(isWarpLatticeRigControl)
-    .map(projectEditorWarpDeformerReadModel)
+    .map((rigControl) => projectEditorWarpDeformerReadModel(session, rigControl))
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
@@ -307,17 +493,47 @@ export function findWarpDeformerReadModel(
   );
 
   return rigControl !== undefined && isWarpLatticeRigControl(rigControl)
-    ? projectEditorWarpDeformerReadModel(rigControl)
+    ? projectEditorWarpDeformerReadModel(session, rigControl)
+    : undefined;
+}
+
+export function findRotationDeformerReadModel(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): RotationDeformerReadModel | undefined {
+  const rigControl = session.graph.rigControls.find(
+    (candidate) => candidate.rigControlId === rigControlId
+  );
+
+  return rigControl !== undefined && isRotationRigControl(rigControl)
+    ? projectEditorRotationDeformerReadModel(session, rigControl)
     : undefined;
 }
 
 export function createWarpDeformerParentOptions(
   session: AuthoringSession
-): readonly Pick<WarpDeformerReadModel, "rigControlId" | "displayName">[] {
-  return createWarpDeformerReadModels(session).map((readModel) => ({
-    rigControlId: readModel.rigControlId,
-    displayName: readModel.displayName
-  }));
+): readonly DeformerParentOption[] {
+  return createDeformerParentOptions(session);
+}
+
+export function createDeformerParentOptions(
+  session: AuthoringSession,
+  excludedRigControlId?: RigControlId
+): readonly DeformerParentOption[] {
+  const excludedIds =
+    excludedRigControlId === undefined
+      ? new Set<RigControlId>()
+      : collectRigControlDescendantIds(session, excludedRigControlId);
+  if (excludedRigControlId !== undefined) {
+    excludedIds.add(excludedRigControlId);
+  }
+
+  return createDeformerReadModels(session)
+    .filter((readModel) => !excludedIds.has(readModel.rigControlId))
+    .map((readModel) => ({
+      rigControlId: readModel.rigControlId,
+      displayName: readModel.displayName
+    }));
 }
 
 export function summarizeWarpDeformerChildren(
@@ -355,7 +571,79 @@ export function formatControlPointGrid(columns: number, rows: number): string {
   return `${columns} x ${rows} control points`;
 }
 
+export function resolveWarpDeformerChildrenBounds(
+  session: AuthoringSession,
+  childDrawableIds: readonly DrawableId[],
+  childRigControlIds: readonly RigControlId[]
+): RectDto | undefined {
+  const childDrawableBounds = childDrawableIds
+    .map((drawableId) => resolveDrawableBounds(session, drawableId))
+    .filter(isPositiveRect);
+  const childRigBounds = childRigControlIds
+    .map((rigControlId) => resolveRigControlBounds(session, rigControlId))
+    .filter(isPositiveRect);
+
+  return unionRects([...childDrawableBounds, ...childRigBounds]);
+}
+
+export function hasRigControlKeyforms(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): boolean {
+  return session.graph.keyformSets.some(
+    (keyformSet) => keyformSet.target.kind === "rigControl" && keyformSet.target.id === rigControlId
+  );
+}
+
+function createDeformerTreeDeformerRow(
+  readModel: DeformerReadModel,
+  depth: number,
+  selection: EditorSelection | null,
+  readModelsById: ReadonlyMap<RigControlId, DeformerReadModel>
+): Extract<DeformerTreeRow, { readonly kind: "warpDeformer" | "rotationDeformer" }> {
+  const childRigControlCount = readModel.childRigControlIds.filter((childId) =>
+    readModelsById.has(childId)
+  ).length;
+  const base = {
+    rigControlId: readModel.rigControlId,
+    depth,
+    displayName: readModel.displayName,
+    selected: selection?.kind === "rigControl" && selection.id === readModel.rigControlId,
+    ...(readModel.parentRigControlId === undefined
+      ? {}
+      : { parentRigControlId: readModel.parentRigControlId }),
+    childDrawableCount: readModel.childDrawableIds.length,
+    childRigControlCount
+  };
+
+  if (readModel.kind === "rotationDeformer") {
+    return {
+      kind: "rotationDeformer",
+      ...base,
+      detail: "Rotation Deformer",
+      transformLabel: `Pivot ${formatNumber(readModel.pivot.x)}, ${formatNumber(readModel.pivot.y)}`,
+      opacityMultiplier: readModel.opacityMultiplier
+    };
+  }
+
+  return {
+    kind: "warpDeformer",
+    ...base,
+    detail: readModel.bezierSurfaceStatus === "stored" ? "Warp Deformer" : "Legacy warp lattice",
+    transformLabel: formatControlPointGrid(
+      readModel.transformGrid.columns,
+      readModel.transformGrid.rows
+    ),
+    bezierLabel: formatControlPointGrid(
+      readModel.bezierEditSurface.columns,
+      readModel.bezierEditSurface.rows
+    ),
+    legacyDefaulted: readModel.bezierSurfaceStatus === "legacyDefaulted"
+  };
+}
+
 function projectEditorWarpDeformerReadModel(
+  session: AuthoringSession,
   rigControl: WarpLatticeRigControlDto
 ): WarpDeformerReadModel {
   const metadata = rigControl.warpDeformer;
@@ -379,6 +667,8 @@ function projectEditorWarpDeformerReadModel(
     ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
+    opacityMultiplier: rigControl.opacityMultiplier ?? 1,
+    hasKeyforms: hasRigControlKeyforms(session, rigControl.rigControlId),
     domainBounds: structuredClone(rigControl.domainBounds),
     transformGrid: structuredClone(transformGrid),
     bezierEditSurface: {
@@ -394,9 +684,29 @@ function projectEditorWarpDeformerReadModel(
   };
 }
 
+function projectEditorRotationDeformerReadModel(
+  session: AuthoringSession,
+  rigControl: RotationRigControlDto
+): RotationDeformerReadModel {
+  return {
+    kind: "rotationDeformer",
+    storageKind: "rotation2d",
+    rigControlId: rigControl.rigControlId,
+    displayName: rigControl.displayName,
+    partId: rigControl.partId,
+    ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
+    childDrawableIds: [...rigControl.childDrawableIds],
+    childRigControlIds: [...rigControl.childRigControlIds],
+    opacityMultiplier: rigControl.opacityMultiplier ?? 1,
+    hasKeyforms: hasRigControlKeyforms(session, rigControl.rigControlId),
+    pivot: structuredClone(rigControl.pivot),
+    restAngleDegrees: rigControl.restAngleDegrees
+  };
+}
+
 function resolveDeformerRootIds(
   session: AuthoringSession,
-  readModels: readonly WarpDeformerReadModel[]
+  readModels: readonly DeformerReadModel[]
 ): readonly RigControlId[] {
   const deformerIds = new Set(readModels.map((readModel) => readModel.rigControlId));
   const roots = [
@@ -455,15 +765,11 @@ function resolveChildBounds(
   session: AuthoringSession,
   draft: WarpDeformerDraft
 ): RectDto | undefined {
-  const childDrawableBounds = draft.childDrawableIds
-    .map((drawableId) => resolveDrawableBounds(session, drawableId))
-    .filter(isPositiveRect);
-  const childRigBounds = draft.childRigControlIds
-    .map((rigControlId) => findWarpDeformerReadModel(session, rigControlId)?.domainBounds)
-    .filter(isDefined)
-    .filter(isPositiveRect);
-
-  return unionRects([...childDrawableBounds, ...childRigBounds]);
+  return resolveWarpDeformerChildrenBounds(
+    session,
+    draft.childDrawableIds,
+    draft.childRigControlIds
+  );
 }
 
 function resolveDrawableBounds(session: AuthoringSession, drawableId: DrawableId): RectDto {
@@ -485,6 +791,46 @@ function findDrawable(session: AuthoringSession, drawableId: DrawableId) {
   return session.graph.drawables.find((drawable) => drawable.drawableId === drawableId);
 }
 
+function findRigControl(session: AuthoringSession, rigControlId: RigControlId) {
+  return session.graph.rigControls.find((rigControl) => rigControl.rigControlId === rigControlId);
+}
+
+function resolveRigControlBounds(
+  session: AuthoringSession,
+  rigControlId: RigControlId,
+  visited: ReadonlySet<RigControlId> = new Set()
+): RectDto {
+  const rigControl = findRigControl(session, rigControlId);
+  if (rigControl === undefined || visited.has(rigControlId)) {
+    return {
+      x: 0,
+      y: 0,
+      width: Math.max(1, session.graph.canvasSize.width),
+      height: Math.max(1, session.graph.canvasSize.height)
+    };
+  }
+
+  if (isWarpLatticeRigControl(rigControl)) {
+    return structuredClone(rigControl.domainBounds);
+  }
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(rigControlId);
+  const childBounds = [
+    ...rigControl.childDrawableIds.map((drawableId) => resolveDrawableBounds(session, drawableId)),
+    ...rigControl.childRigControlIds.map((childRigControlId) =>
+      resolveRigControlBounds(session, childRigControlId, nextVisited)
+    )
+  ];
+
+  return unionRects(childBounds) ?? {
+    x: rigControl.pivot.x - 16,
+    y: rigControl.pivot.y - 16,
+    width: 32,
+    height: 32
+  };
+}
+
 function findMesh(session: AuthoringSession, meshId: MeshDto["meshId"]) {
   return session.graph.meshes.find((mesh) => mesh.meshId === meshId);
 }
@@ -493,6 +839,47 @@ function isWarpLatticeRigControl(
   rigControl: RigControlDto
 ): rigControl is WarpLatticeRigControlDto {
   return rigControl.kind === "warpLattice2d";
+}
+
+function isRotationRigControl(rigControl: RigControlDto): rigControl is RotationRigControlDto {
+  return rigControl.kind === "rotation2d";
+}
+
+function findDrawableRigControlParentId(
+  session: AuthoringSession,
+  drawableId: DrawableId
+): RigControlId | undefined {
+  return session.graph.rigControls.find((rigControl) =>
+    rigControl.childDrawableIds.includes(drawableId)
+  )?.rigControlId;
+}
+
+function collectRigControlDescendantIds(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): Set<RigControlId> {
+  const rigControlsById = new Map(
+    session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
+  );
+  const result = new Set<RigControlId>();
+  const visit = (currentRigControlId: RigControlId) => {
+    const rigControl = rigControlsById.get(currentRigControlId);
+    if (rigControl === undefined) {
+      return;
+    }
+
+    for (const childRigControlId of rigControl.childRigControlIds) {
+      if (result.has(childRigControlId)) {
+        continue;
+      }
+
+      result.add(childRigControlId);
+      visit(childRigControlId);
+    }
+  };
+
+  visit(rigControlId);
+  return result;
 }
 
 function unionRects(rects: readonly RectDto[]): RectDto | undefined {

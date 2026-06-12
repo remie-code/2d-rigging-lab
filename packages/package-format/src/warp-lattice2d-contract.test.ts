@@ -52,6 +52,7 @@ describe("warpLattice2d package-format contract", () => {
   it("parses Warp Deformer metadata with transform and Bezier edit divisions", () => {
     const rigControl = RigControlSchema.parse({
       ...createWarpLatticeRigControl(),
+      opacityMultiplier: 0.5,
       latticeColumns: 5,
       latticeRows: 4,
       restControlPoints: createGridPoints({ columns: 5, rows: 4 }),
@@ -83,6 +84,7 @@ describe("warpLattice2d package-format contract", () => {
         bezierEvaluation: "storedNotEvaluatedV0"
       }
     });
+    expect(projection.opacityMultiplier).toBe(0.5);
     expect(projection.bezierEditSurface).toMatchObject({
       columns: 3,
       rows: 2,
@@ -101,6 +103,7 @@ describe("warpLattice2d package-format contract", () => {
     const projection = projectWarpDeformerReadModel(rigControl);
 
     expect(projection.bezierSurfaceStatus).toBe("legacyDefaulted");
+    expect(projection.opacityMultiplier).toBe(1);
     expect(projection.transformGrid).toMatchObject({
       columns: 2,
       rows: 2
@@ -159,6 +162,21 @@ describe("warpLattice2d package-format contract", () => {
       RigControlSchema.safeParse({
         ...createWarpLatticeRigControl(),
         domainBounds: { x: 10, y: 20, width: 100, height: 0 }
+      }).success
+    ).toBe(false);
+  });
+
+  it("rejects rig control opacity multipliers outside the normalized range", () => {
+    expect(
+      RigControlSchema.safeParse({
+        ...createWarpLatticeRigControl(),
+        opacityMultiplier: -0.01
+      }).success
+    ).toBe(false);
+    expect(
+      RigControlSchema.safeParse({
+        ...createWarpLatticeRigControl(),
+        opacityMultiplier: 1.01
       }).success
     ).toBe(false);
   });

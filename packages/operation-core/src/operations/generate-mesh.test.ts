@@ -244,19 +244,63 @@ describe("generateMesh operation handler", () => {
       ],
       generationProvenanceId: "prov_generate_body_mesh"
     });
-    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual([
-      "generateMesh:auto-outline-v1",
-      "meshSource:outline-rgba"
-    ]);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v1",
+        "meshSource:outline-rgba",
+        "meshQuality:triangulationMode=ordinary-delaunay-alpha-filter"
+      ])
+    );
     expect(toRuntimeGraph(session).drawables.get(DrawableIdSchema.parse("draw_body"))).toMatchObject({
       vertexCount: 4
     });
+  });
+
+  it("commits auto-outline-v2 and records quality metrics in provenance", () => {
+    const session = createFixtureSessionWithTextureBytes();
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2",
+        "meshSource:outline-v2-rgba",
+        "meshQuality:triangulationMode=interim-delaunay-alpha-filter"
+      ])
+    );
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:maxEdgeLength="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:maxTriangleArea="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:minAngleDegrees="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:maxVertexValence="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:refinementIterations="))).toBe(true);
+  });
+
+  it("records auto-outline-v2 fallback chain in operation provenance", () => {
+    const session = createFixtureSessionWithTextureBytes([]);
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2",
+        "meshSource:bounds-grid",
+        "fallback:auto-outline-v2:alpha-empty",
+        "fallback:auto-outline-v1:alpha-empty"
+      ])
+    );
   });
 });
 
 const createGenerateMeshRequest = (options: {
   readonly dryRun: boolean;
-  readonly method?: "manual-empty" | "auto-grid-v1" | "auto-outline-v1";
+  readonly method?: "manual-empty" | "auto-grid-v1" | "auto-outline-v1" | "auto-outline-v2";
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];
 }): OperationRequestDto =>
@@ -330,14 +374,16 @@ const createPreviewMesh = (
   ...overrides
 });
 
-const createFixtureSessionWithTextureBytes = (): AuthoringSession => {
-  const session = createFixtureSession();
-  const bytes = createAlphaBytes(4, 4, [
+const createFixtureSessionWithTextureBytes = (
+  opaquePixels: readonly (readonly [number, number])[] = [
     [1, 1],
     [2, 1],
     [1, 2],
     [2, 2]
-  ]);
+  ]
+): AuthoringSession => {
+  const session = createFixtureSession();
+  const bytes = createAlphaBytes(4, 4, opaquePixels);
   session.graph.meshes[0] = {
     ...session.graph.meshes[0]!,
     bounds: { x: 4, y: 8, width: 4, height: 4 }

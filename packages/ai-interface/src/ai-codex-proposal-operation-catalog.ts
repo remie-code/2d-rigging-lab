@@ -235,6 +235,18 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     ])
   },
   {
+    operationType: "moveDrawableRigControlBinding",
+    operationFamily: "rigControl",
+    displayName: "Move drawable deformer binding",
+    summary: "Move an already-bound drawable from one deformer parent to another without changing part membership or draw order.",
+    targetKinds: ["rigControl", "drawable"],
+    payloadSchemaRef: "operation.moveDrawableRigControlBinding.payload.v1",
+    requiredInputs: codexInputs("Bound drawable and destination rig control.", [
+      "drawableId",
+      "targetRigControlId"
+    ])
+  },
+  {
     operationType: "createDrawable",
     operationFamily: "modelStructure",
     displayName: "Create drawable",
@@ -291,7 +303,7 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationType: "createRotation2dRigControl",
     operationFamily: "rigControl",
     displayName: "Create rotation2d rig control",
-    summary: "Create a project-defined 2D rotation rig control.",
+    summary: "Create a project-defined 2D rotation rig control, optionally inserting it between a parent deformer and existing child.",
     targetKinds: ["rigControl", "part", "drawable"],
     payloadSchemaRef: "operation.createRotation2dRigControl.payload.v1",
     requiredInputs: codexInputs("New rig control, part, and pivot.", [
@@ -306,7 +318,7 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationFamily: "rigControl",
     displayName: "Create Warp Deformer",
     summary:
-      "Create a project-defined Warp Deformer with transform grid divisions and a stored Bezier edit surface.",
+      "Create a project-defined Warp Deformer with transform grid divisions, stored Bezier edit surface, and optional insertion between an existing parent and child.",
     targetKinds: ["rigControl", "part", "drawable"],
     payloadSchemaRef: "operation.createWarpDeformer.payload.v1",
     requiredInputs: codexInputs("New Warp Deformer, part, domain bounds, and division settings.", [
@@ -453,6 +465,18 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     ])
   },
   {
+    operationType: "reparentRigControl",
+    operationFamily: "rigControl",
+    displayName: "Reparent rig control",
+    summary: "Move a child deformer under another deformer parent or to the deformer root with cycle prevention.",
+    targetKinds: ["rigControl"],
+    payloadSchemaRef: "operation.reparentRigControl.payload.v1",
+    requiredInputs: codexInputs("Child rig control and destination parent, or null for root.", [
+      "childRigControlId",
+      "parentRigControlId"
+    ])
+  },
+  {
     operationType: "setDrawOrder",
     operationFamily: "composition",
     displayName: "Set draw order",
@@ -532,6 +556,15 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     targetKinds: ["part"],
     payloadSchemaRef: "operation.updatePart.payload.v1",
     requiredInputs: codexInputs("Part to update plus at least one changed field.", ["partId"])
+  },
+  {
+    operationType: "updateRigControl",
+    operationFamily: "rigControl",
+    displayName: "Update rig control",
+    summary: "Update committed deformer metadata, Warp Deformer domain/divisions, or static opacity multiplier.",
+    targetKinds: ["rigControl"],
+    payloadSchemaRef: "operation.updateRigControl.payload.v1",
+    requiredInputs: codexInputs("Rig control plus at least one editable field.", ["rigControlId"])
   }
 ];
 

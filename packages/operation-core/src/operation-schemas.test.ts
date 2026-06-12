@@ -266,6 +266,7 @@ const operationPayloads = [
       displayName: "Head Rotation",
       childDrawableIds: ["draw_face"],
       childRigControlIds: [],
+      opacityMultiplier: 0.8,
       pivot: {
         x: 512,
         y: 512
@@ -299,6 +300,7 @@ const operationPayloads = [
       parentRigControlId: "rig_head_rotation",
       childDrawableIds: ["draw_face"],
       childRigControlIds: [],
+      opacityMultiplier: 0.75,
       domainBounds: {
         x: 320,
         y: 240,
@@ -320,6 +322,38 @@ const operationPayloads = [
         kind: "rigControl",
         id: "rig_child_rotation"
       }
+    }
+  },
+  {
+    operationType: "moveDrawableRigControlBinding",
+    payload: {
+      drawableId: "draw_face",
+      targetRigControlId: "rig_face_warp"
+    }
+  },
+  {
+    operationType: "reparentRigControl",
+    payload: {
+      childRigControlId: "rig_child_rotation",
+      parentRigControlId: "rig_head_rotation"
+    }
+  },
+  {
+    operationType: "updateRigControl",
+    payload: {
+      rigControlId: "rig_face_warp",
+      displayName: "Face Warp",
+      domainBounds: {
+        x: 320,
+        y: 240,
+        width: 512,
+        height: 512
+      },
+      transformColumns: 5,
+      transformRows: 4,
+      bezierColumns: 3,
+      bezierRows: 2,
+      opacityMultiplier: 0.5
     }
   }
 ] as const;
@@ -388,7 +422,10 @@ describe("operation-core DTO schemas", () => {
       "createRotation2dRigControl",
       "createWarpLattice2dRigControl",
       "createWarpDeformer",
-      "bindRigControlChild"
+      "bindRigControlChild",
+      "moveDrawableRigControlBinding",
+      "reparentRigControl",
+      "updateRigControl"
     ]);
   });
 
