@@ -10,6 +10,8 @@ PSD import後に表示するものはPhotoshopのflatten previewそのもので�
 
 Canvas / Previewはペインティング機能を提供しない。PhotoshopやKritaのようなbrush、paint layer編集、pixel編集はスコープ外である。
 
+Parameter値、keyform補間、Warp / Rotation Deformer、Apply前draft、overlay追従、hit testをどの順序で評価してCanvasへ描くかは、画面仕様ではなく [../../canvas-evaluation/canvas-evaluation-pipeline-v0.md](../../canvas-evaluation/canvas-evaluation-pipeline-v0.md) を正とする。この文書はCanvasの見え方・操作・toolbar配置を扱う。
+
 ## 2. Import後に表示するもの
 
 MVPで表示するもの:
@@ -155,3 +157,4 @@ Mesh overlayの初期方針:
 - Drawable Inspector: [drawable-inspector.md](drawable-inspector.md)
 - Mesh Tool: [mesh-tool.md](mesh-tool.md)
 - Rig Tool: [rig-tool.md](rig-tool.md)
+- Canvas Evaluation Pipeline: [../../canvas-evaluation/canvas-evaluation-pipeline-v0.md](../../canvas-evaluation/canvas-evaluation-pipeline-v0.md)

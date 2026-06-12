@@ -1,4 +1,4 @@
-import { Eye, FolderOpen, PanelLeft, Save } from "lucide-react";
+import { Eye, FolderOpen, PanelLeft, Redo2, Save, Undo2 } from "lucide-react";
 
 import { StatusBadge } from "../components/status-badge";
 import { useEditorSession } from "../features/editor-session/editor-session-context";
@@ -11,7 +11,7 @@ export function AppBar() {
   const surfaceLabel = useEditorUiStore((state) => state.surfaceLabel);
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const { openPsdImport } = useEditorSession();
+  const { canRedo, canUndo, openPsdImport, redo, undo } = useEditorSession();
 
   const activateEntry = (entry: WorkspaceEntryId) => {
     setActiveEntry(entry);
@@ -67,6 +67,24 @@ export function AppBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <IconButton
+          className="disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600 disabled:hover:border-neutral-800 disabled:hover:bg-neutral-950 disabled:hover:text-neutral-600"
+          disabled={!canUndo}
+          label="Undo"
+          onClick={undo}
+          tooltipSide="bottom"
+        >
+          <Undo2 aria-hidden="true" size={18} strokeWidth={1.8} />
+        </IconButton>
+        <IconButton
+          className="disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600 disabled:hover:border-neutral-800 disabled:hover:bg-neutral-950 disabled:hover:text-neutral-600"
+          disabled={!canRedo}
+          label="Redo"
+          onClick={redo}
+          tooltipSide="bottom"
+        >
+          <Redo2 aria-hidden="true" size={18} strokeWidth={1.8} />
+        </IconButton>
         <IconButton label="Open project" tooltipSide="bottom">
           <FolderOpen aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>

@@ -158,7 +158,7 @@ describe("ParameterManagerTable", () => {
     let reactRoot: Root | null = null;
 
     try {
-      reactRoot = createRoot(root.container);
+      reactRoot = createRoot(root.container as unknown as Element);
       await act(async () => {
         reactRoot?.render(
           createElement(
@@ -184,9 +184,10 @@ describe("ParameterManagerTable", () => {
         updatedActiveSelect.options.find((option) => option.value === updatedSelectValue)
           ?.textContent
       ).toBe("Mouth Open");
-      expect(getFakeElementByAriaLabel(root.container, "Parameter value").min).toBe("0");
-      expect(getFakeElementByAriaLabel(root.container, "Parameter value").max).toBe("1");
-      expect(getFakeElementByAriaLabel(root.container, "Parameter value").value).toBe("0");
+      const parameterSlider = getFakeElementByTestId(root.container, "parameter-slider-thumb");
+      expect(parameterSlider.getAttribute("data-parameter-min")).toBe("0");
+      expect(parameterSlider.getAttribute("data-parameter-max")).toBe("1");
+      expect(parameterSlider.getAttribute("data-parameter-value")).toBe("0");
       expect(getFakeElementByAriaLabel(root.container, "Parameter numeric value").value).toBe("0");
       expect(getFakeButtonByText(root.container, "Active in Parameter Bar")).toBeDefined();
     } finally {
@@ -414,11 +415,16 @@ class FakeDocument {
   }
 }
 
+type ReactActGlobal = typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+};
+
 function createFakeDomRoot(): {
   readonly container: FakeElement;
   readonly restore: () => void;
 } {
   const document = new FakeDocument();
+  const reactActGlobal = globalThis as ReactActGlobal;
   const previous = {
     document: globalThis.document,
     window: globalThis.window,
@@ -426,7 +432,7 @@ function createFakeDomRoot(): {
     HTMLElement: globalThis.HTMLElement,
     HTMLIFrameElement: globalThis.HTMLIFrameElement,
     SVGElement: globalThis.SVGElement,
-    IS_REACT_ACT_ENVIRONMENT: globalThis.IS_REACT_ACT_ENVIRONMENT
+    IS_REACT_ACT_ENVIRONMENT: reactActGlobal.IS_REACT_ACT_ENVIRONMENT
   };
 
   globalThis.document = document as unknown as Document;
@@ -436,7 +442,7 @@ function createFakeDomRoot(): {
   globalThis.HTMLIFrameElement =
     document.defaultView.HTMLIFrameElement as unknown as typeof HTMLIFrameElement;
   globalThis.SVGElement = FakeElement as unknown as typeof SVGElement;
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  reactActGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
   return {
     container: document.createElement("div"),
@@ -447,7 +453,7 @@ function createFakeDomRoot(): {
       globalThis.HTMLElement = previous.HTMLElement;
       globalThis.HTMLIFrameElement = previous.HTMLIFrameElement;
       globalThis.SVGElement = previous.SVGElement;
-      globalThis.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
+      reactActGlobal.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
     }
   };
 }
@@ -483,6 +489,15 @@ function getFakeElementByAriaLabel(root: FakeElement, label: string): FakeElemen
   const element = findFakeElements(root, (candidate) => candidate.getAttribute("aria-label") === label)[0];
   if (element === undefined) {
     throw new Error(`Element with aria-label "${label}" was not rendered.`);
+  }
+
+  return element;
+}
+
+function getFakeElementByTestId(root: FakeElement, testId: string): FakeElement {
+  const element = findFakeElements(root, (candidate) => candidate.getAttribute("data-testid") === testId)[0];
+  if (element === undefined) {
+    throw new Error(`Element with data-testid "${testId}" was not rendered.`);
   }
 
   return element;

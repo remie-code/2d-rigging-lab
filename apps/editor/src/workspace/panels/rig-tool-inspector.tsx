@@ -23,7 +23,6 @@ import {
   formatRectSummary,
   resolveWarpDeformerChildrenBounds,
   summarizeWarpDeformerChildren,
-  WARP_DEFORMER_BEZIER_EDIT_TYPE,
   type RotationDeformerReadModel,
   type WarpDeformerDraft,
   type WarpDeformerReadModel,
@@ -285,69 +284,42 @@ function WarpDeformerDraftEditor({
               ))}
             </select>
           </label>
-          <SummaryBlock
-            rows={[
-              ...(draft.insertBeforeChild === undefined
-                ? []
-                : [
-                    {
-                      label: "Insertion",
-                      value: "Locked between current parent and child"
-                    }
-                  ]),
-              {
-                label: "Bound children",
-                value: summarizeWarpDeformerChildren(
-                  session,
-                  draft.childDrawableIds,
-                  draft.childRigControlIds
-                )
-              },
-              { label: "Bezier edit type", value: draft.bezierEditType },
-              {
-                label: "Transform",
-                value: formatControlPointGrid(draft.transformColumns, draft.transformRows)
-              },
-              {
-                label: "Bezier",
-                value: formatControlPointGrid(draft.bezierColumns, draft.bezierRows)
-              }
-            ]}
-          />
         </div>
       </section>
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <SectionTitle>Domain bounds</SectionTitle>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-[repeat(4,minmax(0,1fr))_2rem_2rem] gap-2">
           <NumberField
+            displayLabel="X"
             label="Domain bounds x"
             onChange={(x) => updateBounds({ x })}
             value={draft.domainBounds.x}
           />
           <NumberField
+            displayLabel="Y"
             label="Domain bounds y"
             onChange={(y) => updateBounds({ y })}
             value={draft.domainBounds.y}
           />
           <NumberField
+            displayLabel="W"
             label="Domain bounds width"
             min={1}
             onChange={(width) => updateBounds({ width })}
             value={draft.domainBounds.width}
           />
           <NumberField
+            displayLabel="H"
             label="Domain bounds height"
             min={1}
             onChange={(height) => updateBounds({ height })}
             value={draft.domainBounds.height}
           />
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <ActionButton label="Fit bounds" onClick={onFit}>
+          <ActionButton iconOnly label="Fit bounds" onClick={onFit}>
             <Maximize2 aria-hidden="true" size={14} strokeWidth={1.8} />
           </ActionButton>
-          <ActionButton label="Reset draft" onClick={onReset}>
+          <ActionButton iconOnly label="Reset draft" onClick={onReset}>
             <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
           </ActionButton>
         </div>
@@ -357,13 +329,13 @@ function WarpDeformerDraftEditor({
         <SectionTitle>Transform divisions (control point counts)</SectionTitle>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <NumberField
-            label="Transform columns control points"
+            label="Transform columns"
             min={2}
             onChange={(transformColumns) => onUpdate({ transformColumns })}
             value={draft.transformColumns}
           />
           <NumberField
-            label="Transform rows control points"
+            label="Transform rows"
             min={2}
             onChange={(transformRows) => onUpdate({ transformRows })}
             value={draft.transformRows}
@@ -387,12 +359,6 @@ function WarpDeformerDraftEditor({
             value={draft.bezierRows}
           />
         </div>
-        <input
-          aria-label="Bezier edit type"
-          className="mt-3 h-8 w-full rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-400"
-          readOnly
-          value={WARP_DEFORMER_BEZIER_EDIT_TYPE}
-        />
       </section>
 
       <OperationFeedback feedback={feedback} />
@@ -530,25 +496,6 @@ export function CommittedWarpDeformerInspector({
               ))}
             </select>
           </label>
-          <SummaryBlock
-            rows={[
-              {
-                label: "Bound children",
-                value: summarizeWarpDeformerChildren(
-                  session,
-                  readModel.childDrawableIds,
-                  readModel.childRigControlIds
-                )
-              },
-              { label: "Bezier edit type", value: readModel.bezierEditSurface.editType },
-              { label: "Transform evaluation", value: readModel.evaluationBoundary.transformEvaluation },
-              { label: "Bezier evaluation", value: readModel.evaluationBoundary.bezierEvaluation },
-              {
-                label: "Keyform lock",
-                value: readModel.hasKeyforms ? "Division edits disabled" : "No keyform lock"
-              }
-            ]}
-          />
         </div>
       </section>
 
@@ -563,32 +510,35 @@ export function CommittedWarpDeformerInspector({
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <SectionTitle>Domain bounds</SectionTitle>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-[repeat(4,minmax(0,1fr))_2rem_2rem] gap-2">
           <NumberField
+            displayLabel="X"
             label="Domain bounds x"
             onChange={(x) => updateBounds({ x })}
             value={editState.domainBounds.x}
           />
           <NumberField
+            displayLabel="Y"
             label="Domain bounds y"
             onChange={(y) => updateBounds({ y })}
             value={editState.domainBounds.y}
           />
           <NumberField
+            displayLabel="W"
             label="Domain bounds width"
             min={1}
             onChange={(width) => updateBounds({ width })}
             value={editState.domainBounds.width}
           />
           <NumberField
+            displayLabel="H"
             label="Domain bounds height"
             min={1}
             onChange={(height) => updateBounds({ height })}
             value={editState.domainBounds.height}
           />
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
           <ActionButton
+            iconOnly
             label="Fit bounds"
             onClick={() => {
               if (childBounds !== undefined) {
@@ -599,6 +549,7 @@ export function CommittedWarpDeformerInspector({
             <Maximize2 aria-hidden="true" size={14} strokeWidth={1.8} />
           </ActionButton>
           <ActionButton
+            iconOnly
             label="Reset bounds"
             onClick={() =>
               setEditState((current) => ({
@@ -617,7 +568,7 @@ export function CommittedWarpDeformerInspector({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <NumberField
             disabled={divisionsDisabled}
-            label="Transform columns control points"
+            label="Transform columns"
             min={2}
             onChange={(transformColumns) =>
               setEditState((current) => ({ ...current, transformColumns }))
@@ -626,7 +577,7 @@ export function CommittedWarpDeformerInspector({
           />
           <NumberField
             disabled={divisionsDisabled}
-            label="Transform rows control points"
+            label="Transform rows"
             min={2}
             onChange={(transformRows) =>
               setEditState((current) => ({ ...current, transformRows }))
@@ -656,26 +607,6 @@ export function CommittedWarpDeformerInspector({
             value={editState.bezierRows}
           />
         </div>
-        <input
-          aria-label="Bezier edit type"
-          className="mt-3 h-8 w-full rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-400"
-          readOnly
-          value={WARP_DEFORMER_BEZIER_EDIT_TYPE}
-        />
-      </section>
-
-      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
-        <SectionTitle>Opacity</SectionTitle>
-        <NumberField
-          label="Opacity multiplier"
-          max={1}
-          min={0}
-          onChange={(opacityMultiplier) =>
-            setEditState((current) => ({ ...current, opacityMultiplier }))
-          }
-          step={0.01}
-          value={editState.opacityMultiplier}
-        />
       </section>
 
       <OperationFeedback feedback={feedback} />
@@ -1095,6 +1026,7 @@ function LabeledInput({
 
 function NumberField({
   disabled = false,
+  displayLabel,
   label,
   max,
   min,
@@ -1103,6 +1035,7 @@ function NumberField({
   value
 }: {
   readonly disabled?: boolean;
+  readonly displayLabel?: string;
   readonly label: string;
   readonly max?: number;
   readonly min?: number;
@@ -1112,7 +1045,7 @@ function NumberField({
 }) {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-500">
-      {label}
+      {displayLabel ?? label}
       <input
         aria-label={label}
         className={cn(
@@ -1138,21 +1071,28 @@ function NumberField({
 
 function ActionButton({
   children,
+  iconOnly = false,
   label,
   onClick
 }: {
   readonly children: ReactNode;
+  readonly iconOnly?: boolean;
   readonly label: string;
   readonly onClick: () => void;
 }) {
   return (
     <button
-      className="flex min-h-8 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs font-medium text-neutral-300 transition hover:border-neutral-700"
+      aria-label={label}
+      className={cn(
+        "flex min-h-8 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 text-xs font-medium text-neutral-300 transition hover:border-neutral-700",
+        iconOnly ? "px-0" : "px-2"
+      )}
       onClick={onClick}
+      title={label}
       type="button"
     >
       {children}
-      {label}
+      {iconOnly ? null : label}
     </button>
   );
 }

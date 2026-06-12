@@ -280,6 +280,42 @@ describe("generateMesh operation handler", () => {
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:refinementIterations="))).toBe(true);
   });
 
+  it("commits auto-outline-v2.5-soft-boundary and records soft boundary metrics in provenance", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 40, height: 36 },
+      meshBounds: { x: 4, y: 8, width: 40, height: 36 },
+      opaquePixels: createPixelsFromPredicate(40, 36, (x, y) => {
+        const dx = (x - 18.5) / 12;
+        const dy = (y - 17.5) / 9;
+        const body = dx * dx + dy * dy <= 1;
+        const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+        const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+        return (body || tail) && !notch;
+      })
+    });
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2.5-soft-boundary" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2.5-soft-boundary",
+        "meshSource:outline-v2-5-soft-boundary-rgba",
+        "meshQuality:triangulationMode=interim-delaunay-soft-boundary-filter",
+        "meshQuality:softBoundaryAlgorithm=auto-outline-v2.5-soft-boundary",
+        "meshQuality:softBoundaryOutsideSamples=0",
+        "meshQuality:softBoundaryFarTransparentSamples=0"
+      ])
+    );
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softBoundaryAreaRatio="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softBoundaryTransparentSamples="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.includes("transparent-near-boundary-allowance"))).toBe(true);
+  });
+
   it("commits auto-outline-v3-envelope and records envelope provenance metrics", () => {
     const session = createFixtureSessionWithSizedTextureBytes({
       textureSize: { width: 36, height: 32 },
@@ -346,6 +382,37 @@ describe("generateMesh operation handler", () => {
     ).toBe(false);
   });
 
+  it("records v2.5 soft-boundary failure fallback to a generated auto-outline-v2 mesh in operation provenance", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 20, height: 20 },
+      meshBounds: { x: 0, y: 0, width: 20, height: 20 },
+      opaquePixels: createPixelsFromPredicate(20, 20, (x, y) => x >= 5 && x <= 7 && y >= 5 && y <= 8)
+    });
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v2.5-soft-boundary",
+      densityHint: "high"
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertexStableIds.some((id) => id.includes("_outline_v2_"))).toBe(true);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2.5-soft-boundary",
+        "meshSource:outline-v2-rgba",
+        "fallback:auto-outline-v2.5-soft-boundary:soft-boundary-generation-failed",
+        "meshQuality:triangulationMode=interim-delaunay-alpha-filter"
+      ])
+    );
+    expect(
+      session.graph.provenanceRecords.at(-1)?.transformHistory.some((entry) =>
+        entry.startsWith("fallback:auto-outline-v2:")
+      )
+    ).toBe(false);
+  });
+
   it("records auto-outline-v2 fallback chain in operation provenance", () => {
     const session = createFixtureSessionWithTextureBytes([]);
     const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2" });
@@ -357,6 +424,24 @@ describe("generateMesh operation handler", () => {
       expect.arrayContaining([
         "generateMesh:auto-outline-v2",
         "meshSource:bounds-grid",
+        "fallback:auto-outline-v2:alpha-empty",
+        "fallback:auto-outline-v1:alpha-empty"
+      ])
+    );
+  });
+
+  it("records auto-outline-v2.5-soft-boundary fallback chain in operation provenance", () => {
+    const session = createFixtureSessionWithTextureBytes([]);
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2.5-soft-boundary" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2.5-soft-boundary",
+        "meshSource:bounds-grid",
+        "fallback:auto-outline-v2.5-soft-boundary:alpha-empty",
         "fallback:auto-outline-v2:alpha-empty",
         "fallback:auto-outline-v1:alpha-empty"
       ])
@@ -389,6 +474,7 @@ const createGenerateMeshRequest = (options: {
     | "auto-grid-v1"
     | "auto-outline-v1"
     | "auto-outline-v2"
+    | "auto-outline-v2.5-soft-boundary"
     | "auto-outline-v3-envelope";
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];

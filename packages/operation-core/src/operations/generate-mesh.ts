@@ -212,6 +212,7 @@ const evaluatePreviewMeshPreconditions = (input: {
     input.method !== "auto-grid-v1" &&
     input.method !== "auto-outline-v1" &&
     input.method !== "auto-outline-v2" &&
+    input.method !== "auto-outline-v2.5-soft-boundary" &&
     input.method !== "auto-outline-v3-envelope"
   ) {
     diagnostics.push(
@@ -351,7 +352,8 @@ const formatQualityMetricsForTransformHistory = (
     ...(metrics.triangulationMode === undefined
       ? []
       : [`meshQuality:triangulationMode=${metrics.triangulationMode}`]),
-    ...formatEnvelopeMetricsForTransformHistory(metrics)
+    ...formatEnvelopeMetricsForTransformHistory(metrics),
+    ...formatSoftBoundaryMetricsForTransformHistory(metrics)
   ];
 };
 
@@ -378,6 +380,34 @@ const formatEnvelopeMetricsForTransformHistory = (
     ...(envelope.fallbackReason === undefined
       ? []
       : [`meshQuality:envelopeFallback=${envelope.fallbackReason}`])
+  ];
+};
+
+const formatSoftBoundaryMetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const softBoundary = metrics.softBoundaryMetrics;
+  if (softBoundary === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:softBoundaryAlgorithm=${softBoundary.algorithmId}`,
+    `meshQuality:softBoundaryPreset=${softBoundary.preset}`,
+    `meshQuality:softBoundaryPadding=${formatMetric(softBoundary.padding)}`,
+    `meshQuality:softBoundaryTransparentAllowance=${formatMetric(softBoundary.transparentAllowance)}`,
+    `meshQuality:softBoundaryAreaRatio=${formatMetric(softBoundary.softBoundaryAreaRatio)}`,
+    `meshQuality:softBoundaryVertices=${softBoundary.softBoundaryVertexCount}`,
+    `meshQuality:softBoundaryInteriorPoints=${softBoundary.interiorPointCount}`,
+    `meshQuality:softBoundaryTransparentSamples=${softBoundary.transparentSampleCount}`,
+    `meshQuality:softBoundaryOutsideSamples=${softBoundary.outsideTriangleSampleCount}`,
+    `meshQuality:softBoundaryFarTransparentSamples=${softBoundary.farTransparentSampleCount}`,
+    `meshQuality:softBoundaryRejectedOutsideTriangles=${softBoundary.rejectedOutsideSoftBoundaryTriangleCount}`,
+    `meshQuality:softBoundaryRejectedFarTransparentTriangles=${softBoundary.rejectedFarTransparentTriangleCount}`,
+    `meshQuality:softBoundaryProvenance=${softBoundary.provenance.join(">")}`,
+    ...(softBoundary.fallbackReason === undefined
+      ? []
+      : [`meshQuality:softBoundaryFallback=${softBoundary.fallbackReason}`])
   ];
 };
 

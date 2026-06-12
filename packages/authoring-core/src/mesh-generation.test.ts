@@ -20,6 +20,7 @@ import {
 } from "./mesh-generation.js";
 import { computeMeshQualityMetrics } from "./mesh-quality-metrics.js";
 import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
+import { createAutoOutlineV25SoftBoundaryMesh } from "./mesh-outline-v2-5-soft-boundary-generation.js";
 import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
 import { createAutoOutlineV3EnvelopeMesh } from "./mesh-outline-v3-envelope-generation.js";
 
@@ -222,6 +223,141 @@ describe("alpha-aware mesh generation", () => {
     expect(minPairwiseDistance(interiorVertices)).toBeGreaterThan(1.5);
   });
 
+  it("generates deterministic auto-outline-v2.5 soft-boundary meshes with coarser counts and provenance metrics", () => {
+    const alphaPixels = createPixelsFromPredicate(40, 36, (x, y) => {
+      const dx = (x - 18.5) / 12;
+      const dy = (y - 17.5) / 9;
+      const body = dx * dx + dy * dy <= 1;
+      const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+      const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+      return (body || tail) && !notch;
+    });
+    const rgbaBytes = createAlphaBytes(40, 36, alphaPixels);
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 40, height: 36 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 40, height: 36 },
+      rgbaBytes,
+      densityHint: "medium" as const
+    };
+
+    const first = createAutoOutlineV25SoftBoundaryMesh(baseInput);
+    const second = createAutoOutlineV25SoftBoundaryMesh(baseInput);
+    const v2 = createAutoOutlineV2Mesh(baseInput);
+
+    expect(first).toEqual(second);
+    expect(first.status).toBe("generated");
+    expect(v2.status).toBe("generated");
+    if (first.status !== "generated" || v2.status !== "generated") {
+      return;
+    }
+
+    expect(first.mesh.vertices.length).toBeLessThan(v2.mesh.vertices.length);
+    expect(first.mesh.triangles.length).toBeLessThan(v2.mesh.triangles.length);
+    expect(first.qualityMetrics.triangulationMode).toBe("interim-delaunay-soft-boundary-filter");
+    expect(first.softBoundaryMetrics.algorithmId).toBe("auto-outline-v2.5-soft-boundary");
+    expect(first.softBoundaryMetrics.padding).toBeGreaterThan(0);
+    expect(first.softBoundaryMetrics.softBoundaryAreaRatio).toBeGreaterThan(1);
+    expect(first.softBoundaryMetrics.softBoundaryAreaRatio).toBeLessThan(1.45);
+    expect(first.softBoundaryMetrics.transparentSampleCount).toBeGreaterThan(0);
+    expect(first.softBoundaryMetrics.outsideTriangleSampleCount).toBe(0);
+    expect(first.softBoundaryMetrics.farTransparentSampleCount).toBe(0);
+    expect(first.softBoundaryMetrics.provenance).toEqual(
+      expect.arrayContaining([
+        "ratio-based-centroid-soft-boundary",
+        "transparent-near-boundary-allowance",
+        "constrained-triangulation-deferred"
+      ])
+    );
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v2_5_soft_boundary_boundary_"))).toBe(true);
+    expect(first.qualityMetrics.softBoundaryMetrics).toEqual(first.softBoundaryMetrics);
+
+    const independentSamples = countV25SoftBoundarySampleClasses(first.mesh, createAlphaSet(alphaPixels));
+    expect(independentSamples.outsideSoftBoundary).toBe(0);
+    expect(independentSamples.transparentInsideSoftBoundary).toBeGreaterThan(0);
+  });
+
+  it("keeps auto-outline-v2.5 Large Motion no denser than current auto-outline-v2 Low Motion", () => {
+    const fixtures = [
+      {
+        name: "notched-tail",
+        width: 40,
+        height: 36,
+        predicate: (x: number, y: number): boolean => {
+          const dx = (x - 18.5) / 12;
+          const dy = (y - 17.5) / 9;
+          const body = dx * dx + dy * dy <= 1;
+          const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+          const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+          return (body || tail) && !notch;
+        }
+      },
+      {
+        name: "round-body",
+        width: 40,
+        height: 40,
+        predicate: (x: number, y: number): boolean => {
+          const dx = x - 19.5;
+          const dy = y - 19.5;
+          return dx * dx + dy * dy <= 210;
+        }
+      }
+    ];
+
+    for (const fixture of fixtures) {
+      const baseInput = {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        bounds: { x: 0, y: 0, width: fixture.width, height: fixture.height },
+        provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+        textureSize: { width: fixture.width, height: fixture.height },
+        rgbaBytes: createAlphaBytesFromPredicate(fixture.width, fixture.height, fixture.predicate)
+      };
+      const v2Low = createAutoOutlineV2Mesh({ ...baseInput, densityHint: "low" });
+      const v25Large = createAutoOutlineV25SoftBoundaryMesh({ ...baseInput, densityHint: "high" });
+
+      expect(v2Low.status, `${fixture.name}:v2-low`).toBe("generated");
+      expect(v25Large.status, `${fixture.name}:v2.5-large`).toBe("generated");
+      if (v2Low.status !== "generated" || v25Large.status !== "generated") {
+        continue;
+      }
+
+      expect(v25Large.mesh.vertices.length, `${fixture.name}:vertices`).toBeLessThanOrEqual(
+        v2Low.mesh.vertices.length
+      );
+      expect(v25Large.mesh.triangles.length, `${fixture.name}:triangles`).toBeLessThanOrEqual(
+        v2Low.mesh.triangles.length
+      );
+    }
+  });
+
+  it("records auto-outline-v2.5 soft-boundary rejection metrics for far transparent triangles", () => {
+    const mesh = createAutoOutlineV25SoftBoundaryMesh({
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 48, height: 40 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 48, height: 40 },
+      rgbaBytes: createAlphaBytesFromPredicate(48, 40, (x, y) => {
+        const outer = x >= 5 && x <= 42 && y >= 5 && y <= 34;
+        const hole = x >= 18 && x <= 30 && y >= 14 && y <= 25;
+        return outer && !hole;
+      }),
+      densityHint: "medium"
+    });
+
+    expect(mesh.status).toBe("generated");
+    if (mesh.status !== "generated") {
+      return;
+    }
+
+    expect(mesh.softBoundaryMetrics.outsideTriangleSampleCount).toBe(0);
+    expect(mesh.softBoundaryMetrics.farTransparentSampleCount).toBe(0);
+    expect(mesh.softBoundaryMetrics.rejectedFarTransparentTriangleCount).toBeGreaterThan(0);
+  });
+
   it("generates deterministic auto-outline-v3 envelope meshes with coarser counts and envelope metrics", () => {
     const alphaPixels = createPixelsFromPredicate(40, 36, (x, y) => {
       const dx = (x - 18.5) / 12;
@@ -415,6 +551,23 @@ describe("alpha-aware mesh generation", () => {
     ]);
     expect(v2Fallback?.mesh.vertices).toHaveLength(4);
 
+    const v25Fallback = createGeneratedMeshForDrawable({
+      session: emptyAlphaSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v2.5-soft-boundary",
+      densityHint: "low"
+    });
+
+    expect(v25Fallback?.source).toBe("bounds-grid");
+    expect(v25Fallback?.fallbackReason).toBe("alpha-empty");
+    expect(v25Fallback?.fallbackSteps).toEqual([
+      { method: "auto-outline-v2.5-soft-boundary", reason: "alpha-empty" },
+      { method: "auto-outline-v2", reason: "alpha-empty" },
+      { method: "auto-outline-v1", reason: "alpha-empty" }
+    ]);
+    expect(v25Fallback?.mesh.vertices).toHaveLength(4);
+
     const v3Fallback = createGeneratedMeshForDrawable({
       session: emptyAlphaSession,
       drawableId: DrawableIdSchema.parse("draw_body"),
@@ -477,6 +630,50 @@ describe("alpha-aware mesh generation", () => {
     expect(generated?.mesh.vertexStableIds.some((id) => id.includes("_outline_v2_"))).toBe(true);
   });
 
+  it("falls back from a v2.5 soft-boundary failure to a generated v2 mesh", () => {
+    const opaquePixels = createPixelsFromPredicate(20, 20, (x, y) => x >= 5 && x <= 7 && y >= 5 && y <= 8);
+    const directInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 20, height: 20 },
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      textureSize: { width: 20, height: 20 },
+      rgbaBytes: createAlphaBytes(20, 20, opaquePixels),
+      densityHint: "high" as const
+    };
+    const v25 = createAutoOutlineV25SoftBoundaryMesh(directInput);
+    const v2 = createAutoOutlineV2Mesh(directInput);
+
+    expect(v25).toMatchObject({ status: "failed", reason: "soft-boundary-generation-failed" });
+    expect(v2.status).toBe("generated");
+
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 20, height: 20 },
+      meshBounds: { x: 0, y: 0, width: 20, height: 20 },
+      opaquePixels
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v2.5-soft-boundary",
+      densityHint: "high"
+    });
+
+    expect(generated?.source).toBe("outline-v2-rgba");
+    expect(generated?.fallbackReason).toBe("soft-boundary-generation-failed");
+    expect(generated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v2.5-soft-boundary", reason: "soft-boundary-generation-failed" }
+    ]);
+    expect(generated?.qualityMetrics).toMatchObject({
+      fallbackReason: "soft-boundary-generation-failed",
+      triangulationMode: "interim-delaunay-alpha-filter"
+    });
+    expect(generated?.mesh.vertexStableIds.some((id) => id.includes("_outline_v2_"))).toBe(true);
+  });
+
   it("routes auto-outline-v2 as an explicit drawable generation method with quality summary", () => {
     const session = createFixtureSession({
       includeBytes: true,
@@ -503,6 +700,42 @@ describe("alpha-aware mesh generation", () => {
       triangulationMode: "interim-delaunay-alpha-filter"
     });
     expect(generated?.qualityMetrics?.maxEdgeLength).toBeGreaterThan(0);
+  });
+
+  it("routes auto-outline-v2.5-soft-boundary as an explicit drawable generation sidecar with soft-boundary summary", () => {
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 40, height: 36 },
+      meshBounds: { x: 10, y: 20, width: 40, height: 36 },
+      opaquePixels: createPixelsFromPredicate(40, 36, (x, y) => {
+        const dx = (x - 18.5) / 12;
+        const dy = (y - 17.5) / 9;
+        const body = dx * dx + dy * dy <= 1;
+        const tail = x >= 25 && x <= 34 && y >= 14 && y <= 20;
+        const notch = x >= 9 && x <= 16 && y >= 19 && y <= 29;
+        return (body || tail) && !notch;
+      })
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v2.5-soft-boundary",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v2-5-soft-boundary-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "interim-delaunay-soft-boundary-filter",
+      softBoundaryMetrics: {
+        algorithmId: "auto-outline-v2.5-soft-boundary",
+        outsideTriangleSampleCount: 0,
+        farTransparentSampleCount: 0
+      }
+    });
+    expect(generated?.qualityMetrics?.softBoundaryMetrics?.transparentSampleCount).toBeGreaterThan(0);
   });
 
   it("routes auto-outline-v3-envelope as an explicit drawable generation sidecar with envelope summary", () => {
@@ -885,6 +1118,55 @@ function countV3EnvelopeSampleClasses(
   return {
     outsideEnvelope,
     transparentInsideEnvelope
+  };
+}
+
+function countV25SoftBoundarySampleClasses(
+  mesh: MeshDto,
+  alphaPixels: ReadonlySet<string>
+): { readonly outsideSoftBoundary: number; readonly transparentInsideSoftBoundary: number } {
+  const softBoundary = mesh.vertices.filter((_vertex, index) =>
+    mesh.vertexStableIds[index]?.includes("_outline_v2_5_soft_boundary_boundary_")
+  );
+  let outsideSoftBoundary = 0;
+  let transparentInsideSoftBoundary = 0;
+
+  expect(softBoundary.length).toBeGreaterThanOrEqual(3);
+
+  for (const triangle of mesh.triangles) {
+    const [aIndex, bIndex, cIndex] = triangle;
+    const a = mesh.vertices[aIndex]!;
+    const b = mesh.vertices[bIndex]!;
+    const c = mesh.vertices[cIndex]!;
+    const centroid = {
+      x: (a.x + b.x + c.x) / 3,
+      y: (a.y + b.y + c.y) / 3
+    };
+    const samples = [
+      centroid,
+      midpoint(a, b),
+      midpoint(b, c),
+      midpoint(c, a),
+      midpoint(a, centroid),
+      midpoint(b, centroid),
+      midpoint(c, centroid)
+    ];
+
+    for (const sample of samples) {
+      if (!isPointInsidePolygon(sample, softBoundary)) {
+        outsideSoftBoundary += 1;
+        continue;
+      }
+
+      if (!alphaPixels.has(`${Math.floor(sample.x)}:${Math.floor(sample.y)}`)) {
+        transparentInsideSoftBoundary += 1;
+      }
+    }
+  }
+
+  return {
+    outsideSoftBoundary,
+    transparentInsideSoftBoundary
   };
 }
 

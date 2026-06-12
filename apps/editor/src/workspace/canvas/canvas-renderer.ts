@@ -5,6 +5,7 @@ import type {
   CanvasViewState
 } from "./canvas-projection";
 import { hasIsolatableCanvasSelection, isRenderableDrawable } from "./canvas-projection";
+import { getWarpControlPointCanvasPosition } from "./warp-deformer-control-points";
 
 export interface CanvasOverlayState {
   readonly grid: boolean;
@@ -19,6 +20,13 @@ export interface CanvasBitmapCache {
   readonly layerCanvases: Map<string, HTMLCanvasElement>;
 }
 
+export interface CanvasWarpDeformerInteractionState {
+  readonly rigControlId: string;
+  readonly editable: boolean;
+  readonly selectedControlPointIndices: readonly number[];
+  readonly hoveredControlPointIndex?: number;
+}
+
 export function createCanvasBitmapCache(): CanvasBitmapCache {
   return {
     layerCanvases: new Map()
@@ -31,6 +39,7 @@ export function renderCanvasProjection(input: {
   readonly view: CanvasViewState;
   readonly overlays: CanvasOverlayState;
   readonly cache: CanvasBitmapCache;
+  readonly warpDeformerInteraction?: CanvasWarpDeformerInteractionState | undefined;
 }): void {
   const viewport = {
     width: input.canvas.clientWidth,
@@ -75,7 +84,12 @@ export function renderCanvasProjection(input: {
   }
 
   if (input.overlays.deformer) {
-    drawDeformerOverlay(context, input.projection, input.view.zoom);
+    drawDeformerOverlay(
+      context,
+      input.projection,
+      input.view.zoom,
+      input.warpDeformerInteraction
+    );
   }
 
   if (input.overlays.mesh) {
@@ -124,7 +138,8 @@ function drawDrawableStack(
 function drawDeformerOverlay(
   context: CanvasRenderingContext2D,
   projection: CanvasRenderProjection,
-  zoom: number
+  zoom: number,
+  warpInteraction: CanvasWarpDeformerInteractionState | undefined
 ): void {
   const overlay = projection.deformerOverlay;
   if (overlay === undefined) {
@@ -158,7 +173,13 @@ function drawDeformerOverlay(
   );
 
   drawDeformerGridLines(context, overlay, zoom, "transform", color);
-  drawDeformerControlPoints(context, overlay, zoom, color);
+  drawDeformerControlPoints(
+    context,
+    overlay,
+    zoom,
+    color,
+    overlay.rigControlId === warpInteraction?.rigControlId ? warpInteraction : undefined
+  );
 
   context.strokeStyle = guideColor;
   context.lineWidth = 1 / zoom;
@@ -227,19 +248,19 @@ function drawDeformerGridLines(
     context.strokeStyle = color;
     context.beginPath();
     for (let row = 0; row < rows; row += 1) {
-      const first = getDeformerGridPoint(overlay, 0, row);
+      const first = getWarpControlPointCanvasPosition(overlay, 0, row);
       context.moveTo(first.x, first.y);
       for (let column = 1; column < columns; column += 1) {
-        const point = getDeformerGridPoint(overlay, column, row);
+        const point = getWarpControlPointCanvasPosition(overlay, column, row);
         context.lineTo(point.x, point.y);
       }
     }
 
     for (let column = 0; column < columns; column += 1) {
-      const first = getDeformerGridPoint(overlay, column, 0);
+      const first = getWarpControlPointCanvasPosition(overlay, column, 0);
       context.moveTo(first.x, first.y);
       for (let row = 1; row < rows; row += 1) {
-        const point = getDeformerGridPoint(overlay, column, row);
+        const point = getWarpControlPointCanvasPosition(overlay, column, row);
         context.lineTo(point.x, point.y);
       }
     }
@@ -274,13 +295,27 @@ function drawDeformerControlPoints(
   context: CanvasRenderingContext2D,
   overlay: CanvasDeformerOverlayProjection,
   zoom: number,
-  color: string
+  color: string,
+  interaction: CanvasWarpDeformerInteractionState | undefined
 ): void {
-  const radius = Math.max(2.5 / zoom, 1.5 / zoom);
-  context.fillStyle = color;
+  const selectedIndices = new Set(interaction?.selectedControlPointIndices ?? []);
+  const editable = interaction?.editable ?? true;
   for (let row = 0; row < overlay.transformRows; row += 1) {
     for (let column = 0; column < overlay.transformColumns; column += 1) {
-      const point = getDeformerGridPoint(overlay, column, row);
+      const index = row * overlay.transformColumns + column;
+      const selected = selectedIndices.has(index);
+      const hovered = interaction?.hoveredControlPointIndex === index;
+      const radius = Math.max((selected || hovered ? 4 : 2.5) / zoom, 1.5 / zoom);
+      const point = getWarpControlPointCanvasPosition(overlay, column, row);
+
+      context.fillStyle = resolveControlPointFill({
+        baseColor: color,
+        editable,
+        hovered,
+        selected
+      });
+      context.strokeStyle = selected ? "rgba(17, 24, 39, 0.96)" : "rgba(255, 255, 255, 0.66)";
+      context.lineWidth = (selected || hovered ? 1.5 : 0.75) / zoom;
       context.beginPath();
       context.arc(
         point.x,
@@ -290,8 +325,30 @@ function drawDeformerControlPoints(
         Math.PI * 2
       );
       context.fill();
+      context.stroke();
     }
   }
+}
+
+function resolveControlPointFill(input: {
+  readonly baseColor: string;
+  readonly editable: boolean;
+  readonly hovered: boolean;
+  readonly selected: boolean;
+}): string {
+  if (input.selected) {
+    return "rgba(253, 224, 71, 0.98)";
+  }
+
+  if (input.hovered && input.editable) {
+    return "rgba(255, 255, 255, 0.98)";
+  }
+
+  if (!input.editable) {
+    return input.hovered ? "rgba(209, 213, 219, 0.92)" : "rgba(156, 163, 175, 0.78)";
+  }
+
+  return input.baseColor;
 }
 
 function drawMeshOverlay(
@@ -596,26 +653,6 @@ function chooseGridInterval(zoom: number): number {
 
 function toUnitGridPosition(index: number, size: number): number {
   return size <= 1 ? 0 : index / (size - 1);
-}
-
-function getDeformerGridPoint(
-  overlay: CanvasDeformerOverlayProjection,
-  column: number,
-  row: number
-): { readonly x: number; readonly y: number } {
-  const base = {
-    x: overlay.domainBounds.x + overlay.domainBounds.width * toUnitGridPosition(column, overlay.transformColumns),
-    y: overlay.domainBounds.y + overlay.domainBounds.height * toUnitGridPosition(row, overlay.transformRows)
-  };
-  const offset = overlay.controlPointOffsets?.[row * overlay.transformColumns + column];
-  if (offset === undefined) {
-    return base;
-  }
-
-  return {
-    x: base.x + offset.x,
-    y: base.y + offset.y
-  };
 }
 
 function hasControlPointOffsets(

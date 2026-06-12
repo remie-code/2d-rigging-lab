@@ -189,6 +189,35 @@ export const createParameterKeyMarkers = (
     }));
 };
 
+export const createTargetParameterKeyMarkers = (
+  session: AuthoringSession,
+  bindings: readonly ParameterKeyformBindingDescriptor[],
+  parameterId: ParameterId,
+  currentValue: number
+): readonly ParameterKeyMarker[] => {
+  const markerValues = new Set<number>();
+  for (const keyformSet of session.graph.keyformSets) {
+    if (
+      keyformSet.evaluator !== "linear-1d-v1" ||
+      keyformSet.parameterId !== parameterId ||
+      !bindings.some((binding) => linearKeyformSetMatchesBinding(keyformSet, binding))
+    ) {
+      continue;
+    }
+
+    for (const key of keyformSet.keys) {
+      markerValues.add(key.value);
+    }
+  }
+
+  return [...markerValues]
+    .sort((left, right) => left - right)
+    .map((value) => ({
+      value,
+      selected: sameKeyValue(value, currentValue)
+    }));
+};
+
 export const createDrawableOpacityBinding = (
   session: AuthoringSession,
   drawableId: DrawableId
@@ -617,9 +646,18 @@ function findLinearKeyformSet(
     (keyformSet): keyformSet is LinearKeyformSetDto =>
       keyformSet.evaluator === "linear-1d-v1" &&
       keyformSet.parameterId === parameterId &&
-      keyformSet.target.kind === binding.target.kind &&
-      keyformSet.target.id === binding.target.id &&
-      keyformSet.target.property === binding.targetProperty
+      linearKeyformSetMatchesBinding(keyformSet, binding)
+  );
+}
+
+function linearKeyformSetMatchesBinding(
+  keyformSet: LinearKeyformSetDto,
+  binding: ParameterKeyformBindingDescriptor
+): boolean {
+  return (
+    keyformSet.target.kind === binding.target.kind &&
+    keyformSet.target.id === binding.target.id &&
+    keyformSet.target.property === binding.targetProperty
   );
 }
 

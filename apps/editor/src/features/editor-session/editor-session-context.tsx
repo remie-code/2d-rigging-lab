@@ -24,6 +24,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from "react";
@@ -52,6 +53,21 @@ import {
 } from "./model/editor-session-commands";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { EditorSelection } from "./model/editor-selection";
+import type {
+  EditorSessionGestureCommit,
+  EditorSessionGestureCommitController
+} from "./model/editor-session-gesture-commit";
+import { commitEditorSessionGestureWithHistory } from "./model/editor-session-gesture-commit";
+import {
+  canRedoEditorSessionHistory,
+  canUndoEditorSessionHistory,
+  commitEditorSessionCommandWithHistory,
+  createEmptyEditorSessionHistory,
+  recordEditorSessionCommit,
+  redoEditorSessionHistory,
+  undoEditorSessionHistory,
+  type EditorSessionHistoryState
+} from "./model/editor-session-history";
 import {
   clampParameterValue,
   createParameterBarProjection,
@@ -107,6 +123,11 @@ export interface MeshToolDraft {
   readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
 }
 
+interface EditorSessionState {
+  readonly session: AuthoringSession;
+  readonly history: EditorSessionHistoryState;
+}
+
 interface EditorSessionContextValue {
   readonly session: AuthoringSession;
   readonly selection: EditorSelection | null;
@@ -124,6 +145,10 @@ interface EditorSessionContextValue {
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
   readonly psdImportOpen: boolean;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly undo: () => void;
+  readonly redo: () => void;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
   readonly openParameterManager: () => void;
@@ -183,6 +208,13 @@ interface EditorSessionContextValue {
   ) => void;
   readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
   readonly editKeyformKey: (payload: EditKeyformKeyPayloadDto) => void;
+  readonly commitGestureCommand: (gesture: EditorSessionGestureCommit<unknown>) => void;
+  readonly commitGestureController: <
+    Preview,
+    Result extends EditorSessionCommandResult = EditorSessionCommandResult
+  >(
+    controller: EditorSessionGestureCommitController<Preview, Result>
+  ) => Result | null;
   readonly createCustomParameter: (
     payload: CreateParameterPayloadDto
   ) => EditorSessionCommandResult;
@@ -204,7 +236,16 @@ const EditorSessionContext = createContext<EditorSessionContextValue | null>(nul
 export function EditorSessionProvider({ children }: { readonly children: ReactNode }) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const [session, setSession] = useState<AuthoringSession>(() => createEmptyAuthoringSession());
+  const [editorState, setEditorState] = useState<EditorSessionState>(() => ({
+    session: createEmptyAuthoringSession(),
+    history: createEmptyEditorSessionHistory()
+  }));
+  const editorStateRef = useRef(editorState);
+  const setEditorSessionState = useCallback((nextState: EditorSessionState) => {
+    editorStateRef.current = nextState;
+    setEditorState(nextState);
+  }, []);
+  const { history, session } = editorState;
   const [selection, setSelection] = useState<EditorSelection | null>(null);
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
@@ -295,87 +336,160 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     };
   }, [session, selection]);
 
+  const clearTransientCommitState = useCallback(() => {
+    setMeshDraft(null);
+    setRigDraft(null);
+    setRigOperationFeedback(null);
+    setParameterOperationFeedback(null);
+  }, []);
+
+  const runCommandWithHistory = useCallback(
+    <Result extends EditorSessionCommandResult,>(
+      command: (currentSession: AuthoringSession) => Result,
+      label?: string
+    ): Result => {
+      const currentState = editorStateRef.current;
+      const baseInput = {
+        currentSession: currentState.session,
+        history: currentState.history,
+        command
+      };
+      const outcome = commitEditorSessionCommandWithHistory(
+        label === undefined
+          ? baseInput
+          : {
+              ...baseInput,
+              label
+            }
+      );
+
+      if (outcome.result.committed) {
+        setEditorSessionState({
+          session: outcome.result.session,
+          history: outcome.history
+        });
+      }
+
+      return outcome.result;
+    },
+    [setEditorSessionState]
+  );
+
+  const undo = useCallback(() => {
+    const currentState = editorStateRef.current;
+    const outcome = undoEditorSessionHistory(currentState.history);
+    if (outcome === null) {
+      return;
+    }
+
+    setEditorSessionState({
+      session: outcome.session,
+      history: outcome.history
+    });
+    clearTransientCommitState();
+  }, [clearTransientCommitState, setEditorSessionState]);
+
+  const redo = useCallback(() => {
+    const currentState = editorStateRef.current;
+    const outcome = redoEditorSessionHistory(currentState.history);
+    if (outcome === null) {
+      return;
+    }
+
+    setEditorSessionState({
+      session: outcome.session,
+      history: outcome.history
+    });
+    clearTransientCommitState();
+  }, [clearTransientCommitState, setEditorSessionState]);
+
   const commitPsdImport = useCallback(
     (plan: PsdImportPlan) => {
-      const result = commitPsdImportPlan({ session, plan });
-      setSession(result.session);
+      const currentState = editorStateRef.current;
+      const result = commitPsdImportPlan({ session: currentState.session, plan });
+      const nextHistory = recordEditorSessionCommit(currentState.history, {
+        before: currentState.session,
+        after: result.session,
+        label: "Import PSD"
+      });
+      setEditorSessionState({
+        session: result.session,
+        history: nextHistory
+      });
       setEditorHiddenPartIds((current) =>
         mergeEditorHiddenPartIds(current, result.editorHiddenPartIds)
       );
       setSelection({ kind: "part", id: plan.importRootPartId });
       setPsdImportOpen(false);
     },
-    [session]
+    [setEditorSessionState]
   );
 
   const applyCommand = useCallback(
-    (command: (currentSession: AuthoringSession) => EditorSessionCommandResult) => {
-      setSession((currentSession) => {
-        const result = command(currentSession);
-        if (result.committed) {
-          return result.session;
-        }
+    (
+      command: (currentSession: AuthoringSession) => EditorSessionCommandResult,
+      label = "Editor command"
+    ) => {
+      const result = runCommandWithHistory(command, label);
+      if (result.committed) {
+        return;
+      }
 
-        if (result.diagnostics.length > 0) {
-          console.warn("Editor command was rejected.", result.diagnostics);
-        }
-
-        return currentSession;
-      });
+      if (result.diagnostics.length > 0) {
+        console.warn("Editor command was rejected.", result.diagnostics);
+      }
     },
-    []
+    [runCommandWithHistory]
   );
 
   const applyRigCommand = useCallback(
     (
       command: (currentSession: AuthoringSession) => EditorSessionCommandResult,
-      onCommitted?: (result: EditorSessionCommandResult) => void
+      onCommitted?: (result: EditorSessionCommandResult) => void,
+      label = "Rig command"
     ) => {
-      setSession((currentSession) => {
-        const result = command(currentSession);
-        if (result.committed) {
-          setRigOperationFeedback(null);
-          onCommitted?.(result);
-          return result.session;
-        }
-
-        if (result.diagnostics.length > 0) {
-          setRigOperationFeedback(formatCommandFeedback(result));
-          console.warn("Rig command was rejected.", result.diagnostics);
-        } else {
-          setRigOperationFeedback("No Rig change was applied.");
-        }
-
-        return currentSession;
-      });
-    },
-    []
-  );
-
-  const editKeyformKey = useCallback((payload: EditKeyformKeyPayloadDto) => {
-    setSession((currentSession) => {
-      const result = commitEditKeyformKey(currentSession, payload);
+      const result = runCommandWithHistory(command, label);
       if (result.committed) {
-        setParameterOperationFeedback(null);
-        return result.session;
+        setRigOperationFeedback(null);
+        onCommitted?.(result);
+        return;
       }
 
       if (result.diagnostics.length > 0) {
-        setParameterOperationFeedback(formatKeyformFeedback(result.diagnostics));
-        console.warn("Parameter keyform command was rejected.", result.diagnostics);
+        setRigOperationFeedback(formatCommandFeedback(result));
+        console.warn("Rig command was rejected.", result.diagnostics);
       } else {
-        setParameterOperationFeedback("No keyform change was applied.");
+        setRigOperationFeedback("No Rig change was applied.");
       }
+    },
+    [runCommandWithHistory]
+  );
 
-      return currentSession;
-    });
-  }, []);
+  const editKeyformKey = useCallback((payload: EditKeyformKeyPayloadDto) => {
+    const result = runCommandWithHistory(
+      (sessionForCommand) => commitEditKeyformKey(sessionForCommand, payload),
+      "Edit keyform"
+    );
+    if (result.committed) {
+      setParameterOperationFeedback(null);
+      return;
+    }
+
+    if (result.diagnostics.length > 0) {
+      setParameterOperationFeedback(formatKeyformFeedback(result.diagnostics));
+      console.warn("Parameter keyform command was rejected.", result.diagnostics);
+    } else {
+      setParameterOperationFeedback("No keyform change was applied.");
+    }
+  }, [runCommandWithHistory]);
 
   const applyParameterDefinitionCommand = useCallback(
-    (command: (currentSession: AuthoringSession) => EditorSessionCommandResult) => {
-      const result = command(session);
+    (
+      command: (currentSession: AuthoringSession) => EditorSessionCommandResult,
+      label = "Edit parameter"
+    ) => {
+      const result = runCommandWithHistory(command, label);
       if (result.committed) {
-        setSession(result.session);
         setParameterOperationFeedback(null);
         return result;
       }
@@ -389,7 +503,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
 
       return result;
     },
-    [session]
+    [runCommandWithHistory]
   );
 
   const createCustomParameter = useCallback(
@@ -490,24 +604,23 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   }, []);
 
   const moveStructureChild = useCallback((moved: StructureOrderItem, drop: StructureOrderDrop) => {
-    setSession((currentSession) => {
-      const result = commitStructureMove(currentSession, moved, drop);
-      if (result.committed) {
-        setSelection(
-          moved.kind === "part"
-            ? { kind: "part", id: moved.partId }
-            : { kind: "drawable", id: moved.drawableId }
-        );
-        return result.session;
-      }
+    const result = runCommandWithHistory(
+      (sessionForCommand) => commitStructureMove(sessionForCommand, moved, drop),
+      "Move structure item"
+    );
+    if (result.committed) {
+      setSelection(
+        moved.kind === "part"
+          ? { kind: "part", id: moved.partId }
+          : { kind: "drawable", id: moved.drawableId }
+      );
+      return;
+    }
 
-      if (result.diagnostics.length > 0) {
-        console.warn("Editor command was rejected.", result.diagnostics);
-      }
-
-      return currentSession;
-    });
-  }, []);
+    if (result.diagnostics.length > 0) {
+      console.warn("Editor command was rejected.", result.diagnostics);
+    }
+  }, [runCommandWithHistory]);
 
   const selectPart = useCallback((partId: PartId) => {
     setMeshDraft(null);
@@ -537,7 +650,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         session,
         drawableId,
         provenanceId: createMeshPreviewProvenanceId(drawableId, presetId),
-        method: "auto-outline-v2",
+        method: "auto-outline-v2.5-soft-boundary",
         densityHint: preset.densityHint
       });
 
@@ -566,27 +679,27 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     }
 
     const preset = getMeshGenerationPreset(meshDraft.presetId);
-    setSession((currentSession) => {
-      const result = commitGenerateMesh(
-        currentSession,
-        meshDraft.drawableId,
-        preset.densityHint,
-        meshDraft.mesh,
-        "auto-outline-v2"
-      );
-      if (result.committed) {
-        setMeshDraft(null);
-        setSelection({ kind: "drawable", id: meshDraft.drawableId });
-        return result.session;
-      }
+    const result = runCommandWithHistory(
+      (sessionForCommand) =>
+        commitGenerateMesh(
+          sessionForCommand,
+          meshDraft.drawableId,
+          preset.densityHint,
+          meshDraft.mesh,
+          "auto-outline-v2.5-soft-boundary"
+        ),
+      "Apply mesh"
+    );
+    if (result.committed) {
+      setMeshDraft(null);
+      setSelection({ kind: "drawable", id: meshDraft.drawableId });
+      return;
+    }
 
-      if (result.diagnostics.length > 0) {
-        console.warn("Editor command was rejected.", result.diagnostics);
-      }
-
-      return currentSession;
-    });
-  }, [meshDraft]);
+    if (result.diagnostics.length > 0) {
+      console.warn("Editor command was rejected.", result.diagnostics);
+    }
+  }, [meshDraft, runCommandWithHistory]);
 
   const startWarpDeformerDraftForDrawable = useCallback(
     (drawableId: DrawableId) => {
@@ -639,7 +752,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         if (rigControlId !== undefined) {
           setSelection({ kind: "rigControl", id: rigControlId });
         }
-      }
+      },
+      "Apply Warp Deformer"
     );
   }, [applyRigCommand, rigDraft]);
 
@@ -662,7 +776,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
               ? { kind: "drawable", id: drawableId }
               : { kind: "rigControl", id: rigControlId }
           );
-        }
+        },
+        "Create Rotation Deformer"
       );
     },
     [applyRigCommand, session]
@@ -687,7 +802,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
               ? { kind: "rigControl", id: rigControlId }
               : { kind: "rigControl", id: parentRigControlId }
           );
-        }
+        },
+        "Create parent Rotation Deformer"
       );
     },
     [applyRigCommand, session]
@@ -712,7 +828,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
               ? { kind: "rigControl", id: rigControlId }
               : { kind: "rigControl", id: parentRigControlId }
           );
-        }
+        },
+        "Create parent Warp Deformer"
       );
     },
     [applyRigCommand, session]
@@ -723,7 +840,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       applyRigCommand(
         (currentSession) =>
           commitBindDrawableToRigControl(currentSession, drawableId, parentRigControlId),
-        () => setSelection({ kind: "drawable", id: drawableId })
+        () => setSelection({ kind: "drawable", id: drawableId }),
+        "Bind Drawable to Deformer"
       );
     },
     [applyRigCommand]
@@ -734,7 +852,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       applyRigCommand(
         (currentSession) =>
           commitMoveDrawableRigControlBinding(currentSession, drawableId, targetRigControlId),
-        () => setSelection({ kind: "drawable", id: drawableId })
+        () => setSelection({ kind: "drawable", id: drawableId }),
+        "Move Drawable binding"
       );
     },
     [applyRigCommand]
@@ -745,7 +864,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       applyRigCommand(
         (currentSession) =>
           commitReparentRigControl(currentSession, childRigControlId, parentRigControlId),
-        () => setSelection({ kind: "rigControl", id: childRigControlId })
+        () => setSelection({ kind: "rigControl", id: childRigControlId }),
+        "Reparent Deformer"
       );
     },
     [applyRigCommand]
@@ -755,10 +875,74 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     (payload: UpdateRigControlPayloadDto) => {
       applyRigCommand(
         (currentSession) => commitUpdateRigControl(currentSession, payload),
-        () => setSelection({ kind: "rigControl", id: payload.rigControlId })
+        () => setSelection({ kind: "rigControl", id: payload.rigControlId }),
+        "Update Deformer"
       );
     },
     [applyRigCommand]
+  );
+
+  const commitGestureCommand = useCallback(
+    (gesture: EditorSessionGestureCommit<unknown>) => {
+      const currentState = editorStateRef.current;
+      const outcome = commitEditorSessionGestureWithHistory({
+        gesture,
+        currentSession: currentState.session,
+        history: currentState.history
+      });
+      const result = outcome.result;
+      if (result.committed) {
+        setEditorSessionState({
+          session: result.session,
+          history: outcome.history
+        });
+        return;
+      }
+
+      if (result.diagnostics.length > 0) {
+        console.warn("Gesture command was rejected.", result.diagnostics);
+      }
+    },
+    [setEditorSessionState]
+  );
+
+  const commitGestureController = useCallback(
+    <
+      Preview,
+      Result extends EditorSessionCommandResult = EditorSessionCommandResult
+    >(
+      controller: EditorSessionGestureCommitController<Preview, Result>
+    ): Result | null => {
+      const currentState = editorStateRef.current;
+      const outcome = controller.commitOnce({
+        currentSession: currentState.session,
+        history: currentState.history
+      });
+      if (outcome === null) {
+        return null;
+      }
+
+      const result = outcome.result;
+      if (result.committed) {
+        setEditorSessionState({
+          session: result.session,
+          history: outcome.history
+        });
+        setParameterOperationFeedback(null);
+        return result;
+      }
+
+      if (result.diagnostics.length > 0) {
+        const firstCheckId = result.diagnostics[0]?.checkId ?? "";
+        if (firstCheckId.startsWith("operation.editKeyformKey.")) {
+          setParameterOperationFeedback(formatKeyformFeedback(result.diagnostics));
+        }
+        console.warn("Gesture command was rejected.", result.diagnostics);
+      }
+
+      return result;
+    },
+    [setEditorSessionState]
   );
 
   const value = useMemo<EditorSessionContextValue>(
@@ -779,6 +963,10 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       rigOperationFeedback,
       parameterOperationFeedback,
       psdImportOpen,
+      canUndo: canUndoEditorSessionHistory(history),
+      canRedo: canRedoEditorSessionHistory(history),
+      undo,
+      redo,
       openPsdImport: () => setPsdImportOpen(true),
       closePsdImport: () => setPsdImportOpen(false),
       openParameterManager,
@@ -836,6 +1024,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       reparentRigControl,
       updateRigControl,
       editKeyformKey,
+      commitGestureCommand,
+      commitGestureController,
       createCustomParameter,
       updateCustomParameter,
       deleteCustomParameter,
@@ -854,12 +1044,15 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       createParentWarpDeformerForRigControl,
       createRotationDeformerForDrawable,
       createCustomParameter,
+      commitGestureCommand,
+      commitGestureController,
       deformerRows,
       deleteCustomParameter,
       drawablePoolItems,
       editKeyformKey,
       editorHiddenPartIds,
       fitRigDraft,
+      history,
       inspector,
       meshDraft,
       moveDrawableRigControlBinding,
@@ -870,6 +1063,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       psdImportOpen,
       previewMeshDraft,
       applyRigDraft,
+      redo,
       reparentRigControl,
       resetActiveParameterValue,
       resetRigDraft,
@@ -889,6 +1083,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       moveStructureChild,
       togglePartCollapse,
       togglePartEditorVisibility,
+      undo,
       updateCustomParameter,
       updateRigControl,
       updateRigDraft

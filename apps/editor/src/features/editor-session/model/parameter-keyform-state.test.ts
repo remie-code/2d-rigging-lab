@@ -20,6 +20,7 @@ import {
   createParameterBarProjection,
   createParameterBindingProjection,
   createRigControlParameterBindings,
+  createTargetParameterKeyMarkers,
   createUniformControlPointOffsets
 } from "./parameter-keyform-state";
 
@@ -176,6 +177,59 @@ describe("parameter keyform editor state", () => {
     expect(evaluated.rigOpacityMultiplierById.get(RIG_FACE_ROTATION)).toBeCloseTo(0.625);
   });
 
+  it("projects markers only for the selected target and active parameter", () => {
+    const session = createRigFixtureSession();
+    session.graph.keyformSets.push(
+      createRigVectorKeyformSet("keyset_warp_offsets", RIG_FACE_WARP, "controlPointOffsets", [
+        {
+          value: -30,
+          statePatch: createUniformControlPointOffsets(4, 0, 0)
+        },
+        {
+          value: 30,
+          statePatch: createUniformControlPointOffsets(4, 8, 12)
+        }
+      ]),
+      createRigNumberKeyformSet("keyset_warp_opacity", RIG_FACE_WARP, "opacityMultiplier", [
+        [0, 0.75],
+        [30, 1]
+      ]),
+      createRigNumberKeyformSet("keyset_rotation_angle", RIG_FACE_ROTATION, "angleDegrees", [
+        [15, 20]
+      ]),
+      createDrawableNumberKeyformSet("keyset_drawable_opacity", [
+        [-10, 0.5]
+      ]),
+      {
+        keyformSetId: KeyformSetIdSchema.parse("keyset_warp_other_parameter"),
+        target: {
+          kind: "rigControl" as const,
+          id: RIG_FACE_WARP,
+          property: "opacityMultiplier" as const
+        },
+        parameterId: EYE_LEFT_OPEN,
+        evaluator: "linear-1d-v1" as const,
+        interpolation: "linear-1d-v1" as const,
+        compositionMode: "replace" as const,
+        compositionOrder: 0,
+        keys: [{ value: 1, statePatch: 1 }]
+      }
+    );
+
+    const markers = createTargetParameterKeyMarkers(
+      session,
+      createRigControlParameterBindings(session, RIG_FACE_WARP),
+      FACE_ANGLE_X,
+      0
+    );
+
+    expect(markers).toEqual([
+      { value: -30, selected: false },
+      { value: 0, selected: true },
+      { value: 30, selected: false }
+    ]);
+  });
+
   it("projects Warp rig-control offsets and opacity keyforms into payloads and preview state", () => {
     const session = createRigFixtureSession();
     const minOffsets = createUniformControlPointOffsets(4, 0, 0);
@@ -299,6 +353,26 @@ function createRigNumberKeyformSet(
       kind: "rigControl" as const,
       id: rigControlId,
       property
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map(([value, statePatch]) => ({ value, statePatch }))
+  };
+}
+
+function createDrawableNumberKeyformSet(
+  keyformSetId: string,
+  keys: readonly (readonly [number, number])[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse(keyformSetId),
+    target: {
+      kind: "drawable" as const,
+      id: DRAW_FACE,
+      property: "opacity" as const
     },
     parameterId: FACE_ANGLE_X,
     evaluator: "linear-1d-v1" as const,

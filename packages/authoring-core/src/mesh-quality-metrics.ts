@@ -10,8 +10,10 @@ export interface MeshGenerationQualityMetrics {
   readonly triangulationMode?:
     | "ordinary-delaunay-alpha-filter"
     | "interim-delaunay-alpha-filter"
-    | "interim-delaunay-envelope-filter";
+    | "interim-delaunay-envelope-filter"
+    | "interim-delaunay-soft-boundary-filter";
   readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
+  readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
 }
 
 export interface MeshGenerationEnvelopeMetrics {
@@ -36,6 +38,27 @@ export interface MeshGenerationEnvelopeMetrics {
   readonly fallbackReason?: string;
 }
 
+export interface MeshGenerationSoftBoundaryMetrics {
+  readonly algorithmId: "auto-outline-v2.5-soft-boundary";
+  readonly preset: "low" | "medium" | "high";
+  readonly padding: number;
+  readonly transparentAllowance: number;
+  readonly alphaArea: number;
+  readonly softBoundaryArea: number;
+  readonly softBoundaryAreaRatio: number;
+  readonly selectedContourVertexCount: number;
+  readonly simplifiedContourVertexCount: number;
+  readonly softBoundaryVertexCount: number;
+  readonly interiorPointCount: number;
+  readonly transparentSampleCount: number;
+  readonly outsideTriangleSampleCount: number;
+  readonly farTransparentSampleCount: number;
+  readonly rejectedOutsideSoftBoundaryTriangleCount: number;
+  readonly rejectedFarTransparentTriangleCount: number;
+  readonly provenance: readonly string[];
+  readonly fallbackReason?: string;
+}
+
 export const computeMeshQualityMetrics = (
   mesh: MeshDto,
   options: {
@@ -43,6 +66,7 @@ export const computeMeshQualityMetrics = (
     readonly fallbackReason?: string;
     readonly triangulationMode?: MeshGenerationQualityMetrics["triangulationMode"];
     readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
+    readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
   }
 ): MeshGenerationQualityMetrics => {
   const neighborsByVertex = new Map<number, Set<number>>();
@@ -104,7 +128,8 @@ export const computeMeshQualityMetrics = (
     refinementIterationCount: options.refinementIterationCount,
     ...(options.fallbackReason === undefined ? {} : { fallbackReason: options.fallbackReason }),
     ...(options.triangulationMode === undefined ? {} : { triangulationMode: options.triangulationMode }),
-    ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics })
+    ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics }),
+    ...(options.softBoundaryMetrics === undefined ? {} : { softBoundaryMetrics: options.softBoundaryMetrics })
   };
 };
 

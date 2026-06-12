@@ -28,6 +28,10 @@ import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 import { IconButton } from "../../ui/icon-button";
 import {
+  INITIAL_CANVAS_AUTO_FIT_POLICY_STATE,
+  resolveCanvasAutoFitPolicy
+} from "../canvas/canvas-auto-fit-policy";
+import {
   createCanvasRenderProjection,
   canvasToScreenPoint,
   fitArtworkView,
@@ -49,6 +53,7 @@ import {
   renderCanvasProjection,
   type CanvasOverlayState
 } from "../canvas/canvas-renderer";
+import { useWarpDeformerControlPointInteraction } from "../canvas/use-warp-deformer-control-point-interaction";
 import { WorkspacePanel } from "./panel-frame";
 
 type PointerDragState =
@@ -79,6 +84,8 @@ const POINTER_CLICK_SLOP = 4;
 
 export function CanvasPreviewPanel() {
   const {
+    activeParameterId,
+    commitGestureController,
     editorHiddenPartIds,
     meshDraft,
     parameterValues,
@@ -97,7 +104,7 @@ export function CanvasPreviewPanel() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const bitmapCacheRef = useRef(createCanvasBitmapCache());
-  const lastAutoFitKeyRef = useRef<string | undefined>(undefined);
+  const autoFitPolicyStateRef = useRef(INITIAL_CANVAS_AUTO_FIT_POLICY_STATE);
   const pointerDragRef = useRef<PointerDragState | undefined>(undefined);
   const hoveredRef = useRef(false);
   const focusedRef = useRef(false);
@@ -133,26 +140,36 @@ export function CanvasPreviewPanel() {
       }),
     [activeTool, editorHiddenPartIds, meshDraft, parameterValues, rigDraft, selection, session]
   );
-  const selectedDrawableCount = projection.selectedDrawableIds.size;
+  const warpControlPoints = useWarpDeformerControlPointInteraction({
+    activeParameterId,
+    commitGestureController,
+    enabled: activeTool === "rig" && deformerOverlayVisible,
+    parameterValues,
+    projection,
+    session,
+    view
+  });
+  const renderProjection = warpControlPoints.renderProjection;
+  const selectedDrawableCount = renderProjection.selectedDrawableIds.size;
   const selectedDrawableOpacity = useMemo(
-    () => projection.drawables.find((drawable) => drawable.selected)?.opacity,
-    [projection]
+    () => renderProjection.drawables.find((drawable) => drawable.selected)?.opacity,
+    [renderProjection]
   );
   const canIsolateSelection = useMemo(
-    () => hasIsolatableCanvasSelection(projection),
-    [projection]
+    () => hasIsolatableCanvasSelection(renderProjection),
+    [renderProjection]
   );
   const isolateSelectedActive = overlays.isolateSelected && canIsolateSelection;
-  const meshOverlayActive = meshOverlayVisible && projection.meshOverlay !== undefined;
-  const deformerOverlayActive = deformerOverlayVisible && projection.deformerOverlay !== undefined;
+  const meshOverlayActive = meshOverlayVisible && renderProjection.meshOverlay !== undefined;
+  const deformerOverlayActive = deformerOverlayVisible && renderProjection.deformerOverlay !== undefined;
   const renderableDrawableCount = useMemo(
     () =>
-      projection.drawables.filter((drawable) => drawable.visible && isRenderableDrawable(drawable))
+      renderProjection.drawables.filter((drawable) => drawable.visible && isRenderableDrawable(drawable))
         .length,
-    [projection]
+    [renderProjection]
   );
   const primaryHitScreenPoint = useMemo(() => {
-    const candidate = [...projection.drawables]
+    const candidate = [...renderProjection.drawables]
       .reverse()
       .find((drawable) => drawable.visible && isRenderableDrawable(drawable));
     if (candidate === undefined) {
@@ -166,7 +183,7 @@ export function CanvasPreviewPanel() {
       },
       view
     );
-  }, [projection, view]);
+  }, [renderProjection, view]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -195,15 +212,16 @@ export function CanvasPreviewPanel() {
   }, [projection.contentKey]);
 
   useEffect(() => {
-    if (viewport.width <= 0 || viewport.height <= 0) {
+    const decision = resolveCanvasAutoFitPolicy({
+      state: autoFitPolicyStateRef.current,
+      viewport,
+      hasRenderableArtwork: projection.hasRenderableArtwork
+    });
+    autoFitPolicyStateRef.current = decision.nextState;
+    if (!decision.shouldFit) {
       return;
     }
 
-    if (lastAutoFitKeyRef.current === projection.contentKey) {
-      return;
-    }
-
-    lastAutoFitKeyRef.current = projection.contentKey;
     setView(fitArtworkView(projection, viewport));
   }, [projection, viewport]);
 
@@ -215,12 +233,19 @@ export function CanvasPreviewPanel() {
 
     renderCanvasProjection({
       canvas,
-      projection,
+      projection: renderProjection,
       view,
       overlays: renderOverlays,
-      cache: bitmapCacheRef.current
+      cache: bitmapCacheRef.current,
+      warpDeformerInteraction: warpControlPoints.rendererState
     });
-  }, [projection, renderOverlays, view, viewport]);
+  }, [
+    renderOverlays,
+    renderProjection,
+    view,
+    viewport,
+    warpControlPoints.rendererState
+  ]);
 
   useEffect(() => {
     if (activeTool === "mesh") {
@@ -322,6 +347,17 @@ export function CanvasPreviewPanel() {
       return;
     }
 
+    if (
+      warpControlPoints.handlePointerDown({
+        pointerId: event.pointerId,
+        screenPoint: localPoint
+      })
+    ) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
     pointerDragRef.current = {
       mode: "select",
       pointerId: event.pointerId,
@@ -330,15 +366,22 @@ export function CanvasPreviewPanel() {
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
+  }, [warpControlPoints]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
     const drag = pointerDragRef.current;
-    if (drag === undefined || drag.pointerId !== event.pointerId) {
+    if (drag === undefined) {
+      warpControlPoints.handlePointerMove({
+        pointerId: event.pointerId,
+        screenPoint: localPoint
+      });
       return;
     }
 
-    const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
+    if (drag.pointerId !== event.pointerId) {
+      return;
+    }
 
     if (drag.mode === "pan") {
       const delta = {
@@ -367,9 +410,24 @@ export function CanvasPreviewPanel() {
         Math.abs(localPoint.x - drag.start.x) > POINTER_CLICK_SLOP ||
         Math.abs(localPoint.y - drag.start.y) > POINTER_CLICK_SLOP
     };
-  }, []);
+  }, [warpControlPoints]);
 
-  const finishPointerDrag = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
+  const finishPointerDrag = useCallback((
+    event: ReactPointerEvent<HTMLCanvasElement>,
+    options: { readonly commit: boolean }
+  ) => {
+    if (
+      warpControlPoints.finishPointerDrag({
+        pointerId: event.pointerId,
+        commit: options.commit
+      })
+    ) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      return;
+    }
+
     const drag = pointerDragRef.current;
     if (drag === undefined || drag.pointerId !== event.pointerId) {
       return;
@@ -391,7 +449,7 @@ export function CanvasPreviewPanel() {
     if (hitDrawableId !== undefined) {
       selectDrawable(hitDrawableId);
     }
-  }, [projection, selectDrawable, view]);
+  }, [projection, selectDrawable, view, warpControlPoints]);
 
   const toolbar = (
     <>
@@ -450,7 +508,7 @@ export function CanvasPreviewPanel() {
           <CircleOff aria-hidden="true" size={15} strokeWidth={1.8} />
         </ToolbarButton>
         <ToolbarButton
-          disabled={projection.selectedDrawableIds.size !== 1}
+          disabled={renderProjection.selectedDrawableIds.size !== 1}
           label="Mesh overlay"
           onClick={toggleMeshOverlayVisible}
           pressed={meshOverlayActive}
@@ -458,7 +516,7 @@ export function CanvasPreviewPanel() {
           <Triangle aria-hidden="true" size={15} strokeWidth={1.8} />
         </ToolbarButton>
         <ToolbarButton
-          disabled={projection.deformerOverlay === undefined}
+          disabled={renderProjection.deformerOverlay === undefined}
           label="Deformer overlay"
           onClick={toggleDeformerOverlayVisible}
           pressed={deformerOverlayActive}
@@ -488,71 +546,93 @@ export function CanvasPreviewPanel() {
             aria-label="Canvas preview"
             className={cn(
               "block size-full touch-none outline-none",
-              isPanning ? "cursor-grabbing" : spacePressed ? "cursor-grab" : "cursor-crosshair"
+              isPanning
+                ? "cursor-grabbing"
+                : warpControlPoints.hoveredControlPointIndex !== undefined && !warpControlPoints.editable
+                  ? "cursor-not-allowed"
+                  : warpControlPoints.hoveredControlPointIndex !== undefined
+                    ? "cursor-grab"
+                    : spacePressed
+                      ? "cursor-grab"
+                      : "cursor-crosshair"
             )}
-            data-canvas-has-renderable-artwork={String(projection.hasRenderableArtwork)}
-            data-mask-relation-count={projection.maskRelations.length}
+            data-canvas-has-renderable-artwork={String(renderProjection.hasRenderableArtwork)}
+            data-mask-relation-count={renderProjection.maskRelations.length}
             data-primary-hit-screen-x={primaryHitScreenPoint?.x ?? ""}
             data-primary-hit-screen-y={primaryHitScreenPoint?.y ?? ""}
             data-renderable-drawable-count={renderableDrawableCount}
             data-selected-drawable-count={selectedDrawableCount}
             data-selected-drawable-opacity={selectedDrawableOpacity?.toFixed(2) ?? ""}
-            data-mesh-overlay-status={meshOverlayActive ? projection.meshOverlay?.status ?? "" : ""}
+            data-mesh-overlay-status={meshOverlayActive ? renderProjection.meshOverlay?.status ?? "" : ""}
             data-mesh-overlay-triangle-count={
-              meshOverlayActive ? String(projection.meshOverlay?.mesh.triangles.length ?? 0) : "0"
+              meshOverlayActive ? String(renderProjection.meshOverlay?.mesh.triangles.length ?? 0) : "0"
             }
             data-mesh-overlay-vertex-count={
-              meshOverlayActive ? String(projection.meshOverlay?.mesh.vertices.length ?? 0) : "0"
+              meshOverlayActive ? String(renderProjection.meshOverlay?.mesh.vertices.length ?? 0) : "0"
             }
             data-mesh-overlay-visible={String(meshOverlayActive)}
             data-mesh-preview-drawable-visible={String(
-              projection.drawables.some((drawable) => drawable.meshPreview && drawable.visible)
+              renderProjection.drawables.some((drawable) => drawable.meshPreview && drawable.visible)
             )}
             data-deformer-overlay-bezier-columns={
-              deformerOverlayActive ? String(projection.deformerOverlay?.bezierColumns ?? 0) : "0"
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.bezierColumns ?? 0) : "0"
             }
             data-deformer-overlay-bezier-rows={
-              deformerOverlayActive ? String(projection.deformerOverlay?.bezierRows ?? 0) : "0"
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.bezierRows ?? 0) : "0"
             }
             data-deformer-overlay-child-drawable-count={
               deformerOverlayActive
-                ? String(projection.deformerOverlay?.childDrawableIds.length ?? 0)
+                ? String(renderProjection.deformerOverlay?.childDrawableIds.length ?? 0)
                 : "0"
             }
             data-deformer-overlay-kind={
-              deformerOverlayActive ? projection.deformerOverlay?.kind ?? "" : ""
+              deformerOverlayActive ? renderProjection.deformerOverlay?.kind ?? "" : ""
             }
             data-deformer-overlay-pivot-x={
-              deformerOverlayActive ? String(projection.deformerOverlay?.pivot?.x ?? "") : ""
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.pivot?.x ?? "") : ""
             }
             data-deformer-overlay-pivot-y={
-              deformerOverlayActive ? String(projection.deformerOverlay?.pivot?.y ?? "") : ""
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.pivot?.y ?? "") : ""
             }
             data-deformer-overlay-rest-angle={
               deformerOverlayActive
-                ? String(projection.deformerOverlay?.restAngleDegrees ?? "")
+                ? String(renderProjection.deformerOverlay?.restAngleDegrees ?? "")
                 : ""
             }
             data-deformer-overlay-evaluated-angle={
               deformerOverlayActive
-                ? String(projection.deformerOverlay?.evaluatedAngleDegrees ?? "")
+                ? String(renderProjection.deformerOverlay?.evaluatedAngleDegrees ?? "")
                 : ""
             }
             data-deformer-overlay-control-point-offset-count={
               deformerOverlayActive
-                ? String(projection.deformerOverlay?.controlPointOffsets?.length ?? 0)
+                ? String(renderProjection.deformerOverlay?.controlPointOffsets?.length ?? 0)
                 : "0"
             }
+            data-deformer-overlay-first-control-point-offset-x={
+              deformerOverlayActive
+                ? String(renderProjection.deformerOverlay?.controlPointOffsets?.[0]?.x ?? "")
+                : ""
+            }
+            data-deformer-overlay-first-control-point-offset-y={
+              deformerOverlayActive
+                ? String(renderProjection.deformerOverlay?.controlPointOffsets?.[0]?.y ?? "")
+                : ""
+            }
             data-deformer-overlay-status={
-              deformerOverlayActive ? projection.deformerOverlay?.status ?? "" : ""
+              deformerOverlayActive ? renderProjection.deformerOverlay?.status ?? "" : ""
             }
             data-deformer-overlay-transform-columns={
-              deformerOverlayActive ? String(projection.deformerOverlay?.transformColumns ?? 0) : "0"
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.transformColumns ?? 0) : "0"
             }
             data-deformer-overlay-transform-rows={
-              deformerOverlayActive ? String(projection.deformerOverlay?.transformRows ?? 0) : "0"
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.transformRows ?? 0) : "0"
             }
             data-deformer-overlay-visible={String(deformerOverlayActive)}
+            data-warp-control-point-editable={String(warpControlPoints.editable)}
+            data-warp-control-point-hovered-index={warpControlPoints.hoveredControlPointIndex ?? ""}
+            data-warp-control-point-preview-active={String(warpControlPoints.previewActive)}
+            data-warp-control-point-selected-count={warpControlPoints.selectedControlPointIndices.length}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {
@@ -561,21 +641,34 @@ export function CanvasPreviewPanel() {
             onFocus={() => {
               focusedRef.current = true;
             }}
-            onPointerCancel={finishPointerDrag}
+            onPointerCancel={(event) => finishPointerDrag(event, { commit: false })}
             onPointerDown={onPointerDown}
             onPointerEnter={() => {
               hoveredRef.current = true;
             }}
             onPointerLeave={() => {
               hoveredRef.current = false;
+              warpControlPoints.clearHover();
             }}
             onPointerMove={onPointerMove}
-            onPointerUp={finishPointerDrag}
+            onPointerUp={(event) => finishPointerDrag(event, { commit: true })}
             onWheel={onWheel}
             ref={canvasRef}
             tabIndex={0}
           />
-          {projection.hasRenderableArtwork ? null : (
+          {warpControlPoints.marqueeRect === null ? null : (
+            <div
+              className="pointer-events-none absolute border border-yellow-300/90 bg-yellow-300/12"
+              data-testid="warp-control-point-marquee"
+              style={{
+                left: `${warpControlPoints.marqueeRect.x}px`,
+                top: `${warpControlPoints.marqueeRect.y}px`,
+                width: `${warpControlPoints.marqueeRect.width}px`,
+                height: `${warpControlPoints.marqueeRect.height}px`
+              }}
+            />
+          )}
+          {renderProjection.hasRenderableArtwork ? null : (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950/88 px-3 py-2 text-xs font-medium text-neutral-300">
                 <Move aria-hidden="true" size={15} strokeWidth={1.8} />

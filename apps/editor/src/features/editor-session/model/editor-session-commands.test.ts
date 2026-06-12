@@ -606,7 +606,7 @@ describe("editor session commands", () => {
     );
   });
 
-  it("defaults Mesh Tool generation commands to auto-outline-v2", () => {
+  it("defaults Mesh Tool generation commands to auto-outline-v2.5-soft-boundary", () => {
     const session = createFixtureSession([DRAW_A]);
     const bytes = createAlphaBytes(4, 4, [
       [1, 1],
@@ -673,7 +673,8 @@ describe("editor session commands", () => {
     expect(result.committed).toBe(true);
     expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
       expect.arrayContaining([
-        "generateMesh:auto-outline-v2",
+        "generateMesh:auto-outline-v2.5-soft-boundary",
+        "fallback:auto-outline-v2.5-soft-boundary:soft-boundary-generation-failed",
         "meshSource:outline-v2-rgba"
       ])
     );

@@ -43,8 +43,8 @@ describe("RigToolInspector committed Warp Deformer", () => {
       })
     );
 
-    expect(inputMarkup(markup, "Transform columns control points")).toContain("disabled");
-    expect(inputMarkup(markup, "Transform rows control points")).toContain("disabled");
+    expect(inputMarkup(markup, "Transform columns")).toContain("disabled");
+    expect(inputMarkup(markup, "Transform rows")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier columns")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier rows")).toContain("disabled");
 

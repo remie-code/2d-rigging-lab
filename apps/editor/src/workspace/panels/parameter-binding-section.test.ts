@@ -58,15 +58,17 @@ describe("ParameterBindingSection rig-control bindings", () => {
     const fullMarkup = renderSection(session, bindings, { [FACE_ANGLE_X]: 0 });
     expect(fullMarkup).toContain("Rotation angle");
     expect(fullMarkup).toContain("Opacity multiplier");
+    expect(fullMarkup).not.toContain("Parameter: Eyeball X");
+    expect(fullMarkup).not.toContain("Keyform:");
+    expect(fullMarkup).not.toContain("Keys:");
 
     const angleMarkup = renderSection(
       session,
       [findBinding(bindings, "angleDegrees")],
       { [FACE_ANGLE_X]: 0 }
     );
-    expect(angleMarkup).toContain("Keyform: Exists");
     expect(hasDisabledAttribute(inputMarkup(angleMarkup, "Rotation angle"))).toBe(false);
-    expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Add Keyform Here"))).toBe(true);
+    expect(angleMarkup).not.toContain("Add Keyform Here");
     expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Update"))).toBe(false);
     expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Delete"))).toBe(false);
   });
@@ -93,20 +95,21 @@ describe("ParameterBindingSection rig-control bindings", () => {
     const fullMarkup = renderSection(session, bindings, { [FACE_ANGLE_X]: 0 });
     expect(fullMarkup).toContain("Warp lattice offsets");
     expect(fullMarkup).toContain("Opacity multiplier");
+    expect(fullMarkup).not.toContain("Parameter: Eyeball X");
+    expect(fullMarkup).not.toContain("Keyform:");
+    expect(fullMarkup).not.toContain("Keys:");
 
     const offsetsMarkup = renderSection(
       session,
       [findBinding(bindings, "controlPointOffsets")],
       { [FACE_ANGLE_X]: 0 }
     );
-    expect(offsetsMarkup).toContain("Keyform: None");
-    expect(offsetsMarkup).toContain("interpolated");
-    expect(offsetsMarkup).toContain("Add a keyform at the current value to edit this property.");
+    expect(offsetsMarkup).not.toContain("Add a keyform at the current value to edit this property.");
     expect(hasDisabledAttribute(inputMarkup(offsetsMarkup, "Uniform offset X"))).toBe(true);
     expect(hasDisabledAttribute(inputMarkup(offsetsMarkup, "Uniform offset Y"))).toBe(true);
-    expect(hasDisabledAttribute(buttonMarkup(offsetsMarkup, "Add Keyform Here"))).toBe(false);
-    expect(hasDisabledAttribute(buttonMarkup(offsetsMarkup, "Update"))).toBe(true);
-    expect(hasDisabledAttribute(buttonMarkup(offsetsMarkup, "Delete"))).toBe(true);
+    expect(offsetsMarkup).not.toContain("Add Keyform Here");
+    expect(offsetsMarkup).not.toContain('aria-label="Update"');
+    expect(offsetsMarkup).not.toContain('aria-label="Delete"');
   });
 });
 

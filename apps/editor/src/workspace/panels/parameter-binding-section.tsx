@@ -1,11 +1,4 @@
-import {
-  ChevronsLeftRight,
-  ChevronsUpDown,
-  Lock,
-  Plus,
-  Save,
-  Trash2
-} from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
@@ -13,7 +6,6 @@ import {
   createEditKeyformPayload,
   createParameterBindingProjection,
   createUniformControlPointOffsets,
-  formatKeyMarkers,
   formatParameterValue,
   getControlPointCount,
   readUniformOffset,
@@ -55,13 +47,7 @@ function ParameterBindingEditor({
 }: {
   readonly binding: ParameterKeyformBindingDescriptor;
 }) {
-  const {
-    activeParameterId,
-    editKeyformKey,
-    parameterOperationFeedback,
-    parameterValues,
-    session
-  } = useEditorSession();
+  const { activeParameterId, editKeyformKey, parameterValues, session } = useEditorSession();
   const projection = useMemo(
     () => createParameterBindingProjection(session, binding, activeParameterId, parameterValues),
     [activeParameterId, binding, parameterValues, session]
@@ -81,7 +67,7 @@ function ParameterBindingEditor({
   ]);
 
   const commit = (
-    action: "addCurrent" | "updateCurrent" | "deleteCurrent" | "createEnds" | "createEndsCenter"
+    action: "updateCurrent" | "deleteCurrent"
   ) => {
     if (projection.parameter === null) {
       return;
@@ -93,7 +79,7 @@ function ParameterBindingEditor({
         parameter: projection.parameter,
         currentParameterValue: projection.currentParameterValue,
         action,
-        value: action === "addCurrent" ? projection.displayValue : editValue
+        value: editValue
       })
     );
   };
@@ -103,31 +89,8 @@ function ParameterBindingEditor({
       className="rounded border border-neutral-800 bg-neutral-950/70 p-2"
       data-testid={`parameter-binding-${binding.targetProperty}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-xs font-semibold text-neutral-100">{binding.label}</div>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-500">
-            <span>
-              Parameter: {projection.parameter?.displayName ?? "None"}
-            </span>
-            <span>Value: {formatParameterValue(projection.currentParameterValue)}</span>
-            <span>{projection.hasCurrentKeyform ? "Keyform: Exists" : "Keyform: None"}</span>
-          </div>
-        </div>
-        <span
-          className={cn(
-            "shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-            projection.source === "keyform"
-              ? "border-teal-800 bg-teal-950/40 text-teal-100"
-              : "border-neutral-800 bg-neutral-900 text-neutral-400"
-          )}
-        >
-          {projection.source}
-        </span>
-      </div>
-
-      <div className="mt-2 text-[11px] text-neutral-500">
-        Keys: {formatKeyMarkers(projection.keyMarkers)}
+      <div className="truncate text-xs font-semibold text-neutral-100">
+        {binding.label}
       </div>
 
       <BindingValueEditor
@@ -137,59 +100,24 @@ function ParameterBindingEditor({
         value={editValue}
       />
 
-      {projection.disabledReason === null ? null : (
-        <div className="mt-2 flex items-start gap-2 rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5 text-[11px] text-neutral-400">
-          <Lock aria-hidden="true" className="mt-0.5 shrink-0" size={12} strokeWidth={1.8} />
-          <span>{projection.disabledReason}</span>
+      {projection.hasCurrentKeyform ? (
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <BindingAction
+            disabled={!projection.canUpdateCurrent}
+            label="Update"
+            onClick={() => commit("updateCurrent")}
+          >
+            <Save aria-hidden="true" size={13} strokeWidth={1.8} />
+          </BindingAction>
+          <BindingAction
+            disabled={!projection.canDeleteCurrent}
+            label="Delete"
+            onClick={() => commit("deleteCurrent")}
+          >
+            <Trash2 aria-hidden="true" size={13} strokeWidth={1.8} />
+          </BindingAction>
         </div>
-      )}
-
-      {parameterOperationFeedback === null ? null : (
-        <div
-          className="mt-2 rounded border border-amber-800 bg-amber-950/25 px-2 py-1.5 text-[11px] text-amber-100"
-          data-testid="parameter-operation-feedback"
-        >
-          {parameterOperationFeedback}
-        </div>
-      )}
-
-      <div className="mt-3 grid grid-cols-5 gap-1.5">
-        <BindingAction
-          disabled={!projection.canAddCurrent}
-          label="Add Keyform Here"
-          onClick={() => commit("addCurrent")}
-        >
-          <Plus aria-hidden="true" size={13} strokeWidth={1.8} />
-        </BindingAction>
-        <BindingAction
-          disabled={!projection.canUpdateCurrent}
-          label="Update"
-          onClick={() => commit("updateCurrent")}
-        >
-          <Save aria-hidden="true" size={13} strokeWidth={1.8} />
-        </BindingAction>
-        <BindingAction
-          disabled={!projection.canDeleteCurrent}
-          label="Delete"
-          onClick={() => commit("deleteCurrent")}
-        >
-          <Trash2 aria-hidden="true" size={13} strokeWidth={1.8} />
-        </BindingAction>
-        <BindingAction
-          disabled={!projection.canCreateEnds}
-          label="Ends"
-          onClick={() => commit("createEnds")}
-        >
-          <ChevronsLeftRight aria-hidden="true" size={13} strokeWidth={1.8} />
-        </BindingAction>
-        <BindingAction
-          disabled={!projection.canCreateEndsCenter}
-          label="Ends + Center"
-          onClick={() => commit("createEndsCenter")}
-        >
-          <ChevronsUpDown aria-hidden="true" size={13} strokeWidth={1.8} />
-        </BindingAction>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -235,11 +163,10 @@ function BindingValueEditor({
 
   return (
     <div className="mt-2 grid grid-cols-[1fr_4.5rem] gap-2">
-      <label className="flex min-w-0 flex-col gap-1 text-[11px] text-neutral-500">
-        {projection.binding.label}
+      <label className="flex h-8 min-w-0 items-center">
         <input
           aria-label={projection.binding.label}
-          className="h-2 accent-teal-400 disabled:cursor-not-allowed"
+          className="h-2 w-full accent-teal-400 disabled:cursor-not-allowed"
           disabled={disabled}
           max={projection.binding.numericRange?.max}
           min={projection.binding.numericRange?.min}
@@ -255,6 +182,7 @@ function BindingValueEditor({
         max={projection.binding.numericRange?.max}
         min={projection.binding.numericRange?.min}
         onChange={onChange}
+        showLabel={false}
         step={projection.binding.numericRange?.step}
         value={numericValue}
       />
@@ -268,6 +196,7 @@ function NumberInput({
   max,
   min,
   onChange,
+  showLabel = true,
   step,
   value
 }: {
@@ -276,12 +205,13 @@ function NumberInput({
   readonly max?: number | undefined;
   readonly min?: number | undefined;
   readonly onChange: (value: number) => void;
+  readonly showLabel?: boolean;
   readonly step?: number | undefined;
   readonly value: number;
 }) {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-[11px] text-neutral-500">
-      {label}
+      {showLabel ? label : null}
       <input
         aria-label={label}
         className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500 disabled:cursor-not-allowed disabled:text-neutral-600"
@@ -319,10 +249,10 @@ function BindingAction({
       className="flex min-h-8 min-w-0 items-center justify-center gap-1 rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100 disabled:cursor-not-allowed disabled:border-neutral-900 disabled:text-neutral-700"
       disabled={disabled}
       onClick={onClick}
+      title={label}
       type="button"
     >
       {children}
-      <span className="truncate">{label}</span>
     </button>
   );
 }
