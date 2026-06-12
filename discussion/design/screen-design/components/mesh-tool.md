@@ -257,7 +257,9 @@ Wave61で実装された `auto-grid-v1` は、初期操作導線とpreview -> Ap
 
 ### 6.2 Mesh生成アルゴリズム参照
 
-この文書はMesh ToolのUXを扱う。Drawable RGBA alpha maskからどのように初期meshを生成するかの詳細アルゴリズムは、画面仕様ではなく [../../mesh-generation/auto-outline-v2.md](../../mesh-generation/auto-outline-v2.md) を正とする。
+この文書はMesh ToolのUXを扱う。Drawable RGBA alpha maskからどのように初期meshを生成するかの詳細アルゴリズムは、画面仕様ではなく [../../mesh-generation/](../../mesh-generation/_map.md) 配下のアルゴリズム設計を正とする。
+
+現時点の次候補は、alpha輪郭そのものをboundaryにするのではなく、外周を含むenvelope boundaryで包む [../../mesh-generation/auto-outline-v3-envelope.md](../../mesh-generation/auto-outline-v3-envelope.md) である。`auto-outline-v2` は自然なmeshへ大きく近づいたが、Large Motionでも細かすぎる印象と外周の輪郭追従過多が残る。
 
 Mesh Tool側が持つ責務:
 
@@ -281,7 +283,8 @@ Mesh Tool側が持つ責務:
 |---|---|---|
 | `auto-grid-v1` | Wave61以前の最小fallback | 矩形grid由来。Cubism風輪郭追従ではない |
 | `auto-outline-v1` | Wave62の輪郭追従初期版 | 矩形gridより大きく改善。ただし扇状集中、大きすぎるtriangle、grid由来の矩形感が残る |
-| `auto-outline-v2` | 次候補 | curvature-aware boundary resampling、inset ring、blue-noise / Poisson-like interior sampling、constrained triangulation、quality refinementを目指す |
+| `auto-outline-v2` | Wave63の改善版 | 自然なtriangular meshへかなり近づいた。ただし全体的に細かく、外周がalpha輪郭を追いすぎる |
+| `auto-outline-v3-envelope` | 次候補 | alpha輪郭そのものではなく、外周を含むenvelope boundaryで包み、V2より粗めで自然な外周triangleを目指す |
 
 UX上のAcceptance Criteria:
 

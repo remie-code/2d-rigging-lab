@@ -1,94 +1,73 @@
 # Parameter Manager 画面仕様
 
-> 状態: Draft screen spec。
+> 状態: Draft screen spec。Parameter定義を管理し、Preset parameterとCustom parameterを区別して扱う。
 
 ## 1. 役割
 
-Parameter Managerは、parameterそのものの定義、命名、min / default / max、grouping、usage reference、validationを扱う専用管理画面である。
+Parameter Managerは、project内のparameter定義を一覧・作成・確認・編集する専用画面である。
 
-この画面は、現在値を動かすParameter Barではない。Parameter Barは「今どのparameterのどの値を見ているか」を扱う。Parameter Managerは「どのparameterが存在し、それが何を意味し、どこで使われているか」を管理する。
+この画面はcurrent valueを動かす場所ではない。current value操作とkeyform authoringはParameter Barとparameter-aware Inspectorが扱う。Parameter Managerは「どのparameterが存在し、それがPreset由来かCustomか、どこで使われているか」を管理する。
+
+Parameter preset / facadeの上位設計は [../../parameter-preset-ecosystem.md](../../parameter-preset-ecosystem.md) を参照する。
 
 基本方針:
 
-- parameter definitionとcurrent value operationを分離する。
-- stable idとdisplay nameを分ける。
-- stable id変更は通常renameではなく、参照更新を伴うrefactor operationとして扱う。
-- Rig ToolやParameter BarからはQuick Create / Selectを提供し、詳細整理はParameter Managerへ送る。
-- Editorはsemantic templateや自動分類を持たない。必要ならユーザーまたはCodexが明示的に作成・分類する。
+- Parameter BarとParameter Managerを分離する。
+- Preset parameterとCustom parameterを明確に分ける。
+- Preset parameterは常設の意味カタログ兼parameter surfaceとして、初期状態からTableに全て表示する。
+- semantic roleはPreset parameterだけが持つ。
+- Custom parameterはroleを持たず、`none` / `Custom` 扱いにする。
+- Preset parameterはrole、group、range、sign conventionを固定し、削除不可にする。
+- Custom parameterはユーザーが作成・編集・削除できる。
+- Usage / Impactは常設大パネルではなく、summaryとdetailsで扱う。
+- warning / errorはCheck Stripにsummary表示し、通常時は画面を圧迫しない。
+- note / memo欄は初期仕様に置かない。
 
 ## 2. 開き方
 
-Parameter Managerはmodalではなく、Authoring Workspaceから開く専用Manager / Task画面として扱う。
-
-基本遷移:
+Parameter Managerは、Authoring Workspaceから開く専用Manager / Task画面として扱う。
 
 ```text
 Authoring Workspace
-  -> Toolbox / Task group / Parameter Manager
+  -> Parameter Bar / App Bar / Toolbox
   -> Parameter Manager
-  -> parameter / groupを作成・整理
-  -> Apply / Update
+  -> parameterを作成・確認・編集
+  -> Close
   -> Authoring Workspace
 ```
 
-Toolからの導線:
+Parameter Barからの導線:
 
 ```text
-Rig Tool / Dynamics Tool / Parameter Bar
-  -> parameter selector
-  -> Quick Create
-  -> Open Parameter Manager
+Parameter Bar
+  -> [Manage]
+  -> Parameter Manager
 ```
 
-Quick Createは、作業を止めずに最低限のparameterを作る入口である。詳細な命名、grouping、usage整理、validationはParameter Managerで行う。
+作業中に最小限のparameterを作る場合はQuick Createを使ってよい。ただし、Preset選択、usage確認、詳細編集はParameter Managerへ送る。
 
-## 3. Task-Local Flow
-
-```mermaid
-stateDiagram-v2
-  [*] --> ParameterList: Managerを開く
-  ParameterList --> ParameterEdit: parameterを選ぶ
-  ParameterList --> CreateParameter: create parameter
-  ParameterList --> CreateGroup: create group
-  CreateParameter --> ParameterEdit: 作成後に編集
-  CreateGroup --> ParameterList: group作成
-  ParameterEdit --> UsageReview: usage / impact確認
-  UsageReview --> ParameterEdit: 定義修正
-  ParameterEdit --> Applied: Apply / Update
-  Applied --> AuthoringWorkspace: Authoringへ戻る
-  ParameterList --> AuthoringWorkspace: cancel / back
-```
-
-状態:
-
-| State | 内容 |
-|---|---|
-| Parameter List | parameter groupとparameter tableを確認する。 |
-| Create Parameter | stable id、display name、min/default/max、groupを指定して作成する。 |
-| Create Group | parameter groupを作成する。 |
-| Parameter Edit | parameter定義を編集する。 |
-| Usage Review | rig keyform、subtree opacity、dynamics、viewer usageなどの参照を確認する。 |
-| Applied | 定義変更をproject stateへ反映した状態。 |
-
-## 4. 画面配置
+## 3. 画面配置
 
 ```text
 +--------------------------------------------------------------------------------+
-| Parameter Manager Header                                                        |
-| create parameter / create group / validate / apply / back                       |
-+----------------------+-------------------------------+-------------------------+
-| Parameter Groups     | Parameter Table               | Parameter Inspector     |
-|                      |                               |                         |
-| Face                 | stable id / display name      | display name            |
-| Eyes                 | group / type                  | stable id               |
-| Mouth                | min / default / max           | min / default / max     |
-| Hair                 | usage count / warnings        | group                   |
-| Body                 |                               | type                    |
-| Custom               |                               | usage references        |
-+----------------------+-------------------------------+-------------------------+
-| Usage / Impact Panel: rig keyforms / opacity effects / dynamics / viewer usage  |
+| Parameter Manager                                      [+ Custom] [Close]       |
 +--------------------------------------------------------------------------------+
-| Check Strip: duplicate id / unused parameter / out-of-range keyforms             |
+| [All] [Face] [Eyes] [Mouth] [Brow/Cheek] [Body] [Secondary] [Custom]  Search   |
++--------------------------------------------------------------------------------+
+| Parameters                                      | Parameter Details             |
+|-------------------------------------------------|-------------------------------|
+| > Face Angle X   Preset locked    -30 / 0 / 30  | Kind: Preset locked           |
+| Eye Left Open    Preset locked      0 / 1 / 1   | Display name                  |
+| Mouth Open       Preset locked      0 / 0 / 1   | Stable id: locked             |
+| Custom Smile     Custom             0 / 0 / 1   | Role: face.angle.x locked     |
+|                                                 | Group: Face locked            |
+|                                                 | Range: -30 / 0 / 30 locked   |
+|                                                 |                               |
+|                                                 | [Set Active]                  |
+|                                                 | Usage: Used by 2 targets      |
+|                                                 | [View Usage]                  |
++--------------------------------------------------------------------------------+
+| 1 warning: Custom Smile is unused.                                      [Review]|
 +--------------------------------------------------------------------------------+
 ```
 
@@ -96,113 +75,262 @@ stateDiagram-v2
 
 | 領域 | 役割 |
 |---|---|
-| Parameter Manager Header | create、validate、apply、戻る導線を表示する。 |
-| Parameter Groups | group一覧とfilterを表示する。 |
-| Parameter Table | parameter定義を一覧し、選択・検索・sortを行う。 |
-| Parameter Inspector | 選択parameterの詳細定義を編集する。 |
-| Usage / Impact Panel | 参照箇所と変更影響を確認する。 |
-| Check Strip | duplicate id、unused、out-of-range keyformなどのsummaryを出す。 |
+| Header | `+ Custom`、Closeを置く。 |
+| Filter Row | group label filter、search、warnings filterを置く。 |
+| Parameter Table | project内parameterを一覧し、選択する。 |
+| Parameter Details | 選択parameterの詳細、lock状態、usage summary、主要actionを表示する。 |
+| Check Strip | warning / errorがある時だけsummaryを表示する。 |
 
-## 5. Stable ID / Display Name
+## 4. Group Filter
 
-Parameterはstable idとdisplay nameを分ける。
+Parameter groupは左ペインとして常設しない。上部のlabel button / segmented filterとして扱う。
 
-| 項目 | 役割 |
+```text
+[All] [Face] [Eyes] [Mouth] [Brow/Cheek] [Body] [Secondary] [Custom]
+```
+
+理由:
+
+- Parameter数は多くても数十程度であり、階層ツリーで管理する対象ではない。
+- 左ペインを置くと、Parameter TableとDetailsの幅を圧迫する。
+- groupは構造管理ではなく絞り込み用途で足りる。
+
+Filter Rowに置くもの:
+
+- group label filter
+- search box
+- only warnings toggle
+
+置かないもの:
+
+- group tree
+- group作成専用ペイン
+- nested group management
+
+## 5. Parameter Table
+
+Parameter Tableは、project内に存在するparameter一覧である。Preset parameterは常時存在し、未使用でもTableに表示する。
+
+表示すべきもの:
+
+| Column | 内容 |
 |---|---|
-| stable id | rig keyform、subtree opacity effect、dynamics、viewer controlsなどの参照に使うmachine-readable identifier。 |
-| display name | 人間向けの表示名。作業中に変更しやすい。 |
+| Name | 人間向け表示名。Presetの場合は標準名またはdisplay label override。 |
+| Kind | `Preset locked` または `Custom`。 |
+| Range | min / default / max summary。 |
+| Used | usage count summary。 |
+| Warning | warning badge。問題がない場合は表示しない。 |
 
-方針:
+例:
 
-- display name変更は軽いrenameとして扱う。
-- stable id変更は、既存参照を更新するrefactor operationとして扱う。
-- stable id変更時はUsage / Impact Panelで影響範囲を表示する。
-- stable idは重複不可。
+```text
+Name             Kind            Range        Used
+Face Angle X     Preset locked   -30/0/30     2
+Eye Left Open    Preset locked     0/1/1      0
+Mouth Open       Preset locked     0/0/1      1
+Breath           Preset locked     0/0/1      0
+Custom Smile     Custom            0/0/1      0
+```
 
-## 6. Parameter Definition
+Tableに常時表示しないもの:
 
-Parameter Inspectorに置くもの:
+- raw operation id
+- generated refs
+- full stable ref
+- validation payload
+- full usage list
+
+roleとstable idは重要だが、Tableには常時出さずDetails側に置く。人間が一覧で判断したい主情報は、Name、Kind、Range、Usedである。
+
+## 6. Parameter Details
+
+Parameter Detailsは、選択parameterの詳細とactionを表示する右ペインである。
+
+### 6.1 Preset parameter
+
+Preset parameterは、外部facadeやCamera Captureが参照できるsemantic contractを持つ。そのため、大部分の定義はlockする。
+
+表示するもの:
+
+- Kind: `Preset locked`
+- display name
+- stable id
+- role
+- group
+- type
+- min / default / max
+- range meaning / sign convention summary
+- usage summary
+
+編集できるもの:
+
+- display name override / local label
+
+編集できないもの:
 
 - stable id
-- display name
+- role
+- group
 - type
-- min value
-- default value
-- max value
-- group
-- description / note
-- usage references
-- validation warnings
-- refactor stable id action
-- delete / archive action
+- min / default / max
+- sign convention
+- delete
 
-初期type:
+主action:
 
-- scalar parameter
+- Set Active
+- View Usage
 
-将来候補:
+Preset parameterは削除不可にする。削除できるようにすると、preset role catalogとfacade mappingの信頼性が下がる。
 
-- 2D parameter pair
-- vector / compound parameter
-- enum-like state parameter
+### 6.2 Custom parameter
 
-初期UIではscalar parameterを中心にする。2D / compound parameterはParameter Bar側のexpanded UIと将来のManager拡張で扱う。
+Custom parameterはsemantic roleを持たないproject-local parameterである。
 
-## 7. Quick Create / Select
+表示するもの:
 
-Quick Createは、Rig Tool、Dynamics Tool、Parameter Barなど、parameterを必要とする場所から呼び出せる軽量入口である。
+- Kind: `Custom`
+- display name
+- stable id
+- role: `none`
+- group: `Custom`
+- type
+- min / default / max
+- usage summary
 
-Quick Createに置くもの:
+編集できるもの:
 
 - display name
-- stable id auto suggestion
+- stable id
+- type
 - min / default / max
-- group
-- create action
-- open in Parameter Manager
 
-Quick Createに置かないもの:
+編集できないもの:
 
-- full usage table
-- refactor operation
-- complex grouping management
-- validation report全文
+- role
 
-Quick Createはparameter作成の近道であり、Parameter Managerの代替ではない。
+Custom parameterに任意roleを付けるUIは置かない。外部連携したいcustom parameterがある場合は、Facade / Mapping側で明示的にparameter idへ接続する。
 
-## 8. Usage / Impact
+主action:
 
-Usage / Impact Panelに表示するもの:
+- Set Active
+- Duplicate
+- View Usage
+- Delete
+- Refactor stable id
 
-- rig keyform references
-- subtree opacity effect references
-- drawable opacity keyform references
-- dynamics input / output references
-- viewer parameter control usage
-- variant / expression parameter-driven reference候補
-- out-of-range keyform warnings
-- unused parameter warning
-- delete / stable id refactor impact
+stable id変更は単なるrenameではなく、既存参照更新を伴うrefactor actionとして扱う。既存usageがある場合は、変更前にimpact confirmationを表示する。
+
+## 7. Usage Details
+
+Usageは常時大きなパネルとして表示しない。Details内ではsummaryだけを表示し、必要時にdetailsを開く。
+
+```text
+Usage
+Used by 3 targets
+[View Usage]
+```
+
+`View Usage` で表示するもの:
+
+```text
+Face Angle X usage
+- Warp Deformer: Head Warp / lattice keyforms
+- Rotation Deformer: Neck Rotate / angle keyforms
+- Drawable: left_eye_highlight / opacity keyforms
+```
 
 表示粒度:
 
-- 通常UIではsummaryと参照先への導線を表示する。
-- raw evidenceやoperation payloadは表示しない。
+- target type
+- target display name
+- keyformed property
+- keyform count
+- invalid / missing reference badge
 
-## 9. 他UIとの関係
+通常表示しないもの:
+
+- raw operation payload
+- generated refs全文
+- evidence path
+- validation report全文
+
+Usage Detailsが必要になる主な場面:
+
+- このparameterがどのkeyformで使われているか知りたい。
+- stable id refactorの影響範囲を確認したい。
+- range変更でout-of-range keyformが出るか確認したい。
+- delete前に参照が残っていないか確認したい。
+
+## 8. Check Strip
+
+Check Stripはwarning / error summaryである。問題がない場合は表示しない、または非常に低い高さに留める。
+
+例:
+
+```text
+1 warning: Custom Smile is unused. [Review]
+```
+
+表示対象:
+
+- duplicate stable id
+- invalid range
+- default out of range
+- keyform out of range
+- missing parameter reference
+- unused custom parameter
+
+Preset parameterは常時存在するため、`Used = 0` でもwarningにしない。未使用Presetは正常状態である。
+
+Check Stripは問題の入口であり、常設のdebug/evidence surfaceではない。詳細はReview action、Usage Details、Diagnostics / Evidence Viewへ送る。
+
+## 9. 作成フロー
+
+### 9.1 Preset
+
+Preset parameterは作成フローを持たない。
+
+初期状態からrole catalog全体がParameter Tableに表示され、keyformやbindingが設定されない限りruntime上の効果を持たない。
+
+```text
+Project open
+  -> Preset parameters are already listed
+  -> User selects a preset parameter
+  -> User sets keyforms / bindings when needed
+  -> Used count increases
+```
+
+これにより、ユーザーが必要なPresetを個別に追加して回るUXを避ける。
+
+### 9.2 Custom
+
+`+ Custom` はroleなしのproject-local scalar parameterを作成する導線である。
+
+```text
+[+ Custom]
+  -> display name / stable id / min / default / max
+  -> Create
+  -> Custom rowとしてParameter Tableに追加
+```
+
+Custom parameterは自由度を持つが、semantic roleは持たない。
+
+## 10. 他UIとの関係
 
 | UI | Parameter Managerとの関係 |
 |---|---|
-| Parameter Bar | active parameterとcurrent valueを操作する。parameter定義の詳細管理はManagerで行う。 |
-| Parameter Control Palette | 全parameterを動かして確認する。定義管理はManagerへ送る。 |
-| Rig Tool | rig keyformやsubtree opacity effectでparameterを参照する。必要ならQuick Createを使う。 |
-| Dynamics Tool | input / output parameterを参照する。必要ならQuick Createを使う。 |
-| Drawable Inspector | opacity keyformでparameterを参照する可能性がある。 |
-| Variant / Expression Manager | 将来parameter-driven switching / fadeを扱う場合、parameter参照を持つ可能性がある。 |
-| Viewer / Runtime View | parameter controlsを表示し、定義されたmin/default/maxに従って操作する。 |
-| Product Preflight | duplicate id、unused parameter、out-of-range keyform、missing referenceをwarning / blockingとして扱う。 |
+| Parameter Bar | active parameterとcurrent valueを操作する。`Manage` からParameter Managerを開く。 |
+| Parameter-aware Inspector | 選択対象のpropertyをkeyformとしてAdd / Update / Deleteする。parameter定義の詳細管理はしない。 |
+| Rig Tool | Warp / Rotation keyformでparameterを参照する。必要ならParameter Managerでpreset/custom parameterを作成する。 |
+| Drawable Inspector | opacity keyformでparameterを参照する。 |
+| Dynamics Tool | 初期は手動binding中心。semantic role体系を直接支配しない。 |
+| Variant / Expression Manager | 初期は差分idとmappingで扱い、parameter role体系を直接支配しない。 |
+| Viewer / Runtime View | displayName、range、defaultを使ってmanual controlsを表示する。 |
+| Camera Capture Facade | Preset role、range meaning、sign conventionを参照してexternal inputをmappingする。 |
+| Diagnostics / Evidence View | raw refs、operation traces、validation evidenceを扱う。通常UIには混ぜない。 |
 
-## 10. 通常表示しないもの
+## 11. 通常表示しないもの
 
 - operation ID
 - generated refs全文
@@ -210,10 +338,13 @@ Usage / Impact Panelに表示するもの:
 - raw runtime evidence
 - validator payload全文
 - command result payload全文
+- tracker固有input source
+- calibration / smoothing詳細
+- export alias
 
-これらは通常UIの視認性を悪化させるため、Diagnostics / Evidence ViewまたはCodex-facing structured surfaceへ分離する。
+これらは通常UIの視認性を悪化させるため、Diagnostics / Evidence View、Camera Capture Facade、またはCodex-facing structured surfaceへ分離する。
 
-## 11. 関連機能ID
+## 12. 関連機能ID
 
 現行の `UX-FEAT-001`〜`UX-FEAT-037` の棚卸では、Parameter Managerは次の既存機能の正式ホームになる。
 
@@ -227,12 +358,11 @@ Usage / Impact Panelに表示するもの:
 - 一部 `UX-FEAT-028` / `UX-FEAT-029`: Product Preflight / validation
 - 一部 `UX-FEAT-034`: runtime / package evidence summary
 
-後続の棚卸またはwave計画では、Parameter Manager専用のUX feature IDを追加するか検討する。
+## 13. 未決事項
 
-## 12. 未決事項
-
-- initial scalar parameter typeの具体schema。
+- Preset parameterのdisplay name overrideをv0で許可するか。
+- Preset roleごとのmin/default/maxとsign conventionをParameter Detailsでどの粒度まで表示するか。
+- Custom parameterのtypeをscalar以外へ広げる時期。
 - stable id auto suggestionの規則。
-- groupの階層化を許可するか、flat groupに留めるか。
-- parameter deleteを物理削除にするか、archive / unused扱いにするか。
-- 2D / compound parameterをいつManager初期仕様に含めるか。
+- unused custom parameterをwarningにするかinfoにするか。
+- Range変更時のexisting keyform rescaleを許可するか、単にreject / warnにするか。

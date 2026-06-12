@@ -24,6 +24,9 @@ Wave53 final integration report/review `pass` により、Authoring Workspace �
 - Canvas / Previewの確認を妨げない。
 - Rig / Mesh / Opacity / Subtree opacity / Dynamicsなどのtool-specific操作はInspectorに置き、parameter current valueはParameter Barに置く。
 - parameter定義、stable id、grouping、usage referenceの詳細管理はParameter Managerへ送る。
+- Keyform専用Inspectorは作らない。選択中対象のInspectorをparameter-awareにし、そこでkeyform保存・更新・削除を扱う。
+- 補間中の値を見ているときは、対象Inspectorに補間結果を表示するが、対象propertyの編集はlockする。編集したい場合は現在値にkeyformを追加する。
+- Parameter preset、group分類、camera capture / runtime inputとの対応はParameter Manager側の別論点として扱い、本コンポーネント仕様では深掘りしない。
 
 ## 3. Parameter Bar
 
@@ -36,19 +39,19 @@ Parameter Barは、現在authoring対象になっている1つのactive paramete
 - 高さは固定または上限付きにし、layoutを押し広げない。
 
 ```text
-+--------------------------------------------------------------------------------+
-| Parameter Bar                                                                  |
-| [Parameter selector] [ value slider + key markers ---------------- ] [actions]  |
-+--------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------------------+
+| Parameter Bar | [Manage] [ParamAngleX v] [Reset] [... ] | -30 |====●====| 30 | 0.00 |
+|               | [Add] [Update] [Delete] [Ends] [Ends+Center] | key markers on slider   |
++------------------------------------------------------------------------------------------------+
 ```
 
 領域:
 
 | 領域 | 表示するもの |
 |---|---|
-| Left | active parameter selector、parameter名、min/default/max summary |
-| Center | current value slider、default marker、key markers、selected key marker |
-| Right | add/update key、previous/next key、reset default、open details |
+| Left | open Parameter Manager、active parameter selector、parameter名 |
+| Center | current value slider、min/default/max、key markers、selected key marker、numeric input |
+| Right | add / update / delete current keyform、preset keyform actions、reset actions、overflow menu |
 
 表示するもの:
 
@@ -57,11 +60,35 @@ Parameter Barは、現在authoring対象になっている1つのactive paramete
 - min / default / max
 - key marker
 - selected key marker
-- add / update keyform action
+- add / update / delete current keyform action
+- add ends action
+- add ends + center action
 - previous / next key action
-- reset default action
+- reset active parameter to default action
+- reset all parameters to default action
 - quick create入口
 - open Parameter Manager入口
+
+配置方針:
+
+- Parameter Barは1行横長を基本とし、Canvas / Previewの縦幅を圧迫しない。
+- Barの高さは固定し、ボタンの折り返しで縦に伸ばさない。
+- 画面幅が足りない場合は、低頻度操作をoverflow menuへ畳む。
+
+常時表示を優先するもの:
+
+- active parameter selector
+- current value slider
+- numeric input
+- Add / Update / Delete current keyform
+- Reset active parameter
+
+overflow menuへ畳んでよいもの:
+
+- Reset All
+- Add Ends
+- Add Ends + Center
+- Open Parameter Manager
 
 表示しないもの:
 
@@ -74,18 +101,19 @@ Parameter Barは、現在authoring対象になっている1つのactive paramete
 
 ## 4. Keyform Authoring
 
-Keyform authoringは、Parameter Barと現在のActive Tool Inspectorが協調して行う。
+Keyform authoringは、Parameter Barと現在のActive Tool Inspector / Selection Inspectorが協調して行う。
 
 役割分担:
 
 - Parameter Bar: どのparameterのどの値を見ているかを決める。
-- Tool Inspector: どのtarget / propertyへkeyformを打つかを決める。
+- 対象Inspector: 選択中targetのpropertyを編集し、その状態をkeyformとして保存・更新・削除する。
 - Canvas / Preview: 現在値における見た目を確認する。
+- Keyform専用Inspector: 作らない。
 
 例: Rig Tool
 
 ```text
-Rig Inspector: target=rig_head_warp / property=controlPointOffsets
+Warp Deformer Inspector: target=rig_head_warp / property=controlPointOffsets
 Parameter Bar: parameter=ParamAngleX / current value=30
 Canvas: current value 30 のdraft deformation preview
 Action: Add keyform
@@ -109,6 +137,100 @@ Active Toolでtarget/propertyを選ぶ
   -> Canvasで見た目を調整・確認する
   -> Add / Update keyform
 ```
+
+### 4.1 Parameter-aware Inspector
+
+選択中対象のInspectorは、通常property編集領域に加えてParameter Binding sectionを持つ。
+
+Warp Deformer選択時の例:
+
+```text
++--------------------------------+
+| Warp Deformer                  |
+| Name                           |
+| Parent Deformer                |
+| Opacity                        |
+| Transform divisions            |
+| Bezier divisions               |
++--------------------------------+
+| Parameter Binding              |
+| Active parameter: ParamAngleX  |
+| Current value: 0.00            |
+| Keyform: Exists                |
+|                                |
+| [Add] [Update] [Delete]        |
+| [Ends] [Ends + Center]         |
++--------------------------------+
+```
+
+Drawable / Deformer / Rotation Deformerなど、対象ごとにkeyform化できるpropertyは異なる。ただし操作の形は共通化する。
+
+- 対象の通常propertyを編集する。
+- active parameterとcurrent valueを確認する。
+- 現在値にkeyformがあるかを表示する。
+- 現在値へAdd / Update / Deleteする。
+- よく使う初期配置としてEnds / Ends + Centerを提供する。
+
+Parameter Binding sectionに置く基本操作:
+
+| 操作 | 意味 |
+|---|---|
+| Add | 現在のparameter値にkeyformを追加する。 |
+| Update | 現在のparameter値にあるkeyformを、現在の対象状態で更新する。 |
+| Delete | 現在のparameter値にあるkeyformを削除する。 |
+| Ends | min / max にkeyformを作る。 |
+| Ends + Center | min / default / max にkeyformを作る。 |
+
+### 4.2 Keyform位置以外の編集lock
+
+current valueがkeyform位置ではない場合、Canvas / PreviewとInspectorには補間結果を表示する。
+
+ただし、補間中のpropertyを直接編集すると「補間結果を編集している」のか「新しいkeyformを作っている」のかが曖昧になるため、対象propertyの編集はlockする。
+
+```text
+Parameter Binding
+Active parameter: ParamAngleX
+Current value: 0.34
+Keyform: None
+
+Interpolated values are shown.
+Editing is locked until a keyform is added.
+
+[Add Keyform Here]
+```
+
+この状態では、通常property欄は補間値を表示するがdisabledにする。操作可能なのは `Add Keyform Here` である。
+
+`Add Keyform Here` 後は、そのcurrent valueにkeyformが作られ、対象property編集が有効になる。
+
+### 4.3 Keyform対象property
+
+v0のkeyform対象は、parameterで連続的に変化する必要があるpropertyだけに絞る。
+
+Parts Tree上の静的構造、描画順、mesh topology、parameter定義そのものはkeyform対象にしない。parameter keyform authoringの主文脈はDeformer Treeであり、Parts Treeは構造・描画順・静的属性のホームとして扱う。
+
+| 対象 | keyform化するもの | keyform化しないもの |
+|---|---|---|
+| Drawable | opacity | visibility、clipping、draw order、name、texture、mesh topology |
+| Parts Container | 対象外 | visibility gate、name、hierarchy |
+| Warp Deformer | lattice / control point positions、opacity multiplier | transform divisions、bezier divisions、parent、bounds、name |
+| Rotation Deformer | rotation angle、opacity multiplier | pivot、parent、name |
+| Mesh | 対象外 | vertex topology、UV、source texture |
+| Parameter | 対象外 | Parameterはkeyformの軸であり、keyform対象ではない |
+
+Drawable opacityは例外的にDrawableを対象とするが、基本的にはDeformer Tree内のbound Drawable ref文脈で扱う。Parts Treeから任意のDrawable propertyをparameter化できる設計にはしない。
+
+Visibilityはparameter keyform対象にしない。連続的な表示変化はopacity keyformで扱い、表情差分・衣装差分・状態切替はVariant / Expression Manager側で扱う。
+
+Inspectorごとの表示方針:
+
+| Inspector | Parameter-aware section |
+|---|---|
+| Drawable Inspector | opacity keyform sectionのみ |
+| Warp Deformer Inspector | lattice keyform、opacity multiplier keyform |
+| Rotation Deformer Inspector | angle keyform、opacity multiplier keyform |
+| Parts Container Inspector | parameter bindingなし |
+| Mesh Tool / Mesh Inspector | parameter bindingなし |
 
 ## 5. Parameter Control Palette
 

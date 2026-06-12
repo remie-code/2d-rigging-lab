@@ -8,6 +8,7 @@
 |---|---|---|
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [auto-outline-v2.md](auto-outline-v2.md) | Drawable RGBA alpha maskから自然な初期meshを生成する `auto-outline-v2` アルゴリズム候補 | Draft algorithm spec |
+| [auto-outline-v3-envelope.md](auto-outline-v3-envelope.md) | `auto-outline-v2` 後の次候補。alpha輪郭そのものではなく外側包絡 envelope boundary を使い、粗めで自然な初期meshを生成する方針 | Draft algorithm spec |
 
 ## 境界
 
@@ -18,10 +19,11 @@
 ## 現在の焦点
 
 - Wave62で `auto-outline-v1` により矩形grid主体から輪郭追従へ進んだ。
-- 次候補は、扇状集中、大きすぎる三角形、grid由来の矩形感を減らす `auto-outline-v2` である。
+- Wave63で `auto-outline-v2` により自然なtriangular meshへ大きく近づいた。
+- 次候補は、alpha輪郭をなぞるのではなく、透明領域を少し含む外側包絡線で部品を包む `auto-outline-v3-envelope` である。
 
 ## 次の作業候補
 
-1. `auto-outline-v2` のtriangulation方式と依存ライブラリ候補を実装前に調査する。
-2. presetごとのspacing / max edge / max area / valence閾値を、実サンプルで調整可能な形にする。
+1. `auto-outline-v3-envelope` のenvelope offset式、self-intersection cleanup、support ring方式を実装前に調査する。
+2. V2より粗めのpreset spacing / max edge / max area / valence閾値を、実サンプルで調整可能な形にする。
 3. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。

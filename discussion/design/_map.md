@@ -20,6 +20,7 @@
 | [initial-design-decisions-and-open-questions.md](initial-design-decisions-and-open-questions.md) | MVP更新前後の設計判断、委任範囲、要調査・要議論事項 | Private baseline語彙へ整理済み |
 | [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) | AI assistant 接続方式と技術スタック方針 | Private baseline語彙へ整理済み |
 | [codex-friendly-automation-policy.md](codex-friendly-automation-policy.md) | Editor/repo は提案・推論・自動分類を持たず、Codex/LLM が人間同等操作を deterministic API で実行するための自動化境界。Wave50の explicit PSD structural expansion は semantic recognition ではなく、明示選択された構造初期状態 scaffold に限定 | Accepted user decision / Wave49-Wave50 basis |
+| [parameter-preset-ecosystem.md](parameter-preset-ecosystem.md) | Parameter presetをCore Parameter / Preset Profile / Ecosystem Facadeに分け、Camera Captureを中心にsemantic consumer、role catalog、初期preset候補を整理する設計メモ | Draft design basis |
 | [screen-design/](screen-design/_map.md) | GUI Editorを中心とする画面設計、画面遷移、主要領域、表示情報分類、人間向けUIとCodex/evidence surface境界の設計トピック | In discussion |
 | [mesh-generation/](mesh-generation/_map.md) | Drawable RGBA alpha maskから初期meshを生成するアルゴリズム、品質基準、fallback境界の設計トピック | Draft algorithm design |
 | [module-contract-design-decisions.md](module-contract-design-decisions.md) | module contract design の判断ログ | Private baseline語彙へ整理済み。過去判断は参考 |
@@ -44,6 +45,7 @@
 | Validator | package / runtime / rights / provenance / demo-safe capture を構造化reportにする |
 | AI / Codex-friendly operation | Editor/repo は提案・推論・auto-riggingを行わない。外部Codex/LLMが操作案を作り、repoは人間同等操作のdeterministic state / operation / dry-run / diff / validation / approval / commit / evidence surfaceを提供する |
 | Mesh generation | Screen UXは `screen-design/`、生成アルゴリズムは [mesh-generation/](mesh-generation/_map.md) に分離。`auto-outline-v2` は扇状集中、大きすぎるtriangle、grid由来の矩形感を減らす次候補 |
+| Parameter preset ecosystem | [parameter-preset-ecosystem.md](parameter-preset-ecosystem.md) で、Core Parameter、Preset / Profile、Ecosystem Facade / Mappingを分離し、Camera Capture / Face Trackingを最重要semantic consumerとして初期role catalogを整理中 |
 | GPT-5.5 Pro review 001 | P0/P1/P2の反映可能指摘を反映。詳細は [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) |
 | GPT-5.5 Pro review 002 | RE3-001〜RE3-020と実装前チェックリストを反映。Dynamics詳細はreview_003で上書き |
 | GPT-5.5 Pro review 003 | RE-FINAL-001〜RE-FINAL-018と確定版チェックリストを反映。RuntimeState evidence詳細はreview_004で上書き |
@@ -69,3 +71,4 @@
 | Pre-Wave51 Editor UX screen spec | Discussion開始。Sylph棚卸後に画面遷移、主要領域、表示情報分類、人間UI/Codex surface境界をユーザー判断で固定する |
 | RigControl構造の技術的正体 | Private Prototype内のproject-defined構造として整理継続 |
 | Runtime評価セマンティクスの設計判断 | compositionMode、mask opacity 0、missing texture severity、epsilonPolicy は実装前未決 |
+| Parameter preset / facade | Draft設計開始。role schema、axis sign convention、normalized/degree-like単位、eyeball/gaze関係、mouth form/vowel関係、smoothing/calibration schemaは未決 |
