@@ -21,6 +21,10 @@ import {
   type AutoOutlineV3EnvelopeFailureReason
 } from "./mesh-outline-v3-envelope-generation.js";
 import {
+  createAutoOutlineV4ContourBandMesh,
+  type AutoOutlineV4ContourBandFailureReason
+} from "./mesh-outline-v4-contour-band-generation.js";
+import {
   computeMeshQualityMetrics,
   type MeshGenerationQualityMetrics
 } from "./mesh-quality-metrics.js";
@@ -32,9 +36,11 @@ export type MeshGenerationMethod =
   | "auto-outline-v2"
   | "auto-outline-v2.5-soft-boundary"
   | "auto-outline-v2.6-soft-apron"
-  | "auto-outline-v3-envelope";
+  | "auto-outline-v3-envelope"
+  | "auto-outline-v4-contour-band";
 export type MeshDensityHint = "low" | "medium" | "high";
 export type DrawableGeneratedMeshSource =
+  | "outline-v4-contour-band-rgba"
   | "outline-v3-envelope-rgba"
   | "outline-v2-6-soft-apron-rgba"
   | "outline-v2-5-soft-boundary-rgba"
@@ -44,6 +50,7 @@ export type DrawableGeneratedMeshSource =
   | "bounds-grid";
 export type MeshGenerationFallbackReason =
   | "texture-bytes-unavailable"
+  | AutoOutlineV4ContourBandFailureReason
   | AutoOutlineV3EnvelopeFailureReason
   | AutoOutlineV26SoftApronFailureReason
   | AutoOutlineV25SoftBoundaryFailureReason
@@ -51,6 +58,7 @@ export type MeshGenerationFallbackReason =
 
 export interface MeshGenerationFallbackStep {
   readonly method:
+    | "auto-outline-v4-contour-band"
     | "auto-outline-v3-envelope"
     | "auto-outline-v2.6-soft-apron"
     | "auto-outline-v2.5-soft-boundary"
@@ -132,6 +140,173 @@ export const createGeneratedMeshForDrawable = (
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
   if (textureBytes !== undefined) {
+    if (input.method === "auto-outline-v4-contour-band") {
+      const outlineV4Mesh = createAutoOutlineV4ContourBandMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+
+      if (outlineV4Mesh.status === "generated") {
+        return {
+          mesh: outlineV4Mesh.mesh,
+          source: "outline-v4-contour-band-rgba",
+          alphaBounds: outlineV4Mesh.alphaBounds,
+          qualityMetrics: outlineV4Mesh.qualityMetrics
+        };
+      }
+
+      const outlineV26Mesh = createAutoOutlineV26SoftApronMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const fallbackSteps = [
+        {
+          method: "auto-outline-v4-contour-band",
+          reason: outlineV4Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV26Mesh.status === "generated") {
+        return {
+          mesh: outlineV26Mesh.mesh,
+          source: "outline-v2-6-soft-apron-rgba",
+          alphaBounds: outlineV26Mesh.alphaBounds,
+          fallbackReason: outlineV4Mesh.reason,
+          fallbackSteps,
+          qualityMetrics: {
+            ...outlineV26Mesh.qualityMetrics,
+            fallbackReason: outlineV4Mesh.reason
+          }
+        };
+      }
+
+      const outlineV25Mesh = createAutoOutlineV25SoftBoundaryMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const v26FallbackSteps = [
+        ...fallbackSteps,
+        {
+          method: "auto-outline-v2.6-soft-apron",
+          reason: outlineV26Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV25Mesh.status === "generated") {
+        return {
+          mesh: outlineV25Mesh.mesh,
+          source: "outline-v2-5-soft-boundary-rgba",
+          alphaBounds: outlineV25Mesh.alphaBounds,
+          fallbackReason: outlineV4Mesh.reason,
+          fallbackSteps: v26FallbackSteps,
+          qualityMetrics: {
+            ...outlineV25Mesh.qualityMetrics,
+            fallbackReason: outlineV4Mesh.reason
+          }
+        };
+      }
+
+      const outlineV2Mesh = createAutoOutlineV2Mesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const v25FallbackSteps = [
+        ...v26FallbackSteps,
+        {
+          method: "auto-outline-v2.5-soft-boundary",
+          reason: outlineV25Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV2Mesh.status === "generated") {
+        return {
+          mesh: outlineV2Mesh.mesh,
+          source: "outline-v2-rgba",
+          alphaBounds: outlineV2Mesh.alphaBounds,
+          fallbackReason: outlineV4Mesh.reason,
+          fallbackSteps: v25FallbackSteps,
+          qualityMetrics: {
+            ...outlineV2Mesh.qualityMetrics,
+            fallbackReason: outlineV4Mesh.reason
+          }
+        };
+      }
+
+      const outlineV1Fallback = createAutoOutlineMesh({
+        meshId: existingMesh.meshId,
+        drawableId: drawable.drawableId,
+        bounds: existingMesh.bounds,
+        provenanceId: input.provenanceId,
+        textureSize: textureBytes.textureSize,
+        rgbaBytes: textureBytes.bytes,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+      });
+      const v2FallbackSteps = [
+        ...v25FallbackSteps,
+        {
+          method: "auto-outline-v2",
+          reason: outlineV2Mesh.reason
+        }
+      ] satisfies readonly MeshGenerationFallbackStep[];
+
+      if (outlineV1Fallback.status === "generated") {
+        return {
+          mesh: outlineV1Fallback.mesh,
+          source: "outline-rgba",
+          alphaBounds: outlineV1Fallback.alphaBounds,
+          fallbackReason: outlineV4Mesh.reason,
+          fallbackSteps: v2FallbackSteps,
+          qualityMetrics: computeMeshQualityMetrics(outlineV1Fallback.mesh, {
+            refinementIterationCount: 0,
+            fallbackReason: outlineV4Mesh.reason,
+            triangulationMode: "ordinary-delaunay-alpha-filter"
+          })
+        };
+      }
+
+      const fallbackAlphaBounds =
+        outlineV1Fallback.alphaBounds ??
+        outlineV2Mesh.alphaBounds ??
+        outlineV25Mesh.alphaBounds ??
+        outlineV26Mesh.alphaBounds ??
+        outlineV4Mesh.alphaBounds;
+      return createFallbackGridMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        fallbackReason: outlineV4Mesh.reason,
+        fallbackSteps: [
+          ...v2FallbackSteps,
+          {
+            method: "auto-outline-v1",
+            reason: outlineV1Fallback.reason
+          }
+        ],
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(fallbackAlphaBounds === undefined ? {} : { alphaBounds: fallbackAlphaBounds })
+      });
+    }
+
     if (input.method === "auto-outline-v2.6-soft-apron") {
       const outlineV26Mesh = createAutoOutlineV26SoftApronMesh({
         meshId: existingMesh.meshId,
@@ -606,9 +781,18 @@ export const createGeneratedMeshForDrawable = (
     (input.method === "auto-outline-v2" ||
       input.method === "auto-outline-v2.5-soft-boundary" ||
       input.method === "auto-outline-v2.6-soft-apron" ||
+      input.method === "auto-outline-v4-contour-band" ||
       input.method === "auto-outline-v3-envelope")
       ? {
           fallbackSteps: [
+            ...(input.method === "auto-outline-v4-contour-band"
+              ? [
+                  {
+                    method: "auto-outline-v4-contour-band" as const,
+                    reason: "texture-bytes-unavailable" as const
+                  }
+                ]
+              : []),
             ...(input.method === "auto-outline-v3-envelope"
               ? [
                   {
@@ -617,7 +801,8 @@ export const createGeneratedMeshForDrawable = (
                   }
                 ]
               : []),
-            ...(input.method === "auto-outline-v2.6-soft-apron"
+            ...(input.method === "auto-outline-v2.6-soft-apron" ||
+            input.method === "auto-outline-v4-contour-band"
               ? [
                   {
                     method: "auto-outline-v2.6-soft-apron" as const,
@@ -626,7 +811,8 @@ export const createGeneratedMeshForDrawable = (
                 ]
               : []),
             ...(input.method === "auto-outline-v2.5-soft-boundary" ||
-            input.method === "auto-outline-v2.6-soft-apron"
+            input.method === "auto-outline-v2.6-soft-apron" ||
+            input.method === "auto-outline-v4-contour-band"
               ? [
                   {
                     method: "auto-outline-v2.5-soft-boundary" as const,
@@ -638,7 +824,8 @@ export const createGeneratedMeshForDrawable = (
               method: "auto-outline-v2",
               reason: "texture-bytes-unavailable"
             },
-            ...(input.method === "auto-outline-v2.6-soft-apron"
+            ...(input.method === "auto-outline-v2.6-soft-apron" ||
+            input.method === "auto-outline-v4-contour-band"
               ? [
                   {
                     method: "auto-outline-v1" as const,

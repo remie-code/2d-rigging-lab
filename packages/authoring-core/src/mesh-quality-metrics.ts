@@ -12,10 +12,12 @@ export interface MeshGenerationQualityMetrics {
     | "interim-delaunay-alpha-filter"
     | "interim-delaunay-envelope-filter"
     | "interim-delaunay-soft-boundary-filter"
-    | "interim-delaunay-soft-apron-strip";
+    | "interim-delaunay-soft-apron-strip"
+    | "interim-delaunay-contour-band-strip";
   readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
   readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
   readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
+  readonly contourBandMetrics?: MeshGenerationContourBandMetrics;
 }
 
 export interface MeshGenerationEnvelopeMetrics {
@@ -90,6 +92,37 @@ export interface MeshGenerationSoftApronMetrics {
   readonly fallbackReason?: string;
 }
 
+export interface MeshGenerationContourBandMetrics {
+  readonly algorithmId: "auto-outline-v4-contour-band";
+  readonly preset: "low" | "medium" | "high";
+  readonly targetEdgeLength: number;
+  readonly contourSampleSpacing: number;
+  readonly outerOffset: number;
+  readonly innerOffset: number;
+  readonly alphaArea: number;
+  readonly outerContourArea: number;
+  readonly outerContourAreaRatio: number;
+  readonly selectedContourVertexCount: number;
+  readonly simplifiedContourVertexCount: number;
+  readonly contourPointCount: number;
+  readonly outerContourPointCount: number;
+  readonly contourBandTriangleCount: number;
+  readonly interiorPointCount: number;
+  readonly interiorTriangleCount: number;
+  readonly maxBoundaryToInteriorEdgeLength: number;
+  readonly maxVertexValence: number;
+  readonly transparentOnlyTriangleRatio: number;
+  readonly vertexCount: number;
+  readonly triangleCount: number;
+  readonly maxVertexCountCap: number;
+  readonly rejectedDegenerateTriangleCount: number;
+  readonly rejectedLongBoundaryToInteriorTriangleCount: number;
+  readonly rejectedLongInteriorTriangleCount: number;
+  readonly rejectedOutsideInteriorTriangleCount: number;
+  readonly provenance: readonly string[];
+  readonly fallbackReason?: string;
+}
+
 export const computeMeshQualityMetrics = (
   mesh: MeshDto,
   options: {
@@ -99,6 +132,7 @@ export const computeMeshQualityMetrics = (
     readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
     readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
     readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
+    readonly contourBandMetrics?: MeshGenerationContourBandMetrics;
   }
 ): MeshGenerationQualityMetrics => {
   const neighborsByVertex = new Map<number, Set<number>>();
@@ -162,7 +196,8 @@ export const computeMeshQualityMetrics = (
     ...(options.triangulationMode === undefined ? {} : { triangulationMode: options.triangulationMode }),
     ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics }),
     ...(options.softBoundaryMetrics === undefined ? {} : { softBoundaryMetrics: options.softBoundaryMetrics }),
-    ...(options.softApronMetrics === undefined ? {} : { softApronMetrics: options.softApronMetrics })
+    ...(options.softApronMetrics === undefined ? {} : { softApronMetrics: options.softApronMetrics }),
+    ...(options.contourBandMetrics === undefined ? {} : { contourBandMetrics: options.contourBandMetrics })
   };
 };
 

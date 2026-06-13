@@ -14,6 +14,7 @@ import {
   SourceAssetIdSchema,
   TextureIdSchema,
   type DrawableId,
+  type RectDto,
   type RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
@@ -125,7 +126,7 @@ describe("canvas evaluation", () => {
     });
   });
 
-  it("applies parent deformer influence before a child drawable evaluation", () => {
+  it("applies parent deformer influence over a child drawable evaluation", () => {
     const session = createFixtureSession();
     session.graph.rigControls.push(
       createWarpRigControl(RIG_PARENT_WARP, {
@@ -152,6 +153,71 @@ describe("canvas evaluation", () => {
     expect(face.rigControlChainIds).toEqual([RIG_PARENT_WARP, RIG_CHILD_WARP]);
     expect(face.evaluatedMesh.vertices[0]).toEqual({ x: 10, y: 0 });
     expect(face.bounds.x).toBeCloseTo(10);
+  });
+
+  it("evaluates child warp in local rest space before parent warp moves the result", () => {
+    const session = createFixtureSession();
+    const childOffsets = [
+      { x: 2, y: 0 },
+      { x: 8, y: 0 },
+      { x: 4, y: 10 },
+      { x: 14, y: 20 }
+    ];
+    session.graph.rigControls.push(
+      createWarpRigControl(RIG_PARENT_WARP, {
+        childRigControlIds: [RIG_CHILD_WARP],
+        domainBounds: { x: 0, y: 0, width: 150, height: 150 }
+      }),
+      createWarpRigControl(RIG_CHILD_WARP, {
+        parentId: RIG_PARENT_WARP,
+        childDrawableIds: [DRAW_FACE]
+      })
+    );
+    session.graph.rigControlRootIds.push(RIG_PARENT_WARP);
+    session.graph.keyformSets.push(
+      createWarpOffsetsKeyformSet(RIG_PARENT_WARP, [
+        { value: -30, statePatch: createOffsets(4, 0, 0) },
+        { value: 30, statePatch: createOffsets(4, 200, 30) }
+      ]),
+      createWarpOffsetsKeyformSet(RIG_CHILD_WARP, [
+        { value: -30, statePatch: createOffsets(4, 0, 0) },
+        { value: 30, statePatch: childOffsets }
+      ])
+    );
+
+    const scene = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    });
+    const face = requireDrawable(scene, DRAW_FACE);
+    const childOverlay = requireRigControl(scene, RIG_CHILD_WARP);
+    if (childOverlay.kind !== "warp") {
+      throw new Error("Expected child warp overlay.");
+    }
+
+    expect(face.rigControlChainIds).toEqual([RIG_PARENT_WARP, RIG_CHILD_WARP]);
+    expect(face.evaluatedMesh.vertices).toEqual([
+      { x: 202, y: 30 },
+      { x: 308, y: 30 },
+      { x: 314, y: 150 },
+      { x: 204, y: 140 }
+    ]);
+    expect(face.bounds).toEqual({ x: 202, y: 30, width: 112, height: 120 });
+    expect(childOverlay).toMatchObject({
+      kind: "warp",
+      rigControlId: RIG_CHILD_WARP,
+      domainBounds: { x: 202, y: 30, width: 112, height: 120 },
+      controlPointOffsets: childOffsets,
+      evaluatedControlPoints: [
+        { x: 202, y: 30 },
+        { x: 308, y: 30 },
+        { x: 204, y: 140 },
+        { x: 314, y: 150 }
+      ]
+    });
+    expect(childOverlay.evaluatedControlPoints[0]).toEqual(face.evaluatedMesh.vertices[0]);
+    expect(childOverlay.evaluatedControlPoints[1]).toEqual(face.evaluatedMesh.vertices[1]);
+    expect(childOverlay.evaluatedControlPoints[2]).toEqual(face.evaluatedMesh.vertices[3]);
+    expect(childOverlay.evaluatedControlPoints[3]).toEqual(face.evaluatedMesh.vertices[2]);
   });
 
   it("interpolates in-between scrub values and clamps values outside the parameter range", () => {
@@ -335,6 +401,18 @@ function requireDrawable(scene: ReturnType<typeof createCanvasEvaluatedScene>, d
   return drawable;
 }
 
+function requireRigControl(
+  scene: ReturnType<typeof createCanvasEvaluatedScene>,
+  rigControlId: RigControlId
+) {
+  const rigControl = scene.rigControls.find((candidate) => candidate.rigControlId === rigControlId);
+  if (rigControl === undefined) {
+    throw new Error(`Expected rig control ${rigControlId}.`);
+  }
+
+  return rigControl;
+}
+
 function createDrawableOpacityKeyformSet(keys: readonly (readonly [number, number])[]) {
   return {
     keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_eval_drawable_opacity"),
@@ -407,8 +485,11 @@ function createWarpRigControl(
     readonly parentId?: RigControlId;
     readonly childDrawableIds?: readonly DrawableId[];
     readonly childRigControlIds?: readonly RigControlId[];
+    readonly domainBounds?: RectDto;
   }
 ) {
+  const domainBounds = input.domainBounds ?? { x: 0, y: 0, width: 100, height: 100 };
+
   return {
     kind: "warpLattice2d" as const,
     rigControlId,
@@ -419,18 +500,31 @@ function createWarpRigControl(
     childRigControlIds: [...(input.childRigControlIds ?? [])],
     opacityMultiplier: 1,
     bindSpace: "rigControlLocalRest" as const,
-    domainBounds: { x: 0, y: 0, width: 100, height: 100 },
+    domainBounds: structuredClone(domainBounds),
     latticeColumns: 2,
     latticeRows: 2,
-    restControlPoints: [
-      { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 0, y: 100 },
-      { x: 100, y: 100 }
-    ],
+    restControlPoints: createRestControlPoints(domainBounds, 2, 2),
     interpolationMethod: "bilinear-grid-v1" as const,
     enabled: true
   };
+}
+
+function createRestControlPoints(
+  domainBounds: RectDto,
+  columns: number,
+  rows: number
+) {
+  const points = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      points.push({
+        x: domainBounds.x + domainBounds.width * (columns <= 1 ? 0 : column / (columns - 1)),
+        y: domainBounds.y + domainBounds.height * (rows <= 1 ? 0 : row / (rows - 1))
+      });
+    }
+  }
+
+  return points;
 }
 
 function createRotationRigControl() {

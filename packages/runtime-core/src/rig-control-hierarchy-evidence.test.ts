@@ -264,6 +264,57 @@ describe("runtime rig control hierarchy evidence", () => {
     ]);
   });
 
+  it("evaluates child warpLattice2d in local space before parent warp moves the child result", () => {
+    const graph = createWarpParentWarpChildGraph();
+    const request = {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_parent", "rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const
+      }
+    };
+
+    const first = evaluateViewerRuntimeSnapshot(graph, request);
+    const second = evaluateViewerRuntimeSnapshot(graph, request);
+
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.runtimeDiff).toEqual(second.runtimeDiff);
+    expect(expectRigControl(first.snapshot.rigControls, "rig_parent")).toMatchObject({
+      kind: "warpLattice2d",
+      evaluationStatus: "evaluated",
+      childRigControlIds: ["rig_child"],
+      affectedDrawableIds: ["draw_child"],
+      affectedRigControlIds: ["rig_child"]
+    });
+    expect(expectRigControl(first.snapshot.rigControls, "rig_child")).toMatchObject({
+      kind: "warpLattice2d",
+      parentId: "rig_parent",
+      evaluationStatus: "evaluated",
+      affectedDrawableIds: ["draw_child"]
+    });
+    expect(first.snapshot.diagnostics.filter((diagnostic) => diagnostic.phase === "rigControl_evaluation")).toEqual([]);
+    expect(first.snapshot.drawables[0]).toMatchObject({
+      drawableId: "draw_child",
+      bounds: { x: 41, y: 0, width: 6, height: 8 },
+      vertices: [
+        { x: 41, y: 0 },
+        { x: 45, y: 0 },
+        { x: 47, y: 8 },
+        { x: 42, y: 6 }
+      ]
+    });
+    expect(first.runtimeDiff.drawableChanges).toEqual([
+      {
+        drawableId: "draw_child",
+        boundsChanged: true,
+        vertexHashBefore: first.baselineSnapshot.drawables[0]?.vertexHash,
+        vertexHashAfter: first.snapshot.drawables[0]?.vertexHash
+      }
+    ]);
+  });
+
   it("keeps blocked ancestor warpLattice2d as no-op while descendant rotation2d transforms drawable evidence", () => {
     const graph = createInvalidWarpParentRotationChildGraph();
     const request = {
@@ -741,6 +792,125 @@ const createWarpParentRotationChildGraph = (): NormalizedRuntimeGraph => {
         keys: [
           { value: 0, statePatch: 0 },
           { value: 1, statePatch: 90 }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 1
+      }
+    ],
+    drawOrder: [{ drawableId, drawOrder: 0 }]
+  };
+};
+
+const createWarpParentWarpChildGraph = (): NormalizedRuntimeGraph => {
+  const graph = createRotationRigControlGraph();
+  const parentRigId = RigControlIdSchema.parse("rig_parent");
+  const childRigId = RigControlIdSchema.parse("rig_child");
+  const drawableId = DrawableIdSchema.parse("draw_child");
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      [
+        parentRigId,
+        {
+          kind: "warpLattice2d",
+          rigControlId: parentRigId,
+          childDrawableIds: [],
+          childRigControlIds: [childRigId],
+          bindSpace: "rigControlLocalRest",
+          domainBounds: { x: 0, y: -10, width: 60, height: 60 },
+          latticeColumns: 2,
+          latticeRows: 2,
+          restControlPoints: [
+            { x: 0, y: -10 },
+            { x: 60, y: -10 },
+            { x: 0, y: 50 },
+            { x: 60, y: 50 }
+          ],
+          interpolationMethod: "bilinear-grid-v1",
+          enabled: true
+        }
+      ],
+      [
+        childRigId,
+        {
+          kind: "warpLattice2d",
+          rigControlId: childRigId,
+          parentId: parentRigId,
+          childDrawableIds: [drawableId],
+          childRigControlIds: [],
+          bindSpace: "rigControlLocalRest",
+          domainBounds: { x: 10, y: 0, width: 2, height: 2 },
+          latticeColumns: 2,
+          latticeRows: 2,
+          restControlPoints: [
+            { x: 10, y: 0 },
+            { x: 12, y: 0 },
+            { x: 10, y: 2 },
+            { x: 12, y: 2 }
+          ],
+          interpolationMethod: "bilinear-grid-v1",
+          enabled: true
+        }
+      ]
+    ]),
+    keyformBindings: [
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_parent_warp_local_space_offsets"),
+        targetId: parentRigId,
+        targetKind: "rigControl",
+        targetProperty: "controlPointOffsets",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        keys: [
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 30, y: 0 },
+              { x: 30, y: 0 },
+              { x: 30, y: 0 },
+              { x: 30, y: 0 }
+            ]
+          }
+        ],
+        compositionMode: "replace",
+        compositionOrder: 0
+      },
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_child_warp_local_space_offsets"),
+        targetId: childRigId,
+        targetKind: "rigControl",
+        targetProperty: "controlPointOffsets",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        keys: [
+          {
+            value: 0,
+            statePatch: [
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 },
+              { x: 0, y: 0 }
+            ]
+          },
+          {
+            value: 1,
+            statePatch: [
+              { x: 1, y: 0 },
+              { x: 3, y: 0 },
+              { x: 2, y: 4 },
+              { x: 5, y: 6 }
+            ]
+          }
         ],
         compositionMode: "replace",
         compositionOrder: 1

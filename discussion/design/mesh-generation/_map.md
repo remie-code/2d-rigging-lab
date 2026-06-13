@@ -17,6 +17,7 @@
 
 - ここではMesh Toolのボタン配置、Inspector layout、Canvas toolbarなどのUXを扱わない。
 - 画面仕様は [../screen-design/components/mesh-tool.md](../screen-design/components/mesh-tool.md) を正とする。
+- Mesh境界の白線、透明境界のにじみ、WebGL2 / Canvas2Dなどの描画方式は [../mesh-rendering/](../mesh-rendering/_map.md) を正とする。
 - ここではCubism互換、pixel-perfect再現、semantic preset selectionを主張しない。
 
 ## 現在の焦点
@@ -33,3 +34,4 @@
 1. `auto-outline-v4-contour-band` を次wave sidecar候補として計画に載せる。
 2. `auto-outline-v2.6-soft-apron` とV4を比較可能にし、人間visual checkでdefault候補を判断する。
 3. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。
+4. Mesh形状品質とmesh rendering品質を混同しない。描画方式の改善は [../mesh-rendering/mesh-image-rendering-architecture.md](../mesh-rendering/mesh-image-rendering-architecture.md) をbasisにする。

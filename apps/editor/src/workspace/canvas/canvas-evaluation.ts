@@ -664,12 +664,10 @@ function applyRigControlChainToVertices(
   vertices: readonly Vec2Dto[],
   chain: readonly EvaluationRigControl[]
 ): readonly Vec2Dto[] {
-  const applied: EvaluationRigControl[] = [];
   let current = vertices.map(cloneVec2);
 
-  for (const rigControl of chain) {
-    current = current.map((vertex) => applyRigControlToPoint(rigControl, vertex, applied));
-    applied.push(rigControl);
+  for (const rigControl of createLocalSpaceEvaluationChain(chain)) {
+    current = current.map((vertex) => applyRigControlToPoint(rigControl, vertex));
   }
 
   return current;
@@ -679,31 +677,33 @@ function applyRigControlChainToPoint(
   point: Vec2Dto,
   chain: readonly EvaluationRigControl[]
 ): Vec2Dto {
-  const applied: EvaluationRigControl[] = [];
   let current = cloneVec2(point);
 
-  for (const rigControl of chain) {
-    current = applyRigControlToPoint(rigControl, current, applied);
-    applied.push(rigControl);
+  for (const rigControl of createLocalSpaceEvaluationChain(chain)) {
+    current = applyRigControlToPoint(rigControl, current);
   }
 
   return current;
 }
 
+function createLocalSpaceEvaluationChain(
+  chain: readonly EvaluationRigControl[]
+): readonly EvaluationRigControl[] {
+  return [...chain].reverse();
+}
+
 function applyRigControlToPoint(
   rigControl: EvaluationRigControl,
-  point: Vec2Dto,
-  previouslyApplied: readonly EvaluationRigControl[]
+  point: Vec2Dto
 ): Vec2Dto {
   if (!rigControl.enabled) {
     return cloneVec2(point);
   }
 
   if (rigControl.kind === "rotation") {
-    const pivot = applyRigControlChainToPoint(rigControl.pivot, previouslyApplied);
     return applyRotationToPoint({
       angleDegrees: rigControl.angleDegrees,
-      pivot,
+      pivot: rigControl.pivot,
       point,
       scale: rigControl.scale,
       translation: rigControl.translation

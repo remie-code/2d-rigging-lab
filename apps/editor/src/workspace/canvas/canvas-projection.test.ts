@@ -10,7 +10,10 @@ import {
   ProvenanceIdSchema,
   RigControlIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  type DrawableId,
+  type RectDto,
+  type RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -41,6 +44,8 @@ const MESH_HIDDEN = MeshIdSchema.parse("mesh_hidden");
 const MESH_MASK = MeshIdSchema.parse("mesh_mask");
 const MESH_TARGET = MeshIdSchema.parse("mesh_target");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
+const RIG_PARENT_WARP = RigControlIdSchema.parse("rig_parent_warp");
+const RIG_CHILD_WARP = RigControlIdSchema.parse("rig_child_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
@@ -461,6 +466,83 @@ describe("canvas render projection", () => {
     expect(projection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 13, y: 3 });
   });
 
+  it("projects child Warp overlay in the same evaluated space as mesh under parent movement", () => {
+    const session = createFixtureSession();
+    const childOffsets = [
+      { x: 2, y: 0 },
+      { x: 6, y: 0 },
+      { x: 4, y: 8 },
+      { x: 10, y: 12 }
+    ];
+    session.graph.rigControls.push(
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_PARENT_WARP,
+        displayName: "Parent Warp",
+        childRigControlIds: [RIG_CHILD_WARP],
+        domainBounds: { x: 0, y: 0, width: 80, height: 80 }
+      }),
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_CHILD_WARP,
+        displayName: "Child Warp",
+        parentId: RIG_PARENT_WARP,
+        childDrawableIds: [DRAW_FRONT],
+        domainBounds: { x: 5, y: 5, width: 20, height: 20 }
+      })
+    );
+    session.graph.rigControlRootIds = [RIG_PARENT_WARP];
+    session.graph.keyformSets.push(
+      createWarpOffsetsKeyformSet(RIG_PARENT_WARP, [
+        { value: -30, statePatch: createOffsets(4, 0, 0) },
+        { value: 30, statePatch: createOffsets(4, 40, 0) }
+      ]),
+      createWarpOffsetsKeyformSet(RIG_CHILD_WARP, [
+        { value: -30, statePatch: createOffsets(4, 0, 0) },
+        { value: 30, statePatch: childOffsets }
+      ])
+    );
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_CHILD_WARP
+      },
+      {
+        parameterValues: { [FACE_ANGLE_X]: 30 }
+      }
+    );
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    const overlay = projection.deformerOverlay;
+    if (overlay?.kind !== "warp" || overlay.evaluatedControlPoints === undefined) {
+      throw new Error("Expected evaluated child warp overlay.");
+    }
+
+    expect(front?.bounds).toEqual({ x: 47, y: 5, width: 28, height: 32 });
+    expect(front?.evaluatedMesh.vertices).toEqual([
+      { x: 47, y: 5 },
+      { x: 71, y: 5 },
+      { x: 75, y: 37 },
+      { x: 49, y: 33 }
+    ]);
+    expect(projection.selectionBounds).toEqual({ x: 47, y: 5, width: 28, height: 32 });
+    expect(overlay).toMatchObject({
+      kind: "warp",
+      rigControlId: RIG_CHILD_WARP,
+      domainBounds: { x: 47, y: 5, width: 28, height: 32 },
+      controlPointOffsets: childOffsets,
+      evaluatedControlPoints: [
+        { x: 47, y: 5 },
+        { x: 71, y: 5 },
+        { x: 49, y: 33 },
+        { x: 75, y: 37 }
+      ]
+    });
+    expect(overlay.evaluatedControlPoints[0]).toEqual(front?.evaluatedMesh.vertices[0]);
+    expect(overlay.evaluatedControlPoints[1]).toEqual(front?.evaluatedMesh.vertices[1]);
+    expect(overlay.evaluatedControlPoints[2]).toEqual(front?.evaluatedMesh.vertices[3]);
+    expect(overlay.evaluatedControlPoints[3]).toEqual(front?.evaluatedMesh.vertices[2]);
+  });
+
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
     const session = createFixtureSession();
     const projection = createCanvasRenderProjection(
@@ -752,6 +834,46 @@ function createWarpDeformerRigControl() {
     },
     enabled: true
   };
+}
+
+function createHierarchyWarpDeformerRigControl(input: {
+  readonly rigControlId: RigControlId;
+  readonly displayName: string;
+  readonly parentId?: RigControlId;
+  readonly childDrawableIds?: readonly DrawableId[];
+  readonly childRigControlIds?: readonly RigControlId[];
+  readonly domainBounds: RectDto;
+}) {
+  return {
+    kind: "warpLattice2d" as const,
+    rigControlId: input.rigControlId,
+    displayName: input.displayName,
+    partId: PART_FACE,
+    ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+    childDrawableIds: [...(input.childDrawableIds ?? [])],
+    childRigControlIds: [...(input.childRigControlIds ?? [])],
+    bindSpace: "rigControlLocalRest" as const,
+    domainBounds: structuredClone(input.domainBounds),
+    latticeColumns: 2,
+    latticeRows: 2,
+    restControlPoints: createRestControlPoints(input.domainBounds, 2, 2),
+    interpolationMethod: "bilinear-grid-v1" as const,
+    enabled: true
+  };
+}
+
+function createRestControlPoints(domainBounds: RectDto, columns: number, rows: number) {
+  const points = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      points.push({
+        x: domainBounds.x + domainBounds.width * (columns <= 1 ? 0 : column / (columns - 1)),
+        y: domainBounds.y + domainBounds.height * (rows <= 1 ? 0 : row / (rows - 1))
+      });
+    }
+  }
+
+  return points;
 }
 
 function createRotationDeformerRigControl() {

@@ -28,6 +28,7 @@ export * from "./mesh-outline-v2-generation.js";
 export * from "./mesh-outline-v2-5-soft-boundary-generation.js";
 export * from "./mesh-outline-v2-6-soft-apron-generation.js";
 export * from "./mesh-outline-v3-envelope-generation.js";
+export * from "./mesh-outline-v4-contour-band-generation.js";
 export * from "./mesh-quality-metrics.js";
 export * from "./mesh-mutations.js";
 export * from "./mesh-topology-mutations.js";

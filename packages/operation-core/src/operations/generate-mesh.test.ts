@@ -354,6 +354,44 @@ describe("generateMesh operation handler", () => {
     expect(transformHistory.some((entry) => entry.includes("bounded-apron-strip-triangulation"))).toBe(true);
   });
 
+  it("commits auto-outline-v4-contour-band and records contour-band provenance metrics", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 52, height: 46 },
+      meshBounds: { x: 4, y: 8, width: 52, height: 46 },
+      opaquePixels: createPixelsFromPredicate(52, 46, (x, y) => {
+        const dx = (x - 24.5) / 14;
+        const dy = (y - 21.5) / 10;
+        const body = dx * dx + dy * dy <= 1;
+        const top = x >= 21 && x <= 29 && y >= 6 && y <= 14;
+        const tail = x >= 32 && x <= 44 && y >= 18 && y <= 25;
+        const notch = x >= 12 && x <= 19 && y >= 25 && y <= 36;
+        return (body || top || tail) && !notch;
+      })
+    });
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v4-contour-band" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v4-contour-band",
+        "meshSource:outline-v4-contour-band-rgba",
+        "meshQuality:triangulationMode=interim-delaunay-contour-band-strip",
+        "meshQuality:contourBandAlgorithm=auto-outline-v4-contour-band"
+      ])
+    );
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:contourBandTriangles="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:contourBandInteriorPoints="))).toBe(true);
+    expect(
+      transformHistory.some((entry) => entry.startsWith("meshQuality:contourBandTransparentOnlyTriangleRatio="))
+    ).toBe(true);
+    expect(transformHistory.some((entry) => entry.includes("explicit-inner-outer-contour-strip"))).toBe(true);
+  });
+
   it("commits auto-outline-v3-envelope and records envelope provenance metrics", () => {
     const session = createFixtureSessionWithSizedTextureBytes({
       textureSize: { width: 36, height: 32 },
@@ -505,6 +543,26 @@ describe("generateMesh operation handler", () => {
     );
   });
 
+  it("records auto-outline-v4-contour-band fallback chain in operation provenance", () => {
+    const session = createFixtureSessionWithTextureBytes([]);
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v4-contour-band" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v4-contour-band",
+        "meshSource:bounds-grid",
+        "fallback:auto-outline-v4-contour-band:alpha-empty",
+        "fallback:auto-outline-v2.6-soft-apron:alpha-empty",
+        "fallback:auto-outline-v2.5-soft-boundary:alpha-empty",
+        "fallback:auto-outline-v2:alpha-empty",
+        "fallback:auto-outline-v1:alpha-empty"
+      ])
+    );
+  });
+
   it("records auto-outline-v3-envelope fallback chain in operation provenance", () => {
     const session = createFixtureSessionWithTextureBytes([]);
     const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v3-envelope" });
@@ -533,7 +591,8 @@ const createGenerateMeshRequest = (options: {
     | "auto-outline-v2"
     | "auto-outline-v2.5-soft-boundary"
     | "auto-outline-v2.6-soft-apron"
-    | "auto-outline-v3-envelope";
+    | "auto-outline-v3-envelope"
+    | "auto-outline-v4-contour-band";
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];
 }): OperationRequestDto =>

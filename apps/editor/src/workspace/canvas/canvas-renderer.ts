@@ -1,3 +1,5 @@
+import { WebGl2Renderer, type WebGl2Like } from "@private-2d-rigging-lab/render-webgl2";
+
 import type {
   CanvasDeformerOverlayProjection,
   CanvasRenderableDrawable,
@@ -5,6 +7,7 @@ import type {
   CanvasViewState
 } from "./canvas-projection";
 import { hasIsolatableCanvasSelection, isRenderableDrawable } from "./canvas-projection";
+import { createRenderSceneFromCanvasProjection } from "./canvas-render-scene-adapter";
 import { resolveTriangleTextureWarpTransform } from "./canvas-triangle-texture-warp";
 import { getWarpControlPointCanvasPosition } from "./warp-deformer-control-points";
 
@@ -19,6 +22,13 @@ export interface CanvasOverlayState {
 
 export interface CanvasBitmapCache {
   readonly layerCanvases: Map<string, HTMLCanvasElement>;
+  readonly webglDrawableStack: CanvasWebGlDrawableStackCache;
+}
+
+interface CanvasWebGlDrawableStackCache {
+  canvas?: HTMLCanvasElement | undefined;
+  renderer?: WebGl2Renderer | undefined;
+  disabled: boolean;
 }
 
 export interface CanvasWarpDeformerInteractionState {
@@ -30,8 +40,19 @@ export interface CanvasWarpDeformerInteractionState {
 
 export function createCanvasBitmapCache(): CanvasBitmapCache {
   return {
-    layerCanvases: new Map()
+    layerCanvases: new Map(),
+    webglDrawableStack: {
+      disabled: false
+    }
   };
+}
+
+export function disposeCanvasBitmapCache(cache: CanvasBitmapCache): void {
+  cache.layerCanvases.clear();
+  cache.webglDrawableStack.renderer?.dispose();
+  cache.webglDrawableStack.renderer = undefined;
+  cache.webglDrawableStack.canvas = undefined;
+  cache.webglDrawableStack.disabled = false;
 }
 
 export function renderCanvasProjection(input: {
@@ -65,8 +86,7 @@ export function renderCanvasProjection(input: {
   fillPanelBackground(context, viewport.width, viewport.height);
 
   context.save();
-  context.translate(input.view.pan.x, input.view.pan.y);
-  context.scale(input.view.zoom, input.view.zoom);
+  applyStageTransform(context, input.view);
 
   if (input.overlays.grid) {
     drawGrid(context, input.projection, input.view.zoom);
@@ -77,8 +97,23 @@ export function renderCanvasProjection(input: {
   if (input.overlays.canvasBounds) {
     drawCanvasBounds(context, input.projection, input.view.zoom);
   }
+  context.restore();
 
-  drawDrawableStack(context, input.projection, input.overlays, input.cache);
+  const drewDrawableStackWithWebGl = drawDrawableStackWithWebGl({
+    context,
+    projection: input.projection,
+    view: input.view,
+    overlays: input.overlays,
+    cache: input.cache,
+    viewport,
+    pixelRatio
+  });
+
+  context.save();
+  applyStageTransform(context, input.view);
+  if (!drewDrawableStackWithWebGl) {
+    drawDrawableStack(context, input.projection, input.overlays, input.cache);
+  }
 
   if (input.overlays.selectionBounds) {
     drawSelectionOverlay(context, input.projection, input.view.zoom);
@@ -98,6 +133,104 @@ export function renderCanvasProjection(input: {
   }
 
   context.restore();
+}
+
+function applyStageTransform(context: CanvasRenderingContext2D, view: CanvasViewState): void {
+  context.translate(view.pan.x, view.pan.y);
+  context.scale(view.zoom, view.zoom);
+}
+
+function drawDrawableStackWithWebGl(input: {
+  readonly context: CanvasRenderingContext2D;
+  readonly projection: CanvasRenderProjection;
+  readonly view: CanvasViewState;
+  readonly overlays: CanvasOverlayState;
+  readonly cache: CanvasBitmapCache;
+  readonly viewport: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly pixelRatio: number;
+}): boolean {
+  const stack = getWebGlDrawableStack(input.cache);
+  if (stack === undefined) {
+    return false;
+  }
+
+  const nextWidth = Math.max(1, Math.round(input.viewport.width * input.pixelRatio));
+  const nextHeight = Math.max(1, Math.round(input.viewport.height * input.pixelRatio));
+  if (stack.canvas.width !== nextWidth || stack.canvas.height !== nextHeight) {
+    stack.canvas.width = nextWidth;
+    stack.canvas.height = nextHeight;
+  }
+
+  try {
+    stack.renderer.render(
+      createRenderSceneFromCanvasProjection(input.projection, {
+        isolateSelected: input.overlays.isolateSelected
+      }),
+      {
+        width: nextWidth,
+        height: nextHeight,
+        stageToViewport: {
+          scale: input.view.zoom * input.pixelRatio,
+          translate: {
+            x: input.view.pan.x * input.pixelRatio,
+            y: input.view.pan.y * input.pixelRatio
+          }
+        }
+      }
+    );
+    input.context.drawImage(stack.canvas, 0, 0, input.viewport.width, input.viewport.height);
+    return true;
+  } catch {
+    stack.renderer.dispose();
+    input.cache.webglDrawableStack.renderer = undefined;
+    input.cache.webglDrawableStack.disabled = true;
+    return false;
+  }
+}
+
+function getWebGlDrawableStack(cache: CanvasBitmapCache): {
+  readonly canvas: HTMLCanvasElement;
+  readonly renderer: WebGl2Renderer;
+} | undefined {
+  if (cache.webglDrawableStack.disabled) {
+    return undefined;
+  }
+
+  const canvas = cache.webglDrawableStack.canvas ?? document.createElement("canvas");
+  cache.webglDrawableStack.canvas = canvas;
+
+  if (cache.webglDrawableStack.renderer !== undefined) {
+    return {
+      canvas,
+      renderer: cache.webglDrawableStack.renderer
+    };
+  }
+
+  const gl = canvas.getContext("webgl2", {
+    alpha: true,
+    antialias: true,
+    premultipliedAlpha: true,
+    stencil: false
+  }) as WebGl2Like | null;
+  if (gl === null) {
+    cache.webglDrawableStack.disabled = true;
+    return undefined;
+  }
+
+  try {
+    const renderer = new WebGl2Renderer(gl);
+    cache.webglDrawableStack.renderer = renderer;
+    return {
+      canvas,
+      renderer
+    };
+  } catch {
+    cache.webglDrawableStack.disabled = true;
+    return undefined;
+  }
 }
 
 function drawDrawableStack(

@@ -253,7 +253,7 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await expect(canvas).toHaveAttribute("data-mesh-preview-drawable-visible", "true");
   await page.getByRole("button", { name: "Preview Standard mesh" }).click();
   await expect(meshStatus).toHaveText("Draft preview");
-  await expect(meshSource).toHaveText("Auto outline v2.5 soft boundary");
+  await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");
   await expect(meshInspector).toContainText("Max edge");
   await expect(meshInspector).toContainText("Min angle");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");

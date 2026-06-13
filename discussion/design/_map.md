@@ -24,6 +24,7 @@
 | [canvas-evaluation/](canvas-evaluation/_map.md) | Canvas / Previewに描くための評価パイプライン、parameter-driven deformation、draft合成、overlay / hit test の設計トピック | Draft design basis |
 | [screen-design/](screen-design/_map.md) | GUI Editorを中心とする画面設計、画面遷移、主要領域、表示情報分類、人間向けUIとCodex/evidence surface境界の設計トピック | In discussion |
 | [mesh-generation/](mesh-generation/_map.md) | Drawable RGBA alpha maskから初期meshを生成するアルゴリズム、品質基準、fallback境界の設計トピック | Draft algorithm design |
+| [mesh-rendering/](mesh-rendering/_map.md) | 生成済みmeshで画像を破綻なく描くrenderer contract、WebGL2 primary方針、texture preparation / atlas境界、Canvas2D撤退条件の設計トピック | Draft architecture basis |
 | [module-contract-design-decisions.md](module-contract-design-decisions.md) | module contract design の判断ログ | Private baseline語彙へ整理済み。過去判断は参考 |
 | [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) | `memo/gpt-5.5-pro-review/reveiw_001.md` への対応分類と反映結果 | Current response record |
 | [gpt-5.5-pro-review-002-response.md](gpt-5.5-pro-review-002-response.md) | `memo/gpt-5.5-pro-review/review_002.md` へのRE3対応分類とDynamics復帰反映結果 | Historical response record; Dynamics details superseded by review_003 |
@@ -46,6 +47,7 @@
 | Validator | package / runtime / rights / provenance / demo-safe capture を構造化reportにする |
 | AI / Codex-friendly operation | Editor/repo は提案・推論・auto-riggingを行わない。外部Codex/LLMが操作案を作り、repoは人間同等操作のdeterministic state / operation / dry-run / diff / validation / approval / commit / evidence surfaceを提供する |
 | Mesh generation | Screen UXは `screen-design/`、生成アルゴリズムは [mesh-generation/](mesh-generation/_map.md) に分離。V2系統のrefinementに加え、輪郭帯を明示生成する `auto-outline-v4-contour-band` を次wave sidecar候補として設計中 |
+| Mesh rendering | [mesh-rendering/](mesh-rendering/_map.md) で、mesh内画像描画をCanvas2D実装ではなく共有renderer contractとして定義。PrimaryはWebGL2、Editor Preview / Viewerは共有renderer、Canvas2Dは短期移行足場として扱う |
 | Canvas evaluation | 次の主目標は、Parameter Barを動かしたときにCanvas上の絵そのものが変形・回転・フェードして見えること。AuthoringSession + parameterValues + draft state から [CanvasEvaluatedScene](canvas-evaluation/canvas-evaluation-pipeline-v0.md) を作る評価層を設計中 |
 | Parameter preset ecosystem | [parameter-preset-ecosystem.md](parameter-preset-ecosystem.md) で、Core Parameter、Preset / Profile、Ecosystem Facade / Mappingを分離し、Camera Capture / Face Trackingを最重要semantic consumerとして初期role catalogを整理中 |
 | GPT-5.5 Pro review 001 | P0/P1/P2の反映可能指摘を反映。詳細は [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) |

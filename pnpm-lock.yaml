@@ -35,6 +35,12 @@ importers:
       '@private-2d-rigging-lab/operation-core':
         specifier: workspace:*
         version: link:../../packages/operation-core
+      '@private-2d-rigging-lab/render-core':
+        specifier: workspace:*
+        version: link:../../packages/render-core
+      '@private-2d-rigging-lab/render-webgl2':
+        specifier: workspace:*
+        version: link:../../packages/render-webgl2
       '@radix-ui/react-dialog':
         specifier: ^1.1.16
         version: 1.1.16(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -150,6 +156,14 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/render-core: {}
+
+  packages/render-webgl2:
+    dependencies:
+      '@private-2d-rigging-lab/render-core':
+        specifier: workspace:*
+        version: link:../render-core
 
   packages/runtime-core:
     dependencies:

@@ -1,8 +1,34 @@
 import { DrawableIdSchema, PartIdSchema } from "@private-2d-rigging-lab/contracts";
+import type { RenderScene, RenderViewport } from "@private-2d-rigging-lab/render-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CanvasRenderableDrawable, CanvasRenderProjection } from "./canvas-projection";
 import { createCanvasBitmapCache, renderCanvasProjection } from "./canvas-renderer";
+
+const webglRendererMock = vi.hoisted(() => ({
+  constructCount: 0,
+  disposeCount: 0,
+  renderCalls: [] as {
+    readonly scene: RenderScene;
+    readonly viewport: RenderViewport;
+  }[]
+}));
+
+vi.mock("@private-2d-rigging-lab/render-webgl2", () => ({
+  WebGl2Renderer: class {
+    constructor(readonly gl: unknown) {
+      webglRendererMock.constructCount += 1;
+    }
+
+    render(scene: RenderScene, viewport: RenderViewport) {
+      webglRendererMock.renderCalls.push({ scene, viewport });
+    }
+
+    dispose() {
+      webglRendererMock.disposeCount += 1;
+    }
+  }
+}));
 
 const DRAW_RENDERER_TEST = DrawableIdSchema.parse("draw_renderer_test");
 const PART_RENDERER_TEST = PartIdSchema.parse("part_renderer_test");
@@ -115,8 +141,14 @@ class FakeCanvas {
   height = 0;
   width = 0;
 
-  getContext(kind: string) {
+  getContext(kind: string): FakeCanvasContext | object | null {
     return kind === "2d" ? this.context : null;
+  }
+}
+
+class FakeWebGlCanvas extends FakeCanvas {
+  getContext(kind: string): FakeCanvasContext | object | null {
+    return kind === "webgl2" ? {} : super.getContext(kind);
   }
 }
 
@@ -130,6 +162,9 @@ class FakeImageData {
 
 describe("canvas renderer evaluated mesh drawing", () => {
   afterEach(() => {
+    webglRendererMock.constructCount = 0;
+    webglRendererMock.disposeCount = 0;
+    webglRendererMock.renderCalls.length = 0;
     vi.unstubAllGlobals();
   });
 
@@ -250,6 +285,81 @@ describe("canvas renderer evaluated mesh drawing", () => {
           call.args[2] === 20 &&
           call.args[3] === 30 &&
           call.args[4] === 40
+      )
+    ).toBe(true);
+  });
+
+  it("uses WebGL2 for the primary drawable stack when available without Canvas2D triangle clip", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeWebGlCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createProjection(createDrawable({
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_face",
+          bounds: { x: 10, y: 20, width: 30, height: 40 },
+          vertices: [
+            { x: 10, y: 20 },
+            { x: 40, y: 20 },
+            { x: 10, y: 60 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 }
+          ],
+          triangles: [[0, 1, 2]]
+        },
+        bounds: { x: 10, y: 20, width: 30, height: 40 }
+      })),
+      view: { zoom: 2, pan: { x: 4, y: 8 } },
+      overlays: {
+        grid: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(webglRendererMock.constructCount).toBe(1);
+    expect(webglRendererMock.renderCalls).toHaveLength(1);
+    expect(webglRendererMock.renderCalls[0]?.scene.drawables.map((drawable) => drawable.drawableId)).toEqual([
+      DRAW_RENDERER_TEST
+    ]);
+    expect(webglRendererMock.renderCalls[0]?.viewport).toEqual({
+      width: 128,
+      height: 128,
+      stageToViewport: {
+        scale: 2,
+        translate: { x: 4, y: 8 }
+      }
+    });
+    expect(context.calls.some((call) => call.name === "clip")).toBe(false);
+    expect(context.calls.some((call) => call.name === "transform")).toBe(false);
+    expect(
+      context.calls.some(
+        (call) =>
+          call.name === "drawImage" &&
+          call.args[0] instanceof FakeWebGlCanvas &&
+          call.args[1] === 0 &&
+          call.args[2] === 0 &&
+          call.args[3] === 128 &&
+          call.args[4] === 128
       )
     ).toBe(true);
   });

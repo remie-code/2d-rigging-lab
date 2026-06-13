@@ -50,6 +50,7 @@ import {
 } from "../canvas/canvas-projection";
 import {
   createCanvasBitmapCache,
+  disposeCanvasBitmapCache,
   renderCanvasProjection,
   type CanvasOverlayState
 } from "../canvas/canvas-renderer";
@@ -214,6 +215,8 @@ export function CanvasPreviewPanel() {
   useEffect(() => {
     bitmapCacheRef.current.layerCanvases.clear();
   }, [projection.contentKey]);
+
+  useEffect(() => () => disposeCanvasBitmapCache(bitmapCacheRef.current), []);
 
   useEffect(() => {
     const decision = resolveCanvasAutoFitPolicy({

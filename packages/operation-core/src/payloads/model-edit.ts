@@ -156,7 +156,8 @@ export const GenerateMeshPayloadSchema = z.object({
     "auto-outline-v2",
     "auto-outline-v2.5-soft-boundary",
     "auto-outline-v2.6-soft-apron",
-    "auto-outline-v3-envelope"
+    "auto-outline-v3-envelope",
+    "auto-outline-v4-contour-band"
   ]),
   densityHint: z.enum(["low", "medium", "high"]).optional(),
   previewMesh: PreviewMeshPayloadSchema.optional()

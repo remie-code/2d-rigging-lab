@@ -24,6 +24,7 @@ import { createAutoOutlineV25SoftBoundaryMesh } from "./mesh-outline-v2-5-soft-b
 import { createAutoOutlineV26SoftApronMesh } from "./mesh-outline-v2-6-soft-apron-generation.js";
 import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
 import { createAutoOutlineV3EnvelopeMesh } from "./mesh-outline-v3-envelope-generation.js";
+import { createAutoOutlineV4ContourBandMesh } from "./mesh-outline-v4-contour-band-generation.js";
 
 describe("alpha-aware mesh generation", () => {
   it("generates an auto-outline mesh whose boundary vertices follow the alpha contour", () => {
@@ -591,6 +592,95 @@ describe("alpha-aware mesh generation", () => {
     }
   });
 
+  it("generates deterministic auto-outline-v4 contour-band meshes with bounded band metrics", () => {
+    const alphaPixels = createPixelsFromPredicate(52, 46, (x, y) => {
+      const dx = (x - 24.5) / 14;
+      const dy = (y - 21.5) / 10;
+      const body = dx * dx + dy * dy <= 1;
+      const top = x >= 21 && x <= 29 && y >= 6 && y <= 14;
+      const tail = x >= 32 && x <= 44 && y >= 18 && y <= 25;
+      const notch = x >= 12 && x <= 19 && y >= 25 && y <= 36;
+      return (body || top || tail) && !notch;
+    });
+    const rgbaBytes = createAlphaBytes(52, 46, alphaPixels);
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 52, height: 46 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 52, height: 46 },
+      rgbaBytes,
+      densityHint: "medium" as const
+    };
+
+    const first = createAutoOutlineV4ContourBandMesh(baseInput);
+    const second = createAutoOutlineV4ContourBandMesh(baseInput);
+
+    expect(first).toEqual(second);
+    expect(first.status).toBe("generated");
+    if (first.status !== "generated") {
+      return;
+    }
+
+    expect(first.qualityMetrics.triangulationMode).toBe("interim-delaunay-contour-band-strip");
+    expect(first.contourBandMetrics.algorithmId).toBe("auto-outline-v4-contour-band");
+    expect(first.contourBandMetrics.contourPointCount).toBeGreaterThan(0);
+    expect(first.contourBandMetrics.outerContourPointCount).toBe(first.contourBandMetrics.contourPointCount);
+    expect(first.contourBandMetrics.contourBandTriangleCount).toBeGreaterThan(0);
+    expect(first.contourBandMetrics.interiorPointCount).toBeGreaterThan(0);
+    expect(first.contourBandMetrics.interiorTriangleCount).toBeGreaterThan(0);
+    expect(first.contourBandMetrics.outerContourAreaRatio).toBeGreaterThan(1);
+    expect(first.contourBandMetrics.outerContourAreaRatio).toBeLessThan(1.58);
+    expect(first.contourBandMetrics.maxBoundaryToInteriorEdgeLength).toBeLessThanOrEqual(
+      first.contourBandMetrics.targetEdgeLength * 2 + 0.000001
+    );
+    expect(first.contourBandMetrics.maxVertexValence).toBeLessThanOrEqual(12);
+    expect(first.contourBandMetrics.transparentOnlyTriangleRatio).toBeLessThanOrEqual(0.08);
+    expect(first.contourBandMetrics.vertexCount).toBeLessThanOrEqual(first.contourBandMetrics.maxVertexCountCap);
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v4_contour_band_outer_contour_"))).toBe(true);
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v4_contour_band_inner_contour_"))).toBe(true);
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v4_contour_band_interior_"))).toBe(true);
+    expect(first.qualityMetrics.contourBandMetrics).toEqual(first.contourBandMetrics);
+  });
+
+  it("uses denser auto-outline-v4 contour-band presets without exceeding vertex caps", () => {
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 54, height: 50 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 54, height: 50 },
+      rgbaBytes: createAlphaBytesFromPredicate(54, 50, (x, y) => {
+        const dx = (x - 26.5) / 16;
+        const dy = (y - 24.5) / 13;
+        const body = dx * dx + dy * dy <= 1;
+        const sweep = x >= 35 && x <= 47 && y >= 21 && y <= 28;
+        return body || sweep;
+      })
+    };
+
+    const large = createAutoOutlineV4ContourBandMesh({ ...baseInput, densityHint: "high" });
+    const standard = createAutoOutlineV4ContourBandMesh({ ...baseInput, densityHint: "medium" });
+    const low = createAutoOutlineV4ContourBandMesh({ ...baseInput, densityHint: "low" });
+
+    expect(large.status).toBe("generated");
+    expect(standard.status).toBe("generated");
+    expect(low.status).toBe("generated");
+    if (large.status !== "generated" || standard.status !== "generated" || low.status !== "generated") {
+      return;
+    }
+
+    expect(large.mesh.vertices.length).toBeGreaterThan(standard.mesh.vertices.length);
+    expect(standard.mesh.vertices.length).toBeGreaterThan(low.mesh.vertices.length);
+    expect(large.mesh.triangles.length).toBeGreaterThan(standard.mesh.triangles.length);
+    expect(standard.mesh.triangles.length).toBeGreaterThan(low.mesh.triangles.length);
+    for (const result of [large, standard, low]) {
+      expect(result.contourBandMetrics.vertexCount).toBeLessThanOrEqual(result.contourBandMetrics.maxVertexCountCap);
+      expect(result.contourBandMetrics.transparentOnlyTriangleRatio).toBeLessThanOrEqual(0.08);
+      expect(result.contourBandMetrics.maxVertexValence).toBeLessThanOrEqual(12);
+    }
+  });
+
   it("improves representative fan and oversized triangle metrics compared with auto-outline-v1", () => {
     const rgbaBytes = createAlphaBytesFromPredicate(32, 28, (x, y) => {
       const dx = (x - 14.5) / 11;
@@ -711,6 +801,25 @@ describe("alpha-aware mesh generation", () => {
       { method: "auto-outline-v1", reason: "alpha-empty" }
     ]);
     expect(v26Fallback?.mesh.vertices).toHaveLength(4);
+
+    const v4Fallback = createGeneratedMeshForDrawable({
+      session: emptyAlphaSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v4-contour-band",
+      densityHint: "low"
+    });
+
+    expect(v4Fallback?.source).toBe("bounds-grid");
+    expect(v4Fallback?.fallbackReason).toBe("alpha-empty");
+    expect(v4Fallback?.fallbackSteps).toEqual([
+      { method: "auto-outline-v4-contour-band", reason: "alpha-empty" },
+      { method: "auto-outline-v2.6-soft-apron", reason: "alpha-empty" },
+      { method: "auto-outline-v2.5-soft-boundary", reason: "alpha-empty" },
+      { method: "auto-outline-v2", reason: "alpha-empty" },
+      { method: "auto-outline-v1", reason: "alpha-empty" }
+    ]);
+    expect(v4Fallback?.mesh.vertices).toHaveLength(4);
 
     const v3Fallback = createGeneratedMeshForDrawable({
       session: emptyAlphaSession,
@@ -918,6 +1027,43 @@ describe("alpha-aware mesh generation", () => {
       }
     });
     expect(generated?.qualityMetrics?.softApronMetrics?.apronTriangleCount).toBeGreaterThan(0);
+  });
+
+  it("routes auto-outline-v4-contour-band as an explicit drawable generation sidecar with contour-band summary", () => {
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 52, height: 46 },
+      meshBounds: { x: 10, y: 20, width: 52, height: 46 },
+      opaquePixels: createPixelsFromPredicate(52, 46, (x, y) => {
+        const dx = (x - 24.5) / 14;
+        const dy = (y - 21.5) / 10;
+        const body = dx * dx + dy * dy <= 1;
+        const top = x >= 21 && x <= 29 && y >= 6 && y <= 14;
+        const tail = x >= 32 && x <= 44 && y >= 18 && y <= 25;
+        const notch = x >= 12 && x <= 19 && y >= 25 && y <= 36;
+        return (body || top || tail) && !notch;
+      })
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v4-contour-band",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v4-contour-band-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "interim-delaunay-contour-band-strip",
+      contourBandMetrics: {
+        algorithmId: "auto-outline-v4-contour-band"
+      }
+    });
+    expect(generated?.qualityMetrics?.contourBandMetrics?.contourBandTriangleCount).toBeGreaterThan(0);
+    expect(generated?.qualityMetrics?.contourBandMetrics?.interiorPointCount).toBeGreaterThan(0);
+    expect(generated?.qualityMetrics?.contourBandMetrics?.transparentOnlyTriangleRatio).toBeLessThanOrEqual(0.08);
   });
 
   it("routes auto-outline-v3-envelope as an explicit drawable generation sidecar with envelope summary", () => {

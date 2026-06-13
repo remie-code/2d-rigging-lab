@@ -214,7 +214,8 @@ const evaluatePreviewMeshPreconditions = (input: {
     input.method !== "auto-outline-v2" &&
     input.method !== "auto-outline-v2.5-soft-boundary" &&
     input.method !== "auto-outline-v2.6-soft-apron" &&
-    input.method !== "auto-outline-v3-envelope"
+    input.method !== "auto-outline-v3-envelope" &&
+    input.method !== "auto-outline-v4-contour-band"
   ) {
     diagnostics.push(
       createOperationDiagnostic({
@@ -355,7 +356,8 @@ const formatQualityMetricsForTransformHistory = (
       : [`meshQuality:triangulationMode=${metrics.triangulationMode}`]),
     ...formatEnvelopeMetricsForTransformHistory(metrics),
     ...formatSoftBoundaryMetricsForTransformHistory(metrics),
-    ...formatSoftApronMetricsForTransformHistory(metrics)
+    ...formatSoftApronMetricsForTransformHistory(metrics),
+    ...formatContourBandMetricsForTransformHistory(metrics)
   ];
 };
 
@@ -443,6 +445,40 @@ const formatSoftApronMetricsForTransformHistory = (
     ...(softApron.fallbackReason === undefined
       ? []
       : [`meshQuality:softApronFallback=${softApron.fallbackReason}`])
+  ];
+};
+
+const formatContourBandMetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const contourBand = metrics.contourBandMetrics;
+  if (contourBand === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:contourBandAlgorithm=${contourBand.algorithmId}`,
+    `meshQuality:contourBandPreset=${contourBand.preset}`,
+    `meshQuality:contourBandTargetEdge=${formatMetric(contourBand.targetEdgeLength)}`,
+    `meshQuality:contourBandOuterOffset=${formatMetric(contourBand.outerOffset)}`,
+    `meshQuality:contourBandInnerOffset=${formatMetric(contourBand.innerOffset)}`,
+    `meshQuality:contourBandOuterAreaRatio=${formatMetric(contourBand.outerContourAreaRatio)}`,
+    `meshQuality:contourBandContourPoints=${contourBand.contourPointCount}`,
+    `meshQuality:contourBandOuterPoints=${contourBand.outerContourPointCount}`,
+    `meshQuality:contourBandTriangles=${contourBand.contourBandTriangleCount}`,
+    `meshQuality:contourBandInteriorPoints=${contourBand.interiorPointCount}`,
+    `meshQuality:contourBandInteriorTriangles=${contourBand.interiorTriangleCount}`,
+    `meshQuality:contourBandBoundaryToInteriorEdge=${formatMetric(contourBand.maxBoundaryToInteriorEdgeLength)}`,
+    `meshQuality:contourBandMaxVertexValence=${contourBand.maxVertexValence}`,
+    `meshQuality:contourBandTransparentOnlyTriangleRatio=${formatMetric(contourBand.transparentOnlyTriangleRatio)}`,
+    `meshQuality:contourBandVertexCount=${contourBand.vertexCount}`,
+    `meshQuality:contourBandVertexCap=${contourBand.maxVertexCountCap}`,
+    `meshQuality:contourBandRejectedBoundaryToInteriorTriangles=${contourBand.rejectedLongBoundaryToInteriorTriangleCount}`,
+    `meshQuality:contourBandRejectedOutsideTriangles=${contourBand.rejectedOutsideInteriorTriangleCount}`,
+    `meshQuality:contourBandProvenance=${contourBand.provenance.join(">")}`,
+    ...(contourBand.fallbackReason === undefined
+      ? []
+      : [`meshQuality:contourBandFallback=${contourBand.fallbackReason}`])
   ];
 };
 
