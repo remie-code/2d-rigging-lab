@@ -316,6 +316,44 @@ describe("generateMesh operation handler", () => {
     expect(transformHistory.some((entry) => entry.includes("transparent-near-boundary-allowance"))).toBe(true);
   });
 
+  it("commits auto-outline-v2.6-soft-apron and records apron provenance metrics", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 44, height: 40 },
+      meshBounds: { x: 4, y: 8, width: 44, height: 40 },
+      opaquePixels: createPixelsFromPredicate(44, 40, (x, y) => {
+        const dx = (x - 20.5) / 12;
+        const dy = (y - 18.5) / 9;
+        const body = dx * dx + dy * dy <= 1;
+        const top = x >= 17 && x <= 24 && y >= 5 && y <= 13;
+        const tail = x >= 28 && x <= 37 && y >= 16 && y <= 22;
+        const notch = x >= 10 && x <= 16 && y >= 22 && y <= 32;
+        return (body || top || tail) && !notch;
+      })
+    });
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2.6-soft-apron" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2.6-soft-apron",
+        "meshSource:outline-v2-6-soft-apron-rgba",
+        "meshQuality:triangulationMode=interim-delaunay-soft-apron-strip",
+        "meshQuality:softApronAlgorithm=auto-outline-v2.6-soft-apron",
+        "meshQuality:softApronBaseAlgorithm=auto-outline-v2.5-soft-boundary",
+        "meshQuality:softApronLongEdges=0",
+        "meshQuality:softApronSkinnyTriangles=0"
+      ])
+    );
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softApronBoundaryAreaRatio="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softApronTriangleIncreaseRatio="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.includes("bounded-apron-strip-triangulation"))).toBe(true);
+  });
+
   it("commits auto-outline-v3-envelope and records envelope provenance metrics", () => {
     const session = createFixtureSessionWithSizedTextureBytes({
       textureSize: { width: 36, height: 32 },
@@ -448,6 +486,25 @@ describe("generateMesh operation handler", () => {
     );
   });
 
+  it("records auto-outline-v2.6-soft-apron fallback chain in operation provenance", () => {
+    const session = createFixtureSessionWithTextureBytes([]);
+    const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v2.6-soft-apron" });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v2.6-soft-apron",
+        "meshSource:bounds-grid",
+        "fallback:auto-outline-v2.6-soft-apron:alpha-empty",
+        "fallback:auto-outline-v2.5-soft-boundary:alpha-empty",
+        "fallback:auto-outline-v2:alpha-empty",
+        "fallback:auto-outline-v1:alpha-empty"
+      ])
+    );
+  });
+
   it("records auto-outline-v3-envelope fallback chain in operation provenance", () => {
     const session = createFixtureSessionWithTextureBytes([]);
     const request = createGenerateMeshRequest({ dryRun: false, method: "auto-outline-v3-envelope" });
@@ -475,6 +532,7 @@ const createGenerateMeshRequest = (options: {
     | "auto-outline-v1"
     | "auto-outline-v2"
     | "auto-outline-v2.5-soft-boundary"
+    | "auto-outline-v2.6-soft-apron"
     | "auto-outline-v3-envelope";
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];

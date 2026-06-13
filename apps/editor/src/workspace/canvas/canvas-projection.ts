@@ -1,21 +1,22 @@
 import {
-  createStructureDrawOrderIndex,
   getPartOrderedChildren,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
+import type { ParameterValueMap } from "../../features/editor-session/model/parameter-keyform-state";
 import {
-  createEvaluatedParameterKeyformState,
-  type EvaluatedParameterKeyformState,
-  type ParameterValueMap
-} from "../../features/editor-session/model/parameter-keyform-state";
+  createCanvasEvaluatedScene,
+  type CanvasEvaluatedDrawable,
+  type CanvasEvaluatedMesh,
+  type CanvasEvaluatedRigControl,
+  type CanvasEvaluationControlPointPreview,
+  type CanvasEvaluationRigDraft
+} from "./canvas-evaluation";
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
-type RotationRigControlDto = Extract<RigControlDto, { readonly kind: "rotation2d" }>;
-type WarpLatticeRigControlDto = Extract<RigControlDto, { readonly kind: "warpLattice2d" }>;
 
 export interface CanvasPoint {
   readonly x: number;
@@ -42,6 +43,7 @@ export interface CanvasRenderableDrawable {
   readonly binaryAssetId?: string;
   readonly binaryAssetPath?: string;
   readonly bounds: RectDto;
+  readonly evaluatedMesh: CanvasEvaluatedMesh;
   readonly frontOrder: number;
   readonly visible: boolean;
   readonly opacity: number;
@@ -66,7 +68,7 @@ export interface CanvasMaskRelationProjection {
 
 export interface CanvasMeshOverlayProjection {
   readonly drawableId: DrawableId;
-  readonly mesh: MeshDto;
+  readonly mesh: CanvasEvaluatedMesh;
   readonly status: "draft" | "committed";
 }
 
@@ -83,6 +85,7 @@ export interface CanvasDeformerOverlayProjection {
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
   readonly controlPointOffsets?: readonly CanvasPoint[];
+  readonly evaluatedControlPoints?: readonly CanvasPoint[];
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
   readonly status: "draft" | "committed";
@@ -110,6 +113,7 @@ export interface CanvasProjectionOptions {
   } | null;
   readonly deformerDraft?: {
     readonly displayName: string;
+    readonly parentRigControlId?: RigControlId | undefined;
     readonly domainBounds: RectDto;
     readonly transformColumns: number;
     readonly transformRows: number;
@@ -117,8 +121,10 @@ export interface CanvasProjectionOptions {
     readonly bezierRows: number;
     readonly childDrawableIds: readonly DrawableId[];
     readonly childRigControlIds: readonly RigControlId[];
+    readonly opacityMultiplier?: number | undefined;
   } | null;
   readonly meshPreviewDrawableId?: DrawableId;
+  readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
   readonly parameterValues?: ParameterValueMap;
 }
 
@@ -137,19 +143,14 @@ export function createCanvasRenderProjection(
   options: CanvasProjectionOptions = {}
 ): CanvasRenderProjection {
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
-  const editorHiddenPartIds = options.editorHiddenPartIds ?? new Set<PartId>();
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const rigControlsById = new Map(
     session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
-  );
-  const textureEntriesById = new Map(
-    session.graph.textureAtlas?.textures.map((texture) => [texture.textureId, texture]) ?? []
   );
   const binaryEntriesByPath = new Map(
     session.binaryAssets?.fileEntries.map((entry) => [entry.path, entry]) ?? []
   );
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
-  const frontOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
   const selectedDrawableIds = resolveSelectedDrawableIds(
     session,
     selection,
@@ -159,34 +160,33 @@ export function createCanvasRenderProjection(
   const selectedPartId = selection?.kind === "part" ? selection.id : undefined;
   const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
   const meshPreviewDrawableId = options.meshPreviewDrawableId;
-  const maskSourcesByTargetId = createMaskSourceIndex(session);
-  const evaluatedKeyforms = createEvaluatedParameterKeyformState(
-    session,
-    options.parameterValues ?? {}
-  );
-  const opacityMultiplierByDrawableId = createDrawableRigOpacityMultiplierIndex(
-    session,
-    evaluatedKeyforms.rigOpacityMultiplierById
-  );
+  const evaluatedScene = createCanvasEvaluatedScene(session, {
+    meshDraft: options.meshDraft ?? null,
+    rigDraft: createEvaluationRigDraftFromProjectionDraft(options.deformerDraft ?? null),
+    controlPointPreview: options.controlPointPreview ?? null,
+    parameterValues: options.parameterValues ?? {},
+    selection,
+    ...(options.editorHiddenPartIds === undefined
+      ? {}
+      : { editorHiddenPartIds: options.editorHiddenPartIds })
+  });
 
-  const drawables = session.graph.drawables
+  const drawables = evaluatedScene.drawables
     .map((drawable): CanvasRenderableDrawable | undefined => {
-      const mesh = meshesById.get(drawable.meshId);
-      const texture = textureEntriesById.get(drawable.textureId);
-      if (mesh === undefined || texture === undefined) {
-        return undefined;
-      }
-
-      const binaryAssetRef = texture.binaryAssetRef;
       const binaryEntry =
-        binaryAssetRef === undefined
+        drawable.textureRef.binaryAssetPath === undefined
           ? undefined
-          : binaryEntriesByPath.get(binaryAssetRef.packageRelativePath);
+          : binaryEntriesByPath.get(drawable.textureRef.binaryAssetPath);
       const sourceLayer = sourceLayerByDrawableId.get(drawable.drawableId);
-      const partAncestorIds = collectPartAncestorIds(drawable.partId, partsById);
-      const hiddenByPart =
-        editorHiddenPartIds.has(drawable.partId) ||
-        partAncestorIds.some((partId) => editorHiddenPartIds.has(partId));
+      const baseMesh =
+        drawable.evaluatedMesh.sourceMeshId === undefined
+          ? undefined
+          : meshesById.get(drawable.evaluatedMesh.sourceMeshId as MeshDto["meshId"]);
+      const renderDimensions = resolveDrawableRenderDimensions({
+        drawable,
+        ...(baseMesh === undefined ? {} : { baseMesh }),
+        ...(sourceLayer === undefined ? {} : { sourceLayer })
+      });
       const selected = selection?.kind === "drawable" && selection.id === drawable.drawableId;
       const selectedBySubtree =
         !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
@@ -196,38 +196,32 @@ export function createCanvasRenderProjection(
         drawableId: drawable.drawableId,
         displayName: drawable.displayName,
         partId: drawable.partId,
-        partAncestorIds,
-        textureId: drawable.textureId,
-        ...(sourceLayer?.sourceLayerId === undefined
+        partAncestorIds: drawable.partAncestorIds,
+        textureId: drawable.textureRef.textureId,
+        ...(drawable.textureRef.sourceLayerId === undefined
           ? {}
-          : { sourceLayerId: sourceLayer.sourceLayerId }),
-        ...(binaryAssetRef === undefined
+          : { sourceLayerId: drawable.textureRef.sourceLayerId }),
+        ...(drawable.textureRef.binaryAssetId === undefined
           ? {}
-          : {
-              binaryAssetId: binaryAssetRef.binaryAssetId,
-              binaryAssetPath: binaryAssetRef.packageRelativePath
-            }),
-        bounds: structuredClone(mesh.bounds),
-        frontOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
-        visible: meshPreview || (drawable.runtimeVisibility && !hiddenByPart),
-        opacity: clamp(
-          (evaluatedKeyforms.drawableOpacityById.get(drawable.drawableId) ??
-            drawable.defaultOpacity) *
-            (opacityMultiplierByDrawableId.get(drawable.drawableId) ?? 1),
-          0,
-          1
-        ),
+          : { binaryAssetId: drawable.textureRef.binaryAssetId }),
+        ...(drawable.textureRef.binaryAssetPath === undefined
+          ? {}
+          : { binaryAssetPath: drawable.textureRef.binaryAssetPath }),
+        bounds: structuredClone(drawable.bounds),
+        evaluatedMesh: cloneEvaluatedMesh(drawable.evaluatedMesh),
+        frontOrder: drawable.drawOrder,
+        visible: meshPreview || drawable.visible,
+        opacity: drawable.opacity,
         selected,
         selectedBySubtree,
         meshPreview,
         ...(binaryEntry === undefined ? {} : { renderBytes: binaryEntry.bytes }),
-        renderWidth: Math.round(mesh.bounds.width),
-        renderHeight: Math.round(mesh.bounds.height),
-        maskSourceDrawableIds: maskSourcesByTargetId.get(drawable.drawableId) ?? []
+        renderWidth: renderDimensions.width,
+        renderHeight: renderDimensions.height,
+        maskSourceDrawableIds: drawable.maskSourceDrawableIds
       };
     })
-    .filter(isDefined)
-    .sort(compareBackToFront);
+    .filter(isDefined);
 
   const visibleDrawables = drawables.filter((drawable) => drawable.visible);
   const renderableDrawables = visibleDrawables.filter(isRenderableDrawable);
@@ -241,32 +235,28 @@ export function createCanvasRenderProjection(
       ? undefined
       : resolveSelectedMeshOverlay({
           selectedDrawableId,
-          meshesById,
-          session,
+          evaluatedScene,
           draft: options.meshDraft ?? null
         });
   const deformerOverlay = resolveDeformerOverlay({
     selection,
-    rigControlsById,
-    evaluatedKeyforms,
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
+    evaluatedRigControls: evaluatedScene.rigControls,
     draft: options.deformerDraft ?? null
   });
 
   return {
-    canvasBounds: resolveProjectionCanvasBounds(session),
+    canvasBounds: evaluatedScene.canvasBounds,
     ...(artworkBounds === undefined ? {} : { artworkBounds }),
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
     selectedDrawableIds,
     ...(selectedPartId === undefined ? {} : { selectedPartId }),
     drawables,
-    maskRelations: session.graph.masks
-      .filter((relation) => relation.enabled)
-      .map((relation) => ({
-        maskRelationId: relation.maskRelationId,
-        sourceDrawableIds: [...relation.maskDrawableIds],
-        targetDrawableIds: [...relation.targetDrawableIds]
-      })),
+    maskRelations: evaluatedScene.maskRelations.map((relation) => ({
+      maskRelationId: relation.maskRelationId,
+      sourceDrawableIds: relation.sourceDrawableIds,
+      targetDrawableIds: relation.targetDrawableIds
+    })),
     ...(meshOverlay === undefined ? {} : { meshOverlay }),
     ...(deformerOverlay === undefined ? {} : { deformerOverlay }),
     hasRenderableArtwork: renderableDrawables.length > 0,
@@ -274,119 +264,161 @@ export function createCanvasRenderProjection(
   };
 }
 
+function createEvaluationRigDraftFromProjectionDraft(
+  draft: CanvasProjectionOptions["deformerDraft"]
+): CanvasEvaluationRigDraft | null {
+  if (draft === null || draft === undefined) {
+    return null;
+  }
+
+  return {
+    kind: "warp",
+    displayName: draft.displayName,
+    ...(draft.parentRigControlId === undefined
+      ? {}
+      : { parentRigControlId: draft.parentRigControlId }),
+    childDrawableIds: [...draft.childDrawableIds],
+    childRigControlIds: [...draft.childRigControlIds],
+    domainBounds: structuredClone(draft.domainBounds),
+    transformColumns: draft.transformColumns,
+    transformRows: draft.transformRows,
+    bezierColumns: draft.bezierColumns,
+    bezierRows: draft.bezierRows,
+    ...(draft.opacityMultiplier === undefined
+      ? {}
+      : { opacityMultiplier: draft.opacityMultiplier })
+  };
+}
+
+function resolveDrawableRenderDimensions(input: {
+  readonly drawable: CanvasEvaluatedDrawable;
+  readonly sourceLayer?: AuthoringSession["graph"]["sourceAssets"][number]["layers"][number];
+  readonly baseMesh?: MeshDto;
+}): { readonly width: number; readonly height: number } {
+  const bounds =
+    input.sourceLayer?.bounds ??
+    input.baseMesh?.bounds ??
+    input.drawable.evaluatedMesh.bounds ??
+    input.drawable.bounds;
+
+  return {
+    width: Math.max(1, Math.round(bounds.width)),
+    height: Math.max(1, Math.round(bounds.height))
+  };
+}
+
+function cloneEvaluatedMesh(mesh: CanvasEvaluatedMesh): CanvasEvaluatedMesh {
+  return {
+    source: mesh.source,
+    ...(mesh.sourceMeshId === undefined ? {} : { sourceMeshId: mesh.sourceMeshId }),
+    vertices: mesh.vertices.map(clonePoint),
+    uvs: mesh.uvs.map(clonePoint),
+    triangles: mesh.triangles.map(
+      (triangle): readonly [number, number, number] => [triangle[0], triangle[1], triangle[2]]
+    ),
+    bounds: structuredClone(mesh.bounds),
+    ...(mesh.vertexStableIds === undefined ? {} : { vertexStableIds: [...mesh.vertexStableIds] })
+  };
+}
+
+function clonePoint(point: CanvasPoint): CanvasPoint {
+  return {
+    x: point.x,
+    y: point.y
+  };
+}
+
 function resolveDeformerOverlay(input: {
   readonly selection: EditorSelection | null;
-  readonly rigControlsById: ReadonlyMap<RigControlId, RigControlDto>;
-  readonly evaluatedKeyforms: EvaluatedParameterKeyformState;
   readonly selectionBounds?: RectDto;
+  readonly evaluatedRigControls: readonly CanvasEvaluatedRigControl[];
   readonly draft: CanvasProjectionOptions["deformerDraft"];
 }): CanvasDeformerOverlayProjection | undefined {
   if (input.draft !== null && input.draft !== undefined) {
-    return {
-      kind: "warp",
-      displayName: input.draft.displayName,
-      domainBounds: structuredClone(input.draft.domainBounds),
-      transformColumns: input.draft.transformColumns,
-      transformRows: input.draft.transformRows,
-      bezierColumns: input.draft.bezierColumns,
-      bezierRows: input.draft.bezierRows,
-      childDrawableIds: [...input.draft.childDrawableIds],
-      childRigControlIds: [...input.draft.childRigControlIds],
-      status: "draft"
-    };
+    const evaluatedDraft = input.evaluatedRigControls.find(
+      (rigControl) => rigControl.status === "draft"
+    );
+    return evaluatedDraft === undefined
+      ? undefined
+      : createDeformerOverlayProjection(evaluatedDraft, input.selectionBounds);
   }
 
   if (input.selection?.kind !== "rigControl") {
     return undefined;
   }
 
-  const rigControl = input.rigControlsById.get(input.selection.id);
-  if (rigControl === undefined) {
-    return undefined;
-  }
-
-  if (isRotationRigControl(rigControl)) {
-    const evaluatedAngleDegrees = input.evaluatedKeyforms.rigAngleDegreesById.get(
-      rigControl.rigControlId
-    );
-    return {
-      kind: "rotation",
-      rigControlId: rigControl.rigControlId,
-      displayName: rigControl.displayName,
-      domainBounds:
-        input.selectionBounds ?? {
-          x: rigControl.pivot.x - 16,
-          y: rigControl.pivot.y - 16,
-          width: 32,
-          height: 32
-        },
-      transformColumns: 0,
-      transformRows: 0,
-      bezierColumns: 0,
-      bezierRows: 0,
-      pivot: structuredClone(rigControl.pivot),
-      restAngleDegrees: evaluatedAngleDegrees ?? rigControl.restAngleDegrees,
-      ...(evaluatedAngleDegrees === undefined ? {} : { evaluatedAngleDegrees }),
-      childDrawableIds: [...rigControl.childDrawableIds],
-      childRigControlIds: [...rigControl.childRigControlIds],
-      status: "committed"
-    };
-  }
-
-  if (!isWarpLatticeRigControl(rigControl)) {
-    return undefined;
-  }
-
-  const controlPointOffsets = input.evaluatedKeyforms.rigControlPointOffsetsById.get(
-    rigControl.rigControlId
+  const evaluatedRigControl = input.evaluatedRigControls.find(
+    (rigControl) => rigControl.rigControlId === input.selection?.id
   );
-
-  return {
-    kind: "warp",
-    rigControlId: rigControl.rigControlId,
-    displayName: rigControl.displayName,
-    domainBounds: structuredClone(rigControl.domainBounds),
-    transformColumns: rigControl.warpDeformer?.transformGrid.columns ?? rigControl.latticeColumns,
-    transformRows: rigControl.warpDeformer?.transformGrid.rows ?? rigControl.latticeRows,
-    bezierColumns: rigControl.warpDeformer?.bezierEditSurface.columns ?? rigControl.latticeColumns,
-    bezierRows: rigControl.warpDeformer?.bezierEditSurface.rows ?? rigControl.latticeRows,
-    ...(controlPointOffsets === undefined
-      ? {}
-      : {
-          controlPointOffsets
-        }),
-    childDrawableIds: [...rigControl.childDrawableIds],
-    childRigControlIds: [...rigControl.childRigControlIds],
-    status: "committed"
-  };
+  return evaluatedRigControl === undefined
+    ? undefined
+    : createDeformerOverlayProjection(evaluatedRigControl, input.selectionBounds);
 }
 
 function resolveSelectedMeshOverlay(input: {
   readonly selectedDrawableId: DrawableId;
-  readonly session: AuthoringSession;
-  readonly meshesById: ReadonlyMap<string, MeshDto>;
+  readonly evaluatedScene: ReturnType<typeof createCanvasEvaluatedScene>;
   readonly draft: CanvasProjectionOptions["meshDraft"];
 }): CanvasMeshOverlayProjection | undefined {
-  if (input.draft?.drawableId === input.selectedDrawableId) {
-    return {
-      drawableId: input.selectedDrawableId,
-      mesh: input.draft.mesh,
-      status: "draft"
-    };
-  }
-
-  const drawable = input.session.graph.drawables.find(
+  const drawable = input.evaluatedScene.drawables.find(
     (candidate) => candidate.drawableId === input.selectedDrawableId
   );
-  const mesh = drawable === undefined ? undefined : input.meshesById.get(drawable.meshId);
-  if (mesh === undefined || mesh.vertices.length === 0 || mesh.triangles.length === 0) {
+  const mesh = drawable?.evaluatedMesh;
+  if (
+    mesh === undefined ||
+    mesh.source === "rectFallback" ||
+    mesh.vertices.length === 0 ||
+    mesh.triangles.length === 0
+  ) {
     return undefined;
   }
 
   return {
     drawableId: input.selectedDrawableId,
-    mesh,
-    status: "committed"
+    mesh: cloneEvaluatedMesh(mesh),
+    status: mesh.source === "draft" || input.draft?.drawableId === input.selectedDrawableId
+      ? "draft"
+      : "committed"
+  };
+}
+
+function createDeformerOverlayProjection(
+  rigControl: CanvasEvaluatedRigControl,
+  selectionBounds: RectDto | undefined
+): CanvasDeformerOverlayProjection {
+  if (rigControl.kind === "rotation") {
+    return {
+      kind: "rotation",
+      ...(rigControl.rigControlId === undefined ? {} : { rigControlId: rigControl.rigControlId }),
+      displayName: rigControl.displayName,
+      domainBounds: selectionBounds ?? structuredClone(rigControl.domainBounds),
+      transformColumns: 0,
+      transformRows: 0,
+      bezierColumns: 0,
+      bezierRows: 0,
+      pivot: structuredClone(rigControl.pivot),
+      restAngleDegrees: rigControl.restAngleDegrees,
+      evaluatedAngleDegrees: rigControl.evaluatedAngleDegrees,
+      childDrawableIds: [...rigControl.childDrawableIds],
+      childRigControlIds: [...rigControl.childRigControlIds],
+      status: rigControl.status
+    };
+  }
+
+  return {
+    kind: "warp",
+    ...(rigControl.rigControlId === undefined ? {} : { rigControlId: rigControl.rigControlId }),
+    displayName: rigControl.displayName,
+    domainBounds: structuredClone(rigControl.domainBounds),
+    transformColumns: rigControl.transformColumns,
+    transformRows: rigControl.transformRows,
+    bezierColumns: rigControl.bezierColumns,
+    bezierRows: rigControl.bezierRows,
+    controlPointOffsets: rigControl.controlPointOffsets.map(clonePoint),
+    evaluatedControlPoints: rigControl.evaluatedControlPoints.map(clonePoint),
+    childDrawableIds: [...rigControl.childDrawableIds],
+    childRigControlIds: [...rigControl.childRigControlIds],
+    status: rigControl.status
   };
 }
 
@@ -536,21 +568,6 @@ export function hasIsolatableCanvasSelection(projection: CanvasRenderProjection)
   );
 }
 
-function resolveProjectionCanvasBounds(session: AuthoringSession): RectDto {
-  const drawableSourceAssetIds = new Set(session.graph.drawables.map((drawable) => drawable.sourceAssetId));
-  const sourceCanvas = session.graph.sourceAssets.find(
-    (sourceAsset) => drawableSourceAssetIds.has(sourceAsset.sourceAssetId) && sourceAsset.psdProfile?.canvas !== undefined
-  )?.psdProfile?.canvas;
-  const bounds = sourceCanvas?.bounds ?? {
-    x: 0,
-    y: 0,
-    width: sourceCanvas?.width ?? session.graph.canvasSize.width,
-    height: sourceCanvas?.height ?? session.graph.canvasSize.height
-  };
-
-  return structuredClone(bounds);
-}
-
 function createSourceLayerIndex(
   session: AuthoringSession
 ): ReadonlyMap<DrawableId, AuthoringSession["graph"]["sourceAssets"][number]["layers"][number]> {
@@ -632,108 +649,6 @@ function collectRigControlDrawableIds(
   return result;
 }
 
-function createDrawableRigOpacityMultiplierIndex(
-  session: AuthoringSession,
-  evaluatedRigOpacityMultiplierById: ReadonlyMap<RigControlId, number>
-): ReadonlyMap<DrawableId, number> {
-  const rigControlsById = new Map(
-    session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
-  );
-  const result = new Map<DrawableId, number>();
-  const visited = new Set<RigControlId>();
-  const roots = [
-    ...session.graph.rigControlRootIds,
-    ...session.graph.rigControls
-      .filter((rigControl) => rigControl.parentId === undefined)
-      .map((rigControl) => rigControl.rigControlId)
-  ].filter((rigControlId, index, rigControlIds) => rigControlIds.indexOf(rigControlId) === index);
-
-  const visitRigControl = (rigControlId: RigControlId, inheritedMultiplier: number) => {
-    const rigControl = rigControlsById.get(rigControlId);
-    if (rigControl === undefined || visited.has(rigControlId)) {
-      return;
-    }
-
-    visited.add(rigControlId);
-    const multiplier =
-      inheritedMultiplier *
-      (evaluatedRigOpacityMultiplierById.get(rigControlId) ??
-        rigControl.opacityMultiplier ??
-        1);
-    for (const drawableId of rigControl.childDrawableIds) {
-      result.set(drawableId, (result.get(drawableId) ?? 1) * multiplier);
-    }
-    for (const childRigControlId of rigControl.childRigControlIds) {
-      visitRigControl(childRigControlId, multiplier);
-    }
-  };
-
-  for (const rootId of roots) {
-    visitRigControl(rootId, 1);
-  }
-  for (const rigControl of session.graph.rigControls) {
-    visitRigControl(rigControl.rigControlId, 1);
-  }
-
-  return result;
-}
-
-function isWarpLatticeRigControl(
-  rigControl: RigControlDto
-): rigControl is WarpLatticeRigControlDto {
-  return rigControl.kind === "warpLattice2d";
-}
-
-function isRotationRigControl(rigControl: RigControlDto): rigControl is RotationRigControlDto {
-  return rigControl.kind === "rotation2d";
-}
-
-function collectPartAncestorIds(
-  partId: PartId,
-  partsById: ReadonlyMap<PartId, AuthoringSession["graph"]["parts"][number]>
-): readonly PartId[] {
-  const ancestors: PartId[] = [];
-  let current = partsById.get(partId);
-
-  while (current?.parentPartId !== undefined) {
-    ancestors.push(current.parentPartId);
-    current = partsById.get(current.parentPartId);
-  }
-
-  return ancestors;
-}
-
-function createMaskSourceIndex(session: AuthoringSession): ReadonlyMap<DrawableId, readonly DrawableId[]> {
-  const result = new Map<DrawableId, DrawableId[]>();
-
-  for (const relation of session.graph.masks) {
-    if (!relation.enabled) {
-      continue;
-    }
-
-    for (const targetDrawableId of relation.targetDrawableIds) {
-      result.set(targetDrawableId, [
-        ...(result.get(targetDrawableId) ?? []),
-        ...relation.maskDrawableIds
-      ]);
-    }
-  }
-
-  return result;
-}
-
-function compareBackToFront(
-  left: CanvasRenderableDrawable,
-  right: CanvasRenderableDrawable
-): number {
-  const frontOrder = right.frontOrder - left.frontOrder;
-  if (frontOrder !== 0) {
-    return frontOrder;
-  }
-
-  return left.drawableId.localeCompare(right.drawableId);
-}
-
 function unionRects(rects: readonly RectDto[]): RectDto | undefined {
   const positive = rects.filter((rect) => rect.width > 0 && rect.height > 0);
   if (positive.length === 0) {
@@ -773,12 +688,9 @@ function createProjectionContentKey(
       [
         drawable.drawableId,
         drawable.visible ? "v" : "h",
-        drawable.opacity.toFixed(4),
-        drawable.bounds.x,
-        drawable.bounds.y,
-        drawable.bounds.width,
-        drawable.bounds.height,
-        drawable.binaryAssetId ?? "missing"
+        drawable.binaryAssetId ?? "missing",
+        drawable.renderBytes?.byteLength ?? 0,
+        `${drawable.renderWidth}x${drawable.renderHeight}`
       ].join(":")
     )
   ].join("|");

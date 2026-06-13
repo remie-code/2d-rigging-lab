@@ -11,9 +11,11 @@ export interface MeshGenerationQualityMetrics {
     | "ordinary-delaunay-alpha-filter"
     | "interim-delaunay-alpha-filter"
     | "interim-delaunay-envelope-filter"
-    | "interim-delaunay-soft-boundary-filter";
+    | "interim-delaunay-soft-boundary-filter"
+    | "interim-delaunay-soft-apron-strip";
   readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
   readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
+  readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
 }
 
 export interface MeshGenerationEnvelopeMetrics {
@@ -59,6 +61,35 @@ export interface MeshGenerationSoftBoundaryMetrics {
   readonly fallbackReason?: string;
 }
 
+export interface MeshGenerationSoftApronMetrics {
+  readonly algorithmId: "auto-outline-v2.6-soft-apron";
+  readonly baseAlgorithmId: "auto-outline-v2.5-soft-boundary";
+  readonly preset: "low" | "medium" | "high";
+  readonly apronPadding: number;
+  readonly apronPaddingRatio: number;
+  readonly alphaArea: number;
+  readonly baseSoftBoundaryAreaRatio: number;
+  readonly apronBoundaryArea: number;
+  readonly apronBoundaryAreaRatio: number;
+  readonly apronRingCount: 1 | 2;
+  readonly innerBoundaryVertexCount: number;
+  readonly apronVertexCount: number;
+  readonly apronTriangleCount: number;
+  readonly baseInteriorPointCount: number;
+  readonly baseTriangleCount: number;
+  readonly triangleCountIncreaseRatio: number;
+  readonly maxBoundaryToApronEdgeLength: number;
+  readonly maxApronEdgeLength: number;
+  readonly maxApronFanTriangleCount: number;
+  readonly skinnyApronTriangleCount: number;
+  readonly longApronEdgeCount: number;
+  readonly rejectedDegenerateApronTriangleCount: number;
+  readonly rejectedLongApronTriangleCount: number;
+  readonly rejectedSkinnyApronTriangleCount: number;
+  readonly provenance: readonly string[];
+  readonly fallbackReason?: string;
+}
+
 export const computeMeshQualityMetrics = (
   mesh: MeshDto,
   options: {
@@ -67,6 +98,7 @@ export const computeMeshQualityMetrics = (
     readonly triangulationMode?: MeshGenerationQualityMetrics["triangulationMode"];
     readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
     readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
+    readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
   }
 ): MeshGenerationQualityMetrics => {
   const neighborsByVertex = new Map<number, Set<number>>();
@@ -129,7 +161,8 @@ export const computeMeshQualityMetrics = (
     ...(options.fallbackReason === undefined ? {} : { fallbackReason: options.fallbackReason }),
     ...(options.triangulationMode === undefined ? {} : { triangulationMode: options.triangulationMode }),
     ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics }),
-    ...(options.softBoundaryMetrics === undefined ? {} : { softBoundaryMetrics: options.softBoundaryMetrics })
+    ...(options.softBoundaryMetrics === undefined ? {} : { softBoundaryMetrics: options.softBoundaryMetrics }),
+    ...(options.softApronMetrics === undefined ? {} : { softApronMetrics: options.softApronMetrics })
   };
 };
 

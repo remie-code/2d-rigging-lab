@@ -259,7 +259,7 @@ Wave61で実装された `auto-grid-v1` は、初期操作導線とpreview -> Ap
 
 この文書はMesh ToolのUXを扱う。Drawable RGBA alpha maskからどのように初期meshを生成するかの詳細アルゴリズムは、画面仕様ではなく [../../mesh-generation/](../../mesh-generation/_map.md) 配下のアルゴリズム設計を正とする。
 
-現時点の主候補は、`auto-outline-v2` を基礎に、輪郭付近だけをbounds比率ベースのsoft boundaryで少し包み、triangle密度を大幅に粗くする [../../mesh-generation/auto-outline-v2-5-soft-boundary.md](../../mesh-generation/auto-outline-v2-5-soft-boundary.md) である。次のrefinement候補は、V2.5の内部密度を維持し、境界外側に薄いapron triangle帯を追加して頭頂部などの境界不足を補う [../../mesh-generation/auto-outline-v2-6-soft-apron.md](../../mesh-generation/auto-outline-v2-6-soft-apron.md) である。`auto-outline-v3-envelope` は実験候補として残すが、外側包絡が強すぎるとDrawable描画領域から外れやすい。
+現時点の主候補は、`auto-outline-v2` を基礎に、輪郭付近だけをbounds比率ベースのsoft boundaryで少し包み、triangle密度を大幅に粗くする [../../mesh-generation/auto-outline-v2-5-soft-boundary.md](../../mesh-generation/auto-outline-v2-5-soft-boundary.md) である。次のrefinement候補は、V2.5の内部密度を維持し、境界外側に薄いapron triangle帯を追加して頭頂部などの境界不足を補う [../../mesh-generation/auto-outline-v2-6-soft-apron.md](../../mesh-generation/auto-outline-v2-6-soft-apron.md) である。さらに、Cubism三段階自動メッシュの観察をもとに、V2系統とは別に輪郭帯を主構造として作る [../../mesh-generation/auto-outline-v4-contour-band.md](../../mesh-generation/auto-outline-v4-contour-band.md) を次wave sidecar候補として扱う。`auto-outline-v3-envelope` は実験候補として残すが、外側包絡が強すぎるとDrawable描画領域から外れやすい。
 
 Mesh Tool側が持つ責務:
 
@@ -287,6 +287,7 @@ Mesh Tool側が持つ責務:
 | `auto-outline-v2.5-soft-boundary` | 現在の主候補 | V2を基礎に、輪郭付近だけsoft boundaryで少し包み、V2より大幅に粗いtriangle密度を目指す |
 | `auto-outline-v2.6-soft-apron` | 次のrefinement候補 | V2.5の内部密度を保ち、境界外側に薄いapron triangle帯を追加して境界不足を補う |
 | `auto-outline-v3-envelope` | 実験候補 | alpha輪郭そのものではなく外周を含むenvelope boundaryで包むが、包絡が強すぎるリスクがある |
+| `auto-outline-v4-contour-band` | 次wave sidecar候補 | 輪郭帯を明示生成し、その内側をpreset別target sizeで三角形充填する別系統候補 |
 
 UX上のAcceptance Criteria:
 

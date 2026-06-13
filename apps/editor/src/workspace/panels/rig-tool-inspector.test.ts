@@ -43,10 +43,12 @@ describe("RigToolInspector committed Warp Deformer", () => {
       })
     );
 
-    expect(inputMarkup(markup, "Transform columns")).toContain("disabled");
-    expect(inputMarkup(markup, "Transform rows")).toContain("disabled");
+    expect(inputMarkup(markup, "Transform columns control points")).toContain("disabled");
+    expect(inputMarkup(markup, "Transform rows control points")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier columns")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier rows")).toContain("disabled");
+    expect(inputMarkup(markup, "Bezier edit type")).toContain("readOnly");
+    expect(hasDisabledAttribute(inputMarkup(markup, "Opacity multiplier"))).toBe(false);
 
     const payload = createWarpUpdatePayload(
       readModel,
@@ -82,6 +84,10 @@ function inputMarkup(markup: string, ariaLabel: string): string {
   }
 
   return match[0];
+}
+
+function hasDisabledAttribute(markup: string): boolean {
+  return /\sdisabled(?:=""|(?=[\s/>]))/.test(markup);
 }
 
 function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {

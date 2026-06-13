@@ -650,7 +650,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
         session,
         drawableId,
         provenanceId: createMeshPreviewProvenanceId(drawableId, presetId),
-        method: "auto-outline-v2.5-soft-boundary",
+        method: "auto-outline-v2.6-soft-apron",
         densityHint: preset.densityHint
       });
 
@@ -686,7 +686,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
           meshDraft.drawableId,
           preset.densityHint,
           meshDraft.mesh,
-          "auto-outline-v2.5-soft-boundary"
+          "auto-outline-v2.6-soft-apron"
         ),
       "Apply mesh"
     );

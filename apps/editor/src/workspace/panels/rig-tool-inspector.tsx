@@ -329,13 +329,15 @@ function WarpDeformerDraftEditor({
         <SectionTitle>Transform divisions (control point counts)</SectionTitle>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <NumberField
-            label="Transform columns"
+            displayLabel="Transform columns"
+            label="Transform columns control points"
             min={2}
             onChange={(transformColumns) => onUpdate({ transformColumns })}
             value={draft.transformColumns}
           />
           <NumberField
-            label="Transform rows"
+            displayLabel="Transform rows"
+            label="Transform rows control points"
             min={2}
             onChange={(transformRows) => onUpdate({ transformRows })}
             value={draft.transformRows}
@@ -357,6 +359,11 @@ function WarpDeformerDraftEditor({
             min={2}
             onChange={(bezierRows) => onUpdate({ bezierRows })}
             value={draft.bezierRows}
+          />
+          <ReadonlyTextField
+            className="col-span-2"
+            label="Bezier edit type"
+            value={draft.bezierEditType}
           />
         </div>
       </section>
@@ -496,6 +503,16 @@ export function CommittedWarpDeformerInspector({
               ))}
             </select>
           </label>
+          <NumberField
+            label="Opacity multiplier"
+            max={1}
+            min={0}
+            onChange={(opacityMultiplier) =>
+              setEditState((current) => ({ ...current, opacityMultiplier }))
+            }
+            step={0.01}
+            value={editState.opacityMultiplier}
+          />
         </div>
       </section>
 
@@ -568,7 +585,8 @@ export function CommittedWarpDeformerInspector({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <NumberField
             disabled={divisionsDisabled}
-            label="Transform columns"
+            displayLabel="Transform columns"
+            label="Transform columns control points"
             min={2}
             onChange={(transformColumns) =>
               setEditState((current) => ({ ...current, transformColumns }))
@@ -577,7 +595,8 @@ export function CommittedWarpDeformerInspector({
           />
           <NumberField
             disabled={divisionsDisabled}
-            label="Transform rows"
+            displayLabel="Transform rows"
+            label="Transform rows control points"
             min={2}
             onChange={(transformRows) =>
               setEditState((current) => ({ ...current, transformRows }))
@@ -605,6 +624,11 @@ export function CommittedWarpDeformerInspector({
             min={2}
             onChange={(bezierRows) => setEditState((current) => ({ ...current, bezierRows }))}
             value={editState.bezierRows}
+          />
+          <ReadonlyTextField
+            className="col-span-2"
+            label="Bezier edit type"
+            value={readModel.bezierEditSurface.editType}
           />
         </div>
       </section>
@@ -1064,6 +1088,28 @@ function NumberField({
         step={step}
         type="number"
         value={formatInputNumber(value)}
+      />
+    </label>
+  );
+}
+
+function ReadonlyTextField({
+  className,
+  label,
+  value
+}: {
+  readonly className?: string;
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <label className={cn("flex min-w-0 flex-col gap-1 text-xs text-neutral-500", className)}>
+      {label}
+      <input
+        aria-label={label}
+        className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300 outline-none"
+        readOnly
+        value={value}
       />
     </label>
   );

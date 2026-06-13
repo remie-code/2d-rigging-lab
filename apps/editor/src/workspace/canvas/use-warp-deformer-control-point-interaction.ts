@@ -14,6 +14,7 @@ import {
   type ParameterKeyformBindingDescriptor,
   type ParameterValueMap
 } from "../../features/editor-session/model/parameter-keyform-state";
+import type { CanvasEvaluationControlPointPreview } from "./canvas-evaluation";
 import type {
   CanvasDeformerOverlayProjection,
   CanvasPoint,
@@ -94,6 +95,9 @@ export interface UseWarpDeformerControlPointInteractionInput {
   readonly enabled: boolean;
   readonly parameterValues: ParameterValueMap;
   readonly projection: CanvasRenderProjection;
+  readonly createPreviewProjection?: (
+    preview: CanvasEvaluationControlPointPreview | null
+  ) => CanvasRenderProjection;
   readonly session: AuthoringSession;
   readonly view: CanvasViewState;
 }
@@ -131,10 +135,17 @@ export function useWarpDeformerControlPointInteraction(
   const [hoveredControlPointIndex, setHoveredControlPointIndex] =
     useState<number | undefined>(undefined);
   const [marqueeRect, setMarqueeRect] = useState<RectDto | null>(null);
-  const renderProjection = useMemo(
-    () => applyWarpControlPointPreview(input.projection, preview),
-    [input.projection, preview]
-  );
+  const renderProjection = useMemo(() => {
+    if (preview === null) {
+      return input.projection;
+    }
+
+    return input.createPreviewProjection?.({
+      rigControlId: preview.rigControlId,
+      controlPointOffsets: preview.offsets,
+      compositionMode: "replaceEvaluated"
+    }) ?? applyWarpControlPointPreview(input.projection, preview);
+  }, [input.createPreviewProjection, input.projection, preview]);
   const editState = useMemo(
     () =>
       createWarpControlPointEditState({

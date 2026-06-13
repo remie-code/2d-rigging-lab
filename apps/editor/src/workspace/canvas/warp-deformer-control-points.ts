@@ -73,6 +73,14 @@ export function getWarpControlPointCanvasPosition(
   const columns = normalizeGridSize(overlay.transformColumns);
   const rows = normalizeGridSize(overlay.transformRows);
   const index = row * columns + column;
+  const evaluated = overlay.evaluatedControlPoints?.[index];
+  if (evaluated !== undefined) {
+    return {
+      x: finiteOrZero(evaluated.x),
+      y: finiteOrZero(evaluated.y)
+    };
+  }
+
   const base = {
     x: overlay.domainBounds.x + overlay.domainBounds.width * toUnitGridPosition(column, columns),
     y: overlay.domainBounds.y + overlay.domainBounds.height * toUnitGridPosition(row, rows)

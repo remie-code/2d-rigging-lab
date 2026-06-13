@@ -21,6 +21,7 @@ import {
 import { computeMeshQualityMetrics } from "./mesh-quality-metrics.js";
 import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
 import { createAutoOutlineV25SoftBoundaryMesh } from "./mesh-outline-v2-5-soft-boundary-generation.js";
+import { createAutoOutlineV26SoftApronMesh } from "./mesh-outline-v2-6-soft-apron-generation.js";
 import { createAutoOutlineV2Mesh } from "./mesh-outline-v2-generation.js";
 import { createAutoOutlineV3EnvelopeMesh } from "./mesh-outline-v3-envelope-generation.js";
 
@@ -358,6 +359,131 @@ describe("alpha-aware mesh generation", () => {
     expect(mesh.softBoundaryMetrics.rejectedFarTransparentTriangleCount).toBeGreaterThan(0);
   });
 
+  it("generates deterministic auto-outline-v2.6 soft-apron meshes with bounded apron coverage", () => {
+    const alphaPixels = createPixelsFromPredicate(44, 40, (x, y) => {
+      const dx = (x - 20.5) / 12;
+      const dy = (y - 18.5) / 9;
+      const body = dx * dx + dy * dy <= 1;
+      const top = x >= 17 && x <= 24 && y >= 5 && y <= 13;
+      const tail = x >= 28 && x <= 37 && y >= 16 && y <= 22;
+      const notch = x >= 10 && x <= 16 && y >= 22 && y <= 32;
+      return (body || top || tail) && !notch;
+    });
+    const rgbaBytes = createAlphaBytes(44, 40, alphaPixels);
+    const baseInput = {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      bounds: { x: 0, y: 0, width: 44, height: 40 },
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+      textureSize: { width: 44, height: 40 },
+      rgbaBytes,
+      densityHint: "medium" as const
+    };
+
+    const first = createAutoOutlineV26SoftApronMesh(baseInput);
+    const second = createAutoOutlineV26SoftApronMesh(baseInput);
+    const v25 = createAutoOutlineV25SoftBoundaryMesh(baseInput);
+
+    expect(first).toEqual(second);
+    expect(first.status).toBe("generated");
+    expect(v25.status).toBe("generated");
+    if (first.status !== "generated" || v25.status !== "generated") {
+      return;
+    }
+
+    expect(first.qualityMetrics.triangulationMode).toBe("interim-delaunay-soft-apron-strip");
+    expect(first.softApronMetrics.algorithmId).toBe("auto-outline-v2.6-soft-apron");
+    expect(first.softApronMetrics.baseAlgorithmId).toBe("auto-outline-v2.5-soft-boundary");
+    expect(first.softApronMetrics.apronRingCount).toBeGreaterThanOrEqual(1);
+    expect(first.softApronMetrics.apronRingCount).toBeLessThanOrEqual(2);
+    expect(first.softApronMetrics.baseInteriorPointCount).toBe(v25.softBoundaryMetrics.interiorPointCount);
+    expect(first.mesh.vertices.length).toBe(v25.mesh.vertices.length + first.softApronMetrics.apronVertexCount);
+    expect(first.mesh.triangles.length).toBe(v25.mesh.triangles.length + first.softApronMetrics.apronTriangleCount);
+    expect(first.softApronMetrics.apronBoundaryAreaRatio).toBeGreaterThan(
+      v25.softBoundaryMetrics.softBoundaryAreaRatio
+    );
+    expect(first.softApronMetrics.apronBoundaryAreaRatio).toBeLessThan(1.58);
+    expect(first.softApronMetrics.triangleCountIncreaseRatio).toBeLessThanOrEqual(4);
+    expect(first.softApronMetrics.longApronEdgeCount).toBe(0);
+    expect(first.softApronMetrics.skinnyApronTriangleCount).toBe(0);
+    expect(first.softApronMetrics.maxApronFanTriangleCount).toBeLessThanOrEqual(4);
+    expect(first.softApronMetrics.maxBoundaryToApronEdgeLength).toBeLessThanOrEqual(
+      first.softApronMetrics.apronPadding + 0.000001
+    );
+    const apronTriangles = first.mesh.triangles.filter((_triangle, triangleIndex) =>
+      first.mesh.triangleStableIds?.[triangleIndex]?.includes("_outline_v2_6_soft_apron_ring_")
+    );
+    expect(apronTriangles.length).toBe(first.softApronMetrics.apronTriangleCount);
+    for (const triangle of apronTriangles) {
+      expect(
+        triangle.every((vertexIndex) => {
+          const stableId = first.mesh.vertexStableIds[vertexIndex] ?? "";
+          return stableId.includes("_outline_v2_6_soft_apron_inner_boundary_") ||
+            stableId.includes("_outline_v2_6_soft_apron_ring_");
+        })
+      ).toBe(true);
+    }
+    expect(first.mesh.vertexStableIds.some((id) => id.includes("_outline_v2_6_soft_apron_ring_"))).toBe(true);
+    expect(first.qualityMetrics.softApronMetrics).toEqual(first.softApronMetrics);
+  });
+
+  it("keeps auto-outline-v2.6 Large Motion apron count increases bounded over V2.5", () => {
+    const fixtures = [
+      {
+        name: "notched-tail",
+        width: 44,
+        height: 40,
+        predicate: (x: number, y: number): boolean => {
+          const dx = (x - 20.5) / 12;
+          const dy = (y - 18.5) / 9;
+          const body = dx * dx + dy * dy <= 1;
+          const top = x >= 17 && x <= 24 && y >= 5 && y <= 13;
+          const tail = x >= 28 && x <= 37 && y >= 16 && y <= 22;
+          const notch = x >= 10 && x <= 16 && y >= 22 && y <= 32;
+          return (body || top || tail) && !notch;
+        }
+      },
+      {
+        name: "round-body",
+        width: 42,
+        height: 42,
+        predicate: (x: number, y: number): boolean => {
+          const dx = x - 20.5;
+          const dy = y - 20.5;
+          return dx * dx + dy * dy <= 220;
+        }
+      }
+    ];
+
+    for (const fixture of fixtures) {
+      const baseInput = {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        bounds: { x: 0, y: 0, width: fixture.width, height: fixture.height },
+        provenanceId: ProvenanceIdSchema.parse("prov_mesh_body"),
+        textureSize: { width: fixture.width, height: fixture.height },
+        rgbaBytes: createAlphaBytesFromPredicate(fixture.width, fixture.height, fixture.predicate),
+        densityHint: "high" as const
+      };
+      const v25 = createAutoOutlineV25SoftBoundaryMesh(baseInput);
+      const v26 = createAutoOutlineV26SoftApronMesh(baseInput);
+
+      expect(v25.status, `${fixture.name}:v2.5-large`).toBe("generated");
+      expect(v26.status, `${fixture.name}:v2.6-large`).toBe("generated");
+      if (v25.status !== "generated" || v26.status !== "generated") {
+        continue;
+      }
+
+      expect(v26.softApronMetrics.baseInteriorPointCount, `${fixture.name}:interior`).toBe(
+        v25.softBoundaryMetrics.interiorPointCount
+      );
+      expect(v26.softApronMetrics.triangleCountIncreaseRatio, `${fixture.name}:triangles`).toBeLessThanOrEqual(4);
+      expect(v26.softApronMetrics.apronBoundaryAreaRatio, `${fixture.name}:area`).toBeLessThan(1.7);
+      expect(v26.softApronMetrics.maxApronFanTriangleCount, `${fixture.name}:fan`).toBeLessThanOrEqual(6);
+      expect(v26.softApronMetrics.rejectedLongApronTriangleCount, `${fixture.name}:long-rejected`).toBe(0);
+    }
+  });
+
   it("generates deterministic auto-outline-v3 envelope meshes with coarser counts and envelope metrics", () => {
     const alphaPixels = createPixelsFromPredicate(40, 36, (x, y) => {
       const dx = (x - 18.5) / 12;
@@ -568,6 +694,24 @@ describe("alpha-aware mesh generation", () => {
     ]);
     expect(v25Fallback?.mesh.vertices).toHaveLength(4);
 
+    const v26Fallback = createGeneratedMeshForDrawable({
+      session: emptyAlphaSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v2.6-soft-apron",
+      densityHint: "low"
+    });
+
+    expect(v26Fallback?.source).toBe("bounds-grid");
+    expect(v26Fallback?.fallbackReason).toBe("alpha-empty");
+    expect(v26Fallback?.fallbackSteps).toEqual([
+      { method: "auto-outline-v2.6-soft-apron", reason: "alpha-empty" },
+      { method: "auto-outline-v2.5-soft-boundary", reason: "alpha-empty" },
+      { method: "auto-outline-v2", reason: "alpha-empty" },
+      { method: "auto-outline-v1", reason: "alpha-empty" }
+    ]);
+    expect(v26Fallback?.mesh.vertices).toHaveLength(4);
+
     const v3Fallback = createGeneratedMeshForDrawable({
       session: emptyAlphaSession,
       drawableId: DrawableIdSchema.parse("draw_body"),
@@ -736,6 +880,44 @@ describe("alpha-aware mesh generation", () => {
       }
     });
     expect(generated?.qualityMetrics?.softBoundaryMetrics?.transparentSampleCount).toBeGreaterThan(0);
+  });
+
+  it("routes auto-outline-v2.6-soft-apron as an explicit drawable generation sidecar with apron summary", () => {
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: { width: 44, height: 40 },
+      meshBounds: { x: 10, y: 20, width: 44, height: 40 },
+      opaquePixels: createPixelsFromPredicate(44, 40, (x, y) => {
+        const dx = (x - 20.5) / 12;
+        const dy = (y - 18.5) / 9;
+        const body = dx * dx + dy * dy <= 1;
+        const top = x >= 17 && x <= 24 && y >= 5 && y <= 13;
+        const tail = x >= 28 && x <= 37 && y >= 16 && y <= 22;
+        const notch = x >= 10 && x <= 16 && y >= 22 && y <= 32;
+        return (body || top || tail) && !notch;
+      })
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v2.6-soft-apron",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v2-6-soft-apron-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "interim-delaunay-soft-apron-strip",
+      softApronMetrics: {
+        algorithmId: "auto-outline-v2.6-soft-apron",
+        baseAlgorithmId: "auto-outline-v2.5-soft-boundary",
+        longApronEdgeCount: 0,
+        skinnyApronTriangleCount: 0
+      }
+    });
+    expect(generated?.qualityMetrics?.softApronMetrics?.apronTriangleCount).toBeGreaterThan(0);
   });
 
   it("routes auto-outline-v3-envelope as an explicit drawable generation sidecar with envelope summary", () => {

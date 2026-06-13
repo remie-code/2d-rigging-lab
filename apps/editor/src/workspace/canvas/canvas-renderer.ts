@@ -5,6 +5,7 @@ import type {
   CanvasViewState
 } from "./canvas-projection";
 import { hasIsolatableCanvasSelection, isRenderableDrawable } from "./canvas-projection";
+import { resolveTriangleTextureWarpTransform } from "./canvas-triangle-texture-warp";
 import { getWarpControlPointCanvasPosition } from "./warp-deformer-control-points";
 
 export interface CanvasOverlayState {
@@ -409,6 +410,10 @@ function drawDrawableImage(
     return;
   }
 
+  if (drawDrawableMeshImage(context, drawable, image)) {
+    return;
+  }
+
   context.drawImage(
     image,
     drawable.bounds.x,
@@ -442,13 +447,10 @@ function drawClippedDrawable(
     return;
   }
 
-  scratchContext.drawImage(
-    targetImage,
-    drawable.bounds.x - bounds.x,
-    drawable.bounds.y - bounds.y,
-    drawable.bounds.width,
-    drawable.bounds.height
-  );
+  scratchContext.save();
+  scratchContext.translate(-bounds.x, -bounds.y);
+  drawDrawableImage(scratchContext, drawable, cache);
+  scratchContext.restore();
 
   for (const maskSource of maskSources) {
     const maskImage = getLayerCanvas(maskSource, cache);
@@ -458,13 +460,8 @@ function drawClippedDrawable(
 
     maskContext.save();
     maskContext.globalAlpha = maskSource.opacity;
-    maskContext.drawImage(
-      maskImage,
-      maskSource.bounds.x - bounds.x,
-      maskSource.bounds.y - bounds.y,
-      maskSource.bounds.width,
-      maskSource.bounds.height
-    );
+    maskContext.translate(-bounds.x, -bounds.y);
+    drawDrawableImage(maskContext, maskSource, cache);
     maskContext.restore();
   }
 
@@ -472,6 +469,76 @@ function drawClippedDrawable(
   scratchContext.drawImage(mask, 0, 0);
   scratchContext.globalCompositeOperation = "source-over";
   context.drawImage(scratch, bounds.x, bounds.y, bounds.width, bounds.height);
+}
+
+function drawDrawableMeshImage(
+  context: CanvasRenderingContext2D,
+  drawable: CanvasRenderableDrawable,
+  image: HTMLCanvasElement
+): boolean {
+  const mesh = drawable.evaluatedMesh;
+  if (
+    mesh.source === "rectFallback" ||
+    mesh.vertices.length === 0 ||
+    mesh.uvs.length === 0 ||
+    mesh.triangles.length === 0
+  ) {
+    return false;
+  }
+
+  let drewTriangle = false;
+  for (const triangle of mesh.triangles) {
+    const [aIndex, bIndex, cIndex] = triangle;
+    const destA = mesh.vertices[aIndex];
+    const destB = mesh.vertices[bIndex];
+    const destC = mesh.vertices[cIndex];
+    const uvA = mesh.uvs[aIndex];
+    const uvB = mesh.uvs[bIndex];
+    const uvC = mesh.uvs[cIndex];
+    if (
+      destA === undefined ||
+      destB === undefined ||
+      destC === undefined ||
+      uvA === undefined ||
+      uvB === undefined ||
+      uvC === undefined
+    ) {
+      continue;
+    }
+
+    const transform = resolveTriangleTextureWarpTransform({
+      source: [
+        uvToTexturePoint(uvA, image),
+        uvToTexturePoint(uvB, image),
+        uvToTexturePoint(uvC, image)
+      ],
+      destination: [destA, destB, destC]
+    });
+    if (transform === undefined) {
+      continue;
+    }
+
+    context.save();
+    context.beginPath();
+    context.moveTo(destA.x, destA.y);
+    context.lineTo(destB.x, destB.y);
+    context.lineTo(destC.x, destC.y);
+    context.closePath();
+    context.clip();
+    context.transform(
+      transform.a,
+      transform.b,
+      transform.c,
+      transform.d,
+      transform.e,
+      transform.f
+    );
+    context.drawImage(image, 0, 0);
+    context.restore();
+    drewTriangle = true;
+  }
+
+  return drewTriangle;
 }
 
 function getLayerCanvas(
@@ -505,6 +572,16 @@ function getLayerCanvas(
   cache.layerCanvases.set(cacheKey, imageCanvas);
 
   return imageCanvas;
+}
+
+function uvToTexturePoint(
+  uv: { readonly x: number; readonly y: number },
+  image: HTMLCanvasElement
+): { readonly x: number; readonly y: number } {
+  return {
+    x: uv.x * image.width,
+    y: uv.y * image.height
+  };
 }
 
 function resolveDrawableAlpha(

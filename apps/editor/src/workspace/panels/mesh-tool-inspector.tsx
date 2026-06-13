@@ -407,6 +407,10 @@ function formatRect(rect: RectDto): string {
 
 function formatMeshSource(source: string | undefined): string {
   switch (source) {
+    case "outline-v2-6-soft-apron-rgba":
+      return "Auto outline v2.6 soft apron";
+    case "outline-v2-5-soft-boundary-rgba":
+      return "Auto outline v2.5 soft boundary";
     case "outline-v2-rgba":
       return "Auto outline v2";
     case "outline-rgba":

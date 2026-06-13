@@ -179,15 +179,19 @@ test("authors drawable opacity keyforms from the Parameter Bar and Inspector", a
   await expect(visibleInput(page, "Active parameter")).toHaveValue("param_face_angle_x");
 
   const binding = page.getByTestId("parameter-binding-opacity").first();
+  const keyState = page.getByTestId("parameter-key-position-state");
   await expect(binding).toBeVisible();
-  await expect(binding).toContainText("Keyform: None");
+  await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: static");
+  await expect(binding.getByLabel("Drawable opacity value")).toBeDisabled();
 
-  await binding.getByRole("button", { name: "Ends", exact: true }).click();
-  await expect(page.getByTestId("parameter-key-marker-summary")).toContainText("-30");
-  await expect(page.getByTestId("parameter-key-marker-summary")).toContainText("30");
+  await page.getByRole("button", { name: "Create end keyforms", exact: true }).click();
+  await expect(page.locator('[data-testid="parameter-key-marker"][data-parameter-value="-30"]')).toBeVisible();
+  await expect(page.locator('[data-testid="parameter-key-marker"][data-parameter-value="30"]')).toBeVisible();
+  await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: interpolated");
 
-  await binding.getByRole("button", { name: "Ends + Center", exact: true }).click();
-  await expect(binding).toContainText("Keyform: Exists");
+  await page.getByRole("button", { name: "Create end and center keyforms", exact: true }).click();
+  await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: keyform");
+  await expect(binding.getByLabel("Drawable opacity value")).toBeEnabled();
 
   await binding.getByLabel("Drawable opacity value").fill("0.4");
   await binding.getByRole("button", { name: "Update", exact: true }).click();
@@ -200,11 +204,11 @@ test("authors drawable opacity keyforms from the Parameter Bar and Inspector", a
   await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
 
   await binding.getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(binding).toContainText("Keyform: None");
+  await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: interpolated");
   await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "1.00");
 
-  await binding.getByRole("button", { name: "Add Keyform Here", exact: true }).click();
-  await expect(binding).toContainText("Keyform: Exists");
+  await page.getByRole("button", { name: "Add keyform at current value", exact: true }).click();
+  await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: keyform");
 });
 
 test("reorders drawable rows with Parts Tree drag and drop", async ({ page }) => {
@@ -249,7 +253,7 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await expect(canvas).toHaveAttribute("data-mesh-preview-drawable-visible", "true");
   await page.getByRole("button", { name: "Preview Standard mesh" }).click();
   await expect(meshStatus).toHaveText("Draft preview");
-  await expect(meshSource).toHaveText("Auto outline v2");
+  await expect(meshSource).toHaveText("Auto outline v2.5 soft boundary");
   await expect(meshInspector).toContainText("Max edge");
   await expect(meshInspector).toContainText("Min angle");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
@@ -469,9 +473,7 @@ test("reparents a committed Deformer from the Inspector without changing Parts o
     .filter({ hasText: childDeformerName })
     .first();
   await childDeformerRow.click();
-  await expect(page.locator('[data-testid="rig-tool-inspector"]:visible').first()).toContainText(
-    childDrawableName
-  );
+  await expect(visibleInput(page, "Name")).toHaveValue(childDeformerName);
   await visibleInput(page, "Parent deformer").selectOption({ label: parentDeformerName });
   const applyDeformerEdits = page.locator('button:has-text("Apply Deformer Edits"):visible').first();
   await expect(applyDeformerEdits).toBeVisible();

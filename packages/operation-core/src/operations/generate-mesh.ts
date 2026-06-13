@@ -213,6 +213,7 @@ const evaluatePreviewMeshPreconditions = (input: {
     input.method !== "auto-outline-v1" &&
     input.method !== "auto-outline-v2" &&
     input.method !== "auto-outline-v2.5-soft-boundary" &&
+    input.method !== "auto-outline-v2.6-soft-apron" &&
     input.method !== "auto-outline-v3-envelope"
   ) {
     diagnostics.push(
@@ -353,7 +354,8 @@ const formatQualityMetricsForTransformHistory = (
       ? []
       : [`meshQuality:triangulationMode=${metrics.triangulationMode}`]),
     ...formatEnvelopeMetricsForTransformHistory(metrics),
-    ...formatSoftBoundaryMetricsForTransformHistory(metrics)
+    ...formatSoftBoundaryMetricsForTransformHistory(metrics),
+    ...formatSoftApronMetricsForTransformHistory(metrics)
   ];
 };
 
@@ -408,6 +410,39 @@ const formatSoftBoundaryMetricsForTransformHistory = (
     ...(softBoundary.fallbackReason === undefined
       ? []
       : [`meshQuality:softBoundaryFallback=${softBoundary.fallbackReason}`])
+  ];
+};
+
+const formatSoftApronMetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const softApron = metrics.softApronMetrics;
+  if (softApron === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:softApronAlgorithm=${softApron.algorithmId}`,
+    `meshQuality:softApronBaseAlgorithm=${softApron.baseAlgorithmId}`,
+    `meshQuality:softApronPreset=${softApron.preset}`,
+    `meshQuality:softApronPadding=${formatMetric(softApron.apronPadding)}`,
+    `meshQuality:softApronPaddingRatio=${formatMetric(softApron.apronPaddingRatio)}`,
+    `meshQuality:softApronBoundaryAreaRatio=${formatMetric(softApron.apronBoundaryAreaRatio)}`,
+    `meshQuality:softApronRings=${softApron.apronRingCount}`,
+    `meshQuality:softApronVertices=${softApron.apronVertexCount}`,
+    `meshQuality:softApronTriangles=${softApron.apronTriangleCount}`,
+    `meshQuality:softApronTriangleIncreaseRatio=${formatMetric(softApron.triangleCountIncreaseRatio)}`,
+    `meshQuality:softApronBoundaryToApronEdge=${formatMetric(softApron.maxBoundaryToApronEdgeLength)}`,
+    `meshQuality:softApronMaxEdge=${formatMetric(softApron.maxApronEdgeLength)}`,
+    `meshQuality:softApronFanTriangles=${softApron.maxApronFanTriangleCount}`,
+    `meshQuality:softApronLongEdges=${softApron.longApronEdgeCount}`,
+    `meshQuality:softApronSkinnyTriangles=${softApron.skinnyApronTriangleCount}`,
+    `meshQuality:softApronRejectedLongTriangles=${softApron.rejectedLongApronTriangleCount}`,
+    `meshQuality:softApronRejectedSkinnyTriangles=${softApron.rejectedSkinnyApronTriangleCount}`,
+    `meshQuality:softApronProvenance=${softApron.provenance.join(">")}`,
+    ...(softApron.fallbackReason === undefined
+      ? []
+      : [`meshQuality:softApronFallback=${softApron.fallbackReason}`])
   ];
 };
 

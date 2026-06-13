@@ -53,6 +53,7 @@ import {
   renderCanvasProjection,
   type CanvasOverlayState
 } from "../canvas/canvas-renderer";
+import type { CanvasEvaluationControlPointPreview } from "../canvas/canvas-evaluation";
 import { useWarpDeformerControlPointInteraction } from "../canvas/use-warp-deformer-control-point-interaction";
 import { WorkspacePanel } from "./panel-frame";
 
@@ -127,12 +128,13 @@ export function CanvasPreviewPanel() {
     }),
     [deformerOverlayVisible, meshOverlayVisible, overlays]
   );
-  const projection = useMemo(
-    () =>
+  const createProjection = useCallback(
+    (controlPointPreview: CanvasEvaluationControlPointPreview | null = null) =>
       createCanvasRenderProjection(session, selection, {
         editorHiddenPartIds,
         meshDraft,
         deformerDraft: rigDraft,
+        controlPointPreview,
         parameterValues,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
@@ -140,12 +142,14 @@ export function CanvasPreviewPanel() {
       }),
     [activeTool, editorHiddenPartIds, meshDraft, parameterValues, rigDraft, selection, session]
   );
+  const projection = useMemo(() => createProjection(null), [createProjection]);
   const warpControlPoints = useWarpDeformerControlPointInteraction({
     activeParameterId,
     commitGestureController,
     enabled: activeTool === "rig" && deformerOverlayVisible,
     parameterValues,
     projection,
+    createPreviewProjection: createProjection,
     session,
     view
   });
@@ -445,11 +449,11 @@ export function CanvasPreviewPanel() {
     }
 
     const canvasPoint = screenToCanvasPoint(drag.last, view);
-    const hitDrawableId = hitTestTopmostDrawable(projection, canvasPoint);
+    const hitDrawableId = hitTestTopmostDrawable(renderProjection, canvasPoint);
     if (hitDrawableId !== undefined) {
       selectDrawable(hitDrawableId);
     }
-  }, [projection, selectDrawable, view, warpControlPoints]);
+  }, [renderProjection, selectDrawable, view, warpControlPoints]);
 
   const toolbar = (
     <>

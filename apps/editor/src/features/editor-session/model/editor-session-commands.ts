@@ -276,7 +276,7 @@ export function commitGenerateMesh(
   drawableId: DrawableId,
   densityHint: GenerateMeshPayloadDto["densityHint"],
   previewMesh?: AuthoringSession["graph"]["meshes"][number],
-  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2.5-soft-boundary"
+  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2.6-soft-apron"
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "generateMesh",

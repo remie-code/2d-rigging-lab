@@ -155,6 +155,7 @@ export const GenerateMeshPayloadSchema = z.object({
     "auto-outline-v1",
     "auto-outline-v2",
     "auto-outline-v2.5-soft-boundary",
+    "auto-outline-v2.6-soft-apron",
     "auto-outline-v3-envelope"
   ]),
   densityHint: z.enum(["low", "medium", "high"]).optional(),

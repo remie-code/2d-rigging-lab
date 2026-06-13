@@ -1,9 +1,11 @@
 import { createInitialAuthoringRevision, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
   MaskRelationIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
   RigControlIdSchema,
@@ -40,6 +42,7 @@ const MESH_MASK = MeshIdSchema.parse("mesh_mask");
 const MESH_TARGET = MeshIdSchema.parse("mesh_target");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
+const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
 const TEX_FRONT = TextureIdSchema.parse("tex_front");
 const TEX_HIDDEN = TextureIdSchema.parse("tex_hidden");
@@ -252,7 +255,14 @@ describe("canvas render projection", () => {
       drawableId: DRAW_BACK,
       status: "committed",
       mesh: {
-        meshId: MESH_BACK
+        source: "committed",
+        sourceMeshId: MESH_BACK,
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 20, y: 0 },
+          { x: 20, y: 20 },
+          { x: 0, y: 20 }
+        ]
       }
     });
   });
@@ -348,14 +358,107 @@ describe("canvas render projection", () => {
       rigControlId: RIG_FACE_ROTATION,
       displayName: "Face Rotation",
       status: "committed",
-      domainBounds: { x: 5, y: 5, width: 20, height: 20 },
       pivot: { x: 15, y: 15 },
       restAngleDegrees: 12,
+      evaluatedAngleDegrees: 12,
       childDrawableIds: [DRAW_FRONT]
     });
+    expect(projection.deformerOverlay?.domainBounds.x).toBeGreaterThan(3.1);
+    expect(projection.deformerOverlay?.domainBounds.y).toBeGreaterThan(3.1);
+    expect(projection.deformerOverlay?.domainBounds.width).toBeGreaterThan(23.7);
+    expect(projection.deformerOverlay?.domainBounds.height).toBeGreaterThan(23.7);
+    expect(projection.deformerOverlay?.domainBounds.width).toBeLessThan(23.8);
+    expect(projection.deformerOverlay?.domainBounds.height).toBeLessThan(23.8);
     expect(
       projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)?.opacity
     ).toBeCloseTo(0.336);
+  });
+
+  it("projects evaluated Warp geometry to bounds, overlay, mesh overlay, and drawable hit-test", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+    session.graph.keyformSets.push(
+      createWarpOffsetsKeyformSet(RIG_FACE_WARP, [
+        { value: -30, statePatch: createOffsets(12, 0, 0) },
+        { value: 30, statePatch: createOffsets(12, 40, 0) }
+      ])
+    );
+
+    const rigProjection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_WARP
+      },
+      {
+        parameterValues: { [FACE_ANGLE_X]: 30 }
+      }
+    );
+    const front = rigProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(front?.bounds).toEqual({ x: 45, y: 5, width: 20, height: 20 });
+    expect(front?.evaluatedMesh.vertices[0]).toEqual({ x: 45, y: 5 });
+    expect(rigProjection.selectionBounds).toEqual({ x: 45, y: 5, width: 20, height: 20 });
+    expect(rigProjection.deformerOverlay).toMatchObject({
+      kind: "warp",
+      rigControlId: RIG_FACE_WARP,
+      domainBounds: { x: 45, y: 5, width: 20, height: 20 },
+      controlPointOffsets: createOffsets(12, 40, 0)
+    });
+    expect(rigProjection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 45, y: 5 });
+    expect(hitTestTopmostDrawable(rigProjection, { x: 46, y: 6 })).toBe(DRAW_FRONT);
+    expect(hitTestTopmostDrawable(rigProjection, { x: 6, y: 6 })).toBe(DRAW_BACK);
+
+    const drawableProjection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawable",
+        id: DRAW_FRONT
+      },
+      {
+        parameterValues: { [FACE_ANGLE_X]: 30 }
+      }
+    );
+
+    expect(drawableProjection.meshOverlay).toMatchObject({
+      drawableId: DRAW_FRONT,
+      status: "committed",
+      mesh: {
+        vertices: [
+          { x: 45, y: 5 },
+          { x: 65, y: 5 },
+          { x: 65, y: 25 },
+          { x: 45, y: 25 }
+        ]
+      }
+    });
+  });
+
+  it("projects Warp control point preview into actual drawable geometry", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_WARP
+      },
+      {
+        controlPointPreview: {
+          rigControlId: RIG_FACE_WARP,
+          controlPointOffsets: createOffsets(12, 8, -2)
+        }
+      }
+    );
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(front?.bounds).toEqual({ x: 13, y: 3, width: 20, height: 20 });
+    expect(front?.evaluatedMesh.vertices[0]).toEqual({ x: 13, y: 3 });
+    expect(projection.deformerOverlay?.controlPointOffsets?.[0]).toEqual({ x: 8, y: -2 });
+    expect(projection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 13, y: 3 });
   });
 
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
@@ -673,6 +776,36 @@ function createZeroBezierHandle() {
     inTangent: { x: 0, y: 0 },
     outTangent: { x: 0, y: 0 }
   };
+}
+
+function createWarpOffsetsKeyformSet(
+  rigControlId: ReturnType<typeof RigControlIdSchema.parse>,
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: readonly { readonly x: number; readonly y: number }[];
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse(`keyset_canvas_projection_${rigControlId}_offsets`),
+    target: {
+      kind: "rigControl" as const,
+      id: rigControlId,
+      property: "controlPointOffsets" as const
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: key.statePatch.map((offset) => ({ x: offset.x, y: offset.y }))
+    }))
+  };
+}
+
+function createOffsets(count: number, x: number, y: number) {
+  return Array.from({ length: count }, () => ({ x, y }));
 }
 
 function createHiddenOnlyPartSession(): AuthoringSession {

@@ -45,7 +45,7 @@
 | Minimum Open Dynamics v1 | Current MVP。`RuntimeSequenceFrameDto[]` 正本、`RuntimeEvaluationContextDto`、単一/sequence RuntimeState evidence、1 group = 1 output、`scalarDampedFollowV1`固定式として確定 |
 | Validator | package / runtime / rights / provenance / demo-safe capture を構造化reportにする |
 | AI / Codex-friendly operation | Editor/repo は提案・推論・auto-riggingを行わない。外部Codex/LLMが操作案を作り、repoは人間同等操作のdeterministic state / operation / dry-run / diff / validation / approval / commit / evidence surfaceを提供する |
-| Mesh generation | Screen UXは `screen-design/`、生成アルゴリズムは [mesh-generation/](mesh-generation/_map.md) に分離。`auto-outline-v2` は扇状集中、大きすぎるtriangle、grid由来の矩形感を減らす次候補 |
+| Mesh generation | Screen UXは `screen-design/`、生成アルゴリズムは [mesh-generation/](mesh-generation/_map.md) に分離。V2系統のrefinementに加え、輪郭帯を明示生成する `auto-outline-v4-contour-band` を次wave sidecar候補として設計中 |
 | Canvas evaluation | 次の主目標は、Parameter Barを動かしたときにCanvas上の絵そのものが変形・回転・フェードして見えること。AuthoringSession + parameterValues + draft state から [CanvasEvaluatedScene](canvas-evaluation/canvas-evaluation-pipeline-v0.md) を作る評価層を設計中 |
 | Parameter preset ecosystem | [parameter-preset-ecosystem.md](parameter-preset-ecosystem.md) で、Core Parameter、Preset / Profile、Ecosystem Facade / Mappingを分離し、Camera Capture / Face Trackingを最重要semantic consumerとして初期role catalogを整理中 |
 | GPT-5.5 Pro review 001 | P0/P1/P2の反映可能指摘を反映。詳細は [gpt-5.5-pro-review-001-response.md](gpt-5.5-pro-review-001-response.md) |
