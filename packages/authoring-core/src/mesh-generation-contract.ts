@@ -9,6 +9,7 @@ export const V6_MESH_GENERATION_METHOD_IDS = [
   "auto-outline-v6b-constrainautor",
   "auto-outline-v6c-poly2tri",
   "auto-outline-v6d-contour-constrainautor",
+  "auto-outline-v6d-contour-band-support-rings",
   "auto-outline-v6e-contour-poly2tri",
   "auto-outline-v6f-contour-custom-cdt"
 ] as const;
@@ -18,6 +19,7 @@ export const V6_MESH_GENERATION_SOURCE_IDS = [
   "outline-v6b-constrainautor-rgba",
   "outline-v6c-poly2tri-rgba",
   "outline-v6d-contour-constrainautor-rgba",
+  "outline-v6d-contour-band-support-rings-rgba",
   "outline-v6e-contour-poly2tri-rgba",
   "outline-v6f-contour-custom-cdt-rgba"
 ] as const;
@@ -27,6 +29,7 @@ export const V6_MESH_GENERATION_BACKEND_IDS = [
   "v6b-constrainautor",
   "v6c-poly2tri",
   "v6d-contour-constrainautor",
+  "v6d-contour-band-support-rings",
   "v6e-contour-poly2tri",
   "v6f-contour-custom-cdt"
 ] as const;
@@ -89,6 +92,14 @@ export const V6_MESH_GENERATION_CANDIDATES = [
     methodId: "auto-outline-v6d-contour-constrainautor",
     sourceId: "outline-v6d-contour-constrainautor-rgba",
     backendId: "v6d-contour-constrainautor",
+    dependencyGateStatus: "available",
+    dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"],
+    backendImplementationStatus: "implemented"
+  },
+  {
+    methodId: "auto-outline-v6d-contour-band-support-rings",
+    sourceId: "outline-v6d-contour-band-support-rings-rgba",
+    backendId: "v6d-contour-band-support-rings",
     dependencyGateStatus: "available",
     dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"],
     backendImplementationStatus: "implemented"
@@ -172,6 +183,8 @@ export type MeshGenerationV6FallbackReason =
   | "v6d-constrainautor-generation-failed"
   | "v6d-constraint-recovery-failed"
   | "v6d-backend-threw"
+  | "v6d-support-ring-geometry-invalid"
+  | "v6d-support-ring-constraint-recovery-failed"
   | "v6e-poly2tri-generation-failed"
   | "v6e-poly2tri-polygon-invalid"
   | "v6e-poly2tri-triangulation-threw"

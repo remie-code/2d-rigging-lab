@@ -169,6 +169,7 @@ export interface MeshGenerationV6Metrics {
   readonly provenance: readonly string[];
   readonly contourPipelineDiagnostics?: MeshGenerationV6ContourPipelineDiagnostics;
   readonly constrainautorDiagnostics?: MeshGenerationV6ConstrainautorDiagnostics;
+  readonly supportRingDiagnostics?: MeshGenerationV6SupportRingDiagnostics;
   readonly poly2triDiagnostics?: MeshGenerationV6Poly2TriDiagnostics;
   readonly customCdtDiagnostics?: MeshGenerationV6CustomCdtDiagnostics;
 }
@@ -193,6 +194,25 @@ export interface MeshGenerationV6ConstrainautorDiagnostics {
   readonly constraintRecoveryFailed: boolean;
   readonly outsideTriangleCount: number;
   readonly thrownErrorKind?: string;
+}
+
+export interface MeshGenerationV6SupportRingDiagnostics {
+  readonly boundaryRingPointCount: number;
+  readonly alphaBoundaryRingPointCount: number;
+  readonly outerRingPointCount: number;
+  readonly innerRingPointCount: number;
+  readonly skippedRingPointCount: number;
+  readonly mergedRingPointCount: number;
+  readonly ringSelfIntersectionCount: number;
+  readonly bridgeConstraintCount: number;
+  readonly supportBandTriangleCount: number;
+  readonly alphaBoundaryBandTriangleCount: number;
+  readonly interiorTriangleCount: number;
+  readonly verticesExtendOutsideLayerBounds: boolean;
+  readonly maxOutsideLayerDistance: number;
+  readonly outerRingOffset: number;
+  readonly innerRingOffset: number;
+  readonly outerRingUvPolicy: "projected-to-alpha-boundary";
 }
 
 export interface MeshGenerationV6Poly2TriDiagnostics {

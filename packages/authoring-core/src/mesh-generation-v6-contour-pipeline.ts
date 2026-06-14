@@ -840,24 +840,24 @@ const getDensityParameters = (densityHint: MeshDensityHint): DensityParameters =
   switch (densityHint) {
     case "high":
       return {
-        boundarySpacing: 1.75,
-        interiorSpacing: 3,
-        maxBoundaryVertices: 128,
+        boundarySpacing: 10,
+        interiorSpacing: 7.5,
+        maxBoundaryVertices: 96,
         maxInteriorVertices: 64,
-        interiorBoundaryClearance: 0.75
+        interiorBoundaryClearance: 1.1
       };
     case "medium":
       return {
-        boundarySpacing: 2.75,
-        interiorSpacing: 5,
+        boundarySpacing: 15,
+        interiorSpacing: 10,
         maxBoundaryVertices: 96,
         maxInteriorVertices: 32,
         interiorBoundaryClearance: 1.1
       };
     case "low":
       return {
-        boundarySpacing: 4.25,
-        interiorSpacing: 7,
+        boundarySpacing: 30,
+        interiorSpacing: 15,
         maxBoundaryVertices: 64,
         maxInteriorVertices: 16,
         interiorBoundaryClearance: 1.5

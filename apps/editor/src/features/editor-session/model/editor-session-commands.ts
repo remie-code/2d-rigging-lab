@@ -18,6 +18,7 @@ import {
   createDrawableTreeOrderEntries,
   type DrawableDropPlacement
 } from "./session-tree";
+import { DEFAULT_MESH_GENERATION_METHOD } from "./mesh-tool-state";
 
 export interface EditorSessionCommandResult {
   readonly committed: boolean;
@@ -276,7 +277,7 @@ export function commitGenerateMesh(
   drawableId: DrawableId,
   densityHint: GenerateMeshPayloadDto["densityHint"],
   previewMesh?: AuthoringSession["graph"]["meshes"][number],
-  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2.6-soft-apron",
+  method: GenerateMeshPayloadDto["method"] = DEFAULT_MESH_GENERATION_METHOD,
   previewProvenance?: GenerateMeshPayloadDto["previewProvenance"]
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {

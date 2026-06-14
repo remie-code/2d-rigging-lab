@@ -24,6 +24,7 @@ import {
   type AutoOutlineV6EContourPoly2TriFailureMetrics
 } from "./mesh-generation-v6e-contour-poly2tri.js";
 import { createAutoOutlineV6DContourConstrainautorMesh } from "./mesh-generation-v6d-contour-constrainautor.js";
+import { createAutoOutlineV6DContourBandSupportRingsMesh } from "./mesh-generation-v6d-contour-band-support-rings.js";
 import {
   createAutoOutlineV6FCustomCdtMesh,
   type AutoOutlineV6FCustomCdtFailureMetrics
@@ -166,6 +167,16 @@ export const createGeneratedMeshForDrawable = (
 
     if (input.method === "auto-outline-v6d-contour-constrainautor") {
       return createV6DContourConstrainautorMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(textureBytes === undefined ? {} : { textureBytes })
+      });
+    }
+
+    if (input.method === "auto-outline-v6d-contour-band-support-rings") {
+      return createV6DContourBandSupportRingsMeshResult({
         existingMesh,
         drawableId: drawable.drawableId,
         provenanceId: input.provenanceId,
@@ -1369,6 +1380,68 @@ const createV6DContourConstrainautorMeshResult = (input: {
   });
 };
 
+const createV6DContourBandSupportRingsMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV6MeshGenerationCandidate("auto-outline-v6d-contour-band-support-rings");
+  if (input.textureBytes === undefined) {
+    return createV6BlockedFallbackMeshResult({
+      candidate,
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV6DContourBandSupportRingsMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  if (generated.status === "fallback") {
+    return {
+      mesh: generated.mesh,
+      source: generated.source,
+      fallbackReason: generated.reason,
+      fallbackSteps: generated.fallbackSteps,
+      qualityMetrics: generated.qualityMetrics,
+      ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds })
+    };
+  }
+
+  return createV6BlockedFallbackMeshResult({
+    candidate,
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    fallbackReason: generated.reason,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+    ...(generated.opaquePixelCount === undefined ? {} : { opaquePixelCount: generated.opaquePixelCount }),
+    ...(generated.contourPipeline === undefined ? {} : { contourPipeline: generated.contourPipeline })
+  });
+};
+
 const createV6FCustomCdtMeshResult = (input: {
   readonly existingMesh: MeshDto;
   readonly drawableId: DrawableId;
@@ -1780,7 +1853,7 @@ const createV6DeferredBackendDiagnostics = (
   fallbackReason?: MeshGenerationFallbackReason
 ): Pick<
   NonNullable<Parameters<typeof computeMeshQualityMetrics>[1]["v6Metrics"]>,
-  "constrainautorDiagnostics" | "poly2triDiagnostics" | "customCdtDiagnostics"
+  "constrainautorDiagnostics" | "supportRingDiagnostics" | "poly2triDiagnostics" | "customCdtDiagnostics"
 > => {
   const constraintEdgeCount = contourCandidate?.constraintEdges.length ?? 0;
   if (candidate.backendId === "v6b-constrainautor") {
@@ -1805,6 +1878,37 @@ const createV6DeferredBackendDiagnostics = (
         missingConstraintEdgeCount: constraintEdgeCount,
         constraintRecoveryFailed: false,
         outsideTriangleCount: 0
+      }
+    };
+  }
+
+  if (candidate.backendId === "v6d-contour-band-support-rings") {
+    return {
+      constrainautorDiagnostics: {
+        dependencyGateStatus: candidate.dependencyGateStatus,
+        constraintEdgeCount,
+        preservedConstraintEdgeCount: 0,
+        missingConstraintEdgeCount: constraintEdgeCount,
+        constraintRecoveryFailed: false,
+        outsideTriangleCount: 0
+      },
+      supportRingDiagnostics: {
+        boundaryRingPointCount: 0,
+        alphaBoundaryRingPointCount: 0,
+        outerRingPointCount: 0,
+        innerRingPointCount: 0,
+        skippedRingPointCount: 0,
+        mergedRingPointCount: 0,
+        ringSelfIntersectionCount: 0,
+        bridgeConstraintCount: 0,
+        supportBandTriangleCount: 0,
+        alphaBoundaryBandTriangleCount: 0,
+        interiorTriangleCount: 0,
+        verticesExtendOutsideLayerBounds: false,
+        maxOutsideLayerDistance: 0,
+        outerRingOffset: 0,
+        innerRingOffset: 0,
+        outerRingUvPolicy: "projected-to-alpha-boundary"
       }
     };
   }

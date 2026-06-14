@@ -248,30 +248,19 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   const meshInspector = page.locator('[data-testid="mesh-tool-inspector"]:visible').first();
   const meshStatus = page.locator('[data-testid="mesh-tool-status"]:visible').first();
   const meshSource = page.locator('[data-testid="mesh-tool-source"]:visible').first();
+  const meshGenerationResult = page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible').first();
 
   await expect(meshInspector).toBeVisible();
   await expect(canvas).toHaveAttribute("data-mesh-preview-drawable-visible", "true");
   await page.getByRole("button", { name: "Preview Standard mesh" }).click();
   await expect(meshStatus).toHaveText("Draft preview");
-  await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");
+  await expect(meshSource).not.toHaveText("Soft apron mesh");
+  await expect(meshGenerationResult).toContainText("Contour support mesh");
   await expect(meshInspector).toContainText("Max edge");
   await expect(meshInspector).toContainText("Min angle");
-  await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible').first()).toContainText(
-    "Temporary"
-  );
-  const backendSelector = page.locator('[data-testid="mesh-tool-backend-selector"]:visible').first();
-  await expect(backendSelector).toContainText("v6D Contour Constrainautor");
-  await expect(backendSelector).toContainText("v6E Contour Poly2Tri");
-  await expect(backendSelector).toContainText("v6F Custom CDT");
-  await expect(backendSelector).not.toContainText("v6A Local");
-  await expect(backendSelector).not.toContainText("v6B Constrainautor");
-  await expect(backendSelector).not.toContainText("v6C Poly2Tri");
-  await page.getByRole("button", { name: "Preview v6D Contour Constrainautor mesh backend" }).click();
-  await expect(page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible').first()).toContainText(
-    "v6D contour Constrainautor"
-  );
-  await page.getByRole("button", { name: "Preview Default v2.6 mesh backend" }).click();
-  await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");
+  await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible')).toHaveCount(0);
+  await expect(meshInspector).not.toContainText("Experimental backend");
+  await expect(page.getByRole("button", { name: /v6D|v6E|v6F|backend/i })).toHaveCount(0);
   await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-vertex-count", /^[1-9]\d*$/);

@@ -609,82 +609,41 @@ describe("editor session commands", () => {
     );
   });
 
-  it("defaults Mesh Tool generation commands to auto-outline-v2.6-soft-apron", () => {
+  it("defaults Mesh Tool generation commands to improved v6D support-ring output", () => {
     const session = createFixtureSession([DRAW_A]);
-    const bytes = createAlphaBytes(4, 4, [
-      [1, 1],
-      [2, 1],
-      [1, 2],
-      [2, 2]
-    ]);
-    session.graph.meshes = [
-      {
-        meshId: MeshIdSchema.parse("mesh_a"),
-        drawableId: DRAW_A,
-        vertices: [],
-        uvs: [],
-        triangles: [],
-        vertexStableIds: [],
-        triangleStableIds: [],
-        topologyRevision: 0,
-        bounds: { x: 0, y: 0, width: 4, height: 4 },
-        generationProvenanceId: ProvenanceIdSchema.parse("prov_a")
-      }
-    ];
-    session.graph.textureAtlas = {
-      schemaVersion: "texture-atlas-v1",
-      textures: [
-        {
-          textureId: TextureIdSchema.parse("tex_a"),
-          filePath: "assets/textures/a.raw-rgba",
-          sourceAssetId: SourceAssetIdSchema.parse("src_fixture"),
-          binaryAssetRef: {
-            referenceKind: "package-binary-asset-ref-v1",
-            binaryAssetId: "bin_a_rgba",
-            packageRelativePath: "assets/textures/a.raw-rgba",
-            digest: {
-              algorithm: "sha256",
-              hex: "0".repeat(64)
-            },
-            byteLength: bytes.byteLength,
-            mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
-            storageStatus: "stored-package-local-v1",
-            provenanceId: ProvenanceIdSchema.parse("prov_a"),
-            rightsAssetId: "rights_a"
-          }
-        }
-      ]
-    };
-    session.binaryAssets = {
-      fileEntries: [
-        {
-          path: "assets/textures/a.raw-rgba",
-          bytes,
-          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
-          binaryAssetId: "bin_a_rgba"
-        }
-      ],
-      binaryAssetIndex: {
-        schemaVersion: "binary-asset-index-v1",
-        assets: []
-      },
-      byteIntakeSummaries: []
-    };
+    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+    attachDrawableMeshTextureBytes(session, {
+      meshBounds: fixture.meshBounds,
+      textureSize: fixture.textureSize,
+      bytes: createAlphaBytes(
+        fixture.textureSize.width,
+        fixture.textureSize.height,
+        fixture.opaquePixels
+      )
+    });
 
     const result = commitGenerateMesh(session, DRAW_A, "medium");
 
     expect(result.committed).toBe(true);
     expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
       expect.arrayContaining([
-        "generateMesh:auto-outline-v2.6-soft-apron",
-        "fallback:auto-outline-v2.6-soft-apron:soft-boundary-generation-failed",
-        "meshSource:outline-v2-rgba"
+        "generateMesh:auto-outline-v6d-contour-band-support-rings",
+        "meshSource:outline-v6d-contour-band-support-rings-rgba",
+        "meshQuality:v6ActualSource=outline-v6d-contour-band-support-rings-rgba",
+        "meshQuality:v6Output=backend-output",
+        "meshQuality:v6Backend=v6d-contour-band-support-rings"
       ])
     );
   });
 
-  it("commits v6D v6E and v6F preview mesh geometry with the previewed method provenance", () => {
+  it("commits preview mesh geometry with improved v6D provenance and keeps legacy preview provenance safe", () => {
     const previewCases = [
+      {
+        token: "v6d_support",
+        method: "auto-outline-v6d-contour-band-support-rings",
+        source: "outline-v6d-contour-band-support-rings-rgba",
+        backend: "v6d-contour-band-support-rings"
+      },
       {
         token: "v6d",
         method: "auto-outline-v6d-contour-constrainautor",

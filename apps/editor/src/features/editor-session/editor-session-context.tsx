@@ -85,10 +85,8 @@ import {
 } from "./model/parameter-definition-commands";
 import {
   createMeshPreviewProvenanceId,
-  DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID,
-  getMeshGenerationBackendOption,
+  DEFAULT_MESH_GENERATION_METHOD,
   getMeshGenerationPreset,
-  type MeshGenerationBackendOptionId,
   type MeshGenerationPresetId
 } from "./model/mesh-tool-state";
 import { mergeEditorHiddenPartIds } from "./model/editor-hidden-part-state";
@@ -119,7 +117,6 @@ import { useEditorUiStore } from "../../state/editor-ui-store";
 export interface MeshToolDraft {
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
-  readonly backendOptionId: MeshGenerationBackendOptionId;
   readonly method: GeneratedMeshPreviewCommitMethod;
   readonly mesh: AuthoringSession["graph"]["meshes"][number];
   readonly source: DrawableGeneratedMeshResult["source"];
@@ -127,6 +124,45 @@ export interface MeshToolDraft {
   readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
   readonly fallbackSteps?: DrawableGeneratedMeshResult["fallbackSteps"];
   readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
+}
+
+function logMeshGenerationPreviewDebug(input: {
+  readonly session: AuthoringSession;
+  readonly drawableId: DrawableId;
+  readonly presetId: MeshGenerationPresetId;
+  readonly method: GeneratedMeshPreviewCommitMethod;
+  readonly densityHint: string | undefined;
+  readonly generated: DrawableGeneratedMeshResult | undefined;
+}): void {
+  const drawable = input.session.graph.drawables.find((candidate) => candidate.drawableId === input.drawableId);
+  const generated = input.generated;
+  const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+  const supportRingDiagnostics = v6Metrics?.supportRingDiagnostics;
+  const contourPipelineDiagnostics = v6Metrics?.contourPipelineDiagnostics;
+  const summary = {
+    drawableId: input.drawableId,
+    drawableName: drawable?.displayName,
+    presetId: input.presetId,
+    densityHint: input.densityHint,
+    method: input.method,
+    status: generated === undefined ? "undefined" : "generated",
+    source: generated?.source,
+    fallbackReason: generated?.fallbackReason,
+    fallbackSteps: generated?.fallbackSteps,
+    vertexCount: generated?.mesh.vertices.length,
+    triangleCount: generated?.mesh.triangles.length,
+    alphaBounds: generated?.alphaBounds,
+    v6OutputKind: v6Metrics?.outputKind,
+    v6BackendId: v6Metrics?.backendId,
+    v6FallbackReason: v6Metrics?.fallbackReason,
+    contourPipelineDiagnostics,
+    supportRingDiagnostics
+  };
+
+  const log = generated === undefined || generated.fallbackReason !== undefined || v6Metrics?.outputKind !== "backend-output"
+    ? console.warn
+    : console.info;
+  log("[mesh-generation:preview]", summary);
 }
 
 interface EditorSessionState {
@@ -187,8 +223,7 @@ interface EditorSessionContextValue {
   readonly moveStructureChild: (moved: StructureOrderItem, drop: StructureOrderDrop) => void;
   readonly previewMeshDraft: (
     drawableId: DrawableId,
-    presetId: MeshGenerationPresetId,
-    backendOptionId?: MeshGenerationBackendOptionId
+    presetId: MeshGenerationPresetId
   ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
@@ -653,17 +688,27 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   const previewMeshDraft = useCallback(
     (
       drawableId: DrawableId,
-      presetId: MeshGenerationPresetId,
-      backendOptionId: MeshGenerationBackendOptionId = DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID
+      presetId: MeshGenerationPresetId
     ) => {
       const preset = getMeshGenerationPreset(presetId);
-      const backendOption = getMeshGenerationBackendOption(backendOptionId);
       const generated = createGeneratedMeshForDrawable({
         session,
         drawableId,
-        provenanceId: createMeshPreviewProvenanceId(drawableId, presetId, backendOption.method),
-        method: backendOption.method,
+        provenanceId: createMeshPreviewProvenanceId(
+          drawableId,
+          presetId,
+          DEFAULT_MESH_GENERATION_METHOD
+        ),
+        method: DEFAULT_MESH_GENERATION_METHOD,
         densityHint: preset.densityHint
+      });
+      logMeshGenerationPreviewDebug({
+        session,
+        drawableId,
+        presetId,
+        method: DEFAULT_MESH_GENERATION_METHOD,
+        densityHint: preset.densityHint,
+        generated
       });
 
       if (generated === undefined) {
@@ -674,8 +719,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       setMeshDraft({
         drawableId,
         presetId,
-        backendOptionId: backendOption.id,
-        method: backendOption.method,
+        method: DEFAULT_MESH_GENERATION_METHOD,
         mesh: generated.mesh,
         source: generated.source,
         ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),

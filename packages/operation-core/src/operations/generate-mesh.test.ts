@@ -490,6 +490,35 @@ describe("generateMesh operation handler", () => {
           expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
         }
 
+        if (candidate.backendId === "v6d-contour-band-support-rings") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6d-contour-delaunator-constrainautor",
+              "meshQuality:v6ConstrainautorDependencyGate=available",
+              "meshQuality:v6ConstrainautorMissingConstraints=0",
+              "meshQuality:v6ConstrainautorRecoveryFailed=false",
+              "meshQuality:v6SupportRingOuterOffset=2.5",
+              "meshQuality:v6SupportRingInnerOffset=1.75",
+              "meshQuality:v6SupportRingOuterUvPolicy=projected-to-alpha-boundary"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}:`))).toBe(false);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorConstraintEdges="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingBoundaryPoints=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingAlphaBoundaryPoints=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingOuterPoints=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingInnerPoints=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingSupportBandTriangles=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingInteriorTriangles=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingOutsideLayer=(true|false)$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6SupportRingMaxOutsideLayerDistance="))).toBe(true);
+        }
+
         if (candidate.backendId === "v6c-poly2tri") {
           expect(transformHistory).toEqual(
             expect.arrayContaining([
@@ -598,6 +627,7 @@ describe("generateMesh operation handler", () => {
     const newContourCandidates = V6_MESH_GENERATION_CANDIDATES.filter(
       (candidate) =>
         candidate.backendId === "v6d-contour-constrainautor" ||
+        candidate.backendId === "v6d-contour-band-support-rings" ||
         candidate.backendId === "v6e-contour-poly2tri" ||
         candidate.backendId === "v6f-contour-custom-cdt"
     );
@@ -646,6 +676,7 @@ describe("generateMesh operation handler", () => {
     const newContourCandidates = V6_MESH_GENERATION_CANDIDATES.filter(
       (candidate) =>
         candidate.backendId === "v6d-contour-constrainautor" ||
+        candidate.backendId === "v6d-contour-band-support-rings" ||
         candidate.backendId === "v6e-contour-poly2tri" ||
         candidate.backendId === "v6f-contour-custom-cdt"
     );
@@ -838,6 +869,55 @@ describe("generateMesh operation handler", () => {
         "meshQuality:v6FallbackSteps=0"
       ])
     );
+  });
+
+  it("preserves v6d support-ring preview provenance diagnostics on previewMesh commit", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 20, height: 16 },
+      meshBounds: { x: 4, y: 8, width: 20, height: 16 },
+      opaquePixels: createPixelsFromPredicate(20, 16, (x, y) => x >= 4 && x <= 15 && y >= 3 && y <= 12)
+    });
+    const preview = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_body_v6d_support"),
+      method: "auto-outline-v6d-contour-band-support-rings",
+      densityHint: "medium"
+    });
+    if (preview === undefined) {
+      throw new Error("Expected v6d support-ring preview mesh.");
+    }
+    expect(preview.qualityMetrics?.v6Metrics?.supportRingDiagnostics).toBeDefined();
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6d-contour-band-support-rings",
+      densityHint: "medium",
+      previewMesh: preview.mesh,
+      previewProvenance: createPreviewProvenance(preview)
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6d-contour-band-support-rings",
+        "meshSource:previewMesh",
+        "previewMeshSource:outline-v6d-contour-band-support-rings-rgba",
+        "meshQuality:v6ActualSource=outline-v6d-contour-band-support-rings-rgba",
+        "meshQuality:v6Output=backend-output",
+        "meshQuality:v6Backend=v6d-contour-band-support-rings",
+        "meshQuality:v6ConstrainautorDependencyGate=available",
+        "meshQuality:v6ConstrainautorRecoveryFailed=false",
+        "meshQuality:v6SupportRingOuterOffset=2.5",
+        "meshQuality:v6SupportRingInnerOffset=1.75",
+        "meshQuality:v6SupportRingOuterUvPolicy=projected-to-alpha-boundary"
+      ])
+    );
+    expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingBoundaryPoints=[1-9]\d*$/.test(entry))).toBe(true);
+    expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingOuterPoints=[1-9]\d*$/.test(entry))).toBe(true);
+    expect(transformHistory.some((entry) => /^meshQuality:v6SupportRingSupportBandTriangles=[1-9]\d*$/.test(entry))).toBe(true);
   });
 
   it("preserves v6 fallback preview provenance on previewMesh commit", () => {
@@ -1090,6 +1170,31 @@ function expectBlockedBackendProvenance(
         "meshQuality:v6ConstrainautorPreservedConstraints=0",
         "meshQuality:v6ConstrainautorMissingConstraints=0",
         "meshQuality:v6ConstrainautorRecoveryFailed=false"
+      ])
+    );
+  }
+
+  if (backendId === "v6d-contour-band-support-rings") {
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "meshQuality:v6ConstrainautorDependencyGate=available",
+        "meshQuality:v6ConstrainautorConstraintEdges=0",
+        "meshQuality:v6ConstrainautorPreservedConstraints=0",
+        "meshQuality:v6ConstrainautorMissingConstraints=0",
+        "meshQuality:v6ConstrainautorRecoveryFailed=false",
+        "meshQuality:v6SupportRingBoundaryPoints=0",
+        "meshQuality:v6SupportRingAlphaBoundaryPoints=0",
+        "meshQuality:v6SupportRingOuterPoints=0",
+        "meshQuality:v6SupportRingInnerPoints=0",
+        "meshQuality:v6SupportRingSkippedPoints=0",
+        "meshQuality:v6SupportRingMergedPoints=0",
+        "meshQuality:v6SupportRingSupportBandTriangles=0",
+        "meshQuality:v6SupportRingInteriorTriangles=0",
+        "meshQuality:v6SupportRingOutsideLayer=false",
+        "meshQuality:v6SupportRingMaxOutsideLayerDistance=0",
+        "meshQuality:v6SupportRingOuterOffset=0",
+        "meshQuality:v6SupportRingInnerOffset=0",
+        "meshQuality:v6SupportRingOuterUvPolicy=projected-to-alpha-boundary"
       ])
     );
   }

@@ -18,7 +18,8 @@
 | [auto-outline-v6b-constrainautor.md](auto-outline-v6b-constrainautor.md) | v6 shared pipelineの `delaunator + @kninnug/constrainautor` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
 | [auto-outline-v6c-poly2tri.md](auto-outline-v6c-poly2tri.md) | v6 shared pipelineの `poly2tri` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
 | [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) | Wave68 v6A visual review後の次候補。v6Aを輪郭抽出器として救い、三角形化をv6D/v6Eのライブラリbackendとv6Fの自作backendへ差し替える | Draft algorithm spec / next-wave candidate |
-| [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) | Wave69 v6D visual review後の次候補。v6Dのsoft alpha contour/constrained triangulationを維持し、外側/内側support ringとlayer-bounds外mesh vertexを検討する | Draft algorithm spec / post-Wave69 refinement candidate |
+| [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) | Wave69 v6D visual review後の次候補。v6Dのsoft alpha contour/constrained triangulationを維持し、外側/内側support ringとlayer-bounds外mesh vertexを検討する。Wave70では実装名をv6D lineageへ戻すbasisとして扱い、`auto-outline-v6d-contour-band-support-rings` として実装された | Draft algorithm spec / Wave70 v6D-lineage implementation basis |
+| [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) | Wave70 visual tuning後の次候補。alpha boundary と inner ring の間をDelaunay任せにせず、alpha edge midpointから内側へずらしたstaggered inner ringと明示triangle stripで内側境界帯を広げる | Draft algorithm spec / next-wave candidate |
 | [auto-outline-v6-library-candidate-inventory.md](auto-outline-v6-library-candidate-inventory.md) | v6 sidecarで利用可能な外部ライブラリ候補、依存リスク、spike順序の調査メモ | Research inventory |
 
 ## 境界
@@ -39,12 +40,13 @@
 - 2026-06-14のユーザー判断により、新方式は `auto-outline-v6` sidecarとして扱う。v6の設計根拠は [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) に限定し、既存実装やV1-V5系統をアルゴリズム根拠にしない。
 - v6は最終的に1方式へ絞る前提で、動作確認中だけEditorから `v6a local` / `v6b constrainautor` / `v6c poly2tri` を切り替えられる一時比較用backendとして扱う。
 - Wave68後のユーザー判断では、`v6a` は輪郭抽出・boundary samplingまでが有望だが、ear clipping + interior split triangulationは破棄する。ABC比較ではAの品質が最も高かったため、自作三角形化も有力候補として残す。次候補は [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) をbasisに、v6D/v6E/v6Fを作り、Editorの一時selectorからv6A/v6B/v6Cを外してよい。
-- Wave69後のユーザー判断では、`v6d` がかなり良い。次の有力改善は [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) をbasisに、soft alpha mask / boundary sampling / constrained triangulationを維持しつつ、外側support ring、内側support ring、layer boundsを越えるmesh vertexを検討すること。
+- Wave69後のユーザー判断では、`v6d` がかなり良い。Wave70では [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) を設計basisにしつつ、公開実装名をv6Gではなくv6D lineageへ戻し、改良v6Dを `auto-outline-v6d-contour-band-support-rings` として新ファイル・新method/source idで実装した。Editorの一時アルゴリズム選択UIは外れ、通常のmesh生成は改良v6D系列へ決め打つ。
+- Wave70後のvisual tuningでは、境界付近の内側帯がまだ狭く、`innerOffset` 調整だけでは見た目が変わりにくいことが分かった。次候補は [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) をbasisに、alpha edge midpointから内側へずらしたstaggered inner ringと明示triangle stripで、alpha boundary直下の帯をDelaunay任せにしない。
 
 ## 次の作業候補
 
-1. 次のmesh品質改善候補は [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) をbasisに、v6Dを本命寄りに伸ばす。
-2. v6G検討では、mesh verticesがlayer boundsを越えられる設計と、UVを有効texture範囲に留める設計を分けて扱う。
-3. 実装計画にする前に、outer ringをtriangulation outer boundaryにするか、alpha boundaryをouter boundaryのままにするかを決める。
+1. [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) を次wave候補として、alpha boundary -> staggered inner ring の明示triangle stripを実装する。
+2. [Wave70 final integration report](../../implementation/waves/wave70/wave70-final-integration-report.md) を改良v6D support-ring backendの実装済み基準として扱う。
+3. mesh verticesがlayer boundsを越えられる設計と、UVを有効texture範囲に留める設計を分けて扱い続ける。
 4. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。
 5. Mesh形状品質とmesh rendering品質を混同しない。描画方式の改善は [../mesh-rendering/mesh-image-rendering-architecture.md](../mesh-rendering/mesh-image-rendering-architecture.md) をbasisにする。

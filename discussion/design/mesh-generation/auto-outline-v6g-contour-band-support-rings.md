@@ -1,13 +1,23 @@
 # auto-outline-v6G Contour Band Support Rings
 
 > Draft algorithm spec / post-Wave69 refinement candidate.
-> This document records the user discussion after visually checking v6D: v6D is strong, especially around the contour, and the next likely improvement is to keep the v6D contour/constrained-triangulation direction while adding inner and outer support rings and removing layer-bounds clipping pressure from mesh vertices.
+> This document records the user discussion after visually checking v6D: v6D is strong, especially around the contour, and the next likely improvement is to keep the v6D contour/constrained-triangulation direction while adding inner and outer support rings and removing layer-bounds clipping pressure from mesh vertices. The filename keeps the original discussion label, but Wave70 treats this as a v6D-lineage refinement basis, not as a public `v6g` implementation id.
 
 ## 1. Position
 
-`auto-outline-v6g-contour-band-support-rings` is a proposed refinement of the Wave69 v6D direction.
+`auto-outline-v6g-contour-band-support-rings` was the discussion label for a proposed refinement of the Wave69 v6D direction.
 
-It is not a new final default decision. It is a candidate basis for the next mesh-generation quality wave.
+Wave70 resolves the naming direction: implement this idea as improved v6D lineage, not as public v6G.
+
+Expected Wave70 implementation names:
+
+```text
+method id: auto-outline-v6d-contour-band-support-rings
+source id: outline-v6d-contour-band-support-rings-rgba
+implementation file: packages/authoring-core/src/mesh-generation-v6d-contour-band-support-rings.ts
+```
+
+The current `auto-outline-v6d-contour-constrainautor` implementation remains available as the old v6D baseline.
 
 The main observation:
 
@@ -312,7 +322,7 @@ v6G is acceptable as an experimental candidate when:
 
 ## 16. Open Questions
 
-- Should this be implemented as `auto-outline-v6g-contour-band-support-rings`, or as a v6D refinement such as `auto-outline-v6d2-contour-band`?
+- Resolved for Wave70: implement as v6D lineage, specifically `auto-outline-v6d-contour-band-support-rings`.
 - Should outer support ring use alpha-boundary UVs, clamped texture-edge UVs, or a later padded texture coordinate model?
 - How far outside the layer bounds may mesh vertices extend before view fitting / hit testing becomes confusing?
 - Should outer ring be the triangulation boundary, with alpha boundary as an internal support ring?

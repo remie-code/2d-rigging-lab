@@ -76,6 +76,7 @@
 | [wave67-plan.md](wave67-plan.md) | Wave 67 Mesh Rendering Foundation + Parent-Child Deformer Semantics + Mesh V4 Sidecar dependency and Orch-Sylph plan | Completed / pass; final validation and final clean integration review recorded `pass` |
 | [wave68-plan.md](wave68-plan.md) | Wave 68 Mesh Generation Quality Foundation v6 Sidecar Candidates dependency and Orch-Sylph plan | Completed / pass; final validation and final clean integration review recorded `pass` |
 | [wave69-plan.md](wave69-plan.md) | Wave 69 Mesh Generation v6 Contour Salvage Triangulation Candidates dependency and Orch-Sylph plan | Completed / pass; final clean integration review recorded `pass` |
+| [wave70-plan.md](wave70-plan.md) | Wave 70 Mesh Generation v6D Mainline Support Rings dependency and Orch-Sylph plan | Completed / pass; final integration report and clean review recorded |
 
 ## Current Decision
 
@@ -85,6 +86,7 @@
 - Wave67 is complete / pass under [wave67-plan.md](wave67-plan.md), adding shared WebGL2 renderer foundation, parent-child Deformer local-space semantics, and non-default Mesh V4 sidecar while keeping Editor default at V2.6.
 - Wave68 is complete / pass under [wave68-plan.md](wave68-plan.md), adding v6a/v6b/v6c mesh-generation sidecar candidates and a temporary Editor comparison selector without changing the default mesh method. Final report: [../waves/wave68/wave68-final-integration-report.md](../waves/wave68/wave68-final-integration-report.md). Final clean review: [../reviews/wave68/wave68-final-clean-integration-review.md](../reviews/wave68/wave68-final-clean-integration-review.md).
 - Wave69 is complete / pass under [wave69-plan.md](wave69-plan.md), saving the v6A contour extraction / boundary sampling pipeline while replacing triangulation with v6D constrainautor, v6E poly2tri, and v6F custom constrained triangulation candidates. It updates the temporary Editor selector to v6D/v6E/v6F, keeps Editor default at V2.6, resolves the v6E registry status mismatch, and records final clean integration review `pass`.
+- Wave70 is complete / pass under [wave70-plan.md](wave70-plan.md). It makes the v6D lineage the main mesh generation direction, adds improved v6D support rings as a new file/method/source id, preserves current v6D, removes the visible Editor algorithm selector, routes Editor mesh generation defaults to the improved v6D lineage, and records final integration at [../waves/wave70/wave70-final-integration-report.md](../waves/wave70/wave70-final-integration-report.md) plus final clean review at [../reviews/wave70/wave70-final-clean-integration-review.md](../reviews/wave70/wave70-final-clean-integration-review.md).
 - Wave 0 is complete and provides the package/test/check scaffold.
 - Wave 1 `contracts-foundation` completed on 2026-05-29. The final domain was `wave1-contracts-integration`.
 - Wave 1 public integration keeps `packages/contracts/src/index.ts` as a barrel-only export surface.

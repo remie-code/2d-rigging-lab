@@ -518,6 +518,7 @@ const formatV6MetricsForTransformHistory = (
     `meshQuality:v6Provenance=${v6.provenance.join(">")}`,
     ...formatV6ContourPipelineDiagnosticsForTransformHistory(metrics),
     ...formatV6ConstrainautorDiagnosticsForTransformHistory(metrics),
+    ...formatV6SupportRingDiagnosticsForTransformHistory(metrics),
     ...formatV6Poly2TriDiagnosticsForTransformHistory(metrics),
     ...formatV6CustomCdtDiagnosticsForTransformHistory(metrics)
   ];
@@ -564,6 +565,34 @@ const formatV6ConstrainautorDiagnosticsForTransformHistory = (
     ...(diagnostics.thrownErrorKind === undefined
       ? []
       : [`meshQuality:v6ConstrainautorThrown=${diagnostics.thrownErrorKind}`])
+  ];
+};
+
+const formatV6SupportRingDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.supportRingDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6SupportRingBoundaryPoints=${diagnostics.boundaryRingPointCount}`,
+    `meshQuality:v6SupportRingAlphaBoundaryPoints=${diagnostics.alphaBoundaryRingPointCount}`,
+    `meshQuality:v6SupportRingOuterPoints=${diagnostics.outerRingPointCount}`,
+    `meshQuality:v6SupportRingInnerPoints=${diagnostics.innerRingPointCount}`,
+    `meshQuality:v6SupportRingSkippedPoints=${diagnostics.skippedRingPointCount}`,
+    `meshQuality:v6SupportRingMergedPoints=${diagnostics.mergedRingPointCount}`,
+    `meshQuality:v6SupportRingSelfIntersections=${diagnostics.ringSelfIntersectionCount}`,
+    `meshQuality:v6SupportRingBridgeConstraints=${diagnostics.bridgeConstraintCount}`,
+    `meshQuality:v6SupportRingSupportBandTriangles=${diagnostics.supportBandTriangleCount}`,
+    `meshQuality:v6SupportRingAlphaBoundaryBandTriangles=${diagnostics.alphaBoundaryBandTriangleCount}`,
+    `meshQuality:v6SupportRingInteriorTriangles=${diagnostics.interiorTriangleCount}`,
+    `meshQuality:v6SupportRingOutsideLayer=${diagnostics.verticesExtendOutsideLayerBounds ? "true" : "false"}`,
+    `meshQuality:v6SupportRingMaxOutsideLayerDistance=${formatMetric(diagnostics.maxOutsideLayerDistance)}`,
+    `meshQuality:v6SupportRingOuterOffset=${formatMetric(diagnostics.outerRingOffset)}`,
+    `meshQuality:v6SupportRingInnerOffset=${formatMetric(diagnostics.innerRingOffset)}`,
+    `meshQuality:v6SupportRingOuterUvPolicy=${diagnostics.outerRingUvPolicy}`
   ];
 };
 

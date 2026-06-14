@@ -186,6 +186,25 @@ const PreviewMeshV6ConstrainautorDiagnosticsShapeSchema = z.object({
   thrownErrorKind: z.string().min(1).optional()
 });
 
+const PreviewMeshV6SupportRingDiagnosticsShapeSchema = z.object({
+  boundaryRingPointCount: z.number().int().nonnegative(),
+  alphaBoundaryRingPointCount: z.number().int().nonnegative(),
+  outerRingPointCount: z.number().int().nonnegative(),
+  innerRingPointCount: z.number().int().nonnegative(),
+  skippedRingPointCount: z.number().int().nonnegative(),
+  mergedRingPointCount: z.number().int().nonnegative(),
+  ringSelfIntersectionCount: z.number().int().nonnegative(),
+  bridgeConstraintCount: z.number().int().nonnegative(),
+  supportBandTriangleCount: z.number().int().nonnegative(),
+  alphaBoundaryBandTriangleCount: z.number().int().nonnegative(),
+  interiorTriangleCount: z.number().int().nonnegative(),
+  verticesExtendOutsideLayerBounds: z.boolean(),
+  maxOutsideLayerDistance: z.number().finite().nonnegative(),
+  outerRingOffset: z.number().finite().nonnegative(),
+  innerRingOffset: z.number().finite().nonnegative(),
+  outerRingUvPolicy: z.literal("projected-to-alpha-boundary")
+});
+
 const PreviewMeshV6Poly2TriDiagnosticsShapeSchema = z.object({
   dependencyGateStatus: PreviewMeshV6DependencyGateStatusSchema,
   outerPointCount: z.number().int().nonnegative(),
@@ -250,6 +269,7 @@ const PreviewMeshV6MetricsShapeSchema = z.object({
   provenance: z.array(z.string()),
   contourPipelineDiagnostics: PreviewMeshV6ContourPipelineDiagnosticsShapeSchema.optional(),
   constrainautorDiagnostics: PreviewMeshV6ConstrainautorDiagnosticsShapeSchema.optional(),
+  supportRingDiagnostics: PreviewMeshV6SupportRingDiagnosticsShapeSchema.optional(),
   poly2triDiagnostics: PreviewMeshV6Poly2TriDiagnosticsShapeSchema.optional(),
   customCdtDiagnostics: PreviewMeshV6CustomCdtDiagnosticsShapeSchema.optional()
 });
