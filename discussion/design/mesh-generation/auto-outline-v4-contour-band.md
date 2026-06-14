@@ -2,6 +2,12 @@
 
 > Draft algorithm spec。Cubismの三段階自動メッシュに近く見える「輪郭帯 + 内部三角形充填 + preset別target size」という振る舞いを、Private 2D Rigging Lab向けに定義する次候補。Cubism互換や再現を主張しない。
 
+## 0. Status Note
+
+この文書は、初期の `auto-outline-v4-contour-band` 構想と実装前提を記録する。
+
+その後のユーザー確認により、輪郭点を頂点化する方式、形状非依存の三角格子を切り抜く方式、逐次greedyに三角形帯を伸ばす方式には問題があることが分かった。最新の議論スナップショットは [auto-outline-v4-recursive-offset-ring.md](auto-outline-v4-recursive-offset-ring.md) を参照する。
+
 ## 1. 目的
 
 `auto-outline-v2.6-soft-apron` は、V2.5の内部密度を保ったままalpha輪郭外側に薄いapronを足す改善である。一方、Cubismの自動メッシュ結果を見ると、単にalpha内側を三角形化しているというより、次のような別系統の考え方に見える。
@@ -377,4 +383,3 @@ fallback時も、どこで落ちたかをquality summary / provenanceに残す�
 - large transparent holeを保持するか、v0では埋めるか。
 - contour bandとinterior triangulationの接続方法。
 - `auto-outline-v4-contour-band` を正式method idにするか。
-

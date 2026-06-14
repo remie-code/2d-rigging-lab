@@ -8,15 +8,28 @@ import {
 import {
   getPartOrderedChildren,
   type AuthoringSession,
+  type GeneratedMeshPreviewCommitMethod,
   type MeshDensityHint
 } from "@private-2d-rigging-lab/authoring-core";
 
 export type MeshGenerationPresetId = "largeMotion" | "standard" | "lowMotion";
+export type MeshGenerationBackendOptionId =
+  | "default-v2-6-soft-apron"
+  | "auto-outline-v6a-local"
+  | "auto-outline-v6b-constrainautor"
+  | "auto-outline-v6c-poly2tri";
 
 export interface MeshGenerationPreset {
   readonly id: MeshGenerationPresetId;
   readonly label: string;
   readonly densityHint: MeshDensityHint;
+  readonly summary: string;
+}
+
+export interface MeshGenerationBackendOption {
+  readonly id: MeshGenerationBackendOptionId;
+  readonly label: string;
+  readonly method: GeneratedMeshPreviewCommitMethod;
   readonly summary: string;
 }
 
@@ -58,18 +71,60 @@ export const MESH_GENERATION_PRESETS: readonly MeshGenerationPreset[] = [
 ];
 
 export const DEFAULT_MESH_GENERATION_PRESET_ID: MeshGenerationPresetId = "standard";
+export const DEFAULT_MESH_GENERATION_METHOD: GeneratedMeshPreviewCommitMethod =
+  "auto-outline-v2.6-soft-apron";
+export const DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID: MeshGenerationBackendOptionId =
+  "default-v2-6-soft-apron";
+
+export const MESH_GENERATION_BACKEND_OPTIONS: readonly MeshGenerationBackendOption[] = [
+  {
+    id: DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID,
+    label: "Default v2.6",
+    method: DEFAULT_MESH_GENERATION_METHOD,
+    summary: "Current soft apron preview path."
+  },
+  {
+    id: "auto-outline-v6a-local",
+    label: "v6A Local",
+    method: "auto-outline-v6a-local",
+    summary: "Local v6 comparison candidate."
+  },
+  {
+    id: "auto-outline-v6b-constrainautor",
+    label: "v6B Constrainautor",
+    method: "auto-outline-v6b-constrainautor",
+    summary: "Delaunator constraint candidate."
+  },
+  {
+    id: "auto-outline-v6c-poly2tri",
+    label: "v6C Poly2Tri",
+    method: "auto-outline-v6c-poly2tri",
+    summary: "Constrained polygon candidate."
+  }
+];
 
 export const getMeshGenerationPreset = (
   presetId: MeshGenerationPresetId
 ): MeshGenerationPreset =>
   MESH_GENERATION_PRESETS.find((preset) => preset.id === presetId) ?? MESH_GENERATION_PRESETS[1]!;
 
+export const getMeshGenerationBackendOption = (
+  optionId: MeshGenerationBackendOptionId
+): MeshGenerationBackendOption =>
+  MESH_GENERATION_BACKEND_OPTIONS.find((option) => option.id === optionId) ??
+  MESH_GENERATION_BACKEND_OPTIONS[0]!;
+
+export const resolveMeshGenerationMethodForBackendOption = (
+  optionId: MeshGenerationBackendOptionId = DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID
+): GeneratedMeshPreviewCommitMethod => getMeshGenerationBackendOption(optionId).method;
+
 export const createMeshPreviewProvenanceId = (
   drawableId: DrawableId,
-  presetId: MeshGenerationPresetId
+  presetId: MeshGenerationPresetId,
+  method: GeneratedMeshPreviewCommitMethod = DEFAULT_MESH_GENERATION_METHOD
 ): ProvenanceId =>
   ProvenanceIdSchema.parse(
-    `prov_mesh_preview_${sanitizeIdToken(stripIdPrefix(drawableId, "draw_"))}_${presetId}`
+    `prov_mesh_preview_${sanitizeIdToken(stripIdPrefix(drawableId, "draw_"))}_${presetId}${formatMethodProvenanceSuffix(method)}`
   );
 
 export const createMeshStatusProjection = (
@@ -163,6 +218,13 @@ export const parseMeshGenerationPresetId = (value: string): MeshGenerationPreset
     ? (value as MeshGenerationPresetId)
     : DEFAULT_MESH_GENERATION_PRESET_ID;
 
+export const parseMeshGenerationBackendOptionId = (
+  value: string
+): MeshGenerationBackendOptionId =>
+  MESH_GENERATION_BACKEND_OPTIONS.some((option) => option.id === value)
+    ? (value as MeshGenerationBackendOptionId)
+    : DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID;
+
 const formatBounds = (bounds: RectDto): string =>
   `${formatNumber(bounds.width)} x ${formatNumber(bounds.height)} at ${formatNumber(bounds.x)}, ${formatNumber(bounds.y)}`;
 
@@ -171,6 +233,9 @@ const formatNumber = (value: number): string =>
 
 const stripIdPrefix = (id: string, prefix: string): string =>
   id.startsWith(prefix) ? id.slice(prefix.length) : id;
+
+const formatMethodProvenanceSuffix = (method: GeneratedMeshPreviewCommitMethod): string =>
+  method === DEFAULT_MESH_GENERATION_METHOD ? "" : `_${sanitizeIdToken(method)}`;
 
 const sanitizeIdToken = (value: string): string => {
   const token = value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");

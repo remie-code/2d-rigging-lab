@@ -1,5 +1,17 @@
 import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 
+import type {
+  DrawableGeneratedMeshSource,
+  MeshDensityHint,
+  MeshGenerationFallbackReason,
+  MeshGenerationFallbackStep,
+  V6MeshGenerationBackendId,
+  V6MeshGenerationBackendImplementationStatus,
+  V6MeshGenerationDependencyGateStatus,
+  V6MeshGenerationMethod,
+  V6MeshGenerationSourceId
+} from "./mesh-generation-contract.js";
+
 export interface MeshGenerationQualityMetrics {
   readonly maxEdgeLength: number;
   readonly maxTriangleArea: number;
@@ -13,11 +25,16 @@ export interface MeshGenerationQualityMetrics {
     | "interim-delaunay-envelope-filter"
     | "interim-delaunay-soft-boundary-filter"
     | "interim-delaunay-soft-apron-strip"
-    | "interim-delaunay-contour-band-strip";
+    | "interim-delaunay-contour-band-strip"
+    | "v6a-local-earclip-steiner-approximation"
+    | "v6b-delaunator-constrainautor"
+    | "v6c-poly2tri-constrained-polygon"
+    | "v6-backend-blocked-fallback";
   readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
   readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
   readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
   readonly contourBandMetrics?: MeshGenerationContourBandMetrics;
+  readonly v6Metrics?: MeshGenerationV6Metrics;
 }
 
 export interface MeshGenerationEnvelopeMetrics {
@@ -123,6 +140,57 @@ export interface MeshGenerationContourBandMetrics {
   readonly fallbackReason?: string;
 }
 
+export interface MeshGenerationV6Metrics {
+  readonly algorithmId: "auto-outline-v6-alpha-constrained-delaunay";
+  readonly methodId: V6MeshGenerationMethod;
+  readonly backendId: V6MeshGenerationBackendId;
+  readonly backendImplementationStatus: V6MeshGenerationBackendImplementationStatus;
+  readonly requestedSourceId: V6MeshGenerationSourceId;
+  readonly actualSourceId: DrawableGeneratedMeshSource;
+  readonly outputKind: "backend-output" | "fallback-output" | "blocked";
+  readonly preset: MeshDensityHint;
+  readonly fallbackReason?: MeshGenerationFallbackReason;
+  readonly fallbackSteps: readonly MeshGenerationFallbackStep[];
+  readonly vertexCount: number;
+  readonly triangleCount: number;
+  readonly boundaryVertexCount: number;
+  readonly interiorVertexCount: number;
+  readonly alphaBoundsAvailable: boolean;
+  readonly opaquePixelCount?: number;
+  readonly contourLoopCount: number;
+  readonly holeLikeRegionCount: number;
+  readonly removedTriangleCount: number;
+  readonly outsideOrCrossingTriangleCount: number;
+  readonly multiIslandHandling: "not-evaluated" | "main-island-only" | "supported";
+  readonly holeHandling: "not-evaluated" | "unsupported-fallback" | "supported";
+  readonly provenance: readonly string[];
+  readonly constrainautorDiagnostics?: MeshGenerationV6ConstrainautorDiagnostics;
+  readonly poly2triDiagnostics?: MeshGenerationV6Poly2TriDiagnostics;
+}
+
+export interface MeshGenerationV6ConstrainautorDiagnostics {
+  readonly dependencyGateStatus: V6MeshGenerationDependencyGateStatus;
+  readonly constraintEdgeCount: number;
+  readonly preservedConstraintEdgeCount: number;
+  readonly missingConstraintEdgeCount: number;
+  readonly constraintRecoveryFailed: boolean;
+  readonly outsideTriangleCount: number;
+  readonly thrownErrorKind?: string;
+}
+
+export interface MeshGenerationV6Poly2TriDiagnostics {
+  readonly dependencyGateStatus: V6MeshGenerationDependencyGateStatus;
+  readonly outerPointCount: number;
+  readonly holeCount: number;
+  readonly steinerPointCount: number;
+  readonly polygonValidationFailed: boolean;
+  readonly holeValidationFailed: boolean;
+  readonly triangulationThrown: boolean;
+  readonly boundaryEdgePreservedCount: number;
+  readonly boundaryEdgeMissingCount: number;
+  readonly mainIslandOnlyFallback: boolean;
+}
+
 export const computeMeshQualityMetrics = (
   mesh: MeshDto,
   options: {
@@ -133,6 +201,7 @@ export const computeMeshQualityMetrics = (
     readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
     readonly softApronMetrics?: MeshGenerationSoftApronMetrics;
     readonly contourBandMetrics?: MeshGenerationContourBandMetrics;
+    readonly v6Metrics?: MeshGenerationV6Metrics;
   }
 ): MeshGenerationQualityMetrics => {
   const neighborsByVertex = new Map<number, Set<number>>();
@@ -197,7 +266,8 @@ export const computeMeshQualityMetrics = (
     ...(options.envelopeMetrics === undefined ? {} : { envelopeMetrics: options.envelopeMetrics }),
     ...(options.softBoundaryMetrics === undefined ? {} : { softBoundaryMetrics: options.softBoundaryMetrics }),
     ...(options.softApronMetrics === undefined ? {} : { softApronMetrics: options.softApronMetrics }),
-    ...(options.contourBandMetrics === undefined ? {} : { contourBandMetrics: options.contourBandMetrics })
+    ...(options.contourBandMetrics === undefined ? {} : { contourBandMetrics: options.contourBandMetrics }),
+    ...(options.v6Metrics === undefined ? {} : { v6Metrics: options.v6Metrics })
   };
 };
 

@@ -1,8 +1,14 @@
 import {
+  createGeneratedMeshForDrawable,
   createInitialAuthoringRevision,
-  toRuntimeGraph
+  toRuntimeGraph,
+  V6_MESH_GENERATION_CANDIDATES
 } from "@private-2d-rigging-lab/authoring-core";
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import type {
+  AuthoringSession,
+  DrawableGeneratedMeshResult,
+  MeshGenerationMethod
+} from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
   MeshIdSchema,
@@ -19,6 +25,10 @@ import { OperationRequestSchema } from "../operation-request.js";
 import type { OperationRequestDto } from "../operation-request.js";
 import { getOperationHandler } from "../operation-registry.js";
 import { generateMeshOperationHandler } from "./generate-mesh.js";
+
+type GenerateMeshPreviewProvenance = NonNullable<
+  Extract<OperationRequestDto, { readonly operationType: "generateMesh" }>["payload"]["previewProvenance"]
+>;
 
 describe("generateMesh operation handler", () => {
   it("is registered in the operation registry", () => {
@@ -351,7 +361,7 @@ describe("generateMesh operation handler", () => {
     const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softApronBoundaryAreaRatio="))).toBe(true);
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:softApronTriangleIncreaseRatio="))).toBe(true);
-    expect(transformHistory.some((entry) => entry.includes("bounded-apron-strip-triangulation"))).toBe(true);
+    expect(transformHistory.some((entry) => entry.includes("frontier-growth-apron-triangulation"))).toBe(true);
   });
 
   it("commits auto-outline-v4-contour-band and records contour-band provenance metrics", () => {
@@ -390,6 +400,333 @@ describe("generateMesh operation handler", () => {
       transformHistory.some((entry) => entry.startsWith("meshQuality:contourBandTransparentOnlyTriangleRatio="))
     ).toBe(true);
     expect(transformHistory.some((entry) => entry.includes("explicit-inner-outer-contour-strip"))).toBe(true);
+  });
+
+  it("commits v6 candidates and records shared v6 provenance", () => {
+    for (const candidate of V6_MESH_GENERATION_CANDIDATES) {
+      const session = createFixtureSessionWithSizedTextureBytes({
+        textureSize: { width: 20, height: 16 },
+        meshBounds: { x: 4, y: 8, width: 20, height: 16 },
+        opaquePixels: createPixelsFromPredicate(20, 16, (x, y) => x >= 4 && x <= 15 && y >= 3 && y <= 12)
+      });
+      const request = createGenerateMeshRequest({
+        dryRun: false,
+        method: candidate.methodId,
+        densityHint: "medium"
+      });
+
+      const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+      expect(outcome.result.status).toBe("committed");
+      expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+      const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+      if (candidate.backendImplementationStatus === "implemented") {
+        expect(transformHistory).toEqual(
+          expect.arrayContaining([
+            `generateMesh:${candidate.methodId}`,
+            "meshQuality:v6Algorithm=auto-outline-v6-alpha-constrained-delaunay",
+            `meshQuality:v6Method=${candidate.methodId}`,
+            `meshQuality:v6Backend=${candidate.backendId}`,
+            "meshQuality:v6BackendImplementation=implemented",
+            `meshQuality:v6RequestedSource=${candidate.sourceId}`
+          ])
+        );
+        expect(transformHistory).toEqual(
+          expect.arrayContaining([
+            "meshQuality:v6MultiIslandHandling=supported",
+            "meshQuality:v6HoleHandling=supported"
+          ])
+        );
+
+        if (candidate.backendId === "v6a-local") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6a-local-earclip-steiner-approximation"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}`))).toBe(false);
+          expect(transformHistory).toContain(
+            "meshQuality:v6Provenance=v6a-local-soft-alpha-mask>v6a-local-main-island-boundary>v6a-local-adaptive-boundary-sampling>v6a-local-deterministic-interior-sampling>v6a-local-earclip-steiner-approximation>limitation-not-full-constrained-delaunay"
+          );
+        }
+
+        if (candidate.backendId === "v6b-constrainautor") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6b-delaunator-constrainautor",
+              "meshQuality:v6ConstrainautorDependencyGate=available",
+              "meshQuality:v6ConstrainautorMissingConstraints=0",
+              "meshQuality:v6ConstrainautorRecoveryFailed=false"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}:`))).toBe(false);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorConstraintEdges="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
+        }
+
+        if (candidate.backendId === "v6c-poly2tri") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6c-poly2tri-constrained-polygon",
+              "meshQuality:v6Poly2TriDependencyGate=available",
+              "meshQuality:v6Poly2TriPolygonValidationFailed=false",
+              "meshQuality:v6Poly2TriHoleValidationFailed=false",
+              "meshQuality:v6Poly2TriTriangulationThrown=false",
+              "meshQuality:v6Poly2TriBoundaryMissing=0"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriOuterPoints="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriSteinerPoints="))).toBe(true);
+        }
+      } else {
+        const expectedReason = "v6-backend-not-implemented";
+        expect(transformHistory).toEqual(
+          expect.arrayContaining([
+            `generateMesh:${candidate.methodId}`,
+            "meshSource:alpha-aware-rgba",
+            `fallback:${candidate.methodId}:${expectedReason}`,
+            "meshQuality:triangulationMode=v6-backend-blocked-fallback",
+            "meshQuality:v6Algorithm=auto-outline-v6-alpha-constrained-delaunay",
+            `meshQuality:v6Method=${candidate.methodId}`,
+            `meshQuality:v6Backend=${candidate.backendId}`,
+            "meshQuality:v6BackendImplementation=deferred",
+            `meshQuality:v6RequestedSource=${candidate.sourceId}`,
+            "meshQuality:v6ActualSource=alpha-aware-rgba",
+            "meshQuality:v6Output=fallback-output",
+            `meshQuality:v6Fallback=${expectedReason}`
+          ])
+        );
+      }
+      expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6BoundaryVertices="))).toBe(true);
+      expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6OpaquePixels="))).toBe(true);
+
+      if (candidate.backendId === "v6b-constrainautor") {
+        expect(transformHistory).toEqual(
+          expect.arrayContaining(["meshQuality:v6ConstrainautorDependencyGate=available"])
+        );
+      }
+
+      if (candidate.backendId === "v6c-poly2tri") {
+        expect(transformHistory).toEqual(
+          expect.arrayContaining(["meshQuality:v6Poly2TriDependencyGate=available"])
+        );
+      }
+    }
+  });
+
+  it("commits auto-outline-v6b-constrainautor and records constraint diagnostics", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 20, height: 16 },
+      meshBounds: { x: 4, y: 8, width: 20, height: 16 },
+      opaquePixels: createPixelsFromPredicate(20, 16, (x, y) => x >= 4 && x <= 15 && y >= 3 && y <= 12)
+    });
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6b-constrainautor",
+      densityHint: "medium"
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(session.graph.meshes[0]?.triangles.length).toBeGreaterThan(0);
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6b-constrainautor",
+        "meshSource:outline-v6b-constrainautor-rgba",
+        "meshQuality:triangulationMode=v6b-delaunator-constrainautor",
+        "meshQuality:v6Backend=v6b-constrainautor",
+        "meshQuality:v6BackendImplementation=implemented",
+        "meshQuality:v6ActualSource=outline-v6b-constrainautor-rgba",
+        "meshQuality:v6Output=backend-output",
+        "meshQuality:v6ConstrainautorDependencyGate=available",
+        "meshQuality:v6ConstrainautorRecoveryFailed=false",
+        "meshQuality:v6ConstrainautorMissingConstraints=0"
+      ])
+    );
+    expect(transformHistory.some((entry) => entry.startsWith("fallback:auto-outline-v6b-constrainautor"))).toBe(false);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorConstraintEdges="))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
+  });
+
+  it("records auto-outline-v6c-poly2tri hole limitation fallback provenance", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 26, height: 22 },
+      meshBounds: { x: 4, y: 8, width: 26, height: 22 },
+      opaquePixels: createPixelsFromPredicate(26, 22, (x, y) => {
+        const outer = x >= 3 && x <= 22 && y >= 3 && y <= 18;
+        const nearTouchingHole = x >= 11 && x <= 15 && y >= 4 && y <= 12;
+        return outer && !nearTouchingHole;
+      })
+    });
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6c-poly2tri",
+      densityHint: "medium"
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]?.vertices.length).toBeGreaterThan(0);
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6c-poly2tri",
+        "meshSource:alpha-aware-rgba",
+        "fallback:auto-outline-v6c-poly2tri:v6c-poly2tri-hole-unsupported",
+        "meshQuality:triangulationMode=v6-backend-blocked-fallback",
+        "meshQuality:v6Backend=v6c-poly2tri",
+        "meshQuality:v6BackendImplementation=implemented",
+        "meshQuality:v6ActualSource=alpha-aware-rgba",
+        "meshQuality:v6Output=fallback-output",
+        "meshQuality:v6Fallback=v6c-poly2tri-hole-unsupported",
+        "meshQuality:v6HoleHandling=unsupported-fallback",
+        "meshQuality:v6Poly2TriDependencyGate=available",
+        "meshQuality:v6Poly2TriPolygonValidationFailed=false",
+        "meshQuality:v6Poly2TriHoleValidationFailed=true",
+        "meshQuality:v6Poly2TriTriangulationThrown=false",
+        "meshQuality:v6Poly2TriBoundaryMissing=0",
+        "meshQuality:v6Poly2TriMainIslandOnlyFallback=false"
+      ])
+    );
+    expect(transformHistory).not.toContain("meshQuality:v6Output=backend-output");
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriOuterPoints="))).toBe(true);
+    expect(transformHistory.some((entry) => /^meshQuality:v6Poly2TriHoles=[1-9]\d*$/.test(entry))).toBe(true);
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriSteinerPoints="))).toBe(true);
+  });
+
+  it("allows previewMesh commits for v6 candidate methods", () => {
+    for (const candidate of V6_MESH_GENERATION_CANDIDATES) {
+      const session = createFixtureSessionWithGeneratedMesh();
+      const previewMesh = createPreviewMesh(session);
+      const request = createGenerateMeshRequest({
+        dryRun: false,
+        method: candidate.methodId,
+        previewMesh
+      });
+
+      const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+
+      expect(outcome.result.status).toBe("committed");
+      expect(session.graph.meshes[0]).toMatchObject({
+        vertices: previewMesh.vertices,
+        uvs: previewMesh.uvs,
+        triangles: previewMesh.triangles,
+        vertexStableIds: previewMesh.vertexStableIds
+      });
+      expect(session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+        expect.arrayContaining([`generateMesh:${candidate.methodId}`, "meshSource:previewMesh"])
+      );
+    }
+  });
+
+  it("preserves v6 backend-output preview provenance on previewMesh commit", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 20, height: 16 },
+      meshBounds: { x: 4, y: 8, width: 20, height: 16 },
+      opaquePixels: createPixelsFromPredicate(20, 16, (x, y) => x >= 4 && x <= 15 && y >= 3 && y <= 12)
+    });
+    const preview = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_body_v6a"),
+      method: "auto-outline-v6a-local",
+      densityHint: "medium"
+    });
+    if (preview === undefined) {
+      throw new Error("Expected v6a preview mesh.");
+    }
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6a-local",
+      densityHint: "medium",
+      previewMesh: preview.mesh,
+      previewProvenance: createPreviewProvenance(preview)
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.meshes[0]).toMatchObject({
+      vertices: preview.mesh.vertices,
+      uvs: preview.mesh.uvs,
+      triangles: preview.mesh.triangles,
+      vertexStableIds: preview.mesh.vertexStableIds
+    });
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6a-local",
+        "meshSource:previewMesh",
+        "previewMeshSource:outline-v6a-local-rgba",
+        "meshQuality:v6ActualSource=outline-v6a-local-rgba",
+        "meshQuality:v6Output=backend-output",
+        "meshQuality:v6Backend=v6a-local",
+        "meshQuality:v6FallbackSteps=0"
+      ])
+    );
+  });
+
+  it("preserves v6 fallback preview provenance on previewMesh commit", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 26, height: 22 },
+      meshBounds: { x: 4, y: 8, width: 26, height: 22 },
+      opaquePixels: createPixelsFromPredicate(26, 22, (x, y) => {
+        const outer = x >= 3 && x <= 22 && y >= 3 && y <= 18;
+        const nearTouchingHole = x >= 11 && x <= 15 && y >= 4 && y <= 12;
+        return outer && !nearTouchingHole;
+      })
+    });
+    const preview = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_body_v6c"),
+      method: "auto-outline-v6c-poly2tri",
+      densityHint: "medium"
+    });
+    if (preview === undefined) {
+      throw new Error("Expected v6c fallback preview mesh.");
+    }
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6c-poly2tri",
+      densityHint: "medium",
+      previewMesh: preview.mesh,
+      previewProvenance: createPreviewProvenance(preview)
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6c-poly2tri",
+        "meshSource:previewMesh",
+        "previewMeshSource:alpha-aware-rgba",
+        "fallback:auto-outline-v6c-poly2tri:v6c-poly2tri-hole-unsupported",
+        "meshQuality:v6ActualSource=alpha-aware-rgba",
+        "meshQuality:v6Output=fallback-output",
+        "meshQuality:v6Fallback=v6c-poly2tri-hole-unsupported",
+        "meshQuality:v6Poly2TriHoleValidationFailed=true"
+      ])
+    );
+    expect(transformHistory).not.toContain("meshQuality:v6Output=backend-output");
   });
 
   it("commits auto-outline-v3-envelope and records envelope provenance metrics", () => {
@@ -584,17 +921,10 @@ describe("generateMesh operation handler", () => {
 
 const createGenerateMeshRequest = (options: {
   readonly dryRun: boolean;
-  readonly method?:
-    | "manual-empty"
-    | "auto-grid-v1"
-    | "auto-outline-v1"
-    | "auto-outline-v2"
-    | "auto-outline-v2.5-soft-boundary"
-    | "auto-outline-v2.6-soft-apron"
-    | "auto-outline-v3-envelope"
-    | "auto-outline-v4-contour-band";
+  readonly method?: MeshGenerationMethod;
   readonly densityHint?: "low" | "medium" | "high";
   readonly previewMesh?: AuthoringSession["graph"]["meshes"][number];
+  readonly previewProvenance?: GenerateMeshPreviewProvenance;
 }): OperationRequestDto =>
   OperationRequestSchema.parse({
     schemaVersion: "operation-request-v1",
@@ -608,7 +938,8 @@ const createGenerateMeshRequest = (options: {
       drawableId: "draw_body",
       method: options.method ?? "auto-grid-v1",
       ...(options.densityHint === undefined ? {} : { densityHint: options.densityHint }),
-      ...(options.previewMesh === undefined ? {} : { previewMesh: options.previewMesh })
+      ...(options.previewMesh === undefined ? {} : { previewMesh: options.previewMesh }),
+      ...(options.previewProvenance === undefined ? {} : { previewProvenance: options.previewProvenance })
     }
   });
 
@@ -664,6 +995,15 @@ const createPreviewMesh = (
   vertexStableIds: ["vtx_preview_0", "vtx_preview_1", "vtx_preview_2"],
   generationProvenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_draw_body"),
   ...overrides
+});
+
+const createPreviewProvenance = (
+  generated: DrawableGeneratedMeshResult
+): GenerateMeshPreviewProvenance => ({
+  source: generated.source,
+  ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
+  ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
+  ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
 });
 
 const createFixtureSessionWithTextureBytes = (

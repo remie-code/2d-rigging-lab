@@ -256,6 +256,15 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");
   await expect(meshInspector).toContainText("Max edge");
   await expect(meshInspector).toContainText("Min angle");
+  await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible').first()).toContainText(
+    "Temporary"
+  );
+  await page.getByRole("button", { name: "Preview v6A Local mesh backend" }).click();
+  await expect(page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible').first()).toContainText(
+    "v6A local"
+  );
+  await page.getByRole("button", { name: "Preview Default v2.6 mesh backend" }).click();
+  await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-visible", "true");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
   await expect(canvas).toHaveAttribute("data-mesh-overlay-vertex-count", /^[1-9]\d*$/);

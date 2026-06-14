@@ -39,6 +39,70 @@
       "license": "MIT",
       "scope": "runtime:packages/contracts,packages/package-format,packages/runtime-core,packages/validator-core,packages/operation-core",
       "status": "wave1-contracts-zod-and-core-approved; wave2-package-runtime-validator-foundation-scope-expanded; wave3-operation-core-scope-expanded; resolved-by-pnpm-lock.yaml"
+    },
+    {
+      "name": "@kninnug/constrainautor",
+      "version": "4.1.0",
+      "purpose": "Constraint recovery library approved only for Wave68 v6b candidate backend mesh-generation work in packages/authoring-core.",
+      "license": "ISC",
+      "scope": "runtime:packages/authoring-core:wave68-v6b-candidate-backend-only",
+      "status": "wave68-domain-a-v6-candidate-dependency-approved"
+    },
+    {
+      "name": "d3-contour",
+      "version": "4.0.2",
+      "purpose": "Contour extraction library approved only for Wave68 shared v6 candidate mesh-generation work in packages/authoring-core.",
+      "license": "ISC",
+      "scope": "runtime:packages/authoring-core:wave68-shared-v6-contour-extraction-candidate-only",
+      "status": "wave68-domain-a-v6-candidate-dependency-approved"
+    },
+    {
+      "name": "delaunator",
+      "version": "5.1.0",
+      "purpose": "Delaunay triangulation library approved only for Wave68 v6b candidate backend mesh-generation work in packages/authoring-core.",
+      "license": "ISC",
+      "scope": "runtime:packages/authoring-core:wave68-v6b-candidate-backend-only",
+      "status": "wave68-domain-a-v6-candidate-dependency-approved"
+    },
+    {
+      "name": "poly2tri",
+      "version": "1.5.0",
+      "purpose": "Constrained polygon triangulation library approved only for Wave68 v6c candidate backend mesh-generation work in packages/authoring-core.",
+      "license": "BSD-3-Clause",
+      "scope": "runtime:packages/authoring-core:wave68-v6c-candidate-backend-only",
+      "status": "wave68-domain-a-v6-candidate-dependency-approved"
+    },
+    {
+      "name": "simplify-js",
+      "version": "1.2.4",
+      "purpose": "Contour simplification library approved only for Wave68 shared v6 candidate mesh-generation work in packages/authoring-core.",
+      "license": "BSD-2-Clause",
+      "scope": "runtime:packages/authoring-core:wave68-shared-v6-contour-simplification-candidate-only",
+      "status": "wave68-domain-a-v6-candidate-dependency-approved"
+    },
+    {
+      "name": "robust-predicates",
+      "version": "3.0.3",
+      "purpose": "Observed transitive geometry predicate dependency via @kninnug/constrainautor and delaunator, approved only for Wave68 v6 candidate backend mesh-generation work in packages/authoring-core.",
+      "license": "Unlicense",
+      "scope": "runtime:packages/authoring-core:wave68-v6-candidate-transitive-only:via-@kninnug/constrainautor,delaunator",
+      "status": "wave68-domain-a-v6-candidate-transitive-dependency-approved"
+    },
+    {
+      "name": "d3-array",
+      "version": "3.2.4",
+      "purpose": "Observed transitive array utility dependency via d3-contour, approved only for Wave68 shared v6 contour extraction candidate work in packages/authoring-core.",
+      "license": "ISC",
+      "scope": "runtime:packages/authoring-core:wave68-v6-candidate-transitive-only:via-d3-contour",
+      "status": "wave68-domain-a-v6-candidate-transitive-dependency-approved"
+    },
+    {
+      "name": "internmap",
+      "version": "2.0.3",
+      "purpose": "Observed transitive map utility dependency via d3-array, approved only for Wave68 shared v6 contour extraction candidate work in packages/authoring-core.",
+      "license": "ISC",
+      "scope": "runtime:packages/authoring-core:wave68-v6-candidate-transitive-only:via-d3-array",
+      "status": "wave68-domain-a-v6-candidate-transitive-dependency-approved"
     }
   ]
 }

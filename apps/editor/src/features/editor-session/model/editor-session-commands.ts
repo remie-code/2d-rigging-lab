@@ -276,7 +276,8 @@ export function commitGenerateMesh(
   drawableId: DrawableId,
   densityHint: GenerateMeshPayloadDto["densityHint"],
   previewMesh?: AuthoringSession["graph"]["meshes"][number],
-  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2.6-soft-apron"
+  method: GenerateMeshPayloadDto["method"] = "auto-outline-v2.6-soft-apron",
+  previewProvenance?: GenerateMeshPayloadDto["previewProvenance"]
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "generateMesh",
@@ -284,7 +285,8 @@ export function commitGenerateMesh(
       drawableId,
       method,
       ...(densityHint === undefined ? {} : { densityHint }),
-      ...(previewMesh === undefined ? {} : { previewMesh })
+      ...(previewMesh === undefined ? {} : { previewMesh }),
+      ...(previewProvenance === undefined ? {} : { previewProvenance })
     }
   });
 }

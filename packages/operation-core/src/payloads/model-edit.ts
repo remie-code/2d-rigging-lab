@@ -16,6 +16,13 @@ import {
   Vec2Schema,
   VertexIdSchema
 } from "@private-2d-rigging-lab/contracts";
+import {
+  DRAWABLE_GENERATED_MESH_SOURCE_IDS,
+  MESH_GENERATION_METHOD_IDS,
+  type MeshGenerationFallbackReason,
+  type MeshGenerationFallbackStep,
+  type MeshGenerationQualityMetrics
+} from "@private-2d-rigging-lab/authoring-core";
 import { z } from "zod";
 
 export const StatePatchValueSchema = z.union([
@@ -147,21 +154,126 @@ const PreviewMeshPayloadSchema = z.object({
   generationProvenanceId: ProvenanceIdSchema
 });
 
-export const GenerateMeshPayloadSchema = z.object({
-  drawableId: DrawableIdSchema,
-  method: z.enum([
-    "manual-empty",
-    "auto-grid-v1",
-    "auto-outline-v1",
-    "auto-outline-v2",
-    "auto-outline-v2.5-soft-boundary",
-    "auto-outline-v2.6-soft-apron",
-    "auto-outline-v3-envelope",
-    "auto-outline-v4-contour-band"
-  ]),
-  densityHint: z.enum(["low", "medium", "high"]).optional(),
-  previewMesh: PreviewMeshPayloadSchema.optional()
+const PreviewMeshFallbackReasonSchema = z.custom<MeshGenerationFallbackReason>(
+  (value) => typeof value === "string" && value.length > 0,
+  { message: "fallbackReason must be a non-empty string" }
+);
+
+const PreviewMeshFallbackStepShapeSchema = z.object({
+  method: z.enum(MESH_GENERATION_METHOD_IDS),
+  reason: z.string().min(1)
 });
+
+const PreviewMeshFallbackStepsSchema = z.custom<readonly MeshGenerationFallbackStep[]>(
+  (value) => z.array(PreviewMeshFallbackStepShapeSchema).safeParse(value).success,
+  { message: "fallbackSteps must be valid mesh generation fallback steps" }
+);
+
+const UnknownObjectSchema = z.object({}).passthrough();
+
+const PreviewMeshV6DependencyGateStatusSchema = z.enum(["not-required", "available"]);
+
+const PreviewMeshV6ConstrainautorDiagnosticsShapeSchema = z.object({
+  dependencyGateStatus: PreviewMeshV6DependencyGateStatusSchema,
+  constraintEdgeCount: z.number().int().nonnegative(),
+  preservedConstraintEdgeCount: z.number().int().nonnegative(),
+  missingConstraintEdgeCount: z.number().int().nonnegative(),
+  constraintRecoveryFailed: z.boolean(),
+  outsideTriangleCount: z.number().int().nonnegative(),
+  thrownErrorKind: z.string().min(1).optional()
+});
+
+const PreviewMeshV6Poly2TriDiagnosticsShapeSchema = z.object({
+  dependencyGateStatus: PreviewMeshV6DependencyGateStatusSchema,
+  outerPointCount: z.number().int().nonnegative(),
+  holeCount: z.number().int().nonnegative(),
+  steinerPointCount: z.number().int().nonnegative(),
+  polygonValidationFailed: z.boolean(),
+  holeValidationFailed: z.boolean(),
+  triangulationThrown: z.boolean(),
+  boundaryEdgePreservedCount: z.number().int().nonnegative(),
+  boundaryEdgeMissingCount: z.number().int().nonnegative(),
+  mainIslandOnlyFallback: z.boolean()
+});
+
+const PreviewMeshV6MetricsShapeSchema = z.object({
+  algorithmId: z.literal("auto-outline-v6-alpha-constrained-delaunay"),
+  methodId: z.enum([
+    "auto-outline-v6a-local",
+    "auto-outline-v6b-constrainautor",
+    "auto-outline-v6c-poly2tri"
+  ]),
+  backendId: z.enum(["v6a-local", "v6b-constrainautor", "v6c-poly2tri"]),
+  backendImplementationStatus: z.enum(["deferred", "implemented"]),
+  requestedSourceId: z.enum([
+    "outline-v6a-local-rgba",
+    "outline-v6b-constrainautor-rgba",
+    "outline-v6c-poly2tri-rgba"
+  ]),
+  actualSourceId: z.enum(DRAWABLE_GENERATED_MESH_SOURCE_IDS),
+  outputKind: z.enum(["backend-output", "fallback-output", "blocked"]),
+  preset: z.enum(["low", "medium", "high"]),
+  fallbackReason: PreviewMeshFallbackReasonSchema.optional(),
+  fallbackSteps: PreviewMeshFallbackStepsSchema,
+  vertexCount: z.number().int().nonnegative(),
+  triangleCount: z.number().int().nonnegative(),
+  boundaryVertexCount: z.number().int().nonnegative(),
+  interiorVertexCount: z.number().int().nonnegative(),
+  alphaBoundsAvailable: z.boolean(),
+  opaquePixelCount: z.number().int().nonnegative().optional(),
+  contourLoopCount: z.number().int().nonnegative(),
+  holeLikeRegionCount: z.number().int().nonnegative(),
+  removedTriangleCount: z.number().int().nonnegative(),
+  outsideOrCrossingTriangleCount: z.number().int().nonnegative(),
+  multiIslandHandling: z.enum(["not-evaluated", "main-island-only", "supported"]),
+  holeHandling: z.enum(["not-evaluated", "unsupported-fallback", "supported"]),
+  provenance: z.array(z.string()),
+  constrainautorDiagnostics: PreviewMeshV6ConstrainautorDiagnosticsShapeSchema.optional(),
+  poly2triDiagnostics: PreviewMeshV6Poly2TriDiagnosticsShapeSchema.optional()
+});
+
+const PreviewMeshQualityMetricsShapeSchema = z.object({
+  maxEdgeLength: z.number().finite(),
+  maxTriangleArea: z.number().finite(),
+  minAngleDegrees: z.number().finite(),
+  maxVertexValence: z.number().int().nonnegative(),
+  refinementIterationCount: z.number().int().nonnegative(),
+  fallbackReason: z.string().min(1).optional(),
+  triangulationMode: z.string().min(1).optional(),
+  envelopeMetrics: UnknownObjectSchema.optional(),
+  softBoundaryMetrics: UnknownObjectSchema.optional(),
+  softApronMetrics: UnknownObjectSchema.optional(),
+  contourBandMetrics: UnknownObjectSchema.optional(),
+  v6Metrics: PreviewMeshV6MetricsShapeSchema.optional()
+});
+
+const PreviewMeshQualityMetricsSchema = z.custom<MeshGenerationQualityMetrics>(
+  (value) => PreviewMeshQualityMetricsShapeSchema.safeParse(value).success,
+  { message: "qualityMetrics must be valid mesh generation quality metrics" }
+);
+
+const PreviewMeshProvenancePayloadSchema = z.object({
+  source: z.enum(DRAWABLE_GENERATED_MESH_SOURCE_IDS),
+  fallbackReason: PreviewMeshFallbackReasonSchema.optional(),
+  fallbackSteps: PreviewMeshFallbackStepsSchema.optional(),
+  qualityMetrics: PreviewMeshQualityMetricsSchema.optional()
+});
+
+export const GenerateMeshPayloadSchema = z
+  .object({
+    drawableId: DrawableIdSchema,
+    method: z.enum(MESH_GENERATION_METHOD_IDS),
+    densityHint: z.enum(["low", "medium", "high"]).optional(),
+    previewMesh: PreviewMeshPayloadSchema.optional(),
+    previewProvenance: PreviewMeshProvenancePayloadSchema.optional()
+  })
+  .refine(
+    (payload) => payload.previewProvenance === undefined || payload.previewMesh !== undefined,
+    {
+      message: "previewProvenance requires previewMesh",
+      path: ["previewProvenance"]
+    }
+  );
 export type GenerateMeshPayloadDto = z.infer<typeof GenerateMeshPayloadSchema>;
 
 export const MoveMeshVertexPayloadSchema = z.object({

@@ -69,6 +69,82 @@ describe("canvas render scene adapter", () => {
 
     expect(scene.drawables[0]?.clipping).toBeUndefined();
   });
+
+  it("maps empty committed meshes to a bounds quad for RenderScene drawing", () => {
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        bounds: { x: 12, y: 24, width: 32, height: 48 },
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_empty",
+          bounds: { x: 12, y: 24, width: 32, height: 48 },
+          vertices: [],
+          uvs: [],
+          triangles: []
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    expect(scene.drawables[0]?.mesh).toMatchObject({
+      coordinateSpace: "stage",
+      uvSpace: "layer-local-top-left-0-1-v1",
+      vertices: [
+        { x: 12, y: 24 },
+        { x: 44, y: 24 },
+        { x: 44, y: 72 },
+        { x: 12, y: 72 }
+      ],
+      uvs: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ],
+      triangles: [
+        [0, 1, 2],
+        [0, 2, 3]
+      ]
+    });
+  });
+
+  it("maps degenerate-only committed meshes to a bounds quad for RenderScene drawing", () => {
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        bounds: { x: 10, y: 20, width: 30, height: 40 },
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_degenerate",
+          bounds: { x: 10, y: 20, width: 30, height: 40 },
+          vertices: [
+            { x: 10, y: 20 },
+            { x: 10, y: 20 },
+            { x: 40, y: 60 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 }
+          ],
+          triangles: [[0, 1, 2]]
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    expect(scene.drawables[0]?.mesh.vertices).toEqual([
+      { x: 10, y: 20 },
+      { x: 40, y: 20 },
+      { x: 40, y: 60 },
+      { x: 10, y: 60 }
+    ]);
+    expect(scene.drawables[0]?.mesh.triangles).toEqual([
+      [0, 1, 2],
+      [0, 2, 3]
+    ]);
+  });
 });
 
 function createProjection(drawables: readonly CanvasRenderableDrawable[]): CanvasRenderProjection {
@@ -88,6 +164,8 @@ function createDrawable(
   textureId: string,
   frontOrder: number,
   options: {
+    readonly bounds?: CanvasRenderableDrawable["bounds"];
+    readonly evaluatedMesh?: CanvasRenderableDrawable["evaluatedMesh"];
     readonly maskSourceDrawableIds?: readonly ReturnType<typeof DrawableIdSchema.parse>[];
     readonly meshPreview?: boolean;
     readonly opacity?: number;
@@ -102,8 +180,8 @@ function createDrawable(
     textureId,
     binaryAssetId: `bin_${textureId}`,
     binaryAssetPath: `assets/${textureId}.rgba`,
-    bounds: { x: 0, y: 0, width: 10, height: 10 },
-    evaluatedMesh: {
+    bounds: options.bounds ?? { x: 0, y: 0, width: 10, height: 10 },
+    evaluatedMesh: options.evaluatedMesh ?? {
       source: "committed",
       sourceMeshId: `mesh_${drawableId}`,
       bounds: { x: 0, y: 0, width: 10, height: 10 },

@@ -363,6 +363,65 @@ describe("canvas renderer evaluated mesh drawing", () => {
       )
     ).toBe(true);
   });
+
+  it("passes a bounds quad to WebGL2 for empty committed meshes", () => {
+    const canvas = new FakeCanvas();
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeWebGlCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createProjection(createDrawable({
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_empty",
+          bounds: { x: 10, y: 20, width: 30, height: 40 },
+          vertices: [],
+          uvs: [],
+          triangles: []
+        },
+        bounds: { x: 10, y: 20, width: 30, height: 40 }
+      })),
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(webglRendererMock.renderCalls).toHaveLength(1);
+    expect(webglRendererMock.renderCalls[0]?.scene.drawables[0]?.mesh).toMatchObject({
+      vertices: [
+        { x: 10, y: 20 },
+        { x: 40, y: 20 },
+        { x: 40, y: 60 },
+        { x: 10, y: 60 }
+      ],
+      uvs: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ],
+      triangles: [
+        [0, 1, 2],
+        [0, 2, 3]
+      ]
+    });
+  });
 });
 
 function renderDrawable(drawable: CanvasRenderableDrawable) {

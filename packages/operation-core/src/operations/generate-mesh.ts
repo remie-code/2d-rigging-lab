@@ -3,6 +3,7 @@ import {
   createGeneratedMeshForDrawable,
   getDrawableById,
   getMeshById,
+  isGeneratedMeshPreviewCommitMethod,
   replaceDrawableMesh
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
@@ -97,6 +98,7 @@ const applyGenerateMesh = (
   const provenanceId = createProvenanceId(operationId);
   let mesh: Parameters<typeof replaceDrawableMesh>[1];
   let generatedSource: string | undefined;
+  let previewSource: string | undefined;
   let fallbackReason: string | undefined;
   let fallbackSteps: readonly MeshGenerationFallbackStep[] | undefined;
   let qualityMetrics: MeshGenerationQualityMetrics | undefined;
@@ -106,6 +108,10 @@ const applyGenerateMesh = (
       generationProvenanceId: provenanceId
     };
     generatedSource = "previewMesh";
+    previewSource = request.payload.previewProvenance?.source;
+    fallbackReason = request.payload.previewProvenance?.fallbackReason;
+    fallbackSteps = request.payload.previewProvenance?.fallbackSteps;
+    qualityMetrics = request.payload.previewProvenance?.qualityMetrics;
   } else {
     const generated = createGeneratedMeshForDrawable({
       session,
@@ -145,6 +151,7 @@ const applyGenerateMesh = (
     actor: request.actor,
     method: request.payload.method,
     ...(generatedSource === undefined ? {} : { generatedSource }),
+    ...(previewSource === undefined ? {} : { previewSource }),
     ...(fallbackReason === undefined ? {} : { fallbackReason }),
     ...(fallbackSteps === undefined ? {} : { fallbackSteps }),
     ...(qualityMetrics === undefined ? {} : { qualityMetrics })
@@ -208,15 +215,7 @@ const evaluatePreviewMeshPreconditions = (input: {
   }
   const previewMesh = input.previewMesh;
 
-  if (
-    input.method !== "auto-grid-v1" &&
-    input.method !== "auto-outline-v1" &&
-    input.method !== "auto-outline-v2" &&
-    input.method !== "auto-outline-v2.5-soft-boundary" &&
-    input.method !== "auto-outline-v2.6-soft-apron" &&
-    input.method !== "auto-outline-v3-envelope" &&
-    input.method !== "auto-outline-v4-contour-band"
-  ) {
+  if (!isGeneratedMeshPreviewCommitMethod(input.method)) {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.generateMesh.previewMeshUnsupportedMethod",
@@ -311,6 +310,7 @@ const createMeshProvenanceRecord = (input: {
   readonly actor: string;
   readonly method: string;
   readonly generatedSource?: string;
+  readonly previewSource?: string;
   readonly fallbackReason?: string;
   readonly fallbackSteps?: readonly MeshGenerationFallbackStep[];
   readonly qualityMetrics?: MeshGenerationQualityMetrics;
@@ -326,6 +326,7 @@ const createMeshProvenanceRecord = (input: {
   transformHistory: [
     `generateMesh:${input.method}`,
     ...(input.generatedSource === undefined ? [] : [`meshSource:${input.generatedSource}`]),
+    ...(input.previewSource === undefined ? [] : [`previewMeshSource:${input.previewSource}`]),
     ...(input.fallbackSteps === undefined
       ? input.fallbackReason === undefined
         ? []
@@ -357,7 +358,8 @@ const formatQualityMetricsForTransformHistory = (
     ...formatEnvelopeMetricsForTransformHistory(metrics),
     ...formatSoftBoundaryMetricsForTransformHistory(metrics),
     ...formatSoftApronMetricsForTransformHistory(metrics),
-    ...formatContourBandMetricsForTransformHistory(metrics)
+    ...formatContourBandMetricsForTransformHistory(metrics),
+    ...formatV6MetricsForTransformHistory(metrics)
   ];
 };
 
@@ -479,6 +481,86 @@ const formatContourBandMetricsForTransformHistory = (
     ...(contourBand.fallbackReason === undefined
       ? []
       : [`meshQuality:contourBandFallback=${contourBand.fallbackReason}`])
+  ];
+};
+
+const formatV6MetricsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const v6 = metrics.v6Metrics;
+  if (v6 === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6Algorithm=${v6.algorithmId}`,
+    `meshQuality:v6Method=${v6.methodId}`,
+    `meshQuality:v6Backend=${v6.backendId}`,
+    `meshQuality:v6BackendImplementation=${v6.backendImplementationStatus}`,
+    `meshQuality:v6RequestedSource=${v6.requestedSourceId}`,
+    `meshQuality:v6ActualSource=${v6.actualSourceId}`,
+    `meshQuality:v6Output=${v6.outputKind}`,
+    `meshQuality:v6Preset=${v6.preset}`,
+    ...(v6.fallbackReason === undefined ? [] : [`meshQuality:v6Fallback=${v6.fallbackReason}`]),
+    `meshQuality:v6FallbackSteps=${v6.fallbackSteps.length}`,
+    `meshQuality:v6BoundaryVertices=${v6.boundaryVertexCount}`,
+    `meshQuality:v6InteriorVertices=${v6.interiorVertexCount}`,
+    `meshQuality:v6VertexCount=${v6.vertexCount}`,
+    `meshQuality:v6TriangleCount=${v6.triangleCount}`,
+    `meshQuality:v6AlphaBounds=${v6.alphaBoundsAvailable ? "available" : "unavailable"}`,
+    ...(v6.opaquePixelCount === undefined ? [] : [`meshQuality:v6OpaquePixels=${v6.opaquePixelCount}`]),
+    `meshQuality:v6ContourLoops=${v6.contourLoopCount}`,
+    `meshQuality:v6HoleLikeRegions=${v6.holeLikeRegionCount}`,
+    `meshQuality:v6RemovedTriangles=${v6.removedTriangleCount}`,
+    `meshQuality:v6OutsideOrCrossingTriangles=${v6.outsideOrCrossingTriangleCount}`,
+    `meshQuality:v6MultiIslandHandling=${v6.multiIslandHandling}`,
+    `meshQuality:v6HoleHandling=${v6.holeHandling}`,
+    `meshQuality:v6Provenance=${v6.provenance.join(">")}`,
+    ...formatV6ConstrainautorDiagnosticsForTransformHistory(metrics),
+    ...formatV6Poly2TriDiagnosticsForTransformHistory(metrics)
+  ];
+};
+
+const formatV6ConstrainautorDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.constrainautorDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6ConstrainautorDependencyGate=${diagnostics.dependencyGateStatus}`,
+    `meshQuality:v6ConstrainautorConstraintEdges=${diagnostics.constraintEdgeCount}`,
+    `meshQuality:v6ConstrainautorPreservedConstraints=${diagnostics.preservedConstraintEdgeCount}`,
+    `meshQuality:v6ConstrainautorMissingConstraints=${diagnostics.missingConstraintEdgeCount}`,
+    `meshQuality:v6ConstrainautorRecoveryFailed=${diagnostics.constraintRecoveryFailed ? "true" : "false"}`,
+    `meshQuality:v6ConstrainautorOutsideTriangles=${diagnostics.outsideTriangleCount}`,
+    ...(diagnostics.thrownErrorKind === undefined
+      ? []
+      : [`meshQuality:v6ConstrainautorThrown=${diagnostics.thrownErrorKind}`])
+  ];
+};
+
+const formatV6Poly2TriDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.poly2triDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6Poly2TriDependencyGate=${diagnostics.dependencyGateStatus}`,
+    `meshQuality:v6Poly2TriOuterPoints=${diagnostics.outerPointCount}`,
+    `meshQuality:v6Poly2TriHoles=${diagnostics.holeCount}`,
+    `meshQuality:v6Poly2TriSteinerPoints=${diagnostics.steinerPointCount}`,
+    `meshQuality:v6Poly2TriPolygonValidationFailed=${diagnostics.polygonValidationFailed ? "true" : "false"}`,
+    `meshQuality:v6Poly2TriHoleValidationFailed=${diagnostics.holeValidationFailed ? "true" : "false"}`,
+    `meshQuality:v6Poly2TriTriangulationThrown=${diagnostics.triangulationThrown ? "true" : "false"}`,
+    `meshQuality:v6Poly2TriBoundaryPreserved=${diagnostics.boundaryEdgePreservedCount}`,
+    `meshQuality:v6Poly2TriBoundaryMissing=${diagnostics.boundaryEdgeMissingCount}`,
+    `meshQuality:v6Poly2TriMainIslandOnlyFallback=${diagnostics.mainIslandOnlyFallback ? "true" : "false"}`
   ];
 };
 

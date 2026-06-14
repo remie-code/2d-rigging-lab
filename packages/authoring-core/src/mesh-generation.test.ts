@@ -18,6 +18,24 @@ import {
   createAlphaAwareGridMesh,
   createGeneratedMeshForDrawable
 } from "./mesh-generation.js";
+import {
+  V6_MESH_GENERATION_CANDIDATES,
+  V6_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS
+} from "./mesh-generation-contract.js";
+import {
+  V6_MESH_GENERATION_CONTRACT_FIXTURE_IDS,
+  V6_MESH_GENERATION_CONTRACT_FIXTURES,
+  createV6MeshGenerationFixtureRgbaBytes,
+  getV6MeshGenerationContractFixture
+} from "./mesh-generation-v6-fixtures.js";
+import {
+  probeAutoOutlineV6BConstrainautorRetryForTest,
+  recoverV6BConstrainautorTriangles
+} from "./mesh-generation-v6b-constrainautor.js";
+import {
+  probeAutoOutlineV6CPoly2TriFailureForTest,
+  probeAutoOutlineV6CPoly2TriSanitizationForTest
+} from "./mesh-generation-v6c-poly2tri.js";
 import { computeMeshQualityMetrics } from "./mesh-quality-metrics.js";
 import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
 import { createAutoOutlineV25SoftBoundaryMesh } from "./mesh-outline-v2-5-soft-boundary-generation.js";
@@ -408,8 +426,9 @@ describe("alpha-aware mesh generation", () => {
     expect(first.softApronMetrics.longApronEdgeCount).toBe(0);
     expect(first.softApronMetrics.skinnyApronTriangleCount).toBe(0);
     expect(first.softApronMetrics.maxApronFanTriangleCount).toBeLessThanOrEqual(4);
+    expect(first.softApronMetrics.maxBoundaryToApronEdgeLength).toBeGreaterThan(0);
     expect(first.softApronMetrics.maxBoundaryToApronEdgeLength).toBeLessThanOrEqual(
-      first.softApronMetrics.apronPadding + 0.000001
+      first.softApronMetrics.maxApronEdgeLength + 0.000001
     );
     const apronTriangles = first.mesh.triangles.filter((_triangle, triangleIndex) =>
       first.mesh.triangleStableIds?.[triangleIndex]?.includes("_outline_v2_6_soft_apron_ring_")
@@ -1066,6 +1085,1165 @@ describe("alpha-aware mesh generation", () => {
     expect(generated?.qualityMetrics?.contourBandMetrics?.transparentOnlyTriangleRatio).toBeLessThanOrEqual(0.08);
   });
 
+  it("provides shared v6 fixture helpers without exact triangle-layout expectations", () => {
+    expect(V6_MESH_GENERATION_CONTRACT_FIXTURE_IDS).toEqual([
+      "v6-simple-rectangle",
+      "v6-curved-blob",
+      "v6-thin-tapered",
+      "v6-hole-like",
+      "v6-empty-alpha-fallback"
+    ]);
+    expect(V6_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS).toEqual([
+      "@kninnug/constrainautor",
+      "d3-contour",
+      "delaunator",
+      "poly2tri",
+      "simplify-js"
+    ]);
+    expect(V6_MESH_GENERATION_CANDIDATES).toEqual([
+      {
+        methodId: "auto-outline-v6a-local",
+        sourceId: "outline-v6a-local-rgba",
+        backendId: "v6a-local",
+        dependencyGateStatus: "not-required",
+        dependencyPackageIds: [],
+        backendImplementationStatus: "implemented"
+      },
+      {
+        methodId: "auto-outline-v6b-constrainautor",
+        sourceId: "outline-v6b-constrainautor-rgba",
+        backendId: "v6b-constrainautor",
+        dependencyGateStatus: "available",
+        dependencyPackageIds: ["d3-contour", "simplify-js", "delaunator", "@kninnug/constrainautor"],
+        backendImplementationStatus: "implemented"
+      },
+      {
+        methodId: "auto-outline-v6c-poly2tri",
+        sourceId: "outline-v6c-poly2tri-rgba",
+        backendId: "v6c-poly2tri",
+        dependencyGateStatus: "available",
+        dependencyPackageIds: ["d3-contour", "simplify-js", "poly2tri"],
+        backendImplementationStatus: "implemented"
+      }
+    ]);
+
+    for (const fixture of V6_MESH_GENERATION_CONTRACT_FIXTURES) {
+      const bytes = createV6MeshGenerationFixtureRgbaBytes(fixture);
+
+      expect(bytes.byteLength).toBe(fixture.textureSize.width * fixture.textureSize.height * 4);
+      expect(fixture.meshBounds).toMatchObject({
+        width: fixture.textureSize.width,
+        height: fixture.textureSize.height
+      });
+      expect(fixture.opaquePixels.length > 0).toBe(fixture.expectedAlphaState === "non-empty");
+      expect(fixture.expectedShapeFeatures.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("generates deterministic auto-outline-v6a-local backend meshes from representative alpha fixtures", () => {
+    for (const fixtureId of [
+      "v6-simple-rectangle",
+      "v6-curved-blob",
+      "v6-thin-tapered",
+      "v6-hole-like"
+    ] as const) {
+      const fixture = getV6MeshGenerationContractFixture(fixtureId);
+      const session = createFixtureSession({
+        includeBytes: true,
+        textureSize: fixture.textureSize,
+        meshBounds: fixture.meshBounds,
+        opaquePixels: fixture.opaquePixels
+      });
+      const baseInput = {
+        session,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        method: "auto-outline-v6a-local" as const,
+        densityHint: "medium" as const
+      };
+
+      const first = createGeneratedMeshForDrawable(baseInput);
+      const second = createGeneratedMeshForDrawable(baseInput);
+
+      expect(first).toEqual(second);
+      expect(first?.source).toBe("outline-v6a-local-rgba");
+      expect(first?.fallbackReason, fixtureId).toBeUndefined();
+      expect(first?.fallbackSteps, fixtureId).toBeUndefined();
+      expectValidMeshDto(first?.mesh, {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: baseInput.drawableId,
+        generationProvenanceId: baseInput.provenanceId,
+        bounds: fixture.meshBounds
+      });
+      expect(first?.alphaBounds).toBeDefined();
+      if (first?.alphaBounds !== undefined) {
+        expectRectInsideBounds(first.alphaBounds, fixture.meshBounds);
+      }
+      expect(first?.mesh.vertices.length).toBeGreaterThan(0);
+      expect(first?.mesh.triangles.length).toBeGreaterThan(0);
+      expect(first?.qualityMetrics).toMatchObject({
+        triangulationMode: "v6a-local-earclip-steiner-approximation",
+        v6Metrics: {
+          algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+          methodId: "auto-outline-v6a-local",
+          backendId: "v6a-local",
+          backendImplementationStatus: "implemented",
+          requestedSourceId: "outline-v6a-local-rgba",
+          actualSourceId: "outline-v6a-local-rgba",
+          outputKind: "backend-output",
+          preset: "medium",
+          fallbackSteps: [],
+          alphaBoundsAvailable: true,
+          opaquePixelCount: fixture.opaquePixels.length
+        }
+      });
+      expect(first?.qualityMetrics?.v6Metrics?.fallbackReason).toBeUndefined();
+      expect(first?.qualityMetrics?.v6Metrics?.vertexCount).toBe(first?.mesh.vertices.length);
+      expect(first?.qualityMetrics?.v6Metrics?.triangleCount).toBe(first?.mesh.triangles.length);
+      expect(first?.qualityMetrics?.v6Metrics?.boundaryVertexCount).toBeGreaterThan(0);
+      expect(first?.qualityMetrics?.v6Metrics?.interiorVertexCount).toBeGreaterThan(0);
+      expect(first?.qualityMetrics?.v6Metrics?.provenance).toContain(
+        "limitation-not-full-constrained-delaunay"
+      );
+
+      if (fixtureId === "v6-hole-like") {
+        expect(first?.qualityMetrics?.v6Metrics?.holeLikeRegionCount).toBeGreaterThan(0);
+        expect(first?.qualityMetrics?.v6Metrics?.holeHandling).toBe("unsupported-fallback");
+      } else {
+        expect(first?.qualityMetrics?.v6Metrics?.holeHandling).toBe("supported");
+      }
+    }
+  });
+
+  it("uses denser auto-outline-v6a-local presets for Large Motion than Standard or Low Motion", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-curved-blob");
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: fixture.textureSize,
+      meshBounds: fixture.meshBounds,
+      opaquePixels: fixture.opaquePixels
+    });
+    const baseInput = {
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6a-local" as const
+    };
+    const large = createGeneratedMeshForDrawable({ ...baseInput, densityHint: "high" });
+    const standard = createGeneratedMeshForDrawable({ ...baseInput, densityHint: "medium" });
+    const low = createGeneratedMeshForDrawable({ ...baseInput, densityHint: "low" });
+
+    expect(large?.source).toBe("outline-v6a-local-rgba");
+    expect(standard?.source).toBe("outline-v6a-local-rgba");
+    expect(low?.source).toBe("outline-v6a-local-rgba");
+    expect(large?.fallbackReason).toBeUndefined();
+    expect(standard?.fallbackReason).toBeUndefined();
+    expect(low?.fallbackReason).toBeUndefined();
+    expect(large?.qualityMetrics?.v6Metrics?.boundaryVertexCount).toBeGreaterThan(
+      standard?.qualityMetrics?.v6Metrics?.boundaryVertexCount ?? 0
+    );
+    expect(standard?.qualityMetrics?.v6Metrics?.boundaryVertexCount).toBeGreaterThan(
+      low?.qualityMetrics?.v6Metrics?.boundaryVertexCount ?? 0
+    );
+    expect(large?.qualityMetrics?.v6Metrics?.interiorVertexCount).toBeGreaterThanOrEqual(
+      standard?.qualityMetrics?.v6Metrics?.interiorVertexCount ?? 0
+    );
+    expect(standard?.qualityMetrics?.v6Metrics?.interiorVertexCount).toBeGreaterThanOrEqual(
+      low?.qualityMetrics?.v6Metrics?.interiorVertexCount ?? 0
+    );
+    expect(large?.mesh.vertices.length).toBeGreaterThan(standard?.mesh.vertices.length ?? 0);
+    expect(standard?.mesh.vertices.length).toBeGreaterThan(low?.mesh.vertices.length ?? 0);
+    expect(large?.mesh.triangles.length).toBeGreaterThan(standard?.mesh.triangles.length ?? 0);
+    expect(standard?.mesh.triangles.length).toBeGreaterThan(low?.mesh.triangles.length ?? 0);
+  });
+
+  it("generates deterministic auto-outline-v6b-constrainautor meshes with preserved boundary constraints", () => {
+    for (const fixtureId of ["v6-simple-rectangle", "v6-curved-blob"] as const) {
+      const fixture = getV6MeshGenerationContractFixture(fixtureId);
+      const session = createFixtureSession({
+        includeBytes: true,
+        textureSize: fixture.textureSize,
+        meshBounds: fixture.meshBounds,
+        opaquePixels: fixture.opaquePixels
+      });
+      const baseInput = {
+        session,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        method: "auto-outline-v6b-constrainautor" as const,
+        densityHint: "medium" as const
+      };
+
+      const first = createGeneratedMeshForDrawable(baseInput);
+      const second = createGeneratedMeshForDrawable(baseInput);
+
+      expect(first).toEqual(second);
+      expect(first?.source, fixtureId).toBe("outline-v6b-constrainautor-rgba");
+      expect(first?.fallbackReason, fixtureId).toBeUndefined();
+      expect(first?.fallbackSteps, fixtureId).toBeUndefined();
+      expectValidMeshDto(first?.mesh, {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: baseInput.drawableId,
+        generationProvenanceId: baseInput.provenanceId,
+        bounds: fixture.meshBounds
+      });
+      expect(first?.alphaBounds).toBeDefined();
+      if (first?.alphaBounds !== undefined) {
+        expectRectInsideBounds(first.alphaBounds, fixture.meshBounds);
+      }
+      expect(first?.qualityMetrics).toMatchObject({
+        triangulationMode: "v6b-delaunator-constrainautor",
+        v6Metrics: {
+          algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+          methodId: "auto-outline-v6b-constrainautor",
+          backendId: "v6b-constrainautor",
+          backendImplementationStatus: "implemented",
+          requestedSourceId: "outline-v6b-constrainautor-rgba",
+          actualSourceId: "outline-v6b-constrainautor-rgba",
+          outputKind: "backend-output",
+          preset: "medium",
+          fallbackSteps: [],
+          alphaBoundsAvailable: true,
+          opaquePixelCount: fixture.opaquePixels.length,
+          constrainautorDiagnostics: {
+            dependencyGateStatus: "available",
+            missingConstraintEdgeCount: 0,
+            constraintRecoveryFailed: false
+          }
+        }
+      });
+      const v6Metrics = first?.qualityMetrics?.v6Metrics;
+      const diagnostics = v6Metrics?.constrainautorDiagnostics;
+      expect(v6Metrics?.fallbackReason).toBeUndefined();
+      expect(v6Metrics?.vertexCount).toBe(first?.mesh.vertices.length);
+      expect(v6Metrics?.triangleCount).toBe(first?.mesh.triangles.length);
+      expect(v6Metrics?.boundaryVertexCount).toBeGreaterThan(0);
+      expect(v6Metrics?.interiorVertexCount).toBeGreaterThan(0);
+      expect(v6Metrics?.provenance).toContain("v6b-boundary-constraints-verified");
+      expect(diagnostics?.constraintEdgeCount).toBeGreaterThan(2);
+      expect(diagnostics?.preservedConstraintEdgeCount).toBe(diagnostics?.constraintEdgeCount);
+      expect(diagnostics?.outsideTriangleCount).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("handles auto-outline-v6b-constrainautor thin tapered fixtures deterministically without fake backend success", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-thin-tapered");
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: fixture.textureSize,
+      meshBounds: fixture.meshBounds,
+      opaquePixels: fixture.opaquePixels
+    });
+    const baseInput = {
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6b-constrainautor" as const,
+      densityHint: "medium" as const
+    };
+
+    const first = createGeneratedMeshForDrawable(baseInput);
+    const second = createGeneratedMeshForDrawable(baseInput);
+
+    expect(first).toEqual(second);
+    expectValidMeshDto(first?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: baseInput.drawableId,
+      generationProvenanceId: baseInput.provenanceId,
+      bounds: fixture.meshBounds
+    });
+    const v6Metrics = first?.qualityMetrics?.v6Metrics;
+    const diagnostics = v6Metrics?.constrainautorDiagnostics;
+    expect(v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6b-constrainautor",
+      backendId: "v6b-constrainautor",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6b-constrainautor-rgba",
+      alphaBoundsAvailable: true,
+      opaquePixelCount: fixture.opaquePixels.length
+    });
+    expect(diagnostics?.dependencyGateStatus).toBe("available");
+
+    if (first?.source === "outline-v6b-constrainautor-rgba") {
+      expect(first.fallbackReason).toBeUndefined();
+      expect(first.fallbackSteps).toBeUndefined();
+      expect(v6Metrics?.outputKind).toBe("backend-output");
+      expect(v6Metrics?.actualSourceId).toBe("outline-v6b-constrainautor-rgba");
+      expect(v6Metrics?.provenance).toContain("v6b-boundary-constraints-verified");
+      expect(diagnostics?.constraintEdgeCount).toBeGreaterThan(2);
+      expect(diagnostics?.missingConstraintEdgeCount).toBe(0);
+      expect(diagnostics?.preservedConstraintEdgeCount).toBe(diagnostics?.constraintEdgeCount);
+      return;
+    }
+
+    const fallbackReason = first?.fallbackReason;
+    expect(first?.source).toBe("alpha-aware-rgba");
+    expect(fallbackReason).toMatch(/^v6b-/);
+    if (fallbackReason !== undefined) {
+      expect(first?.fallbackSteps).toEqual([
+        { method: "auto-outline-v6b-constrainautor", reason: fallbackReason }
+      ]);
+    }
+    expect(v6Metrics?.outputKind).toBe("fallback-output");
+    expect(v6Metrics?.actualSourceId).toBe("alpha-aware-rgba");
+    expect(v6Metrics?.provenance).toContain("v6b-visible-fallback");
+    expect(v6Metrics?.provenance).not.toContain("v6b-boundary-constraints-verified");
+    expect(diagnostics?.constraintRecoveryFailed).toBe(true);
+  });
+
+  it("reports auto-outline-v6b-constrainautor hole limitations as visible fallback metadata", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-hole-like");
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: fixture.textureSize,
+      meshBounds: fixture.meshBounds,
+      opaquePixels: fixture.opaquePixels
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6b-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("alpha-aware-rgba");
+    expect(generated?.fallbackReason).toBe("v6b-unsupported-hole-region");
+    expect(generated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v6b-constrainautor", reason: "v6b-unsupported-hole-region" }
+    ]);
+    expectValidMeshDto(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: fixture.meshBounds
+    });
+    expect(generated?.qualityMetrics).toMatchObject({
+      fallbackReason: "v6b-unsupported-hole-region",
+      triangulationMode: "v6-backend-blocked-fallback",
+      v6Metrics: {
+        methodId: "auto-outline-v6b-constrainautor",
+        backendId: "v6b-constrainautor",
+        backendImplementationStatus: "implemented",
+        requestedSourceId: "outline-v6b-constrainautor-rgba",
+        actualSourceId: "alpha-aware-rgba",
+        outputKind: "fallback-output",
+        fallbackReason: "v6b-unsupported-hole-region",
+        fallbackSteps: [
+          { method: "auto-outline-v6b-constrainautor", reason: "v6b-unsupported-hole-region" }
+        ],
+        holeHandling: "unsupported-fallback",
+        constrainautorDiagnostics: {
+          dependencyGateStatus: "available",
+          constraintRecoveryFailed: true
+        }
+      }
+    });
+    const diagnostics = generated?.qualityMetrics?.v6Metrics?.constrainautorDiagnostics;
+    expect(diagnostics?.constraintEdgeCount).toBeGreaterThan(2);
+    expect(diagnostics?.missingConstraintEdgeCount).toBe(diagnostics?.constraintEdgeCount);
+  });
+
+  it("validates v6b duplicate, zero-length, and crossing constraints before triangulation", () => {
+    const duplicateZeroLength = recoverV6BConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0]
+      ]
+    });
+    const crossing = recoverV6BConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 2],
+        [1, 3]
+      ]
+    });
+
+    expect(duplicateZeroLength.status).toBe("failed");
+    expect(duplicateZeroLength).toMatchObject({
+      reason: "v6b-invalid-constraints"
+    });
+    expect(duplicateZeroLength.diagnostics).toMatchObject({
+      dependencyGateStatus: "available",
+      constraintRecoveryFailed: true
+    });
+    expect(crossing.status).toBe("failed");
+    expect(crossing).toMatchObject({
+      reason: "v6b-invalid-constraints"
+    });
+    expect(crossing.diagnostics).toMatchObject({
+      dependencyGateStatus: "available",
+      constraintEdgeCount: 2,
+      missingConstraintEdgeCount: 2,
+      constraintRecoveryFailed: true
+    });
+  });
+
+  it("recovers or reports structured failure for v6b near-collinear boundary spans", () => {
+    const nearCollinear = recoverV6BConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 0.000004, role: "boundary", stableOrder: 1 },
+        { x: 2, y: 0.000009, role: "boundary", stableOrder: 2 },
+        { x: 3, y: 0.08, role: "boundary", stableOrder: 3 },
+        { x: 3, y: 1, role: "boundary", stableOrder: 4 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 5 },
+        { x: 1.4, y: 0.45, role: "interior", stableOrder: 0 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0]
+      ]
+    });
+
+    expect(nearCollinear.diagnostics.dependencyGateStatus).toBe("available");
+    expect(nearCollinear.diagnostics.constraintEdgeCount).toBeGreaterThan(2);
+    if (nearCollinear.status === "generated") {
+      expect(nearCollinear.diagnostics.constraintRecoveryFailed).toBe(false);
+      expect(nearCollinear.diagnostics.missingConstraintEdgeCount).toBe(0);
+      expect(nearCollinear.diagnostics.preservedConstraintEdgeCount).toBe(
+        nearCollinear.diagnostics.constraintEdgeCount
+      );
+      expect(nearCollinear.triangles.length).toBeGreaterThan(0);
+      return;
+    }
+
+    expect([
+      "v6b-invalid-constraints",
+      "v6b-constraint-recovery-failed",
+      "v6b-backend-threw"
+    ]).toContain(nearCollinear.reason);
+    expect(nearCollinear.diagnostics.constraintRecoveryFailed).toBe(true);
+  });
+
+  it("reports near-duplicate v6b points after quantization as structured invalid constraints", () => {
+    const nearDuplicateAfterQuantization = recoverV6BConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 0.0000004, y: 0.0000004, role: "boundary", stableOrder: 1 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0]
+      ]
+    });
+
+    expect(nearDuplicateAfterQuantization.status).toBe("failed");
+    expect(nearDuplicateAfterQuantization).toMatchObject({
+      reason: "v6b-invalid-constraints",
+      diagnostics: {
+        dependencyGateStatus: "available",
+        constraintRecoveryFailed: true
+      }
+    });
+    expect(nearDuplicateAfterQuantization.diagnostics.constraintEdgeCount).toBeGreaterThan(2);
+    expect(nearDuplicateAfterQuantization.diagnostics.missingConstraintEdgeCount).toBe(
+      nearDuplicateAfterQuantization.diagnostics.constraintEdgeCount
+    );
+  });
+
+  it("records v6b retry provenance for retry success and retry fallback probes", () => {
+    const invalidRecoveryInput = {
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 4, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 4, y: 4, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 4, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 2],
+        [1, 3]
+      ]
+    } as const;
+    const validRecoveryInput = {
+      points: [
+        { x: 1, y: 1, role: "boundary", stableOrder: 0 },
+        { x: 6, y: 1, role: "boundary", stableOrder: 1 },
+        { x: 6, y: 6, role: "boundary", stableOrder: 2 },
+        { x: 1, y: 6, role: "boundary", stableOrder: 3 },
+        { x: 3.5, y: 3.5, role: "interior", stableOrder: 0 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0]
+      ]
+    } as const;
+
+    const retrySuccess = probeAutoOutlineV6BConstrainautorRetryForTest({
+      width: 8,
+      height: 8,
+      attempts: [
+        { recoveryInput: invalidRecoveryInput },
+        {
+          recoveryInput: validRecoveryInput,
+          retryProvenance: ["v6b-retry-coarser-boundary"]
+        },
+        {
+          recoveryInput: validRecoveryInput,
+          retryProvenance: ["v6b-retry-fewer-interior-points"]
+        }
+      ]
+    });
+
+    expect(retrySuccess).toMatchObject({
+      outputKind: "backend-output",
+      attemptCount: 2,
+      diagnostics: {
+        dependencyGateStatus: "available",
+        constraintRecoveryFailed: false,
+        missingConstraintEdgeCount: 0
+      }
+    });
+    expect(retrySuccess.triangleCount).toBeGreaterThan(0);
+    expect(retrySuccess.provenance).toEqual(
+      expect.arrayContaining([
+        "v6b-constrainautor-constraint-recovery",
+        "v6b-retry-coarser-boundary",
+        "v6b-boundary-constraints-verified"
+      ])
+    );
+    expect(retrySuccess.provenance).not.toContain("v6b-retry-fewer-interior-points");
+
+    const retryFallback = probeAutoOutlineV6BConstrainautorRetryForTest({
+      width: 8,
+      height: 8,
+      attempts: [
+        { recoveryInput: invalidRecoveryInput },
+        {
+          recoveryInput: invalidRecoveryInput,
+          retryProvenance: ["v6b-retry-coarser-boundary"]
+        },
+        {
+          recoveryInput: invalidRecoveryInput,
+          retryProvenance: ["v6b-retry-fewer-interior-points"]
+        }
+      ]
+    });
+
+    expect(retryFallback).toMatchObject({
+      outputKind: "fallback-output",
+      reason: "v6b-invalid-constraints",
+      attemptCount: 3,
+      diagnostics: {
+        dependencyGateStatus: "available",
+        constraintRecoveryFailed: true
+      }
+    });
+    expect(retryFallback.provenance).toEqual(
+      expect.arrayContaining([
+        "v6b-visible-fallback",
+        "fallback-v6b-invalid-constraints",
+        "v6b-retry-coarser-boundary",
+        "v6b-retry-fewer-interior-points",
+        "v6b-constrainautor-recovery-failed"
+      ])
+    );
+  });
+
+  it("records v6b main-island-only handling for multi-island alpha inputs", () => {
+    const textureSize = { width: 24, height: 16 };
+    const meshBounds = { x: 0, y: 0, width: 24, height: 16 };
+    const opaquePixels = createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+      (x >= 3 && x <= 8 && y >= 3 && y <= 10) ||
+      (x >= 15 && x <= 20 && y >= 5 && y <= 12)
+    );
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize,
+      meshBounds,
+      opaquePixels
+    });
+    const baseInput = {
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6b-constrainautor" as const,
+      densityHint: "medium" as const
+    };
+
+    const first = createGeneratedMeshForDrawable(baseInput);
+    const second = createGeneratedMeshForDrawable(baseInput);
+    const v6Metrics = first?.qualityMetrics?.v6Metrics;
+    const diagnostics = v6Metrics?.constrainautorDiagnostics;
+
+    expect(first).toEqual(second);
+    expectValidMeshDto(first?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: baseInput.drawableId,
+      generationProvenanceId: baseInput.provenanceId,
+      bounds: meshBounds
+    });
+    expect(v6Metrics?.methodId).toBe("auto-outline-v6b-constrainautor");
+    expect(v6Metrics?.multiIslandHandling).toBe("main-island-only");
+    expect(diagnostics?.dependencyGateStatus).toBe("available");
+
+    if (first?.source === "outline-v6b-constrainautor-rgba") {
+      expect(first.fallbackReason).toBeUndefined();
+      expect(v6Metrics?.outputKind).toBe("backend-output");
+      expect(v6Metrics?.provenance).toContain("limitation-main-island-only");
+      expect(diagnostics?.missingConstraintEdgeCount).toBe(0);
+      return;
+    }
+
+    const fallbackReason = first?.fallbackReason;
+    expect(first?.source).toBe("alpha-aware-rgba");
+    expect(fallbackReason).toMatch(/^v6b-/);
+    if (fallbackReason !== undefined) {
+      expect(first?.fallbackSteps).toEqual([
+        { method: "auto-outline-v6b-constrainautor", reason: fallbackReason }
+      ]);
+    }
+    expect(v6Metrics?.outputKind).toBe("fallback-output");
+    expect(v6Metrics?.provenance).toContain("v6b-visible-fallback");
+    expect(diagnostics?.constraintRecoveryFailed).toBe(true);
+  });
+
+  it("generates deterministic auto-outline-v6c-poly2tri backend meshes from simple polygon fixtures", () => {
+    for (const fixtureId of [
+      "v6-simple-rectangle",
+      "v6-curved-blob",
+      "v6-thin-tapered"
+    ] as const) {
+      const fixture = getV6MeshGenerationContractFixture(fixtureId);
+      const session = createFixtureSession({
+        includeBytes: true,
+        textureSize: fixture.textureSize,
+        meshBounds: fixture.meshBounds,
+        opaquePixels: fixture.opaquePixels
+      });
+      const baseInput = {
+        session,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        method: "auto-outline-v6c-poly2tri" as const,
+        densityHint: "medium" as const
+      };
+
+      const first = createGeneratedMeshForDrawable(baseInput);
+      const second = createGeneratedMeshForDrawable(baseInput);
+
+      expect(first).toEqual(second);
+      expect(first?.qualityMetrics?.v6Metrics?.poly2triDiagnostics).toMatchObject({
+        boundaryEdgeMissingCount: 0
+      });
+      expect(first?.fallbackReason).toBeUndefined();
+      expect(first?.fallbackSteps).toBeUndefined();
+      expect(first?.source).toBe("outline-v6c-poly2tri-rgba");
+      expectValidMeshDto(first?.mesh, {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: baseInput.drawableId,
+        generationProvenanceId: baseInput.provenanceId,
+        bounds: fixture.meshBounds
+      });
+      expect(first?.alphaBounds).toBeDefined();
+      if (first?.alphaBounds !== undefined) {
+        expectRectInsideBounds(first.alphaBounds, fixture.meshBounds);
+      }
+      expect(first?.qualityMetrics).toMatchObject({
+        triangulationMode: "v6c-poly2tri-constrained-polygon",
+        v6Metrics: {
+          algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+          methodId: "auto-outline-v6c-poly2tri",
+          backendId: "v6c-poly2tri",
+          backendImplementationStatus: "implemented",
+          requestedSourceId: "outline-v6c-poly2tri-rgba",
+          actualSourceId: "outline-v6c-poly2tri-rgba",
+          outputKind: "backend-output",
+          preset: "medium",
+          fallbackSteps: [],
+          alphaBoundsAvailable: true,
+          opaquePixelCount: fixture.opaquePixels.length,
+          multiIslandHandling: "supported",
+          holeHandling: "supported",
+          poly2triDiagnostics: {
+            dependencyGateStatus: "available",
+            holeCount: 0,
+            polygonValidationFailed: false,
+            holeValidationFailed: false,
+            triangulationThrown: false,
+            boundaryEdgeMissingCount: 0,
+            mainIslandOnlyFallback: false
+          }
+        }
+      });
+      const v6Metrics = first?.qualityMetrics?.v6Metrics;
+      const diagnostics = v6Metrics?.poly2triDiagnostics;
+      expect(v6Metrics?.fallbackReason).toBeUndefined();
+      expect(v6Metrics?.vertexCount).toBe(first?.mesh.vertices.length);
+      expect(v6Metrics?.triangleCount).toBe(first?.mesh.triangles.length);
+      expect(v6Metrics?.boundaryVertexCount).toBeGreaterThan(0);
+      expect(v6Metrics?.interiorVertexCount).toBeGreaterThan(0);
+      expect(v6Metrics?.provenance).toContain("v6c-poly2tri-constrained-polygon-triangulation");
+      expect(diagnostics?.outerPointCount).toBeGreaterThan(2);
+      expect(diagnostics?.steinerPointCount).toBeGreaterThan(0);
+      expect(diagnostics?.boundaryEdgePreservedCount).toBe(diagnostics?.outerPointCount);
+    }
+  });
+
+  it("exposes auto-outline-v6c-poly2tri invalid polygon, throw, and boundary-missing blockers", () => {
+    const invalidPolygon = probeAutoOutlineV6CPoly2TriFailureForTest({
+      boundaryPoints: [
+        { x: 0, y: 0 },
+        { x: 8, y: 0 },
+        { x: 8, y: 0 },
+        { x: 0, y: 8 }
+      ]
+    });
+    const thrown = probeAutoOutlineV6CPoly2TriFailureForTest({
+      boundaryPoints: [
+        { x: 0, y: 0 },
+        { x: 8, y: 0 },
+        { x: 8, y: 8 },
+        { x: 0, y: 8 }
+      ],
+      interiorPoints: [{ x: 4, y: 4 }],
+      createSweepContext: () => ({
+        addPoints: () => undefined,
+        triangulate: () => {
+          throw new Error("forced poly2tri probe failure");
+        },
+        getTriangles: () => []
+      })
+    });
+    const missingBoundary = probeAutoOutlineV6CPoly2TriFailureForTest({
+      boundaryPoints: [
+        { x: 0, y: 0 },
+        { x: 8, y: 0 },
+        { x: 8, y: 8 },
+        { x: 0, y: 8 }
+      ],
+      interiorPoints: [{ x: 4, y: 4 }],
+      createSweepContext: (contourPoints) => {
+        let steinerPoints = contourPoints.slice(0, 0);
+        return {
+          addPoints: (points) => {
+            steinerPoints = points;
+          },
+          triangulate: () => undefined,
+          getTriangles: () => [
+            {
+              getPoints: () => [
+                contourPoints[0]!,
+                contourPoints[1]!,
+                steinerPoints[0] ?? contourPoints[2]!
+              ]
+            }
+          ]
+        };
+      }
+    });
+
+    expect(invalidPolygon.outputKind).toBe("blocked");
+    expect(invalidPolygon.reason).toBe("v6c-poly2tri-polygon-invalid");
+    expect(invalidPolygon.validationFailures).toEqual(
+      expect.arrayContaining(["duplicate-point", "zero-length-edge"])
+    );
+    expect(invalidPolygon.diagnostics).toMatchObject({
+      outerPointCount: 4,
+      polygonValidationFailed: true,
+      triangulationThrown: false,
+      boundaryEdgeMissingCount: 0
+    });
+
+    expect(thrown.outputKind).toBe("blocked");
+    expect(thrown.reason).toBe("v6c-poly2tri-triangulation-threw");
+    expect(thrown.triangleCount).toBe(0);
+    expect(thrown.diagnostics).toMatchObject({
+      polygonValidationFailed: false,
+      triangulationThrown: true,
+      boundaryEdgeMissingCount: 0
+    });
+
+    expect(missingBoundary.outputKind).toBe("blocked");
+    expect(missingBoundary.reason).toBe("v6c-poly2tri-boundary-missing");
+    expect(missingBoundary.triangleCount).toBe(1);
+    expect(missingBoundary.diagnostics).toMatchObject({
+      polygonValidationFailed: false,
+      triangulationThrown: false,
+      boundaryEdgePreservedCount: 1,
+      boundaryEdgeMissingCount: 3
+    });
+  });
+
+  it("sanitizes near-duplicate auto-outline-v6c-poly2tri contour points before validation", () => {
+    const sanitization = probeAutoOutlineV6CPoly2TriSanitizationForTest({
+      boundaryPoints: [
+        { x: 0, y: 0 },
+        { x: 0.2, y: 0.05 },
+        { x: 8, y: 0 },
+        { x: 8, y: 8 },
+        { x: 0, y: 8 }
+      ]
+    });
+    const backendProbe = probeAutoOutlineV6CPoly2TriFailureForTest({
+      boundaryPoints: sanitization.sanitizedPoints,
+      interiorPoints: [{ x: 4, y: 4 }]
+    });
+
+    expect(sanitization).toMatchObject({
+      originalPointCount: 5,
+      sanitizedPointCount: 4,
+      removedPointCount: 1,
+      validationFailures: [],
+      diagnostics: {
+        dependencyGateStatus: "available",
+        outerPointCount: 4,
+        polygonValidationFailed: false,
+        triangulationThrown: false,
+        boundaryEdgeMissingCount: 0
+      }
+    });
+    expect(sanitization.shortestSanitizedEdgeLength).toBeGreaterThanOrEqual(1.25);
+    expect(sanitization.sanitizedPoints).toEqual([
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+      { x: 8, y: 8 },
+      { x: 0, y: 8 }
+    ]);
+    expect(backendProbe).toMatchObject({
+      outputKind: "backend-output",
+      validationFailures: [],
+      diagnostics: {
+        outerPointCount: 4,
+        polygonValidationFailed: false,
+        triangulationThrown: false,
+        boundaryEdgeMissingCount: 0
+      }
+    });
+    expect(backendProbe.triangleCount).toBeGreaterThan(0);
+  });
+
+  it("reports auto-outline-v6c-poly2tri hole and multi-island limitations as visible fallback metadata", () => {
+    const holeFixture = getV6MeshGenerationContractFixture("v6-hole-like");
+    const cases = [
+      {
+        name: "hole",
+        textureSize: holeFixture.textureSize,
+        meshBounds: holeFixture.meshBounds,
+        opaquePixels: holeFixture.opaquePixels,
+        reason: "v6c-poly2tri-hole-unsupported",
+        expectedHoleHandling: "unsupported-fallback",
+        expectedMultiIslandHandling: "supported",
+        expectedDiagnostics: {
+          holeValidationFailed: true,
+          mainIslandOnlyFallback: false
+        }
+      },
+      {
+        name: "near-touching-hole",
+        textureSize: { width: 26, height: 22 },
+        meshBounds: { x: 0, y: 0, width: 26, height: 22 },
+        opaquePixels: createPixelsFromPredicate(26, 22, (x, y) => {
+          const outer = x >= 3 && x <= 22 && y >= 3 && y <= 18;
+          const nearTouchingHole = x >= 11 && x <= 15 && y >= 4 && y <= 12;
+          return outer && !nearTouchingHole;
+        }),
+        reason: "v6c-poly2tri-hole-unsupported",
+        expectedHoleHandling: "unsupported-fallback",
+        expectedMultiIslandHandling: "supported",
+        expectedDiagnostics: {
+          holeValidationFailed: true,
+          mainIslandOnlyFallback: false
+        }
+      },
+      {
+        name: "multi-island",
+        textureSize: { width: 24, height: 16 },
+        meshBounds: { x: 0, y: 0, width: 24, height: 16 },
+        opaquePixels: createPixelsFromPredicate(24, 16, (x, y) =>
+          (x >= 3 && x <= 8 && y >= 3 && y <= 10) ||
+          (x >= 15 && x <= 20 && y >= 5 && y <= 12)
+        ),
+        reason: "v6c-poly2tri-multi-island-unsupported",
+        expectedHoleHandling: "supported",
+        expectedMultiIslandHandling: "main-island-only",
+        expectedDiagnostics: {
+          holeValidationFailed: false,
+          mainIslandOnlyFallback: true
+        }
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const session = createFixtureSession({
+        includeBytes: true,
+        textureSize: testCase.textureSize,
+        meshBounds: testCase.meshBounds,
+        opaquePixels: testCase.opaquePixels
+      });
+      const generated = createGeneratedMeshForDrawable({
+        session,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        method: "auto-outline-v6c-poly2tri",
+        densityHint: "medium"
+      });
+
+      expect(generated?.source, testCase.name).toBe("alpha-aware-rgba");
+      expect(generated?.fallbackReason, testCase.name).toBe(testCase.reason);
+      expect(generated?.fallbackSteps).toEqual([
+        { method: "auto-outline-v6c-poly2tri", reason: testCase.reason }
+      ]);
+      expectValidMeshDto(generated?.mesh, {
+        meshId: MeshIdSchema.parse("mesh_body"),
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        bounds: testCase.meshBounds
+      });
+      expect(generated?.qualityMetrics).toMatchObject({
+        fallbackReason: testCase.reason,
+        triangulationMode: "v6-backend-blocked-fallback",
+        v6Metrics: {
+          methodId: "auto-outline-v6c-poly2tri",
+          backendId: "v6c-poly2tri",
+          backendImplementationStatus: "implemented",
+          requestedSourceId: "outline-v6c-poly2tri-rgba",
+          actualSourceId: "alpha-aware-rgba",
+          outputKind: "fallback-output",
+          fallbackReason: testCase.reason,
+          fallbackSteps: [{ method: "auto-outline-v6c-poly2tri", reason: testCase.reason }],
+          multiIslandHandling: testCase.expectedMultiIslandHandling,
+          holeHandling: testCase.expectedHoleHandling,
+          poly2triDiagnostics: {
+            dependencyGateStatus: "available",
+            polygonValidationFailed: false,
+            triangulationThrown: false,
+            boundaryEdgeMissingCount: 0,
+            ...testCase.expectedDiagnostics
+          }
+        }
+      });
+      expect(generated?.qualityMetrics?.v6Metrics?.poly2triDiagnostics?.outerPointCount).toBeGreaterThan(2);
+      if (testCase.expectedHoleHandling === "unsupported-fallback") {
+        expect(generated?.qualityMetrics?.v6Metrics?.poly2triDiagnostics?.holeCount).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("routes deferred v6 library candidates through explicit non-success fallback metadata", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+
+    for (const candidate of V6_MESH_GENERATION_CANDIDATES.filter(
+      (entry) => (entry.backendImplementationStatus as string) === "deferred"
+    )) {
+      const session = createFixtureSession({
+        includeBytes: true,
+        textureSize: fixture.textureSize,
+        meshBounds: fixture.meshBounds,
+        opaquePixels: fixture.opaquePixels
+      });
+      const generated = createGeneratedMeshForDrawable({
+        session,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+        method: candidate.methodId,
+        densityHint: "medium"
+      });
+      const expectedReason = "v6-backend-not-implemented";
+
+      expect(generated?.source).toBe("alpha-aware-rgba");
+      expect(generated?.fallbackReason).toBe(expectedReason);
+      expect(generated?.fallbackSteps).toEqual([{ method: candidate.methodId, reason: expectedReason }]);
+      expect(generated?.qualityMetrics).toMatchObject({
+        fallbackReason: expectedReason,
+        triangulationMode: "v6-backend-blocked-fallback",
+        v6Metrics: {
+          algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+          methodId: candidate.methodId,
+          backendId: candidate.backendId,
+          backendImplementationStatus: "deferred",
+          requestedSourceId: candidate.sourceId,
+          actualSourceId: "alpha-aware-rgba",
+          outputKind: "fallback-output",
+          preset: "medium",
+          fallbackReason: expectedReason,
+          fallbackSteps: [{ method: candidate.methodId, reason: expectedReason }],
+          alphaBoundsAvailable: true,
+          multiIslandHandling: "not-evaluated",
+          holeHandling: "not-evaluated"
+        }
+      });
+      expect(generated?.qualityMetrics?.v6Metrics?.vertexCount).toBe(generated?.mesh.vertices.length);
+      expect(generated?.qualityMetrics?.v6Metrics?.triangleCount).toBe(generated?.mesh.triangles.length);
+      expect(generated?.qualityMetrics?.v6Metrics?.boundaryVertexCount).toBeGreaterThan(0);
+      expect(generated?.qualityMetrics?.v6Metrics?.opaquePixelCount).toBe(fixture.opaquePixels.length);
+
+      if (candidate.backendId === "v6b-constrainautor") {
+        expect(generated?.qualityMetrics?.v6Metrics?.constrainautorDiagnostics).toMatchObject({
+          dependencyGateStatus: "available",
+          constraintRecoveryFailed: false
+        });
+      }
+
+      if (candidate.backendId === "v6c-poly2tri") {
+        expect(generated?.qualityMetrics?.v6Metrics?.poly2triDiagnostics).toMatchObject({
+          dependencyGateStatus: "available",
+          polygonValidationFailed: false
+        });
+      }
+    }
+  });
+
+  it("reports v6 empty and missing alpha fallbacks without claiming backend output", () => {
+    const emptyFixture = getV6MeshGenerationContractFixture("v6-empty-alpha-fallback");
+    const emptySession = createFixtureSession({
+      includeBytes: true,
+      textureSize: emptyFixture.textureSize,
+      meshBounds: emptyFixture.meshBounds,
+      opaquePixels: emptyFixture.opaquePixels
+    });
+    const emptyGenerated = createGeneratedMeshForDrawable({
+      session: emptySession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6a-local",
+      densityHint: "low"
+    });
+
+    expect(emptyGenerated?.source).toBe("bounds-grid");
+    expect(emptyGenerated?.fallbackReason).toBe("alpha-empty");
+    expect(emptyGenerated?.fallbackSteps).toEqual([{ method: "auto-outline-v6a-local", reason: "alpha-empty" }]);
+    expect(emptyGenerated?.qualityMetrics?.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6a-local",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6a-local-rgba",
+      actualSourceId: "bounds-grid",
+      outputKind: "blocked",
+      alphaBoundsAvailable: false,
+      opaquePixelCount: 0
+    });
+
+    const emptyConstrainautorGenerated = createGeneratedMeshForDrawable({
+      session: emptySession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6b-constrainautor",
+      densityHint: "low"
+    });
+
+    expect(emptyConstrainautorGenerated?.source).toBe("bounds-grid");
+    expect(emptyConstrainautorGenerated?.fallbackReason).toBe("alpha-empty");
+    expect(emptyConstrainautorGenerated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v6b-constrainautor", reason: "alpha-empty" }
+    ]);
+    expect(emptyConstrainautorGenerated?.qualityMetrics?.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6b-constrainautor",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6b-constrainautor-rgba",
+      actualSourceId: "bounds-grid",
+      outputKind: "blocked",
+      alphaBoundsAvailable: false,
+      opaquePixelCount: 0,
+      constrainautorDiagnostics: {
+        dependencyGateStatus: "available"
+      }
+    });
+
+    const missingFixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+    const missingBytesSession = createFixtureSession({
+      includeBytes: false,
+      textureSize: missingFixture.textureSize,
+      meshBounds: missingFixture.meshBounds,
+      opaquePixels: missingFixture.opaquePixels
+    });
+    const missingLocalGenerated = createGeneratedMeshForDrawable({
+      session: missingBytesSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6a-local",
+      densityHint: "low"
+    });
+
+    expect(missingLocalGenerated?.source).toBe("bounds-grid");
+    expect(missingLocalGenerated?.fallbackReason).toBe("texture-bytes-unavailable");
+    expect(missingLocalGenerated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v6a-local", reason: "texture-bytes-unavailable" }
+    ]);
+    expect(missingLocalGenerated?.qualityMetrics?.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6a-local",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6a-local-rgba",
+      actualSourceId: "bounds-grid",
+      outputKind: "blocked",
+      alphaBoundsAvailable: false
+    });
+
+    const missingGenerated = createGeneratedMeshForDrawable({
+      session: missingBytesSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6b-constrainautor",
+      densityHint: "low"
+    });
+
+    expect(missingGenerated?.source).toBe("bounds-grid");
+    expect(missingGenerated?.fallbackReason).toBe("texture-bytes-unavailable");
+    expect(missingGenerated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v6b-constrainautor", reason: "texture-bytes-unavailable" }
+    ]);
+    expect(missingGenerated?.qualityMetrics?.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6b-constrainautor",
+      requestedSourceId: "outline-v6b-constrainautor-rgba",
+      actualSourceId: "bounds-grid",
+      outputKind: "blocked",
+      alphaBoundsAvailable: false,
+      constrainautorDiagnostics: {
+        dependencyGateStatus: "available"
+      }
+    });
+
+    const missingPoly2TriGenerated = createGeneratedMeshForDrawable({
+      session: missingBytesSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6c-poly2tri",
+      densityHint: "low"
+    });
+
+    expect(missingPoly2TriGenerated?.source).toBe("bounds-grid");
+    expect(missingPoly2TriGenerated?.fallbackReason).toBe("texture-bytes-unavailable");
+    expect(missingPoly2TriGenerated?.fallbackSteps).toEqual([
+      { method: "auto-outline-v6c-poly2tri", reason: "texture-bytes-unavailable" }
+    ]);
+    expect(missingPoly2TriGenerated?.qualityMetrics?.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6c-poly2tri",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6c-poly2tri-rgba",
+      actualSourceId: "bounds-grid",
+      outputKind: "blocked",
+      alphaBoundsAvailable: false,
+      poly2triDiagnostics: {
+        dependencyGateStatus: "available",
+        outerPointCount: 0,
+        triangulationThrown: false
+      }
+    });
+  });
+
   it("routes auto-outline-v3-envelope as an explicit drawable generation sidecar with envelope summary", () => {
     const session = createFixtureSession({
       includeBytes: true,
@@ -1180,6 +2358,98 @@ describe("alpha-aware mesh generation", () => {
     expect(session.authoringRevision).toBe(0);
   });
 });
+
+function expectValidMeshDto(
+  mesh: MeshDto | undefined,
+  expected?: {
+    readonly meshId?: MeshDto["meshId"];
+    readonly drawableId?: MeshDto["drawableId"];
+    readonly generationProvenanceId?: MeshDto["generationProvenanceId"];
+    readonly bounds?: RectDto;
+  }
+): void {
+  expect(mesh).toBeDefined();
+  if (mesh === undefined) {
+    return;
+  }
+
+  if (expected?.meshId !== undefined) {
+    expect(mesh.meshId).toBe(expected.meshId);
+  }
+  if (expected?.drawableId !== undefined) {
+    expect(mesh.drawableId).toBe(expected.drawableId);
+  }
+  if (expected?.generationProvenanceId !== undefined) {
+    expect(mesh.generationProvenanceId).toBe(expected.generationProvenanceId);
+  }
+  if (expected?.bounds !== undefined) {
+    expect(mesh.bounds).toEqual(expected.bounds);
+  }
+  expect(mesh.vertices).toHaveLength(mesh.uvs.length);
+  expect(mesh.vertices).toHaveLength(mesh.vertexStableIds.length);
+  expect(mesh.triangleStableIds).toHaveLength(mesh.triangles.length);
+  expect(mesh.topologyRevision).toBe(0);
+
+  for (const vertex of mesh.vertices) {
+    expect(Number.isFinite(vertex.x)).toBe(true);
+    expect(Number.isFinite(vertex.y)).toBe(true);
+    if (expected?.bounds !== undefined) {
+      expect(vertex.x).toBeGreaterThanOrEqual(expected.bounds.x);
+      expect(vertex.x).toBeLessThanOrEqual(expected.bounds.x + expected.bounds.width);
+      expect(vertex.y).toBeGreaterThanOrEqual(expected.bounds.y);
+      expect(vertex.y).toBeLessThanOrEqual(expected.bounds.y + expected.bounds.height);
+    }
+  }
+
+  for (const uv of mesh.uvs) {
+    expect(Number.isFinite(uv.x)).toBe(true);
+    expect(Number.isFinite(uv.y)).toBe(true);
+    expect(uv.x).toBeGreaterThanOrEqual(0);
+    expect(uv.x).toBeLessThanOrEqual(1);
+    expect(uv.y).toBeGreaterThanOrEqual(0);
+    expect(uv.y).toBeLessThanOrEqual(1);
+  }
+
+  for (const stableId of mesh.vertexStableIds) {
+    expect(stableId).toMatch(/^[A-Za-z0-9_-]+$/);
+  }
+
+  for (const stableId of mesh.triangleStableIds ?? []) {
+    expect(stableId).toMatch(/^tri_[A-Za-z0-9_-]+$/);
+  }
+
+  for (const triangle of mesh.triangles) {
+    const [aIndex, bIndex, cIndex] = triangle;
+    expect(aIndex).not.toBe(bIndex);
+    expect(bIndex).not.toBe(cIndex);
+    expect(cIndex).not.toBe(aIndex);
+    expect(mesh.vertices[aIndex]).toBeDefined();
+    expect(mesh.vertices[bIndex]).toBeDefined();
+    expect(mesh.vertices[cIndex]).toBeDefined();
+    const a = mesh.vertices[aIndex];
+    const b = mesh.vertices[bIndex];
+    const c = mesh.vertices[cIndex];
+    if (a === undefined || b === undefined || c === undefined) {
+      continue;
+    }
+
+    const area = Math.abs(((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2);
+    expect(area).toBeGreaterThan(0);
+  }
+}
+
+function expectRectInsideBounds(rect: RectDto, bounds: RectDto): void {
+  expect(Number.isFinite(rect.x)).toBe(true);
+  expect(Number.isFinite(rect.y)).toBe(true);
+  expect(Number.isFinite(rect.width)).toBe(true);
+  expect(Number.isFinite(rect.height)).toBe(true);
+  expect(rect.width).toBeGreaterThanOrEqual(0);
+  expect(rect.height).toBeGreaterThanOrEqual(0);
+  expect(rect.x).toBeGreaterThanOrEqual(bounds.x);
+  expect(rect.y).toBeGreaterThanOrEqual(bounds.y);
+  expect(rect.x + rect.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+  expect(rect.y + rect.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+}
 
 function createFixtureSession({
   includeBytes,

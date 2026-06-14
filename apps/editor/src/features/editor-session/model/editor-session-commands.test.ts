@@ -1,5 +1,7 @@
 import {
+  createGeneratedMeshForDrawable,
   createInitialAuthoringRevision,
+  getV6MeshGenerationContractFixture,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
 import {
@@ -13,6 +15,7 @@ import {
   RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
+  type RectDto,
   type RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
@@ -679,6 +682,62 @@ describe("editor session commands", () => {
       ])
     );
   });
+
+  it("commits v6 preview mesh geometry with the previewed method provenance", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+    attachDrawableMeshTextureBytes(session, {
+      meshBounds: fixture.meshBounds,
+      textureSize: fixture.textureSize,
+      bytes: createAlphaBytes(
+        fixture.textureSize.width,
+        fixture.textureSize.height,
+        fixture.opaquePixels
+      )
+    });
+
+    const preview = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DRAW_A,
+      provenanceId: ProvenanceIdSchema.parse("prov_preview_v6a"),
+      method: "auto-outline-v6a-local",
+      densityHint: "medium"
+    });
+    expect(preview).toBeDefined();
+    expect(preview?.qualityMetrics?.v6Metrics?.methodId).toBe("auto-outline-v6a-local");
+
+    const result = commitGenerateMesh(
+      session,
+      DRAW_A,
+      "medium",
+      preview?.mesh,
+      "auto-outline-v6a-local",
+      preview === undefined
+        ? undefined
+        : {
+            source: preview.source,
+            ...(preview.fallbackReason === undefined ? {} : { fallbackReason: preview.fallbackReason }),
+            ...(preview.fallbackSteps === undefined ? {} : { fallbackSteps: preview.fallbackSteps }),
+            ...(preview.qualityMetrics === undefined ? {} : { qualityMetrics: preview.qualityMetrics })
+          }
+    );
+
+    expect(result.committed).toBe(true);
+    const committedMesh = result.session.graph.meshes.find((mesh) => mesh.meshId === MeshIdSchema.parse("mesh_a"));
+    expect(committedMesh?.vertices).toEqual(preview?.mesh.vertices);
+    expect(committedMesh?.uvs).toEqual(preview?.mesh.uvs);
+    expect(committedMesh?.triangles).toEqual(preview?.mesh.triangles);
+    expect(committedMesh?.vertexStableIds).toEqual(preview?.mesh.vertexStableIds);
+    expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6a-local",
+        "meshSource:previewMesh",
+        "previewMeshSource:outline-v6a-local-rgba",
+        "meshQuality:v6ActualSource=outline-v6a-local-rgba",
+        "meshQuality:v6Output=backend-output"
+      ])
+    );
+  });
 });
 
 function projectedDrawableOrder(session: AuthoringSession) {
@@ -805,6 +864,78 @@ function createDrawable(drawableId: typeof DRAW_A, partId: typeof PART_A) {
     runtimeVisibility: true,
     baseDrawOrder: 0,
     sourceProvenanceId: ProvenanceIdSchema.parse(`prov_${token}`)
+  };
+}
+
+function attachDrawableMeshTextureBytes(
+  session: AuthoringSession,
+  input: {
+    readonly meshBounds: RectDto;
+    readonly textureSize: { readonly width: number; readonly height: number };
+    readonly bytes: Uint8Array;
+  }
+): void {
+  const drawable = session.graph.drawables.find((candidate) => candidate.drawableId === DRAW_A);
+  if (drawable === undefined) {
+    throw new Error("Expected fixture drawable.");
+  }
+  if (input.bytes.byteLength !== input.textureSize.width * input.textureSize.height * 4) {
+    throw new Error("Fixture texture bytes do not match texture dimensions.");
+  }
+
+  const texturePath = "assets/textures/a.raw-rgba";
+  session.graph.meshes = [
+    {
+      meshId: MeshIdSchema.parse("mesh_a"),
+      drawableId: DRAW_A,
+      vertices: [],
+      uvs: [],
+      triangles: [],
+      vertexStableIds: [],
+      triangleStableIds: [],
+      topologyRevision: 0,
+      bounds: input.meshBounds,
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_a")
+    }
+  ];
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: drawable.textureId,
+        filePath: texturePath,
+        sourceAssetId: SourceAssetIdSchema.parse("src_fixture"),
+        binaryAssetRef: {
+          referenceKind: "package-binary-asset-ref-v1",
+          binaryAssetId: "bin_a_rgba",
+          packageRelativePath: texturePath,
+          digest: {
+            algorithm: "sha256",
+            hex: "0".repeat(64)
+          },
+          byteLength: input.bytes.byteLength,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          storageStatus: "stored-package-local-v1",
+          provenanceId: ProvenanceIdSchema.parse("prov_a"),
+          rightsAssetId: "rights_a"
+        }
+      }
+    ]
+  };
+  session.binaryAssets = {
+    fileEntries: [
+      {
+        path: texturePath,
+        bytes: input.bytes,
+        mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+        binaryAssetId: "bin_a_rgba"
+      }
+    ],
+    binaryAssetIndex: {
+      schemaVersion: "binary-asset-index-v1",
+      assets: []
+    },
+    byteIntakeSummaries: []
   };
 }
 

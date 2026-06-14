@@ -1,6 +1,7 @@
 import type {
   AuthoringSession,
   DrawableGeneratedMeshResult,
+  GeneratedMeshPreviewCommitMethod,
   StructureOrderDrop,
   StructureOrderItem
 } from "@private-2d-rigging-lab/authoring-core";
@@ -84,7 +85,10 @@ import {
 } from "./model/parameter-definition-commands";
 import {
   createMeshPreviewProvenanceId,
+  DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID,
+  getMeshGenerationBackendOption,
   getMeshGenerationPreset,
+  type MeshGenerationBackendOptionId,
   type MeshGenerationPresetId
 } from "./model/mesh-tool-state";
 import { mergeEditorHiddenPartIds } from "./model/editor-hidden-part-state";
@@ -115,6 +119,8 @@ import { useEditorUiStore } from "../../state/editor-ui-store";
 export interface MeshToolDraft {
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
+  readonly backendOptionId: MeshGenerationBackendOptionId;
+  readonly method: GeneratedMeshPreviewCommitMethod;
   readonly mesh: AuthoringSession["graph"]["meshes"][number];
   readonly source: DrawableGeneratedMeshResult["source"];
   readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
@@ -181,7 +187,8 @@ interface EditorSessionContextValue {
   readonly moveStructureChild: (moved: StructureOrderItem, drop: StructureOrderDrop) => void;
   readonly previewMeshDraft: (
     drawableId: DrawableId,
-    presetId: MeshGenerationPresetId
+    presetId: MeshGenerationPresetId,
+    backendOptionId?: MeshGenerationBackendOptionId
   ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
@@ -644,13 +651,18 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   }, []);
 
   const previewMeshDraft = useCallback(
-    (drawableId: DrawableId, presetId: MeshGenerationPresetId) => {
+    (
+      drawableId: DrawableId,
+      presetId: MeshGenerationPresetId,
+      backendOptionId: MeshGenerationBackendOptionId = DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID
+    ) => {
       const preset = getMeshGenerationPreset(presetId);
+      const backendOption = getMeshGenerationBackendOption(backendOptionId);
       const generated = createGeneratedMeshForDrawable({
         session,
         drawableId,
-        provenanceId: createMeshPreviewProvenanceId(drawableId, presetId),
-        method: "auto-outline-v2.6-soft-apron",
+        provenanceId: createMeshPreviewProvenanceId(drawableId, presetId, backendOption.method),
+        method: backendOption.method,
         densityHint: preset.densityHint
       });
 
@@ -662,6 +674,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       setMeshDraft({
         drawableId,
         presetId,
+        backendOptionId: backendOption.id,
+        method: backendOption.method,
         mesh: generated.mesh,
         source: generated.source,
         ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
@@ -686,7 +700,13 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
           meshDraft.drawableId,
           preset.densityHint,
           meshDraft.mesh,
-          "auto-outline-v2.6-soft-apron"
+          meshDraft.method,
+          {
+            source: meshDraft.source,
+            ...(meshDraft.fallbackReason === undefined ? {} : { fallbackReason: meshDraft.fallbackReason }),
+            ...(meshDraft.fallbackSteps === undefined ? {} : { fallbackSteps: meshDraft.fallbackSteps }),
+            ...(meshDraft.qualityMetrics === undefined ? {} : { qualityMetrics: meshDraft.qualityMetrics })
+          }
         ),
       "Apply mesh"
     );

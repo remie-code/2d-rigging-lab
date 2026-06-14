@@ -9,6 +9,11 @@
   "dependencies": {
     "@private-2d-rigging-lab/contracts": "workspace:*",
     "@private-2d-rigging-lab/package-format": "workspace:*",
-    "@private-2d-rigging-lab/runtime-core": "workspace:*"
+    "@private-2d-rigging-lab/runtime-core": "workspace:*",
+    "@kninnug/constrainautor": "^4.1.0",
+    "d3-contour": "^4.0.2",
+    "delaunator": "^5.1.0",
+    "poly2tri": "^1.5.0",
+    "simplify-js": "^1.2.4"
   }
 }

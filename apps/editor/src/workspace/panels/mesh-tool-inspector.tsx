@@ -14,8 +14,12 @@ import type { DrawableId, PartId, RectDto } from "@private-2d-rigging-lab/contra
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import {
+  DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID,
+  getMeshGenerationBackendOption,
   getMeshGenerationPreset,
+  MESH_GENERATION_BACKEND_OPTIONS,
   MESH_GENERATION_PRESETS,
+  type MeshGenerationBackendOptionId,
   type MeshGenerationPresetId
 } from "../../features/editor-session/model/mesh-tool-state";
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
@@ -40,6 +44,9 @@ export function MeshToolInspector() {
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
   const setMeshOverlayVisible = useEditorUiStore((state) => state.setMeshOverlayVisible);
   const [presetId, setPresetId] = useState<MeshGenerationPresetId>("standard");
+  const [backendOptionId, setBackendOptionId] = useState<MeshGenerationBackendOptionId>(
+    DEFAULT_MESH_GENERATION_BACKEND_OPTION_ID
+  );
   const [autoPreviewKey, setAutoPreviewKey] = useState<string | undefined>(undefined);
   const target = useMemo(
     () => resolveMeshToolTarget(session, selection, editorHiddenPartIds),
@@ -63,15 +70,15 @@ export function MeshToolInspector() {
     }
 
     const meshEmpty = target.mesh === undefined || target.mesh.vertices.length === 0 || target.mesh.triangles.length === 0;
-    const key = `${target.drawable.drawableId}:${presetId}`;
+    const key = createPreviewKey(target.drawable.drawableId, presetId, backendOptionId);
     if (!meshEmpty || autoPreviewKey === key) {
       return;
     }
 
     setAutoPreviewKey(key);
-    previewMeshDraft(target.drawable.drawableId, presetId);
+    previewMeshDraft(target.drawable.drawableId, presetId, backendOptionId);
     setMeshOverlayVisible(true);
-  }, [autoPreviewKey, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
+  }, [autoPreviewKey, backendOptionId, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
 
   if (target.kind === "part") {
     return (
@@ -125,16 +132,26 @@ export function MeshToolInspector() {
   const meshStatus = resolveWorkflowStatus(target.mesh, currentDraft !== null);
   const summaryMesh = currentDraft?.mesh ?? target.mesh;
   const preset = getMeshGenerationPreset(presetId);
+  const backendOption = getMeshGenerationBackendOption(backendOptionId);
   const previewPreset = (nextPresetId: MeshGenerationPresetId) => {
     setPresetId(nextPresetId);
-    setAutoPreviewKey(`${target.drawable.drawableId}:${nextPresetId}`);
-    previewMeshDraft(target.drawable.drawableId, nextPresetId);
+    setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId, backendOptionId));
+    previewMeshDraft(target.drawable.drawableId, nextPresetId, backendOptionId);
+    setMeshOverlayVisible(true);
+  };
+  const previewBackend = (nextBackendOptionId: MeshGenerationBackendOptionId) => {
+    setBackendOptionId(nextBackendOptionId);
+    setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, nextBackendOptionId));
+    previewMeshDraft(target.drawable.drawableId, presetId, nextBackendOptionId);
     setMeshOverlayVisible(true);
   };
   const alphaBounds = currentDraft?.alphaBounds;
   const fallbackReason = currentDraft?.fallbackReason;
   const fallbackSummary = formatFallbackSummary(currentDraft?.fallbackSteps, fallbackReason);
   const qualityMetrics = currentDraft?.qualityMetrics;
+  const v6Metrics = qualityMetrics?.v6Metrics;
+  const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
+  const poly2triDiagnostics = v6Metrics?.poly2triDiagnostics;
 
   return (
     <>
@@ -160,6 +177,8 @@ export function MeshToolInspector() {
           <SummaryRow label="Drawable" value={target.drawable.displayName} />
           <SummaryRow label="Status" testId="mesh-tool-status" value={meshStatus} />
           <SummaryRow label="Preset" value={preset.label} />
+          <SummaryRow label="Backend" value={backendOption.label} />
+          <SummaryRow label="Draft method" value={formatMeshMethod(currentDraft?.method)} />
           <SummaryRow label="Vertices" testId="mesh-tool-vertex-count" value={String(summaryMesh?.vertices.length ?? 0)} />
           <SummaryRow label="Triangles" testId="mesh-tool-triangle-count" value={String(summaryMesh?.triangles.length ?? 0)} />
           <SummaryRow label="Source" testId="mesh-tool-source" value={formatMeshSource(currentDraft?.source)} />
@@ -176,6 +195,52 @@ export function MeshToolInspector() {
               <SummaryRow label="Min angle" value={`${formatNumber(qualityMetrics.minAngleDegrees)} deg`} />
               <SummaryRow label="Max valence" value={String(qualityMetrics.maxVertexValence)} />
               <SummaryRow label="Refinement" value={String(qualityMetrics.refinementIterationCount)} />
+            </>
+          )}
+          {v6Metrics === undefined ? null : (
+            <>
+              <SummaryRow
+                label="v6 output"
+                testId="mesh-tool-v6-output-kind"
+                value={`${formatV6Backend(v6Metrics.backendId)} / ${formatV6OutputKind(v6Metrics.outputKind)}`}
+              />
+              <SummaryRow
+                label="v6 counts"
+                value={`B ${v6Metrics.boundaryVertexCount} / I ${v6Metrics.interiorVertexCount}`}
+              />
+              <SummaryRow label="v6 fallback steps" value={String(v6Metrics.fallbackSteps.length)} />
+              <SummaryRow
+                label="v6 regions"
+                value={`Loops ${v6Metrics.contourLoopCount} / Holes ${v6Metrics.holeLikeRegionCount}`}
+              />
+              <SummaryRow
+                label="v6 rejected"
+                value={`Removed ${v6Metrics.removedTriangleCount} / Outside ${v6Metrics.outsideOrCrossingTriangleCount}`}
+              />
+            </>
+          )}
+          {constrainautorDiagnostics === undefined ? null : (
+            <>
+              <SummaryRow
+                label="v6B constraints"
+                value={`${constrainautorDiagnostics.preservedConstraintEdgeCount}/${constrainautorDiagnostics.constraintEdgeCount} kept`}
+              />
+              <SummaryRow
+                label="v6B missing"
+                value={String(constrainautorDiagnostics.missingConstraintEdgeCount)}
+              />
+            </>
+          )}
+          {poly2triDiagnostics === undefined ? null : (
+            <>
+              <SummaryRow
+                label="v6C polygon"
+                value={`Outer ${poly2triDiagnostics.outerPointCount} / Steiner ${poly2triDiagnostics.steinerPointCount}`}
+              />
+              <SummaryRow
+                label="v6C boundary"
+                value={`${poly2triDiagnostics.boundaryEdgePreservedCount} kept / ${poly2triDiagnostics.boundaryEdgeMissingCount} missing`}
+              />
             </>
           )}
         </div>
@@ -195,6 +260,37 @@ export function MeshToolInspector() {
               )}
               key={candidate.id}
               onClick={() => previewPreset(candidate.id)}
+              type="button"
+            >
+              <span className="font-medium">{candidate.label}</span>
+              <span className="text-[11px] text-neutral-500">{candidate.summary}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section
+        className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3"
+        data-testid="mesh-tool-backend-selector"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold uppercase text-neutral-500">Experimental backend</h3>
+          <span className="shrink-0 rounded border border-neutral-800 bg-neutral-950 px-2 py-0.5 text-[11px] font-medium text-neutral-400">
+            Temporary
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {MESH_GENERATION_BACKEND_OPTIONS.map((candidate) => (
+            <button
+              aria-label={`Preview ${candidate.label} mesh backend`}
+              className={cn(
+                "flex min-h-9 items-center justify-between gap-3 rounded border px-2 text-left text-xs transition",
+                backendOptionId === candidate.id
+                  ? "border-sky-500/70 bg-sky-950/20 text-sky-100"
+                  : "border-neutral-800 bg-neutral-950 text-neutral-200 hover:border-neutral-700"
+              )}
+              key={candidate.id}
+              onClick={() => previewBackend(candidate.id)}
               type="button"
             >
               <span className="font-medium">{candidate.label}</span>
@@ -224,7 +320,11 @@ export function MeshToolInspector() {
           </button>
           <button
             className="flex min-h-8 items-center justify-center gap-2 rounded border border-amber-600/70 bg-amber-950/25 px-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/30"
-            onClick={() => previewPreset(presetId)}
+            onClick={() => {
+              setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, backendOptionId));
+              previewMeshDraft(target.drawable.drawableId, presetId, backendOptionId);
+              setMeshOverlayVisible(true);
+            }}
             type="button"
           >
             <RefreshCw aria-hidden="true" size={14} strokeWidth={1.8} />
@@ -405,8 +505,41 @@ function formatRect(rect: RectDto): string {
   return `${formatNumber(rect.x)}, ${formatNumber(rect.y)}, ${formatNumber(rect.width)} x ${formatNumber(rect.height)}`;
 }
 
+function createPreviewKey(
+  drawableId: DrawableId,
+  presetId: MeshGenerationPresetId,
+  backendOptionId: MeshGenerationBackendOptionId
+): string {
+  return `${drawableId}:${presetId}:${backendOptionId}`;
+}
+
+function formatMeshMethod(method: string | undefined): string {
+  switch (method) {
+    case "auto-outline-v6a-local":
+      return "Auto outline v6A local";
+    case "auto-outline-v6b-constrainautor":
+      return "Auto outline v6B Constrainautor";
+    case "auto-outline-v6c-poly2tri":
+      return "Auto outline v6C Poly2Tri";
+    case "auto-outline-v2.6-soft-apron":
+      return "Auto outline v2.6 soft apron";
+    case undefined:
+      return "No draft";
+    default:
+      return method;
+  }
+}
+
 function formatMeshSource(source: string | undefined): string {
   switch (source) {
+    case "outline-v6a-local-rgba":
+      return "Auto outline v6A local";
+    case "outline-v6b-constrainautor-rgba":
+      return "Auto outline v6B Constrainautor";
+    case "outline-v6c-poly2tri-rgba":
+      return "Auto outline v6C Poly2Tri";
+    case "outline-v4-contour-band-rgba":
+      return "Auto outline v4 contour band";
     case "outline-v2-6-soft-apron-rgba":
       return "Auto outline v2.6 soft apron";
     case "outline-v2-5-soft-boundary-rgba":
@@ -431,11 +564,36 @@ function formatFallbackSummary(
 ): string | undefined {
   if (steps !== undefined && steps.length > 0) {
     return steps
-      .map((step) => `${step.method}: ${formatFallbackReason(step.reason)}`)
+      .map((step) => `${formatFallbackMethod(step.method)}: ${formatFallbackReason(step.reason)}`)
       .join(" > ");
   }
 
   return fallbackReason === undefined ? undefined : formatFallbackReason(fallbackReason);
+}
+
+function formatFallbackMethod(method: string): string {
+  switch (method) {
+    case "auto-outline-v6a-local":
+      return "v6A local";
+    case "auto-outline-v6b-constrainautor":
+      return "v6B Constrainautor";
+    case "auto-outline-v6c-poly2tri":
+      return "v6C Poly2Tri";
+    case "auto-outline-v4-contour-band":
+      return "v4 contour band";
+    case "auto-outline-v3-envelope":
+      return "v3 envelope";
+    case "auto-outline-v2.6-soft-apron":
+      return "v2.6 soft apron";
+    case "auto-outline-v2.5-soft-boundary":
+      return "v2.5 soft boundary";
+    case "auto-outline-v2":
+      return "v2 outline";
+    case "auto-outline-v1":
+      return "v1 outline";
+    default:
+      return method;
+  }
 }
 
 function formatFallbackReason(reason: string): string {
@@ -450,8 +608,60 @@ function formatFallbackReason(reason: string): string {
       return "Outline extraction failed";
     case "triangulation-failed":
       return "Triangulation failed";
+    case "v6-backend-not-implemented":
+      return "V6 backend not implemented";
+    case "v6a-local-generation-failed":
+      return "V6A local generation failed";
+    case "v6b-constrainautor-generation-failed":
+      return "V6B Constrainautor generation failed";
+    case "v6b-invalid-constraints":
+      return "V6B invalid constraints";
+    case "v6b-constraint-recovery-failed":
+      return "V6B constraint recovery failed";
+    case "v6b-backend-threw":
+      return "V6B backend threw";
+    case "v6b-unsupported-hole-region":
+      return "V6B unsupported hole region";
+    case "v6c-poly2tri-generation-failed":
+      return "V6C Poly2Tri generation failed";
+    case "v6c-poly2tri-polygon-invalid":
+      return "V6C polygon invalid";
+    case "v6c-poly2tri-hole-unsupported":
+      return "V6C hole unsupported";
+    case "v6c-poly2tri-multi-island-unsupported":
+      return "V6C multi-island unsupported";
+    case "v6c-poly2tri-triangulation-threw":
+      return "V6C triangulation threw";
+    case "v6c-poly2tri-boundary-missing":
+      return "V6C boundary missing";
     default:
       return reason;
+  }
+}
+
+function formatV6Backend(backendId: string): string {
+  switch (backendId) {
+    case "v6a-local":
+      return "v6A local";
+    case "v6b-constrainautor":
+      return "v6B Constrainautor";
+    case "v6c-poly2tri":
+      return "v6C Poly2Tri";
+    default:
+      return backendId;
+  }
+}
+
+function formatV6OutputKind(outputKind: string): string {
+  switch (outputKind) {
+    case "backend-output":
+      return "Backend output";
+    case "fallback-output":
+      return "Fallback output";
+    case "blocked":
+      return "Blocked";
+    default:
+      return outputKind;
   }
 }
 

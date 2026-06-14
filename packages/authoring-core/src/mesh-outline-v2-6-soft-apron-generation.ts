@@ -120,7 +120,6 @@ export const createAutoOutlineV26SoftApronMesh = (
   const apronRings = createApronRings({
     boundary,
     config,
-    bounds: input.bounds,
     alphaArea: base.softBoundaryMetrics.alphaArea
   });
   if (apronRings === undefined) {
@@ -177,7 +176,7 @@ export const createAutoOutlineV26SoftApronMesh = (
       "v2-5-soft-boundary-base-mesh",
       "ratio-based-soft-apron-padding",
       "ordered-boundary-apron-ring-sampling",
-      "bounded-apron-strip-triangulation",
+      "frontier-growth-apron-triangulation",
       "apron-long-edge-skinny-filter",
       "apron-fan-metrics",
       "v2-5-sparse-interior-preserved",
@@ -229,8 +228,8 @@ const createV26Config = (input: {
 
   switch (input.densityHint) {
     case "high": {
-      const ratio = 0.036;
-      const padding = clamp(baseSize * ratio, 1.05, Math.max(1.05, baseSize * 0.095));
+      const ratio = 0.036 * 2;
+      const padding = clamp(baseSize * ratio, 1.05 * 2, Math.max(1.05 * 2, baseSize * 0.095 * 2));
       return {
         preset: "high",
         apronPaddingRatio: ratio,
@@ -242,8 +241,8 @@ const createV26Config = (input: {
       };
     }
     case "medium": {
-      const ratio = 0.026;
-      const padding = clamp(baseSize * ratio, 0.85, Math.max(0.85, baseSize * 0.08));
+      const ratio = 0.026 * 2;
+      const padding = clamp(baseSize * ratio, 0.85 * 2, Math.max(0.85 * 2, baseSize * 0.08 * 2));
       return {
         preset: "medium",
         apronPaddingRatio: ratio,
@@ -256,8 +255,8 @@ const createV26Config = (input: {
     }
     case "low":
     default: {
-      const ratio = 0.018;
-      const padding = clamp(baseSize * ratio, 0.6, Math.max(0.6, baseSize * 0.065));
+      const ratio = 0.018 * 2;
+      const padding = clamp(baseSize * ratio, 0.6 * 2, Math.max(0.6 * 2, baseSize * 0.065 * 2));
       return {
         preset: "low",
         apronPaddingRatio: ratio,
@@ -274,26 +273,28 @@ const createV26Config = (input: {
 const createApronRings = (input: {
   readonly boundary: readonly BoundaryVertex[];
   readonly config: V26Config;
-  readonly bounds: RectDto;
   readonly alphaArea: number;
 }): ApronRings | undefined => {
-  const centroid = polygonCentroid(input.boundary.map((item) => item.vertex));
+  const boundaryPoints = input.boundary.map((item) => item.vertex);
+  const centroid = polygonCentroid(boundaryPoints);
   const attempts = [1, 0.72, 0.48, 0.25] as const;
 
   for (const paddingFactor of attempts) {
     const padding = input.config.apronPadding * paddingFactor;
-    const rings = Array.from({ length: input.config.apronRingCount }, (_value, ringIndex) => {
-      const ringRatio = (ringIndex + 1) / input.config.apronRingCount;
-      return input.boundary.map((item) =>
-        offsetPointFromCentroid(item.vertex, centroid, padding * ringRatio, input.bounds)
-      );
+    const ring = boundaryPoints.map((point, pointIndex) => {
+      const next = boundaryPoints[(pointIndex + 1) % boundaryPoints.length]!;
+      return createFrontierApex({
+        start: point,
+        end: next,
+        centroid,
+        maxGrowthDistance: padding
+      });
     });
-    const outerRing = rings[rings.length - 1];
-    if (outerRing === undefined || outerRing.length < 3 || hasSelfIntersections(outerRing)) {
+    if (ring.length < 3) {
       continue;
     }
 
-    const apronBoundaryArea = Math.abs(polygonArea(outerRing));
+    const apronBoundaryArea = Math.abs(polygonArea(ring));
     const apronBoundaryAreaRatio = apronBoundaryArea / Math.max(input.alphaArea, 1);
     if (apronBoundaryAreaRatio > input.config.maxApronAreaRatio) {
       continue;
@@ -303,11 +304,52 @@ const createApronRings = (input: {
       padding,
       apronBoundaryArea,
       apronBoundaryAreaRatio,
-      rings
+      rings: [ring]
     };
   }
 
   return undefined;
+};
+
+const createFrontierApex = (input: {
+  readonly start: Vec2;
+  readonly end: Vec2;
+  readonly centroid: Vec2;
+  readonly maxGrowthDistance: number;
+}): Vec2 => {
+  const edgeX = input.end.x - input.start.x;
+  const edgeY = input.end.y - input.start.y;
+  const edgeLength = Math.hypot(edgeX, edgeY);
+  const center = {
+    x: (input.start.x + input.end.x) / 2,
+    y: (input.start.y + input.end.y) / 2
+  };
+  if (edgeLength <= 0.000001) {
+    return center;
+  }
+
+  const normalA = {
+    x: edgeY / edgeLength,
+    y: -edgeX / edgeLength
+  };
+  const awayFromCentroid = {
+    x: center.x - input.centroid.x,
+    y: center.y - input.centroid.y
+  };
+  const outward =
+    normalA.x * awayFromCentroid.x + normalA.y * awayFromCentroid.y >= 0
+      ? normalA
+      : {
+          x: -normalA.x,
+          y: -normalA.y
+        };
+  const equilateralHeight = edgeLength * 0.8660254037844386;
+  const growthDistance = Math.min(equilateralHeight, input.maxGrowthDistance);
+
+  return {
+    x: roundCoordinate(center.x + outward.x * growthDistance),
+    y: roundCoordinate(center.y + outward.y * growthDistance)
+  };
 };
 
 const createSoftApronMesh = (input: {
@@ -392,16 +434,13 @@ const createSoftApronMesh = (input: {
       const innerA = inner[pointIndex]!;
       const innerB = inner[nextIndex]!;
       const outerA = outer[pointIndex]!;
-      const outerB = outer[nextIndex]!;
       addTriangle(
         [innerA, innerB, outerA],
-        `tri_${token}_outline_v2_6_soft_apron_ring_${ringIndex}_${pointIndex}_a` as TriangleId,
-        [[innerA, outerA]]
-      );
-      addTriangle(
-        [innerB, outerB, outerA],
-        `tri_${token}_outline_v2_6_soft_apron_ring_${ringIndex}_${pointIndex}_b` as TriangleId,
-        [[innerB, outerB]]
+        `tri_${token}_outline_v2_6_soft_apron_ring_${ringIndex}_${pointIndex}` as TriangleId,
+        [
+          [innerA, outerA],
+          [innerB, outerA]
+        ]
       );
     }
   }
@@ -498,74 +537,6 @@ const stagePointToUv = (point: Vec2, bounds: RectDto): Vec2 => ({
   x: roundCoordinate(clamp((point.x - bounds.x) / Math.max(bounds.width, 1), 0, 1)),
   y: roundCoordinate(clamp((point.y - bounds.y) / Math.max(bounds.height, 1), 0, 1))
 });
-
-const offsetPointFromCentroid = (
-  point: Vec2,
-  centroid: Vec2,
-  padding: number,
-  bounds: RectDto
-): Vec2 => {
-  const dx = point.x - centroid.x;
-  const dy = point.y - centroid.y;
-  const length = Math.hypot(dx, dy);
-  if (length <= 0.000001) {
-    return {
-      x: roundCoordinate(clamp(point.x, bounds.x, bounds.x + bounds.width)),
-      y: roundCoordinate(clamp(point.y, bounds.y, bounds.y + bounds.height))
-    };
-  }
-
-  return {
-    x: roundCoordinate(clamp(point.x + (dx / length) * padding, bounds.x, bounds.x + bounds.width)),
-    y: roundCoordinate(clamp(point.y + (dy / length) * padding, bounds.y, bounds.y + bounds.height))
-  };
-};
-
-const hasSelfIntersections = (points: readonly Vec2[]): boolean => {
-  if (points.length < 4) {
-    return false;
-  }
-
-  for (let leftIndex = 0; leftIndex < points.length; leftIndex += 1) {
-    const leftStart = points[leftIndex]!;
-    const leftEnd = points[(leftIndex + 1) % points.length]!;
-    for (let rightIndex = leftIndex + 1; rightIndex < points.length; rightIndex += 1) {
-      if (
-        rightIndex === leftIndex ||
-        rightIndex === (leftIndex + 1) % points.length ||
-        leftIndex === (rightIndex + 1) % points.length
-      ) {
-        continue;
-      }
-
-      const rightStart = points[rightIndex]!;
-      const rightEnd = points[(rightIndex + 1) % points.length]!;
-      if (segmentsIntersect(leftStart, leftEnd, rightStart, rightEnd)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-};
-
-const segmentsIntersect = (a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean => {
-  const abC = cross(a, b, c);
-  const abD = cross(a, b, d);
-  const cdA = cross(c, d, a);
-  const cdB = cross(c, d, b);
-
-  if (
-    Math.abs(abC) <= 0.000001 ||
-    Math.abs(abD) <= 0.000001 ||
-    Math.abs(cdA) <= 0.000001 ||
-    Math.abs(cdB) <= 0.000001
-  ) {
-    return false;
-  }
-
-  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
-};
 
 const loopEdgeLengths = (points: readonly Vec2[]): readonly number[] => {
   const lengths: number[] = [];

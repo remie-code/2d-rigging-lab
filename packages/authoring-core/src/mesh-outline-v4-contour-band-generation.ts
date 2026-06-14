@@ -88,10 +88,13 @@ interface V4Config {
   readonly innerOffset: number;
   readonly interiorSpacing: number;
   readonly sampleMinDistance: number;
+  readonly softApronMargin: number;
+  readonly geometryClampMargin: number;
   readonly maxOuterContourAreaRatio: number;
   readonly maxBoundaryToInteriorEdgeLength: number;
   readonly maxInteriorEdgeLength: number;
   readonly maxTransparentOnlyTriangleRatio: number;
+  readonly minTriangleAngleDegrees: number;
   readonly maxVertexValence: number;
   readonly maxVertexCountCap: number;
   readonly maxInteriorPointCount: number;
@@ -117,6 +120,14 @@ interface ContourBandBuild {
   readonly rejectedOutsideInteriorTriangleCount: number;
 }
 
+interface V5FragmentBuild {
+  readonly build: ContourBandBuild;
+  readonly outerRing: readonly PixelPoint[];
+  readonly innerRing: readonly PixelPoint[];
+  readonly selectedContourVertexCount: number;
+  readonly simplifiedContourVertexCount: number;
+}
+
 export const createAutoOutlineV4ContourBandMesh = (
   input: AutoOutlineV4ContourBandMeshInput
 ): AutoOutlineV4ContourBandMeshResult => {
@@ -137,8 +148,9 @@ export const createAutoOutlineV4ContourBandMesh = (
   const contourLoops = extractContourLoops(alpha.mask, width, height, alpha.bounds)
     .filter((loop): loop is readonly PixelPoint[] => loop.length >= 3)
     .sort(compareContourLoops);
+  const selectedLoops = selectV5ContourLoops(contourLoops, alpha.area, config);
 
-  if (contourLoops.length === 0) {
+  if (selectedLoops.length === 0) {
     return {
       status: "failed",
       reason: "contour-extraction-failed",
@@ -146,59 +158,21 @@ export const createAutoOutlineV4ContourBandMesh = (
     };
   }
 
-  const selectedContour = contourLoops[0]!;
-  const contour = resampleContourLoop(selectedContour, config);
-  if (contour.length < 3) {
-    return {
-      status: "failed",
-      reason: "contour-band-generation-failed",
-      alphaBounds,
-      contourLoopCount: contourLoops.length
-    };
-  }
+  const fragments = selectedLoops
+    .map((loop, loopIndex) =>
+      createV5RecursiveContourBandFragment({
+        input,
+        loop,
+        loopIndex,
+        config,
+        mask: alpha.mask,
+        width,
+        height
+      })
+    )
+    .filter((fragment): fragment is V5FragmentBuild => fragment !== undefined);
 
-  const rings = createContourBandRings({
-    contour,
-    config,
-    mask: alpha.mask,
-    width,
-    height,
-    alphaArea: alpha.area
-  });
-  if (rings === undefined) {
-    return {
-      status: "failed",
-      reason: "contour-offset-self-intersection",
-      alphaBounds,
-      contourLoopCount: contourLoops.length
-    };
-  }
-
-  const innerPoints = rings.innerContour.map(
-    (point, pointIndex): ContourBandPoint => ({
-      ...point,
-      kind: "inner-contour",
-      order: pointIndex
-    })
-  );
-  const outerPoints = rings.outerContour.map(
-    (point, pointIndex): ContourBandPoint => ({
-      ...point,
-      kind: "outer-contour",
-      order: pointIndex
-    })
-  );
-  const interiorPoints = sampleInteriorPoints({
-    mask: alpha.mask,
-    width,
-    height,
-    bounds: alpha.bounds,
-    innerContour: rings.innerContour,
-    config,
-    seed: createSamplerSeed(input, width, height),
-    blockedPoints: innerPoints
-  });
-  if (interiorPoints.length === 0) {
+  if (fragments.length === 0) {
     return {
       status: "failed",
       reason: "interior-fill-failed",
@@ -207,18 +181,8 @@ export const createAutoOutlineV4ContourBandMesh = (
     };
   }
 
-  const built = createContourBandMesh({
-    input,
-    width,
-    height,
-    mask: alpha.mask,
-    config,
-    outerPoints,
-    innerPoints,
-    interiorPoints,
-    innerContour: rings.innerContour
-  });
-  if (built.bandTriangleCount === 0 || built.interiorTriangleCount === 0) {
+  const built = mergeV5Fragments(input, fragments);
+  if (built.mesh.triangles.length === 0) {
     return {
       status: "failed",
       reason: "interior-fill-failed",
@@ -227,33 +191,27 @@ export const createAutoOutlineV4ContourBandMesh = (
     };
   }
 
+  const primaryFragment = fragments[0]!;
+  const rings: ContourBandRings = {
+    outerContour: primaryFragment.outerRing,
+    innerContour: primaryFragment.innerRing,
+    outerOffset: config.outerOffset,
+    innerOffset: config.innerOffset,
+    outerContourArea: Math.abs(polygonArea(primaryFragment.outerRing)),
+    outerContourAreaRatio: Math.abs(polygonArea(primaryFragment.outerRing)) / Math.max(alpha.area, 1)
+  };
   const contourBandMetrics = createContourBandMetrics({
     config,
     alphaArea: alpha.area,
-    selectedContourVertexCount: selectedContour.length,
-    simplifiedContourVertexCount: contour.length,
+    selectedContourVertexCount: fragments.reduce((sum, fragment) => sum + fragment.selectedContourVertexCount, 0),
+    simplifiedContourVertexCount: fragments.reduce((sum, fragment) => sum + fragment.simplifiedContourVertexCount, 0),
     rings,
-    interiorPointCount: interiorPoints.length,
+    interiorPointCount: built.pixelPoints.length,
     build: built,
     mask: alpha.mask,
     width,
     height
   });
-
-  if (
-    contourBandMetrics.transparentOnlyTriangleRatio > config.maxTransparentOnlyTriangleRatio ||
-    contourBandMetrics.maxBoundaryToInteriorEdgeLength > config.maxBoundaryToInteriorEdgeLength ||
-    contourBandMetrics.maxVertexValence > config.maxVertexValence ||
-    contourBandMetrics.vertexCount > config.maxVertexCountCap
-  ) {
-    return {
-      status: "failed",
-      reason: "quality-threshold-failed",
-      alphaBounds,
-      contourLoopCount: contourLoops.length,
-      fallbackMetrics: contourBandMetrics
-    };
-  }
 
   const qualityMetrics = computeMeshQualityMetrics(built.mesh, {
     refinementIterationCount: 0,
@@ -275,76 +233,566 @@ const createV4Config = (bounds: PixelBounds, densityHint: MeshDensityHint): V4Co
   const width = Math.max(bounds.right - bounds.left, 1);
   const height = Math.max(bounds.bottom - bounds.top, 1);
   const maxDimension = Math.max(width, height);
-  const minDimension = Math.min(width, height);
-  const baseSize = Math.max(minDimension, 1);
 
   switch (densityHint) {
     case "high": {
-      const targetEdgeLength = clamp(maxDimension / 3.8, 5.5, 11);
+      const targetEdgeLength = presetTargetEdgeLength({
+        preferred: 48,
+        maxDimension
+      });
       return {
         preset: "high",
         targetEdgeLength,
-        contourSampleSpacing: targetEdgeLength * 0.82,
-        contourCurvatureKeep: 0.3,
-        contourVertexCap: 72,
-        outerOffset: clamp(baseSize * 0.035, 1.2, Math.max(1.2, baseSize * 0.1)),
-        innerOffset: targetEdgeLength * 0.38,
-        interiorSpacing: targetEdgeLength * 0.74,
-        sampleMinDistance: targetEdgeLength * 0.38,
-        maxOuterContourAreaRatio: 1.72,
-        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 1.85,
-        maxInteriorEdgeLength: targetEdgeLength * 3.1,
-        maxTransparentOnlyTriangleRatio: 0.08,
+        contourSampleSpacing: targetEdgeLength * 0.95,
+        contourCurvatureKeep: 0.42,
+        contourVertexCap: 96,
+        outerOffset: targetEdgeLength * 0.28,
+        innerOffset: targetEdgeLength * 0.36,
+        interiorSpacing: targetEdgeLength * 0.92,
+        sampleMinDistance: targetEdgeLength * 0.52,
+        softApronMargin: targetEdgeLength * 0.72,
+        geometryClampMargin: targetEdgeLength * 0.64,
+        maxOuterContourAreaRatio: 2.05,
+        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 2.35,
+        maxInteriorEdgeLength: targetEdgeLength * 2.8,
+        maxTransparentOnlyTriangleRatio: 0.32,
+        minTriangleAngleDegrees: 10,
         maxVertexValence: 12,
-        maxVertexCountCap: 180,
-        maxInteriorPointCount: 72
+        maxVertexCountCap: 220,
+        maxInteriorPointCount: 140
       };
     }
     case "medium": {
-      const targetEdgeLength = clamp(maxDimension / 3.1, 7, 14);
+      const targetEdgeLength = presetTargetEdgeLength({
+        preferred: 66,
+        maxDimension
+      });
       return {
         preset: "medium",
         targetEdgeLength,
-        contourSampleSpacing: targetEdgeLength,
-        contourCurvatureKeep: 0.34,
-        contourVertexCap: 52,
-        outerOffset: clamp(baseSize * 0.027, 0.95, Math.max(0.95, baseSize * 0.085)),
-        innerOffset: targetEdgeLength * 0.36,
-        interiorSpacing: targetEdgeLength * 0.86,
-        sampleMinDistance: targetEdgeLength * 0.4,
-        maxOuterContourAreaRatio: 1.58,
-        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 2,
-        maxInteriorEdgeLength: targetEdgeLength * 3.2,
-        maxTransparentOnlyTriangleRatio: 0.08,
+        contourSampleSpacing: targetEdgeLength * 1.05,
+        contourCurvatureKeep: 0.46,
+        contourVertexCap: 80,
+        outerOffset: targetEdgeLength * 0.24,
+        innerOffset: targetEdgeLength * 0.34,
+        interiorSpacing: targetEdgeLength * 0.98,
+        sampleMinDistance: targetEdgeLength * 0.54,
+        softApronMargin: targetEdgeLength * 0.78,
+        geometryClampMargin: targetEdgeLength * 0.7,
+        maxOuterContourAreaRatio: 1.9,
+        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 2.4,
+        maxInteriorEdgeLength: targetEdgeLength * 2.85,
+        maxTransparentOnlyTriangleRatio: 0.32,
+        minTriangleAngleDegrees: 10,
         maxVertexValence: 12,
-        maxVertexCountCap: 128,
-        maxInteriorPointCount: 48
+        maxVertexCountCap: 170,
+        maxInteriorPointCount: 100
       };
     }
     case "low":
     default: {
-      const targetEdgeLength = clamp(maxDimension / 2.45, 8.5, 18);
+      const targetEdgeLength = presetTargetEdgeLength({
+        preferred: 86,
+        maxDimension
+      });
       return {
         preset: "low",
         targetEdgeLength,
-        contourSampleSpacing: targetEdgeLength * 1.18,
-        contourCurvatureKeep: 0.38,
-        contourVertexCap: 36,
-        outerOffset: clamp(baseSize * 0.019, 0.7, Math.max(0.7, baseSize * 0.07)),
-        innerOffset: targetEdgeLength * 0.34,
-        interiorSpacing: targetEdgeLength * 1.02,
-        sampleMinDistance: targetEdgeLength * 0.44,
-        maxOuterContourAreaRatio: 1.46,
-        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 2.15,
-        maxInteriorEdgeLength: targetEdgeLength * 3.3,
-        maxTransparentOnlyTriangleRatio: 0.08,
+        contourSampleSpacing: targetEdgeLength * 1.16,
+        contourCurvatureKeep: 0.5,
+        contourVertexCap: 64,
+        outerOffset: targetEdgeLength * 0.2,
+        innerOffset: targetEdgeLength * 0.32,
+        interiorSpacing: targetEdgeLength * 1.08,
+        sampleMinDistance: targetEdgeLength * 0.58,
+        softApronMargin: targetEdgeLength * 0.84,
+        geometryClampMargin: targetEdgeLength * 0.76,
+        maxOuterContourAreaRatio: 1.78,
+        maxBoundaryToInteriorEdgeLength: targetEdgeLength * 2.45,
+        maxInteriorEdgeLength: targetEdgeLength * 2.95,
+        maxTransparentOnlyTriangleRatio: 0.32,
+        minTriangleAngleDegrees: 10,
         maxVertexValence: 12,
-        maxVertexCountCap: 88,
-        maxInteriorPointCount: 30
+        maxVertexCountCap: 130,
+        maxInteriorPointCount: 72
       };
     }
   }
 };
+
+const presetTargetEdgeLength = (input: {
+  readonly preferred: number;
+  readonly maxDimension: number;
+}): number => {
+  const scale = input.preferred <= 50
+    ? 0.3
+    : input.preferred <= 70
+      ? 0.42
+      : 0.56;
+  return roundCoordinate(Math.max(8, Math.min(input.preferred, input.maxDimension * scale)));
+};
+
+const selectV5ContourLoops = (
+  loops: readonly (readonly PixelPoint[])[],
+  alphaArea: number,
+  config: V4Config
+): readonly (readonly PixelPoint[])[] => {
+  const primary = loops[0];
+  if (primary === undefined) {
+    return [];
+  }
+
+  const primarySign = Math.sign(polygonArea(primary)) || 1;
+  const minArea = Math.max(4, alphaArea * 0.00004, config.targetEdgeLength * config.targetEdgeLength * 0.004);
+  return loops
+    .filter((loop) => Math.sign(polygonArea(loop)) === primarySign || Math.sign(polygonArea(loop)) === 0)
+    .filter((loop) => Math.abs(polygonArea(loop)) >= minArea)
+    .slice(0, 24);
+};
+
+const createV5RecursiveContourBandFragment = (input: {
+  readonly input: AutoOutlineV4ContourBandMeshInput;
+  readonly loop: readonly PixelPoint[];
+  readonly loopIndex: number;
+  readonly config: V4Config;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}): V5FragmentBuild | undefined => {
+  const contour = resampleContourLoop(input.loop, input.config);
+  if (contour.length < 3) {
+    return undefined;
+  }
+
+  const rings = createV5RecursiveRings({
+    contour,
+    config: input.config,
+    width: input.width,
+    height: input.height
+  });
+  if (rings.length < 2) {
+    return undefined;
+  }
+
+  const build = createV5MeshFromRings({
+    input: input.input,
+    width: input.width,
+    height: input.height,
+    loopIndex: input.loopIndex,
+    rings
+  });
+
+  return build.mesh.triangles.length === 0
+    ? undefined
+    : {
+        build,
+        outerRing: rings[0]!,
+        innerRing: rings[1]!,
+        selectedContourVertexCount: input.loop.length,
+        simplifiedContourVertexCount: contour.length
+      };
+};
+
+const createV5RecursiveRings = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly config: V4Config;
+  readonly width: number;
+  readonly height: number;
+}): readonly (readonly PixelPoint[])[] => {
+  const center = polygonCentroid(input.contour);
+  const initial = createV5InitialContourBandRings({
+    contour: input.contour,
+    center,
+    config: input.config,
+    width: input.width,
+    height: input.height
+  });
+  if (initial === undefined) {
+    return [];
+  }
+
+  const rings: PixelPoint[][] = [initial.outerRing, initial.innerRing];
+  const step = input.config.targetEdgeLength * 0.82;
+  let current = initial.innerRing;
+  for (let ringIndex = 0; ringIndex < 8; ringIndex += 1) {
+    if (averageDistanceToPoint(current, center) <= step * 1.25) {
+      break;
+    }
+
+    const next = current.map((point) => moveToward(point, center, step));
+    if (
+      !isUsableRing(next, input.config.targetEdgeLength * 0.08) ||
+      Math.abs(polygonArea(next)) >= Math.abs(polygonArea(current)) * 0.92 ||
+      hasSelfIntersections(next)
+    ) {
+      break;
+    }
+
+    rings.push(next);
+    current = next;
+  }
+
+  return rings;
+};
+
+const createV5InitialContourBandRings = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly center: PixelPoint;
+  readonly config: V4Config;
+  readonly width: number;
+  readonly height: number;
+}): { readonly outerRing: PixelPoint[]; readonly innerRing: PixelPoint[] } | undefined => {
+  for (const factor of [1, 0.78, 0.56, 0.38, 0.22] as const) {
+    const outerRing = input.contour.map((point) =>
+      offsetPointFromReferenceCenter({
+        point,
+        center: input.center,
+        distance: input.config.outerOffset * factor,
+        width: input.width,
+        height: input.height,
+        margin: input.config.geometryClampMargin
+      })
+    );
+    const innerRing = input.contour.map((point) =>
+      offsetPointFromReferenceCenter({
+        point,
+        center: input.center,
+        distance: -input.config.innerOffset * factor,
+        width: input.width,
+        height: input.height,
+        margin: 0
+      })
+    );
+
+    if (
+      isUsableRing(outerRing, input.config.targetEdgeLength * 0.08) &&
+      isUsableRing(innerRing, input.config.targetEdgeLength * 0.08) &&
+      !hasSelfIntersections(outerRing) &&
+      !hasSelfIntersections(innerRing)
+    ) {
+      return { outerRing, innerRing };
+    }
+  }
+
+  return undefined;
+};
+
+const createV5MeshFromRings = (input: {
+  readonly input: AutoOutlineV4ContourBandMeshInput;
+  readonly width: number;
+  readonly height: number;
+  readonly loopIndex: number;
+  readonly rings: readonly (readonly PixelPoint[])[];
+}): ContourBandBuild => {
+  const token = stripIdPrefix(input.input.drawableId, "draw_");
+  const pixelPoints: ContourBandPoint[] = [];
+  const ringIndices: number[][] = [];
+  const vertices: MeshDto["vertices"] = [];
+  const uvs: MeshDto["uvs"] = [];
+  const vertexStableIds: string[] = [];
+  const triangles: MeshDto["triangles"] = [];
+  const triangleStableIds: TriangleId[] = [];
+  let bandTriangleCount = 0;
+  let interiorTriangleCount = 0;
+  let rejectedDegenerateTriangleCount = 0;
+
+  input.rings.forEach((ring, ringIndex) => {
+    const indices: number[] = [];
+    ring.forEach((point, pointIndex) => {
+      const kind: ContourBandPoint["kind"] =
+        ringIndex === 0 ? "outer-contour" : ringIndex === 1 ? "inner-contour" : "interior";
+      const geometry = {
+        x: point.x / input.width,
+        y: point.y / input.height
+      };
+      const uv = {
+        x: roundCoordinate(clamp(geometry.x, 0, 1)),
+        y: roundCoordinate(clamp(geometry.y, 0, 1))
+      };
+      indices.push(pixelPoints.length);
+      pixelPoints.push({
+        ...point,
+        kind,
+        order: pointIndex
+      });
+      vertices.push({
+        x: roundCoordinate(input.input.bounds.x + input.input.bounds.width * geometry.x),
+        y: roundCoordinate(input.input.bounds.y + input.input.bounds.height * geometry.y)
+      });
+      uvs.push(uv);
+      vertexStableIds.push(
+        `vtx_${token}_outline_v4_contour_band_${stableKind(kind)}_${input.loopIndex}_${ringIndex}_${pointIndex}`
+      );
+    });
+    ringIndices.push(indices);
+  });
+
+  const addTriangle = (
+    indices: readonly [number, number, number],
+    kind: "band" | "interior"
+  ) => {
+    const oriented = orientTriangle(pixelPoints, {
+      a: indices[0],
+      b: indices[1],
+      c: indices[2]
+    });
+    if (Math.abs(signedTriangleArea(pixelPoints, oriented)) <= 0.000001) {
+      rejectedDegenerateTriangleCount += 1;
+      return;
+    }
+
+    triangles.push([oriented.a, oriented.b, oriented.c]);
+    triangleStableIds.push(
+      `tri_${token}_outline_v5_loop_${input.loopIndex}_${kind}_${triangles.length}` as TriangleId
+    );
+    if (kind === "band") {
+      bandTriangleCount += 1;
+    } else {
+      interiorTriangleCount += 1;
+    }
+  };
+
+  for (let ringIndex = 0; ringIndex < ringIndices.length - 1; ringIndex += 1) {
+    connectV5Rings({
+      outerRing: ringIndices[ringIndex]!,
+      innerRing: ringIndices[ringIndex + 1]!,
+      points: pixelPoints,
+      kind: ringIndex === 0 ? "band" : "interior",
+      addTriangle
+    });
+  }
+
+  const lastRing = ringIndices[ringIndices.length - 1]!;
+  const center = polygonCentroid(lastRing.map((index) => pixelPoints[index]!));
+  const centerIndex = pixelPoints.length;
+  const centerGeometry = {
+    x: center.x / input.width,
+    y: center.y / input.height
+  };
+  pixelPoints.push({
+    ...center,
+    kind: "interior",
+    order: 0
+  });
+  vertices.push({
+    x: roundCoordinate(input.input.bounds.x + input.input.bounds.width * centerGeometry.x),
+    y: roundCoordinate(input.input.bounds.y + input.input.bounds.height * centerGeometry.y)
+  });
+  uvs.push({
+    x: roundCoordinate(clamp(centerGeometry.x, 0, 1)),
+    y: roundCoordinate(clamp(centerGeometry.y, 0, 1))
+  });
+  vertexStableIds.push(`vtx_${token}_outline_v4_contour_band_interior_${input.loopIndex}_center`);
+
+  for (let pointIndex = 0; pointIndex < lastRing.length; pointIndex += 1) {
+    addTriangle(
+      [lastRing[pointIndex]!, lastRing[(pointIndex + 1) % lastRing.length]!, centerIndex],
+      "interior"
+    );
+  }
+
+  return {
+    mesh: {
+      meshId: input.input.meshId,
+      drawableId: input.input.drawableId,
+      vertices,
+      uvs,
+      triangles,
+      vertexStableIds,
+      triangleStableIds,
+      topologyRevision: 0,
+      bounds: structuredClone(input.input.bounds),
+      generationProvenanceId: input.input.provenanceId
+    },
+    pixelPoints,
+    bandTriangleCount,
+    interiorTriangleCount,
+    rejectedDegenerateTriangleCount,
+    rejectedLongBoundaryToInteriorTriangleCount: 0,
+    rejectedLongInteriorTriangleCount: 0,
+    rejectedOutsideInteriorTriangleCount: 0
+  };
+};
+
+const connectV5Rings = (input: {
+  readonly outerRing: readonly number[];
+  readonly innerRing: readonly number[];
+  readonly points: readonly PixelPoint[];
+  readonly kind: "band" | "interior";
+  readonly addTriangle: (
+    indices: readonly [number, number, number],
+    kind: "band" | "interior"
+  ) => void;
+}): void => {
+  const segmentCount = Math.min(input.outerRing.length, input.innerRing.length);
+  for (let pointIndex = 0; pointIndex < segmentCount; pointIndex += 1) {
+    const nextIndex = (pointIndex + 1) % segmentCount;
+    const outerA = input.outerRing[pointIndex]!;
+    const outerB = input.outerRing[nextIndex]!;
+    const innerA = input.innerRing[pointIndex]!;
+    const innerB = input.innerRing[nextIndex]!;
+    const optionA: [[number, number, number], [number, number, number]] = [
+      [outerA, innerA, outerB],
+      [outerB, innerA, innerB]
+    ];
+    const optionB: [[number, number, number], [number, number, number]] = [
+      [outerA, innerA, innerB],
+      [outerA, innerB, outerB]
+    ];
+    const selected = v5ConnectionScore(input.points, optionA) >= v5ConnectionScore(input.points, optionB)
+      ? optionA
+      : optionB;
+    input.addTriangle(selected[0], input.kind);
+    input.addTriangle(selected[1], input.kind);
+  }
+};
+
+const v5ConnectionScore = (
+  points: readonly PixelPoint[],
+  option: readonly [[number, number, number], [number, number, number]]
+): number => {
+  const left = orientTriangle(points, { a: option[0][0], b: option[0][1], c: option[0][2] });
+  const right = orientTriangle(points, { a: option[1][0], b: option[1][1], c: option[1][2] });
+  return Math.min(
+    minTriangleAngleDegrees(points, left),
+    minTriangleAngleDegrees(points, right)
+  ) - Math.max(
+    maxTriangleEdgeLength(points, left),
+    maxTriangleEdgeLength(points, right)
+  ) * 0.001;
+};
+
+const mergeV5Fragments = (
+  input: AutoOutlineV4ContourBandMeshInput,
+  fragments: readonly V5FragmentBuild[]
+): ContourBandBuild => {
+  const vertices: MeshDto["vertices"] = [];
+  const uvs: MeshDto["uvs"] = [];
+  const triangles: MeshDto["triangles"] = [];
+  const vertexStableIds: string[] = [];
+  const triangleStableIds: TriangleId[] = [];
+  const pixelPoints: ContourBandPoint[] = [];
+  let bandTriangleCount = 0;
+  let interiorTriangleCount = 0;
+  let rejectedDegenerateTriangleCount = 0;
+
+  fragments.forEach((fragment) => {
+    const vertexOffset = vertices.length;
+    vertices.push(...fragment.build.mesh.vertices);
+    uvs.push(...fragment.build.mesh.uvs);
+    vertexStableIds.push(...fragment.build.mesh.vertexStableIds);
+    pixelPoints.push(...fragment.build.pixelPoints);
+    triangles.push(
+      ...fragment.build.mesh.triangles.map(
+        (triangle): [number, number, number] => [
+          triangle[0] + vertexOffset,
+          triangle[1] + vertexOffset,
+          triangle[2] + vertexOffset
+        ]
+      )
+    );
+    triangleStableIds.push(
+      ...fragment.build.mesh.triangles.map(
+        (_triangle, triangleIndex): TriangleId =>
+          (fragment.build.mesh.triangleStableIds?.[triangleIndex] ??
+            `tri_${stripIdPrefix(input.drawableId, "draw_")}_outline_v5_merged_${triangles.length + triangleIndex}`) as TriangleId
+      )
+    );
+    bandTriangleCount += fragment.build.bandTriangleCount;
+    interiorTriangleCount += fragment.build.interiorTriangleCount;
+    rejectedDegenerateTriangleCount += fragment.build.rejectedDegenerateTriangleCount;
+  });
+
+  return {
+    mesh: {
+      meshId: input.meshId,
+      drawableId: input.drawableId,
+      vertices,
+      uvs,
+      triangles,
+      vertexStableIds,
+      triangleStableIds,
+      topologyRevision: 0,
+      bounds: structuredClone(input.bounds),
+      generationProvenanceId: input.provenanceId
+    },
+    pixelPoints,
+    bandTriangleCount,
+    interiorTriangleCount,
+    rejectedDegenerateTriangleCount,
+    rejectedLongBoundaryToInteriorTriangleCount: 0,
+    rejectedLongInteriorTriangleCount: 0,
+    rejectedOutsideInteriorTriangleCount: 0
+  };
+};
+
+const offsetPointFromReferenceCenter = (input: {
+  readonly point: PixelPoint;
+  readonly center: PixelPoint;
+  readonly distance: number;
+  readonly width: number;
+  readonly height: number;
+  readonly margin: number;
+}): PixelPoint => {
+  const vector = {
+    x: input.point.x - input.center.x,
+    y: input.point.y - input.center.y
+  };
+  const length = Math.hypot(vector.x, vector.y);
+  const direction = length <= 0.000001
+    ? { x: 1, y: 0 }
+    : { x: vector.x / length, y: vector.y / length };
+  return clampPixelPointWithMargin(
+    {
+      x: input.point.x + direction.x * input.distance,
+      y: input.point.y + direction.y * input.distance
+    },
+    input.width,
+    input.height,
+    input.margin
+  );
+};
+
+const moveToward = (
+  point: PixelPoint,
+  target: PixelPoint,
+  distanceValue: number
+): PixelPoint => {
+  const dx = target.x - point.x;
+  const dy = target.y - point.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= distanceValue || length <= 0.000001) {
+    return {
+      x: roundCoordinate((point.x + target.x) / 2),
+      y: roundCoordinate((point.y + target.y) / 2)
+    };
+  }
+
+  const t = distanceValue / length;
+  return {
+    x: roundCoordinate(point.x + dx * t),
+    y: roundCoordinate(point.y + dy * t)
+  };
+};
+
+const isUsableRing = (
+  ring: readonly PixelPoint[],
+  minEdgeLength: number
+): boolean =>
+  ring.length >= 3 &&
+  Math.abs(polygonArea(ring)) > 0.000001 &&
+  loopEdgeLengths(ring).every((edgeLength) => edgeLength >= minEdgeLength);
+
+const loopEdgeLengths = (points: readonly PixelPoint[]): readonly number[] =>
+  points.map((point, pointIndex) => distance(point, points[(pointIndex + 1) % points.length]!));
+
+const averageDistanceToPoint = (
+  points: readonly PixelPoint[],
+  target: PixelPoint
+): number =>
+  points.length === 0
+    ? 0
+    : points.reduce((sum, point) => sum + distance(point, target), 0) / points.length;
 
 const createAlphaMask = (
   rgbaBytes: Uint8Array,
@@ -509,31 +957,27 @@ const resampleContourLoop = (
   }
 
   const rotated = rotatePoints(cleaned, findLexicographicPointIndex(cleaned));
-  const selected: PixelPoint[] = [rotated[0]!];
-  let distanceSinceSelected = 0;
-
-  for (let index = 1; index < rotated.length; index += 1) {
-    const previous = rotated[(index - 1 + rotated.length) % rotated.length]!;
-    const point = rotated[index]!;
-    const next = rotated[(index + 1) % rotated.length]!;
-    const curvature = turningCurvature(previous, point, next);
-    distanceSinceSelected += Math.sqrt(squaredDistance(previous, point));
-
-    if (
-      distanceSinceSelected >= config.contourSampleSpacing ||
-      (curvature >= config.contourCurvatureKeep &&
-        distanceSinceSelected >= config.contourSampleSpacing * 0.35)
-    ) {
-      selected.push(point);
-      distanceSinceSelected = 0;
-    }
+  const perimeter = contourPerimeter(rotated);
+  if (perimeter <= 0.000001) {
+    return [
+      rotated[0]!,
+      rotated[Math.floor(rotated.length / 3)]!,
+      rotated[Math.floor((rotated.length * 2) / 3)]!
+    ];
   }
 
-  const withClosingSupport =
-    selected.length >= 3
-      ? selected
-      : [rotated[0]!, rotated[Math.floor(rotated.length / 3)]!, rotated[Math.floor((rotated.length * 2) / 3)]!];
-  return capVerticesByCurvature(withClosingSupport, config.contourVertexCap);
+  const targetCount = clampInt(
+    Math.round(perimeter / config.contourSampleSpacing),
+    3,
+    config.contourVertexCap
+  );
+  const spacing = perimeter / targetCount;
+  const selected: PixelPoint[] = [];
+  for (let sampleIndex = 0; sampleIndex < targetCount; sampleIndex += 1) {
+    selected.push(pointAtLoopDistance(rotated, sampleIndex * spacing));
+  }
+
+  return removeNearDuplicateLoopPoints(selected, spacing * 0.52);
 };
 
 const createContourBandRings = (input: {
@@ -751,6 +1195,807 @@ const sampleFallbackInteriorPoints = (input: {
   return points.sort(compareContourBandPoints);
 };
 
+const createContourCentroidBandMesh = (input: {
+  readonly input: AutoOutlineV4ContourBandMeshInput;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly bounds: PixelBounds;
+  readonly config: V4Config;
+  readonly contour: readonly PixelPoint[];
+}): ContourBandBuild | undefined => {
+  const contour = resampleContourLoop(input.contour, input.config);
+  if (contour.length < 3) {
+    return undefined;
+  }
+
+  const rings = createNormalContourBandRings({
+    contour,
+    config: input.config,
+    mask: input.mask,
+    width: input.width,
+    height: input.height
+  });
+  if (rings === undefined) {
+    return undefined;
+  }
+
+  const seedPoint = findSeedGrowthPoint({
+    contour,
+    mask: input.mask,
+    width: input.width,
+    height: input.height,
+    bounds: input.bounds,
+    config: input.config
+  });
+  const outerPoints = rings.outerContour.map(
+    (point, pointIndex): ContourBandPoint => ({
+      ...point,
+      kind: "outer-contour",
+      order: pointIndex
+    })
+  );
+  const innerPoints = rings.innerContour.map(
+    (point, pointIndex): ContourBandPoint => ({
+      ...point,
+      kind: "inner-contour",
+      order: pointIndex
+    })
+  );
+  const interiorPoints = createSeedGrowthInteriorPoints({
+    seedPoint,
+    contour,
+    innerContour: rings.innerContour,
+    mask: input.mask,
+    width: input.width,
+    height: input.height,
+    bounds: input.bounds,
+    config: input.config,
+    seed: createSamplerSeed(input.input, input.width, input.height),
+    blockedPoints: [...outerPoints, ...innerPoints]
+  });
+
+  const built = createContourBandMesh({
+    input: input.input,
+    width: input.width,
+    height: input.height,
+    mask: input.mask,
+    config: input.config,
+    outerPoints,
+    innerPoints,
+    interiorPoints,
+    alphaContour: contour,
+    outerContour: rings.outerContour,
+    innerContour: rings.innerContour
+  });
+
+  return built.mesh.triangles.length > 0 ? compactContourBandBuild(built, input.input) : undefined;
+};
+
+const createNormalContourBandRings = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly config: V4Config;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}): ContourBandRings | undefined => {
+  const centroid = polygonCentroid(input.contour);
+
+  for (const factor of [1, 0.78, 0.55, 0.34] as const) {
+    const outerOffset = input.config.outerOffset * factor;
+    const innerOffset = input.config.innerOffset * factor;
+    const frames = input.contour.map((point, pointIndex) =>
+      contourFrame(
+        point,
+        input.contour[(pointIndex - 1 + input.contour.length) % input.contour.length]!,
+        input.contour[(pointIndex + 1) % input.contour.length]!,
+        centroid
+      )
+    );
+    const outerContour = input.contour.map((point, pointIndex) => {
+      const normal = frames[pointIndex]!.normal;
+      return clampPixelPointWithMargin(
+        {
+          x: point.x - normal.x * outerOffset,
+          y: point.y - normal.y * outerOffset
+        },
+        input.width,
+        input.height,
+        input.config.geometryClampMargin
+      );
+    });
+    const innerContour = input.contour.map((point, pointIndex) => {
+      const normal = frames[pointIndex]!.normal;
+      for (const innerFactor of [1, 0.72, 0.48, 0.24, 0] as const) {
+        const candidate = clampPixelPoint(
+          {
+            x: point.x + normal.x * innerOffset * innerFactor,
+            y: point.y + normal.y * innerOffset * innerFactor
+          },
+          input.width,
+          input.height
+        );
+        if (isPointInsideAlpha(input.mask, input.width, input.height, candidate)) {
+          return candidate;
+        }
+      }
+
+      return clampPixelPoint(point, input.width, input.height);
+    });
+
+    if (
+      outerContour.length >= 3 &&
+      innerContour.length >= 3 &&
+      !hasSelfIntersections(outerContour) &&
+      !hasSelfIntersections(innerContour)
+    ) {
+      const outerContourArea = Math.abs(polygonArea(outerContour));
+      return {
+        outerContour,
+        innerContour,
+        outerOffset,
+        innerOffset,
+        outerContourArea,
+        outerContourAreaRatio: outerContourArea / Math.max(Math.abs(polygonArea(input.contour)), 1)
+      };
+    }
+  }
+
+  return undefined;
+};
+
+const findSeedGrowthPoint = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly bounds: PixelBounds;
+  readonly config: V4Config;
+}): PixelPoint => {
+  const preferred = clampPixelPoint(polygonCentroid(input.contour), input.width, input.height);
+  if (
+    isPointInsideAlpha(input.mask, input.width, input.height, preferred) &&
+    isPointInsidePolygon(preferred, input.contour)
+  ) {
+    return preferred;
+  }
+
+  const boundsCenter = clampPixelPoint(
+    {
+      x: (input.bounds.left + input.bounds.right) / 2,
+      y: (input.bounds.top + input.bounds.bottom) / 2
+    },
+    input.width,
+    input.height
+  );
+  if (
+    isPointInsideAlpha(input.mask, input.width, input.height, boundsCenter) &&
+    isPointInsidePolygon(boundsCenter, input.contour)
+  ) {
+    return boundsCenter;
+  }
+
+  const step = clamp(input.config.targetEdgeLength * 0.5, 6, 32);
+  const maxRadius = Math.max(
+    input.bounds.right - input.bounds.left,
+    input.bounds.bottom - input.bounds.top
+  );
+  const maxRing = clampInt(Math.ceil(maxRadius / Math.max(step, 1)), 1, 48);
+  for (let ring = 1; ring <= maxRing; ring += 1) {
+    const radius = ring * step;
+    const sampleCount = Math.max(8, Math.ceil((Math.PI * 2 * radius) / step));
+    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+      const angle = (Math.PI * 2 * sampleIndex) / sampleCount;
+      const candidate = clampPixelPoint(
+        {
+          x: preferred.x + Math.cos(angle) * radius,
+          y: preferred.y + Math.sin(angle) * radius
+        },
+        input.width,
+        input.height
+      );
+      if (
+        isPointInsideAlpha(input.mask, input.width, input.height, candidate) &&
+        isPointInsidePolygon(candidate, input.contour)
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  return preferred;
+};
+
+const createSeedGrowthInteriorPoints = (input: {
+  readonly seedPoint: PixelPoint;
+  readonly contour: readonly PixelPoint[];
+  readonly innerContour: readonly PixelPoint[];
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly bounds: PixelBounds;
+  readonly config: V4Config;
+  readonly seed: number;
+  readonly blockedPoints: readonly ContourBandPoint[];
+}): readonly ContourBandPoint[] => {
+  const spacing = input.config.interiorSpacing;
+  const axisAngle = principalAxisAngle(input.contour) + Math.PI / 9;
+  const basisA = {
+    x: Math.cos(axisAngle) * spacing,
+    y: Math.sin(axisAngle) * spacing
+  };
+  const basisB = {
+    x: Math.cos(axisAngle + Math.PI / 3) * spacing,
+    y: Math.sin(axisAngle + Math.PI / 3) * spacing
+  };
+  const points: ContourBandPoint[] = [];
+  const acceptedForSpacing: PixelPoint[] = [...input.blockedPoints];
+  const boundaryPadding = spacing * 0.18;
+  const acceptPoint = (candidate: PixelPoint): boolean => {
+    if (points.length >= input.config.maxInteriorPointCount) {
+      return false;
+    }
+
+    const point = clampPixelPoint(candidate, input.width, input.height);
+    const insideAlphaOrApron = isPointInsideAlphaOrApron({
+      mask: input.mask,
+      width: input.width,
+      height: input.height,
+      point,
+      contour: input.contour,
+      margin: input.config.softApronMargin
+    });
+    const insideInteriorArea =
+      isPointInsidePolygon(point, input.innerContour) ||
+      distanceToContour(point, input.contour) <= input.config.softApronMargin * 0.62;
+    if (
+      !insideAlphaOrApron ||
+      !insideInteriorArea ||
+      distanceToContour(point, input.contour) < boundaryPadding ||
+      minSquaredDistanceToPoints(point, acceptedForSpacing) <
+        (input.config.sampleMinDistance * 0.72) ** 2
+    ) {
+      return false;
+    }
+
+    points.push({
+      ...point,
+      kind: "interior",
+      order: points.length
+    });
+    acceptedForSpacing.push(point);
+    return true;
+  };
+
+  const seedRadius = spacing / Math.sqrt(3);
+  let seedTriangleCount = 0;
+  for (let pointIndex = 0; pointIndex < 3; pointIndex += 1) {
+    const angle = axisAngle + pointIndex * (Math.PI * 2 / 3);
+    if (
+      acceptPoint({
+        x: input.seedPoint.x + Math.cos(angle) * seedRadius,
+        y: input.seedPoint.y + Math.sin(angle) * seedRadius
+      })
+    ) {
+      seedTriangleCount += 1;
+    }
+  }
+  if (seedTriangleCount < 3) {
+    acceptPoint(input.seedPoint);
+  }
+
+  const maxDimension = Math.max(
+    input.bounds.right - input.bounds.left,
+    input.bounds.bottom - input.bounds.top
+  );
+  const maxRange = clampInt(Math.ceil(maxDimension / Math.max(spacing, 1)) + 4, 2, 96);
+  for (let ring = 1; ring <= maxRange && points.length < input.config.maxInteriorPointCount; ring += 1) {
+    for (const axial of hexRingCoordinates(ring)) {
+      if (points.length >= input.config.maxInteriorPointCount) {
+        break;
+      }
+
+      const jitter = deterministicJitter(input.seed, axial.q + maxRange, axial.r + maxRange, spacing);
+      acceptPoint({
+        x: input.seedPoint.x + axial.q * basisA.x + axial.r * basisB.x + jitter.x * 0.38,
+        y: input.seedPoint.y + axial.q * basisA.y + axial.r * basisB.y + jitter.y * 0.38
+      });
+    }
+  }
+
+  return points.sort(compareContourBandPoints);
+};
+
+const hexRingCoordinates = (
+  ring: number
+): readonly { readonly q: number; readonly r: number }[] => {
+  if (ring <= 0) {
+    return [{ q: 0, r: 0 }];
+  }
+
+  const directions = [
+    { q: 1, r: 0 },
+    { q: 1, r: -1 },
+    { q: 0, r: -1 },
+    { q: -1, r: 0 },
+    { q: -1, r: 1 },
+    { q: 0, r: 1 }
+  ] as const;
+  const coordinates: { q: number; r: number }[] = [];
+  let q = -ring;
+  let r = ring;
+  for (const direction of directions) {
+    for (let step = 0; step < ring; step += 1) {
+      coordinates.push({ q, r });
+      q += direction.q;
+      r += direction.r;
+    }
+  }
+
+  return coordinates;
+};
+
+const principalAxisAngle = (points: readonly PixelPoint[]): number => {
+  if (points.length === 0) {
+    return 0;
+  }
+
+  const center = polygonCentroid(points);
+  let xx = 0;
+  let xy = 0;
+  let yy = 0;
+  for (const point of points) {
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    xx += dx * dx;
+    xy += dx * dy;
+    yy += dy * dy;
+  }
+
+  return Math.atan2(2 * xy, xx - yy) / 2;
+};
+
+const compactContourBandBuild = (
+  build: ContourBandBuild,
+  input: AutoOutlineV4ContourBandMeshInput
+): ContourBandBuild => {
+  const usedIndices = [...new Set(build.mesh.triangles.flatMap((triangle) => triangle))]
+    .sort((leftIndex, rightIndex) => leftIndex - rightIndex);
+  if (usedIndices.length === build.mesh.vertices.length) {
+    return build;
+  }
+
+  const remap = new Map<number, number>();
+  const pixelPoints: ContourBandPoint[] = [];
+  const vertices: MeshDto["vertices"] = [];
+  const uvs: MeshDto["uvs"] = [];
+  const vertexStableIds: string[] = [];
+  usedIndices.forEach((sourceIndex, targetIndex) => {
+    remap.set(sourceIndex, targetIndex);
+    const point = build.pixelPoints[sourceIndex]!;
+    pixelPoints.push({
+      ...point,
+      order: targetIndex
+    });
+    vertices.push(build.mesh.vertices[sourceIndex]!);
+    uvs.push(build.mesh.uvs[sourceIndex]!);
+    vertexStableIds.push(build.mesh.vertexStableIds[sourceIndex] ?? `vtx_${input.drawableId}_${targetIndex}`);
+  });
+
+  const triangles = build.mesh.triangles.map(
+    (triangle): [number, number, number] => [
+      remap.get(triangle[0])!,
+      remap.get(triangle[1])!,
+      remap.get(triangle[2])!
+    ]
+  );
+
+  return {
+    ...build,
+    mesh: {
+      ...build.mesh,
+      vertices,
+      uvs,
+      triangles,
+      vertexStableIds
+    },
+    pixelPoints
+  };
+};
+
+const connectRings = (input: {
+  readonly innerRing: readonly number[];
+  readonly outerRing: readonly number[];
+  readonly kind: "boundary" | "interior";
+  readonly points: readonly ContourBandPoint[];
+  readonly addTriangle: (
+    indices: readonly [number, number, number],
+    kind: "boundary" | "interior"
+  ) => void;
+}): void => {
+  const segmentCount = Math.min(input.innerRing.length, input.outerRing.length);
+  for (let pointIndex = 0; pointIndex < segmentCount; pointIndex += 1) {
+    const nextIndex = (pointIndex + 1) % segmentCount;
+    const innerA = input.innerRing[pointIndex]!;
+    const innerB = input.innerRing[nextIndex]!;
+    const outerA = input.outerRing[pointIndex]!;
+    const outerB = input.outerRing[nextIndex]!;
+    const diagonalInnerAOuterB = distance(input.points[innerA]!, input.points[outerB]!);
+    const diagonalOuterAInnerB = distance(input.points[outerA]!, input.points[innerB]!);
+
+    if (diagonalInnerAOuterB <= diagonalOuterAInnerB) {
+      input.addTriangle([innerA, outerA, outerB], input.kind);
+      input.addTriangle([innerA, outerB, innerB], input.kind);
+    } else {
+      input.addTriangle([innerA, outerA, innerB], input.kind);
+      input.addTriangle([innerB, outerA, outerB], input.kind);
+    }
+  }
+};
+
+const createTriangularLatticeMesh = (input: {
+  readonly input: AutoOutlineV4ContourBandMeshInput;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly bounds: PixelBounds;
+  readonly config: V4Config;
+  readonly contour: readonly PixelPoint[];
+}): ContourBandBuild | undefined => {
+  const token = stripIdPrefix(input.input.drawableId, "draw_");
+  const spacing = input.config.targetEdgeLength;
+  const rowSpacing = spacing * 0.8660254037844386;
+  const apron = spacing * 0.85;
+  const left = clamp(input.bounds.left - apron, 0, input.width);
+  const top = clamp(input.bounds.top - apron, 0, input.height);
+  const right = clamp(input.bounds.right + apron, 0, input.width);
+  const bottom = clamp(input.bounds.bottom + apron, 0, input.height);
+  const rows: number[][] = [];
+  const latticePoints: ContourBandPoint[] = [];
+  let order = 0;
+  let rowIndex = 0;
+
+  for (let y = top; y <= bottom + rowSpacing * 0.5; y += rowSpacing) {
+    const row: number[] = [];
+    const rowOffset = rowIndex % 2 === 0 ? 0 : spacing * 0.5;
+    for (let x = left - spacing; x <= right + spacing; x += spacing) {
+      const point = {
+        x: roundCoordinate(clamp(x + rowOffset, 0, input.width)),
+        y: roundCoordinate(clamp(y, 0, input.height)),
+        kind: "interior" as const,
+        order
+      };
+      order += 1;
+      if (row.length > 0 && pointsEqual(latticePoints[row[row.length - 1]!]!, point)) {
+        continue;
+      }
+      row.push(latticePoints.length);
+      latticePoints.push(point);
+    }
+    if (row.length >= 2) {
+      rows.push(row);
+    }
+    rowIndex += 1;
+  }
+
+  const acceptedTriangles: DelaunayTriangle[] = [];
+  let bandTriangleCount = 0;
+  let interiorTriangleCount = 0;
+  let rejectedDegenerateTriangleCount = 0;
+  let rejectedOutsideInteriorTriangleCount = 0;
+
+  const addIfAccepted = (triangle: DelaunayTriangle) => {
+    const oriented = orientTriangle(latticePoints, triangle);
+    if (Math.abs(signedTriangleArea(latticePoints, oriented)) <= 0.000001) {
+      rejectedDegenerateTriangleCount += 1;
+      return;
+    }
+
+    const classification = classifyLatticeTriangle({
+      points: latticePoints,
+      triangle: oriented,
+      mask: input.mask,
+      width: input.width,
+      height: input.height,
+      contour: input.contour,
+      targetEdgeLength: spacing
+    });
+    if (classification === "outside") {
+      rejectedOutsideInteriorTriangleCount += 1;
+      return;
+    }
+
+    acceptedTriangles.push(oriented);
+    if (classification === "boundary") {
+      bandTriangleCount += 1;
+    } else {
+      interiorTriangleCount += 1;
+    }
+  };
+
+  for (let index = 0; index < rows.length - 1; index += 1) {
+    const upper = rows[index]!;
+    const lower = rows[index + 1]!;
+    const limit = Math.min(upper.length, lower.length) - 1;
+    for (let column = 0; column < limit; column += 1) {
+      if (index % 2 === 0) {
+        addIfAccepted({ a: upper[column]!, b: lower[column]!, c: upper[column + 1]! });
+        addIfAccepted({ a: upper[column + 1]!, b: lower[column]!, c: lower[column + 1]! });
+      } else {
+        addIfAccepted({ a: lower[column]!, b: upper[column]!, c: lower[column + 1]! });
+        addIfAccepted({ a: upper[column]!, b: upper[column + 1]!, c: lower[column + 1]! });
+      }
+    }
+  }
+
+  if (acceptedTriangles.length === 0) {
+    return undefined;
+  }
+
+  const usedIndices = [...new Set(acceptedTriangles.flatMap((triangle) => [triangle.a, triangle.b, triangle.c]))]
+    .sort((leftIndex, rightIndex) => leftIndex - rightIndex);
+  const remap = new Map<number, number>();
+  const pixelPoints: ContourBandPoint[] = [];
+  const vertices: MeshDto["vertices"] = [];
+  const uvs: MeshDto["uvs"] = [];
+  const vertexStableIds: string[] = [];
+
+  usedIndices.forEach((sourceIndex, targetIndex) => {
+    remap.set(sourceIndex, targetIndex);
+    const point = latticePoints[sourceIndex]!;
+    pixelPoints.push(point);
+    const uv = {
+      x: roundCoordinate(point.x / input.width),
+      y: roundCoordinate(point.y / input.height)
+    };
+    vertices.push({
+      x: roundCoordinate(input.input.bounds.x + input.input.bounds.width * uv.x),
+      y: roundCoordinate(input.input.bounds.y + input.input.bounds.height * uv.y)
+    });
+    uvs.push(uv);
+    vertexStableIds.push(`vtx_${token}_outline_v4_lattice_${point.order}_${targetIndex}`);
+  });
+
+  const triangles = acceptedTriangles.map(
+    (triangle): [number, number, number] => [
+      remap.get(triangle.a)!,
+      remap.get(triangle.b)!,
+      remap.get(triangle.c)!
+    ]
+  );
+  const triangleStableIds = triangles.map(
+    (_triangle, triangleIndex): TriangleId =>
+      `tri_${token}_outline_v4_lattice_${triangleIndex}` as TriangleId
+  );
+
+  return {
+    mesh: {
+      meshId: input.input.meshId,
+      drawableId: input.input.drawableId,
+      vertices,
+      uvs,
+      triangles,
+      vertexStableIds,
+      triangleStableIds,
+      topologyRevision: 0,
+      bounds: structuredClone(input.input.bounds),
+      generationProvenanceId: input.input.provenanceId
+    },
+    pixelPoints,
+    bandTriangleCount,
+    interiorTriangleCount,
+    rejectedDegenerateTriangleCount,
+    rejectedLongBoundaryToInteriorTriangleCount: 0,
+    rejectedLongInteriorTriangleCount: 0,
+    rejectedOutsideInteriorTriangleCount
+  };
+};
+
+const classifyLatticeTriangle = (input: {
+  readonly points: readonly PixelPoint[];
+  readonly triangle: DelaunayTriangle;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly contour: readonly PixelPoint[];
+  readonly targetEdgeLength: number;
+}): "boundary" | "interior" | "outside" => {
+  const a = input.points[input.triangle.a]!;
+  const b = input.points[input.triangle.b]!;
+  const c = input.points[input.triangle.c]!;
+  const centroid = triangleCentroid(input.points, input.triangle);
+  const samples = [
+    a,
+    b,
+    c,
+    centroid,
+    midpoint(a, b),
+    midpoint(b, c),
+    midpoint(c, a)
+  ];
+  const alphaHit = samples.some((sample) => isPointInsideAlpha(input.mask, input.width, input.height, sample));
+  const contourHit = contourIntersectsTriangle({
+    contour: input.contour,
+    a,
+    b,
+    c
+  });
+  const nearContour =
+    distanceToContour(centroid, input.contour) <= input.targetEdgeLength * 0.62 ||
+    samples.some((sample) => distanceToContour(sample, input.contour) <= input.targetEdgeLength * 0.34);
+
+  if (contourHit || nearContour) {
+    return "boundary";
+  }
+
+  return alphaHit ? "interior" : "outside";
+};
+
+const contourFrame = (
+  center: PixelPoint,
+  previous: PixelPoint,
+  next: PixelPoint,
+  polygonCentroidPoint: PixelPoint
+): {
+  readonly tangent: PixelPoint;
+  readonly normal: PixelPoint;
+} => {
+  const rawTangent = normalizeVector({
+    x: next.x - previous.x,
+    y: next.y - previous.y
+  });
+  const tangent = Math.hypot(rawTangent.x, rawTangent.y) <= 0.000001
+    ? { x: 1, y: 0 }
+    : rawTangent;
+  let normal = {
+    x: -tangent.y,
+    y: tangent.x
+  };
+  const inward = {
+    x: polygonCentroidPoint.x - center.x,
+    y: polygonCentroidPoint.y - center.y
+  };
+  if (normal.x * inward.x + normal.y * inward.y < 0) {
+    normal = {
+      x: -normal.x,
+      y: -normal.y
+    };
+  }
+
+  return { tangent, normal };
+};
+
+const normalizeVector = (vector: PixelPoint): PixelPoint => {
+  const length = Math.hypot(vector.x, vector.y);
+  return length <= 0.000001
+    ? { x: 0, y: 0 }
+    : {
+        x: vector.x / length,
+        y: vector.y / length
+      };
+};
+
+const sampleContourFollowingInteriorPoints = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly centroid: PixelPoint;
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly config: V4Config;
+}): readonly ContourBandPoint[] => {
+  const points: ContourBandPoint[] = [];
+  const add = (point: PixelPoint) => {
+    const candidate = {
+      x: roundCoordinate(clamp(point.x, 0, input.width)),
+      y: roundCoordinate(clamp(point.y, 0, input.height))
+    };
+    if (
+      !isPointInsidePolygon(candidate, input.contour) ||
+      !isPointInsideAlpha(input.mask, input.width, input.height, candidate) ||
+      minDistanceToPoints(candidate, points) < input.config.targetEdgeLength * 0.42
+    ) {
+      return;
+    }
+    points.push({
+      ...candidate,
+      kind: "interior",
+      order: points.length
+    });
+  };
+
+  input.contour.forEach((center, pointIndex) => {
+    const previous = input.contour[(pointIndex - 1 + input.contour.length) % input.contour.length]!;
+    const next = input.contour[(pointIndex + 1) % input.contour.length]!;
+    const frame = contourFrame(center, previous, next, input.centroid);
+    for (const factor of [0.85, 1.65, 2.45, 3.25] as const) {
+      add({
+        x: center.x + frame.normal.x * input.config.targetEdgeLength * factor,
+        y: center.y + frame.normal.y * input.config.targetEdgeLength * factor
+      });
+    }
+  });
+
+  add(input.centroid);
+  return points.sort(compareContourBandPoints);
+};
+
+const contourIntersectsTriangle = (input: {
+  readonly contour: readonly PixelPoint[];
+  readonly a: PixelPoint;
+  readonly b: PixelPoint;
+  readonly c: PixelPoint;
+}): boolean => {
+  const minX = Math.min(input.a.x, input.b.x, input.c.x);
+  const maxX = Math.max(input.a.x, input.b.x, input.c.x);
+  const minY = Math.min(input.a.y, input.b.y, input.c.y);
+  const maxY = Math.max(input.a.y, input.b.y, input.c.y);
+
+  for (const point of input.contour) {
+    if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) {
+      continue;
+    }
+    if (isPointInsideTriangle(point, input.a, input.b, input.c)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const isPointInsideTriangle = (
+  point: PixelPoint,
+  a: PixelPoint,
+  b: PixelPoint,
+  c: PixelPoint
+): boolean => {
+  const area = Math.abs(cross(a, b, c));
+  const areaA = Math.abs(cross(point, b, c));
+  const areaB = Math.abs(cross(a, point, c));
+  const areaC = Math.abs(cross(a, b, point));
+  return Math.abs(area - (areaA + areaB + areaC)) <= 0.0001;
+};
+
+const distanceToContour = (
+  point: PixelPoint,
+  contour: readonly PixelPoint[]
+): number => {
+  if (contour.length === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let result = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < contour.length; index += 1) {
+    result = Math.min(
+      result,
+      distancePointToSegment(point, contour[index]!, contour[(index + 1) % contour.length]!)
+    );
+  }
+
+  return result;
+};
+
+const distancePointToSegment = (
+  point: PixelPoint,
+  start: PixelPoint,
+  end: PixelPoint
+): number => {
+  const segmentLengthSquared = squaredDistance(start, end);
+  if (segmentLengthSquared <= 0.000001) {
+    return distance(point, start);
+  }
+
+  const t = clamp(
+    ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) /
+      segmentLengthSquared,
+    0,
+    1
+  );
+  return distance(point, {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t
+  });
+};
+
 const createContourBandMesh = (input: {
   readonly input: AutoOutlineV4ContourBandMeshInput;
   readonly width: number;
@@ -760,6 +2005,8 @@ const createContourBandMesh = (input: {
   readonly outerPoints: readonly ContourBandPoint[];
   readonly innerPoints: readonly ContourBandPoint[];
   readonly interiorPoints: readonly ContourBandPoint[];
+  readonly alphaContour: readonly PixelPoint[];
+  readonly outerContour: readonly PixelPoint[];
   readonly innerContour: readonly PixelPoint[];
 }): ContourBandBuild => {
   const token = stripIdPrefix(input.input.drawableId, "draw_");
@@ -784,33 +2031,49 @@ const createContourBandMesh = (input: {
   let rejectedOutsideInteriorTriangleCount = 0;
 
   pixelPoints.forEach((point, pointIndex) => {
+    const geometry = {
+      x: point.x / input.width,
+      y: point.y / input.height
+    };
     const uv = {
-      x: roundCoordinate(point.x / input.width),
-      y: roundCoordinate(point.y / input.height)
+      x: roundCoordinate(clamp(geometry.x, 0, 1)),
+      y: roundCoordinate(clamp(geometry.y, 0, 1))
     };
     vertices.push({
-      x: roundCoordinate(input.input.bounds.x + input.input.bounds.width * uv.x),
-      y: roundCoordinate(input.input.bounds.y + input.input.bounds.height * uv.y)
+      x: roundCoordinate(input.input.bounds.x + input.input.bounds.width * geometry.x),
+      y: roundCoordinate(input.input.bounds.y + input.input.bounds.height * geometry.y)
     });
     uvs.push(uv);
     vertexStableIds.push(`vtx_${token}_outline_v4_contour_band_${stableKind(point.kind)}_${point.order}_${pointIndex}`);
   });
 
-  const addBandTriangle = (triangle: [number, number, number], stableId: TriangleId) => {
+  const addBandTriangle = (triangle: [number, number, number], suffix: string) => {
     const oriented = orientTriangle(pixelPoints, {
       a: triangle[0],
       b: triangle[1],
       c: triangle[2]
     });
-    const candidate: [number, number, number] = [oriented.a, oriented.b, oriented.c];
     if (Math.abs(signedTriangleArea(pixelPoints, oriented)) <= 0.000001) {
       rejectedDegenerateTriangleCount += 1;
       return;
     }
+    if (triangleOverlapsExistingTriangles(pixelPoints, oriented, triangles)) {
+      rejectedDegenerateTriangleCount += 1;
+      return;
+    }
 
-    triangles.push(candidate);
-    triangleStableIds.push(stableId);
+    triangles.push([oriented.a, oriented.b, oriented.c]);
+    triangleStableIds.push(`tri_${token}_outline_v4_contour_band_strip_${suffix}` as TriangleId);
     bandTriangleCount += 1;
+  };
+
+  const bandOptionScore = (option: readonly [[number, number, number], [number, number, number]]): number => {
+    const left = orientTriangle(pixelPoints, { a: option[0][0], b: option[0][1], c: option[0][2] });
+    const right = orientTriangle(pixelPoints, { a: option[1][0], b: option[1][1], c: option[1][2] });
+    return Math.min(
+      minTriangleAngleDegrees(pixelPoints, left),
+      minTriangleAngleDegrees(pixelPoints, right)
+    );
   };
 
   const segmentCount = Math.min(input.outerPoints.length, input.innerPoints.length);
@@ -820,32 +2083,38 @@ const createContourBandMesh = (input: {
     const innerB = innerStart + nextIndex;
     const outerA = outerStart + pointIndex;
     const outerB = outerStart + nextIndex;
-
-    addBandTriangle(
-      [innerA, innerB, outerA],
-      `tri_${token}_outline_v4_contour_band_strip_${pointIndex}_a` as TriangleId
-    );
-    addBandTriangle(
-      [innerB, outerB, outerA],
-      `tri_${token}_outline_v4_contour_band_strip_${pointIndex}_b` as TriangleId
-    );
+    const optionA: [[number, number, number], [number, number, number]] = [
+      [innerA, outerA, outerB],
+      [innerA, outerB, innerB]
+    ];
+    const optionB: [[number, number, number], [number, number, number]] = [
+      [innerA, outerA, innerB],
+      [innerB, outerA, outerB]
+    ];
+    const selectedOption = bandOptionScore(optionA) >= bandOptionScore(optionB)
+      ? optionA
+      : optionB;
+    addBandTriangle(selectedOption[0], `${pointIndex}_a`);
+    addBandTriangle(selectedOption[1], `${pointIndex}_b`);
   }
 
   const interiorDelaunayPoints = [
     ...input.innerPoints,
     ...input.interiorPoints
   ];
-  const interiorTriangles = triangulate(interiorDelaunayPoints)
+  const delaunayTriangles = triangulate(interiorDelaunayPoints)
     .map((triangle) => orientTriangle(interiorDelaunayPoints, triangle))
     .sort(compareTriangles);
 
-  for (const triangle of interiorTriangles) {
+  for (const triangle of delaunayTriangles) {
     const classification = classifyInteriorTriangle({
       points: interiorDelaunayPoints,
       triangle,
       mask: input.mask,
       width: input.width,
       height: input.height,
+      alphaContour: input.alphaContour,
+      outerContour: input.innerContour,
       innerContour: input.innerContour,
       config: input.config
     });
@@ -867,6 +2136,15 @@ const createContourBandMesh = (input: {
     }
 
     const mapped = mapInteriorTriangle(triangle, innerStart, interiorStart, input.innerPoints.length);
+    const orientedMapped = orientTriangle(pixelPoints, {
+      a: mapped[0],
+      b: mapped[1],
+      c: mapped[2]
+    });
+    if (triangleOverlapsExistingTriangles(pixelPoints, orientedMapped, triangles)) {
+      rejectedDegenerateTriangleCount += 1;
+      continue;
+    }
     triangles.push(mapped);
     triangleStableIds.push(`tri_${token}_outline_v4_contour_band_interior_${interiorTriangleCount}` as TriangleId);
     interiorTriangleCount += 1;
@@ -965,6 +2243,8 @@ const classifyInteriorTriangle = (input: {
   readonly mask: Uint8Array;
   readonly width: number;
   readonly height: number;
+  readonly alphaContour: readonly PixelPoint[];
+  readonly outerContour: readonly PixelPoint[];
   readonly innerContour: readonly PixelPoint[];
   readonly config: V4Config;
 }): "accepted" | "degenerate" | "outside" | "long-boundary-to-interior" | "long-interior" => {
@@ -982,11 +2262,30 @@ const classifyInteriorTriangle = (input: {
     midpoint(b, c),
     midpoint(c, a)
   ];
+
+  if (samples.some((sample) => !isPointInsidePolygon(sample, input.outerContour))) {
+    return "outside";
+  }
+
+  const touchesBoundary = triangleTouchesBoundary(input.points, input.triangle);
   if (
-    samples.some((sample) => !isPointInsidePolygon(sample, input.innerContour)) ||
-    !samples.some((sample) => isPointInsideAlpha(input.mask, input.width, input.height, sample))
+    !touchesBoundary &&
+    !samples.some((sample) =>
+      isPointInsideAlphaOrApron({
+        mask: input.mask,
+        width: input.width,
+        height: input.height,
+        point: sample,
+        contour: input.alphaContour,
+        margin: input.config.softApronMargin
+      })
+    )
   ) {
     return "outside";
+  }
+
+  if (minTriangleAngleDegrees(input.points, input.triangle) < input.config.minTriangleAngleDegrees) {
+    return "degenerate";
   }
 
   const maxBoundaryInteriorEdge = maxBoundaryToInteriorEdgeLengthForTriangle(input.points, input.triangle);
@@ -999,6 +2298,148 @@ const classifyInteriorTriangle = (input: {
   }
 
   return "accepted";
+};
+
+const triangleTouchesBoundary = (
+  points: readonly ContourBandPoint[],
+  triangle: DelaunayTriangle
+): boolean =>
+  points[triangle.a]!.kind !== "interior" ||
+  points[triangle.b]!.kind !== "interior" ||
+  points[triangle.c]!.kind !== "interior";
+
+const triangleOverlapsExistingTriangles = (
+  points: readonly PixelPoint[],
+  candidate: DelaunayTriangle,
+  existingTriangles: readonly (readonly [number, number, number])[]
+): boolean => {
+  for (const existing of existingTriangles) {
+    const existingTriangle = {
+      a: existing[0],
+      b: existing[1],
+      c: existing[2]
+    };
+    if (trianglesShareEdge(candidate, existingTriangle)) {
+      continue;
+    }
+    if (trianglesHaveCrossingEdges(points, candidate, existingTriangle)) {
+      return true;
+    }
+    if (
+      !trianglesShareVertex(candidate, existingTriangle) &&
+      (isTriangleCentroidInsideTriangle(points, candidate, existingTriangle) ||
+        isTriangleCentroidInsideTriangle(points, existingTriangle, candidate))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const trianglesHaveCrossingEdges = (
+  points: readonly PixelPoint[],
+  left: DelaunayTriangle,
+  right: DelaunayTriangle
+): boolean => {
+  for (const leftEdge of triangleIndexEdges(left)) {
+    for (const rightEdge of triangleIndexEdges(right)) {
+      if (leftEdge[0] === rightEdge[0] || leftEdge[0] === rightEdge[1] ||
+        leftEdge[1] === rightEdge[0] || leftEdge[1] === rightEdge[1]) {
+        continue;
+      }
+      if (segmentsIntersect(
+        points[leftEdge[0]]!,
+        points[leftEdge[1]]!,
+        points[rightEdge[0]]!,
+        points[rightEdge[1]]!
+      )) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const trianglesShareEdge = (
+  left: DelaunayTriangle,
+  right: DelaunayTriangle
+): boolean => {
+  for (const leftEdge of triangleIndexEdges(left)) {
+    for (const rightEdge of triangleIndexEdges(right)) {
+      if (
+        (leftEdge[0] === rightEdge[0] && leftEdge[1] === rightEdge[1]) ||
+        (leftEdge[0] === rightEdge[1] && leftEdge[1] === rightEdge[0])
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const trianglesShareVertex = (
+  left: DelaunayTriangle,
+  right: DelaunayTriangle
+): boolean =>
+  triangleIndices(left).some((leftIndex) => triangleIndices(right).includes(leftIndex));
+
+const triangleIndexEdges = (
+  triangle: DelaunayTriangle
+): readonly (readonly [number, number])[] => [
+  [triangle.a, triangle.b],
+  [triangle.b, triangle.c],
+  [triangle.c, triangle.a]
+];
+
+const triangleIndices = (triangle: DelaunayTriangle): readonly number[] => [
+  triangle.a,
+  triangle.b,
+  triangle.c
+];
+
+const isTriangleCentroidInsideTriangle = (
+  points: readonly PixelPoint[],
+  subject: DelaunayTriangle,
+  container: DelaunayTriangle
+): boolean =>
+  isPointInsideTriangle(
+    triangleCentroid(points, subject),
+    points[container.a]!,
+    points[container.b]!,
+    points[container.c]!
+  );
+
+const minTriangleAngleDegrees = (
+  points: readonly PixelPoint[],
+  triangle: DelaunayTriangle
+): number => {
+  const a = points[triangle.a]!;
+  const b = points[triangle.b]!;
+  const c = points[triangle.c]!;
+  const angleA = angleDegrees(distance(b, c), distance(a, b), distance(a, c));
+  const angleB = angleDegrees(distance(a, c), distance(a, b), distance(b, c));
+  const angleC = angleDegrees(distance(a, b), distance(a, c), distance(b, c));
+  return Math.min(angleA, angleB, angleC);
+};
+
+const angleDegrees = (
+  opposite: number,
+  sideA: number,
+  sideB: number
+): number => {
+  if (sideA <= 0.000001 || sideB <= 0.000001) {
+    return 0;
+  }
+
+  const cosine = clamp(
+    (sideA * sideA + sideB * sideB - opposite * opposite) / (2 * sideA * sideB),
+    -1,
+    1
+  );
+  return (Math.acos(cosine) * 180) / Math.PI;
 };
 
 const mapInteriorTriangle = (
@@ -1251,10 +2692,25 @@ const isPointInsideAlpha = (
   height: number,
   point: PixelPoint
 ): boolean => {
+  if (point.x < 0 || point.y < 0 || point.x >= width || point.y >= height) {
+    return false;
+  }
+
   const x = clampInt(Math.floor(point.x), 0, width - 1);
   const y = clampInt(Math.floor(point.y), 0, height - 1);
   return isMaskFilled(mask, width, height, x, y);
 };
+
+const isPointInsideAlphaOrApron = (input: {
+  readonly mask: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly point: PixelPoint;
+  readonly contour: readonly PixelPoint[];
+  readonly margin: number;
+}): boolean =>
+  isPointInsideAlpha(input.mask, input.width, input.height, input.point) ||
+  distanceToContour(input.point, input.contour) <= input.margin;
 
 const isPointInsidePolygon = (
   point: PixelPoint,
@@ -1418,6 +2874,64 @@ const removeConsecutiveDuplicatePoints = (points: readonly PixelPoint[]): PixelP
   return result;
 };
 
+const removeNearDuplicateLoopPoints = (
+  points: readonly PixelPoint[],
+  minDistance: number
+): readonly PixelPoint[] => {
+  if (points.length <= 3) {
+    return points;
+  }
+
+  const result: PixelPoint[] = [];
+  for (const point of points) {
+    if (result.length === 0 || distance(result[result.length - 1]!, point) >= minDistance) {
+      result.push(point);
+    }
+  }
+
+  while (result.length > 3 && distance(result[0]!, result[result.length - 1]!) < minDistance) {
+    result.pop();
+  }
+
+  return result.length >= 3 ? result : points.slice(0, 3);
+};
+
+const contourPerimeter = (points: readonly PixelPoint[]): number => {
+  let result = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    result += distance(points[index]!, points[(index + 1) % points.length]!);
+  }
+
+  return result;
+};
+
+const pointAtLoopDistance = (
+  points: readonly PixelPoint[],
+  targetDistance: number
+): PixelPoint => {
+  let walked = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index]!;
+    const end = points[(index + 1) % points.length]!;
+    const segmentLength = distance(start, end);
+    if (segmentLength <= 0.000001) {
+      continue;
+    }
+
+    if (walked + segmentLength >= targetDistance) {
+      const t = clamp((targetDistance - walked) / segmentLength, 0, 1);
+      return {
+        x: roundCoordinate(start.x + (end.x - start.x) * t),
+        y: roundCoordinate(start.y + (end.y - start.y) * t)
+      };
+    }
+
+    walked += segmentLength;
+  }
+
+  return points[0]!;
+};
+
 const pointSetBounds = (points: readonly PixelPoint[]): PixelBounds => {
   let left = Number.POSITIVE_INFINITY;
   let top = Number.POSITIVE_INFINITY;
@@ -1443,6 +2957,22 @@ const minDistanceToPoints = (
   }
 
   return Math.sqrt(Math.min(...points.map((candidate) => squaredDistance(point, candidate))));
+};
+
+const minSquaredDistanceToPoints = (
+  point: PixelPoint,
+  points: readonly PixelPoint[]
+): number => {
+  if (points.length === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let result = Number.POSITIVE_INFINITY;
+  for (const candidate of points) {
+    result = Math.min(result, squaredDistance(point, candidate));
+  }
+
+  return result;
 };
 
 const polygonArea = (points: readonly PixelPoint[]): number => {
@@ -1682,3 +3212,22 @@ const clamp = (value: number, min: number, max: number): number =>
 
 const clampInt = (value: number, min: number, max: number): number =>
   Math.min(Math.max(Math.trunc(value), min), max);
+
+const clampPixelPoint = (
+  point: PixelPoint,
+  width: number,
+  height: number
+): PixelPoint => ({
+  x: roundCoordinate(clamp(point.x, 0, width)),
+  y: roundCoordinate(clamp(point.y, 0, height))
+});
+
+const clampPixelPointWithMargin = (
+  point: PixelPoint,
+  width: number,
+  height: number,
+  margin: number
+): PixelPoint => ({
+  x: roundCoordinate(clamp(point.x, -margin, width + margin)),
+  y: roundCoordinate(clamp(point.y, -margin, height + margin))
+});
