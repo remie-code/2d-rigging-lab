@@ -7,13 +7,28 @@ import type { AutoOutlineV4ContourBandFailureReason } from "./mesh-outline-v4-co
 export const V6_MESH_GENERATION_METHOD_IDS = [
   "auto-outline-v6a-local",
   "auto-outline-v6b-constrainautor",
-  "auto-outline-v6c-poly2tri"
+  "auto-outline-v6c-poly2tri",
+  "auto-outline-v6d-contour-constrainautor",
+  "auto-outline-v6e-contour-poly2tri",
+  "auto-outline-v6f-contour-custom-cdt"
 ] as const;
 
 export const V6_MESH_GENERATION_SOURCE_IDS = [
   "outline-v6a-local-rgba",
   "outline-v6b-constrainautor-rgba",
-  "outline-v6c-poly2tri-rgba"
+  "outline-v6c-poly2tri-rgba",
+  "outline-v6d-contour-constrainautor-rgba",
+  "outline-v6e-contour-poly2tri-rgba",
+  "outline-v6f-contour-custom-cdt-rgba"
+] as const;
+
+export const V6_MESH_GENERATION_BACKEND_IDS = [
+  "v6a-local",
+  "v6b-constrainautor",
+  "v6c-poly2tri",
+  "v6d-contour-constrainautor",
+  "v6e-contour-poly2tri",
+  "v6f-contour-custom-cdt"
 ] as const;
 
 export const V6_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS = [
@@ -28,10 +43,7 @@ export type V6MeshGenerationMethod = (typeof V6_MESH_GENERATION_METHOD_IDS)[numb
 export type V6MeshGenerationSourceId = (typeof V6_MESH_GENERATION_SOURCE_IDS)[number];
 export type V6MeshGenerationDependencyPackageId =
   (typeof V6_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS)[number];
-export type V6MeshGenerationBackendId =
-  | "v6a-local"
-  | "v6b-constrainautor"
-  | "v6c-poly2tri";
+export type V6MeshGenerationBackendId = (typeof V6_MESH_GENERATION_BACKEND_IDS)[number];
 export type V6MeshGenerationDependencyGateStatus =
   | "not-required"
   | "available";
@@ -71,6 +83,30 @@ export const V6_MESH_GENERATION_CANDIDATES = [
     backendId: "v6c-poly2tri",
     dependencyGateStatus: "available",
     dependencyPackageIds: ["d3-contour", "simplify-js", "poly2tri"],
+    backendImplementationStatus: "implemented"
+  },
+  {
+    methodId: "auto-outline-v6d-contour-constrainautor",
+    sourceId: "outline-v6d-contour-constrainautor-rgba",
+    backendId: "v6d-contour-constrainautor",
+    dependencyGateStatus: "available",
+    dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"],
+    backendImplementationStatus: "implemented"
+  },
+  {
+    methodId: "auto-outline-v6e-contour-poly2tri",
+    sourceId: "outline-v6e-contour-poly2tri-rgba",
+    backendId: "v6e-contour-poly2tri",
+    dependencyGateStatus: "available",
+    dependencyPackageIds: ["poly2tri"],
+    backendImplementationStatus: "implemented"
+  },
+  {
+    methodId: "auto-outline-v6f-contour-custom-cdt",
+    sourceId: "outline-v6f-contour-custom-cdt-rgba",
+    backendId: "v6f-contour-custom-cdt",
+    dependencyGateStatus: "not-required",
+    dependencyPackageIds: [],
     backendImplementationStatus: "implemented"
   }
 ] as const satisfies readonly V6MeshGenerationCandidate[];
@@ -120,6 +156,7 @@ export type GeneratedMeshPreviewCommitMethod =
 
 export type MeshGenerationV6FallbackReason =
   | "v6-backend-not-implemented"
+  | "v6-contour-extraction-failed"
   | "v6a-local-generation-failed"
   | "v6b-constrainautor-generation-failed"
   | "v6b-invalid-constraints"
@@ -131,7 +168,16 @@ export type MeshGenerationV6FallbackReason =
   | "v6c-poly2tri-hole-unsupported"
   | "v6c-poly2tri-multi-island-unsupported"
   | "v6c-poly2tri-triangulation-threw"
-  | "v6c-poly2tri-boundary-missing";
+  | "v6c-poly2tri-boundary-missing"
+  | "v6d-constrainautor-generation-failed"
+  | "v6d-constraint-recovery-failed"
+  | "v6d-backend-threw"
+  | "v6e-poly2tri-generation-failed"
+  | "v6e-poly2tri-polygon-invalid"
+  | "v6e-poly2tri-triangulation-threw"
+  | "v6f-custom-cdt-generation-failed"
+  | "v6f-custom-cdt-constraint-recovery-failed"
+  | "v6f-custom-cdt-local-improvement-rejected";
 
 export type MeshGenerationFallbackReason =
   | "texture-bytes-unavailable"

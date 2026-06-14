@@ -30,6 +30,7 @@ export interface WebGl2Like {
   readonly TEXTURE_MIN_FILTER: number;
   readonly TEXTURE_MAG_FILTER: number;
   readonly LINEAR: number;
+  readonly NEAREST: number;
   readonly BLEND: number;
   readonly ONE: number;
   readonly ONE_MINUS_SRC_ALPHA: number;

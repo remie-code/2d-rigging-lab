@@ -19,6 +19,9 @@ import {
 import {
   DRAWABLE_GENERATED_MESH_SOURCE_IDS,
   MESH_GENERATION_METHOD_IDS,
+  V6_MESH_GENERATION_BACKEND_IDS,
+  V6_MESH_GENERATION_METHOD_IDS,
+  V6_MESH_GENERATION_SOURCE_IDS,
   type MeshGenerationFallbackReason,
   type MeshGenerationFallbackStep,
   type MeshGenerationQualityMetrics
@@ -196,20 +199,37 @@ const PreviewMeshV6Poly2TriDiagnosticsShapeSchema = z.object({
   mainIslandOnlyFallback: z.boolean()
 });
 
+const PreviewMeshV6ContourPipelineDiagnosticsShapeSchema = z.object({
+  status: z.enum(["generated", "blocked"]),
+  inputOpaquePixelCount: z.number().int().nonnegative(),
+  softMaskOpaquePixelCount: z.number().int().nonnegative(),
+  selectedComponentPixelCount: z.number().int().nonnegative(),
+  boundaryPointCount: z.number().int().nonnegative(),
+  constraintEdgeCount: z.number().int().nonnegative(),
+  steinerPointCount: z.number().int().nonnegative(),
+  alphaBoundsAvailable: z.boolean(),
+  blockedReason: PreviewMeshFallbackReasonSchema.optional()
+});
+
+const PreviewMeshV6CustomCdtDiagnosticsShapeSchema = z.object({
+  dependencyGateStatus: PreviewMeshV6DependencyGateStatusSchema,
+  constraintEdgeCount: z.number().int().nonnegative(),
+  preservedConstraintEdgeCount: z.number().int().nonnegative(),
+  missingConstraintEdgeCount: z.number().int().nonnegative(),
+  edgeFlipCount: z.number().int().nonnegative(),
+  constraintRecoveryOperationCount: z.number().int().nonnegative(),
+  longSpokeCandidateCount: z.number().int().nonnegative(),
+  rejectedLocalImprovementCount: z.number().int().nonnegative(),
+  customTriangulationFallbackReason: PreviewMeshFallbackReasonSchema.optional(),
+  thrownErrorKind: z.string().min(1).optional()
+});
+
 const PreviewMeshV6MetricsShapeSchema = z.object({
   algorithmId: z.literal("auto-outline-v6-alpha-constrained-delaunay"),
-  methodId: z.enum([
-    "auto-outline-v6a-local",
-    "auto-outline-v6b-constrainautor",
-    "auto-outline-v6c-poly2tri"
-  ]),
-  backendId: z.enum(["v6a-local", "v6b-constrainautor", "v6c-poly2tri"]),
+  methodId: z.enum(V6_MESH_GENERATION_METHOD_IDS),
+  backendId: z.enum(V6_MESH_GENERATION_BACKEND_IDS),
   backendImplementationStatus: z.enum(["deferred", "implemented"]),
-  requestedSourceId: z.enum([
-    "outline-v6a-local-rgba",
-    "outline-v6b-constrainautor-rgba",
-    "outline-v6c-poly2tri-rgba"
-  ]),
+  requestedSourceId: z.enum(V6_MESH_GENERATION_SOURCE_IDS),
   actualSourceId: z.enum(DRAWABLE_GENERATED_MESH_SOURCE_IDS),
   outputKind: z.enum(["backend-output", "fallback-output", "blocked"]),
   preset: z.enum(["low", "medium", "high"]),
@@ -228,8 +248,10 @@ const PreviewMeshV6MetricsShapeSchema = z.object({
   multiIslandHandling: z.enum(["not-evaluated", "main-island-only", "supported"]),
   holeHandling: z.enum(["not-evaluated", "unsupported-fallback", "supported"]),
   provenance: z.array(z.string()),
+  contourPipelineDiagnostics: PreviewMeshV6ContourPipelineDiagnosticsShapeSchema.optional(),
   constrainautorDiagnostics: PreviewMeshV6ConstrainautorDiagnosticsShapeSchema.optional(),
-  poly2triDiagnostics: PreviewMeshV6Poly2TriDiagnosticsShapeSchema.optional()
+  poly2triDiagnostics: PreviewMeshV6Poly2TriDiagnosticsShapeSchema.optional(),
+  customCdtDiagnostics: PreviewMeshV6CustomCdtDiagnosticsShapeSchema.optional()
 });
 
 const PreviewMeshQualityMetricsShapeSchema = z.object({

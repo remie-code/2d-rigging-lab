@@ -15,9 +15,9 @@ import {
 export type MeshGenerationPresetId = "largeMotion" | "standard" | "lowMotion";
 export type MeshGenerationBackendOptionId =
   | "default-v2-6-soft-apron"
-  | "auto-outline-v6a-local"
-  | "auto-outline-v6b-constrainautor"
-  | "auto-outline-v6c-poly2tri";
+  | "auto-outline-v6d-contour-constrainautor"
+  | "auto-outline-v6e-contour-poly2tri"
+  | "auto-outline-v6f-contour-custom-cdt";
 
 export interface MeshGenerationPreset {
   readonly id: MeshGenerationPresetId;
@@ -84,22 +84,22 @@ export const MESH_GENERATION_BACKEND_OPTIONS: readonly MeshGenerationBackendOpti
     summary: "Current soft apron preview path."
   },
   {
-    id: "auto-outline-v6a-local",
-    label: "v6A Local",
-    method: "auto-outline-v6a-local",
-    summary: "Local v6 comparison candidate."
+    id: "auto-outline-v6d-contour-constrainautor",
+    label: "v6D Contour Constrainautor",
+    method: "auto-outline-v6d-contour-constrainautor",
+    summary: "Shared contour pipeline with Constrainautor recovery."
   },
   {
-    id: "auto-outline-v6b-constrainautor",
-    label: "v6B Constrainautor",
-    method: "auto-outline-v6b-constrainautor",
-    summary: "Delaunator constraint candidate."
+    id: "auto-outline-v6e-contour-poly2tri",
+    label: "v6E Contour Poly2Tri",
+    method: "auto-outline-v6e-contour-poly2tri",
+    summary: "Shared contour pipeline with Poly2Tri triangulation."
   },
   {
-    id: "auto-outline-v6c-poly2tri",
-    label: "v6C Poly2Tri",
-    method: "auto-outline-v6c-poly2tri",
-    summary: "Constrained polygon candidate."
+    id: "auto-outline-v6f-contour-custom-cdt",
+    label: "v6F Custom CDT",
+    method: "auto-outline-v6f-contour-custom-cdt",
+    summary: "Shared contour pipeline with custom constrained triangulation."
   }
 ];
 

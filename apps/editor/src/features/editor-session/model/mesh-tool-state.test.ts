@@ -20,11 +20,16 @@ describe("mesh tool state", () => {
   });
 
   it("exposes v6 candidates only as explicit temporary backend options", () => {
-    expect(MESH_GENERATION_BACKEND_OPTIONS.map((option) => option.method)).toEqual([
+    const methods = MESH_GENERATION_BACKEND_OPTIONS.map((option) => option.method);
+
+    expect(methods).toEqual([
       "auto-outline-v2.6-soft-apron",
-      "auto-outline-v6a-local",
-      "auto-outline-v6b-constrainautor",
-      "auto-outline-v6c-poly2tri"
+      "auto-outline-v6d-contour-constrainautor",
+      "auto-outline-v6e-contour-poly2tri",
+      "auto-outline-v6f-contour-custom-cdt"
     ]);
+    expect(methods).not.toContain("auto-outline-v6a-local");
+    expect(methods).not.toContain("auto-outline-v6b-constrainautor");
+    expect(methods).not.toContain("auto-outline-v6c-poly2tri");
   });
 });

@@ -472,6 +472,24 @@ describe("generateMesh operation handler", () => {
           expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
         }
 
+        if (candidate.backendId === "v6d-contour-constrainautor") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6d-contour-delaunator-constrainautor",
+              "meshQuality:v6ConstrainautorDependencyGate=available",
+              "meshQuality:v6ConstrainautorMissingConstraints=0",
+              "meshQuality:v6ConstrainautorRecoveryFailed=false"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}:`))).toBe(false);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorConstraintEdges="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ConstrainautorPreservedConstraints="))).toBe(true);
+        }
+
         if (candidate.backendId === "v6c-poly2tri") {
           expect(transformHistory).toEqual(
             expect.arrayContaining([
@@ -490,6 +508,44 @@ describe("generateMesh operation handler", () => {
           expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriOuterPoints="))).toBe(true);
           expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriSteinerPoints="))).toBe(true);
         }
+
+        if (candidate.backendId === "v6e-contour-poly2tri") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6e-contour-poly2tri-constrained-polygon",
+              "meshQuality:v6Poly2TriDependencyGate=available",
+              "meshQuality:v6Poly2TriPolygonValidationFailed=false",
+              "meshQuality:v6Poly2TriHoleValidationFailed=false",
+              "meshQuality:v6Poly2TriTriangulationThrown=false",
+              "meshQuality:v6Poly2TriBoundaryMissing=0"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}:`))).toBe(false);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriOuterPoints="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6Poly2TriSteinerPoints="))).toBe(true);
+        }
+
+        if (candidate.backendId === "v6f-contour-custom-cdt") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              `meshSource:${candidate.sourceId}`,
+              `meshQuality:v6ActualSource=${candidate.sourceId}`,
+              "meshQuality:v6Output=backend-output",
+              "meshQuality:v6FallbackSteps=0",
+              "meshQuality:triangulationMode=v6f-contour-custom-cdt",
+              "meshQuality:v6CustomCdtDependencyGate=not-required",
+              "meshQuality:v6CustomCdtMissingConstraints=0"
+            ])
+          );
+          expect(transformHistory.some((entry) => entry.startsWith(`fallback:${candidate.methodId}:`))).toBe(false);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6CustomCdtConstraintEdges="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6CustomCdtPreservedConstraints="))).toBe(true);
+          expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6CustomCdtLongSpokeCandidates="))).toBe(true);
+        }
       } else {
         const expectedReason = "v6-backend-not-implemented";
         expect(transformHistory).toEqual(
@@ -505,9 +561,21 @@ describe("generateMesh operation handler", () => {
             `meshQuality:v6RequestedSource=${candidate.sourceId}`,
             "meshQuality:v6ActualSource=alpha-aware-rgba",
             "meshQuality:v6Output=fallback-output",
-            `meshQuality:v6Fallback=${expectedReason}`
+            `meshQuality:v6Fallback=${expectedReason}`,
+            "meshQuality:v6ContourPipelineStatus=generated"
           ])
         );
+
+        if (candidate.backendId === "v6e-contour-poly2tri") {
+          expect(transformHistory).toEqual(
+            expect.arrayContaining([
+              "meshQuality:v6Poly2TriDependencyGate=available",
+              "meshQuality:v6Poly2TriBoundaryPreserved=0"
+            ])
+          );
+          expect(transformHistory.some((entry) => /^meshQuality:v6Poly2TriOuterPoints=[1-9]\d*$/.test(entry))).toBe(true);
+          expect(transformHistory.some((entry) => /^meshQuality:v6Poly2TriBoundaryMissing=[1-9]\d*$/.test(entry))).toBe(true);
+        }
       }
       expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6BoundaryVertices="))).toBe(true);
       expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6OpaquePixels="))).toBe(true);
@@ -518,11 +586,101 @@ describe("generateMesh operation handler", () => {
         );
       }
 
-      if (candidate.backendId === "v6c-poly2tri") {
+      if (candidate.backendId === "v6c-poly2tri" || candidate.backendId === "v6e-contour-poly2tri") {
         expect(transformHistory).toEqual(
           expect.arrayContaining(["meshQuality:v6Poly2TriDependencyGate=available"])
         );
       }
+    }
+  });
+
+  it("records v6D v6E and v6F empty-alpha blocked metadata in operation provenance", () => {
+    const newContourCandidates = V6_MESH_GENERATION_CANDIDATES.filter(
+      (candidate) =>
+        candidate.backendId === "v6d-contour-constrainautor" ||
+        candidate.backendId === "v6e-contour-poly2tri" ||
+        candidate.backendId === "v6f-contour-custom-cdt"
+    );
+
+    for (const candidate of newContourCandidates) {
+      const session = createFixtureSessionWithSizedTextureBytes({
+        textureSize: { width: 16, height: 16 },
+        meshBounds: { x: 4, y: 8, width: 16, height: 16 },
+        opaquePixels: []
+      });
+      const request = createGenerateMeshRequest({
+        dryRun: false,
+        method: candidate.methodId,
+        densityHint: "low"
+      });
+
+      const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+      const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+      expect(outcome.result.status).toBe("committed");
+      expect(transformHistory).toEqual(
+        expect.arrayContaining([
+          `generateMesh:${candidate.methodId}`,
+          "meshSource:bounds-grid",
+          `fallback:${candidate.methodId}:alpha-empty`,
+          "meshQuality:triangulationMode=v6-backend-blocked-fallback",
+          `meshQuality:v6Method=${candidate.methodId}`,
+          `meshQuality:v6Backend=${candidate.backendId}`,
+          `meshQuality:v6BackendImplementation=${candidate.backendImplementationStatus}`,
+          `meshQuality:v6RequestedSource=${candidate.sourceId}`,
+          "meshQuality:v6ActualSource=bounds-grid",
+          "meshQuality:v6Output=blocked",
+          "meshQuality:v6Fallback=alpha-empty",
+          "meshQuality:v6AlphaBounds=unavailable",
+          "meshQuality:v6OpaquePixels=0",
+          "meshQuality:v6ContourPipelineStatus=blocked",
+          "meshQuality:v6ContourBlockedReason=alpha-empty"
+        ])
+      );
+      expect(transformHistory).not.toContain("meshQuality:v6Output=backend-output");
+      expectBlockedBackendProvenance(transformHistory, candidate.backendId, "alpha-empty");
+    }
+  });
+
+  it("records v6D v6E and v6F missing-texture blocked metadata in operation provenance", () => {
+    const newContourCandidates = V6_MESH_GENERATION_CANDIDATES.filter(
+      (candidate) =>
+        candidate.backendId === "v6d-contour-constrainautor" ||
+        candidate.backendId === "v6e-contour-poly2tri" ||
+        candidate.backendId === "v6f-contour-custom-cdt"
+    );
+
+    for (const candidate of newContourCandidates) {
+      const session = createFixtureSession();
+      const request = createGenerateMeshRequest({
+        dryRun: false,
+        method: candidate.methodId,
+        densityHint: "low"
+      });
+
+      const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+      const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+      expect(outcome.result.status).toBe("committed");
+      expect(transformHistory).toEqual(
+        expect.arrayContaining([
+          `generateMesh:${candidate.methodId}`,
+          "meshSource:bounds-grid",
+          `fallback:${candidate.methodId}:texture-bytes-unavailable`,
+          "meshQuality:triangulationMode=v6-backend-blocked-fallback",
+          `meshQuality:v6Method=${candidate.methodId}`,
+          `meshQuality:v6Backend=${candidate.backendId}`,
+          `meshQuality:v6BackendImplementation=${candidate.backendImplementationStatus}`,
+          `meshQuality:v6RequestedSource=${candidate.sourceId}`,
+          "meshQuality:v6ActualSource=bounds-grid",
+          "meshQuality:v6Output=blocked",
+          "meshQuality:v6Fallback=texture-bytes-unavailable",
+          "meshQuality:v6AlphaBounds=unavailable"
+        ])
+      );
+      expect(transformHistory).not.toContain("meshQuality:v6Output=backend-output");
+      expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6ContourPipelineStatus="))).toBe(false);
+      expectBlockedBackendProvenance(transformHistory, candidate.backendId, "texture-bytes-unavailable");
     }
   });
 
@@ -918,6 +1076,51 @@ describe("generateMesh operation handler", () => {
     );
   });
 });
+
+function expectBlockedBackendProvenance(
+  transformHistory: readonly string[],
+  backendId: string,
+  fallbackReason: "alpha-empty" | "texture-bytes-unavailable"
+): void {
+  if (backendId === "v6d-contour-constrainautor") {
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "meshQuality:v6ConstrainautorDependencyGate=available",
+        "meshQuality:v6ConstrainautorConstraintEdges=0",
+        "meshQuality:v6ConstrainautorPreservedConstraints=0",
+        "meshQuality:v6ConstrainautorMissingConstraints=0",
+        "meshQuality:v6ConstrainautorRecoveryFailed=false"
+      ])
+    );
+  }
+
+  if (backendId === "v6e-contour-poly2tri") {
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "meshQuality:v6Poly2TriDependencyGate=available",
+        "meshQuality:v6Poly2TriOuterPoints=0",
+        "meshQuality:v6Poly2TriSteinerPoints=0",
+        "meshQuality:v6Poly2TriBoundaryPreserved=0",
+        "meshQuality:v6Poly2TriBoundaryMissing=0",
+        "meshQuality:v6Poly2TriTriangulationThrown=false"
+      ])
+    );
+  }
+
+  if (backendId === "v6f-contour-custom-cdt") {
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "meshQuality:v6CustomCdtDependencyGate=not-required",
+        "meshQuality:v6CustomCdtConstraintEdges=0",
+        "meshQuality:v6CustomCdtPreservedConstraints=0",
+        "meshQuality:v6CustomCdtMissingConstraints=0",
+        "meshQuality:v6CustomCdtEdgeFlips=0",
+        "meshQuality:v6CustomCdtLongSpokeCandidates=0",
+        `meshQuality:v6CustomCdtFallback=${fallbackReason}`
+      ])
+    );
+  }
+}
 
 const createGenerateMeshRequest = (options: {
   readonly dryRun: boolean;

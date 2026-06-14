@@ -516,8 +516,33 @@ const formatV6MetricsForTransformHistory = (
     `meshQuality:v6MultiIslandHandling=${v6.multiIslandHandling}`,
     `meshQuality:v6HoleHandling=${v6.holeHandling}`,
     `meshQuality:v6Provenance=${v6.provenance.join(">")}`,
+    ...formatV6ContourPipelineDiagnosticsForTransformHistory(metrics),
     ...formatV6ConstrainautorDiagnosticsForTransformHistory(metrics),
-    ...formatV6Poly2TriDiagnosticsForTransformHistory(metrics)
+    ...formatV6Poly2TriDiagnosticsForTransformHistory(metrics),
+    ...formatV6CustomCdtDiagnosticsForTransformHistory(metrics)
+  ];
+};
+
+const formatV6ContourPipelineDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.contourPipelineDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6ContourPipelineStatus=${diagnostics.status}`,
+    `meshQuality:v6ContourInputOpaquePixels=${diagnostics.inputOpaquePixelCount}`,
+    `meshQuality:v6ContourSoftMaskOpaquePixels=${diagnostics.softMaskOpaquePixelCount}`,
+    `meshQuality:v6ContourSelectedComponentPixels=${diagnostics.selectedComponentPixelCount}`,
+    `meshQuality:v6ContourBoundaryPoints=${diagnostics.boundaryPointCount}`,
+    `meshQuality:v6ContourConstraintEdges=${diagnostics.constraintEdgeCount}`,
+    `meshQuality:v6ContourSteinerPoints=${diagnostics.steinerPointCount}`,
+    `meshQuality:v6ContourAlphaBounds=${diagnostics.alphaBoundsAvailable ? "available" : "unavailable"}`,
+    ...(diagnostics.blockedReason === undefined
+      ? []
+      : [`meshQuality:v6ContourBlockedReason=${diagnostics.blockedReason}`])
   ];
 };
 
@@ -561,6 +586,32 @@ const formatV6Poly2TriDiagnosticsForTransformHistory = (
     `meshQuality:v6Poly2TriBoundaryPreserved=${diagnostics.boundaryEdgePreservedCount}`,
     `meshQuality:v6Poly2TriBoundaryMissing=${diagnostics.boundaryEdgeMissingCount}`,
     `meshQuality:v6Poly2TriMainIslandOnlyFallback=${diagnostics.mainIslandOnlyFallback ? "true" : "false"}`
+  ];
+};
+
+const formatV6CustomCdtDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.customCdtDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6CustomCdtDependencyGate=${diagnostics.dependencyGateStatus}`,
+    `meshQuality:v6CustomCdtConstraintEdges=${diagnostics.constraintEdgeCount}`,
+    `meshQuality:v6CustomCdtPreservedConstraints=${diagnostics.preservedConstraintEdgeCount}`,
+    `meshQuality:v6CustomCdtMissingConstraints=${diagnostics.missingConstraintEdgeCount}`,
+    `meshQuality:v6CustomCdtEdgeFlips=${diagnostics.edgeFlipCount}`,
+    `meshQuality:v6CustomCdtConstraintRecoveryOperations=${diagnostics.constraintRecoveryOperationCount}`,
+    `meshQuality:v6CustomCdtLongSpokeCandidates=${diagnostics.longSpokeCandidateCount}`,
+    `meshQuality:v6CustomCdtRejectedLocalImprovements=${diagnostics.rejectedLocalImprovementCount}`,
+    ...(diagnostics.customTriangulationFallbackReason === undefined
+      ? []
+      : [`meshQuality:v6CustomCdtFallback=${diagnostics.customTriangulationFallbackReason}`]),
+    ...(diagnostics.thrownErrorKind === undefined
+      ? []
+      : [`meshQuality:v6CustomCdtThrown=${diagnostics.thrownErrorKind}`])
   ];
 };
 

@@ -29,6 +29,9 @@ export interface MeshGenerationQualityMetrics {
     | "v6a-local-earclip-steiner-approximation"
     | "v6b-delaunator-constrainautor"
     | "v6c-poly2tri-constrained-polygon"
+    | "v6d-contour-delaunator-constrainautor"
+    | "v6e-contour-poly2tri-constrained-polygon"
+    | "v6f-contour-custom-cdt"
     | "v6-backend-blocked-fallback";
   readonly envelopeMetrics?: MeshGenerationEnvelopeMetrics;
   readonly softBoundaryMetrics?: MeshGenerationSoftBoundaryMetrics;
@@ -164,8 +167,22 @@ export interface MeshGenerationV6Metrics {
   readonly multiIslandHandling: "not-evaluated" | "main-island-only" | "supported";
   readonly holeHandling: "not-evaluated" | "unsupported-fallback" | "supported";
   readonly provenance: readonly string[];
+  readonly contourPipelineDiagnostics?: MeshGenerationV6ContourPipelineDiagnostics;
   readonly constrainautorDiagnostics?: MeshGenerationV6ConstrainautorDiagnostics;
   readonly poly2triDiagnostics?: MeshGenerationV6Poly2TriDiagnostics;
+  readonly customCdtDiagnostics?: MeshGenerationV6CustomCdtDiagnostics;
+}
+
+export interface MeshGenerationV6ContourPipelineDiagnostics {
+  readonly status: "generated" | "blocked";
+  readonly inputOpaquePixelCount: number;
+  readonly softMaskOpaquePixelCount: number;
+  readonly selectedComponentPixelCount: number;
+  readonly boundaryPointCount: number;
+  readonly constraintEdgeCount: number;
+  readonly steinerPointCount: number;
+  readonly alphaBoundsAvailable: boolean;
+  readonly blockedReason?: MeshGenerationFallbackReason;
 }
 
 export interface MeshGenerationV6ConstrainautorDiagnostics {
@@ -189,6 +206,19 @@ export interface MeshGenerationV6Poly2TriDiagnostics {
   readonly boundaryEdgePreservedCount: number;
   readonly boundaryEdgeMissingCount: number;
   readonly mainIslandOnlyFallback: boolean;
+}
+
+export interface MeshGenerationV6CustomCdtDiagnostics {
+  readonly dependencyGateStatus: V6MeshGenerationDependencyGateStatus;
+  readonly constraintEdgeCount: number;
+  readonly preservedConstraintEdgeCount: number;
+  readonly missingConstraintEdgeCount: number;
+  readonly edgeFlipCount: number;
+  readonly constraintRecoveryOperationCount: number;
+  readonly longSpokeCandidateCount: number;
+  readonly rejectedLocalImprovementCount: number;
+  readonly customTriangulationFallbackReason?: MeshGenerationFallbackReason;
+  readonly thrownErrorKind?: string;
 }
 
 export const computeMeshQualityMetrics = (

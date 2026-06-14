@@ -259,9 +259,16 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible').first()).toContainText(
     "Temporary"
   );
-  await page.getByRole("button", { name: "Preview v6A Local mesh backend" }).click();
+  const backendSelector = page.locator('[data-testid="mesh-tool-backend-selector"]:visible').first();
+  await expect(backendSelector).toContainText("v6D Contour Constrainautor");
+  await expect(backendSelector).toContainText("v6E Contour Poly2Tri");
+  await expect(backendSelector).toContainText("v6F Custom CDT");
+  await expect(backendSelector).not.toContainText("v6A Local");
+  await expect(backendSelector).not.toContainText("v6B Constrainautor");
+  await expect(backendSelector).not.toContainText("v6C Poly2Tri");
+  await page.getByRole("button", { name: "Preview v6D Contour Constrainautor mesh backend" }).click();
   await expect(page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible').first()).toContainText(
-    "v6A local"
+    "v6D contour Constrainautor"
   );
   await page.getByRole("button", { name: "Preview Default v2.6 mesh backend" }).click();
   await expect(meshSource).toHaveText("Auto outline v2.6 soft apron");

@@ -17,6 +17,8 @@
 | [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) | alpha mask、adaptive contour simplification、adaptive interior sampling、boundary-preserving triangulationで初期meshを生成する新規sidecar候補。既存実装をアルゴリズム根拠にしない | Draft algorithm spec / current sidecar target |
 | [auto-outline-v6b-constrainautor.md](auto-outline-v6b-constrainautor.md) | v6 shared pipelineの `delaunator + @kninnug/constrainautor` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
 | [auto-outline-v6c-poly2tri.md](auto-outline-v6c-poly2tri.md) | v6 shared pipelineの `poly2tri` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
+| [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) | Wave68 v6A visual review後の次候補。v6Aを輪郭抽出器として救い、三角形化をv6D/v6Eのライブラリbackendとv6Fの自作backendへ差し替える | Draft algorithm spec / next-wave candidate |
+| [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) | Wave69 v6D visual review後の次候補。v6Dのsoft alpha contour/constrained triangulationを維持し、外側/内側support ringとlayer-bounds外mesh vertexを検討する | Draft algorithm spec / post-Wave69 refinement candidate |
 | [auto-outline-v6-library-candidate-inventory.md](auto-outline-v6-library-candidate-inventory.md) | v6 sidecarで利用可能な外部ライブラリ候補、依存リスク、spike順序の調査メモ | Research inventory |
 
 ## 境界
@@ -36,12 +38,13 @@
 - `auto-outline-v3-envelope` は、外側包絡が強すぎるとDrawable描画領域から外れやすいことが分かったため、現時点では実験候補として扱う。
 - 2026-06-14のユーザー判断により、新方式は `auto-outline-v6` sidecarとして扱う。v6の設計根拠は [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) に限定し、既存実装やV1-V5系統をアルゴリズム根拠にしない。
 - v6は最終的に1方式へ絞る前提で、動作確認中だけEditorから `v6a local` / `v6b constrainautor` / `v6c poly2tri` を切り替えられる一時比較用backendとして扱う。
+- Wave68後のユーザー判断では、`v6a` は輪郭抽出・boundary samplingまでが有望だが、ear clipping + interior split triangulationは破棄する。ABC比較ではAの品質が最も高かったため、自作三角形化も有力候補として残す。次候補は [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) をbasisに、v6D/v6E/v6Fを作り、Editorの一時selectorからv6A/v6B/v6Cを外してよい。
+- Wave69後のユーザー判断では、`v6d` がかなり良い。次の有力改善は [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) をbasisに、soft alpha mask / boundary sampling / constrained triangulationを維持しつつ、外側support ring、内側support ring、layer boundsを越えるmesh vertexを検討すること。
 
 ## 次の作業候補
 
-1. `auto-outline-v6-alpha-constrained-delaunay` をsidecarとして実装計画に載せる。
-2. 実装ノームには、v6文書をアルゴリズムsource of truthとし、既存mesh生成実装を参照しないことを明示する。
-3. `v6b` と `v6c` の依存追加を許可する場合は、[auto-outline-v6-library-candidate-inventory.md](auto-outline-v6-library-candidate-inventory.md) のdue diligenceを先に満たす。
-4. Editorには一時比較用selectorとして実装し、最終方式選定後に削除しやすい境界にする。
-5. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。
-6. Mesh形状品質とmesh rendering品質を混同しない。描画方式の改善は [../mesh-rendering/mesh-image-rendering-architecture.md](../mesh-rendering/mesh-image-rendering-architecture.md) をbasisにする。
+1. 次のmesh品質改善候補は [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) をbasisに、v6Dを本命寄りに伸ばす。
+2. v6G検討では、mesh verticesがlayer boundsを越えられる設計と、UVを有効texture範囲に留める設計を分けて扱う。
+3. 実装計画にする前に、outer ringをtriangulation outer boundaryにするか、alpha boundaryをouter boundaryのままにするかを決める。
+4. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。
+5. Mesh形状品質とmesh rendering品質を混同しない。描画方式の改善は [../mesh-rendering/mesh-image-rendering-architecture.md](../mesh-rendering/mesh-image-rendering-architecture.md) をbasisにする。

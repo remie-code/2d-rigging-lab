@@ -19,6 +19,20 @@ import {
   createAutoOutlineV6CPoly2TriMesh,
   type AutoOutlineV6CPoly2TriFailureMetrics
 } from "./mesh-generation-v6c-poly2tri.js";
+import {
+  createAutoOutlineV6EContourPoly2TriMesh,
+  type AutoOutlineV6EContourPoly2TriFailureMetrics
+} from "./mesh-generation-v6e-contour-poly2tri.js";
+import { createAutoOutlineV6DContourConstrainautorMesh } from "./mesh-generation-v6d-contour-constrainautor.js";
+import {
+  createAutoOutlineV6FCustomCdtMesh,
+  type AutoOutlineV6FCustomCdtFailureMetrics
+} from "./mesh-generation-v6f-custom-cdt.js";
+import {
+  createV6ContourCandidateInput,
+  type V6ContourCandidateInput,
+  type V6ContourPipelineResult
+} from "./mesh-generation-v6-contour-pipeline.js";
 import { createAutoOutlineMesh } from "./mesh-outline-generation.js";
 import {
   createAutoOutlineV25SoftBoundaryMesh
@@ -142,6 +156,36 @@ export const createGeneratedMeshForDrawable = (
 
     if (input.method === "auto-outline-v6c-poly2tri") {
       return createV6CPoly2TriMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(textureBytes === undefined ? {} : { textureBytes })
+      });
+    }
+
+    if (input.method === "auto-outline-v6d-contour-constrainautor") {
+      return createV6DContourConstrainautorMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(textureBytes === undefined ? {} : { textureBytes })
+      });
+    }
+
+    if (input.method === "auto-outline-v6e-contour-poly2tri") {
+      return createV6EContourPoly2TriMeshResult({
+        existingMesh,
+        drawableId: drawable.drawableId,
+        provenanceId: input.provenanceId,
+        ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+        ...(textureBytes === undefined ? {} : { textureBytes })
+      });
+    }
+
+    if (input.method === "auto-outline-v6f-contour-custom-cdt") {
+      return createV6FCustomCdtMeshResult({
         existingMesh,
         drawableId: drawable.drawableId,
         provenanceId: input.provenanceId,
@@ -1112,7 +1156,7 @@ const createV6CPoly2TriMeshResult = (input: {
     };
   }
 
-  return createV6CPoly2TriFallbackMeshResult({
+  return createV6Poly2TriFallbackMeshResult({
     candidate,
     existingMesh: input.existingMesh,
     drawableId: input.drawableId,
@@ -1126,7 +1170,59 @@ const createV6CPoly2TriMeshResult = (input: {
   });
 };
 
-const createV6CPoly2TriFallbackMeshResult = (input: {
+const createV6EContourPoly2TriMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV6MeshGenerationCandidate("auto-outline-v6e-contour-poly2tri");
+  if (input.textureBytes === undefined) {
+    return createV6BlockedFallbackMeshResult({
+      candidate,
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV6EContourPoly2TriMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  return createV6Poly2TriFallbackMeshResult({
+    candidate,
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    textureBytes: input.textureBytes,
+    fallbackReason: generated.reason,
+    failureMetrics: generated.failureMetrics,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+    ...(generated.opaquePixelCount === undefined ? {} : { opaquePixelCount: generated.opaquePixelCount })
+  });
+};
+
+const createV6Poly2TriFallbackMeshResult = (input: {
   readonly candidate: V6MeshGenerationCandidate;
   readonly existingMesh: MeshDto;
   readonly drawableId: DrawableId;
@@ -1134,7 +1230,7 @@ const createV6CPoly2TriFallbackMeshResult = (input: {
   readonly textureBytes: ResolvedDrawableTextureBytes;
   readonly densityHint?: MeshDensityHint;
   readonly fallbackReason: MeshGenerationFallbackReason;
-  readonly failureMetrics: AutoOutlineV6CPoly2TriFailureMetrics;
+  readonly failureMetrics: AutoOutlineV6CPoly2TriFailureMetrics | AutoOutlineV6EContourPoly2TriFailureMetrics;
   readonly alphaBounds?: RectDto;
   readonly opaquePixelCount?: number;
 }): DrawableGeneratedMeshResult => {
@@ -1193,7 +1289,226 @@ const createV6CPoly2TriFallbackMeshResult = (input: {
       multiIslandHandling: input.failureMetrics.multiIslandHandling,
       holeHandling: input.failureMetrics.holeHandling,
       provenance: input.failureMetrics.provenance,
+      ...(!("contourPipelineDiagnostics" in input.failureMetrics) ||
+      input.failureMetrics.contourPipelineDiagnostics === undefined
+        ? {}
+        : { contourPipelineDiagnostics: input.failureMetrics.contourPipelineDiagnostics }),
       poly2triDiagnostics: input.failureMetrics.diagnostics
+    }
+  });
+
+  return {
+    mesh,
+    source,
+    fallbackReason: input.fallbackReason,
+    fallbackSteps,
+    qualityMetrics,
+    ...(fallbackAlphaBounds === undefined ? {} : { alphaBounds: fallbackAlphaBounds })
+  };
+};
+
+const createV6DContourConstrainautorMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV6MeshGenerationCandidate("auto-outline-v6d-contour-constrainautor");
+  if (input.textureBytes === undefined) {
+    return createV6BlockedFallbackMeshResult({
+      candidate,
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV6DContourConstrainautorMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  if (generated.status === "fallback") {
+    return {
+      mesh: generated.mesh,
+      source: generated.source,
+      fallbackReason: generated.reason,
+      fallbackSteps: generated.fallbackSteps,
+      qualityMetrics: generated.qualityMetrics,
+      ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds })
+    };
+  }
+
+  return createV6BlockedFallbackMeshResult({
+    candidate,
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    fallbackReason: generated.reason,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+    ...(generated.opaquePixelCount === undefined ? {} : { opaquePixelCount: generated.opaquePixelCount }),
+    ...(generated.contourPipeline === undefined ? {} : { contourPipeline: generated.contourPipeline })
+  });
+};
+
+const createV6FCustomCdtMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV6MeshGenerationCandidate("auto-outline-v6f-contour-custom-cdt");
+  if (input.textureBytes === undefined) {
+    return createV6FCustomCdtFallbackMeshResult({
+      candidate,
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV6FCustomCdtMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  return createV6FCustomCdtFallbackMeshResult({
+    candidate,
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    textureBytes: input.textureBytes,
+    fallbackReason: generated.reason,
+    failureMetrics: generated.failureMetrics,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+    ...(generated.opaquePixelCount === undefined ? {} : { opaquePixelCount: generated.opaquePixelCount })
+  });
+};
+
+const createV6FCustomCdtFallbackMeshResult = (input: {
+  readonly candidate: V6MeshGenerationCandidate;
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+  readonly densityHint?: MeshDensityHint;
+  readonly fallbackReason: MeshGenerationFallbackReason;
+  readonly failureMetrics?: AutoOutlineV6FCustomCdtFailureMetrics;
+  readonly alphaBounds?: RectDto;
+  readonly opaquePixelCount?: number;
+}): DrawableGeneratedMeshResult => {
+  const alphaMesh =
+    input.textureBytes === undefined
+      ? undefined
+      : createAlphaAwareGridMesh({
+          meshId: input.existingMesh.meshId,
+          drawableId: input.drawableId,
+          bounds: input.existingMesh.bounds,
+          provenanceId: input.provenanceId,
+          textureSize: input.textureBytes.textureSize,
+          rgbaBytes: input.textureBytes.bytes,
+          ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+        });
+  const mesh =
+    alphaMesh?.mesh ??
+    createGridMesh({
+      meshId: input.existingMesh.meshId,
+      drawableId: input.drawableId,
+      bounds: input.existingMesh.bounds,
+      provenanceId: input.provenanceId,
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  const source: DrawableGeneratedMeshSource = alphaMesh === undefined ? "bounds-grid" : "alpha-aware-rgba";
+  const fallbackSteps: readonly MeshGenerationFallbackStep[] = [
+    {
+      method: input.candidate.methodId,
+      reason: input.fallbackReason
+    }
+  ];
+  const fallbackAlphaBounds = input.alphaBounds ?? alphaMesh?.alphaBounds;
+  const boundaryVertexCount = input.failureMetrics?.boundaryVertexCount ?? countBoundaryVertices(mesh);
+  const interiorVertexCount =
+    input.failureMetrics?.interiorVertexCount ?? Math.max(0, mesh.vertices.length - boundaryVertexCount);
+  const qualityMetrics = computeMeshQualityMetrics(mesh, {
+    refinementIterationCount: input.failureMetrics?.diagnostics.edgeFlipCount ?? 0,
+    fallbackReason: input.fallbackReason,
+    triangulationMode: "v6-backend-blocked-fallback",
+    v6Metrics: {
+      algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+      methodId: input.candidate.methodId,
+      backendId: input.candidate.backendId,
+      backendImplementationStatus: input.candidate.backendImplementationStatus,
+      requestedSourceId: input.candidate.sourceId,
+      actualSourceId: source,
+      outputKind: alphaMesh === undefined ? "blocked" : "fallback-output",
+      preset: input.densityHint ?? "medium",
+      fallbackReason: input.fallbackReason,
+      fallbackSteps,
+      vertexCount: mesh.vertices.length,
+      triangleCount: mesh.triangles.length,
+      boundaryVertexCount,
+      interiorVertexCount,
+      alphaBoundsAvailable: fallbackAlphaBounds !== undefined,
+      ...(input.textureBytes === undefined
+        ? {}
+        : { opaquePixelCount: input.opaquePixelCount ?? countOpaquePixels(input.textureBytes.bytes) }),
+      contourLoopCount: input.failureMetrics?.contourLoopCount ?? 0,
+      holeLikeRegionCount: input.failureMetrics?.holeLikeRegionCount ?? 0,
+      removedTriangleCount: input.failureMetrics?.removedTriangleCount ?? 0,
+      outsideOrCrossingTriangleCount: input.failureMetrics?.outsideOrCrossingTriangleCount ?? 0,
+      multiIslandHandling: input.failureMetrics?.multiIslandHandling ?? "not-evaluated",
+      holeHandling: input.failureMetrics?.holeHandling ?? "not-evaluated",
+      provenance: input.failureMetrics?.provenance ?? createV6BlockedFallbackProvenance(input.candidate, input.fallbackReason),
+      ...(input.failureMetrics?.contourPipelineDiagnostics === undefined
+        ? {}
+        : { contourPipelineDiagnostics: input.failureMetrics.contourPipelineDiagnostics }),
+      customCdtDiagnostics: input.failureMetrics?.diagnostics ?? {
+        dependencyGateStatus: "not-required",
+        constraintEdgeCount: 0,
+        preservedConstraintEdgeCount: 0,
+        missingConstraintEdgeCount: 0,
+        edgeFlipCount: 0,
+        constraintRecoveryOperationCount: 0,
+        longSpokeCandidateCount: 0,
+        rejectedLocalImprovementCount: 0,
+        customTriangulationFallbackReason: input.fallbackReason
+      }
     }
   });
 
@@ -1216,6 +1531,7 @@ const createV6BlockedFallbackMeshResult = (input: {
   readonly fallbackReason: MeshGenerationFallbackReason;
   readonly alphaBounds?: RectDto;
   readonly opaquePixelCount?: number;
+  readonly contourPipeline?: V6ContourPipelineResult;
 }): DrawableGeneratedMeshResult => {
   const fallbackSteps: readonly MeshGenerationFallbackStep[] = [
     {
@@ -1231,6 +1547,7 @@ const createV6BlockedFallbackMeshResult = (input: {
     ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
   });
   const boundaryVertexCount = countBoundaryVertices(mesh);
+  const contourPipelineDiagnostics = createV6ContourPipelineDiagnostics(input.contourPipeline, input.fallbackReason);
   const qualityMetrics = computeMeshQualityMetrics(mesh, {
     refinementIterationCount: 0,
     fallbackReason: input.fallbackReason,
@@ -1259,6 +1576,7 @@ const createV6BlockedFallbackMeshResult = (input: {
       multiIslandHandling: "not-evaluated",
       holeHandling: "not-evaluated",
       provenance: createV6BlockedFallbackProvenance(input.candidate, input.fallbackReason),
+      ...(contourPipelineDiagnostics === undefined ? {} : { contourPipelineDiagnostics }),
       ...createV6DeferredBackendDiagnostics(input.candidate)
     }
   });
@@ -1282,6 +1600,17 @@ const createV6DeferredFallbackMeshResult = (input: {
   readonly textureBytes?: ResolvedDrawableTextureBytes;
 }): DrawableGeneratedMeshResult => {
   const candidate = getV6MeshGenerationCandidate(input.method);
+  const contourPipeline =
+    input.textureBytes === undefined
+      ? undefined
+      : createV6ContourCandidateInput({
+          textureSize: input.textureBytes.textureSize,
+          meshBounds: input.existingMesh.bounds,
+          rgbaBytes: input.textureBytes.bytes,
+          ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+        });
+  const contourCandidate =
+    contourPipeline?.status === "generated" ? contourPipeline.candidateInput : undefined;
   const alphaMesh =
     input.textureBytes === undefined
       ? undefined
@@ -1294,7 +1623,7 @@ const createV6DeferredFallbackMeshResult = (input: {
           rgbaBytes: input.textureBytes.bytes,
           ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
         });
-  const fallbackReason = resolveV6DeferredFallbackReason(input.textureBytes, alphaMesh);
+  const fallbackReason = resolveV6DeferredFallbackReason(input.textureBytes, contourPipeline, alphaMesh);
   const fallbackSteps: readonly MeshGenerationFallbackStep[] = [
     {
       method: candidate.methodId,
@@ -1311,8 +1640,12 @@ const createV6DeferredFallbackMeshResult = (input: {
       ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
     });
   const source: DrawableGeneratedMeshSource = alphaMesh === undefined ? "bounds-grid" : "alpha-aware-rgba";
-  const boundaryVertexCount = countBoundaryVertices(mesh);
+  const fallbackAlphaBounds = contourCandidate?.alphaBounds.stageBounds ?? alphaMesh?.alphaBounds;
+  const boundaryVertexCount = contourCandidate?.boundaryPoints.length ?? countBoundaryVertices(mesh);
+  const interiorVertexCount =
+    contourCandidate?.interiorPoints.length ?? Math.max(0, mesh.vertices.length - boundaryVertexCount);
   const outputKind = fallbackReason === "v6-backend-not-implemented" ? "fallback-output" : "blocked";
+  const contourPipelineDiagnostics = createV6ContourPipelineDiagnostics(contourPipeline, fallbackReason);
   const qualityMetrics = computeMeshQualityMetrics(mesh, {
     refinementIterationCount: 0,
     fallbackReason,
@@ -1331,24 +1664,27 @@ const createV6DeferredFallbackMeshResult = (input: {
       vertexCount: mesh.vertices.length,
       triangleCount: mesh.triangles.length,
       boundaryVertexCount,
-      interiorVertexCount: Math.max(0, mesh.vertices.length - boundaryVertexCount),
-      alphaBoundsAvailable: alphaMesh?.alphaBounds !== undefined,
-      ...(input.textureBytes === undefined ? {} : { opaquePixelCount: countOpaquePixels(input.textureBytes.bytes) }),
-      contourLoopCount: 0,
-      holeLikeRegionCount: 0,
+      interiorVertexCount,
+      alphaBoundsAvailable: fallbackAlphaBounds !== undefined,
+      ...(input.textureBytes === undefined
+        ? {}
+        : { opaquePixelCount: contourCandidate?.diagnostics.inputOpaquePixelCount ?? countOpaquePixels(input.textureBytes.bytes) }),
+      contourLoopCount: contourCandidate?.diagnostics.contourLoopCount ?? 0,
+      holeLikeRegionCount: contourCandidate?.diagnostics.holeLikeRegionCount ?? 0,
       removedTriangleCount: 0,
       outsideOrCrossingTriangleCount: 0,
-      multiIslandHandling: "not-evaluated",
-      holeHandling: "not-evaluated",
-      provenance: createV6DeferredFallbackProvenance(candidate),
-      ...createV6DeferredBackendDiagnostics(candidate)
+      multiIslandHandling: contourCandidate?.diagnostics.multiIslandHandling ?? "not-evaluated",
+      holeHandling: contourCandidate?.diagnostics.holeHandling ?? "not-evaluated",
+      provenance: createV6DeferredFallbackProvenance(candidate, contourCandidate),
+      ...(contourPipelineDiagnostics === undefined ? {} : { contourPipelineDiagnostics }),
+      ...createV6DeferredBackendDiagnostics(candidate, contourCandidate, fallbackReason)
     }
   });
 
   return {
     mesh,
     source,
-    ...(alphaMesh?.alphaBounds === undefined ? {} : { alphaBounds: alphaMesh.alphaBounds }),
+    ...(fallbackAlphaBounds === undefined ? {} : { alphaBounds: fallbackAlphaBounds }),
     fallbackReason,
     fallbackSteps,
     qualityMetrics
@@ -1357,10 +1693,15 @@ const createV6DeferredFallbackMeshResult = (input: {
 
 const resolveV6DeferredFallbackReason = (
   textureBytes: ResolvedDrawableTextureBytes | undefined,
+  contourPipeline: V6ContourPipelineResult | undefined,
   alphaMesh: { readonly mesh: MeshDto; readonly alphaBounds: RectDto } | undefined
 ): MeshGenerationFallbackReason => {
   if (textureBytes === undefined) {
     return "texture-bytes-unavailable";
+  }
+
+  if (contourPipeline?.status === "blocked") {
+    return contourPipeline.reason;
   }
 
   if (alphaMesh === undefined) {
@@ -1370,13 +1711,53 @@ const resolveV6DeferredFallbackReason = (
   return "v6-backend-not-implemented";
 };
 
+const createV6ContourPipelineDiagnostics = (
+  contourPipeline: V6ContourPipelineResult | undefined,
+  fallbackReason: MeshGenerationFallbackReason
+): NonNullable<
+  NonNullable<Parameters<typeof computeMeshQualityMetrics>[1]["v6Metrics"]>["contourPipelineDiagnostics"]
+> | undefined => {
+  if (contourPipeline === undefined) {
+    return undefined;
+  }
+
+  if (contourPipeline.status === "generated") {
+    const diagnostics = contourPipeline.candidateInput.diagnostics;
+    return {
+      status: "generated",
+      inputOpaquePixelCount: diagnostics.inputOpaquePixelCount,
+      softMaskOpaquePixelCount: diagnostics.softMaskOpaquePixelCount,
+      selectedComponentPixelCount: diagnostics.selectedComponentPixelCount,
+      boundaryPointCount: diagnostics.boundaryPointCount,
+      constraintEdgeCount: diagnostics.constraintEdgeCount,
+      steinerPointCount: diagnostics.interiorPointCount,
+      alphaBoundsAvailable: true
+    };
+  }
+
+  return {
+    status: "blocked",
+    inputOpaquePixelCount:
+      contourPipeline.opaquePixelCount ?? contourPipeline.diagnostics?.inputOpaquePixelCount ?? 0,
+    softMaskOpaquePixelCount: contourPipeline.diagnostics?.softMaskOpaquePixelCount ?? 0,
+    selectedComponentPixelCount: contourPipeline.diagnostics?.selectedComponentPixelCount ?? 0,
+    boundaryPointCount: contourPipeline.diagnostics?.boundaryPointCount ?? 0,
+    constraintEdgeCount: contourPipeline.diagnostics?.constraintEdgeCount ?? 0,
+    steinerPointCount: contourPipeline.diagnostics?.interiorPointCount ?? 0,
+    alphaBoundsAvailable: contourPipeline.alphaBounds !== undefined,
+    blockedReason: fallbackReason
+  };
+};
+
 const createV6DeferredFallbackProvenance = (
-  candidate: V6MeshGenerationCandidate
+  candidate: V6MeshGenerationCandidate,
+  contourCandidate?: V6ContourCandidateInput
 ): readonly string[] => [
   "v6-contract-surface",
   candidate.dependencyGateStatus === "available"
     ? "dependency-available"
     : "dependency-not-required",
+  ...(contourCandidate === undefined ? [] : ["shared-v6-contour-pipeline"]),
   "backend-implementation-deferred",
   `${candidate.backendId}-domain-deferred`
 ];
@@ -1394,11 +1775,14 @@ const createV6BlockedFallbackProvenance = (
 ];
 
 const createV6DeferredBackendDiagnostics = (
-  candidate: V6MeshGenerationCandidate
+  candidate: V6MeshGenerationCandidate,
+  contourCandidate?: V6ContourCandidateInput,
+  fallbackReason?: MeshGenerationFallbackReason
 ): Pick<
   NonNullable<Parameters<typeof computeMeshQualityMetrics>[1]["v6Metrics"]>,
-  "constrainautorDiagnostics" | "poly2triDiagnostics"
+  "constrainautorDiagnostics" | "poly2triDiagnostics" | "customCdtDiagnostics"
 > => {
+  const constraintEdgeCount = contourCandidate?.constraintEdges.length ?? 0;
   if (candidate.backendId === "v6b-constrainautor") {
     return {
       constrainautorDiagnostics: {
@@ -1406,6 +1790,19 @@ const createV6DeferredBackendDiagnostics = (
         constraintEdgeCount: 0,
         preservedConstraintEdgeCount: 0,
         missingConstraintEdgeCount: 0,
+        constraintRecoveryFailed: false,
+        outsideTriangleCount: 0
+      }
+    };
+  }
+
+  if (candidate.backendId === "v6d-contour-constrainautor") {
+    return {
+      constrainautorDiagnostics: {
+        dependencyGateStatus: candidate.dependencyGateStatus,
+        constraintEdgeCount,
+        preservedConstraintEdgeCount: 0,
+        missingConstraintEdgeCount: constraintEdgeCount,
         constraintRecoveryFailed: false,
         outsideTriangleCount: 0
       }
@@ -1425,6 +1822,41 @@ const createV6DeferredBackendDiagnostics = (
         boundaryEdgePreservedCount: 0,
         boundaryEdgeMissingCount: 0,
         mainIslandOnlyFallback: false
+      }
+    };
+  }
+
+  if (candidate.backendId === "v6e-contour-poly2tri") {
+    return {
+      poly2triDiagnostics: {
+        dependencyGateStatus: candidate.dependencyGateStatus,
+        outerPointCount: contourCandidate?.boundaryPoints.length ?? 0,
+        holeCount: contourCandidate?.diagnostics.holeLikeRegionCount ?? 0,
+        steinerPointCount: contourCandidate?.interiorPoints.length ?? 0,
+        polygonValidationFailed: false,
+        holeValidationFailed: false,
+        triangulationThrown: false,
+        boundaryEdgePreservedCount: 0,
+        boundaryEdgeMissingCount: constraintEdgeCount,
+        mainIslandOnlyFallback: contourCandidate?.diagnostics.multiIslandHandling === "main-island-only"
+      }
+    };
+  }
+
+  if (candidate.backendId === "v6f-contour-custom-cdt") {
+    return {
+      customCdtDiagnostics: {
+        dependencyGateStatus: candidate.dependencyGateStatus,
+        constraintEdgeCount,
+        preservedConstraintEdgeCount: 0,
+        missingConstraintEdgeCount: constraintEdgeCount,
+        edgeFlipCount: 0,
+        constraintRecoveryOperationCount: 0,
+        longSpokeCandidateCount: 0,
+        rejectedLocalImprovementCount: 0,
+        ...(fallbackReason === undefined
+          ? {}
+          : { customTriangulationFallbackReason: fallbackReason })
       }
     };
   }

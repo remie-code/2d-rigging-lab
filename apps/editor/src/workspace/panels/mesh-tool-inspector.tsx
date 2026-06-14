@@ -152,6 +152,11 @@ export function MeshToolInspector() {
   const v6Metrics = qualityMetrics?.v6Metrics;
   const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
   const poly2triDiagnostics = v6Metrics?.poly2triDiagnostics;
+  const customCdtDiagnostics = v6Metrics?.customCdtDiagnostics;
+  const constrainautorDiagnosticLabel =
+    v6Metrics?.backendId === "v6d-contour-constrainautor" ? "v6D" : "v6B";
+  const poly2triDiagnosticLabel =
+    v6Metrics?.backendId === "v6e-contour-poly2tri" ? "v6E" : "v6C";
 
   return (
     <>
@@ -222,11 +227,11 @@ export function MeshToolInspector() {
           {constrainautorDiagnostics === undefined ? null : (
             <>
               <SummaryRow
-                label="v6B constraints"
+                label={`${constrainautorDiagnosticLabel} constraints`}
                 value={`${constrainautorDiagnostics.preservedConstraintEdgeCount}/${constrainautorDiagnostics.constraintEdgeCount} kept`}
               />
               <SummaryRow
-                label="v6B missing"
+                label={`${constrainautorDiagnosticLabel} missing`}
                 value={String(constrainautorDiagnostics.missingConstraintEdgeCount)}
               />
             </>
@@ -234,12 +239,24 @@ export function MeshToolInspector() {
           {poly2triDiagnostics === undefined ? null : (
             <>
               <SummaryRow
-                label="v6C polygon"
+                label={`${poly2triDiagnosticLabel} polygon`}
                 value={`Outer ${poly2triDiagnostics.outerPointCount} / Steiner ${poly2triDiagnostics.steinerPointCount}`}
               />
               <SummaryRow
-                label="v6C boundary"
+                label={`${poly2triDiagnosticLabel} boundary`}
                 value={`${poly2triDiagnostics.boundaryEdgePreservedCount} kept / ${poly2triDiagnostics.boundaryEdgeMissingCount} missing`}
+              />
+            </>
+          )}
+          {customCdtDiagnostics === undefined ? null : (
+            <>
+              <SummaryRow
+                label="v6F constraints"
+                value={`${customCdtDiagnostics.preservedConstraintEdgeCount}/${customCdtDiagnostics.constraintEdgeCount} kept`}
+              />
+              <SummaryRow
+                label="v6F custom"
+                value={`Flips ${customCdtDiagnostics.edgeFlipCount} / Spokes ${customCdtDiagnostics.longSpokeCandidateCount}`}
               />
             </>
           )}
@@ -521,6 +538,12 @@ function formatMeshMethod(method: string | undefined): string {
       return "Auto outline v6B Constrainautor";
     case "auto-outline-v6c-poly2tri":
       return "Auto outline v6C Poly2Tri";
+    case "auto-outline-v6d-contour-constrainautor":
+      return "Auto outline v6D contour Constrainautor";
+    case "auto-outline-v6e-contour-poly2tri":
+      return "Auto outline v6E contour Poly2Tri";
+    case "auto-outline-v6f-contour-custom-cdt":
+      return "Auto outline v6F custom CDT";
     case "auto-outline-v2.6-soft-apron":
       return "Auto outline v2.6 soft apron";
     case undefined:
@@ -538,6 +561,12 @@ function formatMeshSource(source: string | undefined): string {
       return "Auto outline v6B Constrainautor";
     case "outline-v6c-poly2tri-rgba":
       return "Auto outline v6C Poly2Tri";
+    case "outline-v6d-contour-constrainautor-rgba":
+      return "Auto outline v6D contour Constrainautor";
+    case "outline-v6e-contour-poly2tri-rgba":
+      return "Auto outline v6E contour Poly2Tri";
+    case "outline-v6f-contour-custom-cdt-rgba":
+      return "Auto outline v6F custom CDT";
     case "outline-v4-contour-band-rgba":
       return "Auto outline v4 contour band";
     case "outline-v2-6-soft-apron-rgba":
@@ -579,6 +608,12 @@ function formatFallbackMethod(method: string): string {
       return "v6B Constrainautor";
     case "auto-outline-v6c-poly2tri":
       return "v6C Poly2Tri";
+    case "auto-outline-v6d-contour-constrainautor":
+      return "v6D contour Constrainautor";
+    case "auto-outline-v6e-contour-poly2tri":
+      return "v6E contour Poly2Tri";
+    case "auto-outline-v6f-contour-custom-cdt":
+      return "v6F custom CDT";
     case "auto-outline-v4-contour-band":
       return "v4 contour band";
     case "auto-outline-v3-envelope":
@@ -634,6 +669,24 @@ function formatFallbackReason(reason: string): string {
       return "V6C triangulation threw";
     case "v6c-poly2tri-boundary-missing":
       return "V6C boundary missing";
+    case "v6d-constrainautor-generation-failed":
+      return "V6D Constrainautor generation failed";
+    case "v6d-constraint-recovery-failed":
+      return "V6D constraint recovery failed";
+    case "v6d-backend-threw":
+      return "V6D backend threw";
+    case "v6e-poly2tri-generation-failed":
+      return "V6E Poly2Tri generation failed";
+    case "v6e-poly2tri-polygon-invalid":
+      return "V6E polygon invalid";
+    case "v6e-poly2tri-triangulation-threw":
+      return "V6E triangulation threw";
+    case "v6f-custom-cdt-generation-failed":
+      return "V6F custom CDT generation failed";
+    case "v6f-custom-cdt-constraint-recovery-failed":
+      return "V6F constraint recovery failed";
+    case "v6f-custom-cdt-local-improvement-rejected":
+      return "V6F local improvement rejected";
     default:
       return reason;
   }
@@ -647,6 +700,12 @@ function formatV6Backend(backendId: string): string {
       return "v6B Constrainautor";
     case "v6c-poly2tri":
       return "v6C Poly2Tri";
+    case "v6d-contour-constrainautor":
+      return "v6D contour Constrainautor";
+    case "v6e-contour-poly2tri":
+      return "v6E contour Poly2Tri";
+    case "v6f-contour-custom-cdt":
+      return "v6F custom CDT";
     default:
       return backendId;
   }

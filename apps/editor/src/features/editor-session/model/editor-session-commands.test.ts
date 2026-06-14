@@ -683,60 +683,89 @@ describe("editor session commands", () => {
     );
   });
 
-  it("commits v6 preview mesh geometry with the previewed method provenance", () => {
-    const session = createFixtureSession([DRAW_A]);
-    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
-    attachDrawableMeshTextureBytes(session, {
-      meshBounds: fixture.meshBounds,
-      textureSize: fixture.textureSize,
-      bytes: createAlphaBytes(
-        fixture.textureSize.width,
-        fixture.textureSize.height,
-        fixture.opaquePixels
-      )
-    });
+  it("commits v6D v6E and v6F preview mesh geometry with the previewed method provenance", () => {
+    const previewCases = [
+      {
+        token: "v6d",
+        method: "auto-outline-v6d-contour-constrainautor",
+        source: "outline-v6d-contour-constrainautor-rgba",
+        backend: "v6d-contour-constrainautor"
+      },
+      {
+        token: "v6e",
+        method: "auto-outline-v6e-contour-poly2tri",
+        source: "outline-v6e-contour-poly2tri-rgba",
+        backend: "v6e-contour-poly2tri"
+      },
+      {
+        token: "v6f",
+        method: "auto-outline-v6f-contour-custom-cdt",
+        source: "outline-v6f-contour-custom-cdt-rgba",
+        backend: "v6f-contour-custom-cdt"
+      }
+    ] as const;
 
-    const preview = createGeneratedMeshForDrawable({
-      session,
-      drawableId: DRAW_A,
-      provenanceId: ProvenanceIdSchema.parse("prov_preview_v6a"),
-      method: "auto-outline-v6a-local",
-      densityHint: "medium"
-    });
-    expect(preview).toBeDefined();
-    expect(preview?.qualityMetrics?.v6Metrics?.methodId).toBe("auto-outline-v6a-local");
+    for (const previewCase of previewCases) {
+      const session = createFixtureSession([DRAW_A]);
+      const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+      attachDrawableMeshTextureBytes(session, {
+        meshBounds: fixture.meshBounds,
+        textureSize: fixture.textureSize,
+        bytes: createAlphaBytes(
+          fixture.textureSize.width,
+          fixture.textureSize.height,
+          fixture.opaquePixels
+        )
+      });
 
-    const result = commitGenerateMesh(
-      session,
-      DRAW_A,
-      "medium",
-      preview?.mesh,
-      "auto-outline-v6a-local",
-      preview === undefined
-        ? undefined
-        : {
-            source: preview.source,
-            ...(preview.fallbackReason === undefined ? {} : { fallbackReason: preview.fallbackReason }),
-            ...(preview.fallbackSteps === undefined ? {} : { fallbackSteps: preview.fallbackSteps }),
-            ...(preview.qualityMetrics === undefined ? {} : { qualityMetrics: preview.qualityMetrics })
-          }
-    );
+      const preview = createGeneratedMeshForDrawable({
+        session,
+        drawableId: DRAW_A,
+        provenanceId: ProvenanceIdSchema.parse(`prov_preview_${previewCase.token}`),
+        method: previewCase.method,
+        densityHint: "medium"
+      });
+      expect(preview).toBeDefined();
+      expect(preview?.qualityMetrics?.v6Metrics).toMatchObject({
+        methodId: previewCase.method,
+        backendId: previewCase.backend,
+        actualSourceId: previewCase.source,
+        outputKind: "backend-output"
+      });
 
-    expect(result.committed).toBe(true);
-    const committedMesh = result.session.graph.meshes.find((mesh) => mesh.meshId === MeshIdSchema.parse("mesh_a"));
-    expect(committedMesh?.vertices).toEqual(preview?.mesh.vertices);
-    expect(committedMesh?.uvs).toEqual(preview?.mesh.uvs);
-    expect(committedMesh?.triangles).toEqual(preview?.mesh.triangles);
-    expect(committedMesh?.vertexStableIds).toEqual(preview?.mesh.vertexStableIds);
-    expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
-      expect.arrayContaining([
-        "generateMesh:auto-outline-v6a-local",
-        "meshSource:previewMesh",
-        "previewMeshSource:outline-v6a-local-rgba",
-        "meshQuality:v6ActualSource=outline-v6a-local-rgba",
-        "meshQuality:v6Output=backend-output"
-      ])
-    );
+      const result = commitGenerateMesh(
+        session,
+        DRAW_A,
+        "medium",
+        preview?.mesh,
+        previewCase.method,
+        preview === undefined
+          ? undefined
+          : {
+              source: preview.source,
+              ...(preview.fallbackReason === undefined ? {} : { fallbackReason: preview.fallbackReason }),
+              ...(preview.fallbackSteps === undefined ? {} : { fallbackSteps: preview.fallbackSteps }),
+              ...(preview.qualityMetrics === undefined ? {} : { qualityMetrics: preview.qualityMetrics })
+            }
+      );
+
+      expect(result.committed).toBe(true);
+      const committedMesh = result.session.graph.meshes.find((mesh) => mesh.meshId === MeshIdSchema.parse("mesh_a"));
+      expect(committedMesh?.vertices).toEqual(preview?.mesh.vertices);
+      expect(committedMesh?.uvs).toEqual(preview?.mesh.uvs);
+      expect(committedMesh?.triangles).toEqual(preview?.mesh.triangles);
+      expect(committedMesh?.vertexStableIds).toEqual(preview?.mesh.vertexStableIds);
+      expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
+        expect.arrayContaining([
+          `generateMesh:${previewCase.method}`,
+          "meshSource:previewMesh",
+          `previewMeshSource:${previewCase.source}`,
+          `meshQuality:v6ActualSource=${previewCase.source}`,
+          "meshQuality:v6Output=backend-output",
+          `meshQuality:v6Backend=${previewCase.backend}`
+        ])
+      );
+    }
   });
 });
 

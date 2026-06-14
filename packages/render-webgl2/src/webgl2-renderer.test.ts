@@ -182,6 +182,7 @@ class FakeWebGl2Context implements WebGl2Like {
   readonly TEXTURE_MIN_FILTER = 22;
   readonly TEXTURE_MAG_FILTER = 23;
   readonly LINEAR = 24;
+  readonly NEAREST = 241;
   readonly BLEND = 25;
   readonly ONE = 26;
   readonly ONE_MINUS_SRC_ALPHA = 27;
