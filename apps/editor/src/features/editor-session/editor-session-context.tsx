@@ -126,7 +126,7 @@ export interface MeshToolDraft {
   readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
 }
 
-function logMeshGenerationPreviewDebug(input: {
+export function logMeshGenerationPreviewDebug(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
@@ -138,7 +138,10 @@ function logMeshGenerationPreviewDebug(input: {
   const generated = input.generated;
   const v6Metrics = generated?.qualityMetrics?.v6Metrics;
   const supportRingDiagnostics = v6Metrics?.supportRingDiagnostics;
+  const adaptiveStaggeredBandDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
   const contourPipelineDiagnostics = v6Metrics?.contourPipelineDiagnostics;
+  const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
+  const adaptiveDensityDiagnostics = v6Metrics?.adaptiveDensityDiagnostics;
   const summary = {
     drawableId: input.drawableId,
     drawableName: drawable?.displayName,
@@ -156,7 +159,10 @@ function logMeshGenerationPreviewDebug(input: {
     v6BackendId: v6Metrics?.backendId,
     v6FallbackReason: v6Metrics?.fallbackReason,
     contourPipelineDiagnostics,
-    supportRingDiagnostics
+    constrainautorDiagnostics,
+    adaptiveDensityDiagnostics,
+    supportRingDiagnostics,
+    adaptiveStaggeredBandDiagnostics
   };
 
   const log = generated === undefined || generated.fallbackReason !== undefined || v6Metrics?.outputKind !== "backend-output"

@@ -60,7 +60,7 @@ export const MESH_GENERATION_PRESETS: readonly MeshGenerationPreset[] = [
 
 export const DEFAULT_MESH_GENERATION_PRESET_ID: MeshGenerationPresetId = "standard";
 export const DEFAULT_MESH_GENERATION_METHOD: GeneratedMeshPreviewCommitMethod =
-  "auto-outline-v6d-contour-band-support-rings";
+  "auto-outline-v6d-adaptive-contour-constrainautor";
 
 export const getMeshGenerationPreset = (
   presetId: MeshGenerationPresetId

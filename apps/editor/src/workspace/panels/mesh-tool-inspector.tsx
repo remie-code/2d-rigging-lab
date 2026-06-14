@@ -138,6 +138,7 @@ export function MeshToolInspector() {
   const v6Metrics = qualityMetrics?.v6Metrics;
   const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
   const supportRingDiagnostics = v6Metrics?.supportRingDiagnostics;
+  const adaptiveStaggeredBandDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
   const poly2triDiagnostics = v6Metrics?.poly2triDiagnostics;
   const customCdtDiagnostics = v6Metrics?.customCdtDiagnostics;
 
@@ -214,6 +215,18 @@ export function MeshToolInspector() {
               <SummaryRow
                 label="Support band"
                 value={`Band ${supportRingDiagnostics.supportBandTriangleCount} / Interior ${supportRingDiagnostics.interiorTriangleCount}`}
+              />
+            </>
+          )}
+          {adaptiveStaggeredBandDiagnostics === undefined ? null : (
+            <>
+              <SummaryRow
+                label="Adaptive density"
+                value={`B ${formatNumber(adaptiveStaggeredBandDiagnostics.resolvedBoundarySpacing)} / I ${formatNumber(adaptiveStaggeredBandDiagnostics.resolvedInteriorSpacing)}`}
+              />
+              <SummaryRow
+                label="Staggered strip"
+                value={`Strip ${adaptiveStaggeredBandDiagnostics.explicitAlphaInnerStripTriangleCount} / Direct ${adaptiveStaggeredBandDiagnostics.directAlphaToInteriorEdgeCount}`}
               />
             </>
           )}
@@ -502,6 +515,9 @@ function formatMeshSource(source: string | undefined): string {
       return "Legacy contour mesh";
     case "outline-v6d-contour-band-support-rings-rgba":
       return "Contour support mesh";
+    case "outline-v6d-adaptive-staggered-band-rgba":
+    case "outline-v6d-adaptive-contour-constrainautor-rgba":
+      return "Adaptive contour mesh";
     case "outline-v4-contour-band-rgba":
       return "Contour band mesh";
     case "outline-v2-6-soft-apron-rgba":
@@ -546,6 +562,9 @@ function formatFallbackMethod(method: string): string {
       return "Legacy contour mesh";
     case "auto-outline-v6d-contour-band-support-rings":
       return "Contour support mesh";
+    case "auto-outline-v6d-adaptive-staggered-band":
+    case "auto-outline-v6d-adaptive-contour-constrainautor":
+      return "Adaptive contour mesh";
     case "auto-outline-v4-contour-band":
       return "Contour band mesh";
     case "auto-outline-v3-envelope":
@@ -611,6 +630,10 @@ function formatFallbackReason(reason: string): string {
       return "Support ring geometry invalid";
     case "v6d-support-ring-constraint-recovery-failed":
       return "Support ring constraints failed";
+    case "v6d-adaptive-staggered-band-geometry-invalid":
+      return "Adaptive strip geometry invalid";
+    case "v6d-adaptive-staggered-band-constraint-recovery-failed":
+      return "Adaptive strip constraints failed";
     case "v6e-poly2tri-generation-failed":
       return "Contour mesh generation failed";
     case "v6e-poly2tri-polygon-invalid":
@@ -639,6 +662,9 @@ function formatV6Backend(backendId: string): string {
       return "Legacy contour mesh";
     case "v6d-contour-band-support-rings":
       return "Contour support mesh";
+    case "v6d-adaptive-staggered-band":
+    case "v6d-adaptive-contour-constrainautor":
+      return "Adaptive contour mesh";
     default:
       return backendId;
   }

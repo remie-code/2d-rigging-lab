@@ -519,6 +519,8 @@ const formatV6MetricsForTransformHistory = (
     ...formatV6ContourPipelineDiagnosticsForTransformHistory(metrics),
     ...formatV6ConstrainautorDiagnosticsForTransformHistory(metrics),
     ...formatV6SupportRingDiagnosticsForTransformHistory(metrics),
+    ...formatV6AdaptiveDensityDiagnosticsForTransformHistory(metrics),
+    ...formatV6AdaptiveStaggeredBandDiagnosticsForTransformHistory(metrics),
     ...formatV6Poly2TriDiagnosticsForTransformHistory(metrics),
     ...formatV6CustomCdtDiagnosticsForTransformHistory(metrics)
   ];
@@ -593,6 +595,65 @@ const formatV6SupportRingDiagnosticsForTransformHistory = (
     `meshQuality:v6SupportRingOuterOffset=${formatMetric(diagnostics.outerRingOffset)}`,
     `meshQuality:v6SupportRingInnerOffset=${formatMetric(diagnostics.innerRingOffset)}`,
     `meshQuality:v6SupportRingOuterUvPolicy=${diagnostics.outerRingUvPolicy}`
+  ];
+};
+
+const formatV6AdaptiveDensityDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.adaptiveDensityDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6AdaptiveDensityReferenceArea=${formatMetric(diagnostics.adaptiveDensityReferenceArea)}`,
+    `meshQuality:v6AdaptiveDensityEffectiveArea=${formatMetric(diagnostics.adaptiveDensityEffectiveArea)}`,
+    `meshQuality:v6AdaptiveDensityAreaRatio=${formatMetric(diagnostics.adaptiveDensityAreaRatio)}`,
+    `meshQuality:v6AdaptiveDensityClampedAreaRatio=${formatMetric(diagnostics.adaptiveDensityClampedAreaRatio)}`,
+    `meshQuality:v6AdaptiveDensitySpacingScale=${formatMetric(diagnostics.adaptiveDensitySpacingScale)}`,
+    `meshQuality:v6AdaptiveDensityVertexScale=${formatMetric(diagnostics.adaptiveDensityVertexScale)}`,
+    `meshQuality:v6AdaptiveDensityBoundaryCapScale=${formatMetric(diagnostics.adaptiveDensityBoundaryCapScale)}`,
+    `meshQuality:v6AdaptiveResolvedBoundarySpacing=${formatMetric(diagnostics.resolvedBoundarySpacing)}`,
+    `meshQuality:v6AdaptiveResolvedInteriorSpacing=${formatMetric(diagnostics.resolvedInteriorSpacing)}`,
+    `meshQuality:v6AdaptiveResolvedMaxBoundaryVertices=${diagnostics.resolvedMaxBoundaryVertices}`,
+    `meshQuality:v6AdaptiveResolvedMaxInteriorVertices=${diagnostics.resolvedMaxInteriorVertices}`,
+    `meshQuality:v6AdaptiveResolvedInteriorBoundaryClearance=${formatMetric(diagnostics.resolvedInteriorBoundaryClearance)}`
+  ];
+};
+
+const formatV6AdaptiveStaggeredBandDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = metrics.v6Metrics?.adaptiveStaggeredBandDiagnostics;
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6AdaptiveDensityReferenceArea=${formatMetric(diagnostics.adaptiveDensityReferenceArea)}`,
+    `meshQuality:v6AdaptiveDensityEffectiveArea=${formatMetric(diagnostics.adaptiveDensityEffectiveArea)}`,
+    `meshQuality:v6AdaptiveDensityAreaRatio=${formatMetric(diagnostics.adaptiveDensityAreaRatio)}`,
+    `meshQuality:v6AdaptiveDensityClampedAreaRatio=${formatMetric(diagnostics.adaptiveDensityClampedAreaRatio)}`,
+    `meshQuality:v6AdaptiveDensitySpacingScale=${formatMetric(diagnostics.adaptiveDensitySpacingScale)}`,
+    `meshQuality:v6AdaptiveDensityVertexScale=${formatMetric(diagnostics.adaptiveDensityVertexScale)}`,
+    `meshQuality:v6AdaptiveDensityBoundaryCapScale=${formatMetric(diagnostics.adaptiveDensityBoundaryCapScale)}`,
+    `meshQuality:v6AdaptiveResolvedBoundarySpacing=${formatMetric(diagnostics.resolvedBoundarySpacing)}`,
+    `meshQuality:v6AdaptiveResolvedInteriorSpacing=${formatMetric(diagnostics.resolvedInteriorSpacing)}`,
+    `meshQuality:v6AdaptiveResolvedMaxBoundaryVertices=${diagnostics.resolvedMaxBoundaryVertices}`,
+    `meshQuality:v6AdaptiveResolvedMaxInteriorVertices=${diagnostics.resolvedMaxInteriorVertices}`,
+    `meshQuality:v6AdaptiveResolvedInteriorBoundaryClearance=${formatMetric(diagnostics.resolvedInteriorBoundaryClearance)}`,
+    `meshQuality:v6AdaptiveStaggeredInnerPoints=${diagnostics.staggeredInnerPointCount}`,
+    `meshQuality:v6AdaptiveSkippedStaggeredInnerPoints=${diagnostics.skippedStaggeredInnerPointCount}`,
+    `meshQuality:v6AdaptiveExplicitAlphaInnerStripTriangles=${diagnostics.explicitAlphaInnerStripTriangleCount}`,
+    `meshQuality:v6AdaptiveDegenerateExplicitStripTriangles=${diagnostics.degenerateExplicitStripTriangleCount}`,
+    `meshQuality:v6AdaptiveInteriorPointsBeforeInnerFilter=${diagnostics.interiorPointCountBeforeInnerFilter}`,
+    `meshQuality:v6AdaptiveInteriorPointsAfterInnerFilter=${diagnostics.interiorPointCountAfterInnerFilter}`,
+    `meshQuality:v6AdaptiveDirectAlphaToInteriorEdges=${diagnostics.directAlphaToInteriorEdgeCount}`,
+    `meshQuality:v6AdaptiveInteriorFillUsesStaggeredInnerBoundary=${diagnostics.interiorFillUsesStaggeredInnerBoundary ? "true" : "false"}`,
+    ...(diagnostics.fallbackFromAdaptiveStaggeredReason === undefined
+      ? []
+      : [`meshQuality:v6AdaptiveFallback=${diagnostics.fallbackFromAdaptiveStaggeredReason}`])
   ];
 };
 

@@ -205,6 +205,34 @@ const PreviewMeshV6SupportRingDiagnosticsShapeSchema = z.object({
   outerRingUvPolicy: z.literal("projected-to-alpha-boundary")
 });
 
+const PreviewMeshV6AdaptiveDensityDiagnosticsShapeSchema = z.object({
+  adaptiveDensityReferenceArea: z.number().finite().nonnegative(),
+  adaptiveDensityEffectiveArea: z.number().finite().nonnegative(),
+  adaptiveDensityAreaRatio: z.number().finite().nonnegative(),
+  adaptiveDensityClampedAreaRatio: z.number().finite().nonnegative(),
+  adaptiveDensitySpacingScale: z.number().finite().nonnegative(),
+  adaptiveDensityVertexScale: z.number().finite().nonnegative(),
+  adaptiveDensityBoundaryCapScale: z.number().finite().nonnegative(),
+  resolvedBoundarySpacing: z.number().finite().nonnegative(),
+  resolvedInteriorSpacing: z.number().finite().nonnegative(),
+  resolvedMaxBoundaryVertices: z.number().int().nonnegative(),
+  resolvedMaxInteriorVertices: z.number().int().nonnegative(),
+  resolvedInteriorBoundaryClearance: z.number().finite().nonnegative()
+});
+
+const PreviewMeshV6AdaptiveStaggeredBandDiagnosticsShapeSchema =
+  PreviewMeshV6AdaptiveDensityDiagnosticsShapeSchema.extend({
+    staggeredInnerPointCount: z.number().int().nonnegative(),
+    skippedStaggeredInnerPointCount: z.number().int().nonnegative(),
+    explicitAlphaInnerStripTriangleCount: z.number().int().nonnegative(),
+    degenerateExplicitStripTriangleCount: z.number().int().nonnegative(),
+    interiorPointCountBeforeInnerFilter: z.number().int().nonnegative(),
+    interiorPointCountAfterInnerFilter: z.number().int().nonnegative(),
+    directAlphaToInteriorEdgeCount: z.number().int().nonnegative(),
+    interiorFillUsesStaggeredInnerBoundary: z.boolean(),
+    fallbackFromAdaptiveStaggeredReason: PreviewMeshFallbackReasonSchema.optional()
+  });
+
 const PreviewMeshV6Poly2TriDiagnosticsShapeSchema = z.object({
   dependencyGateStatus: PreviewMeshV6DependencyGateStatusSchema,
   outerPointCount: z.number().int().nonnegative(),
@@ -270,6 +298,8 @@ const PreviewMeshV6MetricsShapeSchema = z.object({
   contourPipelineDiagnostics: PreviewMeshV6ContourPipelineDiagnosticsShapeSchema.optional(),
   constrainautorDiagnostics: PreviewMeshV6ConstrainautorDiagnosticsShapeSchema.optional(),
   supportRingDiagnostics: PreviewMeshV6SupportRingDiagnosticsShapeSchema.optional(),
+  adaptiveDensityDiagnostics: PreviewMeshV6AdaptiveDensityDiagnosticsShapeSchema.optional(),
+  adaptiveStaggeredBandDiagnostics: PreviewMeshV6AdaptiveStaggeredBandDiagnosticsShapeSchema.optional(),
   poly2triDiagnostics: PreviewMeshV6Poly2TriDiagnosticsShapeSchema.optional(),
   customCdtDiagnostics: PreviewMeshV6CustomCdtDiagnosticsShapeSchema.optional()
 });

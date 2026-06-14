@@ -255,7 +255,7 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
   await page.getByRole("button", { name: "Preview Standard mesh" }).click();
   await expect(meshStatus).toHaveText("Draft preview");
   await expect(meshSource).not.toHaveText("Soft apron mesh");
-  await expect(meshGenerationResult).toContainText("Contour support mesh");
+  await expect(meshGenerationResult).toContainText("Adaptive contour mesh");
   await expect(meshInspector).toContainText("Max edge");
   await expect(meshInspector).toContainText("Min angle");
   await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible')).toHaveCount(0);

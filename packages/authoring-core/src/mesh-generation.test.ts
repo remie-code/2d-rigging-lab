@@ -30,6 +30,7 @@ import {
   getV6MeshGenerationContractFixture
 } from "./mesh-generation-v6-fixtures.js";
 import { createV6ContourCandidateInput } from "./mesh-generation-v6-contour-pipeline.js";
+import { resolveV6DAdaptiveDensityForTest } from "./mesh-generation-v6d-adaptive-density.js";
 import {
   probeAutoOutlineV6BConstrainautorRetryForTest,
   recoverV6BConstrainautorTriangles
@@ -46,6 +47,10 @@ import {
   probeV6DSupportRingGeometryFallbackForTest,
   probeV6DSupportRingTriangleFilterForTest
 } from "./mesh-generation-v6d-contour-band-support-rings.js";
+import {
+  probeV6DAdaptiveStaggeredBandStripGeometryForTest,
+  probeV6DAdaptiveStaggeredBandWave70FallbackForTest
+} from "./mesh-generation-v6d-adaptive-staggered-band.js";
 import {
   computeMeshQualityMetrics,
   type MeshGenerationV6Metrics
@@ -1155,6 +1160,22 @@ describe("alpha-aware mesh generation", () => {
         backendImplementationStatus: "implemented"
       },
       {
+        methodId: "auto-outline-v6d-adaptive-staggered-band",
+        sourceId: "outline-v6d-adaptive-staggered-band-rgba",
+        backendId: "v6d-adaptive-staggered-band",
+        dependencyGateStatus: "available",
+        dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"],
+        backendImplementationStatus: "implemented"
+      },
+      {
+        methodId: "auto-outline-v6d-adaptive-contour-constrainautor",
+        sourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        backendId: "v6d-adaptive-contour-constrainautor",
+        dependencyGateStatus: "available",
+        dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"],
+        backendImplementationStatus: "implemented"
+      },
+      {
         methodId: "auto-outline-v6e-contour-poly2tri",
         sourceId: "outline-v6e-contour-poly2tri-rgba",
         backendId: "v6e-contour-poly2tri",
@@ -1257,6 +1278,50 @@ describe("alpha-aware mesh generation", () => {
         expect(edge, fixtureId).toEqual([index, (index + 1) % candidateInput.boundaryPoints.length]);
       });
     }
+  });
+
+  it("expands the shared v6 contour mask only when requested before boundary tracing", () => {
+    const baseInput = {
+      textureSize: { width: 8, height: 8 },
+      meshBounds: { x: 0, y: 0, width: 8, height: 8 },
+      rgbaBytes: createAlphaBytes(8, 8, [[3, 3]]),
+      densityHint: "medium" as const
+    };
+
+    const compact = createV6ContourCandidateInput(baseInput);
+    const expanded = createV6ContourCandidateInput({
+      ...baseInput,
+      maskExpansionPixels: 2
+    });
+
+    expect(compact.status).toBe("generated");
+    expect(expanded.status).toBe("generated");
+    if (compact.status !== "generated" || expanded.status !== "generated") {
+      return;
+    }
+
+    const compactBounds = getContourPointBounds(compact.candidateInput.boundaryLoop);
+    const expandedBounds = getContourPointBounds(expanded.candidateInput.boundaryLoop);
+
+    expect(compact.candidateInput.alphaBounds.pixelBounds).toEqual({
+      left: 3,
+      top: 3,
+      right: 4,
+      bottom: 4
+    });
+    expect(expanded.candidateInput.alphaBounds).toEqual(compact.candidateInput.alphaBounds);
+    expect(compactBounds).toEqual({
+      left: 3,
+      top: 3,
+      right: 4,
+      bottom: 4
+    });
+    expect(expandedBounds.left).toBeLessThan(compactBounds.left);
+    expect(expandedBounds.top).toBeLessThan(compactBounds.top);
+    expect(expandedBounds.right).toBeGreaterThan(compactBounds.right);
+    expect(expandedBounds.bottom).toBeGreaterThan(compactBounds.bottom);
+    expect(expanded.candidateInput.mainMask[3 * 8 + 1]).toBe(true);
+    expect(expanded.candidateInput.mainMask[3 * 8 + 0]).toBe(false);
   });
 
   it("generates deterministic auto-outline-v6a-local backend meshes from representative alpha fixtures", () => {
@@ -1930,6 +1995,127 @@ describe("alpha-aware mesh generation", () => {
     }
   });
 
+  it("routes auto-outline-v6d-adaptive-contour-constrainautor through old v6d topology with adaptive density", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: fixture.textureSize,
+      meshBounds: fixture.meshBounds,
+      opaquePixels: fixture.opaquePixels
+    });
+
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.fallbackSteps).toBeUndefined();
+    expectValidMeshDto(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: fixture.meshBounds
+    });
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "v6d-adaptive-contour-constrainautor",
+      v6Metrics: {
+        methodId: "auto-outline-v6d-adaptive-contour-constrainautor",
+        backendId: "v6d-adaptive-contour-constrainautor",
+        requestedSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        actualSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        outputKind: "backend-output",
+        fallbackSteps: [],
+        constrainautorDiagnostics: {
+          dependencyGateStatus: "available",
+          missingConstraintEdgeCount: 0,
+          constraintRecoveryFailed: false
+        },
+        adaptiveDensityDiagnostics: {
+          resolvedBoundarySpacing: expect.any(Number),
+          resolvedInteriorSpacing: expect.any(Number),
+          resolvedMaxBoundaryVertices: expect.any(Number),
+          resolvedMaxInteriorVertices: expect.any(Number),
+          resolvedInteriorBoundaryClearance: expect.any(Number)
+        }
+      }
+    });
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const densityDiagnostics = v6Metrics?.adaptiveDensityDiagnostics;
+    expect(v6Metrics?.supportRingDiagnostics).toBeUndefined();
+    expect(v6Metrics?.adaptiveStaggeredBandDiagnostics).toBeUndefined();
+    expect(densityDiagnostics?.resolvedMaxInteriorVertices).toBeGreaterThan(0);
+    expect(v6Metrics?.boundaryVertexCount).toBe(v6Metrics?.contourPipelineDiagnostics?.boundaryPointCount);
+    expect(v6Metrics?.interiorVertexCount).toBe(v6Metrics?.contourPipelineDiagnostics?.steinerPointCount);
+    expect(v6Metrics?.provenance).toEqual(
+      expect.arrayContaining([
+        "v6d-adaptive-density-resolved",
+        "v6d-adaptive-contour-constrainautor-delaunator-all-points",
+        "v6d-adaptive-contour-constrainautor-constraint-recovery",
+        "v6d-adaptive-contour-constrainautor-boundary-constraints-verified",
+        "v6d-adaptive-contour-constrainautor-outside-triangle-filter"
+      ])
+    );
+    expect(v6Metrics?.provenance.join(">")).not.toMatch(/staggered|support-ring|inner-strip/i);
+  });
+
+  it("allows v6d adaptive contour-constrainautor vertices outside layer bounds while keeping original texture UVs valid", () => {
+    const textureSize = { width: 24, height: 20 };
+    const meshBounds = { x: 10, y: 20, width: 24, height: 20 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+          x >= 0 && x <= 13 && y >= 0 && y <= 11
+        )
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.fallbackSteps).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    const outsideVertexIndexes =
+      generated?.mesh.vertices
+        .map((vertex, index) => ({ vertex, index }))
+        .filter(({ vertex }) =>
+          vertex.x < meshBounds.x ||
+          vertex.x > meshBounds.x + meshBounds.width ||
+          vertex.y < meshBounds.y ||
+          vertex.y > meshBounds.y + meshBounds.height
+        )
+        .map(({ index }) => index) ?? [];
+
+    expect(outsideVertexIndexes.length).toBeGreaterThan(0);
+    for (const index of outsideVertexIndexes) {
+      const uv = generated?.mesh.uvs[index];
+      expect(uv).toBeDefined();
+      expect(uv?.x).toBeGreaterThanOrEqual(0);
+      expect(uv?.x).toBeLessThanOrEqual(1);
+      expect(uv?.y).toBeGreaterThanOrEqual(0);
+      expect(uv?.y).toBeLessThanOrEqual(1);
+    }
+    expect(outsideVertexIndexes.some((index) => {
+      const uv = generated?.mesh.uvs[index];
+      return uv?.x === 0 || uv?.y === 0;
+    })).toBe(true);
+  });
+
   it("filters v6d outside and crossing triangles before backend success", () => {
     const points = [
       { x: 0, y: 0, role: "boundary", stableOrder: 0 },
@@ -2425,6 +2611,258 @@ describe("alpha-aware mesh generation", () => {
     });
     expect(missingGenerated?.qualityMetrics?.v6Metrics?.contourPipelineDiagnostics).toBeUndefined();
     expect(missingGenerated?.qualityMetrics?.v6Metrics?.outputKind).not.toBe("backend-output");
+  });
+
+  it("resolves shared v6d adaptive density from current tuned baselines and part size", () => {
+    const highReference = resolveV6DAdaptiveDensityForTest({
+      densityHint: "high",
+      selectedComponentPixelCount: 73_936
+    });
+    const reference = resolveV6DAdaptiveDensityForTest({
+      densityHint: "medium",
+      selectedComponentPixelCount: 73_936
+    });
+    const lowReference = resolveV6DAdaptiveDensityForTest({
+      densityHint: "low",
+      selectedComponentPixelCount: 73_936
+    });
+    const alphaBoundsFallback = resolveV6DAdaptiveDensityForTest({
+      densityHint: "medium",
+      alphaBoundsArea: 400 * 288
+    });
+    const smaller = resolveV6DAdaptiveDensityForTest({
+      densityHint: "medium",
+      selectedComponentPixelCount: Math.round(73_936 * 0.25)
+    });
+    const larger = resolveV6DAdaptiveDensityForTest({
+      densityHint: "medium",
+      selectedComponentPixelCount: Math.round(73_936 * 3)
+    });
+    const maxedBoundaryCap = resolveV6DAdaptiveDensityForTest({
+      densityHint: "medium",
+      selectedComponentPixelCount: 73_936 * 4
+    });
+
+    expect(highReference.parameters).toEqual({
+      boundarySpacing: 8,
+      interiorSpacing: 7.5,
+      maxBoundaryVertices: 128,
+      maxInteriorVertices: 64,
+      interiorBoundaryClearance: 1.1
+    });
+    expect(reference.parameters).toEqual({
+      boundarySpacing: 12,
+      interiorSpacing: 10,
+      maxBoundaryVertices: 128,
+      maxInteriorVertices: 32,
+      interiorBoundaryClearance: 1.1
+    });
+    expect(reference.diagnostics).toMatchObject({
+      adaptiveDensityReferenceArea: 73_936,
+      adaptiveDensityEffectiveArea: 73_936,
+      adaptiveDensityAreaRatio: 1,
+      adaptiveDensitySpacingScale: 1,
+      adaptiveDensityVertexScale: 1,
+      adaptiveDensityBoundaryCapScale: 1,
+      resolvedBoundarySpacing: 12,
+      resolvedInteriorSpacing: 10,
+      resolvedMaxBoundaryVertices: 128,
+      resolvedMaxInteriorVertices: 32,
+      resolvedInteriorBoundaryClearance: 1.1
+    });
+    expect(lowReference.parameters).toEqual({
+      boundarySpacing: 30,
+      interiorSpacing: 15,
+      maxBoundaryVertices: 64,
+      maxInteriorVertices: 16,
+      interiorBoundaryClearance: 1.5
+    });
+    expect(alphaBoundsFallback.parameters).toEqual(reference.parameters);
+    expect(alphaBoundsFallback.diagnostics).toMatchObject({
+      adaptiveDensityReferenceArea: 400 * 288,
+      adaptiveDensityEffectiveArea: 400 * 288,
+      adaptiveDensityAreaRatio: 1,
+      adaptiveDensitySpacingScale: 1,
+      adaptiveDensityVertexScale: 1,
+      adaptiveDensityBoundaryCapScale: 1,
+      resolvedBoundarySpacing: 12,
+      resolvedInteriorSpacing: 10,
+      resolvedMaxBoundaryVertices: 128,
+      resolvedMaxInteriorVertices: 32,
+      resolvedInteriorBoundaryClearance: 1.1
+    });
+    expect(smaller.parameters.maxInteriorVertices).toBeLessThan(reference.parameters.maxInteriorVertices);
+    expect(larger.parameters.maxInteriorVertices).toBeGreaterThan(reference.parameters.maxInteriorVertices);
+    expect(larger.parameters.maxBoundaryVertices).toBeGreaterThanOrEqual(reference.parameters.maxBoundaryVertices);
+    expect(larger.parameters.maxInteriorVertices).toBeGreaterThanOrEqual(smaller.parameters.maxInteriorVertices);
+    expect(maxedBoundaryCap.parameters.maxBoundaryVertices).toBe(256);
+    expect(maxedBoundaryCap.diagnostics.adaptiveDensityBoundaryCapScale).toBe(2);
+  });
+
+  it("builds v6d adaptive staggered inner points from edge midpoints and explicit strip topology", () => {
+    const probe = probeV6DAdaptiveStaggeredBandStripGeometryForTest();
+
+    expect(probe.alphaPoints.length).toBeGreaterThan(2);
+    expect(probe.staggeredInnerPoints).toHaveLength(probe.alphaPoints.length);
+    expect(probe.innerGlobalIndexByBoundaryIndex).toHaveLength(probe.alphaPoints.length);
+    expect(probe.explicitAlphaInnerStripTriangles).toHaveLength(probe.alphaPoints.length * 2);
+    for (let index = 0; index < probe.alphaPoints.length; index += 1) {
+      const next = (index + 1) % probe.alphaPoints.length;
+      expect(probe.explicitAlphaInnerStripTriangles[index * 2]).toEqual([
+        probe.alphaStart + index,
+        probe.alphaStart + next,
+        probe.innerGlobalIndexByBoundaryIndex[index]
+      ]);
+      expect(probe.explicitAlphaInnerStripTriangles[index * 2 + 1]).toEqual([
+        probe.alphaStart + next,
+        probe.innerGlobalIndexByBoundaryIndex[next],
+        probe.innerGlobalIndexByBoundaryIndex[index]
+      ]);
+    }
+
+    const alphaPointKeys = new Set(probe.alphaPoints.map((point) => `${point.x}:${point.y}`));
+    const hasMidpointShiftedInnerPoint = probe.staggeredInnerPoints.some((innerPoint, index) => {
+      const start = probe.alphaPoints[index];
+      const end = probe.alphaPoints[(index + 1) % probe.alphaPoints.length];
+      if (start === undefined || end === undefined) {
+        return false;
+      }
+
+      const midpoint = {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2
+      };
+      const midpointDistance = Math.hypot(innerPoint.x - midpoint.x, innerPoint.y - midpoint.y);
+      const startDistance = Math.hypot(innerPoint.x - start.x, innerPoint.y - start.y);
+      const endDistance = Math.hypot(innerPoint.x - end.x, innerPoint.y - end.y);
+      return (
+        midpointDistance > 0 &&
+        midpointDistance < startDistance &&
+        midpointDistance < endDistance &&
+        startDistance > 0 &&
+        endDistance > 0 &&
+        !alphaPointKeys.has(`${innerPoint.x}:${innerPoint.y}`)
+      );
+    });
+
+    expect(hasMidpointShiftedInnerPoint).toBe(true);
+    expect(probe.directAlphaToInteriorEdgeCount).toBe(0);
+  });
+
+  it("routes auto-outline-v6d-adaptive-staggered-band with explicit strip diagnostics", () => {
+    const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
+    const session = createFixtureSession({
+      includeBytes: true,
+      textureSize: fixture.textureSize,
+      meshBounds: fixture.meshBounds,
+      opaquePixels: fixture.opaquePixels
+    });
+    const generated = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-staggered-band",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("outline-v6d-adaptive-staggered-band-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.fallbackSteps).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: fixture.meshBounds
+    });
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const adaptiveDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
+    expect(generated?.qualityMetrics).toMatchObject({
+      triangulationMode: "v6d-adaptive-staggered-band",
+      v6Metrics: {
+        methodId: "auto-outline-v6d-adaptive-staggered-band",
+        backendId: "v6d-adaptive-staggered-band",
+        requestedSourceId: "outline-v6d-adaptive-staggered-band-rgba",
+        actualSourceId: "outline-v6d-adaptive-staggered-band-rgba",
+        outputKind: "backend-output",
+        fallbackSteps: [],
+        supportRingDiagnostics: {
+          alphaBoundaryRingPointCount: expect.any(Number),
+          innerRingPointCount: expect.any(Number),
+          alphaBoundaryBandTriangleCount: expect.any(Number)
+        },
+        adaptiveStaggeredBandDiagnostics: {
+          resolvedBoundarySpacing: expect.any(Number),
+          resolvedInteriorSpacing: expect.any(Number),
+          resolvedMaxInteriorVertices: expect.any(Number),
+          staggeredInnerPointCount: expect.any(Number),
+          skippedStaggeredInnerPointCount: 0,
+          explicitAlphaInnerStripTriangleCount: expect.any(Number),
+          degenerateExplicitStripTriangleCount: 0,
+          directAlphaToInteriorEdgeCount: 0,
+          interiorFillUsesStaggeredInnerBoundary: true
+        }
+      }
+    });
+    expect(v6Metrics?.methodId).not.toContain("v6g");
+    expect(v6Metrics?.requestedSourceId).not.toContain("v6g");
+    expect(adaptiveDiagnostics?.staggeredInnerPointCount).toBe(v6Metrics?.boundaryVertexCount);
+    expect(adaptiveDiagnostics?.explicitAlphaInnerStripTriangleCount).toBe(
+      (adaptiveDiagnostics?.staggeredInnerPointCount ?? 0) * 2
+    );
+    expect(adaptiveDiagnostics?.interiorPointCountBeforeInnerFilter ?? 0).toBeGreaterThanOrEqual(
+      adaptiveDiagnostics?.interiorPointCountAfterInnerFilter ?? 0
+    );
+    expect(v6Metrics?.provenance).toEqual(
+      expect.arrayContaining([
+        "v6d-adaptive-density-resolved",
+        "v6d-adaptive-staggered-band-edge-midpoint-inner-ring",
+        "v6d-adaptive-staggered-band-explicit-alpha-inner-strip",
+        "v6d-adaptive-staggered-band-inner-boundary-interior-fill",
+        "v6d-adaptive-staggered-band-no-alpha-to-ordinary-interior-edges"
+      ])
+    );
+  });
+
+  it("falls back from globally invalid adaptive staggered-strip geometry to Wave70 support-ring v6d before coarse fallback", () => {
+    const fallback = probeV6DAdaptiveStaggeredBandWave70FallbackForTest();
+
+    expect(fallback.status).toBe("fallback");
+    if (fallback.status !== "fallback") {
+      throw new Error("Expected adaptive staggered-band probe to return fallback output.");
+    }
+
+    expect(fallback.source).toBe("outline-v6d-contour-band-support-rings-rgba");
+    expect(fallback.reason).toBe("v6d-adaptive-staggered-band-geometry-invalid");
+    expect(fallback.fallbackSteps[0]).toEqual({
+      method: "auto-outline-v6d-adaptive-staggered-band",
+      reason: "v6d-adaptive-staggered-band-geometry-invalid"
+    });
+    expect(fallback.fallbackSteps).not.toContainEqual({
+      method: "auto-outline-v6d-contour-band-support-rings",
+      reason: "v6d-support-ring-geometry-invalid"
+    });
+    expect(fallback.qualityMetrics.v6Metrics).toMatchObject({
+      methodId: "auto-outline-v6d-adaptive-staggered-band",
+      backendId: "v6d-adaptive-staggered-band",
+      requestedSourceId: "outline-v6d-adaptive-staggered-band-rgba",
+      actualSourceId: "outline-v6d-contour-band-support-rings-rgba",
+      outputKind: "fallback-output",
+      fallbackReason: "v6d-adaptive-staggered-band-geometry-invalid",
+      supportRingDiagnostics: {
+        outerRingPointCount: expect.any(Number),
+        innerRingPointCount: expect.any(Number)
+      },
+      adaptiveStaggeredBandDiagnostics: {
+        fallbackFromAdaptiveStaggeredReason: "v6d-adaptive-staggered-band-geometry-invalid",
+        explicitAlphaInnerStripTriangleCount: 0
+      }
+    });
+    expect(fallback.qualityMetrics.v6Metrics?.provenance).toEqual(
+      expect.arrayContaining([
+        "v6d-adaptive-staggered-band-wave70-support-ring-fallback",
+        "v6d-adaptive-staggered-band-test-probe-wave70-fallback"
+      ])
+    );
   });
 
   it("generates deterministic auto-outline-v6c-poly2tri backend meshes from simple polygon fixtures", () => {
@@ -3905,6 +4343,21 @@ function getOpaquePixelBounds(
   }
 
   return { left, top, right, bottom };
+}
+
+function getContourPointBounds(
+  points: readonly { readonly x: number; readonly y: number }[]
+): { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number } {
+  if (points.length === 0) {
+    throw new Error("Expected non-empty contour points for bounds test.");
+  }
+
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    right: Math.max(...points.map((point) => point.x)),
+    bottom: Math.max(...points.map((point) => point.y))
+  };
 }
 
 function roundTestCoordinate(value: number): number {

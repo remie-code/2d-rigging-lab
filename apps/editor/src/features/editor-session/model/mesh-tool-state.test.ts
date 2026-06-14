@@ -10,11 +10,11 @@ import {
 } from "./mesh-tool-state";
 
 describe("mesh tool state", () => {
-  it("routes normal mesh preview defaults to the improved v6D support-ring method", () => {
+  it("routes normal mesh preview defaults to the adaptive contour-constrainautor method", () => {
     const drawableId = DrawableIdSchema.parse("draw_face");
 
     expect(DEFAULT_MESH_GENERATION_METHOD).toBe(
-      "auto-outline-v6d-contour-band-support-rings"
+      "auto-outline-v6d-adaptive-contour-constrainautor"
     );
     expect(createMeshPreviewProvenanceId(drawableId, "standard")).toBe(
       "prov_mesh_preview_face_standard"

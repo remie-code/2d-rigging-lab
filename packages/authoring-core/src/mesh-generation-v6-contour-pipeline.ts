@@ -10,7 +10,9 @@ export interface V6ContourPipelineInput {
   readonly meshBounds: RectDto;
   readonly rgbaBytes: Uint8Array;
   readonly densityHint?: MeshDensityHint;
+  readonly densityParameters?: V6ContourDensityParameters;
   readonly alphaThreshold?: number;
+  readonly maskExpansionPixels?: number;
 }
 
 export interface V6ContourPoint {
@@ -99,7 +101,7 @@ interface BoundaryEdge {
   readonly end: V6ContourPoint;
 }
 
-interface DensityParameters {
+export interface V6ContourDensityParameters {
   readonly boundarySpacing: number;
   readonly interiorSpacing: number;
   readonly maxBoundaryVertices: number;
@@ -109,6 +111,7 @@ interface DensityParameters {
 
 const DEFAULT_ALPHA_THRESHOLD = 8;
 const SOFT_ALPHA_THRESHOLD = 0.18;
+const MAX_MASK_EXPANSION_PIXELS = 8;
 
 export const createV6ContourCandidateInput = (
   input: V6ContourPipelineInput
@@ -152,7 +155,12 @@ export const createV6ContourCandidateInput = (
     };
   }
 
-  const mainMask = createComponentMask(mainComponent, width, height);
+  const componentMask = createComponentMask(mainComponent, width, height);
+  const maskExpansionPixels = resolveMaskExpansionPixels(input.maskExpansionPixels);
+  const mainMask =
+    maskExpansionPixels <= 0
+      ? componentMask
+      : expandMask(componentMask, width, height, maskExpansionPixels);
   const boundaryLoops = traceBoundaryLoops(mainMask, width, height);
   const outerLoop = selectOuterLoop(boundaryLoops);
   const alphaBounds = {
@@ -176,7 +184,7 @@ export const createV6ContourCandidateInput = (
   }
 
   const density = input.densityHint ?? "medium";
-  const densityParameters = getDensityParameters(density);
+  const densityParameters = input.densityParameters ?? getDensityParameters(density);
   const boundaryPoints = sampleBoundaryLoop(outerLoop, densityParameters);
   const constraintEdges = createConstraintEdges(boundaryPoints);
   if (boundaryPoints.length < 3 || constraintEdges.length < 3) {
@@ -464,6 +472,43 @@ const createComponentMask = (
   return mask;
 };
 
+const resolveMaskExpansionPixels = (value: number | undefined): number =>
+  value === undefined || !Number.isFinite(value)
+    ? 0
+    : clampInt(Math.round(value), 0, MAX_MASK_EXPANSION_PIXELS);
+
+const expandMask = (
+  mask: readonly boolean[],
+  width: number,
+  height: number,
+  expansionPixels: number
+): readonly boolean[] => {
+  let expanded = [...mask];
+
+  for (let iteration = 0; iteration < expansionPixels; iteration += 1) {
+    const next = [...expanded];
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (expanded[y * width + x] === true) {
+          continue;
+        }
+
+        if (
+          getFourNeighbors(x, y, width, height).some(
+            (neighbor) => expanded[neighbor.y * width + neighbor.x] === true
+          )
+        ) {
+          next[y * width + x] = true;
+        }
+      }
+    }
+
+    expanded = next;
+  }
+
+  return expanded;
+};
+
 const traceBoundaryLoops = (
   mainMask: readonly boolean[],
   width: number,
@@ -575,7 +620,7 @@ const selectOuterLoop = (
 
 const sampleBoundaryLoop = (
   loop: readonly V6ContourPoint[],
-  densityParameters: DensityParameters
+  densityParameters: V6ContourDensityParameters
 ): readonly V6ContourPoint[] => {
   const perimeter = polygonPerimeter(loop);
   if (perimeter <= 0) {
@@ -647,7 +692,7 @@ const sampleInteriorSteinerPoints = (input: {
   readonly width: number;
   readonly component: OpaqueComponent;
   readonly boundaryPoints: readonly V6ContourPoint[];
-  readonly densityParameters: DensityParameters;
+  readonly densityParameters: V6ContourDensityParameters;
 }): readonly V6ContourPoint[] => {
   const usedKeys = new Set(input.boundaryPoints.map(pointKey));
   const candidatePoints = createInteriorCandidatePoints(input)
@@ -698,7 +743,7 @@ const createInteriorCandidatePoints = (input: {
   readonly width: number;
   readonly component: OpaqueComponent;
   readonly boundaryPoints: readonly V6ContourPoint[];
-  readonly densityParameters: DensityParameters;
+  readonly densityParameters: V6ContourDensityParameters;
 }): readonly { readonly point: V6ContourPoint; readonly boundaryDistance: number }[] => {
   const points: { readonly point: V6ContourPoint; readonly boundaryDistance: number }[] = [];
   const step = input.densityParameters.interiorSpacing;
@@ -836,7 +881,7 @@ const countHoleLikeRegions = (
   return count;
 };
 
-const getDensityParameters = (densityHint: MeshDensityHint): DensityParameters => {
+const getDensityParameters = (densityHint: MeshDensityHint): V6ContourDensityParameters => {
   switch (densityHint) {
     case "high":
       return {

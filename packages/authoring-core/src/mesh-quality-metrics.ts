@@ -30,6 +30,8 @@ export interface MeshGenerationQualityMetrics {
     | "v6b-delaunator-constrainautor"
     | "v6c-poly2tri-constrained-polygon"
     | "v6d-contour-delaunator-constrainautor"
+    | "v6d-adaptive-contour-constrainautor"
+    | "v6d-adaptive-staggered-band"
     | "v6e-contour-poly2tri-constrained-polygon"
     | "v6f-contour-custom-cdt"
     | "v6-backend-blocked-fallback";
@@ -170,6 +172,8 @@ export interface MeshGenerationV6Metrics {
   readonly contourPipelineDiagnostics?: MeshGenerationV6ContourPipelineDiagnostics;
   readonly constrainautorDiagnostics?: MeshGenerationV6ConstrainautorDiagnostics;
   readonly supportRingDiagnostics?: MeshGenerationV6SupportRingDiagnostics;
+  readonly adaptiveDensityDiagnostics?: MeshGenerationV6AdaptiveDensityDiagnostics;
+  readonly adaptiveStaggeredBandDiagnostics?: MeshGenerationV6AdaptiveStaggeredBandDiagnostics;
   readonly poly2triDiagnostics?: MeshGenerationV6Poly2TriDiagnostics;
   readonly customCdtDiagnostics?: MeshGenerationV6CustomCdtDiagnostics;
 }
@@ -213,6 +217,34 @@ export interface MeshGenerationV6SupportRingDiagnostics {
   readonly outerRingOffset: number;
   readonly innerRingOffset: number;
   readonly outerRingUvPolicy: "projected-to-alpha-boundary";
+}
+
+export interface MeshGenerationV6AdaptiveDensityDiagnostics {
+  readonly adaptiveDensityReferenceArea: number;
+  readonly adaptiveDensityEffectiveArea: number;
+  readonly adaptiveDensityAreaRatio: number;
+  readonly adaptiveDensityClampedAreaRatio: number;
+  readonly adaptiveDensitySpacingScale: number;
+  readonly adaptiveDensityVertexScale: number;
+  readonly adaptiveDensityBoundaryCapScale: number;
+  readonly resolvedBoundarySpacing: number;
+  readonly resolvedInteriorSpacing: number;
+  readonly resolvedMaxBoundaryVertices: number;
+  readonly resolvedMaxInteriorVertices: number;
+  readonly resolvedInteriorBoundaryClearance: number;
+}
+
+export interface MeshGenerationV6AdaptiveStaggeredBandDiagnostics
+  extends MeshGenerationV6AdaptiveDensityDiagnostics {
+  readonly staggeredInnerPointCount: number;
+  readonly skippedStaggeredInnerPointCount: number;
+  readonly explicitAlphaInnerStripTriangleCount: number;
+  readonly degenerateExplicitStripTriangleCount: number;
+  readonly interiorPointCountBeforeInnerFilter: number;
+  readonly interiorPointCountAfterInnerFilter: number;
+  readonly directAlphaToInteriorEdgeCount: number;
+  readonly interiorFillUsesStaggeredInnerBoundary: boolean;
+  readonly fallbackFromAdaptiveStaggeredReason?: MeshGenerationFallbackReason;
 }
 
 export interface MeshGenerationV6Poly2TriDiagnostics {

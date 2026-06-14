@@ -1,10 +1,19 @@
-import { ParameterIdSchema, type ParameterId } from "@private-2d-rigging-lab/contracts";
+import type {
+  AuthoringSession,
+  DrawableGeneratedMeshResult
+} from "@private-2d-rigging-lab/authoring-core";
+import {
+  DrawableIdSchema,
+  ParameterIdSchema,
+  type ParameterId
+} from "@private-2d-rigging-lab/contracts";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   EditorSessionProvider,
+  logMeshGenerationPreviewDebug,
   useEditorSession
 } from "./editor-session-context";
 
@@ -14,6 +23,44 @@ type FakeNode = FakeElement | FakeTextNode;
 const CUSTOM_PARAMETER_ID = ParameterIdSchema.parse("param_custom_history");
 
 describe("EditorSessionProvider history integration", () => {
+  it("includes v6 adaptive contour diagnostics in mesh preview debug logs", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    try {
+      logMeshGenerationPreviewDebug({
+        session: {
+          graph: {
+            drawables: [
+              {
+                drawableId: DrawableIdSchema.parse("draw_body"),
+                displayName: "Body"
+              }
+            ]
+          }
+        } as AuthoringSession,
+        drawableId: DrawableIdSchema.parse("draw_body"),
+        presetId: "standard",
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        densityHint: "medium",
+        generated: createGeneratedMeshResultWithAdaptiveContourDiagnostics()
+      });
+
+      expect(info).toHaveBeenCalledTimes(1);
+      expect(info.mock.calls[0]?.[1]).toMatchObject({
+        constrainautorDiagnostics: {
+          constraintEdgeCount: 24,
+          missingConstraintEdgeCount: 0
+        },
+        adaptiveDensityDiagnostics: {
+          resolvedBoundarySpacing: 12,
+          resolvedMaxBoundaryVertices: 128
+        }
+      });
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   it("records one committed provider action as one Undo entry under StrictMode", async () => {
     const harness = await renderEditorSessionProbe();
 
@@ -158,6 +205,77 @@ function hasCustomParameter(context: EditorSessionContextSnapshot): boolean {
   return context.session.graph.parameters.some(
     (parameter) => parameter.parameterId === CUSTOM_PARAMETER_ID
   );
+}
+
+function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGeneratedMeshResult {
+  return {
+    source: "outline-v6d-adaptive-contour-constrainautor-rgba",
+    mesh: {
+      meshId: "mesh_body",
+      drawableId: "draw_body",
+      vertices: [],
+      uvs: [],
+      triangles: [],
+      vertexStableIds: [],
+      triangleStableIds: [],
+      topologyRevision: 0,
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      generationProvenanceId: "prov_generate_body"
+    },
+    qualityMetrics: {
+      maxEdgeLength: 0,
+      maxTriangleArea: 0,
+      minAngleDegrees: 0,
+      maxVertexValence: 0,
+      refinementIterationCount: 0,
+      triangulationMode: "v6d-adaptive-contour-constrainautor",
+      v6Metrics: {
+        algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+        methodId: "auto-outline-v6d-adaptive-contour-constrainautor",
+        backendId: "v6d-adaptive-contour-constrainautor",
+        backendImplementationStatus: "implemented",
+        requestedSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        actualSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        outputKind: "backend-output",
+        preset: "medium",
+        fallbackSteps: [],
+        vertexCount: 0,
+        triangleCount: 0,
+        boundaryVertexCount: 0,
+        interiorVertexCount: 0,
+        alphaBoundsAvailable: true,
+        contourLoopCount: 1,
+        holeLikeRegionCount: 0,
+        removedTriangleCount: 0,
+        outsideOrCrossingTriangleCount: 0,
+        multiIslandHandling: "supported",
+        holeHandling: "supported",
+        provenance: [],
+        constrainautorDiagnostics: {
+          dependencyGateStatus: "available",
+          constraintEdgeCount: 24,
+          preservedConstraintEdgeCount: 24,
+          missingConstraintEdgeCount: 0,
+          constraintRecoveryFailed: false,
+          outsideTriangleCount: 0
+        },
+        adaptiveDensityDiagnostics: {
+          adaptiveDensityReferenceArea: 73_936,
+          adaptiveDensityEffectiveArea: 73_936,
+          adaptiveDensityAreaRatio: 1,
+          adaptiveDensityClampedAreaRatio: 1,
+          adaptiveDensitySpacingScale: 1,
+          adaptiveDensityVertexScale: 1,
+          adaptiveDensityBoundaryCapScale: 1,
+          resolvedBoundarySpacing: 12,
+          resolvedInteriorSpacing: 10,
+          resolvedMaxBoundaryVertices: 128,
+          resolvedMaxInteriorVertices: 32,
+          resolvedInteriorBoundaryClearance: 1.1
+        }
+      }
+    }
+  } as DrawableGeneratedMeshResult;
 }
 
 function requireActiveParameterId(context: EditorSessionContextSnapshot): ParameterId {

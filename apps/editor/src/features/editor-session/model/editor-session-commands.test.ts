@@ -609,7 +609,7 @@ describe("editor session commands", () => {
     );
   });
 
-  it("defaults Mesh Tool generation commands to improved v6D support-ring output", () => {
+  it("defaults Mesh Tool generation commands to adaptive contour-constrainautor output", () => {
     const session = createFixtureSession([DRAW_A]);
     const fixture = getV6MeshGenerationContractFixture("v6-simple-rectangle");
     attachDrawableMeshTextureBytes(session, {
@@ -627,17 +627,29 @@ describe("editor session commands", () => {
     expect(result.committed).toBe(true);
     expect(result.session.graph.provenanceRecords.at(-1)?.transformHistory).toEqual(
       expect.arrayContaining([
-        "generateMesh:auto-outline-v6d-contour-band-support-rings",
-        "meshSource:outline-v6d-contour-band-support-rings-rgba",
-        "meshQuality:v6ActualSource=outline-v6d-contour-band-support-rings-rgba",
+        "generateMesh:auto-outline-v6d-adaptive-contour-constrainautor",
+        "meshSource:outline-v6d-adaptive-contour-constrainautor-rgba",
+        "meshQuality:v6ActualSource=outline-v6d-adaptive-contour-constrainautor-rgba",
         "meshQuality:v6Output=backend-output",
-        "meshQuality:v6Backend=v6d-contour-band-support-rings"
+        "meshQuality:v6Backend=v6d-adaptive-contour-constrainautor"
       ])
     );
   });
 
-  it("commits preview mesh geometry with improved v6D provenance and keeps legacy preview provenance safe", () => {
+  it("commits preview mesh geometry with adaptive v6D provenance and keeps legacy preview provenance safe", () => {
     const previewCases = [
+      {
+        token: "v6d_adaptive_contour",
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        source: "outline-v6d-adaptive-contour-constrainautor-rgba",
+        backend: "v6d-adaptive-contour-constrainautor"
+      },
+      {
+        token: "v6d_adaptive",
+        method: "auto-outline-v6d-adaptive-staggered-band",
+        source: "outline-v6d-adaptive-staggered-band-rgba",
+        backend: "v6d-adaptive-staggered-band"
+      },
       {
         token: "v6d_support",
         method: "auto-outline-v6d-contour-band-support-rings",

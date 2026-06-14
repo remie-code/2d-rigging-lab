@@ -116,11 +116,25 @@ interface SanitizedConstrainautorFailure {
   readonly constraintEdgeCount: number;
 }
 
-interface PixelBounds {
+export interface PixelBounds {
   readonly left: number;
   readonly top: number;
   readonly right: number;
   readonly bottom: number;
+}
+
+export interface V6DAlphaBoundsFallbackMeshInput {
+  readonly meshId: MeshId;
+  readonly drawableId: DrawableId;
+  readonly bounds: RectDto;
+  readonly provenanceId: ProvenanceId;
+  readonly textureSize: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly rgbaBytes: Uint8Array;
+  readonly alphaBoundsPixels: PixelBounds;
+  readonly densityHint: MeshDensityHint;
 }
 
 const TRIANGLE_AREA_EPSILON = 0.000001;
@@ -301,6 +315,16 @@ export const probeV6DOutsideTriangleFilterForTest = (input: {
   readonly boundaryEdges: readonly (readonly [number, number])[];
   readonly triangles: readonly (readonly [number, number, number])[];
 }): FilteredTriangles => filterTrianglesToMainMask(input);
+
+export const filterV6DConstrainautorTrianglesToMainMask = (input: {
+  readonly points: readonly V6DConstrainautorPoint[];
+  readonly boundaryEdges: readonly (readonly [number, number])[];
+  readonly triangles: readonly (readonly [number, number, number])[];
+}): FilteredTriangles => filterTrianglesToMainMask(input);
+
+export const createV6DAlphaBoundsFallbackMesh = (
+  input: V6DAlphaBoundsFallbackMeshInput
+): { readonly mesh: MeshDto } => createAlphaBoundsFallbackMesh(input);
 
 const createRecoveryInput = (
   candidateInput: V6ContourCandidateInput
@@ -571,19 +595,7 @@ const filterTrianglesToMainMask = (input: {
   };
 };
 
-const createAlphaBoundsFallbackMesh = (input: {
-  readonly meshId: MeshId;
-  readonly drawableId: DrawableId;
-  readonly bounds: RectDto;
-  readonly provenanceId: ProvenanceId;
-  readonly textureSize: {
-    readonly width: number;
-    readonly height: number;
-  };
-  readonly rgbaBytes: Uint8Array;
-  readonly alphaBoundsPixels: PixelBounds;
-  readonly densityHint: MeshDensityHint;
-}): { readonly mesh: MeshDto } => {
+const createAlphaBoundsFallbackMesh = (input: V6DAlphaBoundsFallbackMeshInput): { readonly mesh: MeshDto } => {
   const cells = gridCellsForDensity(input.densityHint);
   const vertices: MeshDto["vertices"] = [];
   const uvs: MeshDto["uvs"] = [];
