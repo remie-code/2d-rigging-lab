@@ -379,6 +379,43 @@ describe("canvas render projection", () => {
     ).toBeCloseTo(0.336);
   });
 
+  it("projects Rotation preview into overlay and evaluated drawable geometry", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createRotationDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      {
+        rotationPreview: {
+          rigControlId: RIG_FACE_ROTATION,
+          pivot: { x: 20, y: 15 },
+          restAngleDegrees: 90,
+          evaluatedAngleDegrees: 90
+        }
+      }
+    );
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(projection.deformerOverlay).toMatchObject({
+      kind: "rotation",
+      rigControlId: RIG_FACE_ROTATION,
+      pivot: { x: 20, y: 15 },
+      restAngleDegrees: 90,
+      evaluatedAngleDegrees: 90
+    });
+    expect(front?.bounds.x).toBeCloseTo(10);
+    expect(front?.bounds.y).toBeCloseTo(0);
+    expect(front?.bounds.width).toBeCloseTo(20);
+    expect(front?.bounds.height).toBeCloseTo(20);
+    expect(front?.evaluatedMesh.vertices[0]?.x).toBeCloseTo(30);
+    expect(front?.evaluatedMesh.vertices[0]?.y).toBeCloseTo(0);
+  });
+
   it("projects evaluated Warp geometry to bounds, overlay, mesh overlay, and drawable hit-test", () => {
     const session = createFixtureSession();
     session.graph.rigControls.push(createWarpDeformerRigControl());

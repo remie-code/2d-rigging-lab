@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  ChangeEvent as ReactChangeEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode
+} from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,9 +12,16 @@ const appBarTestState = vi.hoisted(() => ({
   editorSession: {
     canUndo: false,
     canRedo: false,
+    openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
+    projectIdentityLabel: "Loaded model · rev 7",
+    projectSaveStatusLabel: "Saved",
+    projectStorage: {
+      status: "idle"
+    },
     undo: vi.fn(),
-    redo: vi.fn()
+    redo: vi.fn(),
+    saveProject: vi.fn()
   },
   iconButtons: [] as Array<{
     readonly disabled: boolean;
@@ -67,15 +79,20 @@ vi.mock("../ui/icon-button", () => ({
   }
 }));
 
-import { AppBar } from "./app-bar";
+import { AppBar, createOpenProjectFileChangeHandler } from "./app-bar";
 
 describe("AppBar history controls", () => {
   beforeEach(() => {
     appBarTestState.editorSession.canUndo = false;
     appBarTestState.editorSession.canRedo = false;
+    appBarTestState.editorSession.projectIdentityLabel = "Loaded model · rev 7";
+    appBarTestState.editorSession.projectSaveStatusLabel = "Saved";
+    appBarTestState.editorSession.projectStorage.status = "idle";
+    appBarTestState.editorSession.openProjectFile.mockClear();
     appBarTestState.editorSession.openPsdImport.mockClear();
     appBarTestState.editorSession.undo.mockClear();
     appBarTestState.editorSession.redo.mockClear();
+    appBarTestState.editorSession.saveProject.mockClear();
     appBarTestState.iconButtons.splice(0, appBarTestState.iconButtons.length);
     appBarTestState.setActiveEntry.mockClear();
   });
@@ -106,6 +123,56 @@ describe("AppBar history controls", () => {
 
     expect(appBarTestState.editorSession.undo).toHaveBeenCalledTimes(1);
     expect(appBarTestState.editorSession.redo).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders project identity/save status from session storage state", () => {
+    const markup = renderToStaticMarkup(createElement(AppBar));
+
+    expect(markup).toContain("Loaded model · rev 7");
+    expect(markup).toContain("Saved");
+    expect(markup).not.toContain("Untitled model");
+  });
+
+  it("wires Save Project to the portable project save action", () => {
+    renderToStaticMarkup(createElement(AppBar));
+
+    const saveButton = findIconButton("Save project");
+    expect(saveButton.disabled).toBe(false);
+
+    saveButton.onClick?.({} as ReactMouseEvent<HTMLButtonElement>);
+
+    expect(appBarTestState.editorSession.saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Open Project file input and disables storage buttons while busy", () => {
+    appBarTestState.editorSession.projectStorage.status = "loading";
+
+    const markup = renderToStaticMarkup(createElement(AppBar));
+
+    expect(markup).toContain("Open portable project bundle file");
+    expect(findIconButton("Open project").disabled).toBe(true);
+    expect(findIconButton("Save project").disabled).toBe(true);
+  });
+
+  it("passes the selected portable project File from the hidden input to openProjectFile", () => {
+    const file = new File(["{}"], "loaded.portable-project.json", {
+      type: "application/json"
+    });
+    const input = {
+      files: [file],
+      value: "C:\\fakepath\\loaded.portable-project.json"
+    };
+    const handler = createOpenProjectFileChangeHandler(
+      appBarTestState.editorSession.openProjectFile
+    );
+
+    handler({
+      currentTarget: input
+    } as unknown as ReactChangeEvent<HTMLInputElement>);
+
+    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledTimes(1);
+    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledWith(file);
+    expect(input.value).toBe("");
   });
 });
 

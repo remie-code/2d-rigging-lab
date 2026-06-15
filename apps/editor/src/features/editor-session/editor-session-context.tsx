@@ -5,7 +5,10 @@ import type {
   StructureOrderDrop,
   StructureOrderItem
 } from "@private-2d-rigging-lab/authoring-core";
-import { createGeneratedMeshForDrawable } from "@private-2d-rigging-lab/authoring-core";
+import {
+  createGeneratedMeshForDrawable,
+  createPackageDocumentBaseFromAuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import type {
   DrawableId,
   ParameterId,
@@ -30,6 +33,26 @@ import {
   type ReactNode
 } from "react";
 
+import {
+  exportEditorProjectBundle,
+  importEditorProjectBundle,
+  toEditorProjectStorageError
+} from "../project-storage/model/editor-project-storage";
+import {
+  readPortableProjectFileText,
+  triggerPortableProjectDownload
+} from "../project-storage/model/browser-portable-project-transfer";
+import {
+  createIdleProjectStorageState,
+  createLoadedProjectStorageState,
+  createLoadingProjectStorageState,
+  createProjectIdentityLabel,
+  createProjectSaveStatusLabel,
+  createProjectStorageErrorState,
+  createSavedProjectStorageState,
+  createSavingProjectStorageState,
+  type ProjectStorageState
+} from "../project-storage/model/project-storage-state";
 import { commitPsdImportPlan } from "../psd-import/model/psd-import-commit";
 import type { PsdImportPlan } from "../psd-import/model/psd-import-types";
 import {
@@ -174,6 +197,7 @@ export function logMeshGenerationPreviewDebug(input: {
 interface EditorSessionState {
   readonly session: AuthoringSession;
   readonly history: EditorSessionHistoryState;
+  readonly baseDocument: unknown;
 }
 
 interface EditorSessionContextValue {
@@ -192,11 +216,20 @@ interface EditorSessionContextValue {
   readonly parameterValues: ParameterValueMap;
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
+  readonly projectStorage: ProjectStorageState;
+  readonly projectIdentityLabel: string;
+  readonly projectSaveStatusLabel: string;
   readonly psdImportOpen: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly undo: () => void;
   readonly redo: () => void;
+  readonly saveProject: () => Promise<void>;
+  readonly openProjectFile: (file: File) => Promise<void>;
+  readonly openProjectFromPortableBundle: (
+    bundleText: string,
+    options?: { readonly fileName?: string }
+  ) => Promise<void>;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
   readonly openParameterManager: () => void;
@@ -281,20 +314,36 @@ interface EditorSessionContextValue {
 
 const EditorSessionContext = createContext<EditorSessionContextValue | null>(null);
 
-export function EditorSessionProvider({ children }: { readonly children: ReactNode }) {
+export interface EditorSessionProviderProps {
+  readonly children?: ReactNode;
+  readonly initialSelection?: EditorSelection | null;
+  readonly initialSession?: AuthoringSession;
+}
+
+export function EditorSessionProvider({
+  children,
+  initialSelection = null,
+  initialSession
+}: EditorSessionProviderProps) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const [editorState, setEditorState] = useState<EditorSessionState>(() => ({
-    session: createEmptyAuthoringSession(),
-    history: createEmptyEditorSessionHistory()
-  }));
+  const [editorState, setEditorState] = useState<EditorSessionState>(() => {
+    const session =
+      initialSession === undefined ? createEmptyAuthoringSession() : structuredClone(initialSession);
+
+    return {
+      session,
+      history: createEmptyEditorSessionHistory(),
+      baseDocument: createPackageDocumentBaseFromAuthoringSession(session)
+    };
+  });
   const editorStateRef = useRef(editorState);
   const setEditorSessionState = useCallback((nextState: EditorSessionState) => {
     editorStateRef.current = nextState;
     setEditorState(nextState);
   }, []);
-  const { history, session } = editorState;
-  const [selection, setSelection] = useState<EditorSelection | null>(null);
+  const { baseDocument, history, session } = editorState;
+  const [selection, setSelection] = useState<EditorSelection | null>(() => initialSelection);
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
@@ -307,6 +356,9 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
+  const [projectStorage, setProjectStorage] = useState<ProjectStorageState>(() =>
+    createIdleProjectStorageState()
+  );
   const [psdImportOpen, setPsdImportOpen] = useState(false);
   const resolvedActiveParameterId = useMemo(
     () => resolveActiveParameterId(session, activeParameterId),
@@ -335,6 +387,14 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
   const parameterBar = useMemo(
     () => createParameterBarProjection(session, resolvedActiveParameterId, parameterValues),
     [parameterValues, resolvedActiveParameterId, session]
+  );
+  const projectIdentityLabel = useMemo(
+    () => createProjectIdentityLabel(session),
+    [session]
+  );
+  const projectSaveStatusLabel = useMemo(
+    () => createProjectSaveStatusLabel(session, projectStorage),
+    [projectStorage, session]
   );
 
   useEffect(() => {
@@ -391,6 +451,16 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
     setParameterOperationFeedback(null);
   }, []);
 
+  const resetEditorLocalStateAfterProjectLoad = useCallback(() => {
+    clearTransientCommitState();
+    setSelection(null);
+    setActiveParameterIdState(null);
+    setParameterValues({});
+    setCollapsedPartIds(new Set());
+    setEditorHiddenPartIds(new Set());
+    setPsdImportOpen(false);
+  }, [clearTransientCommitState]);
+
   const runCommandWithHistory = useCallback(
     <Result extends EditorSessionCommandResult,>(
       command: (currentSession: AuthoringSession) => Result,
@@ -414,7 +484,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       if (outcome.result.committed) {
         setEditorSessionState({
           session: outcome.result.session,
-          history: outcome.history
+          history: outcome.history,
+          baseDocument: currentState.baseDocument
         });
       }
 
@@ -432,7 +503,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
 
     setEditorSessionState({
       session: outcome.session,
-      history: outcome.history
+      history: outcome.history,
+      baseDocument: currentState.baseDocument
     });
     clearTransientCommitState();
   }, [clearTransientCommitState, setEditorSessionState]);
@@ -446,10 +518,90 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
 
     setEditorSessionState({
       session: outcome.session,
-      history: outcome.history
+      history: outcome.history,
+      baseDocument: currentState.baseDocument
     });
     clearTransientCommitState();
   }, [clearTransientCommitState, setEditorSessionState]);
+
+  const saveProject = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    setProjectStorage(createSavingProjectStorageState());
+
+    try {
+      const result = await exportEditorProjectBundle({
+        session: currentState.session,
+        baseDocument: currentState.baseDocument
+      });
+      triggerPortableProjectDownload({
+        bundleJson: result.bundleJson,
+        fileName: result.fileName
+      });
+
+      if (editorStateRef.current.session === currentState.session) {
+        const savedSession = structuredClone(currentState.session);
+        savedSession.dirty = false;
+        setEditorSessionState({
+          session: savedSession,
+          history: currentState.history,
+          baseDocument: result.packageDocument
+        });
+      }
+
+      setProjectStorage(createSavedProjectStorageState(result));
+    } catch (error) {
+      setProjectStorage(
+        createProjectStorageErrorState(toEditorProjectStorageError(error, "save"), "save")
+      );
+    }
+  }, [setEditorSessionState]);
+
+  const openProjectFromPortableBundle = useCallback(
+    async (bundleText: string, options: { readonly fileName?: string } = {}) => {
+      setProjectStorage(createLoadingProjectStorageState(options.fileName));
+
+      try {
+        const result = await importEditorProjectBundle({ bundleText });
+        setEditorSessionState({
+          session: result.session,
+          history: createEmptyEditorSessionHistory(),
+          baseDocument: result.packageDocument
+        });
+        resetEditorLocalStateAfterProjectLoad();
+        setProjectStorage(createLoadedProjectStorageState(result, options.fileName));
+      } catch (error) {
+        setProjectStorage(
+          createProjectStorageErrorState(
+            toEditorProjectStorageError(error, "open"),
+            "open",
+            options.fileName
+          )
+        );
+      }
+    },
+    [resetEditorLocalStateAfterProjectLoad, setEditorSessionState]
+  );
+
+  const openProjectFile = useCallback(
+    async (file: File) => {
+      setProjectStorage(createLoadingProjectStorageState(file.name));
+
+      try {
+        await openProjectFromPortableBundle(await readPortableProjectFileText(file), {
+          fileName: file.name
+        });
+      } catch (error) {
+        setProjectStorage(
+          createProjectStorageErrorState(
+            toEditorProjectStorageError(error, "open"),
+            "open",
+            file.name
+          )
+        );
+      }
+    },
+    [openProjectFromPortableBundle]
+  );
 
   const commitPsdImport = useCallback(
     (plan: PsdImportPlan) => {
@@ -462,7 +614,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       });
       setEditorSessionState({
         session: result.session,
-        history: nextHistory
+        history: nextHistory,
+        baseDocument: currentState.baseDocument
       });
       setEditorHiddenPartIds((current) =>
         mergeEditorHiddenPartIds(current, result.editorHiddenPartIds)
@@ -964,7 +1117,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       if (result.committed) {
         setEditorSessionState({
           session: result.session,
-          history: outcome.history
+          history: outcome.history,
+          baseDocument: currentState.baseDocument
         });
         return;
       }
@@ -996,7 +1150,8 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       if (result.committed) {
         setEditorSessionState({
           session: result.session,
-          history: outcome.history
+          history: outcome.history,
+          baseDocument: currentState.baseDocument
         });
         setParameterOperationFeedback(null);
         return result;
@@ -1032,11 +1187,17 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       parameterValues,
       rigOperationFeedback,
       parameterOperationFeedback,
+      projectStorage,
+      projectIdentityLabel,
+      projectSaveStatusLabel,
       psdImportOpen,
       canUndo: canUndoEditorSessionHistory(history),
       canRedo: canRedoEditorSessionHistory(history),
       undo,
       redo,
+      saveProject,
+      openProjectFile,
+      openProjectFromPortableBundle,
       openPsdImport: () => setPsdImportOpen(true),
       closePsdImport: () => setPsdImportOpen(false),
       openParameterManager,
@@ -1126,10 +1287,15 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       inspector,
       meshDraft,
       moveDrawableRigControlBinding,
+      openProjectFile,
+      openProjectFromPortableBundle,
       openParameterManager,
       parameterBar,
       parameterOperationFeedback,
       parameterValues,
+      projectIdentityLabel,
+      projectSaveStatusLabel,
+      projectStorage,
       psdImportOpen,
       previewMeshDraft,
       applyRigDraft,
@@ -1142,6 +1308,7 @@ export function EditorSessionProvider({ children }: { readonly children: ReactNo
       rigDraft,
       selection,
       resolvedActiveParameterId,
+      saveProject,
       selectDrawable,
       selectPart,
       selectRigControl,

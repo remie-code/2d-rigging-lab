@@ -7,6 +7,7 @@ import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
 import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
+import { ProjectStorageScreen } from "./project-storage/project-storage-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
 
@@ -28,14 +29,15 @@ export function AuthoringWorkspaceContent({
   readonly activeEntry: WorkspaceEntryId;
 }) {
   const showParameterManager = activeEntry === "parameters";
+  const showProjectStorage = activeEntry === "storage";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      {showParameterManager ? (
+      {showParameterManager || showProjectStorage ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
-          <ParameterManagerScreen />
+          {showParameterManager ? <ParameterManagerScreen /> : <ProjectStorageScreen />}
         </div>
       ) : (
         <>

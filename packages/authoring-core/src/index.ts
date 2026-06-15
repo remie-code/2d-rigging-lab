@@ -3,6 +3,8 @@ export * from "./authoring-revision.js";
 export * from "./authoring-graph.js";
 export * from "./authoring-session.js";
 export * from "./from-package-document.js";
+export * from "./package-document-from-authoring-session.js";
+export * from "./portable-project-bundle.js";
 export * from "./package-document-assets.js";
 export * from "./package-document-manifest.js";
 export * from "./package-document-model-files.js";

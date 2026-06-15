@@ -54,9 +54,18 @@ import {
   renderCanvasProjection,
   type CanvasOverlayState
 } from "../canvas/canvas-renderer";
-import type { CanvasEvaluationControlPointPreview } from "../canvas/canvas-evaluation";
+import type {
+  CanvasEvaluationControlPointPreview,
+  CanvasEvaluationRotationPreview
+} from "../canvas/canvas-evaluation";
+import { useRotationDeformerInteraction } from "../canvas/use-rotation-deformer-interaction";
 import { useWarpDeformerControlPointInteraction } from "../canvas/use-warp-deformer-control-point-interaction";
 import { WorkspacePanel } from "./panel-frame";
+
+interface CanvasPreviewProjectionPreview {
+  readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
+  readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
+}
 
 type PointerDragState =
   | {
@@ -130,12 +139,13 @@ export function CanvasPreviewPanel() {
     [deformerOverlayVisible, meshOverlayVisible, overlays]
   );
   const createProjection = useCallback(
-    (controlPointPreview: CanvasEvaluationControlPointPreview | null = null) =>
+    (preview: CanvasPreviewProjectionPreview = {}) =>
       createCanvasRenderProjection(session, selection, {
         editorHiddenPartIds,
         meshDraft,
         deformerDraft: rigDraft,
-        controlPointPreview,
+        controlPointPreview: preview.controlPointPreview ?? null,
+        rotationPreview: preview.rotationPreview ?? null,
         parameterValues,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
@@ -143,18 +153,28 @@ export function CanvasPreviewPanel() {
       }),
     [activeTool, editorHiddenPartIds, meshDraft, parameterValues, rigDraft, selection, session]
   );
-  const projection = useMemo(() => createProjection(null), [createProjection]);
+  const projection = useMemo(() => createProjection(), [createProjection]);
   const warpControlPoints = useWarpDeformerControlPointInteraction({
     activeParameterId,
     commitGestureController,
     enabled: activeTool === "rig" && deformerOverlayVisible,
     parameterValues,
     projection,
-    createPreviewProjection: createProjection,
+    createPreviewProjection: (controlPointPreview) => createProjection({ controlPointPreview }),
     session,
     view
   });
-  const renderProjection = warpControlPoints.renderProjection;
+  const rotationDeformer = useRotationDeformerInteraction({
+    activeParameterId,
+    commitGestureController,
+    enabled: activeTool === "rig" && deformerOverlayVisible,
+    parameterValues,
+    projection: warpControlPoints.renderProjection,
+    createPreviewProjection: (rotationPreview) => createProjection({ rotationPreview }),
+    session,
+    view
+  });
+  const renderProjection = rotationDeformer.renderProjection;
   const selectedDrawableCount = renderProjection.selectedDrawableIds.size;
   const selectedDrawableOpacity = useMemo(
     () => renderProjection.drawables.find((drawable) => drawable.selected)?.opacity,
@@ -244,11 +264,13 @@ export function CanvasPreviewPanel() {
       view,
       overlays: renderOverlays,
       cache: bitmapCacheRef.current,
-      warpDeformerInteraction: warpControlPoints.rendererState
+      warpDeformerInteraction: warpControlPoints.rendererState,
+      rotationDeformerInteraction: rotationDeformer.rendererState
     });
   }, [
     renderOverlays,
     renderProjection,
+    rotationDeformer.rendererState,
     view,
     viewport,
     warpControlPoints.rendererState
@@ -355,6 +377,17 @@ export function CanvasPreviewPanel() {
     }
 
     if (
+      rotationDeformer.handlePointerDown({
+        pointerId: event.pointerId,
+        screenPoint: localPoint
+      })
+    ) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (
       warpControlPoints.handlePointerDown({
         pointerId: event.pointerId,
         screenPoint: localPoint
@@ -373,12 +406,20 @@ export function CanvasPreviewPanel() {
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [warpControlPoints]);
+  }, [rotationDeformer, warpControlPoints]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
     const drag = pointerDragRef.current;
     if (drag === undefined) {
+      if (
+        rotationDeformer.handlePointerMove({
+          pointerId: event.pointerId,
+          screenPoint: localPoint
+        })
+      ) {
+        return;
+      }
       warpControlPoints.handlePointerMove({
         pointerId: event.pointerId,
         screenPoint: localPoint
@@ -417,13 +458,17 @@ export function CanvasPreviewPanel() {
         Math.abs(localPoint.x - drag.start.x) > POINTER_CLICK_SLOP ||
         Math.abs(localPoint.y - drag.start.y) > POINTER_CLICK_SLOP
     };
-  }, [warpControlPoints]);
+  }, [rotationDeformer, warpControlPoints]);
 
   const finishPointerDrag = useCallback((
     event: ReactPointerEvent<HTMLCanvasElement>,
     options: { readonly commit: boolean }
   ) => {
     if (
+      rotationDeformer.finishPointerDrag({
+        pointerId: event.pointerId,
+        commit: options.commit
+      }) ||
       warpControlPoints.finishPointerDrag({
         pointerId: event.pointerId,
         commit: options.commit
@@ -456,7 +501,14 @@ export function CanvasPreviewPanel() {
     if (hitDrawableId !== undefined) {
       selectDrawable(hitDrawableId);
     }
-  }, [renderProjection, selectDrawable, view, warpControlPoints]);
+  }, [renderProjection, rotationDeformer, selectDrawable, view, warpControlPoints]);
+
+  const rotationHoveredLocked =
+    rotationDeformer.hoveredHandle === "pivot"
+      ? rotationDeformer.rendererState?.pivotEditable === false
+      : rotationDeformer.hoveredHandle === "angle"
+        ? rotationDeformer.rendererState?.angleEditable === false
+        : false;
 
   const toolbar = (
     <>
@@ -555,13 +607,17 @@ export function CanvasPreviewPanel() {
               "block size-full touch-none outline-none",
               isPanning
                 ? "cursor-grabbing"
-                : warpControlPoints.hoveredControlPointIndex !== undefined && !warpControlPoints.editable
+                : rotationDeformer.hoveredHandle !== undefined && rotationHoveredLocked
                   ? "cursor-not-allowed"
-                  : warpControlPoints.hoveredControlPointIndex !== undefined
+                  : rotationDeformer.hoveredHandle !== undefined
                     ? "cursor-grab"
-                    : spacePressed
-                      ? "cursor-grab"
-                      : "cursor-crosshair"
+                    : warpControlPoints.hoveredControlPointIndex !== undefined && !warpControlPoints.editable
+                      ? "cursor-not-allowed"
+                      : warpControlPoints.hoveredControlPointIndex !== undefined
+                        ? "cursor-grab"
+                        : spacePressed
+                          ? "cursor-grab"
+                          : "cursor-crosshair"
             )}
             data-canvas-has-renderable-artwork={String(renderProjection.hasRenderableArtwork)}
             data-mask-relation-count={renderProjection.maskRelations.length}
@@ -640,6 +696,16 @@ export function CanvasPreviewPanel() {
             data-warp-control-point-hovered-index={warpControlPoints.hoveredControlPointIndex ?? ""}
             data-warp-control-point-preview-active={String(warpControlPoints.previewActive)}
             data-warp-control-point-selected-count={warpControlPoints.selectedControlPointIndices.length}
+            data-rotation-deformer-angle-editable={String(
+              rotationDeformer.rendererState?.angleEditable ?? false
+            )}
+            data-rotation-deformer-angle-lock-reason={rotationDeformer.angleLockReason ?? ""}
+            data-rotation-deformer-angle-mode={rotationDeformer.angleEditMode}
+            data-rotation-deformer-hovered-handle={rotationDeformer.hoveredHandle ?? ""}
+            data-rotation-deformer-pivot-editable={String(
+              rotationDeformer.rendererState?.pivotEditable ?? false
+            )}
+            data-rotation-deformer-preview-active={String(rotationDeformer.previewActive)}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {
@@ -655,6 +721,7 @@ export function CanvasPreviewPanel() {
             }}
             onPointerLeave={() => {
               hoveredRef.current = false;
+              rotationDeformer.clearHover();
               warpControlPoints.clearHover();
             }}
             onPointerMove={onPointerMove}

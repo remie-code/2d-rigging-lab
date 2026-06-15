@@ -106,6 +106,7 @@ export interface CanvasEvaluationOptions {
   } | null;
   readonly rigDraft?: CanvasEvaluationRigDraft | null;
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
+  readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
   readonly parameterValues?: ParameterValueMap;
   readonly selection?: EditorSelection | null;
   readonly overlayToggles?: Readonly<Record<string, boolean>>;
@@ -141,6 +142,13 @@ export interface CanvasEvaluationControlPointPreview {
   readonly rigControlId: RigControlId;
   readonly controlPointOffsets: readonly Vec2Dto[];
   readonly compositionMode?: "replaceEvaluated" | "additiveDelta";
+}
+
+export interface CanvasEvaluationRotationPreview {
+  readonly rigControlId: RigControlId;
+  readonly pivot?: Vec2Dto;
+  readonly restAngleDegrees?: number;
+  readonly evaluatedAngleDegrees?: number;
 }
 
 interface EvaluationRigControlBase {
@@ -201,6 +209,7 @@ export function createCanvasEvaluatedScene(
   const rigControls = createEvaluationRigControls({
     evaluatedKeyforms,
     preview: options.controlPointPreview ?? null,
+    rotationPreview: options.rotationPreview ?? null,
     rigDraft: options.rigDraft ?? null,
     session
   });
@@ -319,6 +328,7 @@ function createEvaluationRigControls(input: {
   readonly session: AuthoringSession;
   readonly evaluatedKeyforms: ReturnType<typeof createEvaluatedParameterKeyformState>;
   readonly preview: CanvasEvaluationControlPointPreview | null;
+  readonly rotationPreview: CanvasEvaluationRotationPreview | null;
   readonly rigDraft: CanvasEvaluationRigDraft | null;
 }): readonly EvaluationRigControl[] {
   const committed = input.session.graph.rigControls
@@ -336,6 +346,7 @@ function createEvaluationRigControls(input: {
         return createEvaluationRotationRigControl({
           evaluatedKeyforms: input.evaluatedKeyforms,
           orderIndex,
+          preview: input.rotationPreview,
           rigControl
         });
       }
@@ -403,8 +414,17 @@ function createEvaluationWarpRigControl(input: {
 function createEvaluationRotationRigControl(input: {
   readonly rigControl: RotationRigControlDto;
   readonly evaluatedKeyforms: ReturnType<typeof createEvaluatedParameterKeyformState>;
+  readonly preview: CanvasEvaluationRotationPreview | null;
   readonly orderIndex: number;
 }): EvaluationRotationRigControl {
+  const preview =
+    input.preview?.rigControlId === input.rigControl.rigControlId ? input.preview : null;
+  const restAngleDegrees = preview?.restAngleDegrees ?? input.rigControl.restAngleDegrees;
+  const evaluatedAngleDegrees =
+    preview?.evaluatedAngleDegrees ??
+    input.evaluatedKeyforms.rigAngleDegreesById.get(input.rigControl.rigControlId) ??
+    restAngleDegrees;
+
   return {
     id: input.rigControl.rigControlId,
     sourceRigControlId: input.rigControl.rigControlId,
@@ -423,11 +443,9 @@ function createEvaluationRotationRigControl(input: {
     ),
     orderIndex: input.orderIndex,
     kind: "rotation",
-    pivot: cloneVec2(input.rigControl.pivot),
-    restAngleDegrees: input.rigControl.restAngleDegrees,
-    angleDegrees:
-      input.evaluatedKeyforms.rigAngleDegreesById.get(input.rigControl.rigControlId) ??
-      input.rigControl.restAngleDegrees,
+    pivot: cloneVec2(preview?.pivot ?? input.rigControl.pivot),
+    restAngleDegrees,
+    angleDegrees: evaluatedAngleDegrees,
     translation: cloneVec2(input.rigControl.restTranslation ?? { x: 0, y: 0 }),
     scale: cloneVec2(input.rigControl.restScale ?? { x: 1, y: 1 })
   };

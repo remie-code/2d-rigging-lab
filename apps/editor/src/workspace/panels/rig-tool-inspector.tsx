@@ -646,7 +646,7 @@ export function CommittedWarpDeformerInspector({
   );
 }
 
-function CommittedRotationDeformerInspector({
+export function CommittedRotationDeformerInspector({
   feedback,
   onCreateParentRotation,
   onCreateParentWarp,
@@ -689,6 +689,9 @@ function CommittedRotationDeformerInspector({
     readModel.displayName,
     readModel.opacityMultiplier,
     readModel.parentRigControlId,
+    readModel.pivot.x,
+    readModel.pivot.y,
+    readModel.restAngleDegrees,
     readModel.rigControlId
   ]);
 
@@ -741,12 +744,7 @@ function CommittedRotationDeformerInspector({
                 )
               },
               {
-                label: "Pivot",
-                value: `${formatInputNumber(readModel.pivot.x)}, ${formatInputNumber(readModel.pivot.y)}`
-              },
-              { label: "Rest angle", value: `${formatInputNumber(readModel.restAngleDegrees)} deg` },
-              {
-                label: "Keyform lock",
+                label: "Angle keyforms",
                 value: readModel.hasKeyforms ? "Rotation keyforms present" : "No keyforms"
               }
             ]}
@@ -756,6 +754,54 @@ function CommittedRotationDeformerInspector({
       <ParameterBindingSection
         bindings={createRigControlParameterBindings(session, readModel.rigControlId)}
       />
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <SectionTitle>Pivot / rest angle</SectionTitle>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <NumberField
+            displayLabel="Pivot X"
+            label="Rotation pivot x"
+            onChange={(x) =>
+              setEditState((current) => ({
+                ...current,
+                pivot: {
+                  ...current.pivot,
+                  x
+                }
+              }))
+            }
+            value={editState.pivot.x}
+          />
+          <NumberField
+            displayLabel="Pivot Y"
+            label="Rotation pivot y"
+            onChange={(y) =>
+              setEditState((current) => ({
+                ...current,
+                pivot: {
+                  ...current.pivot,
+                  y
+                }
+              }))
+            }
+            value={editState.pivot.y}
+          />
+          <NumberField
+            className="col-span-2"
+            displayLabel="Rest angle"
+            label="Rotation rest angle degrees"
+            onChange={(restAngleDegrees) =>
+              setEditState((current) => ({ ...current, restAngleDegrees }))
+            }
+            step={1}
+            value={editState.restAngleDegrees}
+          />
+        </div>
+        <p className="mt-2 text-[11px] leading-4 text-neutral-500">
+          {readModel.hasKeyforms
+            ? "Rest angle is fallback; existing Rotation angle keyforms stay authoritative at keyed parameter values."
+            : "Rest angle is the unkeyed fallback angle used when no Rotation angle keyform applies."}
+        </p>
+      </section>
       <ParentDeformerActions
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
@@ -800,7 +846,12 @@ interface WarpEditState {
 interface RotationEditState {
   readonly displayName: string;
   readonly parentRigControlId: string;
+  readonly pivot: {
+    readonly x: number;
+    readonly y: number;
+  };
   readonly opacityMultiplier: number;
+  readonly restAngleDegrees: number;
 }
 
 function createWarpEditState(readModel: WarpDeformerReadModel): WarpEditState {
@@ -820,7 +871,9 @@ function createRotationEditState(readModel: RotationDeformerReadModel): Rotation
   return {
     displayName: readModel.displayName,
     parentRigControlId: readModel.parentRigControlId ?? "",
-    opacityMultiplier: readModel.opacityMultiplier
+    pivot: structuredClone(readModel.pivot),
+    opacityMultiplier: readModel.opacityMultiplier,
+    restAngleDegrees: readModel.restAngleDegrees
   };
 }
 
@@ -873,7 +926,7 @@ export function createWarpUpdatePayload(
   return hasUpdateFields(payload) ? payload : undefined;
 }
 
-function createRotationUpdatePayload(
+export function createRotationUpdatePayload(
   readModel: RotationDeformerReadModel,
   editState: RotationEditState
 ): UpdateRigControlPayloadDto | undefined {
@@ -882,11 +935,20 @@ function createRotationUpdatePayload(
   };
 
   addStringChange(payload, "displayName", readModel.displayName, editState.displayName.trim());
+  if (!samePoint(readModel.pivot, editState.pivot)) {
+    payload.pivot = structuredClone(editState.pivot);
+  }
   addNumberChange(
     payload,
     "opacityMultiplier",
     readModel.opacityMultiplier,
     clampNumber(editState.opacityMultiplier, 0, 1)
+  );
+  addNumberChange(
+    payload,
+    "restAngleDegrees",
+    readModel.restAngleDegrees,
+    editState.restAngleDegrees
   );
 
   return hasUpdateFields(payload) ? payload : undefined;
@@ -910,7 +972,8 @@ function addNumberChange(
     | "transformRows"
     | "bezierColumns"
     | "bezierRows"
-    | "opacityMultiplier",
+    | "opacityMultiplier"
+    | "restAngleDegrees",
   before: number,
   after: number
 ): void {
@@ -930,6 +993,13 @@ function sameRect(left: RectDto, right: RectDto): boolean {
     left.width === right.width &&
     left.height === right.height
   );
+}
+
+function samePoint(
+  left: { readonly x: number; readonly y: number },
+  right: { readonly x: number; readonly y: number }
+): boolean {
+  return left.x === right.x && left.y === right.y;
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -1049,6 +1119,7 @@ function LabeledInput({
 }
 
 function NumberField({
+  className,
   disabled = false,
   displayLabel,
   label,
@@ -1058,6 +1129,7 @@ function NumberField({
   step,
   value
 }: {
+  readonly className?: string;
   readonly disabled?: boolean;
   readonly displayLabel?: string;
   readonly label: string;
@@ -1068,7 +1140,7 @@ function NumberField({
   readonly value: number;
 }) {
   return (
-    <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-500">
+    <label className={cn("flex min-w-0 flex-col gap-1 text-xs text-neutral-500", className)}>
       {displayLabel ?? label}
       <input
         aria-label={label}

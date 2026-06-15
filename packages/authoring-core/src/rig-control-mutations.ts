@@ -124,6 +124,8 @@ export interface InsertRigControlBetweenParentAndChildMutationResult {
 export interface UpdateRigControlInput {
   readonly rigControlId: RigControlId;
   readonly displayName?: string;
+  readonly pivot?: Vec2Dto;
+  readonly restAngleDegrees?: number;
   readonly domainBounds?: RectDto;
   readonly transformColumns?: number;
   readonly transformRows?: number;
@@ -572,6 +574,8 @@ export const updateRigControl = (
     input.transformRows !== undefined ||
     input.bezierColumns !== undefined ||
     input.bezierRows !== undefined;
+  const rotationFieldsWereProvided =
+    input.pivot !== undefined || input.restAngleDegrees !== undefined;
   if (warpFieldsWereProvided) {
     if (rigControl.kind !== "warpLattice2d") {
       throw new AuthoringMutationError(
@@ -579,6 +583,16 @@ export const updateRigControl = (
         `Only warpLattice2d rig controls can update domain bounds or division fields: ${input.rigControlId}`
       );
     }
+  }
+  if (rotationFieldsWereProvided) {
+    if (rigControl.kind !== "rotation2d") {
+      throw new AuthoringMutationError(
+        "unsupported_rig_control_update_field",
+        `Only rotation2d rig controls can update pivot or rest angle fields: ${input.rigControlId}`
+      );
+    }
+    assertRotation2dPivot(input.pivot);
+    assertRotation2dRestAngle(input.restAngleDegrees);
   }
 
   const warpFieldUpdate =
@@ -591,6 +605,17 @@ export const updateRigControl = (
   }
   if (input.opacityMultiplier !== undefined) {
     previewRigControlAfter.opacityMultiplier = input.opacityMultiplier;
+  }
+  if (rotationFieldsWereProvided) {
+    if (previewRigControlAfter.kind !== "rotation2d") {
+      throw new Error("Expected rotation2d preview after update precondition.");
+    }
+    if (input.pivot !== undefined) {
+      previewRigControlAfter.pivot = structuredClone(input.pivot);
+    }
+    if (input.restAngleDegrees !== undefined) {
+      previewRigControlAfter.restAngleDegrees = input.restAngleDegrees;
+    }
   }
   if (warpFieldUpdate !== undefined) {
     if (previewRigControlAfter.kind !== "warpLattice2d") {
@@ -769,6 +794,32 @@ const assertRigControlOpacityMultiplier = (opacityMultiplier: number | undefined
     throw new AuthoringMutationError(
       "invalid_rig_control_opacity_multiplier",
       `Rig control opacityMultiplier must be between 0 and 1: ${opacityMultiplier}`
+    );
+  }
+};
+
+const assertRotation2dPivot = (pivot: Vec2Dto | undefined): void => {
+  if (pivot === undefined) {
+    return;
+  }
+
+  if (!Number.isFinite(pivot.x) || !Number.isFinite(pivot.y)) {
+    throw new AuthoringMutationError(
+      "invalid_rotation_pivot",
+      `rotation2d pivot must contain finite x/y values: ${JSON.stringify(pivot)}`
+    );
+  }
+};
+
+const assertRotation2dRestAngle = (restAngleDegrees: number | undefined): void => {
+  if (restAngleDegrees === undefined) {
+    return;
+  }
+
+  if (!Number.isFinite(restAngleDegrees)) {
+    throw new AuthoringMutationError(
+      "invalid_rotation_rest_angle",
+      `rotation2d restAngleDegrees must be finite: ${restAngleDegrees}`
     );
   }
 };

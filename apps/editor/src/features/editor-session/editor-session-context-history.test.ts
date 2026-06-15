@@ -1,10 +1,24 @@
 import type {
   AuthoringSession,
-  DrawableGeneratedMeshResult
+  DrawableGeneratedMeshResult,
+  RegisterAuthoringSessionBinaryBytesInput
+} from "@private-2d-rigging-lab/authoring-core";
+import {
+  createInitialAuthoringRevision,
+  exportAuthoringSessionPortableBundle,
+  registerAuthoringSessionBinaryBytes
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
+  MeshIdSchema,
+  PackageIdSchema,
   ParameterIdSchema,
+  PartIdSchema,
+  ProvenanceIdSchema,
+  RigControlIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema,
   type ParameterId
 } from "@private-2d-rigging-lab/contracts";
 import { act, createElement, StrictMode } from "react";
@@ -19,8 +33,15 @@ import {
 
 type EditorSessionContextSnapshot = ReturnType<typeof useEditorSession>;
 type FakeNode = FakeElement | FakeTextNode;
+type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
 const CUSTOM_PARAMETER_ID = ParameterIdSchema.parse("param_custom_history");
+const ROTATION_PARAMETER_ID = ParameterIdSchema.parse("param_rotation_selection_x");
+const ROTATION_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rotation_selection");
+const ROTATION_PART_ID = PartIdSchema.parse("part_rotation_selection");
+const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
+const TEXTURE_BYTES_SHA256_HEX =
+  "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
 describe("EditorSessionProvider history integration", () => {
   it("includes v6 adaptive contour diagnostics in mesh preview debug logs", () => {
@@ -134,6 +155,288 @@ describe("EditorSessionProvider history integration", () => {
       await harness.cleanup();
     }
   });
+
+  it("preserves selected Rotation Deformer through context edits, undo, and redo", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createRotationSelectionSession()
+    });
+
+    try {
+      await act(async () => {
+        harness.context().selectRigControl(ROTATION_RIG_CONTROL_ID);
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+
+      await act(async () => {
+        harness.context().updateRigControl({
+          rigControlId: ROTATION_RIG_CONTROL_ID,
+          pivot: { x: 24, y: 32 },
+          restAngleDegrees: 12
+        });
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionRigControl(harness.context().session)).toMatchObject({
+        pivot: { x: 24, y: 32 },
+        restAngleDegrees: 12
+      });
+
+      await act(async () => {
+        harness.context().undo();
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionRigControl(harness.context().session)).toMatchObject({
+        pivot: { x: 16, y: 16 },
+        restAngleDegrees: 0
+      });
+
+      await act(async () => {
+        harness.context().redo();
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionRigControl(harness.context().session)).toMatchObject({
+        pivot: { x: 24, y: 32 },
+        restAngleDegrees: 12
+      });
+
+      await act(async () => {
+        harness.context().editKeyformKey({
+          action: "updateCurrent",
+          target: { kind: "rigControl", id: ROTATION_RIG_CONTROL_ID },
+          targetProperty: "angleDegrees",
+          parameterId: ROTATION_PARAMETER_ID,
+          keyValue: 0,
+          interpolation: "linear-1d-v1",
+          statePatch: {
+            propertyPath: "angleDegrees",
+            value: -25
+          }
+        });
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionAngleKey(harness.context().session)).toBe(-25);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionAngleKey(harness.context().session)).toBe(5);
+
+      await act(async () => {
+        harness.context().redo();
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+      expect(readRotationSelectionAngleKey(harness.context().session)).toBe(-25);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks the current project saved after portable bundle save", async () => {
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      await act(async () => {
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.dirty).toBe(true);
+      expect(harness.context().projectSaveStatusLabel).toBe("Unsaved changes");
+
+      await act(async () => {
+        await harness.context().saveProject();
+      });
+
+      expect(harness.context().session.dirty).toBe(false);
+      expect(harness.context().projectStorage.status).toBe("saved");
+      expect(harness.context().projectSaveStatusLabel).toBe("Saved");
+      expect(harness.context().projectStorage.binaryPayloadCount).toBe(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("loads a portable bundle by replacing session and clearing transient editor state", async () => {
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      const activeParameterId = requireActiveParameterId(harness.context());
+
+      await act(async () => {
+        harness.context().selectPart(PartIdSchema.parse("part_root"));
+        harness.context().togglePartCollapse(PartIdSchema.parse("part_root"));
+        harness.context().togglePartEditorVisibility(PartIdSchema.parse("part_root"));
+        harness.context().openPsdImport();
+        harness.context().setActiveParameterValue(1);
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().selection).toEqual({
+        kind: "part",
+        id: PartIdSchema.parse("part_root")
+      });
+      expect(harness.context().psdImportOpen).toBe(true);
+      expect(harness.context().parameterValues[activeParameterId]).toBe(1);
+      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
+      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
+      expect(harness.context().canUndo).toBe(true);
+
+      const loadedBundle = await exportAuthoringSessionPortableBundle({
+        session: createLoadedProjectSession(),
+        updatedAt: "2026-06-15T02:00:00.000Z"
+      });
+
+      await act(async () => {
+        await harness.context().openProjectFromPortableBundle(loadedBundle.bundleJson, {
+          fileName: "loaded-project.portable-project.json"
+        });
+      });
+
+      expect(harness.context().session.packageIdentity.packageDisplayName).toBe(
+        "Loaded Project"
+      );
+      expect(harness.context().session.graph.parameters.map((parameter) => parameter.parameterId))
+        .toEqual([ParameterIdSchema.parse("param_loaded_wave72")]);
+      expect(harness.context().selection).toBeNull();
+      expect(harness.context().psdImportOpen).toBe(false);
+      expect(harness.context().parameterValues).toEqual({});
+      expect(harness.context().collapsedPartIds.size).toBe(0);
+      expect(harness.context().editorHiddenPartIds.size).toBe(0);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(false);
+      expect(harness.context().projectStorage.status).toBe("loaded");
+      expect(harness.context().projectStorage.fileName).toBe(
+        "loaded-project.portable-project.json"
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves the current session and reports invalid bundle import errors", async () => {
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      const initialSession = harness.context().session;
+
+      await act(async () => {
+        await harness.context().openProjectFromPortableBundle("{", {
+          fileName: "invalid.portable-project.json"
+        });
+      });
+
+      expect(harness.context().session).toBe(initialSession);
+      expect(harness.context().projectStorage).toMatchObject({
+        status: "error",
+        lastAction: "open",
+        fileName: "invalid.portable-project.json",
+        errorCode: "invalidBundle"
+      });
+      expect(harness.context().projectStorage.issues).toEqual([
+        expect.objectContaining({ code: "portableBundle.json.invalid" })
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves the current session and reports missing payload import errors", async () => {
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      const initialSession = harness.context().session;
+      const exported = await exportAuthoringSessionPortableBundle({
+        session: createTextureBundleSession()
+      });
+      const bundle = JSON.parse(exported.bundleJson) as { binaryPayloads: unknown[] };
+      bundle.binaryPayloads = [];
+
+      await act(async () => {
+        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
+          fileName: "missing-payload.portable-project.json"
+        });
+      });
+
+      expect(harness.context().session).toBe(initialSession);
+      expect(harness.context().projectStorage).toMatchObject({
+        status: "error",
+        lastAction: "open",
+        fileName: "missing-payload.portable-project.json",
+        errorCode: "missingBytes"
+      });
+      expect(harness.context().projectStorage.issues).toEqual([
+        expect.objectContaining({
+          code: "portableBundle.binaryPayload.missing",
+          targetPath: "/binaryPayloads"
+        })
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves the current session and reports digest mismatch import errors", async () => {
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      const initialSession = harness.context().session;
+      const exported = await exportAuthoringSessionPortableBundle({
+        session: createTextureBundleSession()
+      });
+      const bundle = JSON.parse(exported.bundleJson) as {
+        binaryPayloads: Array<{ payloadBase64: string }>;
+      };
+      const firstPayload = bundle.binaryPayloads[0];
+      if (firstPayload === undefined) {
+        throw new Error("Expected provider test bundle payload.");
+      }
+      firstPayload.payloadBase64 = "YWJk";
+
+      await act(async () => {
+        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
+          fileName: "digest-mismatch.portable-project.json"
+        });
+      });
+
+      expect(harness.context().session).toBe(initialSession);
+      expect(harness.context().projectStorage).toMatchObject({
+        status: "error",
+        lastAction: "open",
+        fileName: "digest-mismatch.portable-project.json",
+        errorCode: "digestMismatch"
+      });
+      expect(harness.context().projectStorage.issues).toEqual([
+        expect.objectContaining({
+          code: "portableBundle.digest.mismatch",
+          targetPath: "/binaryPayloads/0"
+        })
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
 
 function Probe({
@@ -145,7 +448,9 @@ function Probe({
   return null;
 }
 
-async function renderEditorSessionProbe(): Promise<{
+async function renderEditorSessionProbe(options: {
+  readonly initialSession?: AuthoringSession;
+} = {}): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly context: () => EditorSessionContextSnapshot;
 }> {
@@ -161,7 +466,9 @@ async function renderEditorSessionProbe(): Promise<{
         null,
         createElement(
           EditorSessionProvider,
-          null,
+          options.initialSession === undefined
+            ? null
+            : { initialSession: options.initialSession },
           createElement(Probe, {
             onRender: (nextContext) => {
               context = nextContext;
@@ -205,6 +512,321 @@ function hasCustomParameter(context: EditorSessionContextSnapshot): boolean {
   return context.session.graph.parameters.some(
     (parameter) => parameter.parameterId === CUSTOM_PARAMETER_ID
   );
+}
+
+function createRotationSelectionSession(): AuthoringSession {
+  return {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_rotation_selection_provider"),
+      packageDisplayName: "Rotation Selection Provider",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 0,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: false,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 128, height: 128 },
+      parts: [
+        {
+          partId: ROTATION_PART_ID,
+          displayName: "Rotation Part",
+          childPartIds: [],
+          drawableIds: []
+        }
+      ],
+      drawables: [],
+      meshes: [],
+      parameters: [
+        {
+          parameterId: ROTATION_PARAMETER_ID,
+          displayName: "Rotation Selection X",
+          valueSource: "authoredInput",
+          min: -30,
+          default: 0,
+          max: 30,
+          recommendedUiStep: 1
+        }
+      ],
+      keyformSets: [
+        {
+          keyformSetId: KeyformSetIdSchema.parse(
+            "keyset_rigcontrol_rig_rotation_selection_angledegrees_rotation_selection_x"
+          ),
+          target: {
+            kind: "rigControl",
+            id: ROTATION_RIG_CONTROL_ID,
+            property: "angleDegrees"
+          },
+          parameterId: ROTATION_PARAMETER_ID,
+          evaluator: "linear-1d-v1",
+          interpolation: "linear-1d-v1",
+          compositionMode: "replace",
+          compositionOrder: 0,
+          keys: [
+            {
+              value: 0,
+              statePatch: 5
+            }
+          ]
+        }
+      ],
+      rigControls: [
+        {
+          kind: "rotation2d",
+          rigControlId: ROTATION_RIG_CONTROL_ID,
+          displayName: "Rotation Selection",
+          partId: ROTATION_PART_ID,
+          childDrawableIds: [],
+          childRigControlIds: [],
+          opacityMultiplier: 1,
+          pivot: { x: 16, y: 16 },
+          restAngleDegrees: 0,
+          restTranslation: { x: 0, y: 0 },
+          restScale: { x: 1, y: 1 },
+          enabled: true
+        }
+      ],
+      dynamicsGroups: [],
+      masks: [],
+      drawOrder: [],
+      rigControlRootIds: [ROTATION_RIG_CONTROL_ID],
+      stableOrder: [ROTATION_PART_ID, ROTATION_PARAMETER_ID, ROTATION_RIG_CONTROL_ID],
+      sourceAssets: [],
+      provenanceRecords: [],
+      rightsRecords: []
+    }
+  };
+}
+
+function readRotationSelectionRigControl(session: AuthoringSession) {
+  const rigControl = session.graph.rigControls.find(
+    (candidate) => candidate.rigControlId === ROTATION_RIG_CONTROL_ID
+  );
+  if (rigControl?.kind !== "rotation2d") {
+    throw new Error("Expected Rotation selection rig control.");
+  }
+
+  return rigControl;
+}
+
+function readRotationSelectionAngleKey(session: AuthoringSession): number {
+  const key = session.graph.keyformSets
+    .find(
+      (candidate) =>
+        candidate.target.kind === "rigControl" &&
+        candidate.target.id === ROTATION_RIG_CONTROL_ID &&
+        candidate.target.property === "angleDegrees"
+    )
+    ?.keys.find(
+      (candidate) =>
+        "value" in candidate &&
+        candidate.value === 0 &&
+        typeof candidate.statePatch === "number"
+    );
+  if (key === undefined || typeof key.statePatch !== "number") {
+    throw new Error("Expected Rotation selection angle key.");
+  }
+
+  return key.statePatch;
+}
+
+function createLoadedProjectSession(): AuthoringSession {
+  return {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_loaded_project"),
+      packageDisplayName: "Loaded Project",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 2,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: false,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 512, height: 512 },
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Loaded Root",
+          childPartIds: [],
+          drawableIds: []
+        }
+      ],
+      drawables: [],
+      meshes: [],
+      parameters: [
+        {
+          parameterId: ParameterIdSchema.parse("param_loaded_wave72"),
+          displayName: "Loaded Wave72",
+          valueSource: "authoredInput",
+          min: -1,
+          default: 0,
+          max: 1,
+          recommendedUiStep: 0.01
+        }
+      ],
+      keyformSets: [],
+      rigControls: [],
+      dynamicsGroups: [],
+      masks: [],
+      drawOrder: [],
+      rigControlRootIds: [],
+      stableOrder: ["part_root", "param_loaded_wave72"],
+      sourceAssets: [],
+      provenanceRecords: [],
+      rightsRecords: []
+    }
+  };
+}
+
+function createTextureBundleSession(): AuthoringSession {
+  const binaryAssetRef = createBinaryAssetReference();
+  const session: AuthoringSession = {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_provider_error_fixture"),
+      packageDisplayName: "Provider Error Fixture",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 1,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: false,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 64, height: 64 },
+      parts: [
+        {
+          partId: PartIdSchema.parse("part_root"),
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: [DrawableIdSchema.parse("draw_provider_fixture")]
+        }
+      ],
+      drawables: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          displayName: "Provider Fixture",
+          partId: PartIdSchema.parse("part_root"),
+          sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),
+          textureId: TextureIdSchema.parse("tex_provider_fixture"),
+          meshId: MeshIdSchema.parse("mesh_provider_fixture"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_provider_fixture")
+        }
+      ],
+      meshes: [
+        {
+          meshId: MeshIdSchema.parse("mesh_provider_fixture"),
+          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 8, y: 0 },
+            { x: 0, y: 8 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 0, y: 1 }
+          ],
+          triangles: [[0, 1, 2]],
+          vertexStableIds: [],
+          triangleStableIds: [],
+          topologyRevision: 1,
+          bounds: { x: 0, y: 0, width: 8, height: 8 },
+          generationProvenanceId: ProvenanceIdSchema.parse("prov_provider_fixture")
+        }
+      ],
+      parameters: [],
+      keyformSets: [],
+      rigControls: [],
+      dynamicsGroups: [],
+      masks: [],
+      drawOrder: [
+        {
+          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          baseDrawOrder: 0,
+          stableOrder: 0
+        }
+      ],
+      rigControlRootIds: [],
+      stableOrder: ["part_root", "draw_provider_fixture", "mesh_provider_fixture"],
+      sourceAssets: [
+        {
+          sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),
+          kind: "generated-fixture-v1",
+          filePath: "assets/sources/provider-fixture.json",
+          contentHash: "sha256:provider-fixture",
+          importProfile: "split-png-fallback-v1",
+          layers: [],
+          diagnostics: []
+        }
+      ],
+      textureAtlas: {
+        schemaVersion: "texture-atlas-v1",
+        textures: [
+          {
+            textureId: TextureIdSchema.parse("tex_provider_fixture"),
+            filePath: "assets/textures/provider-fixture.png",
+            sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),
+            sourceLayerId: "layer_provider_fixture",
+            provenanceId: ProvenanceIdSchema.parse("prov_provider_fixture"),
+            binaryAssetRef
+          }
+        ]
+      },
+      provenanceRecords: [
+        {
+          provenanceId: ProvenanceIdSchema.parse("prov_provider_fixture"),
+          assetId: "tex_provider_fixture",
+          assetKind: "texture",
+          filePath: "assets/textures/provider-fixture.png",
+          contentHash: `sha256:${TEXTURE_BYTES_SHA256_HEX}`,
+          creator: "test fixture",
+          license: "private-local",
+          redistributionAllowed: false,
+          aiUsed: false,
+          transformHistory: [],
+          relatedOperationIds: []
+        }
+      ],
+      rightsRecords: [
+        {
+          assetId: "rights_provider_fixture",
+          rightsStatus: "cleared",
+          license: "private-local",
+          redistributionAllowed: false
+        }
+      ]
+    }
+  };
+
+  registerAuthoringSessionBinaryBytes(session, {
+    binaryAssetRef,
+    bytes: TEXTURE_BYTES,
+    role: "texture-raster-v1",
+    sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),
+    textureId: TextureIdSchema.parse("tex_provider_fixture")
+  });
+
+  return session;
+}
+
+function createBinaryAssetReference(): BinaryAssetReference {
+  return {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: "bin_provider_fixture_texture",
+    packageRelativePath: "assets/textures/provider-fixture.png",
+    digest: {
+      algorithm: "sha256",
+      hex: TEXTURE_BYTES_SHA256_HEX
+    },
+    byteLength: TEXTURE_BYTES.byteLength,
+    mediaType: "image/png; pixelFormat=rgba8",
+    storageStatus: "stored-package-local-v1",
+    provenanceId: ProvenanceIdSchema.parse("prov_provider_fixture"),
+    rightsAssetId: "rights_provider_fixture"
+  } as BinaryAssetReference;
 }
 
 function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGeneratedMeshResult {

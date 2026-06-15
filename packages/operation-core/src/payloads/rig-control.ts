@@ -92,6 +92,8 @@ export const UpdateRigControlPayloadSchema = z
   .object({
     rigControlId: RigControlIdSchema,
     displayName: z.string().min(1).optional(),
+    pivot: Vec2Schema.optional(),
+    restAngleDegrees: z.number().finite().optional(),
     domainBounds: RectSchema.optional(),
     transformColumns: z.number().int().min(2).optional(),
     transformRows: z.number().int().min(2).optional(),
@@ -102,6 +104,8 @@ export const UpdateRigControlPayloadSchema = z
   .refine(
     (payload) =>
       payload.displayName !== undefined ||
+      payload.pivot !== undefined ||
+      payload.restAngleDegrees !== undefined ||
       payload.domainBounds !== undefined ||
       payload.transformColumns !== undefined ||
       payload.transformRows !== undefined ||

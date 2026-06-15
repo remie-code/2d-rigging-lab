@@ -12,6 +12,7 @@ import {
   type CanvasEvaluatedMesh,
   type CanvasEvaluatedRigControl,
   type CanvasEvaluationControlPointPreview,
+  type CanvasEvaluationRotationPreview,
   type CanvasEvaluationRigDraft
 } from "./canvas-evaluation";
 
@@ -125,6 +126,7 @@ export interface CanvasProjectionOptions {
   } | null;
   readonly meshPreviewDrawableId?: DrawableId;
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
+  readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
   readonly parameterValues?: ParameterValueMap;
 }
 
@@ -164,6 +166,7 @@ export function createCanvasRenderProjection(
     meshDraft: options.meshDraft ?? null,
     rigDraft: createEvaluationRigDraftFromProjectionDraft(options.deformerDraft ?? null),
     controlPointPreview: options.controlPointPreview ?? null,
+    rotationPreview: options.rotationPreview ?? null,
     parameterValues: options.parameterValues ?? {},
     selection,
     ...(options.editorHiddenPartIds === undefined

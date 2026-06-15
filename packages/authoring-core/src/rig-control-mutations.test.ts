@@ -326,6 +326,108 @@ describe("rig control authoring mutations", () => {
     expect((caught as AuthoringMutationError).code).toBe("rig_control_keyform_cardinality_conflict");
   });
 
+  it("updates rotation pivot and rest angle while preserving hierarchy and keyforms", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_face_rotation", "Face Rotation", {
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_face_rotation" }
+    });
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_face_rotation_angle"),
+      target: {
+        kind: "rigControl",
+        id: "rig_face_rotation",
+        property: "angleDegrees"
+      },
+      parameterId: ParameterIdSchema.parse("param_face_angle_x"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        {
+          value: 0,
+          statePatch: 0
+        }
+      ]
+    });
+
+    const result = updateRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_face_rotation"),
+      pivot: { x: 24, y: 36 },
+      restAngleDegrees: 15
+    });
+
+    expect(result.rigControlAfter).toMatchObject({
+      kind: "rotation2d",
+      parentId: "rig_parent",
+      childDrawableIds: ["draw_body"],
+      childRigControlIds: [],
+      pivot: { x: 24, y: 36 },
+      restAngleDegrees: 15
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+    expect(session.graph.keyformSets).toHaveLength(1);
+    expect(session.graph.keyformSets[0]?.keys).toEqual([{ value: 0, statePatch: 0 }]);
+  });
+
+  it("rejects invalid and wrong-kind rotation field updates without mutating", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_face_rotation", "Face Rotation"));
+    createWarpLattice2dRigControl(session, createWarpLatticeRigControl("rig_face_warp", "Face Warp"));
+
+    for (const [patch, expectedCode] of [
+      [
+        {
+          pivot: { x: Number.NaN, y: 0 }
+        },
+        "invalid_rotation_pivot"
+      ],
+      [
+        {
+          restAngleDegrees: Number.POSITIVE_INFINITY
+        },
+        "invalid_rotation_rest_angle"
+      ],
+      [
+        {
+          rigControlId: RigControlIdSchema.parse("rig_face_warp"),
+          pivot: { x: 1, y: 2 }
+        },
+        "unsupported_rig_control_update_field"
+      ],
+      [
+        {
+          pivot: { x: 64, y: 64 },
+          restAngleDegrees: 0
+        },
+        "no_op_rig_control_update"
+      ]
+    ] as const) {
+      const before = structuredClone(session.graph.rigControls);
+      let caught: unknown;
+      try {
+        updateRigControl(session, {
+          rigControlId: RigControlIdSchema.parse("rig_face_rotation"),
+          ...patch
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(AuthoringMutationError);
+      expect((caught as AuthoringMutationError).code).toBe(expectedCode);
+      expect(session.graph.rigControls).toEqual(before);
+    }
+  });
+
   it("rejects a rig control binding that would introduce a cycle", () => {
     const session = createFixtureSession();
     createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));

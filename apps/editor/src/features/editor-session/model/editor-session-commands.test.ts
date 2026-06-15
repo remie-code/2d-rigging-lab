@@ -33,6 +33,12 @@ import {
   commitReparentRigControl,
   commitUpdateRigControl
 } from "./editor-session-commands";
+import {
+  commitEditorSessionCommandWithHistory,
+  createEmptyEditorSessionHistory,
+  redoEditorSessionHistory,
+  undoEditorSessionHistory
+} from "./editor-session-history";
 import { createStructureTreeRows, type StructureTreeRow } from "./session-tree";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
@@ -318,6 +324,33 @@ describe("editor session commands", () => {
       kind: "rotation2d",
       childDrawableIds: [DRAW_A]
     });
+    const rotationUpdated = commitUpdateRigControl(rotation.session, {
+      rigControlId: rotation.rigControlId!,
+      pivot: { x: 12, y: 24 },
+      restAngleDegrees: -15,
+      opacityMultiplier: 0.75
+    });
+    expect(rotationUpdated.committed).toBe(true);
+    expect(
+      rotationUpdated.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rotation.rigControlId
+      )
+    ).toMatchObject({
+      kind: "rotation2d",
+      childDrawableIds: [DRAW_A],
+      pivot: { x: 12, y: 24 },
+      restAngleDegrees: -15,
+      opacityMultiplier: 0.75
+    });
+    expect(
+      rotation.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rotation.rigControlId
+      )
+    ).toMatchObject({
+      pivot: { x: 10, y: 20 },
+      restAngleDegrees: 0,
+      opacityMultiplier: 1
+    });
 
     const warp = commitCreateWarpDeformer(rotation.session, {
       partId: PART_B,
@@ -502,6 +535,114 @@ describe("editor session commands", () => {
     });
     expect(deleted.committed).toBe(true);
     expect(findRigControlKeyformSet(deleted.session, rigControlId, "angleDegrees")).toBeUndefined();
+  });
+
+  it("records Rotation pivot, rest angle, and angle keyform edits with redo", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const rotation = commitCreateRotationDeformer(session, {
+      partId: PART_A,
+      displayName: "Drawable A Rotation",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 16, y: 16 },
+      restAngleDegrees: 0
+    });
+    expect(rotation.committed).toBe(true);
+    const rigControlId = rotation.rigControlId!;
+    const parameterId = ParameterIdSchema.parse("param_face_angle_x");
+    const keyed = commitEditKeyformKey(rotation.session, {
+      action: "addCurrent",
+      target: { kind: "rigControl", id: rigControlId },
+      targetProperty: "angleDegrees",
+      parameterId,
+      keyValue: 0,
+      interpolation: "linear-1d-v1",
+      statePatch: {
+        propertyPath: "angleDegrees",
+        value: 5
+      }
+    });
+    expect(keyed.committed).toBe(true);
+
+    const history = createEmptyEditorSessionHistory();
+    const pivotRest = commitEditorSessionCommandWithHistory({
+      currentSession: keyed.session,
+      history,
+      label: "Edit Rotation pivot/rest",
+      command: (currentSession) =>
+        commitUpdateRigControl(currentSession, {
+          rigControlId,
+          pivot: { x: 24, y: 32 },
+          restAngleDegrees: 12
+        })
+    });
+    expect(pivotRest.result.committed).toBe(true);
+    expect(
+      pivotRest.result.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rigControlId
+      )
+    ).toMatchObject({
+      pivot: { x: 24, y: 32 },
+      restAngleDegrees: 12
+    });
+
+    const undoPivotRest = undoEditorSessionHistory(pivotRest.history);
+    expect(undoPivotRest).not.toBeNull();
+    expect(
+      undoPivotRest?.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rigControlId
+      )
+    ).toMatchObject({
+      pivot: { x: 16, y: 16 },
+      restAngleDegrees: 0
+    });
+
+    const redoPivotRest = redoEditorSessionHistory(undoPivotRest!.history);
+    expect(redoPivotRest).not.toBeNull();
+    expect(
+      redoPivotRest?.session.graph.rigControls.find(
+        (rigControl) => rigControl.rigControlId === rigControlId
+      )
+    ).toMatchObject({
+      pivot: { x: 24, y: 32 },
+      restAngleDegrees: 12
+    });
+
+    const keyformUpdate = commitEditorSessionCommandWithHistory({
+      currentSession: redoPivotRest!.session,
+      history: redoPivotRest!.history,
+      label: "Edit Rotation angle keyform",
+      command: (currentSession) =>
+        commitEditKeyformKey(currentSession, {
+          action: "updateCurrent",
+          target: { kind: "rigControl", id: rigControlId },
+          targetProperty: "angleDegrees",
+          parameterId,
+          keyValue: 0,
+          interpolation: "linear-1d-v1",
+          statePatch: {
+            propertyPath: "angleDegrees",
+            value: -25
+          }
+        })
+    });
+    expect(keyformUpdate.result.committed).toBe(true);
+    expect(findRigControlKeyformSet(keyformUpdate.result.session, rigControlId, "angleDegrees")?.keys).toEqual([
+      { value: 0, statePatch: -25 }
+    ]);
+
+    const undoKeyform = undoEditorSessionHistory(keyformUpdate.history);
+    expect(undoKeyform).not.toBeNull();
+    expect(findRigControlKeyformSet(undoKeyform!.session, rigControlId, "angleDegrees")?.keys).toEqual([
+      { value: 0, statePatch: 5 }
+    ]);
+
+    const redoKeyform = redoEditorSessionHistory(undoKeyform!.history);
+    expect(redoKeyform).not.toBeNull();
+    expect(findRigControlKeyformSet(redoKeyform!.session, rigControlId, "angleDegrees")?.keys).toEqual([
+      { value: 0, statePatch: -25 }
+    ]);
   });
 
   it("creates parent Warp and Rotation Deformers above selected Deformers", () => {

@@ -14,10 +14,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  CommittedRotationDeformerInspector,
   CommittedWarpDeformerInspector,
+  createRotationUpdatePayload,
   createWarpUpdatePayload
 } from "./rig-tool-inspector";
-import type { WarpDeformerReadModel } from "../../features/editor-session/model/rig-tool-state";
+import type {
+  RotationDeformerReadModel,
+  WarpDeformerReadModel
+} from "../../features/editor-session/model/rig-tool-state";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
@@ -27,6 +32,7 @@ const TEX_FACE = TextureIdSchema.parse("tex_face");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_fixture");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
+const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 
 describe("RigToolInspector committed Warp Deformer", () => {
   it("disables division fields for keyformed Warp Deformers and omits division updates", () => {
@@ -76,6 +82,47 @@ describe("RigToolInspector committed Warp Deformer", () => {
   });
 });
 
+describe("RigToolInspector committed Rotation Deformer", () => {
+  it("renders editable pivot/rest-angle fields and explains rest angle keyform semantics", () => {
+    const readModel = createRotationReadModel(true);
+    const markup = renderToStaticMarkup(
+      createElement(CommittedRotationDeformerInspector, {
+        feedback: null,
+        onCreateParentRotation: () => undefined,
+        onCreateParentWarp: () => undefined,
+        onReparent: () => undefined,
+        onUpdate: () => undefined,
+        readModel,
+        session: createFixtureSession()
+      })
+    );
+
+    expect(hasDisabledAttribute(inputMarkup(markup, "Rotation pivot x"))).toBe(false);
+    expect(hasDisabledAttribute(inputMarkup(markup, "Rotation pivot y"))).toBe(false);
+    expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest angle degrees"))).toBe(false);
+    expect(markup).toContain("Rotation keyforms present");
+    expect(markup).toContain(
+      "Rest angle is fallback; existing Rotation angle keyforms stay authoritative"
+    );
+
+    const payload = createRotationUpdatePayload(readModel, {
+      displayName: "Face Rotation Edited",
+      parentRigControlId: "",
+      pivot: { x: 12, y: 34 },
+      opacityMultiplier: 0.5,
+      restAngleDegrees: -25
+    });
+
+    expect(payload).toEqual({
+      rigControlId: RIG_FACE_ROTATION,
+      displayName: "Face Rotation Edited",
+      pivot: { x: 12, y: 34 },
+      opacityMultiplier: 0.5,
+      restAngleDegrees: -25
+    });
+  });
+});
+
 function inputMarkup(markup: string, ariaLabel: string): string {
   const escapedLabel = ariaLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = markup.match(new RegExp(`<input[^>]*aria-label="${escapedLabel}"[^>]*>`));
@@ -117,6 +164,22 @@ function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {
       bezierEvaluation: "storedNotEvaluatedV0"
     },
     bezierSurfaceStatus: "stored"
+  };
+}
+
+function createRotationReadModel(hasKeyforms: boolean): RotationDeformerReadModel {
+  return {
+    kind: "rotationDeformer",
+    storageKind: "rotation2d",
+    rigControlId: RIG_FACE_ROTATION,
+    displayName: "Face Rotation",
+    partId: PART_FACE,
+    childDrawableIds: [DRAW_FACE],
+    childRigControlIds: [],
+    opacityMultiplier: 1,
+    hasKeyforms,
+    pivot: { x: 16, y: 24 },
+    restAngleDegrees: 10
   };
 }
 

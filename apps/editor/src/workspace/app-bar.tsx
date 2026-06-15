@@ -1,4 +1,5 @@
 import { Eye, FolderOpen, PanelLeft, Redo2, Save, Undo2 } from "lucide-react";
+import { useRef, type ChangeEvent } from "react";
 
 import { StatusBadge } from "../components/status-badge";
 import { useEditorSession } from "../features/editor-session/editor-session-context";
@@ -11,7 +12,20 @@ export function AppBar() {
   const surfaceLabel = useEditorUiStore((state) => state.surfaceLabel);
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const { canRedo, canUndo, openPsdImport, redo, undo } = useEditorSession();
+  const {
+    canRedo,
+    canUndo,
+    openProjectFile,
+    openPsdImport,
+    projectIdentityLabel,
+    projectSaveStatusLabel,
+    projectStorage,
+    redo,
+    saveProject,
+    undo
+  } = useEditorSession();
+  const openProjectInputRef = useRef<HTMLInputElement | null>(null);
+  const storageBusy = projectStorage.status === "loading" || projectStorage.status === "saving";
 
   const activateEntry = (entry: WorkspaceEntryId) => {
     setActiveEntry(entry);
@@ -19,6 +33,8 @@ export function AppBar() {
       openPsdImport();
     }
   };
+
+  const handleOpenProjectFile = createOpenProjectFileChangeHandler(openProjectFile);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-neutral-800 bg-[#151514] px-4">
@@ -62,7 +78,10 @@ export function AppBar() {
       </nav>
 
       <div className="ml-auto hidden min-w-0 shrink-0 items-center gap-2 md:flex">
-        <StatusBadge tone="ready">Untitled model</StatusBadge>
+        <StatusBadge tone="ready">{projectIdentityLabel}</StatusBadge>
+        <StatusBadge tone={projectSaveStatusLabel === "Saved" ? "ready" : "neutral"}>
+          {projectSaveStatusLabel}
+        </StatusBadge>
         <StatusBadge tone="neutral">{surfaceLabel}</StatusBadge>
       </div>
 
@@ -85,10 +104,30 @@ export function AppBar() {
         >
           <Redo2 aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>
-        <IconButton label="Open project" tooltipSide="bottom">
+        <input
+          accept="application/json,.json"
+          aria-label="Open portable project bundle file"
+          className="sr-only"
+          onChange={handleOpenProjectFile}
+          ref={openProjectInputRef}
+          type="file"
+        />
+        <IconButton
+          disabled={storageBusy}
+          label="Open project"
+          onClick={() => openProjectInputRef.current?.click()}
+          tooltipSide="bottom"
+        >
           <FolderOpen aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>
-        <IconButton label="Save project" tooltipSide="bottom">
+        <IconButton
+          disabled={storageBusy}
+          label="Save project"
+          onClick={() => {
+            void saveProject();
+          }}
+          tooltipSide="bottom"
+        >
           <Save aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>
         <IconButton label="Viewer" tooltipSide="bottom">
@@ -98,3 +137,15 @@ export function AppBar() {
     </header>
   );
 }
+
+export const createOpenProjectFileChangeHandler =
+  (openProjectFile: (file: File) => Promise<void>) =>
+  (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file === undefined) {
+      return;
+    }
+
+    void openProjectFile(file);
+  };

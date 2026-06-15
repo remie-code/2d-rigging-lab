@@ -9,6 +9,10 @@ import type {
 import { hasIsolatableCanvasSelection, isRenderableDrawable } from "./canvas-projection";
 import { createRenderSceneFromCanvasProjection } from "./canvas-render-scene-adapter";
 import { resolveTriangleTextureWarpTransform } from "./canvas-triangle-texture-warp";
+import {
+  getRotationDeformerPivot,
+  listRotationDeformerHandlePositions
+} from "./rotation-deformer-handles";
 import { getWarpControlPointCanvasPosition } from "./warp-deformer-control-points";
 
 export interface CanvasOverlayState {
@@ -38,6 +42,13 @@ export interface CanvasWarpDeformerInteractionState {
   readonly hoveredControlPointIndex?: number;
 }
 
+export interface CanvasRotationDeformerInteractionState {
+  readonly rigControlId: string;
+  readonly pivotEditable: boolean;
+  readonly angleEditable: boolean;
+  readonly hoveredHandle?: "pivot" | "angle";
+}
+
 export function createCanvasBitmapCache(): CanvasBitmapCache {
   return {
     layerCanvases: new Map(),
@@ -62,6 +73,7 @@ export function renderCanvasProjection(input: {
   readonly overlays: CanvasOverlayState;
   readonly cache: CanvasBitmapCache;
   readonly warpDeformerInteraction?: CanvasWarpDeformerInteractionState | undefined;
+  readonly rotationDeformerInteraction?: CanvasRotationDeformerInteractionState | undefined;
 }): void {
   const viewport = {
     width: input.canvas.clientWidth,
@@ -124,7 +136,8 @@ export function renderCanvasProjection(input: {
       context,
       input.projection,
       input.view.zoom,
-      input.warpDeformerInteraction
+      input.warpDeformerInteraction,
+      input.rotationDeformerInteraction
     );
   }
 
@@ -273,7 +286,8 @@ function drawDeformerOverlay(
   context: CanvasRenderingContext2D,
   projection: CanvasRenderProjection,
   zoom: number,
-  warpInteraction: CanvasWarpDeformerInteractionState | undefined
+  warpInteraction: CanvasWarpDeformerInteractionState | undefined,
+  rotationInteraction: CanvasRotationDeformerInteractionState | undefined
 ): void {
   const overlay = projection.deformerOverlay;
   if (overlay === undefined) {
@@ -290,7 +304,13 @@ function drawDeformerOverlay(
       : "rgba(251, 113, 133, 0.36)";
 
   if (overlay.kind === "rotation") {
-    drawRotationDeformerOverlay(context, overlay, zoom, color);
+    drawRotationDeformerOverlay(
+      context,
+      overlay,
+      zoom,
+      color,
+      overlay.rigControlId === rotationInteraction?.rigControlId ? rotationInteraction : undefined
+    );
     return;
   }
 
@@ -326,13 +346,18 @@ function drawRotationDeformerOverlay(
   context: CanvasRenderingContext2D,
   overlay: CanvasDeformerOverlayProjection,
   zoom: number,
-  color: string
+  color: string,
+  interaction: CanvasRotationDeformerInteractionState | undefined
 ): void {
-  const pivot = overlay.pivot ?? {
-    x: overlay.domainBounds.x + overlay.domainBounds.width / 2,
-    y: overlay.domainBounds.y + overlay.domainBounds.height / 2
-  };
-  const radius = Math.max(12 / zoom, Math.min(overlay.domainBounds.width, overlay.domainBounds.height) * 0.28);
+  const pivot = getRotationDeformerPivot(overlay);
+  const handles = listRotationDeformerHandlePositions({
+    overlay,
+    view: {
+      zoom,
+      pan: { x: 0, y: 0 }
+    }
+  });
+  const angleHandle = handles.find((handle) => handle.kind === "angle")?.canvasPoint;
   const angleRadians = ((overlay.evaluatedAngleDegrees ?? overlay.restAngleDegrees ?? 0) * Math.PI) / 180;
 
   context.save();
@@ -348,25 +373,82 @@ function drawRotationDeformerOverlay(
   );
 
   context.beginPath();
-  context.arc(pivot.x, pivot.y, Math.max(3 / zoom, 1.5 / zoom), 0, Math.PI * 2);
-  context.fill();
-
-  context.beginPath();
   context.moveTo(pivot.x - 7 / zoom, pivot.y);
   context.lineTo(pivot.x + 7 / zoom, pivot.y);
   context.moveTo(pivot.x, pivot.y - 7 / zoom);
   context.lineTo(pivot.x, pivot.y + 7 / zoom);
   context.stroke();
 
+  context.fillStyle = resolveRotationHandleFill({
+    baseColor: color,
+    editable: interaction?.pivotEditable ?? true,
+    hovered: interaction?.hoveredHandle === "pivot"
+  });
+  context.strokeStyle = "rgba(255, 255, 255, 0.72)";
+  context.lineWidth = 1 / zoom;
   context.beginPath();
-  context.arc(pivot.x, pivot.y, radius, -Math.PI * 0.25, Math.PI * 0.25);
+  context.arc(
+    pivot.x,
+    pivot.y,
+    Math.max((interaction?.hoveredHandle === "pivot" ? 4.5 : 3) / zoom, 1.5 / zoom),
+    0,
+    Math.PI * 2
+  );
+  context.fill();
+  context.stroke();
+
+  context.beginPath();
+  context.arc(
+    pivot.x,
+    pivot.y,
+    Math.hypot(
+      (angleHandle?.x ?? pivot.x) - pivot.x,
+      (angleHandle?.y ?? pivot.y) - pivot.y
+    ),
+    -Math.PI * 0.25,
+    Math.PI * 0.25
+  );
   context.stroke();
 
   context.beginPath();
   context.moveTo(pivot.x, pivot.y);
-  context.lineTo(pivot.x + Math.cos(angleRadians) * radius, pivot.y + Math.sin(angleRadians) * radius);
+  context.lineTo(
+    angleHandle?.x ?? pivot.x + Math.cos(angleRadians) * 12 / zoom,
+    angleHandle?.y ?? pivot.y + Math.sin(angleRadians) * 12 / zoom
+  );
   context.stroke();
+
+  if (angleHandle !== undefined) {
+    context.fillStyle = resolveRotationHandleFill({
+      baseColor: color,
+      editable: interaction?.angleEditable ?? true,
+      hovered: interaction?.hoveredHandle === "angle"
+    });
+    context.strokeStyle = "rgba(255, 255, 255, 0.72)";
+    context.beginPath();
+    context.arc(
+      angleHandle.x,
+      angleHandle.y,
+      Math.max((interaction?.hoveredHandle === "angle" ? 4.5 : 3) / zoom, 1.5 / zoom),
+      0,
+      Math.PI * 2
+    );
+    context.fill();
+    context.stroke();
+  }
   context.restore();
+}
+
+function resolveRotationHandleFill(input: {
+  readonly baseColor: string;
+  readonly editable: boolean;
+  readonly hovered: boolean;
+}): string {
+  if (!input.editable) {
+    return input.hovered ? "rgba(209, 213, 219, 0.92)" : "rgba(156, 163, 175, 0.78)";
+  }
+
+  return input.hovered ? "rgba(255, 255, 255, 0.98)" : input.baseColor;
 }
 
 function drawDeformerGridLines(

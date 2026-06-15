@@ -740,6 +740,136 @@ describe("rig control operation handlers", () => {
     );
   });
 
+  it("commits Rotation pivot and rest angle updates with modelDiff fields", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        childDrawableIds: ["draw_body"],
+        opacityMultiplier: 0.9
+      })
+    );
+    const beforeDryRunRigControl = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))
+    );
+
+    const dryRun = core.dryRunOperation(
+      session,
+      createUpdateRigControlRequest({
+        dryRun: true,
+        basePackageRevision: 1,
+        rigControlId: "rig_head_rotation",
+        displayName: "Head Rotation Updated",
+        opacityMultiplier: 0.5,
+        pivot: { x: 20, y: 30 },
+        restAngleDegrees: 18
+      })
+    );
+
+    expect(dryRun.status).toBe("dry_run");
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).toEqual(
+      beforeDryRunRigControl
+    );
+
+    const outcome = core.commitOperation(
+      session,
+      createUpdateRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        rigControlId: "rig_head_rotation",
+        displayName: "Head Rotation Updated",
+        opacityMultiplier: 0.5,
+        pivot: { x: 20, y: 30 },
+        restAngleDegrees: 18
+      })
+    );
+    const rigControl = getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"));
+
+    expect(outcome.result.status).toBe("committed");
+    expect(rigControl).toMatchObject({
+      kind: "rotation2d",
+      childDrawableIds: ["draw_body"],
+      displayName: "Head Rotation Updated",
+      opacityMultiplier: 0.5,
+      pivot: { x: 20, y: 30 },
+      restAngleDegrees: 18
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
+    expect(outcome.result.modelDiff?.changed[0]?.fields.map((field) => field.path)).toEqual(
+      expect.arrayContaining([
+        "/model/rigControls/rigControls/rig_head_rotation/displayName",
+        "/model/rigControls/rigControls/rig_head_rotation/opacityMultiplier",
+        "/model/rigControls/rigControls/rig_head_rotation/pivot",
+        "/model/rigControls/rigControls/rig_head_rotation/restAngleDegrees"
+      ])
+    );
+  });
+
+  it("rejects invalid, wrong-kind, and no-op Rotation updates without mutating", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        childDrawableIds: ["draw_body"]
+      })
+    );
+    core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Head Warp Deformer"
+      })
+    );
+
+    const beforeInvalid = structuredClone(session.graph.rigControls);
+    const invalid = core.commitOperation(
+      session,
+      createUpdateRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        rigControlId: "rig_head_rotation",
+        pivot: { x: Number.NaN, y: 1 }
+      })
+    );
+    expect(invalid.result.status).toBe("rejected");
+    expect(invalid.result.diagnostics[0]?.checkId).toBe("operation.request.invalid");
+    expect(session.graph.rigControls).toEqual(beforeInvalid);
+
+    const wrongKind = core.commitOperation(
+      session,
+      createUpdateRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        rigControlId: "rig_head_warp_deformer",
+        pivot: { x: 1, y: 2 }
+      })
+    );
+    expect(wrongKind.result.status).toBe("rejected");
+    expect(wrongKind.result.diagnostics[0]?.checkId).toBe(
+      "operation.updateRigControl.unsupportedField"
+    );
+    expect(session.graph.rigControls).toEqual(beforeInvalid);
+
+    const noOp = core.commitOperation(
+      session,
+      createUpdateRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        rigControlId: "rig_head_rotation",
+        pivot: { x: 64, y: 64 },
+        restAngleDegrees: 0
+      })
+    );
+    expect(noOp.result.status).toBe("rejected");
+    expect(noOp.result.diagnostics[0]?.checkId).toBe("operation.updateRigControl.noOp");
+    expect(session.graph.rigControls).toEqual(beforeInvalid);
+  });
+
   it("rejects invalid Warp updates atomically when generic fields are present", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -1131,6 +1261,8 @@ const createUpdateRigControlRequest = (options: {
   readonly rigControlId: string;
   readonly displayName?: string;
   readonly opacityMultiplier?: number;
+  readonly pivot?: { readonly x: number; readonly y: number };
+  readonly restAngleDegrees?: number;
   readonly domainBounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly transformColumns?: number;
   readonly transformRows?: number;
@@ -1148,6 +1280,8 @@ const createUpdateRigControlRequest = (options: {
     rigControlId: options.rigControlId,
     ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
     ...(options.opacityMultiplier === undefined ? {} : { opacityMultiplier: options.opacityMultiplier }),
+    ...(options.pivot === undefined ? {} : { pivot: options.pivot }),
+    ...(options.restAngleDegrees === undefined ? {} : { restAngleDegrees: options.restAngleDegrees }),
     ...(options.domainBounds === undefined ? {} : { domainBounds: options.domainBounds }),
     ...(options.transformColumns === undefined ? {} : { transformColumns: options.transformColumns }),
     ...(options.transformRows === undefined ? {} : { transformRows: options.transformRows }),

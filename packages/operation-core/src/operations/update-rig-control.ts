@@ -82,6 +82,8 @@ const applyUpdateRigControl = (
     const mutation = updateRigControl(session, {
       rigControlId: request.payload.rigControlId,
       ...(request.payload.displayName === undefined ? {} : { displayName: request.payload.displayName }),
+      ...(request.payload.pivot === undefined ? {} : { pivot: request.payload.pivot }),
+      ...(request.payload.restAngleDegrees === undefined ? {} : { restAngleDegrees: request.payload.restAngleDegrees }),
       ...(request.payload.domainBounds === undefined ? {} : { domainBounds: request.payload.domainBounds }),
       ...(request.payload.transformColumns === undefined ? {} : { transformColumns: request.payload.transformColumns }),
       ...(request.payload.transformRows === undefined ? {} : { transformRows: request.payload.transformRows }),
@@ -173,6 +175,11 @@ const createRigControlFieldChanges = (
   addFieldChange(fields, `${basePath}/displayName`, before.displayName, after.displayName);
   addFieldChange(fields, `${basePath}/opacityMultiplier`, before.opacityMultiplier ?? 1, after.opacityMultiplier ?? 1);
 
+  if (before.kind === "rotation2d" && after.kind === "rotation2d") {
+    addFieldChange(fields, `${basePath}/pivot`, before.pivot, after.pivot);
+    addFieldChange(fields, `${basePath}/restAngleDegrees`, before.restAngleDegrees, after.restAngleDegrees);
+  }
+
   if (before.kind === "warpLattice2d" && after.kind === "warpLattice2d") {
     addFieldChange(fields, `${basePath}/domainBounds`, before.domainBounds, after.domainBounds);
     addFieldChange(fields, `${basePath}/latticeColumns`, before.latticeColumns, after.latticeColumns);
@@ -238,6 +245,18 @@ const createUpdateRigControlMutationDiagnostic = (
         checkId: "operation.updateRigControl.invalidOpacityMultiplier",
         message: error.message,
         target
+      });
+    case "invalid_rotation_pivot":
+      return createOperationDiagnostic({
+        checkId: "operation.updateRigControl.invalidRotationPivot",
+        message: error.message,
+        target: { ...target, path: "/payload/pivot" }
+      });
+    case "invalid_rotation_rest_angle":
+      return createOperationDiagnostic({
+        checkId: "operation.updateRigControl.invalidRotationRestAngle",
+        message: error.message,
+        target: { ...target, path: "/payload/restAngleDegrees" }
       });
     case "unsupported_rig_control_update_field":
       return createOperationDiagnostic({
