@@ -58,6 +58,16 @@ test("saves a portable project bundle and restores authored mesh, deformers, key
   await expect(page.locator('[data-row-kind="warp-deformer"]:visible').first()).toBeVisible();
   await expect(page.locator('[data-row-kind="rotation-deformer"]:visible').first()).toBeVisible();
 
+  await page.getByRole("button", { name: "Parts" }).click();
+  await expandVisiblePartContainers(page);
+  const importRootRow = page
+    .locator('[data-row-kind="part"]:visible')
+    .filter({ hasText: "sample_model import" })
+    .first();
+  await importRootRow.getByRole("button", { name: "Hide part container" }).click();
+  await expect(importRootRow.getByRole("button", { name: "Show part container" })).toBeVisible();
+  await expect(canvas).toHaveAttribute("data-canvas-has-renderable-artwork", "false");
+
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Save project" }).click();
   const download = await downloadPromise;
@@ -72,6 +82,16 @@ test("saves a portable project bundle and restores authored mesh, deformers, key
 
   const partsTree = page.locator('[data-testid="parts-tree"]:visible').first();
   await expect(partsTree).toContainText("sample_model import");
+  const restoredImportRootRow = page
+    .locator('[data-row-kind="part"]:visible')
+    .filter({ hasText: "sample_model import" })
+    .first();
+  await expect(restoredImportRootRow.getByRole("button", { name: "Show part container" }))
+    .toBeVisible();
+  await expect(canvas).toHaveAttribute("data-canvas-has-renderable-artwork", "false");
+  await restoredImportRootRow.getByRole("button", { name: "Show part container" }).click();
+  await expect(canvas).toHaveAttribute("data-canvas-has-renderable-artwork", "true");
+  await expandVisiblePartContainers(page);
   await expect(partsTree).toContainText(selectedDrawableName);
   await expect(canvas).toHaveAttribute("data-canvas-has-renderable-artwork", "true");
   await expect(canvas).toHaveAttribute("data-renderable-drawable-count", /^[1-9]\d*$/);
@@ -129,6 +149,7 @@ async function importFixturePsd(page: Page): Promise<void> {
   await expect(page.locator('[data-testid="parts-tree"]:visible').first()).toContainText(
     "sample_model import"
   );
+  await expandVisiblePartContainers(page);
 }
 
 function rowNameButton(row: Locator): Locator {
@@ -137,4 +158,19 @@ function rowNameButton(row: Locator): Locator {
 
 function visibleInput(page: Page, label: string): Locator {
   return page.locator(`[aria-label="${label}"]:visible`).first();
+}
+
+async function expandVisiblePartContainers(page: Page): Promise<void> {
+  const partsTree = page.locator('[data-testid="parts-tree"]:visible').first();
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const expandButton = partsTree.getByRole("button", { name: /^Expand / }).first();
+    if (await expandButton.count() === 0) {
+      return;
+    }
+
+    await expandButton.click();
+  }
+
+  throw new Error("Parts Tree did not finish expanding visible Part Containers.");
 }

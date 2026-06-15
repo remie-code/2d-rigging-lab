@@ -47,6 +47,9 @@ describe("ParameterBindingSection rig-control bindings", () => {
       createRigNumberKeyformSet("keyset_rotation_angle", RIG_FACE_ROTATION, "angleDegrees", [
         [0, 20]
       ]),
+      createRigVec2KeyformSet("keyset_rotation_translation", RIG_FACE_ROTATION, "translation", [
+        { value: 0, statePatch: { x: 3, y: -2 } }
+      ]),
       createRigNumberKeyformSet(
         "keyset_rotation_opacity",
         RIG_FACE_ROTATION,
@@ -57,6 +60,7 @@ describe("ParameterBindingSection rig-control bindings", () => {
     const bindings = createRigControlParameterBindings(session, RIG_FACE_ROTATION);
     const fullMarkup = renderSection(session, bindings, { [FACE_ANGLE_X]: 0 });
     expect(fullMarkup).toContain("Rotation angle");
+    expect(fullMarkup).toContain("Translation");
     expect(fullMarkup).toContain("Opacity multiplier");
     expect(fullMarkup).not.toContain("Parameter: Eyeball X");
     expect(fullMarkup).not.toContain("Keyform:");
@@ -71,6 +75,16 @@ describe("ParameterBindingSection rig-control bindings", () => {
     expect(angleMarkup).not.toContain("Add Keyform Here");
     expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Update"))).toBe(false);
     expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Delete"))).toBe(false);
+
+    const translationMarkup = renderSection(
+      session,
+      [findBinding(bindings, "translation")],
+      { [FACE_ANGLE_X]: 0 }
+    );
+    expect(hasDisabledAttribute(inputMarkup(translationMarkup, "Translation X"))).toBe(false);
+    expect(hasDisabledAttribute(inputMarkup(translationMarkup, "Translation Y"))).toBe(false);
+    expect(hasDisabledAttribute(buttonMarkup(translationMarkup, "Update"))).toBe(false);
+    expect(hasDisabledAttribute(buttonMarkup(translationMarkup, "Delete"))).toBe(false);
   });
 
   it("renders Warp binding rows and locks value editing between keyforms", () => {
@@ -216,6 +230,34 @@ function createRigVectorKeyformSet(
     keys: keys.map((key) => ({
       value: key.value,
       statePatch: key.statePatch.map((offset) => ({ x: offset.x, y: offset.y }))
+    }))
+  };
+}
+
+function createRigVec2KeyformSet(
+  keyformSetId: string,
+  rigControlId: typeof RIG_FACE_ROTATION,
+  property: "translation",
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: { readonly x: number; readonly y: number };
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse(keyformSetId),
+    target: {
+      kind: "rigControl" as const,
+      id: rigControlId,
+      property
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: { x: key.statePatch.x, y: key.statePatch.y }
     }))
   };
 }

@@ -135,6 +135,10 @@ import {
   type InspectorProjection,
   type StructureTreeRow
 } from "./model/session-tree";
+import {
+  createInitialCollapsedPartIds,
+  mergeNewPartInitialCollapsedPartIds
+} from "./model/part-tree-collapse-state";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 
 export interface MeshToolDraft {
@@ -347,7 +351,7 @@ export function EditorSessionProvider({
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
-    () => new Set()
+    () => createInitialCollapsedPartIds(session)
   );
   const [editorHiddenPartIds, setEditorHiddenPartIds] = useState<ReadonlySet<PartId>>(
     () => new Set()
@@ -451,13 +455,16 @@ export function EditorSessionProvider({
     setParameterOperationFeedback(null);
   }, []);
 
-  const resetEditorLocalStateAfterProjectLoad = useCallback(() => {
+  const resetEditorLocalStateAfterProjectLoad = useCallback((input: {
+    readonly loadedSession: AuthoringSession;
+    readonly editorHiddenPartIds: readonly PartId[];
+  }) => {
     clearTransientCommitState();
     setSelection(null);
     setActiveParameterIdState(null);
     setParameterValues({});
-    setCollapsedPartIds(new Set());
-    setEditorHiddenPartIds(new Set());
+    setCollapsedPartIds(createInitialCollapsedPartIds(input.loadedSession));
+    setEditorHiddenPartIds(new Set(input.editorHiddenPartIds));
     setPsdImportOpen(false);
   }, [clearTransientCommitState]);
 
@@ -531,7 +538,8 @@ export function EditorSessionProvider({
     try {
       const result = await exportEditorProjectBundle({
         session: currentState.session,
-        baseDocument: currentState.baseDocument
+        baseDocument: currentState.baseDocument,
+        editorHiddenPartIds
       });
       triggerPortableProjectDownload({
         bundleJson: result.bundleJson,
@@ -554,7 +562,7 @@ export function EditorSessionProvider({
         createProjectStorageErrorState(toEditorProjectStorageError(error, "save"), "save")
       );
     }
-  }, [setEditorSessionState]);
+  }, [editorHiddenPartIds, setEditorSessionState]);
 
   const openProjectFromPortableBundle = useCallback(
     async (bundleText: string, options: { readonly fileName?: string } = {}) => {
@@ -567,7 +575,10 @@ export function EditorSessionProvider({
           history: createEmptyEditorSessionHistory(),
           baseDocument: result.packageDocument
         });
-        resetEditorLocalStateAfterProjectLoad();
+        resetEditorLocalStateAfterProjectLoad({
+          loadedSession: result.session,
+          editorHiddenPartIds: result.editorHiddenPartIds
+        });
         setProjectStorage(createLoadedProjectStorageState(result, options.fileName));
       } catch (error) {
         setProjectStorage(
@@ -617,6 +628,11 @@ export function EditorSessionProvider({
         history: nextHistory,
         baseDocument: currentState.baseDocument
       });
+      setCollapsedPartIds((current) =>
+        mergeNewPartInitialCollapsedPartIds(current, currentState.session, result.session, {
+          expandPartIds: [plan.importRootPartId]
+        })
+      );
       setEditorHiddenPartIds((current) =>
         mergeEditorHiddenPartIds(current, result.editorHiddenPartIds)
       );

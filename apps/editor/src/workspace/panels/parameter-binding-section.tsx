@@ -9,6 +9,7 @@ import {
   formatParameterValue,
   getControlPointCount,
   readUniformOffset,
+  readVec2Component,
   type ParameterBindingProjection,
   type ParameterKeyformBindingDescriptor,
   type ParameterKeyformValue
@@ -155,6 +156,34 @@ function BindingValueEditor({
           value={y}
         />
         <div className="pb-2 text-right text-[11px] text-neutral-500">{count} points</div>
+      </div>
+    );
+  }
+
+  if (projection.binding.valueKind === "vec2") {
+    const x = readVec2Component(value, "x");
+    const y = readVec2Component(value, "y");
+
+    return (
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <NumberInput
+          disabled={disabled}
+          label={`${projection.binding.label} X`}
+          max={projection.binding.numericRange?.max}
+          min={projection.binding.numericRange?.min}
+          onChange={(nextX) => onChange({ x: nextX, y })}
+          step={projection.binding.numericRange?.step}
+          value={x}
+        />
+        <NumberInput
+          disabled={disabled}
+          label={`${projection.binding.label} Y`}
+          max={projection.binding.numericRange?.max}
+          min={projection.binding.numericRange?.min}
+          onChange={(nextY) => onChange({ x, y: nextY })}
+          step={projection.binding.numericRange?.step}
+          value={y}
+        />
       </div>
     );
   }

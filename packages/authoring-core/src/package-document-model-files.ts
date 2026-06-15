@@ -1,10 +1,15 @@
 import type { PackageModelFilesDto } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
+import {
+  createPackageEditorStateFile,
+  type PackageDocumentEditorStateOptions
+} from "./package-document-editor-state.js";
 
 export const buildPackageDocumentModelFiles = (
   session: AuthoringSession,
-  baseModelFiles: PackageModelFilesDto
+  baseModelFiles: PackageModelFilesDto,
+  options: PackageDocumentEditorStateOptions = {}
 ): PackageModelFilesDto => {
   const modelFiles: PackageModelFilesDto = {
     graph: {
@@ -49,7 +54,10 @@ export const buildPackageDocumentModelFiles = (
     }
   };
 
-  if (baseModelFiles.editorState !== undefined) {
+  const editorState = createPackageEditorStateFile(session, options);
+  if (editorState !== undefined) {
+    modelFiles.editorState = editorState;
+  } else if (baseModelFiles.editorState !== undefined) {
     modelFiles.editorState = cloneDto(baseModelFiles.editorState);
   }
 

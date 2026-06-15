@@ -393,6 +393,17 @@ const assertSupportedV0TargetAndPatches = (
     return;
   }
 
+  if (input.target.property === "translation") {
+    if (rigControl.kind !== "rotation2d") {
+      throwUnsupportedTarget(input.target);
+    }
+    assertCompositionMode(input.compositionMode, ["replace", "additiveDelta"]);
+    for (const key of input.keys) {
+      assertFiniteVec2Patch(key.statePatch, input.target.property);
+    }
+    return;
+  }
+
   if (input.target.property === "controlPointOffsets") {
     if (rigControl.kind === "warpLattice2d") {
       assertCompositionMode(input.compositionMode, ["replace", "additiveDelta"]);
@@ -473,6 +484,29 @@ const assertNumberPatchInRange = (
     );
   }
 };
+
+const assertFiniteVec2Patch = (
+  value: PackageStatePatchValueDto,
+  targetProperty: string
+): void => {
+  if (!isFiniteVec2(value)) {
+    throw new AuthoringMutationError(
+      "invalid_keyform_patch_shape",
+      `${targetProperty} keyforms require a finite Vec2 patch.`
+    );
+  }
+};
+
+const isFiniteVec2 = (value: PackageStatePatchValueDto): value is Vec2Dto =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  "x" in value &&
+  "y" in value &&
+  typeof value.x === "number" &&
+  typeof value.y === "number" &&
+  Number.isFinite(value.x) &&
+  Number.isFinite(value.y);
 
 const assertControlPointOffsetsPatch = (
   value: PackageStatePatchValueDto,

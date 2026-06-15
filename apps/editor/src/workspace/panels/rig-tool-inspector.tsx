@@ -691,6 +691,8 @@ export function CommittedRotationDeformerInspector({
     readModel.parentRigControlId,
     readModel.pivot.x,
     readModel.pivot.y,
+    readModel.restTranslation.x,
+    readModel.restTranslation.y,
     readModel.restAngleDegrees,
     readModel.rigControlId
   ]);
@@ -755,7 +757,7 @@ export function CommittedRotationDeformerInspector({
         bindings={createRigControlParameterBindings(session, readModel.rigControlId)}
       />
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
-        <SectionTitle>Pivot / rest angle</SectionTitle>
+        <SectionTitle>Pivot / translation / rest angle</SectionTitle>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <NumberField
             displayLabel="Pivot X"
@@ -784,6 +786,34 @@ export function CommittedRotationDeformerInspector({
               }))
             }
             value={editState.pivot.y}
+          />
+          <NumberField
+            displayLabel="Rest translation X"
+            label="Rotation rest translation x"
+            onChange={(x) =>
+              setEditState((current) => ({
+                ...current,
+                restTranslation: {
+                  ...current.restTranslation,
+                  x
+                }
+              }))
+            }
+            value={editState.restTranslation.x}
+          />
+          <NumberField
+            displayLabel="Rest translation Y"
+            label="Rotation rest translation y"
+            onChange={(y) =>
+              setEditState((current) => ({
+                ...current,
+                restTranslation: {
+                  ...current.restTranslation,
+                  y
+                }
+              }))
+            }
+            value={editState.restTranslation.y}
           />
           <NumberField
             className="col-span-2"
@@ -850,6 +880,10 @@ interface RotationEditState {
     readonly x: number;
     readonly y: number;
   };
+  readonly restTranslation: {
+    readonly x: number;
+    readonly y: number;
+  };
   readonly opacityMultiplier: number;
   readonly restAngleDegrees: number;
 }
@@ -872,6 +906,7 @@ function createRotationEditState(readModel: RotationDeformerReadModel): Rotation
     displayName: readModel.displayName,
     parentRigControlId: readModel.parentRigControlId ?? "",
     pivot: structuredClone(readModel.pivot),
+    restTranslation: structuredClone(readModel.restTranslation),
     opacityMultiplier: readModel.opacityMultiplier,
     restAngleDegrees: readModel.restAngleDegrees
   };
@@ -937,6 +972,9 @@ export function createRotationUpdatePayload(
   addStringChange(payload, "displayName", readModel.displayName, editState.displayName.trim());
   if (!samePoint(readModel.pivot, editState.pivot)) {
     payload.pivot = structuredClone(editState.pivot);
+  }
+  if (!samePoint(readModel.restTranslation, editState.restTranslation)) {
+    payload.restTranslation = structuredClone(editState.restTranslation);
   }
   addNumberChange(
     payload,

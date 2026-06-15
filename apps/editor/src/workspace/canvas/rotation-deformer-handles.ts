@@ -5,7 +5,7 @@ import type {
 } from "./canvas-projection";
 import { canvasToScreenPoint, screenToCanvasPoint } from "./canvas-projection";
 
-export type RotationDeformerHandleKind = "pivot" | "angle";
+export type RotationDeformerHandleKind = "pivot" | "angle" | "translation";
 
 export interface RotationDeformerHandlePosition {
   readonly kind: RotationDeformerHandleKind;
@@ -15,6 +15,7 @@ export interface RotationDeformerHandlePosition {
 
 const PIVOT_HIT_TOLERANCE_PX = 8;
 const ANGLE_HIT_TOLERANCE_PX = 9;
+const TRANSLATION_HIT_TOLERANCE_PX = 9;
 const MIN_ANGLE_HANDLE_RADIUS_PX = 12;
 
 export function getRotationDeformerPivot(
@@ -36,6 +37,20 @@ export function getRotationDeformerAngleHandleRadius(
   );
 }
 
+export function getRotationDeformerTranslationHandle(
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number
+): CanvasPoint {
+  const inset = Math.max(
+    10 / Math.max(zoom, 0.000001),
+    Math.min(overlay.domainBounds.width, overlay.domainBounds.height) * 0.08
+  );
+  return {
+    x: overlay.domainBounds.x + overlay.domainBounds.width - inset,
+    y: overlay.domainBounds.y + inset
+  };
+}
+
 export function listRotationDeformerHandlePositions(input: {
   readonly overlay: CanvasDeformerOverlayProjection;
   readonly view: CanvasViewState;
@@ -49,6 +64,10 @@ export function listRotationDeformerHandlePositions(input: {
     x: pivot.x + Math.cos(angleRadians) * radius,
     y: pivot.y + Math.sin(angleRadians) * radius
   };
+  const translationHandle = getRotationDeformerTranslationHandle(
+    input.overlay,
+    input.view.zoom
+  );
 
   return [
     {
@@ -60,6 +79,11 @@ export function listRotationDeformerHandlePositions(input: {
       kind: "angle",
       canvasPoint: angleHandle,
       screenPoint: canvasToScreenPoint(angleHandle, input.view)
+    },
+    {
+      kind: "translation",
+      canvasPoint: translationHandle,
+      screenPoint: canvasToScreenPoint(translationHandle, input.view)
     }
   ];
 }
@@ -70,6 +94,7 @@ export function hitTestRotationDeformerHandle(input: {
   readonly screenPoint: CanvasPoint;
   readonly pivotTolerancePx?: number;
   readonly angleTolerancePx?: number;
+  readonly translationTolerancePx?: number;
 }): RotationDeformerHandlePosition | undefined {
   if (input.overlay.kind !== "rotation" || input.overlay.status !== "committed") {
     return undefined;
@@ -95,6 +120,15 @@ export function hitTestRotationDeformerHandle(input: {
       (input.angleTolerancePx ?? ANGLE_HIT_TOLERANCE_PX)
   ) {
     return angle;
+  }
+
+  const translation = handles.find((handle) => handle.kind === "translation");
+  if (
+    translation !== undefined &&
+    distance(translation.screenPoint, input.screenPoint) <=
+      (input.translationTolerancePx ?? TRANSLATION_HIT_TOLERANCE_PX)
+  ) {
+    return translation;
   }
 
   return undefined;

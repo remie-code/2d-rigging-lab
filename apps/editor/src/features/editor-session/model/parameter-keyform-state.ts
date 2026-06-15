@@ -24,10 +24,11 @@ export type ParameterValueMap = Readonly<Record<string, number>>;
 export type ParameterKeyformProperty =
   | "opacity"
   | "angleDegrees"
+  | "translation"
   | "controlPointOffsets"
   | "opacityMultiplier";
-export type ParameterKeyformValue = number | readonly Vec2Dto[];
-export type ParameterKeyformValueKind = "number" | "controlPointOffsets";
+export type ParameterKeyformValue = number | Vec2Dto | readonly Vec2Dto[];
+export type ParameterKeyformValueKind = "number" | "vec2" | "controlPointOffsets";
 export type ParameterKeyformTarget = {
   readonly kind: "drawable" | "rigControl";
   readonly id: string;
@@ -83,6 +84,7 @@ export interface EvaluatedParameterKeyformState {
   readonly drawableOpacityById: ReadonlyMap<DrawableId, number>;
   readonly rigOpacityMultiplierById: ReadonlyMap<RigControlId, number>;
   readonly rigAngleDegreesById: ReadonlyMap<RigControlId, number>;
+  readonly rigTranslationById: ReadonlyMap<RigControlId, Vec2Dto>;
   readonly rigControlPointOffsetsById: ReadonlyMap<RigControlId, readonly Vec2Dto[]>;
 }
 
@@ -259,6 +261,7 @@ export const createRigControlParameterBindings = (
   if (rigControl.kind === "rotation2d") {
     return [
       createRotationAngleBinding(rigControl),
+      createRotationTranslationBinding(rigControl),
       createRigOpacityMultiplierBinding(rigControl)
     ];
   }
@@ -398,6 +401,12 @@ export const coerceBindingValue = (
       : createUniformControlPointOffsets(getControlPointCount(binding.baseValue), 0, 0);
   }
 
+  if (binding.valueKind === "vec2") {
+    return isVec2(value)
+      ? { x: finiteOrZero(value.x), y: finiteOrZero(value.y) }
+      : { x: 0, y: 0 };
+  }
+
   const numeric = typeof value === "number" ? value : 0;
   if (binding.numericRange === undefined) {
     return Number.isFinite(numeric) ? numeric : 0;
@@ -430,6 +439,11 @@ export const readUniformOffset = (
   return value[0]?.[axis] ?? 0;
 };
 
+export const readVec2Component = (
+  value: ParameterKeyformValue,
+  axis: "x" | "y"
+): number => isVec2(value) ? value[axis] : 0;
+
 export const createEvaluatedParameterKeyformState = (
   session: AuthoringSession,
   parameterValues: ParameterValueMap
@@ -440,6 +454,7 @@ export const createEvaluatedParameterKeyformState = (
   const drawableOpacityById = new Map<DrawableId, number>();
   const rigOpacityMultiplierById = new Map<RigControlId, number>();
   const rigAngleDegreesById = new Map<RigControlId, number>();
+  const rigTranslationById = new Map<RigControlId, Vec2Dto>();
   const rigControlPointOffsetsById = new Map<RigControlId, readonly Vec2Dto[]>();
   const drawablesById = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable])
@@ -507,6 +522,20 @@ export const createEvaluatedParameterKeyformState = (
     }
 
     if (
+      target.property === "translation" &&
+      rigControl.kind === "rotation2d" &&
+      isVec2(sampled)
+    ) {
+      const current =
+        rigTranslationById.get(rigControlId) ?? rigControl.restTranslation ?? { x: 0, y: 0 };
+      rigTranslationById.set(
+        rigControlId,
+        applyVec2Composition(current, sampled, keyformSet.compositionMode)
+      );
+      continue;
+    }
+
+    if (
       target.property === "controlPointOffsets" &&
       rigControl.kind === "warpLattice2d" &&
       Array.isArray(sampled)
@@ -528,6 +557,7 @@ export const createEvaluatedParameterKeyformState = (
     drawableOpacityById,
     rigOpacityMultiplierById,
     rigAngleDegreesById,
+    rigTranslationById,
     rigControlPointOffsetsById
   };
 };
@@ -580,6 +610,27 @@ function createRotationAngleBinding(
     numericRange: {
       min: -180,
       max: 180,
+      step: 1
+    }
+  };
+}
+
+function createRotationTranslationBinding(
+  rigControl: RotationRigControlDto
+): ParameterKeyformBindingDescriptor {
+  return {
+    label: "Translation",
+    target: {
+      kind: "rigControl",
+      id: rigControl.rigControlId
+    },
+    targetProperty: "translation",
+    valueKind: "vec2",
+    baseValue: structuredClone(rigControl.restTranslation ?? { x: 0, y: 0 }),
+    compositionMode: "replace",
+    numericRange: {
+      min: -9999,
+      max: 9999,
       step: 1
     }
   };
@@ -745,6 +796,13 @@ function interpolateKeyformValue(
     return left + (right - left) * t;
   }
 
+  if (isVec2(left) && isVec2(right)) {
+    return {
+      x: left.x + (right.x - left.x) * t,
+      y: left.y + (right.y - left.y) * t
+    };
+  }
+
   if (Array.isArray(left) && Array.isArray(right) && left.length === right.length) {
     return left.map((leftPoint, index) => {
       const rightPoint = right[index];
@@ -793,6 +851,24 @@ function applyNumericComposition(
   return patch;
 }
 
+function applyVec2Composition(
+  current: Vec2Dto,
+  patch: Vec2Dto,
+  compositionMode: LinearKeyformSetDto["compositionMode"]
+): Vec2Dto {
+  if (compositionMode === "additiveDelta") {
+    return {
+      x: current.x + patch.x,
+      y: current.y + patch.y
+    };
+  }
+
+  return {
+    x: patch.x,
+    y: patch.y
+  };
+}
+
 const addOffsets = (
   current: readonly Vec2Dto[],
   patch: readonly Vec2Dto[],
@@ -828,6 +904,13 @@ function cloneKeyformValue(value: unknown): ParameterKeyformValue {
     return value;
   }
 
+  if (isVec2(value)) {
+    return {
+      x: value.x,
+      y: value.y
+    };
+  }
+
   if (Array.isArray(value)) {
     return value.map((candidate) =>
       isVec2(candidate)
@@ -846,6 +929,13 @@ function cloneStatePatchValue(value: unknown): StatePatchValueDto {
   const cloned = cloneKeyformValue(value);
   if (typeof cloned === "number") {
     return cloned;
+  }
+
+  if (isVec2(cloned)) {
+    return {
+      x: cloned.x,
+      y: cloned.y
+    };
   }
 
   return cloned.map((offset) => ({

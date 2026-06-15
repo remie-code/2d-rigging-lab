@@ -29,9 +29,12 @@ import {
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+const PART_ROOT = PartIdSchema.parse("part_root");
+const PART_HEAD_CONTAINER = PartIdSchema.parse("part_head_container");
+const PART_STALE = PartIdSchema.parse("part_stale_hidden");
 
 describe("authoring portable project bundle adapter", () => {
-  it("round-trips texture bytes, mesh, warp and rotation deformers, parameters, and keyforms", async () => {
+  it("round-trips editor-hidden parts, texture bytes, mesh, deformers, parameters, and keyforms", async () => {
     const textureBinaryAssetRef = createTextureBinaryAssetReference();
     const session = createRiggedTextureSession(textureBinaryAssetRef);
 
@@ -45,17 +48,135 @@ describe("authoring portable project bundle adapter", () => {
 
     const exported = await exportAuthoringSessionPortableBundle({
       session,
+      editorHiddenPartIds: [PART_STALE, PART_HEAD_CONTAINER, PART_HEAD_CONTAINER],
       updatedAt: "2026-06-15T01:00:00.000Z"
     });
     const imported = await importAuthoringSessionPortableBundle({
       bundle: exported.bundleJson
     });
     const exportedDocument = PackageDocumentSchema.parse(exported.packageDocument);
+    const importedDrawable = imported.session.graph.drawables.find((drawable) =>
+      drawable.drawableId === "draw_head"
+    );
+    const importedMesh = imported.session.graph.meshes.find((mesh) =>
+      mesh.meshId === "mesh_head"
+    );
+    const importedRotation = imported.session.graph.rigControls.find((rigControl) =>
+      rigControl.rigControlId === "rig_head_rotate"
+    );
+    const importedWarp = imported.session.graph.rigControls.find((rigControl) =>
+      rigControl.rigControlId === "rig_head_warp"
+    );
+    const importedRotationKeyform = imported.session.graph.keyformSets.find((keyformSet) =>
+      keyformSet.keyformSetId === "keyset_rotate_angle_x"
+    );
+    const importedRotationTranslationKeyform = imported.session.graph.keyformSets.find((keyformSet) =>
+      keyformSet.keyformSetId === "keyset_rotate_translation_x"
+    );
+    const importedWarpKeyform = imported.session.graph.keyformSets.find((keyformSet) =>
+      keyformSet.keyformSetId === "keyset_warp_angle_x"
+    );
 
     expect(exported.binaryPayloadCount).toBe(1);
+    expect(exportedDocument.manifest.schemaVersions.editorState).toBe("editor-state-v1");
+    expect(exportedDocument.manifest.modelFiles.editorState).toBe("model/editor-state.json");
+    expect(exportedDocument.model.editorState).toEqual({
+      schemaVersion: "editor-state-v1",
+      selection: [],
+      lockedIds: [],
+      editorHiddenIds: [PART_HEAD_CONTAINER]
+    });
     expect(exportedDocument.assets.textureAtlas?.textures[0]?.binaryAssetRef).toEqual(
       textureBinaryAssetRef
     );
+    expect(imported.editorHiddenPartIds).toEqual([PART_HEAD_CONTAINER]);
+    expect(imported.session.graph.parts).toEqual(session.graph.parts);
+    expect(imported.session.graph.parts.find((part) => part.partId === PART_HEAD_CONTAINER))
+      .toMatchObject({
+        parentPartId: PART_ROOT,
+        drawableIds: ["draw_head"],
+        children: [{ kind: "drawable", drawableId: "draw_head" }]
+      });
+    expect(importedDrawable).toMatchObject({
+      drawableId: "draw_head",
+      partId: PART_HEAD_CONTAINER,
+      defaultOpacity: 0.9,
+      runtimeVisibility: true,
+      baseDrawOrder: 0
+    });
+    expect(importedMesh).toMatchObject({
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+        { x: 64, y: 64 },
+        { x: 0, y: 64 }
+      ],
+      uvs: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ],
+      triangles: [
+        [0, 1, 2],
+        [0, 2, 3]
+      ],
+      generationProvenanceId: "prov_texture_head"
+    });
+    expect(importedWarp).toMatchObject({
+      kind: "warpLattice2d",
+      parentId: "rig_head_rotate",
+      domainBounds: { x: 0, y: 0, width: 64, height: 64 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      restControlPoints: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+        { x: 0, y: 64 },
+        { x: 64, y: 64 }
+      ]
+    });
+    expect(importedWarpKeyform?.keys.map((key) => key.statePatch)).toEqual([
+      [
+        { x: -2, y: 0 },
+        { x: -1, y: 0 },
+        { x: -2, y: 1 },
+        { x: -1, y: 1 }
+      ],
+      [
+        { x: 2, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: -1 },
+        { x: 1, y: -1 }
+      ]
+    ]);
+    expect(importedRotation).toMatchObject({
+      kind: "rotation2d",
+      pivot: { x: 32, y: 32 },
+      restAngleDegrees: 5,
+      restTranslation: { x: 6, y: -3 },
+      childRigControlIds: ["rig_head_warp"]
+    });
+    expect(importedRotationKeyform?.keys.map((key) => key.statePatch)).toEqual([-20, 20]);
+    expect(importedRotationTranslationKeyform?.keys.map((key) => key.statePatch)).toEqual([
+      { x: -4, y: 2 },
+      { x: 8, y: -5 }
+    ]);
+    expect(imported.session.graph.parameters).toEqual([
+      expect.objectContaining({
+        parameterId: "param_angle_x",
+        min: -1,
+        default: 0,
+        max: 1
+      })
+    ]);
+    expect(imported.session.graph.drawOrder).toEqual([
+      {
+        drawableId: "draw_head",
+        baseDrawOrder: 0,
+        stableOrder: 0
+      }
+    ]);
     expect(imported.session.graph.meshes).toEqual(session.graph.meshes);
     expect(imported.session.graph.rigControls).toEqual(session.graph.rigControls);
     expect(imported.session.graph.parameters).toEqual(session.graph.parameters);
@@ -74,6 +195,45 @@ describe("authoring portable project bundle adapter", () => {
       textureId: "tex_head"
     });
     expect(imported.session.dirty).toBe(false);
+  });
+
+  it("deterministically drops stale package editor hidden Part IDs during import", async () => {
+    const textureBinaryAssetRef = createTextureBinaryAssetReference();
+    const session = createRiggedTextureSession(textureBinaryAssetRef);
+
+    registerAuthoringSessionBinaryBytes(session, {
+      binaryAssetRef: textureBinaryAssetRef,
+      bytes: TEXTURE_BYTES,
+      role: "texture-raster-v1",
+      sourceAssetId: SourceAssetIdSchema.parse("src_layered_fixture"),
+      textureId: TextureIdSchema.parse("tex_head")
+    });
+
+    const exported = await exportAuthoringSessionPortableBundle({
+      session,
+      editorHiddenPartIds: [PART_HEAD_CONTAINER]
+    });
+    const bundle = JSON.parse(exported.bundleJson) as {
+      packageDocument: {
+        model: {
+          editorState: {
+            editorHiddenIds: string[];
+          };
+        };
+      };
+    };
+    bundle.packageDocument.model.editorState.editorHiddenIds = [
+      "part_missing_after_save",
+      "not a part id",
+      PART_HEAD_CONTAINER,
+      PART_HEAD_CONTAINER
+    ];
+
+    const imported = await importAuthoringSessionPortableBundle({
+      bundle: JSON.stringify(bundle)
+    });
+
+    expect(imported.editorHiddenPartIds).toEqual([PART_HEAD_CONTAINER]);
   });
 });
 
@@ -111,8 +271,21 @@ function createRiggedTextureSession(
       canvasSize: { width: 256, height: 256 },
       parts: [
         {
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_ROOT,
           displayName: "Root",
+          childPartIds: [PART_HEAD_CONTAINER],
+          drawableIds: [],
+          children: [
+            {
+              kind: "part",
+              partId: PART_HEAD_CONTAINER
+            }
+          ]
+        },
+        {
+          partId: PART_HEAD_CONTAINER,
+          displayName: "Head Container",
+          parentPartId: PART_ROOT,
           childPartIds: [],
           drawableIds: [DrawableIdSchema.parse("draw_head")],
           children: [
@@ -127,7 +300,7 @@ function createRiggedTextureSession(
         {
           drawableId: DrawableIdSchema.parse("draw_head"),
           displayName: "Head",
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_HEAD_CONTAINER,
           sourceAssetId: SourceAssetIdSchema.parse("src_layered_fixture"),
           textureId: TextureIdSchema.parse("tex_head"),
           meshId: MeshIdSchema.parse("mesh_head"),
@@ -207,7 +380,7 @@ function createRiggedTextureSession(
           evaluator: "linear-1d-v1",
           interpolation: "linear-1d-v1",
           compositionMode: "replace",
-          compositionOrder: 1,
+          compositionOrder: 2,
           keys: [
             {
               value: -1,
@@ -230,6 +403,23 @@ function createRiggedTextureSession(
           ]
         },
         {
+          keyformSetId: KeyformSetIdSchema.parse("keyset_rotate_translation_x"),
+          target: {
+            kind: "rigControl",
+            id: RigControlIdSchema.parse("rig_head_rotate"),
+            property: "translation"
+          },
+          parameterId: ParameterIdSchema.parse("param_angle_x"),
+          evaluator: "linear-1d-v1",
+          interpolation: "linear-1d-v1",
+          compositionMode: "replace",
+          compositionOrder: 1,
+          keys: [
+            { value: -1, statePatch: { x: -4, y: 2 } },
+            { value: 1, statePatch: { x: 8, y: -5 } }
+          ]
+        },
+        {
           keyformSetId: KeyformSetIdSchema.parse("keyset_draw_head_opacity"),
           target: {
             kind: "drawable",
@@ -240,7 +430,7 @@ function createRiggedTextureSession(
           evaluator: "linear-1d-v1",
           interpolation: "linear-1d-v1",
           compositionMode: "replace",
-          compositionOrder: 2,
+          compositionOrder: 3,
           keys: [
             { value: -1, statePatch: 0.5 },
             { value: 1, statePatch: 1 }
@@ -252,13 +442,13 @@ function createRiggedTextureSession(
           kind: "rotation2d",
           rigControlId: RigControlIdSchema.parse("rig_head_rotate"),
           displayName: "Head Rotate",
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_HEAD_CONTAINER,
           childDrawableIds: [],
           childRigControlIds: [RigControlIdSchema.parse("rig_head_warp")],
           opacityMultiplier: 0.95,
           pivot: { x: 32, y: 32 },
           restAngleDegrees: 5,
-          restTranslation: { x: 0, y: 0 },
+          restTranslation: { x: 6, y: -3 },
           restScale: { x: 1, y: 1 },
           enabled: true
         },
@@ -266,7 +456,7 @@ function createRiggedTextureSession(
           kind: "warpLattice2d",
           rigControlId: RigControlIdSchema.parse("rig_head_warp"),
           displayName: "Head Warp",
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_HEAD_CONTAINER,
           parentId: RigControlIdSchema.parse("rig_head_rotate"),
           childDrawableIds: [DrawableIdSchema.parse("draw_head")],
           childRigControlIds: [],
@@ -296,7 +486,8 @@ function createRiggedTextureSession(
       ],
       rigControlRootIds: [RigControlIdSchema.parse("rig_head_rotate")],
       stableOrder: [
-        "part_root",
+        PART_ROOT,
+        PART_HEAD_CONTAINER,
         "draw_head",
         "mesh_head",
         "param_angle_x",

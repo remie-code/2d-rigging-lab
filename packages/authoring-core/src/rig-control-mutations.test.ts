@@ -326,7 +326,7 @@ describe("rig control authoring mutations", () => {
     expect((caught as AuthoringMutationError).code).toBe("rig_control_keyform_cardinality_conflict");
   });
 
-  it("updates rotation pivot and rest angle while preserving hierarchy and keyforms", () => {
+  it("updates rotation pivot, rest angle, and rest translation while preserving hierarchy and keyforms", () => {
     const session = createFixtureSession();
     createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
     createRotation2dRigControl(
@@ -362,7 +362,8 @@ describe("rig control authoring mutations", () => {
     const result = updateRigControl(session, {
       rigControlId: RigControlIdSchema.parse("rig_face_rotation"),
       pivot: { x: 24, y: 36 },
-      restAngleDegrees: 15
+      restAngleDegrees: 15,
+      restTranslation: { x: 7, y: -3 }
     });
 
     expect(result.rigControlAfter).toMatchObject({
@@ -371,7 +372,10 @@ describe("rig control authoring mutations", () => {
       childDrawableIds: ["draw_body"],
       childRigControlIds: [],
       pivot: { x: 24, y: 36 },
-      restAngleDegrees: 15
+      restAngleDegrees: 15,
+      restTranslation: { x: 7, y: -3 },
+      restScale: { x: 1, y: 1 },
+      enabled: true
     });
     expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
     expect(session.graph.keyformSets).toHaveLength(1);
@@ -398,15 +402,22 @@ describe("rig control authoring mutations", () => {
       ],
       [
         {
+          restTranslation: { x: Number.NEGATIVE_INFINITY, y: 0 }
+        },
+        "invalid_rotation_rest_translation"
+      ],
+      [
+        {
           rigControlId: RigControlIdSchema.parse("rig_face_warp"),
-          pivot: { x: 1, y: 2 }
+          restTranslation: { x: 1, y: 2 }
         },
         "unsupported_rig_control_update_field"
       ],
       [
         {
           pivot: { x: 64, y: 64 },
-          restAngleDegrees: 0
+          restAngleDegrees: 0,
+          restTranslation: { x: 0, y: 0 }
         },
         "no_op_rig_control_update"
       ]

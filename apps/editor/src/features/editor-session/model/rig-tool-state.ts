@@ -94,6 +94,10 @@ export interface RotationDeformerReadModel {
     readonly x: number;
     readonly y: number;
   };
+  readonly restTranslation: {
+    readonly x: number;
+    readonly y: number;
+  };
   readonly restAngleDegrees: number;
 }
 
@@ -701,6 +705,7 @@ function projectEditorRotationDeformerReadModel(
     opacityMultiplier: rigControl.opacityMultiplier ?? 1,
     hasKeyforms: hasRigControlKeyforms(session, rigControl.rigControlId),
     pivot: structuredClone(rigControl.pivot),
+    restTranslation: structuredClone(rigControl.restTranslation ?? { x: 0, y: 0 }),
     restAngleDegrees: rigControl.restAngleDegrees
   };
 }

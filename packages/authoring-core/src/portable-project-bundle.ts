@@ -8,6 +8,7 @@ import {
   type PackageBinaryFileEntry,
   type PackageDocumentDto
 } from "@private-2d-rigging-lab/package-format";
+import type { PartId } from "@private-2d-rigging-lab/contracts";
 
 import type { AuthoringSession } from "./authoring-session.js";
 import {
@@ -15,11 +16,13 @@ import {
   registerAuthoringSessionBinaryBytes
 } from "./binary-byte-registration.js";
 import { createAuthoringSessionFromPackageDocument } from "./from-package-document.js";
+import { readPackageEditorHiddenPartIds } from "./package-document-editor-state.js";
 import { toPackageDocumentFromAuthoringSession } from "./package-document-from-authoring-session.js";
 
 export interface ExportAuthoringSessionPortableBundleInput {
   readonly session: AuthoringSession;
   readonly baseDocument?: unknown;
+  readonly editorHiddenPartIds?: Iterable<PartId>;
   readonly updatedAt?: Date | string;
 }
 
@@ -44,6 +47,7 @@ export interface ImportAuthoringSessionPortableBundleResult {
   readonly packageRevision: number;
   readonly binaryPayloadCount: number;
   readonly binaryFileCount: number;
+  readonly editorHiddenPartIds: readonly PartId[];
 }
 
 interface BinaryRegistrationTarget {
@@ -58,6 +62,9 @@ export const exportAuthoringSessionPortableBundle = async (
 ): Promise<ExportAuthoringSessionPortableBundleResult> => {
   const packageDocument = toPackageDocumentFromAuthoringSession(input.session, {
     ...(input.baseDocument === undefined ? {} : { baseDocument: input.baseDocument }),
+    ...(input.editorHiddenPartIds === undefined
+      ? {}
+      : { editorHiddenPartIds: input.editorHiddenPartIds }),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt })
   });
   const bundle = await exportPortablePackageBundleV0({
@@ -85,6 +92,7 @@ export const importAuthoringSessionPortableBundle = async (
   const session = createAuthoringSessionFromPackageDocument(packageDocument, {
     dirty: false
   });
+  const editorHiddenPartIds = readPackageEditorHiddenPartIds(session, packageDocument);
 
   hydrateAuthoringSessionBinaryAssets({
     session,
@@ -99,7 +107,8 @@ export const importAuthoringSessionPortableBundle = async (
     packageDisplayName: packageDocument.manifest.packageDisplayName,
     packageRevision: packageDocument.manifest.packageRevision,
     binaryPayloadCount: imported.bundle.binaryPayloads.length,
-    binaryFileCount: imported.binaryEntries.length
+    binaryFileCount: imported.binaryEntries.length,
+    editorHiddenPartIds
   };
 };
 

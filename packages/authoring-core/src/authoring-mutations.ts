@@ -127,6 +127,7 @@ export type AuthoringMutationErrorCode =
   | "invalid_rig_control_opacity_multiplier"
   | "invalid_rotation_pivot"
   | "invalid_rotation_rest_angle"
+  | "invalid_rotation_rest_translation"
   | "unsupported_rig_control_update_field"
   | "rig_control_keyform_cardinality_conflict"
   | "no_op_rig_control_update"

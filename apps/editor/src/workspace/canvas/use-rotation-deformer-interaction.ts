@@ -36,11 +36,16 @@ import {
 } from "./rotation-deformer-handles";
 import {
   canCommitRotationAngleKeyformUpdate,
+  canCommitRotationTranslationKeyformUpdate,
   createRotationKeyformAngleUpdateGesture,
+  createRotationKeyformTranslationUpdateGesture,
   createRotationPivotUpdateGesture,
   createRotationRestAngleUpdateGesture,
+  createRotationRestTranslationUpdateGesture,
   hasRotationAngleKeyforms,
-  type RotationAngleEditMode
+  hasRotationTranslationKeyforms,
+  type RotationAngleEditMode,
+  type RotationTranslationEditMode
 } from "./rotation-deformer-gesture";
 
 const POINTER_CLICK_SLOP = 4;
@@ -76,11 +81,24 @@ type RotationDragState =
       readonly controller?: EditorSessionGestureCommitController<number> | undefined;
       readonly editMode: RotationAngleEditMode;
       readonly moved: boolean;
+    }
+  | {
+      readonly mode: "translation";
+      readonly pointerId: number;
+      readonly rigControlId: RigControlId;
+      readonly startScreen: CanvasPoint;
+      readonly startCanvas: CanvasPoint;
+      readonly baseTranslation: CanvasPoint;
+      readonly nextTranslationRef: { current: CanvasPoint };
+      readonly controller?: EditorSessionGestureCommitController<CanvasPoint> | undefined;
+      readonly editMode: RotationTranslationEditMode;
+      readonly moved: boolean;
     };
 
 interface RotationDeformerPreviewState {
   readonly rigControlId: RigControlId;
   readonly pivot?: CanvasPoint;
+  readonly translation?: CanvasPoint;
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
 }
@@ -90,8 +108,11 @@ interface RotationDeformerEditState {
   readonly parentedUnsupported: boolean;
   readonly localPivot: CanvasPoint;
   readonly displayPivot: CanvasPoint;
+  readonly localTranslation: CanvasPoint;
+  readonly displayTranslation: CanvasPoint;
   readonly displayAngleDegrees: number;
   readonly angleEditMode: RotationAngleEditMode;
+  readonly translationEditMode: RotationTranslationEditMode;
 }
 
 export interface UseRotationDeformerInteractionInput {
@@ -111,6 +132,8 @@ export interface RotationDeformerInteraction {
   readonly activeRigControlId?: RigControlId;
   readonly angleEditMode: RotationAngleEditMode["kind"] | "none";
   readonly angleLockReason?: Extract<RotationAngleEditMode, { readonly kind: "locked" }>["reason"];
+  readonly translationEditMode: RotationTranslationEditMode["kind"] | "none";
+  readonly translationLockReason?: Extract<RotationTranslationEditMode, { readonly kind: "locked" }>["reason"];
   readonly hoveredHandle?: RotationDeformerHandleKind;
   readonly previewActive: boolean;
   readonly renderProjection: CanvasRenderProjection;
@@ -218,6 +241,31 @@ export function useRotationDeformerInteraction(
         return true;
       }
 
+      if (hit.kind === "translation") {
+        const nextTranslationRef = {
+          current: editState.displayTranslation
+        };
+        const controller = createTranslationGestureController({
+          editMode: editState.translationEditMode,
+          getNextTranslation: () => nextTranslationRef.current,
+          rigControlId: overlay.rigControlId
+        });
+
+        dragRef.current = {
+          mode: "translation",
+          pointerId: eventInput.pointerId,
+          rigControlId: overlay.rigControlId,
+          startScreen: eventInput.screenPoint,
+          startCanvas: screenToCanvasPoint(eventInput.screenPoint, input.view),
+          baseTranslation: editState.displayTranslation,
+          nextTranslationRef,
+          ...(controller === undefined ? {} : { controller }),
+          editMode: editState.translationEditMode,
+          moved: false
+        };
+        return true;
+      }
+
       const nextAngleRef = {
         current: editState.displayAngleDegrees
       };
@@ -292,6 +340,27 @@ export function useRotationDeformerInteraction(
         return true;
       }
 
+      if (drag.mode === "translation") {
+        if (drag.controller !== undefined) {
+          const currentCanvas = screenToCanvasPoint(eventInput.screenPoint, input.view);
+          drag.nextTranslationRef.current = offsetCanvasPoint(drag.baseTranslation, {
+            x: currentCanvas.x - drag.startCanvas.x,
+            y: currentCanvas.y - drag.startCanvas.y
+          });
+          const nextTranslation = drag.controller.preview({ currentSession: input.session });
+          setPreview(createTranslationPreview({
+            rigControlId: drag.rigControlId,
+            nextTranslation
+          }));
+        }
+
+        dragRef.current = {
+          ...drag,
+          moved
+        };
+        return true;
+      }
+
       if (drag.controller !== undefined) {
         drag.nextAngleRef.current = resolveRotationAngleDegreesFromScreenPoint({
           fallbackAngleDegrees: drag.baseAngleDegrees,
@@ -346,6 +415,13 @@ export function useRotationDeformerInteraction(
         input.commitGestureController(drag.controller);
       }
 
+      if (
+        drag.mode === "translation" &&
+        !areCanvasPointsEqual(drag.baseTranslation, drag.nextTranslationRef.current)
+      ) {
+        input.commitGestureController(drag.controller);
+      }
+
       return true;
     },
     [input]
@@ -360,6 +436,7 @@ export function useRotationDeformerInteraction(
       rigControlId: activeRigControlId,
       pivotEditable: !editState.parentedUnsupported,
       angleEditable: editState.angleEditMode.kind !== "locked",
+      translationEditable: editState.translationEditMode.kind !== "locked",
       ...(hoveredHandle === undefined ? {} : { hoveredHandle })
     };
   }, [activeRigControlId, editState, hoveredHandle]);
@@ -369,6 +446,10 @@ export function useRotationDeformerInteraction(
     angleEditMode: editState?.angleEditMode.kind ?? "none",
     ...(editState?.angleEditMode.kind === "locked"
       ? { angleLockReason: editState.angleEditMode.reason }
+      : {}),
+    translationEditMode: editState?.translationEditMode.kind ?? "none",
+    ...(editState?.translationEditMode.kind === "locked"
+      ? { translationLockReason: editState.translationEditMode.reason }
       : {}),
     ...(hoveredHandle === undefined ? {} : { hoveredHandle }),
     previewActive: preview !== null,
@@ -409,6 +490,34 @@ function createAngleGestureController(input: {
   return undefined;
 }
 
+function createTranslationGestureController(input: {
+  readonly editMode: RotationTranslationEditMode;
+  readonly getNextTranslation: () => CanvasPoint;
+  readonly rigControlId: RigControlId;
+}): EditorSessionGestureCommitController<CanvasPoint> | undefined {
+  if (input.editMode.kind === "restTranslation") {
+    return createEditorSessionGestureCommitController(
+      createRotationRestTranslationUpdateGesture({
+        rigControlId: input.rigControlId,
+        getNextTranslation: input.getNextTranslation
+      })
+    );
+  }
+
+  if (input.editMode.kind === "keyform") {
+    return createEditorSessionGestureCommitController(
+      createRotationKeyformTranslationUpdateGesture({
+        binding: input.editMode.binding,
+        currentParameterValue: input.editMode.currentParameterValue,
+        getNextTranslation: input.getNextTranslation,
+        parameter: input.editMode.parameter
+      })
+    );
+  }
+
+  return undefined;
+}
+
 function createAnglePreview(input: {
   readonly editMode: RotationAngleEditMode;
   readonly rigControlId: RigControlId;
@@ -425,6 +534,16 @@ function createAnglePreview(input: {
   return {
     rigControlId: input.rigControlId,
     evaluatedAngleDegrees: input.nextAngleDegrees
+  };
+}
+
+function createTranslationPreview(input: {
+  readonly rigControlId: RigControlId;
+  readonly nextTranslation: CanvasPoint;
+}): RotationDeformerPreviewState {
+  return {
+    rigControlId: input.rigControlId,
+    translation: input.nextTranslation
   };
 }
 
@@ -451,24 +570,47 @@ function createRotationDeformerEditState(input: {
   }
 
   const parentedUnsupported = rigControl.parentId !== undefined;
-  const binding = createRigControlParameterBindings(input.session, overlay.rigControlId).find(
+  const bindings = createRigControlParameterBindings(input.session, overlay.rigControlId);
+  const angleBinding = bindings.find(
     (candidate) => candidate.targetProperty === "angleDegrees"
   );
-  const bindingProjection =
-    binding === undefined
+  const angleBindingProjection =
+    angleBinding === undefined
       ? undefined
       : createParameterBindingProjection(
           input.session,
-          binding,
+          angleBinding,
+          input.activeParameterId,
+          input.parameterValues
+        );
+  const translationBinding = bindings.find(
+    (candidate) => candidate.targetProperty === "translation"
+  );
+  const translationBindingProjection =
+    translationBinding === undefined
+      ? undefined
+      : createParameterBindingProjection(
+          input.session,
+          translationBinding,
           input.activeParameterId,
           input.parameterValues
         );
   const angleEditMode = resolveAngleEditMode({
-    binding,
-    bindingProjection,
+    binding: angleBinding,
+    bindingProjection: angleBindingProjection,
     hasAngleKeyforms: hasRotationAngleKeyforms(input.session, overlay.rigControlId),
     parentedUnsupported
   });
+  const translationEditMode = resolveTranslationEditMode({
+    binding: translationBinding,
+    bindingProjection: translationBindingProjection,
+    hasTranslationKeyforms: hasRotationTranslationKeyforms(input.session, overlay.rigControlId),
+    parentedUnsupported
+  });
+  const localTranslation = {
+    x: rigControl.restTranslation?.x ?? 0,
+    y: rigControl.restTranslation?.y ?? 0
+  };
 
   return {
     rigControlId: overlay.rigControlId,
@@ -478,8 +620,11 @@ function createRotationDeformerEditState(input: {
       y: rigControl.pivot.y
     },
     displayPivot: getRotationDeformerPivot(overlay),
+    localTranslation,
+    displayTranslation: overlay.translation ?? localTranslation,
     displayAngleDegrees: overlay.evaluatedAngleDegrees ?? overlay.restAngleDegrees ?? 0,
-    angleEditMode
+    angleEditMode,
+    translationEditMode
   };
 }
 
@@ -521,6 +666,44 @@ function resolveAngleEditMode(input: {
   };
 }
 
+function resolveTranslationEditMode(input: {
+  readonly binding: ParameterKeyformBindingDescriptor | undefined;
+  readonly bindingProjection: ParameterBindingProjection | undefined;
+  readonly hasTranslationKeyforms: boolean;
+  readonly parentedUnsupported: boolean;
+}): RotationTranslationEditMode {
+  if (input.parentedUnsupported) {
+    return {
+      kind: "locked",
+      reason: "parentedUnsupported"
+    };
+  }
+
+  if (
+    input.binding !== undefined &&
+    input.bindingProjection !== undefined &&
+    canCommitRotationTranslationKeyformUpdate(input.bindingProjection)
+  ) {
+    return {
+      kind: "keyform",
+      binding: input.binding,
+      currentParameterValue: input.bindingProjection.currentParameterValue,
+      parameter: input.bindingProjection.parameter
+    };
+  }
+
+  if (!input.hasTranslationKeyforms) {
+    return {
+      kind: "restTranslation"
+    };
+  }
+
+  return {
+    kind: "locked",
+    reason: "missingCurrentKeyform"
+  };
+}
+
 function applyRotationPreview(
   projection: CanvasRenderProjection,
   preview: RotationDeformerPreviewState | null
@@ -538,6 +721,7 @@ function applyRotationPreview(
     deformerOverlay: {
       ...projection.deformerOverlay,
       ...(preview.pivot === undefined ? {} : { pivot: preview.pivot }),
+      ...(preview.translation === undefined ? {} : { translation: preview.translation }),
       ...(preview.restAngleDegrees === undefined
         ? {}
         : { restAngleDegrees: preview.restAngleDegrees }),

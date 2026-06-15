@@ -91,6 +91,101 @@ describe("runtime rig control keyform evidence", () => {
     expect(first.evidence.runtimeDiffEquivalent).toBe(false);
   });
 
+  it("records rotation2d rest translation, keyed translation, hierarchy composition, and diff evidence", () => {
+    const baseGraph = createRotation2dKeyformGraph([
+      {
+        evaluator: "linear-1d-v1",
+        keyformSetId: KeyformSetIdSchema.parse("keyset_child_translation"),
+        targetId: "rig_child",
+        targetKind: "rigControl",
+        targetProperty: "translation",
+        parameterId: ParameterIdSchema.parse("param_rig_angle"),
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [
+          { value: 0, statePatch: { x: 0, y: 0 } },
+          { value: 1, statePatch: { x: 2, y: 3 } }
+        ]
+      }
+    ]);
+    const parentRigId = RigControlIdSchema.parse("rig_parent");
+    const parent = baseGraph.rigControls.get(parentRigId);
+    if (parent?.kind !== "rotation2d") {
+      throw new Error("Expected parent rotation2d rig control.");
+    }
+    const graph = {
+      ...baseGraph,
+      rigControls: new Map([
+        ...baseGraph.rigControls,
+        [
+          parentRigId,
+          {
+            ...parent,
+            restTranslation: { x: 5, y: 0 }
+          }
+        ]
+      ])
+    };
+    const request = {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_parent", "rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const,
+        includeTrace: true
+      }
+    };
+
+    const first = evaluateViewerRuntimeSnapshot(graph, request);
+    const second = evaluateViewerRuntimeSnapshot(graph, request);
+    const baselineParent = expectRigControl(first.baselineSnapshot.rigControls, "rig_parent");
+    const candidateChild = expectRigControl(first.snapshot.rigControls, "rig_child");
+    const drawable = expectDrawable(first.snapshot.drawables, "draw_child");
+
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.runtimeDiff).toEqual(second.runtimeDiff);
+    expect(baselineParent.localTransform?.translation).toEqual({ x: 5, y: 0 });
+    expect(candidateChild.localTransform?.translation).toEqual({ x: 2, y: 3 });
+    expect(candidateChild.worldTransform?.translation).toEqual({ x: 7, y: 3 });
+    expect(drawable.bounds).toEqual({ x: 17, y: 3, width: 2, height: 2 });
+    expect(drawable.vertices).toEqual([
+      { x: 17, y: 3 },
+      { x: 19, y: 3 },
+      { x: 19, y: 5 },
+      { x: 17, y: 5 }
+    ]);
+    expect(first.snapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: "keyset_child_translation",
+        target: "rigControl:rig_child.translation",
+        statePatch: { x: 2, y: 3 },
+        samplingStatus: "exact"
+      })
+    ]);
+    expect(first.runtimeDiff.parameterChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "/rigControls/rig_child/localTransform/translation",
+          before: { x: 0, y: 0 },
+          after: { x: 2, y: 3 }
+        }),
+        expect.objectContaining({
+          path: "/rigControls/rig_child/worldTransform/translation",
+          before: { x: 5, y: 0 },
+          after: { x: 7, y: 3 }
+        })
+      ])
+    );
+    expect(first.runtimeDiff.drawableChanges).toEqual([
+      expect.objectContaining({
+        drawableId: "draw_child",
+        boundsChanged: true
+      })
+    ]);
+    expect(first.evidence.runtimeDiffEquivalent).toBe(false);
+  });
+
   it("emits deterministic diagnostics for invalid and unsupported rotation2d keyform patches", () => {
     const graph = createRotation2dKeyformGraph([
       {

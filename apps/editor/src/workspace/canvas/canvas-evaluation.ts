@@ -94,6 +94,7 @@ export interface CanvasEvaluatedWarpRigControl extends CanvasEvaluatedRigControl
 export interface CanvasEvaluatedRotationRigControl extends CanvasEvaluatedRigControlBase {
   readonly kind: "rotation";
   readonly pivot: Vec2Dto;
+  readonly translation: Vec2Dto;
   readonly restAngleDegrees: number;
   readonly evaluatedAngleDegrees: number;
 }
@@ -147,6 +148,7 @@ export interface CanvasEvaluationControlPointPreview {
 export interface CanvasEvaluationRotationPreview {
   readonly rigControlId: RigControlId;
   readonly pivot?: Vec2Dto;
+  readonly translation?: Vec2Dto;
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
 }
@@ -424,6 +426,11 @@ function createEvaluationRotationRigControl(input: {
     preview?.evaluatedAngleDegrees ??
     input.evaluatedKeyforms.rigAngleDegreesById.get(input.rigControl.rigControlId) ??
     restAngleDegrees;
+  const translation =
+    preview?.translation ??
+    input.evaluatedKeyforms.rigTranslationById.get(input.rigControl.rigControlId) ??
+    input.rigControl.restTranslation ??
+    { x: 0, y: 0 };
 
   return {
     id: input.rigControl.rigControlId,
@@ -446,7 +453,7 @@ function createEvaluationRotationRigControl(input: {
     pivot: cloneVec2(preview?.pivot ?? input.rigControl.pivot),
     restAngleDegrees,
     angleDegrees: evaluatedAngleDegrees,
-    translation: cloneVec2(input.rigControl.restTranslation ?? { x: 0, y: 0 }),
+    translation: cloneVec2(translation),
     scale: cloneVec2(input.rigControl.restScale ?? { x: 1, y: 1 })
   };
 }
@@ -553,6 +560,7 @@ function createCanvasEvaluatedRotationRigControl(
       height: 32
     },
     pivot: evaluatedPivot,
+    translation: cloneVec2(rigControl.translation),
     restAngleDegrees: rigControl.restAngleDegrees,
     evaluatedAngleDegrees: rigControl.angleDegrees,
     childDrawableIds: [...rigControl.childDrawableIds],

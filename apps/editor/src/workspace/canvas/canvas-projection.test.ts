@@ -364,6 +364,7 @@ describe("canvas render projection", () => {
       displayName: "Face Rotation",
       status: "committed",
       pivot: { x: 15, y: 15 },
+      translation: { x: 0, y: 0 },
       restAngleDegrees: 12,
       evaluatedAngleDegrees: 12,
       childDrawableIds: [DRAW_FRONT]
@@ -377,6 +378,55 @@ describe("canvas render projection", () => {
     expect(
       projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)?.opacity
     ).toBeCloseTo(0.336);
+  });
+
+  it("projects Rotation rest and keyed translation into overlay and drawable geometry", () => {
+    const restSession = createFixtureSession();
+    const restRigControl = createRotationDeformerRigControl();
+    restRigControl.restAngleDegrees = 0;
+    restRigControl.restTranslation = { x: 3, y: -2 };
+    restSession.graph.rigControls.push(restRigControl);
+    restSession.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+
+    const restProjection = createCanvasRenderProjection(restSession, {
+      kind: "rigControl",
+      id: RIG_FACE_ROTATION
+    });
+    const restFront = restProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(restFront?.bounds).toEqual({ x: 8, y: 3, width: 20, height: 20 });
+    expect(restProjection.deformerOverlay).toMatchObject({
+      kind: "rotation",
+      pivot: { x: 18, y: 13 },
+      translation: { x: 3, y: -2 }
+    });
+
+    const keyedSession = createFixtureSession();
+    const keyedRigControl = createRotationDeformerRigControl();
+    keyedRigControl.restAngleDegrees = 0;
+    keyedSession.graph.rigControls.push(keyedRigControl);
+    keyedSession.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+    keyedSession.graph.keyformSets.push(createRotationTranslationKeyformSet([
+      { value: -30, statePatch: { x: 0, y: 0 } },
+      { value: 30, statePatch: { x: 8, y: 5 } }
+    ]));
+
+    const keyedProjection = createCanvasRenderProjection(
+      keyedSession,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      {
+        parameterValues: { [FACE_ANGLE_X]: 30 }
+      }
+    );
+    const keyedFront = keyedProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(keyedFront?.bounds).toEqual({ x: 13, y: 10, width: 20, height: 20 });
+    expect(keyedProjection.deformerOverlay).toMatchObject({
+      kind: "rotation",
+      pivot: { x: 23, y: 20 },
+      translation: { x: 8, y: 5 }
+    });
   });
 
   it("projects Rotation preview into overlay and evaluated drawable geometry", () => {
@@ -959,6 +1009,31 @@ function createWarpOffsetsKeyformSet(
     keys: keys.map((key) => ({
       value: key.value,
       statePatch: key.statePatch.map((offset) => ({ x: offset.x, y: offset.y }))
+    }))
+  };
+}
+
+function createRotationTranslationKeyformSet(
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: { readonly x: number; readonly y: number };
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_projection_rotation_translation"),
+    target: {
+      kind: "rigControl" as const,
+      id: RIG_FACE_ROTATION,
+      property: "translation" as const
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: { x: key.statePatch.x, y: key.statePatch.y }
     }))
   };
 }

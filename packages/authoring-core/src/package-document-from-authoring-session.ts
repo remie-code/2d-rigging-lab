@@ -5,9 +5,11 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
+import type { PackageDocumentEditorStateOptions } from "./package-document-editor-state.js";
 import { toPackageDocument } from "./to-package-document.js";
 
-export interface PackageDocumentFromAuthoringSessionOptions {
+export interface PackageDocumentFromAuthoringSessionOptions
+  extends PackageDocumentEditorStateOptions {
   readonly createdAt?: Date | string;
   readonly updatedAt?: Date | string;
 }
@@ -137,6 +139,9 @@ export const toPackageDocumentFromAuthoringSession = (
       : PackageDocumentSchema.parse(options.baseDocument);
 
   return toPackageDocument(session, baseDocument, {
+    ...(options.editorHiddenPartIds === undefined
+      ? {}
+      : { editorHiddenPartIds: options.editorHiddenPartIds }),
     ...(options.updatedAt === undefined ? {} : { updatedAt: options.updatedAt })
   });
 };

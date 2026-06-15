@@ -740,7 +740,7 @@ describe("rig control operation handlers", () => {
     );
   });
 
-  it("commits Rotation pivot and rest angle updates with modelDiff fields", () => {
+  it("commits Rotation pivot, rest angle, and rest translation updates with modelDiff fields", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
     core.commitOperation(
@@ -764,7 +764,8 @@ describe("rig control operation handlers", () => {
         displayName: "Head Rotation Updated",
         opacityMultiplier: 0.5,
         pivot: { x: 20, y: 30 },
-        restAngleDegrees: 18
+        restAngleDegrees: 18,
+        restTranslation: { x: 9, y: -4 }
       })
     );
 
@@ -782,7 +783,8 @@ describe("rig control operation handlers", () => {
         displayName: "Head Rotation Updated",
         opacityMultiplier: 0.5,
         pivot: { x: 20, y: 30 },
-        restAngleDegrees: 18
+        restAngleDegrees: 18,
+        restTranslation: { x: 9, y: -4 }
       })
     );
     const rigControl = getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"));
@@ -794,7 +796,10 @@ describe("rig control operation handlers", () => {
       displayName: "Head Rotation Updated",
       opacityMultiplier: 0.5,
       pivot: { x: 20, y: 30 },
-      restAngleDegrees: 18
+      restAngleDegrees: 18,
+      restTranslation: { x: 9, y: -4 },
+      restScale: { x: 1, y: 1 },
+      enabled: true
     });
     expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
     expect(outcome.result.modelDiff?.changed[0]?.fields.map((field) => field.path)).toEqual(
@@ -802,7 +807,8 @@ describe("rig control operation handlers", () => {
         "/model/rigControls/rigControls/rig_head_rotation/displayName",
         "/model/rigControls/rigControls/rig_head_rotation/opacityMultiplier",
         "/model/rigControls/rigControls/rig_head_rotation/pivot",
-        "/model/rigControls/rigControls/rig_head_rotation/restAngleDegrees"
+        "/model/rigControls/rigControls/rig_head_rotation/restAngleDegrees",
+        "/model/rigControls/rigControls/rig_head_rotation/restTranslation"
       ])
     );
   });
@@ -833,7 +839,7 @@ describe("rig control operation handlers", () => {
         dryRun: false,
         basePackageRevision: 2,
         rigControlId: "rig_head_rotation",
-        pivot: { x: Number.NaN, y: 1 }
+        restTranslation: { x: Number.NaN, y: 1 }
       })
     );
     expect(invalid.result.status).toBe("rejected");
@@ -846,7 +852,7 @@ describe("rig control operation handlers", () => {
         dryRun: false,
         basePackageRevision: 2,
         rigControlId: "rig_head_warp_deformer",
-        pivot: { x: 1, y: 2 }
+        restTranslation: { x: 1, y: 2 }
       })
     );
     expect(wrongKind.result.status).toBe("rejected");
@@ -862,7 +868,8 @@ describe("rig control operation handlers", () => {
         basePackageRevision: 2,
         rigControlId: "rig_head_rotation",
         pivot: { x: 64, y: 64 },
-        restAngleDegrees: 0
+        restAngleDegrees: 0,
+        restTranslation: { x: 0, y: 0 }
       })
     );
     expect(noOp.result.status).toBe("rejected");
@@ -1263,6 +1270,7 @@ const createUpdateRigControlRequest = (options: {
   readonly opacityMultiplier?: number;
   readonly pivot?: { readonly x: number; readonly y: number };
   readonly restAngleDegrees?: number;
+  readonly restTranslation?: { readonly x: number; readonly y: number };
   readonly domainBounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly transformColumns?: number;
   readonly transformRows?: number;
@@ -1282,6 +1290,7 @@ const createUpdateRigControlRequest = (options: {
     ...(options.opacityMultiplier === undefined ? {} : { opacityMultiplier: options.opacityMultiplier }),
     ...(options.pivot === undefined ? {} : { pivot: options.pivot }),
     ...(options.restAngleDegrees === undefined ? {} : { restAngleDegrees: options.restAngleDegrees }),
+    ...(options.restTranslation === undefined ? {} : { restTranslation: options.restTranslation }),
     ...(options.domainBounds === undefined ? {} : { domainBounds: options.domainBounds }),
     ...(options.transformColumns === undefined ? {} : { transformColumns: options.transformColumns }),
     ...(options.transformRows === undefined ? {} : { transformRows: options.transformRows }),

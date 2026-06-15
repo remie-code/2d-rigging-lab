@@ -209,7 +209,7 @@ describe("editKeyformKey operation handler", () => {
     );
   });
 
-  it("supports v0 rigControl targets for angle, warp offsets, and opacity multiplier", () => {
+  it("supports v0 rigControl targets for angle, translation, warp offsets, and opacity multiplier", () => {
     const session = createFixtureSession();
     const rotationRequest = createEditRequest({
       dryRun: false,
@@ -220,6 +220,15 @@ describe("editKeyformKey operation handler", () => {
       statePatchValue: -20,
       defaultStatePatchValue: 0,
       maxStatePatchValue: 20
+    });
+    const translationRequest = createEditRequest({
+      dryRun: false,
+      action: "addCurrent",
+      targetKind: "rigControl",
+      targetId: "rig_head_rotation",
+      targetProperty: "translation",
+      keyValue: 10,
+      statePatchValue: { x: 2, y: -3 }
     });
     const warpRequest = createEditRequest({
       dryRun: false,
@@ -259,6 +268,11 @@ describe("editKeyformKey operation handler", () => {
       rotationRequest,
       getRequestOperationId(rotationRequest)
     );
+    const translationOutcome = editKeyformKeyOperationHandler.commit(
+      session,
+      translationRequest,
+      getRequestOperationId(translationRequest)
+    );
     const warpOutcome = editKeyformKeyOperationHandler.commit(
       session,
       warpRequest,
@@ -276,15 +290,21 @@ describe("editKeyformKey operation handler", () => {
     );
 
     expect(rotationOutcome.result.status).toBe("committed");
+    expect(translationOutcome.result.status).toBe("committed");
     expect(warpOutcome.result.status).toBe("committed");
     expect(opacityOutcome.result.status).toBe("committed");
     expect(warpOpacityOutcome.result.status).toBe("committed");
     expect(session.graph.keyformSets.map((set) => `${set.target.id}.${set.target.property}`)).toEqual([
       "rig_head_rotation.angleDegrees",
+      "rig_head_rotation.translation",
       "rig_head_warp.controlPointOffsets",
       "rig_head_rotation.opacityMultiplier",
       "rig_head_warp.opacityMultiplier"
     ]);
+    expect(getKeyformSetById(session.graph, KeyformSetIdSchema.parse("keyset_rigcontrol_rig_head_rotation_translation_face_yaw"))).toMatchObject({
+      target: { kind: "rigControl", id: "rig_head_rotation", property: "translation" },
+      keys: [{ value: 10, statePatch: { x: 2, y: -3 } }]
+    });
   });
 
   it("rejects duplicate key, missing key, missing binding, duplicate binding, missing parameter, and missing target atomically", () => {
@@ -417,6 +437,15 @@ describe("editKeyformKey operation handler", () => {
       keyValue: 0,
       statePatchValue: 1.5
     });
+    const invalidTranslationShape = createEditRequest({
+      dryRun: false,
+      action: "addCurrent",
+      targetKind: "rigControl",
+      targetId: "rig_head_rotation",
+      targetProperty: "translation",
+      keyValue: 0,
+      statePatchValue: 1
+    });
     const outOfRange = createEditRequest({
       dryRun: false,
       action: "addCurrent",
@@ -441,6 +470,11 @@ describe("editKeyformKey operation handler", () => {
       invalidShape,
       getRequestOperationId(invalidShape)
     );
+    const invalidTranslationShapeOutcome = editKeyformKeyOperationHandler.commit(
+      session,
+      invalidTranslationShape,
+      getRequestOperationId(invalidTranslationShape)
+    );
     const outOfRangeOutcome = editKeyformKeyOperationHandler.commit(
       session,
       outOfRange,
@@ -458,6 +492,10 @@ describe("editKeyformKey operation handler", () => {
     );
     expect(invalidShapeOutcome.result.status).toBe("rejected");
     expect(invalidShapeOutcome.result.diagnostics[0]?.checkId).toBe(
+      "operation.editKeyformKey.invalidPatchShape"
+    );
+    expect(invalidTranslationShapeOutcome.result.status).toBe("rejected");
+    expect(invalidTranslationShapeOutcome.result.diagnostics[0]?.checkId).toBe(
       "operation.editKeyformKey.invalidPatchShape"
     );
     expect(outOfRangeOutcome.result.status).toBe("rejected");

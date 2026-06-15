@@ -20,6 +20,6 @@ export const toPackageDocument = (
 ): PackageDocumentDto =>
   PackageDocumentSchema.parse({
     manifest: buildPackageDocumentManifest(session, baseDocument, options),
-    model: buildPackageDocumentModelFiles(session, baseDocument.model),
+    model: buildPackageDocumentModelFiles(session, baseDocument.model, options),
     assets: buildPackageDocumentAssets(session, baseDocument.assets)
   });

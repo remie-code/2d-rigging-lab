@@ -83,6 +83,7 @@ export interface CanvasDeformerOverlayProjection {
   readonly bezierColumns: number;
   readonly bezierRows: number;
   readonly pivot?: CanvasPoint;
+  readonly translation?: CanvasPoint;
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
   readonly controlPointOffsets?: readonly CanvasPoint[];
@@ -400,6 +401,7 @@ function createDeformerOverlayProjection(
       bezierColumns: 0,
       bezierRows: 0,
       pivot: structuredClone(rigControl.pivot),
+      translation: structuredClone(rigControl.translation),
       restAngleDegrees: rigControl.restAngleDegrees,
       evaluatedAngleDegrees: rigControl.evaluatedAngleDegrees,
       childDrawableIds: [...rigControl.childDrawableIds],

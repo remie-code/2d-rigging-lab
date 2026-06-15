@@ -3,6 +3,7 @@ import {
   exportAuthoringSessionPortableBundle,
   importAuthoringSessionPortableBundle
 } from "@private-2d-rigging-lab/authoring-core";
+import type { PartId } from "@private-2d-rigging-lab/contracts";
 
 export type EditorProjectStorageErrorCode =
   | "digestMismatch"
@@ -38,6 +39,7 @@ export class EditorProjectStorageError extends Error {
 export interface ExportEditorProjectBundleInput {
   readonly session: AuthoringSession;
   readonly baseDocument?: unknown;
+  readonly editorHiddenPartIds?: Iterable<PartId>;
   readonly now?: () => Date;
 }
 
@@ -64,6 +66,7 @@ export interface ImportEditorProjectBundleResult {
   readonly packageRevision: number;
   readonly binaryPayloadCount: number;
   readonly binaryFileCount: number;
+  readonly editorHiddenPartIds: readonly PartId[];
 }
 
 export const exportEditorProjectBundle = async (
@@ -75,6 +78,9 @@ export const exportEditorProjectBundle = async (
     const exported = await exportAuthoringSessionPortableBundle({
       session: input.session,
       ...(input.baseDocument === undefined ? {} : { baseDocument: input.baseDocument }),
+      ...(input.editorHiddenPartIds === undefined
+        ? {}
+        : { editorHiddenPartIds: input.editorHiddenPartIds }),
       updatedAt: exportedAt
     });
 

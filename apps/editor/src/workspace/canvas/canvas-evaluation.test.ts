@@ -287,6 +287,67 @@ describe("canvas evaluation", () => {
     expect(face.opacity).toBeCloseTo(0.25);
   });
 
+  it("evaluates rotation rest translation, keyed translation, and parent-child composition", () => {
+    const restSession = createFixtureSession();
+    restSession.graph.rigControls.push(createRotationRigControl({
+      restTranslation: { x: 6, y: -4 }
+    }));
+    restSession.graph.rigControlRootIds.push(RIG_FACE_ROTATION);
+
+    const restScene = createCanvasEvaluatedScene(restSession);
+    const restFace = requireDrawable(restScene, DRAW_FACE);
+    const restRigControl = requireRigControl(restScene, RIG_FACE_ROTATION);
+
+    expect(restFace.evaluatedMesh.vertices[0]).toEqual({ x: 6, y: -4 });
+    expect(restFace.bounds).toEqual({ x: 6, y: -4, width: 100, height: 100 });
+    expect(restRigControl).toMatchObject({
+      kind: "rotation",
+      translation: { x: 6, y: -4 }
+    });
+
+    const keyedSession = createFixtureSession();
+    keyedSession.graph.rigControls.push(createRotationRigControl());
+    keyedSession.graph.rigControlRootIds.push(RIG_FACE_ROTATION);
+    keyedSession.graph.keyformSets.push(createRotationTranslationKeyformSet([
+      { value: -30, statePatch: { x: 0, y: 0 } },
+      { value: 30, statePatch: { x: 8, y: 5 } }
+    ]));
+
+    const keyedScene = createCanvasEvaluatedScene(keyedSession, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    });
+    expect(requireDrawable(keyedScene, DRAW_FACE).evaluatedMesh.vertices[0]).toEqual({
+      x: 8,
+      y: 5
+    });
+    expect(requireRigControl(keyedScene, RIG_FACE_ROTATION)).toMatchObject({
+      kind: "rotation",
+      translation: { x: 8, y: 5 }
+    });
+
+    const hierarchySession = createFixtureSession();
+    hierarchySession.graph.rigControls.push(
+      createRotationRigControl({
+        rigControlId: RigControlIdSchema.parse("rig_parent_rotation"),
+        childDrawableIds: [],
+        childRigControlIds: [RIG_FACE_ROTATION],
+        restTranslation: { x: 5, y: 0 }
+      }),
+      createRotationRigControl({
+        parentId: RigControlIdSchema.parse("rig_parent_rotation"),
+        restTranslation: { x: 2, y: 3 }
+      })
+    );
+    hierarchySession.graph.rigControlRootIds.push(RigControlIdSchema.parse("rig_parent_rotation"));
+
+    const hierarchyFace = requireDrawable(createCanvasEvaluatedScene(hierarchySession), DRAW_FACE);
+    expect(hierarchyFace.rigControlChainIds).toEqual([
+      RigControlIdSchema.parse("rig_parent_rotation"),
+      RIG_FACE_ROTATION
+    ]);
+    expect(hierarchyFace.evaluatedMesh.vertices[0]).toEqual({ x: 7, y: 3 });
+  });
+
   it("applies rotation rigDraft geometry and opacity multiplier", () => {
     const session = createFixtureSession();
 
@@ -453,6 +514,31 @@ function createRigNumberKeyformSet(
   };
 }
 
+function createRotationTranslationKeyformSet(
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: { readonly x: number; readonly y: number };
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_eval_rotation_translation"),
+    target: {
+      kind: "rigControl" as const,
+      id: RIG_FACE_ROTATION,
+      property: "translation" as const
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: { x: key.statePatch.x, y: key.statePatch.y }
+    }))
+  };
+}
+
 function createWarpOffsetsKeyformSet(
   rigControlId: RigControlId,
   keys: readonly {
@@ -527,18 +613,25 @@ function createRestControlPoints(
   return points;
 }
 
-function createRotationRigControl() {
+function createRotationRigControl(input: {
+  readonly rigControlId?: RigControlId;
+  readonly parentId?: RigControlId;
+  readonly childDrawableIds?: readonly DrawableId[];
+  readonly childRigControlIds?: readonly RigControlId[];
+  readonly restTranslation?: { readonly x: number; readonly y: number };
+} = {}) {
   return {
     kind: "rotation2d" as const,
-    rigControlId: RIG_FACE_ROTATION,
+    rigControlId: input.rigControlId ?? RIG_FACE_ROTATION,
     displayName: "Face Rotation",
     partId: PART_FACE,
-    childDrawableIds: [DRAW_FACE],
-    childRigControlIds: [],
+    ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+    childDrawableIds: [...(input.childDrawableIds ?? [DRAW_FACE])],
+    childRigControlIds: [...(input.childRigControlIds ?? [])],
     opacityMultiplier: 1,
     pivot: { x: 50, y: 50 },
     restAngleDegrees: 0,
-    restTranslation: { x: 0, y: 0 },
+    restTranslation: input.restTranslation ?? { x: 0, y: 0 },
     restScale: { x: 1, y: 1 },
     enabled: true
   };

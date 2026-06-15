@@ -126,6 +126,7 @@ export interface UpdateRigControlInput {
   readonly displayName?: string;
   readonly pivot?: Vec2Dto;
   readonly restAngleDegrees?: number;
+  readonly restTranslation?: Vec2Dto;
   readonly domainBounds?: RectDto;
   readonly transformColumns?: number;
   readonly transformRows?: number;
@@ -575,7 +576,9 @@ export const updateRigControl = (
     input.bezierColumns !== undefined ||
     input.bezierRows !== undefined;
   const rotationFieldsWereProvided =
-    input.pivot !== undefined || input.restAngleDegrees !== undefined;
+    input.pivot !== undefined ||
+    input.restAngleDegrees !== undefined ||
+    input.restTranslation !== undefined;
   if (warpFieldsWereProvided) {
     if (rigControl.kind !== "warpLattice2d") {
       throw new AuthoringMutationError(
@@ -588,11 +591,12 @@ export const updateRigControl = (
     if (rigControl.kind !== "rotation2d") {
       throw new AuthoringMutationError(
         "unsupported_rig_control_update_field",
-        `Only rotation2d rig controls can update pivot or rest angle fields: ${input.rigControlId}`
+        `Only rotation2d rig controls can update pivot, rest angle, or rest translation fields: ${input.rigControlId}`
       );
     }
     assertRotation2dPivot(input.pivot);
     assertRotation2dRestAngle(input.restAngleDegrees);
+    assertRotation2dRestTranslation(input.restTranslation);
   }
 
   const warpFieldUpdate =
@@ -615,6 +619,9 @@ export const updateRigControl = (
     }
     if (input.restAngleDegrees !== undefined) {
       previewRigControlAfter.restAngleDegrees = input.restAngleDegrees;
+    }
+    if (input.restTranslation !== undefined) {
+      previewRigControlAfter.restTranslation = structuredClone(input.restTranslation);
     }
   }
   if (warpFieldUpdate !== undefined) {
@@ -820,6 +827,19 @@ const assertRotation2dRestAngle = (restAngleDegrees: number | undefined): void =
     throw new AuthoringMutationError(
       "invalid_rotation_rest_angle",
       `rotation2d restAngleDegrees must be finite: ${restAngleDegrees}`
+    );
+  }
+};
+
+const assertRotation2dRestTranslation = (restTranslation: Vec2Dto | undefined): void => {
+  if (restTranslation === undefined) {
+    return;
+  }
+
+  if (!Number.isFinite(restTranslation.x) || !Number.isFinite(restTranslation.y)) {
+    throw new AuthoringMutationError(
+      "invalid_rotation_rest_translation",
+      `rotation2d restTranslation must contain finite x/y values: ${JSON.stringify(restTranslation)}`
     );
   }
 };

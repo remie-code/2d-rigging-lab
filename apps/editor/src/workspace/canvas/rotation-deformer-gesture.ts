@@ -33,7 +33,30 @@ export type RotationAngleEditMode =
       readonly reason: "parentedUnsupported" | "missingCurrentKeyform";
     };
 
+export type RotationTranslationEditMode =
+  | {
+      readonly kind: "restTranslation";
+    }
+  | {
+      readonly kind: "keyform";
+      readonly binding: ParameterKeyformBindingDescriptor;
+      readonly parameter: EditorParameter;
+      readonly currentParameterValue: number;
+    }
+  | {
+      readonly kind: "locked";
+      readonly reason: "parentedUnsupported" | "missingCurrentKeyform";
+    };
+
 export function canCommitRotationAngleKeyformUpdate(
+  projection: Pick<ParameterBindingProjection, "canEditValue" | "parameter">
+): projection is Pick<ParameterBindingProjection, "canEditValue"> & {
+  readonly parameter: EditorParameter;
+} {
+  return projection.canEditValue && projection.parameter !== null;
+}
+
+export function canCommitRotationTranslationKeyformUpdate(
   projection: Pick<ParameterBindingProjection, "canEditValue" | "parameter">
 ): projection is Pick<ParameterBindingProjection, "canEditValue"> & {
   readonly parameter: EditorParameter;
@@ -50,6 +73,18 @@ export function hasRotationAngleKeyforms(
       keyformSet.target.kind === "rigControl" &&
       keyformSet.target.id === rigControlId &&
       keyformSet.target.property === "angleDegrees"
+  );
+}
+
+export function hasRotationTranslationKeyforms(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): boolean {
+  return session.graph.keyformSets.some(
+    (keyformSet) =>
+      keyformSet.target.kind === "rigControl" &&
+      keyformSet.target.id === rigControlId &&
+      keyformSet.target.property === "translation"
   );
 }
 
@@ -83,6 +118,21 @@ export function createRotationRestAngleUpdateGesture(input: {
   });
 }
 
+export function createRotationRestTranslationUpdateGesture(input: {
+  readonly rigControlId: RigControlId;
+  readonly getNextTranslation: () => CanvasPoint;
+}): EditorSessionGestureCommit<CanvasPoint, EditorSessionCommandResult> {
+  return createEditorSessionGestureCommit({
+    label: "Edit Rotation rest translation",
+    preview: () => input.getNextTranslation(),
+    commit: (currentSession) =>
+      commitUpdateRigControl(currentSession, {
+        rigControlId: input.rigControlId,
+        restTranslation: input.getNextTranslation()
+      })
+  });
+}
+
 export function createRotationKeyformAngleUpdateGesture(input: {
   readonly binding: ParameterKeyformBindingDescriptor;
   readonly currentParameterValue: number;
@@ -101,6 +151,29 @@ export function createRotationKeyformAngleUpdateGesture(input: {
           currentParameterValue: input.currentParameterValue,
           parameter: input.parameter,
           value: input.getNextAngleDegrees()
+        })
+      )
+  });
+}
+
+export function createRotationKeyformTranslationUpdateGesture(input: {
+  readonly binding: ParameterKeyformBindingDescriptor;
+  readonly currentParameterValue: number;
+  readonly getNextTranslation: () => CanvasPoint;
+  readonly parameter: EditorParameter;
+}): EditorSessionGestureCommit<CanvasPoint, EditorSessionCommandResult> {
+  return createEditorSessionGestureCommit({
+    label: "Edit Rotation translation keyform",
+    preview: () => input.getNextTranslation(),
+    commit: (currentSession) =>
+      commitEditKeyformKey(
+        currentSession,
+        createEditKeyformPayload({
+          action: "updateCurrent",
+          binding: input.binding,
+          currentParameterValue: input.currentParameterValue,
+          parameter: input.parameter,
+          value: input.getNextTranslation()
         })
       )
   });

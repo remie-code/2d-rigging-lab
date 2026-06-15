@@ -39,6 +39,9 @@ const CUSTOM_PARAMETER_ID = ParameterIdSchema.parse("param_custom_history");
 const ROTATION_PARAMETER_ID = ParameterIdSchema.parse("param_rotation_selection_x");
 const ROTATION_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rotation_selection");
 const ROTATION_PART_ID = PartIdSchema.parse("part_rotation_selection");
+const LOADED_CHILD_PART_ID = PartIdSchema.parse("part_loaded_child");
+const LOADED_DRAWABLE_ID = DrawableIdSchema.parse("draw_loaded_child");
+const TRANSIENT_DRAFT_DRAWABLE_ID = DrawableIdSchema.parse("draw_provider_fixture");
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -278,7 +281,10 @@ describe("EditorSessionProvider history integration", () => {
   });
 
   it("loads a portable bundle by replacing session and clearing transient editor state", async () => {
-    const harness = await renderEditorSessionProbe();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe({
+      initialSession: createTextureBundleSession()
+    });
 
     try {
       const activeParameterId = requireActiveParameterId(harness.context());
@@ -291,20 +297,51 @@ describe("EditorSessionProvider history integration", () => {
         harness.context().setActiveParameterValue(1);
         const result = harness.context().createCustomParameter(createCustomParameterPayload());
         expect(result.committed).toBe(true);
+        harness.context().startWarpDeformerDraftForDrawable(TRANSIENT_DRAFT_DRAWABLE_ID);
+        harness.context().previewMeshDraft(TRANSIENT_DRAFT_DRAWABLE_ID, "standard");
       });
 
       expect(harness.context().selection).toEqual({
-        kind: "part",
-        id: PartIdSchema.parse("part_root")
+        kind: "drawable",
+        id: TRANSIENT_DRAFT_DRAWABLE_ID
       });
       expect(harness.context().psdImportOpen).toBe(true);
       expect(harness.context().parameterValues[activeParameterId]).toBe(1);
       expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
       expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
+      expect(harness.context().meshDraft).toMatchObject({
+        drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
+        presetId: "standard"
+      });
+      expect(harness.context().rigDraft).toMatchObject({
+        childDrawableIds: [TRANSIENT_DRAFT_DRAWABLE_ID]
+      });
       expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().createRotationDeformerForDrawable(
+          DrawableIdSchema.parse("draw_missing_operation_feedback")
+        );
+        const duplicatePresetResult = harness.context().createCustomParameter({
+          parameterId: ParameterIdSchema.parse("param_face_angle_x"),
+          displayName: "Duplicate Preset",
+          valueSource: "authoredInput",
+          min: -1,
+          default: 0,
+          max: 1,
+          recommendedUiStep: 0.01
+        });
+        expect(duplicatePresetResult.committed).toBe(false);
+      });
+
+      expect(harness.context().rigOperationFeedback).toBe(
+        "Rotation Deformer could not be created for the selected Drawable."
+      );
+      expect(harness.context().parameterOperationFeedback).not.toBeNull();
 
       const loadedBundle = await exportAuthoringSessionPortableBundle({
         session: createLoadedProjectSession(),
+        editorHiddenPartIds: [LOADED_CHILD_PART_ID],
         updatedAt: "2026-06-15T02:00:00.000Z"
       });
 
@@ -322,8 +359,14 @@ describe("EditorSessionProvider history integration", () => {
       expect(harness.context().selection).toBeNull();
       expect(harness.context().psdImportOpen).toBe(false);
       expect(harness.context().parameterValues).toEqual({});
-      expect(harness.context().collapsedPartIds.size).toBe(0);
-      expect(harness.context().editorHiddenPartIds.size).toBe(0);
+      expect(harness.context().meshDraft).toBeNull();
+      expect(harness.context().rigDraft).toBeNull();
+      expect(harness.context().rigOperationFeedback).toBeNull();
+      expect(harness.context().parameterOperationFeedback).toBeNull();
+      expect(harness.context().collapsedPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
+      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
+      expect(harness.context().editorHiddenPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
+      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
       expect(harness.context().canUndo).toBe(false);
       expect(harness.context().canRedo).toBe(false);
       expect(harness.context().projectStorage.status).toBe("loaded");
@@ -331,6 +374,7 @@ describe("EditorSessionProvider history integration", () => {
         "loaded-project.portable-project.json"
       );
     } finally {
+      warn.mockRestore();
       await harness.cleanup();
     }
   });
@@ -648,11 +692,33 @@ function createLoadedProjectSession(): AuthoringSession {
         {
           partId: PartIdSchema.parse("part_root"),
           displayName: "Loaded Root",
+          childPartIds: [LOADED_CHILD_PART_ID],
+          drawableIds: [],
+          children: [{ kind: "part", partId: LOADED_CHILD_PART_ID }]
+        },
+        {
+          partId: LOADED_CHILD_PART_ID,
+          displayName: "Loaded Child",
+          parentPartId: PartIdSchema.parse("part_root"),
           childPartIds: [],
-          drawableIds: []
+          drawableIds: [LOADED_DRAWABLE_ID],
+          children: [{ kind: "drawable", drawableId: LOADED_DRAWABLE_ID }]
         }
       ],
-      drawables: [],
+      drawables: [
+        {
+          drawableId: LOADED_DRAWABLE_ID,
+          displayName: "Loaded Child Drawable",
+          partId: LOADED_CHILD_PART_ID,
+          sourceAssetId: SourceAssetIdSchema.parse("src_loaded_child"),
+          textureId: TextureIdSchema.parse("tex_loaded_child"),
+          meshId: MeshIdSchema.parse("mesh_loaded_child"),
+          defaultOpacity: 1,
+          runtimeVisibility: true,
+          baseDrawOrder: 0,
+          sourceProvenanceId: ProvenanceIdSchema.parse("prov_loaded_child")
+        }
+      ],
       meshes: [],
       parameters: [
         {
@@ -669,9 +735,15 @@ function createLoadedProjectSession(): AuthoringSession {
       rigControls: [],
       dynamicsGroups: [],
       masks: [],
-      drawOrder: [],
+      drawOrder: [
+        {
+          drawableId: LOADED_DRAWABLE_ID,
+          baseDrawOrder: 0,
+          stableOrder: 0
+        }
+      ],
       rigControlRootIds: [],
-      stableOrder: ["part_root", "param_loaded_wave72"],
+      stableOrder: ["part_root", LOADED_CHILD_PART_ID, LOADED_DRAWABLE_ID, "param_loaded_wave72"],
       sourceAssets: [],
       provenanceRecords: [],
       rightsRecords: []
@@ -698,12 +770,12 @@ function createTextureBundleSession(): AuthoringSession {
           partId: PartIdSchema.parse("part_root"),
           displayName: "Root",
           childPartIds: [],
-          drawableIds: [DrawableIdSchema.parse("draw_provider_fixture")]
+          drawableIds: [TRANSIENT_DRAFT_DRAWABLE_ID]
         }
       ],
       drawables: [
         {
-          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
           displayName: "Provider Fixture",
           partId: PartIdSchema.parse("part_root"),
           sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),
@@ -718,7 +790,7 @@ function createTextureBundleSession(): AuthoringSession {
       meshes: [
         {
           meshId: MeshIdSchema.parse("mesh_provider_fixture"),
-          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
           vertices: [
             { x: 0, y: 0 },
             { x: 8, y: 0 },
@@ -744,13 +816,13 @@ function createTextureBundleSession(): AuthoringSession {
       masks: [],
       drawOrder: [
         {
-          drawableId: DrawableIdSchema.parse("draw_provider_fixture"),
+          drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
           baseDrawOrder: 0,
           stableOrder: 0
         }
       ],
       rigControlRootIds: [],
-      stableOrder: ["part_root", "draw_provider_fixture", "mesh_provider_fixture"],
+      stableOrder: ["part_root", TRANSIENT_DRAFT_DRAWABLE_ID, "mesh_provider_fixture"],
       sourceAssets: [
         {
           sourceAssetId: SourceAssetIdSchema.parse("src_provider_fixture"),

@@ -23,6 +23,9 @@ import {
 const TEST_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEST_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+const PART_STORAGE_ROOT = PartIdSchema.parse("part_root");
+const PART_STORAGE_CONTAINER = PartIdSchema.parse("part_storage_container");
+const PART_STORAGE_STALE = PartIdSchema.parse("part_storage_stale");
 type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
 describe("editor project storage service", () => {
@@ -47,6 +50,37 @@ describe("editor project storage service", () => {
       0x62,
       0x63
     ]);
+  });
+
+  it("exports and imports editor-hidden Part Container state through package editor-state", async () => {
+    const binaryAssetRef = createBinaryAssetReference();
+    const session = createTextureSession(binaryAssetRef);
+    registerTextureBytes(session, binaryAssetRef);
+
+    const exported = await exportEditorProjectBundle({
+      session,
+      editorHiddenPartIds: new Set([PART_STORAGE_STALE, PART_STORAGE_CONTAINER]),
+      now: () => new Date("2026-06-15T03:30:00.000Z")
+    });
+    const packageDocument = exported.packageDocument as {
+      readonly manifest: {
+        readonly modelFiles: { readonly editorState?: string };
+      };
+      readonly model: {
+        readonly editorState?: {
+          readonly schemaVersion: string;
+          readonly editorHiddenIds: readonly string[];
+        };
+      };
+    };
+    const imported = await importEditorProjectBundle({ bundleText: exported.bundleJson });
+
+    expect(packageDocument.manifest.modelFiles.editorState).toBe("model/editor-state.json");
+    expect(packageDocument.model.editorState).toMatchObject({
+      schemaVersion: "editor-state-v1",
+      editorHiddenIds: [PART_STORAGE_CONTAINER]
+    });
+    expect(imported.editorHiddenPartIds).toEqual([PART_STORAGE_CONTAINER]);
   });
 
   it("classifies invalid portable bundle input", async () => {
@@ -152,17 +186,26 @@ function createTextureSession(binaryAssetRef: BinaryAssetReference): AuthoringSe
       canvasSize: { width: 64, height: 64 },
       parts: [
         {
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_STORAGE_ROOT,
           displayName: "Root",
+          childPartIds: [PART_STORAGE_CONTAINER],
+          drawableIds: [],
+          children: [{ kind: "part", partId: PART_STORAGE_CONTAINER }]
+        },
+        {
+          partId: PART_STORAGE_CONTAINER,
+          displayName: "Storage Container",
+          parentPartId: PART_STORAGE_ROOT,
           childPartIds: [],
-          drawableIds: [DrawableIdSchema.parse("draw_storage_fixture")]
+          drawableIds: [DrawableIdSchema.parse("draw_storage_fixture")],
+          children: [{ kind: "drawable", drawableId: DrawableIdSchema.parse("draw_storage_fixture") }]
         }
       ],
       drawables: [
         {
           drawableId: DrawableIdSchema.parse("draw_storage_fixture"),
           displayName: "Storage Fixture",
-          partId: PartIdSchema.parse("part_root"),
+          partId: PART_STORAGE_CONTAINER,
           sourceAssetId: SourceAssetIdSchema.parse("src_storage_fixture"),
           textureId: TextureIdSchema.parse("tex_storage_fixture"),
           meshId: MeshIdSchema.parse("mesh_storage_fixture"),
@@ -207,7 +250,7 @@ function createTextureSession(binaryAssetRef: BinaryAssetReference): AuthoringSe
         }
       ],
       rigControlRootIds: [],
-      stableOrder: ["part_root", "draw_storage_fixture", "mesh_storage_fixture"],
+      stableOrder: [PART_STORAGE_ROOT, PART_STORAGE_CONTAINER, "draw_storage_fixture", "mesh_storage_fixture"],
       sourceAssets: [
         {
           sourceAssetId: SourceAssetIdSchema.parse("src_storage_fixture"),

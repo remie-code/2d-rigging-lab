@@ -92,6 +92,10 @@ describe("parameter keyform editor state", () => {
         [-30, -45],
         [30, 45]
       ]),
+      createRigVec2KeyformSet("keyset_rotation_translation", RIG_FACE_ROTATION, "translation", [
+        { value: -30, statePatch: { x: -4, y: 2 } },
+        { value: 30, statePatch: { x: 8, y: -6 } }
+      ]),
       createRigNumberKeyformSet(
         "keyset_rotation_opacity",
         RIG_FACE_ROTATION,
@@ -106,6 +110,7 @@ describe("parameter keyform editor state", () => {
     const bindings = createRigControlParameterBindings(session, RIG_FACE_ROTATION);
     expect(bindings.map((binding) => binding.targetProperty)).toEqual([
       "angleDegrees",
+      "translation",
       "opacityMultiplier"
     ]);
 
@@ -121,6 +126,19 @@ describe("parameter keyform editor state", () => {
     });
     if (angleBinding === undefined) {
       throw new Error("Expected Rotation angle binding.");
+    }
+    const translationBinding = bindings.find((binding) => binding.targetProperty === "translation");
+    expect(translationBinding).toMatchObject({
+      label: "Translation",
+      target: {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      valueKind: "vec2",
+      compositionMode: "replace"
+    });
+    if (translationBinding === undefined) {
+      throw new Error("Expected Rotation translation binding.");
     }
 
     const interpolatedProjection = createParameterBindingProjection(
@@ -172,8 +190,54 @@ describe("parameter keyform editor state", () => {
       }
     });
 
+    const translationProjection = createParameterBindingProjection(
+      session,
+      translationBinding,
+      FACE_ANGLE_X,
+      { [FACE_ANGLE_X]: 0 }
+    );
+    expect(translationProjection.source).toBe("interpolated");
+    expect(translationProjection.displayValue).toEqual({ x: 2, y: -2 });
+    expect(translationProjection.canEditValue).toBe(false);
+
+    const exactTranslationProjection = createParameterBindingProjection(
+      session,
+      translationBinding,
+      FACE_ANGLE_X,
+      { [FACE_ANGLE_X]: -30 }
+    );
+    expect(exactTranslationProjection.source).toBe("keyform");
+    expect(exactTranslationProjection.displayValue).toEqual({ x: -4, y: 2 });
+    expect(exactTranslationProjection.canEditValue).toBe(true);
+    if (exactTranslationProjection.parameter === null) {
+      throw new Error("Expected active parameter for translation.");
+    }
+
+    const translationPayload = createEditKeyformPayload({
+      action: "updateCurrent",
+      binding: translationBinding,
+      currentParameterValue: exactTranslationProjection.currentParameterValue,
+      parameter: exactTranslationProjection.parameter,
+      value: { x: 12, y: -5 }
+    });
+    expect(translationPayload).toMatchObject({
+      action: "updateCurrent",
+      target: {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      targetProperty: "translation",
+      parameterId: FACE_ANGLE_X,
+      keyValue: -30,
+      statePatch: {
+        propertyPath: "translation",
+        value: { x: 12, y: -5 }
+      }
+    });
+
     const evaluated = createEvaluatedParameterKeyformState(session, { [FACE_ANGLE_X]: 0 });
     expect(evaluated.rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(0);
+    expect(evaluated.rigTranslationById.get(RIG_FACE_ROTATION)).toEqual({ x: 2, y: -2 });
     expect(evaluated.rigOpacityMultiplierById.get(RIG_FACE_ROTATION)).toBeCloseTo(0.625);
   });
 
@@ -407,6 +471,34 @@ function createRigVectorKeyformSet(
     keys: keys.map((key) => ({
       value: key.value,
       statePatch: key.statePatch.map((offset) => ({ x: offset.x, y: offset.y }))
+    }))
+  };
+}
+
+function createRigVec2KeyformSet(
+  keyformSetId: string,
+  rigControlId: typeof RIG_FACE_ROTATION,
+  property: "translation",
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: { readonly x: number; readonly y: number };
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse(keyformSetId),
+    target: {
+      kind: "rigControl" as const,
+      id: rigControlId,
+      property
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: { x: key.statePatch.x, y: key.statePatch.y }
     }))
   };
 }

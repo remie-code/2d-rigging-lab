@@ -83,7 +83,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
 });
 
 describe("RigToolInspector committed Rotation Deformer", () => {
-  it("renders editable pivot/rest-angle fields and explains rest angle keyform semantics", () => {
+  it("renders editable pivot/rest-translation/rest-angle fields and explains rest angle keyform semantics", () => {
     const readModel = createRotationReadModel(true);
     const markup = renderToStaticMarkup(
       createElement(CommittedRotationDeformerInspector, {
@@ -99,6 +99,8 @@ describe("RigToolInspector committed Rotation Deformer", () => {
 
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation pivot x"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation pivot y"))).toBe(false);
+    expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest translation x"))).toBe(false);
+    expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest translation y"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest angle degrees"))).toBe(false);
     expect(markup).toContain("Rotation keyforms present");
     expect(markup).toContain(
@@ -109,6 +111,7 @@ describe("RigToolInspector committed Rotation Deformer", () => {
       displayName: "Face Rotation Edited",
       parentRigControlId: "",
       pivot: { x: 12, y: 34 },
+      restTranslation: { x: 7, y: -4 },
       opacityMultiplier: 0.5,
       restAngleDegrees: -25
     });
@@ -117,6 +120,7 @@ describe("RigToolInspector committed Rotation Deformer", () => {
       rigControlId: RIG_FACE_ROTATION,
       displayName: "Face Rotation Edited",
       pivot: { x: 12, y: 34 },
+      restTranslation: { x: 7, y: -4 },
       opacityMultiplier: 0.5,
       restAngleDegrees: -25
     });
@@ -179,6 +183,7 @@ function createRotationReadModel(hasKeyforms: boolean): RotationDeformerReadMode
     opacityMultiplier: 1,
     hasKeyforms,
     pivot: { x: 16, y: 24 },
+    restTranslation: { x: 1, y: -2 },
     restAngleDegrees: 10
   };
 }

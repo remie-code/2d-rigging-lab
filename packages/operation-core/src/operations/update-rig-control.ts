@@ -84,6 +84,7 @@ const applyUpdateRigControl = (
       ...(request.payload.displayName === undefined ? {} : { displayName: request.payload.displayName }),
       ...(request.payload.pivot === undefined ? {} : { pivot: request.payload.pivot }),
       ...(request.payload.restAngleDegrees === undefined ? {} : { restAngleDegrees: request.payload.restAngleDegrees }),
+      ...(request.payload.restTranslation === undefined ? {} : { restTranslation: request.payload.restTranslation }),
       ...(request.payload.domainBounds === undefined ? {} : { domainBounds: request.payload.domainBounds }),
       ...(request.payload.transformColumns === undefined ? {} : { transformColumns: request.payload.transformColumns }),
       ...(request.payload.transformRows === undefined ? {} : { transformRows: request.payload.transformRows }),
@@ -178,6 +179,7 @@ const createRigControlFieldChanges = (
   if (before.kind === "rotation2d" && after.kind === "rotation2d") {
     addFieldChange(fields, `${basePath}/pivot`, before.pivot, after.pivot);
     addFieldChange(fields, `${basePath}/restAngleDegrees`, before.restAngleDegrees, after.restAngleDegrees);
+    addFieldChange(fields, `${basePath}/restTranslation`, before.restTranslation, after.restTranslation);
   }
 
   if (before.kind === "warpLattice2d" && after.kind === "warpLattice2d") {
@@ -257,6 +259,12 @@ const createUpdateRigControlMutationDiagnostic = (
         checkId: "operation.updateRigControl.invalidRotationRestAngle",
         message: error.message,
         target: { ...target, path: "/payload/restAngleDegrees" }
+      });
+    case "invalid_rotation_rest_translation":
+      return createOperationDiagnostic({
+        checkId: "operation.updateRigControl.invalidRotationRestTranslation",
+        message: error.message,
+        target: { ...target, path: "/payload/restTranslation" }
       });
     case "unsupported_rig_control_update_field":
       return createOperationDiagnostic({

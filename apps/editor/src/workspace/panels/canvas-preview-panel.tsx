@@ -508,6 +508,8 @@ export function CanvasPreviewPanel() {
       ? rotationDeformer.rendererState?.pivotEditable === false
       : rotationDeformer.hoveredHandle === "angle"
         ? rotationDeformer.rendererState?.angleEditable === false
+        : rotationDeformer.hoveredHandle === "translation"
+          ? rotationDeformer.rendererState?.translationEditable === false
         : false;
 
   const toolbar = (
@@ -657,6 +659,12 @@ export function CanvasPreviewPanel() {
             data-deformer-overlay-pivot-y={
               deformerOverlayActive ? String(renderProjection.deformerOverlay?.pivot?.y ?? "") : ""
             }
+            data-deformer-overlay-translation-x={
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.translation?.x ?? "") : ""
+            }
+            data-deformer-overlay-translation-y={
+              deformerOverlayActive ? String(renderProjection.deformerOverlay?.translation?.y ?? "") : ""
+            }
             data-deformer-overlay-rest-angle={
               deformerOverlayActive
                 ? String(renderProjection.deformerOverlay?.restAngleDegrees ?? "")
@@ -706,6 +714,13 @@ export function CanvasPreviewPanel() {
               rotationDeformer.rendererState?.pivotEditable ?? false
             )}
             data-rotation-deformer-preview-active={String(rotationDeformer.previewActive)}
+            data-rotation-deformer-translation-editable={String(
+              rotationDeformer.rendererState?.translationEditable ?? false
+            )}
+            data-rotation-deformer-translation-lock-reason={
+              rotationDeformer.translationLockReason ?? ""
+            }
+            data-rotation-deformer-translation-mode={rotationDeformer.translationEditMode}
             data-testid="canvas-renderer-surface"
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {

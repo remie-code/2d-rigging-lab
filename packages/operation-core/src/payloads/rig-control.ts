@@ -94,6 +94,7 @@ export const UpdateRigControlPayloadSchema = z
     displayName: z.string().min(1).optional(),
     pivot: Vec2Schema.optional(),
     restAngleDegrees: z.number().finite().optional(),
+    restTranslation: Vec2Schema.optional(),
     domainBounds: RectSchema.optional(),
     transformColumns: z.number().int().min(2).optional(),
     transformRows: z.number().int().min(2).optional(),
@@ -106,6 +107,7 @@ export const UpdateRigControlPayloadSchema = z
       payload.displayName !== undefined ||
       payload.pivot !== undefined ||
       payload.restAngleDegrees !== undefined ||
+      payload.restTranslation !== undefined ||
       payload.domainBounds !== undefined ||
       payload.transformColumns !== undefined ||
       payload.transformRows !== undefined ||

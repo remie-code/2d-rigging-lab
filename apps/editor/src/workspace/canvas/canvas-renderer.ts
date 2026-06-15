@@ -46,7 +46,8 @@ export interface CanvasRotationDeformerInteractionState {
   readonly rigControlId: string;
   readonly pivotEditable: boolean;
   readonly angleEditable: boolean;
-  readonly hoveredHandle?: "pivot" | "angle";
+  readonly translationEditable: boolean;
+  readonly hoveredHandle?: "pivot" | "angle" | "translation";
 }
 
 export function createCanvasBitmapCache(): CanvasBitmapCache {
@@ -358,6 +359,7 @@ function drawRotationDeformerOverlay(
     }
   });
   const angleHandle = handles.find((handle) => handle.kind === "angle")?.canvasPoint;
+  const translationHandle = handles.find((handle) => handle.kind === "translation")?.canvasPoint;
   const angleRadians = ((overlay.evaluatedAngleDegrees ?? overlay.restAngleDegrees ?? 0) * Math.PI) / 180;
 
   context.save();
@@ -433,6 +435,24 @@ function drawRotationDeformerOverlay(
       0,
       Math.PI * 2
     );
+    context.fill();
+    context.stroke();
+  }
+
+  if (translationHandle !== undefined) {
+    const radius = Math.max((interaction?.hoveredHandle === "translation" ? 5 : 3.5) / zoom, 2 / zoom);
+    context.fillStyle = resolveRotationHandleFill({
+      baseColor: color,
+      editable: interaction?.translationEditable ?? true,
+      hovered: interaction?.hoveredHandle === "translation"
+    });
+    context.strokeStyle = "rgba(255, 255, 255, 0.72)";
+    context.beginPath();
+    context.moveTo(translationHandle.x, translationHandle.y - radius);
+    context.lineTo(translationHandle.x + radius, translationHandle.y);
+    context.lineTo(translationHandle.x, translationHandle.y + radius);
+    context.lineTo(translationHandle.x - radius, translationHandle.y);
+    context.closePath();
     context.fill();
     context.stroke();
   }
