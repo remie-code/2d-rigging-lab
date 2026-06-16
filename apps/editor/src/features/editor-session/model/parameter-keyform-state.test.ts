@@ -17,6 +17,7 @@ import {
   createDrawableOpacityBinding,
   createEditKeyformPayload,
   createEvaluatedParameterKeyformState,
+  createMaterializedEditKeyformPayloads,
   createParameterBarProjection,
   createParameterBindingProjection,
   createRigControlParameterBindings,
@@ -239,6 +240,84 @@ describe("parameter keyform editor state", () => {
     expect(evaluated.rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(0);
     expect(evaluated.rigTranslationById.get(RIG_FACE_ROTATION)).toEqual({ x: 2, y: -2 });
     expect(evaluated.rigOpacityMultiplierById.get(RIG_FACE_ROTATION)).toBeCloseTo(0.625);
+  });
+
+  it("materializes missing Rotation translation payloads from existing exact key positions", () => {
+    const session = createRigFixtureSession();
+    const translationBinding = createRigControlParameterBindings(session, RIG_FACE_ROTATION)
+      .find((binding) => binding.targetProperty === "translation");
+    if (translationBinding === undefined) {
+      throw new Error("Expected Rotation translation binding.");
+    }
+
+    const projection = createParameterBindingProjection(
+      session,
+      translationBinding,
+      FACE_ANGLE_X,
+      { [FACE_ANGLE_X]: 30 }
+    );
+    if (projection.parameter === null) {
+      throw new Error("Expected active parameter.");
+    }
+
+    const payloads = createMaterializedEditKeyformPayloads({
+      binding: translationBinding,
+      currentParameterValue: projection.currentParameterValue,
+      currentValue: { x: 12, y: -5 },
+      fallbackValue: { x: 0, y: 0 },
+      keyValues: [30, -30, 0],
+      parameter: projection.parameter
+    });
+
+    expect(payloads.map((payload) => payload.action)).toEqual([
+      "addCurrent",
+      "addCurrent",
+      "addCurrent"
+    ]);
+    expect(payloads.map((payload) => "keyValue" in payload ? payload.keyValue : null)).toEqual([
+      -30,
+      0,
+      30
+    ]);
+    expect(
+      payloads.map((payload) =>
+        "statePatch" in payload ? payload.statePatch.value : null
+      )
+    ).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 12, y: -5 }
+    ]);
+  });
+
+  it("does not materialize when the current value is not an exact source key position", () => {
+    const session = createRigFixtureSession();
+    const translationBinding = createRigControlParameterBindings(session, RIG_FACE_ROTATION)
+      .find((binding) => binding.targetProperty === "translation");
+    if (translationBinding === undefined) {
+      throw new Error("Expected Rotation translation binding.");
+    }
+
+    const projection = createParameterBindingProjection(
+      session,
+      translationBinding,
+      FACE_ANGLE_X,
+      { [FACE_ANGLE_X]: 15 }
+    );
+    if (projection.parameter === null) {
+      throw new Error("Expected active parameter.");
+    }
+
+    expect(
+      createMaterializedEditKeyformPayloads({
+        binding: translationBinding,
+        currentParameterValue: projection.currentParameterValue,
+        currentValue: { x: 12, y: -5 },
+        fallbackValue: { x: 0, y: 0 },
+        keyValues: [-30, 0, 30],
+        parameter: projection.parameter
+      })
+    ).toEqual([]);
   });
 
   it("projects markers only for the selected target and active parameter", () => {

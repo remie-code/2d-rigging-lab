@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from "react";
@@ -49,7 +51,21 @@ export function ParameterBar() {
     () => createSelectedBindings(session, selection),
     [selection, session]
   );
-  const selectedBinding = selectedBindings[0];
+  const [selectedBindingKey, setSelectedBindingKey] = useState(
+    () => selectedBindings[0] === undefined ? "" : createBindingKey(selectedBindings[0])
+  );
+  useEffect(() => {
+    setSelectedBindingKey((current) =>
+      selectedBindings.some((binding) => createBindingKey(binding) === current)
+        ? current
+        : selectedBindings[0] === undefined
+          ? ""
+          : createBindingKey(selectedBindings[0])
+    );
+  }, [selectedBindings]);
+  const selectedBinding =
+    selectedBindings.find((binding) => createBindingKey(binding) === selectedBindingKey) ??
+    selectedBindings[0];
   const selectedProjection = useMemo(
     () =>
       selectedBinding === undefined
@@ -68,15 +84,15 @@ export function ParameterBar() {
   const canUseSlider = activeParameter !== null;
   const visibleKeyMarkers = useMemo(
     () =>
-      activeParameter === null || selectedBindings.length === 0
+      activeParameter === null || selectedBinding === undefined
         ? []
         : createTargetParameterKeyMarkers(
             session,
-            selectedBindings,
+            [selectedBinding],
             activeParameter.parameterId,
             currentValue
           ),
-    [activeParameter, currentValue, selectedBindings, session]
+    [activeParameter, currentValue, selectedBinding, session]
   );
 
   const commitAction = (
@@ -118,7 +134,7 @@ export function ParameterBar() {
         Manage
       </button>
 
-      <div className="grid min-w-0 flex-1 grid-cols-[minmax(10rem,15rem)_minmax(14rem,1fr)_2rem_4.5rem] items-center gap-3">
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(8rem,13rem)_minmax(8rem,13rem)_minmax(12rem,1fr)_2rem_4.5rem] items-center gap-3">
         <select
           aria-label="Active parameter"
           className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500"
@@ -133,6 +149,24 @@ export function ParameterBar() {
           ))}
         </select>
 
+        <select
+          aria-label="Keyform target"
+          className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500 disabled:cursor-not-allowed disabled:text-neutral-600"
+          disabled={selectedBindings.length <= 1}
+          onChange={(event) => setSelectedBindingKey(event.currentTarget.value)}
+          value={selectedBinding === undefined ? "" : createBindingKey(selectedBinding)}
+        >
+          {selectedBindings.length === 0 ? (
+            <option value="">No target</option>
+          ) : (
+            selectedBindings.map((binding) => (
+              <option key={createBindingKey(binding)} value={createBindingKey(binding)}>
+                {binding.label}
+              </option>
+            ))
+          )}
+        </select>
+
         <ParameterSlider
           activeParameter={activeParameter}
           currentValue={currentValue}
@@ -143,7 +177,7 @@ export function ParameterBar() {
         <KeyPositionStateIcon
           activeParameter={activeParameter}
           keyMarkers={visibleKeyMarkers}
-          selectedBindings={selectedBindings}
+          selectedBindings={selectedBinding === undefined ? [] : [selectedBinding]}
         />
 
         <input
@@ -447,6 +481,10 @@ function createSelectedBindings(
   }
 
   return [];
+}
+
+function createBindingKey(binding: ParameterKeyformBindingDescriptor): string {
+  return `${binding.target.kind}:${binding.target.id}:${binding.targetProperty}`;
 }
 
 function formatKeyPositionState(

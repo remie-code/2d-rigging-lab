@@ -29,6 +29,26 @@ describe("linear 1d keyform interpolation", () => {
     });
   });
 
+  it("samples exact Vec2 keys and interpolates x/y components linearly", () => {
+    const keys = [
+      { value: -1, statePatch: { x: -4, y: 2 } },
+      { value: 1, statePatch: { x: 8, y: -6 } }
+    ];
+
+    expect(interpolateLinear1dKeyform({ keys, parameterValue: -1 })).toMatchObject({
+      ok: true,
+      sampledValue: -1,
+      source: "exact",
+      statePatch: { x: -4, y: 2 }
+    });
+    expect(interpolateLinear1dKeyform({ keys, parameterValue: 0 })).toMatchObject({
+      ok: true,
+      sampledValue: 0,
+      source: "interpolated",
+      statePatch: { x: 2, y: -2 }
+    });
+  });
+
   it("reports duplicate key values while sampling the first key deterministically", () => {
     expect(
       interpolateLinear1dKeyform({

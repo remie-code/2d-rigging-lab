@@ -16,6 +16,10 @@ import {
   PackageDocumentSchema,
   type BinaryAssetReferenceDto
 } from "@private-2d-rigging-lab/package-format";
+import {
+  defaultRuntimeEvaluationOptions,
+  evaluateViewerRuntimeSnapshot
+} from "@private-2d-rigging-lab/runtime-core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -23,6 +27,7 @@ import {
   exportAuthoringSessionPortableBundle,
   importAuthoringSessionPortableBundle,
   registerAuthoringSessionBinaryBytes,
+  toRuntimeGraph,
   type AuthoringSession
 } from "./index.js";
 
@@ -194,6 +199,31 @@ describe("authoring portable project bundle adapter", () => {
       packageRelativePath: textureBinaryAssetRef.packageRelativePath,
       textureId: "tex_head"
     });
+    const runtimeMidpoint = evaluateViewerRuntimeSnapshot(toRuntimeGraph(imported.session), {
+      baselineParameterOverrides: { param_angle_x: -1 },
+      parameterOverrides: { param_angle_x: 0 },
+      targetIds: ["rig_head_rotate", "rig_head_warp", "draw_head"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full",
+        includeTrace: true
+      }
+    });
+    expect(runtimeMidpoint.snapshot.keyformSamples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          keyformSetId: "keyset_rotate_translation_x",
+          target: "rigControl:rig_head_rotate.translation",
+          statePatch: { x: 2, y: -1.5 },
+          samplingStatus: "interpolated"
+        })
+      ])
+    );
+    expect(
+      runtimeMidpoint.snapshot.rigControls.find((rigControl) =>
+        rigControl.rigControlId === "rig_head_rotate"
+      )?.localTransform?.translation
+    ).toEqual({ x: 2, y: -1.5 });
     expect(imported.session.dirty).toBe(false);
   });
 

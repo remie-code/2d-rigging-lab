@@ -20,6 +20,7 @@ export const DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS = 5;
 export const DEFAULT_WARP_DEFORMER_BEZIER_COLUMNS = 3;
 export const DEFAULT_WARP_DEFORMER_BEZIER_ROWS = 3;
 export const WARP_DEFORMER_BEZIER_EDIT_TYPE = "cubicBezierSurfaceV1" as const;
+export const WARP_DEFORMER_DOMAIN_MARGIN = 1;
 
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
 type RotationRigControlDto = Extract<RigControlDto, { readonly kind: "rotation2d" }>;
@@ -61,6 +62,8 @@ export interface WarpDeformerReadModel {
   readonly childRigControlIds: readonly RigControlId[];
   readonly opacityMultiplier: number;
   readonly hasKeyforms: boolean;
+  readonly keyformSetCount: number;
+  readonly keyformKeyCount: number;
   readonly domainBounds: RectDto;
   readonly transformGrid: {
     readonly columns: number;
@@ -90,6 +93,8 @@ export interface RotationDeformerReadModel {
   readonly childRigControlIds: readonly RigControlId[];
   readonly opacityMultiplier: number;
   readonly hasKeyforms: boolean;
+  readonly keyformSetCount: number;
+  readonly keyformKeyCount: number;
   readonly pivot: {
     readonly x: number;
     readonly y: number;
@@ -126,6 +131,8 @@ export type DeformerTreeRow =
       readonly parentRigControlId?: RigControlId;
       readonly childDrawableCount: number;
       readonly childRigControlCount: number;
+      readonly keyformSetCount: number;
+      readonly keyformKeyCount: number;
       readonly transformLabel: string;
       readonly bezierLabel: string;
       readonly legacyDefaulted: boolean;
@@ -140,6 +147,8 @@ export type DeformerTreeRow =
       readonly parentRigControlId?: RigControlId;
       readonly childDrawableCount: number;
       readonly childRigControlCount: number;
+      readonly keyformSetCount: number;
+      readonly keyformKeyCount: number;
       readonly transformLabel: string;
       readonly opacityMultiplier: number;
     }
@@ -178,7 +187,7 @@ export function createWarpDeformerDraftForDrawable(
         }),
     childDrawableIds: [drawable.drawableId],
     childRigControlIds: [],
-    domainBounds: resolveDrawableBounds(session, drawable.drawableId),
+    domainBounds: resolveDrawableWarpDomainBounds(session, drawable.drawableId),
     transformColumns: DEFAULT_WARP_DEFORMER_TRANSFORM_COLUMNS,
     transformRows: DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS,
     bezierColumns: DEFAULT_WARP_DEFORMER_BEZIER_COLUMNS,
@@ -231,7 +240,7 @@ export function createWarpDeformerParentPayloadForRigControl(
     return undefined;
   }
 
-  const bounds = resolveRigControlBounds(session, childRigControlId);
+  const bounds = resolveRigControlWarpDomainBounds(session, childRigControlId);
 
   return {
     partId: childRigControl.partId,
@@ -582,10 +591,10 @@ export function resolveWarpDeformerChildrenBounds(
   childRigControlIds: readonly RigControlId[]
 ): RectDto | undefined {
   const childDrawableBounds = childDrawableIds
-    .map((drawableId) => resolveDrawableBounds(session, drawableId))
+    .map((drawableId) => resolveDrawableWarpDomainBounds(session, drawableId))
     .filter(isPositiveRect);
   const childRigBounds = childRigControlIds
-    .map((rigControlId) => resolveRigControlBounds(session, rigControlId))
+    .map((rigControlId) => resolveRigControlWarpDomainBounds(session, rigControlId))
     .filter(isPositiveRect);
 
   return unionRects([...childDrawableBounds, ...childRigBounds]);
@@ -595,9 +604,22 @@ export function hasRigControlKeyforms(
   session: AuthoringSession,
   rigControlId: RigControlId
 ): boolean {
-  return session.graph.keyformSets.some(
-    (keyformSet) => keyformSet.target.kind === "rigControl" && keyformSet.target.id === rigControlId
+  return summarizeRigControlKeyforms(session, rigControlId).keyformSetCount > 0;
+}
+
+export function summarizeRigControlKeyforms(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): { readonly keyformSetCount: number; readonly keyformKeyCount: number } {
+  const keyformSets = session.graph.keyformSets.filter(
+    (keyformSet) =>
+      keyformSet.target.kind === "rigControl" && keyformSet.target.id === rigControlId
   );
+
+  return {
+    keyformSetCount: keyformSets.length,
+    keyformKeyCount: keyformSets.reduce((total, keyformSet) => total + keyformSet.keys.length, 0)
+  };
 }
 
 function createDeformerTreeDeformerRow(
@@ -618,7 +640,9 @@ function createDeformerTreeDeformerRow(
       ? {}
       : { parentRigControlId: readModel.parentRigControlId }),
     childDrawableCount: readModel.childDrawableIds.length,
-    childRigControlCount
+    childRigControlCount,
+    keyformSetCount: readModel.keyformSetCount,
+    keyformKeyCount: readModel.keyformKeyCount
   };
 
   if (readModel.kind === "rotationDeformer") {
@@ -652,6 +676,7 @@ function projectEditorWarpDeformerReadModel(
   rigControl: WarpLatticeRigControlDto
 ): WarpDeformerReadModel {
   const metadata = rigControl.warpDeformer;
+  const keyformSummary = summarizeRigControlKeyforms(session, rigControl.rigControlId);
   const transformGrid = metadata?.transformGrid ?? {
     columns: rigControl.latticeColumns,
     rows: rigControl.latticeRows,
@@ -673,7 +698,9 @@ function projectEditorWarpDeformerReadModel(
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
     opacityMultiplier: rigControl.opacityMultiplier ?? 1,
-    hasKeyforms: hasRigControlKeyforms(session, rigControl.rigControlId),
+    hasKeyforms: keyformSummary.keyformSetCount > 0,
+    keyformSetCount: keyformSummary.keyformSetCount,
+    keyformKeyCount: keyformSummary.keyformKeyCount,
     domainBounds: structuredClone(rigControl.domainBounds),
     transformGrid: structuredClone(transformGrid),
     bezierEditSurface: {
@@ -693,6 +720,8 @@ function projectEditorRotationDeformerReadModel(
   session: AuthoringSession,
   rigControl: RotationRigControlDto
 ): RotationDeformerReadModel {
+  const keyformSummary = summarizeRigControlKeyforms(session, rigControl.rigControlId);
+
   return {
     kind: "rotationDeformer",
     storageKind: "rotation2d",
@@ -703,7 +732,9 @@ function projectEditorRotationDeformerReadModel(
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
     opacityMultiplier: rigControl.opacityMultiplier ?? 1,
-    hasKeyforms: hasRigControlKeyforms(session, rigControl.rigControlId),
+    hasKeyforms: keyformSummary.keyformSetCount > 0,
+    keyformSetCount: keyformSummary.keyformSetCount,
+    keyformKeyCount: keyformSummary.keyformKeyCount,
     pivot: structuredClone(rigControl.pivot),
     restTranslation: structuredClone(rigControl.restTranslation ?? { x: 0, y: 0 }),
     restAngleDegrees: rigControl.restAngleDegrees
@@ -793,6 +824,23 @@ function resolveDrawableBounds(session: AuthoringSession, drawableId: DrawableId
   };
 }
 
+function resolveDrawableWarpDomainBounds(session: AuthoringSession, drawableId: DrawableId): RectDto {
+  const drawable = findDrawable(session, drawableId);
+  const mesh = drawable === undefined ? undefined : findMesh(session, drawable.meshId);
+  if (mesh !== undefined) {
+    const vertexBounds = computeVertexBounds(mesh.vertices);
+    if (vertexBounds !== undefined) {
+      return expandRect(vertexBounds, WARP_DEFORMER_DOMAIN_MARGIN);
+    }
+
+    if (isPositiveRect(mesh.bounds)) {
+      return expandRect(mesh.bounds, WARP_DEFORMER_DOMAIN_MARGIN);
+    }
+  }
+
+  return resolveDrawableBounds(session, drawableId);
+}
+
 function findDrawable(session: AuthoringSession, drawableId: DrawableId) {
   return session.graph.drawables.find((drawable) => drawable.drawableId === drawableId);
 }
@@ -835,6 +883,37 @@ function resolveRigControlBounds(
     width: 32,
     height: 32
   };
+}
+
+function resolveRigControlWarpDomainBounds(
+  session: AuthoringSession,
+  rigControlId: RigControlId,
+  visited: ReadonlySet<RigControlId> = new Set()
+): RectDto {
+  const rigControl = findRigControl(session, rigControlId);
+  if (rigControl === undefined || visited.has(rigControlId)) {
+    return fallbackCanvasBounds(session);
+  }
+
+  if (isWarpLatticeRigControl(rigControl)) {
+    return structuredClone(rigControl.domainBounds);
+  }
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(rigControlId);
+  const childBounds = [
+    ...rigControl.childDrawableIds.map((drawableId) => resolveDrawableWarpDomainBounds(session, drawableId)),
+    ...rigControl.childRigControlIds.map((childRigControlId) =>
+      resolveRigControlWarpDomainBounds(session, childRigControlId, nextVisited)
+    )
+  ];
+
+  return unionRects(childBounds) ?? expandRect({
+    x: rigControl.pivot.x - 16,
+    y: rigControl.pivot.y - 16,
+    width: 32,
+    height: 32
+  }, WARP_DEFORMER_DOMAIN_MARGIN);
 }
 
 function findMesh(session: AuthoringSession, meshId: MeshDto["meshId"]) {
@@ -909,6 +988,43 @@ function unionRects(rects: readonly RectDto[]): RectDto | undefined {
 
 function isPositiveRect(rect: RectDto): boolean {
   return rect.width > 0 && rect.height > 0;
+}
+
+function computeVertexBounds(vertices: readonly { readonly x: number; readonly y: number }[]): RectDto | undefined {
+  const finiteVertices = vertices.filter((vertex) => Number.isFinite(vertex.x) && Number.isFinite(vertex.y));
+  if (finiteVertices.length === 0) {
+    return undefined;
+  }
+
+  const left = Math.min(...finiteVertices.map((vertex) => vertex.x));
+  const top = Math.min(...finiteVertices.map((vertex) => vertex.y));
+  const right = Math.max(...finiteVertices.map((vertex) => vertex.x));
+  const bottom = Math.max(...finiteVertices.map((vertex) => vertex.y));
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
+function expandRect(rect: RectDto, margin: number): RectDto {
+  return {
+    x: rect.x - margin,
+    y: rect.y - margin,
+    width: Math.max(1, rect.width + margin * 2),
+    height: Math.max(1, rect.height + margin * 2)
+  };
+}
+
+function fallbackCanvasBounds(session: AuthoringSession): RectDto {
+  return {
+    x: 0,
+    y: 0,
+    width: Math.max(1, session.graph.canvasSize.width),
+    height: Math.max(1, session.graph.canvasSize.height)
+  };
 }
 
 function clampInteger(value: number, min: number, max: number): number {

@@ -1,5 +1,4 @@
-import { Save, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import {
@@ -14,7 +13,6 @@ import {
   type ParameterKeyformBindingDescriptor,
   type ParameterKeyformValue
 } from "../../features/editor-session/model/parameter-keyform-state";
-import { cn } from "../../lib/class-name";
 
 export function ParameterBindingSection({
   bindings
@@ -67,10 +65,9 @@ function ParameterBindingEditor({
     projection.parameter?.parameterId
   ]);
 
-  const commit = (
-    action: "updateCurrent" | "deleteCurrent"
-  ) => {
-    if (projection.parameter === null) {
+  const updateValue = (value: ParameterKeyformValue) => {
+    setEditValue(value);
+    if (projection.parameter === null || !projection.canUpdateCurrent) {
       return;
     }
 
@@ -79,8 +76,8 @@ function ParameterBindingEditor({
         binding,
         parameter: projection.parameter,
         currentParameterValue: projection.currentParameterValue,
-        action,
-        value: editValue
+        action: "updateCurrent",
+        value
       })
     );
   };
@@ -96,29 +93,10 @@ function ParameterBindingEditor({
 
       <BindingValueEditor
         disabled={!projection.canEditValue}
-        onChange={setEditValue}
+        onChange={updateValue}
         projection={projection}
         value={editValue}
       />
-
-      {projection.hasCurrentKeyform ? (
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
-          <BindingAction
-            disabled={!projection.canUpdateCurrent}
-            label="Update"
-            onClick={() => commit("updateCurrent")}
-          >
-            <Save aria-hidden="true" size={13} strokeWidth={1.8} />
-          </BindingAction>
-          <BindingAction
-            disabled={!projection.canDeleteCurrent}
-            label="Delete"
-            onClick={() => commit("deleteCurrent")}
-          >
-            <Trash2 aria-hidden="true" size={13} strokeWidth={1.8} />
-          </BindingAction>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -258,30 +236,5 @@ function NumberInput({
         value={formatParameterValue(value)}
       />
     </label>
-  );
-}
-
-function BindingAction({
-  children,
-  disabled,
-  label,
-  onClick
-}: {
-  readonly children: ReactNode;
-  readonly disabled: boolean;
-  readonly label: string;
-  readonly onClick: () => void;
-}) {
-  return (
-    <button
-      aria-label={label}
-      className="flex min-h-8 min-w-0 items-center justify-center gap-1 rounded border border-neutral-800 bg-neutral-950 px-1.5 text-[11px] font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100 disabled:cursor-not-allowed disabled:border-neutral-900 disabled:text-neutral-700"
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
   );
 }

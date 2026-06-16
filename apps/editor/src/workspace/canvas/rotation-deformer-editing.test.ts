@@ -7,6 +7,7 @@ import {
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  type ParameterId,
   ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
@@ -37,6 +38,7 @@ import type {
 } from "./canvas-projection";
 import {
   createRotationKeyformAngleUpdateGesture,
+  createRotationMaterializedTranslationKeyformGesture,
   createRotationKeyformTranslationUpdateGesture,
   createRotationPivotUpdateGesture,
   createRotationRestAngleUpdateGesture,
@@ -287,6 +289,70 @@ describe("Rotation Deformer canvas editing", () => {
     expect(readRotationRigControl(outcome.result.session).restTranslation).toEqual({ x: 0, y: 0 });
   });
 
+  it("materializes missing Rotation translation keyforms from angle key positions and preserves other keys on later exact-key updates", () => {
+    const session = createRigFixtureSession();
+    session.graph.keyformSets.push(createAngleEndsCenterKeyformSet());
+    const binding = requireRotationTranslationBinding(session);
+    const projection = createParameterBindingProjection(session, binding, FACE_ANGLE_X, {
+      [FACE_ANGLE_X]: 30
+    });
+    if (projection.parameter === null) {
+      throw new Error("Expected active parameter.");
+    }
+
+    const materializeController = createEditorSessionGestureCommitController(
+      createRotationMaterializedTranslationKeyformGesture({
+        binding,
+        currentParameterValue: projection.currentParameterValue,
+        fallbackTranslation: { x: 1, y: -1 },
+        getNextTranslation: () => ({ x: 10, y: -6 }),
+        keyValues: [-30, 0, 30],
+        parameter: projection.parameter
+      })
+    );
+    const materialized = materializeController.commitOnce({
+      currentSession: session,
+      history: createEmptyEditorSessionHistory()
+    });
+
+    if (materialized?.result.committed !== true) {
+      throw new Error(JSON.stringify(materialized?.result.diagnostics ?? []));
+    }
+    expect(readTranslationKey(materialized.result.session, -30)).toEqual({ x: 1, y: -1 });
+    expect(readTranslationKey(materialized.result.session, 0)).toEqual({ x: 1, y: -1 });
+    expect(readTranslationKey(materialized.result.session, 30)).toEqual({ x: 10, y: -6 });
+    expect(readRotationRigControl(materialized.result.session).restTranslation).toEqual({ x: 0, y: 0 });
+
+    const exactProjection = createParameterBindingProjection(
+      materialized.result.session,
+      binding,
+      FACE_ANGLE_X,
+      { [FACE_ANGLE_X]: 30 }
+    );
+    if (!canCommitRotationTranslationKeyformUpdate(exactProjection)) {
+      throw new Error("Expected exact materialized translation keyform to be editable.");
+    }
+    const updateController = createEditorSessionGestureCommitController(
+      createRotationKeyformTranslationUpdateGesture({
+        binding,
+        currentParameterValue: exactProjection.currentParameterValue,
+        getNextTranslation: () => ({ x: 14, y: -9 }),
+        parameter: exactProjection.parameter
+      })
+    );
+    const updated = updateController.commitOnce({
+      currentSession: materialized.result.session,
+      history: materialized.history
+    });
+
+    if (updated?.result.committed !== true) {
+      throw new Error(JSON.stringify(updated?.result.diagnostics ?? []));
+    }
+    expect(readTranslationKey(updated.result.session, -30)).toEqual({ x: 1, y: -1 });
+    expect(readTranslationKey(updated.result.session, 0)).toEqual({ x: 1, y: -1 });
+    expect(readTranslationKey(updated.result.session, 30)).toEqual({ x: 14, y: -9 });
+  });
+
   it("does not commit when a drag is cancelled before pointer-up commit", () => {
     const session = createRigFixtureSession();
     const controller = createEditorSessionGestureCommitController(
@@ -472,6 +538,63 @@ describe("Rotation Deformer canvas editing", () => {
       expect(readRotationRigControl(currentSession).restTranslation).toEqual({ x: 10, y: 5 });
     } finally {
       await harness.cleanup();
+    }
+
+    currentSession = createRigFixtureSession();
+    currentSession.graph.keyformSets.push(createAngleEndsCenterKeyformSet());
+    history = createEmptyEditorSessionHistory();
+    commitCount = 0;
+    const materializeHarness = await renderRotationInteractionProbe({
+      session: currentSession,
+      projection: createMinimalProjection(createOverlay({
+        pivot: { x: 50, y: 50 },
+        translation: { x: 0, y: 0 },
+        restAngleDegrees: 0,
+        evaluatedAngleDegrees: 0
+      })),
+      activeParameterId: FACE_ANGLE_X,
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      commitGestureController: (controller) => {
+        const outcome = controller.commitOnce({
+          currentSession,
+          history
+        });
+        if (outcome?.result.committed === true) {
+          currentSession = outcome.result.session;
+          history = outcome.history;
+          commitCount += 1;
+        }
+
+        return outcome?.result ?? null;
+      }
+    });
+
+    try {
+      expect(materializeHarness.current().translationEditMode).toBe("materializeKeyform");
+      expect(materializeHarness.current().rendererState).toMatchObject({
+        translationEditable: true
+      });
+      await act(async () => {
+        expect(materializeHarness.current().handlePointerDown({
+          pointerId: 7,
+          screenPoint: { x: 90, y: 10 }
+        })).toBe(true);
+        expect(materializeHarness.current().handlePointerMove({
+          pointerId: 7,
+          screenPoint: { x: 100, y: 16 }
+        })).toBe(true);
+        expect(materializeHarness.current().finishPointerDrag({
+          pointerId: 7,
+          commit: true
+        })).toBe(true);
+      });
+      expect(commitCount).toBe(1);
+      expect(readTranslationKey(currentSession, -30)).toEqual({ x: 0, y: 0 });
+      expect(readTranslationKey(currentSession, 0)).toEqual({ x: 0, y: 0 });
+      expect(readTranslationKey(currentSession, 30)).toEqual({ x: 10, y: 6 });
+      expect(readRotationRigControl(currentSession).restTranslation).toEqual({ x: 0, y: 0 });
+    } finally {
+      await materializeHarness.cleanup();
     }
 
     currentSession = createRigFixtureSession();
@@ -882,6 +1005,29 @@ function createAngleKeyformSet() {
     compositionOrder: 0,
     keys: [
       { value: -30, statePatch: -20 },
+      { value: 30, statePatch: 20 }
+    ]
+  };
+}
+
+function createAngleEndsCenterKeyformSet() {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse(
+      "keyset_rigcontrol_rig_face_rotation_angledegrees_face_angle_x"
+    ),
+    target: {
+      kind: "rigControl" as const,
+      id: RIG_FACE_ROTATION,
+      property: "angleDegrees" as const
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: [
+      { value: -30, statePatch: -20 },
+      { value: 0, statePatch: 0 },
       { value: 30, statePatch: 20 }
     ]
   };

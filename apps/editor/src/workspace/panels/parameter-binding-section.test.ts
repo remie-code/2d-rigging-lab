@@ -41,7 +41,7 @@ const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 
 describe("ParameterBindingSection rig-control bindings", () => {
-  it("renders Rotation binding rows and enables update/delete at an exact key", () => {
+  it("renders Rotation binding rows without per-card keyform action buttons", () => {
     const session = createRigFixtureSession();
     session.graph.keyformSets.push(
       createRigNumberKeyformSet("keyset_rotation_angle", RIG_FACE_ROTATION, "angleDegrees", [
@@ -65,6 +65,9 @@ describe("ParameterBindingSection rig-control bindings", () => {
     expect(fullMarkup).not.toContain("Parameter: Eyeball X");
     expect(fullMarkup).not.toContain("Keyform:");
     expect(fullMarkup).not.toContain("Keys:");
+    expect(fullMarkup).not.toContain('aria-label="Add"');
+    expect(fullMarkup).not.toContain('aria-label="Update"');
+    expect(fullMarkup).not.toContain('aria-label="Delete"');
 
     const angleMarkup = renderSection(
       session,
@@ -73,8 +76,9 @@ describe("ParameterBindingSection rig-control bindings", () => {
     );
     expect(hasDisabledAttribute(inputMarkup(angleMarkup, "Rotation angle"))).toBe(false);
     expect(angleMarkup).not.toContain("Add Keyform Here");
-    expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Update"))).toBe(false);
-    expect(hasDisabledAttribute(buttonMarkup(angleMarkup, "Delete"))).toBe(false);
+    expect(angleMarkup).not.toContain('aria-label="Add"');
+    expect(angleMarkup).not.toContain('aria-label="Update"');
+    expect(angleMarkup).not.toContain('aria-label="Delete"');
 
     const translationMarkup = renderSection(
       session,
@@ -83,11 +87,12 @@ describe("ParameterBindingSection rig-control bindings", () => {
     );
     expect(hasDisabledAttribute(inputMarkup(translationMarkup, "Translation X"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(translationMarkup, "Translation Y"))).toBe(false);
-    expect(hasDisabledAttribute(buttonMarkup(translationMarkup, "Update"))).toBe(false);
-    expect(hasDisabledAttribute(buttonMarkup(translationMarkup, "Delete"))).toBe(false);
+    expect(translationMarkup).not.toContain('aria-label="Add"');
+    expect(translationMarkup).not.toContain('aria-label="Update"');
+    expect(translationMarkup).not.toContain('aria-label="Delete"');
   });
 
-  it("renders Warp binding rows and locks value editing between keyforms", () => {
+  it("renders Warp binding rows, keeps point controls, and omits per-card action buttons", () => {
     const session = createRigFixtureSession();
     session.graph.keyformSets.push(
       createRigVectorKeyformSet("keyset_warp_offsets", RIG_FACE_WARP, "controlPointOffsets", [
@@ -112,6 +117,10 @@ describe("ParameterBindingSection rig-control bindings", () => {
     expect(fullMarkup).not.toContain("Parameter: Eyeball X");
     expect(fullMarkup).not.toContain("Keyform:");
     expect(fullMarkup).not.toContain("Keys:");
+    expect(fullMarkup).toContain("4 points");
+    expect(fullMarkup).not.toContain('aria-label="Add"');
+    expect(fullMarkup).not.toContain('aria-label="Update"');
+    expect(fullMarkup).not.toContain('aria-label="Delete"');
 
     const offsetsMarkup = renderSection(
       session,
@@ -122,6 +131,7 @@ describe("ParameterBindingSection rig-control bindings", () => {
     expect(hasDisabledAttribute(inputMarkup(offsetsMarkup, "Uniform offset X"))).toBe(true);
     expect(hasDisabledAttribute(inputMarkup(offsetsMarkup, "Uniform offset Y"))).toBe(true);
     expect(offsetsMarkup).not.toContain("Add Keyform Here");
+    expect(offsetsMarkup).not.toContain('aria-label="Add"');
     expect(offsetsMarkup).not.toContain('aria-label="Update"');
     expect(offsetsMarkup).not.toContain('aria-label="Delete"');
   });
@@ -157,10 +167,6 @@ function findBinding(
 
 function inputMarkup(markup: string, ariaLabel: string): string {
   return elementMarkup(markup, "input", ariaLabel);
-}
-
-function buttonMarkup(markup: string, ariaLabel: string): string {
-  return elementMarkup(markup, "button", ariaLabel);
 }
 
 function elementMarkup(markup: string, tagName: string, ariaLabel: string): string {

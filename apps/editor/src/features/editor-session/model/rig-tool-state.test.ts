@@ -1,8 +1,10 @@
 import { createInitialAuthoringRevision, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
@@ -18,7 +20,11 @@ import {
   createRotationDeformerParentPayloadForRigControl,
   createWarpDeformerParentPayloadForRigControl,
   createWarpDeformerDraftForDrawable,
-  createWarpDeformerPayloadFromDraft
+  createWarpDeformerPayloadFromDraft,
+  fitWarpDeformerDraftToChildren,
+  resetWarpDeformerDraft,
+  updateWarpDeformerDraft,
+  WARP_DEFORMER_DOMAIN_MARGIN
 } from "./rig-tool-state";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
@@ -31,6 +37,7 @@ const TEX_FACE = TextureIdSchema.parse("tex_face");
 const TEX_HAIR = TextureIdSchema.parse("tex_hair");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_fixture");
+const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
 
 describe("rig tool state", () => {
   it("creates a Warp Deformer draft from a Drawable and projects the committed Deformer Tree", () => {
@@ -41,7 +48,7 @@ describe("rig tool state", () => {
       displayName: "Face Warp Deformer",
       partId: PART_FACE,
       childDrawableIds: [DRAW_FACE],
-      domainBounds: { x: 10, y: 20, width: 30, height: 40 },
+      domainBounds: { x: 9, y: 19, width: 32, height: 42 },
       transformColumns: 5,
       transformRows: 5,
       bezierColumns: 3,
@@ -69,6 +76,8 @@ describe("rig tool state", () => {
       kind: "warpDeformer",
       displayName: "Face Warp Deformer",
       childDrawableCount: 1,
+      keyformSetCount: 0,
+      keyformKeyCount: 0,
       transformLabel: "5 x 5 control points",
       bezierLabel: "3 x 3 control points"
     });
@@ -76,6 +85,74 @@ describe("rig tool state", () => {
       kind: "drawableRef",
       drawableId: DRAW_FACE,
       displayName: "Face"
+    });
+  });
+
+  it("creates Warp Deformer domains from committed mesh vertices outside the layer bounds", () => {
+    const session = createFixtureSession();
+    setFaceMeshVerticesOutsideLayer(session);
+    const expectedDomain = { x: 5, y: 17, width: 42, height: 48 };
+
+    const draft = createWarpDeformerDraftForDrawable(session, DRAW_FACE);
+    expect(draft?.domainBounds).toEqual(expectedDomain);
+    expect(WARP_DEFORMER_DOMAIN_MARGIN).toBe(1);
+
+    const payload = createWarpDeformerPayloadFromDraft(draft!);
+    const result = commitCreateWarpDeformer(session, payload);
+
+    expect(result.committed).toBe(true);
+    expect(
+      result.session.graph.rigControls.find((rigControl) => rigControl.rigControlId === result.rigControlId)
+    ).toMatchObject({
+      kind: "warpLattice2d",
+      domainBounds: expectedDomain
+    });
+  });
+
+  it("fits and resets Warp Deformer drafts to mesh vertex bounds and falls back without a mesh", () => {
+    const session = createFixtureSession();
+    setFaceMeshVerticesOutsideLayer(session);
+    const draft = createWarpDeformerDraftForDrawable(session, DRAW_FACE);
+    if (draft === undefined) {
+      throw new Error("Expected Warp Deformer draft.");
+    }
+    const edited = updateWarpDeformerDraft(draft, {
+      domainBounds: { x: 0, y: 0, width: 12, height: 12 },
+      transformColumns: 8,
+      transformRows: 7,
+      bezierColumns: 6,
+      bezierRows: 5
+    });
+
+    const fitted = fitWarpDeformerDraftToChildren(session, edited);
+    const reset = resetWarpDeformerDraft(session, edited);
+
+    expect(fitted.domainBounds).toEqual({ x: 5, y: 17, width: 42, height: 48 });
+    expect(fitted.transformColumns).toBe(8);
+    expect(reset.domainBounds).toEqual({ x: 5, y: 17, width: 42, height: 48 });
+    expect(reset.transformColumns).toBe(5);
+    expect(reset.transformRows).toBe(5);
+
+    const fallbackSession = createFixtureSession();
+    fallbackSession.graph.meshes = fallbackSession.graph.meshes.filter(
+      (mesh) => mesh.meshId !== MESH_FACE
+    );
+    const fallbackDraft = createWarpDeformerDraftForDrawable(fallbackSession, DRAW_FACE);
+    if (fallbackDraft === undefined) {
+      throw new Error("Expected fallback Warp Deformer draft.");
+    }
+
+    expect(fitWarpDeformerDraftToChildren(fallbackSession, fallbackDraft).domainBounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 128,
+      height: 128
+    });
+    expect(resetWarpDeformerDraft(fallbackSession, fallbackDraft).domainBounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 128,
+      height: 128
     });
   });
 
@@ -205,6 +282,51 @@ describe("rig tool state", () => {
     });
     expect(parentedRotation?.childRigControlIds).toEqual([]);
   });
+
+  it("projects deterministic keyform counts for Deformer Tree discovery", () => {
+    const session = createFixtureSession();
+    const result = commitCreateWarpDeformer(session, {
+      partId: PART_FACE,
+      displayName: "Face Warp",
+      childDrawableIds: [DRAW_FACE],
+      childRigControlIds: [],
+      domainBounds: { x: 10, y: 20, width: 30, height: 40 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(result.committed).toBe(true);
+    const rigControlId = result.rigControlId!;
+
+    result.session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_face_warp_offsets"),
+      target: {
+        kind: "rigControl",
+        id: rigControlId,
+        property: "controlPointOffsets"
+      },
+      parameterId: FACE_ANGLE_X,
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        { value: 0, statePatch: [{ x: 4, y: 6 }] },
+        { value: 30, statePatch: [{ x: 8, y: 12 }] }
+      ]
+    });
+
+    const rows = createDeformerTreeRows(result.session, null);
+
+    expect(rows[0]).toMatchObject({
+      kind: "warpDeformer",
+      displayName: "Face Warp",
+      keyformSetCount: 1,
+      keyformKeyCount: 2
+    });
+  });
 });
 
 function createFixtureSession(): AuthoringSession {
@@ -330,4 +452,19 @@ function createFixtureSession(): AuthoringSession {
       rightsRecords: []
     }
   };
+}
+
+function setFaceMeshVerticesOutsideLayer(session: AuthoringSession): void {
+  const mesh = session.graph.meshes.find((candidate) => candidate.meshId === MESH_FACE);
+  if (mesh === undefined) {
+    throw new Error("Expected face mesh.");
+  }
+
+  mesh.vertices = [
+    { x: 6, y: 18 },
+    { x: 46, y: 18 },
+    { x: 46, y: 64 },
+    { x: 6, y: 64 }
+  ];
+  mesh.bounds = { x: 10, y: 20, width: 30, height: 40 };
 }

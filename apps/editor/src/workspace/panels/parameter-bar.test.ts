@@ -5,6 +5,7 @@ import {
   MeshIdSchema,
   ParameterIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -38,6 +39,7 @@ const MESH_FACE = MeshIdSchema.parse("mesh_parameter_bar_face");
 const TEX_FACE = TextureIdSchema.parse("tex_parameter_bar_face");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_parameter_bar_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_parameter_bar_fixture");
+const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_parameter_bar_rotation");
 
 describe("ParameterBar custom slider", () => {
   beforeEach(() => {
@@ -80,6 +82,21 @@ describe("ParameterBar custom slider", () => {
     expect(markup).toContain('data-testid="parameter-slider"');
     expect(markup).not.toContain('role="slider"');
     expect(markup).not.toContain('type="range"');
+  });
+
+  it("renders a keyform target selector for multi-property rig controls", () => {
+    installEditorSessionMock({
+      parameterValues: {},
+      selection: { kind: "rigControl", id: RIG_FACE_ROTATION },
+      session: createRotationSession()
+    });
+
+    const markup = renderToStaticMarkup(createElement(ParameterBar));
+
+    expect(markup).toContain('aria-label="Keyform target"');
+    expect(markup).toContain("Rotation angle");
+    expect(markup).toContain("Translation");
+    expect(markup).toContain("Opacity multiplier");
   });
 
   it("keeps track pointer down as a no-op", async () => {
@@ -204,10 +221,15 @@ describe("ParameterBar custom slider", () => {
 
 function installEditorSessionMock({
   parameterValues,
+  selection = { kind: "drawable", id: DRAW_FACE },
   session,
   setActiveParameterValue = vi.fn()
 }: {
   readonly parameterValues: Readonly<Record<string, number>>;
+  readonly selection?: { readonly kind: "drawable"; readonly id: typeof DRAW_FACE } | {
+    readonly kind: "rigControl";
+    readonly id: typeof RIG_FACE_ROTATION;
+  };
   readonly session: AuthoringSession;
   readonly setActiveParameterValue?: (value: number) => void;
 }): void {
@@ -219,7 +241,7 @@ function installEditorSessionMock({
     parameterOperationFeedback: null,
     parameterValues,
     resetActiveParameterValue: vi.fn(),
-    selection: { kind: "drawable", id: DRAW_FACE },
+    selection,
     session,
     setActiveParameterId: vi.fn(),
     setActiveParameterValue
@@ -287,6 +309,27 @@ function createDrawableSession(): AuthoringSession {
   });
   session.graph.drawOrder.push({ drawableId: DRAW_FACE, baseDrawOrder: 0, stableOrder: 0 });
   session.graph.stableOrder.push(DRAW_FACE);
+  return session;
+}
+
+function createRotationSession(): AuthoringSession {
+  const session = createDrawableSession();
+  session.graph.rigControls.push({
+    kind: "rotation2d" as const,
+    rigControlId: RIG_FACE_ROTATION,
+    displayName: "Face Rotation",
+    partId: ROOT_PART_ID,
+    childDrawableIds: [DRAW_FACE],
+    childRigControlIds: [],
+    opacityMultiplier: 1,
+    pivot: { x: 10, y: 10 },
+    restAngleDegrees: 0,
+    restTranslation: { x: 0, y: 0 },
+    restScale: { x: 1, y: 1 },
+    enabled: true
+  });
+  session.graph.rigControlRootIds.push(RIG_FACE_ROTATION);
+  session.graph.stableOrder.push(RIG_FACE_ROTATION);
   return session;
 }
 

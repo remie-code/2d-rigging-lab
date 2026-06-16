@@ -54,7 +54,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
     expect(inputMarkup(markup, "Bezier columns")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier rows")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier edit type")).toContain("readOnly");
-    expect(hasDisabledAttribute(inputMarkup(markup, "Opacity multiplier"))).toBe(false);
+    expect(markup).not.toContain('aria-label="Opacity multiplier"');
 
     const payload = createWarpUpdatePayload(
       readModel,
@@ -65,8 +65,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
         transformColumns: 8,
         transformRows: 7,
         bezierColumns: 6,
-        bezierRows: 5,
-        opacityMultiplier: readModel.opacityMultiplier
+        bezierRows: 5
       },
       true
     );
@@ -83,7 +82,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
 });
 
 describe("RigToolInspector committed Rotation Deformer", () => {
-  it("renders editable pivot/rest-translation/rest-angle fields and explains rest angle keyform semantics", () => {
+  it("renders compact editable setup fields and omits duplicate summaries and opacity section", () => {
     const readModel = createRotationReadModel(true);
     const markup = renderToStaticMarkup(
       createElement(CommittedRotationDeformerInspector, {
@@ -102,17 +101,18 @@ describe("RigToolInspector committed Rotation Deformer", () => {
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest translation x"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest translation y"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest angle degrees"))).toBe(false);
-    expect(markup).toContain("Rotation keyforms present");
-    expect(markup).toContain(
-      "Rest angle is fallback; existing Rotation angle keyforms stay authoritative"
-    );
+    expect(markup).toContain("Setup transform");
+    expect(markup).not.toContain("Bound children");
+    expect(markup).not.toContain("Angle keyforms");
+    expect(markup).not.toContain("Rotation keyforms present");
+    expect(markup).not.toContain("Rest angle is fallback");
+    expect(markup).not.toContain('aria-label="Opacity multiplier"');
 
     const payload = createRotationUpdatePayload(readModel, {
       displayName: "Face Rotation Edited",
       parentRigControlId: "",
       pivot: { x: 12, y: 34 },
       restTranslation: { x: 7, y: -4 },
-      opacityMultiplier: 0.5,
       restAngleDegrees: -25
     });
 
@@ -121,7 +121,6 @@ describe("RigToolInspector committed Rotation Deformer", () => {
       displayName: "Face Rotation Edited",
       pivot: { x: 12, y: 34 },
       restTranslation: { x: 7, y: -4 },
-      opacityMultiplier: 0.5,
       restAngleDegrees: -25
     });
   });
@@ -152,6 +151,8 @@ function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {
     childRigControlIds: [],
     opacityMultiplier: 1,
     hasKeyforms,
+    keyformSetCount: hasKeyforms ? 1 : 0,
+    keyformKeyCount: hasKeyforms ? 3 : 0,
     domainBounds: { x: 10, y: 20, width: 30, height: 40 },
     transformGrid: {
       columns: 5,
@@ -182,6 +183,8 @@ function createRotationReadModel(hasKeyforms: boolean): RotationDeformerReadMode
     childRigControlIds: [],
     opacityMultiplier: 1,
     hasKeyforms,
+    keyformSetCount: hasKeyforms ? 1 : 0,
+    keyformKeyCount: hasKeyforms ? 3 : 0,
     pivot: { x: 16, y: 24 },
     restTranslation: { x: 1, y: -2 },
     restAngleDegrees: 10

@@ -194,7 +194,6 @@ test("authors drawable opacity keyforms from the Parameter Bar and Inspector", a
   await expect(binding.getByLabel("Drawable opacity value")).toBeEnabled();
 
   await binding.getByLabel("Drawable opacity value").fill("0.4");
-  await binding.getByRole("button", { name: "Update", exact: true }).click();
   await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
 
   await visibleInput(page, "Parameter numeric value").fill("30");
@@ -203,7 +202,7 @@ test("authors drawable opacity keyforms from the Parameter Bar and Inspector", a
   await visibleInput(page, "Parameter numeric value").fill("0");
   await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "0.40");
 
-  await binding.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete keyform at current value", exact: true }).click();
   await expect(keyState).toHaveAttribute("aria-label", "Parameter keyform state: interpolated");
   await expect(canvas).toHaveAttribute("data-selected-drawable-opacity", "1.00");
 
@@ -338,6 +337,7 @@ test("creates a Warp Deformer draft from a selected Drawable and reflects it in 
   await expect(visibleInput(page, "Bezier columns")).toHaveValue("3");
   await expect(visibleInput(page, "Bezier rows")).toHaveValue("3");
   await expect(visibleInput(page, "Bezier edit type")).toHaveValue("cubicBezierSurfaceV1");
+  await expect(page.locator('[aria-label="Opacity multiplier"]:visible')).toHaveCount(0);
   await expect(canvas).toHaveAttribute("data-deformer-overlay-visible", "true");
   await expect(canvas).toHaveAttribute("data-deformer-overlay-kind", "warp");
   await expect(canvas).toHaveAttribute("data-deformer-overlay-status", "draft");
@@ -366,7 +366,9 @@ test("creates a Warp Deformer draft from a selected Drawable and reflects it in 
   );
   await visibleInput(page, "Name").fill(`${selectedDrawableName} Warp Edited`);
   await visibleInput(page, "Transform columns control points").fill("6");
-  await visibleInput(page, "Opacity multiplier").fill("0.75");
+  const warpOpacityBinding = page.getByTestId("parameter-binding-opacityMultiplier").first();
+  await expect(warpOpacityBinding).toBeVisible();
+  await expect(warpOpacityBinding.getByRole("slider", { name: "Opacity multiplier" })).toBeDisabled();
   await page.getByRole("button", { name: "Apply Deformer Edits" }).click();
   await expect(canvas).toHaveAttribute("data-deformer-overlay-transform-columns", "6");
 
@@ -533,6 +535,74 @@ test("creates a Rotation Deformer from UI and inserts a parent Warp above it", a
   );
 });
 
+test("authors Rotation angle and translation keyforms from Parameter Bar and canvas handles", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  const visibleDrawableRow = page
+    .locator('[data-row-kind="drawable"]:visible')
+    .filter({ has: page.getByRole("button", { name: "Hide drawable" }) })
+    .first();
+  await rowNameButton(visibleDrawableRow).click();
+
+  await page.getByRole("button", { name: /^Mesh$/ }).first().click();
+  await page.getByRole("button", { name: "Preview Standard mesh" }).click();
+  await page.getByRole("button", { name: "Apply mesh" }).click();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "committed");
+
+  await page.getByRole("button", { name: /^Rig$/ }).first().click();
+  await rowNameButton(visibleDrawableRow).click();
+  await page.getByRole("button", { name: "Create Rotation Deformer" }).click();
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-kind", "rotation");
+  await visibleInput(page, "Active parameter").selectOption({ label: "Face Angle Z" });
+
+  await page.getByRole("button", { name: "Create end and center keyforms", exact: true }).click();
+  await visibleInput(page, "Parameter numeric value").fill("30");
+  await expect(canvas).toHaveAttribute("data-rotation-deformer-angle-mode", "keyform");
+  await expect(canvas).toHaveAttribute(
+    "data-rotation-deformer-translation-mode",
+    "materializeKeyform"
+  );
+
+  const angleHandle = await findRotationHandlePoint(page, canvas, "angle");
+  await dragMouse(page, angleHandle, { x: 0, y: 42 });
+  const maxAngle = await readNumberAttribute(canvas, "data-deformer-overlay-evaluated-angle");
+  expect(Math.abs(maxAngle)).toBeGreaterThan(0.5);
+
+  const translationHandle = await findRotationHandlePoint(page, canvas, "translation");
+  await dragMouse(page, translationHandle, { x: 32, y: -20 });
+  await expect(canvas).toHaveAttribute("data-rotation-deformer-translation-mode", "keyform");
+  const maxTranslationX = await readNumberAttribute(canvas, "data-deformer-overlay-translation-x");
+  const maxTranslationY = await readNumberAttribute(canvas, "data-deformer-overlay-translation-y");
+  expect(Math.hypot(maxTranslationX, maxTranslationY)).toBeGreaterThan(0.5);
+
+  await visibleInput(page, "Parameter numeric value").fill("0");
+  const restScreen = {
+    x: await readNumberAttribute(canvas, "data-primary-hit-screen-x"),
+    y: await readNumberAttribute(canvas, "data-primary-hit-screen-y")
+  };
+
+  await visibleInput(page, "Parameter numeric value").fill("15");
+  await expect.poll(async () =>
+    Math.abs((await readNumberAttribute(canvas, "data-deformer-overlay-translation-x")) - maxTranslationX / 2)
+  ).toBeLessThan(0.75);
+  await expect.poll(async () =>
+    Math.abs((await readNumberAttribute(canvas, "data-deformer-overlay-translation-y")) - maxTranslationY / 2)
+  ).toBeLessThan(0.75);
+  await expect.poll(async () =>
+    Math.abs((await readNumberAttribute(canvas, "data-deformer-overlay-evaluated-angle")) - maxAngle / 2)
+  ).toBeLessThan(0.75);
+
+  const midpointScreen = {
+    x: await readNumberAttribute(canvas, "data-primary-hit-screen-x"),
+    y: await readNumberAttribute(canvas, "data-primary-hit-screen-y")
+  };
+  expect(Math.hypot(midpointScreen.x - restScreen.x, midpointScreen.y - restScreen.y))
+    .toBeGreaterThan(0.5);
+});
+
 async function importFixturePsd(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: "Import PSD" }).first().click();
@@ -568,4 +638,78 @@ async function readVisibleDrawableRowNames(page: Page): Promise<readonly string[
 
 function visibleInput(page: Page, label: string): Locator {
   return page.locator(`[aria-label="${label}"]:visible`).first();
+}
+
+async function findRotationHandlePoint(
+  page: Page,
+  canvas: Locator,
+  kind: "angle" | "translation"
+): Promise<{ readonly x: number; readonly y: number }> {
+  const box = await canvas.boundingBox();
+  if (box === null) {
+    throw new Error("Canvas surface is not visible.");
+  }
+
+  const pivot = {
+    x: await readNumberAttribute(canvas, "data-primary-hit-screen-x"),
+    y: await readNumberAttribute(canvas, "data-primary-hit-screen-y")
+  };
+  const candidates = kind === "angle"
+    ? createAngleHandleCandidates(pivot)
+    : createTranslationHandleCandidates(pivot);
+
+  for (const point of candidates) {
+    if (point.x <= 0 || point.y <= 0 || point.x >= box.width || point.y >= box.height) {
+      continue;
+    }
+
+    await page.mouse.move(box.x + point.x, box.y + point.y);
+      if ((await canvas.getAttribute("data-rotation-deformer-hovered-handle")) === kind) {
+      return { x: box.x + point.x, y: box.y + point.y };
+    }
+  }
+
+  throw new Error(`Could not locate Rotation ${kind} handle.`);
+}
+
+function createAngleHandleCandidates(pivot: {
+  readonly x: number;
+  readonly y: number;
+}): readonly { readonly x: number; readonly y: number }[] {
+  const points: { x: number; y: number }[] = [];
+  for (const yOffset of [0, -4, 4, -8, 8]) {
+    for (let radius = 10; radius <= 220; radius += 4) {
+      points.push({ x: pivot.x + radius, y: pivot.y + yOffset });
+    }
+  }
+  return points;
+}
+
+function createTranslationHandleCandidates(pivot: {
+  readonly x: number;
+  readonly y: number;
+}): readonly { readonly x: number; readonly y: number }[] {
+  const points: { x: number; y: number }[] = [];
+  for (let yOffset = -20; yOffset >= -240; yOffset -= 10) {
+    for (let xOffset = 20; xOffset <= 260; xOffset += 10) {
+      points.push({ x: pivot.x + xOffset, y: pivot.y + yOffset });
+    }
+  }
+  return points;
+}
+
+async function dragMouse(
+  page: Page,
+  start: { readonly x: number; readonly y: number },
+  delta: { readonly x: number; readonly y: number }
+): Promise<void> {
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + delta.x, start.y + delta.y, { steps: 6 });
+  await page.mouse.up();
+}
+
+async function readNumberAttribute(locator: Locator, name: string): Promise<number> {
+  const value = await locator.getAttribute(name);
+  return Number(value ?? "0");
 }

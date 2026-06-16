@@ -262,6 +262,41 @@ describe("canvas evaluation", () => {
     expect(clamped.opacity).toBeCloseTo(0.1);
   });
 
+  it("deforms committed mesh vertices outside source layer bounds when Warp domain includes mesh vertex bounds", () => {
+    const session = createFixtureSession();
+    const mesh = session.graph.meshes.find((candidate) => candidate.meshId === MESH_FACE);
+    if (mesh === undefined) {
+      throw new Error("Expected face mesh.");
+    }
+    mesh.bounds = { x: 0, y: 0, width: 100, height: 100 };
+    mesh.vertices = [
+      { x: -4, y: 0 },
+      { x: 104, y: 0 },
+      { x: 104, y: 100 },
+      { x: -4, y: 100 }
+    ];
+    session.graph.rigControls.push(createWarpRigControl(RIG_FACE_WARP, {
+      childDrawableIds: [DRAW_FACE],
+      domainBounds: { x: -5, y: -1, width: 110, height: 102 }
+    }));
+    session.graph.rigControlRootIds.push(RIG_FACE_WARP);
+    session.graph.keyformSets.push(
+      createWarpOffsetsKeyformSet(RIG_FACE_WARP, [
+        { value: -30, statePatch: createOffsets(4, 0, 0) },
+        { value: 30, statePatch: createOffsets(4, 10, 0) }
+      ])
+    );
+
+    const face = requireDrawable(createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    }), DRAW_FACE);
+
+    expect(mesh.bounds).toEqual({ x: 0, y: 0, width: 100, height: 100 });
+    expect(face.evaluatedMesh.vertices[0]).toEqual({ x: 6, y: 0 });
+    expect(face.evaluatedMesh.vertices[1]).toEqual({ x: 114, y: 0 });
+    expect(face.bounds).toEqual({ x: 6, y: 0, width: 108, height: 100 });
+  });
+
   it("evaluates rotation angle and rotation opacity multiplier keyforms", () => {
     const session = createFixtureSession();
     session.graph.rigControls.push(createRotationRigControl());
@@ -323,6 +358,18 @@ describe("canvas evaluation", () => {
     expect(requireRigControl(keyedScene, RIG_FACE_ROTATION)).toMatchObject({
       kind: "rotation",
       translation: { x: 8, y: 5 }
+    });
+
+    const midpointScene = createCanvasEvaluatedScene(keyedSession, {
+      parameterValues: { [FACE_ANGLE_X]: 0 }
+    });
+    expect(requireDrawable(midpointScene, DRAW_FACE).evaluatedMesh.vertices[0]).toEqual({
+      x: 4,
+      y: 2.5
+    });
+    expect(requireRigControl(midpointScene, RIG_FACE_ROTATION)).toMatchObject({
+      kind: "rotation",
+      translation: { x: 4, y: 2.5 }
     });
 
     const hierarchySession = createFixtureSession();

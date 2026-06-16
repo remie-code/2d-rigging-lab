@@ -391,6 +391,32 @@ export const createEditKeyformPayload = (input: {
   };
 };
 
+export const createMaterializedEditKeyformPayloads = (input: {
+  readonly binding: ParameterKeyformBindingDescriptor;
+  readonly parameter: EditorParameter;
+  readonly currentParameterValue: number;
+  readonly keyValues: readonly number[];
+  readonly currentValue: ParameterKeyformValue;
+  readonly fallbackValue: ParameterKeyformValue;
+}): readonly EditKeyformKeyPayloadDto[] => {
+  const keyValues = uniqueSortedKeyValues(input.keyValues);
+  if (!keyValues.some((keyValue) => sameKeyValue(keyValue, input.currentParameterValue))) {
+    return [];
+  }
+
+  return keyValues.map((keyValue) =>
+    createEditKeyformPayload({
+      action: "addCurrent",
+      binding: input.binding,
+      currentParameterValue: keyValue,
+      parameter: input.parameter,
+      value: sameKeyValue(keyValue, input.currentParameterValue)
+        ? input.currentValue
+        : input.fallbackValue
+    })
+  );
+};
+
 export const coerceBindingValue = (
   binding: ParameterKeyformBindingDescriptor,
   value: ParameterKeyformValue
@@ -946,6 +972,18 @@ function cloneStatePatchValue(value: unknown): StatePatchValueDto {
 
 function hasDistinctKeyPositions(min: number, middle: number, max: number): boolean {
   return min !== middle && middle !== max && min !== max;
+}
+
+function uniqueSortedKeyValues(values: readonly number[]): readonly number[] {
+  const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
+  const unique: number[] = [];
+  for (const value of sorted) {
+    if (!unique.some((candidate) => sameKeyValue(candidate, value))) {
+      unique.push(value);
+    }
+  }
+
+  return unique;
 }
 
 function sameKeyValue(left: number, right: number): boolean {

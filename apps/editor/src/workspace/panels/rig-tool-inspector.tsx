@@ -22,7 +22,6 @@ import {
   formatControlPointGrid,
   formatRectSummary,
   resolveWarpDeformerChildrenBounds,
-  summarizeWarpDeformerChildren,
   type RotationDeformerReadModel,
   type WarpDeformerDraft,
   type WarpDeformerReadModel,
@@ -458,7 +457,6 @@ export function CommittedWarpDeformerInspector({
     readModel.domainBounds.width,
     readModel.domainBounds.x,
     readModel.domainBounds.y,
-    readModel.opacityMultiplier,
     readModel.parentRigControlId,
     readModel.rigControlId,
     readModel.transformGrid.columns,
@@ -503,16 +501,6 @@ export function CommittedWarpDeformerInspector({
               ))}
             </select>
           </label>
-          <NumberField
-            label="Opacity multiplier"
-            max={1}
-            min={0}
-            onChange={(opacityMultiplier) =>
-              setEditState((current) => ({ ...current, opacityMultiplier }))
-            }
-            step={0.01}
-            value={editState.opacityMultiplier}
-          />
         </div>
       </section>
 
@@ -687,7 +675,6 @@ export function CommittedRotationDeformerInspector({
     setEditState(createRotationEditState(readModel));
   }, [
     readModel.displayName,
-    readModel.opacityMultiplier,
     readModel.parentRigControlId,
     readModel.pivot.x,
     readModel.pivot.y,
@@ -735,30 +722,14 @@ export function CommittedRotationDeformerInspector({
               ))}
             </select>
           </label>
-          <SummaryBlock
-            rows={[
-              {
-                label: "Bound children",
-                value: summarizeWarpDeformerChildren(
-                  session,
-                  readModel.childDrawableIds,
-                  readModel.childRigControlIds
-                )
-              },
-              {
-                label: "Angle keyforms",
-                value: readModel.hasKeyforms ? "Rotation keyforms present" : "No keyforms"
-              }
-            ]}
-          />
         </div>
       </section>
       <ParameterBindingSection
         bindings={createRigControlParameterBindings(session, readModel.rigControlId)}
       />
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
-        <SectionTitle>Pivot / translation / rest angle</SectionTitle>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <SectionTitle>Setup transform</SectionTitle>
+        <div className="mt-3 grid grid-cols-5 gap-2">
           <NumberField
             displayLabel="Pivot X"
             label="Rotation pivot x"
@@ -788,7 +759,7 @@ export function CommittedRotationDeformerInspector({
             value={editState.pivot.y}
           />
           <NumberField
-            displayLabel="Rest translation X"
+            displayLabel="Rest X"
             label="Rotation rest translation x"
             onChange={(x) =>
               setEditState((current) => ({
@@ -802,7 +773,7 @@ export function CommittedRotationDeformerInspector({
             value={editState.restTranslation.x}
           />
           <NumberField
-            displayLabel="Rest translation Y"
+            displayLabel="Rest Y"
             label="Rotation rest translation y"
             onChange={(y) =>
               setEditState((current) => ({
@@ -816,7 +787,6 @@ export function CommittedRotationDeformerInspector({
             value={editState.restTranslation.y}
           />
           <NumberField
-            className="col-span-2"
             displayLabel="Rest angle"
             label="Rotation rest angle degrees"
             onChange={(restAngleDegrees) =>
@@ -826,29 +796,11 @@ export function CommittedRotationDeformerInspector({
             value={editState.restAngleDegrees}
           />
         </div>
-        <p className="mt-2 text-[11px] leading-4 text-neutral-500">
-          {readModel.hasKeyforms
-            ? "Rest angle is fallback; existing Rotation angle keyforms stay authoritative at keyed parameter values."
-            : "Rest angle is the unkeyed fallback angle used when no Rotation angle keyform applies."}
-        </p>
       </section>
       <ParentDeformerActions
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
       />
-      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
-        <SectionTitle>Opacity</SectionTitle>
-        <NumberField
-          label="Opacity multiplier"
-          max={1}
-          min={0}
-          onChange={(opacityMultiplier) =>
-            setEditState((current) => ({ ...current, opacityMultiplier }))
-          }
-          step={0.01}
-          value={editState.opacityMultiplier}
-        />
-      </section>
       <OperationFeedback feedback={feedback} />
       <button
         className="flex min-h-9 items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/60 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
@@ -870,7 +822,6 @@ interface WarpEditState {
   readonly transformRows: number;
   readonly bezierColumns: number;
   readonly bezierRows: number;
-  readonly opacityMultiplier: number;
 }
 
 interface RotationEditState {
@@ -884,7 +835,6 @@ interface RotationEditState {
     readonly x: number;
     readonly y: number;
   };
-  readonly opacityMultiplier: number;
   readonly restAngleDegrees: number;
 }
 
@@ -896,8 +846,7 @@ function createWarpEditState(readModel: WarpDeformerReadModel): WarpEditState {
     transformColumns: readModel.transformGrid.columns,
     transformRows: readModel.transformGrid.rows,
     bezierColumns: readModel.bezierEditSurface.columns,
-    bezierRows: readModel.bezierEditSurface.rows,
-    opacityMultiplier: readModel.opacityMultiplier
+    bezierRows: readModel.bezierEditSurface.rows
   };
 }
 
@@ -907,7 +856,6 @@ function createRotationEditState(readModel: RotationDeformerReadModel): Rotation
     parentRigControlId: readModel.parentRigControlId ?? "",
     pivot: structuredClone(readModel.pivot),
     restTranslation: structuredClone(readModel.restTranslation),
-    opacityMultiplier: readModel.opacityMultiplier,
     restAngleDegrees: readModel.restAngleDegrees
   };
 }
@@ -951,13 +899,6 @@ export function createWarpUpdatePayload(
       editState.bezierRows
     );
   }
-  addNumberChange(
-    payload,
-    "opacityMultiplier",
-    readModel.opacityMultiplier,
-    clampNumber(editState.opacityMultiplier, 0, 1)
-  );
-
   return hasUpdateFields(payload) ? payload : undefined;
 }
 
@@ -976,12 +917,6 @@ export function createRotationUpdatePayload(
   if (!samePoint(readModel.restTranslation, editState.restTranslation)) {
     payload.restTranslation = structuredClone(editState.restTranslation);
   }
-  addNumberChange(
-    payload,
-    "opacityMultiplier",
-    readModel.opacityMultiplier,
-    clampNumber(editState.opacityMultiplier, 0, 1)
-  );
   addNumberChange(
     payload,
     "restAngleDegrees",
@@ -1010,7 +945,6 @@ function addNumberChange(
     | "transformRows"
     | "bezierColumns"
     | "bezierRows"
-    | "opacityMultiplier"
     | "restAngleDegrees",
   before: number,
   after: number
@@ -1038,10 +972,6 @@ function samePoint(
   right: { readonly x: number; readonly y: number }
 ): boolean {
   return left.x === right.x && left.y === right.y;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
 
 function RigToolEmptyState({

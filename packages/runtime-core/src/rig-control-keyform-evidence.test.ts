@@ -186,6 +186,102 @@ describe("runtime rig control keyform evidence", () => {
     expect(first.evidence.runtimeDiffEquivalent).toBe(false);
   });
 
+  it("uses rest translation fallback and linearly interpolates rotation2d translation keyforms", () => {
+    const fallbackGraph = withRigControlRestTranslation(
+      createRotation2dKeyformGraph([]),
+      "rig_child",
+      { x: 3, y: -2 }
+    );
+    const fallback = evaluateViewerRuntimeSnapshot(fallbackGraph, {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 0.5 },
+      targetIds: ["rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const,
+        includeTrace: true
+      }
+    });
+
+    expect(expectRigControl(fallback.snapshot.rigControls, "rig_child").localTransform?.translation).toEqual({
+      x: 3,
+      y: -2
+    });
+    expect(expectDrawable(fallback.snapshot.drawables, "draw_child").vertices?.[0]).toEqual({
+      x: 13,
+      y: -2
+    });
+    expect(fallback.snapshot.keyformSamples).toEqual([]);
+
+    const keyedGraph = withRigControlRestTranslation(
+      createRotation2dKeyformGraph([
+        {
+          evaluator: "linear-1d-v1",
+          keyformSetId: KeyformSetIdSchema.parse("keyset_child_translation_midpoint"),
+          targetId: "rig_child",
+          targetKind: "rigControl",
+          targetProperty: "translation",
+          parameterId: ParameterIdSchema.parse("param_rig_angle"),
+          compositionMode: "replace",
+          compositionOrder: 0,
+          keys: [
+            { value: 0, statePatch: { x: -2, y: 4 } },
+            { value: 1, statePatch: { x: 8, y: -6 } }
+          ]
+        }
+      ]),
+      "rig_child",
+      { x: 99, y: 99 }
+    );
+    const midpoint = evaluateViewerRuntimeSnapshot(keyedGraph, {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 0.5 },
+      targetIds: ["rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const,
+        includeTrace: true
+      }
+    });
+    const exact = evaluateViewerRuntimeSnapshot(keyedGraph, {
+      baselineParameterOverrides: { param_rig_angle: 0 },
+      parameterOverrides: { param_rig_angle: 1 },
+      targetIds: ["rig_child", "draw_child"],
+      options: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full" as const,
+        includeTrace: true
+      }
+    });
+
+    expect(midpoint.snapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        keyformSetId: "keyset_child_translation_midpoint",
+        target: "rigControl:rig_child.translation",
+        statePatch: { x: 3, y: -1 },
+        samplingStatus: "interpolated"
+      })
+    ]);
+    expect(expectRigControl(midpoint.snapshot.rigControls, "rig_child").localTransform?.translation).toEqual({
+      x: 3,
+      y: -1
+    });
+    expect(expectDrawable(midpoint.snapshot.drawables, "draw_child").vertices?.[0]).toEqual({
+      x: 13,
+      y: -1
+    });
+    expect(exact.snapshot.keyformSamples).toEqual([
+      expect.objectContaining({
+        statePatch: { x: 8, y: -6 },
+        samplingStatus: "exact"
+      })
+    ]);
+    expect(expectRigControl(exact.snapshot.rigControls, "rig_child").localTransform?.translation).toEqual({
+      x: 8,
+      y: -6
+    });
+  });
+
   it("emits deterministic diagnostics for invalid and unsupported rotation2d keyform patches", () => {
     const graph = createRotation2dKeyformGraph([
       {
@@ -633,6 +729,32 @@ const createWarpLatticeInvalidOffsetsGraph = (): NormalizedRuntimeGraph => {
         ]
       }
     ]
+  };
+};
+
+const withRigControlRestTranslation = (
+  graph: NormalizedRuntimeGraph,
+  rigControlIdText: string,
+  restTranslation: { readonly x: number; readonly y: number }
+): NormalizedRuntimeGraph => {
+  const rigControlId = RigControlIdSchema.parse(rigControlIdText);
+  const rigControl = graph.rigControls.get(rigControlId);
+  if (rigControl?.kind !== "rotation2d") {
+    throw new Error(`Expected rotation2d rig control ${rigControlIdText}.`);
+  }
+
+  return {
+    ...graph,
+    rigControls: new Map([
+      ...graph.rigControls,
+      [
+        rigControlId,
+        {
+          ...rigControl,
+          restTranslation: { x: restTranslation.x, y: restTranslation.y }
+        }
+      ]
+    ])
   };
 };
 

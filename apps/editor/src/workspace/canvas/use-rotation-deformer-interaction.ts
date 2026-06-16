@@ -37,6 +37,7 @@ import {
 import {
   canCommitRotationAngleKeyformUpdate,
   canCommitRotationTranslationKeyformUpdate,
+  createRotationMaterializedTranslationKeyformGesture,
   createRotationKeyformAngleUpdateGesture,
   createRotationKeyformTranslationUpdateGesture,
   createRotationPivotUpdateGesture,
@@ -44,6 +45,7 @@ import {
   createRotationRestTranslationUpdateGesture,
   hasRotationAngleKeyforms,
   hasRotationTranslationKeyforms,
+  listRotationAngleKeyformValues,
   type RotationAngleEditMode,
   type RotationTranslationEditMode
 } from "./rotation-deformer-gesture";
@@ -515,6 +517,19 @@ function createTranslationGestureController(input: {
     );
   }
 
+  if (input.editMode.kind === "materializeKeyform") {
+    return createEditorSessionGestureCommitController(
+      createRotationMaterializedTranslationKeyformGesture({
+        binding: input.editMode.binding,
+        currentParameterValue: input.editMode.currentParameterValue,
+        fallbackTranslation: input.editMode.fallbackTranslation,
+        getNextTranslation: input.getNextTranslation,
+        keyValues: input.editMode.keyValues,
+        parameter: input.editMode.parameter
+      })
+    );
+  }
+
   return undefined;
 }
 
@@ -595,6 +610,11 @@ function createRotationDeformerEditState(input: {
           input.activeParameterId,
           input.parameterValues
         );
+  const localTranslation = {
+    x: rigControl.restTranslation?.x ?? 0,
+    y: rigControl.restTranslation?.y ?? 0
+  };
+  const displayTranslation = overlay.translation ?? localTranslation;
   const angleEditMode = resolveAngleEditMode({
     binding: angleBinding,
     bindingProjection: angleBindingProjection,
@@ -604,13 +624,19 @@ function createRotationDeformerEditState(input: {
   const translationEditMode = resolveTranslationEditMode({
     binding: translationBinding,
     bindingProjection: translationBindingProjection,
+    fallbackTranslation: displayTranslation,
     hasTranslationKeyforms: hasRotationTranslationKeyforms(input.session, overlay.rigControlId),
-    parentedUnsupported
+    parentedUnsupported,
+    sourceKeyValues:
+      translationBindingProjection?.parameter === null ||
+      translationBindingProjection?.parameter === undefined
+        ? []
+        : listRotationAngleKeyformValues(
+            input.session,
+            overlay.rigControlId,
+            translationBindingProjection.parameter.parameterId
+          )
   });
-  const localTranslation = {
-    x: rigControl.restTranslation?.x ?? 0,
-    y: rigControl.restTranslation?.y ?? 0
-  };
 
   return {
     rigControlId: overlay.rigControlId,
@@ -621,7 +647,7 @@ function createRotationDeformerEditState(input: {
     },
     displayPivot: getRotationDeformerPivot(overlay),
     localTranslation,
-    displayTranslation: overlay.translation ?? localTranslation,
+    displayTranslation,
     displayAngleDegrees: overlay.evaluatedAngleDegrees ?? overlay.restAngleDegrees ?? 0,
     angleEditMode,
     translationEditMode
@@ -669,8 +695,10 @@ function resolveAngleEditMode(input: {
 function resolveTranslationEditMode(input: {
   readonly binding: ParameterKeyformBindingDescriptor | undefined;
   readonly bindingProjection: ParameterBindingProjection | undefined;
+  readonly fallbackTranslation: CanvasPoint;
   readonly hasTranslationKeyforms: boolean;
   readonly parentedUnsupported: boolean;
+  readonly sourceKeyValues: readonly number[];
 }): RotationTranslationEditMode {
   if (input.parentedUnsupported) {
     return {
@@ -692,6 +720,26 @@ function resolveTranslationEditMode(input: {
     };
   }
 
+  const bindingProjection = input.bindingProjection;
+  if (
+    input.binding !== undefined &&
+    bindingProjection !== undefined &&
+    bindingProjection.parameter !== null &&
+    !bindingProjection.hasBinding &&
+    input.sourceKeyValues.some((keyValue) =>
+      areParameterKeyValuesEqual(keyValue, bindingProjection.currentParameterValue)
+    )
+  ) {
+    return {
+      kind: "materializeKeyform",
+      binding: input.binding,
+      currentParameterValue: bindingProjection.currentParameterValue,
+      fallbackTranslation: input.fallbackTranslation,
+      keyValues: input.sourceKeyValues,
+      parameter: bindingProjection.parameter
+    };
+  }
+
   if (!input.hasTranslationKeyforms) {
     return {
       kind: "restTranslation"
@@ -702,6 +750,10 @@ function resolveTranslationEditMode(input: {
     kind: "locked",
     reason: "missingCurrentKeyform"
   };
+}
+
+function areParameterKeyValuesEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }
 
 function applyRotationPreview(

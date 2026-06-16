@@ -1,5 +1,5 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
-import type { RigControlId } from "@private-2d-rigging-lab/contracts";
+import type { DiagnosticDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSessionCommandResult } from "../../features/editor-session/model/editor-session-commands";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../../features/editor-session/model/editor-session-gesture-commit";
 import {
   createEditKeyformPayload,
+  createMaterializedEditKeyformPayloads,
   type EditorParameter,
   type ParameterBindingProjection,
   type ParameterKeyformBindingDescriptor
@@ -42,6 +43,14 @@ export type RotationTranslationEditMode =
       readonly binding: ParameterKeyformBindingDescriptor;
       readonly parameter: EditorParameter;
       readonly currentParameterValue: number;
+    }
+  | {
+      readonly kind: "materializeKeyform";
+      readonly binding: ParameterKeyformBindingDescriptor;
+      readonly parameter: EditorParameter;
+      readonly currentParameterValue: number;
+      readonly keyValues: readonly number[];
+      readonly fallbackTranslation: CanvasPoint;
     }
   | {
       readonly kind: "locked";
@@ -86,6 +95,27 @@ export function hasRotationTranslationKeyforms(
       keyformSet.target.id === rigControlId &&
       keyformSet.target.property === "translation"
   );
+}
+
+export function listRotationAngleKeyformValues(
+  session: AuthoringSession,
+  rigControlId: RigControlId,
+  parameterId: EditorParameter["parameterId"]
+): readonly number[] {
+  const keyformSet = session.graph.keyformSets.find(
+    (candidate) =>
+      candidate.evaluator === "linear-1d-v1" &&
+      candidate.parameterId === parameterId &&
+      candidate.target.kind === "rigControl" &&
+      candidate.target.id === rigControlId &&
+      candidate.target.property === "angleDegrees"
+  );
+
+  if (keyformSet === undefined || keyformSet.evaluator !== "linear-1d-v1") {
+    return [];
+  }
+
+  return keyformSet.keys.map((key) => key.value).sort((left, right) => left - right);
 }
 
 export function createRotationPivotUpdateGesture(input: {
@@ -176,5 +206,58 @@ export function createRotationKeyformTranslationUpdateGesture(input: {
           value: input.getNextTranslation()
         })
       )
+  });
+}
+
+export function createRotationMaterializedTranslationKeyformGesture(input: {
+  readonly binding: ParameterKeyformBindingDescriptor;
+  readonly currentParameterValue: number;
+  readonly fallbackTranslation: CanvasPoint;
+  readonly getNextTranslation: () => CanvasPoint;
+  readonly keyValues: readonly number[];
+  readonly parameter: EditorParameter;
+}): EditorSessionGestureCommit<CanvasPoint, EditorSessionCommandResult> {
+  return createEditorSessionGestureCommit({
+    label: "Edit Rotation translation keyform",
+    preview: () => input.getNextTranslation(),
+    commit: (currentSession) => {
+      const payloads = createMaterializedEditKeyformPayloads({
+        binding: input.binding,
+        currentParameterValue: input.currentParameterValue,
+        currentValue: input.getNextTranslation(),
+        fallbackValue: input.fallbackTranslation,
+        keyValues: input.keyValues,
+        parameter: input.parameter
+      });
+
+      if (payloads.length === 0) {
+        return {
+          committed: false,
+          diagnostics: [],
+          session: currentSession
+        };
+      }
+
+      let nextSession = currentSession;
+      const diagnostics: DiagnosticDto[] = [];
+      for (const payload of payloads) {
+        const result = commitEditKeyformKey(nextSession, payload);
+        diagnostics.push(...result.diagnostics);
+        if (!result.committed) {
+          return {
+            committed: false,
+            diagnostics,
+            session: currentSession
+          };
+        }
+        nextSession = result.session;
+      }
+
+      return {
+        committed: true,
+        diagnostics,
+        session: nextSession
+      };
+    }
   });
 }

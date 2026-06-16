@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronRight,
   GitBranch,
+  KeyRound,
   Layers,
   Link2,
   RotateCcw,
@@ -132,6 +133,7 @@ export function DeformerTreeView() {
               )}
               data-row-kind="bound-drawable-ref"
               data-row-id={row.drawableId}
+              data-parent-rig-control-id={row.parentRigControlId}
               data-testid="deformer-tree-drawable-ref"
               draggable
               key={`drawable-ref:${row.parentRigControlId}:${row.drawableId}`}
@@ -175,6 +177,9 @@ export function DeformerTreeView() {
               )}
               data-row-kind={row.kind === "warpDeformer" ? "warp-deformer" : "rotation-deformer"}
               data-row-id={row.rigControlId}
+              data-keyform-key-count={row.keyformKeyCount}
+              data-keyform-set-count={row.keyformSetCount}
+              data-parent-rig-control-id={row.parentRigControlId}
               data-testid={row.selected ? "deformer-tree-selected-row" : "deformer-tree-row"}
               draggable
               key={`deformer:${row.rigControlId}`}
@@ -193,7 +198,7 @@ export function DeformerTreeView() {
               onDrop={(event) => handleDropOnDeformer(event, row.rigControlId)}
               role="treeitem"
               style={{ marginLeft: `${row.depth * 14}px` }}
-              title={`${row.displayName} - ${row.detail}`}
+              title={`${row.displayName} - ${row.detail}${row.keyformKeyCount > 0 ? ` - ${row.keyformSetCount} keyed properties / ${row.keyformKeyCount} keys` : ""}`}
               type="button"
             >
               <span className="flex size-5 shrink-0 items-center justify-center text-teal-300">
@@ -212,8 +217,22 @@ export function DeformerTreeView() {
                   {row.transformLabel}
                 </span>
               </span>
-              <span className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-400">
-                {row.childRigControlCount + row.childDrawableCount}
+              <span className="flex shrink-0 items-center gap-1">
+                {row.keyformKeyCount > 0 ? (
+                  <span
+                    className="inline-flex h-5 items-center gap-1 rounded border border-amber-700/70 bg-amber-950/45 px-1.5 text-[10px] font-medium uppercase text-amber-100"
+                    data-keyform-key-count={row.keyformKeyCount}
+                    data-keyform-set-count={row.keyformSetCount}
+                    data-testid="deformer-tree-keyform-count"
+                    title={`${row.keyformSetCount} keyed properties / ${row.keyformKeyCount} keys`}
+                  >
+                    <KeyRound aria-hidden="true" size={10} strokeWidth={1.9} />
+                    Keyed {row.keyformKeyCount}
+                  </span>
+                ) : null}
+                <span className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-400">
+                  {row.childRigControlCount + row.childDrawableCount}
+                </span>
               </span>
             </button>
           )
