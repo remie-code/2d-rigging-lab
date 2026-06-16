@@ -26,6 +26,7 @@ import {
   zoomViewAtScreenPoint
 } from "./canvas-projection";
 import { commitUpdateRigControl } from "../../features/editor-session/model/editor-session-commands";
+import { computeWarpDeformerScaledControlPointOffsets } from "./warp-deformer-scale";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
@@ -595,6 +596,9 @@ describe("canvas render projection", () => {
       controlPointOffsets: createOffsets(12, 40, 0)
     });
     expect(rigProjection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 45, y: 5 });
+    expect(rigProjection.deformerOverlay?.restControlPoints).toHaveLength(12);
+    expect(rigProjection.deformerOverlay?.restControlPoints?.[0]).toEqual({ x: 5, y: 5 });
+    expect(rigProjection.deformerOverlay?.restControlPoints?.[11]).toEqual({ x: 25, y: 25 });
     expect(hitTestTopmostDrawable(rigProjection, { x: 46, y: 6 })).toBe(DRAW_FRONT);
     expect(hitTestTopmostDrawable(rigProjection, { x: 6, y: 6 })).toBe(DRAW_BACK);
 
@@ -647,6 +651,49 @@ describe("canvas render projection", () => {
     expect(front?.evaluatedMesh.vertices[0]).toEqual({ x: 13, y: 3 });
     expect(projection.deformerOverlay?.controlPointOffsets?.[0]).toEqual({ x: 8, y: -2 });
     expect(projection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 13, y: 3 });
+  });
+
+  it("projects scaled Warp preview offsets into evaluated drawable geometry", () => {
+    const session = createFixtureSession();
+    const domainBounds = { x: 5, y: 5, width: 20, height: 20 };
+    const scaled = computeWarpDeformerScaledControlPointOffsets({
+      restControlPoints: createRestControlPoints(domainBounds, 4, 3),
+      controlPointOffsets: createOffsets(12, 0, 0),
+      latticeColumns: 4,
+      latticeRows: 3,
+      handle: "rightEdge",
+      dragDeltaCanvas: { x: 10, y: 0 }
+    });
+    if (!scaled.ok) {
+      throw new Error(`Expected scaled preview offsets: ${scaled.reason}`);
+    }
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_WARP
+      },
+      {
+        controlPointPreview: {
+          rigControlId: RIG_FACE_WARP,
+          compositionMode: "replaceEvaluated",
+          controlPointOffsets: scaled.nextOffsets
+        }
+      }
+    );
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(projection.deformerOverlay?.controlPointOffsets).toHaveLength(12);
+    expect(projection.deformerOverlay?.controlPointOffsets?.[0]).toEqual({ x: 0, y: 0 });
+    expect(projection.deformerOverlay?.controlPointOffsets?.[3]).toEqual({ x: 10, y: 0 });
+    expect(front?.bounds.x).toBeCloseTo(5);
+    expect(front?.bounds.y).toBeCloseTo(5);
+    expect(front?.bounds.width).toBeCloseTo(30);
+    expect(front?.bounds.height).toBeCloseTo(20);
+    expect(front?.evaluatedMesh.vertices[1]?.x).toBeCloseTo(35);
   });
 
   it("projects child Warp overlay in the same evaluated space as mesh under parent movement", () => {

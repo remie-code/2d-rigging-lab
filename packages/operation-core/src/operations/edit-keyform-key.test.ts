@@ -307,6 +307,28 @@ describe("editKeyformKey operation handler", () => {
     });
   });
 
+  it("rejects warp controlPointOffsets with invalid cardinality without mutation", () => {
+    const session = createFixtureSession();
+
+    expectRejectedWithoutMutation(
+      session,
+      createEditRequest({
+        dryRun: false,
+        action: "addCurrent",
+        targetKind: "rigControl",
+        targetId: "rig_head_warp",
+        targetProperty: "controlPointOffsets",
+        keyValue: 0,
+        statePatchValue: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 }
+        ]
+      }),
+      "operation.editKeyformKey.invalidPatchShape"
+    );
+  });
+
   it("rejects duplicate key, missing key, missing binding, duplicate binding, missing parameter, and missing target atomically", () => {
     const duplicateKeySession = createFixtureSession();
     const initialAdd = createEditRequest({

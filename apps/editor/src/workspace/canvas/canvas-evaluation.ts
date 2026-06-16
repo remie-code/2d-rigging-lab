@@ -87,6 +87,7 @@ export interface CanvasEvaluatedWarpRigControl extends CanvasEvaluatedRigControl
   readonly transformRows: number;
   readonly bezierColumns: number;
   readonly bezierRows: number;
+  readonly restControlPoints: readonly Vec2Dto[];
   readonly controlPointOffsets: readonly Vec2Dto[];
   readonly evaluatedControlPoints: readonly Vec2Dto[];
 }
@@ -525,7 +526,8 @@ function createCanvasEvaluatedWarpRigControl(
   rigControlsById: ReadonlyMap<EvaluationRigControlId, EvaluationRigControl>
 ): CanvasEvaluatedWarpRigControl {
   const chain = createDrawableRigControlChain(rigControl, rigControlsById);
-  const evaluatedControlPoints = createWarpRestControlPoints(rigControl).map((point) =>
+  const restControlPoints = createWarpRestControlPoints(rigControl);
+  const evaluatedControlPoints = restControlPoints.map((point) =>
     applyRigControlChainToPoint(point, chain)
   );
 
@@ -541,6 +543,7 @@ function createCanvasEvaluatedWarpRigControl(
     transformRows: rigControl.latticeRows,
     bezierColumns: rigControl.bezierColumns,
     bezierRows: rigControl.bezierRows,
+    restControlPoints: restControlPoints.map(cloneVec2),
     controlPointOffsets: rigControl.controlPointOffsets.map(cloneVec2),
     evaluatedControlPoints,
     childDrawableIds: [...rigControl.childDrawableIds],

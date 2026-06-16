@@ -14,6 +14,10 @@ import {
   listRotationDeformerHandlePositions
 } from "./rotation-deformer-handles";
 import { getWarpControlPointCanvasPosition } from "./warp-deformer-control-points";
+import type { WarpDeformerScaleHandle } from "./warp-deformer-scale";
+
+const WARP_SCALE_HANDLE_OUTER_OFFSET_PX = 10;
+const MIN_WARP_SCALE_HANDLE_ZOOM = 1e-6;
 
 export interface CanvasOverlayState {
   readonly grid: boolean;
@@ -40,6 +44,8 @@ export interface CanvasWarpDeformerInteractionState {
   readonly editable: boolean;
   readonly selectedControlPointIndices: readonly number[];
   readonly hoveredControlPointIndex?: number;
+  readonly scaleHandlesVisible: boolean;
+  readonly hoveredScaleHandle?: WarpDeformerScaleHandle;
 }
 
 export interface CanvasRotationDeformerInteractionState {
@@ -328,19 +334,197 @@ function drawDeformerOverlay(
   );
 
   drawDeformerGridLines(context, overlay, zoom, "transform", color);
+  const activeWarpInteraction =
+    overlay.rigControlId === warpInteraction?.rigControlId ? warpInteraction : undefined;
   drawDeformerControlPoints(
     context,
     overlay,
     zoom,
     color,
-    overlay.rigControlId === warpInteraction?.rigControlId ? warpInteraction : undefined
+    activeWarpInteraction
   );
+  drawWarpScaleHandles(context, overlay, zoom, activeWarpInteraction);
 
   context.strokeStyle = guideColor;
   context.lineWidth = 1 / zoom;
   context.setLineDash([2 / zoom, 5 / zoom]);
   drawDeformerGridLines(context, overlay, zoom, "bezier", guideColor);
   context.restore();
+}
+
+function drawWarpScaleHandles(
+  context: CanvasRenderingContext2D,
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number,
+  interaction: CanvasWarpDeformerInteractionState | undefined
+): void {
+  if (interaction?.scaleHandlesVisible !== true || overlay.status !== "committed") {
+    return;
+  }
+
+  const positions = listWarpScaleHandleCanvasPositions(overlay, zoom);
+  const edgePositions = positions.filter((position) => position.kind === "edge");
+  const cornerPositions = positions.filter((position) => position.kind === "corner");
+
+  context.save();
+  context.setLineDash([]);
+  context.lineWidth = 1.2 / zoom;
+  for (const position of [...edgePositions, ...cornerPositions]) {
+    const hovered = interaction.hoveredScaleHandle === position.handle;
+    context.fillStyle = hovered ? "rgba(255, 255, 255, 0.98)" : "rgba(251, 191, 36, 0.96)";
+    context.strokeStyle = hovered ? "rgba(17, 24, 39, 0.98)" : "rgba(17, 24, 39, 0.86)";
+
+    if (position.kind === "corner") {
+      drawWarpScaleCornerHandle(context, position.canvasPoint, zoom, hovered);
+    } else {
+      drawWarpScaleEdgeHandle(context, position, zoom, hovered);
+    }
+  }
+  context.restore();
+}
+
+function drawWarpScaleCornerHandle(
+  context: CanvasRenderingContext2D,
+  point: { readonly x: number; readonly y: number },
+  zoom: number,
+  hovered: boolean
+): void {
+  const halfSize = (hovered ? 5 : 4) / zoom;
+  context.beginPath();
+  context.moveTo(point.x - halfSize, point.y - halfSize);
+  context.lineTo(point.x + halfSize, point.y - halfSize);
+  context.lineTo(point.x + halfSize, point.y + halfSize);
+  context.lineTo(point.x - halfSize, point.y + halfSize);
+  context.closePath();
+  context.fill();
+  context.stroke();
+}
+
+function drawWarpScaleEdgeHandle(
+  context: CanvasRenderingContext2D,
+  position: WarpScaleHandleCanvasPosition,
+  zoom: number,
+  hovered: boolean
+): void {
+  const longHalf = (hovered ? 7 : 6) / zoom;
+  const shortHalf = (hovered ? 3.5 : 3) / zoom;
+  const horizontal = position.handle === "topEdge" || position.handle === "bottomEdge";
+  const halfWidth = horizontal ? longHalf : shortHalf;
+  const halfHeight = horizontal ? shortHalf : longHalf;
+  const point = position.canvasPoint;
+
+  context.beginPath();
+  context.moveTo(point.x - halfWidth, point.y - halfHeight);
+  context.lineTo(point.x + halfWidth, point.y - halfHeight);
+  context.lineTo(point.x + halfWidth, point.y + halfHeight);
+  context.lineTo(point.x - halfWidth, point.y + halfHeight);
+  context.closePath();
+  context.fill();
+  context.stroke();
+}
+
+interface WarpScaleHandleCanvasPosition {
+  readonly handle: WarpDeformerScaleHandle;
+  readonly kind: "corner" | "edge";
+  readonly canvasPoint: {
+    readonly x: number;
+    readonly y: number;
+  };
+}
+
+function listWarpScaleHandleCanvasPositions(
+  overlay: CanvasDeformerOverlayProjection,
+  zoom: number
+): readonly WarpScaleHandleCanvasPosition[] {
+  const bounds = getWarpCurrentControlPointBounds(overlay);
+  if (bounds === undefined) {
+    return [];
+  }
+
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  const offset = getWarpScaleHandleCanvasOffset(zoom);
+  const leftX = bounds.x - offset;
+  const rightX = bounds.x + bounds.width + offset;
+  const topY = bounds.y - offset;
+  const bottomY = bounds.y + bounds.height + offset;
+  return [
+    {
+      handle: "topLeftCorner",
+      kind: "corner",
+      canvasPoint: { x: leftX, y: topY }
+    },
+    {
+      handle: "topRightCorner",
+      kind: "corner",
+      canvasPoint: { x: rightX, y: topY }
+    },
+    {
+      handle: "bottomLeftCorner",
+      kind: "corner",
+      canvasPoint: { x: leftX, y: bottomY }
+    },
+    {
+      handle: "bottomRightCorner",
+      kind: "corner",
+      canvasPoint: { x: rightX, y: bottomY }
+    },
+    {
+      handle: "leftEdge",
+      kind: "edge",
+      canvasPoint: { x: leftX, y: centerY }
+    },
+    {
+      handle: "rightEdge",
+      kind: "edge",
+      canvasPoint: { x: rightX, y: centerY }
+    },
+    {
+      handle: "topEdge",
+      kind: "edge",
+      canvasPoint: { x: centerX, y: topY }
+    },
+    {
+      handle: "bottomEdge",
+      kind: "edge",
+      canvasPoint: { x: centerX, y: bottomY }
+    }
+  ];
+}
+
+function getWarpScaleHandleCanvasOffset(zoom: number): number {
+  return WARP_SCALE_HANDLE_OUTER_OFFSET_PX / Math.max(Math.abs(zoom), MIN_WARP_SCALE_HANDLE_ZOOM);
+}
+
+function getWarpCurrentControlPointBounds(
+  overlay: CanvasDeformerOverlayProjection
+): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | undefined {
+  if (overlay.kind !== "warp" || overlay.transformColumns <= 0 || overlay.transformRows <= 0) {
+    return undefined;
+  }
+
+  const first = getWarpControlPointCanvasPosition(overlay, 0, 0);
+  let minX = first.x;
+  let maxX = first.x;
+  let minY = first.y;
+  let maxY = first.y;
+
+  for (let row = 0; row < overlay.transformRows; row += 1) {
+    for (let column = 0; column < overlay.transformColumns; column += 1) {
+      const point = getWarpControlPointCanvasPosition(overlay, column, row);
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
 }
 
 function drawRotationDeformerOverlay(

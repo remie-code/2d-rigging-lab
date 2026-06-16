@@ -90,6 +90,7 @@ export interface CanvasDeformerOverlayProjection {
   readonly translation?: CanvasPoint;
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
+  readonly restControlPoints?: readonly CanvasPoint[];
   readonly controlPointOffsets?: readonly CanvasPoint[];
   readonly evaluatedControlPoints?: readonly CanvasPoint[];
   readonly childDrawableIds: readonly DrawableId[];
@@ -459,6 +460,7 @@ function createDeformerOverlayProjection(
     transformRows: rigControl.transformRows,
     bezierColumns: rigControl.bezierColumns,
     bezierRows: rigControl.bezierRows,
+    restControlPoints: rigControl.restControlPoints.map(clonePoint),
     controlPointOffsets: rigControl.controlPointOffsets.map(clonePoint),
     evaluatedControlPoints: rigControl.evaluatedControlPoints.map(clonePoint),
     childDrawableIds: [...rigControl.childDrawableIds],

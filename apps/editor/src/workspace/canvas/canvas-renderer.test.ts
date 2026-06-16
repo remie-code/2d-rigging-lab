@@ -1,8 +1,12 @@
-import { DrawableIdSchema, PartIdSchema } from "@private-2d-rigging-lab/contracts";
+import { DrawableIdSchema, PartIdSchema, RigControlIdSchema } from "@private-2d-rigging-lab/contracts";
 import type { RenderScene, RenderViewport } from "@private-2d-rigging-lab/render-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CanvasRenderableDrawable, CanvasRenderProjection } from "./canvas-projection";
+import type {
+  CanvasDeformerOverlayProjection,
+  CanvasRenderableDrawable,
+  CanvasRenderProjection
+} from "./canvas-projection";
 import { createCanvasBitmapCache, renderCanvasProjection } from "./canvas-renderer";
 
 const webglRendererMock = vi.hoisted(() => ({
@@ -32,6 +36,7 @@ vi.mock("@private-2d-rigging-lab/render-webgl2", () => ({
 
 const DRAW_RENDERER_TEST = DrawableIdSchema.parse("draw_renderer_test");
 const PART_RENDERER_TEST = PartIdSchema.parse("part_renderer_test");
+const RIG_RENDERER_WARP = RigControlIdSchema.parse("rig_renderer_warp");
 
 type RecordedCall = {
   readonly name: string;
@@ -473,6 +478,54 @@ describe("canvas renderer evaluated mesh drawing", () => {
     ).toHaveLength(2);
     expect(context.calls.filter((call) => call.name === "arc")).toHaveLength(6);
   });
+
+  it("draws warp scale handles on a screen-space outer ring", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: {
+        canvasBounds: { x: 0, y: 0, width: 128, height: 128 },
+        selectedDrawableIds: new Set(),
+        drawables: [],
+        maskRelations: [],
+        deformerOverlay: createWarpOverlay(),
+        hasRenderableArtwork: false,
+        contentKey: "renderer-warp-scale-handles-test"
+      },
+      view: { zoom: 2, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: true,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache(),
+      warpDeformerInteraction: {
+        rigControlId: RIG_RENDERER_WARP,
+        editable: true,
+        selectedControlPointIndices: [],
+        scaleHandlesVisible: true
+      }
+    });
+
+    expect(hasCall(context, "moveTo", [-7, -7])).toBe(true);
+    expect(hasCall(context, "moveTo", [47, -6.5])).toBe(true);
+    expect(hasCall(context, "moveTo", [-6.5, 47])).toBe(true);
+  });
 });
 
 function renderDrawable(drawable: CanvasRenderableDrawable) {
@@ -571,4 +624,48 @@ function createMeshOverlay(drawableId: string) {
       triangles: [[0, 1, 2]] as [number, number, number][]
     }
   };
+}
+
+function createWarpOverlay(): CanvasDeformerOverlayProjection {
+  const domainBounds = { x: 0, y: 0, width: 100, height: 100 };
+  return {
+    kind: "warp",
+    rigControlId: RIG_RENDERER_WARP,
+    displayName: "Renderer Warp",
+    domainBounds,
+    transformColumns: 2,
+    transformRows: 2,
+    bezierColumns: 2,
+    bezierRows: 2,
+    restControlPoints: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 0, y: 100 },
+      { x: 100, y: 100 }
+    ],
+    controlPointOffsets: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 }
+    ],
+    childDrawableIds: [],
+    childRigControlIds: [],
+    status: "committed"
+  };
+}
+
+function hasCall(
+  context: FakeCanvasContext,
+  name: string,
+  args: readonly number[]
+): boolean {
+  return context.calls.some((call) =>
+    call.name === name &&
+    call.args.length === args.length &&
+    call.args.every((actual, index) =>
+      typeof actual === "number" &&
+      Math.abs(actual - (args[index] ?? 0)) < 1e-9
+    )
+  );
 }
