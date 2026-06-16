@@ -24,6 +24,12 @@ interface RecordedGlCall {
   readonly args: readonly unknown[];
 }
 
+interface FeedbackLoopViolation {
+  readonly framebuffer: WebGl2Framebuffer;
+  readonly attachedTexture: WebGl2Texture;
+  readonly textureUnits: readonly number[];
+}
+
 describe("WebGl2Renderer", () => {
   it("renders a textured mesh with premultiplied-alpha-friendly blending", () => {
     const gl = new FakeWebGl2Context();
@@ -88,6 +94,102 @@ describe("WebGl2Renderer", () => {
       )
     ).toBe(true);
     expect(gl.calls.filter((call) => call.name === "drawElements")).toHaveLength(3);
+    expect(gl.feedbackLoopViolations).toEqual([]);
+  });
+
+  it("does not bind the newly-created mask target while drawing the first mask pass", () => {
+    const gl = new FakeWebGl2Context();
+    const renderer = new WebGl2Renderer(gl);
+    const scene = createRenderScene({
+      textureSources: [
+        createTextureSource("tex_mask"),
+        createTextureSource("tex_target")
+      ],
+      drawables: [
+        createDrawable("draw_mask", "tex_mask", { drawOrder: 1 }),
+        createDrawable("draw_target", "tex_target", {
+          drawOrder: 0,
+          clippingMaskIds: ["draw_mask"]
+        })
+      ]
+    });
+
+    renderer.render(scene, createViewport());
+
+    expect(gl.feedbackLoopViolations).toEqual([]);
+    expect(gl.calls.filter((call) => call.name === "createFramebuffer")).toHaveLength(1);
+    expect(gl.calls.filter((call) => call.name === "drawElements")).toHaveLength(3);
+  });
+
+  it("does not bind a reused mask target while drawing repeated mask passes", () => {
+    const gl = new FakeWebGl2Context();
+    const renderer = new WebGl2Renderer(gl);
+    const scene = createRenderScene({
+      textureSources: [
+        createTextureSource("tex_mask"),
+        createTextureSource("tex_target_a"),
+        createTextureSource("tex_target_b")
+      ],
+      drawables: [
+        createDrawable("draw_mask", "tex_mask", { drawOrder: 2 }),
+        createDrawable("draw_target_a", "tex_target_a", {
+          drawOrder: 1,
+          clippingMaskIds: ["draw_mask"]
+        }),
+        createDrawable("draw_target_b", "tex_target_b", {
+          drawOrder: 0,
+          clippingMaskIds: ["draw_mask"]
+        })
+      ]
+    });
+
+    renderer.render(scene, createViewport());
+
+    expect(gl.feedbackLoopViolations).toEqual([]);
+    expect(gl.calls.filter((call) => call.name === "createFramebuffer")).toHaveLength(1);
+    expect(gl.calls.filter((call) => call.name === "drawElements")).toHaveLength(5);
+  });
+
+  it("skips clipped drawables when all mask sources are missing or unrenderable", () => {
+    const gl = new FakeWebGl2Context();
+    const renderer = new WebGl2Renderer(gl);
+    const scene = createRenderScene({
+      textureSources: [
+        createTextureSource("tex_background"),
+        createTextureSource("tex_invisible_mask"),
+        createTextureSource("tex_target")
+      ],
+      drawables: [
+        createDrawable("draw_invisible_mask", "tex_invisible_mask", {
+          drawOrder: 2,
+          visible: false
+        }),
+        createDrawable("draw_mask_without_texture", "tex_missing_mask", { drawOrder: 1 }),
+        createDrawable("draw_target", "tex_target", {
+          drawOrder: 0,
+          clippingMaskIds: [
+            "draw_missing_mask",
+            "draw_invisible_mask",
+            "draw_mask_without_texture"
+          ]
+        }),
+        createDrawable("draw_background", "tex_background", { drawOrder: -1 })
+      ]
+    });
+
+    renderer.render(scene, createViewport());
+
+    expect(gl.calls.filter((call) => call.name === "drawElements")).toHaveLength(1);
+    expect(gl.calls.some((call) => call.name === "createFramebuffer")).toBe(false);
+    expect(
+      gl.calls.some(
+        (call) =>
+          call.name === "uniform1i" &&
+          isUniformLocation(call.args[0], "u_useMask") &&
+          call.args[1] === 1
+      )
+    ).toBe(false);
+    expect(gl.feedbackLoopViolations).toEqual([]);
   });
 });
 
@@ -120,6 +222,8 @@ function createDrawable(
   options: {
     readonly drawOrder?: number;
     readonly clippingMaskIds?: readonly string[];
+    readonly opacity?: number;
+    readonly visible?: boolean;
   } = {}
 ): RenderDrawable {
   return {
@@ -140,10 +244,10 @@ function createDrawable(
       ],
       triangles: [[0, 1, 2]]
     },
-    opacity: 0.5,
+    opacity: options.opacity ?? 0.5,
     drawOrder: options.drawOrder ?? 0,
     stableIndex: 0,
-    visible: true,
+    visible: options.visible ?? true,
     blendMode: DEFAULT_RENDER_BLEND_MODE,
     ...(options.clippingMaskIds === undefined
       ? {}
@@ -158,6 +262,7 @@ function createDrawable(
 
 class FakeWebGl2Context implements WebGl2Like {
   readonly calls: RecordedGlCall[] = [];
+  readonly feedbackLoopViolations: FeedbackLoopViolation[] = [];
   readonly VERTEX_SHADER = 1;
   readonly FRAGMENT_SHADER = 2;
   readonly COMPILE_STATUS = 3;
@@ -192,6 +297,10 @@ class FakeWebGl2Context implements WebGl2Like {
   readonly FRAMEBUFFER_COMPLETE = 31;
 
   private nextObjectId = 1;
+  private activeTextureUnit = this.TEXTURE0;
+  private currentFramebuffer: WebGl2Framebuffer | null = null;
+  private readonly textureBindingsByUnit = new Map<number, WebGl2Texture | null>();
+  private readonly colorAttachmentByFramebuffer = new Map<WebGl2Framebuffer, WebGl2Texture | null>();
 
   createShader(type: number): WebGl2Shader {
     this.record("createShader", [type]);
@@ -300,10 +409,14 @@ class FakeWebGl2Context implements WebGl2Like {
 
   activeTexture(texture: number): void {
     this.record("activeTexture", [texture]);
+    this.activeTextureUnit = texture;
   }
 
   bindTexture(target: number, texture: WebGl2Texture | null): void {
     this.record("bindTexture", [target, texture]);
+    if (target === this.TEXTURE_2D) {
+      this.textureBindingsByUnit.set(this.activeTextureUnit, texture);
+    }
   }
 
   texParameteri(target: number, parameter: number, value: number): void {
@@ -320,6 +433,16 @@ class FakeWebGl2Context implements WebGl2Like {
 
   deleteTexture(texture: WebGl2Texture): void {
     this.record("deleteTexture", [texture]);
+    for (const [unit, boundTexture] of this.textureBindingsByUnit) {
+      if (boundTexture === texture) {
+        this.textureBindingsByUnit.set(unit, null);
+      }
+    }
+    for (const [framebuffer, attachedTexture] of this.colorAttachmentByFramebuffer) {
+      if (attachedTexture === texture) {
+        this.colorAttachmentByFramebuffer.set(framebuffer, null);
+      }
+    }
   }
 
   createFramebuffer(): WebGl2Framebuffer {
@@ -329,6 +452,9 @@ class FakeWebGl2Context implements WebGl2Like {
 
   bindFramebuffer(target: number, framebuffer: WebGl2Framebuffer | null): void {
     this.record("bindFramebuffer", [target, framebuffer]);
+    if (target === this.FRAMEBUFFER) {
+      this.currentFramebuffer = framebuffer;
+    }
   }
 
   framebufferTexture2D(
@@ -339,6 +465,14 @@ class FakeWebGl2Context implements WebGl2Like {
     level: number
   ): void {
     this.record("framebufferTexture2D", [target, attachment, textureTarget, texture, level]);
+    if (
+      target === this.FRAMEBUFFER &&
+      attachment === this.COLOR_ATTACHMENT0 &&
+      textureTarget === this.TEXTURE_2D &&
+      this.currentFramebuffer !== null
+    ) {
+      this.colorAttachmentByFramebuffer.set(this.currentFramebuffer, texture);
+    }
   }
 
   checkFramebufferStatus(target: number): number {
@@ -348,6 +482,10 @@ class FakeWebGl2Context implements WebGl2Like {
 
   deleteFramebuffer(framebuffer: WebGl2Framebuffer): void {
     this.record("deleteFramebuffer", [framebuffer]);
+    this.colorAttachmentByFramebuffer.delete(framebuffer);
+    if (this.currentFramebuffer === framebuffer) {
+      this.currentFramebuffer = null;
+    }
   }
 
   viewport(x: number, y: number, width: number, height: number): void {
@@ -394,6 +532,7 @@ class FakeWebGl2Context implements WebGl2Like {
 
   drawElements(mode: number, count: number, type: number, offset: number): void {
     this.record("drawElements", [mode, count, type, offset]);
+    this.detectFramebufferFeedbackLoop();
   }
 
   private createObject(kind: string): object {
@@ -407,6 +546,31 @@ class FakeWebGl2Context implements WebGl2Like {
 
   private record(name: string, args: readonly unknown[]): void {
     this.calls.push({ name, args });
+  }
+
+  private detectFramebufferFeedbackLoop(): void {
+    if (this.currentFramebuffer === null) {
+      return;
+    }
+
+    const attachedTexture = this.colorAttachmentByFramebuffer.get(this.currentFramebuffer);
+    if (attachedTexture === undefined || attachedTexture === null) {
+      return;
+    }
+
+    const textureUnits = [...this.textureBindingsByUnit]
+      .filter(([, texture]) => texture === attachedTexture)
+      .map(([unit]) => unit);
+    if (textureUnits.length === 0) {
+      return;
+    }
+
+    this.feedbackLoopViolations.push({
+      framebuffer: this.currentFramebuffer,
+      attachedTexture,
+      textureUnits
+    });
+    throw new Error("WebGL framebuffer feedback loop detected.");
   }
 }
 

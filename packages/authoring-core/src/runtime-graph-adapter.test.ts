@@ -166,7 +166,6 @@ describe("authoring runtime graph adapter", () => {
           kind: "rotation2d",
           rigControlId: rigHeadId,
           displayName: "Head",
-          partId: partRootId,
           childDrawableIds: [drawBodyId],
           childRigControlIds: [],
           pivot: { x: 16, y: 16 },
@@ -208,6 +207,7 @@ describe("authoring runtime graph adapter", () => {
       kind: "rotation2d",
       childDrawableIds: ["draw_body"]
     });
+    expect(runtimeGraph.rigControls.get(rigHeadId)).not.toHaveProperty("partId");
     expect(runtimeGraph.masks).toEqual([
       {
         maskRelationId: "maskrel_body",

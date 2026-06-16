@@ -8,6 +8,7 @@ import {
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "./editor-selection";
+import { isDrawableSelected } from "./editor-selection";
 import { ROOT_PART_ID } from "./empty-authoring-session";
 
 interface StructureTreeRowBase {
@@ -41,7 +42,8 @@ export type StructureTreeRow =
 export type InspectorProjection =
   | ProjectInspectorProjection
   | PartInspectorProjection
-  | DrawableInspectorProjection;
+  | DrawableInspectorProjection
+  | DrawableSetInspectorProjection;
 
 export interface ProjectInspectorProjection {
   readonly title: string;
@@ -78,6 +80,16 @@ export interface DrawableInspectorProjection {
   readonly meshSummary: string;
   readonly maskSourceDrawableId?: DrawableId;
   readonly clippingOptions: readonly {
+    readonly drawableId: DrawableId;
+    readonly displayName: string;
+  }[];
+}
+
+export interface DrawableSetInspectorProjection {
+  readonly title: string;
+  readonly kind: "Drawable Selection";
+  readonly drawableIds: readonly DrawableId[];
+  readonly drawables: readonly {
     readonly drawableId: DrawableId;
     readonly displayName: string;
   }[];
@@ -186,13 +198,13 @@ export function createStructureTreeRows(
             ? "Drawable"
             : "Hidden Drawable",
       tone: effectiveHidden ? "neutral" : "amber",
-      selected: selection?.kind === "drawable" && selection.id === drawable.drawableId,
       hidden: !drawable.runtimeVisibility,
       effectiveHidden,
       canToggleVisibility: true,
       draggable: true,
       runtimeVisible: drawable.runtimeVisibility,
-      order: drawOrderByDrawableId.get(drawable.drawableId) ?? Number.MAX_SAFE_INTEGER
+      order: drawOrderByDrawableId.get(drawable.drawableId) ?? Number.MAX_SAFE_INTEGER,
+      selected: isDrawableSelected(selection, drawable.drawableId)
     });
   };
 
@@ -252,6 +264,25 @@ export function createInspectorProjection(
           : "Mesh pending",
         ...(maskSourceDrawableId === undefined ? {} : { maskSourceDrawableId }),
         clippingOptions: createClippingOptions(session, drawable.drawableId)
+      };
+    }
+  }
+
+  if (selection?.kind === "drawableSet") {
+    const drawables = selection.ids
+      .map((drawableId) => findDrawable(session, drawableId))
+      .filter(isDefined)
+      .map((drawable) => ({
+        drawableId: drawable.drawableId,
+        displayName: drawable.displayName
+      }));
+
+    if (drawables.length > 0) {
+      return {
+        title: `${drawables.length} Drawables selected`,
+        kind: "Drawable Selection",
+        drawableIds: drawables.map((drawable) => drawable.drawableId),
+        drawables
       };
     }
   }

@@ -70,19 +70,16 @@ describe("rig control operation handlers", () => {
       restTranslation: { x: 0, y: 0 },
       restScale: { x: 1, y: 1 }
     });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).not.toHaveProperty(
+      "partId"
+    );
     expect(outcome.logEntry?.operationType).toBe("createRotation2dRigControl");
     expect(outcome.logEntry?.targetIds).toEqual([
       "rig_head_rotation",
-      "part_root",
       "draw_body"
     ]);
     expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_head_rotation" },
-      {
-        kind: "part",
-        id: "part_root",
-        path: "/model/rigControls/rigControls/rig_head_rotation/partId"
-      },
       {
         kind: "drawable",
         id: "draw_body",
@@ -123,10 +120,12 @@ describe("rig control operation handlers", () => {
       ],
       interpolationMethod: "bilinear-grid-v1"
     });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_body_warp_lattice"))).not.toHaveProperty(
+      "partId"
+    );
     expect(outcome.logEntry?.operationType).toBe("createWarpLattice2dRigControl");
     expect(outcome.logEntry?.targetIds).toEqual([
       "rig_body_warp_lattice",
-      "part_root",
       "draw_body"
     ]);
     expect(outcome.result.modelDiff?.added).toEqual([
@@ -134,11 +133,6 @@ describe("rig control operation handlers", () => {
     ]);
     expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_body_warp_lattice" },
-      {
-        kind: "part",
-        id: "part_root",
-        path: "/model/rigControls/rigControls/rig_body_warp_lattice/partId"
-      },
       {
         kind: "drawable",
         id: "draw_body",
@@ -190,7 +184,6 @@ describe("rig control operation handlers", () => {
     expect(outcome.logEntry?.operationType).toBe("createWarpDeformer");
     expect(outcome.logEntry?.targetIds).toEqual([
       "rig_head_warp_deformer",
-      "part_root",
       "rig_head_rotation",
       "draw_body"
     ]);
@@ -222,6 +215,7 @@ describe("rig control operation handlers", () => {
         }
       }
     });
+    expect(rigControl).not.toHaveProperty("partId");
     if (rigControl?.kind !== "warpLattice2d") {
       throw new Error("Expected committed Warp Deformer storage rig control.");
     }
@@ -235,11 +229,6 @@ describe("rig control operation handlers", () => {
     expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_head_warp_deformer" },
       {
-        kind: "part",
-        id: "part_root",
-        path: "/model/rigControls/rigControls/rig_head_warp_deformer/partId"
-      },
-      {
         kind: "rigControl",
         id: "rig_head_rotation",
         path: "/model/rigControls/rigControls/rig_head_rotation/childRigControlIds"
@@ -250,6 +239,55 @@ describe("rig control operation handlers", () => {
         path: "/model/rigControls/rigControls/rig_head_warp_deformer/childDrawableIds"
       }
     ]);
+  });
+
+  it("accepts legacy partId in create rig-control payloads without storing or targeting it", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const rotation = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Legacy Rotation",
+        partId: "part_root"
+      })
+    );
+    const warpLattice = core.commitOperation(
+      session,
+      createWarpLattice2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Legacy Warp Lattice",
+        partId: "part_root"
+      })
+    );
+    const warpDeformer = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Legacy Warp Deformer",
+        partId: "part_root"
+      })
+    );
+
+    expect(rotation.result.status).toBe("committed");
+    expect(warpLattice.result.status).toBe("committed");
+    expect(warpDeformer.result.status).toBe("committed");
+    for (const rigControlId of [
+      "rig_legacy_rotation",
+      "rig_legacy_warp_lattice",
+      "rig_legacy_warp_deformer"
+    ]) {
+      expect(getRigControlById(session.graph, RigControlIdSchema.parse(rigControlId))).not.toHaveProperty("partId");
+    }
+    for (const outcome of [rotation, warpLattice, warpDeformer]) {
+      expect(outcome.logEntry?.targetIds).not.toContain("part_root");
+      expect(outcome.logEntry?.precondition.checkedTargetRefs).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "part", id: "part_root" })])
+      );
+    }
   });
 
   it("inserts createWarpDeformer between an existing parent deformer and drawable child", () => {
@@ -467,6 +505,433 @@ describe("rig control operation handlers", () => {
         "/model/rigControls/rigControls/rig_child_rotation/parentId"
       ])
     );
+  });
+
+  it("commits createRotation2dRigControl with wrapChildren for multiple parented drawable children", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_b", "B");
+    addFixtureDrawable(session, "draw_c", "C");
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Parent Rotation",
+        childDrawableIds: ["draw_a", "draw_b", "draw_c"]
+      })
+    );
+    const parentBefore = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent_rotation"))
+    );
+    if (parentBefore === undefined) {
+      throw new Error("Expected parent rotation before wrap.");
+    }
+
+    const outcome = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Wrapped Rotation",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" },
+          { kind: "drawable", id: "draw_b" }
+        ]
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "rig_wrapped_rotation",
+      "rig_parent_rotation",
+      "draw_a",
+      "draw_b"
+    ]);
+    expect(outcome.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_wrapped_rotation" }]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent_rotation"))).toEqual({
+      ...parentBefore,
+      childDrawableIds: ["draw_c"],
+      childRigControlIds: ["rig_wrapped_rotation"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_wrapped_rotation"))).toMatchObject({
+      parentId: "rig_parent_rotation",
+      childDrawableIds: ["draw_a", "draw_b"],
+      childRigControlIds: []
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent_rotation"]);
+    expect(findChangedFields(outcome.result, "rig_parent_rotation")).toEqual(
+      expect.arrayContaining([
+        {
+          path: "/model/rigControls/rigControls/rig_parent_rotation/childDrawableIds",
+          before: ["draw_a", "draw_b", "draw_c"],
+          after: ["draw_c"]
+        },
+        {
+          path: "/model/rigControls/rigControls/rig_parent_rotation/childRigControlIds",
+          before: [],
+          after: ["rig_wrapped_rotation"]
+        }
+      ])
+    );
+    expect(findChangedFieldPaths(outcome.result, "rig_parent_rotation")).toEqual(
+      expect.arrayContaining([
+        "/model/rigControls/rigControls/rig_parent_rotation/childDrawableIds",
+        "/model/rigControls/rigControls/rig_parent_rotation/childRigControlIds"
+      ])
+    );
+  });
+
+  it("commits createWarpDeformer with wrapChildren for mixed siblings and an unbound drawable", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_unbound", "Unbound");
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Parent Rotation",
+        childDrawableIds: ["draw_a"]
+      })
+    );
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Child Rotation"
+      })
+    );
+    core.commitOperation(
+      session,
+      createBindRigControlChildRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        parentRigControlId: "rig_parent_rotation",
+        child: { kind: "rigControl", id: "rig_child_rotation" }
+      })
+    );
+    const parentBefore = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent_rotation"))
+    );
+    const childBefore = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_rotation"))
+    );
+    if (parentBefore === undefined || childBefore === undefined) {
+      throw new Error("Expected parent and child rig controls before wrap.");
+    }
+
+    const outcome = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 3,
+        displayName: "Wrapped Warp Deformer",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" },
+          { kind: "rigControl", id: "rig_child_rotation" },
+          { kind: "drawable", id: "draw_unbound" }
+        ],
+        domainBounds: { x: 10, y: 20, width: 30, height: 40 }
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_wrapped_warp_deformer" }]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent_rotation"))).toEqual({
+      ...parentBefore,
+      childDrawableIds: [],
+      childRigControlIds: ["rig_wrapped_warp_deformer"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_wrapped_warp_deformer"))).toMatchObject({
+      kind: "warpLattice2d",
+      parentId: "rig_parent_rotation",
+      childDrawableIds: ["draw_a", "draw_unbound"],
+      childRigControlIds: ["rig_child_rotation"],
+      domainBounds: { x: 10, y: 20, width: 30, height: 40 }
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_rotation"))).toEqual({
+      ...childBefore,
+      parentId: "rig_wrapped_warp_deformer"
+    });
+    expect(findChangedFields(outcome.result, "rig_parent_rotation")).toEqual(
+      expect.arrayContaining([
+        {
+          path: "/model/rigControls/rigControls/rig_parent_rotation/childDrawableIds",
+          before: ["draw_a"],
+          after: []
+        },
+        {
+          path: "/model/rigControls/rigControls/rig_parent_rotation/childRigControlIds",
+          before: ["rig_child_rotation"],
+          after: ["rig_wrapped_warp_deformer"]
+        }
+      ])
+    );
+    expect(findChangedFields(outcome.result, "rig_child_rotation")).toEqual([
+      {
+        path: "/model/rigControls/rigControls/rig_child_rotation/parentId",
+        before: "rig_parent_rotation",
+        after: "rig_wrapped_warp_deformer"
+      }
+    ]);
+    expect(outcome.result.modelDiff?.changed.map((change) => change.target)).toEqual(
+      expect.arrayContaining([
+        { kind: "rigControl", id: "rig_parent_rotation" },
+        { kind: "rigControl", id: "rig_child_rotation" },
+        { kind: "drawable", id: "draw_a", path: "/model/rigControls/rigControls/rig_wrapped_warp_deformer/childDrawableIds" },
+        { kind: "drawable", id: "draw_unbound", path: "/model/rigControls/rigControls/rig_wrapped_warp_deformer/childDrawableIds" }
+      ])
+    );
+  });
+
+  it("commits createRotation2dRigControl with wrapChildren for root rig controls", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    addFixtureDrawable(session, "draw_unbound", "Unbound");
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Root A"
+      })
+    );
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Root B"
+      })
+    );
+    const rootABefore = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_a"))
+    );
+    const rootBBefore = structuredClone(
+      getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_b"))
+    );
+    if (rootABefore === undefined || rootBBefore === undefined) {
+      throw new Error("Expected root rig controls before wrap.");
+    }
+
+    const outcome = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Root Wrapper",
+        wrapChildren: [
+          { kind: "rigControl", id: "rig_root_a" },
+          { kind: "rigControl", id: "rig_root_b" },
+          { kind: "drawable", id: "draw_unbound" }
+        ]
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "rig_root_wrapper",
+      "rig_root_a",
+      "rig_root_b",
+      "draw_unbound"
+    ]);
+    expect(outcome.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_root_wrapper" }]);
+    expect(session.graph.rigControlRootIds).toEqual(["rig_root_wrapper"]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_wrapper"))).toMatchObject({
+      childDrawableIds: ["draw_unbound"],
+      childRigControlIds: ["rig_root_a", "rig_root_b"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_a"))).toEqual({
+      ...rootABefore,
+      parentId: "rig_root_wrapper"
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_b"))).toEqual({
+      ...rootBBefore,
+      parentId: "rig_root_wrapper"
+    });
+    expect(findChangedFields(outcome.result, "rig_root_a")).toEqual([
+      {
+        path: "/model/rigControls/rigControls/rig_root_a/parentId",
+        before: null,
+        after: "rig_root_wrapper"
+      }
+    ]);
+    expect(findChangedFields(outcome.result, "rig_root_b")).toEqual([
+      {
+        path: "/model/rigControls/rigControls/rig_root_b/parentId",
+        before: null,
+        after: "rig_root_wrapper"
+      }
+    ]);
+    expect(outcome.result.modelDiff?.changed).toEqual(
+      expect.arrayContaining([
+        {
+          target: {
+            kind: "package",
+            id: "pkg_rig_control_operation_test",
+            path: "/model/graph/rigControlRootIds"
+          },
+          fields: [
+            {
+              path: "/model/graph/rigControlRootIds",
+              before: ["rig_root_a", "rig_root_b"],
+              after: ["rig_root_wrapper"]
+            }
+          ]
+        }
+      ])
+    );
+  });
+
+  it("rejects invalid wrapChildren create operations without mutating", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_b", "B");
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Parent A",
+        childDrawableIds: ["draw_a"]
+      })
+    );
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Parent B",
+        childDrawableIds: ["draw_b"]
+      })
+    );
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Child"
+      })
+    );
+    core.commitOperation(
+      session,
+      createBindRigControlChildRequest({
+        dryRun: false,
+        basePackageRevision: 3,
+        parentRigControlId: "rig_parent_a",
+        child: { kind: "rigControl", id: "rig_child" }
+      })
+    );
+    const beforeGraph = structuredClone(session.graph);
+
+    const mixedParents = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Mixed Parents",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" },
+          { kind: "drawable", id: "draw_b" }
+        ]
+      })
+    );
+    const duplicateTargets = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Duplicate",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" },
+          { kind: "drawable", id: "draw_a" }
+        ]
+      })
+    );
+    const ancestorDescendant = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Ancestor",
+        wrapChildren: [
+          { kind: "rigControl", id: "rig_parent_a" },
+          { kind: "rigControl", id: "rig_child" }
+        ]
+      })
+    );
+    const missingChild = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Missing Child",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_missing" }
+        ]
+      })
+    );
+    const parentMismatch = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Parent Mismatch",
+        parentRigControlId: "rig_parent_b",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" }
+        ]
+      })
+    );
+    const childListMismatch = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Child List Mismatch",
+        childDrawableIds: ["draw_b"],
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" }
+        ]
+      })
+    );
+    const insertAndWrap = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        displayName: "Rejected Insert And Wrap",
+        parentRigControlId: "rig_parent_a",
+        insertBeforeChild: { kind: "drawable", id: "draw_a" },
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" }
+        ]
+      })
+    );
+
+    expect(mixedParents.result.status).toBe("rejected");
+    expect(mixedParents.result.diagnostics[0]?.checkId).toBe("operation.createWarpDeformer.parentChildMismatch");
+    expect(duplicateTargets.result.status).toBe("rejected");
+    expect(duplicateTargets.result.diagnostics[0]?.checkId).toBe("operation.createRotation2dRigControl.duplicateChild");
+    expect(ancestorDescendant.result.status).toBe("rejected");
+    expect(ancestorDescendant.result.diagnostics[0]?.checkId).toBe("operation.createRotation2dRigControl.cycle");
+    expect(missingChild.result.status).toBe("rejected");
+    expect(missingChild.result.diagnostics[0]?.checkId).toBe(
+      "operation.createRotation2dRigControl.missingChildDrawable"
+    );
+    expect(parentMismatch.result.status).toBe("rejected");
+    expect(parentMismatch.result.diagnostics[0]?.checkId).toBe(
+      "operation.createRotation2dRigControl.parentChildMismatch"
+    );
+    expect(childListMismatch.result.status).toBe("rejected");
+    expect(childListMismatch.result.diagnostics[0]?.checkId).toBe(
+      "operation.createRotation2dRigControl.parentChildMismatch"
+    );
+    expect(insertAndWrap.result.status).toBe("rejected");
+    expect(insertAndWrap.result.diagnostics[0]?.checkId).toBe("operation.createWarpDeformer.parentChildMismatch");
+    expect(session.graph).toEqual(beforeGraph);
+    expect(session.packageRevision).toBe(4);
   });
 
   it("dry-runs and commits drawable deformer binding moves without changing parts or draw order", () => {
@@ -1098,14 +1563,24 @@ const findChangedFieldPaths = (
     .find((change) => change.target.id === targetId)
     ?.fields.map((field) => field.path) ?? [];
 
+const findChangedFields = (
+  result: ReturnType<ReturnType<typeof createOperationCore>["commitOperation"]>["result"],
+  targetId: string
+): readonly { readonly path: string; readonly before: unknown; readonly after: unknown }[] =>
+  result.modelDiff?.changed
+    .find((change) => change.target.id === targetId)
+    ?.fields ?? [];
+
 const createRotation2dRigControlRequest = (options: {
   readonly dryRun: boolean;
   readonly basePackageRevision?: number;
   readonly displayName?: string;
+  readonly partId?: string;
   readonly parentRigControlId?: string;
   readonly childDrawableIds?: readonly string[];
   readonly childRigControlIds?: readonly string[];
   readonly insertBeforeChild?: { readonly kind: "drawable" | "rigControl"; readonly id: string };
+  readonly wrapChildren?: readonly { readonly kind: "drawable" | "rigControl"; readonly id: string }[];
   readonly opacityMultiplier?: number;
 }) => ({
   schemaVersion: "operation-request-v1",
@@ -1116,10 +1591,11 @@ const createRotation2dRigControlRequest = (options: {
   basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createRotation2dRigControl",
   payload: {
-    partId: "part_root",
+    ...(options.partId === undefined ? {} : { partId: options.partId }),
     displayName: options.displayName ?? "Head Rotation",
     ...(options.parentRigControlId === undefined ? {} : { parentRigControlId: options.parentRigControlId }),
     ...(options.insertBeforeChild === undefined ? {} : { insertBeforeChild: options.insertBeforeChild }),
+    ...(options.wrapChildren === undefined ? {} : { wrapChildren: options.wrapChildren }),
     childDrawableIds: options.childDrawableIds ?? [],
     childRigControlIds: options.childRigControlIds ?? [],
     ...(options.opacityMultiplier === undefined ? {} : { opacityMultiplier: options.opacityMultiplier }),
@@ -1135,6 +1611,7 @@ const createWarpLattice2dRigControlRequest = (options: {
   readonly dryRun: boolean;
   readonly basePackageRevision?: number;
   readonly displayName?: string;
+  readonly partId?: string;
   readonly childDrawableIds?: readonly string[];
   readonly childRigControlIds?: readonly string[];
 }) => ({
@@ -1146,7 +1623,7 @@ const createWarpLattice2dRigControlRequest = (options: {
   basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createWarpLattice2dRigControl",
   payload: {
-    partId: "part_root",
+    ...(options.partId === undefined ? {} : { partId: options.partId }),
     displayName: options.displayName ?? "Body Warp Lattice",
     childDrawableIds: options.childDrawableIds ?? [],
     childRigControlIds: options.childRigControlIds ?? [],
@@ -1166,10 +1643,12 @@ const createWarpDeformerRequest = (options: {
   readonly dryRun: boolean;
   readonly basePackageRevision?: number;
   readonly displayName?: string;
+  readonly partId?: string;
   readonly parentRigControlId?: string;
   readonly childDrawableIds?: readonly string[];
   readonly childRigControlIds?: readonly string[];
   readonly insertBeforeChild?: { readonly kind: "drawable" | "rigControl"; readonly id: string };
+  readonly wrapChildren?: readonly { readonly kind: "drawable" | "rigControl"; readonly id: string }[];
   readonly opacityMultiplier?: number;
   readonly domainBounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly transformColumns?: number;
@@ -1185,10 +1664,11 @@ const createWarpDeformerRequest = (options: {
   basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "createWarpDeformer",
   payload: {
-    partId: "part_root",
+    ...(options.partId === undefined ? {} : { partId: options.partId }),
     displayName: options.displayName ?? "Head Warp Deformer",
     ...(options.parentRigControlId === undefined ? {} : { parentRigControlId: options.parentRigControlId }),
     ...(options.insertBeforeChild === undefined ? {} : { insertBeforeChild: options.insertBeforeChild }),
+    ...(options.wrapChildren === undefined ? {} : { wrapChildren: options.wrapChildren }),
     childDrawableIds: options.childDrawableIds ?? [],
     childRigControlIds: options.childRigControlIds ?? [],
     opacityMultiplier: options.opacityMultiplier ?? 1,
@@ -1209,6 +1689,7 @@ const createWarpDeformerRequest = (options: {
 const createBindRigControlChildRequest = (options: {
   readonly dryRun: boolean;
   readonly basePackageRevision?: number;
+  readonly parentRigControlId?: string;
   readonly child: { readonly kind: string; readonly id: string };
 }) => ({
   schemaVersion: "operation-request-v1",
@@ -1219,7 +1700,7 @@ const createBindRigControlChildRequest = (options: {
   basePackageRevision: options.basePackageRevision ?? 0,
   operationType: "bindRigControlChild",
   payload: {
-    parentRigControlId: "rig_head_rotation",
+    parentRigControlId: options.parentRigControlId ?? "rig_head_rotation",
     child: options.child
   }
 });
@@ -1298,6 +1779,47 @@ const createUpdateRigControlRequest = (options: {
     ...(options.bezierRows === undefined ? {} : { bezierRows: options.bezierRows })
   }
 });
+
+const addFixtureDrawable = (
+  session: AuthoringSession,
+  drawableId: string,
+  displayName: string
+): void => {
+  const parsedDrawableId = DrawableIdSchema.parse(drawableId);
+  const suffix = drawableId.replace(/^draw_/, "");
+  session.graph.parts[0]?.drawableIds.push(parsedDrawableId);
+  session.graph.drawables.push({
+    drawableId: parsedDrawableId,
+    displayName,
+    partId: PartIdSchema.parse("part_root"),
+    sourceAssetId: SourceAssetIdSchema.parse(`src_${suffix}`),
+    textureId: TextureIdSchema.parse(`tex_${suffix}`),
+    meshId: MeshIdSchema.parse(`mesh_${suffix}`),
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder: session.graph.drawables.length,
+    sourceProvenanceId: ProvenanceIdSchema.parse(`prov_${suffix}`)
+  });
+  session.graph.meshes.push({
+    meshId: MeshIdSchema.parse(`mesh_${suffix}`),
+    drawableId: parsedDrawableId,
+    vertices: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ],
+    uvs: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ],
+    triangles: [[0, 1, 2]],
+    vertexStableIds: [`vtx_${suffix}_0`, `vtx_${suffix}_1`, `vtx_${suffix}_2`],
+    bounds: { x: 0, y: 0, width: 1, height: 1 },
+    generationProvenanceId: ProvenanceIdSchema.parse(`prov_${suffix}`)
+  });
+  session.graph.stableOrder.push(parsedDrawableId);
+};
 
 const createFixtureSession = (): AuthoringSession => ({
   packageIdentity: {

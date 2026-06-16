@@ -2,18 +2,20 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
-  GitBranch,
+  Folder,
   KeyRound,
   Layers,
   Link2,
   RotateCcw,
   Spline
 } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 
 import type { DrawableId, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import { createDeformerTreeSelectableTargets } from "../../features/editor-session/model/rig-tool-state";
+import type { DeformerTreeSelectionTarget } from "../../features/editor-session/model/editor-selection";
 import { cn } from "../../lib/class-name";
 
 const DEFORMER_TREE_DRAG_TYPE = "application/x-private-2d-deformer-tree-row";
@@ -42,16 +44,38 @@ export function DeformerTreeView() {
     reparentRigControl,
     rigDraft,
     rigOperationFeedback,
-    selectDrawable,
-    selectRigControl
+    selectDeformerTreeTarget
   } = useEditorSession();
   const [poolCollapsed, setPoolCollapsed] = useState(true);
   const [dragging, setDragging] = useState<DeformerDragPayload | null>(null);
   const [dropTargetId, setDropTargetId] = useState<RigControlId | null>(null);
   const [localFeedback, setLocalFeedback] = useState<string | null>(null);
   const parentByRigControlId = useMemo(() => createParentMap(deformerRows), [deformerRows]);
+  const visibleSelectionTargets = useMemo(
+    () =>
+      createDeformerTreeSelectableTargets(
+        deformerRows,
+        poolCollapsed ? [] : drawablePoolItems
+      ),
+    [deformerRows, drawablePoolItems, poolCollapsed]
+  );
   const hasDeformerRows = deformerRows.some((row) => row.kind !== "drawableRef");
+  const drawablePoolDrawableCount = useMemo(
+    () => drawablePoolItems.filter((item) => item.kind === "drawable").length,
+    [drawablePoolItems]
+  );
   const feedback = localFeedback ?? rigOperationFeedback;
+
+  const selectTreeTarget = (
+    event: MouseEvent<HTMLElement>,
+    target: DeformerTreeSelectionTarget
+  ) => {
+    selectDeformerTreeTarget(target, {
+      range: event.shiftKey,
+      toggle: !event.shiftKey && (event.ctrlKey || event.metaKey),
+      visibleTargets: visibleSelectionTargets
+    });
+  };
 
   const handleDropOnDeformer = (
     event: DragEvent<HTMLElement>,
@@ -133,11 +157,18 @@ export function DeformerTreeView() {
               )}
               data-row-kind="bound-drawable-ref"
               data-row-id={row.drawableId}
+              data-selected={String(row.selected)}
               data-parent-rig-control-id={row.parentRigControlId}
               data-testid="deformer-tree-drawable-ref"
               draggable
               key={`drawable-ref:${row.parentRigControlId}:${row.drawableId}`}
-              onClick={() => selectDrawable(row.drawableId)}
+              onClick={(event) =>
+                selectTreeTarget(event, {
+                  kind: "boundDrawable",
+                  drawableId: row.drawableId,
+                  parentRigControlId: row.parentRigControlId
+                })
+              }
               onDragEnd={() => setDragging(null)}
               onDragStart={(event) =>
                 startDrag(event, setDragging, {
@@ -180,10 +211,16 @@ export function DeformerTreeView() {
               data-keyform-key-count={row.keyformKeyCount}
               data-keyform-set-count={row.keyformSetCount}
               data-parent-rig-control-id={row.parentRigControlId}
+              data-selected={String(row.selected)}
               data-testid={row.selected ? "deformer-tree-selected-row" : "deformer-tree-row"}
               draggable
               key={`deformer:${row.rigControlId}`}
-              onClick={() => selectRigControl(row.rigControlId)}
+              onClick={(event) =>
+                selectTreeTarget(event, {
+                  kind: "rigControl",
+                  rigControlId: row.rigControlId
+                })
+              }
               onDragEnd={() => {
                 setDragging(null);
                 setDropTargetId(null);
@@ -211,10 +248,6 @@ export function DeformerTreeView() {
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-neutral-100">
                   {row.displayName}
-                </span>
-                <span className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[11px] text-neutral-500">
-                  <GitBranch aria-hidden="true" size={11} strokeWidth={1.8} />
-                  {row.transformLabel}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-1">
@@ -260,7 +293,7 @@ export function DeformerTreeView() {
             Drawable Pool
           </span>
           <span className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[10px] text-neutral-400">
-            {drawablePoolItems.length}
+            {drawablePoolDrawableCount}
           </span>
         </button>
         {poolCollapsed ? null : (
@@ -268,50 +301,78 @@ export function DeformerTreeView() {
             className="border-t border-neutral-800 p-1.5"
             data-testid="deformer-tree-drawable-pool-items"
           >
-            {drawablePoolItems.length === 0 ? (
+            {drawablePoolDrawableCount === 0 ? (
               <div className="rounded border border-neutral-800 bg-neutral-950/60 px-2 py-2 text-xs text-neutral-500">
                 No unbound Drawables
               </div>
             ) : (
-              drawablePoolItems.map((item) => (
-                <button
-                  className={cn(
-                    "grid min-h-8 w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded border px-2 py-1 text-left transition",
-                    item.selected
-                      ? "border-amber-500/80 bg-amber-950/25"
-                      : "border-neutral-800 bg-neutral-950/50 hover:border-neutral-700"
-                  )}
-                  data-row-kind="drawable-pool-item"
-                  data-row-id={item.drawableId}
-                  data-testid="deformer-tree-drawable-pool-row"
-                  draggable
-                  key={`pool:${item.drawableId}`}
-                  onClick={() => selectDrawable(item.drawableId)}
-                  onDragEnd={() => setDragging(null)}
-                  onDragStart={(event) =>
-                    startDrag(event, setDragging, {
-                      kind: "poolDrawable",
-                      drawableId: item.drawableId
-                    })
-                  }
-                  type="button"
-                >
-                  <Layers
-                    aria-hidden="true"
-                    className="text-neutral-500"
-                    size={13}
-                    strokeWidth={1.8}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-neutral-300">
+              drawablePoolItems.map((item) =>
+                item.kind === "part" ? (
+                  <div
+                    aria-disabled="true"
+                    className="grid min-h-7 w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded px-2 py-1 text-left text-neutral-500"
+                    data-display-only="true"
+                    data-row-kind="drawable-pool-part"
+                    data-row-id={item.partId}
+                    data-selected="false"
+                    data-testid="deformer-tree-drawable-pool-part-row"
+                    key={`pool-part:${item.partId}`}
+                    role="treeitem"
+                    style={{ marginLeft: `${item.depth * 14}px` }}
+                    title={item.displayName}
+                  >
+                    <Folder aria-hidden="true" size={13} strokeWidth={1.8} />
+                    <span className="block min-w-0 truncate text-xs font-medium">
                       {item.displayName}
                     </span>
-                    <span className="block truncate text-[11px] text-neutral-600">
-                      {item.partDisplayName}
+                  </div>
+                ) : (
+                  <button
+                    className={cn(
+                      "grid min-h-8 w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded border px-2 py-1 text-left transition",
+                      item.selected
+                        ? "border-amber-500/80 bg-amber-950/25"
+                        : "border-neutral-800 bg-neutral-950/50 hover:border-neutral-700"
+                    )}
+                    data-display-only="false"
+                    data-row-kind="drawable-pool-item"
+                    data-row-id={item.drawableId}
+                    data-selected={String(item.selected)}
+                    data-testid="deformer-tree-drawable-pool-row"
+                    draggable
+                    key={`pool:${item.drawableId}`}
+                    onClick={(event) =>
+                      selectTreeTarget(event, {
+                        kind: "poolDrawable",
+                        drawableId: item.drawableId
+                      })
+                    }
+                    onDragEnd={() => setDragging(null)}
+                    onDragStart={(event) =>
+                      startDrag(event, setDragging, {
+                        kind: "poolDrawable",
+                        drawableId: item.drawableId
+                      })
+                    }
+                    type="button"
+                  >
+                    <Layers
+                      aria-hidden="true"
+                      className="text-neutral-500"
+                      size={13}
+                      strokeWidth={1.8}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-neutral-300">
+                        {item.displayName}
+                      </span>
+                      <span className="block truncate text-[11px] text-neutral-600">
+                        {item.partDisplayName}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              ))
+                  </button>
+                )
+              )
             )}
           </div>
         )}

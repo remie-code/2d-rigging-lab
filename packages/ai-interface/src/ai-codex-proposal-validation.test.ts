@@ -51,6 +51,15 @@ describe("AI Codex proposal operation catalog", () => {
     expect(findCatalogOperation(firstCatalog, "setRuntimeVisibility")).toMatchObject({
       targetKinds: ["drawable"]
     });
+    for (const operationType of [
+      "createRotation2dRigControl",
+      "createWarpDeformer",
+      "createWarpLattice2dRigControl"
+    ]) {
+      const operation = findCatalogOperation(firstCatalog, operationType);
+      expect(operation.targetKinds).not.toContain("part");
+      expect(operation.requiredInputs.map((input) => input.inputId)).not.toContain("payload.partId");
+    }
     expect(findCatalogOperation(firstCatalog, "importPsdLayerMaterializationBatch")).toMatchObject({
       availability: "available",
       targetKinds: ["drawable", "mesh", "part", "sourceAsset", "texture"],

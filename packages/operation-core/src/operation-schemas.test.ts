@@ -262,10 +262,15 @@ const operationPayloads = [
   {
     operationType: "createRotation2dRigControl",
     payload: {
-      partId: "part_head",
       displayName: "Head Rotation",
       childDrawableIds: ["draw_face"],
       childRigControlIds: [],
+      wrapChildren: [
+        {
+          kind: "drawable",
+          id: "draw_face"
+        }
+      ],
       opacityMultiplier: 0.8,
       pivot: {
         x: 512,
@@ -277,7 +282,6 @@ const operationPayloads = [
   {
     operationType: "createWarpLattice2dRigControl",
     payload: {
-      partId: "part_head",
       displayName: "Head Warp Lattice",
       childDrawableIds: ["draw_face"],
       childRigControlIds: [],
@@ -295,11 +299,16 @@ const operationPayloads = [
   {
     operationType: "createWarpDeformer",
     payload: {
-      partId: "part_head",
       displayName: "Head Warp Deformer",
       parentRigControlId: "rig_head_rotation",
       childDrawableIds: ["draw_face"],
       childRigControlIds: [],
+      wrapChildren: [
+        {
+          kind: "drawable",
+          id: "draw_face"
+        }
+      ],
       opacityMultiplier: 0.75,
       domainBounds: {
         x: 320,

@@ -104,7 +104,15 @@ export interface CanvasEvaluationOptions {
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
+    readonly meshDrafts?: readonly {
+      readonly drawableId: DrawableId;
+      readonly mesh: MeshDto;
+    }[];
   } | null;
+  readonly meshDrafts?: readonly {
+    readonly drawableId: DrawableId;
+    readonly mesh: MeshDto;
+  }[] | null;
   readonly rigDraft?: CanvasEvaluationRigDraft | null;
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
   readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
@@ -222,6 +230,7 @@ export function createCanvasEvaluatedScene(
     rigControlsById
   );
   const maskSourcesByTargetId = createMaskSourceIndex(session);
+  const meshDraftsByDrawableId = createMeshDraftIndex(options);
 
   const drawables = session.graph.drawables
     .map((drawable): CanvasEvaluatedDrawable | undefined => {
@@ -241,7 +250,7 @@ export function createCanvasEvaluatedScene(
             height: Math.max(1, session.graph.canvasSize.height)
           },
         mesh: meshesById.get(drawable.meshId),
-        meshDraft: options.meshDraft ?? null
+        meshDraft: meshDraftsByDrawableId.get(drawable.drawableId) ?? null
       });
       const chain = createDrawableRigControlChain(
         directRigControlByDrawableId.get(drawable.drawableId),
@@ -813,6 +822,17 @@ function createBaseEvaluatedMesh(input: {
   }
 
   return createRectFallbackMesh(input.fallbackBounds);
+}
+
+function createMeshDraftIndex(
+  options: CanvasEvaluationOptions
+): ReadonlyMap<DrawableId, NonNullable<CanvasEvaluationOptions["meshDraft"]>> {
+  const drafts =
+    options.meshDrafts ??
+    options.meshDraft?.meshDrafts ??
+    (options.meshDraft === undefined || options.meshDraft === null ? [] : [options.meshDraft]);
+
+  return new Map(drafts.map((draft) => [draft.drawableId, draft]));
 }
 
 function cloneMesh(mesh: MeshDto, source: "committed" | "draft"): CanvasEvaluatedMesh {

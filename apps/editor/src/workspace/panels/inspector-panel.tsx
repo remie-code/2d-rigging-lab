@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import type {
   DrawableInspectorProjection,
+  DrawableSetInspectorProjection,
   PartInspectorProjection,
   ProjectInspectorProjection
 } from "../../features/editor-session/model/session-tree";
@@ -32,6 +33,8 @@ export function InspectorPanel() {
           <PartContainerInspector inspector={inspector} />
         ) : inspector.kind === "Drawable" ? (
           <DrawableInspector inspector={inspector} />
+        ) : inspector.kind === "Drawable Selection" ? (
+          <DrawableSetInspector inspector={inspector} />
         ) : (
           <ProjectInspector inspector={inspector} />
         )}
@@ -121,6 +124,40 @@ function PartContainerInspector({
             />
           </div>
         </div>
+      </section>
+    </>
+  );
+}
+
+function DrawableSetInspector({
+  inspector
+}: {
+  readonly inspector: DrawableSetInspectorProjection;
+}) {
+  return (
+    <>
+      <InspectorHeader title={inspector.title} />
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <h3 className="text-xs font-semibold uppercase text-neutral-500">Selected Drawables</h3>
+        <div className="mt-2 divide-y divide-neutral-800">
+          <SummaryRow
+            label="Kind"
+            testId="inspector-selection-kind"
+            value={inspector.kind}
+          />
+          <SummaryRow label="Count" value={String(inspector.drawables.length)} />
+        </div>
+        <ul className="mt-3 flex flex-col gap-1">
+          {inspector.drawables.map((drawable) => (
+            <li
+              className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs font-medium text-neutral-100"
+              data-testid="select-inspector-selected-drawable"
+              key={drawable.drawableId}
+            >
+              {drawable.displayName}
+            </li>
+          ))}
+        </ul>
       </section>
     </>
   );

@@ -17,6 +17,7 @@ import {
   createStructureMoveDrop,
   createStructureTreeRows
 } from "./session-tree";
+import { resolveDrawableSelectionTransition } from "./editor-selection";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
@@ -67,6 +68,203 @@ describe("editor session tree projection", () => {
       ["part", "Root", false],
       ["part", "Face", false]
     ]);
+  });
+
+  it("resolves Drawable-only normal, Ctrl, and Shift selection transitions", () => {
+    const visibleDrawableIds = [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN];
+
+    const replaced = resolveDrawableSelectionTransition({
+      currentSelection: { kind: "part", id: PART_FACE },
+      anchorDrawableId: null,
+      clickedDrawableId: DRAW_FRONT,
+      visibleDrawableIds,
+      mode: "replace"
+    });
+    expect(replaced).toEqual({
+      selection: { kind: "drawable", id: DRAW_FRONT },
+      anchorDrawableId: DRAW_FRONT
+    });
+
+    const toggled = resolveDrawableSelectionTransition({
+      currentSelection: replaced.selection,
+      anchorDrawableId: replaced.anchorDrawableId,
+      clickedDrawableId: DRAW_HIDDEN,
+      visibleDrawableIds,
+      mode: "toggle"
+    });
+    expect(toggled).toEqual({
+      selection: {
+        kind: "drawableSet",
+        ids: [DRAW_FRONT, DRAW_HIDDEN]
+      },
+      anchorDrawableId: DRAW_HIDDEN
+    });
+
+    const toggledOff = resolveDrawableSelectionTransition({
+      currentSelection: toggled.selection,
+      anchorDrawableId: toggled.anchorDrawableId,
+      clickedDrawableId: DRAW_FRONT,
+      visibleDrawableIds,
+      mode: "toggle"
+    });
+    expect(toggledOff).toEqual({
+      selection: { kind: "drawable", id: DRAW_HIDDEN },
+      anchorDrawableId: DRAW_FRONT
+    });
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: toggledOff.selection,
+        anchorDrawableId: toggledOff.anchorDrawableId,
+        clickedDrawableId: DRAW_HIDDEN,
+        visibleDrawableIds,
+        mode: "range"
+      })
+    ).toEqual({
+      selection: {
+        kind: "drawableSet",
+        ids: [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN]
+      },
+      anchorDrawableId: DRAW_FRONT
+    });
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: { kind: "drawable", id: DRAW_FRONT },
+        anchorDrawableId: DRAW_FRONT,
+        clickedDrawableId: DRAW_FRONT,
+        visibleDrawableIds,
+        mode: "toggle"
+      })
+    ).toEqual({
+      selection: null,
+      anchorDrawableId: DRAW_FRONT
+    });
+
+    const ranged = resolveDrawableSelectionTransition({
+      currentSelection: toggled.selection,
+      anchorDrawableId: DRAW_FRONT,
+      clickedDrawableId: DRAW_HIDDEN,
+      visibleDrawableIds,
+      mode: "range"
+    });
+    expect(ranged).toEqual({
+      selection: {
+        kind: "drawableSet",
+        ids: [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN]
+      },
+      anchorDrawableId: DRAW_FRONT
+    });
+  });
+
+  it("falls back to clicked Drawable when Shift anchor is absent, hidden, or selection is a Part Container", () => {
+    const visibleDrawableIds = [DRAW_FRONT, DRAW_BACK];
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: { kind: "drawable", id: DRAW_FRONT },
+        anchorDrawableId: null,
+        clickedDrawableId: DRAW_BACK,
+        visibleDrawableIds,
+        mode: "range"
+      })
+    ).toEqual({
+      selection: { kind: "drawable", id: DRAW_BACK },
+      anchorDrawableId: DRAW_BACK
+    });
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: { kind: "drawable", id: DRAW_FRONT },
+        anchorDrawableId: DRAW_HIDDEN,
+        clickedDrawableId: DRAW_BACK,
+        visibleDrawableIds,
+        mode: "range"
+      })
+    ).toEqual({
+      selection: { kind: "drawable", id: DRAW_BACK },
+      anchorDrawableId: DRAW_BACK
+    });
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: { kind: "part", id: PART_FACE },
+        anchorDrawableId: DRAW_FRONT,
+        clickedDrawableId: DRAW_BACK,
+        visibleDrawableIds,
+        mode: "range"
+      })
+    ).toEqual({
+      selection: { kind: "drawable", id: DRAW_BACK },
+      anchorDrawableId: DRAW_BACK
+    });
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: { kind: "part", id: PART_FACE },
+        anchorDrawableId: DRAW_FRONT,
+        clickedDrawableId: DRAW_BACK,
+        visibleDrawableIds,
+        mode: "toggle"
+      })
+    ).toEqual({
+      selection: { kind: "drawable", id: DRAW_BACK },
+      anchorDrawableId: DRAW_BACK
+    });
+  });
+
+  it("clears Drawable multi-selection on normal replacement clicks", () => {
+    const visibleDrawableIds = [DRAW_FRONT, DRAW_BACK, DRAW_HIDDEN];
+
+    expect(
+      resolveDrawableSelectionTransition({
+        currentSelection: {
+          kind: "drawableSet",
+          ids: [DRAW_FRONT, DRAW_HIDDEN]
+        },
+        anchorDrawableId: DRAW_HIDDEN,
+        clickedDrawableId: DRAW_BACK,
+        visibleDrawableIds,
+        mode: "replace"
+      })
+    ).toEqual({
+      selection: { kind: "drawable", id: DRAW_BACK },
+      anchorDrawableId: DRAW_BACK
+    });
+  });
+
+  it("marks only Drawable members selected for Drawable set selections", () => {
+    const session = createFixtureSession();
+    const rows = createStructureTreeRows(session, {
+      kind: "drawableSet",
+      ids: [DRAW_FRONT, DRAW_HIDDEN]
+    });
+
+    expect(rows.map((row) => [row.kind, row.name, row.selected])).toEqual([
+      ["part", "Root", false],
+      ["part", "Face", false],
+      ["drawable", "Front", true],
+      ["part", "Eye", false],
+      ["drawable", "Back", false],
+      ["drawable", "Hidden", true]
+    ]);
+  });
+
+  it("projects a minimal Select Inspector Drawable name list for Drawable set selections", () => {
+    const session = createFixtureSession();
+    const inspector = createInspectorProjection(session, {
+      kind: "drawableSet",
+      ids: [DRAW_FRONT, DRAW_HIDDEN]
+    });
+
+    expect(inspector).toEqual({
+      title: "2 Drawables selected",
+      kind: "Drawable Selection",
+      drawableIds: [DRAW_FRONT, DRAW_HIDDEN],
+      drawables: [
+        { drawableId: DRAW_FRONT, displayName: "Front" },
+        { drawableId: DRAW_HIDDEN, displayName: "Hidden" }
+      ]
+    });
   });
 
   it("creates draw-order updates so the dragged drawable becomes top/front in the tree", () => {

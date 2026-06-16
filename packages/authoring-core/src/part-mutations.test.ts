@@ -242,15 +242,17 @@ describe("part authoring mutations", () => {
         }
       ]
     });
-    expect(() =>
-      deletePart(rigSession, {
-        partId: PartIdSchema.parse("part_empty")
-      })
-    ).toThrow(expect.objectContaining({ code: "part_has_rig_controls" }) as AuthoringMutationError);
+    const rigDeleteResult = deletePart(rigSession, {
+      partId: PartIdSchema.parse("part_empty")
+    });
+    expect(rigDeleteResult.partBefore.partId).toBe("part_empty");
+    expect(rigSession.graph.parts.map((part) => part.partId)).toEqual(["part_root", "part_head"]);
+    expect(rigSession.graph.rigControls).toHaveLength(1);
+    expect(rigSession.graph.rigControls[0]).toHaveProperty("partId", "part_empty");
 
     expect(childSession.authoringRevision).toBe(0);
     expect(drawableSession.authoringRevision).toBe(0);
-    expect(rigSession.authoringRevision).toBe(0);
+    expect(rigSession.authoringRevision).toBe(1);
   });
 });
 

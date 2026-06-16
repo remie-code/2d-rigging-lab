@@ -13,7 +13,8 @@ import type {
   CreateWarpDeformerPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 
-import type { EditorSelection } from "./editor-selection";
+import { isDeformerTreeTargetSelected } from "./editor-selection";
+import type { DeformerTreeSelectionTarget, EditorSelection } from "./editor-selection";
 
 export const DEFAULT_WARP_DEFORMER_TRANSFORM_COLUMNS = 5;
 export const DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS = 5;
@@ -30,7 +31,6 @@ type InsertRigControlChild = NonNullable<CreateWarpDeformerPayloadDto["insertBef
 
 export interface WarpDeformerDraft {
   readonly displayName: string;
-  readonly partId: PartId;
   readonly parentRigControlId?: RigControlId | undefined;
   readonly insertBeforeChild?: InsertRigControlChild | undefined;
   readonly childDrawableIds: readonly DrawableId[];
@@ -46,9 +46,16 @@ export interface WarpDeformerDraft {
 export interface WarpDeformerTargetOption {
   readonly drawableId: DrawableId;
   readonly displayName: string;
-  readonly partId: PartId;
   readonly partDisplayName: string;
   readonly bounds: RectDto;
+}
+
+export interface RigBatchDrawableTarget {
+  readonly drawableId: DrawableId;
+  readonly displayName: string;
+  readonly bounds: RectDto;
+  readonly status: "eligible" | "alreadyBound";
+  readonly boundRigControlId?: RigControlId;
 }
 
 export interface WarpDeformerReadModel {
@@ -56,7 +63,6 @@ export interface WarpDeformerReadModel {
   readonly storageKind: "warpLattice2d";
   readonly rigControlId: RigControlId;
   readonly displayName: string;
-  readonly partId: PartId;
   readonly parentRigControlId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
@@ -87,7 +93,6 @@ export interface RotationDeformerReadModel {
   readonly storageKind: "rotation2d";
   readonly rigControlId: RigControlId;
   readonly displayName: string;
-  readonly partId: PartId;
   readonly parentRigControlId?: RigControlId;
   readonly childDrawableIds: readonly DrawableId[];
   readonly childRigControlIds: readonly RigControlId[];
@@ -113,12 +118,24 @@ export interface DeformerParentOption {
   readonly displayName: string;
 }
 
-export interface DrawablePoolItem {
-  readonly drawableId: DrawableId;
-  readonly displayName: string;
-  readonly partDisplayName: string;
-  readonly selected: boolean;
-}
+export type DrawablePoolItem =
+  | {
+      readonly kind: "part";
+      readonly partId: PartId;
+      readonly depth: number;
+      readonly displayName: string;
+      readonly selected: false;
+      readonly displayOnly: true;
+    }
+  | {
+      readonly kind: "drawable";
+      readonly drawableId: DrawableId;
+      readonly depth: number;
+      readonly displayName: string;
+      readonly partDisplayName: string;
+      readonly selected: boolean;
+      readonly displayOnly: false;
+    };
 
 export type DeformerTreeRow =
   | {
@@ -175,7 +192,6 @@ export function createWarpDeformerDraftForDrawable(
 
   return {
     displayName: `${drawable.displayName} Warp Deformer`,
-    partId: drawable.partId,
     ...(parentRigControlId === undefined
       ? {}
       : {
@@ -209,7 +225,6 @@ export function createRotationDeformerPayloadForDrawable(
   const parentRigControlId = findDrawableRigControlParentId(session, drawableId);
 
   return {
-    partId: drawable.partId,
     displayName: `${drawable.displayName} Rotation Deformer`,
     childDrawableIds: [drawable.drawableId],
     childRigControlIds: [],
@@ -231,6 +246,94 @@ export function createRotationDeformerPayloadForDrawable(
   };
 }
 
+export function createRigBatchDrawableTargets(
+  session: AuthoringSession,
+  drawableIds: readonly DrawableId[]
+): readonly RigBatchDrawableTarget[] {
+  const result: RigBatchDrawableTarget[] = [];
+  const seen = new Set<DrawableId>();
+
+  for (const drawableId of drawableIds) {
+    if (seen.has(drawableId)) {
+      continue;
+    }
+    seen.add(drawableId);
+
+    const drawable = findDrawable(session, drawableId);
+    if (drawable === undefined) {
+      continue;
+    }
+
+    const boundRigControlId = findDrawableRigControlParentId(session, drawableId);
+    result.push({
+      drawableId: drawable.drawableId,
+      displayName: drawable.displayName,
+      bounds: resolveDrawableBounds(session, drawable.drawableId),
+      status: boundRigControlId === undefined ? "eligible" : "alreadyBound",
+      ...(boundRigControlId === undefined ? {} : { boundRigControlId })
+    });
+  }
+
+  return result;
+}
+
+export function createRotationDeformerPayloadForUnboundDrawables(
+  session: AuthoringSession,
+  drawableIds: readonly DrawableId[]
+): CreateRotation2dRigControlPayloadDto | undefined {
+  const eligibleTargets = createRigBatchDrawableTargets(session, drawableIds).filter(
+    (target) => target.status === "eligible"
+  );
+  if (eligibleTargets.length === 0) {
+    return undefined;
+  }
+
+  const bounds = unionRects(eligibleTargets.map((target) => target.bounds)) ?? fallbackCanvasBounds(session);
+
+  return {
+    displayName: createBatchDeformerDisplayName(eligibleTargets, "Rotation Deformer"),
+    childDrawableIds: eligibleTargets.map((target) => target.drawableId),
+    childRigControlIds: [],
+    opacityMultiplier: 1,
+    pivot: {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2
+    },
+    restAngleDegrees: 0
+  };
+}
+
+export function createWarpDeformerPayloadForUnboundDrawables(
+  session: AuthoringSession,
+  drawableIds: readonly DrawableId[]
+): CreateWarpDeformerPayloadDto | undefined {
+  const eligibleTargets = createRigBatchDrawableTargets(session, drawableIds).filter(
+    (target) => target.status === "eligible"
+  );
+  if (eligibleTargets.length === 0) {
+    return undefined;
+  }
+
+  const domainBounds =
+    unionRects(
+      eligibleTargets
+        .map((target) => resolveDrawableWarpDomainBounds(session, target.drawableId))
+        .filter(isPositiveRect)
+    ) ?? fallbackCanvasBounds(session);
+
+  return createWarpDeformerPayloadFromDraft({
+    displayName: createBatchDeformerDisplayName(eligibleTargets, "Warp Deformer"),
+    childDrawableIds: eligibleTargets.map((target) => target.drawableId),
+    childRigControlIds: [],
+    domainBounds,
+    transformColumns: DEFAULT_WARP_DEFORMER_TRANSFORM_COLUMNS,
+    transformRows: DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS,
+    bezierColumns: DEFAULT_WARP_DEFORMER_BEZIER_COLUMNS,
+    bezierRows: DEFAULT_WARP_DEFORMER_BEZIER_ROWS,
+    bezierEditType: WARP_DEFORMER_BEZIER_EDIT_TYPE
+  });
+}
+
 export function createWarpDeformerParentPayloadForRigControl(
   session: AuthoringSession,
   childRigControlId: RigControlId
@@ -243,7 +346,6 @@ export function createWarpDeformerParentPayloadForRigControl(
   const bounds = resolveRigControlWarpDomainBounds(session, childRigControlId);
 
   return {
-    partId: childRigControl.partId,
     displayName: `${childRigControl.displayName} Parent Warp Deformer`,
     ...(childRigControl.parentId === undefined
       ? { childRigControlIds: [childRigControlId] }
@@ -278,7 +380,6 @@ export function createRotationDeformerParentPayloadForRigControl(
   const bounds = resolveRigControlBounds(session, childRigControlId);
 
   return {
-    partId: childRigControl.partId,
     displayName: `${childRigControl.displayName} Parent Rotation Deformer`,
     ...(childRigControl.parentId === undefined
       ? { childRigControlIds: [childRigControlId] }
@@ -382,7 +483,6 @@ export function createWarpDeformerPayloadFromDraft(
   const normalized = normalizeWarpDeformerDraft(draft);
 
   return {
-    partId: normalized.partId,
     displayName: normalized.displayName,
     ...(normalized.parentRigControlId === undefined
       ? {}
@@ -436,7 +536,11 @@ export function createDeformerTreeRows(
         depth: depth + 1,
         displayName: drawableLabels.get(childDrawableId) ?? childDrawableId,
         detail: "Bound Drawable reference",
-        selected: selection?.kind === "drawable" && selection.id === childDrawableId
+        selected: isDeformerTreeTargetSelected(selection, {
+          kind: "boundDrawable",
+          drawableId: childDrawableId,
+          parentRigControlId: rigControlId
+        })
       });
     }
   };
@@ -460,15 +564,164 @@ export function createDrawablePoolItems(
     session.graph.rigControls.flatMap((rigControl) => rigControl.childDrawableIds)
   );
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
+  const unboundDrawablesById = new Map(
+    session.graph.drawables
+      .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
+      .map((drawable) => [drawable.drawableId, drawable])
+  );
+  const emittedDrawableIds = new Set<DrawableId>();
+  const visitedPartIds = new Set<PartId>();
+  const rows: DrawablePoolItem[] = [];
 
-  return session.graph.drawables
-    .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
-    .map((drawable) => ({
+  const createPoolDrawableRow = (
+    drawable: AuthoringSession["graph"]["drawables"][number],
+    depth: number
+  ): Extract<DrawablePoolItem, { readonly kind: "drawable" }> => {
+    emittedDrawableIds.add(drawable.drawableId);
+
+    return {
+      kind: "drawable",
       drawableId: drawable.drawableId,
+      depth,
       displayName: drawable.displayName,
       partDisplayName: partsById.get(drawable.partId)?.displayName ?? "Missing part",
-      selected: selection?.kind === "drawable" && selection.id === drawable.drawableId
-    }));
+      selected: isDeformerTreeTargetSelected(selection, {
+        kind: "poolDrawable",
+        drawableId: drawable.drawableId
+      }),
+      displayOnly: false
+    };
+  };
+
+  const appendPartSubtree = (partId: PartId, depth: number): readonly DrawablePoolItem[] => {
+    const part = partsById.get(partId);
+    if (part === undefined || visitedPartIds.has(partId)) {
+      return [];
+    }
+
+    visitedPartIds.add(partId);
+    const childRows: DrawablePoolItem[] = [];
+
+    for (const child of getPartOrderedChildren(session.graph, part)) {
+      if (child.kind === "drawable") {
+        const drawable = unboundDrawablesById.get(child.drawableId);
+        if (drawable !== undefined && !emittedDrawableIds.has(drawable.drawableId)) {
+          childRows.push(createPoolDrawableRow(drawable, depth + 1));
+        }
+        continue;
+      }
+
+      childRows.push(...appendPartSubtree(child.partId, depth + 1));
+    }
+
+    for (const drawable of session.graph.drawables) {
+      if (
+        drawable.partId === partId &&
+        unboundDrawablesById.has(drawable.drawableId) &&
+        !emittedDrawableIds.has(drawable.drawableId)
+      ) {
+        childRows.push(createPoolDrawableRow(drawable, depth + 1));
+      }
+    }
+
+    if (childRows.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        kind: "part",
+        partId,
+        depth,
+        displayName: part.displayName,
+        selected: false,
+        displayOnly: true
+      },
+      ...childRows
+    ];
+  };
+
+  for (const part of createPoolRootParts(session, partsById)) {
+    rows.push(...appendPartSubtree(part.partId, 0));
+  }
+
+  for (const part of createStablePartOrder(session)) {
+    if (!visitedPartIds.has(part.partId)) {
+      rows.push(...appendPartSubtree(part.partId, 0));
+    }
+  }
+
+  for (const drawable of session.graph.drawables) {
+    if (
+      unboundDrawablesById.has(drawable.drawableId) &&
+      !emittedDrawableIds.has(drawable.drawableId)
+    ) {
+      rows.push(createPoolDrawableRow(drawable, 0));
+    }
+  }
+
+  return rows;
+}
+
+export function createDeformerTreeSelectableTargets(
+  deformerRows: readonly DeformerTreeRow[],
+  drawablePoolItems: readonly DrawablePoolItem[]
+): readonly DeformerTreeSelectionTarget[] {
+  const targets: DeformerTreeSelectionTarget[] = [];
+
+  for (const row of deformerRows) {
+    if (row.kind === "drawableRef") {
+      targets.push({
+        kind: "boundDrawable",
+        drawableId: row.drawableId,
+        parentRigControlId: row.parentRigControlId
+      });
+      continue;
+    }
+
+    targets.push({
+      kind: "rigControl",
+      rigControlId: row.rigControlId
+    });
+  }
+
+  for (const item of drawablePoolItems) {
+    if (item.kind === "drawable") {
+      targets.push({
+        kind: "poolDrawable",
+        drawableId: item.drawableId
+      });
+    }
+  }
+
+  return targets;
+}
+
+function createPoolRootParts(
+  session: AuthoringSession,
+  partsById: ReadonlyMap<PartId, AuthoringSession["graph"]["parts"][number]>
+): readonly AuthoringSession["graph"]["parts"][number][] {
+  return createStablePartOrder(session).filter(
+    (part) => part.parentPartId === undefined || !partsById.has(part.parentPartId)
+  );
+}
+
+function createStablePartOrder(
+  session: AuthoringSession
+): readonly AuthoringSession["graph"]["parts"][number][] {
+  const stableOrderIndex = new Map(
+    session.graph.stableOrder.map((stableId, index) => [stableId, index])
+  );
+
+  return [...session.graph.parts].sort((left, right) => {
+    const leftIndex = stableOrderIndex.get(left.partId) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = stableOrderIndex.get(right.partId) ?? Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+
+    return left.displayName.localeCompare(right.displayName);
+  });
 }
 
 export function createDeformerReadModels(
@@ -635,7 +888,10 @@ function createDeformerTreeDeformerRow(
     rigControlId: readModel.rigControlId,
     depth,
     displayName: readModel.displayName,
-    selected: selection?.kind === "rigControl" && selection.id === readModel.rigControlId,
+    selected: isDeformerTreeTargetSelected(selection, {
+      kind: "rigControl",
+      rigControlId: readModel.rigControlId
+    }),
     ...(readModel.parentRigControlId === undefined
       ? {}
       : { parentRigControlId: readModel.parentRigControlId }),
@@ -693,7 +949,6 @@ function projectEditorWarpDeformerReadModel(
     storageKind: "warpLattice2d",
     rigControlId: rigControl.rigControlId,
     displayName: rigControl.displayName,
-    partId: rigControl.partId,
     ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
@@ -727,7 +982,6 @@ function projectEditorRotationDeformerReadModel(
     storageKind: "rotation2d",
     rigControlId: rigControl.rigControlId,
     displayName: rigControl.displayName,
-    partId: rigControl.partId,
     ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],
@@ -772,7 +1026,6 @@ function createWarpDeformerTargetOption(
   return {
     drawableId: drawable.drawableId,
     displayName: drawable.displayName,
-    partId: drawable.partId,
     partDisplayName:
       session.graph.parts.find((part) => part.partId === drawable.partId)?.displayName ??
       "Missing part",
@@ -934,9 +1187,27 @@ function findDrawableRigControlParentId(
   session: AuthoringSession,
   drawableId: DrawableId
 ): RigControlId | undefined {
-  return session.graph.rigControls.find((rigControl) =>
-    rigControl.childDrawableIds.includes(drawableId)
-  )?.rigControlId;
+  return findDrawableRigControlParentIds(session, drawableId)[0];
+}
+
+function findDrawableRigControlParentIds(
+  session: AuthoringSession,
+  drawableId: DrawableId
+): readonly RigControlId[] {
+  return session.graph.rigControls
+    .filter((rigControl) => rigControl.childDrawableIds.includes(drawableId))
+    .map((rigControl) => rigControl.rigControlId);
+}
+
+function createBatchDeformerDisplayName(
+  targets: readonly Pick<RigBatchDrawableTarget, "displayName">[],
+  suffix: string
+): string {
+  if (targets.length === 1) {
+    return `${targets[0]!.displayName} ${suffix}`;
+  }
+
+  return `${targets.length} Drawables ${suffix}`;
 }
 
 function collectRigControlDescendantIds(

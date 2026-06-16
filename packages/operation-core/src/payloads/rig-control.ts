@@ -21,8 +21,19 @@ const InsertRigControlChildTargetSchema = z.union([
   })
 ]);
 
+const RigControlWrapChildTargetSchema = z.union([
+  z.object({
+    kind: z.literal("drawable"),
+    id: DrawableIdSchema
+  }),
+  z.object({
+    kind: z.literal("rigControl"),
+    id: RigControlIdSchema
+  })
+]);
+
 export const CreateRotation2dRigControlPayloadSchema = z.object({
-  partId: PartIdSchema,
+  partId: PartIdSchema.optional(),
   displayName: z.string().min(1),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
   childRigControlIds: z.array(RigControlIdSchema).default([]),
@@ -30,14 +41,15 @@ export const CreateRotation2dRigControlPayloadSchema = z.object({
   pivot: Vec2Schema,
   restAngleDegrees: z.number().finite(),
   parentRigControlId: RigControlIdSchema.optional(),
-  insertBeforeChild: InsertRigControlChildTargetSchema.optional()
+  insertBeforeChild: InsertRigControlChildTargetSchema.optional(),
+  wrapChildren: z.array(RigControlWrapChildTargetSchema).min(1).optional()
 });
 export type CreateRotation2dRigControlPayloadDto = z.infer<
   typeof CreateRotation2dRigControlPayloadSchema
 >;
 
 export const CreateWarpLattice2dRigControlPayloadSchema = z.object({
-  partId: PartIdSchema,
+  partId: PartIdSchema.optional(),
   displayName: z.string().min(1),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
   childRigControlIds: z.array(RigControlIdSchema).default([]),
@@ -52,7 +64,7 @@ export type CreateWarpLattice2dRigControlPayloadDto = z.infer<
 >;
 
 export const CreateWarpDeformerPayloadSchema = z.object({
-  partId: PartIdSchema,
+  partId: PartIdSchema.optional(),
   displayName: z.string().min(1),
   parentRigControlId: RigControlIdSchema.optional(),
   childDrawableIds: z.array(DrawableIdSchema).default([]),
@@ -64,7 +76,8 @@ export const CreateWarpDeformerPayloadSchema = z.object({
   bezierColumns: z.number().int().min(2),
   bezierRows: z.number().int().min(2),
   bezierEditType: z.literal("cubicBezierSurfaceV1").default("cubicBezierSurfaceV1"),
-  insertBeforeChild: InsertRigControlChildTargetSchema.optional()
+  insertBeforeChild: InsertRigControlChildTargetSchema.optional(),
+  wrapChildren: z.array(RigControlWrapChildTargetSchema).min(1).optional()
 });
 export type CreateWarpDeformerPayloadDto = z.infer<typeof CreateWarpDeformerPayloadSchema>;
 

@@ -16,9 +16,12 @@ import { describe, expect, it } from "vitest";
 import {
   CommittedRotationDeformerInspector,
   CommittedWarpDeformerInspector,
+  DeformerTreeWrapTargetStart,
+  RigBatchTargetStart,
   createRotationUpdatePayload,
   createWarpUpdatePayload
 } from "./rig-tool-inspector";
+import type { DeformerTreeWrapSelectionReadModel } from "../../features/editor-session/model/deformer-tree-wrap-selection";
 import type {
   RotationDeformerReadModel,
   WarpDeformerReadModel
@@ -27,6 +30,7 @@ import type {
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
 const DRAW_FACE = DrawableIdSchema.parse("draw_face");
+const DRAW_HAIR = DrawableIdSchema.parse("draw_hair");
 const MESH_FACE = MeshIdSchema.parse("mesh_face");
 const TEX_FACE = TextureIdSchema.parse("tex_face");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_fixture");
@@ -126,6 +130,107 @@ describe("RigToolInspector committed Rotation Deformer", () => {
   });
 });
 
+describe("RigToolInspector batch Drawable target start", () => {
+  it("shows selected Drawable names and warns for already-bound selections", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RigBatchTargetStart, {
+        onCreateRotation: () => undefined,
+        onCreateWarp: () => undefined,
+        targets: [
+          {
+            drawableId: DRAW_FACE,
+            displayName: "Face",
+            bounds: { x: 10, y: 20, width: 30, height: 40 },
+            status: "alreadyBound",
+            boundRigControlId: RIG_FACE_WARP
+          },
+          {
+            drawableId: DRAW_HAIR,
+            displayName: "Hair",
+            bounds: { x: 50, y: 20, width: 30, height: 40 },
+            status: "eligible"
+          }
+        ]
+      })
+    );
+
+    expect(markup).toContain("Target Drawables");
+    expect(markup).toContain("Face");
+    expect(markup).toContain("Hair");
+    expect(markup).toContain("Already-bound Drawables are excluded");
+    expect(markup).toContain('data-testid="rig-tool-bound-drawable-warning"');
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Rotation Deformer"))).toBe(false);
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Warp Deformer"))).toBe(false);
+    expect(markup).not.toContain("Wrap");
+  });
+
+  it("disables create actions when every selected Drawable is already bound", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RigBatchTargetStart, {
+        onCreateRotation: () => undefined,
+        onCreateWarp: () => undefined,
+        targets: [
+          {
+            drawableId: DRAW_FACE,
+            displayName: "Face",
+            bounds: { x: 10, y: 20, width: 30, height: 40 },
+            status: "alreadyBound",
+            boundRigControlId: RIG_FACE_WARP
+          }
+        ]
+      })
+    );
+
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Rotation Deformer"))).toBe(true);
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Warp Deformer"))).toBe(true);
+    expect(markup).not.toContain("Wrap");
+  });
+});
+
+describe("RigToolInspector Deformer Tree wrap target start", () => {
+  it("shows selected Deformer Tree target names with enabled create actions", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DeformerTreeWrapTargetStart, {
+        feedback: null,
+        onCreateRotation: () => undefined,
+        onCreateWarp: () => undefined,
+        readModel: createCoherentWrapReadModel()
+      })
+    );
+
+    expect(markup).toContain("Target Selection");
+    expect(markup).toContain("Face Warp");
+    expect(markup).toContain("Hair");
+    expect(markup).toContain("Root Deformer");
+    expect(markup).toContain("Pool Drawable");
+    expect(markup).not.toContain('data-testid="rig-tool-wrap-selection-warning"');
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Rotation Deformer"))).toBe(false);
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Warp Deformer"))).toBe(false);
+  });
+
+  it("disables create actions and shows a warning for incoherent selections", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DeformerTreeWrapTargetStart, {
+        feedback: null,
+        onCreateRotation: () => undefined,
+        onCreateWarp: () => undefined,
+        readModel: {
+          ...createCoherentWrapReadModel(),
+          status: "incoherent",
+          canCreate: false,
+          warning: "Selection includes a Deformer and one of its descendants. Select direct siblings instead.",
+          wrapChildren: []
+        }
+      })
+    );
+
+    expect(markup).toContain('data-testid="rig-tool-wrap-selection-warning"');
+    expect(markup).toContain("Select direct siblings instead");
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Rotation Deformer"))).toBe(true);
+    expect(hasDisabledAttribute(buttonMarkup(markup, "Create Warp Deformer"))).toBe(true);
+  });
+});
+
 function inputMarkup(markup: string, ariaLabel: string): string {
   const escapedLabel = ariaLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = markup.match(new RegExp(`<input[^>]*aria-label="${escapedLabel}"[^>]*>`));
@@ -136,8 +241,50 @@ function inputMarkup(markup: string, ariaLabel: string): string {
   return match[0];
 }
 
+function buttonMarkup(markup: string, buttonText: string): string {
+  const escapedText = buttonText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = markup.match(new RegExp(`<button[^>]*>[\\s\\S]*?${escapedText}[\\s\\S]*?</button>`));
+  if (match === null) {
+    throw new Error(`Expected button with text ${buttonText}.`);
+  }
+
+  return match[0];
+}
+
 function hasDisabledAttribute(markup: string): boolean {
   return /\sdisabled(?:=""|(?=[\s/>]))/.test(markup);
+}
+
+function createCoherentWrapReadModel(): DeformerTreeWrapSelectionReadModel {
+  return {
+    status: "coherent",
+    canCreate: true,
+    targets: [
+      {
+        kind: "rigControl",
+        source: "rigControl",
+        id: RIG_FACE_WARP,
+        displayName: "Face Warp",
+        detail: "Root Deformer",
+        status: "included"
+      },
+      {
+        kind: "drawable",
+        source: "poolDrawable",
+        id: DRAW_HAIR,
+        displayName: "Hair",
+        detail: "Pool Drawable",
+        status: "included"
+      }
+    ],
+    warning: null,
+    wrapChildren: [
+      { kind: "rigControl", id: RIG_FACE_WARP },
+      { kind: "drawable", id: DRAW_HAIR }
+    ],
+    bounds: { x: 10, y: 20, width: 70, height: 40 },
+    warpDomainBounds: { x: 9, y: 19, width: 72, height: 42 }
+  };
 }
 
 function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {
@@ -146,7 +293,6 @@ function createWarpReadModel(hasKeyforms: boolean): WarpDeformerReadModel {
     storageKind: "warpLattice2d",
     rigControlId: RIG_FACE_WARP,
     displayName: "Face Warp",
-    partId: PART_FACE,
     childDrawableIds: [DRAW_FACE],
     childRigControlIds: [],
     opacityMultiplier: 1,
@@ -178,7 +324,6 @@ function createRotationReadModel(hasKeyforms: boolean): RotationDeformerReadMode
     storageKind: "rotation2d",
     rigControlId: RIG_FACE_ROTATION,
     displayName: "Face Rotation",
-    partId: PART_FACE,
     childDrawableIds: [DRAW_FACE],
     childRigControlIds: [],
     opacityMultiplier: 1,

@@ -303,11 +303,11 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationType: "createRotation2dRigControl",
     operationFamily: "rigControl",
     displayName: "Create rotation2d rig control",
-    summary: "Create a project-defined 2D rotation rig control, optionally inserting it between a parent deformer and existing child.",
-    targetKinds: ["rigControl", "part", "drawable"],
+    summary:
+      "Create a project-defined 2D rotation rig control, optionally inserting it before one child or atomically wrapping selected children.",
+    targetKinds: ["rigControl", "drawable"],
     payloadSchemaRef: "operation.createRotation2dRigControl.payload.v1",
-    requiredInputs: codexInputs("New rig control, part, and pivot.", [
-      "partId",
+    requiredInputs: codexInputs("New rig control and pivot.", [
       "displayName",
       "pivot",
       "restAngleDegrees"
@@ -318,11 +318,10 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationFamily: "rigControl",
     displayName: "Create Warp Deformer",
     summary:
-      "Create a project-defined Warp Deformer with transform grid divisions, stored Bezier edit surface, and optional insertion between an existing parent and child.",
-    targetKinds: ["rigControl", "part", "drawable"],
+      "Create a project-defined Warp Deformer with transform grid divisions, stored Bezier edit surface, and optional insertion or selected-child wrap.",
+    targetKinds: ["rigControl", "drawable"],
     payloadSchemaRef: "operation.createWarpDeformer.payload.v1",
-    requiredInputs: codexInputs("New Warp Deformer, part, domain bounds, and division settings.", [
-      "partId",
+    requiredInputs: codexInputs("New Warp Deformer, domain bounds, and division settings.", [
       "displayName",
       "domainBounds",
       "transformColumns",
@@ -336,10 +335,9 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationFamily: "rigControl",
     displayName: "Create warpLattice2d rig control",
     summary: "Create a project-defined bilinear warp lattice rig control.",
-    targetKinds: ["rigControl", "part", "drawable"],
+    targetKinds: ["rigControl", "drawable"],
     payloadSchemaRef: "operation.createWarpLattice2dRigControl.payload.v1",
     requiredInputs: codexInputs("New warp lattice rig control and lattice dimensions.", [
-      "partId",
       "displayName",
       "domainBounds",
       "latticeColumns",

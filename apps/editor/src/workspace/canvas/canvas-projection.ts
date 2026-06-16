@@ -5,6 +5,10 @@ import {
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
+import {
+  getSingleSelectedDrawableId,
+  isDrawableSelected
+} from "../../features/editor-session/model/editor-selection";
 import type { ParameterValueMap } from "../../features/editor-session/model/parameter-keyform-state";
 import {
   createCanvasEvaluatedScene,
@@ -102,6 +106,7 @@ export interface CanvasRenderProjection {
   readonly drawables: readonly CanvasRenderableDrawable[];
   readonly maskRelations: readonly CanvasMaskRelationProjection[];
   readonly meshOverlay?: CanvasMeshOverlayProjection;
+  readonly meshOverlays?: readonly CanvasMeshOverlayProjection[];
   readonly deformerOverlay?: CanvasDeformerOverlayProjection;
   readonly hasRenderableArtwork: boolean;
   readonly contentKey: string;
@@ -112,7 +117,15 @@ export interface CanvasProjectionOptions {
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
+    readonly meshDrafts?: readonly {
+      readonly drawableId: DrawableId;
+      readonly mesh: MeshDto;
+    }[];
   } | null;
+  readonly meshDrafts?: readonly {
+    readonly drawableId: DrawableId;
+    readonly mesh: MeshDto;
+  }[] | null;
   readonly deformerDraft?: {
     readonly displayName: string;
     readonly parentRigControlId?: RigControlId | undefined;
@@ -126,6 +139,7 @@ export interface CanvasProjectionOptions {
     readonly opacityMultiplier?: number | undefined;
   } | null;
   readonly meshPreviewDrawableId?: DrawableId;
+  readonly meshPreviewDrawableIds?: readonly DrawableId[];
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
   readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
   readonly parameterValues?: ParameterValueMap;
@@ -161,10 +175,14 @@ export function createCanvasRenderProjection(
     rigControlsById
   );
   const selectedPartId = selection?.kind === "part" ? selection.id : undefined;
-  const selectedDrawableId = selection?.kind === "drawable" ? selection.id : undefined;
-  const meshPreviewDrawableId = options.meshPreviewDrawableId;
+  const selectedDrawableId = getSingleSelectedDrawableId(selection);
+  const meshPreviewDrawableIds = new Set([
+    ...(options.meshPreviewDrawableIds ?? []),
+    ...(options.meshPreviewDrawableId === undefined ? [] : [options.meshPreviewDrawableId])
+  ]);
   const evaluatedScene = createCanvasEvaluatedScene(session, {
     meshDraft: options.meshDraft ?? null,
+    meshDrafts: options.meshDrafts ?? null,
     rigDraft: createEvaluationRigDraftFromProjectionDraft(options.deformerDraft ?? null),
     controlPointPreview: options.controlPointPreview ?? null,
     rotationPreview: options.rotationPreview ?? null,
@@ -191,10 +209,10 @@ export function createCanvasRenderProjection(
         ...(baseMesh === undefined ? {} : { baseMesh }),
         ...(sourceLayer === undefined ? {} : { sourceLayer })
       });
-      const selected = selection?.kind === "drawable" && selection.id === drawable.drawableId;
+      const selected = isDrawableSelected(selection, drawable.drawableId);
       const selectedBySubtree =
         !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
-      const meshPreview = meshPreviewDrawableId === drawable.drawableId;
+      const meshPreview = meshPreviewDrawableIds.has(drawable.drawableId);
 
       return {
         drawableId: drawable.drawableId,
@@ -234,14 +252,19 @@ export function createCanvasRenderProjection(
   );
   const artworkBounds = unionRects(renderableDrawables.map((drawable) => drawable.bounds));
   const selectionBounds = unionRects(selectedVisibleDrawables.map((drawable) => drawable.bounds));
+  const meshDraftsByDrawableId = createProjectionMeshDraftIndex(options);
+  const meshOverlayDrawableIds = selectedDrawableId === undefined
+    ? [...meshDraftsByDrawableId.keys()].filter((drawableId) => selectedDrawableIds.has(drawableId))
+    : [selectedDrawableId];
+  const meshOverlays = resolveSelectedMeshOverlays({
+    selectedDrawableIds: meshOverlayDrawableIds,
+    evaluatedScene,
+    drafts: meshDraftsByDrawableId
+  });
   const meshOverlay =
     selectedDrawableId === undefined
-      ? undefined
-      : resolveSelectedMeshOverlay({
-          selectedDrawableId,
-          evaluatedScene,
-          draft: options.meshDraft ?? null
-        });
+      ? meshOverlays[0]
+      : meshOverlays.find((overlay) => overlay.drawableId === selectedDrawableId);
   const deformerOverlay = resolveDeformerOverlay({
     selection,
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
@@ -261,6 +284,7 @@ export function createCanvasRenderProjection(
       sourceDrawableIds: relation.sourceDrawableIds,
       targetDrawableIds: relation.targetDrawableIds
     })),
+    meshOverlays,
     ...(meshOverlay === undefined ? {} : { meshOverlay }),
     ...(deformerOverlay === undefined ? {} : { deformerOverlay }),
     hasRenderableArtwork: renderableDrawables.length > 0,
@@ -292,6 +316,17 @@ function createEvaluationRigDraftFromProjectionDraft(
       ? {}
       : { opacityMultiplier: draft.opacityMultiplier })
   };
+}
+
+function createProjectionMeshDraftIndex(
+  options: CanvasProjectionOptions
+): ReadonlyMap<DrawableId, NonNullable<CanvasProjectionOptions["meshDraft"]>> {
+  const drafts =
+    options.meshDrafts ??
+    options.meshDraft?.meshDrafts ??
+    (options.meshDraft === undefined || options.meshDraft === null ? [] : [options.meshDraft]);
+
+  return new Map(drafts.map((draft) => [draft.drawableId, draft]));
 }
 
 function resolveDrawableRenderDimensions(input: {
@@ -351,39 +386,44 @@ function resolveDeformerOverlay(input: {
     return undefined;
   }
 
+  const selectedRigControlId = input.selection.id;
   const evaluatedRigControl = input.evaluatedRigControls.find(
-    (rigControl) => rigControl.rigControlId === input.selection?.id
+    (rigControl) => rigControl.rigControlId === selectedRigControlId
   );
   return evaluatedRigControl === undefined
     ? undefined
     : createDeformerOverlayProjection(evaluatedRigControl, input.selectionBounds);
 }
 
-function resolveSelectedMeshOverlay(input: {
-  readonly selectedDrawableId: DrawableId;
+function resolveSelectedMeshOverlays(input: {
+  readonly selectedDrawableIds: readonly DrawableId[];
   readonly evaluatedScene: ReturnType<typeof createCanvasEvaluatedScene>;
-  readonly draft: CanvasProjectionOptions["meshDraft"];
-}): CanvasMeshOverlayProjection | undefined {
-  const drawable = input.evaluatedScene.drawables.find(
-    (candidate) => candidate.drawableId === input.selectedDrawableId
-  );
-  const mesh = drawable?.evaluatedMesh;
-  if (
-    mesh === undefined ||
-    mesh.source === "rectFallback" ||
-    mesh.vertices.length === 0 ||
-    mesh.triangles.length === 0
-  ) {
-    return undefined;
-  }
+  readonly drafts: ReadonlyMap<DrawableId, NonNullable<CanvasProjectionOptions["meshDraft"]>>;
+}): readonly CanvasMeshOverlayProjection[] {
+  return input.selectedDrawableIds
+    .map((selectedDrawableId): CanvasMeshOverlayProjection | undefined => {
+      const drawable = input.evaluatedScene.drawables.find(
+        (candidate) => candidate.drawableId === selectedDrawableId
+      );
+      const mesh = drawable?.evaluatedMesh;
+      if (
+        mesh === undefined ||
+        mesh.source === "rectFallback" ||
+        mesh.vertices.length === 0 ||
+        mesh.triangles.length === 0
+      ) {
+        return undefined;
+      }
 
-  return {
-    drawableId: input.selectedDrawableId,
-    mesh: cloneEvaluatedMesh(mesh),
-    status: mesh.source === "draft" || input.draft?.drawableId === input.selectedDrawableId
-      ? "draft"
-      : "committed"
-  };
+      return {
+        drawableId: selectedDrawableId,
+        mesh: cloneEvaluatedMesh(mesh),
+        status: mesh.source === "draft" || input.drafts.has(selectedDrawableId)
+          ? "draft"
+          : "committed"
+      };
+    })
+    .filter(isDefined);
 }
 
 function createDeformerOverlayProjection(
@@ -597,6 +637,10 @@ function resolveSelectedDrawableIds(
 ): ReadonlySet<DrawableId> {
   if (selection?.kind === "drawable") {
     return new Set([selection.id]);
+  }
+
+  if (selection?.kind === "drawableSet") {
+    return new Set(selection.ids);
   }
 
   if (selection?.kind === "rigControl") {

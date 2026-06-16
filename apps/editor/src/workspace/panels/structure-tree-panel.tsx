@@ -8,7 +8,7 @@ import {
   Layers,
   Spline
 } from "lucide-react";
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
@@ -48,13 +48,16 @@ export function StructureTreePanel() {
     readonly placement: StructureDropPlacement;
   } | null>(null);
 
-  const selectRow = (row: StructureTreeRow) => {
+  const selectRow = (row: StructureTreeRow, event: MouseEvent<HTMLButtonElement>) => {
     if (row.kind === "part") {
       selectPart(row.id);
       return;
     }
 
-    selectDrawable(row.id);
+    selectDrawable(row.id, {
+      range: event.shiftKey,
+      toggle: !event.shiftKey && (event.ctrlKey || event.metaKey)
+    });
   };
 
   const actions = (
@@ -222,7 +225,7 @@ export function StructureTreePanel() {
             </button>
             <button
               className="flex min-w-0 items-center gap-2 rounded px-1 py-0.5 text-left"
-              onClick={() => selectRow(row)}
+              onClick={(event) => selectRow(row, event)}
               type="button"
             >
               <span className="flex size-5 shrink-0 items-center justify-center text-neutral-500">

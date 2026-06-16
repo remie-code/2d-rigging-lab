@@ -30,6 +30,7 @@ import {
   logMeshGenerationPreviewDebug,
   useEditorSession
 } from "./editor-session-context";
+import type { DeformerTreeSelectionTarget } from "./model/editor-selection";
 
 type EditorSessionContextSnapshot = ReturnType<typeof useEditorSession>;
 type FakeNode = FakeElement | FakeTextNode;
@@ -41,6 +42,15 @@ const ROTATION_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rotation_selection
 const ROTATION_PART_ID = PartIdSchema.parse("part_rotation_selection");
 const LOADED_CHILD_PART_ID = PartIdSchema.parse("part_loaded_child");
 const LOADED_DRAWABLE_ID = DrawableIdSchema.parse("draw_loaded_child");
+const BATCH_PART_ID = PartIdSchema.parse("part_mesh_batch");
+const BATCH_DRAW_EMPTY_A = DrawableIdSchema.parse("draw_mesh_batch_empty_a");
+const BATCH_DRAW_EXISTING = DrawableIdSchema.parse("draw_mesh_batch_existing");
+const BATCH_DRAW_EMPTY_B = DrawableIdSchema.parse("draw_mesh_batch_empty_b");
+const BATCH_MESH_EMPTY_A = MeshIdSchema.parse("mesh_mesh_batch_empty_a");
+const BATCH_MESH_EXISTING = MeshIdSchema.parse("mesh_mesh_batch_existing");
+const BATCH_MESH_EMPTY_B = MeshIdSchema.parse("mesh_mesh_batch_empty_b");
+const WRAP_ROOT_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_wrap_existing_root");
+const WRAP_CREATED_ROTATION_ID = RigControlIdSchema.parse("rig_2_selected_rotation_deformer");
 const TRANSIENT_DRAFT_DRAWABLE_ID = DrawableIdSchema.parse("draw_provider_fixture");
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
@@ -379,6 +389,126 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
+  it("previews, applies, and cancels batch mesh drafts only for eligible Drawables", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe({
+      initialSession: createBatchMeshSession()
+    });
+
+    try {
+      await selectBatchDrawables(harness.context);
+
+      await act(async () => {
+        harness.context().previewMeshDrafts(
+          [BATCH_DRAW_EMPTY_A, BATCH_DRAW_EXISTING, BATCH_DRAW_EMPTY_B],
+          "standard"
+        );
+      });
+
+      expect(harness.context().meshDraft).toMatchObject({
+        drawableId: BATCH_DRAW_EMPTY_A,
+        meshDrafts: [
+          expect.objectContaining({ drawableId: BATCH_DRAW_EMPTY_A }),
+          expect.objectContaining({ drawableId: BATCH_DRAW_EMPTY_B })
+        ]
+      });
+      expect(harness.context().meshDrafts.map((draft) => draft.drawableId)).toEqual([
+        BATCH_DRAW_EMPTY_A,
+        BATCH_DRAW_EMPTY_B
+      ]);
+
+      await act(async () => {
+        harness.context().cancelMeshDraft();
+      });
+      expect(harness.context().meshDrafts).toEqual([]);
+
+      await act(async () => {
+        harness.context().previewMeshDrafts(
+          [BATCH_DRAW_EMPTY_A, BATCH_DRAW_EXISTING, BATCH_DRAW_EMPTY_B],
+          "standard"
+        );
+      });
+      const existingMeshBefore = structuredClone(
+        requireMesh(harness.context().session, BATCH_MESH_EXISTING)
+      );
+
+      await act(async () => {
+        harness.context().applyMeshDraft();
+      });
+
+      expect(harness.context().meshDrafts).toEqual([]);
+      expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).triangles.length).toBeGreaterThan(0);
+      expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_B).triangles.length).toBeGreaterThan(0);
+      expect(requireMesh(harness.context().session, BATCH_MESH_EXISTING)).toEqual(existingMeshBefore);
+    } finally {
+      info.mockRestore();
+      warn.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("selects the created wrapper after Deformer Tree wrap-selected Rig create", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createDeformerTreeWrapProviderSession()
+    });
+    const visibleTargets: readonly DeformerTreeSelectionTarget[] = [
+      {
+        kind: "rigControl",
+        rigControlId: WRAP_ROOT_RIG_CONTROL_ID
+      },
+      {
+        kind: "poolDrawable",
+        drawableId: BATCH_DRAW_EMPTY_A
+      }
+    ];
+
+    try {
+      await act(async () => {
+        harness.context().selectDeformerTreeTarget(visibleTargets[0]!, { visibleTargets });
+      });
+      await act(async () => {
+        harness.context().selectDeformerTreeTarget(visibleTargets[1]!, {
+          toggle: true,
+          visibleTargets
+        });
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "deformerTreeSet",
+        targets: visibleTargets
+      });
+
+      await act(async () => {
+        harness.context().createRotationDeformerForDeformerTreeSelection();
+      });
+
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: WRAP_CREATED_ROTATION_ID
+      });
+      expect(harness.context().session.graph.rigControlRootIds).toEqual([
+        WRAP_CREATED_ROTATION_ID
+      ]);
+      expect(
+        harness.context().session.graph.rigControls.find(
+          (candidate) => candidate.rigControlId === WRAP_CREATED_ROTATION_ID
+        )
+      ).toMatchObject({
+        childDrawableIds: [BATCH_DRAW_EMPTY_A],
+        childRigControlIds: [WRAP_ROOT_RIG_CONTROL_ID]
+      });
+      expect(
+        harness.context().session.graph.rigControls.find(
+          (candidate) => candidate.rigControlId === WRAP_ROOT_RIG_CONTROL_ID
+        )
+      ).toMatchObject({
+        parentId: WRAP_CREATED_ROTATION_ID
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("preserves the current session and reports invalid bundle import errors", async () => {
     const harness = await renderEditorSessionProbe();
 
@@ -673,6 +803,205 @@ function readRotationSelectionAngleKey(session: AuthoringSession): number {
   }
 
   return key.statePatch;
+}
+
+async function selectBatchDrawables(
+  context: () => EditorSessionContextSnapshot
+): Promise<void> {
+  await act(async () => {
+    context().selectDrawable(BATCH_DRAW_EMPTY_A);
+  });
+  await act(async () => {
+    context().selectDrawable(BATCH_DRAW_EXISTING, { toggle: true });
+  });
+  await act(async () => {
+    context().selectDrawable(BATCH_DRAW_EMPTY_B, { toggle: true });
+  });
+
+  expect(context().selection).toEqual({
+    kind: "drawableSet",
+    ids: [BATCH_DRAW_EMPTY_A, BATCH_DRAW_EXISTING, BATCH_DRAW_EMPTY_B]
+  });
+}
+
+function requireMesh(session: AuthoringSession, meshId: typeof BATCH_MESH_EMPTY_A) {
+  const mesh = session.graph.meshes.find((candidate) => candidate.meshId === meshId);
+  if (mesh === undefined) {
+    throw new Error(`Expected mesh ${meshId}.`);
+  }
+
+  return mesh;
+}
+
+function createBatchMeshSession(): AuthoringSession {
+  return {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_batch_mesh_provider"),
+      packageDisplayName: "Batch Mesh Provider",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 0,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: false,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 128, height: 128 },
+      parts: [
+        {
+          partId: BATCH_PART_ID,
+          displayName: "Batch Mesh Part",
+          childPartIds: [],
+          drawableIds: [BATCH_DRAW_EMPTY_A, BATCH_DRAW_EXISTING, BATCH_DRAW_EMPTY_B],
+          children: [
+            { kind: "drawable", drawableId: BATCH_DRAW_EMPTY_A },
+            { kind: "drawable", drawableId: BATCH_DRAW_EXISTING },
+            { kind: "drawable", drawableId: BATCH_DRAW_EMPTY_B }
+          ]
+        }
+      ],
+      drawables: [
+        createBatchDrawable(BATCH_DRAW_EMPTY_A, BATCH_MESH_EMPTY_A, "Empty A", 0),
+        createBatchDrawable(BATCH_DRAW_EXISTING, BATCH_MESH_EXISTING, "Existing", 1),
+        createBatchDrawable(BATCH_DRAW_EMPTY_B, BATCH_MESH_EMPTY_B, "Empty B", 2)
+      ],
+      meshes: [
+        createEmptyBatchMesh(BATCH_MESH_EMPTY_A, BATCH_DRAW_EMPTY_A, 0),
+        createGeneratedBatchMesh(BATCH_MESH_EXISTING, BATCH_DRAW_EXISTING, 40),
+        createEmptyBatchMesh(BATCH_MESH_EMPTY_B, BATCH_DRAW_EMPTY_B, 80)
+      ],
+      parameters: [],
+      keyformSets: [],
+      rigControls: [],
+      dynamicsGroups: [],
+      masks: [],
+      drawOrder: [
+        { drawableId: BATCH_DRAW_EMPTY_A, baseDrawOrder: 0, stableOrder: 0 },
+        { drawableId: BATCH_DRAW_EXISTING, baseDrawOrder: 1, stableOrder: 1 },
+        { drawableId: BATCH_DRAW_EMPTY_B, baseDrawOrder: 2, stableOrder: 2 }
+      ],
+      rigControlRootIds: [],
+      stableOrder: [
+        BATCH_PART_ID,
+        BATCH_DRAW_EMPTY_A,
+        BATCH_DRAW_EXISTING,
+        BATCH_DRAW_EMPTY_B
+      ],
+      sourceAssets: [],
+      textureAtlas: {
+        schemaVersion: "texture-atlas-v1",
+        textures: [
+          createBatchTexture("empty-a", BATCH_DRAW_EMPTY_A),
+          createBatchTexture("existing", BATCH_DRAW_EXISTING),
+          createBatchTexture("empty-b", BATCH_DRAW_EMPTY_B)
+        ]
+      },
+      provenanceRecords: [],
+      rightsRecords: []
+    }
+  };
+}
+
+function createDeformerTreeWrapProviderSession(): AuthoringSession {
+  const session = createBatchMeshSession();
+  session.graph.rigControls = [
+    {
+      kind: "rotation2d",
+      rigControlId: WRAP_ROOT_RIG_CONTROL_ID,
+      displayName: "Wrap Existing Root",
+      childDrawableIds: [BATCH_DRAW_EXISTING],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 52, y: 12 },
+      restAngleDegrees: 0,
+      restTranslation: { x: 0, y: 0 },
+      restScale: { x: 1, y: 1 },
+      enabled: true
+    }
+  ];
+  session.graph.rigControlRootIds = [WRAP_ROOT_RIG_CONTROL_ID];
+  session.graph.stableOrder = [...session.graph.stableOrder, WRAP_ROOT_RIG_CONTROL_ID];
+
+  return session;
+}
+
+function createBatchDrawable(
+  drawableId: typeof BATCH_DRAW_EMPTY_A,
+  meshId: typeof BATCH_MESH_EMPTY_A,
+  displayName: string,
+  baseDrawOrder: number
+) {
+  const token = String(drawableId).replace(/^draw_/, "");
+
+  return {
+    drawableId,
+    displayName,
+    partId: BATCH_PART_ID,
+    sourceAssetId: SourceAssetIdSchema.parse("src_batch_mesh"),
+    textureId: TextureIdSchema.parse(`tex_${token}`),
+    meshId,
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder,
+    sourceProvenanceId: ProvenanceIdSchema.parse("prov_batch_mesh")
+  };
+}
+
+function createEmptyBatchMesh(
+  meshId: typeof BATCH_MESH_EMPTY_A,
+  drawableId: typeof BATCH_DRAW_EMPTY_A,
+  x: number
+) {
+  return {
+    meshId,
+    drawableId,
+    vertices: [],
+    uvs: [],
+    triangles: [],
+    vertexStableIds: [],
+    triangleStableIds: [],
+    topologyRevision: 0,
+    bounds: { x, y: 0, width: 24, height: 24 },
+    generationProvenanceId: ProvenanceIdSchema.parse("prov_batch_mesh")
+  };
+}
+
+function createGeneratedBatchMesh(
+  meshId: typeof BATCH_MESH_EMPTY_A,
+  drawableId: typeof BATCH_DRAW_EMPTY_A,
+  x: number
+) {
+  return {
+    ...createEmptyBatchMesh(meshId, drawableId, x),
+    vertices: [
+      { x, y: 0 },
+      { x: x + 24, y: 0 },
+      { x, y: 24 }
+    ],
+    uvs: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ],
+    triangles: [[0, 1, 2]] as [number, number, number][],
+    vertexStableIds: ["vtx_0", "vtx_1", "vtx_2"],
+    topologyRevision: 1
+  };
+}
+
+function createBatchTexture(name: string, drawableId: typeof BATCH_DRAW_EMPTY_A) {
+  const textureId = createBatchDrawable(
+    drawableId,
+    BATCH_MESH_EMPTY_A,
+    name,
+    0
+  ).textureId;
+
+  return {
+    textureId,
+    filePath: `assets/textures/${name}.rgba`,
+    sourceAssetId: SourceAssetIdSchema.parse("src_batch_mesh"),
+    provenanceId: ProvenanceIdSchema.parse("prov_batch_mesh")
+  };
 }
 
 function createLoadedProjectSession(): AuthoringSession {

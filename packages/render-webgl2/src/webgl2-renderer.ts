@@ -122,6 +122,7 @@ export class WebGl2Renderer implements RendererBackend {
     viewport: RenderViewport
   ): WebGl2Texture {
     const maskTarget = this.ensureMaskTarget(viewport);
+    this.unbindRendererSamplerTextures();
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, maskTarget.framebuffer);
     this.gl.viewport(0, 0, viewport.width, viewport.height);
     this.gl.clearColor(0, 0, 0, 0);
@@ -201,6 +202,13 @@ export class WebGl2Renderer implements RendererBackend {
       texture
     };
     return this.maskTarget;
+  }
+
+  private unbindRendererSamplerTextures(): void {
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    this.gl.activeTexture(this.gl.TEXTURE1);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
   }
 
   private drawDrawable(

@@ -724,6 +724,19 @@ describe("part, texture, and editor layer diagnostics", () => {
         restTranslation: { x: 0, y: 0 },
         restScale: { x: 1, y: 1 },
         enabled: true
+      },
+      {
+        kind: "rotation2d",
+        rigControlId: RigControlIdSchema.parse("rig_empty_leaf_legacy_part"),
+        displayName: "Empty Leaf Legacy Part Rotation",
+        partId: EMPTY_LEAF_PART_ID,
+        childDrawableIds: [],
+        childRigControlIds: [],
+        pivot: { x: 0, y: 0 },
+        restAngleDegrees: 0,
+        restTranslation: { x: 0, y: 0 },
+        restScale: { x: 1, y: 1 },
+        enabled: true
       }
     ];
     document.model.masks.masks = [
@@ -772,10 +785,9 @@ describe("part, texture, and editor layer diagnostics", () => {
         operationIds: ["op_delete_part_root"],
         evidence: [
           `partId=${ROOT_PART_ID}`,
-          "blockerKinds=childPart,drawable,rigControl,maskRelation",
+          "blockerKinds=childPart,drawable,maskRelation",
           `childPartIds=${EMPTY_LEAF_PART_ID},${HEAD_PART_ID}`,
           `drawableIds=${BODY_DRAWABLE_ID}`,
-          `rigControlIds=${ROOT_RIG_CONTROL_ID}`,
           `maskRelationIds=${BODY_MASK_RELATION_ID}`,
           "deleteScope=empty-leaf-only"
         ]

@@ -76,12 +76,20 @@ import {
   type EditorSessionCommandResult
 } from "./model/editor-session-commands";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
-import type { EditorSelection } from "./model/editor-selection";
+import type { DeformerTreeSelectionTarget, EditorSelection } from "./model/editor-selection";
 import type {
   EditorSessionGestureCommit,
   EditorSessionGestureCommitController
 } from "./model/editor-session-gesture-commit";
 import { commitEditorSessionGestureWithHistory } from "./model/editor-session-gesture-commit";
+import {
+  createDrawableSelection,
+  getSelectedDrawableIds,
+  getSingleSelectedDrawableId,
+  isDeformerTreeAnchorActiveForSelection,
+  resolveDeformerTreeSelectionTransition,
+  resolveDrawableSelectionTransition
+} from "./model/editor-selection";
 import {
   canRedoEditorSessionHistory,
   canUndoEditorSessionHistory,
@@ -107,9 +115,11 @@ import {
   commitUpdateCustomParameter
 } from "./model/parameter-definition-commands";
 import {
+  createMeshDrawableBatchTargets,
   createMeshPreviewProvenanceId,
   DEFAULT_MESH_GENERATION_METHOD,
   getMeshGenerationPreset,
+  isMeshGenerationEligible,
   type MeshGenerationPresetId
 } from "./model/mesh-tool-state";
 import { mergeEditorHiddenPartIds } from "./model/editor-hidden-part-state";
@@ -117,10 +127,12 @@ import {
   createDrawablePoolItems,
   createDeformerTreeRows,
   createRotationDeformerPayloadForDrawable,
+  createRotationDeformerPayloadForUnboundDrawables,
   createRotationDeformerParentPayloadForRigControl,
   createWarpDeformerParentPayloadForRigControl,
   createWarpDeformerDraftForDrawable,
   createWarpDeformerPayloadFromDraft,
+  createWarpDeformerPayloadForUnboundDrawables,
   fitWarpDeformerDraftToChildren,
   resetWarpDeformerDraft,
   updateWarpDeformerDraft,
@@ -128,6 +140,10 @@ import {
   type DrawablePoolItem,
   type WarpDeformerDraft
 } from "./model/rig-tool-state";
+import {
+  createRotationDeformerPayloadForDeformerTreeSelection,
+  createWarpDeformerPayloadForDeformerTreeSelection
+} from "./model/deformer-tree-wrap-selection";
 import {
   createInspectorProjection,
   createStructureTreeRows,
@@ -144,8 +160,10 @@ import { useEditorUiStore } from "../../state/editor-ui-store";
 export interface MeshToolDraft {
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
+  readonly commitMode: "single" | "batchEligible";
   readonly method: GeneratedMeshPreviewCommitMethod;
   readonly mesh: AuthoringSession["graph"]["meshes"][number];
+  readonly meshDrafts?: readonly MeshToolDraft[];
   readonly source: DrawableGeneratedMeshResult["source"];
   readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
   readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
@@ -210,6 +228,7 @@ interface EditorSessionContextValue {
   readonly collapsedPartIds: ReadonlySet<PartId>;
   readonly editorHiddenPartIds: ReadonlySet<PartId>;
   readonly meshDraft: MeshToolDraft | null;
+  readonly meshDrafts: readonly MeshToolDraft[];
   readonly rigDraft: WarpDeformerDraft | null;
   readonly structureRows: readonly StructureTreeRow[];
   readonly deformerRows: readonly DeformerTreeRow[];
@@ -241,8 +260,22 @@ interface EditorSessionContextValue {
   readonly setActiveParameterValue: (value: number) => void;
   readonly resetActiveParameterValue: () => void;
   readonly selectPart: (partId: PartId) => void;
-  readonly selectDrawable: (drawableId: DrawableId) => void;
+  readonly selectDrawable: (
+    drawableId: DrawableId,
+    options?: {
+      readonly range?: boolean;
+      readonly toggle?: boolean;
+    }
+  ) => void;
   readonly selectRigControl: (rigControlId: RigControlId) => void;
+  readonly selectDeformerTreeTarget: (
+    target: DeformerTreeSelectionTarget,
+    options?: {
+      readonly range?: boolean;
+      readonly toggle?: boolean;
+      readonly visibleTargets?: readonly DeformerTreeSelectionTarget[];
+    }
+  ) => void;
   readonly togglePartCollapse: (partId: PartId) => void;
   readonly togglePartEditorVisibility: (partId: PartId) => void;
   readonly updatePartName: (partId: PartId, displayName: string) => void;
@@ -268,6 +301,10 @@ interface EditorSessionContextValue {
     drawableId: DrawableId,
     presetId: MeshGenerationPresetId
   ) => void;
+  readonly previewMeshDrafts: (
+    drawableIds: readonly DrawableId[],
+    presetId: MeshGenerationPresetId
+  ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
   readonly startWarpDeformerDraftForDrawable: (drawableId: DrawableId) => void;
@@ -277,6 +314,10 @@ interface EditorSessionContextValue {
   readonly applyWarpDeformerDraft: () => void;
   readonly cancelWarpDeformerDraft: () => void;
   readonly createRotationDeformerForDrawable: (drawableId: DrawableId) => void;
+  readonly createRotationDeformerForDrawables: (drawableIds: readonly DrawableId[]) => void;
+  readonly createWarpDeformerForDrawables: (drawableIds: readonly DrawableId[]) => void;
+  readonly createRotationDeformerForDeformerTreeSelection: () => void;
+  readonly createWarpDeformerForDeformerTreeSelection: () => void;
   readonly createParentRotationDeformerForRigControl: (rigControlId: RigControlId) => void;
   readonly createParentWarpDeformerForRigControl: (rigControlId: RigControlId) => void;
   readonly bindDrawableToRigControl: (
@@ -348,6 +389,10 @@ export function EditorSessionProvider({
   }, []);
   const { baseDocument, history, session } = editorState;
   const [selection, setSelection] = useState<EditorSelection | null>(() => initialSelection);
+  const [selectionAnchorDrawableId, setSelectionAnchorDrawableId] =
+    useState<DrawableId | null>(() => getSingleSelectedDrawableId(initialSelection) ?? null);
+  const [selectionAnchorDeformerTreeTarget, setSelectionAnchorDeformerTreeTarget] =
+    useState<DeformerTreeSelectionTarget | null>(null);
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
@@ -356,7 +401,8 @@ export function EditorSessionProvider({
   const [editorHiddenPartIds, setEditorHiddenPartIds] = useState<ReadonlySet<PartId>>(
     () => new Set()
   );
-  const [meshDraft, setMeshDraft] = useState<MeshToolDraft | null>(null);
+  const [meshDrafts, setMeshDrafts] = useState<readonly MeshToolDraft[]>([]);
+  const meshDraft = useMemo(() => createMeshToolDraftCompatValue(meshDrafts), [meshDrafts]);
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
@@ -409,7 +455,7 @@ export function EditorSessionProvider({
 
   useEffect(() => {
     if (activeTool !== "mesh") {
-      setMeshDraft(null);
+      setMeshDrafts([]);
     }
   }, [activeTool]);
 
@@ -424,19 +470,19 @@ export function EditorSessionProvider({
   }, [selection]);
 
   useEffect(() => {
+    if (
+      !isDeformerTreeAnchorActiveForSelection(selection, selectionAnchorDeformerTreeTarget)
+    ) {
+      setSelectionAnchorDeformerTreeTarget(null);
+    }
+  }, [selection, selectionAnchorDeformerTreeTarget]);
+
+  useEffect(() => {
     setParameterOperationFeedback(null);
   }, [resolvedActiveParameterId, selection]);
 
   useEffect(() => {
-    setMeshDraft((current) => {
-      if (current === null) {
-        return current;
-      }
-
-      return selection?.kind === "drawable" && selection.id === current.drawableId
-        ? current
-        : null;
-    });
+    setMeshDrafts((current) => filterMeshDraftsForSelection(current, selection));
   }, [selection]);
 
   const resolvePsdImportDestination = useCallback(() => {
@@ -449,7 +495,7 @@ export function EditorSessionProvider({
   }, [session, selection]);
 
   const clearTransientCommitState = useCallback(() => {
-    setMeshDraft(null);
+    setMeshDrafts([]);
     setRigDraft(null);
     setRigOperationFeedback(null);
     setParameterOperationFeedback(null);
@@ -461,6 +507,8 @@ export function EditorSessionProvider({
   }) => {
     clearTransientCommitState();
     setSelection(null);
+    setSelectionAnchorDrawableId(null);
+    setSelectionAnchorDeformerTreeTarget(null);
     setActiveParameterIdState(null);
     setParameterValues({});
     setCollapsedPartIds(createInitialCollapsedPartIds(input.loadedSession));
@@ -637,6 +685,7 @@ export function EditorSessionProvider({
         mergeEditorHiddenPartIds(current, result.editorHiddenPartIds)
       );
       setSelection({ kind: "part", id: plan.importRootPartId });
+      setSelectionAnchorDrawableId(null);
       setPsdImportOpen(false);
     },
     [setEditorSessionState]
@@ -826,11 +875,13 @@ export function EditorSessionProvider({
       "Move structure item"
     );
     if (result.committed) {
-      setSelection(
-        moved.kind === "part"
-          ? { kind: "part", id: moved.partId }
-          : { kind: "drawable", id: moved.drawableId }
-      );
+      if (moved.kind === "part") {
+        setSelection({ kind: "part", id: moved.partId });
+        setSelectionAnchorDrawableId(null);
+      } else {
+        setSelection({ kind: "drawable", id: moved.drawableId });
+        setSelectionAnchorDrawableId(moved.drawableId);
+      }
       return;
     }
 
@@ -840,24 +891,70 @@ export function EditorSessionProvider({
   }, [runCommandWithHistory]);
 
   const selectPart = useCallback((partId: PartId) => {
-    setMeshDraft(null);
+    setMeshDrafts([]);
     setSelection({ kind: "part", id: partId });
+    setSelectionAnchorDrawableId(null);
+    setSelectionAnchorDeformerTreeTarget(null);
   }, []);
 
-  const selectDrawable = useCallback((drawableId: DrawableId) => {
-    setMeshDraft((current) =>
-      current?.drawableId === drawableId ? current : null
-    );
-    setSelection({ kind: "drawable", id: drawableId });
-  }, []);
+  const selectDrawable = useCallback((
+    drawableId: DrawableId,
+    options: {
+      readonly range?: boolean;
+      readonly toggle?: boolean;
+    } = {}
+  ) => {
+    const visibleDrawableIds = structureRows
+      .filter((row): row is Extract<StructureTreeRow, { readonly kind: "drawable" }> =>
+        row.kind === "drawable"
+      )
+      .map((row) => row.id);
+    const mode = options.range ? "range" : options.toggle ? "toggle" : "replace";
+    const transition = resolveDrawableSelectionTransition({
+      currentSelection: selection,
+      anchorDrawableId: selectionAnchorDrawableId,
+      clickedDrawableId: drawableId,
+      visibleDrawableIds,
+      mode
+    });
+    setMeshDrafts((current) => filterMeshDraftsForSelection(current, transition.selection));
+    setSelection(transition.selection);
+    setSelectionAnchorDrawableId(transition.anchorDrawableId);
+    setSelectionAnchorDeformerTreeTarget(null);
+  }, [selection, selectionAnchorDrawableId, structureRows]);
 
   const selectRigControl = useCallback((rigControlId: RigControlId) => {
-    setMeshDraft(null);
+    setMeshDrafts([]);
     setSelection({ kind: "rigControl", id: rigControlId });
+    setSelectionAnchorDrawableId(null);
+    setSelectionAnchorDeformerTreeTarget(null);
   }, []);
 
+  const selectDeformerTreeTarget = useCallback((
+    target: DeformerTreeSelectionTarget,
+    options: {
+      readonly range?: boolean;
+      readonly toggle?: boolean;
+      readonly visibleTargets?: readonly DeformerTreeSelectionTarget[];
+    } = {}
+  ) => {
+    const mode = options.range ? "range" : options.toggle ? "toggle" : "replace";
+    const transition = resolveDeformerTreeSelectionTransition({
+      currentSelection: selection,
+      anchorTarget: selectionAnchorDeformerTreeTarget,
+      clickedTarget: target,
+      visibleTargets: options.visibleTargets ?? [target],
+      mode
+    });
+
+    setMeshDrafts((current) => filterMeshDraftsForSelection(current, transition.selection));
+    setSelection(transition.selection);
+    setSelectionAnchorDrawableId(getSingleSelectedDrawableId(transition.selection) ?? null);
+    setSelectionAnchorDeformerTreeTarget(transition.anchorTarget);
+  }, [selection, selectionAnchorDeformerTreeTarget]);
+
   const cancelMeshDraft = useCallback(() => {
-    setMeshDraft(null);
+    setMeshDrafts([]);
   }, []);
 
   const previewMeshDraft = useCallback(
@@ -865,80 +962,108 @@ export function EditorSessionProvider({
       drawableId: DrawableId,
       presetId: MeshGenerationPresetId
     ) => {
-      const preset = getMeshGenerationPreset(presetId);
-      const generated = createGeneratedMeshForDrawable({
-        session,
-        drawableId,
-        provenanceId: createMeshPreviewProvenanceId(
-          drawableId,
-          presetId,
-          DEFAULT_MESH_GENERATION_METHOD
-        ),
-        method: DEFAULT_MESH_GENERATION_METHOD,
-        densityHint: preset.densityHint
-      });
-      logMeshGenerationPreviewDebug({
-        session,
+      const draft = createMeshToolDraft({
+        commitMode: "single",
         drawableId,
         presetId,
-        method: DEFAULT_MESH_GENERATION_METHOD,
-        densityHint: preset.densityHint,
-        generated
+        session
       });
 
-      if (generated === undefined) {
-        setMeshDraft(null);
-        return;
-      }
+      setMeshDrafts(draft === undefined ? [] : [draft]);
+    },
+    [session]
+  );
 
-      setMeshDraft({
-        drawableId,
-        presetId,
-        method: DEFAULT_MESH_GENERATION_METHOD,
-        mesh: generated.mesh,
-        source: generated.source,
-        ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
-        ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
-        ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
-        ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
-      });
+  const previewMeshDrafts = useCallback(
+    (
+      drawableIds: readonly DrawableId[],
+      presetId: MeshGenerationPresetId
+    ) => {
+      const eligibleDrawableIds = createMeshDrawableBatchTargets(session, drawableIds)
+        .filter((target) => target.eligible)
+        .map((target) => target.drawableId);
+      const drafts = eligibleDrawableIds
+        .map((drawableId) =>
+          createMeshToolDraft({
+            commitMode: "batchEligible",
+            drawableId,
+            presetId,
+            session
+          })
+        )
+        .filter(isDefined);
+
+      setMeshDrafts(drafts);
     },
     [session]
   );
 
   const applyMeshDraft = useCallback(() => {
-    if (meshDraft === null) {
+    if (meshDrafts.length === 0) {
       return;
     }
 
-    const preset = getMeshGenerationPreset(meshDraft.presetId);
+    const draftsToApply = meshDrafts;
+    const committedDrawableIds: DrawableId[] = [];
     const result = runCommandWithHistory(
-      (sessionForCommand) =>
-        commitGenerateMesh(
-          sessionForCommand,
-          meshDraft.drawableId,
-          preset.densityHint,
-          meshDraft.mesh,
-          meshDraft.method,
-          {
-            source: meshDraft.source,
-            ...(meshDraft.fallbackReason === undefined ? {} : { fallbackReason: meshDraft.fallbackReason }),
-            ...(meshDraft.fallbackSteps === undefined ? {} : { fallbackSteps: meshDraft.fallbackSteps }),
-            ...(meshDraft.qualityMetrics === undefined ? {} : { qualityMetrics: meshDraft.qualityMetrics })
+      (sessionForCommand) => {
+        let nextSession = sessionForCommand;
+        const diagnostics: Array<EditorSessionCommandResult["diagnostics"][number]> = [];
+
+        for (const draft of draftsToApply) {
+          if (
+            draft.commitMode === "batchEligible" &&
+            !isMeshGenerationEligible(nextSession, draft.drawableId)
+          ) {
+            continue;
           }
-        ),
-      "Apply mesh"
+
+          const preset = getMeshGenerationPreset(draft.presetId);
+          const draftResult = commitGenerateMesh(
+            nextSession,
+            draft.drawableId,
+            preset.densityHint,
+            draft.mesh,
+            draft.method,
+            {
+              source: draft.source,
+              ...(draft.fallbackReason === undefined ? {} : { fallbackReason: draft.fallbackReason }),
+              ...(draft.fallbackSteps === undefined ? {} : { fallbackSteps: draft.fallbackSteps }),
+              ...(draft.qualityMetrics === undefined ? {} : { qualityMetrics: draft.qualityMetrics })
+            }
+          );
+          diagnostics.push(...draftResult.diagnostics);
+
+          if (!draftResult.committed) {
+            continue;
+          }
+
+          nextSession = draftResult.session;
+          committedDrawableIds.push(draft.drawableId);
+        }
+
+        return committedDrawableIds.length === 0
+          ? { committed: false, session: sessionForCommand, diagnostics }
+          : { committed: true, session: nextSession, diagnostics };
+      },
+      draftsToApply.length === 1 ? "Apply mesh" : "Apply meshes"
     );
     if (result.committed) {
-      setMeshDraft(null);
-      setSelection({ kind: "drawable", id: meshDraft.drawableId });
+      setMeshDrafts([]);
+      if (draftsToApply.length === 1 && draftsToApply[0]?.commitMode === "single") {
+        const committedDrawableId = committedDrawableIds[0]!;
+        setSelection({ kind: "drawable", id: committedDrawableId });
+        setSelectionAnchorDrawableId(committedDrawableId);
+      } else if (committedDrawableIds.length > 1 && selection?.kind === "drawableSet") {
+        setSelection(createDrawableSelection(selection.ids));
+      }
       return;
     }
 
     if (result.diagnostics.length > 0) {
       console.warn("Editor command was rejected.", result.diagnostics);
     }
-  }, [meshDraft, runCommandWithHistory]);
+  }, [meshDrafts, runCommandWithHistory, selection]);
 
   const startWarpDeformerDraftForDrawable = useCallback(
     (drawableId: DrawableId) => {
@@ -948,8 +1073,9 @@ export function EditorSessionProvider({
         return;
       }
 
-      setMeshDraft(null);
+      setMeshDrafts([]);
       setSelection({ kind: "drawable", id: drawableId });
+      setSelectionAnchorDrawableId(drawableId);
       setRigDraft(draft);
     },
     [session]
@@ -990,6 +1116,7 @@ export function EditorSessionProvider({
         const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
         if (rigControlId !== undefined) {
           setSelection({ kind: "rigControl", id: rigControlId });
+          setSelectionAnchorDrawableId(null);
         }
       },
       "Apply Warp Deformer"
@@ -1005,22 +1132,134 @@ export function EditorSessionProvider({
       }
 
       setRigDraft(null);
-      setMeshDraft(null);
+      setMeshDrafts([]);
       applyRigCommand(
         (currentSession) => commitCreateRotationDeformer(currentSession, payload),
         (result) => {
           const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
-          setSelection(
-            rigControlId === undefined
-              ? { kind: "drawable", id: drawableId }
-              : { kind: "rigControl", id: rigControlId }
-          );
+          if (rigControlId === undefined) {
+            setSelection({ kind: "drawable", id: drawableId });
+            setSelectionAnchorDrawableId(drawableId);
+          } else {
+            setSelection({ kind: "rigControl", id: rigControlId });
+            setSelectionAnchorDrawableId(null);
+          }
         },
         "Create Rotation Deformer"
       );
     },
     [applyRigCommand, session]
   );
+
+  const createRotationDeformerForDrawables = useCallback(
+    (drawableIds: readonly DrawableId[]) => {
+      const payload = createRotationDeformerPayloadForUnboundDrawables(session, drawableIds);
+      if (payload === undefined) {
+        setRigOperationFeedback("No unbound selected Drawables are eligible for Rotation Deformer creation.");
+        return;
+      }
+
+      setRigDraft(null);
+      setMeshDrafts([]);
+      applyRigCommand(
+        (currentSession) => commitCreateRotationDeformer(currentSession, payload),
+        (result) => {
+          const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+          if (rigControlId === undefined) {
+            const fallbackSelection = createDrawableSelection(drawableIds);
+            setSelection(fallbackSelection);
+            setSelectionAnchorDrawableId(getSingleSelectedDrawableId(fallbackSelection) ?? null);
+          } else {
+            setSelection({ kind: "rigControl", id: rigControlId });
+            setSelectionAnchorDrawableId(null);
+          }
+        },
+        "Create batch Rotation Deformer"
+      );
+    },
+    [applyRigCommand, session]
+  );
+
+  const createWarpDeformerForDrawables = useCallback(
+    (drawableIds: readonly DrawableId[]) => {
+      const payload = createWarpDeformerPayloadForUnboundDrawables(session, drawableIds);
+      if (payload === undefined) {
+        setRigOperationFeedback("No unbound selected Drawables are eligible for Warp Deformer creation.");
+        return;
+      }
+
+      setRigDraft(null);
+      setMeshDrafts([]);
+      applyRigCommand(
+        (currentSession) => commitCreateWarpDeformer(currentSession, payload),
+        (result) => {
+          const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+          if (rigControlId === undefined) {
+            const fallbackSelection = createDrawableSelection(drawableIds);
+            setSelection(fallbackSelection);
+            setSelectionAnchorDrawableId(getSingleSelectedDrawableId(fallbackSelection) ?? null);
+          } else {
+            setSelection({ kind: "rigControl", id: rigControlId });
+            setSelectionAnchorDrawableId(null);
+          }
+        },
+        "Create batch Warp Deformer"
+      );
+    },
+    [applyRigCommand, session]
+  );
+
+  const createRotationDeformerForDeformerTreeSelection = useCallback(() => {
+    const payload = createRotationDeformerPayloadForDeformerTreeSelection(session, selection);
+    if (payload === undefined) {
+      setRigOperationFeedback("Selected Deformer Tree targets cannot be wrapped by a Rotation Deformer.");
+      return;
+    }
+
+    const fallbackSelection = selection;
+    setRigDraft(null);
+    setMeshDrafts([]);
+    applyRigCommand(
+      (currentSession) => commitCreateRotationDeformer(currentSession, payload),
+      (result) => {
+        const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+        if (rigControlId === undefined) {
+          setSelection(fallbackSelection);
+        } else {
+          setSelection({ kind: "rigControl", id: rigControlId });
+        }
+        setSelectionAnchorDrawableId(null);
+        setSelectionAnchorDeformerTreeTarget(null);
+      },
+      "Create selected Rotation Deformer"
+    );
+  }, [applyRigCommand, selection, session]);
+
+  const createWarpDeformerForDeformerTreeSelection = useCallback(() => {
+    const payload = createWarpDeformerPayloadForDeformerTreeSelection(session, selection);
+    if (payload === undefined) {
+      setRigOperationFeedback("Selected Deformer Tree targets cannot be wrapped by a Warp Deformer.");
+      return;
+    }
+
+    const fallbackSelection = selection;
+    setRigDraft(null);
+    setMeshDrafts([]);
+    applyRigCommand(
+      (currentSession) => commitCreateWarpDeformer(currentSession, payload),
+      (result) => {
+        const rigControlId = (result as { readonly rigControlId?: RigControlId }).rigControlId;
+        if (rigControlId === undefined) {
+          setSelection(fallbackSelection);
+        } else {
+          setSelection({ kind: "rigControl", id: rigControlId });
+        }
+        setSelectionAnchorDrawableId(null);
+        setSelectionAnchorDeformerTreeTarget(null);
+      },
+      "Create selected Warp Deformer"
+    );
+  }, [applyRigCommand, selection, session]);
 
   const createParentRotationDeformerForRigControl = useCallback(
     (rigControlId: RigControlId) => {
@@ -1031,7 +1270,7 @@ export function EditorSessionProvider({
       }
 
       setRigDraft(null);
-      setMeshDraft(null);
+      setMeshDrafts([]);
       applyRigCommand(
         (currentSession) => commitCreateRotationDeformer(currentSession, payload),
         (result) => {
@@ -1041,6 +1280,7 @@ export function EditorSessionProvider({
               ? { kind: "rigControl", id: rigControlId }
               : { kind: "rigControl", id: parentRigControlId }
           );
+          setSelectionAnchorDrawableId(null);
         },
         "Create parent Rotation Deformer"
       );
@@ -1057,7 +1297,7 @@ export function EditorSessionProvider({
       }
 
       setRigDraft(null);
-      setMeshDraft(null);
+      setMeshDrafts([]);
       applyRigCommand(
         (currentSession) => commitCreateWarpDeformer(currentSession, payload),
         (result) => {
@@ -1067,6 +1307,7 @@ export function EditorSessionProvider({
               ? { kind: "rigControl", id: rigControlId }
               : { kind: "rigControl", id: parentRigControlId }
           );
+          setSelectionAnchorDrawableId(null);
         },
         "Create parent Warp Deformer"
       );
@@ -1079,7 +1320,10 @@ export function EditorSessionProvider({
       applyRigCommand(
         (currentSession) =>
           commitBindDrawableToRigControl(currentSession, drawableId, parentRigControlId),
-        () => setSelection({ kind: "drawable", id: drawableId }),
+        () => {
+          setSelection({ kind: "drawable", id: drawableId });
+          setSelectionAnchorDrawableId(drawableId);
+        },
         "Bind Drawable to Deformer"
       );
     },
@@ -1091,7 +1335,10 @@ export function EditorSessionProvider({
       applyRigCommand(
         (currentSession) =>
           commitMoveDrawableRigControlBinding(currentSession, drawableId, targetRigControlId),
-        () => setSelection({ kind: "drawable", id: drawableId }),
+        () => {
+          setSelection({ kind: "drawable", id: drawableId });
+          setSelectionAnchorDrawableId(drawableId);
+        },
         "Move Drawable binding"
       );
     },
@@ -1103,7 +1350,10 @@ export function EditorSessionProvider({
       applyRigCommand(
         (currentSession) =>
           commitReparentRigControl(currentSession, childRigControlId, parentRigControlId),
-        () => setSelection({ kind: "rigControl", id: childRigControlId }),
+        () => {
+          setSelection({ kind: "rigControl", id: childRigControlId });
+          setSelectionAnchorDrawableId(null);
+        },
         "Reparent Deformer"
       );
     },
@@ -1114,7 +1364,10 @@ export function EditorSessionProvider({
     (payload: UpdateRigControlPayloadDto) => {
       applyRigCommand(
         (currentSession) => commitUpdateRigControl(currentSession, payload),
-        () => setSelection({ kind: "rigControl", id: payload.rigControlId }),
+        () => {
+          setSelection({ kind: "rigControl", id: payload.rigControlId });
+          setSelectionAnchorDrawableId(null);
+        },
         "Update Deformer"
       );
     },
@@ -1193,6 +1446,7 @@ export function EditorSessionProvider({
       session,
       selection,
       meshDraft,
+      meshDrafts,
       rigDraft,
       structureRows,
       deformerRows,
@@ -1223,6 +1477,7 @@ export function EditorSessionProvider({
       selectPart,
       selectDrawable,
       selectRigControl,
+      selectDeformerTreeTarget,
       togglePartCollapse,
       togglePartEditorVisibility,
       updatePartName: (partId, displayName) =>
@@ -1255,6 +1510,7 @@ export function EditorSessionProvider({
         applyCommand((currentSession) => commitPartReparent(currentSession, partId, parentPartId)),
       moveStructureChild,
       previewMeshDraft,
+      previewMeshDrafts,
       applyMeshDraft,
       cancelMeshDraft,
       startWarpDeformerDraftForDrawable,
@@ -1264,6 +1520,10 @@ export function EditorSessionProvider({
       applyWarpDeformerDraft: applyRigDraft,
       cancelWarpDeformerDraft: cancelRigDraft,
       createRotationDeformerForDrawable,
+      createRotationDeformerForDrawables,
+      createWarpDeformerForDrawables,
+      createRotationDeformerForDeformerTreeSelection,
+      createWarpDeformerForDeformerTreeSelection,
       createParentRotationDeformerForRigControl,
       createParentWarpDeformerForRigControl,
       bindDrawableToRigControl,
@@ -1290,6 +1550,10 @@ export function EditorSessionProvider({
       createParentRotationDeformerForRigControl,
       createParentWarpDeformerForRigControl,
       createRotationDeformerForDrawable,
+      createRotationDeformerForDrawables,
+      createRotationDeformerForDeformerTreeSelection,
+      createWarpDeformerForDrawables,
+      createWarpDeformerForDeformerTreeSelection,
       createCustomParameter,
       commitGestureCommand,
       commitGestureController,
@@ -1302,6 +1566,7 @@ export function EditorSessionProvider({
       history,
       inspector,
       meshDraft,
+      meshDrafts,
       moveDrawableRigControlBinding,
       openProjectFile,
       openProjectFromPortableBundle,
@@ -1314,6 +1579,7 @@ export function EditorSessionProvider({
       projectStorage,
       psdImportOpen,
       previewMeshDraft,
+      previewMeshDrafts,
       applyRigDraft,
       redo,
       reparentRigControl,
@@ -1328,6 +1594,7 @@ export function EditorSessionProvider({
       selectDrawable,
       selectPart,
       selectRigControl,
+      selectDeformerTreeTarget,
       session,
       setActiveParameterId,
       setActiveParameterValue,
@@ -1355,6 +1622,81 @@ export function useEditorSession() {
   }
 
   return context;
+}
+
+function createMeshToolDraft(input: {
+  readonly session: AuthoringSession;
+  readonly drawableId: DrawableId;
+  readonly presetId: MeshGenerationPresetId;
+  readonly commitMode: MeshToolDraft["commitMode"];
+}): MeshToolDraft | undefined {
+  const preset = getMeshGenerationPreset(input.presetId);
+  const generated = createGeneratedMeshForDrawable({
+    session: input.session,
+    drawableId: input.drawableId,
+    provenanceId: createMeshPreviewProvenanceId(
+      input.drawableId,
+      input.presetId,
+      DEFAULT_MESH_GENERATION_METHOD
+    ),
+    method: DEFAULT_MESH_GENERATION_METHOD,
+    densityHint: preset.densityHint
+  });
+  logMeshGenerationPreviewDebug({
+    session: input.session,
+    drawableId: input.drawableId,
+    presetId: input.presetId,
+    method: DEFAULT_MESH_GENERATION_METHOD,
+    densityHint: preset.densityHint,
+    generated
+  });
+
+  if (generated === undefined) {
+    return undefined;
+  }
+
+  return {
+    drawableId: input.drawableId,
+    presetId: input.presetId,
+    commitMode: input.commitMode,
+    method: DEFAULT_MESH_GENERATION_METHOD,
+    mesh: generated.mesh,
+    source: generated.source,
+    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+    ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
+    ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
+    ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
+  };
+}
+
+function createMeshToolDraftCompatValue(
+  drafts: readonly MeshToolDraft[]
+): MeshToolDraft | null {
+  if (drafts.length === 0) {
+    return null;
+  }
+
+  if (drafts.length === 1) {
+    return drafts[0]!;
+  }
+
+  return {
+    ...drafts[0]!,
+    meshDrafts: drafts
+  };
+}
+
+function filterMeshDraftsForSelection(
+  drafts: readonly MeshToolDraft[],
+  selection: EditorSelection | null
+): readonly MeshToolDraft[] {
+  const selectedDrawableIds = new Set(getSelectedDrawableIds(selection));
+
+  return drafts.filter((draft) => selectedDrawableIds.has(draft.drawableId));
+}
+
+function isDefined<TValue>(value: TValue | undefined): value is TValue {
+  return value !== undefined;
 }
 
 function formatCommandFeedback(result: EditorSessionCommandResult): string {

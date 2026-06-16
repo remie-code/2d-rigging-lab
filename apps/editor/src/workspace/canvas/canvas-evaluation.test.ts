@@ -498,6 +498,34 @@ describe("canvas evaluation", () => {
     expect(face.evaluatedMesh.vertices[0]).toEqual({ x: 7, y: 3 });
     expect(face.bounds).toEqual({ x: 7, y: 3, width: 40, height: 30 });
   });
+
+  it("accepts multiple meshDrafts as evaluation inputs", () => {
+    const session = createFixtureSession();
+    const faceDraft = {
+      ...createMesh(MESH_FACE, DRAW_FACE, 2, 3, 40, 30),
+      vertexStableIds: ["vtx_face_draft_0", "vtx_face_draft_1", "vtx_face_draft_2", "vtx_face_draft_3"]
+    };
+    const hiddenDraft = {
+      ...createMesh(MESH_HIDDEN, DRAW_HIDDEN, 12, 14, 16, 18),
+      vertexStableIds: ["vtx_hidden_draft_0", "vtx_hidden_draft_1", "vtx_hidden_draft_2", "vtx_hidden_draft_3"]
+    };
+
+    const scene = createCanvasEvaluatedScene(session, {
+      meshDrafts: [
+        { drawableId: DRAW_FACE, mesh: faceDraft },
+        { drawableId: DRAW_HIDDEN, mesh: hiddenDraft }
+      ]
+    });
+
+    expect(requireDrawable(scene, DRAW_FACE).evaluatedMesh).toMatchObject({
+      source: "draft",
+      vertices: faceDraft.vertices
+    });
+    expect(requireDrawable(scene, DRAW_HIDDEN).evaluatedMesh).toMatchObject({
+      source: "draft",
+      vertices: hiddenDraft.vertices
+    });
+  });
 });
 
 function requireDrawable(scene: ReturnType<typeof createCanvasEvaluatedScene>, drawableId: DrawableId) {

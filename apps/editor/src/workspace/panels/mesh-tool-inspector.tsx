@@ -10,12 +10,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getPartOrderedChildren } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
-import type { DrawableId, PartId, RectDto } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import {
+  createMeshDrawableBatchTargets,
   getMeshGenerationPreset,
   MESH_GENERATION_PRESETS,
+  type MeshDrawableBatchTarget,
   type MeshGenerationPresetId
 } from "../../features/editor-session/model/mesh-tool-state";
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
@@ -31,8 +33,9 @@ export function MeshToolInspector() {
     applyMeshDraft,
     cancelMeshDraft,
     editorHiddenPartIds,
-    meshDraft,
+    meshDrafts,
     previewMeshDraft,
+    previewMeshDrafts,
     selectDrawable,
     selection,
     session
@@ -45,7 +48,22 @@ export function MeshToolInspector() {
     () => resolveMeshToolTarget(session, selection, editorHiddenPartIds),
     [editorHiddenPartIds, selection, session]
   );
-  const targetDrawableId = target.kind === "drawable" ? target.drawable.drawableId : undefined;
+  const targetDrawableIds = useMemo(() => getMeshToolTargetDrawableIds(target), [target]);
+  const targetKey = targetDrawableIds.join("|");
+  const targetDrawableIdSet = useMemo(() => new Set(targetDrawableIds), [targetDrawableIds]);
+  const draftsForTarget = meshDrafts.filter((draft) => targetDrawableIdSet.has(draft.drawableId));
+  const currentDraft = target.kind === "drawable"
+    ? draftsForTarget.find((draft) => draft.drawableId === target.drawable.drawableId) ?? null
+    : null;
+  const batchTargets = useMemo(
+    () => createMeshDrawableBatchTargets(session, targetDrawableIds),
+    [session, targetDrawableIds]
+  );
+  const eligibleBatchTargets = batchTargets.filter((candidate) => candidate.eligible);
+  const excludedBatchTargets = target.kind === "drawableSet"
+    ? batchTargets.filter((candidate) => !candidate.eligible)
+    : [];
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     setMeshOverlayVisible(true);
@@ -55,7 +73,7 @@ export function MeshToolInspector() {
     return () => {
       cancelMeshDraft();
     };
-  }, [cancelMeshDraft, targetDrawableId]);
+  }, [cancelMeshDraft, targetKey]);
 
   useEffect(() => {
     if (target.kind !== "drawable") {
@@ -106,7 +124,7 @@ export function MeshToolInspector() {
     );
   }
 
-  if (target.kind !== "drawable") {
+  if (target.kind !== "drawable" && target.kind !== "drawableSet") {
     return (
       <>
         <MeshToolHeader title="Mesh" />
@@ -121,26 +139,52 @@ export function MeshToolInspector() {
     );
   }
 
-  const currentDraft = meshDraft?.drawableId === target.drawable.drawableId ? meshDraft : null;
-  const meshStatus = resolveWorkflowStatus(target.mesh, currentDraft !== null);
-  const summaryMesh = currentDraft?.mesh ?? target.mesh;
+  const workflowStatus = target.kind === "drawableSet"
+    ? formatBatchWorkflowStatus(eligibleBatchTargets, excludedBatchTargets, draftsForTarget)
+    : resolveWorkflowStatus(target.mesh, currentDraft !== null);
   const preset = getMeshGenerationPreset(presetId);
+  const generatePreview = (nextPresetId: MeshGenerationPresetId) => {
+    if (target.kind === "drawableSet" && eligibleBatchTargets.length === 0) {
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      if (target.kind === "drawable") {
+        previewMeshDraft(target.drawable.drawableId, nextPresetId);
+      } else if (target.kind === "drawableSet") {
+        previewMeshDrafts(
+          eligibleBatchTargets.map((candidate) => candidate.drawableId),
+          nextPresetId
+        );
+      }
+      setMeshOverlayVisible(true);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
   const previewPreset = (nextPresetId: MeshGenerationPresetId) => {
     setPresetId(nextPresetId);
-    setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId));
-    previewMeshDraft(target.drawable.drawableId, nextPresetId);
-    setMeshOverlayVisible(true);
+    if (target.kind === "drawable") {
+      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId));
+    }
+    generatePreview(nextPresetId);
   };
-  const alphaBounds = currentDraft?.alphaBounds;
-  const fallbackReason = currentDraft?.fallbackReason;
-  const fallbackSummary = formatFallbackSummary(currentDraft?.fallbackSteps, fallbackReason);
-  const qualityMetrics = currentDraft?.qualityMetrics;
-  const v6Metrics = qualityMetrics?.v6Metrics;
-  const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
-  const supportRingDiagnostics = v6Metrics?.supportRingDiagnostics;
-  const adaptiveStaggeredBandDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
-  const poly2triDiagnostics = v6Metrics?.poly2triDiagnostics;
-  const customCdtDiagnostics = v6Metrics?.customCdtDiagnostics;
+  const canGeneratePreview = target.kind === "drawable"
+    ? !isGenerating
+    : !isGenerating && eligibleBatchTargets.length > 0;
+  const canApplyPreview = draftsForTarget.length > 0;
+  const targetNameItems = target.kind === "drawableSet"
+    ? target.drawables.map((candidate) => ({
+        drawableId: candidate.drawable.drawableId,
+        displayName: candidate.drawable.displayName
+      }))
+    : [
+        {
+          drawableId: target.drawable.drawableId,
+          displayName: target.drawable.displayName
+        }
+      ];
 
   return (
     <>
@@ -151,123 +195,30 @@ export function MeshToolInspector() {
       >
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-xs font-semibold uppercase text-neutral-500">Target</h3>
-          <span
-            className={cn(
-              "rounded border px-2 py-0.5 text-[11px] font-medium",
-              target.effectiveVisible
-                ? "border-teal-800/70 bg-teal-950/20 text-teal-100"
-                : "border-neutral-700 bg-neutral-900 text-neutral-300"
-            )}
-          >
-            {target.effectiveVisible ? "Visible" : "Hidden"}
-          </span>
         </div>
-        <div className="mt-2 divide-y divide-neutral-800">
-          <SummaryRow label="Drawable" value={target.drawable.displayName} />
-          <SummaryRow label="Status" testId="mesh-tool-status" value={meshStatus} />
-          <SummaryRow label="Preset" value={preset.label} />
-          <SummaryRow label="Vertices" testId="mesh-tool-vertex-count" value={String(summaryMesh?.vertices.length ?? 0)} />
-          <SummaryRow label="Triangles" testId="mesh-tool-triangle-count" value={String(summaryMesh?.triangles.length ?? 0)} />
-          <SummaryRow label="Source" testId="mesh-tool-source" value={formatMeshSource(currentDraft?.source)} />
-          {fallbackSummary === undefined ? null : (
-            <SummaryRow label="Fallback" value={fallbackSummary} />
-          )}
-          {alphaBounds === undefined ? null : (
-            <SummaryRow label="Alpha bounds" value={formatRect(alphaBounds)} />
-          )}
-          {qualityMetrics === undefined ? null : (
-            <>
-              <SummaryRow label="Max edge" value={formatNumber(qualityMetrics.maxEdgeLength)} />
-              <SummaryRow label="Max area" value={formatNumber(qualityMetrics.maxTriangleArea)} />
-              <SummaryRow label="Min angle" value={`${formatNumber(qualityMetrics.minAngleDegrees)} deg`} />
-              <SummaryRow label="Max valence" value={String(qualityMetrics.maxVertexValence)} />
-              <SummaryRow label="Refinement" value={String(qualityMetrics.refinementIterationCount)} />
-            </>
-          )}
-          {v6Metrics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Generation result"
-                testId="mesh-tool-v6-output-kind"
-                value={`${formatV6Backend(v6Metrics.backendId)} / ${formatV6OutputKind(v6Metrics.outputKind)}`}
-              />
-              <SummaryRow
-                label="Contour counts"
-                value={`B ${v6Metrics.boundaryVertexCount} / I ${v6Metrics.interiorVertexCount}`}
-              />
-              <SummaryRow label="Fallback steps" value={String(v6Metrics.fallbackSteps.length)} />
-              <SummaryRow
-                label="Contour regions"
-                value={`Loops ${v6Metrics.contourLoopCount} / Holes ${v6Metrics.holeLikeRegionCount}`}
-              />
-              <SummaryRow
-                label="Filtered triangles"
-                value={`Removed ${v6Metrics.removedTriangleCount} / Outside ${v6Metrics.outsideOrCrossingTriangleCount}`}
-              />
-            </>
-          )}
-          {supportRingDiagnostics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Support rings"
-                value={`Outer ${supportRingDiagnostics.outerRingPointCount} / Inner ${supportRingDiagnostics.innerRingPointCount}`}
-              />
-              <SummaryRow
-                label="Support band"
-                value={`Band ${supportRingDiagnostics.supportBandTriangleCount} / Interior ${supportRingDiagnostics.interiorTriangleCount}`}
-              />
-            </>
-          )}
-          {adaptiveStaggeredBandDiagnostics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Adaptive density"
-                value={`B ${formatNumber(adaptiveStaggeredBandDiagnostics.resolvedBoundarySpacing)} / I ${formatNumber(adaptiveStaggeredBandDiagnostics.resolvedInteriorSpacing)}`}
-              />
-              <SummaryRow
-                label="Staggered strip"
-                value={`Strip ${adaptiveStaggeredBandDiagnostics.explicitAlphaInnerStripTriangleCount} / Direct ${adaptiveStaggeredBandDiagnostics.directAlphaToInteriorEdgeCount}`}
-              />
-            </>
-          )}
-          {constrainautorDiagnostics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Constraint quality"
-                value={`${constrainautorDiagnostics.preservedConstraintEdgeCount}/${constrainautorDiagnostics.constraintEdgeCount} kept`}
-              />
-              <SummaryRow
-                label="Missing constraints"
-                value={String(constrainautorDiagnostics.missingConstraintEdgeCount)}
-              />
-            </>
-          )}
-          {poly2triDiagnostics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Polygon points"
-                value={`Outer ${poly2triDiagnostics.outerPointCount} / Steiner ${poly2triDiagnostics.steinerPointCount}`}
-              />
-              <SummaryRow
-                label="Boundary quality"
-                value={`${poly2triDiagnostics.boundaryEdgePreservedCount} kept / ${poly2triDiagnostics.boundaryEdgeMissingCount} missing`}
-              />
-            </>
-          )}
-          {customCdtDiagnostics === undefined ? null : (
-            <>
-              <SummaryRow
-                label="Constraint quality"
-                value={`${customCdtDiagnostics.preservedConstraintEdgeCount}/${customCdtDiagnostics.constraintEdgeCount} kept`}
-              />
-              <SummaryRow
-                label="Mesh refinement"
-                value={`Flips ${customCdtDiagnostics.edgeFlipCount} / Spokes ${customCdtDiagnostics.longSpokeCandidateCount}`}
-              />
-            </>
-          )}
-        </div>
+        <ul className="mt-3 flex flex-col gap-1.5">
+          {targetNameItems.map((item) => (
+            <li
+              className="truncate text-xs font-medium text-neutral-200"
+              data-testid="mesh-tool-target-name"
+              key={item.drawableId}
+            >
+              {item.displayName}
+            </li>
+          ))}
+        </ul>
       </section>
+
+      <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
+        <h3 className="text-xs font-semibold uppercase text-neutral-500">Preview</h3>
+        <p className="mt-3 text-xs font-medium text-neutral-200" data-testid="mesh-tool-status">
+          {workflowStatus}
+        </p>
+      </section>
+
+      {excludedBatchTargets.length === 0 ? null : (
+        <ExistingMeshWarning targets={excludedBatchTargets} />
+      )}
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <h3 className="text-xs font-semibold uppercase text-neutral-500">Preset</h3>
@@ -311,21 +262,27 @@ export function MeshToolInspector() {
             <span>{meshOverlayVisible ? "On" : "Off"}</span>
           </button>
           <button
-            className="flex min-h-8 items-center justify-center gap-2 rounded border border-amber-600/70 bg-amber-950/25 px-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/30"
+            className="flex min-h-8 items-center justify-center gap-2 rounded border border-amber-600/70 bg-amber-950/25 px-2 text-xs font-semibold text-amber-100 transition enabled:hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600"
             onClick={() => {
-              setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId));
-              previewMeshDraft(target.drawable.drawableId, presetId);
-              setMeshOverlayVisible(true);
+              if (target.kind === "drawable") {
+                setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId));
+              }
+              generatePreview(presetId);
             }}
+            disabled={!canGeneratePreview}
             type="button"
           >
             <RefreshCw aria-hidden="true" size={14} strokeWidth={1.8} />
-            {target.mesh !== undefined && target.mesh.triangles.length > 0 ? "Regenerate mesh" : "Generate preview"}
+            {isGenerating
+              ? "Generating preview..."
+              : target.kind === "drawable" && target.mesh !== undefined && target.mesh.triangles.length > 0
+                ? "Regenerate mesh"
+                : "Generate preview"}
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button
               className="flex min-h-8 items-center justify-center gap-2 rounded border border-teal-600/70 bg-teal-950/30 px-2 text-xs font-semibold text-teal-100 transition enabled:hover:bg-teal-900/30 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600"
-              disabled={currentDraft === null}
+              disabled={!canApplyPreview}
               onClick={applyMeshDraft}
               type="button"
             >
@@ -334,7 +291,7 @@ export function MeshToolInspector() {
             </button>
             <button
               className="flex min-h-8 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs font-semibold text-neutral-200 transition enabled:hover:border-neutral-700 disabled:cursor-not-allowed disabled:text-neutral-600"
-              disabled={currentDraft === null}
+              disabled={draftsForTarget.length === 0}
               onClick={cancelMeshDraft}
               type="button"
             >
@@ -353,6 +310,10 @@ type MeshToolTarget =
   | {
       readonly kind: "part";
       readonly part: ModelPartDto;
+      readonly drawables: readonly DrawableCandidate[];
+    }
+  | {
+      readonly kind: "drawableSet";
       readonly drawables: readonly DrawableCandidate[];
     }
   | DrawableCandidate & { readonly kind: "drawable" };
@@ -386,6 +347,30 @@ function resolveMeshToolTarget(
     };
   }
 
+  if (selection?.kind === "drawableSet") {
+    return {
+      kind: "drawableSet",
+      drawables: selection.ids
+        .map((drawableId): DrawableCandidate | undefined => {
+          const drawable = drawablesById.get(drawableId);
+          if (drawable === undefined) {
+            return undefined;
+          }
+
+          return {
+            drawable,
+            mesh: meshesById.get(drawable.meshId),
+            effectiveVisible: isDrawableEffectivelyVisible(
+              drawable,
+              partsById,
+              editorHiddenPartIds
+            )
+          };
+        })
+        .filter(isDefined)
+    };
+  }
+
   if (selection?.kind === "part") {
     const part = partsById.get(selection.id);
     if (part === undefined) {
@@ -407,6 +392,18 @@ function resolveMeshToolTarget(
   }
 
   return { kind: "none" };
+}
+
+function getMeshToolTargetDrawableIds(target: MeshToolTarget): readonly DrawableId[] {
+  if (target.kind === "drawable") {
+    return [target.drawable.drawableId];
+  }
+
+  if (target.kind === "drawableSet") {
+    return target.drawables.map((candidate) => candidate.drawable.drawableId);
+  }
+
+  return [];
 }
 
 function collectDrawableCandidates(input: {
@@ -493,10 +490,6 @@ function formatMeshStatus(mesh: MeshDto | undefined): string {
   return "Generated";
 }
 
-function formatRect(rect: RectDto): string {
-  return `${formatNumber(rect.x)}, ${formatNumber(rect.y)}, ${formatNumber(rect.width)} x ${formatNumber(rect.height)}`;
-}
-
 function createPreviewKey(
   drawableId: DrawableId,
   presetId: MeshGenerationPresetId
@@ -504,187 +497,50 @@ function createPreviewKey(
   return `${drawableId}:${presetId}`;
 }
 
-function formatMeshSource(source: string | undefined): string {
-  switch (source) {
-    case "outline-v6a-local-rgba":
-    case "outline-v6b-constrainautor-rgba":
-    case "outline-v6c-poly2tri-rgba":
-    case "outline-v6d-contour-constrainautor-rgba":
-    case "outline-v6e-contour-poly2tri-rgba":
-    case "outline-v6f-contour-custom-cdt-rgba":
-      return "Legacy contour mesh";
-    case "outline-v6d-contour-band-support-rings-rgba":
-      return "Contour support mesh";
-    case "outline-v6d-adaptive-staggered-band-rgba":
-    case "outline-v6d-adaptive-contour-constrainautor-rgba":
-      return "Adaptive contour mesh";
-    case "outline-v4-contour-band-rgba":
-      return "Contour band mesh";
-    case "outline-v2-6-soft-apron-rgba":
-      return "Soft apron mesh";
-    case "outline-v2-5-soft-boundary-rgba":
-      return "Soft boundary mesh";
-    case "outline-v2-rgba":
-      return "Outline mesh";
-    case "outline-rgba":
-      return "Outline mesh";
-    case "alpha-aware-rgba":
-      return "Alpha-aware grid";
-    case "bounds-grid":
-    case undefined:
-      return "Bounds grid";
-    default:
-      return source;
-  }
-}
-
-function formatFallbackSummary(
-  steps: readonly { readonly method: string; readonly reason: string }[] | undefined,
-  fallbackReason: string | undefined
-): string | undefined {
-  if (steps !== undefined && steps.length > 0) {
-    return steps
-      .map((step) => `${formatFallbackMethod(step.method)}: ${formatFallbackReason(step.reason)}`)
-      .join(" > ");
+function formatBatchWorkflowStatus(
+  eligibleTargets: readonly MeshDrawableBatchTarget[],
+  excludedTargets: readonly MeshDrawableBatchTarget[],
+  drafts: readonly { readonly drawableId: DrawableId }[]
+): string {
+  if (drafts.length > 0) {
+    return `${drafts.length} preview${drafts.length === 1 ? "" : "s"} ready`;
   }
 
-  return fallbackReason === undefined ? undefined : formatFallbackReason(fallbackReason);
-}
-
-function formatFallbackMethod(method: string): string {
-  switch (method) {
-    case "auto-outline-v6a-local":
-    case "auto-outline-v6b-constrainautor":
-    case "auto-outline-v6c-poly2tri":
-    case "auto-outline-v6d-contour-constrainautor":
-    case "auto-outline-v6e-contour-poly2tri":
-    case "auto-outline-v6f-contour-custom-cdt":
-      return "Legacy contour mesh";
-    case "auto-outline-v6d-contour-band-support-rings":
-      return "Contour support mesh";
-    case "auto-outline-v6d-adaptive-staggered-band":
-    case "auto-outline-v6d-adaptive-contour-constrainautor":
-      return "Adaptive contour mesh";
-    case "auto-outline-v4-contour-band":
-      return "Contour band mesh";
-    case "auto-outline-v3-envelope":
-      return "Envelope mesh";
-    case "auto-outline-v2.6-soft-apron":
-      return "Soft apron mesh";
-    case "auto-outline-v2.5-soft-boundary":
-      return "Soft boundary mesh";
-    case "auto-outline-v2":
-      return "Outline mesh";
-    case "auto-outline-v1":
-      return "Outline mesh";
-    default:
-      return method;
+  if (eligibleTargets.length === 0) {
+    return excludedTargets.length === 0
+      ? "No eligible Drawable selected"
+      : "All selected Drawables already have meshes";
   }
+
+  return `${eligibleTargets.length} eligible / ${excludedTargets.length} excluded`;
 }
 
-function formatFallbackReason(reason: string): string {
-  switch (reason) {
-    case "texture-bytes-unavailable":
-      return "Texture bytes unavailable";
-    case "invalid-rgba":
-      return "Invalid texture bytes";
-    case "alpha-empty":
-      return "Alpha mask empty";
-    case "contour-extraction-failed":
-      return "Outline extraction failed";
-    case "triangulation-failed":
-      return "Triangulation failed";
-    case "v6-backend-not-implemented":
-      return "Contour backend not available";
-    case "v6a-local-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6b-constrainautor-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6b-invalid-constraints":
-      return "Contour constraints invalid";
-    case "v6b-constraint-recovery-failed":
-      return "Contour constraints failed";
-    case "v6b-backend-threw":
-      return "Contour backend failed";
-    case "v6b-unsupported-hole-region":
-      return "Unsupported contour hole";
-    case "v6c-poly2tri-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6c-poly2tri-polygon-invalid":
-      return "Contour polygon invalid";
-    case "v6c-poly2tri-hole-unsupported":
-      return "Unsupported contour hole";
-    case "v6c-poly2tri-multi-island-unsupported":
-      return "Unsupported multi-island contour";
-    case "v6c-poly2tri-triangulation-threw":
-      return "Contour triangulation failed";
-    case "v6c-poly2tri-boundary-missing":
-      return "Contour boundary missing";
-    case "v6d-constrainautor-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6d-constraint-recovery-failed":
-      return "Contour constraints failed";
-    case "v6d-backend-threw":
-      return "Contour backend failed";
-    case "v6d-support-ring-geometry-invalid":
-      return "Support ring geometry invalid";
-    case "v6d-support-ring-constraint-recovery-failed":
-      return "Support ring constraints failed";
-    case "v6d-adaptive-staggered-band-geometry-invalid":
-      return "Adaptive strip geometry invalid";
-    case "v6d-adaptive-staggered-band-constraint-recovery-failed":
-      return "Adaptive strip constraints failed";
-    case "v6e-poly2tri-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6e-poly2tri-polygon-invalid":
-      return "Contour polygon invalid";
-    case "v6e-poly2tri-triangulation-threw":
-      return "Contour triangulation failed";
-    case "v6f-custom-cdt-generation-failed":
-      return "Contour mesh generation failed";
-    case "v6f-custom-cdt-constraint-recovery-failed":
-      return "Contour constraints failed";
-    case "v6f-custom-cdt-local-improvement-rejected":
-      return "Contour refinement rejected";
-    default:
-      return reason;
-  }
-}
-
-function formatV6Backend(backendId: string): string {
-  switch (backendId) {
-    case "v6a-local":
-    case "v6b-constrainautor":
-    case "v6c-poly2tri":
-    case "v6d-contour-constrainautor":
-    case "v6e-contour-poly2tri":
-    case "v6f-contour-custom-cdt":
-      return "Legacy contour mesh";
-    case "v6d-contour-band-support-rings":
-      return "Contour support mesh";
-    case "v6d-adaptive-staggered-band":
-    case "v6d-adaptive-contour-constrainautor":
-      return "Adaptive contour mesh";
-    default:
-      return backendId;
-  }
-}
-
-function formatV6OutputKind(outputKind: string): string {
-  switch (outputKind) {
-    case "backend-output":
-      return "Generated";
-    case "fallback-output":
-      return "Fallback";
-    case "blocked":
-      return "Blocked";
-    default:
-      return outputKind;
-  }
-}
-
-function formatNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+function ExistingMeshWarning({
+  targets
+}: {
+  readonly targets: readonly MeshDrawableBatchTarget[];
+}) {
+  return (
+    <section
+      className="rounded-md border border-amber-700/60 bg-amber-950/20 p-3"
+      data-testid="mesh-tool-existing-mesh-warning"
+    >
+      <h3 className="text-xs font-semibold uppercase text-amber-200">
+        Existing meshes excluded
+      </h3>
+      <ul className="mt-3 flex flex-col gap-1.5">
+        {targets.map((target) => (
+          <li
+            className="truncate text-xs text-amber-100"
+            data-testid="mesh-tool-existing-mesh-name"
+            key={target.drawableId}
+          >
+            {target.displayName}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function MeshToolHeader({ title }: { readonly title: string }) {
@@ -698,24 +554,6 @@ function MeshToolHeader({ title }: { readonly title: string }) {
   );
 }
 
-function SummaryRow({
-  label,
-  testId,
-  value
-}: {
-  readonly label: string;
-  readonly testId?: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="flex min-h-8 items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-neutral-500">{label}</span>
-      <span
-        className="truncate text-xs font-medium text-neutral-200"
-        data-testid={testId}
-      >
-        {value}
-      </span>
-    </div>
-  );
+function isDefined<TValue>(value: TValue | undefined): value is TValue {
+  return value !== undefined;
 }

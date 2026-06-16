@@ -29,7 +29,8 @@ import {
   insertRigControlBetweenParentAndChild,
   moveDrawableRigControlBinding,
   reparentRigControl,
-  updateRigControl
+  updateRigControl,
+  wrapRigControlChildren
 } from "./rig-control-mutations.js";
 import { AuthoringMutationError } from "./authoring-mutations.js";
 import { toPackageDocument } from "./to-package-document.js";
@@ -51,6 +52,7 @@ describe("rig control authoring mutations", () => {
       childDrawableIds: ["draw_body"],
       childRigControlIds: []
     });
+    expect(result.rigControl).not.toHaveProperty("partId");
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
     expect(session.graph.rigControlRootIds).toEqual(["rig_head"]);
@@ -103,6 +105,7 @@ describe("rig control authoring mutations", () => {
       childDrawableIds: ["draw_body"],
       interpolationMethod: "bilinear-grid-v1"
     });
+    expect(result.rigControl).not.toHaveProperty("partId");
     expect(result.rigControl.restControlPoints).toEqual([
       { x: 0, y: 0 },
       { x: 100, y: 0 },
@@ -119,6 +122,26 @@ describe("rig control authoring mutations", () => {
         restControlPoints: result.rigControl.restControlPoints
       })
     );
+  });
+
+  it("preserves legacy partId metadata when explicit legacy rig controls are authored", () => {
+    const session = createFixtureSession();
+
+    const rotation = createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_legacy_rotation", "Legacy Rotation", {
+        partId: "part_root"
+      })
+    );
+    const warp = createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_legacy_warp", "Legacy Warp", {
+        partId: "part_root"
+      })
+    );
+
+    expect(rotation.rigControl).toHaveProperty("partId", "part_root");
+    expect(warp.rigControl).toHaveProperty("partId", "part_root");
   });
 
   it("binds child rig controls and updates graph roots for package materialization", () => {
@@ -254,6 +277,218 @@ describe("rig control authoring mutations", () => {
       opacityMultiplier: 1
     });
     expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+  });
+
+  it("wraps multiple drawable children under one new parent without moving unselected siblings", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_b", "B");
+    addFixtureDrawable(session, "draw_c", "C");
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_parent", "Parent", {
+        childDrawableIds: ["draw_a", "draw_b", "draw_c"]
+      })
+    );
+    const parentBefore = structuredClone(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent")));
+
+    const result = wrapRigControlChildren(
+      session,
+      createRotationRigControl("rig_wrapper", "Wrapper", {
+        childDrawableIds: ["draw_a", "draw_b"]
+      }),
+      {
+        wrapChildren: [
+          { kind: "drawable", id: DrawableIdSchema.parse("draw_a") },
+          { kind: "drawable", id: DrawableIdSchema.parse("draw_b") }
+        ]
+      }
+    );
+
+    expect(result.parentRigControlBefore?.childDrawableIds).toEqual(["draw_a", "draw_b", "draw_c"]);
+    expect(result.parentRigControlAfter?.childDrawableIds).toEqual(["draw_c"]);
+    expect(result.parentRigControlAfter?.childRigControlIds).toEqual(["rig_wrapper"]);
+    expect(result.rigControl).toMatchObject({
+      rigControlId: "rig_wrapper",
+      parentId: "rig_parent",
+      childDrawableIds: ["draw_a", "draw_b"],
+      childRigControlIds: []
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent"))).toMatchObject({
+      pivot: parentBefore?.kind === "rotation2d" ? parentBefore.pivot : undefined,
+      restAngleDegrees: parentBefore?.kind === "rotation2d" ? parentBefore.restAngleDegrees : undefined,
+      childDrawableIds: ["draw_c"],
+      childRigControlIds: ["rig_wrapper"]
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+  });
+
+  it("wraps mixed direct drawable and child rig-control siblings with an unbound drawable", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_unbound", "Unbound");
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_parent", "Parent", {
+        childDrawableIds: ["draw_a"]
+      })
+    );
+    createWarpLattice2dRigControl(session, createWarpLatticeRigControl("rig_child_warp", "Child Warp"));
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_child_warp" }
+    });
+    const parentBefore = structuredClone(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent")));
+    const childBefore = structuredClone(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_warp")));
+
+    const result = wrapRigControlChildren(
+      session,
+      createWarpLatticeRigControl("rig_wrapper_warp", "Wrapper Warp", {
+        childDrawableIds: ["draw_a", "draw_unbound"],
+        childRigControlIds: ["rig_child_warp"]
+      }),
+      {
+        wrapChildren: [
+          { kind: "drawable", id: DrawableIdSchema.parse("draw_a") },
+          { kind: "rigControl", id: RigControlIdSchema.parse("rig_child_warp") },
+          { kind: "drawable", id: DrawableIdSchema.parse("draw_unbound") }
+        ]
+      }
+    );
+
+    expect(result.parentRigControlBefore).toEqual(parentBefore);
+    expect(result.parentRigControlAfter?.childDrawableIds).toEqual([]);
+    expect(result.parentRigControlAfter?.childRigControlIds).toEqual(["rig_wrapper_warp"]);
+    expect(result.childRigControlChanges).toHaveLength(1);
+    expect(result.childRigControlChanges[0]?.before).toEqual(childBefore);
+    expect(result.childRigControlChanges[0]?.after).toMatchObject({
+      rigControlId: "rig_child_warp",
+      parentId: "rig_wrapper_warp"
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_wrapper_warp"))).toMatchObject({
+      parentId: "rig_parent",
+      childDrawableIds: ["draw_a", "draw_unbound"],
+      childRigControlIds: ["rig_child_warp"],
+      domainBounds: { x: 0, y: 0, width: 100, height: 100 }
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_warp"))).toMatchObject({
+      parentId: "rig_wrapper_warp",
+      kind: "warpLattice2d",
+      domainBounds: childBefore?.kind === "warpLattice2d" ? childBefore.domainBounds : undefined,
+      restControlPoints: childBefore?.kind === "warpLattice2d" ? childBefore.restControlPoints : undefined
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+  });
+
+  it("wraps root rig controls into one new root wrapper", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_unbound", "Unbound");
+    createRotation2dRigControl(session, createRotationRigControl("rig_root_a", "Root A"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_root_b", "Root B"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_root_c", "Root C"));
+
+    const result = wrapRigControlChildren(
+      session,
+      createRotationRigControl("rig_root_wrapper", "Root Wrapper", {
+        childDrawableIds: ["draw_unbound"],
+        childRigControlIds: ["rig_root_a", "rig_root_b"]
+      }),
+      {
+        wrapChildren: [
+          { kind: "rigControl", id: RigControlIdSchema.parse("rig_root_a") },
+          { kind: "rigControl", id: RigControlIdSchema.parse("rig_root_b") },
+          { kind: "drawable", id: DrawableIdSchema.parse("draw_unbound") }
+        ]
+      }
+    );
+
+    expect(result.rigControlRootIdsBefore).toEqual(["rig_root_a", "rig_root_b", "rig_root_c"]);
+    expect(result.rigControlRootIdsAfter).toEqual(["rig_root_wrapper", "rig_root_c"]);
+    expect(session.graph.rigControlRootIds).toEqual(["rig_root_wrapper", "rig_root_c"]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_wrapper"))).toMatchObject({
+      childDrawableIds: ["draw_unbound"],
+      childRigControlIds: ["rig_root_a", "rig_root_b"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_a"))).toMatchObject({
+      parentId: "rig_root_wrapper"
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_b"))).toMatchObject({
+      parentId: "rig_root_wrapper"
+    });
+  });
+
+  it("rejects incoherent bulk wrap selections deterministically", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_b", "B");
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_parent_a", "Parent A", {
+        childDrawableIds: ["draw_a"]
+      })
+    );
+    createRotation2dRigControl(
+      session,
+      createRotationRigControl("rig_parent_b", "Parent B", {
+        childDrawableIds: ["draw_b"]
+      })
+    );
+    createRotation2dRigControl(session, createRotationRigControl("rig_child", "Child"));
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent_a"),
+      child: { kind: "rigControl", id: "rig_child" }
+    });
+
+    expectWrapError(
+      session,
+      createRotationRigControl("rig_dup_wrapper", "Duplicate Wrapper", {
+        childDrawableIds: ["draw_a", "draw_a"]
+      }),
+      [
+        { kind: "drawable", id: DrawableIdSchema.parse("draw_a") },
+        { kind: "drawable", id: DrawableIdSchema.parse("draw_a") }
+      ],
+      "duplicate_rig_control_child"
+    );
+    expectWrapError(
+      session,
+      createRotationRigControl("rig_missing_wrapper", "Missing Wrapper", {
+        childDrawableIds: ["draw_missing"]
+      }),
+      [{ kind: "drawable", id: DrawableIdSchema.parse("draw_missing") }],
+      "missing_drawable"
+    );
+    expectWrapError(
+      session,
+      createRotationRigControl("rig_mixed_parent_wrapper", "Mixed Parent Wrapper", {
+        childDrawableIds: ["draw_a", "draw_b"]
+      }),
+      [
+        { kind: "drawable", id: DrawableIdSchema.parse("draw_a") },
+        { kind: "drawable", id: DrawableIdSchema.parse("draw_b") }
+      ],
+      "rig_control_parent_child_mismatch"
+    );
+    expectWrapError(
+      session,
+      createRotationRigControl("rig_ancestor_wrapper", "Ancestor Wrapper", {
+        childRigControlIds: ["rig_parent_a", "rig_child"]
+      }),
+      [
+        { kind: "rigControl", id: RigControlIdSchema.parse("rig_parent_a") },
+        { kind: "rigControl", id: RigControlIdSchema.parse("rig_child") }
+      ],
+      "rig_control_cycle"
+    );
+    expectWrapError(
+      session,
+      createRotationRigControl("rig_mismatch_wrapper", "Mismatch Wrapper", {
+        childDrawableIds: ["draw_a"]
+      }),
+      [{ kind: "drawable", id: DrawableIdSchema.parse("draw_a") }],
+      "rig_control_parent_child_mismatch",
+      RigControlIdSchema.parse("rig_parent_b")
+    );
   });
 
   it("updates committed rig control fields and rejects division cardinality changes with keyforms", () => {
@@ -470,6 +705,7 @@ const createRotationRigControl = (
   rigControlId: string,
   displayName: string,
   overrides: Partial<{
+    readonly partId: string;
     readonly childDrawableIds: readonly string[];
     readonly childRigControlIds: readonly string[];
   }> = {}
@@ -477,7 +713,7 @@ const createRotationRigControl = (
   kind: "rotation2d" as const,
   rigControlId: RigControlIdSchema.parse(rigControlId),
   displayName,
-  partId: PartIdSchema.parse("part_root"),
+  ...(overrides.partId === undefined ? {} : { partId: PartIdSchema.parse(overrides.partId) }),
   childDrawableIds: (overrides.childDrawableIds ?? []).map((drawableId) =>
     DrawableIdSchema.parse(drawableId)
   ),
@@ -495,6 +731,7 @@ const createWarpLatticeRigControl = (
   rigControlId: string,
   displayName: string,
   overrides: Partial<{
+    readonly partId: string;
     readonly childDrawableIds: readonly string[];
     readonly childRigControlIds: readonly string[];
   }> = {}
@@ -502,7 +739,7 @@ const createWarpLatticeRigControl = (
   kind: "warpLattice2d" as const,
   rigControlId: RigControlIdSchema.parse(rigControlId),
   displayName,
-  partId: PartIdSchema.parse("part_root"),
+  ...(overrides.partId === undefined ? {} : { partId: PartIdSchema.parse(overrides.partId) }),
   childDrawableIds: (overrides.childDrawableIds ?? []).map((drawableId) =>
     DrawableIdSchema.parse(drawableId)
   ),
@@ -522,6 +759,52 @@ const createWarpLatticeRigControl = (
   interpolationMethod: "bilinear-grid-v1" as const,
   enabled: true
 });
+
+const expectWrapError = (
+  session: AuthoringSession,
+  rigControl: ReturnType<typeof createRotationRigControl> | ReturnType<typeof createWarpLatticeRigControl>,
+  wrapChildren: Parameters<typeof wrapRigControlChildren>[2]["wrapChildren"],
+  expectedCode: AuthoringMutationError["code"],
+  parentRigControlId?: Parameters<typeof wrapRigControlChildren>[2]["parentRigControlId"]
+): void => {
+  const before = structuredClone(session.graph);
+  let caught: unknown;
+  try {
+    wrapRigControlChildren(session, rigControl, {
+      wrapChildren,
+      ...(parentRigControlId === undefined ? {} : { parentRigControlId })
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(AuthoringMutationError);
+  expect((caught as AuthoringMutationError).code).toBe(expectedCode);
+  expect(session.graph).toEqual(before);
+};
+
+const addFixtureDrawable = (
+  session: AuthoringSession,
+  drawableId: string,
+  displayName: string
+): void => {
+  const parsedDrawableId = DrawableIdSchema.parse(drawableId);
+  const suffix = drawableId.replace(/^draw_/, "");
+  session.graph.parts[0]?.drawableIds.push(parsedDrawableId);
+  session.graph.drawables.push({
+    drawableId: parsedDrawableId,
+    displayName,
+    partId: PartIdSchema.parse("part_root"),
+    sourceAssetId: SourceAssetIdSchema.parse(`src_${suffix}`),
+    textureId: TextureIdSchema.parse(`tex_${suffix}`),
+    meshId: MeshIdSchema.parse(`mesh_${suffix}`),
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder: session.graph.drawables.length,
+    sourceProvenanceId: ProvenanceIdSchema.parse(`prov_${suffix}`)
+  });
+  session.graph.stableOrder.push(parsedDrawableId);
+};
 
 const createFixtureSession = (): AuthoringSession => ({
   packageIdentity: {

@@ -141,6 +141,7 @@ describe("authoring portable project bundle adapter", () => {
         { x: 64, y: 64 }
       ]
     });
+    expect(importedWarp).not.toHaveProperty("partId");
     expect(importedWarpKeyform?.keys.map((key) => key.statePatch)).toEqual([
       [
         { x: -2, y: 0 },
@@ -157,6 +158,7 @@ describe("authoring portable project bundle adapter", () => {
     ]);
     expect(importedRotation).toMatchObject({
       kind: "rotation2d",
+      partId: PART_HEAD_CONTAINER,
       pivot: { x: 32, y: 32 },
       restAngleDegrees: 5,
       restTranslation: { x: 6, y: -3 },
@@ -486,7 +488,6 @@ function createRiggedTextureSession(
           kind: "warpLattice2d",
           rigControlId: RigControlIdSchema.parse("rig_head_warp"),
           displayName: "Head Warp",
-          partId: PART_HEAD_CONTAINER,
           parentId: RigControlIdSchema.parse("rig_head_rotate"),
           childDrawableIds: [DrawableIdSchema.parse("draw_head")],
           childRigControlIds: [],

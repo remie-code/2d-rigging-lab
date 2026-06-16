@@ -19,7 +19,7 @@ export interface WarpDeformerReadProjectionDto {
   readonly storageKind: typeof WARP_DEFORMER_STORAGE_KIND;
   readonly rigControlId: string;
   readonly displayName: string;
-  readonly partId: string;
+  readonly partId?: string;
   readonly parentRigControlId?: string;
   readonly childDrawableIds: readonly string[];
   readonly childRigControlIds: readonly string[];
@@ -61,7 +61,7 @@ export const projectWarpDeformerReadModel = (
     storageKind: WARP_DEFORMER_STORAGE_KIND,
     rigControlId: rigControl.rigControlId,
     displayName: rigControl.displayName,
-    partId: rigControl.partId,
+    ...(rigControl.partId === undefined ? {} : { partId: rigControl.partId }),
     ...(rigControl.parentId === undefined ? {} : { parentRigControlId: rigControl.parentId }),
     childDrawableIds: [...rigControl.childDrawableIds],
     childRigControlIds: [...rigControl.childRigControlIds],

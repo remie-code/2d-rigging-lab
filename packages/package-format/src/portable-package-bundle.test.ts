@@ -60,6 +60,85 @@ describe("portable package bundle writer/importer", () => {
     expect(Array.from(importedEntry?.bytes ?? [])).toEqual([0x61, 0x62, 0x63]);
   });
 
+  it("round-trips legacy and current rig controls through portable package bundles", async () => {
+    const binaryAssetRef = createBinaryAssetReference();
+    const baseDocument = createPackageDocumentWithSourceBinaryRef(binaryAssetRef);
+    const packageDocument = PackageDocumentSchema.parse({
+      ...baseDocument,
+      model: {
+        ...baseDocument.model,
+        graph: {
+          ...baseDocument.model.graph,
+          rigControlRootIds: ["rig_legacy_rotation", "rig_current_warp"],
+          stableOrder: [
+            ...baseDocument.model.graph.stableOrder,
+            "rig_legacy_rotation",
+            "rig_current_warp"
+          ]
+        },
+        rigControls: {
+          schemaVersion: "rig-controls-file-v1",
+          rigControls: [
+            {
+              kind: "rotation2d",
+              rigControlId: "rig_legacy_rotation",
+              displayName: "Legacy Rotation",
+              partId: "part_root",
+              childDrawableIds: ["draw_body"],
+              childRigControlIds: [],
+              pivot: { x: 64, y: 64 },
+              restAngleDegrees: 0,
+              restTranslation: { x: 0, y: 0 },
+              restScale: { x: 1, y: 1 },
+              enabled: true
+            },
+            {
+              kind: "warpLattice2d",
+              rigControlId: "rig_current_warp",
+              displayName: "Current Warp",
+              childDrawableIds: [],
+              childRigControlIds: [],
+              bindSpace: "rigControlLocalRest",
+              domainBounds: { x: 0, y: 0, width: 128, height: 128 },
+              latticeColumns: 2,
+              latticeRows: 2,
+              restControlPoints: [
+                { x: 0, y: 0 },
+                { x: 128, y: 0 },
+                { x: 0, y: 128 },
+                { x: 128, y: 128 }
+              ],
+              interpolationMethod: "bilinear-grid-v1",
+              enabled: true
+            }
+          ]
+        }
+      }
+    });
+
+    const bundle = await exportPortablePackageBundleV0({
+      packageDocument,
+      fileSet: createPackageInMemoryFileSet([
+        createPackageBinaryFileEntry({
+          path: binaryAssetRef.packageRelativePath,
+          bytes: TEST_BYTES,
+          mediaType: binaryAssetRef.mediaType,
+          binaryAssetId: binaryAssetRef.binaryAssetId
+        })
+      ])
+    });
+    const imported = await importPortablePackageBundleV0({ bundle: JSON.stringify(bundle) });
+
+    expect(imported.packageDocument.model.rigControls.rigControls).toEqual(
+      packageDocument.model.rigControls.rigControls
+    );
+    expect(imported.packageDocument.model.rigControls.rigControls[0]).toHaveProperty(
+      "partId",
+      "part_root"
+    );
+    expect(imported.packageDocument.model.rigControls.rigControls[1]).not.toHaveProperty("partId");
+  });
+
   it("fails export when referenced bytes are missing, require reupload, or do not verify", async () => {
     const binaryAssetRef = createBinaryAssetReference();
     const packageDocument = createPackageDocumentWithSourceBinaryRef(binaryAssetRef);

@@ -27,7 +27,7 @@ import { AuthoringMutationError } from "./authoring-mutations.js";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
-import { getDrawableById, getPartById } from "./drawable-selectors.js";
+import { getDrawableById } from "./drawable-selectors.js";
 import { getRigControlById, hasRigControl } from "./rig-control-selectors.js";
 import { addStableOrderId } from "./stable-order-mutations.js";
 
@@ -121,6 +121,33 @@ export interface InsertRigControlBetweenParentAndChildMutationResult {
   readonly authoringRevision: AuthoringRevision;
 }
 
+export type RigControlWrapChildTarget =
+  | {
+      readonly kind: "drawable";
+      readonly id: DrawableId;
+    }
+  | {
+      readonly kind: "rigControl";
+      readonly id: RigControlId;
+    };
+
+export interface WrapRigControlChildrenInput {
+  readonly wrapChildren: readonly RigControlWrapChildTarget[];
+  readonly parentRigControlId?: RigControlId;
+}
+
+export interface WrapRigControlChildrenMutationResult {
+  readonly session: AuthoringSession;
+  readonly rigControl: RigControlDto;
+  readonly parentRigControlBefore?: RigControlDto;
+  readonly parentRigControlAfter?: RigControlDto;
+  readonly childRigControlChanges: readonly RigControlMutationChange[];
+  readonly wrapChildren: readonly RigControlWrapChildTarget[];
+  readonly rigControlRootIdsBefore: readonly RigControlId[];
+  readonly rigControlRootIdsAfter: readonly RigControlId[];
+  readonly authoringRevision: AuthoringRevision;
+}
+
 export interface UpdateRigControlInput {
   readonly rigControlId: RigControlId;
   readonly displayName?: string;
@@ -150,12 +177,18 @@ interface WarpLattice2dRigControlFieldUpdate {
   readonly warpDeformer: WarpLattice2dRigControlDto["warpDeformer"];
 }
 
+interface WrapRigControlChildrenPlan {
+  readonly parentRigControl?: RigControlDto;
+  readonly selectedDrawableIds: readonly DrawableId[];
+  readonly selectedRigControlIds: readonly RigControlId[];
+  readonly selectedRootRigControlIds: readonly RigControlId[];
+}
+
 export const createRotation2dRigControl = (
   session: AuthoringSession,
   rigControl: Rotation2dRigControlDto
 ): CreateRotation2dRigControlMutationResult => {
   assertUniqueRigControlId(session, rigControl.rigControlId);
-  assertPartExists(session, rigControl);
   assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
   assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
   assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
@@ -192,7 +225,6 @@ export const createWarpLattice2dRigControl = (
 ): CreateWarpLattice2dRigControlMutationResult => {
   assertWarpLattice2dRigControlShape(rigControl);
   assertUniqueRigControlId(session, rigControl.rigControlId);
-  assertPartExists(session, rigControl);
   assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
   assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
   assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
@@ -478,7 +510,6 @@ export const insertRigControlBetweenParentAndChild = (
     assertWarpLattice2dRigControlShape(rigControl);
   }
   assertUniqueRigControlId(session, rigControl.rigControlId);
-  assertPartExists(session, rigControl);
   assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
   assertInsertionPayloadChildren(rigControl, input.child);
 
@@ -543,6 +574,73 @@ export const insertRigControlBetweenParentAndChild = (
     parentRigControlAfter,
     ...(childRigControlChange === undefined ? {} : { childRigControlChange }),
     child: input.child,
+    rigControlRootIdsBefore,
+    rigControlRootIdsAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const wrapRigControlChildren = (
+  session: AuthoringSession,
+  rigControl: RigControlDto,
+  input: WrapRigControlChildrenInput
+): WrapRigControlChildrenMutationResult => {
+  if (rigControl.kind === "warpLattice2d") {
+    assertWarpLattice2dRigControlShape(rigControl);
+  }
+  assertUniqueRigControlId(session, rigControl.rigControlId);
+  assertRigControlOpacityMultiplier(rigControl.opacityMultiplier);
+  assertUniqueWrapChildren(input.wrapChildren);
+  assertWrapPayloadChildren(rigControl, input.wrapChildren);
+
+  const plan = createWrapRigControlChildrenPlan(session.graph, rigControl.rigControlId, input);
+  const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
+  const parentRigControlBefore =
+    plan.parentRigControl === undefined ? undefined : structuredClone(plan.parentRigControl);
+  const storedRigControl = withDefaultOpacityMultiplier({
+    ...rigControl,
+    ...(plan.parentRigControl === undefined ? {} : { parentId: plan.parentRigControl.rigControlId })
+  } as RigControlDto);
+  const selectedRigControlIds = new Set(plan.selectedRigControlIds);
+  const selectedDrawableIds = new Set(plan.selectedDrawableIds);
+
+  if (plan.parentRigControl === undefined) {
+    session.graph.rigControlRootIds = replaceSelectedIdsWithWrapper(
+      session.graph.rigControlRootIds,
+      new Set(plan.selectedRootRigControlIds),
+      storedRigControl.rigControlId
+    );
+  } else {
+    plan.parentRigControl.childDrawableIds = plan.parentRigControl.childDrawableIds.filter(
+      (childDrawableId) => !selectedDrawableIds.has(childDrawableId)
+    );
+    plan.parentRigControl.childRigControlIds = replaceSelectedIdsWithWrapper(
+      plan.parentRigControl.childRigControlIds,
+      selectedRigControlIds,
+      storedRigControl.rigControlId
+    );
+  }
+
+  const childRigControlChanges = plan.selectedRigControlIds.map((childRigControlId) =>
+    setChildRigControlParent(session.graph, childRigControlId, storedRigControl.rigControlId)
+  );
+
+  session.graph.rigControls.push(storedRigControl);
+  addStableOrderId(session.graph, storedRigControl.rigControlId);
+  const parentRigControlAfter =
+    plan.parentRigControl === undefined ? undefined : structuredClone(plan.parentRigControl);
+  const rigControlRootIdsAfter = cloneDto(session.graph.rigControlRootIds);
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    rigControl: storedRigControl,
+    ...(parentRigControlBefore === undefined ? {} : { parentRigControlBefore }),
+    ...(parentRigControlAfter === undefined ? {} : { parentRigControlAfter }),
+    childRigControlChanges,
+    wrapChildren: cloneDto(input.wrapChildren),
     rigControlRootIdsBefore,
     rigControlRootIdsAfter,
     authoringRevision: session.authoringRevision
@@ -762,18 +860,6 @@ const assertWarpDeformerShape = (rigControl: WarpLattice2dRigControlDto): void =
   }
 };
 
-const assertPartExists = (
-  session: AuthoringSession,
-  rigControl: Pick<RigControlDto, "partId" | "rigControlId">
-): void => {
-  if (getPartById(session.graph, rigControl.partId) === undefined) {
-    throw new AuthoringMutationError(
-      "missing_part",
-      `Rig control part does not exist: ${rigControl.partId}`
-    );
-  }
-};
-
 const assertUniqueChildIds = (
   childIds: readonly string[],
   childKind: "drawable" | "rigControl"
@@ -885,6 +971,246 @@ const assertInsertionPayloadChildren = (
     "invalid_rig_control_child_kind",
     `Rig control insertion child must be drawable or rigControl: ${child.kind}`
   );
+};
+
+const assertUniqueWrapChildren = (
+  wrapChildren: readonly RigControlWrapChildTarget[]
+): void => {
+  if (wrapChildren.length === 0) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      "Wrap create requires at least one selected child target"
+    );
+  }
+
+  const seen = new Set<string>();
+  for (const child of wrapChildren) {
+    const childKind = (child as { readonly kind: string }).kind;
+    if (childKind !== "drawable" && childKind !== "rigControl") {
+      throw new AuthoringMutationError(
+        "invalid_rig_control_child_kind",
+        `Rig control wrap child must be drawable or rigControl: ${childKind}`
+      );
+    }
+
+    const key = `${child.kind}:${child.id}`;
+    if (seen.has(key)) {
+      throw new AuthoringMutationError(
+        "duplicate_rig_control_child",
+        `Rig control wrap child is duplicated: ${child.id}`
+      );
+    }
+    seen.add(key);
+  }
+};
+
+const assertWrapPayloadChildren = (
+  rigControl: RigControlDto,
+  wrapChildren: readonly RigControlWrapChildTarget[]
+): void => {
+  const expectedDrawableIds = wrapChildren
+    .filter((child): child is Extract<RigControlWrapChildTarget, { readonly kind: "drawable" }> =>
+      child.kind === "drawable"
+    )
+    .map((child) => parseDrawableChildId(child));
+  const expectedRigControlIds = wrapChildren
+    .filter((child): child is Extract<RigControlWrapChildTarget, { readonly kind: "rigControl" }> =>
+      child.kind === "rigControl"
+    )
+    .map((child) => parseRigControlChildId(child));
+
+  if (
+    !sameOrderedIds(rigControl.childDrawableIds, expectedDrawableIds) ||
+    !sameOrderedIds(rigControl.childRigControlIds, expectedRigControlIds)
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      "Wrap create requires the new rig control child lists to match wrapChildren"
+    );
+  }
+};
+
+const createWrapRigControlChildrenPlan = (
+  graph: AuthoringGraph,
+  newRigControlId: RigControlId,
+  input: WrapRigControlChildrenInput
+): WrapRigControlChildrenPlan => {
+  const selectedDrawableIds: DrawableId[] = [];
+  const selectedRigControlIds: RigControlId[] = [];
+  const selectedRootRigControlIds: RigControlId[] = [];
+  const parentedParentIds: RigControlId[] = [];
+
+  for (const child of input.wrapChildren) {
+    if (child.kind === "drawable") {
+      const drawableId = parseDrawableChildId(child);
+      assertDrawableWrapTargetSource(graph, drawableId, parentedParentIds);
+      selectedDrawableIds.push(drawableId);
+      continue;
+    }
+
+    if (child.kind === "rigControl") {
+      const childRigControlId = parseRigControlChildId(child);
+      const childRigControl = assertRigControlWrapTargetSource(
+        graph,
+        newRigControlId,
+        childRigControlId
+      );
+      selectedRigControlIds.push(childRigControlId);
+      if (childRigControl.parentId === undefined) {
+        selectedRootRigControlIds.push(childRigControlId);
+      } else {
+        parentedParentIds.push(childRigControl.parentId);
+      }
+      continue;
+    }
+
+    throw new AuthoringMutationError(
+      "invalid_rig_control_child_kind",
+      `Rig control wrap child must be drawable or rigControl: ${(child as { readonly kind: string }).kind}`
+    );
+  }
+
+  assertNoAncestorDescendantWrapSelection(graph, selectedRigControlIds, selectedDrawableIds);
+
+  const uniqueParentedParentIds = uniqueIds(parentedParentIds);
+  if (uniqueParentedParentIds.length > 1) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      "Parented wrap children must share one immediate parent rig control"
+    );
+  }
+  if (uniqueParentedParentIds.length === 1 && selectedRootRigControlIds.length > 0) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      "Wrap children cannot mix root rig controls with parented children"
+    );
+  }
+
+  const parentRigControlId = uniqueParentedParentIds[0];
+  if (parentRigControlId === undefined) {
+    if (input.parentRigControlId !== undefined) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        `Wrap parent ${input.parentRigControlId} does not match a root selected group`
+      );
+    }
+
+    return {
+      selectedDrawableIds,
+      selectedRigControlIds,
+      selectedRootRigControlIds
+    };
+  }
+
+  if (input.parentRigControlId !== undefined && input.parentRigControlId !== parentRigControlId) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      `Wrap parent ${input.parentRigControlId} does not match child parent ${parentRigControlId}`
+    );
+  }
+
+  const parentRigControl = getRigControlById(graph, parentRigControlId);
+  if (parentRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Parent rig control does not exist: ${parentRigControlId}`
+    );
+  }
+
+  return {
+    parentRigControl,
+    selectedDrawableIds,
+    selectedRigControlIds,
+    selectedRootRigControlIds
+  };
+};
+
+const assertDrawableWrapTargetSource = (
+  graph: AuthoringGraph,
+  childDrawableId: DrawableId,
+  parentedParentIds: RigControlId[]
+): void => {
+  if (getDrawableById(graph, childDrawableId) === undefined) {
+    throw new AuthoringMutationError(
+      "missing_drawable",
+      `Rig control child drawable does not exist: ${childDrawableId}`
+    );
+  }
+
+  const existingParents = findRigControlsWithDrawableChild(graph, childDrawableId);
+  if (existingParents.length > 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Drawable ${childDrawableId} is bound under multiple rig controls`
+    );
+  }
+
+  const parentRigControl = existingParents[0];
+  if (parentRigControl === undefined) {
+    return;
+  }
+
+  const parentChildCount = countOccurrences(parentRigControl.childDrawableIds, childDrawableId);
+  if (parentChildCount !== 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} lists drawable ${childDrawableId} more than once`
+    );
+  }
+  parentedParentIds.push(parentRigControl.rigControlId);
+};
+
+const assertRigControlWrapTargetSource = (
+  graph: AuthoringGraph,
+  newRigControlId: RigControlId,
+  childRigControlId: RigControlId
+): RigControlDto => {
+  if (childRigControlId === newRigControlId) {
+    throw new AuthoringMutationError(
+      "rig_control_self_child",
+      `Rig control cannot wrap itself as a child: ${newRigControlId}`
+    );
+  }
+
+  const childRigControl = getRigControlById(graph, childRigControlId);
+  if (childRigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Child rig control does not exist: ${childRigControlId}`
+    );
+  }
+
+  assertCoherentRigControlParentState(graph, childRigControl);
+  return childRigControl;
+};
+
+const assertNoAncestorDescendantWrapSelection = (
+  graph: AuthoringGraph,
+  selectedRigControlIds: readonly RigControlId[],
+  selectedDrawableIds: readonly DrawableId[]
+): void => {
+  for (const ancestorCandidateId of selectedRigControlIds) {
+    for (const descendantCandidateId of selectedRigControlIds) {
+      if (ancestorCandidateId === descendantCandidateId) {
+        continue;
+      }
+      if (isRigControlDescendant(graph, ancestorCandidateId, descendantCandidateId)) {
+        throw new AuthoringMutationError(
+          "rig_control_cycle",
+          `Wrap children cannot include both ancestor ${ancestorCandidateId} and descendant ${descendantCandidateId}`
+        );
+      }
+    }
+
+    for (const drawableId of selectedDrawableIds) {
+      if (rigControlSubtreeContainsDrawable(graph, ancestorCandidateId, drawableId)) {
+        throw new AuthoringMutationError(
+          "rig_control_cycle",
+          `Wrap children cannot include rig control ${ancestorCandidateId} and descendant drawable ${drawableId}`
+        );
+      }
+    }
+  }
 };
 
 const assertChildDrawablesCanBind = (
@@ -1324,6 +1650,61 @@ const findRigControlsWithRigControlChild = (
 ): readonly RigControlDto[] =>
   graph.rigControls.filter((rigControl) => rigControl.childRigControlIds.includes(childRigControlId));
 
+const replaceSelectedIdsWithWrapper = (
+  currentIds: readonly RigControlId[],
+  selectedIds: ReadonlySet<RigControlId>,
+  wrapperRigControlId: RigControlId
+): RigControlId[] => {
+  const nextIds: RigControlId[] = [];
+  let wrapperWasInserted = false;
+
+  for (const currentId of currentIds) {
+    if (!selectedIds.has(currentId)) {
+      nextIds.push(currentId);
+      continue;
+    }
+
+    if (!wrapperWasInserted) {
+      nextIds.push(wrapperRigControlId);
+      wrapperWasInserted = true;
+    }
+  }
+
+  if (!wrapperWasInserted) {
+    nextIds.push(wrapperRigControlId);
+  }
+
+  return nextIds;
+};
+
+const rigControlSubtreeContainsDrawable = (
+  graph: AuthoringGraph,
+  startRigControlId: RigControlId,
+  targetDrawableId: DrawableId
+): boolean => {
+  const visited = new Set<RigControlId>();
+  const pending: RigControlId[] = [startRigControlId];
+
+  while (pending.length > 0) {
+    const currentRigControlId = pending.pop();
+    if (currentRigControlId === undefined || visited.has(currentRigControlId)) {
+      continue;
+    }
+
+    visited.add(currentRigControlId);
+    const currentRigControl = getRigControlById(graph, currentRigControlId);
+    if (currentRigControl === undefined) {
+      continue;
+    }
+    if (currentRigControl.childDrawableIds.includes(targetDrawableId)) {
+      return true;
+    }
+    pending.push(...currentRigControl.childRigControlIds);
+  }
+
+  return false;
+};
+
 const isRigControlDescendant = (
   graph: AuthoringGraph,
   startRigControlId: RigControlId,
@@ -1385,6 +1766,16 @@ const isValidDivisionCount = (value: number): boolean =>
 
 const countOccurrences = <TValue>(values: readonly TValue[], expected: TValue): number =>
   values.filter((value) => value === expected).length;
+
+const sameOrderedIds = <TValue extends string>(
+  left: readonly TValue[],
+  right: readonly TValue[]
+): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const uniqueIds = <TValue extends string>(values: readonly TValue[]): TValue[] => [
+  ...new Set(values)
+];
 
 const toUnitGridPosition = (index: number, size: number): number =>
   size <= 1 ? 0 : index / (size - 1);

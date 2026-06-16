@@ -320,19 +320,18 @@ describe("part operation handlers", () => {
       dryRun: false,
       partId: "part_empty"
     });
-    const rigRejected = deletePartOperationHandler.commit(
+    const rigAccepted = deletePartOperationHandler.commit(
       rigSession,
       rigRequest,
       getRequestOperationId(rigRequest)
     );
-    expect(rigRejected.result.status).toBe("rejected");
-    expect(rigRejected.result.diagnostics[0]).toMatchObject({
-      checkId: "operation.deletePart.partHasRigControls",
-      target: { kind: "part", id: "part_empty", path: "/model/rigControls/rigControls" }
-    });
+    expect(rigAccepted.result.status).toBe("committed");
+    expect(rigSession.graph.parts.find((part) => part.partId === "part_empty")).toBeUndefined();
+    expect(rigSession.graph.rigControls).toHaveLength(1);
+    expect(rigSession.graph.rigControls[0]).toHaveProperty("partId", "part_empty");
     expect(childSession.authoringRevision).toBe(0);
     expect(drawableSession.authoringRevision).toBe(0);
-    expect(rigSession.authoringRevision).toBe(0);
+    expect(rigSession.authoringRevision).toBe(1);
   });
 });
 

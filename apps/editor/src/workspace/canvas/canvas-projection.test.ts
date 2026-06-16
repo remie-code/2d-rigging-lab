@@ -117,6 +117,32 @@ describe("canvas render projection", () => {
     expect(screenToCanvasPoint(pointer, zoomed).y).toBeCloseTo(before.y);
   });
 
+  it("projects Drawable set selection without expanding a Part subtree", () => {
+    const session = createFixtureSession();
+    const projection = createCanvasRenderProjection(session, {
+      kind: "drawableSet",
+      ids: [DRAW_FRONT, DRAW_TARGET]
+    });
+
+    expect(projection.selectedPartId).toBeUndefined();
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT, DRAW_TARGET]));
+    expect(projection.selectionBounds).toEqual({ x: 5, y: 5, width: 35, height: 35 });
+    expect(projection.meshOverlay).toBeUndefined();
+    expect(
+      projection.drawables.map((drawable) => [
+        drawable.drawableId,
+        drawable.selected,
+        drawable.selectedBySubtree
+      ])
+    ).toEqual([
+      [DRAW_TARGET, true, false],
+      [DRAW_MASK, false, false],
+      [DRAW_HIDDEN, false, false],
+      [DRAW_BACK, false, false],
+      [DRAW_FRONT, true, false]
+    ]);
+  });
+
   it("flattens nested Part Container blocks for Canvas draw order and subtree selection", () => {
     const session = createNestedContainerBlockSession();
     const projection = createCanvasRenderProjection(session, {
@@ -270,6 +296,76 @@ describe("canvas render projection", () => {
         ]
       }
     });
+  });
+
+  it("projects multiple draft mesh overlays for selected Drawable sets", () => {
+    const session = createFixtureSession();
+    const frontDraftMesh = {
+      ...createMesh(MESH_FRONT, DRAW_FRONT, 5, 5, 20, 20),
+      vertices: [
+        { x: 6, y: 6 },
+        { x: 18, y: 6 },
+        { x: 6, y: 18 }
+      ],
+      uvs: [
+        { x: 0.05, y: 0.05 },
+        { x: 0.65, y: 0.05 },
+        { x: 0.05, y: 0.65 }
+      ],
+      triangles: [[0, 1, 2]] as [number, number, number][],
+      vertexStableIds: ["vtx_front_draft_0", "vtx_front_draft_1", "vtx_front_draft_2"]
+    };
+    const targetDraftMesh = {
+      ...createMesh(MESH_TARGET, DRAW_TARGET, 30, 30, 10, 10),
+      vertices: [
+        { x: 31, y: 31 },
+        { x: 38, y: 31 },
+        { x: 31, y: 38 }
+      ],
+      uvs: [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.1 },
+        { x: 0.1, y: 0.8 }
+      ],
+      triangles: [[0, 1, 2]] as [number, number, number][],
+      vertexStableIds: ["vtx_target_draft_0", "vtx_target_draft_1", "vtx_target_draft_2"]
+    };
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "drawableSet",
+        ids: [DRAW_FRONT, DRAW_TARGET]
+      },
+      {
+        meshDraft: {
+          drawableId: DRAW_FRONT,
+          mesh: frontDraftMesh,
+          meshDrafts: [
+            { drawableId: DRAW_FRONT, mesh: frontDraftMesh },
+            { drawableId: DRAW_TARGET, mesh: targetDraftMesh }
+          ]
+        }
+      }
+    );
+
+    expect(projection.meshOverlay).toMatchObject({
+      drawableId: DRAW_FRONT,
+      status: "draft"
+    });
+    expect(projection.meshOverlays).toHaveLength(2);
+    expect(projection.meshOverlays).toEqual([
+      expect.objectContaining({
+        drawableId: DRAW_FRONT,
+        status: "draft",
+        mesh: expect.objectContaining({ vertices: frontDraftMesh.vertices })
+      }),
+      expect.objectContaining({
+        drawableId: DRAW_TARGET,
+        status: "draft",
+        mesh: expect.objectContaining({ vertices: targetDraftMesh.vertices })
+      })
+    ]);
   });
 
   it("projects draft and committed Warp Deformer overlays for Canvas", () => {

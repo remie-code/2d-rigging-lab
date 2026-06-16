@@ -13,7 +13,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import { cn } from "../../lib/class-name";
+import { getSelectedDrawableIds } from "../../features/editor-session/model/editor-selection";
 import {
+  createDeformerTreeWrapSelectionReadModel,
+  type DeformerTreeWrapSelectionReadModel
+} from "../../features/editor-session/model/deformer-tree-wrap-selection";
+import {
+  createRigBatchDrawableTargets,
   createDeformerParentOptions,
   createWarpDeformerParentOptions,
   createWarpDeformerTargetOptions,
@@ -22,6 +28,7 @@ import {
   formatControlPointGrid,
   formatRectSummary,
   resolveWarpDeformerChildrenBounds,
+  type RigBatchDrawableTarget,
   type RotationDeformerReadModel,
   type WarpDeformerDraft,
   type WarpDeformerReadModel,
@@ -40,8 +47,12 @@ export function RigToolInspector() {
     rigOperationFeedback,
     selection,
     session,
+    createRotationDeformerForDrawables,
+    createRotationDeformerForDeformerTreeSelection,
     createParentRotationDeformerForRigControl,
     createParentWarpDeformerForRigControl,
+    createWarpDeformerForDrawables,
+    createWarpDeformerForDeformerTreeSelection,
     createRotationDeformerForDrawable,
     reparentRigControl,
     startWarpDeformerDraftForDrawable,
@@ -51,6 +62,15 @@ export function RigToolInspector() {
   const parentOptions = useMemo(() => createWarpDeformerParentOptions(session), [session]);
   const targetOptions = useMemo(
     () => createWarpDeformerTargetOptions(session, selection),
+    [selection, session]
+  );
+  const selectedDrawableIds = useMemo(() => getSelectedDrawableIds(selection), [selection]);
+  const batchTargets = useMemo(
+    () => createRigBatchDrawableTargets(session, selectedDrawableIds),
+    [selectedDrawableIds, session]
+  );
+  const deformerTreeWrapSelection = useMemo(
+    () => createDeformerTreeWrapSelectionReadModel(session, selection),
     [selection, session]
   );
 
@@ -108,6 +128,27 @@ export function RigToolInspector() {
     );
   }
 
+  if (selection?.kind === "drawableSet") {
+    return (
+      <RigBatchTargetStart
+        onCreateRotation={() => createRotationDeformerForDrawables(selectedDrawableIds)}
+        onCreateWarp={() => createWarpDeformerForDrawables(selectedDrawableIds)}
+        targets={batchTargets}
+      />
+    );
+  }
+
+  if (selection?.kind === "deformerTreeSet" && deformerTreeWrapSelection !== undefined) {
+    return (
+      <DeformerTreeWrapTargetStart
+        feedback={rigOperationFeedback}
+        onCreateRotation={createRotationDeformerForDeformerTreeSelection}
+        onCreateWarp={createWarpDeformerForDeformerTreeSelection}
+        readModel={deformerTreeWrapSelection}
+      />
+    );
+  }
+
   if (selection?.kind === "part") {
     return (
       <WarpDeformerTargetPicker
@@ -160,6 +201,191 @@ function WarpDeformerSingleTargetStart({
           </button>
         </div>
       </section>
+    </>
+  );
+}
+
+export function RigBatchTargetStart({
+  onCreateRotation,
+  onCreateWarp,
+  targets
+}: {
+  readonly onCreateRotation: () => void;
+  readonly onCreateWarp: () => void;
+  readonly targets: readonly RigBatchDrawableTarget[];
+}) {
+  const eligibleTargets = targets.filter((target) => target.status === "eligible");
+  const excludedTargets = targets.filter((target) => target.status === "alreadyBound");
+  const canCreate = eligibleTargets.length > 0;
+
+  return (
+    <>
+      <RigToolHeader title="Rig Deformer" />
+      <section
+        className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3"
+        data-testid="rig-tool-batch-targets"
+      >
+        <SectionTitle icon={<Spline aria-hidden="true" size={13} strokeWidth={1.8} />}>
+          Target Drawables
+        </SectionTitle>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {targets.length === 0 ? (
+            <div className="rounded border border-neutral-800 bg-neutral-950 px-2 py-2 text-xs text-neutral-400">
+              No selected Drawables
+            </div>
+          ) : (
+            targets.map((target) => (
+              <div
+                className={cn(
+                  "grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border bg-neutral-950/60 px-2",
+                  target.status === "eligible"
+                    ? "border-neutral-800"
+                    : "border-amber-800/70 text-amber-100"
+                )}
+                data-testid="rig-tool-target-name"
+                key={target.drawableId}
+              >
+                <span className="truncate text-xs font-semibold text-neutral-100">
+                  {target.displayName}
+                </span>
+                <span className="text-[11px] text-neutral-500">
+                  {target.status === "eligible" ? "Eligible" : "Bound"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+        {excludedTargets.length > 0 ? (
+          <div
+            className="mt-3 rounded border border-amber-800 bg-amber-950/25 px-2 py-2 text-xs text-amber-100"
+            data-testid="rig-tool-bound-drawable-warning"
+          >
+            Already-bound Drawables are excluded:{" "}
+            {excludedTargets.map((target) => target.displayName).join(", ")}
+          </div>
+        ) : null}
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          <button
+            className={cn(
+              "flex min-h-8 w-full items-center justify-center gap-2 rounded border px-3 text-xs font-semibold transition",
+              canCreate
+                ? "border-neutral-700 bg-neutral-950 text-neutral-100 hover:border-neutral-500"
+                : "cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600"
+            )}
+            disabled={!canCreate}
+            onClick={onCreateRotation}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Rotation Deformer
+          </button>
+          <button
+            className={cn(
+              "flex min-h-8 w-full items-center justify-center gap-2 rounded border px-3 text-xs font-semibold transition",
+              canCreate
+                ? "border-teal-700 bg-teal-950/55 text-teal-100 hover:border-teal-500"
+                : "cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600"
+            )}
+            disabled={!canCreate}
+            onClick={onCreateWarp}
+            type="button"
+          >
+            <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Warp Deformer
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function DeformerTreeWrapTargetStart({
+  feedback,
+  onCreateRotation,
+  onCreateWarp,
+  readModel
+}: {
+  readonly feedback: string | null;
+  readonly onCreateRotation: () => void;
+  readonly onCreateWarp: () => void;
+  readonly readModel: DeformerTreeWrapSelectionReadModel;
+}) {
+  return (
+    <>
+      <RigToolHeader title="Rig Deformer" />
+      <section
+        className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3"
+        data-testid="rig-tool-wrap-targets"
+      >
+        <SectionTitle icon={<Spline aria-hidden="true" size={13} strokeWidth={1.8} />}>
+          Target Selection
+        </SectionTitle>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {readModel.targets.length === 0 ? (
+            <div className="rounded border border-neutral-800 bg-neutral-950 px-2 py-2 text-xs text-neutral-400">
+              No selected Deformer Tree targets
+            </div>
+          ) : (
+            readModel.targets.map((target) => (
+              <div
+                className={cn(
+                  "grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border bg-neutral-950/60 px-2",
+                  target.status === "included"
+                    ? "border-neutral-800"
+                    : "border-amber-800/70 text-amber-100"
+                )}
+                data-testid="rig-tool-wrap-target-name"
+                key={`${target.source}:${target.kind}:${target.id}`}
+              >
+                <span className="truncate text-xs font-semibold text-neutral-100">
+                  {target.displayName}
+                </span>
+                <span className="text-[11px] text-neutral-500">{target.detail}</span>
+              </div>
+            ))
+          )}
+        </div>
+        {readModel.warning === null ? null : (
+          <div
+            className="mt-3 flex items-start gap-2 rounded border border-amber-800 bg-amber-950/25 px-2 py-2 text-xs text-amber-100"
+            data-testid="rig-tool-wrap-selection-warning"
+          >
+            <AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={13} strokeWidth={1.8} />
+            <span>{readModel.warning}</span>
+          </div>
+        )}
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          <button
+            className={cn(
+              "flex min-h-8 w-full items-center justify-center gap-2 rounded border px-3 text-xs font-semibold transition",
+              readModel.canCreate
+                ? "border-neutral-700 bg-neutral-950 text-neutral-100 hover:border-neutral-500"
+                : "cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600"
+            )}
+            disabled={!readModel.canCreate}
+            onClick={onCreateRotation}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Rotation Deformer
+          </button>
+          <button
+            className={cn(
+              "flex min-h-8 w-full items-center justify-center gap-2 rounded border px-3 text-xs font-semibold transition",
+              readModel.canCreate
+                ? "border-teal-700 bg-teal-950/55 text-teal-100 hover:border-teal-500"
+                : "cursor-not-allowed border-neutral-800 bg-neutral-950 text-neutral-600"
+            )}
+            disabled={!readModel.canCreate}
+            onClick={onCreateWarp}
+            type="button"
+          >
+            <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
+            Create Warp Deformer
+          </button>
+        </div>
+      </section>
+      <OperationFeedback feedback={feedback} />
     </>
   );
 }

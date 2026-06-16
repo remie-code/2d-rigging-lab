@@ -158,17 +158,6 @@ const evaluateDeletePartPreconditions = (
     );
   }
 
-  const rigControlIds = getPartRigControlIds(session, part.partId);
-  if (rigControlIds.length > 0) {
-    diagnostics.push(
-      createOperationDiagnostic({
-        checkId: "operation.deletePart.partHasRigControls",
-        message: `Part ${part.partId} cannot be deleted because rig controls reference it: ${rigControlIds.join(", ")}.`,
-        target: { ...partTarget, path: "/model/rigControls/rigControls" }
-      })
-    );
-  }
-
   return diagnostics;
 };
 
@@ -282,11 +271,6 @@ const getPartDrawableIds = (session: AuthoringSession, part: ModelPart): readonl
       .filter((drawable) => drawable.partId === part.partId)
       .map((drawable) => drawable.drawableId)
   ]);
-
-const getPartRigControlIds = (session: AuthoringSession, partId: PartId): readonly string[] =>
-  session.graph.rigControls
-    .filter((rigControl) => rigControl.partId === partId)
-    .map((rigControl) => rigControl.rigControlId);
 
 const uniqueStrings = (values: readonly string[]): readonly string[] => {
   const seen = new Set<string>();

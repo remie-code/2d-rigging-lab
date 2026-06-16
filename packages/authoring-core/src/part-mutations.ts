@@ -254,15 +254,6 @@ const assertCanDeletePart = (session: AuthoringSession, part: ModelPartDto): voi
     );
   }
 
-  const rigControlIds = session.graph.rigControls
-    .filter((rigControl) => rigControl.partId === part.partId)
-    .map((rigControl) => rigControl.rigControlId);
-  if (rigControlIds.length > 0) {
-    throw new AuthoringMutationError(
-      "part_has_rig_controls",
-      `Part ${part.partId} cannot be deleted because rig controls reference it: ${rigControlIds.join(", ")}.`
-    );
-  }
 };
 
 const assertCanUpdatePart = (

@@ -422,6 +422,57 @@ describe("canvas renderer evaluated mesh drawing", () => {
       ]
     });
   });
+
+  it("draws every projected mesh overlay", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: {
+        canvasBounds: { x: 0, y: 0, width: 128, height: 128 },
+        selectedDrawableIds: new Set(),
+        drawables: [],
+        maskRelations: [],
+        meshOverlays: [
+          createMeshOverlay("draw_renderer_test_a"),
+          createMeshOverlay("draw_renderer_test_b")
+        ],
+        hasRenderableArtwork: false,
+        contentKey: "renderer-mesh-overlays-test"
+      },
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: true,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(
+      context.calls.filter(
+        (call) =>
+          call.name === "setLineDash" &&
+          Array.isArray(call.args[0]) &&
+          call.args[0][0] === 7
+      )
+    ).toHaveLength(2);
+    expect(context.calls.filter((call) => call.name === "arc")).toHaveLength(6);
+  });
 });
 
 function renderDrawable(drawable: CanvasRenderableDrawable) {
@@ -496,5 +547,28 @@ function createDrawable(input: {
     renderWidth,
     renderHeight,
     maskSourceDrawableIds: []
+  };
+}
+
+function createMeshOverlay(drawableId: string) {
+  return {
+    drawableId: DrawableIdSchema.parse(drawableId),
+    status: "draft" as const,
+    mesh: {
+      source: "draft" as const,
+      sourceMeshId: `mesh_${drawableId}`,
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 0, y: 10 }
+      ],
+      uvs: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 }
+      ],
+      triangles: [[0, 1, 2]] as [number, number, number][]
+    }
   };
 }

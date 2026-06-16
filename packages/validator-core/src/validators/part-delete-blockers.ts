@@ -33,7 +33,6 @@ interface PartWithIndex {
 interface PartDeleteBlockers {
   readonly childPartIds: readonly string[];
   readonly drawableIds: readonly string[];
-  readonly rigControlIds: readonly string[];
   readonly maskRelationIds: readonly string[];
 }
 
@@ -73,11 +72,6 @@ const collectPartDeleteBlockers = (
   return {
     childPartIds: uniqueSorted(part.childPartIds),
     drawableIds,
-    rigControlIds: uniqueSorted(
-      packageDocument.model.rigControls.rigControls
-        .filter((rigControl) => rigControl.partId === part.partId)
-        .map((rigControl) => rigControl.rigControlId)
-    ),
     maskRelationIds: uniqueSorted(
       packageDocument.model.masks.masks
         .filter((mask) =>
@@ -91,7 +85,6 @@ const collectPartDeleteBlockers = (
 const hasDeleteBlockers = (blockers: PartDeleteBlockers): boolean =>
   blockers.childPartIds.length > 0 ||
   blockers.drawableIds.length > 0 ||
-  blockers.rigControlIds.length > 0 ||
   blockers.maskRelationIds.length > 0;
 
 const createPartDeleteNonEmptyCheck = (input: {
@@ -107,7 +100,6 @@ const createPartDeleteNonEmptyCheck = (input: {
   const blockerKinds = [
     ...(input.blockers.childPartIds.length === 0 ? [] : ["childPart"]),
     ...(input.blockers.drawableIds.length === 0 ? [] : ["drawable"]),
-    ...(input.blockers.rigControlIds.length === 0 ? [] : ["rigControl"]),
     ...(input.blockers.maskRelationIds.length === 0 ? [] : ["maskRelation"])
   ];
 
@@ -128,7 +120,6 @@ const createPartDeleteNonEmptyCheck = (input: {
       `blockerKinds=${blockerKinds.join(",")}`,
       ...createBlockerEvidence("childPartIds", input.blockers.childPartIds),
       ...createBlockerEvidence("drawableIds", input.blockers.drawableIds),
-      ...createBlockerEvidence("rigControlIds", input.blockers.rigControlIds),
       ...createBlockerEvidence("maskRelationIds", input.blockers.maskRelationIds),
       "deleteScope=empty-leaf-only"
     ],

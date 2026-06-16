@@ -37,6 +37,14 @@ export interface MeshDrawableCandidate {
   readonly textureLabel: string;
 }
 
+export interface MeshDrawableBatchTarget {
+  readonly drawableId: DrawableId;
+  readonly displayName: string;
+  readonly meshStatus: MeshStatusProjection;
+  readonly eligible: boolean;
+  readonly exclusionReason?: "existingGeneratedMesh";
+}
+
 export const MESH_GENERATION_PRESETS: readonly MeshGenerationPreset[] = [
   {
     id: "largeMotion",
@@ -107,6 +115,49 @@ export const createMeshStatusProjection = (
     triangleCount,
     boundsSummary: formatBounds(mesh.bounds)
   };
+};
+
+export const isMeshGenerationEligible = (
+  session: AuthoringSession,
+  drawableId: DrawableId
+): boolean => {
+  const drawable = session.graph.drawables.find((candidate) => candidate.drawableId === drawableId);
+  if (drawable === undefined) {
+    return false;
+  }
+
+  const mesh = session.graph.meshes.find((candidate) => candidate.meshId === drawable.meshId);
+
+  return mesh === undefined || mesh.vertices.length === 0 || mesh.triangles.length === 0;
+};
+
+export const createMeshDrawableBatchTargets = (
+  session: AuthoringSession,
+  drawableIds: readonly DrawableId[]
+): readonly MeshDrawableBatchTarget[] => {
+  const drawablesById = new Map(
+    session.graph.drawables.map((drawable) => [drawable.drawableId, drawable])
+  );
+
+  return dedupeDrawableIds(drawableIds)
+    .map((drawableId): MeshDrawableBatchTarget | undefined => {
+      const drawable = drawablesById.get(drawableId);
+      if (drawable === undefined) {
+        return undefined;
+      }
+
+      const meshStatus = createMeshStatusProjection(session, drawableId);
+      const eligible = meshStatus.status !== "generated";
+
+      return {
+        drawableId,
+        displayName: drawable.displayName,
+        meshStatus,
+        eligible,
+        ...(eligible ? {} : { exclusionReason: "existingGeneratedMesh" as const })
+      };
+    })
+    .filter(isDefined);
 };
 
 export const collectMeshDrawableCandidates = (
@@ -183,3 +234,23 @@ const sanitizeIdToken = (value: string): string => {
   const token = value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
   return token.length > 0 ? token : "unnamed";
 };
+
+function dedupeDrawableIds(drawableIds: readonly DrawableId[]): readonly DrawableId[] {
+  const result: DrawableId[] = [];
+  const seen = new Set<DrawableId>();
+
+  for (const drawableId of drawableIds) {
+    if (seen.has(drawableId)) {
+      continue;
+    }
+
+    seen.add(drawableId);
+    result.push(drawableId);
+  }
+
+  return result;
+}
+
+function isDefined<TValue>(value: TValue | undefined): value is TValue {
+  return value !== undefined;
+}

@@ -12,15 +12,20 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
-import { commitCreateWarpDeformer } from "./editor-session-commands";
+import { commitCreateRotationDeformer, commitCreateWarpDeformer } from "./editor-session-commands";
+import { resolveDeformerTreeSelectionTransition } from "./editor-selection";
 import {
+  createDeformerTreeSelectableTargets,
   createDrawablePoolItems,
   createDeformerTreeRows,
+  createRigBatchDrawableTargets,
   createRotationDeformerPayloadForDrawable,
+  createRotationDeformerPayloadForUnboundDrawables,
   createRotationDeformerParentPayloadForRigControl,
   createWarpDeformerParentPayloadForRigControl,
   createWarpDeformerDraftForDrawable,
   createWarpDeformerPayloadFromDraft,
+  createWarpDeformerPayloadForUnboundDrawables,
   fitWarpDeformerDraftToChildren,
   resetWarpDeformerDraft,
   updateWarpDeformerDraft,
@@ -29,6 +34,8 @@ import {
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
+const PART_EYE = PartIdSchema.parse("part_eye");
+const PART_EMPTY = PartIdSchema.parse("part_empty");
 const DRAW_FACE = DrawableIdSchema.parse("draw_face");
 const DRAW_HAIR = DrawableIdSchema.parse("draw_hair");
 const MESH_FACE = MeshIdSchema.parse("mesh_face");
@@ -46,7 +53,6 @@ describe("rig tool state", () => {
 
     expect(draft).toMatchObject({
       displayName: "Face Warp Deformer",
-      partId: PART_FACE,
       childDrawableIds: [DRAW_FACE],
       domainBounds: { x: 9, y: 19, width: 32, height: 42 },
       transformColumns: 5,
@@ -55,8 +61,10 @@ describe("rig tool state", () => {
       bezierRows: 3,
       bezierEditType: "cubicBezierSurfaceV1"
     });
+    expect(draft).not.toHaveProperty("partId");
 
     const payload = createWarpDeformerPayloadFromDraft(draft!);
+    expect(payload).not.toHaveProperty("partId");
     const result = commitCreateWarpDeformer(session, payload);
 
     expect(result.committed).toBe(true);
@@ -159,7 +167,6 @@ describe("rig tool state", () => {
   it("creates insertion payloads when a selected Drawable is already bound", () => {
     const session = createFixtureSession();
     const parentResult = commitCreateWarpDeformer(session, {
-      partId: PART_FACE,
       displayName: "Parent Warp",
       childDrawableIds: [DRAW_FACE],
       childRigControlIds: [],
@@ -204,15 +211,140 @@ describe("rig tool state", () => {
     });
   });
 
+  it("classifies batch Rig targets and excludes already-bound Drawables from create payloads", () => {
+    const session = createFixtureSession();
+    const parentResult = commitCreateWarpDeformer(session, {
+      displayName: "Parent Warp",
+      childDrawableIds: [DRAW_FACE],
+      childRigControlIds: [],
+      domainBounds: { x: 10, y: 20, width: 30, height: 40 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(parentResult.committed).toBe(true);
+
+    const targets = createRigBatchDrawableTargets(parentResult.session, [DRAW_FACE, DRAW_HAIR]);
+    expect(targets).toEqual([
+      {
+        drawableId: DRAW_FACE,
+        displayName: "Face",
+        bounds: { x: 10, y: 20, width: 30, height: 40 },
+        status: "alreadyBound",
+        boundRigControlId: parentResult.rigControlId
+      },
+      {
+        drawableId: DRAW_HAIR,
+        displayName: "Hair",
+        bounds: { x: 50, y: 20, width: 30, height: 40 },
+        status: "eligible"
+      }
+    ]);
+
+    const rotationPayload = createRotationDeformerPayloadForUnboundDrawables(
+      parentResult.session,
+      [DRAW_FACE, DRAW_HAIR]
+    );
+    expect(rotationPayload).toMatchObject({
+      childDrawableIds: [DRAW_HAIR],
+      childRigControlIds: [],
+      pivot: { x: 65, y: 40 }
+    });
+    expect(rotationPayload).not.toHaveProperty("partId");
+    expect(rotationPayload).not.toHaveProperty("parentRigControlId");
+    expect(rotationPayload).not.toHaveProperty("insertBeforeChild");
+
+    expect(
+      createRotationDeformerPayloadForUnboundDrawables(parentResult.session, [DRAW_FACE])
+    ).toBeUndefined();
+    expect(
+      createWarpDeformerPayloadForUnboundDrawables(parentResult.session, [DRAW_FACE])
+    ).toBeUndefined();
+  });
+
+  it("creates one root Rotation Deformer payload for selected unbound Drawables", () => {
+    const session = createFixtureSession();
+    const payload = createRotationDeformerPayloadForUnboundDrawables(session, [
+      DRAW_FACE,
+      DRAW_HAIR
+    ]);
+
+    expect(payload).toMatchObject({
+      displayName: "2 Drawables Rotation Deformer",
+      childDrawableIds: [DRAW_FACE, DRAW_HAIR],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 45, y: 40 },
+      restAngleDegrees: 0
+    });
+    expect(payload).not.toHaveProperty("partId");
+    expect(payload).not.toHaveProperty("parentRigControlId");
+    expect(payload).not.toHaveProperty("insertBeforeChild");
+
+    const result = commitCreateRotationDeformer(session, payload!);
+    expect(result.committed).toBe(true);
+    const rigControl = result.session.graph.rigControls.find(
+      (candidate) => candidate.rigControlId === result.rigControlId
+    );
+
+    expect(rigControl).toMatchObject({
+      kind: "rotation2d",
+      childDrawableIds: [DRAW_FACE, DRAW_HAIR],
+      childRigControlIds: [],
+      pivot: { x: 45, y: 40 }
+    });
+    expect(rigControl).not.toHaveProperty("partId");
+    expect(result.session.graph.rigControlRootIds).toContain(result.rigControlId);
+  });
+
+  it("creates one root Warp Deformer payload for selected unbound Drawables", () => {
+    const session = createFixtureSession();
+    const payload = createWarpDeformerPayloadForUnboundDrawables(session, [
+      DRAW_FACE,
+      DRAW_HAIR
+    ]);
+
+    expect(payload).toMatchObject({
+      displayName: "2 Drawables Warp Deformer",
+      childDrawableIds: [DRAW_FACE, DRAW_HAIR],
+      childRigControlIds: [],
+      domainBounds: { x: 9, y: 19, width: 72, height: 42 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(payload).not.toHaveProperty("partId");
+    expect(payload).not.toHaveProperty("parentRigControlId");
+    expect(payload).not.toHaveProperty("insertBeforeChild");
+
+    const result = commitCreateWarpDeformer(session, payload!);
+    expect(result.committed).toBe(true);
+    const rigControl = result.session.graph.rigControls.find(
+      (candidate) => candidate.rigControlId === result.rigControlId
+    );
+
+    expect(rigControl).toMatchObject({
+      kind: "warpLattice2d",
+      childDrawableIds: [DRAW_FACE, DRAW_HAIR],
+      childRigControlIds: [],
+      domainBounds: { x: 9, y: 19, width: 72, height: 42 }
+    });
+    expect(rigControl).not.toHaveProperty("partId");
+    expect(result.session.graph.rigControlRootIds).toContain(result.rigControlId);
+  });
+
   it("computes Drawable Pool from deformer binding without using Parts membership", () => {
     const session = createFixtureSession();
-    expect(createDrawablePoolItems(session, null).map((item) => item.drawableId)).toEqual([
+    expect(getPoolDrawableIds(createDrawablePoolItems(session, null))).toEqual([
       DRAW_FACE,
       DRAW_HAIR
     ]);
 
     const result = commitCreateWarpDeformer(session, {
-      partId: PART_FACE,
       displayName: "Face Warp",
       childDrawableIds: [DRAW_FACE],
       childRigControlIds: [],
@@ -227,10 +359,29 @@ describe("rig tool state", () => {
     expect(result.committed).toBe(true);
     expect(createDrawablePoolItems(result.session, { kind: "drawable", id: DRAW_HAIR })).toEqual([
       {
+        kind: "part",
+        partId: PART_ROOT,
+        depth: 0,
+        displayName: "Root",
+        selected: false,
+        displayOnly: true
+      },
+      {
+        kind: "part",
+        partId: PART_FACE,
+        depth: 1,
+        displayName: "Face Part",
+        selected: false,
+        displayOnly: true
+      },
+      {
+        kind: "drawable",
         drawableId: DRAW_HAIR,
+        depth: 2,
         displayName: "Hair",
         partDisplayName: "Face Part",
-        selected: true
+        selected: true,
+        displayOnly: false
       }
     ]);
     expect(
@@ -238,10 +389,213 @@ describe("rig tool state", () => {
     ).toBe(PART_FACE);
   });
 
+  it("resolves Deformer Tree mixed selection transitions in visible selectable row order", () => {
+    const session = createFixtureSession();
+    const result = commitCreateWarpDeformer(session, {
+      displayName: "Face Warp",
+      childDrawableIds: [DRAW_FACE],
+      childRigControlIds: [],
+      domainBounds: { x: 10, y: 20, width: 30, height: 40 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(result.committed).toBe(true);
+
+    const deformerRows = createDeformerTreeRows(result.session, null);
+    const poolItems = createDrawablePoolItems(result.session, null);
+    const visibleTargets = createDeformerTreeSelectableTargets(deformerRows, poolItems);
+    const rigTarget = {
+      kind: "rigControl" as const,
+      rigControlId: result.rigControlId!
+    };
+    const boundTarget = {
+      kind: "boundDrawable" as const,
+      drawableId: DRAW_FACE,
+      parentRigControlId: result.rigControlId!
+    };
+    const poolTarget = {
+      kind: "poolDrawable" as const,
+      drawableId: DRAW_HAIR
+    };
+
+    expect(poolItems.filter((item) => item.kind === "part")).toHaveLength(2);
+    expect(visibleTargets).toEqual([rigTarget, boundTarget, poolTarget]);
+
+    const replaced = resolveDeformerTreeSelectionTransition({
+      currentSelection: null,
+      anchorTarget: null,
+      clickedTarget: rigTarget,
+      visibleTargets,
+      mode: "replace"
+    });
+    expect(replaced).toEqual({
+      selection: { kind: "rigControl", id: result.rigControlId },
+      anchorTarget: rigTarget
+    });
+
+    const toggled = resolveDeformerTreeSelectionTransition({
+      currentSelection: replaced.selection,
+      anchorTarget: replaced.anchorTarget,
+      clickedTarget: poolTarget,
+      visibleTargets,
+      mode: "toggle"
+    });
+    expect(toggled).toEqual({
+      selection: {
+        kind: "deformerTreeSet",
+        targets: [rigTarget, poolTarget]
+      },
+      anchorTarget: poolTarget
+    });
+
+    const ranged = resolveDeformerTreeSelectionTransition({
+      currentSelection: {
+        kind: "drawable",
+        id: DRAW_FACE
+      },
+      anchorTarget: boundTarget,
+      clickedTarget: poolTarget,
+      visibleTargets,
+      mode: "range"
+    });
+    expect(ranged).toEqual({
+      selection: {
+        kind: "deformerTreeSet",
+        targets: [boundTarget, poolTarget]
+      },
+      anchorTarget: boundTarget
+    });
+
+    const fallback = resolveDeformerTreeSelectionTransition({
+      currentSelection: replaced.selection,
+      anchorTarget: {
+        kind: "poolDrawable",
+        drawableId: DRAW_FACE
+      },
+      clickedTarget: poolTarget,
+      visibleTargets,
+      mode: "range"
+    });
+    expect(fallback).toEqual({
+      selection: { kind: "drawable", id: DRAW_HAIR },
+      anchorTarget: poolTarget
+    });
+  });
+
+  it("projects Drawable Pool under nested Parts hierarchy and prunes empty containers", () => {
+    const session = createFixtureSession();
+    session.graph.parts = [
+      {
+        partId: PART_ROOT,
+        displayName: "Root",
+        childPartIds: [PART_FACE, PART_EMPTY],
+        drawableIds: [],
+        children: [
+          { kind: "part", partId: PART_FACE },
+          { kind: "part", partId: PART_EMPTY }
+        ]
+      },
+      {
+        partId: PART_FACE,
+        displayName: "Face Part",
+        parentPartId: PART_ROOT,
+        childPartIds: [PART_EYE],
+        drawableIds: [DRAW_FACE],
+        children: [
+          { kind: "drawable", drawableId: DRAW_FACE },
+          { kind: "part", partId: PART_EYE }
+        ]
+      },
+      {
+        partId: PART_EYE,
+        displayName: "Eye Part",
+        parentPartId: PART_FACE,
+        childPartIds: [],
+        drawableIds: [DRAW_HAIR],
+        children: [{ kind: "drawable", drawableId: DRAW_HAIR }]
+      },
+      {
+        partId: PART_EMPTY,
+        displayName: "Empty Part",
+        parentPartId: PART_ROOT,
+        childPartIds: [],
+        drawableIds: [],
+        children: []
+      }
+    ];
+    session.graph.drawables = session.graph.drawables.map((drawable) =>
+      drawable.drawableId === DRAW_HAIR ? { ...drawable, partId: PART_EYE } : drawable
+    );
+    session.graph.stableOrder = [
+      PART_ROOT,
+      PART_FACE,
+      DRAW_FACE,
+      PART_EYE,
+      DRAW_HAIR,
+      PART_EMPTY
+    ];
+
+    const result = commitCreateWarpDeformer(session, {
+      displayName: "Face Warp",
+      childDrawableIds: [DRAW_FACE],
+      childRigControlIds: [],
+      domainBounds: { x: 10, y: 20, width: 30, height: 40 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(result.committed).toBe(true);
+
+    expect(
+      createDrawablePoolItems(result.session, {
+        kind: "deformerTreeSet",
+        targets: [{ kind: "poolDrawable", drawableId: DRAW_HAIR }]
+      })
+    ).toEqual([
+      {
+        kind: "part",
+        partId: PART_ROOT,
+        depth: 0,
+        displayName: "Root",
+        selected: false,
+        displayOnly: true
+      },
+      {
+        kind: "part",
+        partId: PART_FACE,
+        depth: 1,
+        displayName: "Face Part",
+        selected: false,
+        displayOnly: true
+      },
+      {
+        kind: "part",
+        partId: PART_EYE,
+        depth: 2,
+        displayName: "Eye Part",
+        selected: false,
+        displayOnly: true
+      },
+      {
+        kind: "drawable",
+        drawableId: DRAW_HAIR,
+        depth: 3,
+        displayName: "Hair",
+        partDisplayName: "Eye Part",
+        selected: true,
+        displayOnly: false
+      }
+    ]);
+  });
+
   it("creates parent Deformer payloads for root and parented selected Deformers", () => {
     const session = createFixtureSession();
     const childResult = commitCreateWarpDeformer(session, {
-      partId: PART_FACE,
       displayName: "Child Warp",
       childDrawableIds: [DRAW_FACE],
       childRigControlIds: [],
@@ -286,7 +640,6 @@ describe("rig tool state", () => {
   it("projects deterministic keyform counts for Deformer Tree discovery", () => {
     const session = createFixtureSession();
     const result = commitCreateWarpDeformer(session, {
-      partId: PART_FACE,
       displayName: "Face Warp",
       childDrawableIds: [DRAW_FACE],
       childRigControlIds: [],
@@ -467,4 +820,13 @@ function setFaceMeshVerticesOutsideLayer(session: AuthoringSession): void {
     { x: 6, y: 64 }
   ];
   mesh.bounds = { x: 10, y: 20, width: 30, height: 40 };
+}
+
+function getPoolDrawableIds(items: ReturnType<typeof createDrawablePoolItems>) {
+  return items
+    .filter(
+      (item): item is Extract<(typeof items)[number], { readonly kind: "drawable" }> =>
+        item.kind === "drawable"
+    )
+    .map((item) => item.drawableId);
 }

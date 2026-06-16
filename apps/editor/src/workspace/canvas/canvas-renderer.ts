@@ -592,44 +592,48 @@ function drawMeshOverlay(
   projection: CanvasRenderProjection,
   zoom: number
 ): void {
-  const overlay = projection.meshOverlay;
-  if (overlay === undefined) {
+  const overlays = projection.meshOverlays ?? (
+    projection.meshOverlay === undefined ? [] : [projection.meshOverlay]
+  );
+  if (overlays.length === 0) {
     return;
   }
 
-  const color =
-    overlay.status === "draft"
-      ? "rgba(251, 191, 36, 0.96)"
-      : "rgba(45, 212, 191, 0.94)";
   context.save();
-  context.strokeStyle = color;
-  context.fillStyle = color;
-  context.lineWidth = 1.25 / zoom;
-  context.setLineDash(overlay.status === "draft" ? [7 / zoom, 5 / zoom] : []);
+  for (const overlay of overlays) {
+    const color =
+      overlay.status === "draft"
+        ? "rgba(251, 191, 36, 0.96)"
+        : "rgba(45, 212, 191, 0.94)";
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = 1.25 / zoom;
+    context.setLineDash(overlay.status === "draft" ? [7 / zoom, 5 / zoom] : []);
 
-  for (const triangle of overlay.mesh.triangles) {
-    const [aIndex, bIndex, cIndex] = triangle;
-    const a = overlay.mesh.vertices[aIndex];
-    const b = overlay.mesh.vertices[bIndex];
-    const c = overlay.mesh.vertices[cIndex];
-    if (a === undefined || b === undefined || c === undefined) {
-      continue;
+    for (const triangle of overlay.mesh.triangles) {
+      const [aIndex, bIndex, cIndex] = triangle;
+      const a = overlay.mesh.vertices[aIndex];
+      const b = overlay.mesh.vertices[bIndex];
+      const c = overlay.mesh.vertices[cIndex];
+      if (a === undefined || b === undefined || c === undefined) {
+        continue;
+      }
+
+      context.beginPath();
+      context.moveTo(a.x, a.y);
+      context.lineTo(b.x, b.y);
+      context.lineTo(c.x, c.y);
+      context.closePath();
+      context.stroke();
     }
 
-    context.beginPath();
-    context.moveTo(a.x, a.y);
-    context.lineTo(b.x, b.y);
-    context.lineTo(c.x, c.y);
-    context.closePath();
-    context.stroke();
-  }
-
-  context.setLineDash([]);
-  const radius = Math.max(2 / zoom, 1.25 / zoom);
-  for (const vertex of overlay.mesh.vertices) {
-    context.beginPath();
-    context.arc(vertex.x, vertex.y, radius, 0, Math.PI * 2);
-    context.fill();
+    context.setLineDash([]);
+    const radius = Math.max(2 / zoom, 1.25 / zoom);
+    for (const vertex of overlay.mesh.vertices) {
+      context.beginPath();
+      context.arc(vertex.x, vertex.y, radius, 0, Math.PI * 2);
+      context.fill();
+    }
   }
 
   context.restore();

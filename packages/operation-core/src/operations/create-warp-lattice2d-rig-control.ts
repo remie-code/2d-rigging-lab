@@ -116,7 +116,6 @@ const createPackageWarpLattice2dRigControl = (
   kind: "warpLattice2d",
   rigControlId,
   displayName: request.payload.displayName,
-  partId: request.payload.partId,
   childDrawableIds: [...request.payload.childDrawableIds],
   childRigControlIds: [...request.payload.childRigControlIds],
   bindSpace: "rigControlLocalRest",
@@ -145,11 +144,6 @@ const createCreateWarpLattice2dRigControlResult = (input: {
     kind: "rigControl",
     id: rigControl.rigControlId
   };
-  const partTarget: TargetRefDto = {
-    kind: "part",
-    id: rigControl.partId,
-    path: `/model/rigControls/rigControls/${rigControl.rigControlId}/partId`
-  };
   const childDrawableTargets = rigControl.childDrawableIds.map((childDrawableId): TargetRefDto => ({
     kind: "drawable",
     id: childDrawableId,
@@ -162,7 +156,6 @@ const createCreateWarpLattice2dRigControlResult = (input: {
   }));
   const checkedTargetRefs = [
     rigControlTarget,
-    partTarget,
     ...childDrawableTargets,
     ...childRigControlTargets
   ];
@@ -313,12 +306,6 @@ const createCreateWarpLattice2dRigControlMutationDiagnostic = (
         message: error.message,
         target: { kind: "rigControl", id: rigControl.rigControlId }
       });
-    case "missing_part":
-      return createOperationDiagnostic({
-        checkId: "operation.createWarpLattice2dRigControl.missingPart",
-        message: error.message,
-        target: { kind: "part", id: rigControl.partId }
-      });
     case "missing_drawable":
       return createOperationDiagnostic({
         checkId: "operation.createWarpLattice2dRigControl.missingChildDrawable",
@@ -391,7 +378,6 @@ const createCreateWarpLattice2dRigControlTargetIds = (
 ): readonly string[] =>
   [
     rigControlId,
-    request.payload.partId,
     ...request.payload.childDrawableIds,
     ...request.payload.childRigControlIds
   ].filter((targetId, index, targetIds) => targetIds.indexOf(targetId) === index);

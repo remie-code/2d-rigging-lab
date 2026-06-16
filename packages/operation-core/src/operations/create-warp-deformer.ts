@@ -3,7 +3,8 @@ import {
   bindRigControlChild,
   createDryRunAuthoringSession,
   createWarpLattice2dRigControl,
-  insertRigControlBetweenParentAndChild
+  insertRigControlBetweenParentAndChild,
+  wrapRigControlChildren
 } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import { createWarpLattice2dControlPointSlots } from "@private-2d-rigging-lab/contracts";
@@ -43,6 +44,7 @@ type PackageWarpDeformerBezierEditSurface = PackageWarpDeformerMetadata["bezierE
 type CreateWarpLattice2dRigControlMutation = ReturnType<typeof createWarpLattice2dRigControl>;
 type BindRigControlChildMutation = ReturnType<typeof bindRigControlChild>;
 type InsertRigControlBetweenParentAndChildMutation = ReturnType<typeof insertRigControlBetweenParentAndChild>;
+type WrapRigControlChildrenMutation = ReturnType<typeof wrapRigControlChildren>;
 
 type CreateWarpDeformerMutation =
   | {
@@ -56,6 +58,13 @@ type CreateWarpDeformerMutation =
   | {
       readonly mode: "insert";
       readonly insertMutation: InsertRigControlBetweenParentAndChildMutation;
+      readonly rigControlRootIdsBefore: readonly RigControlId[];
+      readonly rigControlRootIdsAfter: readonly RigControlId[];
+      readonly authoringRevision: number;
+    }
+  | {
+      readonly mode: "wrap";
+      readonly wrapMutation: WrapRigControlChildrenMutation;
       readonly rigControlRootIdsBefore: readonly RigControlId[];
       readonly rigControlRootIdsAfter: readonly RigControlId[];
       readonly authoringRevision: number;
@@ -101,7 +110,11 @@ const applyCreateWarpDeformer = (
   const rigControl = createPackageWarpDeformerRigControl(request, rigControlId);
   const targetIds = createCreateWarpDeformerTargetIds(request, rigControlId);
   const baseRevision = session.authoringRevision;
-  if (request.payload.insertBeforeChild !== undefined && request.payload.parentRigControlId === undefined) {
+  if (
+    request.payload.insertBeforeChild !== undefined &&
+    request.payload.parentRigControlId === undefined &&
+    request.payload.wrapChildren === undefined
+  ) {
     return {
       result: createRejectedOperationResult({
         operationId,
@@ -154,7 +167,7 @@ const applyCreateWarpDeformer = (
       packageId: session.packageIdentity.packageId,
       mutation: applied.mutation
     }),
-    targetIds,
+    targetIds: createCreateWarpDeformerTargetIds(request, rigControlId, applied.mutation),
     candidateSession: session
   };
 };
@@ -167,6 +180,32 @@ const tryCreateWarpDeformerMutations = (
   | { readonly mutation: CreateWarpDeformerMutation }
   | { readonly diagnostic: DiagnosticDto } => {
   try {
+    if (request.payload.wrapChildren !== undefined && request.payload.insertBeforeChild !== undefined) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        "Create Warp Deformer payload must not set both insertBeforeChild and wrapChildren"
+      );
+    }
+
+    if (request.payload.wrapChildren !== undefined) {
+      assertWrapChildrenPayloadCompatibility(request);
+      const wrapMutation = wrapRigControlChildren(session, rigControl, {
+        wrapChildren: request.payload.wrapChildren,
+        ...(request.payload.parentRigControlId === undefined
+          ? {}
+          : { parentRigControlId: request.payload.parentRigControlId })
+      });
+      return {
+        mutation: {
+          mode: "wrap",
+          wrapMutation,
+          rigControlRootIdsBefore: wrapMutation.rigControlRootIdsBefore,
+          rigControlRootIdsAfter: wrapMutation.rigControlRootIdsAfter,
+          authoringRevision: wrapMutation.authoringRevision
+        }
+      };
+    }
+
     if (request.payload.insertBeforeChild !== undefined) {
       const insertMutation = insertRigControlBetweenParentAndChild(session, rigControl, {
         parentRigControlId: request.payload.parentRigControlId as RigControlId,
@@ -224,7 +263,6 @@ const createPackageWarpDeformerRigControl = (
   kind: "warpLattice2d",
   rigControlId,
   displayName: request.payload.displayName,
-  partId: request.payload.partId,
   childDrawableIds: createWarpDeformerChildDrawableIds(request),
   childRigControlIds: createWarpDeformerChildRigControlIds(request),
   opacityMultiplier: request.payload.opacityMultiplier,
@@ -245,14 +283,22 @@ const createPackageWarpDeformerRigControl = (
 const createWarpDeformerChildDrawableIds = (
   request: CreateWarpDeformerRequest
 ): PackageWarpLattice2dRigControl["childDrawableIds"] =>
-  request.payload.insertBeforeChild?.kind === "drawable"
+  request.payload.wrapChildren !== undefined
+    ? request.payload.wrapChildren
+        .filter((child) => child.kind === "drawable")
+        .map((child) => child.id)
+    : request.payload.insertBeforeChild?.kind === "drawable"
     ? [request.payload.insertBeforeChild.id]
     : [...request.payload.childDrawableIds];
 
 const createWarpDeformerChildRigControlIds = (
   request: CreateWarpDeformerRequest
 ): PackageWarpLattice2dRigControl["childRigControlIds"] =>
-  request.payload.insertBeforeChild?.kind === "rigControl"
+  request.payload.wrapChildren !== undefined
+    ? request.payload.wrapChildren
+        .filter((child) => child.kind === "rigControl")
+        .map((child) => child.id)
+    : request.payload.insertBeforeChild?.kind === "rigControl"
     ? [request.payload.insertBeforeChild.id]
     : [...request.payload.childRigControlIds];
 
@@ -353,11 +399,6 @@ const createCreateWarpDeformerResult = (input: {
     kind: "rigControl",
     id: rigControl.rigControlId
   };
-  const partTarget: TargetRefDto = {
-    kind: "part",
-    id: rigControl.partId,
-    path: `/model/rigControls/rigControls/${rigControl.rigControlId}/partId`
-  };
   const parentTarget = getParentTarget(input.mutation);
   const childDrawableTargets = rigControl.childDrawableIds.map((childDrawableId): TargetRefDto => ({
     kind: "drawable",
@@ -371,7 +412,6 @@ const createCreateWarpDeformerResult = (input: {
   }));
   const checkedTargetRefs = [
     rigControlTarget,
-    partTarget,
     ...(parentTarget === undefined ? [] : [parentTarget]),
     ...childDrawableTargets,
     ...childRigControlTargets
@@ -505,19 +545,25 @@ const getCreatedWarpDeformerRigControl = (
 ): PackageWarpLattice2dRigControl =>
   mutation.mode === "create"
     ? mutation.createMutation.rigControl
-    : mutation.insertMutation.rigControl as PackageWarpLattice2dRigControl;
+    : mutation.mode === "insert"
+      ? mutation.insertMutation.rigControl as PackageWarpLattice2dRigControl
+      : mutation.wrapMutation.rigControl as PackageWarpLattice2dRigControl;
 
 const getCreatedChildRigControlChanges = (mutation: CreateWarpDeformerMutation) =>
   mutation.mode === "create"
     ? mutation.createMutation.childRigControlChanges
-    : mutation.insertMutation.childRigControlChange === undefined
-      ? []
-      : [mutation.insertMutation.childRigControlChange];
+    : mutation.mode === "insert"
+      ? mutation.insertMutation.childRigControlChange === undefined
+        ? []
+        : [mutation.insertMutation.childRigControlChange]
+      : mutation.wrapMutation.childRigControlChanges;
 
 const getParentTarget = (mutation: CreateWarpDeformerMutation): TargetRefDto | undefined => {
   const parentId = mutation.mode === "create"
     ? mutation.parentBindMutation?.parentRigControlAfter.rigControlId
-    : mutation.insertMutation.parentRigControlAfter.rigControlId;
+    : mutation.mode === "insert"
+      ? mutation.insertMutation.parentRigControlAfter.rigControlId
+      : mutation.wrapMutation.parentRigControlAfter?.rigControlId;
   if (parentId === undefined) {
     return undefined;
   }
@@ -534,10 +580,14 @@ const getParentListChange = (
 ): ModelDiffDto["changed"][number] | undefined => {
   const parentBefore = mutation.mode === "create"
     ? mutation.parentBindMutation?.parentRigControlBefore
-    : mutation.insertMutation.parentRigControlBefore;
+    : mutation.mode === "insert"
+      ? mutation.insertMutation.parentRigControlBefore
+      : mutation.wrapMutation.parentRigControlBefore;
   const parentAfter = mutation.mode === "create"
     ? mutation.parentBindMutation?.parentRigControlAfter
-    : mutation.insertMutation.parentRigControlAfter;
+    : mutation.mode === "insert"
+      ? mutation.insertMutation.parentRigControlAfter
+      : mutation.wrapMutation.parentRigControlAfter;
   if (parentBefore === undefined || parentAfter === undefined) {
     return undefined;
   }
@@ -577,12 +627,6 @@ const createCreateWarpDeformerMutationDiagnostic = (
         checkId: "operation.createWarpDeformer.duplicateRigControl",
         message: error.message,
         target
-      });
-    case "missing_part":
-      return createOperationDiagnostic({
-        checkId: "operation.createWarpDeformer.missingPart",
-        message: error.message,
-        target: { kind: "part", id: rigControl.partId }
       });
     case "missing_drawable":
       return createOperationDiagnostic({
@@ -675,18 +719,65 @@ const createCreateWarpDeformerMutationDiagnostic = (
 
 const createCreateWarpDeformerTargetIds = (
   request: CreateWarpDeformerRequest,
-  rigControlId: RigControlId
+  rigControlId: RigControlId,
+  mutation?: CreateWarpDeformerMutation
 ): readonly string[] =>
   [
     rigControlId,
-    request.payload.partId,
     ...(request.payload.parentRigControlId === undefined ? [] : [request.payload.parentRigControlId]),
+    ...getMutationParentTargetIds(mutation),
     ...(request.payload.insertBeforeChild === undefined ? [] : [request.payload.insertBeforeChild.id]),
-    ...request.payload.childDrawableIds,
-    ...request.payload.childRigControlIds
+    ...(request.payload.wrapChildren === undefined
+      ? [...request.payload.childDrawableIds, ...request.payload.childRigControlIds]
+      : request.payload.wrapChildren.map((child) => child.id))
   ].filter((targetId, index, targetIds) => targetIds.indexOf(targetId) === index);
+
+const assertWrapChildrenPayloadCompatibility = (
+  request: CreateWarpDeformerRequest
+): void => {
+  const wrapChildren = request.payload.wrapChildren;
+  if (wrapChildren === undefined) {
+    return;
+  }
+
+  const legacyChildListsWereProvided =
+    request.payload.childDrawableIds.length > 0 ||
+    request.payload.childRigControlIds.length > 0;
+  if (!legacyChildListsWereProvided) {
+    return;
+  }
+
+  const expectedDrawableIds = wrapChildren
+    .filter((child) => child.kind === "drawable")
+    .map((child) => child.id);
+  const expectedRigControlIds = wrapChildren
+    .filter((child) => child.kind === "rigControl")
+    .map((child) => child.id);
+  if (
+    !sameOrderedIds(request.payload.childDrawableIds, expectedDrawableIds) ||
+    !sameOrderedIds(request.payload.childRigControlIds, expectedRigControlIds)
+  ) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      "When wrapChildren is set, childDrawableIds and childRigControlIds must be omitted or match wrapChildren"
+    );
+  }
+};
+
+const getMutationParentTargetIds = (
+  mutation: CreateWarpDeformerMutation | undefined
+): readonly RigControlId[] => {
+  if (mutation?.mode !== "wrap" || mutation.wrapMutation.parentRigControlAfter === undefined) {
+    return [];
+  }
+
+  return [mutation.wrapMutation.parentRigControlAfter.rigControlId];
+};
 
 const toUnitGridPosition = (index: number, size: number): number =>
   size <= 1 ? 0 : index / (size - 1);
+
+const sameOrderedIds = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const toJsonValue = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue;

@@ -159,6 +159,102 @@ test("edits imported parts and drawables through the Parts Tree and Inspector", 
   );
 });
 
+test("multi-selects Drawable rows in the Parts Tree with modifier clicks", async ({
+  page
+}) => {
+  await importFixturePsd(page);
+
+  const canvas = page.locator('[data-testid="canvas-renderer-surface"]:visible').first();
+  const drawableRows = page.locator('[data-row-kind="drawable"]:visible');
+  await expect(drawableRows.nth(2)).toBeVisible();
+
+  const firstDrawableName = (await rowNameButton(drawableRows.nth(0)).innerText()).trim();
+  const secondDrawableName = (await rowNameButton(drawableRows.nth(1)).innerText()).trim();
+  const thirdDrawableName = (await rowNameButton(drawableRows.nth(2)).innerText()).trim();
+
+  await rowNameButton(drawableRows.nth(0)).click();
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible')).toHaveCount(1);
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable"
+  );
+
+  await rowNameButton(drawableRows.nth(1)).click({ modifiers: ["Control"] });
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible')).toHaveCount(2);
+  await expect(canvas).toHaveAttribute("data-selected-drawable-count", "2");
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable Selection"
+  );
+
+  const selectedNames = page.locator('[data-testid="select-inspector-selected-drawable"]:visible');
+  await expect(selectedNames).toHaveCount(2);
+  await expect(selectedNames.nth(0)).toHaveText(firstDrawableName);
+  await expect(selectedNames.nth(1)).toHaveText(secondDrawableName);
+  await expect(page.locator('[aria-label="Opacity"]:visible')).toHaveCount(0);
+  await expect(page.locator('[aria-label="Clipping source"]:visible')).toHaveCount(0);
+
+  await rowNameButton(drawableRows.nth(2)).click({ modifiers: ["Shift"] });
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible')).toHaveCount(2);
+  await expect(canvas).toHaveAttribute("data-selected-drawable-count", "2");
+  await expect(selectedNames).toHaveCount(2);
+  await expect(selectedNames.nth(0)).toHaveText(secondDrawableName);
+  await expect(selectedNames.nth(1)).toHaveText(thirdDrawableName);
+
+  await page.getByRole("button", { name: /^Mesh$/ }).first().click();
+  const meshTargetNames = page.locator('[data-testid="mesh-tool-target-name"]:visible');
+  await expect(meshTargetNames).toHaveCount(2);
+  await expect(meshTargetNames.nth(0)).toHaveText(secondDrawableName);
+  await expect(meshTargetNames.nth(1)).toHaveText(thirdDrawableName);
+  await expect(page.locator('[data-testid="mesh-tool-existing-mesh-warning"]:visible')).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate preview" }).click();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "draft");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(canvas).toHaveAttribute("data-mesh-overlay-status", "");
+
+  await page.getByRole("button", { name: /^Rig$/ }).first().click();
+  const rigTargetNames = page.locator('[data-testid="rig-tool-target-name"]:visible');
+  await expect(rigTargetNames).toHaveCount(2);
+  await expect(rigTargetNames.nth(0)).toContainText(secondDrawableName);
+  await expect(rigTargetNames.nth(1)).toContainText(thirdDrawableName);
+  await expect(page.locator('[data-testid="rig-tool-bound-drawable-warning"]:visible')).toHaveCount(0);
+  await page.getByRole("button", { name: "Create Rotation Deformer" }).click();
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-kind", "rotation");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-status", "committed");
+  await expect(canvas).toHaveAttribute("data-deformer-overlay-child-drawable-count", "2");
+
+  await page.getByRole("button", { name: "Parts" }).click();
+  await rowNameButton(drawableRows.nth(1)).click();
+  await rowNameButton(drawableRows.nth(2)).click({ modifiers: ["Control"] });
+  await page.getByRole("button", { name: /^Rig$/ }).first().click();
+  await expect(page.locator('[data-testid="rig-tool-bound-drawable-warning"]:visible')).toContainText(
+    secondDrawableName
+  );
+  await expect(page.locator('[data-testid="rig-tool-bound-drawable-warning"]:visible')).toContainText(
+    thirdDrawableName
+  );
+  await expect(page.getByRole("button", { name: "Create Rotation Deformer" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Create Warp Deformer" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Wrap/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Select" }).first().click();
+
+  const partRow = page
+    .locator('[data-row-kind="part"]:visible')
+    .filter({ has: page.getByRole("button", { name: "Hide part container" }) })
+    .first();
+  await rowNameButton(partRow).click();
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Part"
+  );
+
+  await rowNameButton(drawableRows.nth(0)).click({ modifiers: ["Control"] });
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible')).toHaveCount(1);
+  await expect(page.locator('[data-testid="parts-tree-selected-row"]:visible').first()).toContainText(
+    firstDrawableName
+  );
+  await expect(page.locator('[data-testid="inspector-selection-kind"]:visible').first()).toHaveText(
+    "Drawable"
+  );
+});
+
 test("authors drawable opacity keyforms from the Parameter Bar and Inspector", async ({
   page
 }) => {
@@ -246,17 +342,20 @@ test("generates an initial mesh draft for a selected hidden Drawable and applies
 
   const meshInspector = page.locator('[data-testid="mesh-tool-inspector"]:visible').first();
   const meshStatus = page.locator('[data-testid="mesh-tool-status"]:visible').first();
-  const meshSource = page.locator('[data-testid="mesh-tool-source"]:visible').first();
-  const meshGenerationResult = page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible').first();
 
   await expect(meshInspector).toBeVisible();
   await expect(canvas).toHaveAttribute("data-mesh-preview-drawable-visible", "true");
   await page.getByRole("button", { name: "Preview Standard mesh" }).click();
   await expect(meshStatus).toHaveText("Draft preview");
-  await expect(meshSource).not.toHaveText("Soft apron mesh");
-  await expect(meshGenerationResult).toContainText("Adaptive contour mesh");
-  await expect(meshInspector).toContainText("Max edge");
-  await expect(meshInspector).toContainText("Min angle");
+  await expect(meshInspector).not.toContainText("Status");
+  await expect(meshInspector).not.toContainText("Preset");
+  await expect(meshInspector).not.toContainText("Vertices");
+  await expect(meshInspector).not.toContainText("Triangles");
+  await expect(meshInspector).not.toContainText("Source");
+  await expect(meshInspector).not.toContainText("Max edge");
+  await expect(meshInspector).not.toContainText("Min angle");
+  await expect(page.locator('[data-testid="mesh-tool-source"]:visible')).toHaveCount(0);
+  await expect(page.locator('[data-testid="mesh-tool-v6-output-kind"]:visible')).toHaveCount(0);
   await expect(page.locator('[data-testid="mesh-tool-backend-selector"]:visible')).toHaveCount(0);
   await expect(meshInspector).not.toContainText("Experimental backend");
   await expect(page.getByRole("button", { name: /v6D|v6E|v6F|backend/i })).toHaveCount(0);
@@ -375,7 +474,10 @@ test("creates a Warp Deformer draft from a selected Drawable and reflects it in 
   await page.getByRole("button", { name: "Deformers" }).click();
   const deformerRow = page.locator('[data-row-kind="warp-deformer"]:visible').first();
   await expect(deformerRow).toContainText("Warp Edited");
-  await expect(page.locator('[data-testid="deformer-tree-drawable-ref"]:visible').first()).toContainText(
+  await expect(deformerRow).not.toContainText("control points");
+  await expect(deformerRow).not.toContainText("Pivot");
+  const boundDrawableRef = page.locator('[data-testid="deformer-tree-drawable-ref"]:visible').first();
+  await expect(boundDrawableRef).toContainText(
     selectedDrawableName
   );
   await expect(page.getByTestId("deformer-tree-drawable-pool")).toHaveAttribute(
@@ -387,8 +489,25 @@ test("creates a Warp Deformer draft from a selected Drawable and reflects it in 
     "data-collapsed",
     "false"
   );
+  const poolPartRow = page.getByTestId("deformer-tree-drawable-pool-part-row").first();
+  await expect(poolPartRow).toBeVisible();
+  await expect(poolPartRow).toHaveAttribute("data-display-only", "true");
+  await expect(poolPartRow).not.toHaveAttribute("draggable", "true");
   const poolRow = page.getByTestId("deformer-tree-drawable-pool-row").first();
   await expect(poolRow).toBeVisible();
+  const deformerTreeSelectedRows = page
+    .locator('[data-testid="deformer-tree"]:visible')
+    .first()
+    .locator('[data-selected="true"]');
+  await deformerRow.click();
+  await expect(deformerTreeSelectedRows).toHaveCount(1);
+  await boundDrawableRef.click({ modifiers: ["Control"] });
+  await expect(deformerTreeSelectedRows).toHaveCount(2);
+  await poolRow.click({ modifiers: ["Shift"] });
+  await expect(deformerTreeSelectedRows).toHaveCount(2);
+  await expect(deformerRow).toHaveAttribute("data-selected", "false");
+  await expect(boundDrawableRef).toHaveAttribute("data-selected", "true");
+  await expect(poolRow).toHaveAttribute("data-selected", "true");
   await poolRow.dragTo(deformerRow);
   await expect(page.locator('[data-testid="deformer-tree-drawable-ref"]:visible')).toHaveCount(2);
 });
