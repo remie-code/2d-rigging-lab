@@ -14,5 +14,5 @@
 | [drawable-inspector.md](drawable-inspector.md) | Drawable Inspector、draw order、visibility、opacity、clipping / mask UXの定義 | Draft component spec |
 | [mesh-tool.md](mesh-tool.md) | Mesh Active Tool、preset-based initial mesh generation、mesh edit UXの定義 | Draft component spec |
 | [rig-tool.md](rig-tool.md) | Rig Active Tool、rig draft/preview、rotation、warp/lattice、keyform authoring UXの定義 | Draft component spec |
-| [dynamics-tool.md](dynamics-tool.md) | Dynamics Active Tool、dynamics group / binding / lightweight preview UXの定義 | Draft component spec |
+| [dynamics-tool.md](dynamics-tool.md) | Dynamics Active Tool、複数driver入力、仮想振り子simulation、output parameter ownership、調整用preview UXの定義 | Revised draft component spec |
 | [parameter-keyform.md](parameter-keyform.md) | Parameter Bar、Parameter Control Palette、keyform authoring UXの定義 | Draft component spec |
