@@ -52,7 +52,7 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Parameter / Keyform authoringでは、Parameter Barは1つのactive parameterを横長1行で操作し、Keyform専用Inspectorは作らない。選択中Drawable / Deformer / Tool Inspectorをparameter-awareにし、current valueに対するAdd / Update / Delete、Ends、Ends + Centerを扱う。keyform位置以外では補間値を表示しつつproperty編集をlockし、`Add Keyform Here` だけを許可する。
 - v0のkeyform対象は、Drawable opacity、Warp Deformer lattice / opacity multiplier、Rotation Deformer angle / opacity multiplierに絞る。Parts Container、Mesh、Parameter definition自体、visibility、clipping、draw order、mesh topologyはkeyform対象にしない。
 - Variant / Expression Managerは表情差分、パーツ差分、衣装差分のstate setを専用画面で管理する。初期はexclusive setを基本とし、同時適用 / additive setは将来候補として扱う。
-- Viewer / Runtime Viewはmodalではなく、Toolbox / App Barから開く専用画面として扱う。編集overlayを出さず、runtime表示、parameter override、warning / diff summaryを確認する。
+- Viewer / Runtime Viewはmodalではなく、Toolbox / App Barから開く専用画面として扱う。作品確認を主目的とし、編集overlayを出さず、Clean StageとRuntime Controlsで完成品としての見え方を確認する。検査情報は最小statusに留め、詳細はDiagnostics / Evidence Viewへ委譲する。Compare / Diff、screenshot / export、presentation frame / crop guide、favorite parameterはv0対象外とする。
 - 人間向けUI、debug/evidence表示、Codex-facing surface、test-facing surfaceを分離する必要がある。
 - `UX-FEAT-001`〜`UX-FEAT-037` の機能IDを、今後の画面仕様議論の参照軸として使う。
 

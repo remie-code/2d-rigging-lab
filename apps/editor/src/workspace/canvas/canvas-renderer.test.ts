@@ -35,6 +35,7 @@ vi.mock("@private-2d-rigging-lab/render-webgl2", () => ({
 }));
 
 const DRAW_RENDERER_TEST = DrawableIdSchema.parse("draw_renderer_test");
+const DRAW_RENDERER_MASK = DrawableIdSchema.parse("draw_renderer_mask");
 const PART_RENDERER_TEST = PartIdSchema.parse("part_renderer_test");
 const RIG_RENDERER_WARP = RigControlIdSchema.parse("rig_renderer_warp");
 
@@ -45,11 +46,29 @@ type RecordedCall = {
 
 class FakeCanvasContext {
   readonly calls: RecordedCall[] = [];
-  fillStyle = "";
   globalAlpha = 1;
-  globalCompositeOperation = "source-over";
   lineWidth = 1;
   strokeStyle = "";
+  private fillStyleValue = "";
+  private globalCompositeOperationValue = "source-over";
+
+  get fillStyle(): string {
+    return this.fillStyleValue;
+  }
+
+  set fillStyle(value: string) {
+    this.fillStyleValue = value;
+    this.record("setFillStyle", [value]);
+  }
+
+  get globalCompositeOperation(): string {
+    return this.globalCompositeOperationValue;
+  }
+
+  set globalCompositeOperation(value: string) {
+    this.globalCompositeOperationValue = value;
+    this.record("setGlobalCompositeOperation", [value]);
+  }
 
   setTransform(...args: unknown[]) {
     this.record("setTransform", args);
@@ -428,6 +447,181 @@ describe("canvas renderer evaluated mesh drawing", () => {
     });
   });
 
+  it("keeps the origin guide visible by default for existing Canvas overlays", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createEmptyProjection(),
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(hasCall(context, "lineTo", [128, 0])).toBe(true);
+    expect(hasCall(context, "lineTo", [0, 128])).toBe(true);
+  });
+
+  it("suppresses origin guide and authoring overlays for Clean Stage overlay state", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createEmptyProjection({
+        selectionBounds: { x: 1, y: 2, width: 24, height: 32 },
+        meshOverlays: [createMeshOverlay("draw_renderer_test_a")],
+        deformerOverlay: createWarpOverlay()
+      }),
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        originGuide: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache(),
+      warpDeformerInteraction: {
+        rigControlId: RIG_RENDERER_WARP,
+        editable: true,
+        selectedControlPointIndices: [],
+        scaleHandlesVisible: true
+      }
+    });
+
+    expect(context.calls.some((call) => call.name === "moveTo")).toBe(false);
+    expect(context.calls.some((call) => call.name === "lineTo")).toBe(false);
+    expect(context.calls.some((call) => call.name === "strokeRect")).toBe(false);
+    expect(context.calls.some((call) => call.name === "arc")).toBe(false);
+  });
+
+  it("uses the supplied panel background color for clean render paths", () => {
+    const canvas = new FakeCanvas();
+    const context = canvas.context;
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        return new FakeCanvas();
+      }
+    });
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createEmptyProjection(),
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      backgroundColor: "#6b7280",
+      overlays: {
+        grid: false,
+        originGuide: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(context.calls[2]).toEqual({
+      name: "setFillStyle",
+      args: ["#6b7280"]
+    });
+    expect(context.calls[3]).toEqual({
+      name: "fillRect",
+      args: [0, 0, 128, 128]
+    });
+  });
+
+  it("preserves mask clipping drawing while Clean Stage overlays are suppressed", () => {
+    const canvas = new FakeCanvas();
+    const createdCanvases: FakeCanvas[] = [];
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("document", {
+      createElement: (tagName: string) => {
+        if (tagName !== "canvas") {
+          throw new Error(`Unexpected element: ${tagName}`);
+        }
+
+        const element = new FakeCanvas();
+        createdCanvases.push(element);
+        return element;
+      }
+    });
+    vi.stubGlobal("ImageData", FakeImageData);
+
+    renderCanvasProjection({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      projection: createProjection([
+        createDrawable({
+          drawableId: DRAW_RENDERER_MASK,
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          evaluatedMesh: createRectFallbackMesh({ x: 0, y: 0, width: 10, height: 10 })
+        }),
+        createDrawable({
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          evaluatedMesh: createRectFallbackMesh({ x: 0, y: 0, width: 10, height: 10 }),
+          maskSourceDrawableIds: [DRAW_RENDERER_MASK]
+        })
+      ]),
+      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      overlays: {
+        grid: false,
+        originGuide: false,
+        canvasBounds: false,
+        selectionBounds: false,
+        mesh: false,
+        deformer: false,
+        isolateSelected: false
+      },
+      cache: createCanvasBitmapCache()
+    });
+
+    expect(
+      createdCanvases.some((element) =>
+        element.context.calls.some(
+          (call) =>
+            call.name === "setGlobalCompositeOperation" &&
+            call.args[0] === "destination-in"
+        )
+      )
+    ).toBe(true);
+  });
+
   it("draws every projected mesh overlay", () => {
     const canvas = new FakeCanvas();
     const context = canvas.context;
@@ -561,12 +755,16 @@ function renderDrawable(drawable: CanvasRenderableDrawable) {
   return { canvas, context };
 }
 
-function createProjection(drawable: CanvasRenderableDrawable): CanvasRenderProjection {
+function createProjection(
+  drawable: CanvasRenderableDrawable | readonly CanvasRenderableDrawable[]
+): CanvasRenderProjection {
+  const drawables = Array.isArray(drawable) ? drawable : [drawable];
+
   return {
     canvasBounds: { x: 0, y: 0, width: 128, height: 128 },
-    artworkBounds: drawable.bounds,
+    artworkBounds: drawables[0]?.bounds ?? { x: 0, y: 0, width: 0, height: 0 },
     selectedDrawableIds: new Set(),
-    drawables: [drawable],
+    drawables,
     maskRelations: [],
     hasRenderableArtwork: true,
     contentKey: "renderer-test"
@@ -574,20 +772,23 @@ function createProjection(drawable: CanvasRenderableDrawable): CanvasRenderProje
 }
 
 function createDrawable(input: {
+  readonly drawableId?: CanvasRenderableDrawable["drawableId"];
   readonly bounds: CanvasRenderableDrawable["bounds"];
   readonly evaluatedMesh: CanvasRenderableDrawable["evaluatedMesh"];
+  readonly maskSourceDrawableIds?: readonly CanvasRenderableDrawable["drawableId"][];
 }): CanvasRenderableDrawable {
+  const drawableId = input.drawableId ?? DRAW_RENDERER_TEST;
   const renderWidth = 30;
   const renderHeight = 40;
 
   return {
-    drawableId: DRAW_RENDERER_TEST,
+    drawableId,
     displayName: "Renderer Test",
     partId: PART_RENDERER_TEST,
     partAncestorIds: [],
-    textureId: "tex_renderer_test",
-    binaryAssetId: "bin_renderer_test",
-    binaryAssetPath: "assets/textures/renderer-test.rgba",
+    textureId: `tex_${drawableId}`,
+    binaryAssetId: `bin_${drawableId}`,
+    binaryAssetPath: `assets/textures/${drawableId}.rgba`,
     bounds: input.bounds,
     evaluatedMesh: input.evaluatedMesh,
     frontOrder: 0,
@@ -599,7 +800,42 @@ function createDrawable(input: {
     renderBytes: new Uint8Array(renderWidth * renderHeight * 4),
     renderWidth,
     renderHeight,
-    maskSourceDrawableIds: []
+    maskSourceDrawableIds: input.maskSourceDrawableIds ?? []
+  };
+}
+
+function createEmptyProjection(overrides: Partial<CanvasRenderProjection> = {}): CanvasRenderProjection {
+  return {
+    canvasBounds: { x: 0, y: 0, width: 128, height: 128 },
+    selectedDrawableIds: new Set(),
+    drawables: [],
+    maskRelations: [],
+    hasRenderableArtwork: false,
+    contentKey: "renderer-empty-test",
+    ...overrides
+  };
+}
+
+function createRectFallbackMesh(bounds: CanvasRenderableDrawable["bounds"]): CanvasRenderableDrawable["evaluatedMesh"] {
+  return {
+    source: "rectFallback",
+    bounds,
+    vertices: [
+      { x: bounds.x, y: bounds.y },
+      { x: bounds.x + bounds.width, y: bounds.y },
+      { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+      { x: bounds.x, y: bounds.y + bounds.height }
+    ],
+    uvs: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 }
+    ],
+    triangles: [
+      [0, 1, 2],
+      [0, 2, 3]
+    ]
   };
 }
 

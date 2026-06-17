@@ -1,18 +1,78 @@
 # Viewer / Runtime View 画面仕様
 
-> 状態: Draft screen spec。
+> 状態: Accepted v0 direction / Draft screen spec。
+> 最終更新: 2026-06-17。
 
 ## 1. 役割
 
-Viewer / Runtime Viewは、authoring previewとは別に、runtime/viewer状態を確認する専用画面である。
+Viewer / Runtime Viewは、編集したproject-defined modelを「完成品としてどう見えるか」確認するための専用画面である。
 
-この画面は編集用のActive Toolではない。Mesh / Rig / Parameter keyformの作成や編集を行う場所ではなく、コミット済みのproject-defined modelがruntime相当の表示でどのように見えるかを確認する場所である。
+この画面の主目的は、編集作業中の部品や制御構造ではなく、parameterを動かした時のキャラクター全体の見え方をユーザーが確認できるようにすることである。
 
-Authoring WorkspaceのCanvas / Previewは、selection、mesh overlay、rig draft、uncommitted preview、tool guideを表示する編集用previewである。Viewer / Runtime Viewは、それらの編集overlayを外し、runtime表示、parameter override、runtime diagnostics summaryを確認する。
+Viewerはauthoring surfaceではない。Mesh、deformer、keyform、parameter definition、tree hierarchy、clipping設定を作成・編集しない。
 
-## 2. 開き方
+Viewerはdiagnostics surfaceでもない。問題の原因追跡、raw evidence、operation log、artifact path、diff payloadの確認はDiagnostics / Evidence Viewへ委譲する。
 
-Viewer / Runtime Viewはmodalではなく、ToolboxまたはApp Barの入口から開く専用View / Screenとして扱う。
+## 2. 用語
+
+### 作品確認
+
+作品確認とは、人間が完成品としての見え方を判断する作業である。
+
+主な問い:
+
+- parameterを動かした時、キャラクターは自然に見えるか。
+- mesh / deformer / keyform / opacity / clipping の結果が、最終表示として破綻していないか。
+- 編集画面の補助線やハンドルなしで、モデル単体として見た時に違和感がないか。
+
+作品確認の対象は、最終的に表示されるキャラクターである。
+
+### 検査
+
+検査とは、表示結果の原因や内部状態を確認する作業である。
+
+主な問い:
+
+- どのdrawable、deformer、parameter、keyform、mask、opacityが結果に影響しているか。
+- runtime evaluationでwarningや欠落が出ているか。
+- 保存復元、評価順、mask合成、parameter補間が仕様どおりか。
+
+検査の対象は、runtime evaluationの中間状態や構造化情報である。
+
+Viewer v0では、作品確認を主画面にし、検査は必要な時だけDiagnostics / Evidence Viewへ逃がす。
+
+## 3. 基本判断
+
+Viewer / Runtime View v0では、次を採用する。
+
+- modalではなく専用Screen / Viewとして開く。
+- Clean Stageを主領域にする。
+- Runtime Controlsを主要操作面にする。
+- parameter一覧の絞り込みは名前検索だけにする。
+- parameter操作はsession-only overrideとして扱う。
+- authoring overlayは表示しない。
+- runtime statusは常設しない。
+- dynamics / physics playbackはRuntime Controls下部に将来接続位置だけ設計上予約する。
+
+Viewer / Runtime View v0では、次を採用しない。
+
+- mesh overlay。
+- deformer lattice。
+- selection bounds。
+- control points。
+- warp scale handles。
+- mesh draft / rig draft。
+- hit-test debug。
+- presentation frame / crop guide。
+- pinned / favorite parameters。
+- parameter group / category filter。
+- screenshot / export。
+- Compare / Diff。
+- authoring operation buttons。
+
+## 4. 開き方
+
+Viewer / Runtime Viewは、Authoring Workspaceから専用画面として開く。
 
 基本遷移:
 
@@ -20,116 +80,221 @@ Viewer / Runtime Viewはmodalではなく、ToolboxまたはApp Barの入口か�
 Authoring Workspace
   -> Toolbox / View group / Viewer
   -> Viewer / Runtime View
-  -> Back to Authoring
+  -> Back to Authoring Workspace
 ```
 
-想定入口:
+戻る時は、可能な限りAuthoring Workspace側のselection、active tool、active parameter contextを保持する。
 
-- ToolboxのView groupにある `Viewer` button。
-- App Bar上のViewer shortcut。既存のViewer buttonがある場合は、専用Viewを開く入口として再定義する。
-- Codex-facing command surfaceからの構造的なview open operation。
+Viewerをmodalにしない理由:
 
-Viewer / Runtime ViewからAuthoring Workspaceへ戻った場合、可能な限り元のselection、active tool、active parameter contextを保持する。
+- parameterを連続的に動かしながら確認するため、短い確認dialogでは足りない。
+- Canvas中央を塞ぐUIは完成品確認に向かない。
+- Authoring Workspaceの情報量から一度切り離す方が、完成品として見やすい。
 
-モーダルを正規導線にしない理由:
-
-- Viewerは短い確認dialogではなく、parameterを動かしながらruntime表示、warning、diff summaryを見る作業文脈である。
-- Canvasを広く使う必要があり、中央を塞ぐmodalはruntime確認に向かない。
-- 画面としてAuthoringから切り替えることで、通常UIの情報過多を避けられる。
-
-将来Quick Previewが必要な場合は、別途floating / temporary previewとして扱う。正規のViewer / Runtime確認は、この専用画面を基準にする。
-
-## 3. 画面配置
+## 5. 画面構成
 
 ```text
 +--------------------------------------------------------------------------------+
 | Viewer Header                                                                  |
-| model / runtime source / override state / reset / back to authoring             |
-+----------------------------------+---------------------------------------------+
-| Runtime Preview Canvas           | Viewer Controls                             |
-|                                  |                                             |
-| clean runtime-like model preview | parameter search / groups                   |
-| no authoring overlays            | parameter sliders                           |
-| committed model state            | reset all / reset selected                  |
-| session parameter overrides      | representative positions / snapshots        |
-| expression / variant visibility  | visible parts / drawables summary           |
-|                                  | runtime diff / warning summary              |
-+----------------------------------+---------------------------------------------+
-| Runtime Check Strip: warnings / diff summary / open Diagnostics / Evidence      |
+| Back / model name / reset pose                                                  |
++----------------------------------------------+---------------------------------+
+| Clean Stage                                  | Runtime Controls                |
+|                                              |                                 |
+| finished model preview                       | parameter name search           |
+| no authoring overlays                        | parameter sliders / numbers     |
+| session parameter overrides reflected        | reset changed / reset all       |
+| neutral gray background by default           | future playback slot            |
+| view controls only                           |                                 |
++----------------------------------------------+---------------------------------+
 +--------------------------------------------------------------------------------+
 ```
 
-主領域:
-
 | 領域 | 役割 |
 |---|---|
-| Viewer Header | 対象model、runtime source、parameter override状態、reset、Authoringへ戻る導線を表示する。 |
-| Runtime Preview Canvas | 編集overlayを出さず、runtime相当のclean previewを表示する。 |
-| Viewer Controls | runtime確認用のparameter操作、表示状態確認、reset、代表姿勢確認、warning summaryを扱う。 |
-| Runtime Check Strip | blocking / warning / diff summaryだけを表示し、詳細はDiagnostics / Evidence Viewへ委譲する。 |
+| Viewer Header | Authoringへ戻る導線、対象model名、pose resetを扱う。 |
+| Clean Stage | 完成品としてのモデル表示を扱う。編集overlayは出さない。 |
+| Runtime Controls | parameter overrideを操作する主UI。Viewerで最も多く触る領域。 |
+| Future Playback Slot | Runtime Controls下部に置く、将来のdynamics / physics playback操作の接続場所。v0では操作UIを出さない。 |
 
-## 4. Viewer Controls
+## 6. Clean Stage
 
-Viewer Controlsは、runtime確認に必要な操作だけを集約する。
+Clean Stageは、現在のcommitted model stateにsession parameter overrideを適用した表示を行う。
 
 表示するもの:
 
-- parameter search
-- parameter group / category filter
-- parameter sliders
-- reset all
-- reset selected
-- defaultへ戻す
-- representative positions / snapshots
-- current override summary
-- visible parts / drawables summary
-- runtime snapshot summary
-- runtime diff summary
-- validation diagnostics summary
-- part/drawable/mesh/mask/rig/dynamicsのruntime確認に必要な最小情報
+- drawable / mesh / deformer / opacity / clipping / parameter evaluationが反映されたモデル。
+- background selection。例: dark、light、transparent / checker。
+- 初期backgroundはneutral solid gray。
+- view controls。例: fit、1:1、zoom、pan、reset view。
+- 描画不能時だけ、Clean Stage内にempty / error stateを表示する。
 
-Viewer Controlsでのparameter操作は、基本的にsession-only overrideとして扱う。Authoring用のkeyform追加や編集は行わない。
+表示しないもの:
 
-## 5. 表示状態
+- mesh line。
+- deformer grid。
+- selected bounds。
+- control point。
+- scale handle。
+- layer bounds。
+- draft preview badge。
+- edit affordance。
 
-| State | 内容 |
+背景やzoomは、完成品を見やすくするためのViewer stage設定であり、authoring overlayではない。
+
+## 7. Runtime Controls
+
+Runtime Controlsは、Viewer内での主要操作面である。
+
+表示するもの:
+
+- parameter name search。
+- parameter slider。
+- numeric value input。
+- changed parameter indication。
+- reset selected / reset changed。
+- reset all parameter overrides。
+
+Runtime Controlsでは、parameter値を一時的に動かして完成品の見え方を確認する。
+
+これらの操作はproject fileを変更しない。keyformの追加、更新、削除も行わない。
+
+parameter searchはRuntime Controls最上部に常設する。
+
+```text
+Runtime Controls
+  [ Search parameters...        ]
+  [ Reset changed ] [ Reset all ]
+
+  Face Angle X     slider / number
+  Face Angle Y     slider / number
+  Face Angle Z     slider / number
+  ...
+
+  Future Playback Slot
+```
+
+parameter group / category filterはv0では置かない。Editor上でユーザーがparameter groupを意識する明確な操作導線がないため、名前検索だけを正式な絞り込み手段にする。
+
+Parameter Barとの違い:
+
+| UI | 役割 |
 |---|---|
-| Clean Runtime Preview | overrideなしで現在のcommitted modelを表示する。 |
-| Parameter Override Active | Viewer内で一時的にparameter値を動かしてruntime表示を確認している。 |
-| Runtime Warning | validation / runtime diff / package stateにwarningがある。詳細はDiagnostics / Evidence Viewへ送る。 |
-| Compare / Diff | authoring stateまたはruntime snapshotとの差分summaryを確認する。 |
+| Parameter Bar | Authoring Workspaceでactive parameterを編集し、keyform操作を行う。 |
+| Viewer Runtime Controls | Viewer内で複数parameterを動かし、完成品としての見え方を確認する。 |
 
-## 6. 他UIとの関係
+## 8. Runtime State 表示
+
+Viewer v0ではruntime statusを常設しない。
+
+表示できている状態で `Ready`、warning count、runtime source summaryを出さない。通常時に見ない情報を常設すると、作品確認の主画面が検査寄りになるためである。
+
+描画不能、texture欠落、runtime evaluation失敗などで完成品表示が成立しない場合だけ、Clean Stage内にempty / error stateを表示してよい。
+
+表示しないもの:
+
+- `Ready`。
+- warning count。
+- runtime source summary。
+- raw runtime evidence。
+- operation ID。
+- generated refs。
+- artifact path全文。
+- structured payload全文。
+- Compare / Diff。
+
+詳細確認が必要な場合はDiagnostics / Evidence Viewへ遷移する。
+
+## 9. Dynamics / Playback 接続余地
+
+Viewer v0ではdynamics / physicsを実装しない。
+
+ただし、将来の髪揺れや物理演算確認はViewerの責務に入る。Viewerは「完成品として動いて見えるか」を確認する場所であるため、dynamics結果も最終的にはClean Stageへ反映されるべきである。
+
+そのため、v0設計では次を予約する。
+
+- Runtime Controls下部に、Future Playback Slotを置ける構成にする。
+- session state上、parameter overrideと将来のsimulation stateを分けて扱える名前にする。
+- reset poseとreset simulationを将来分離できる導線にする。
+- runtime evaluationは、将来 `frameIndex`、`deltaTimeMs`、`previousState`、`resetReasons` を受け取れる形に寄せる。
+
+v0の画面上には、再生できないplay / pause / step buttonを出さない。
+
+必要なら、Future Playback Slotに小さく次のような静的表示だけを置いてよい。
+
+```text
+Motion / Physics: Not configured
+```
+
+この表示はRuntime Controls下部のFuture Playback Slotに置くplaceholderであり、操作可能UIではない。
+
+## 10. 除外事項
+
+### Presentation Frame / Crop Guide
+
+v0では扱わない。
+
+Viewer v0の目的は、書き出し構図や配信用カメラ枠ではなく、モデル単体が完成品としてどう見えるかを確認することである。
+
+### Screenshot / Export
+
+v0では扱わない。
+
+画像書き出しや配信・カメラ連携は、モデルを実際に動かす側のアプリケーション責務として扱う。Editor側Viewerにexportを持ち込まない。
+
+### Compare / Diff
+
+v0では扱わない。
+
+Default poseとの差分、保存前後差分、authoring previewとの差分、revision diffは、人間が視覚的に意味を取りにくい。必要になった場合もDiagnostics / Evidence側の検査機能として扱う。
+
+### Pinned / Favorite Parameters
+
+v0では扱わない。
+
+便利ではあるが、何をpinするか、どこに保存するか、session-onlyかproject stateかが曖昧になりやすい。初期Viewerはparameter name searchとchanged indicationで十分とする。
+
+### Parameter Group / Category Filter
+
+v0では扱わない。
+
+Editor上でユーザーがparameter groupを意識するタイミングがないため、Viewerにもgroup / category filterを置かない。絞り込みはparameter name searchだけにする。
+
+## 11. 他UIとの関係
 
 | UI | Viewer / Runtime Viewとの違い |
 |---|---|
-| Authoring Workspace Canvas / Preview | 編集overlay、tool draft、selection guideを出す編集用preview。 |
-| Parameter Bar | 1つのactive parameterをauthoringする常設UI。 |
-| Parameter Control Palette | Authoring中に全parameterを軽く動かして確認する非モーダルpalette。 |
-| Viewer / Runtime View | 編集overlayなしでruntime表示、parameter override、warning / diff summaryを確認する専用画面。 |
-| Diagnostics / Evidence View | raw evidence、operation log、artifact path、validation report detailsを確認する詳細view。 |
+| Authoring Workspace Canvas | 編集対象のselection、draft、tool overlay、control handlesを扱う。 |
+| Mesh Tool | mesh生成、preview、Apply、overlay確認を扱う。 |
+| Rig Tool | deformer作成、hierarchy編集、control point編集、keyed deformation編集を扱う。 |
+| Parameter Bar | keyform authoringの操作面。 |
+| Parameter Manager | parameter definitionを管理する。 |
+| Diagnostics / Evidence View | raw evidence、warning詳細、検査情報を扱う。 |
+| Viewer / Runtime View | 完成品としての見え方を、clean stageとruntime controlsで確認する。 |
 
-## 7. 通常表示しないもの
+## 12. v0受け入れ観点
 
-- runtime state artifact path全文
-- sequence artifact path全文
-- validation report path全文
-- raw runtime evidence
-- operation ID
-- generated refs
-- machine-readable payload全文
+Viewer / Runtime View v0は、次を満たせばよい。
 
-これらは通常UIの視認性を悪化させるため、Diagnostics / Evidence ViewまたはCodex-facing structured surfaceへ分離する。
+- Authoring Workspaceから専用Viewer screenへ移動できる。
+- ViewerからAuthoring Workspaceへ戻れる。
+- Clean Stageに現在のcommitted modelが表示される。
+- Authoring overlayが表示されない。
+- Runtime Controlsでparameterを動かせる。
+- Runtime Controls最上部でparameter名検索ができる。
+- parameter group / category filterは表示されない。
+- parameter overrideはsession-onlyであり、project authoring stateを書き換えない。
+- reset操作でparameter overrideを戻せる。
+- clipping、opacity、mesh、deformer、keyform評価がViewer表示にも反映される。
+- runtime statusは常設されない。
+- 描画不能時だけClean Stage内にempty / error stateを表示できる。
+- 初期backgroundはneutral solid grayである。
+- Future Playback SlotはRuntime Controls下部に配置できる。
+- screenshot / export、Compare / Diff、crop guide、favorite parameterを実装しない。
 
-## 8. 関連機能ID
+## 13. 確定済み事項
 
-- `UX-FEAT-007`
-- 一部 `UX-FEAT-020`〜`UX-FEAT-025`
-- 一部 `UX-FEAT-034`
-
-## 9. 未決事項
-
-- Viewer Controlsのparameter group / category分類方法。
-- representative positions / snapshots の最小セット。
-- Compare / Diffを初期仕様に含めるか、後続拡張に回すか。
-- runtime sourceの表示粒度。通常UIではsummaryに留め、詳細はDiagnostics / Evidence Viewへ委譲する方針を維持する。
+- parameter group / category filterはv0に含めない。
+- parameter searchはRuntime Controls最上部に置く。
+- runtime statusは常設しない。
+- 初期backgroundはneutral solid grayにする。
+- Future Playback SlotはRuntime Controls下部に置く。

@@ -14,7 +14,7 @@
 | [texture-atlas-task.md](texture-atlas-task.md) | Texture Atlas Taskの内部遷移とレイアウト | Draft screen spec |
 | [project-storage-task.md](project-storage-task.md) | Project Storage Taskの内部遷移とレイアウト | Draft screen spec |
 | [validation-task.md](validation-task.md) | Product Preflight / Validation Taskの内部遷移とレイアウト | Draft screen spec |
-| [viewer-runtime-view.md](viewer-runtime-view.md) | Viewer / Runtime Viewのレイアウト | Draft screen spec |
+| [viewer-runtime-view.md](viewer-runtime-view.md) | 完成品確認用Viewer / Runtime ViewのClean Stage、Runtime Controls、除外事項 | Accepted v0 direction / Draft screen spec |
 | [diagnostics-evidence-view.md](diagnostics-evidence-view.md) | Diagnostics / Evidence Viewのレイアウト | Draft screen spec |
 | [codex-automation-view.md](codex-automation-view.md) | Codex / Automation Viewのレイアウト | Draft screen spec |
 | [tutorial-task.md](tutorial-task.md) | Tutorial Taskのレイアウト | Placeholder screen spec |

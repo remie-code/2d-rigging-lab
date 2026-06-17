@@ -21,6 +21,7 @@ const MIN_WARP_SCALE_HANDLE_ZOOM = 1e-6;
 
 export interface CanvasOverlayState {
   readonly grid: boolean;
+  readonly originGuide?: boolean;
   readonly canvasBounds: boolean;
   readonly selectionBounds: boolean;
   readonly mesh: boolean;
@@ -79,6 +80,7 @@ export function renderCanvasProjection(input: {
   readonly view: CanvasViewState;
   readonly overlays: CanvasOverlayState;
   readonly cache: CanvasBitmapCache;
+  readonly backgroundColor?: string;
   readonly warpDeformerInteraction?: CanvasWarpDeformerInteractionState | undefined;
   readonly rotationDeformerInteraction?: CanvasRotationDeformerInteractionState | undefined;
 }): void {
@@ -102,7 +104,7 @@ export function renderCanvasProjection(input: {
 
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, viewport.width, viewport.height);
-  fillPanelBackground(context, viewport.width, viewport.height);
+  fillPanelBackground(context, viewport.width, viewport.height, input.backgroundColor);
 
   context.save();
   applyStageTransform(context, input.view);
@@ -111,7 +113,9 @@ export function renderCanvasProjection(input: {
     drawGrid(context, input.projection, input.view.zoom);
   }
 
-  drawOrigin(context, input.projection, input.view.zoom);
+  if (input.overlays.originGuide ?? true) {
+    drawOrigin(context, input.projection, input.view.zoom);
+  }
 
   if (input.overlays.canvasBounds) {
     drawCanvasBounds(context, input.projection, input.view.zoom);
@@ -1129,9 +1133,10 @@ function drawSelectionOverlay(
 function fillPanelBackground(
   context: CanvasRenderingContext2D,
   width: number,
-  height: number
+  height: number,
+  color = "#111211"
 ): void {
-  context.fillStyle = "#111211";
+  context.fillStyle = color;
   context.fillRect(0, 0, width, height);
 }
 

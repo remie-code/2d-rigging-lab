@@ -26,6 +26,8 @@ export function AppBar() {
   } = useEditorSession();
   const openProjectInputRef = useRef<HTMLInputElement | null>(null);
   const storageBusy = projectStorage.status === "loading" || projectStorage.status === "saving";
+  const workspaceModeLabel =
+    activeEntry === "viewer" ? "Viewer / Runtime View" : "Authoring Workspace";
 
   const activateEntry = (entry: WorkspaceEntryId) => {
     setActiveEntry(entry);
@@ -46,7 +48,7 @@ export function AppBar() {
           <div className="truncate text-sm font-semibold text-neutral-50">
             Private 2D Rigging Lab
           </div>
-          <div className="truncate text-xs text-neutral-400">Authoring Workspace</div>
+          <div className="truncate text-xs text-neutral-400">{workspaceModeLabel}</div>
         </div>
       </div>
 
@@ -130,7 +132,12 @@ export function AppBar() {
         >
           <Save aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>
-        <IconButton label="Viewer" tooltipSide="bottom">
+        <IconButton
+          label="Viewer"
+          onClick={() => activateEntry("viewer")}
+          pressed={activeEntry === "viewer"}
+          tooltipSide="bottom"
+        >
           <Eye aria-hidden="true" size={18} strokeWidth={1.8} />
         </IconButton>
       </div>

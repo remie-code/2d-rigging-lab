@@ -9,6 +9,7 @@ import { StructureTreePanel } from "./panels/structure-tree-panel";
 import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
 import { ProjectStorageScreen } from "./project-storage/project-storage-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
+import { ViewerRuntimeScreen } from "./viewer/viewer-runtime-screen";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
 
 function ResizeHandle() {
@@ -30,14 +31,21 @@ export function AuthoringWorkspaceContent({
 }) {
   const showParameterManager = activeEntry === "parameters";
   const showProjectStorage = activeEntry === "storage";
+  const showViewer = activeEntry === "viewer";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      {showParameterManager || showProjectStorage ? (
+      {showParameterManager || showProjectStorage || showViewer ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
-          {showParameterManager ? <ParameterManagerScreen /> : <ProjectStorageScreen />}
+          {showViewer ? (
+            <ViewerRuntimeScreen />
+          ) : showParameterManager ? (
+            <ParameterManagerScreen />
+          ) : (
+            <ProjectStorageScreen />
+          )}
         </div>
       ) : (
         <>
@@ -72,7 +80,7 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      <ParameterBar />
+      {showViewer ? null : <ParameterBar />}
       <PsdImportModal />
     </main>
   );
