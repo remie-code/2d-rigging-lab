@@ -1,9 +1,10 @@
 import type { ParameterId, RuntimeSnapshotId, TargetRefDto } from "@private-2d-rigging-lab/contracts";
+import { createInitializedParameterSurface } from "@private-2d-rigging-lab/package-format";
 import type {
-  DynamicsDriverDto,
   DynamicsGroupDto,
+  DynamicsInputDto,
+  InitializedParameterDto,
   PackageDocumentDto,
-  ParameterDto
 } from "@private-2d-rigging-lab/package-format";
 import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 
@@ -15,13 +16,13 @@ interface DynamicsGroupEntry {
   readonly index: number;
 }
 
-interface DynamicsDriverEntry {
-  readonly driver: DynamicsDriverDto;
+interface DynamicsInputEntry {
+  readonly input: DynamicsInputDto;
   readonly index: number;
 }
 
 interface ParameterEntry {
-  readonly parameter: ParameterDto;
+  readonly parameter: InitializedParameterDto;
   readonly index: number;
 }
 
@@ -33,32 +34,24 @@ export const validateDynamicsSemantics = (
   const groupEntries = packageDocument.model.dynamics.dynamicsGroups
     .map((group, index) => ({ group, index }))
     .sort(compareGroupEntries);
-  const outputProducersByParameterId = createOutputProducerIndex(groupEntries);
+  const outputOwnersByParameterId = createOutputOwnerIndex(groupEntries);
   const checks: ValidationCheckResultDto[] = [];
-
-  checks.push(
-    ...validateComputedDynamicsProducerCoverage({
-      packageDocument,
-      parametersById,
-      outputProducersByParameterId
-    })
-  );
 
   for (const entry of groupEntries) {
     checks.push(
+      ...validateDynamicsGroupShape(entry),
       ...validateDynamicsGroupRelations({
         entry,
-        parametersById,
-        outputProducersByParameterId
-      })
+        parametersById
+      }),
+      ...validateDynamicsGroupWarnings(entry)
     );
   }
 
-  checks.push(...validateDuplicateOutputTargets(outputProducersByParameterId));
-  checks.push(...validateRuntimeDynamicsEvidence({
-    groupEntries,
-    ...(runtimeSnapshot === undefined ? {} : { runtimeSnapshot })
-  }));
+  checks.push(...validateDuplicateOutputTargets(outputOwnersByParameterId));
+  if (runtimeSnapshot !== undefined) {
+    checks.push(...validateRuntimeDynamicsEvidence({ groupEntries, runtimeSnapshot }));
+  }
 
   return checks;
 };
@@ -67,49 +60,73 @@ const createParameterIndex = (
   packageDocument: PackageDocumentDto
 ): ReadonlyMap<ParameterId, ParameterEntry> =>
   new Map(
-    packageDocument.model.parameters.parameters.map((parameter, index) => [
+    createInitializedParameterSurface(packageDocument.model.parameters.parameters).map((parameter, index) => [
       parameter.parameterId,
       { parameter, index }
     ])
   );
 
-const createOutputProducerIndex = (
+const createOutputOwnerIndex = (
   groupEntries: readonly DynamicsGroupEntry[]
 ): ReadonlyMap<ParameterId, readonly DynamicsGroupEntry[]> => {
-  const producers = new Map<ParameterId, DynamicsGroupEntry[]>();
+  const owners = new Map<ParameterId, DynamicsGroupEntry[]>();
 
   for (const entry of groupEntries) {
-    const outputParameterId = entry.group.output.targetParameterId;
-    const current = producers.get(outputParameterId) ?? [];
-    current.push(entry);
-    producers.set(outputParameterId, current);
+    for (const output of entry.group.outputs) {
+      const current = owners.get(output.parameterId) ?? [];
+      current.push(entry);
+      owners.set(output.parameterId, current);
+    }
   }
 
   return new Map(
-    [...producers.entries()]
+    [...owners.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([parameterId, entries]) => [parameterId, entries.sort(compareGroupEntries)])
   );
 };
 
-const validateComputedDynamicsProducerCoverage = (input: {
-  readonly packageDocument: PackageDocumentDto;
-  readonly parametersById: ReadonlyMap<ParameterId, ParameterEntry>;
-  readonly outputProducersByParameterId: ReadonlyMap<ParameterId, readonly DynamicsGroupEntry[]>;
-}): readonly ValidationCheckResultDto[] => {
+const validateDynamicsGroupShape = (entry: DynamicsGroupEntry): readonly ValidationCheckResultDto[] => {
   const checks: ValidationCheckResultDto[] = [];
-  const computedParameters = [...input.parametersById.values()]
-    .filter((entry) => entry.parameter.valueSource === "computedDynamics")
-    .sort(compareParameterEntries);
 
-  for (const entry of computedParameters) {
-    const producers = input.outputProducersByParameterId.get(entry.parameter.parameterId) ?? [];
-    if (producers.length > 0) {
-      continue;
+  if (entry.group.inputs.length < 1) {
+    checks.push(createGroupShapeCheck({
+      entry,
+      checkId: "dynamics.inputMissing",
+      targetPath: `${groupBasePath(entry.index)}/inputs`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has no inputs.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, "inputs=0"],
+      impact: "A Dynamics v0 group needs at least one driver input."
+    }));
+  }
+
+  if (entry.group.pendulums.length !== 1) {
+    checks.push(createGroupShapeCheck({
+      entry,
+      checkId: "dynamics.invalidPendulumCardinality",
+      targetPath: `${groupBasePath(entry.index)}/pendulums`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} must have exactly one pendulum in v0.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `pendulumCount=${entry.group.pendulums.length}`],
+      impact: "Wave81 Dynamics v0 evaluates exactly one pendulum per group."
+    }));
+  }
+
+  if (entry.group.outputs.length !== 1) {
+    checks.push(createGroupShapeCheck({
+      entry,
+      checkId: "dynamics.invalidOutputCardinality",
+      targetPath: `${groupBasePath(entry.index)}/outputs`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} must have exactly one output in v0.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `outputCount=${entry.group.outputs.length}`],
+      impact: "Wave81 Dynamics v0 applies one additive output offset per group."
+    }));
+  }
+
+  for (const inputEntry of createSortedInputEntries(entry.group)) {
+    const normalization = inputEntry.input.normalization;
+    if (normalization.min >= normalization.center || normalization.center >= normalization.max) {
+      checks.push(createNormalizationInvalidCheck(entry, inputEntry));
     }
-
-    checks.push(createRequiredGroupMissingCheck(entry, input.packageDocument.model.dynamics.dynamicsGroups.length));
-    checks.push(createComputedParameterProducerMissingCheck(entry));
   }
 
   return checks;
@@ -118,280 +135,146 @@ const validateComputedDynamicsProducerCoverage = (input: {
 const validateDynamicsGroupRelations = (input: {
   readonly entry: DynamicsGroupEntry;
   readonly parametersById: ReadonlyMap<ParameterId, ParameterEntry>;
-  readonly outputProducersByParameterId: ReadonlyMap<ParameterId, readonly DynamicsGroupEntry[]>;
 }): readonly ValidationCheckResultDto[] => {
   const { entry } = input;
   const checks: ValidationCheckResultDto[] = [];
 
-  for (const driverEntry of createSortedDriverEntries(entry.group)) {
-    const parameterEntry = input.parametersById.get(driverEntry.driver.sourceParameterId);
+  for (const inputEntry of createSortedInputEntries(entry.group)) {
+    const parameterEntry = input.parametersById.get(inputEntry.input.parameterId);
     if (parameterEntry === undefined) {
-      checks.push(createDriverMissingCheck(entry, driverEntry));
-      continue;
-    }
-
-    if (parameterEntry.parameter.valueSource !== "authoredInput") {
-      checks.push(createDriverMustBeAuthoredInputCheck(entry, driverEntry, parameterEntry));
-    }
-
-    const producerEntries = input.outputProducersByParameterId.get(driverEntry.driver.sourceParameterId) ?? [];
-    if (producerEntries.length > 0) {
-      checks.push(createOutputUsedAsDriverCheck(entry, driverEntry, producerEntries));
+      checks.push(createDriverMissingCheck(entry, inputEntry));
     }
   }
 
-  const outputParameterEntry = input.parametersById.get(entry.group.output.targetParameterId);
-  if (outputParameterEntry === undefined) {
-    checks.push(createOutputMissingCheck(entry));
-  } else {
-    if (outputParameterEntry.parameter.valueSource !== "computedDynamics") {
-      checks.push(createOutputMustBeComputedParameterCheck(entry, outputParameterEntry));
+  for (const [outputIndex, output] of entry.group.outputs.entries()) {
+    const parameterEntry = input.parametersById.get(output.parameterId);
+    if (parameterEntry === undefined) {
+      checks.push(createOutputMissingCheck(entry, outputIndex));
     }
-
-    checks.push(...validateOutputRange(entry, outputParameterEntry));
-    checks.push(...validateUnsafeSettings(entry, outputParameterEntry));
   }
 
   return checks;
 };
 
-const createSortedDriverEntries = (group: DynamicsGroupDto): readonly DynamicsDriverEntry[] =>
-  group.drivers
-    .map((driver, index) => ({ driver, index }))
-    .sort((left, right) =>
-      left.driver.driverId.localeCompare(right.driver.driverId) ||
-      left.driver.sourceParameterId.localeCompare(right.driver.sourceParameterId) ||
-      left.index - right.index
-    );
-
-const validateOutputRange = (
-  entry: DynamicsGroupEntry,
-  outputParameterEntry: ParameterEntry
-): readonly ValidationCheckResultDto[] => {
-  const output = entry.group.output;
-  const targetParameter = outputParameterEntry.parameter;
+const validateDynamicsGroupWarnings = (entry: DynamicsGroupEntry): readonly ValidationCheckResultDto[] => {
   const checks: ValidationCheckResultDto[] = [];
+  const output = entry.group.outputs[0];
+  const pendulum = entry.group.pendulums[0];
 
-  if (output.min > output.max) {
-    checks.push(createOutputParameterOutOfRangeCheck({
+  if (entry.group.inputs.length > 0 && entry.group.inputs.every((input) => input.influencePercent === 0)) {
+    checks.push(createWarningCheck({
       entry,
-      targetPath: groupOutputRangePath(entry.index),
-      message: `Dynamics group ${entry.group.dynamicsGroupId} has output min greater than max.`,
-      evidence: [
-        `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-        `outputParameterId=${output.targetParameterId}`,
-        `outputMin=${output.min}`,
-        `outputMax=${output.max}`
-      ]
+      checkId: "dynamics.zeroInputInfluence",
+      targetPath: `${groupBasePath(entry.index)}/inputs`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has zero influence across all inputs.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`],
+      impact: "The group is valid but cannot produce visible input-driven motion."
     }));
   }
 
-  if (output.min < targetParameter.min || output.max > targetParameter.max) {
-    checks.push(createOutputParameterOutOfRangeCheck({
+  if (output !== undefined && output.strength === 0) {
+    checks.push(createWarningCheck({
       entry,
-      targetPath: groupOutputRangePath(entry.index),
-      message: `Dynamics group ${entry.group.dynamicsGroupId} output range exceeds target parameter ${targetParameter.parameterId}.`,
-      evidence: [
-        `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-        `outputParameterId=${output.targetParameterId}`,
-        `outputMin=${output.min}`,
-        `outputMax=${output.max}`,
-        `parameterMin=${targetParameter.min}`,
-        `parameterMax=${targetParameter.max}`
-      ]
+      checkId: "dynamics.outputStrengthZero",
+      targetPath: `${groupBasePath(entry.index)}/outputs/0/strength`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} output strength is zero.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `outputParameterId=${output.parameterId}`],
+      impact: "The additive output offset will always be zero."
     }));
   }
 
-  return checks;
-};
-
-const validateUnsafeSettings = (
-  entry: DynamicsGroupEntry,
-  outputParameterEntry: ParameterEntry
-): readonly ValidationCheckResultDto[] => {
-  const checks: ValidationCheckResultDto[] = [];
-  const { settings } = entry.group;
-
-  if (settings.stiffness > 0 && settings.damping === 0) {
-    checks.push(createUnstableSettingsCheck(entry, [
-      `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `stiffness=${settings.stiffness}`,
-      `damping=${settings.damping}`,
-      "reason=positive-stiffness-with-zero-damping"
-    ]));
+  if (output !== undefined && output.limit <= 0.000001) {
+    checks.push(createWarningCheck({
+      entry,
+      checkId: "dynamics.outputLimitTooSmall",
+      targetPath: `${groupBasePath(entry.index)}/outputs/0/limit`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} output limit is too small to show visible motion.`,
+      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `limit=${output.limit}`],
+      impact: "The additive output offset will be clamped to zero or a visually negligible range."
+    }));
   }
 
-  if (settings.maxAmplitude !== undefined) {
-    const outputRangeWidth = entry.group.output.max - entry.group.output.min;
-    const parameterRangeWidth = outputParameterEntry.parameter.max - outputParameterEntry.parameter.min;
-    const boundedWidth = Math.min(outputRangeWidth, parameterRangeWidth);
-
-    if (boundedWidth >= 0 && settings.maxAmplitude > boundedWidth) {
-      checks.push(createExcessiveAmplitudeCheck(entry, [
+  if (
+    pendulum !== undefined &&
+    (pendulum.length < 0.001 ||
+      pendulum.sway > 100 ||
+      pendulum.reactionSpeed > 100 ||
+      pendulum.convergenceSpeed > 100)
+  ) {
+    checks.push(createWarningCheck({
+      entry,
+      checkId: "dynamics.unstableSettings",
+      targetPath: `${groupBasePath(entry.index)}/pendulums/0`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has extreme pendulum coefficients.`,
+      evidence: [
         `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-        `maxAmplitude=${settings.maxAmplitude}`,
-        `outputRangeWidth=${outputRangeWidth}`,
-        `parameterRangeWidth=${parameterRangeWidth}`
-      ]));
-    }
+        `length=${pendulum.length}`,
+        `sway=${pendulum.sway}`,
+        `reactionSpeed=${pendulum.reactionSpeed}`,
+        `convergenceSpeed=${pendulum.convergenceSpeed}`
+      ],
+      impact: "The group is valid but may produce unstable or hard-to-control additive motion."
+    }));
   }
 
   return checks;
 };
 
 const validateDuplicateOutputTargets = (
-  outputProducersByParameterId: ReadonlyMap<ParameterId, readonly DynamicsGroupEntry[]>
+  outputOwnersByParameterId: ReadonlyMap<ParameterId, readonly DynamicsGroupEntry[]>
 ): readonly ValidationCheckResultDto[] =>
-  [...outputProducersByParameterId.entries()]
+  [...outputOwnersByParameterId.entries()]
     .filter(([, entries]) => entries.length > 1)
     .map(([parameterId, entries]) => createOutputTargetDuplicateCheck(parameterId, entries));
 
 const validateRuntimeDynamicsEvidence = (input: {
   readonly groupEntries: readonly DynamicsGroupEntry[];
-  readonly runtimeSnapshot?: RuntimeSnapshotDto;
+  readonly runtimeSnapshot: RuntimeSnapshotDto;
 }): readonly ValidationCheckResultDto[] => {
-  const enabledGroupEntries = input.groupEntries.filter((entry) => entry.group.enabled);
-  if (enabledGroupEntries.length === 0) {
-    return [];
-  }
-
-  if (input.runtimeSnapshot === undefined) {
-    return enabledGroupEntries.map((entry) =>
-      createRuntimeEvidenceMissingCheck({
-        entry,
-        message: `Dynamics group ${entry.group.dynamicsGroupId} has no runtime snapshot evidence.`,
-        evidence: createRuntimeEvidenceBase(entry, ["runtimeSnapshot=missing"])
-      })
-    );
-  }
-
   const snapshotDynamicsById = new Map(
     input.runtimeSnapshot.dynamics.map((dynamicsGroup) => [
       dynamicsGroup.dynamicsGroupId,
       dynamicsGroup
     ])
   );
-  const snapshotParametersById = new Map(
-    input.runtimeSnapshot.parameters.map((parameter) => [
-      parameter.parameterId,
-      parameter
-    ])
-  );
   const checks: ValidationCheckResultDto[] = [];
 
-  for (const entry of enabledGroupEntries) {
+  for (const entry of input.groupEntries.filter((candidate) => candidate.group.enabled)) {
+    const output = entry.group.outputs[0];
     const snapshotDynamicsGroup = snapshotDynamicsById.get(entry.group.dynamicsGroupId);
-    if (snapshotDynamicsGroup === undefined) {
-      checks.push(createRuntimeEvidenceMissingCheck({
-        entry,
-        runtimeSnapshotId: input.runtimeSnapshot.snapshotId,
-        message: `Runtime snapshot ${input.runtimeSnapshot.snapshotId} is missing dynamics evidence for ${entry.group.dynamicsGroupId}.`,
-        evidence: createRuntimeEvidenceBase(entry, [
-          `snapshotId=${input.runtimeSnapshot.snapshotId}`,
-          "snapshotDynamicsGroup=missing"
-        ])
-      }));
+    if (snapshotDynamicsGroup === undefined || output === undefined) {
       continue;
     }
 
-    if (snapshotDynamicsGroup.outputParameterId !== entry.group.output.targetParameterId) {
-      checks.push(createRuntimeEvidenceMissingCheck({
+    if (snapshotDynamicsGroup.outputParameterId !== output.parameterId) {
+      checks.push(createRuntimeEvidenceMismatchCheck({
         entry,
         runtimeSnapshotId: input.runtimeSnapshot.snapshotId,
         message: `Runtime snapshot ${input.runtimeSnapshot.snapshotId} dynamics output target does not match package group ${entry.group.dynamicsGroupId}.`,
-        evidence: createRuntimeEvidenceBase(entry, [
-          `snapshotId=${input.runtimeSnapshot.snapshotId}`,
+        evidence: [
+          `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
+          `packageOutputParameterId=${output.parameterId}`,
           `snapshotOutputParameterId=${snapshotDynamicsGroup.outputParameterId}`
-        ])
+        ]
       }));
-    }
-
-    const outputParameter = snapshotParametersById.get(entry.group.output.targetParameterId);
-    if (outputParameter === undefined || outputParameter.valueSource !== "computedDynamics") {
-      checks.push(createRuntimeEvidenceMissingCheck({
-        entry,
-        runtimeSnapshotId: input.runtimeSnapshot.snapshotId,
-        message: `Runtime snapshot ${input.runtimeSnapshot.snapshotId} is missing computed parameter evidence for ${entry.group.output.targetParameterId}.`,
-        evidence: createRuntimeEvidenceBase(entry, [
-          `snapshotId=${input.runtimeSnapshot.snapshotId}`,
-          `snapshotParameter=${outputParameter === undefined ? "missing" : outputParameter.valueSource}`
-        ])
-      }));
-    }
-
-    if (snapshotDynamicsGroup.outputValue < entry.group.output.min || snapshotDynamicsGroup.outputValue > entry.group.output.max) {
-      checks.push(createOutputParameterOutOfRangeCheck({
-        entry,
-        runtimeSnapshotId: input.runtimeSnapshot.snapshotId,
-        targetPath: `${groupBasePath(entry.index)}/runtimeEvidence/outputValue`,
-        message: `Runtime snapshot ${input.runtimeSnapshot.snapshotId} output for ${entry.group.dynamicsGroupId} is outside the group output range.`,
-        evidence: createRuntimeEvidenceBase(entry, [
-          `snapshotId=${input.runtimeSnapshot.snapshotId}`,
-          `outputValue=${snapshotDynamicsGroup.outputValue}`,
-          `outputMin=${entry.group.output.min}`,
-          `outputMax=${entry.group.output.max}`
-        ])
-      }));
-    }
-
-    if (snapshotDynamicsGroup.debug?.outputClamped === true) {
-      checks.push(createOutputClampedCheck(entry, input.runtimeSnapshot.snapshotId));
     }
   }
 
   return checks;
 };
 
-const createRequiredGroupMissingCheck = (
-  parameterEntry: ParameterEntry,
-  dynamicsGroupCount: number
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.requiredGroupMissing",
-    status: "fail",
-    severity: "error",
-    phase: "dynamics_semantic",
-    target: {
-      kind: "parameter",
-      id: parameterEntry.parameter.parameterId,
-      path: parameterPath(parameterEntry.index)
-    },
-    targetPath: parameterPath(parameterEntry.index),
-    message: `Computed dynamics parameter ${parameterEntry.parameter.parameterId} has no required dynamics group.`,
-    evidence: [
-      `parameterId=${parameterEntry.parameter.parameterId}`,
-      "valueSource=computedDynamics",
-      `dynamicsGroupCount=${dynamicsGroupCount}`
-    ],
-    impact: "The package declares a computed dynamics parameter without a dynamics group that can produce it."
-  });
-
-const createComputedParameterProducerMissingCheck = (
-  parameterEntry: ParameterEntry
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.computedParameterProducerMissing",
-    status: "fail",
-    severity: "error",
-    phase: "dynamics_semantic",
-    target: {
-      kind: "parameter",
-      id: parameterEntry.parameter.parameterId,
-      path: parameterPath(parameterEntry.index)
-    },
-    targetPath: parameterPath(parameterEntry.index),
-    message: `Computed dynamics parameter ${parameterEntry.parameter.parameterId} has no producer group.`,
-    evidence: [
-      `parameterId=${parameterEntry.parameter.parameterId}`,
-      "valueSource=computedDynamics",
-      "producerGroup=missing"
-    ],
-    impact: "Runtime cannot resolve the computed parameter from package dynamics relations."
-  });
+const createSortedInputEntries = (group: DynamicsGroupDto): readonly DynamicsInputEntry[] =>
+  group.inputs
+    .map((input, index) => ({ input, index }))
+    .sort((left, right) =>
+      left.input.parameterId.localeCompare(right.input.parameterId) ||
+      left.input.kind.localeCompare(right.input.kind) ||
+      left.index - right.index
+    );
 
 const createDriverMissingCheck = (
   entry: DynamicsGroupEntry,
-  driverEntry: DynamicsDriverEntry
+  inputEntry: DynamicsInputEntry
 ): ValidationCheckResultDto =>
   createDynamicsCheck({
     checkId: "dynamics.driverMissing",
@@ -400,119 +283,72 @@ const createDriverMissingCheck = (
     phase: "dynamics_semantic",
     target: {
       kind: "parameter",
-      id: driverEntry.driver.sourceParameterId,
-      path: groupDriverSourcePath(entry.index, driverEntry.index)
+      id: inputEntry.input.parameterId,
+      path: groupInputParameterPath(entry.index, inputEntry.index)
     },
-    targetPath: groupDriverSourcePath(entry.index, driverEntry.index),
-    message: `Dynamics group ${entry.group.dynamicsGroupId} references missing driver parameter ${driverEntry.driver.sourceParameterId}.`,
+    targetPath: groupInputParameterPath(entry.index, inputEntry.index),
+    message: `Dynamics group ${entry.group.dynamicsGroupId} references missing driver parameter ${inputEntry.input.parameterId}.`,
     evidence: [
       `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `driverId=${driverEntry.driver.driverId}`,
-      `sourceParameterId=${driverEntry.driver.sourceParameterId}`,
+      `inputIndex=${inputEntry.index}`,
+      `parameterId=${inputEntry.input.parameterId}`,
       "parameterMatch=missing"
     ],
-    impact: "The dynamics group cannot be evaluated because one driver parameter is absent."
+    impact: "The dynamics group cannot be evaluated because one input parameter is absent."
   });
 
-const createDriverMustBeAuthoredInputCheck = (
+const createOutputMissingCheck = (
   entry: DynamicsGroupEntry,
-  driverEntry: DynamicsDriverEntry,
-  parameterEntry: ParameterEntry
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.driverMustBeAuthoredInput",
-    status: "fail",
-    severity: "error",
-    phase: "dynamics_semantic",
-    target: {
-      kind: "parameter",
-      id: parameterEntry.parameter.parameterId,
-      path: groupDriverSourcePath(entry.index, driverEntry.index)
-    },
-    targetPath: groupDriverSourcePath(entry.index, driverEntry.index),
-    message: `Dynamics driver ${driverEntry.driver.driverId} must reference an authoredInput parameter.`,
-    evidence: [
-      `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `driverId=${driverEntry.driver.driverId}`,
-      `sourceParameterId=${parameterEntry.parameter.parameterId}`,
-      `valueSource=${parameterEntry.parameter.valueSource}`,
-      `parameterPath=${parameterPath(parameterEntry.index)}`
-    ],
-    impact: "Computed or debug-only parameters cannot be used as deterministic dynamics drivers."
-  });
+  outputIndex: number
+): ValidationCheckResultDto => {
+  const output = entry.group.outputs[outputIndex];
 
-const createOutputUsedAsDriverCheck = (
-  entry: DynamicsGroupEntry,
-  driverEntry: DynamicsDriverEntry,
-  producerEntries: readonly DynamicsGroupEntry[]
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.outputUsedAsDriver",
-    status: "fail",
-    severity: "error",
-    phase: "dynamics_semantic",
-    target: {
-      kind: "parameter",
-      id: driverEntry.driver.sourceParameterId,
-      path: groupDriverSourcePath(entry.index, driverEntry.index)
-    },
-    targetPath: groupDriverSourcePath(entry.index, driverEntry.index),
-    message: `Dynamics driver ${driverEntry.driver.driverId} uses a computed dynamics output parameter.`,
-    evidence: [
-      `consumerGroupId=${entry.group.dynamicsGroupId}`,
-      `driverId=${driverEntry.driver.driverId}`,
-      `sourceParameterId=${driverEntry.driver.sourceParameterId}`,
-      ...producerEntries.map((producer) => `producerGroupId=${producer.group.dynamicsGroupId}`).sort()
-    ],
-    impact: "Dynamics output parameters cannot feed another dynamics driver in Minimum Open Dynamics v1."
-  });
-
-const createOutputMissingCheck = (entry: DynamicsGroupEntry): ValidationCheckResultDto =>
-  createDynamicsCheck({
+  return createDynamicsCheck({
     checkId: "dynamics.outputMissing",
     status: "fail",
     severity: "error",
     phase: "dynamics_semantic",
     target: {
       kind: "parameter",
-      id: entry.group.output.targetParameterId,
-      path: groupOutputTargetPath(entry.index)
+      id: output?.parameterId ?? entry.group.dynamicsGroupId,
+      path: groupOutputParameterPath(entry.index, outputIndex)
     },
-    targetPath: groupOutputTargetPath(entry.index),
-    message: `Dynamics group ${entry.group.dynamicsGroupId} targets missing output parameter ${entry.group.output.targetParameterId}.`,
+    targetPath: groupOutputParameterPath(entry.index, outputIndex),
+    message: `Dynamics group ${entry.group.dynamicsGroupId} targets missing output parameter ${output?.parameterId ?? "<missing>"}.`,
     evidence: [
       `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `outputId=${entry.group.output.outputId}`,
-      `targetParameterId=${entry.group.output.targetParameterId}`,
+      `outputIndex=${outputIndex}`,
+      `parameterId=${output?.parameterId ?? "<missing>"}`,
       "parameterMatch=missing"
     ],
-    impact: "The dynamics group cannot write its computed output into the package parameter graph."
+    impact: "The dynamics group cannot apply its additive output offset to a package parameter."
   });
+};
 
-const createOutputMustBeComputedParameterCheck = (
+const createNormalizationInvalidCheck = (
   entry: DynamicsGroupEntry,
-  parameterEntry: ParameterEntry
+  inputEntry: DynamicsInputEntry
 ): ValidationCheckResultDto =>
   createDynamicsCheck({
-    checkId: "dynamics.outputMustBeComputedParameter",
+    checkId: "dynamics.normalizationInvalid",
     status: "fail",
     severity: "error",
     phase: "dynamics_semantic",
     target: {
-      kind: "parameter",
-      id: parameterEntry.parameter.parameterId,
-      path: groupOutputTargetPath(entry.index)
+      kind: "dynamicsGroup",
+      id: entry.group.dynamicsGroupId,
+      path: `${groupInputBasePath(entry.index, inputEntry.index)}/normalization`
     },
-    targetPath: groupOutputTargetPath(entry.index),
-    message: `Dynamics output ${entry.group.output.outputId} must target a computedDynamics parameter.`,
+    targetPath: `${groupInputBasePath(entry.index, inputEntry.index)}/normalization`,
+    message: `Dynamics group ${entry.group.dynamicsGroupId} has invalid input normalization.`,
     evidence: [
       `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `outputId=${entry.group.output.outputId}`,
-      `targetParameterId=${parameterEntry.parameter.parameterId}`,
-      `valueSource=${parameterEntry.parameter.valueSource}`,
-      `parameterPath=${parameterPath(parameterEntry.index)}`
+      `inputIndex=${inputEntry.index}`,
+      `min=${inputEntry.input.normalization.min}`,
+      `center=${inputEntry.input.normalization.center}`,
+      `max=${inputEntry.input.normalization.max}`
     ],
-    impact: "Dynamics output must be separated from authored input and debug override parameters."
+    impact: "Dynamics input normalization must satisfy min < center < max."
   });
 
 const createOutputTargetDuplicateCheck = (
@@ -530,90 +366,74 @@ const createOutputTargetDuplicateCheck = (
     target: {
       kind: "parameter",
       id: parameterId,
-      path: firstEntry === undefined ? "/model/dynamics/dynamicsGroups" : groupOutputTargetPath(firstEntry.index)
+      path: firstEntry === undefined ? "/model/dynamics/dynamicsGroups" : groupOutputParameterPath(firstEntry.index, 0)
     },
-    targetPath: firstEntry === undefined ? "/model/dynamics/dynamicsGroups" : groupOutputTargetPath(firstEntry.index),
-    message: `Multiple dynamics groups target computed output parameter ${parameterId}.`,
+    targetPath: firstEntry === undefined ? "/model/dynamics/dynamicsGroups" : groupOutputParameterPath(firstEntry.index, 0),
+    message: `Multiple dynamics groups target additive output parameter ${parameterId}.`,
     evidence: [
       `targetParameterId=${parameterId}`,
-      ...sortedEntries.map((entry) => `producerGroupId=${entry.group.dynamicsGroupId}`)
+      ...sortedEntries.map((entry) => `ownerGroupId=${entry.group.dynamicsGroupId}`)
     ],
-    impact: "Minimum Open Dynamics v1 allows only one producer group per computed output parameter."
+    impact: "Dynamics v0 allows only one group to own an output parameter."
   });
 };
 
-const createOutputParameterOutOfRangeCheck = (input: {
+const createGroupShapeCheck = (input: {
   readonly entry: DynamicsGroupEntry;
-  readonly runtimeSnapshotId?: RuntimeSnapshotId;
+  readonly checkId: string;
   readonly targetPath: string;
   readonly message: string;
   readonly evidence: readonly string[];
+  readonly impact: string;
 }): ValidationCheckResultDto =>
   createDynamicsCheck({
-    checkId: "dynamics.outputParameterOutOfRange",
+    checkId: input.checkId,
     status: "fail",
     severity: "error",
-    phase: "dynamics_evaluation",
+    phase: "dynamics_semantic",
     target: {
-      kind: "parameter",
-      id: input.entry.group.output.targetParameterId,
+      kind: "dynamicsGroup",
+      id: input.entry.group.dynamicsGroupId,
       path: input.targetPath
     },
     targetPath: input.targetPath,
     message: input.message,
     evidence: input.evidence,
-    impact: "Dynamics output can exceed the declared parameter range and cannot be accepted as deterministic replay evidence.",
-    snapshotIds: input.runtimeSnapshotId === undefined ? [] : [input.runtimeSnapshotId]
+    impact: input.impact
   });
 
-const createUnstableSettingsCheck = (
-  entry: DynamicsGroupEntry,
-  evidence: readonly string[]
-): ValidationCheckResultDto =>
+const createWarningCheck = (input: {
+  readonly entry: DynamicsGroupEntry;
+  readonly checkId: string;
+  readonly targetPath: string;
+  readonly message: string;
+  readonly evidence: readonly string[];
+  readonly impact: string;
+}): ValidationCheckResultDto =>
   createDynamicsCheck({
-    checkId: "dynamics.unstableSettings",
+    checkId: input.checkId,
     status: "needs_review",
     severity: "warning",
     phase: "dynamics_semantic",
     target: {
       kind: "dynamicsGroup",
-      id: entry.group.dynamicsGroupId,
-      path: `${groupBasePath(entry.index)}/settings`
+      id: input.entry.group.dynamicsGroupId,
+      path: input.targetPath
     },
-    targetPath: `${groupBasePath(entry.index)}/settings`,
-    message: `Dynamics group ${entry.group.dynamicsGroupId} has unsafe scalar damped follow settings.`,
-    evidence,
-    impact: "The validator can determine that these settings are likely to produce unstable or non-useful dynamics output."
+    targetPath: input.targetPath,
+    message: input.message,
+    evidence: input.evidence,
+    impact: input.impact
   });
 
-const createExcessiveAmplitudeCheck = (
-  entry: DynamicsGroupEntry,
-  evidence: readonly string[]
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.excessiveAmplitude",
-    status: "needs_review",
-    severity: "warning",
-    phase: "dynamics_evaluation",
-    target: {
-      kind: "dynamicsGroup",
-      id: entry.group.dynamicsGroupId,
-      path: `${groupBasePath(entry.index)}/settings/maxAmplitude`
-    },
-    targetPath: `${groupBasePath(entry.index)}/settings/maxAmplitude`,
-    message: `Dynamics group ${entry.group.dynamicsGroupId} maxAmplitude exceeds its output range.`,
-    evidence,
-    impact: "The declared amplitude can push the computed output beyond the safe authored range."
-  });
-
-const createRuntimeEvidenceMissingCheck = (input: {
+const createRuntimeEvidenceMismatchCheck = (input: {
   readonly entry: DynamicsGroupEntry;
-  readonly runtimeSnapshotId?: RuntimeSnapshotId;
+  readonly runtimeSnapshotId: RuntimeSnapshotId;
   readonly message: string;
   readonly evidence: readonly string[];
 }): ValidationCheckResultDto =>
   createDynamicsCheck({
-    checkId: "dynamics.runtimeEvidenceMissing",
+    checkId: "dynamics.runtimeEvidenceMismatch",
     status: "fail",
     severity: "error",
     phase: "representative_evaluation",
@@ -625,32 +445,8 @@ const createRuntimeEvidenceMissingCheck = (input: {
     targetPath: groupBasePath(input.entry.index),
     message: input.message,
     evidence: input.evidence,
-    impact: "Validator cannot prove deterministic dynamics replay without runtime dynamics evidence.",
-    snapshotIds: input.runtimeSnapshotId === undefined ? [] : [input.runtimeSnapshotId]
-  });
-
-const createOutputClampedCheck = (
-  entry: DynamicsGroupEntry,
-  runtimeSnapshotId: RuntimeSnapshotId
-): ValidationCheckResultDto =>
-  createDynamicsCheck({
-    checkId: "dynamics.outputClamped",
-    status: "needs_review",
-    severity: "warning",
-    phase: "dynamics_evaluation",
-    target: {
-      kind: "dynamicsGroup",
-      id: entry.group.dynamicsGroupId,
-      path: `${groupBasePath(entry.index)}/runtimeEvidence/outputClamped`
-    },
-    targetPath: `${groupBasePath(entry.index)}/runtimeEvidence/outputClamped`,
-    message: `Runtime snapshot ${runtimeSnapshotId} clamped dynamics output for ${entry.group.dynamicsGroupId}.`,
-    evidence: createRuntimeEvidenceBase(entry, [
-      `snapshotId=${runtimeSnapshotId}`,
-      "outputClamped=true"
-    ]),
-    impact: "The runtime output is deterministic but may need review because it hit the declared output clamp.",
-    snapshotIds: [runtimeSnapshotId]
+    impact: "Provided runtime dynamics evidence disagrees with the package Dynamics group.",
+    snapshotIds: [input.runtimeSnapshotId]
   });
 
 const createDynamicsCheck = (input: {
@@ -680,32 +476,17 @@ const createDynamicsCheck = (input: {
     snapshotIds: input.snapshotIds ?? []
   });
 
-const createRuntimeEvidenceBase = (
-  entry: DynamicsGroupEntry,
-  additionalEvidence: readonly string[]
-): readonly string[] => [
-  `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-  `outputParameterId=${entry.group.output.targetParameterId}`,
-  ...additionalEvidence
-];
-
 const compareGroupEntries = (left: DynamicsGroupEntry, right: DynamicsGroupEntry): number =>
   left.group.dynamicsGroupId.localeCompare(right.group.dynamicsGroupId) || left.index - right.index;
-
-const compareParameterEntries = (left: ParameterEntry, right: ParameterEntry): number =>
-  left.parameter.parameterId.localeCompare(right.parameter.parameterId) || left.index - right.index;
 
 const groupBasePath = (groupIndex: number): string =>
   `/model/dynamics/dynamicsGroups/${groupIndex}`;
 
-const groupDriverSourcePath = (groupIndex: number, driverIndex: number): string =>
-  `${groupBasePath(groupIndex)}/drivers/${driverIndex}/sourceParameterId`;
+const groupInputBasePath = (groupIndex: number, inputIndex: number): string =>
+  `${groupBasePath(groupIndex)}/inputs/${inputIndex}`;
 
-const groupOutputTargetPath = (groupIndex: number): string =>
-  `${groupBasePath(groupIndex)}/output/targetParameterId`;
+const groupInputParameterPath = (groupIndex: number, inputIndex: number): string =>
+  `${groupInputBasePath(groupIndex, inputIndex)}/parameterId`;
 
-const groupOutputRangePath = (groupIndex: number): string =>
-  `${groupBasePath(groupIndex)}/output`;
-
-const parameterPath = (parameterIndex: number): string =>
-  `/model/parameters/parameters/${parameterIndex}`;
+const groupOutputParameterPath = (groupIndex: number, outputIndex: number): string =>
+  `${groupBasePath(groupIndex)}/outputs/${outputIndex}/parameterId`;

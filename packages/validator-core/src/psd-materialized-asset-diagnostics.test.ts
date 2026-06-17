@@ -538,7 +538,7 @@ const createWave46PackageDocument = (input: {
         rigControls: []
       },
       dynamics: {
-        schemaVersion: "dynamics-file-v1",
+        schemaVersion: "dynamics-file-v2",
         dynamicsGroups: []
       },
       masks: {

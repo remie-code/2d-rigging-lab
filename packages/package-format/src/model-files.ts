@@ -169,43 +169,67 @@ export const KeyformSetSchema = KeyformSetBaseSchema.superRefine((keyformSet, co
 });
 export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
 
-export const DynamicsDriverSchema = z.object({
-  driverId: z.string(),
-  sourceParameterId: ParameterIdSchema,
-  inputScale: z.number().finite().default(1),
-  inputOffset: z.number().finite().default(0),
-  invert: z.boolean().default(false)
+export const DynamicsAxisKindSchema = z.enum(["angle", "positionX", "positionY"]);
+export type DynamicsAxisKindDto = z.infer<typeof DynamicsAxisKindSchema>;
+
+export const DynamicsNormalizationSchema = z
+  .object({
+    min: z.number().finite(),
+    center: z.number().finite(),
+    max: z.number().finite()
+  })
+  .superRefine((normalization, context) => {
+    if (normalization.min >= normalization.center) {
+      context.addIssue({
+        code: "custom",
+        path: ["min"],
+        message: "Dynamics input normalization requires min < center."
+      });
+    }
+    if (normalization.center >= normalization.max) {
+      context.addIssue({
+        code: "custom",
+        path: ["max"],
+        message: "Dynamics input normalization requires center < max."
+      });
+    }
+  });
+export type DynamicsNormalizationDto = z.infer<typeof DynamicsNormalizationSchema>;
+
+export const DynamicsInputSchema = z.object({
+  parameterId: ParameterIdSchema,
+  kind: DynamicsAxisKindSchema,
+  influencePercent: z.number().finite(),
+  invert: z.boolean().default(false),
+  normalization: DynamicsNormalizationSchema
 });
-export type DynamicsDriverDto = z.infer<typeof DynamicsDriverSchema>;
+export type DynamicsInputDto = z.infer<typeof DynamicsInputSchema>;
+
+export const DynamicsPendulumSchema = z.object({
+  length: z.number().finite().positive(),
+  sway: z.number().finite().nonnegative(),
+  reactionSpeed: z.number().finite().nonnegative(),
+  convergenceSpeed: z.number().finite().nonnegative()
+});
+export type DynamicsPendulumDto = z.infer<typeof DynamicsPendulumSchema>;
 
 export const DynamicsOutputSchema = z.object({
-  outputId: z.string(),
-  targetParameterId: ParameterIdSchema,
-  outputScale: z.number().finite().default(1),
-  outputOffset: z.number().finite().default(0),
-  min: z.number().finite(),
-  max: z.number().finite(),
-  clampPolicy: z.literal("clamp-to-output-range")
+  parameterId: ParameterIdSchema,
+  kind: DynamicsAxisKindSchema,
+  strength: z.number().finite(),
+  invert: z.boolean().default(false),
+  limit: z.number().finite().nonnegative()
 });
 export type DynamicsOutputDto = z.infer<typeof DynamicsOutputSchema>;
-
-export const ScalarDampedFollowSettingsV1Schema = z.object({
-  stiffness: z.number().finite().nonnegative(),
-  damping: z.number().finite().nonnegative(),
-  maxVelocity: z.number().finite().positive().optional(),
-  maxAmplitude: z.number().finite().positive().optional()
-});
-export type ScalarDampedFollowSettingsV1Dto = z.infer<typeof ScalarDampedFollowSettingsV1Schema>;
 
 export const DynamicsGroupSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   displayName: z.string(),
   enabled: z.boolean().default(true),
-  solverKind: z.literal("scalarDampedFollowV1"),
-  drivers: z.array(DynamicsDriverSchema).min(1),
-  output: DynamicsOutputSchema,
-  settings: ScalarDampedFollowSettingsV1Schema,
-  resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"])
+  presetId: z.string().min(1).optional(),
+  inputs: z.array(DynamicsInputSchema).min(1),
+  pendulums: z.array(DynamicsPendulumSchema).length(1),
+  outputs: z.array(DynamicsOutputSchema).length(1)
 });
 export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
 
@@ -348,7 +372,7 @@ export const RigControlsFileSchema = z.object({
 export type RigControlsFileDto = z.infer<typeof RigControlsFileSchema>;
 
 export const DynamicsFileSchema = z.object({
-  schemaVersion: z.literal("dynamics-file-v1"),
+  schemaVersion: z.literal("dynamics-file-v2"),
   dynamicsGroups: z.array(DynamicsGroupSchema)
 });
 export type DynamicsFileDto = z.infer<typeof DynamicsFileSchema>;

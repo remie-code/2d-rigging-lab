@@ -234,12 +234,32 @@ const operationPayloads = [
     payload: {
       dynamicsGroupId: "dyn_hair_sway",
       displayName: "Hair Sway",
-      solverKind: "scalarDampedFollowV1",
-      resetPolicy: "reset-on-load",
-      settings: {
-        stiffness: 0.35,
-        damping: 0.7
-      }
+      inputs: [
+        {
+          parameterId: "param_face_yaw",
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: { min: -1, center: 0, max: 1 }
+        }
+      ],
+      pendulums: [
+        {
+          length: 1,
+          sway: 0.35,
+          reactionSpeed: 8,
+          convergenceSpeed: 4
+        }
+      ],
+      outputs: [
+        {
+          parameterId: "param_hair_sway",
+          kind: "angle",
+          strength: 1,
+          invert: false,
+          limit: 1
+        }
+      ]
     }
   },
   {

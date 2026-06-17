@@ -54,7 +54,7 @@ describe("createInitialRuntimeState", () => {
           {
             id: outputParameterId,
             displayName: "Hair sway",
-            valueSource: "computedDynamics",
+            valueSource: "authoredInput",
             min: -1,
             max: 1,
             default: 0
@@ -68,30 +68,36 @@ describe("createInitialRuntimeState", () => {
             dynamicsGroupId,
             displayName: "Hair sway",
             enabled: true,
-            solverKind: "scalarDampedFollowV1",
-            drivers: [
+            inputs: [
               {
-                driverId: "driver-yaw",
-                sourceParameterId: driverParameterId,
-                inputScale: 1,
-                inputOffset: 0,
-                invert: false
+                parameterId: driverParameterId,
+                kind: "angle",
+                influencePercent: 100,
+                invert: false,
+                normalization: {
+                  min: -1,
+                  center: 0,
+                  max: 1
+                }
               }
             ],
-            output: {
-              outputId: "output-hair",
-              targetParameterId: outputParameterId,
-              outputScale: 1,
-              outputOffset: 0,
-              min: -1,
-              max: 1,
-              clampPolicy: "clamp-to-output-range"
-            },
-            settings: {
-              stiffness: 0.5,
-              damping: 0.2
-            },
-            resetPolicy: "reset-on-load"
+            pendulums: [
+              {
+                length: 1,
+                sway: 0.35,
+                reactionSpeed: 8,
+                convergenceSpeed: 4
+              }
+            ],
+            outputs: [
+              {
+                parameterId: outputParameterId,
+                kind: "angle",
+                strength: 1,
+                invert: false,
+                limit: 1
+              }
+            ]
           }
         ]
       ])
@@ -108,8 +114,10 @@ describe("createInitialRuntimeState", () => {
 
     expect(Object.keys(state.dynamicsGroups)).toEqual([dynamicsGroupId]);
     expect(state.dynamicsGroups[dynamicsGroupId]).toEqual({
-      position: 0.5,
-      velocity: 0,
+      angle: 0.5,
+      angularVelocity: 0,
+      previousSource: 0.5,
+      previousSourceVelocity: 0,
       tick: 0,
       resetCounter: 1
     });

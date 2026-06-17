@@ -173,12 +173,12 @@ const listParameterReferences = (
       : [];
   });
   const dynamicsRefs = session.graph.dynamicsGroups.flatMap((group) => [
-    ...group.drivers
-      .filter((driver) => driver.sourceParameterId === parameterId)
-      .map((driver) => `dynamicsDriver:${group.dynamicsGroupId}/${driver.driverId}`),
-    ...(group.output.targetParameterId === parameterId
-      ? [`dynamicsOutput:${group.dynamicsGroupId}/${group.output.outputId}`]
-      : [])
+    ...group.inputs
+      .filter((input, index) => input.parameterId === parameterId)
+      .map((_, index) => `dynamicsInput:${group.dynamicsGroupId}/${index}`),
+    ...group.outputs
+      .filter((output) => output.parameterId === parameterId)
+      .map((_, index) => `dynamicsOutput:${group.dynamicsGroupId}/${index}`)
   ]);
 
   return [...keyformRefs, ...dynamicsRefs].sort();

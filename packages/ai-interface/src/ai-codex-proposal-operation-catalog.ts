@@ -263,15 +263,15 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationType: "createDynamicsGroup",
     operationFamily: "dynamics",
     displayName: "Create dynamics group",
-    summary: "Create a Minimum Open Dynamics v1 scalar damped follow group.",
+    summary: "Create a Dynamics v2 additive pendulum group.",
     targetKinds: ["dynamicsGroup", "parameter"],
     payloadSchemaRef: "operation.createDynamicsGroup.payload.v1",
-    requiredInputs: codexInputs("New dynamics group and its parameter bindings.", [
+    requiredInputs: codexInputs("New dynamics group and its v0 inputs, pendulum, and output.", [
       "dynamicsGroupId",
       "displayName",
-      "solverKind",
-      "resetPolicy",
-      "settings"
+      "inputs",
+      "pendulums",
+      "outputs"
     ])
   },
   {
@@ -541,10 +541,19 @@ const AVAILABLE_OPERATIONS: readonly AvailableOperationDefinition[] = [
     operationType: "updateDynamicsGroup",
     operationFamily: "dynamics",
     displayName: "Update dynamics group",
-    summary: "Update metadata or enabled/reset policy for an existing dynamics group.",
+    summary: "Update metadata, inputs, pendulum, or additive output for an existing Dynamics v2 group.",
     targetKinds: ["dynamicsGroup"],
     payloadSchemaRef: "operation.updateDynamicsGroup.payload.v1",
     requiredInputs: codexInputs("Dynamics group to update.", ["dynamicsGroupId"])
+  },
+  {
+    operationType: "deleteDynamicsGroup",
+    operationFamily: "dynamics",
+    displayName: "Delete dynamics group",
+    summary: "Delete an existing Dynamics v2 additive pendulum group.",
+    targetKinds: ["dynamicsGroup"],
+    payloadSchemaRef: "operation.deleteDynamicsGroup.payload.v1",
+    requiredInputs: codexInputs("Dynamics group to delete.", ["dynamicsGroupId"])
   },
   {
     operationType: "updatePart",

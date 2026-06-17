@@ -1,5 +1,6 @@
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -26,6 +27,7 @@ import {
   createInitialAuthoringRevision,
   exportAuthoringSessionPortableBundle,
   importAuthoringSessionPortableBundle,
+  listInitializedParameters,
   registerAuthoringSessionBinaryBytes,
   toRuntimeGraph,
   type AuthoringSession
@@ -37,6 +39,12 @@ const TEXTURE_BYTES_SHA256_HEX =
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_HEAD_CONTAINER = PartIdSchema.parse("part_head_container");
 const PART_STALE = PartIdSchema.parse("part_stale_hidden");
+const PARAM_ANGLE_X = ParameterIdSchema.parse("param_angle_x");
+const PARAM_HAIR_SWAY = ParameterIdSchema.parse("param_hair_sway");
+const DYN_HAIR_SWAY = DynamicsGroupIdSchema.parse("dyn_hair_sway");
+const PRESET_FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
+const PRESET_HAIR_FRONT_SWAY_X = ParameterIdSchema.parse("param_hair_front_sway_x");
+const DYN_PRESET_HAIR_SWAY = DynamicsGroupIdSchema.parse("dyn_preset_hair_sway");
 
 describe("authoring portable project bundle adapter", () => {
   it("round-trips editor-hidden parts, texture bytes, mesh, deformers, parameters, and keyforms", async () => {
@@ -81,8 +89,15 @@ describe("authoring portable project bundle adapter", () => {
     const importedWarpKeyform = imported.session.graph.keyformSets.find((keyformSet) =>
       keyformSet.keyformSetId === "keyset_warp_angle_x"
     );
+    const importedDynamicsGroup = imported.session.graph.dynamicsGroups.find((group) =>
+      group.dynamicsGroupId === DYN_HAIR_SWAY
+    );
 
     expect(exported.binaryPayloadCount).toBe(1);
+    expect(exportedDocument.model.dynamics).toEqual({
+      schemaVersion: "dynamics-file-v2",
+      dynamicsGroups: session.graph.dynamicsGroups
+    });
     expect(exportedDocument.manifest.schemaVersions.editorState).toBe("editor-state-v1");
     expect(exportedDocument.manifest.modelFiles.editorState).toBe("model/editor-state.json");
     expect(exportedDocument.model.editorState).toEqual({
@@ -169,14 +184,57 @@ describe("authoring portable project bundle adapter", () => {
       { x: -4, y: 2 },
       { x: 8, y: -5 }
     ]);
-    expect(imported.session.graph.parameters).toEqual([
-      expect.objectContaining({
-        parameterId: "param_angle_x",
-        min: -1,
-        default: 0,
-        max: 1
-      })
-    ]);
+    expect(imported.session.graph.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          parameterId: "param_angle_x",
+          min: -1,
+          default: 0,
+          max: 1
+        }),
+        expect.objectContaining({
+          parameterId: "param_hair_sway",
+          min: -1,
+          default: 0,
+          max: 1
+        })
+      ])
+    );
+    expect(importedDynamicsGroup).toEqual({
+      dynamicsGroupId: DYN_HAIR_SWAY,
+      displayName: "Hair Sway",
+      enabled: true,
+      inputs: [
+        {
+          parameterId: PARAM_ANGLE_X,
+          kind: "angle",
+          influencePercent: 75,
+          invert: true,
+          normalization: {
+            min: -1,
+            center: 0,
+            max: 1
+          }
+        }
+      ],
+      pendulums: [
+        {
+          length: 1.25,
+          sway: 0.4,
+          reactionSpeed: 7,
+          convergenceSpeed: 3.5
+        }
+      ],
+      outputs: [
+        {
+          parameterId: PARAM_HAIR_SWAY,
+          kind: "positionX",
+          strength: 0.8,
+          invert: true,
+          limit: 0.45
+        }
+      ]
+    });
     expect(imported.session.graph.drawOrder).toEqual([
       {
         drawableId: "draw_head",
@@ -266,6 +324,39 @@ describe("authoring portable project bundle adapter", () => {
     });
 
     expect(imported.editorHiddenPartIds).toEqual([PART_HEAD_CONTAINER]);
+  });
+
+  it("round-trips dynamics groups that reference initialized preset parameters without materializing parameters", async () => {
+    const session = createPresetDynamicsOnlySession();
+
+    const exported = await exportAuthoringSessionPortableBundle({
+      session,
+      updatedAt: "2026-06-18T00:00:00.000Z"
+    });
+    const exportedDocument = PackageDocumentSchema.parse(exported.packageDocument);
+    const imported = await importAuthoringSessionPortableBundle({
+      bundle: exported.bundleJson
+    });
+    const importedRuntimeGraph = toRuntimeGraph(imported.session);
+
+    expect(exportedDocument.model.parameters.parameters).toEqual([]);
+    expect(imported.session.graph.parameters).toEqual([]);
+    expect(imported.session.graph.dynamicsGroups).toEqual(session.graph.dynamicsGroups);
+    expect(imported.session.graph.dynamicsGroups[0]).toMatchObject({
+      dynamicsGroupId: DYN_PRESET_HAIR_SWAY,
+      inputs: [{ parameterId: PRESET_FACE_ANGLE_X }],
+      outputs: [{ parameterId: PRESET_HAIR_FRONT_SWAY_X }]
+    });
+    expect(listInitializedParameters(imported.session.graph).map((parameter) => parameter.parameterId))
+      .toContain(PRESET_HAIR_FRONT_SWAY_X);
+    expect(importedRuntimeGraph.parameters.get(PRESET_FACE_ANGLE_X)).toMatchObject({
+      id: PRESET_FACE_ANGLE_X,
+      displayName: "Face Angle X"
+    });
+    expect(importedRuntimeGraph.parameters.get(PRESET_HAIR_FRONT_SWAY_X)).toMatchObject({
+      id: PRESET_HAIR_FRONT_SWAY_X,
+      displayName: "Hair Front Sway X"
+    });
   });
 });
 
@@ -374,8 +465,17 @@ function createRiggedTextureSession(
       ],
       parameters: [
         {
-          parameterId: ParameterIdSchema.parse("param_angle_x"),
+          parameterId: PARAM_ANGLE_X,
           displayName: "Angle X",
+          valueSource: "authoredInput",
+          min: -1,
+          default: 0,
+          max: 1,
+          recommendedUiStep: 0.01
+        },
+        {
+          parameterId: PARAM_HAIR_SWAY,
+          displayName: "Hair Sway",
           valueSource: "authoredInput",
           min: -1,
           default: 0,
@@ -506,7 +606,43 @@ function createRiggedTextureSession(
           enabled: true
         }
       ],
-      dynamicsGroups: [],
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: DYN_HAIR_SWAY,
+          displayName: "Hair Sway",
+          enabled: true,
+          inputs: [
+            {
+              parameterId: PARAM_ANGLE_X,
+              kind: "angle",
+              influencePercent: 75,
+              invert: true,
+              normalization: {
+                min: -1,
+                center: 0,
+                max: 1
+              }
+            }
+          ],
+          pendulums: [
+            {
+              length: 1.25,
+              sway: 0.4,
+              reactionSpeed: 7,
+              convergenceSpeed: 3.5
+            }
+          ],
+          outputs: [
+            {
+              parameterId: PARAM_HAIR_SWAY,
+              kind: "positionX",
+              strength: 0.8,
+              invert: true,
+              limit: 0.45
+            }
+          ]
+        }
+      ],
       masks: [],
       drawOrder: [
         {
@@ -521,9 +657,11 @@ function createRiggedTextureSession(
         PART_HEAD_CONTAINER,
         "draw_head",
         "mesh_head",
-        "param_angle_x",
+        PARAM_ANGLE_X,
+        PARAM_HAIR_SWAY,
         "rig_head_rotate",
-        "rig_head_warp"
+        "rig_head_warp",
+        DYN_HAIR_SWAY
       ],
       sourceAssets: [
         {
@@ -573,6 +711,73 @@ function createRiggedTextureSession(
           redistributionAllowed: false
         }
       ]
+    }
+  };
+}
+
+function createPresetDynamicsOnlySession(): AuthoringSession {
+  return {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_preset_dynamics_portable_roundtrip"),
+      packageDisplayName: "Preset Dynamics Portable Roundtrip",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 0,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: true,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 256, height: 256 },
+      parts: [],
+      drawables: [],
+      meshes: [],
+      parameters: [],
+      keyformSets: [],
+      rigControls: [],
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: DYN_PRESET_HAIR_SWAY,
+          displayName: "Preset Hair Sway",
+          enabled: true,
+          inputs: [
+            {
+              parameterId: PRESET_FACE_ANGLE_X,
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: {
+                min: -30,
+                center: 0,
+                max: 30
+              }
+            }
+          ],
+          pendulums: [
+            {
+              length: 1,
+              sway: 0.35,
+              reactionSpeed: 8,
+              convergenceSpeed: 4
+            }
+          ],
+          outputs: [
+            {
+              parameterId: PRESET_HAIR_FRONT_SWAY_X,
+              kind: "angle",
+              strength: 1,
+              invert: false,
+              limit: 1
+            }
+          ]
+        }
+      ],
+      masks: [],
+      drawOrder: [],
+      rigControlRootIds: [],
+      stableOrder: [DYN_PRESET_HAIR_SWAY],
+      sourceAssets: [],
+      provenanceRecords: [],
+      rightsRecords: []
     }
   };
 }

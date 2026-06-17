@@ -1,8 +1,4 @@
-import type {
-  NormalizedDynamicsSettings,
-  NormalizedRuntimeGraph
-} from "@private-2d-rigging-lab/runtime-core";
-import type { DynamicsGroupDto } from "@private-2d-rigging-lab/package-format";
+import type { NormalizedRuntimeGraph } from "@private-2d-rigging-lab/runtime-core";
 
 import type { AuthoringGraph } from "./authoring-graph.js";
 
@@ -16,40 +12,31 @@ export const createRuntimeDynamicsGroupMap = (
         dynamicsGroupId: group.dynamicsGroupId,
         displayName: group.displayName,
         enabled: group.enabled,
-        solverKind: group.solverKind,
-        drivers: group.drivers.map((driver) => ({
-          driverId: driver.driverId,
-          sourceParameterId: driver.sourceParameterId,
-          inputScale: driver.inputScale,
-          inputOffset: driver.inputOffset,
-          invert: driver.invert
+        ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
+        inputs: group.inputs.map((input) => ({
+          parameterId: input.parameterId,
+          kind: input.kind,
+          influencePercent: input.influencePercent,
+          invert: input.invert,
+          normalization: {
+            min: input.normalization.min,
+            center: input.normalization.center,
+            max: input.normalization.max
+          }
         })),
-        output: {
-          outputId: group.output.outputId,
-          targetParameterId: group.output.targetParameterId,
-          outputScale: group.output.outputScale,
-          outputOffset: group.output.outputOffset,
-          min: group.output.min,
-          max: group.output.max,
-          clampPolicy: group.output.clampPolicy
-        },
-        settings: cloneDefinedSettings(group.settings),
-        resetPolicy: group.resetPolicy
+        pendulums: group.pendulums.map((pendulum) => ({
+          length: pendulum.length,
+          sway: pendulum.sway,
+          reactionSpeed: pendulum.reactionSpeed,
+          convergenceSpeed: pendulum.convergenceSpeed
+        })),
+        outputs: group.outputs.map((output) => ({
+          parameterId: output.parameterId,
+          kind: output.kind,
+          strength: output.strength,
+          invert: output.invert,
+          limit: output.limit
+        }))
       }
     ])
   );
-
-const cloneDefinedSettings = (settings: DynamicsGroupDto["settings"]): NormalizedDynamicsSettings => {
-  const cloned: NormalizedDynamicsSettings = {
-    stiffness: settings.stiffness,
-    damping: settings.damping
-  };
-
-  if (settings.maxVelocity !== undefined) {
-    return settings.maxAmplitude === undefined
-      ? { ...cloned, maxVelocity: settings.maxVelocity }
-      : { ...cloned, maxVelocity: settings.maxVelocity, maxAmplitude: settings.maxAmplitude };
-  }
-
-  return settings.maxAmplitude === undefined ? cloned : { ...cloned, maxAmplitude: settings.maxAmplitude };
-};

@@ -176,8 +176,8 @@ const summarizePackageGraph = (packageDocument: PackageDocumentDto) => {
     },
     dynamics: {
       dynamicsGroupId: dynamicsGroup.dynamicsGroupId,
-      driverParameterIds: dynamicsGroup.drivers.map((driver) => driver.sourceParameterId),
-      outputParameterId: dynamicsGroup.output.targetParameterId
+      inputParameterIds: dynamicsGroup.inputs.map((input) => input.parameterId),
+      outputParameterId: dynamicsGroup.outputs[0]?.parameterId
     },
     rightsClean: {
       sourceKind: sourceAsset.kind,

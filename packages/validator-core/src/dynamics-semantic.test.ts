@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import {
+  createPackageInMemoryFileSet,
+  exportPortablePackageBundleV0,
+  importPortablePackageBundleV0,
+  PackageDocumentSchema
+} from "@private-2d-rigging-lab/package-format";
 
 import type { ValidationCheckResultDto } from "./validation-report.js";
+import { validateDynamicsSemantics } from "./validators/dynamics-semantic.js";
 import { validatePackageRuntime } from "./validators/package-runtime.js";
 
 const CREATED_AT = "2026-05-31T00:00:00.000Z";
@@ -11,18 +18,17 @@ const MESH_ID = "mesh_body";
 const SOURCE_ASSET_ID = "src_generated";
 const TEXTURE_ID = "tex_body";
 const PROVENANCE_ID = "prov_generated";
-const DRIVER_PARAMETER_ID = "param_faceYaw";
+const INPUT_PARAMETER_ID = "param_faceYaw";
 const OUTPUT_PARAMETER_ID = "param_hairSway";
+const PRESET_INPUT_PARAMETER_ID = "param_face_angle_x";
+const PRESET_OUTPUT_PARAMETER_ID = "param_hair_front_sway_x";
 const DYNAMICS_GROUP_ID = "dyn_hair_sway";
 
 describe("validator dynamics semantic checks", () => {
-  it("validates a minimal dynamics package with runtime evidence", () => {
-    const packageDocument = createDynamicsPackage();
-    const runtimeSnapshot = createRuntimeSnapshot();
-
+  it("validates a minimal additive dynamics package with runtime evidence", () => {
     const report = validatePackageRuntime({
-      packageDocument,
-      runtimeSnapshot,
+      packageDocument: createDynamicsPackage(),
+      runtimeSnapshot: createRuntimeSnapshot(),
       createdAt: CREATED_AT
     });
 
@@ -31,24 +37,104 @@ describe("validator dynamics semantic checks", () => {
     expect(report.evidence.runtimeSnapshotIds).toEqual(["snap_dynamics_0"]);
   });
 
-  it("emits deterministic diagnostics for invalid dynamics relations", () => {
+  it("does not require runtime evidence for static package validation", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createDynamicsPackage(),
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("pass");
+    expect(report.checks.map((check) => check.checkId)).not.toContain("dynamics.runtimeEvidenceMissing");
+  });
+
+  it("accepts initialized preset driver and output refs without persisted parameters", () => {
+    const checks = validateDynamicsSemantics(createDynamicsPackage({
+      parameters: [],
+      dynamicsGroups: [
+        createDynamicsGroup({
+          inputs: [
+            createDynamicsInput({
+              parameterId: PRESET_INPUT_PARAMETER_ID,
+              normalization: {
+                min: -30,
+                center: 0,
+                max: 30
+              }
+            })
+          ],
+          outputs: [
+            createDynamicsOutput({
+              parameterId: PRESET_OUTPUT_PARAMETER_ID
+            })
+          ]
+        })
+      ]
+    }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
+
+    expect(checks).toEqual([]);
+  });
+
+  it("keeps initialized preset dynamics refs semantically valid through portable package export/import", async () => {
+    const packageDocument = PackageDocumentSchema.parse(createDynamicsPackage({
+      parameters: [],
+      dynamicsGroups: [
+        createDynamicsGroup({
+          inputs: [
+            createDynamicsInput({
+              parameterId: PRESET_INPUT_PARAMETER_ID,
+              normalization: {
+                min: -30,
+                center: 0,
+                max: 30
+              }
+            })
+          ],
+          outputs: [
+            createDynamicsOutput({
+              parameterId: PRESET_OUTPUT_PARAMETER_ID
+            })
+          ]
+        })
+      ]
+    }));
+    const bundle = await exportPortablePackageBundleV0({
+      packageDocument,
+      fileSet: createPackageInMemoryFileSet([])
+    });
+    const imported = await importPortablePackageBundleV0({ bundle });
+    const importedDocument = PackageDocumentSchema.parse(imported.packageDocument);
+
+    expect(importedDocument.model.parameters.parameters).toEqual([]);
+    expect(importedDocument.model.dynamics.dynamicsGroups[0]).toMatchObject({
+      inputs: [{ parameterId: PRESET_INPUT_PARAMETER_ID }],
+      outputs: [{ parameterId: PRESET_OUTPUT_PARAMETER_ID }]
+    });
+
+    const report = validatePackageRuntime({
+      packageDocument: importedDocument,
+      createdAt: CREATED_AT
+    });
+
+    expect(report.summary.status).toBe("pass");
+    expect(report.checks).toEqual([]);
+  });
+
+  it("reports missing input and output parameters", () => {
     const report = validatePackageRuntime({
       packageDocument: createDynamicsPackage({
-        parameters: [createAuthoredParameter(DRIVER_PARAMETER_ID)],
+        parameters: [createAuthoredParameter(INPUT_PARAMETER_ID)],
         dynamicsGroups: [
           createDynamicsGroup({
-            drivers: [
-              {
-                driverId: "driver_missing",
-                sourceParameterId: "param_missingDriver",
-                inputScale: 1,
-                inputOffset: 0,
-                invert: false
-              }
+            inputs: [
+              createDynamicsInput({
+                parameterId: "param_missingInput"
+              })
             ],
-            output: createDynamicsOutput({
-              targetParameterId: "param_missingOutput"
-            })
+            outputs: [
+              createDynamicsOutput({
+                parameterId: "param_missingOutput"
+              })
+            ]
           })
         ]
       }),
@@ -58,75 +144,112 @@ describe("validator dynamics semantic checks", () => {
     expect(report.checks.map(toDiagnosticSummary)).toEqual([
       {
         checkId: "dynamics.driverMissing",
-        targetId: "param_missingDriver",
-        targetPath: "/model/dynamics/dynamicsGroups/0/drivers/0/sourceParameterId",
+        targetId: "param_missingInput",
+        targetPath: "/model/dynamics/dynamicsGroups/0/inputs/0/parameterId",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "driverId=driver_missing",
-          "sourceParameterId=param_missingDriver",
+          "inputIndex=0",
+          "parameterId=param_missingInput",
           "parameterMatch=missing"
         ]
       },
       {
         checkId: "dynamics.outputMissing",
         targetId: "param_missingOutput",
-        targetPath: "/model/dynamics/dynamicsGroups/0/output/targetParameterId",
+        targetPath: "/model/dynamics/dynamicsGroups/0/outputs/0/parameterId",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "outputId=output_hair_sway",
-          "targetParameterId=param_missingOutput",
+          "outputIndex=0",
+          "parameterId=param_missingOutput",
           "parameterMatch=missing"
+        ]
+      }
+    ]);
+  });
+
+  it("reports invalid v0 group cardinality directly from dynamics semantics", () => {
+    const checks = validateDynamicsSemantics(createDynamicsPackage({
+      dynamicsGroups: [
+        createDynamicsGroup({
+          inputs: [],
+          pendulums: [],
+          outputs: []
+        })
+      ]
+    }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
+
+    expect(checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "dynamics.inputMissing",
+        targetId: DYNAMICS_GROUP_ID,
+        targetPath: "/model/dynamics/dynamicsGroups/0/inputs",
+        evidence: [
+          "dynamicsGroupId=dyn_hair_sway",
+          "inputs=0"
         ]
       },
       {
-        checkId: "dynamics.runtimeEvidenceMissing",
-        targetId: "dyn_hair_sway",
-        targetPath: "/model/dynamics/dynamicsGroups/0",
+        checkId: "dynamics.invalidPendulumCardinality",
+        targetId: DYNAMICS_GROUP_ID,
+        targetPath: "/model/dynamics/dynamicsGroups/0/pendulums",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "outputParameterId=param_missingOutput",
-          "runtimeSnapshot=missing"
+          "pendulumCount=0"
         ]
-      }
-    ]);
-  });
-
-  it("reports runtime evidence gaps for present dynamics groups", () => {
-    const report = validatePackageRuntime({
-      packageDocument: createDynamicsPackage(),
-      createdAt: CREATED_AT
-    });
-
-    expect(report.summary.status).toBe("fail");
-    expect(report.checks.map(toDiagnosticSummary)).toEqual([
+      },
       {
-        checkId: "dynamics.runtimeEvidenceMissing",
-        targetId: "dyn_hair_sway",
-        targetPath: "/model/dynamics/dynamicsGroups/0",
+        checkId: "dynamics.invalidOutputCardinality",
+        targetId: DYNAMICS_GROUP_ID,
+        targetPath: "/model/dynamics/dynamicsGroups/0/outputs",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "outputParameterId=param_hairSway",
-          "runtimeSnapshot=missing"
+          "outputCount=0"
         ]
       }
     ]);
   });
 
-  it("reports statically unsafe dynamics output and settings", () => {
+  it("reports invalid input normalization directly from dynamics semantics", () => {
+    const checks = validateDynamicsSemantics(createDynamicsPackage({
+      dynamicsGroups: [
+        createDynamicsGroup({
+          inputs: [
+            createDynamicsInput({
+              normalization: {
+                min: 0,
+                center: 0,
+                max: 1
+              }
+            })
+          ]
+        })
+      ]
+    }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
+
+    expect(checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "dynamics.normalizationInvalid",
+        targetId: DYNAMICS_GROUP_ID,
+        targetPath: "/model/dynamics/dynamicsGroups/0/inputs/0/normalization",
+        evidence: [
+          "dynamicsGroupId=dyn_hair_sway",
+          "inputIndex=0",
+          "min=0",
+          "center=0",
+          "max=1"
+        ]
+      }
+    ]);
+  });
+
+  it("blocks duplicate additive output ownership", () => {
     const report = validatePackageRuntime({
       packageDocument: createDynamicsPackage({
         dynamicsGroups: [
+          createDynamicsGroup(),
           createDynamicsGroup({
-            output: createDynamicsOutput({
-              min: -2,
-              max: 2
-            }),
-            settings: createDynamicsSettings({
-              stiffness: 0.5,
-              damping: 0,
-              maxVelocity: 2,
-              maxAmplitude: 3
-            })
+            dynamicsGroupId: "dyn_second_hair_sway",
+            displayName: "Second Hair Sway"
           })
         ]
       }),
@@ -134,15 +257,55 @@ describe("validator dynamics semantic checks", () => {
       createdAt: CREATED_AT
     });
 
+    expect(report.checks.map(toDiagnosticSummary)).toContainEqual({
+      checkId: "dynamics.outputTargetDuplicate",
+      targetId: OUTPUT_PARAMETER_ID,
+      targetPath: "/model/dynamics/dynamicsGroups/0/outputs/0/parameterId",
+      evidence: [
+        `targetParameterId=${OUTPUT_PARAMETER_ID}`,
+        "ownerGroupId=dyn_hair_sway",
+        "ownerGroupId=dyn_second_hair_sway"
+      ]
+    });
+  });
+
+  it("reports additive dynamics warnings and runtime output mismatch", () => {
+    const report = validatePackageRuntime({
+      packageDocument: createDynamicsPackage({
+        dynamicsGroups: [
+          createDynamicsGroup({
+            inputs: [
+              createDynamicsInput({
+                influencePercent: 0
+              })
+            ],
+            pendulums: [
+              {
+                length: 1,
+                sway: 101,
+                reactionSpeed: 8,
+                convergenceSpeed: 4
+              }
+            ],
+            outputs: [
+              createDynamicsOutput({
+                strength: 0,
+                limit: 0
+              })
+            ]
+          })
+        ]
+      }),
+      runtimeSnapshot: createRuntimeSnapshot({ outputParameterId: "param_other_output" }),
+      createdAt: CREATED_AT
+    });
+
     expect(report.checks.map((check) => check.checkId)).toEqual([
-      "dynamics.outputParameterOutOfRange",
+      "dynamics.zeroInputInfluence",
+      "dynamics.outputStrengthZero",
+      "dynamics.outputLimitTooSmall",
       "dynamics.unstableSettings",
-      "dynamics.excessiveAmplitude"
-    ]);
-    expect(report.checks.map((check) => check.targetPath)).toEqual([
-      "/model/dynamics/dynamicsGroups/0/output",
-      "/model/dynamics/dynamicsGroups/0/settings",
-      "/model/dynamics/dynamicsGroups/0/settings/maxAmplitude"
+      "dynamics.runtimeEvidenceMismatch"
     ]);
   });
 });
@@ -256,8 +419,8 @@ const createDynamicsPackage = (overrides: {
     parameters: {
       schemaVersion: "parameters-file-v1",
       parameters: overrides.parameters ?? [
-        createAuthoredParameter(DRIVER_PARAMETER_ID),
-        createComputedParameter(OUTPUT_PARAMETER_ID)
+        createAuthoredParameter(INPUT_PARAMETER_ID),
+        createAuthoredParameter(OUTPUT_PARAMETER_ID, "dynamics")
       ]
     },
     keyforms: {
@@ -269,7 +432,7 @@ const createDynamicsPackage = (overrides: {
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v2",
       dynamicsGroups: overrides.dynamicsGroups ?? [createDynamicsGroup()]
     },
     masks: {
@@ -333,10 +496,10 @@ const createDynamicsPackage = (overrides: {
   }
 });
 
-const createAuthoredParameter = (parameterId: string) => ({
+const createAuthoredParameter = (parameterId: string, semanticRole = "face") => ({
   parameterId,
   displayName: parameterId,
-  semanticRole: "face",
+  semanticRole,
   valueSource: "authoredInput",
   min: -1,
   max: 1,
@@ -344,64 +507,53 @@ const createAuthoredParameter = (parameterId: string) => ({
   recommendedUiStep: 0.1
 });
 
-const createComputedParameter = (parameterId: string) => ({
-  parameterId,
-  displayName: parameterId,
-  semanticRole: "dynamics",
-  valueSource: "computedDynamics",
-  min: -1,
-  max: 1,
-  default: 0,
-  recommendedUiStep: 0.1
-});
-
 const createDynamicsGroup = (overrides: {
-  readonly drivers?: readonly unknown[];
-  readonly output?: unknown;
-  readonly settings?: unknown;
+  readonly dynamicsGroupId?: string;
+  readonly displayName?: string;
+  readonly inputs?: readonly unknown[];
+  readonly pendulums?: readonly unknown[];
+  readonly outputs?: readonly unknown[];
 } = {}) => ({
-  dynamicsGroupId: DYNAMICS_GROUP_ID,
-  displayName: "Hair Sway",
+  dynamicsGroupId: overrides.dynamicsGroupId ?? DYNAMICS_GROUP_ID,
+  displayName: overrides.displayName ?? "Hair Sway",
   enabled: true,
-  solverKind: "scalarDampedFollowV1",
-  drivers: overrides.drivers ?? [
+  inputs: overrides.inputs ?? [createDynamicsInput()],
+  pendulums: overrides.pendulums ?? [
     {
-      driverId: "driver_face_yaw",
-      sourceParameterId: DRIVER_PARAMETER_ID,
-      inputScale: 1,
-      inputOffset: 0,
-      invert: false
+      length: 1,
+      sway: 0.35,
+      reactionSpeed: 8,
+      convergenceSpeed: 4
     }
   ],
-  output: overrides.output ?? {
-    ...createDynamicsOutput()
+  outputs: overrides.outputs ?? [createDynamicsOutput()]
+});
+
+const createDynamicsInput = (overrides: Record<string, unknown> = {}) => ({
+  parameterId: INPUT_PARAMETER_ID,
+  kind: "angle",
+  influencePercent: 100,
+  invert: false,
+  normalization: {
+    min: -1,
+    center: 0,
+    max: 1
   },
-  settings: overrides.settings ?? createDynamicsSettings(),
-  resetPolicy: "reset-on-load"
+  ...overrides
 });
 
 const createDynamicsOutput = (overrides: Record<string, unknown> = {}) => ({
-  outputId: "output_hair_sway",
-  targetParameterId: OUTPUT_PARAMETER_ID,
-  outputScale: 1,
-  outputOffset: 0,
-  min: -1,
-  max: 1,
-  clampPolicy: "clamp-to-output-range",
+  parameterId: OUTPUT_PARAMETER_ID,
+  kind: "angle",
+  strength: 1,
+  invert: false,
+  limit: 1,
   ...overrides
 });
 
-const createDynamicsSettings = (overrides: Record<string, unknown> = {}) => ({
-  stiffness: 0.4,
-  damping: 0.6,
-  maxVelocity: 2,
-  maxAmplitude: 1,
-  ...overrides
-});
-
-const createRuntimeSnapshot = () => ({
+const createRuntimeSnapshot = (overrides: Record<string, unknown> = {}) => ({
   schemaVersion: "runtime-snapshot-v1",
-  runtimeCoreVersion: "wave23-dynamics-test",
+  runtimeCoreVersion: "wave81-dynamics-test",
   snapshotId: "snap_dynamics_0",
   context: {
     source: {
@@ -417,7 +569,7 @@ const createRuntimeSnapshot = () => ({
   evaluation: {
     snapshotDetail: "summary",
     evaluatorVersions: {
-      dynamics: "scalarDampedFollowV1",
+      dynamics: "additivePendulumV0",
       keyform1d: "linear-1d-v1",
       keyformGrid2d: "parameter-grid-2d-v1",
       warpLattice: "bilinear-grid-v1",
@@ -426,40 +578,46 @@ const createRuntimeSnapshot = () => ({
   },
   parameters: [
     {
-      parameterId: DRIVER_PARAMETER_ID,
+      parameterId: INPUT_PARAMETER_ID,
       valueSource: "authoredInput",
       authoredValue: 0.5,
+      baseValue: 0.5,
       effectiveValue: 0.5,
       clamped: false,
       source: "viewerOverride"
     },
     {
       parameterId: OUTPUT_PARAMETER_ID,
-      valueSource: "computedDynamics",
-      computedValue: 0.25,
+      valueSource: "authoredInput",
+      baseValue: 0,
+      dynamicsOffset: 0.25,
       effectiveValue: 0.25,
       clamped: false,
-      source: "dynamicsComputed"
+      source: "dynamicsAdditive"
     }
   ],
   dynamics: [
     {
       dynamicsGroupId: DYNAMICS_GROUP_ID,
       enabled: true,
-      solverKind: "scalarDampedFollowV1",
-      driverValues: {
-        [DRIVER_PARAMETER_ID]: 0.5
+      solverKind: "additivePendulumV0",
+      inputValues: {
+        [INPUT_PARAMETER_ID]: 0.5
       },
       outputParameterId: OUTPUT_PARAMETER_ID,
-      outputValue: 0.25,
+      outputOffset: 0.25,
+      effectiveOutputValue: 0.25,
       stateSummary: {
-        position: 0.25,
-        velocity: 0
+        angle: 0.25,
+        angularVelocity: 0,
+        previousSource: 0.5,
+        previousSourceVelocity: 0
       },
       tick: 1,
       fixedStepMs: 16.6666667,
       resetCounter: 0,
-      diagnostics: []
+      diagnostics: [],
+      ...overrides
     }
   ],
   keyformSamples: [],

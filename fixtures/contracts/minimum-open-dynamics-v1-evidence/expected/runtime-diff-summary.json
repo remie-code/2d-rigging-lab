@@ -17,8 +17,10 @@
         "outputParameterId": "param_hair_sway",
         "stateChanged": true,
         "outputChanged": true,
-        "positionAfter": 1,
-        "velocityAfter": 0,
+        "angleAfter": 1,
+        "angularVelocityAfter": 0,
+        "outputOffsetAfter": 1,
+        "effectiveOutputValueAfter": 1,
         "tickAfter": 1,
         "resetCounterAfter": 1
       }

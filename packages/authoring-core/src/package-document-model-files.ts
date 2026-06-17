@@ -42,6 +42,7 @@ export const buildPackageDocumentModelFiles = (
     },
     dynamics: {
       ...cloneDto(baseModelFiles.dynamics),
+      schemaVersion: "dynamics-file-v2",
       dynamicsGroups: cloneDto(session.graph.dynamicsGroups)
     },
     masks: {

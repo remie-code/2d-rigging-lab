@@ -90,7 +90,7 @@ describe("viewer runtime evaluation", () => {
     expect(overrideResult.evidence.runtimeDiffEquivalent).toBe(false);
   });
 
-  it("evaluates Wave23-style dynamics output in viewer context as project-defined dynamics", () => {
+  it("evaluates additive dynamics output in viewer context as project-defined dynamics", () => {
     const fixture = createViewerEvaluationFixture({ includeDynamics: true });
 
     const result = evaluateViewerRuntimeSnapshot(fixture.graph, {
@@ -104,24 +104,26 @@ describe("viewer runtime evaluation", () => {
     expect(result.snapshot.dynamics).toEqual([
       expect.objectContaining({
         dynamicsGroupId: fixture.dynamicsGroupId,
-        driverValues: {
+        inputValues: {
           [fixture.faceYawParameterId]: 1
         },
         outputParameterId: fixture.hairSwayParameterId,
-        outputValue: 1,
-        stateSummary: {
-          position: 1,
-          velocity: 0
-        }
+        outputOffset: 1,
+        effectiveOutputValue: 1,
+        stateSummary: expect.objectContaining({
+          angle: 1,
+          angularVelocity: 0
+        })
       })
     ]);
     expect(result.snapshot.parameters).toContainEqual(
       expect.objectContaining({
         parameterId: fixture.hairSwayParameterId,
         valueSource: "computedDynamics",
-        computedValue: 1,
+        baseValue: 0,
+        dynamicsOffset: 1,
         effectiveValue: 1,
-        source: "dynamicsComputed"
+        source: "dynamicsAdditive"
       })
     );
     expect(result.runtimeDiff.dynamicsChanges).toEqual([
@@ -242,30 +244,36 @@ const createViewerEvaluationFixture = (
                 dynamicsGroupId,
                 displayName: "Hair Sway",
                 enabled: true,
-                solverKind: "scalarDampedFollowV1",
-                drivers: [
+                inputs: [
                   {
-                    driverId: "driver_face_yaw",
-                    sourceParameterId: runtimeDriverParameterId,
-                    inputScale: 1,
-                    inputOffset: 0,
-                    invert: false
+                    parameterId: runtimeDriverParameterId,
+                    kind: "angle",
+                    influencePercent: 100,
+                    invert: false,
+                    normalization: {
+                      min: -1,
+                      center: 0,
+                      max: 1
+                    }
                   }
                 ],
-                output: {
-                  outputId: "output_hair_sway",
-                  targetParameterId: hairSwayParameterId,
-                  outputScale: 1,
-                  outputOffset: 0,
-                  min: -1,
-                  max: 1,
-                  clampPolicy: "clamp-to-output-range"
-                },
-                settings: {
-                  stiffness: 4,
-                  damping: 1
-                },
-                resetPolicy: "reset-on-load"
+                pendulums: [
+                  {
+                    length: 1,
+                    sway: 0.35,
+                    reactionSpeed: 8,
+                    convergenceSpeed: 4
+                  }
+                ],
+                outputs: [
+                  {
+                    parameterId: hairSwayParameterId,
+                    kind: "angle",
+                    strength: 1,
+                    invert: false,
+                    limit: 1
+                  }
+                ]
               }
             ]
           ]

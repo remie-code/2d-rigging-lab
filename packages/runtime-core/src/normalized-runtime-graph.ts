@@ -54,36 +54,41 @@ export interface NormalizedDynamicsGroup {
   readonly dynamicsGroupId: DynamicsGroupId;
   readonly displayName: string;
   readonly enabled: boolean;
-  readonly solverKind: "scalarDampedFollowV1";
-  readonly drivers: readonly NormalizedDynamicsDriver[];
-  readonly output: NormalizedDynamicsOutput;
-  readonly settings: NormalizedDynamicsSettings;
-  readonly resetPolicy: "reset-on-load" | "reset-on-manual-command" | "reset-on-large-input-jump";
+  readonly presetId?: string;
+  readonly inputs: readonly NormalizedDynamicsInput[];
+  readonly pendulums: readonly NormalizedDynamicsPendulum[];
+  readonly outputs: readonly NormalizedDynamicsOutput[];
 }
 
-export interface NormalizedDynamicsDriver {
-  readonly driverId: string;
-  readonly sourceParameterId: ParameterId;
-  readonly inputScale: number;
-  readonly inputOffset: number;
+export type NormalizedDynamicsAxisKind = "angle" | "positionX" | "positionY";
+
+export interface NormalizedDynamicsInput {
+  readonly parameterId: ParameterId;
+  readonly kind: NormalizedDynamicsAxisKind;
+  readonly influencePercent: number;
   readonly invert: boolean;
+  readonly normalization: NormalizedDynamicsNormalization;
+}
+
+export interface NormalizedDynamicsNormalization {
+  readonly min: number;
+  readonly center: number;
+  readonly max: number;
+}
+
+export interface NormalizedDynamicsPendulum {
+  readonly length: number;
+  readonly sway: number;
+  readonly reactionSpeed: number;
+  readonly convergenceSpeed: number;
 }
 
 export interface NormalizedDynamicsOutput {
-  readonly outputId: string;
-  readonly targetParameterId: ParameterId;
-  readonly outputScale: number;
-  readonly outputOffset: number;
-  readonly min: number;
-  readonly max: number;
-  readonly clampPolicy: "clamp-to-output-range";
-}
-
-export interface NormalizedDynamicsSettings {
-  readonly stiffness: number;
-  readonly damping: number;
-  readonly maxVelocity?: number;
-  readonly maxAmplitude?: number;
+  readonly parameterId: ParameterId;
+  readonly kind: NormalizedDynamicsAxisKind;
+  readonly strength: number;
+  readonly invert: boolean;
+  readonly limit: number;
 }
 
 export interface NormalizedDrawable {

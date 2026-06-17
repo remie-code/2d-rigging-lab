@@ -12,6 +12,7 @@ import type {
 import { createDrawableOpacityBinding } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
+import { DynamicsToolInspector } from "./dynamics-tool-inspector";
 import { MeshToolInspector } from "./mesh-tool-inspector";
 import { ParameterBindingSection } from "./parameter-binding-section";
 import { WorkspacePanel } from "./panel-frame";
@@ -29,6 +30,8 @@ export function InspectorPanel() {
           <MeshToolInspector />
         ) : activeTool === "rig" ? (
           <RigToolInspector />
+        ) : activeTool === "dynamics" ? (
+          <DynamicsToolInspector />
         ) : inspector.kind === "Part" ? (
           <PartContainerInspector inspector={inspector} />
         ) : inspector.kind === "Drawable" ? (

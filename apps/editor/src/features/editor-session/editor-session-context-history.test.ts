@@ -10,6 +10,7 @@ import {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -30,6 +31,7 @@ import {
   logMeshGenerationPreviewDebug,
   useEditorSession
 } from "./editor-session-context";
+import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { DeformerTreeSelectionTarget } from "./model/editor-selection";
 
 type EditorSessionContextSnapshot = ReturnType<typeof useEditorSession>;
@@ -40,6 +42,14 @@ const CUSTOM_PARAMETER_ID = ParameterIdSchema.parse("param_custom_history");
 const ROTATION_PARAMETER_ID = ParameterIdSchema.parse("param_rotation_selection_x");
 const ROTATION_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rotation_selection");
 const ROTATION_PART_ID = PartIdSchema.parse("part_rotation_selection");
+const DYNAMICS_HISTORY_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_history_sway");
+const DYNAMICS_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_history_driver_x");
+const DYNAMICS_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_history_output_sway");
+const DYNAMICS_PRESET_HISTORY_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_preset_history_sway");
+const DYNAMICS_PRESET_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_face_angle_x");
+const DYNAMICS_PRESET_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_hair_front_sway_x");
+const DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_body_angle_x");
+const DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_hair_side_sway_x");
 const LOADED_CHILD_PART_ID = PartIdSchema.parse("part_loaded_child");
 const LOADED_DRAWABLE_ID = DrawableIdSchema.parse("draw_loaded_child");
 const BATCH_PART_ID = PartIdSchema.parse("part_mesh_batch");
@@ -164,6 +174,113 @@ describe("EditorSessionProvider history integration", () => {
 
       expect(harness.context().canUndo).toBe(false);
       expect(harness.context().canRedo).toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("records Dynamics create/update/delete while preview state stays out of history", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createDynamicsHistorySession()
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createDynamicsGroup(createDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(1);
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().setDynamicsToolPreviewGroupId(DYNAMICS_HISTORY_GROUP_ID);
+        harness.context().setDynamicsToolPreviewDriverValue(
+          DYNAMICS_HISTORY_GROUP_ID,
+          DYNAMICS_HISTORY_DRIVER_ID,
+          30
+        );
+        harness.context().resetDynamicsToolPreviewSimulation(DYNAMICS_HISTORY_GROUP_ID);
+      });
+
+      expect(harness.context().dynamicsToolPreview.selectedGroupId).toBe(DYNAMICS_HISTORY_GROUP_ID);
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(0);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(true);
+
+      await act(async () => {
+        harness.context().redo();
+      });
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+          displayName: "History Sway Updated"
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.displayName)
+        .toBe("History Sway Updated");
+
+      await act(async () => {
+        const result = harness.context().deleteDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(0);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.displayName)
+        .toBe("History Sway Updated");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("commits Dynamics create and apply with initialized preset parameter candidates", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createEmptyAuthoringSession()
+    });
+
+    try {
+      expect(harness.context().session.graph.parameters).toEqual([]);
+
+      await act(async () => {
+        const result = harness.context().createDynamicsGroup(createPresetDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.parameters).toEqual([]);
+      expect(harness.context().session.graph.dynamicsGroups[0]).toMatchObject({
+        dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+        inputs: [{ parameterId: DYNAMICS_PRESET_HISTORY_DRIVER_ID }],
+        outputs: [{ parameterId: DYNAMICS_PRESET_HISTORY_OUTPUT_ID }]
+      });
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup(createUpdatedPresetDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.parameters).toEqual([]);
+      expect(harness.context().session.graph.dynamicsGroups[0]).toMatchObject({
+        dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+        inputs: [{ parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID }],
+        outputs: [{ parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID }]
+      });
+      expect(harness.context().canUndo).toBe(true);
     } finally {
       await harness.cleanup();
     }
@@ -686,6 +803,148 @@ function hasCustomParameter(context: EditorSessionContextSnapshot): boolean {
   return context.session.graph.parameters.some(
     (parameter) => parameter.parameterId === CUSTOM_PARAMETER_ID
   );
+}
+
+function createDynamicsHistorySession(): AuthoringSession {
+  const session = createEmptyAuthoringSession();
+  session.graph.parameters.push(
+    {
+      parameterId: DYNAMICS_HISTORY_DRIVER_ID,
+      displayName: "History Driver X",
+      valueSource: "authoredInput",
+      min: -30,
+      default: 0,
+      max: 30,
+      recommendedUiStep: 1
+    },
+    {
+      parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+      displayName: "History Output Sway",
+      valueSource: "authoredInput",
+      min: -20,
+      default: 0,
+      max: 20,
+      recommendedUiStep: 0.1
+    }
+  );
+  return session;
+}
+
+function createDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+    displayName: "History Sway",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        influencePercent: 100,
+        invert: false,
+        normalization: {
+          min: -30,
+          center: 0,
+          max: 30
+        }
+      }
+    ],
+    pendulums: [
+      {
+        length: 0.8,
+        sway: 0.7,
+        reactionSpeed: 12,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+        kind: "angle" as const,
+        strength: 10,
+        invert: false,
+        limit: 20
+      }
+    ]
+  };
+}
+
+function createPresetDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+    displayName: "Preset History Sway",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_PRESET_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        influencePercent: 100,
+        invert: false,
+        normalization: {
+          min: -30,
+          center: 0,
+          max: 30
+        }
+      }
+    ],
+    pendulums: [
+      {
+        length: 0.8,
+        sway: 0.7,
+        reactionSpeed: 12,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: DYNAMICS_PRESET_HISTORY_OUTPUT_ID,
+        kind: "angle" as const,
+        strength: 10,
+        invert: false,
+        limit: 20
+      }
+    ]
+  };
+}
+
+function createUpdatedPresetDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+    displayName: "Preset History Sway Updated",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        influencePercent: 50,
+        invert: true,
+        normalization: {
+          min: -10,
+          center: 0,
+          max: 10
+        }
+      }
+    ],
+    pendulums: [
+      {
+        length: 0.8,
+        sway: 0.7,
+        reactionSpeed: 12,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID,
+        kind: "angle" as const,
+        strength: 5,
+        invert: true,
+        limit: 10
+      }
+    ]
+  };
 }
 
 function createRotationSelectionSession(): AuthoringSession {

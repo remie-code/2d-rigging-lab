@@ -120,30 +120,36 @@ describe("authoring runtime graph adapter", () => {
           dynamicsGroupId: dynamicGroupId,
           displayName: "Hair",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_yaw",
-              sourceParameterId: faceYawId,
-              inputScale: 1,
-              inputOffset: 0,
-              invert: false
+              parameterId: faceYawId,
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: {
+                min: -1,
+                center: 0,
+                max: 1
+              }
             }
           ],
-          output: {
-            outputId: "out_hair",
-            targetParameterId: hairSwayId,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
-          },
-          settings: {
-            stiffness: 4,
-            damping: 1
-          },
-          resetPolicy: "reset-on-load"
+          pendulums: [
+            {
+              length: 1,
+              sway: 0.35,
+              reactionSpeed: 8,
+              convergenceSpeed: 4
+            }
+          ],
+          outputs: [
+            {
+              parameterId: hairSwayId,
+              kind: "angle",
+              strength: 1,
+              invert: false,
+              limit: 1
+            }
+          ]
         }
       ],
       keyformSets: [
@@ -193,7 +199,7 @@ describe("authoring runtime graph adapter", () => {
 
     expect(runtimeGraph.packageHash).toBe("sha256:adapter");
     expect(runtimeGraph.dynamicsGroups.get(dynamicGroupId)).toMatchObject({
-      output: { targetParameterId: "param_hair_sway" }
+      outputs: [{ parameterId: "param_hair_sway" }]
     });
     expect(runtimeGraph.keyformBindings).toEqual([
       expect.objectContaining({

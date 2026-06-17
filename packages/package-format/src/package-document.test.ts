@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PackageDocumentSchema,
   PackageManifestSchema,
+  DynamicsFileSchema,
   SourceManifestSchema,
   TextureAtlasEntrySchema,
   TexturePreviewReferenceSchema,
@@ -78,7 +79,7 @@ const minimalDocument = {
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v2",
       dynamicsGroups: []
     },
     masks: {
@@ -122,6 +123,82 @@ describe("package-format DTO schemas", () => {
 
     expect(parsed.manifest.packageId).toBe("pkg_minimal");
     expect(parsed.assets.sourceManifest.sourceAssets[0]?.kind).toBe("split-png-set-v1");
+  });
+
+  it("accepts dynamics-file-v2 additive pendulum groups", () => {
+    const parsed = DynamicsFileSchema.parse({
+      schemaVersion: "dynamics-file-v2",
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: "dyn_hair_sway",
+          displayName: "Hair Sway",
+          enabled: true,
+          inputs: [
+            {
+              parameterId: "param_face_yaw",
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: { min: -1, center: 0, max: 1 }
+            }
+          ],
+          pendulums: [
+            {
+              length: 1,
+              sway: 0.35,
+              reactionSpeed: 8,
+              convergenceSpeed: 4
+            }
+          ],
+          outputs: [
+            {
+              parameterId: "param_hair_sway",
+              kind: "angle",
+              strength: 1,
+              invert: false,
+              limit: 1
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(parsed.dynamicsGroups[0]?.outputs[0]?.parameterId).toBe("param_hair_sway");
+  });
+
+  it("rejects unsupported dynamics v0 cardinality and invalid normalization", () => {
+    const invalid = DynamicsFileSchema.safeParse({
+      schemaVersion: "dynamics-file-v2",
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: "dyn_invalid",
+          displayName: "Invalid",
+          enabled: true,
+          inputs: [
+            {
+              parameterId: "param_face_yaw",
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: { min: 0, center: 0, max: 1 }
+            }
+          ],
+          pendulums: [],
+          outputs: []
+        }
+      ]
+    });
+
+    expect(invalid.success).toBe(false);
+    if (!invalid.success) {
+      expect(invalid.error.issues.map((issue) => issue.path.join("."))).toEqual(
+        expect.arrayContaining([
+          "dynamicsGroups.0.inputs.0.normalization.min",
+          "dynamicsGroups.0.pendulums",
+          "dynamicsGroups.0.outputs"
+        ])
+      );
+    }
   });
 
   it("parses texture preview asset metadata as safe text references", () => {

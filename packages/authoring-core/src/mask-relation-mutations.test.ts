@@ -208,7 +208,7 @@ const createBaseModelFiles = (): PackageModelFilesDto => ({
   parameters: { schemaVersion: "parameters-file-v1", parameters: [] },
   keyforms: { schemaVersion: "keyforms-file-v1", keyformSets: [] },
   rigControls: { schemaVersion: "rig-controls-file-v1", rigControls: [] },
-  dynamics: { schemaVersion: "dynamics-file-v1", dynamicsGroups: [] },
+  dynamics: { schemaVersion: "dynamics-file-v2", dynamicsGroups: [] },
   masks: { schemaVersion: "masks-file-v1", masks: [] },
   drawOrder: { schemaVersion: "draw-order-file-v1", entries: [] }
 });

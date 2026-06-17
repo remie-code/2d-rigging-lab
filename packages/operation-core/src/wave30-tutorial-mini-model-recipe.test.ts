@@ -211,7 +211,7 @@ describe("wave30 tutorial mini model recipe foundation", () => {
       ]),
       dynamicsGroup: {
         dynamicsGroupId: TUTORIAL_MINI_MODEL_IDS.dynamicsGroups.hairSway,
-        driverParameterIds: [
+        inputParameterIds: [
           TUTORIAL_MINI_MODEL_IDS.parameters.faceYaw,
           TUTORIAL_MINI_MODEL_IDS.parameters.bodyBob
         ],
@@ -305,8 +305,8 @@ const summarizeTutorialPackage = (document: PackageDocument) => {
     keyformSetIds: document.model.keyforms.keyformSets.map((keyformSet) => keyformSet.keyformSetId),
     dynamicsGroup: {
       dynamicsGroupId: dynamicsGroup.dynamicsGroupId,
-      driverParameterIds: dynamicsGroup.drivers.map((driver) => driver.sourceParameterId),
-      outputParameterId: dynamicsGroup.output.targetParameterId
+      inputParameterIds: dynamicsGroup.inputs.map((input) => input.parameterId),
+      outputParameterId: dynamicsGroup.outputs[0]?.parameterId
     },
     rightsClean: {
       rightsStatus: rightsRecord.rightsStatus,

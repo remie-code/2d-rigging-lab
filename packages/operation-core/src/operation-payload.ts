@@ -1,13 +1,8 @@
 import { z } from "zod";
 
 import {
-  BindDynamicsDriverPayloadSchema,
-  BindDynamicsOutputPayloadSchema,
   CreateDynamicsGroupPayloadSchema,
   DeleteDynamicsGroupPayloadSchema,
-  ResetDynamicsPreviewStatePayloadSchema,
-  RunDynamicsPreviewSequencePayloadSchema,
-  SetDynamicsSettingsPayloadSchema,
   UpdateDynamicsGroupPayloadSchema
 } from "./payloads/dynamics.js";
 import {
@@ -95,17 +90,6 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("createDynamicsGroup"), payload: CreateDynamicsGroupPayloadSchema }),
   z.object({ operationType: z.literal("updateDynamicsGroup"), payload: UpdateDynamicsGroupPayloadSchema }),
   z.object({ operationType: z.literal("deleteDynamicsGroup"), payload: DeleteDynamicsGroupPayloadSchema }),
-  z.object({ operationType: z.literal("bindDynamicsDriver"), payload: BindDynamicsDriverPayloadSchema }),
-  z.object({ operationType: z.literal("bindDynamicsOutput"), payload: BindDynamicsOutputPayloadSchema }),
-  z.object({ operationType: z.literal("setDynamicsSettings"), payload: SetDynamicsSettingsPayloadSchema }),
-  z.object({
-    operationType: z.literal("resetDynamicsPreviewState"),
-    payload: ResetDynamicsPreviewStatePayloadSchema
-  }),
-  z.object({
-    operationType: z.literal("runDynamicsPreviewSequence"),
-    payload: RunDynamicsPreviewSequencePayloadSchema
-  }),
   z.object({
     operationType: z.literal("createRotation2dRigControl"),
     payload: CreateRotation2dRigControlPayloadSchema

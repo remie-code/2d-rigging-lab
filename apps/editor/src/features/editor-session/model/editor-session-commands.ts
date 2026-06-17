@@ -5,10 +5,13 @@ import {
   createOperationCore,
   createRigControlIdFromDisplayName,
   OperationRequestSchema,
+  type CreateDynamicsGroupPayloadDto,
   type CreateRotation2dRigControlPayloadDto,
   type CreateWarpDeformerPayloadDto,
+  type DeleteDynamicsGroupPayloadDto,
   type EditKeyformKeyPayloadDto,
   type GenerateMeshPayloadDto,
+  type UpdateDynamicsGroupPayloadDto,
   type UpdateRigControlPayloadDto,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
@@ -382,6 +385,36 @@ export function commitEditKeyformKey(
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "editKeyformKey",
+    payload
+  });
+}
+
+export function commitCreateDynamicsGroup(
+  session: AuthoringSession,
+  payload: CreateDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "createDynamicsGroup",
+    payload
+  });
+}
+
+export function commitUpdateDynamicsGroup(
+  session: AuthoringSession,
+  payload: UpdateDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "updateDynamicsGroup",
+    payload
+  });
+}
+
+export function commitDeleteDynamicsGroup(
+  session: AuthoringSession,
+  payload: DeleteDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "deleteDynamicsGroup",
     payload
   });
 }

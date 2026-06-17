@@ -1,15 +1,14 @@
 import type {
-  DynamicsGroupId,
-  ParameterId
+  DynamicsGroupId
 } from "@private-2d-rigging-lab/contracts";
-import type { DynamicsGroupDto } from "@private-2d-rigging-lab/package-format";
+import { DynamicsGroupSchema, type DynamicsGroupDto } from "@private-2d-rigging-lab/package-format";
 
 import { AuthoringMutationError } from "./authoring-mutations.js";
 import { incrementAuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringRevision } from "./authoring-revision.js";
 import type { AuthoringSession } from "./authoring-session.js";
 import { hasDynamicsGroup } from "./dynamics-selectors.js";
-import { getParameterById } from "./graph-selectors.js";
+import { getInitializedParameterById } from "./parameter-surface.js";
 
 export interface CreateDynamicsGroupMutationResult {
   readonly session: AuthoringSession;
@@ -21,8 +20,10 @@ export interface UpdateDynamicsGroupInput {
   readonly dynamicsGroupId: DynamicsGroupId;
   readonly displayName?: string;
   readonly enabled?: boolean;
-  readonly resetPolicy?: DynamicsGroupDto["resetPolicy"];
-  readonly settings?: DynamicsGroupDto["settings"];
+  readonly presetId?: string;
+  readonly inputs?: DynamicsGroupDto["inputs"];
+  readonly pendulums?: DynamicsGroupDto["pendulums"];
+  readonly outputs?: DynamicsGroupDto["outputs"];
 }
 
 export interface UpdateDynamicsGroupMutationResult {
@@ -32,16 +33,22 @@ export interface UpdateDynamicsGroupMutationResult {
   readonly authoringRevision: AuthoringRevision;
 }
 
+export interface DeleteDynamicsGroupMutationResult {
+  readonly session: AuthoringSession;
+  readonly dynamicsGroup: DynamicsGroupDto;
+  readonly authoringRevision: AuthoringRevision;
+}
+
 export const createDynamicsGroup = (
   session: AuthoringSession,
   dynamicsGroup: DynamicsGroupDto
 ): CreateDynamicsGroupMutationResult => {
-  assertUniqueDynamicsGroupId(session, dynamicsGroup.dynamicsGroupId);
-  assertValidDynamicsGroupParameterBindings(session, dynamicsGroup);
-  assertUniqueDynamicsDriverIds(dynamicsGroup);
-  assertUniqueDynamicsOutputParameter(session, dynamicsGroup);
+  const parsedDynamicsGroup = parseDynamicsGroupForMutation(dynamicsGroup);
+  assertUniqueDynamicsGroupId(session, parsedDynamicsGroup.dynamicsGroupId);
+  assertValidDynamicsGroupParameterBindings(session, parsedDynamicsGroup);
+  assertUniqueDynamicsOutputParameter(session, parsedDynamicsGroup);
 
-  const storedDynamicsGroup = structuredClone(dynamicsGroup);
+  const storedDynamicsGroup = structuredClone(parsedDynamicsGroup);
   session.graph.dynamicsGroups.push(storedDynamicsGroup);
   if (!session.graph.stableOrder.includes(storedDynamicsGroup.dynamicsGroupId)) {
     session.graph.stableOrder.push(storedDynamicsGroup.dynamicsGroupId);
@@ -85,25 +92,58 @@ export const updateDynamicsGroup = (
     ...previousDynamicsGroup,
     ...(update.displayName === undefined ? {} : { displayName: update.displayName }),
     ...(update.enabled === undefined ? {} : { enabled: update.enabled }),
-    ...(update.resetPolicy === undefined ? {} : { resetPolicy: update.resetPolicy }),
-    ...(update.settings === undefined ? {} : { settings: structuredClone(update.settings) })
+    ...(update.presetId === undefined ? {} : { presetId: update.presetId }),
+    ...(update.inputs === undefined ? {} : { inputs: structuredClone(update.inputs) }),
+    ...(update.pendulums === undefined ? {} : { pendulums: structuredClone(update.pendulums) }),
+    ...(update.outputs === undefined ? {} : { outputs: structuredClone(update.outputs) })
   };
+  const parsedNextDynamicsGroup = parseDynamicsGroupForMutation(nextDynamicsGroup);
+  assertValidDynamicsGroupParameterBindings(session, parsedNextDynamicsGroup);
+  assertUniqueDynamicsOutputParameter(session, parsedNextDynamicsGroup, update.dynamicsGroupId);
 
-  if (JSON.stringify(previousDynamicsGroup) === JSON.stringify(nextDynamicsGroup)) {
+  if (JSON.stringify(previousDynamicsGroup) === JSON.stringify(parsedNextDynamicsGroup)) {
     throw new AuthoringMutationError(
       "no_op_dynamics_group_update",
       `Dynamics group update does not change ${update.dynamicsGroupId}`
     );
   }
 
-  session.graph.dynamicsGroups[existingIndex] = nextDynamicsGroup;
+  session.graph.dynamicsGroups[existingIndex] = parsedNextDynamicsGroup;
   session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
   session.dirty = true;
 
   return {
     session,
-    dynamicsGroup: nextDynamicsGroup,
+    dynamicsGroup: parsedNextDynamicsGroup,
     previousDynamicsGroup,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+export const deleteDynamicsGroup = (
+  session: AuthoringSession,
+  dynamicsGroupId: DynamicsGroupId
+): DeleteDynamicsGroupMutationResult => {
+  const existingIndex = session.graph.dynamicsGroups.findIndex(
+    (group) => group.dynamicsGroupId === dynamicsGroupId
+  );
+  const existingDynamicsGroup = existingIndex < 0 ? undefined : session.graph.dynamicsGroups[existingIndex];
+
+  if (existingDynamicsGroup === undefined) {
+    throw new AuthoringMutationError(
+      "missing_dynamics_group",
+      `Dynamics group does not exist: ${dynamicsGroupId}`
+    );
+  }
+
+  session.graph.dynamicsGroups.splice(existingIndex, 1);
+  session.graph.stableOrder = session.graph.stableOrder.filter((id) => id !== dynamicsGroupId);
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    dynamicsGroup: structuredClone(existingDynamicsGroup),
     authoringRevision: session.authoringRevision
   };
 };
@@ -120,78 +160,69 @@ const assertUniqueDynamicsGroupId = (
   }
 };
 
+const parseDynamicsGroupForMutation = (dynamicsGroup: DynamicsGroupDto): DynamicsGroupDto => {
+  const parsed = DynamicsGroupSchema.safeParse(dynamicsGroup);
+  if (!parsed.success) {
+    throw new AuthoringMutationError(
+      "invalid_dynamics_group",
+      parsed.error.issues.map((issue) => issue.message).join("; ")
+    );
+  }
+
+  return parsed.data;
+};
+
 const assertValidDynamicsGroupParameterBindings = (
   session: AuthoringSession,
   dynamicsGroup: DynamicsGroupDto
 ): void => {
-  const driverParameterIds = new Set<ParameterId>();
-
-  for (const driver of dynamicsGroup.drivers) {
-    const parameter = getParameterById(session.graph, driver.sourceParameterId);
+  for (const input of dynamicsGroup.inputs) {
+    const parameter = getInitializedParameterById(session.graph, input.parameterId);
     if (parameter === undefined) {
       throw new AuthoringMutationError(
         "missing_dynamics_driver_parameter",
-        `Dynamics parameter does not exist: ${driver.sourceParameterId}`
+        `Dynamics input parameter does not exist: ${input.parameterId}`
       );
     }
-    if (parameter.valueSource !== "authoredInput") {
-      throw new AuthoringMutationError(
-        "invalid_dynamics_driver_parameter_source",
-        `Dynamics driver parameter must use valueSource=authoredInput: ${driver.sourceParameterId}`
-      );
-    }
-    driverParameterIds.add(driver.sourceParameterId);
   }
 
-  const outputParameter = getParameterById(session.graph, dynamicsGroup.output.targetParameterId);
+  const output = dynamicsGroup.outputs[0];
+  if (output === undefined) {
+    throw new AuthoringMutationError(
+      "missing_dynamics_output",
+      `Dynamics group must have one output: ${dynamicsGroup.dynamicsGroupId}`
+    );
+  }
+
+  const outputParameter = getInitializedParameterById(session.graph, output.parameterId);
   if (outputParameter === undefined) {
     throw new AuthoringMutationError(
       "missing_dynamics_output_parameter",
-      `Dynamics parameter does not exist: ${dynamicsGroup.output.targetParameterId}`
+      `Dynamics output parameter does not exist: ${output.parameterId}`
     );
-  }
-  if (outputParameter.valueSource !== "computedDynamics") {
-    throw new AuthoringMutationError(
-      "invalid_dynamics_output_parameter_source",
-      `Dynamics output parameter must use valueSource=computedDynamics: ${dynamicsGroup.output.targetParameterId}`
-    );
-  }
-
-  if (driverParameterIds.has(dynamicsGroup.output.targetParameterId)) {
-    throw new AuthoringMutationError(
-      "dynamics_output_used_as_driver",
-      `Dynamics output parameter cannot also be a driver: ${dynamicsGroup.output.targetParameterId}`
-    );
-  }
-};
-
-const assertUniqueDynamicsDriverIds = (dynamicsGroup: DynamicsGroupDto): void => {
-  const driverIds = new Set<string>();
-
-  for (const driver of dynamicsGroup.drivers) {
-    if (driverIds.has(driver.driverId)) {
-      throw new AuthoringMutationError(
-        "duplicate_dynamics_driver",
-        `Dynamics driver ID is duplicated: ${driver.driverId}`
-      );
-    }
-
-    driverIds.add(driver.driverId);
   }
 };
 
 const assertUniqueDynamicsOutputParameter = (
   session: AuthoringSession,
-  dynamicsGroup: DynamicsGroupDto
+  dynamicsGroup: DynamicsGroupDto,
+  ignoredDynamicsGroupId?: DynamicsGroupId
 ): void => {
+  const output = dynamicsGroup.outputs[0];
+  if (output === undefined) {
+    return;
+  }
+
   const existingGroup = session.graph.dynamicsGroups.find(
-    (group) => group.output.targetParameterId === dynamicsGroup.output.targetParameterId
+    (group) =>
+      group.dynamicsGroupId !== ignoredDynamicsGroupId &&
+      group.outputs.some((candidate) => candidate.parameterId === output.parameterId)
   );
 
   if (existingGroup !== undefined) {
     throw new AuthoringMutationError(
       "duplicate_dynamics_output_parameter",
-      `Dynamics output parameter is already produced by ${existingGroup.dynamicsGroupId}: ${dynamicsGroup.output.targetParameterId}`
+      `Dynamics output parameter is already owned by ${existingGroup.dynamicsGroupId}: ${output.parameterId}`
     );
   }
 };

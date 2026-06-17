@@ -1,7 +1,7 @@
 {
   "schemaVersion": "contract-fixture-manifest-v1",
   "fixtureId": "minimum-open-dynamics-v1-evidence",
-  "title": "Minimum Open Dynamics v1 operation, runtime, validator, and editor-facing evidence",
+  "title": "Minimum Open Dynamics v2 operation, runtime, validator, and editor-facing evidence",
   "coversAC": [
     "AC-MVP-010",
     "AC-MVP-012",

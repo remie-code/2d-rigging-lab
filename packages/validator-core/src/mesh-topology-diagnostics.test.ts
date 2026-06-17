@@ -761,7 +761,7 @@ const createPackageDocument = (): PackageDocumentDto => PackageDocumentSchema.pa
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v2",
       dynamicsGroups: []
     },
     masks: {

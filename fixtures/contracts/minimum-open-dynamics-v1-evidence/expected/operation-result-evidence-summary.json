@@ -1,7 +1,7 @@
 {
   "schemaVersion": "minimum-open-dynamics-operation-result-evidence-summary-v1",
   "dryRun": {
-    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "operationId": "op_fixture_create_minimum_open_dynamics_v2",
     "status": "dry_run",
     "preconditionOk": true,
     "reversible": true,
@@ -14,8 +14,8 @@
       "changedTargets": [
         "package:pkg_minimum_open_dynamics_v1_evidence:/model/dynamics/dynamicsGroups",
         "dynamicsGroup:dyn_hair_sway",
-        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_face_yaw/sourceParameterId",
-        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/inputs/0/parameterId",
+        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/outputs/0/parameterId"
       ]
     },
     "generatedRuntimeSnapshotIds": [
@@ -23,19 +23,19 @@
       "snap_minimum_open_dynamics_v1_evidence_1"
     ],
     "generatedRuntimeStateRefs": [
-      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json"
+      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence-final-f1.runtime-state.json"
     ],
     "generatedRuntimeStateSequenceRefs": [
-      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence.runtime-state-sequence.json"
+      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence.runtime-state-sequence.json"
     ],
-    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json",
+    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence-final-f1.runtime-state.json",
     "generatedValidationReportIds": [
       "val_minimum_open_dynamics_v1_dry_run_baseline",
       "val_minimum_open_dynamics_v1_dry_run_candidate"
     ],
     "validationDiff": {
       "newFailureCount": 0,
-      "resolvedFailureCount": 2,
+      "resolvedFailureCount": 0,
       "severityChangeCount": 0
     },
     "operationLogLength": 0,
@@ -44,7 +44,7 @@
     "originalDirtyAfter": false
   },
   "commit": {
-    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "operationId": "op_fixture_create_minimum_open_dynamics_v2",
     "status": "committed",
     "preconditionOk": true,
     "reversible": true,
@@ -57,8 +57,8 @@
       "changedTargets": [
         "package:pkg_minimum_open_dynamics_v1_evidence:/model/dynamics/dynamicsGroups",
         "dynamicsGroup:dyn_hair_sway",
-        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_face_yaw/sourceParameterId",
-        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+        "parameter:param_face_yaw:/model/dynamics/dynamicsGroups/dyn_hair_sway/inputs/0/parameterId",
+        "parameter:param_hair_sway:/model/dynamics/dynamicsGroups/dyn_hair_sway/outputs/0/parameterId"
       ]
     },
     "generatedRuntimeSnapshotIds": [
@@ -66,19 +66,19 @@
       "snap_minimum_open_dynamics_v1_evidence_1"
     ],
     "generatedRuntimeStateRefs": [
-      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json"
+      "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence-final-f1.runtime-state.json"
     ],
     "generatedRuntimeStateSequenceRefs": [
-      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence.runtime-state-sequence.json"
+      "runtime/state-sequences/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence.runtime-state-sequence.json"
     ],
-    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v1-evidence-final-f1.runtime-state.json",
+    "finalRuntimeStateRef": "runtime/states/pkg_minimum_open_dynamics_v1_evidence-r1-minimum-open-dynamics-v2-evidence-final-f1.runtime-state.json",
     "generatedValidationReportIds": [
       "val_minimum_open_dynamics_v1_commit_baseline",
       "val_minimum_open_dynamics_v1_commit_candidate"
     ],
     "validationDiff": {
       "newFailureCount": 0,
-      "resolvedFailureCount": 2,
+      "resolvedFailureCount": 0,
       "severityChangeCount": 0
     },
     "operationLogLength": 1,
@@ -86,7 +86,7 @@
     "authoringRevisionAfter": 1,
     "dirtyAfter": true,
     "logEntry": {
-      "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+      "operationId": "op_fixture_create_minimum_open_dynamics_v2",
       "operationType": "createDynamicsGroup",
       "targetIds": [
         "dyn_hair_sway",

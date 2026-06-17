@@ -13,12 +13,14 @@ import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
 import { createRuntimeSnapshot } from "./snapshot.js";
 
 describe("effective parameter resolution", () => {
-  it("resolves authored defaults, clamps authored input, and overlays computed dynamics values", () => {
+  it("resolves authored defaults, clamps authored input, and adds dynamics offsets", () => {
     const fixture = createParameterResolutionFixture();
     const state = createRuntimeState(fixture.graph, {
       [fixture.dynamicsGroupId]: {
-        position: 0.25,
-        velocity: 0,
+        angle: 0.25,
+        angularVelocity: 0,
+        previousSource: 0.25,
+        previousSourceVelocity: 0,
         tick: 1,
         resetCounter: 1
       }
@@ -28,7 +30,7 @@ describe("effective parameter resolution", () => {
       graph: fixture.graph,
       authoredParameterValues: {
         [fixture.yawParameterId]: 2,
-        [fixture.hairSwayParameterId]: 0.9
+        [fixture.hairSwayParameterId]: 0.4
       },
       state
     });
@@ -38,30 +40,34 @@ describe("effective parameter resolution", () => {
         parameterId: fixture.yawParameterId,
         valueSource: "authoredInput",
         authoredValue: 2,
+        baseValue: 1,
         effectiveValue: 1,
         clamped: true,
         source: "viewerOverride"
       },
       {
         parameterId: fixture.hairSwayParameterId,
-        valueSource: "computedDynamics",
-        authoredValue: 0.9,
-        computedValue: 0.25,
-        effectiveValue: 0.25,
+        valueSource: "authoredInput",
+        authoredValue: 0.4,
+        baseValue: 0.4,
+        dynamicsOffset: 0.25,
+        effectiveValue: 0.65,
         clamped: false,
-        source: "dynamicsComputed"
+        source: "dynamicsAdditive"
       }
     ]);
     expect(resolution.effectiveParameterValues.get(fixture.yawParameterId)).toBe(1);
-    expect(resolution.effectiveParameterValues.get(fixture.hairSwayParameterId)).toBe(0.25);
+    expect(resolution.effectiveParameterValues.get(fixture.hairSwayParameterId)).toBe(0.65);
   });
 
   it("keeps snapshot parameter output and empty keyform samples unchanged without keyforms", () => {
     const fixture = createParameterResolutionFixture();
     const state = createRuntimeState(fixture.graph, {
       [fixture.dynamicsGroupId]: {
-        position: -0.5,
-        velocity: 0,
+        angle: -0.5,
+        angularVelocity: 0,
+        previousSource: -0.5,
+        previousSourceVelocity: 0,
         tick: 1,
         resetCounter: 1
       }
@@ -124,7 +130,7 @@ const createParameterResolutionFixture = () => {
         {
           id: hairSwayParameterId,
           displayName: "Hair Sway",
-          valueSource: "computedDynamics",
+          valueSource: "authoredInput",
           min: -1,
           max: 1,
           default: 0
@@ -138,30 +144,36 @@ const createParameterResolutionFixture = () => {
           dynamicsGroupId,
           displayName: "Hair Sway",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_yaw",
-              sourceParameterId: yawParameterId,
-              inputScale: 1,
-              inputOffset: 0,
-              invert: false
+              parameterId: yawParameterId,
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: {
+                min: -1,
+                center: 0,
+                max: 1
+              }
             }
           ],
-          output: {
-            outputId: "output_hair",
-            targetParameterId: hairSwayParameterId,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
-          },
-          settings: {
-            stiffness: 4,
-            damping: 1
-          },
-          resetPolicy: "reset-on-load"
+          pendulums: [
+            {
+              length: 1,
+              sway: 0.35,
+              reactionSpeed: 8,
+              convergenceSpeed: 4
+            }
+          ],
+          outputs: [
+            {
+              parameterId: hairSwayParameterId,
+              kind: "angle",
+              strength: 1,
+              invert: false,
+              limit: 1
+            }
+          ]
         }
       ]
     ]),

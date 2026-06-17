@@ -65,8 +65,10 @@ export const compareRuntimeSnapshots = (
             outputParameterId: afterDynamics.outputParameterId,
             stateChanged: true,
             outputChanged: true,
-            positionAfter: afterDynamics.stateSummary.position,
-            velocityAfter: afterDynamics.stateSummary.velocity,
+            angleAfter: afterDynamics.stateSummary.angle,
+            angularVelocityAfter: afterDynamics.stateSummary.angularVelocity,
+            outputOffsetAfter: afterDynamics.outputOffset,
+            effectiveOutputValueAfter: afterDynamics.effectiveOutputValue,
             tickAfter: afterDynamics.tick,
             resetCounterAfter: afterDynamics.resetCounter
           }
@@ -74,11 +76,15 @@ export const compareRuntimeSnapshots = (
       }
 
       const stateChanged =
-        beforeDynamics.stateSummary.position !== afterDynamics.stateSummary.position ||
-        beforeDynamics.stateSummary.velocity !== afterDynamics.stateSummary.velocity ||
+        beforeDynamics.stateSummary.angle !== afterDynamics.stateSummary.angle ||
+        beforeDynamics.stateSummary.angularVelocity !== afterDynamics.stateSummary.angularVelocity ||
+        beforeDynamics.stateSummary.previousSource !== afterDynamics.stateSummary.previousSource ||
+        beforeDynamics.stateSummary.previousSourceVelocity !== afterDynamics.stateSummary.previousSourceVelocity ||
         beforeDynamics.tick !== afterDynamics.tick ||
         beforeDynamics.resetCounter !== afterDynamics.resetCounter;
-      const outputChanged = beforeDynamics.outputValue !== afterDynamics.outputValue;
+      const outputChanged =
+        beforeDynamics.outputOffset !== afterDynamics.outputOffset ||
+        beforeDynamics.effectiveOutputValue !== afterDynamics.effectiveOutputValue;
 
       if (!stateChanged && !outputChanged) {
         return [];
@@ -90,10 +96,14 @@ export const compareRuntimeSnapshots = (
           outputParameterId: afterDynamics.outputParameterId,
           stateChanged,
           outputChanged,
-          positionBefore: beforeDynamics.stateSummary.position,
-          positionAfter: afterDynamics.stateSummary.position,
-          velocityBefore: beforeDynamics.stateSummary.velocity,
-          velocityAfter: afterDynamics.stateSummary.velocity,
+          angleBefore: beforeDynamics.stateSummary.angle,
+          angleAfter: afterDynamics.stateSummary.angle,
+          angularVelocityBefore: beforeDynamics.stateSummary.angularVelocity,
+          angularVelocityAfter: afterDynamics.stateSummary.angularVelocity,
+          outputOffsetBefore: beforeDynamics.outputOffset,
+          outputOffsetAfter: afterDynamics.outputOffset,
+          effectiveOutputValueBefore: beforeDynamics.effectiveOutputValue,
+          effectiveOutputValueAfter: afterDynamics.effectiveOutputValue,
           tickBefore: beforeDynamics.tick,
           tickAfter: afterDynamics.tick,
           resetCounterBefore: beforeDynamics.resetCounter,
@@ -112,8 +122,10 @@ export const compareRuntimeSnapshots = (
           outputParameterId: beforeDynamics.outputParameterId,
           stateChanged: true,
           outputChanged: true,
-          positionBefore: beforeDynamics.stateSummary.position,
-          velocityBefore: beforeDynamics.stateSummary.velocity,
+          angleBefore: beforeDynamics.stateSummary.angle,
+          angularVelocityBefore: beforeDynamics.stateSummary.angularVelocity,
+          outputOffsetBefore: beforeDynamics.outputOffset,
+          effectiveOutputValueBefore: beforeDynamics.effectiveOutputValue,
           tickBefore: beforeDynamics.tick,
           resetCounterBefore: beforeDynamics.resetCounter
         }

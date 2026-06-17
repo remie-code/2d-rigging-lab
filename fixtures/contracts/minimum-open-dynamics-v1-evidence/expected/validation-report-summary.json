@@ -2,18 +2,15 @@
   "schemaVersion": "minimum-open-dynamics-validation-report-summary-v1",
   "baseline": {
     "reportId": "val_minimum_open_dynamics_v1_baseline",
-    "status": "fail",
-    "highestSeverity": "error",
+    "status": "pass",
+    "highestSeverity": "info",
     "counts": {
       "info": 0,
       "warning": 0,
-      "error": 2,
+      "error": 0,
       "blocking": 0
     },
-    "checkIds": [
-      "dynamics.requiredGroupMissing",
-      "dynamics.computedParameterProducerMissing"
-    ],
+    "checkIds": [],
     "runtimeSnapshotIds": [
       "snap_minimum_open_dynamics_v1_evidence_0"
     ],
@@ -41,7 +38,7 @@
     "beforeReportId": "val_minimum_open_dynamics_v1_baseline",
     "afterReportId": "val_minimum_open_dynamics_v1_candidate",
     "newFailureCount": 0,
-    "resolvedFailureCount": 2,
+    "resolvedFailureCount": 0,
     "severityChangeCount": 0
   }
 }

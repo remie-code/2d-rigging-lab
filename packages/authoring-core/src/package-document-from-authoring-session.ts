@@ -37,7 +37,7 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         parameters: "parameters-file-v1",
         keyforms: "keyforms-file-v1",
         rigControls: "rig-controls-file-v1",
-        dynamics: "dynamics-file-v1",
+        dynamics: "dynamics-file-v2",
         masks: "masks-file-v1",
         drawOrder: "draw-order-file-v1",
         sourceManifest: "source-manifest-v1",
@@ -95,7 +95,7 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         rigControls: session.graph.rigControls
       },
       dynamics: {
-        schemaVersion: "dynamics-file-v1",
+        schemaVersion: "dynamics-file-v2",
         dynamicsGroups: session.graph.dynamicsGroups
       },
       masks: {

@@ -834,38 +834,42 @@ const createTutorialPackageDocument = (): PackageDocumentDto => PackageDocumentS
       ]
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v2",
       dynamicsGroups: [
         {
           dynamicsGroupId: DYNAMICS_HAIR,
           displayName: "Front hair sway",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_faceYaw",
-              sourceParameterId: PARAM_FACE_YAW,
-              inputScale: 1,
-              inputOffset: 0,
-              invert: false
+              parameterId: PARAM_FACE_YAW,
+              kind: "angle",
+              influencePercent: 100,
+              invert: false,
+              normalization: {
+                min: -1,
+                center: 0,
+                max: 1
+              }
             }
           ],
-          output: {
-            outputId: "out_hairSway",
-            targetParameterId: PARAM_HAIR_SWAY,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
-          },
-          settings: {
-            stiffness: 0.35,
-            damping: 0.6,
-            maxVelocity: 2,
-            maxAmplitude: 1
-          },
-          resetPolicy: "reset-on-load"
+          pendulums: [
+            {
+              length: 1,
+              sway: 0.35,
+              reactionSpeed: 8,
+              convergenceSpeed: 4
+            }
+          ],
+          outputs: [
+            {
+              parameterId: PARAM_HAIR_SWAY,
+              kind: "angle",
+              strength: 1,
+              invert: false,
+              limit: 1
+            }
+          ]
         }
       ]
     },
@@ -1061,32 +1065,36 @@ const createTutorialRuntimeGraph = (): NormalizedRuntimeGraph => ({
         dynamicsGroupId: DYNAMICS_HAIR,
         displayName: "Front hair sway",
         enabled: true,
-        solverKind: "scalarDampedFollowV1",
-        drivers: [
+        inputs: [
           {
-            driverId: "driver_faceYaw",
-            sourceParameterId: PARAM_FACE_YAW,
-            inputScale: 1,
-            inputOffset: 0,
-            invert: false
+            parameterId: PARAM_FACE_YAW,
+            kind: "angle",
+            influencePercent: 100,
+            invert: false,
+            normalization: {
+              min: -1,
+              center: 0,
+              max: 1
+            }
           }
         ],
-        output: {
-          outputId: "out_hairSway",
-          targetParameterId: PARAM_HAIR_SWAY,
-          outputScale: 1,
-          outputOffset: 0,
-          min: -1,
-          max: 1,
-          clampPolicy: "clamp-to-output-range"
-        },
-        settings: {
-          stiffness: 0.35,
-          damping: 0.6,
-          maxVelocity: 2,
-          maxAmplitude: 1
-        },
-        resetPolicy: "reset-on-load"
+        pendulums: [
+          {
+            length: 1,
+            sway: 0.35,
+            reactionSpeed: 8,
+            convergenceSpeed: 4
+          }
+        ],
+        outputs: [
+          {
+            parameterId: PARAM_HAIR_SWAY,
+            kind: "angle",
+            strength: 1,
+            invert: false,
+            limit: 1
+          }
+        ]
       }
     ]
   ]),

@@ -15,6 +15,7 @@ import { createRotation2dRigControlOperationHandler } from "./operations/create-
 import { createWarpDeformerOperationHandler } from "./operations/create-warp-deformer.js";
 import { createWarpLattice2dRigControlOperationHandler } from "./operations/create-warp-lattice2d-rig-control.js";
 import { deletePartOperationHandler } from "./operations/delete-part.js";
+import { deleteDynamicsGroupOperationHandler } from "./operations/delete-dynamics-group.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdLayerMaterializationBatchOperationHandler } from "./operations/import-psd-layer-materialization-batch.js";
 import { importPsdLayerMaterializationOperationHandler } from "./operations/import-psd-layer-materialization.js";
@@ -106,6 +107,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
   [createDynamicsGroupOperationHandler.operationType, createDynamicsGroupOperationHandler],
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],
+  [deleteDynamicsGroupOperationHandler.operationType, deleteDynamicsGroupOperationHandler],
   [createRotation2dRigControlOperationHandler.operationType, createRotation2dRigControlOperationHandler],
   [createWarpLattice2dRigControlOperationHandler.operationType, createWarpLattice2dRigControlOperationHandler],
   [createWarpDeformerOperationHandler.operationType, createWarpDeformerOperationHandler],

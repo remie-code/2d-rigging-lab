@@ -1,0 +1,264 @@
+import { DynamicsGroupIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+import { describe, expect, it } from "vitest";
+
+import { createEmptyAuthoringSession } from "./empty-authoring-session";
+import {
+  addInputToDynamicsDraft,
+  createDefaultDynamicsInput,
+  createDefaultDynamicsOutput,
+  createDynamicsGroupDraftFromSession,
+  createDynamicsToolPreviewEvaluation,
+  resetDynamicsToolPreviewSimulation,
+  setDynamicsToolPreviewDriverValue,
+  validateDynamicsToolDraft,
+  type DynamicsToolPreviewState
+} from "./dynamics-tool-state";
+
+const DRIVER_X = ParameterIdSchema.parse("param_driver_x");
+const DRIVER_Y = ParameterIdSchema.parse("param_driver_y");
+const OUTPUT_SWAY = ParameterIdSchema.parse("param_output_sway");
+const NON_DRIVER = ParameterIdSchema.parse("param_non_driver_default");
+const GROUP_ID = DynamicsGroupIdSchema.parse("dyn_model_sway");
+
+describe("Dynamics Tool state", () => {
+  it("derives input normalization defaults and output angle defaults from parameters", () => {
+    const session = createDynamicsSession();
+    const input = createDefaultDynamicsInput(session.graph.parameters[0]!);
+    const output = createDefaultDynamicsOutput(session.graph.parameters[2]!);
+
+    expect(input).toMatchObject({
+      parameterId: DRIVER_X,
+      kind: "angle",
+      influencePercent: 100,
+      normalization: {
+        min: -30,
+        center: 0,
+        max: 30
+      }
+    });
+    expect(output).toMatchObject({
+      parameterId: OUTPUT_SWAY,
+      kind: "angle"
+    });
+  });
+
+  it("adds multiple driver inputs without replacing the first input", () => {
+    const session = createDynamicsSession();
+    const draft = addInputToDynamicsDraft(session, {
+      ...createDynamicsGroupDraftFromSession(session),
+      inputs: [createDefaultDynamicsInput(session.graph.parameters[0]!)],
+      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+    });
+
+    expect(draft.inputs).toHaveLength(2);
+    expect(draft.inputs[0]?.parameterId).toBe(DRIVER_X);
+    expect(new Set(draft.inputs.map((input) => input.parameterId)).size).toBe(2);
+  });
+
+  it("blocks invalid normalization and duplicate output ownership", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push({
+      dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_existing_output"),
+      displayName: "Existing Output",
+      enabled: true,
+      presetId: "hair",
+      inputs: [createDefaultDynamicsInput(session.graph.parameters[0]!)],
+      pendulums: [
+        {
+          length: 0.8,
+          sway: 0.7,
+          reactionSpeed: 12,
+          convergenceSpeed: 4
+        }
+      ],
+      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+    });
+
+    const draft = {
+      ...createDynamicsGroupDraftFromSession(session),
+      inputs: [
+        {
+          ...createDefaultDynamicsInput(session.graph.parameters[0]!),
+          normalization: {
+            min: 0,
+            center: 0,
+            max: 30
+          }
+        }
+      ],
+      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+    };
+
+    const issues = validateDynamicsToolDraft(session, draft);
+
+    expect(issues.map((issue) => issue.code)).toContain("dynamicsTool.normalizationInvalid");
+    expect(issues.map((issue) => issue.code)).toContain("dynamicsTool.outputOwnershipDuplicate");
+    expect(issues.filter((issue) => issue.severity === "error")).toHaveLength(2);
+  });
+
+  it("uses non-driver defaults, local driver values, and additive output offset in preview", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push(createDynamicsGroup());
+    const state = setDynamicsToolPreviewDriverValue(
+      session,
+      {
+        selectedGroupId: GROUP_ID,
+        driverValuesByGroupId: {},
+        simulationStatesByGroupId: {
+          [GROUP_ID]: {
+            angle: 0.5,
+            angularVelocity: 0,
+            previousSource: 0,
+            previousSourceVelocity: 0,
+            tick: 1,
+            resetCounter: 1
+          }
+        },
+        resetSerial: 0
+      },
+      {
+        dynamicsGroupId: GROUP_ID,
+        parameterId: DRIVER_X,
+        value: 30
+      }
+    );
+    const evaluation = createDynamicsToolPreviewEvaluation(session, {
+      ...state,
+      simulationStatesByGroupId: {
+        [GROUP_ID]: {
+          angle: 0.5,
+          angularVelocity: 0,
+          previousSource: 0,
+          previousSourceVelocity: 0,
+          tick: 1,
+          resetCounter: 1
+        }
+      }
+    });
+
+    expect(evaluation.parameterValues[DRIVER_X]).toBe(30);
+    expect(evaluation.parameterValues[NON_DRIVER]).toBe(0.25);
+    expect(evaluation.output).toMatchObject({
+      baseValue: 0,
+      offset: 5,
+      effectiveValue: 5
+    });
+    expect(evaluation.parameterValues[OUTPUT_SWAY]).toBe(5);
+  });
+
+  it("resets only the session-local simulation state", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push(createDynamicsGroup());
+    const initialState: DynamicsToolPreviewState = {
+      selectedGroupId: GROUP_ID,
+      driverValuesByGroupId: {
+        [GROUP_ID]: {
+          [DRIVER_X]: 20
+        }
+      },
+      simulationStatesByGroupId: {
+        [GROUP_ID]: {
+          angle: 0.4,
+          angularVelocity: 3,
+          previousSource: 0.2,
+          previousSourceVelocity: 1,
+          tick: 4,
+          resetCounter: 2
+        }
+      },
+      resetSerial: 0
+    };
+
+    const reset = resetDynamicsToolPreviewSimulation(session, initialState, GROUP_ID);
+
+    expect(reset.driverValuesByGroupId[GROUP_ID]?.[DRIVER_X]).toBe(20);
+    expect(reset.simulationStatesByGroupId[GROUP_ID]).toMatchObject({
+      angularVelocity: 0,
+      tick: 0,
+      resetCounter: 3
+    });
+    expect(reset.resetSerial).toBe(1);
+  });
+});
+
+function createDynamicsSession() {
+  const session = createEmptyAuthoringSession();
+  session.graph.parameters.push(
+    {
+      parameterId: DRIVER_X,
+      displayName: "Driver X",
+      valueSource: "authoredInput",
+      min: -30,
+      default: 0,
+      max: 30,
+      recommendedUiStep: 1
+    },
+    {
+      parameterId: DRIVER_Y,
+      displayName: "Driver Y",
+      valueSource: "authoredInput",
+      min: -10,
+      default: 0,
+      max: 10,
+      recommendedUiStep: 0.5
+    },
+    {
+      parameterId: OUTPUT_SWAY,
+      displayName: "Output Sway",
+      valueSource: "authoredInput",
+      min: -20,
+      default: 0,
+      max: 20,
+      recommendedUiStep: 0.1
+    },
+    {
+      parameterId: NON_DRIVER,
+      displayName: "Non Driver",
+      valueSource: "authoredInput",
+      min: 0,
+      default: 0.25,
+      max: 1,
+      recommendedUiStep: 0.01
+    }
+  );
+  return session;
+}
+
+function createDynamicsGroup() {
+  return {
+    dynamicsGroupId: GROUP_ID,
+    displayName: "Model Sway",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DRIVER_X,
+        kind: "angle" as const,
+        influencePercent: 100,
+        invert: false,
+        normalization: {
+          min: -30,
+          center: 0,
+          max: 30
+        }
+      }
+    ],
+    pendulums: [
+      {
+        length: 0.8,
+        sway: 0.7,
+        reactionSpeed: 12,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: OUTPUT_SWAY,
+        kind: "angle" as const,
+        strength: 10,
+        invert: false,
+        limit: 15
+      }
+    ]
+  };
+}

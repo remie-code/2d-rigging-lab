@@ -125,30 +125,36 @@ describe("parameter manager projection", () => {
       dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_smile_follow"),
       displayName: "Smile Follow",
       enabled: true,
-      solverKind: "scalarDampedFollowV1",
-      drivers: [
+      inputs: [
         {
-          driverId: "driver_smile",
-          sourceParameterId: dynamicsDriverParameterId,
-          inputScale: 1,
-          inputOffset: 0,
-          invert: false
+          parameterId: dynamicsDriverParameterId,
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: {
+            min: 0,
+            center: 0.5,
+            max: 1
+          }
         }
       ],
-      output: {
-        outputId: "output_smile",
-        targetParameterId: dynamicsOutputParameterId,
-        outputScale: 1,
-        outputOffset: 0,
-        min: 0,
-        max: 1,
-        clampPolicy: "clamp-to-output-range"
-      },
-      settings: {
-        stiffness: 0.5,
-        damping: 0.25
-      },
-      resetPolicy: "reset-on-load"
+      pendulums: [
+        {
+          length: 1,
+          sway: 0.35,
+          reactionSpeed: 8,
+          convergenceSpeed: 4
+        }
+      ],
+      outputs: [
+        {
+          parameterId: dynamicsOutputParameterId,
+          kind: "angle",
+          strength: 1,
+          invert: false,
+          limit: 1
+        }
+      ]
     });
 
     const projection = createParameterManagerProjection(session);
@@ -166,7 +172,7 @@ describe("parameter manager projection", () => {
     expect(driverRow?.usageItems[0]).toMatchObject({
       targetLabel: "Dynamics: Smile Follow",
       propertyLabel: "driver input parameter",
-      detailLabel: "Driver driver_smile"
+      detailLabel: "Input 1 / angle"
     });
     expect(outputRow).toMatchObject({
       usageCount: 1,
@@ -175,7 +181,7 @@ describe("parameter manager projection", () => {
     expect(outputRow?.usageItems[0]).toMatchObject({
       targetLabel: "Dynamics: Smile Follow",
       propertyLabel: "output target parameter",
-      detailLabel: "Output output_smile"
+      detailLabel: "Output 1 / angle"
     });
     expect(projection.checks).not.toContainEqual(
       expect.objectContaining({

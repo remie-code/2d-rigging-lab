@@ -339,9 +339,10 @@ const createDynamicsRefs = (snapshot: RuntimeSnapshotDto): readonly TutorialDyna
         dynamicsGroupId: dynamics.dynamicsGroupId,
         enabled: dynamics.enabled,
         solverKind: dynamics.solverKind,
-        driverParameterIds: Object.keys(dynamics.driverValues).sort(compareStrings),
+        inputParameterIds: Object.keys(dynamics.inputValues).sort(compareStrings),
         outputParameterId: dynamics.outputParameterId,
-        outputValue: dynamics.outputValue,
+        outputOffset: dynamics.outputOffset,
+        effectiveOutputValue: dynamics.effectiveOutputValue,
         tick: dynamics.tick,
         resetCounter: dynamics.resetCounter
       })

@@ -4,15 +4,40 @@ import type {
   RuntimeDynamicsGroupState
 } from "@private-2d-rigging-lab/contracts";
 
-import type { NormalizedDynamicsGroup, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import type {
+  NormalizedDynamicsGroup,
+  NormalizedDynamicsInput,
+  NormalizedRuntimeGraph
+} from "./normalized-runtime-graph.js";
 
 const nominalFrameStepMs = 16.6666667;
+const maxStableStepMs = 100;
 
-export interface DynamicsTargetSample {
-  readonly driverValues: Readonly<Record<ParameterId, number>>;
-  readonly rawTarget: number;
-  readonly clampedTarget: number;
+export interface DynamicsSourceSample {
+  readonly inputValues: Readonly<Record<ParameterId, number>>;
+  readonly rawSource: number;
+  readonly source: number;
+}
+
+export interface DynamicsOutputOffset {
+  readonly outputParameterId: ParameterId;
+  readonly rawOffset: number;
+  readonly offset: number;
   readonly outputClamped: boolean;
+}
+
+export interface StepDynamicsInput {
+  readonly definition: NormalizedDynamicsGroup;
+  readonly previousState: RuntimeDynamicsGroupState | undefined;
+  readonly inputValues: Readonly<Record<ParameterId, number>>;
+  readonly dtMs: number;
+  readonly resetApplied: boolean;
+}
+
+export interface StepDynamicsResult {
+  readonly state: RuntimeDynamicsGroupState;
+  readonly source: DynamicsSourceSample;
+  readonly outputOffsets: readonly DynamicsOutputOffset[];
 }
 
 export interface AdvanceDynamicsGroupStateInput {
@@ -28,148 +53,194 @@ export interface AdvanceDynamicsGroupStateInput {
 export interface AdvancedDynamicsGroupState {
   readonly dynamicsGroupId: DynamicsGroupId;
   readonly state: RuntimeDynamicsGroupState;
-  readonly target: DynamicsTargetSample;
+  readonly source: DynamicsSourceSample;
+  readonly outputOffsets: readonly DynamicsOutputOffset[];
 }
 
-interface ScalarDampedFollowStepState {
-  readonly position: number;
-  readonly velocity: number;
-}
-
-export const computeDynamicsTargetSample = (
+export const computeDynamicsSourceSample = (
   graph: NormalizedRuntimeGraph,
   group: NormalizedDynamicsGroup,
   authoredParameterValues: Readonly<Record<string, number>>
-): DynamicsTargetSample => {
-  const driverValues = createDynamicsDriverValues(graph, group, authoredParameterValues);
-  const targetInput = group.drivers.reduce((sum, driver) => {
-    const authoredValue = driverValues[driver.sourceParameterId] ?? 0;
-    const signedValue = driver.invert ? -authoredValue : authoredValue;
-    return sum + signedValue * driver.inputScale + driver.inputOffset;
-  }, 0);
-  const rawTarget = targetInput * group.output.outputScale + group.output.outputOffset;
-  const amplitudeLimitedTarget = applyAmplitudeLimit(group, rawTarget);
-  const clampedTarget = clamp(amplitudeLimitedTarget, group.output.min, group.output.max);
-
-  return {
-    driverValues,
-    rawTarget,
-    clampedTarget,
-    outputClamped: clampedTarget !== rawTarget
-  };
+): DynamicsSourceSample => {
+  const inputValues = createDynamicsInputValues(graph, group, authoredParameterValues);
+  return computeDynamicsSourceFromInputValues(group, inputValues);
 };
 
-export const computeDynamicsTarget = (
+export const computeDynamicsSource = (
   graph: NormalizedRuntimeGraph,
   group: NormalizedDynamicsGroup,
   authoredParameterValues: Readonly<Record<string, number>>
-): number => computeDynamicsTargetSample(graph, group, authoredParameterValues).clampedTarget;
+): number => computeDynamicsSourceSample(graph, group, authoredParameterValues).source;
+
+export const stepDynamics = (input: StepDynamicsInput): StepDynamicsResult => {
+  const source = computeDynamicsSourceFromInputValues(input.definition, input.inputValues);
+  const previousState = input.resetApplied || input.previousState === undefined
+    ? createResetDynamicsState(source.source, input.previousState?.resetCounter ?? 0, input.resetApplied)
+    : input.previousState;
+  const dtSeconds = clamp(input.dtMs, 0, maxStableStepMs) / 1000;
+
+  if (dtSeconds === 0 || input.resetApplied) {
+    return {
+      state: previousState,
+      source,
+      outputOffsets: computeDynamicsOutputOffsets(input.definition, previousState)
+    };
+  }
+
+  const pendulum = input.definition.pendulums[0];
+  if (pendulum === undefined) {
+    return {
+      state: previousState,
+      source,
+      outputOffsets: computeDynamicsOutputOffsets(input.definition, previousState)
+    };
+  }
+
+  const length = Math.max(pendulum.length, 0.0001);
+  const sourceVelocity = (source.source - previousState.previousSource) / dtSeconds;
+  const sourceAcceleration = (sourceVelocity - previousState.previousSourceVelocity) / dtSeconds;
+  const angularAcceleration =
+    ((source.source - previousState.angle) * pendulum.reactionSpeed) / length +
+    sourceAcceleration * pendulum.sway -
+    previousState.angularVelocity * pendulum.convergenceSpeed;
+  const angularVelocity = previousState.angularVelocity + angularAcceleration * dtSeconds;
+  const angle = previousState.angle + angularVelocity * dtSeconds;
+  const state: RuntimeDynamicsGroupState = {
+    angle,
+    angularVelocity,
+    previousSource: source.source,
+    previousSourceVelocity: sourceVelocity,
+    tick: previousState.tick + 1,
+    resetCounter: previousState.resetCounter
+  };
+
+  return {
+    state,
+    source,
+    outputOffsets: computeDynamicsOutputOffsets(input.definition, state)
+  };
+};
 
 export const advanceDynamicsGroupState = (
   input: AdvanceDynamicsGroupStateInput
 ): AdvancedDynamicsGroupState => {
-  const target = computeDynamicsTargetSample(input.graph, input.group, input.authoredParameterValues);
-  const resetCounter = (input.previousState?.resetCounter ?? 0) + (input.resetApplied ? 1 : 0);
-  const initialState: RuntimeDynamicsGroupState = input.resetApplied
-    ? {
-        position: target.clampedTarget,
-        velocity: 0,
-        tick: 0,
-        resetCounter
-      }
-    : {
-        position: input.previousState?.position ?? target.clampedTarget,
-        velocity: input.previousState?.velocity ?? 0,
-        tick: input.previousState?.tick ?? 0,
-        resetCounter
-      };
+  const inputValues = createDynamicsInputValues(input.graph, input.group, input.authoredParameterValues);
+  const initialSource = computeDynamicsSourceFromInputValues(input.group, inputValues);
+  let state = input.resetApplied || input.previousState === undefined
+    ? createResetDynamicsState(initialSource.source, input.previousState?.resetCounter ?? 0, input.resetApplied)
+    : input.previousState;
+  let source = initialSource;
+  let outputOffsets = computeDynamicsOutputOffsets(input.group, state);
 
-  if (input.resetApplied || input.subSteps <= 0) {
-    return {
-      dynamicsGroupId: input.group.dynamicsGroupId,
-      state: initialState,
-      target
-    };
-  }
-
-  let position = initialState.position;
-  let velocity = initialState.velocity;
-  for (let stepIndex = 0; stepIndex < input.subSteps; stepIndex += 1) {
-    const advanced = advanceScalarDampedFollowStep(input.group, position, velocity, target.clampedTarget, input.fixedStepMs);
-    position = advanced.position;
-    velocity = advanced.velocity;
+  if (!input.resetApplied && input.subSteps > 0) {
+    for (let stepIndex = 0; stepIndex < input.subSteps; stepIndex += 1) {
+      const stepped = stepDynamics({
+        definition: input.group,
+        previousState: state,
+        inputValues,
+        dtMs: input.fixedStepMs,
+        resetApplied: false
+      });
+      state = stepped.state;
+      source = stepped.source;
+      outputOffsets = stepped.outputOffsets;
+    }
   }
 
   return {
     dynamicsGroupId: input.group.dynamicsGroupId,
-    state: {
-      position,
-      velocity,
-      tick: initialState.tick + input.subSteps,
-      resetCounter: initialState.resetCounter
-    },
-    target
+    state,
+    source,
+    outputOffsets
   };
 };
 
-const createDynamicsDriverValues = (
+export const computeDynamicsOutputOffsets = (
+  group: NormalizedDynamicsGroup,
+  state: RuntimeDynamicsGroupState
+): readonly DynamicsOutputOffset[] =>
+  group.outputs.map((output) => {
+    const signedStrength = output.invert ? -output.strength : output.strength;
+    const rawOffset = state.angle * signedStrength;
+    const limit = Math.abs(output.limit);
+    const offset = clamp(rawOffset, -limit, limit);
+
+    return {
+      outputParameterId: output.parameterId,
+      rawOffset,
+      offset,
+      outputClamped: offset !== rawOffset
+    };
+  });
+
+export const getDynamicsOutputOffsetForParameter = (
+  group: NormalizedDynamicsGroup,
+  state: RuntimeDynamicsGroupState | undefined,
+  parameterId: ParameterId
+): DynamicsOutputOffset | undefined => {
+  if (state === undefined) {
+    return undefined;
+  }
+
+  return computeDynamicsOutputOffsets(group, state).find(
+    (offset) => offset.outputParameterId === parameterId
+  );
+};
+
+const createResetDynamicsState = (
+  source: number,
+  previousResetCounter: number,
+  resetApplied: boolean
+): RuntimeDynamicsGroupState => ({
+  angle: source,
+  angularVelocity: 0,
+  previousSource: source,
+  previousSourceVelocity: 0,
+  tick: 0,
+  resetCounter: previousResetCounter + (resetApplied || previousResetCounter === 0 ? 1 : 0)
+});
+
+const createDynamicsInputValues = (
   graph: NormalizedRuntimeGraph,
   group: NormalizedDynamicsGroup,
   authoredParameterValues: Readonly<Record<string, number>>
 ): Readonly<Record<ParameterId, number>> =>
   Object.fromEntries(
-    group.drivers.map((driver) => {
-      const parameterDefault = graph.parameters.get(driver.sourceParameterId)?.default ?? 0;
-      return [driver.sourceParameterId, authoredParameterValues[driver.sourceParameterId] ?? parameterDefault];
+    group.inputs.map((dynamicsInput) => {
+      const parameterDefault = graph.parameters.get(dynamicsInput.parameterId)?.default ?? 0;
+      return [dynamicsInput.parameterId, authoredParameterValues[dynamicsInput.parameterId] ?? parameterDefault];
     })
   ) as Readonly<Record<ParameterId, number>>;
 
-const advanceScalarDampedFollowStep = (
+const computeDynamicsSourceFromInputValues = (
   group: NormalizedDynamicsGroup,
-  position: number,
-  velocity: number,
-  target: number,
-  fixedStepMs: number
-): ScalarDampedFollowStepState => {
-  const stepScale = fixedStepMs / nominalFrameStepMs;
-  const dampingFactor = 1 / (1 + group.settings.damping * stepScale);
-  const unclampedVelocity = (velocity + (target - position) * group.settings.stiffness * stepScale) * dampingFactor;
-  const nextVelocity = clampVelocity(group, unclampedVelocity);
-  const unclampedPosition = position + nextVelocity * stepScale;
-  const nextPosition = clampDynamicsOutputValue(group, unclampedPosition);
+  inputValues: Readonly<Record<ParameterId, number>>
+): DynamicsSourceSample => {
+  const rawSource = group.inputs.reduce((sum, dynamicsInput) => {
+    const value = inputValues[dynamicsInput.parameterId] ?? dynamicsInput.normalization.center;
+    const normalized = normalizeDynamicsInput(value, dynamicsInput);
+    const signed = dynamicsInput.invert ? -normalized : normalized;
+    return sum + signed * (dynamicsInput.influencePercent / 100);
+  }, 0);
 
   return {
-    position: nextPosition,
-    velocity: nextPosition === unclampedPosition ? nextVelocity : 0
+    inputValues,
+    rawSource,
+    source: rawSource
   };
 };
 
-const clampVelocity = (
-  group: NormalizedDynamicsGroup,
-  velocity: number
-): number => {
-  if (group.settings.maxVelocity === undefined) {
-    return velocity;
+const normalizeDynamicsInput = (value: number, dynamicsInput: NormalizedDynamicsInput): number => {
+  const { min, center, max } = dynamicsInput.normalization;
+  if (value === center) {
+    return 0;
   }
 
-  return clamp(velocity, -group.settings.maxVelocity, group.settings.maxVelocity);
-};
-
-const clampDynamicsOutputValue = (
-  group: NormalizedDynamicsGroup,
-  value: number
-): number => clamp(applyAmplitudeLimit(group, value), group.output.min, group.output.max);
-
-const applyAmplitudeLimit = (
-  group: NormalizedDynamicsGroup,
-  value: number
-): number => {
-  if (group.settings.maxAmplitude === undefined) {
-    return value;
+  if (value > center) {
+    return clamp((value - center) / (max - center), 0, 1);
   }
 
-  const restOutput = group.output.outputOffset;
-  return clamp(value, restOutput - group.settings.maxAmplitude, restOutput + group.settings.maxAmplitude);
+  return clamp((value - center) / (center - min), -1, 0);
 };
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);

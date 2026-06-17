@@ -37,7 +37,10 @@ import {
 import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
-import { computeDynamicsTargetSample } from "./dynamics-evaluation.js";
+import {
+  computeDynamicsOutputOffsets,
+  computeDynamicsSourceSample
+} from "./dynamics-evaluation.js";
 import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
@@ -62,7 +65,8 @@ export const EvaluatedParameterSchema = z.object({
   parameterId: ParameterIdSchema,
   valueSource: z.enum(["authoredInput", "computedDynamics", "debugOverride"]),
   authoredValue: z.number().finite().optional(),
-  computedValue: z.number().finite().optional(),
+  baseValue: z.number().finite(),
+  dynamicsOffset: z.number().finite().optional(),
   effectiveValue: z.number().finite(),
   clamped: z.boolean(),
   source: z.enum([
@@ -70,7 +74,7 @@ export const EvaluatedParameterSchema = z.object({
     "viewerOverride",
     "editorPreviewOverride",
     "operationDryRun",
-    "dynamicsComputed",
+    "dynamicsAdditive",
     "debugOverride"
   ])
 });
@@ -97,13 +101,16 @@ export type EvaluatedDrawableDto = z.infer<typeof EvaluatedDrawableSchema>;
 export const EvaluatedDynamicsGroupSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   enabled: z.boolean(),
-  solverKind: z.literal("scalarDampedFollowV1"),
-  driverValues: z.record(ParameterIdSchema, z.number().finite()),
+  solverKind: z.literal("additivePendulumV0"),
+  inputValues: z.record(ParameterIdSchema, z.number().finite()),
   outputParameterId: ParameterIdSchema,
-  outputValue: z.number().finite(),
+  outputOffset: z.number().finite(),
+  effectiveOutputValue: z.number().finite(),
   stateSummary: z.object({
-    position: z.number().finite(),
-    velocity: z.number().finite()
+    angle: z.number().finite(),
+    angularVelocity: z.number().finite(),
+    previousSource: z.number().finite(),
+    previousSourceVelocity: z.number().finite()
   }),
   tick: z.number().int().nonnegative(),
   fixedStepMs: z.number().positive(),
@@ -111,7 +118,8 @@ export const EvaluatedDynamicsGroupSchema = z.object({
   debug: z
     .object({
       rawTarget: z.number().finite().optional(),
-      clampedTarget: z.number().finite().optional(),
+      source: z.number().finite().optional(),
+      rawOffset: z.number().finite().optional(),
       outputClamped: z.boolean().optional(),
       resetApplied: z.boolean().optional(),
       resetReasons: z.array(RuntimeResetReasonSchema).default([])
@@ -204,7 +212,13 @@ export const createRuntimeSnapshot = (input: {
       evaluatorVersions: input.options.evaluatorVersions
     },
     parameters: createEvaluatedParameters(parameterResolution),
-    dynamics: createEvaluatedDynamics(input.graph, input.evaluationInput, input.state, input.options),
+    dynamics: createEvaluatedDynamics(
+      input.graph,
+      input.evaluationInput,
+      input.state,
+      input.options,
+      parameterResolution
+    ),
     keyformSamples: keyformSampling.samples,
     rigControls: rigControlEvaluation.rigControls,
     parts: createEvaluatedParts(input.graph),
@@ -246,36 +260,54 @@ const createEvaluatedDynamics = (
   graph: NormalizedRuntimeGraph,
   input: RuntimeEvaluationInputDto,
   state: RuntimeStateDto,
-  options: RuntimeEvaluationOptionsDto
+  options: RuntimeEvaluationOptionsDto,
+  parameterResolution: EffectiveParameterResolution
 ): EvaluatedDynamicsGroupDto[] =>
   [...graph.dynamicsGroups.values()]
     .filter((group) => group.enabled)
     .map((group) => {
       const groupState = state.dynamicsGroups[group.dynamicsGroupId];
-      const target = computeDynamicsTargetSample(graph, group, input.authoredParameterValues);
-      const outputValue = groupState?.position ?? target.clampedTarget;
+      const source = computeDynamicsSourceSample(graph, group, input.authoredParameterValues);
+      const resetState = {
+        angle: source.source,
+        angularVelocity: 0,
+        previousSource: source.source,
+        previousSourceVelocity: 0,
+        tick: 0,
+        resetCounter: 0
+      };
+      const stateSummary = groupState ?? resetState;
+      const output = group.outputs[0];
+      const outputOffset = computeDynamicsOutputOffsets(group, stateSummary)[0];
+      const evaluatedOutputParameter = output === undefined
+        ? undefined
+        : parameterResolution.values.find((parameter) => parameter.parameterId === output.parameterId);
 
       return EvaluatedDynamicsGroupSchema.parse({
         dynamicsGroupId: group.dynamicsGroupId,
         enabled: group.enabled,
-        solverKind: group.solverKind,
-        driverValues: target.driverValues,
-        outputParameterId: group.output.targetParameterId,
-        outputValue,
+        solverKind: "additivePendulumV0",
+        inputValues: source.inputValues,
+        outputParameterId: outputOffset?.outputParameterId ?? output?.parameterId,
+        outputOffset: outputOffset?.offset ?? 0,
+        effectiveOutputValue: evaluatedOutputParameter?.effectiveValue ?? 0,
         stateSummary: {
-          position: outputValue,
-          velocity: groupState?.velocity ?? 0
+          angle: stateSummary.angle,
+          angularVelocity: stateSummary.angularVelocity,
+          previousSource: stateSummary.previousSource,
+          previousSourceVelocity: stateSummary.previousSourceVelocity
         },
-        tick: groupState?.tick ?? 0,
+        tick: stateSummary.tick,
         fixedStepMs: state.fixedStepMs,
-        resetCounter: groupState?.resetCounter ?? 0,
+        resetCounter: stateSummary.resetCounter,
         ...(options.snapshotDetail === "summary"
           ? {}
           : {
               debug: {
-                rawTarget: target.rawTarget,
-                clampedTarget: target.clampedTarget,
-                outputClamped: target.outputClamped,
+                rawTarget: source.rawSource,
+                source: source.source,
+                rawOffset: outputOffset?.rawOffset ?? 0,
+                outputClamped: outputOffset?.outputClamped ?? false,
                 resetApplied: input.resetReasons.length > 0,
                 resetReasons: input.resetReasons
               }

@@ -188,10 +188,11 @@ export type TutorialRigControlKeyformEvidenceRefDto = z.infer<typeof TutorialRig
 export const TutorialDynamicsEvidenceRefSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   enabled: z.boolean(),
-  solverKind: z.literal("scalarDampedFollowV1"),
-  driverParameterIds: z.array(ParameterIdSchema),
+  solverKind: z.literal("additivePendulumV0"),
+  inputParameterIds: z.array(ParameterIdSchema),
   outputParameterId: ParameterIdSchema,
-  outputValue: z.number().finite(),
+  outputOffset: z.number().finite(),
+  effectiveOutputValue: z.number().finite(),
   tick: z.number().int().nonnegative(),
   resetCounter: z.number().int().nonnegative()
 });

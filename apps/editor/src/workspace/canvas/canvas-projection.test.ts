@@ -1,6 +1,7 @@
 import { createInitialAuthoringRevision, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MaskRelationIdSchema,
   MeshIdSchema,
@@ -26,6 +27,7 @@ import {
   zoomViewAtScreenPoint
 } from "./canvas-projection";
 import { commitUpdateRigControl } from "../../features/editor-session/model/editor-session-commands";
+import { createDynamicsToolPreviewEvaluation } from "../../features/editor-session/model/dynamics-tool-state";
 import { computeWarpDeformerScaledControlPointOffsets } from "./warp-deformer-scale";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
@@ -49,6 +51,8 @@ const RIG_PARENT_WARP = RigControlIdSchema.parse("rig_parent_warp");
 const RIG_CHILD_WARP = RigControlIdSchema.parse("rig_child_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
+const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_canvas_hair_sway");
+const DYNAMICS_OUTPUT = ParameterIdSchema.parse("param_canvas_hair_sway");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
 const TEX_FRONT = TextureIdSchema.parse("tex_front");
 const TEX_HIDDEN = TextureIdSchema.parse("tex_hidden");
@@ -523,6 +527,114 @@ describe("canvas render projection", () => {
       kind: "rotation",
       pivot: { x: 23, y: 20 },
       translation: { x: 8, y: 5 }
+    });
+  });
+
+  it("projects Dynamics preview additive output through Canvas keyform evaluation", () => {
+    const session = createFixtureSession();
+    const rigControl = createRotationDeformerRigControl();
+    rigControl.restAngleDegrees = 0;
+    session.graph.rigControls.push(rigControl);
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+    session.graph.parameters.push(
+      {
+        parameterId: FACE_ANGLE_X,
+        displayName: "Face Angle X",
+        valueSource: "authoredInput",
+        min: -30,
+        default: 0,
+        max: 30,
+        recommendedUiStep: 1
+      },
+      {
+        parameterId: DYNAMICS_OUTPUT,
+        displayName: "Hair Sway",
+        valueSource: "authoredInput",
+        min: -20,
+        default: 0,
+        max: 20,
+        recommendedUiStep: 0.1
+      }
+    );
+    session.graph.keyformSets.push(createRotationAngleKeyformSet([
+      { value: 0, statePatch: 0 },
+      { value: 10, statePatch: 10 }
+    ]));
+    session.graph.dynamicsGroups.push({
+      dynamicsGroupId: DYNAMICS_GROUP,
+      displayName: "Hair Sway",
+      enabled: true,
+      presetId: "hair",
+      inputs: [
+        {
+          parameterId: FACE_ANGLE_X,
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: {
+            min: -30,
+            center: 0,
+            max: 30
+          }
+        }
+      ],
+      pendulums: [
+        {
+          length: 0.8,
+          sway: 0.7,
+          reactionSpeed: 12,
+          convergenceSpeed: 4
+        }
+      ],
+      outputs: [
+        {
+          parameterId: DYNAMICS_OUTPUT,
+          kind: "angle",
+          strength: 10,
+          invert: false,
+          limit: 20
+        }
+      ]
+    });
+
+    const dynamicsEvaluation = createDynamicsToolPreviewEvaluation(session, {
+      selectedGroupId: DYNAMICS_GROUP,
+      driverValuesByGroupId: {
+        [DYNAMICS_GROUP]: {
+          [FACE_ANGLE_X]: 30
+        }
+      },
+      simulationStatesByGroupId: {
+        [DYNAMICS_GROUP]: {
+          angle: 0.5,
+          angularVelocity: 0,
+          previousSource: 0,
+          previousSourceVelocity: 0,
+          tick: 1,
+          resetCounter: 1
+        }
+      },
+      resetSerial: 0
+    });
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      {
+        parameterValues: dynamicsEvaluation.parameterValues
+      }
+    );
+
+    expect(dynamicsEvaluation.output).toMatchObject({
+      baseValue: 0,
+      offset: 5,
+      effectiveValue: 5
+    });
+    expect(projection.deformerOverlay).toMatchObject({
+      kind: "rotation",
+      evaluatedAngleDegrees: 5
     });
   });
 
@@ -1177,6 +1289,31 @@ function createRotationTranslationKeyformSet(
     keys: keys.map((key) => ({
       value: key.value,
       statePatch: { x: key.statePatch.x, y: key.statePatch.y }
+    }))
+  };
+}
+
+function createRotationAngleKeyformSet(
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: number;
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_projection_rotation_angle"),
+    target: {
+      kind: "rigControl" as const,
+      id: RIG_FACE_ROTATION,
+      property: "angleDegrees" as const
+    },
+    parameterId: DYNAMICS_OUTPUT,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: key.statePatch
     }))
   };
 }

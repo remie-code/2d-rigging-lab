@@ -1617,12 +1617,28 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Warp Deformer Bezier edit surface cardinality does not match bezier columns * rows."
   },
   {
-    checkId: "dynamics.requiredGroupMissing",
+    checkId: "dynamics.inputMissing",
     phase: "dynamics_semantic",
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "A required Minimum Open Dynamics v1 group is absent for a computed dynamics parameter."
+    description: "Dynamics v0 additive pendulum group has no input parameter."
+  },
+  {
+    checkId: "dynamics.invalidPendulumCardinality",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics v0 group must contain exactly one pendulum."
+  },
+  {
+    checkId: "dynamics.invalidOutputCardinality",
+    phase: "dynamics_semantic",
+    defaultSeverity: "error",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics v0 group must contain exactly one output."
   },
   {
     checkId: "dynamics.driverMissing",
@@ -1630,7 +1646,7 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics group references a missing driver parameter."
+    description: "Dynamics group references a missing input parameter."
   },
   {
     checkId: "dynamics.outputMissing",
@@ -1638,7 +1654,7 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics group targets a missing computed output parameter."
+    description: "Dynamics group targets a missing additive output parameter."
   },
   {
     checkId: "dynamics.outputTargetDuplicate",
@@ -1646,55 +1662,39 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Multiple dynamics groups target the same computed output parameter."
+    description: "Multiple dynamics groups target the same additive output parameter."
   },
   {
-    checkId: "dynamics.driverMustBeAuthoredInput",
+    checkId: "dynamics.normalizationInvalid",
     phase: "dynamics_semantic",
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics driver must reference an authoredInput parameter."
+    description: "Dynamics input normalization must satisfy min < center < max."
   },
   {
-    checkId: "dynamics.outputMustBeComputedParameter",
+    checkId: "dynamics.zeroInputInfluence",
     phase: "dynamics_semantic",
-    defaultSeverity: "error",
-    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics output must target a computedDynamics parameter."
-  },
-  {
-    checkId: "dynamics.computedParameterProducerMissing",
-    phase: "dynamics_semantic",
-    defaultSeverity: "error",
-    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Computed dynamics parameter has no producer group."
-  },
-  {
-    checkId: "dynamics.outputParameterOutOfRange",
-    phase: "dynamics_evaluation",
-    defaultSeverity: "error",
-    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
-    description: "Dynamics output range or runtime output falls outside the target parameter range."
-  },
-  {
-    checkId: "dynamics.outputClamped",
-    phase: "dynamics_evaluation",
     defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
-    description: "Runtime dynamics output was clamped by declared output limits."
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics inputs all have zero influence."
   },
   {
-    checkId: "dynamics.outputUsedAsDriver",
+    checkId: "dynamics.outputStrengthZero",
     phase: "dynamics_semantic",
-    defaultSeverity: "error",
+    defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "A computed dynamics output parameter is used as a dynamics driver."
+    description: "Dynamics output strength is zero."
+  },
+  {
+    checkId: "dynamics.outputLimitTooSmall",
+    phase: "dynamics_semantic",
+    defaultSeverity: "warning",
+    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
+    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
+    description: "Dynamics output limit is zero or too small to show visible motion."
   },
   {
     checkId: "dynamics.unstableSettings",
@@ -1702,23 +1702,15 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics settings are statically unsafe or likely unstable."
+    description: "Dynamics pendulum coefficients are statically unsafe or likely unstable."
   },
   {
-    checkId: "dynamics.excessiveAmplitude",
-    phase: "dynamics_evaluation",
-    defaultSeverity: "warning",
-    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics maxAmplitude exceeds the safe output or parameter range."
-  },
-  {
-    checkId: "dynamics.runtimeEvidenceMissing",
+    checkId: "dynamics.runtimeEvidenceMismatch",
     phase: "representative_evaluation",
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-012", "AC-MVP-013", "AC-MVP-014"],
-    description: "Package dynamics cannot be matched to runtime snapshot evidence."
+    description: "Provided runtime dynamics evidence disagrees with package Dynamics group."
   },
   {
     checkId: "viewer.runtimeEvidenceMissing",
@@ -1814,7 +1806,7 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "error",
     profiles: ["acceptance"],
     relatedAC: ["AC-MVP-010", "AC-MVP-012", "AC-MVP-013"],
-    description: "Tutorial mini model is missing enabled Minimum Open Dynamics v1 evidence."
+    description: "Tutorial mini model is missing enabled Dynamics v2 additive pendulum evidence."
   },
   {
     checkId: "tutorial.viewerEvidenceMissing",

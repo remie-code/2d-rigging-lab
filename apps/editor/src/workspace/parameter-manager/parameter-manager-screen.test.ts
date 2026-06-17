@@ -78,30 +78,36 @@ describe("ParameterManagerTable", () => {
       dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_smile_follow"),
       displayName: "Smile Follow",
       enabled: true,
-      solverKind: "scalarDampedFollowV1",
-      drivers: [
+      inputs: [
         {
-          driverId: "driver_smile",
-          sourceParameterId: parameterId,
-          inputScale: 1,
-          inputOffset: 0,
-          invert: false
+          parameterId,
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: {
+            min: 0,
+            center: 0.5,
+            max: 1
+          }
         }
       ],
-      output: {
-        outputId: "output_smile",
-        targetParameterId: ParameterIdSchema.parse("param_mouth_open"),
-        outputScale: 1,
-        outputOffset: 0,
-        min: 0,
-        max: 1,
-        clampPolicy: "clamp-to-output-range"
-      },
-      settings: {
-        stiffness: 0.5,
-        damping: 0.25
-      },
-      resetPolicy: "reset-on-load"
+      pendulums: [
+        {
+          length: 1,
+          sway: 0.35,
+          reactionSpeed: 8,
+          convergenceSpeed: 4
+        }
+      ],
+      outputs: [
+        {
+          parameterId: ParameterIdSchema.parse("param_mouth_open"),
+          kind: "angle",
+          strength: 1,
+          invert: false,
+          limit: 1
+        }
+      ]
     });
     const projection = createParameterManagerProjection(session);
     const row = projection.rows.find((candidate) => candidate.parameterId === parameterId);
@@ -129,7 +135,7 @@ describe("ParameterManagerTable", () => {
     expect(markup).toContain("disabled");
     expect(markup).toContain("Dynamics: Smile Follow");
     expect(markup).toContain("driver input parameter");
-    expect(markup).toContain("Driver driver_smile");
+    expect(markup).toContain("Input 1 / angle");
   });
 
   it("shares Set Active manager actions with the Parameter Bar projection", () => {

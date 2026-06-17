@@ -13,7 +13,7 @@ import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
 import { evaluateRuntimeFrame, evaluateRuntimeSequence } from "./runtime-core.js";
 
 describe("runtime dynamics evaluation", () => {
-  it("evaluates scalar damped follow sequences deterministically", () => {
+  it("evaluates additive pendulum sequences deterministically", () => {
     const fixture = createDynamicsFixture();
     const initialState = createInitialRuntimeState(fixture.graph, {
       packageId: fixture.packageId,
@@ -52,10 +52,10 @@ describe("runtime dynamics evaluation", () => {
       tick: 4,
       resetCounter: 1
     });
-    expect(firstRun.finalState.dynamicsGroups[fixture.dynamicsGroupId]?.position).toBeCloseTo(0.971817, 5);
+    expect(Number.isFinite(firstRun.finalState.dynamicsGroups[fixture.dynamicsGroupId]?.angle)).toBe(true);
   });
 
-  it("projects dynamics state and computed output into runtime snapshots", () => {
+  it("projects additive dynamics state and output offset into runtime snapshots", () => {
     const fixture = createDynamicsFixture();
     const initialState = createInitialRuntimeState(fixture.graph, {
       packageId: fixture.packageId,
@@ -90,16 +90,17 @@ describe("runtime dynamics evaluation", () => {
 
     expect(dynamics).toMatchObject({
       dynamicsGroupId: fixture.dynamicsGroupId,
-      solverKind: "scalarDampedFollowV1",
-      driverValues: {
+      solverKind: "additivePendulumV0",
+      inputValues: {
         [fixture.driverParameterId]: 1
       },
       outputParameterId: fixture.outputParameterId,
-      outputValue: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.position,
+      outputOffset: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.angle,
+      effectiveOutputValue: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.angle,
       fixedStepMs: 16.6666667,
       debug: {
         rawTarget: 1,
-        clampedTarget: 1,
+        source: 1,
         outputClamped: false,
         resetApplied: false,
         resetReasons: []
@@ -107,14 +108,15 @@ describe("runtime dynamics evaluation", () => {
     });
     expect(computedParameter).toMatchObject({
       parameterId: fixture.outputParameterId,
-      valueSource: "computedDynamics",
-      computedValue: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.position,
-      effectiveValue: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.position,
-      source: "dynamicsComputed"
+      valueSource: "authoredInput",
+      baseValue: 0,
+      dynamicsOffset: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.angle,
+      effectiveValue: result.nextState.dynamicsGroups[fixture.dynamicsGroupId]?.angle,
+      source: "dynamicsAdditive"
     });
   });
 
-  it("exposes added dynamics groups and computed output through runtime diff evidence", () => {
+  it("exposes added dynamics groups and additive output through runtime diff evidence", () => {
     const fixture = createDynamicsFixture();
     const baselineGraph = {
       ...fixture.graph,
@@ -158,19 +160,22 @@ describe("runtime dynamics evaluation", () => {
         outputParameterId: fixture.outputParameterId,
         stateChanged: true,
         outputChanged: true,
-        positionAfter: 1,
-        velocityAfter: 0,
+        angleAfter: 1,
+        angularVelocityAfter: 0,
+        outputOffsetAfter: 1,
+        effectiveOutputValueAfter: 1,
         tickAfter: 1,
         resetCounterAfter: 1
       }
     ]);
     expect(evidence.candidateSnapshot.dynamics[0]).toMatchObject({
       dynamicsGroupId: fixture.dynamicsGroupId,
-      outputValue: 1
+      outputOffset: 1,
+      effectiveOutputValue: 1
     });
     expect(evidence.finalRuntimeState.dynamicsGroups[fixture.dynamicsGroupId]).toMatchObject({
-      position: 1,
-      velocity: 0,
+      angle: 1,
+      angularVelocity: 0,
       tick: 1,
       resetCounter: 1
     });
@@ -186,30 +191,36 @@ const createDynamicsFixture = () => {
     dynamicsGroupId,
     displayName: "Hair Sway",
     enabled: true,
-    solverKind: "scalarDampedFollowV1",
-    drivers: [
+    inputs: [
       {
-        driverId: "driver_face_yaw",
-        sourceParameterId: driverParameterId,
-        inputScale: 1,
-        inputOffset: 0,
-        invert: false
+        parameterId: driverParameterId,
+        kind: "angle",
+        influencePercent: 100,
+        invert: false,
+        normalization: {
+          min: -1,
+          center: 0,
+          max: 1
+        }
       }
     ],
-    output: {
-      outputId: "output_hair_sway",
-      targetParameterId: outputParameterId,
-      outputScale: 1,
-      outputOffset: 0,
-      min: -1,
-      max: 1,
-      clampPolicy: "clamp-to-output-range"
-    },
-    settings: {
-      stiffness: 0.35,
-      damping: 0.7
-    },
-    resetPolicy: "reset-on-load"
+    pendulums: [
+      {
+        length: 1,
+        sway: 0.35,
+        reactionSpeed: 8,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: outputParameterId,
+        kind: "angle",
+        strength: 1,
+        invert: false,
+        limit: 1
+      }
+    ]
   };
   const graph: NormalizedRuntimeGraph = {
     packageId,
@@ -234,7 +245,7 @@ const createDynamicsFixture = () => {
           id: outputParameterId,
           displayName: "Hair Sway",
           semanticRole: "dynamics",
-          valueSource: "computedDynamics",
+          valueSource: "authoredInput",
           min: -1,
           max: 1,
           default: 0

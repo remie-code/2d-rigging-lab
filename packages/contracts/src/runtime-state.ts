@@ -3,8 +3,10 @@ import { z } from "zod";
 import { DynamicsGroupIdSchema, PackageIdSchema } from "./ids.js";
 
 export const RuntimeDynamicsGroupStateSchema = z.object({
-  position: z.number().finite(),
-  velocity: z.number().finite(),
+  angle: z.number().finite(),
+  angularVelocity: z.number().finite(),
+  previousSource: z.number().finite(),
+  previousSourceVelocity: z.number().finite(),
   tick: z.number().int().nonnegative(),
   resetCounter: z.number().int().nonnegative()
 });

@@ -10,15 +10,19 @@ import {
   createPackageDocumentBaseFromAuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
+  DynamicsGroupId,
   DrawableId,
   ParameterId,
   PartId,
   RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import type {
+  CreateDynamicsGroupPayloadDto,
   CreateParameterPayloadDto,
+  DeleteDynamicsGroupPayloadDto,
   DeleteParameterPayloadDto,
   EditKeyformKeyPayloadDto,
+  UpdateDynamicsGroupPayloadDto,
   UpdateParameterPayloadDto,
   UpdateRigControlPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
@@ -62,6 +66,8 @@ import {
   commitDrawableReorder,
   commitDrawableReparent,
   commitDrawableRuntimeVisibility,
+  commitCreateDynamicsGroup,
+  commitDeleteDynamicsGroup,
   commitEditKeyformKey,
   commitBindDrawableToRigControl,
   commitCreateRotationDeformer,
@@ -72,6 +78,7 @@ import {
   commitPartNameEdit,
   commitPartReparent,
   commitReparentRigControl,
+  commitUpdateDynamicsGroup,
   commitUpdateRigControl,
   type EditorSessionCommandResult
 } from "./model/editor-session-commands";
@@ -155,6 +162,15 @@ import {
   createInitialCollapsedPartIds,
   mergeNewPartInitialCollapsedPartIds
 } from "./model/part-tree-collapse-state";
+import {
+  createDynamicsToolPreviewEvaluation,
+  createInitialDynamicsToolPreviewState,
+  resetDynamicsToolPreviewSimulation as resetDynamicsToolPreviewSimulationState,
+  selectDynamicsToolPreviewGroup,
+  setDynamicsToolPreviewDriverValue,
+  type DynamicsToolPreviewEvaluation,
+  type DynamicsToolPreviewState
+} from "./model/dynamics-tool-state";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 
 export interface MeshToolDraft {
@@ -237,6 +253,8 @@ interface EditorSessionContextValue {
   readonly parameterBar: ParameterBarProjection;
   readonly activeParameterId: ParameterId | null;
   readonly parameterValues: ParameterValueMap;
+  readonly dynamicsToolPreview: DynamicsToolPreviewState;
+  readonly dynamicsToolPreviewEvaluation: DynamicsToolPreviewEvaluation;
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
   readonly projectStorage: ProjectStorageState;
@@ -259,6 +277,13 @@ interface EditorSessionContextValue {
   readonly setActiveParameterId: (parameterId: ParameterId) => void;
   readonly setActiveParameterValue: (value: number) => void;
   readonly resetActiveParameterValue: () => void;
+  readonly setDynamicsToolPreviewGroupId: (dynamicsGroupId: DynamicsGroupId | null) => void;
+  readonly setDynamicsToolPreviewDriverValue: (
+    dynamicsGroupId: DynamicsGroupId,
+    parameterId: ParameterId,
+    value: number
+  ) => void;
+  readonly resetDynamicsToolPreviewSimulation: (dynamicsGroupId?: DynamicsGroupId) => void;
   readonly selectPart: (partId: PartId) => void;
   readonly selectDrawable: (
     drawableId: DrawableId,
@@ -334,6 +359,15 @@ interface EditorSessionContextValue {
   ) => void;
   readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
   readonly editKeyformKey: (payload: EditKeyformKeyPayloadDto) => void;
+  readonly createDynamicsGroup: (
+    payload: CreateDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateDynamicsGroup: (
+    payload: UpdateDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteDynamicsGroup: (
+    payload: DeleteDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
   readonly commitGestureCommand: (gesture: EditorSessionGestureCommit<unknown>) => void;
   readonly commitGestureController: <
     Preview,
@@ -395,6 +429,8 @@ export function EditorSessionProvider({
     useState<DeformerTreeSelectionTarget | null>(null);
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
+  const [dynamicsToolPreview, setDynamicsToolPreview] =
+    useState<DynamicsToolPreviewState>(createInitialDynamicsToolPreviewState);
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
     () => createInitialCollapsedPartIds(session)
   );
@@ -437,6 +473,10 @@ export function EditorSessionProvider({
   const parameterBar = useMemo(
     () => createParameterBarProjection(session, resolvedActiveParameterId, parameterValues),
     [parameterValues, resolvedActiveParameterId, session]
+  );
+  const dynamicsToolPreviewEvaluation = useMemo(
+    () => createDynamicsToolPreviewEvaluation(session, dynamicsToolPreview),
+    [dynamicsToolPreview, session]
   );
   const projectIdentityLabel = useMemo(
     () => createProjectIdentityLabel(session),
@@ -497,6 +537,7 @@ export function EditorSessionProvider({
   const clearTransientCommitState = useCallback(() => {
     setMeshDrafts([]);
     setRigDraft(null);
+    setDynamicsToolPreview(createInitialDynamicsToolPreviewState());
     setRigOperationFeedback(null);
     setParameterOperationFeedback(null);
   }, []);
@@ -732,6 +773,10 @@ export function EditorSessionProvider({
   );
 
   const editKeyformKey = useCallback((payload: EditKeyformKeyPayloadDto) => {
+    if (activeTool === "dynamics") {
+      return;
+    }
+
     const result = runCommandWithHistory(
       (sessionForCommand) => commitEditKeyformKey(sessionForCommand, payload),
       "Edit keyform"
@@ -747,7 +792,7 @@ export function EditorSessionProvider({
     } else {
       setParameterOperationFeedback("No keyform change was applied.");
     }
-  }, [runCommandWithHistory]);
+  }, [activeTool, runCommandWithHistory]);
 
   const applyParameterDefinitionCommand = useCallback(
     (
@@ -796,12 +841,78 @@ export function EditorSessionProvider({
     [applyParameterDefinitionCommand]
   );
 
+  const createDynamicsGroup = useCallback(
+    (payload: CreateDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateDynamicsGroup(currentSession, payload),
+        "Create Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateDynamicsGroup = useCallback(
+    (payload: UpdateDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateDynamicsGroup(currentSession, payload),
+        "Update Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteDynamicsGroup = useCallback(
+    (payload: DeleteDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteDynamicsGroup(currentSession, payload),
+        "Delete Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setDynamicsToolPreviewGroupId = useCallback(
+    (dynamicsGroupId: DynamicsGroupId | null) => {
+      setDynamicsToolPreview((current) =>
+        selectDynamicsToolPreviewGroup(editorStateRef.current.session, current, dynamicsGroupId)
+      );
+    },
+    []
+  );
+
+  const setDynamicsToolPreviewDriver = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, parameterId: ParameterId, value: number) => {
+      setDynamicsToolPreview((current) =>
+        setDynamicsToolPreviewDriverValue(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          parameterId,
+          value
+        })
+      );
+    },
+    []
+  );
+
+  const resetDynamicsToolPreviewSimulation = useCallback(
+    (dynamicsGroupId?: DynamicsGroupId) => {
+      setDynamicsToolPreview((current) =>
+        resetDynamicsToolPreviewSimulationState(
+          editorStateRef.current.session,
+          current,
+          dynamicsGroupId ?? current.selectedGroupId
+        )
+      );
+    },
+    []
+  );
+
   const setActiveParameterId = useCallback((parameterId: ParameterId) => {
     setActiveParameterIdState(parameterId);
   }, []);
 
   const setActiveParameterValue = useCallback(
     (value: number) => {
+      if (activeTool === "dynamics") {
+        return;
+      }
+
       if (resolvedActiveParameterId === null) {
         return;
       }
@@ -818,10 +929,14 @@ export function EditorSessionProvider({
         [resolvedActiveParameterId]: clampParameterValue(parameter, value)
       }));
     },
-    [resolvedActiveParameterId, session]
+    [activeTool, resolvedActiveParameterId, session]
   );
 
   const resetActiveParameterValue = useCallback(() => {
+    if (activeTool === "dynamics") {
+      return;
+    }
+
     if (resolvedActiveParameterId === null) {
       return;
     }
@@ -837,7 +952,7 @@ export function EditorSessionProvider({
       ...current,
       [resolvedActiveParameterId]: parameter.default
     }));
-  }, [resolvedActiveParameterId, session]);
+  }, [activeTool, resolvedActiveParameterId, session]);
 
   const openParameterManager = useCallback(() => {
     setActiveEntry("parameters");
@@ -1455,6 +1570,8 @@ export function EditorSessionProvider({
       parameterBar,
       activeParameterId: resolvedActiveParameterId,
       parameterValues,
+      dynamicsToolPreview,
+      dynamicsToolPreviewEvaluation,
       rigOperationFeedback,
       parameterOperationFeedback,
       projectStorage,
@@ -1474,6 +1591,9 @@ export function EditorSessionProvider({
       setActiveParameterId,
       setActiveParameterValue,
       resetActiveParameterValue,
+      setDynamicsToolPreviewGroupId,
+      setDynamicsToolPreviewDriverValue: setDynamicsToolPreviewDriver,
+      resetDynamicsToolPreviewSimulation,
       selectPart,
       selectDrawable,
       selectRigControl,
@@ -1531,6 +1651,9 @@ export function EditorSessionProvider({
       reparentRigControl,
       updateRigControl,
       editKeyformKey,
+      createDynamicsGroup,
+      updateDynamicsGroup,
+      deleteDynamicsGroup,
       commitGestureCommand,
       commitGestureController,
       createCustomParameter,
@@ -1555,11 +1678,15 @@ export function EditorSessionProvider({
       createWarpDeformerForDrawables,
       createWarpDeformerForDeformerTreeSelection,
       createCustomParameter,
+      createDynamicsGroup,
       commitGestureCommand,
       commitGestureController,
       deformerRows,
       deleteCustomParameter,
+      deleteDynamicsGroup,
       drawablePoolItems,
+      dynamicsToolPreview,
+      dynamicsToolPreviewEvaluation,
       editKeyformKey,
       editorHiddenPartIds,
       fitRigDraft,
@@ -1584,6 +1711,7 @@ export function EditorSessionProvider({
       redo,
       reparentRigControl,
       resetActiveParameterValue,
+      resetDynamicsToolPreviewSimulation,
       resetRigDraft,
       resolvePsdImportDestination,
       rigOperationFeedback,
@@ -1598,6 +1726,8 @@ export function EditorSessionProvider({
       session,
       setActiveParameterId,
       setActiveParameterValue,
+      setDynamicsToolPreviewDriver,
+      setDynamicsToolPreviewGroupId,
       startWarpDeformerDraftForDrawable,
       structureRows,
       moveStructureChild,
@@ -1605,6 +1735,7 @@ export function EditorSessionProvider({
       togglePartEditorVisibility,
       undo,
       updateCustomParameter,
+      updateDynamicsGroup,
       updateRigControl,
       updateRigDraft
     ]

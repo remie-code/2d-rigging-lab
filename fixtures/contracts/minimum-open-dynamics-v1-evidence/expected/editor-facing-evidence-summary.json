@@ -1,12 +1,12 @@
 {
   "schemaVersion": "editor-facing-dynamics-evidence-summary-v1",
-  "fixtureId": "minimum-open-dynamics-v1-evidence",
+  "fixtureId": "minimum-open-dynamics-v2-evidence",
   "workflow": {
     "operationType": "createDynamicsGroup",
-    "operationId": "op_fixture_create_minimum_open_dynamics_v1",
+    "operationId": "op_fixture_create_minimum_open_dynamics_v2",
     "dynamicsGroupId": "dyn_hair_sway",
     "displayName": "Hair Sway",
-    "driverParameterIds": [
+    "inputParameterIds": [
       "param_face_yaw"
     ],
     "outputParameterId": "param_hair_sway",
@@ -26,7 +26,7 @@
     "computedOutput": {
       "parameterId": "param_hair_sway",
       "value": 1,
-      "source": "dynamicsComputed"
+      "source": "dynamicsAdditive"
     },
     "projectedDrawable": {
       "drawableId": "draw_hair",
@@ -43,10 +43,7 @@
   "validationEvidence": {
     "candidateReportId": "val_minimum_open_dynamics_v1_candidate",
     "candidateStatus": "pass",
-    "baselineResolvedDynamicsFailures": [
-      "dynamics.requiredGroupMissing",
-      "dynamics.computedParameterProducerMissing"
-    ]
+    "baselineResolvedDynamicsFailures": []
   },
   "artifactRefs": {
     "baselinePackage": "fixtures/contracts/minimum-open-dynamics-v1-evidence/baseline-package.json",

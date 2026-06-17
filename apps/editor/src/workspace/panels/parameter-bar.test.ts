@@ -21,9 +21,19 @@ import {
 import { createParameterBarProjection } from "../../features/editor-session/model/parameter-keyform-state";
 
 const editorSessionMock = vi.hoisted(() => ({ current: undefined as unknown }));
+const editorUiStoreMock = vi.hoisted(() => ({
+  current: {
+    activeTool: "select" as "select" | "mesh" | "rig" | "dynamics"
+  }
+}));
 
 vi.mock("../../features/editor-session/editor-session-context", () => ({
   useEditorSession: () => editorSessionMock.current
+}));
+
+vi.mock("../../state/editor-ui-store", () => ({
+  useEditorUiStore: (selector: (state: typeof editorUiStoreMock.current) => unknown) =>
+    selector(editorUiStoreMock.current)
 }));
 
 import {
@@ -44,6 +54,7 @@ const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_parameter_bar_rotation")
 describe("ParameterBar custom slider", () => {
   beforeEach(() => {
     editorSessionMock.current = undefined;
+    editorUiStoreMock.current.activeTool = "select";
   });
 
   it("projects slider percentages and pointer values with clamping", () => {
@@ -181,6 +192,49 @@ describe("ParameterBar custom slider", () => {
       });
 
       expect(setActiveParameterValue).toHaveBeenCalledWith(30);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("is read-only in Dynamics mode and does not scrub or jump values", async () => {
+    editorUiStoreMock.current.activeTool = "dynamics";
+    const setActiveParameterValue = vi.fn();
+    installEditorSessionMock({
+      parameterValues: { [FACE_ANGLE_X]: 0 },
+      session: createDrawableSessionWithKeyforms(),
+      setActiveParameterValue
+    });
+    const harness = await renderParameterBar();
+
+    try {
+      expect(getFakeElementByTestId(harness.container, "parameter-bar-readonly-reason").textContent)
+        .toContain("Dynamics preview");
+
+      const track = getFakeElementByTestId(harness.container, "parameter-slider-track");
+      track.boundingClientRect = { left: 100, width: 200 };
+      const thumb = getFakeElementByTestId(harness.container, "parameter-slider-thumb");
+      getFakeReactProps(thumb).onPointerDown?.(
+        createPointerEvent({
+          clientX: 300,
+          currentTarget: thumb,
+          pointerId: 8
+        })
+      );
+      getFakeReactProps(thumb).onPointerMove?.(
+        createPointerEvent({
+          clientX: 300,
+          currentTarget: thumb,
+          pointerId: 8
+        })
+      );
+
+      const marker = getFakeElementByAttribute(harness.container, "data-parameter-value", "30");
+      getFakeReactProps(marker).onClick?.({
+        stopPropagation: vi.fn()
+      });
+
+      expect(setActiveParameterValue).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
     }
