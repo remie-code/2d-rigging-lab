@@ -55,6 +55,68 @@ describe("runtime dynamics evaluation", () => {
     expect(Number.isFinite(firstRun.finalState.dynamicsGroups[fixture.dynamicsGroupId]?.angle)).toBe(true);
   });
 
+  it("continues pendulum motion after the driver value is held and converges toward the source", () => {
+    const fixture = createDynamicsFixture();
+    const initialState = createInitialRuntimeState(fixture.graph, {
+      packageId: fixture.packageId,
+      packageRevision: 0,
+      authoredParameterValues: {
+        [fixture.driverParameterId]: 0
+      },
+      resetReasons: ["packageLoad"]
+    });
+    let result = evaluateRuntimeFrame(
+      fixture.graph,
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex: 1,
+        deltaTimeMs: 16.6666667,
+        authoredParameterValues: {
+          [fixture.driverParameterId]: 1
+        },
+        targetIds: [fixture.outputParameterId]
+      },
+      initialState,
+      {
+        ...defaultRuntimeEvaluationOptions(),
+        maxSubSteps: 6
+      },
+      { source: { surface: "viewer" } }
+    );
+    const firstState = result.nextState.dynamicsGroups[fixture.dynamicsGroupId];
+
+    for (let frameIndex = 2; frameIndex <= 121; frameIndex += 1) {
+      result = evaluateRuntimeFrame(
+        fixture.graph,
+        {
+          schemaVersion: "runtime-evaluation-input-v1",
+          frameIndex,
+          deltaTimeMs: 16.6666667,
+          authoredParameterValues: {
+            [fixture.driverParameterId]: 1
+          },
+          targetIds: [fixture.outputParameterId]
+        },
+        result.nextState,
+        {
+          ...defaultRuntimeEvaluationOptions(),
+          maxSubSteps: 6
+        },
+        { source: { surface: "viewer" } }
+      );
+    }
+
+    const settledState = result.nextState.dynamicsGroups[fixture.dynamicsGroupId];
+    expect(firstState?.tick).toBe(1);
+    expect(settledState?.tick).toBe(121);
+    expect(Math.abs(settledState?.angularVelocity ?? 0)).toBeLessThan(
+      Math.abs(firstState?.angularVelocity ?? 0)
+    );
+    expect(Math.abs((settledState?.angle ?? 0) - 1)).toBeLessThan(
+      Math.abs((firstState?.angle ?? 0) - 1)
+    );
+  });
+
   it("projects additive dynamics state and output offset into runtime snapshots", () => {
     const fixture = createDynamicsFixture();
     const initialState = createInitialRuntimeState(fixture.graph, {

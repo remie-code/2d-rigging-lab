@@ -1,3 +1,4 @@
+import type { ParameterId } from "@private-2d-rigging-lab/contracts";
 import { RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useMemo, type ChangeEvent } from "react";
 
@@ -12,42 +13,58 @@ import {
   setRuntimeControlsSearch,
   setRuntimeParameterOverride,
   type RuntimeControlParameterRow,
+  type RuntimeControlsParameterFilterOptions,
   type ViewerRuntimeControlsState
 } from "./runtime-controls-state";
 
 export interface RuntimeControlsProps {
   readonly className?: string;
+  readonly excludedParameterIds?: ReadonlySet<ParameterId>;
+  readonly hasDynamicsSimulation?: boolean;
   readonly onStateChange: (state: ViewerRuntimeControlsState) => void;
+  readonly onResetSimulation?: () => void;
   readonly parameters: readonly EditorParameter[];
   readonly state: ViewerRuntimeControlsState;
 }
 
 export function RuntimeControls({
   className,
+  excludedParameterIds,
+  hasDynamicsSimulation = false,
   onStateChange,
+  onResetSimulation,
   parameters,
   state
 }: RuntimeControlsProps) {
+  const filterOptions: RuntimeControlsParameterFilterOptions = useMemo(
+    () =>
+      excludedParameterIds === undefined
+        ? {}
+        : {
+            excludedParameterIds
+          },
+    [excludedParameterIds]
+  );
   const normalizedState = useMemo(
-    () => normalizeRuntimeControlsState(parameters, state),
-    [parameters, state]
+    () => normalizeRuntimeControlsState(parameters, state, filterOptions),
+    [filterOptions, parameters, state]
   );
   const projection = useMemo(
-    () => createRuntimeControlsProjection(parameters, normalizedState),
-    [normalizedState, parameters]
+    () => createRuntimeControlsProjection(parameters, normalizedState, filterOptions),
+    [filterOptions, normalizedState, parameters]
   );
 
   const commitState = useCallback(
     (nextState: ViewerRuntimeControlsState) => {
-      onStateChange(normalizeRuntimeControlsState(parameters, nextState));
+      onStateChange(normalizeRuntimeControlsState(parameters, nextState, filterOptions));
     },
-    [onStateChange, parameters]
+    [filterOptions, onStateChange, parameters]
   );
   const applyParameterValue = useCallback(
     (row: RuntimeControlParameterRow, value: number) => {
-      commitState(setRuntimeParameterOverride(normalizedState, row.parameter, value));
+      commitState(setRuntimeParameterOverride(normalizedState, row.parameter, value, filterOptions));
     },
-    [commitState, normalizedState]
+    [commitState, filterOptions, normalizedState]
   );
 
   return (
@@ -126,13 +143,26 @@ export function RuntimeControls({
       </div>
 
       <footer
-        aria-disabled="true"
+        aria-disabled={hasDynamicsSimulation ? undefined : "true"}
         className="border-t border-neutral-800 px-3 py-3 text-xs text-neutral-500"
         data-testid="future-playback-slot"
       >
         <div className="flex items-center justify-between gap-3 rounded border border-neutral-800 bg-neutral-950 px-3 py-2">
           <span className="font-medium text-neutral-300">Motion / Physics</span>
-          <span>Not configured</span>
+          {hasDynamicsSimulation ? (
+            <button
+              className="inline-flex h-7 items-center gap-1.5 rounded border border-neutral-800 bg-[#151514] px-2 text-[11px] font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100 disabled:cursor-not-allowed disabled:border-neutral-900 disabled:text-neutral-700"
+              data-testid="viewer-reset-simulation"
+              disabled={onResetSimulation === undefined}
+              onClick={onResetSimulation}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" size={13} strokeWidth={1.8} />
+              <span>Reset simulation</span>
+            </button>
+          ) : (
+            <span>Not configured</span>
+          )}
         </div>
       </footer>
     </aside>

@@ -50,6 +50,46 @@ describe("viewer runtime controls state", () => {
     expect(byId.rows.some((row) => row.parameterId === HAIR_SWAY)).toBe(false);
   });
 
+  it("excludes authored Dynamics output parameters without hiding driver inputs", () => {
+    const parameters = [
+      createParameter(FACE_ANGLE_X, "Face Angle X", { min: -30, max: 30 }),
+      createParameter(HAIR_SWAY, "Hair Sway Output", {
+        min: -1,
+        max: 1,
+        valueSource: "authoredInput"
+      })
+    ];
+    const dynamicsOutputParameterIds = new Set<ParameterId>([HAIR_SWAY]);
+    const state: ViewerRuntimeControlsState = {
+      parameterOverrides: {
+        [FACE_ANGLE_X]: 10,
+        [HAIR_SWAY]: 0.5
+      },
+      search: ""
+    };
+    const projection = createRuntimeControlsProjection(parameters, state, {
+      excludedParameterIds: dynamicsOutputParameterIds
+    });
+
+    expect(projection.rows.map((row) => row.parameterId)).toEqual([FACE_ANGLE_X]);
+    expect(projection.changedParameterCount).toBe(1);
+    expect(projection.hiddenDynamicsOutputParameterCount).toBe(1);
+    expect(
+      normalizeRuntimeParameterOverrides(parameters, state.parameterOverrides, {
+        excludedParameterIds: dynamicsOutputParameterIds
+      })
+    ).toEqual({
+      [FACE_ANGLE_X]: 10
+    });
+    expect(
+      createRuntimeParameterValueMap(parameters, state, {
+        excludedParameterIds: dynamicsOutputParameterIds
+      })
+    ).toEqual({
+      [FACE_ANGLE_X]: 10
+    });
+  });
+
   it("clamps override updates and removes entries when values return to default", () => {
     const parameter = createParameter(FACE_ANGLE_X, "Face Angle X", {
       defaultValue: 0,
@@ -176,6 +216,34 @@ describe("viewer runtime controls state", () => {
 
     expect(state.parameterOverrides[HAIR_SWAY]).toBeUndefined();
     expect(createRuntimeControlsProjection([computed], state).rows).toEqual([]);
+  });
+
+  it("ignores direct override attempts for authored Dynamics output parameters", () => {
+    const authoredOutput = createParameter(HAIR_SWAY, "Hair Sway Output", {
+      max: 1,
+      min: -1,
+      valueSource: "authoredInput"
+    });
+    const state = setRuntimeParameterOverride(
+      {
+        parameterOverrides: {
+          [HAIR_SWAY]: 0.5
+        },
+        search: ""
+      },
+      authoredOutput,
+      0.75,
+      {
+        excludedParameterIds: new Set([HAIR_SWAY])
+      }
+    );
+
+    expect(state.parameterOverrides[HAIR_SWAY]).toBeUndefined();
+    expect(
+      createRuntimeControlsProjection([authoredOutput], state, {
+        excludedParameterIds: new Set([HAIR_SWAY])
+      }).rows
+    ).toEqual([]);
   });
 
   it("creates runtime parameter values without reading or mutating authoring values", () => {
@@ -310,6 +378,21 @@ describe("RuntimeControls UI", () => {
     expect(markup).not.toContain("Pause");
   });
 
+  it("renders Reset simulation for configured Dynamics without playback transport controls", () => {
+    const markup = renderRuntimeControls({
+      hasDynamicsSimulation: true,
+      parameters: [createParameter(FACE_ANGLE_X, "Face Angle X", { max: 30, min: -30 })],
+      state: createInitialRuntimeControlsState()
+    });
+
+    expect(markup).toContain('data-testid="future-playback-slot"');
+    expect(markup).toContain('data-testid="viewer-reset-simulation"');
+    expect(markup).toContain("Reset simulation");
+    expect(markup).not.toContain("Not configured");
+    expect(markup).not.toContain("Play");
+    expect(markup).not.toContain("Pause");
+  });
+
   it("coalesces runtime slider changes and flushes the final value", async () => {
     const animationFrame = installAnimationFrameMock();
     const onStateChange = vi.fn();
@@ -348,15 +431,19 @@ describe("RuntimeControls UI", () => {
 });
 
 function renderRuntimeControls({
+  hasDynamicsSimulation = false,
   parameters,
   state
 }: {
+  readonly hasDynamicsSimulation?: boolean;
   readonly parameters: readonly EditorParameter[];
   readonly state: ViewerRuntimeControlsState;
 }): string {
   return renderToStaticMarkup(
     createElement(RuntimeControls, {
+      hasDynamicsSimulation,
       onStateChange: vi.fn(),
+      onResetSimulation: vi.fn(),
       parameters,
       state
     })

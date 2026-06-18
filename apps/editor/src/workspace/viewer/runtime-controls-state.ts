@@ -12,6 +12,10 @@ const PARAMETER_VALUE_EPSILON = 0.000001;
 
 export type RuntimeParameterOverrides = Readonly<Partial<Record<ParameterId, number>>>;
 
+export interface RuntimeControlsParameterFilterOptions {
+  readonly excludedParameterIds?: ReadonlySet<ParameterId>;
+}
+
 export interface ViewerRuntimeControlsState {
   readonly parameterOverrides: RuntimeParameterOverrides;
   readonly search: string;
@@ -38,6 +42,7 @@ export interface RuntimeControlsProjection {
   readonly visibleParameterCount: number;
   readonly changedParameterCount: number;
   readonly hiddenComputedParameterCount: number;
+  readonly hiddenDynamicsOutputParameterCount: number;
   readonly hasSearch: boolean;
 }
 
@@ -54,25 +59,35 @@ export const setRuntimeControlsSearch = (
   search
 });
 
-export const isEditableRuntimeParameter = (parameter: EditorParameter): boolean =>
-  parameter.valueSource !== "computedDynamics";
+export const isEditableRuntimeParameter = (
+  parameter: EditorParameter,
+  options: RuntimeControlsParameterFilterOptions = {}
+): boolean =>
+  parameter.valueSource !== "computedDynamics" &&
+  options.excludedParameterIds?.has(parameter.parameterId) !== true;
 
 export const normalizeRuntimeControlsState = (
   parameters: readonly EditorParameter[],
-  state: ViewerRuntimeControlsState
+  state: ViewerRuntimeControlsState,
+  options: RuntimeControlsParameterFilterOptions = {}
 ): ViewerRuntimeControlsState => ({
-  parameterOverrides: normalizeRuntimeParameterOverrides(parameters, state.parameterOverrides),
+  parameterOverrides: normalizeRuntimeParameterOverrides(
+    parameters,
+    state.parameterOverrides,
+    options
+  ),
   search: state.search
 });
 
 export const normalizeRuntimeParameterOverrides = (
   parameters: readonly EditorParameter[],
-  parameterOverrides: RuntimeParameterOverrides
+  parameterOverrides: RuntimeParameterOverrides,
+  options: RuntimeControlsParameterFilterOptions = {}
 ): RuntimeParameterOverrides => {
   const normalized: Partial<Record<ParameterId, number>> = {};
 
   for (const parameter of parameters) {
-    if (!isEditableRuntimeParameter(parameter)) {
+    if (!isEditableRuntimeParameter(parameter, options)) {
       continue;
     }
 
@@ -92,10 +107,13 @@ export const normalizeRuntimeParameterOverrides = (
 
 export const createRuntimeControlsProjection = (
   parameters: readonly EditorParameter[],
-  state: ViewerRuntimeControlsState
+  state: ViewerRuntimeControlsState,
+  options: RuntimeControlsParameterFilterOptions = {}
 ): RuntimeControlsProjection => {
-  const normalizedState = normalizeRuntimeControlsState(parameters, state);
-  const editableParameters = parameters.filter(isEditableRuntimeParameter);
+  const normalizedState = normalizeRuntimeControlsState(parameters, state, options);
+  const editableParameters = parameters.filter((parameter) =>
+    isEditableRuntimeParameter(parameter, options)
+  );
   const query = normalizeSearchQuery(normalizedState.search);
   const allRows = editableParameters.map((parameter) =>
     createRuntimeControlParameterRow(parameter, normalizedState.parameterOverrides)
@@ -113,7 +131,12 @@ export const createRuntimeControlsProjection = (
     editableParameterCount: editableParameters.length,
     visibleParameterCount: rows.length,
     changedParameterCount,
-    hiddenComputedParameterCount: parameters.length - editableParameters.length,
+    hiddenComputedParameterCount: parameters.filter(
+      (parameter) => parameter.valueSource === "computedDynamics"
+    ).length,
+    hiddenDynamicsOutputParameterCount: parameters.filter(
+      (parameter) => options.excludedParameterIds?.has(parameter.parameterId) === true
+    ).length,
     hasSearch: query.length > 0
   };
 };
@@ -121,13 +144,14 @@ export const createRuntimeControlsProjection = (
 export const setRuntimeParameterOverride = (
   state: ViewerRuntimeControlsState,
   parameter: EditorParameter,
-  value: number
+  value: number,
+  options: RuntimeControlsParameterFilterOptions = {}
 ): ViewerRuntimeControlsState => {
   const nextOverrides: Partial<Record<ParameterId, number>> = {
     ...state.parameterOverrides
   };
 
-  if (!isEditableRuntimeParameter(parameter)) {
+  if (!isEditableRuntimeParameter(parameter, options)) {
     if (nextOverrides[parameter.parameterId] === undefined) {
       recordLive2dPerformanceCounter("runtimeControls.skippedNoOpUpdates");
       return state;
@@ -197,11 +221,13 @@ export const resetAllRuntimeParameterOverrides = (
 
 export const createRuntimeParameterValueMap = (
   parameters: readonly EditorParameter[],
-  state: ViewerRuntimeControlsState
+  state: ViewerRuntimeControlsState,
+  options: RuntimeControlsParameterFilterOptions = {}
 ): ParameterValueMap => {
   const normalizedOverrides = normalizeRuntimeParameterOverrides(
     parameters,
-    state.parameterOverrides
+    state.parameterOverrides,
+    options
   );
   const runtimeValues: Record<string, number> = {};
 

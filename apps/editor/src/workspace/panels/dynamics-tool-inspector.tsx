@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  Info,
   Pencil,
   Plus,
   RotateCcw,
@@ -48,6 +49,7 @@ import {
   type EditorParameter
 } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
+import { Tooltip } from "../../ui/tooltip";
 import { useRafCoalescedNumberCommit } from "../controls/raf-coalesced-number";
 
 const AXIS_KIND_OPTIONS: readonly DynamicsAxisKind[] = ["angle", "positionX", "positionY"];
@@ -684,6 +686,7 @@ function QuickTuneControl({
   readonly value: number;
 }) {
   const label = getQuickTuneLabel(field);
+  const description = getQuickTuneDescription(field);
   const bounds = getQuickTuneBounds(field, value);
   const latestValueRef = useRef(value);
   const sliderCommit = useRafCoalescedNumberCommit({
@@ -707,11 +710,22 @@ function QuickTuneControl({
   };
 
   return (
-    <label
+    <div
       className="flex min-w-0 flex-col gap-1 text-xs text-neutral-500"
       data-testid={`dynamics-quick-tune-${field}`}
     >
-      {label}
+      <div className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate">{label}</span>
+        <Tooltip label={description} side="top">
+          <button
+            aria-label={`${label}の説明: ${description}`}
+            className="inline-flex size-4 shrink-0 items-center justify-center rounded text-neutral-600 outline-none transition hover:text-neutral-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-400"
+            type="button"
+          >
+            <Info aria-hidden="true" size={12} strokeWidth={1.9} />
+          </button>
+        </Tooltip>
+      </div>
       <input
         aria-label={`${label} quick tune`}
         className="h-2 accent-teal-400"
@@ -749,7 +763,7 @@ function QuickTuneControl({
         type="number"
         value={formatParameterValue(value)}
       />
-    </label>
+    </div>
   );
 }
 
@@ -856,6 +870,23 @@ function getQuickTuneLabel(field: QuickTuneField): string {
       return "Reaction";
     case "convergenceSpeed":
       return "Convergence";
+  }
+}
+
+function getQuickTuneDescription(field: QuickTuneField): string {
+  switch (field) {
+    case "strength":
+      return "揺れの大きさ。上げると出力パラメータの動きが大きくなります。";
+    case "limit":
+      return "最大振れ幅。上げると大きく揺れますが、暴れやすくなります。";
+    case "length":
+      return "揺れの重さや周期。上げるとゆったり遅れて揺れます。";
+    case "sway":
+      return "入力変化への揺れやすさ。上げると動き出しや切り返しで大きく振れます。";
+    case "reactionSpeed":
+      return "入力へ追従する速さ。上げると素早く反応します。";
+    case "convergenceSpeed":
+      return "揺れの収まりやすさ。上げると揺れが早く止まります。";
   }
 }
 

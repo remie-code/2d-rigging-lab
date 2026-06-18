@@ -4,6 +4,7 @@ import {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -127,6 +128,11 @@ import {
   ViewerRuntimeScreen
 } from "./viewer-runtime-screen";
 import { createInitialRuntimeControlsState } from "./runtime-controls-state";
+import {
+  createViewerRuntimeInitialState,
+  createViewerRuntimePlaybackModel,
+  evaluateViewerRuntimePlaybackFrame
+} from "./viewer-runtime-playback";
 
 const PART_ROOT = PartIdSchema.parse("part_viewer_screen_root");
 const PART_FACE = PartIdSchema.parse("part_viewer_screen_face");
@@ -136,6 +142,8 @@ const TEX_FACE = TextureIdSchema.parse("tex_viewer_screen_face");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_viewer_screen_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_viewer_screen_fixture");
 const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
+const HAIR_SWAY_X = ParameterIdSchema.parse("param_viewer_hair_sway_x");
+const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_viewer_hair_sway_x");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_viewer_screen_face_warp");
 
 describe("ViewerRuntimeScreen integration", () => {
@@ -255,6 +263,174 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(authoringParameterValues[FACE_ANGLE_X]).toBe(-30);
   });
 
+  it("advances Viewer Dynamics over runtime frames and keeps motion after driver stops", () => {
+    const session = createRuntimeScreenSessionWithDynamics();
+    const model = createViewerRuntimePlaybackModel(session);
+    const initialState = createViewerRuntimeInitialState(model, {
+      [FACE_ANGLE_X]: 0
+    });
+    const firstFrame = evaluateViewerRuntimePlaybackFrame({
+      authoredParameterValues: {
+        [FACE_ANGLE_X]: 30
+      },
+      deltaTimeMs: 16.6666667,
+      frameIndex: 1,
+      model,
+      previousState: initialState
+    });
+    let settledFrame = firstFrame;
+
+    for (let frameIndex = 2; frameIndex <= 121; frameIndex += 1) {
+      settledFrame = evaluateViewerRuntimePlaybackFrame({
+        authoredParameterValues: {
+          [FACE_ANGLE_X]: 30
+        },
+        deltaTimeMs: 16.6666667,
+        frameIndex,
+        model,
+        previousState: settledFrame.nextState
+      });
+    }
+
+    const firstState = firstFrame.nextState.dynamicsGroups[DYNAMICS_GROUP];
+    const settledState = settledFrame.nextState.dynamicsGroups[DYNAMICS_GROUP];
+    expect(firstState?.tick).toBe(1);
+    expect(settledState?.tick).toBe(121);
+    expect(firstFrame.parameterValues[HAIR_SWAY_X]).not.toBe(0);
+    expect(Math.abs(settledState?.angularVelocity ?? 0)).toBeLessThan(
+      Math.abs(firstState?.angularVelocity ?? 0)
+    );
+    expect(Math.abs((settledState?.angle ?? 0) - 1)).toBeLessThan(
+      Math.abs((firstState?.angle ?? 0) - 1)
+    );
+  });
+
+  it("injects Dynamics output offsets into the Viewer Clean Stage before keyform evaluation", () => {
+    const session = createRuntimeScreenSessionWithDynamics();
+    const model = createViewerRuntimePlaybackModel(session);
+    const runtimeState = {
+      ...createViewerRuntimeInitialState(model, {
+        [FACE_ANGLE_X]: 0
+      }),
+      dynamicsGroups: {
+        [DYNAMICS_GROUP]: {
+          angle: 0.5,
+          angularVelocity: 0,
+          previousSource: 0,
+          previousSourceVelocity: 0,
+          tick: 4,
+          resetCounter: 1
+        }
+      }
+    };
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      runtimeControlsState: {
+        parameterOverrides: {
+          [FACE_ANGLE_X]: 30,
+          [HAIR_SWAY_X]: 9
+        },
+        search: ""
+      },
+      runtimePlaybackModel: model,
+      runtimePlaybackState: runtimeState,
+      session
+    });
+
+    expect(projection.baseParameterValues[FACE_ANGLE_X]).toBe(30);
+    expect(projection.baseParameterValues[HAIR_SWAY_X]).toBeUndefined();
+    expect(projection.parameterValues[HAIR_SWAY_X]).toBe(5);
+    expect(requireDrawable(projection.projection, DRAW_FACE).bounds.x).toBe(2);
+  });
+
+  it("resets Viewer simulation state without changing Runtime Controls overrides", () => {
+    const session = createRuntimeScreenSessionWithDynamics();
+    const model = createViewerRuntimePlaybackModel(session);
+    const runtimeControlsState = Object.freeze({
+      parameterOverrides: {
+        [FACE_ANGLE_X]: 30
+      },
+      search: ""
+    });
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      runtimeControlsState,
+      runtimePlaybackModel: model,
+      session
+    });
+    const resetState = createViewerRuntimeInitialState(
+      model,
+      projection.baseParameterValues,
+      "manualCommand"
+    );
+
+    expect(resetState.dynamicsGroups[DYNAMICS_GROUP]).toMatchObject({
+      angle: 1,
+      angularVelocity: 0,
+      previousSource: 1,
+      previousSourceVelocity: 0,
+      tick: 0
+    });
+    expect(runtimeControlsState.parameterOverrides[FACE_ANGLE_X]).toBe(30);
+    expect(session.dirty).toBe(false);
+  });
+
+  it("discards stale Dynamics state when a new project reuses a Dynamics Group id", () => {
+    const oldSession = createRuntimeScreenSessionWithDynamics();
+    const oldModel = createViewerRuntimePlaybackModel(oldSession);
+    const staleState = {
+      ...createViewerRuntimeInitialState(oldModel, {
+        [FACE_ANGLE_X]: 0
+      }),
+      dynamicsGroups: {
+        [DYNAMICS_GROUP]: {
+          angle: 0.75,
+          angularVelocity: 3,
+          previousSource: 0.5,
+          previousSourceVelocity: 2,
+          tick: 99,
+          resetCounter: 4
+        }
+      }
+    };
+    const nextSession = createRuntimeScreenSessionWithDynamics({
+      packageId: PackageIdSchema.parse("pkg_viewer_runtime_screen_fixture_next"),
+      packageRevision: 1
+    });
+    const nextModel = createViewerRuntimePlaybackModel(nextSession);
+    const evaluated = evaluateViewerRuntimePlaybackFrame({
+      authoredParameterValues: {
+        [FACE_ANGLE_X]: 0
+      },
+      deltaTimeMs: 0,
+      frameIndex: 1,
+      model: nextModel,
+      previousState: staleState
+    });
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      runtimePlaybackModel: nextModel,
+      runtimePlaybackState: staleState,
+      session: nextSession
+    });
+
+    expect(evaluated.nextState.dynamicsGroups[DYNAMICS_GROUP]).toMatchObject({
+      angle: 0,
+      angularVelocity: 0,
+      previousSource: 0,
+      previousSourceVelocity: 0,
+      tick: 0
+    });
+    expect(evaluated.nextState.dynamicsGroups[DYNAMICS_GROUP]).not.toMatchObject({
+      angle: 0.75,
+      angularVelocity: 3,
+      previousSource: 0.5,
+      previousSourceVelocity: 2
+    });
+    expect(projection.parameterValues[HAIR_SWAY_X]).toBe(0);
+  });
+
   it("passes editor Parts Container visibility into the Clean Stage projection", () => {
     const session = createRuntimeScreenSession();
     const visibleProjection = createViewerRuntimeCleanStageProjection({
@@ -345,14 +521,19 @@ function requireDrawable(
   return drawable;
 }
 
-function createRuntimeScreenSession(): AuthoringSession {
+function createRuntimeScreenSession(
+  options: {
+    readonly packageId?: ReturnType<typeof PackageIdSchema.parse>;
+    readonly packageRevision?: number;
+  } = {}
+): AuthoringSession {
   return {
     packageIdentity: {
-      packageId: PackageIdSchema.parse("pkg_viewer_runtime_screen_fixture"),
+      packageId: options.packageId ?? PackageIdSchema.parse("pkg_viewer_runtime_screen_fixture"),
       packageDisplayName: "Viewer Fixture",
       formatVersion: "open-model-package-v1"
     },
-    packageRevision: 7,
+    packageRevision: options.packageRevision ?? 7,
     authoringRevision: createInitialAuthoringRevision(),
     dirty: false,
     graph: {
@@ -442,6 +623,84 @@ function createRuntimeScreenSession(): AuthoringSession {
       rightsRecords: []
     }
   } as AuthoringSession;
+}
+
+function createRuntimeScreenSessionWithDynamics(
+  options: {
+    readonly packageId?: ReturnType<typeof PackageIdSchema.parse>;
+    readonly packageRevision?: number;
+  } = {}
+): AuthoringSession {
+  const session = createRuntimeScreenSession(options);
+  session.graph.parameters.push({
+    parameterId: HAIR_SWAY_X,
+    displayName: "Hair Sway X",
+    valueSource: "authoredInput",
+    min: -10,
+    default: 0,
+    max: 10,
+    recommendedUiStep: 0.1,
+    kind: "custom",
+    parameterType: "scalar",
+    group: "custom",
+    lockedFields: []
+  });
+  session.graph.keyformSets.push({
+    keyformSetId: KeyformSetIdSchema.parse("keyset_viewer_screen_hair_sway_offsets"),
+    target: {
+      kind: "rigControl",
+      id: RIG_FACE_WARP,
+      property: "controlPointOffsets"
+    },
+    parameterId: HAIR_SWAY_X,
+    evaluator: "linear-1d-v1",
+    interpolation: "linear-1d-v1",
+    compositionMode: "replace",
+    compositionOrder: 1,
+    keys: [
+      { value: -10, statePatch: createOffsets(4, -4, 0) },
+      { value: 0, statePatch: createOffsets(4, 0, 0) },
+      { value: 10, statePatch: createOffsets(4, 4, 0) }
+    ]
+  });
+  session.graph.dynamicsGroups.push({
+    dynamicsGroupId: DYNAMICS_GROUP,
+    displayName: "Viewer Hair Sway X",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: FACE_ANGLE_X,
+        kind: "angle",
+        influencePercent: 100,
+        invert: false,
+        normalization: {
+          min: -30,
+          center: 0,
+          max: 30
+        }
+      }
+    ],
+    pendulums: [
+      {
+        length: 1,
+        sway: 0.05,
+        reactionSpeed: 8,
+        convergenceSpeed: 10
+      }
+    ],
+    outputs: [
+      {
+        parameterId: HAIR_SWAY_X,
+        kind: "angle",
+        strength: 10,
+        invert: false,
+        limit: 10
+      }
+    ]
+  });
+
+  return session;
 }
 
 function createDrawable(

@@ -5,6 +5,11 @@ import type {
   RuntimeDynamicsGroupState
 } from "@private-2d-rigging-lab/contracts";
 import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
+import {
+  computeDynamicsOutputOffsets,
+  stepDynamics,
+  type DynamicsSourceSample
+} from "@private-2d-rigging-lab/runtime-core";
 import type {
   CreateDynamicsGroupPayloadDto,
   DynamicsInputPayloadDto,
@@ -518,7 +523,7 @@ export const selectDynamicsToolPreviewGroup = (
       existingState === undefined
         ? {
             ...state.simulationStatesByGroupId,
-            [selectedGroupId]: createResetDynamicsState(computeDynamicsSource(group, driverValues).source, 0, true)
+            [selectedGroupId]: createResetDynamicsToolPreviewState(group, driverValues)
           }
         : state.simulationStatesByGroupId
   };
@@ -676,7 +681,6 @@ export const resetDynamicsToolPreviewSimulation = (
   }
 
   const driverValues = state.driverValuesByGroupId[dynamicsGroupId] ?? createDefaultDriverValues(session, group);
-  const source = computeDynamicsSource(group, driverValues).source;
   const previousState = state.simulationStatesByGroupId[dynamicsGroupId];
 
   return {
@@ -688,7 +692,7 @@ export const resetDynamicsToolPreviewSimulation = (
     },
     simulationStatesByGroupId: {
       ...state.simulationStatesByGroupId,
-      [dynamicsGroupId]: createResetDynamicsState(source, previousState?.resetCounter ?? 0, true)
+      [dynamicsGroupId]: createResetDynamicsToolPreviewState(group, driverValues, previousState)
     },
     resetSerial: state.resetSerial + 1
   };
@@ -729,10 +733,16 @@ export const createDynamicsToolPreviewEvaluation = (
     ...createDefaultDriverValues(session, group),
     ...(state.driverValuesByGroupId[selectedGroupId] ?? {})
   } as Readonly<Record<ParameterId, number>>;
-  const source = computeDynamicsSource(group, driverValues);
+  const sampled = stepDynamicsToolPreview({
+    definition: group,
+    inputValues: driverValues,
+    previousState: state.simulationStatesByGroupId[selectedGroupId],
+    resetApplied: false,
+    dtMs: 0
+  });
   const dynamicsState =
     state.simulationStatesByGroupId[selectedGroupId] ??
-    createResetDynamicsState(source.source, 0, true);
+    sampled.state;
   const parameterValues: Record<string, number> = {
     ...baseParameterValues,
     ...driverValues
@@ -750,8 +760,8 @@ export const createDynamicsToolPreviewEvaluation = (
     selectedGroupId,
     parameterValues,
     driverValues,
-    source: source.source,
-    rawSource: source.rawSource,
+    source: sampled.source.source,
+    rawSource: sampled.source.rawSource,
     state: dynamicsState,
     output
   };
@@ -803,46 +813,43 @@ const stepDynamicsToolPreview = (input: {
   readonly dtMs: number;
 }): {
   readonly state: RuntimeDynamicsGroupState;
-  readonly source: ReturnType<typeof computeDynamicsSource>;
+  readonly source: DynamicsSourceSample;
 } => {
-  const source = computeDynamicsSource(input.definition, input.inputValues);
-  const previousState =
-    input.resetApplied || input.previousState === undefined
-      ? createResetDynamicsState(source.source, input.previousState?.resetCounter ?? 0, input.resetApplied)
-      : input.previousState;
   const pendulum = input.definition.pendulums[0];
   const dtMs = clamp(input.dtMs, 0, DYNAMICS_TOOL_PREVIEW_MAX_ELAPSED_MS);
+  const reset = stepDynamics({
+    definition: input.definition,
+    previousState: input.previousState,
+    inputValues: input.inputValues,
+    resetApplied: input.resetApplied || input.previousState === undefined,
+    dtMs: 0
+  });
+  const previousState =
+    input.resetApplied || input.previousState === undefined
+      ? reset.state
+      : input.previousState;
   if (input.resetApplied || pendulum === undefined || !input.definition.enabled || dtMs === 0) {
     return {
       state: previousState,
-      source
+      source: reset.source
     };
   }
 
-  const length = Math.max(pendulum.length, 0.0001);
   let nextState = previousState;
+  let source = reset.source;
   let remainingMs = dtMs;
 
   while (remainingMs > 0.000001) {
     const stepMs = Math.min(DYNAMICS_TOOL_PREVIEW_STEP_MS, remainingMs);
-    const dtSeconds = stepMs / 1000;
-    const sourceVelocity = (source.source - nextState.previousSource) / dtSeconds;
-    const sourceAcceleration = (sourceVelocity - nextState.previousSourceVelocity) / dtSeconds;
-    const angularAcceleration =
-      ((source.source - nextState.angle) * pendulum.reactionSpeed) / length +
-      sourceAcceleration * pendulum.sway -
-      nextState.angularVelocity * pendulum.convergenceSpeed;
-    const angularVelocity = nextState.angularVelocity + angularAcceleration * dtSeconds;
-    const angle = nextState.angle + angularVelocity * dtSeconds;
-
-    nextState = {
-      angle,
-      angularVelocity,
-      previousSource: source.source,
-      previousSourceVelocity: sourceVelocity,
-      tick: nextState.tick + 1,
-      resetCounter: nextState.resetCounter
-    };
+    const stepped = stepDynamics({
+      definition: input.definition,
+      previousState: nextState,
+      inputValues: input.inputValues,
+      resetApplied: false,
+      dtMs: stepMs
+    });
+    nextState = stepped.state;
+    source = stepped.source;
     remainingMs -= stepMs;
   }
 
@@ -850,46 +857,6 @@ const stepDynamicsToolPreview = (input: {
     source,
     state: nextState
   };
-};
-
-const computeDynamicsSource = (
-  group: DynamicsToolGroup,
-  inputValues: Readonly<Record<string, number>>
-): {
-  readonly rawSource: number;
-  readonly source: number;
-} => {
-  const rawSource = group.inputs.reduce((sum, input) => {
-    const value = inputValues[input.parameterId] ?? input.normalization.center;
-    const normalized = normalizeDynamicsInput(value, input);
-    const signed = input.invert ? -normalized : normalized;
-    return sum + signed * (input.influencePercent / 100);
-  }, 0);
-
-  return {
-    rawSource,
-    source: rawSource
-  };
-};
-
-const normalizeDynamicsInput = (
-  value: number,
-  input: DynamicsInputPayloadDto
-): number => {
-  const { min, center, max } = input.normalization;
-  if (min >= center || center >= max) {
-    return 0;
-  }
-
-  if (value === center) {
-    return 0;
-  }
-
-  if (value > center) {
-    return clamp((value - center) / (max - center), 0, 1);
-  }
-
-  return clamp((value - center) / (center - min), -1, 0);
 };
 
 const createPreviewOutputSummary = (
@@ -905,9 +872,9 @@ const createPreviewOutputSummary = (
 
   const parameter = findEditorParameter(session, output.parameterId);
   const baseValue = parameterValues[output.parameterId] ?? parameter?.default ?? 0;
-  const signedStrength = output.invert ? -output.strength : output.strength;
-  const rawOffset = state.angle * signedStrength;
-  const offset = clamp(rawOffset, -Math.abs(output.limit), Math.abs(output.limit));
+  const outputOffset = computeDynamicsOutputOffsets(group, state)[0];
+  const rawOffset = outputOffset?.rawOffset ?? 0;
+  const offset = outputOffset?.offset ?? 0;
   const rawEffectiveValue = baseValue + offset;
   const effectiveValue =
     parameter === undefined
@@ -950,18 +917,18 @@ const createDisabledOutputSummary = (
   };
 };
 
-const createResetDynamicsState = (
-  source: number,
-  previousResetCounter: number,
-  resetApplied: boolean
-): RuntimeDynamicsGroupState => ({
-  angle: source,
-  angularVelocity: 0,
-  previousSource: source,
-  previousSourceVelocity: 0,
-  tick: 0,
-  resetCounter: previousResetCounter + (resetApplied || previousResetCounter === 0 ? 1 : 0)
-});
+const createResetDynamicsToolPreviewState = (
+  definition: DynamicsToolGroup,
+  inputValues: Readonly<Record<string, number>>,
+  previousState?: RuntimeDynamicsGroupState
+): RuntimeDynamicsGroupState =>
+  stepDynamics({
+    definition,
+    previousState,
+    inputValues,
+    resetApplied: true,
+    dtMs: 0
+  }).state;
 
 const findDynamicsGroup = (
   session: AuthoringSession,

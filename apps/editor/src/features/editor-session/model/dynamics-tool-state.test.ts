@@ -1,5 +1,6 @@
 import { listInitializedParameters, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import { DynamicsGroupIdSchema, ParameterIdSchema, type ParameterId } from "@private-2d-rigging-lab/contracts";
+import { stepDynamics } from "@private-2d-rigging-lab/runtime-core";
 import { describe, expect, it } from "vitest";
 
 import { createEmptyAuthoringSession } from "./empty-authoring-session";
@@ -186,6 +187,39 @@ describe("Dynamics Tool state", () => {
       first.simulationStatesByGroupId[GROUP_ID]?.angle
     );
   });
+
+  it("matches runtime-core stepDynamics for a representative preview step", () => {
+    const session = createDynamicsSession();
+    const group = createDynamicsGroup();
+    session.graph.dynamicsGroups.push(group);
+    let state = selectDynamicsToolPreviewGroup(
+      session,
+      createInitialDynamicsToolPreviewState(),
+      GROUP_ID
+    );
+    state = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: 30
+    });
+    const previousState = state.simulationStatesByGroupId[GROUP_ID];
+    const advanced = advanceDynamicsToolPreviewSimulation(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+    const expected = stepDynamics({
+      definition: group,
+      previousState,
+      inputValues: {
+        [DRIVER_X]: 30
+      },
+      resetApplied: false,
+      dtMs: 16.6666667
+    });
+
+    expect(advanced.simulationStatesByGroupId[GROUP_ID]).toEqual(expected.state);
+  });
+
 
   it("uses later driver values on subsequent frames", () => {
     const session = createDynamicsSession();

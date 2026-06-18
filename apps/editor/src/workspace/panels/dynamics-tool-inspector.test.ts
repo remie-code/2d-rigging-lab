@@ -11,6 +11,7 @@ import {
   createDynamicsToolPreviewEvaluation,
   createInitialDynamicsToolPreviewState
 } from "../../features/editor-session/model/dynamics-tool-state";
+import { TooltipProvider } from "../../ui/tooltip";
 
 const editorSessionMock = vi.hoisted(() => ({ current: undefined as unknown }));
 
@@ -107,6 +108,24 @@ describe("DynamicsToolInspector", () => {
       expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-sway")).toHaveLength(1);
       expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-reactionSpeed")).toHaveLength(1);
       expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-convergenceSpeed")).toHaveLength(1);
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-strength")).toBe(
+        "Strengthの説明: 揺れの大きさ。上げると出力パラメータの動きが大きくなります。"
+      );
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-limit")).toBe(
+        "Limitの説明: 最大振れ幅。上げると大きく揺れますが、暴れやすくなります。"
+      );
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-length")).toBe(
+        "Lengthの説明: 揺れの重さや周期。上げるとゆったり遅れて揺れます。"
+      );
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-sway")).toBe(
+        "Swayの説明: 入力変化への揺れやすさ。上げると動き出しや切り返しで大きく振れます。"
+      );
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-reactionSpeed")).toBe(
+        "Reactionの説明: 入力へ追従する速さ。上げると素早く反応します。"
+      );
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-convergenceSpeed")).toBe(
+        "Convergenceの説明: 揺れの収まりやすさ。上げると揺れが早く止まります。"
+      );
       expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
         .not.toContain("Source");
       expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
@@ -457,7 +476,7 @@ async function renderDynamicsToolInspector(): Promise<{
   let reactRoot: Root | null = createRoot(fakeRoot.container as unknown as Element);
 
   await act(async () => {
-    reactRoot?.render(createElement(DynamicsToolInspector));
+    reactRoot?.render(createElement(TooltipProvider, null, createElement(DynamicsToolInspector)));
   });
 
   return {
@@ -663,6 +682,8 @@ class FakeDocument {
     readonly HTMLElement: typeof FakeElement;
     readonly SVGElement: typeof FakeElement;
     readonly HTMLIFrameElement: new () => object;
+    readonly clearTimeout: typeof globalThis.clearTimeout;
+    readonly setTimeout: typeof globalThis.setTimeout;
   };
   activeElement: FakeElement | null = null;
 
@@ -675,7 +696,9 @@ class FakeDocument {
       Element: FakeElement,
       HTMLElement: FakeElement,
       SVGElement: FakeElement,
-      HTMLIFrameElement: class HTMLIFrameElement {}
+      HTMLIFrameElement: class HTMLIFrameElement {},
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
+      setTimeout: globalThis.setTimeout.bind(globalThis)
     };
   }
 
@@ -768,6 +791,19 @@ function getFakeInputByType(root: FakeElement, type: string): FakeElement {
 
 function getFakeInputsIn(root: FakeElement): FakeElement[] {
   return findFakeElements(root, (candidate) => candidate.localName === "input");
+}
+
+function getQuickTuneHelpLabel(root: FakeElement, testId: string): string | null {
+  const control = getFakeElementByTestId(root, testId);
+  const helpButton = findFakeElements(
+    control,
+    (candidate) => candidate.localName === "button"
+  )[0];
+  if (helpButton === undefined) {
+    throw new Error(`Quick Tune help button was not rendered for "${testId}".`);
+  }
+
+  return helpButton.getAttribute("aria-label");
 }
 
 function getMaybeFakeElementByTestId(root: FakeElement, testId: string): FakeElement | undefined {
