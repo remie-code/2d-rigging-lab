@@ -31,12 +31,15 @@ describe("DynamicsToolInspector", () => {
       selectedGroupId: GROUP_ID
     };
     editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation: vi.fn(),
+      clearDynamicsToolPreviewDefinitionOverride: vi.fn(),
       createDynamicsGroup: vi.fn(),
       deleteDynamicsGroup: vi.fn(),
       dynamicsToolPreview: preview,
       dynamicsToolPreviewEvaluation: createDynamicsToolPreviewEvaluation(session, preview),
       resetDynamicsToolPreviewSimulation: vi.fn(),
       session,
+      setDynamicsToolPreviewDefinitionOverride: vi.fn(),
       setDynamicsToolPreviewDriverValue: vi.fn(),
       setDynamicsToolPreviewGroupId: vi.fn(),
       updateDynamicsGroup: vi.fn()
@@ -63,21 +66,27 @@ describe("DynamicsToolInspector", () => {
     const session = createDynamicsSession();
     const preview = {
       ...createInitialDynamicsToolPreviewState(),
-      selectedGroupId: null
+      selectedGroupId: GROUP_ID
     };
     const updateDynamicsGroup = vi.fn(() => ({ committed: true, diagnostics: [] }));
     const deleteDynamicsGroup = vi.fn(() => ({ committed: true, diagnostics: [] }));
     const createDynamicsGroup = vi.fn(() => ({ committed: true, diagnostics: [] }));
+    const advanceDynamicsToolPreviewSimulation = vi.fn();
+    const clearDynamicsToolPreviewDefinitionOverride = vi.fn();
+    const setDynamicsToolPreviewDefinitionOverride = vi.fn();
     const setDynamicsToolPreviewGroupId = vi.fn();
     const setDynamicsToolPreviewDriverValue = vi.fn();
     const animationFrame = installAnimationFrameMock();
     editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation,
+      clearDynamicsToolPreviewDefinitionOverride,
       createDynamicsGroup,
       deleteDynamicsGroup,
       dynamicsToolPreview: preview,
       dynamicsToolPreviewEvaluation: createDynamicsToolPreviewEvaluation(session, preview),
       resetDynamicsToolPreviewSimulation: vi.fn(),
       session,
+      setDynamicsToolPreviewDefinitionOverride,
       setDynamicsToolPreviewDriverValue,
       setDynamicsToolPreviewGroupId,
       updateDynamicsGroup
@@ -91,9 +100,29 @@ describe("DynamicsToolInspector", () => {
       expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
         .toContain("Inspector Sway");
       expect(getFakeElementsByTestId(harness.container, "dynamics-preview-driver")).toHaveLength(2);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-strength")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-limit")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-length")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-sway")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-reactionSpeed")).toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-convergenceSpeed")).toHaveLength(1);
+      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
+        .not.toContain("Source");
+      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
+        .not.toContain("Angle");
+      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
+        .not.toContain("Offset");
+      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
+        .not.toContain("Effective");
       expect(getMaybeFakeElementByTestId(harness.container, "dynamics-input-row")).toBeUndefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-edit-group")).toBeDefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-delete-group")).toBeDefined();
+      expect(animationFrame.pendingCount()).toBe(1);
+      animationFrame.flushNext(10);
+      expect(advanceDynamicsToolPreviewSimulation).toHaveBeenCalledWith(GROUP_ID, 16.6666667);
+      animationFrame.flushNext(30);
+      expect(advanceDynamicsToolPreviewSimulation).toHaveBeenLastCalledWith(GROUP_ID, 20);
 
       const driverRange = getFakeInputByType(harness.container, "range");
       driverRange.value = "10";
@@ -107,8 +136,68 @@ describe("DynamicsToolInspector", () => {
       animationFrame.flushAll();
       expect(setDynamicsToolPreviewDriverValue).toHaveBeenCalledTimes(1);
 
+      const quickTuneStrength = getFakeElementByTestId(
+        harness.container,
+        "dynamics-quick-tune-strength"
+      );
+      const quickTuneStrengthNumber = getFakeInputsIn(quickTuneStrength).find(
+        (input) => input.type === "number"
+      );
+      if (quickTuneStrengthNumber === undefined) {
+        throw new Error("Expected Strength Quick Tune number input.");
+      }
+      quickTuneStrengthNumber.value = "6";
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthNumber).onChange?.({
+          currentTarget: quickTuneStrengthNumber
+        });
+      });
+      expect(setDynamicsToolPreviewDefinitionOverride).toHaveBeenLastCalledWith(
+        GROUP_ID,
+        expect.objectContaining({
+          outputs: [
+            expect.objectContaining({
+              strength: 6
+            })
+          ]
+        })
+      );
+
+      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+        (input) => input.type === "range"
+      );
+      if (quickTuneStrengthRange === undefined) {
+        throw new Error("Expected Strength Quick Tune range input.");
+      }
+      await act(async () => {
+        quickTuneStrengthRange.value = "7";
+        getFakeReactProps(quickTuneStrengthRange).onChange?.({
+          currentTarget: quickTuneStrengthRange
+        });
+        quickTuneStrengthRange.value = "8";
+        getFakeReactProps(quickTuneStrengthRange).onChange?.({
+          currentTarget: quickTuneStrengthRange
+        });
+      });
+      expect(updateDynamicsGroup).not.toHaveBeenCalled();
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+      });
+      expect(updateDynamicsGroup).toHaveBeenCalledTimes(1);
+      expect(updateDynamicsGroup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dynamicsGroupId: GROUP_ID,
+          outputs: [
+            expect.objectContaining({
+              strength: 8
+            })
+          ]
+        })
+      );
+
       await clickTestId(harness.container, "dynamics-edit-group");
       expect(getFakeElementByTestId(harness.container, "dynamics-edit-inspector")).toBeDefined();
+      expect(animationFrame.pendingCount()).toBe(0);
       expect(getFakeElementsByTestId(harness.container, "dynamics-input-row")).toHaveLength(2);
       expect(getFakeElementByTestId(harness.container, "dynamics-apply-group")).toBeDefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-cancel")).toBeDefined();
@@ -120,9 +209,11 @@ describe("DynamicsToolInspector", () => {
 
       await clickTestId(harness.container, "dynamics-back-to-groups");
       expect(getFakeElementByTestId(harness.container, "dynamics-group-list")).toBeDefined();
+      expect(animationFrame.pendingCount()).toBe(0);
 
       await clickTestId(harness.container, "dynamics-new-draft");
       expect(getFakeElementByTestId(harness.container, "dynamics-create-inspector")).toBeDefined();
+      expect(animationFrame.pendingCount()).toBe(0);
       expect(getFakeElementByTestId(harness.container, "dynamics-create-group")).toBeDefined();
       expect(getMaybeFakeElementByTestId(harness.container, "dynamics-delete-group")).toBeUndefined();
 
@@ -137,12 +228,147 @@ describe("DynamicsToolInspector", () => {
       await clickTestId(harness.container, "dynamics-group-row");
       await clickTestId(harness.container, "dynamics-edit-group");
       await clickTestId(harness.container, "dynamics-apply-group");
-      expect(updateDynamicsGroup).toHaveBeenCalledTimes(1);
+      expect(updateDynamicsGroup).toHaveBeenCalledTimes(2);
       expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector")).toBeDefined();
 
       await clickTestId(harness.container, "dynamics-delete-group");
       expect(deleteDynamicsGroup).toHaveBeenCalledWith({ dynamicsGroupId: GROUP_ID });
       expect(getFakeElementByTestId(harness.container, "dynamics-group-list")).toBeDefined();
+    } finally {
+      animationFrame.restore();
+      await harness.cleanup();
+    }
+  });
+
+  it("does not commit Quick Tune when the finalized value matches the group", async () => {
+    const session = createDynamicsSession();
+    const preview = {
+      ...createInitialDynamicsToolPreviewState(),
+      selectedGroupId: GROUP_ID
+    };
+    const updateDynamicsGroup = vi.fn(() => ({ committed: true, diagnostics: [] }));
+    const animationFrame = installAnimationFrameMock();
+    editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation: vi.fn(),
+      clearDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      createDynamicsGroup: vi.fn(),
+      deleteDynamicsGroup: vi.fn(),
+      dynamicsToolPreview: preview,
+      dynamicsToolPreviewEvaluation: createDynamicsToolPreviewEvaluation(session, preview),
+      resetDynamicsToolPreviewSimulation: vi.fn(),
+      session,
+      setDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      setDynamicsToolPreviewDriverValue: vi.fn(),
+      setDynamicsToolPreviewGroupId: vi.fn(),
+      updateDynamicsGroup
+    };
+    const harness = await renderDynamicsToolInspector();
+
+    try {
+      await clickTestId(harness.container, "dynamics-group-row");
+      const quickTuneStrength = getFakeElementByTestId(
+        harness.container,
+        "dynamics-quick-tune-strength"
+      );
+      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+        (input) => input.type === "range"
+      );
+      if (quickTuneStrengthRange === undefined) {
+        throw new Error("Expected Strength Quick Tune range input.");
+      }
+
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+      });
+
+      expect(updateDynamicsGroup).not.toHaveBeenCalled();
+    } finally {
+      animationFrame.restore();
+      await harness.cleanup();
+    }
+  });
+
+  it("deduplicates repeated Quick Tune completion events for the same finalized draft", async () => {
+    const session = createDynamicsSession();
+    const preview = {
+      ...createInitialDynamicsToolPreviewState(),
+      selectedGroupId: GROUP_ID
+    };
+    const updateDynamicsGroup = vi.fn(() => ({ committed: true, diagnostics: [] }));
+    const animationFrame = installAnimationFrameMock();
+    editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation: vi.fn(),
+      clearDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      createDynamicsGroup: vi.fn(),
+      deleteDynamicsGroup: vi.fn(),
+      dynamicsToolPreview: preview,
+      dynamicsToolPreviewEvaluation: createDynamicsToolPreviewEvaluation(session, preview),
+      resetDynamicsToolPreviewSimulation: vi.fn(),
+      session,
+      setDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      setDynamicsToolPreviewDriverValue: vi.fn(),
+      setDynamicsToolPreviewGroupId: vi.fn(),
+      updateDynamicsGroup
+    };
+    const harness = await renderDynamicsToolInspector();
+
+    try {
+      await clickTestId(harness.container, "dynamics-group-row");
+      const quickTuneStrength = getFakeElementByTestId(
+        harness.container,
+        "dynamics-quick-tune-strength"
+      );
+      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+        (input) => input.type === "range"
+      );
+      if (quickTuneStrengthRange === undefined) {
+        throw new Error("Expected Strength Quick Tune range input.");
+      }
+
+      await act(async () => {
+        quickTuneStrengthRange.value = "8";
+        getFakeReactProps(quickTuneStrengthRange).onChange?.({
+          currentTarget: quickTuneStrengthRange
+        });
+      });
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+      });
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthRange).onBlur?.();
+      });
+
+      expect(updateDynamicsGroup).toHaveBeenCalledTimes(1);
+      expect(updateDynamicsGroup).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          outputs: [
+            expect.objectContaining({
+              strength: 8
+            })
+          ]
+        })
+      );
+
+      await act(async () => {
+        quickTuneStrengthRange.value = "9";
+        getFakeReactProps(quickTuneStrengthRange).onChange?.({
+          currentTarget: quickTuneStrengthRange
+        });
+      });
+      await act(async () => {
+        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+      });
+
+      expect(updateDynamicsGroup).toHaveBeenCalledTimes(2);
+      expect(updateDynamicsGroup).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          outputs: [
+            expect.objectContaining({
+              strength: 9
+            })
+          ]
+        })
+      );
     } finally {
       animationFrame.restore();
       await harness.cleanup();
@@ -257,6 +483,7 @@ type FakeReactProps = {
   readonly onBlur?: () => void;
   readonly onChange?: (event: { readonly currentTarget: FakeElement }) => void;
   readonly onClick?: () => void;
+  readonly onKeyDown?: (event: { readonly key: string }) => void;
   readonly onPointerCancel?: () => void;
   readonly onPointerUp?: () => void;
 };
@@ -539,6 +766,10 @@ function getFakeInputByType(root: FakeElement, type: string): FakeElement {
   return input;
 }
 
+function getFakeInputsIn(root: FakeElement): FakeElement[] {
+  return findFakeElements(root, (candidate) => candidate.localName === "input");
+}
+
 function getMaybeFakeElementByTestId(root: FakeElement, testId: string): FakeElement | undefined {
   return getFakeElementsByTestId(root, testId)[0];
 }
@@ -578,7 +809,9 @@ function getFakeReactProps(element: FakeElement): FakeReactProps {
 }
 
 function installAnimationFrameMock(): {
+  readonly flushNext: (timestamp?: number) => void;
   readonly flushAll: () => void;
+  readonly pendingCount: () => number;
   readonly restore: () => void;
 } {
   const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -596,7 +829,7 @@ function installAnimationFrameMock(): {
     callbacks.delete(frameId);
   });
 
-  const flushNext = () => {
+  const flushNext = (timestamp = 0) => {
     const entry = callbacks.entries().next().value;
     if (entry === undefined) {
       return;
@@ -604,15 +837,23 @@ function installAnimationFrameMock(): {
 
     const [frameId, callback] = entry;
     callbacks.delete(frameId);
-    callback(0);
+    callback(timestamp);
   };
 
   return {
+    flushNext,
     flushAll: () => {
-      while (callbacks.size > 0) {
-        flushNext();
+      const frameIds = [...callbacks.keys()];
+      for (const frameId of frameIds) {
+        const callback = callbacks.get(frameId);
+        if (callback === undefined) {
+          continue;
+        }
+        callbacks.delete(frameId);
+        callback(0);
       }
     },
+    pendingCount: () => callbacks.size,
     restore: () => {
       globalThis.requestAnimationFrame = previousRequestAnimationFrame;
       globalThis.cancelAnimationFrame = previousCancelAnimationFrame;

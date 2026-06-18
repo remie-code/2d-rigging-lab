@@ -258,6 +258,74 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
+  it("keeps Dynamics preview animation ticks out of history while coefficient commits stay undoable", async () => {
+    const initialSession = createDynamicsHistorySession();
+    initialSession.graph.dynamicsGroups.push(createDynamicsHistoryPayload());
+    const harness = await renderEditorSessionProbe({ initialSession });
+
+    try {
+      expect(harness.context().canUndo).toBe(false);
+
+      await act(async () => {
+        harness.context().setDynamicsToolPreviewGroupId(DYNAMICS_HISTORY_GROUP_ID);
+        harness.context().setDynamicsToolPreviewDriverValue(
+          DYNAMICS_HISTORY_GROUP_ID,
+          DYNAMICS_HISTORY_DRIVER_ID,
+          30
+        );
+        harness.context().advanceDynamicsToolPreviewSimulation(
+          DYNAMICS_HISTORY_GROUP_ID,
+          16.6666667
+        );
+        harness.context().advanceDynamicsToolPreviewSimulation(
+          DYNAMICS_HISTORY_GROUP_ID,
+          16.6666667
+        );
+      });
+
+      expect(harness.context().dynamicsToolPreview.simulationStatesByGroupId[
+        DYNAMICS_HISTORY_GROUP_ID
+      ]?.tick).toBe(2);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(false);
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+          pendulums: [
+            {
+              length: 0.9,
+              sway: 0.5,
+              reactionSpeed: 10,
+              convergenceSpeed: 6
+            }
+          ],
+          outputs: [
+            {
+              parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+              kind: "angle",
+              strength: 8,
+              invert: false,
+              limit: 12
+            }
+          ]
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().canUndo).toBe(true);
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.strength).toBe(8);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.strength).toBe(10);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("commits Dynamics create and apply with initialized preset parameter candidates", async () => {
     const harness = await renderEditorSessionProbe({
       initialSession: createEmptyAuthoringSession()

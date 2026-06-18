@@ -164,11 +164,15 @@ import {
   mergeNewPartInitialCollapsedPartIds
 } from "./model/part-tree-collapse-state";
 import {
+  advanceDynamicsToolPreviewSimulation as advanceDynamicsToolPreviewSimulationState,
+  clearDynamicsToolPreviewDefinitionOverride as clearDynamicsToolPreviewDefinitionOverrideState,
   createDynamicsToolPreviewEvaluation,
   createInitialDynamicsToolPreviewState,
   resetDynamicsToolPreviewSimulation as resetDynamicsToolPreviewSimulationState,
   selectDynamicsToolPreviewGroup,
+  setDynamicsToolPreviewDefinitionOverride as setDynamicsToolPreviewDefinitionOverrideState,
   setDynamicsToolPreviewDriverValue,
+  type DynamicsToolGroup,
   type DynamicsToolPreviewEvaluation,
   type DynamicsToolPreviewState
 } from "./model/dynamics-tool-state";
@@ -283,6 +287,17 @@ interface EditorSessionContextValue {
     dynamicsGroupId: DynamicsGroupId,
     parameterId: ParameterId,
     value: number
+  ) => void;
+  readonly advanceDynamicsToolPreviewSimulation: (
+    dynamicsGroupId: DynamicsGroupId,
+    dtMs: number
+  ) => void;
+  readonly setDynamicsToolPreviewDefinitionOverride: (
+    dynamicsGroupId: DynamicsGroupId,
+    definition: DynamicsToolGroup
+  ) => void;
+  readonly clearDynamicsToolPreviewDefinitionOverride: (
+    dynamicsGroupId: DynamicsGroupId
   ) => void;
   readonly resetDynamicsToolPreviewSimulation: (dynamicsGroupId?: DynamicsGroupId) => void;
   readonly selectPart: (partId: PartId) => void;
@@ -886,6 +901,39 @@ export function EditorSessionProvider({
           parameterId,
           value
         })
+      );
+    },
+    []
+  );
+
+  const advanceDynamicsToolPreviewSimulation = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, dtMs: number) => {
+      setDynamicsToolPreview((current) =>
+        advanceDynamicsToolPreviewSimulationState(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          dtMs
+        })
+      );
+    },
+    []
+  );
+
+  const setDynamicsToolPreviewDefinitionOverride = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, definition: DynamicsToolGroup) => {
+      setDynamicsToolPreview((current) =>
+        setDynamicsToolPreviewDefinitionOverrideState(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          definition
+        })
+      );
+    },
+    []
+  );
+
+  const clearDynamicsToolPreviewDefinitionOverride = useCallback(
+    (dynamicsGroupId: DynamicsGroupId) => {
+      setDynamicsToolPreview((current) =>
+        clearDynamicsToolPreviewDefinitionOverrideState(current, dynamicsGroupId)
       );
     },
     []
@@ -1620,6 +1668,9 @@ export function EditorSessionProvider({
       resetActiveParameterValue,
       setDynamicsToolPreviewGroupId,
       setDynamicsToolPreviewDriverValue: setDynamicsToolPreviewDriver,
+      advanceDynamicsToolPreviewSimulation,
+      setDynamicsToolPreviewDefinitionOverride,
+      clearDynamicsToolPreviewDefinitionOverride,
       resetDynamicsToolPreviewSimulation,
       selectPart,
       selectDrawable,
@@ -1691,12 +1742,14 @@ export function EditorSessionProvider({
     }),
     [
       applyCommand,
+      advanceDynamicsToolPreviewSimulation,
       collapsedPartIds,
       applyMeshDraft,
       cancelMeshDraft,
       commitPsdImport,
       cancelRigDraft,
       bindDrawableToRigControl,
+      clearDynamicsToolPreviewDefinitionOverride,
       createParentRotationDeformerForRigControl,
       createParentWarpDeformerForRigControl,
       createRotationDeformerForDrawable,
@@ -1753,6 +1806,7 @@ export function EditorSessionProvider({
       session,
       setActiveParameterId,
       setActiveParameterValue,
+      setDynamicsToolPreviewDefinitionOverride,
       setDynamicsToolPreviewDriver,
       setDynamicsToolPreviewGroupId,
       startWarpDeformerDraftForDrawable,

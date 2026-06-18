@@ -1,6 +1,6 @@
 # Dynamics Tool コンポーネント仕様
 
-> 状態: Revised draft / 2026-06-17。Wave80後の議論に基づき、Dynamics / Physics v0 のAuthoring UXを再定義する。古い「軽量binding editor」前提ではなく、複数driver入力から仮想振り子simulationを作り、既存parameterへadditive offsetを反映する調整Toolとして扱う。
+> 状態: Revised draft / 2026-06-18。Wave82後の議論に基づき、Dynamics / Physics v0 のAuthoring UXを再定義する。古い「軽量binding editor」前提ではなく、複数driver入力から仮想振り子simulationを作り、既存parameterへadditive offsetを反映する調整Toolとして扱う。
 
 ## 1. 役割
 
@@ -59,9 +59,10 @@ Viewer / Runtime Viewは、作成済みDynamicsを完成品として確認する
 7. Length / Sway / Reaction / Convergence / Output strengthを調整する
 8. CreateでGroupを作成する
 9. 作成されたGroup rowを開く
-10. Group Inspectorでdriver previewを動かす
-11. 必要ならEditで設定を調整し、Applyする
-12. Viewerで完成品として確認する
+10. Group Inspectorでdriver previewを動かし、時間経過で揺れと収束を見る
+11. Previewを見ながらQuick Tuneでよく触る係数を調整する
+12. 構造設定が必要ならEditで詳細設定を調整し、Applyする
+13. Viewerで完成品として確認する
 ```
 
 重要なUX境界:
@@ -369,11 +370,12 @@ Dynamics Group
 
 Preview
   Driver scrub / sample controls
-  Current input source
-  Current pendulum angle
-  Current output offset
-  Current effective value
   Reset Preview
+
+Quick Tune
+  Strength   Limit
+  Length     Sway
+  Reaction   Convergence
 
 Actions
   Edit
@@ -383,6 +385,8 @@ Actions
 Existing Group Inspector stateの責務:
 
 - 既存Groupのpreviewを行う。
+- driver preview sliderを動かしながら、Canvas上で時間経過の揺れと収束を見る。
+- よく触る係数をQuick Tuneで調整する。
 - `Edit`で編集Inspectorへ入る。
 - `Delete Group`で既存Groupを削除する。
 - `Back to Groups`で一覧へ戻る。
@@ -390,8 +394,82 @@ Existing Group Inspector stateの責務:
 Existing Group Inspector stateに表示しないもの:
 
 - Settings / Inputs / Advanced / Pendulum / Outputsの編集フォーム。
+- Source / Angle / Offset / Effective のようなraw solver summary。
 - Create / Apply button。
 - New Group button。
+
+#### 5.2.1 Preview Area
+
+Preview Areaは、調整中のdriver入力とresetだけを置く。
+
+```text
+Preview
+  Face Angle X      [slider] [value]
+  Reset Preview
+```
+
+Preview Areaで行うこと:
+
+- driver preview値をInspector-localに動かす。
+- driver値の変化をもとに、時間経過でpendulum simulationを進める。
+- Canvas上で、既存parameter / keyform / deformerにDynamics outputが反映された結果を見る。
+- `Reset Preview`で、pendulum angle、angular velocity、previous sourceなどのpreview simulation stateを初期化する。
+
+Preview Areaに表示しないもの:
+
+- `Source`
+- `Angle`
+- `Offset`
+- `Effective`
+
+理由:
+
+- これらは実装者・debugger向けの値であり、通常ユーザーが揺れの良し悪しを判断する材料になりにくい。
+- Canvas上の動きこそが主要feedbackである。
+- Inspectorの縦幅は、driver sliderとQuick Tuneを同時に見えるように使う。
+
+必要なら、raw solver summaryは将来のDiagnostics / Evidence View、またはdev/debug modeに逃がす。
+
+#### 5.2.2 Quick Tune
+
+Quick Tuneは、Previewを見ながら頻繁に触る係数だけをExisting Group Inspectorに出す簡易調整UIである。
+
+Quick Tuneに出す項目:
+
+| Control | Source field | 意味 | 優先度 |
+|---|---|---|---|
+| Strength | Output `strength` | 最終的にどれくらい揺れるか | 最高 |
+| Sway | Pendulum `sway` | driver変化がどれくらい揺れを生むか | 高 |
+| Reaction | Pendulum `reactionSpeed` | input/rootへどれくらい速く反応するか | 高 |
+| Convergence | Pendulum `convergenceSpeed` | 揺れがどれくらい早く収束するか | 高 |
+| Length | Pendulum `length` | 周期・重さ・遅れの印象 | 中 |
+| Limit | Output `limit` | 揺れすぎ防止の上限 | 中 |
+
+Quick Tuneに出さない項目:
+
+- driver parameter選択。
+- input kind。
+- input追加/削除。
+- input influence / invert。
+- Advanced normalization min / center / max。
+- output parameter選択。
+- output kind。
+- output invert。
+- name / enabled以外の構造設定。
+- validation detail。
+
+理由:
+
+- Previewしながら詰めたいのは「揺れの量、遅れ、反応、余韻」である。
+- input/output bindingやnormalizationは、揺れを確認する前に構造を作るためのEdit画面の項目である。
+- 通常Preview画面では、driver sliderとQuick Tuneが同時に視界へ入ることを優先する。
+
+Quick Tuneの編集方針:
+
+- 操作中はCanvas previewへ即時反映する。
+- operation historyへ毎frame commitしてはいけない。
+- 実装時は、drag完了時に1回commitする、または明示的なApply相当でcommitするなど、historyを汚さない粒度にする。
+- どちらのcommit方式を採る場合でも、Preview中に値を触った結果がCanvas上で即座に確認できることを優先する。
 
 ### 5.3 Create Group Inspector State
 
@@ -584,12 +662,28 @@ Dynamics previewのparameter map:
 
 このため、Dynamics Tool previewはcurrent authored poseを混ぜない。非driver parameterはdefaultであり、現在のViewer状態やParameter Bar状態は入らない。
 
+Dynamics Tool previewは、driver値変更時に1 stepだけ反映するものでは足りない。Group Inspectorを開いてpreviewしている間は、animation clockによりsimulation stateを時間経過で進める。
+
+時間経過previewの概念:
+
+```text
+preview clock tick
+  -> 現在のInspector-local driver preview値を読む
+  -> 前frameからのdtでpendulum stateを進める
+  -> output offsetを計算する
+  -> effective parameter mapへ反映する
+  -> Canvasへ描画する
+  -> 次frameへ続く
+```
+
+これにより、driver sliderを動かした後も、内部状態の`angularVelocity`、復元力、dampingによって揺れと収束が継続して見える。ユーザーは「入力した瞬間の変形」ではなく、「揺れ方の余韻」を見ながら係数を詰められる。
+
 Dynamics Tool previewで必要なもの:
 
 - driver inputを一時的に動かす。
+- driver inputが止まった後も、時間経過で振り子の揺れと収束を見る。
+- previewしながら、よく触る係数を同じ視界内で調整する。
 - simulationをresetする。
-- 現在の合成input sourceを見る。
-- 現在のpendulum angle / output valueを見る。
 - Canvas上で、output parameterが既存deformer/keyform評価へ反映された結果を見る。
 
 Preview値はsession-onlyであり、project stateやoperation historyへcommitしない。
@@ -675,17 +769,20 @@ Viewerで扱わないもの:
 | 振り子図 | v0 optional | あると理解しやすいが、Canvas上の結果確認を優先する。 |
 | 出力設定 | 採用 | output parameter、kind、strength、limit、invertが必要。 |
 | 複数Output | UI構造は用意、v0では1 output | まずはoutput ownershipを単純に保つ。 |
+| Source / Angle / Offset / Effective summary | 通常Previewでは非表示 | 数値を見てもユーザーが調整判断しづらい。Canvas上の動きとQuick Tuneを優先する。必要ならDiagnostics / debugへ逃がす。 |
+| Quick Tune | 採用 | Preview中によく触るStrength / Sway / Reaction / Convergence / Length / Limitだけを同じ視界に置く。 |
 
 ## 10. Tool State
 
 | State | 内容 |
 |---|---|
 | List | 初期/通常状態。Group一覧と`New Group`だけを表示する。 |
-| Group Inspector | 既存Group詳細状態。Preview、Edit、Delete、Back to Groupsを表示する。 |
+| Group Inspector | 既存Group詳細状態。Preview、Quick Tune、Edit、Delete、Back to Groupsを表示する。 |
 | Create Group | 新規Group draft状態。Settings / Inputs / Advanced / Pendulum / Outputs / ValidationとCreate / Cancelを表示する。 |
 | Edit Group | 既存Group draft状態。Settings / Inputs / Advanced / Pendulum / Outputs / ValidationとApply / Cancelを表示する。 |
 | Invalid Draft | Create/Edit中にinput/output不足、output ownership conflict、invalid normalizationなどでCreate/Apply不可。 |
-| Previewing | Group Inspector中にsession-only preview inputでsimulationを動かしている。 |
+| Previewing | Group Inspector中にsession-only preview inputとanimation clockでsimulationを時間経過させている。 |
+| Quick Tuning | Group Inspector中にCanvas previewを見ながらStrength / Sway / Reaction / Convergence / Length / Limitを調整している。 |
 
 ## 11. Validation
 
@@ -714,6 +811,9 @@ Warning:
 
 - output kindは自動推定しない。初期値は`angle`でよく、ユーザーが`angle / positionX / positionY`を選択する。
 - input normalization UIはAdvanced sectionに閉じる。通常はparameter定義のmin / default / maxから自動設定する。
+- Dynamics Tool previewは時間経過でsimulationを進める。driver変更時の1 step反映だけでは、揺れと収束を調整するUXとして不足する。
+- Existing Group Inspectorではraw solver summaryを通常表示しない。Canvas上の動き、driver slider、Quick Tuneを優先する。
+- Quick TuneにはStrength / Sway / Reaction / Convergence / Length / Limitを置く。input/output bindingやnormalizationはEdit画面に残す。
 - Viewer v1で扱うDynamics確認はtime progressionとreset simulationまで。frame steppingはViewer機能として不要。
 - Dynamics-owned output parameterはViewer / Runtime Controlsでread-only / derived表示にする。
 - v0はadditive offset modelで実装する。`replace` modeは作らない。

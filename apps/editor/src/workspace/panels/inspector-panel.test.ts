@@ -31,6 +31,8 @@ describe("InspectorPanel Dynamics mode", () => {
     const preview = createInitialDynamicsToolPreviewState();
     editorUiStoreMock.current.activeTool = "dynamics";
     editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation: vi.fn(),
+      clearDynamicsToolPreviewDefinitionOverride: vi.fn(),
       createDynamicsGroup: vi.fn(),
       deleteDynamicsGroup: vi.fn(),
       dynamicsToolPreview: preview,
@@ -42,6 +44,7 @@ describe("InspectorPanel Dynamics mode", () => {
       },
       resetDynamicsToolPreviewSimulation: vi.fn(),
       session,
+      setDynamicsToolPreviewDefinitionOverride: vi.fn(),
       setDynamicsToolPreviewDriverValue: vi.fn(),
       setDynamicsToolPreviewGroupId: vi.fn(),
       updateDynamicsGroup: vi.fn()

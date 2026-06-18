@@ -53,6 +53,7 @@ export interface DynamicsToolPreviewState {
   readonly selectedGroupId: DynamicsGroupId | null;
   readonly driverValuesByGroupId: Readonly<Record<string, Readonly<Record<string, number>>>>;
   readonly simulationStatesByGroupId: Readonly<Record<string, RuntimeDynamicsGroupState>>;
+  readonly definitionOverridesByGroupId: Readonly<Record<string, DynamicsToolGroup>>;
   readonly resetSerial: number;
 }
 
@@ -78,6 +79,7 @@ export interface DynamicsToolPreviewEvaluation {
 }
 
 export const DYNAMICS_TOOL_PREVIEW_STEP_MS = 16.6666667;
+export const DYNAMICS_TOOL_PREVIEW_MAX_ELAPSED_MS = 100;
 
 export const DYNAMICS_TOOL_PRESETS: readonly DynamicsToolPreset[] = [
   {
@@ -134,6 +136,7 @@ export const createInitialDynamicsToolPreviewState = (): DynamicsToolPreviewStat
   selectedGroupId: null,
   driverValuesByGroupId: {},
   simulationStatesByGroupId: {},
+  definitionOverridesByGroupId: {},
   resetSerial: 0
 });
 
@@ -489,7 +492,8 @@ export const selectDynamicsToolPreviewGroup = (
   if (selectedGroupId === null) {
     return {
       ...state,
-      selectedGroupId: null
+      selectedGroupId: null,
+      definitionOverridesByGroupId: {}
     };
   }
 
@@ -553,13 +557,6 @@ export const setDynamicsToolPreviewDriverValue = (
     ...currentDriverValues,
     [input.parameterId]: nextValue
   };
-  const previousState = state.simulationStatesByGroupId[input.dynamicsGroupId];
-  const stepped = stepDynamicsToolPreview({
-    definition: group,
-    inputValues: driverValues,
-    previousState,
-    resetApplied: false
-  });
 
   recordLive2dPerformanceCounter("dynamicsPreview.appliedUpdates");
   return {
@@ -568,11 +565,99 @@ export const setDynamicsToolPreviewDriverValue = (
     driverValuesByGroupId: {
       ...state.driverValuesByGroupId,
       [input.dynamicsGroupId]: driverValues
+    }
+  };
+};
+
+export const advanceDynamicsToolPreviewSimulation = (
+  session: AuthoringSession,
+  state: DynamicsToolPreviewState,
+  input: {
+    readonly dynamicsGroupId: DynamicsGroupId;
+    readonly dtMs: number;
+  }
+): DynamicsToolPreviewState => {
+  if (state.selectedGroupId !== input.dynamicsGroupId || input.dtMs <= 0) {
+    return state;
+  }
+
+  const definition = resolvePreviewDynamicsDefinition(session, state, input.dynamicsGroupId);
+  if (definition === undefined) {
+    return state;
+  }
+
+  const driverValues =
+    state.driverValuesByGroupId[input.dynamicsGroupId] ??
+    createDefaultDriverValues(session, definition);
+  const previousState = state.simulationStatesByGroupId[input.dynamicsGroupId];
+  const stepped = stepDynamicsToolPreview({
+    definition,
+    inputValues: driverValues,
+    previousState,
+    resetApplied: false,
+    dtMs: input.dtMs
+  });
+
+  if (stepped.state === previousState) {
+    return state;
+  }
+
+  recordLive2dPerformanceCounter("dynamicsPreview.animationTicks");
+  return {
+    ...state,
+    driverValuesByGroupId: {
+      ...state.driverValuesByGroupId,
+      [input.dynamicsGroupId]: driverValues
     },
     simulationStatesByGroupId: {
       ...state.simulationStatesByGroupId,
       [input.dynamicsGroupId]: stepped.state
     }
+  };
+};
+
+export const setDynamicsToolPreviewDefinitionOverride = (
+  session: AuthoringSession,
+  state: DynamicsToolPreviewState,
+  input: {
+    readonly dynamicsGroupId: DynamicsGroupId;
+    readonly definition: DynamicsToolGroup;
+  }
+): DynamicsToolPreviewState => {
+  if (findDynamicsGroup(session, input.dynamicsGroupId) === undefined) {
+    return state;
+  }
+
+  const definition = cloneDynamicsGroup(input.definition);
+  const current = state.definitionOverridesByGroupId[input.dynamicsGroupId];
+  if (current !== undefined && sameDynamicsDefinition(current, definition)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    definitionOverridesByGroupId: {
+      ...state.definitionOverridesByGroupId,
+      [input.dynamicsGroupId]: definition
+    }
+  };
+};
+
+export const clearDynamicsToolPreviewDefinitionOverride = (
+  state: DynamicsToolPreviewState,
+  dynamicsGroupId: DynamicsGroupId
+): DynamicsToolPreviewState => {
+  if (state.definitionOverridesByGroupId[dynamicsGroupId] === undefined) {
+    return state;
+  }
+
+  const remainingOverrides: Record<string, DynamicsToolGroup> = {
+    ...state.definitionOverridesByGroupId
+  };
+  delete remainingOverrides[dynamicsGroupId];
+  return {
+    ...state,
+    definitionOverridesByGroupId: remainingOverrides
   };
 };
 
@@ -585,7 +670,7 @@ export const resetDynamicsToolPreviewSimulation = (
     return state;
   }
 
-  const group = findDynamicsGroup(session, dynamicsGroupId);
+  const group = resolvePreviewDynamicsDefinition(session, state, dynamicsGroupId);
   if (group === undefined) {
     return state;
   }
@@ -627,7 +712,7 @@ export const createDynamicsToolPreviewEvaluation = (
     };
   }
 
-  const group = findDynamicsGroup(session, selectedGroupId);
+  const group = resolvePreviewDynamicsDefinition(session, state, selectedGroupId);
   if (group === undefined) {
     return {
       selectedGroupId: null,
@@ -715,6 +800,7 @@ const stepDynamicsToolPreview = (input: {
   readonly previousState: RuntimeDynamicsGroupState | undefined;
   readonly inputValues: Readonly<Record<string, number>>;
   readonly resetApplied: boolean;
+  readonly dtMs: number;
 }): {
   readonly state: RuntimeDynamicsGroupState;
   readonly source: ReturnType<typeof computeDynamicsSource>;
@@ -725,34 +811,44 @@ const stepDynamicsToolPreview = (input: {
       ? createResetDynamicsState(source.source, input.previousState?.resetCounter ?? 0, input.resetApplied)
       : input.previousState;
   const pendulum = input.definition.pendulums[0];
-  if (input.resetApplied || pendulum === undefined || !input.definition.enabled) {
+  const dtMs = clamp(input.dtMs, 0, DYNAMICS_TOOL_PREVIEW_MAX_ELAPSED_MS);
+  if (input.resetApplied || pendulum === undefined || !input.definition.enabled || dtMs === 0) {
     return {
       state: previousState,
       source
     };
   }
 
-  const dtSeconds = DYNAMICS_TOOL_PREVIEW_STEP_MS / 1000;
   const length = Math.max(pendulum.length, 0.0001);
-  const sourceVelocity = (source.source - previousState.previousSource) / dtSeconds;
-  const sourceAcceleration = (sourceVelocity - previousState.previousSourceVelocity) / dtSeconds;
-  const angularAcceleration =
-    ((source.source - previousState.angle) * pendulum.reactionSpeed) / length +
-    sourceAcceleration * pendulum.sway -
-    previousState.angularVelocity * pendulum.convergenceSpeed;
-  const angularVelocity = previousState.angularVelocity + angularAcceleration * dtSeconds;
-  const angle = previousState.angle + angularVelocity * dtSeconds;
+  let nextState = previousState;
+  let remainingMs = dtMs;
 
-  return {
-    source,
-    state: {
+  while (remainingMs > 0.000001) {
+    const stepMs = Math.min(DYNAMICS_TOOL_PREVIEW_STEP_MS, remainingMs);
+    const dtSeconds = stepMs / 1000;
+    const sourceVelocity = (source.source - nextState.previousSource) / dtSeconds;
+    const sourceAcceleration = (sourceVelocity - nextState.previousSourceVelocity) / dtSeconds;
+    const angularAcceleration =
+      ((source.source - nextState.angle) * pendulum.reactionSpeed) / length +
+      sourceAcceleration * pendulum.sway -
+      nextState.angularVelocity * pendulum.convergenceSpeed;
+    const angularVelocity = nextState.angularVelocity + angularAcceleration * dtSeconds;
+    const angle = nextState.angle + angularVelocity * dtSeconds;
+
+    nextState = {
       angle,
       angularVelocity,
       previousSource: source.source,
       previousSourceVelocity: sourceVelocity,
-      tick: previousState.tick + 1,
-      resetCounter: previousState.resetCounter
-    }
+      tick: nextState.tick + 1,
+      resetCounter: nextState.resetCounter
+    };
+    remainingMs -= stepMs;
+  }
+
+  return {
+    source,
+    state: nextState
   };
 };
 
@@ -873,6 +969,19 @@ const findDynamicsGroup = (
 ): DynamicsToolGroup | undefined =>
   session.graph.dynamicsGroups.find((group) => group.dynamicsGroupId === dynamicsGroupId);
 
+const resolvePreviewDynamicsDefinition = (
+  session: AuthoringSession,
+  state: DynamicsToolPreviewState,
+  dynamicsGroupId: DynamicsGroupId
+): DynamicsToolGroup | undefined => {
+  const group = findDynamicsGroup(session, dynamicsGroupId);
+  if (group === undefined) {
+    return undefined;
+  }
+
+  return state.definitionOverridesByGroupId[dynamicsGroupId] ?? group;
+};
+
 const findEditorParameter = (
   session: AuthoringSession,
   parameterId: ParameterId | undefined
@@ -912,6 +1021,80 @@ const cloneDynamicsOutput = (output: DynamicsOutputPayloadDto): DynamicsOutputPa
   invert: output.invert,
   limit: output.limit
 });
+
+const cloneDynamicsGroup = (group: DynamicsToolGroup): DynamicsToolGroup => ({
+  dynamicsGroupId: group.dynamicsGroupId,
+  displayName: group.displayName,
+  enabled: group.enabled,
+  ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
+  inputs: group.inputs.map(cloneDynamicsInput),
+  pendulums: group.pendulums.map(cloneDynamicsPendulum),
+  outputs: group.outputs.map(cloneDynamicsOutput)
+});
+
+const sameDynamicsDefinition = (
+  left: DynamicsToolGroup,
+  right: DynamicsToolGroup
+): boolean =>
+  left.dynamicsGroupId === right.dynamicsGroupId &&
+  left.displayName === right.displayName &&
+  left.enabled === right.enabled &&
+  left.presetId === right.presetId &&
+  sameDynamicsInputs(left.inputs, right.inputs) &&
+  sameDynamicsPendulums(left.pendulums, right.pendulums) &&
+  sameDynamicsOutputs(left.outputs, right.outputs);
+
+const sameDynamicsInputs = (
+  left: readonly DynamicsInputPayloadDto[],
+  right: readonly DynamicsInputPayloadDto[]
+): boolean =>
+  left.length === right.length &&
+  left.every((input, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      input.parameterId === other.parameterId &&
+      input.kind === other.kind &&
+      input.influencePercent === other.influencePercent &&
+      input.invert === other.invert &&
+      input.normalization.min === other.normalization.min &&
+      input.normalization.center === other.normalization.center &&
+      input.normalization.max === other.normalization.max
+    );
+  });
+
+const sameDynamicsPendulums = (
+  left: readonly DynamicsPendulumPayloadDto[],
+  right: readonly DynamicsPendulumPayloadDto[]
+): boolean =>
+  left.length === right.length &&
+  left.every((pendulum, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      pendulum.length === other.length &&
+      pendulum.sway === other.sway &&
+      pendulum.reactionSpeed === other.reactionSpeed &&
+      pendulum.convergenceSpeed === other.convergenceSpeed
+    );
+  });
+
+const sameDynamicsOutputs = (
+  left: readonly DynamicsOutputPayloadDto[],
+  right: readonly DynamicsOutputPayloadDto[]
+): boolean =>
+  left.length === right.length &&
+  left.every((output, index) => {
+    const other = right[index];
+    return (
+      other !== undefined &&
+      output.parameterId === other.parameterId &&
+      output.kind === other.kind &&
+      output.strength === other.strength &&
+      output.invert === other.invert &&
+      output.limit === other.limit
+    );
+  });
 
 const errorIssue = (
   code: string,

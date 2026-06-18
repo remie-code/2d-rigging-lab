@@ -3,7 +3,8 @@ import {
   createDynamicsGroupIdFromDisplayName,
   type DynamicsInputPayloadDto,
   type DynamicsOutputPayloadDto,
-  type DynamicsPendulumPayloadDto
+  type DynamicsPendulumPayloadDto,
+  type UpdateDynamicsGroupPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
   AlertTriangle,
@@ -16,7 +17,7 @@ import {
   Trash2,
   Waves
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import {
@@ -26,6 +27,7 @@ import {
   createDynamicsGroupDraftFromGroup,
   createDynamicsGroupDraftFromSession,
   createDynamicsGroupUpdatePayloadFromDraft,
+  DYNAMICS_TOOL_PREVIEW_STEP_MS,
   DYNAMICS_TOOL_PRESETS,
   getDynamicsToolPreset,
   hasBlockingDynamicsToolIssues,
@@ -58,12 +60,14 @@ type DynamicsInspectorMode =
 
 export function DynamicsToolInspector() {
   const {
+    advanceDynamicsToolPreviewSimulation,
+    clearDynamicsToolPreviewDefinitionOverride,
     createDynamicsGroup,
     deleteDynamicsGroup,
     dynamicsToolPreview,
-    dynamicsToolPreviewEvaluation,
     resetDynamicsToolPreviewSimulation,
     session,
+    setDynamicsToolPreviewDefinitionOverride,
     setDynamicsToolPreviewDriverValue,
     setDynamicsToolPreviewGroupId,
     updateDynamicsGroup
@@ -217,6 +221,19 @@ export function DynamicsToolInspector() {
     setOperationMessage(formatOperationDiagnostics(result.diagnostics));
   };
 
+  const commitQuickTune = (payload: UpdateDynamicsGroupPayloadDto): boolean => {
+    const result = updateDynamicsGroup(payload);
+    if (result.committed) {
+      setOperationMessage("Dynamics Group tuned.");
+      return true;
+    }
+
+    if (result.diagnostics.length > 0) {
+      setOperationMessage(formatOperationDiagnostics(result.diagnostics));
+    }
+    return false;
+  };
+
   const updateInput = (index: number, patch: Partial<DynamicsInputPayloadDto>) => {
     setDraft((current) => updateDynamicsDraftInput(session, current, index, patch));
   };
@@ -244,12 +261,15 @@ export function DynamicsToolInspector() {
       {mode.kind === "group" && activeGroup !== undefined ? (
         <ExistingGroupInspector
           dynamicsToolPreview={dynamicsToolPreview}
-          dynamicsToolPreviewEvaluation={dynamicsToolPreviewEvaluation}
           group={activeGroup}
+          onAdvancePreview={advanceDynamicsToolPreviewSimulation}
           onBack={returnToList}
+          onClearQuickTunePreview={clearDynamicsToolPreviewDefinitionOverride}
           onDelete={() => deleteGroup(activeGroup)}
           onEdit={() => openEdit(activeGroup)}
           onPreviewDriverChange={setDynamicsToolPreviewDriverValue}
+          onQuickTuneCommit={commitQuickTune}
+          onQuickTunePreviewChange={setDynamicsToolPreviewDefinitionOverride}
           onResetPreview={() => resetDynamicsToolPreviewSimulation(activeGroup.dynamicsGroupId)}
           operationMessage={operationMessage}
           parameters={parameters}
@@ -366,20 +386,27 @@ function GroupList({
 
 function ExistingGroupInspector({
   dynamicsToolPreview,
-  dynamicsToolPreviewEvaluation,
   group,
+  onAdvancePreview,
   onBack,
+  onClearQuickTunePreview,
   onDelete,
   onEdit,
   onPreviewDriverChange,
+  onQuickTuneCommit,
+  onQuickTunePreviewChange,
   onResetPreview,
   operationMessage,
   parameters
 }: {
   readonly dynamicsToolPreview: ReturnType<typeof useEditorSession>["dynamicsToolPreview"];
-  readonly dynamicsToolPreviewEvaluation: ReturnType<typeof useEditorSession>["dynamicsToolPreviewEvaluation"];
   readonly group: DynamicsToolGroup;
+  readonly onAdvancePreview: (
+    dynamicsGroupId: DynamicsGroupId,
+    dtMs: number
+  ) => void;
   readonly onBack: () => void;
+  readonly onClearQuickTunePreview: (dynamicsGroupId: DynamicsGroupId) => void;
   readonly onDelete: () => void;
   readonly onEdit: () => void;
   readonly onPreviewDriverChange: (
@@ -387,11 +414,88 @@ function ExistingGroupInspector({
     parameterId: ParameterId,
     value: number
   ) => void;
+  readonly onQuickTuneCommit: (payload: UpdateDynamicsGroupPayloadDto) => boolean;
+  readonly onQuickTunePreviewChange: (
+    dynamicsGroupId: DynamicsGroupId,
+    definition: DynamicsToolGroup
+  ) => void;
   readonly onResetPreview: () => void;
   readonly operationMessage: string | null;
   readonly parameters: readonly EditorParameter[];
 }) {
   const previewDriverValues = dynamicsToolPreview.driverValuesByGroupId[group.dynamicsGroupId] ?? {};
+  const committedQuickTuneSignature = useMemo(
+    () => createQuickTuneSignature(createQuickTuneDraftFromGroup(group)),
+    [group]
+  );
+  const [quickTuneDraft, setQuickTuneDraft] = useState<QuickTuneDraft>(() =>
+    createQuickTuneDraftFromGroup(group)
+  );
+  const finalizedQuickTuneSignatureRef = useRef<string | null>(null);
+  const quickTunePreviewDefinition = useMemo(
+    () => applyQuickTuneDraftToGroup(group, quickTuneDraft),
+    [group, quickTuneDraft]
+  );
+
+  useDynamicsPreviewAnimationLoop({
+    enabled: dynamicsToolPreview.selectedGroupId === group.dynamicsGroupId,
+    groupId: group.dynamicsGroupId,
+    onAdvance: onAdvancePreview
+  });
+
+  useEffect(() => {
+    finalizedQuickTuneSignatureRef.current = null;
+    setQuickTuneDraft(createQuickTuneDraftFromGroup(group));
+  }, [committedQuickTuneSignature, group]);
+
+  useEffect(
+    () => () => {
+      onClearQuickTunePreview(group.dynamicsGroupId);
+    },
+    [group.dynamicsGroupId, onClearQuickTunePreview]
+  );
+
+  useEffect(() => {
+    if (sameQuickTuneDraftAsGroup(group, quickTuneDraft)) {
+      onClearQuickTunePreview(group.dynamicsGroupId);
+      return;
+    }
+
+    onQuickTunePreviewChange(group.dynamicsGroupId, quickTunePreviewDefinition);
+  }, [
+    group,
+    onClearQuickTunePreview,
+    onQuickTunePreviewChange,
+    quickTuneDraft,
+    quickTunePreviewDefinition
+  ]);
+
+  const updateQuickTuneDraft = (field: QuickTuneField, rawValue: number) => {
+    setQuickTuneDraft((current) => updateQuickTuneDraftValue(current, field, rawValue));
+  };
+
+  const finalizeQuickTuneDraft = (field: QuickTuneField, rawValue: number) => {
+    const nextDraft = updateQuickTuneDraftValue(quickTuneDraft, field, rawValue);
+    const nextSignature = createQuickTuneSignature(nextDraft);
+    setQuickTuneDraft(nextDraft);
+    if (sameQuickTuneDraftAsGroup(group, nextDraft)) {
+      onClearQuickTunePreview(group.dynamicsGroupId);
+      return;
+    }
+    if (finalizedQuickTuneSignatureRef.current === nextSignature) {
+      return;
+    }
+
+    const nextGroup = applyQuickTuneDraftToGroup(group, nextDraft);
+    const committed = onQuickTuneCommit({
+      dynamicsGroupId: group.dynamicsGroupId,
+      pendulums: nextGroup.pendulums.map(cloneDynamicsPendulumForPayload),
+      outputs: nextGroup.outputs.map(cloneDynamicsOutputForPayload)
+    });
+    if (committed) {
+      finalizedQuickTuneSignatureRef.current = nextSignature;
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3" data-testid="dynamics-group-inspector">
@@ -429,25 +533,6 @@ function ExistingGroupInspector({
               />
             );
           })}
-          <div className="divide-y divide-neutral-800 rounded border border-neutral-800 bg-neutral-950/60 px-2">
-            <SummaryRow label="Source" value={formatParameterValue(dynamicsToolPreviewEvaluation.source)} />
-            <SummaryRow
-              label="Angle"
-              value={formatParameterValue(dynamicsToolPreviewEvaluation.state?.angle ?? 0)}
-            />
-            <SummaryRow
-              label="Offset"
-              value={formatParameterValue(dynamicsToolPreviewEvaluation.output?.offset ?? 0)}
-            />
-            <SummaryRow
-              label="Effective"
-              value={formatParameterValue(
-                dynamicsToolPreviewEvaluation.output?.effectiveValue ??
-                  dynamicsToolPreviewEvaluation.output?.baseValue ??
-                  0
-              )}
-            />
-          </div>
           <PanelButton label="Reset Preview" onClick={onResetPreview} testId="dynamics-preview-reset">
             <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
             Reset Preview
@@ -455,21 +540,40 @@ function ExistingGroupInspector({
         </div>
       </Section>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
-        <PanelButton label="Edit" onClick={onEdit} testId="dynamics-edit-group">
-          <Pencil aria-hidden="true" size={14} strokeWidth={1.8} />
-          Edit
-        </PanelButton>
-        <button
-          className="flex min-h-8 items-center justify-center gap-2 rounded border border-red-900/60 bg-red-950/20 px-2 text-xs font-medium text-red-100 transition hover:border-red-700"
-          data-testid="dynamics-delete-group"
-          onClick={onDelete}
-          type="button"
+      <Section title="Quick Tune">
+        <div
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2"
+          data-testid="dynamics-quick-tune"
         >
-          <Trash2 aria-hidden="true" size={14} strokeWidth={1.8} />
-          Delete Group
-        </button>
-      </div>
+          {QUICK_TUNE_FIELDS.map((field) => (
+            <QuickTuneControl
+              field={field}
+              key={field}
+              onFinalize={finalizeQuickTuneDraft}
+              onLiveChange={updateQuickTuneDraft}
+              value={quickTuneDraft[field]}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Actions">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+          <PanelButton label="Edit" onClick={onEdit} testId="dynamics-edit-group">
+            <Pencil aria-hidden="true" size={14} strokeWidth={1.8} />
+            Edit
+          </PanelButton>
+          <button
+            className="flex min-h-8 items-center justify-center gap-2 rounded border border-red-900/60 bg-red-950/20 px-2 text-xs font-medium text-red-100 transition hover:border-red-700"
+            data-testid="dynamics-delete-group"
+            onClick={onDelete}
+            type="button"
+          >
+            <Trash2 aria-hidden="true" size={14} strokeWidth={1.8} />
+            Delete Group
+          </button>
+        </div>
+      </Section>
 
       {operationMessage === null ? null : (
         <OperationMessage message={operationMessage} />
@@ -540,6 +644,333 @@ function PreviewDriverControl({
       </div>
     </label>
   );
+}
+
+type QuickTuneField =
+  | "strength"
+  | "limit"
+  | "length"
+  | "sway"
+  | "reactionSpeed"
+  | "convergenceSpeed";
+
+interface QuickTuneDraft {
+  readonly strength: number;
+  readonly limit: number;
+  readonly length: number;
+  readonly sway: number;
+  readonly reactionSpeed: number;
+  readonly convergenceSpeed: number;
+}
+
+const QUICK_TUNE_FIELDS: readonly QuickTuneField[] = [
+  "strength",
+  "limit",
+  "length",
+  "sway",
+  "reactionSpeed",
+  "convergenceSpeed"
+];
+
+function QuickTuneControl({
+  field,
+  onFinalize,
+  onLiveChange,
+  value
+}: {
+  readonly field: QuickTuneField;
+  readonly onFinalize: (field: QuickTuneField, value: number) => void;
+  readonly onLiveChange: (field: QuickTuneField, value: number) => void;
+  readonly value: number;
+}) {
+  const label = getQuickTuneLabel(field);
+  const bounds = getQuickTuneBounds(field, value);
+  const latestValueRef = useRef(value);
+  const sliderCommit = useRafCoalescedNumberCommit({
+    counterPrefix: "dynamicsQuickTune.slider",
+    onCommit: (nextValue) => onLiveChange(field, nextValue)
+  });
+
+  useEffect(() => {
+    latestValueRef.current = value;
+  }, [value]);
+
+  const scheduleSliderValue = (rawValue: number) => {
+    const nextValue = normalizeQuickTuneValue(field, rawValue);
+    latestValueRef.current = nextValue;
+    sliderCommit.schedule(nextValue);
+  };
+
+  const finalize = () => {
+    sliderCommit.flush();
+    onFinalize(field, latestValueRef.current);
+  };
+
+  return (
+    <label
+      className="flex min-w-0 flex-col gap-1 text-xs text-neutral-500"
+      data-testid={`dynamics-quick-tune-${field}`}
+    >
+      {label}
+      <input
+        aria-label={`${label} quick tune`}
+        className="h-2 accent-teal-400"
+        max={bounds.max}
+        min={bounds.min}
+        onBlur={finalize}
+        onChange={(event) =>
+          scheduleSliderValue(readFiniteInputValue(event.currentTarget.value, value))
+        }
+        onPointerCancel={finalize}
+        onPointerUp={finalize}
+        step={bounds.step}
+        type="range"
+        value={value}
+      />
+      <input
+        aria-label={`${label} quick tune value`}
+        className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500"
+        min={bounds.min}
+        onBlur={finalize}
+        onChange={(event) => {
+          const nextValue = normalizeQuickTuneValue(
+            field,
+            readFiniteInputValue(event.currentTarget.value, value)
+          );
+          latestValueRef.current = nextValue;
+          onLiveChange(field, nextValue);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            finalize();
+          }
+        }}
+        step={bounds.step}
+        type="number"
+        value={formatParameterValue(value)}
+      />
+    </label>
+  );
+}
+
+function createQuickTuneDraftFromGroup(group: DynamicsToolGroup): QuickTuneDraft {
+  const pendulum = group.pendulums[0];
+  const output = group.outputs[0];
+
+  return {
+    strength: output?.strength ?? 0,
+    limit: output?.limit ?? 0,
+    length: pendulum?.length ?? 1,
+    sway: pendulum?.sway ?? 0,
+    reactionSpeed: pendulum?.reactionSpeed ?? 0,
+    convergenceSpeed: pendulum?.convergenceSpeed ?? 0
+  };
+}
+
+function updateQuickTuneDraftValue(
+  draft: QuickTuneDraft,
+  field: QuickTuneField,
+  rawValue: number
+): QuickTuneDraft {
+  const value = normalizeQuickTuneValue(field, rawValue);
+  return sameNumericValue(draft[field], value)
+    ? draft
+    : {
+        ...draft,
+        [field]: value
+      };
+}
+
+function applyQuickTuneDraftToGroup(
+  group: DynamicsToolGroup,
+  draft: QuickTuneDraft
+): DynamicsToolGroup {
+  const output = group.outputs[0];
+
+  return {
+    dynamicsGroupId: group.dynamicsGroupId,
+    displayName: group.displayName,
+    enabled: group.enabled,
+    ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
+    inputs: group.inputs.map(cloneDynamicsInputForPayload),
+    pendulums: [
+      {
+        length: draft.length,
+        sway: draft.sway,
+        reactionSpeed: draft.reactionSpeed,
+        convergenceSpeed: draft.convergenceSpeed
+      }
+    ],
+    outputs:
+      output === undefined
+        ? []
+        : [
+            {
+              parameterId: output.parameterId,
+              kind: output.kind,
+              strength: draft.strength,
+              invert: output.invert,
+              limit: draft.limit
+            }
+          ]
+  };
+}
+
+function sameQuickTuneDraftAsGroup(
+  group: DynamicsToolGroup,
+  draft: QuickTuneDraft
+): boolean {
+  const committed = createQuickTuneDraftFromGroup(group);
+  return (
+    sameNumericValue(committed.strength, draft.strength) &&
+    sameNumericValue(committed.limit, draft.limit) &&
+    sameNumericValue(committed.length, draft.length) &&
+    sameNumericValue(committed.sway, draft.sway) &&
+    sameNumericValue(committed.reactionSpeed, draft.reactionSpeed) &&
+    sameNumericValue(committed.convergenceSpeed, draft.convergenceSpeed)
+  );
+}
+
+function createQuickTuneSignature(draft: QuickTuneDraft): string {
+  return [
+    draft.strength,
+    draft.limit,
+    draft.length,
+    draft.sway,
+    draft.reactionSpeed,
+    draft.convergenceSpeed
+  ].join(":");
+}
+
+function getQuickTuneLabel(field: QuickTuneField): string {
+  switch (field) {
+    case "strength":
+      return "Strength";
+    case "limit":
+      return "Limit";
+    case "length":
+      return "Length";
+    case "sway":
+      return "Sway";
+    case "reactionSpeed":
+      return "Reaction";
+    case "convergenceSpeed":
+      return "Convergence";
+  }
+}
+
+function getQuickTuneBounds(
+  field: QuickTuneField,
+  value: number
+): {
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+} {
+  const magnitude = Math.abs(value);
+  switch (field) {
+    case "strength":
+      return { min: 0, max: Math.max(1, magnitude * 2), step: 0.01 };
+    case "limit":
+      return { min: 0, max: Math.max(1, magnitude * 2), step: 0.01 };
+    case "length":
+      return { min: 0.01, max: Math.max(2.5, magnitude * 2), step: 0.01 };
+    case "sway":
+      return { min: 0, max: Math.max(2, magnitude * 2), step: 0.01 };
+    case "reactionSpeed":
+      return { min: 0, max: Math.max(30, magnitude * 2), step: 0.1 };
+    case "convergenceSpeed":
+      return { min: 0, max: Math.max(20, magnitude * 2), step: 0.1 };
+  }
+}
+
+function normalizeQuickTuneValue(field: QuickTuneField, value: number): number {
+  if (!Number.isFinite(value)) {
+    return field === "length" ? 0.01 : 0;
+  }
+
+  const min = field === "length" ? 0.01 : 0;
+  return Number(Math.max(value, min).toFixed(6));
+}
+
+function cloneDynamicsInputForPayload(input: DynamicsInputPayloadDto): DynamicsInputPayloadDto {
+  return {
+    parameterId: input.parameterId,
+    kind: input.kind,
+    influencePercent: input.influencePercent,
+    invert: input.invert,
+    normalization: {
+      min: input.normalization.min,
+      center: input.normalization.center,
+      max: input.normalization.max
+    }
+  };
+}
+
+function cloneDynamicsPendulumForPayload(
+  pendulum: DynamicsPendulumPayloadDto
+): DynamicsPendulumPayloadDto {
+  return {
+    length: pendulum.length,
+    sway: pendulum.sway,
+    reactionSpeed: pendulum.reactionSpeed,
+    convergenceSpeed: pendulum.convergenceSpeed
+  };
+}
+
+function cloneDynamicsOutputForPayload(output: DynamicsOutputPayloadDto): DynamicsOutputPayloadDto {
+  return {
+    parameterId: output.parameterId,
+    kind: output.kind,
+    strength: output.strength,
+    invert: output.invert,
+    limit: output.limit
+  };
+}
+
+function useDynamicsPreviewAnimationLoop({
+  enabled,
+  groupId,
+  onAdvance
+}: {
+  readonly enabled: boolean;
+  readonly groupId: DynamicsGroupId;
+  readonly onAdvance: (groupId: DynamicsGroupId, dtMs: number) => void;
+}) {
+  const lastTimestampRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || typeof globalThis.requestAnimationFrame !== "function") {
+      lastTimestampRef.current = null;
+      return;
+    }
+
+    let active = true;
+    let frameId: number | null = null;
+    const tick = (timestamp: number) => {
+      if (!active) {
+        return;
+      }
+
+      const dtMs =
+        lastTimestampRef.current === null
+          ? DYNAMICS_TOOL_PREVIEW_STEP_MS
+          : timestamp - lastTimestampRef.current;
+      lastTimestampRef.current = timestamp;
+      onAdvance(groupId, Math.max(0, dtMs));
+      frameId = globalThis.requestAnimationFrame(tick);
+    };
+
+    frameId = globalThis.requestAnimationFrame(tick);
+
+    return () => {
+      active = false;
+      lastTimestampRef.current = null;
+      if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
+        globalThis.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [enabled, groupId, onAdvance]);
 }
 
 function DraftInspector({
@@ -1121,4 +1552,8 @@ function formatOperationDiagnostics(diagnostics: readonly { readonly message?: s
 function readFiniteInputValue(value: string, fallbackValue: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallbackValue;
+}
+
+function sameNumericValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }

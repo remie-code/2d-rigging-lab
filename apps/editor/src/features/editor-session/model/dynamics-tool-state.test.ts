@@ -5,11 +5,16 @@ import { describe, expect, it } from "vitest";
 import { createEmptyAuthoringSession } from "./empty-authoring-session";
 import {
   addInputToDynamicsDraft,
+  advanceDynamicsToolPreviewSimulation,
+  clearDynamicsToolPreviewDefinitionOverride,
   createDefaultDynamicsInput,
   createDefaultDynamicsOutput,
   createDynamicsGroupDraftFromSession,
   createDynamicsToolPreviewEvaluation,
+  createInitialDynamicsToolPreviewState,
   resetDynamicsToolPreviewSimulation,
+  selectDynamicsToolPreviewGroup,
+  setDynamicsToolPreviewDefinitionOverride,
   setDynamicsToolPreviewDriverValue,
   validateDynamicsToolDraft,
   type DynamicsToolPreviewState
@@ -119,6 +124,7 @@ describe("Dynamics Tool state", () => {
             resetCounter: 1
           }
         },
+        definitionOverridesByGroupId: {},
         resetSerial: 0
       },
       {
@@ -151,6 +157,162 @@ describe("Dynamics Tool state", () => {
     expect(evaluation.parameterValues[OUTPUT_SWAY]).toBe(5);
   });
 
+  it("advances preview simulation across frames using elapsed time", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push(createDynamicsGroup());
+    let state = selectDynamicsToolPreviewGroup(
+      session,
+      createInitialDynamicsToolPreviewState(),
+      GROUP_ID
+    );
+    state = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: 30
+    });
+
+    const first = advanceDynamicsToolPreviewSimulation(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+    const second = advanceDynamicsToolPreviewSimulation(session, first, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+
+    expect(first.simulationStatesByGroupId[GROUP_ID]?.tick).toBe(1);
+    expect(second.simulationStatesByGroupId[GROUP_ID]?.tick).toBe(2);
+    expect(second.simulationStatesByGroupId[GROUP_ID]?.angle).not.toBe(
+      first.simulationStatesByGroupId[GROUP_ID]?.angle
+    );
+  });
+
+  it("uses later driver values on subsequent frames", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push(createDynamicsGroup());
+    let state = selectDynamicsToolPreviewGroup(
+      session,
+      createInitialDynamicsToolPreviewState(),
+      GROUP_ID
+    );
+    state = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: 30
+    });
+    state = advanceDynamicsToolPreviewSimulation(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+
+    state = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: -30
+    });
+    const afterDriverChange = advanceDynamicsToolPreviewSimulation(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+
+    expect(afterDriverChange.driverValuesByGroupId[GROUP_ID]?.[DRIVER_X]).toBe(-30);
+    expect(afterDriverChange.simulationStatesByGroupId[GROUP_ID]).toMatchObject({
+      previousSource: -1,
+      tick: 2
+    });
+  });
+
+  it("keeps moving after driver input stops and settles toward the held source", () => {
+    const session = createDynamicsSession();
+    const group = createDynamicsGroup();
+    group.pendulums = [
+      {
+        length: 1,
+        sway: 0.05,
+        reactionSpeed: 8,
+        convergenceSpeed: 10
+      }
+    ];
+    session.graph.dynamicsGroups.push(group);
+    let state = selectDynamicsToolPreviewGroup(
+      session,
+      createInitialDynamicsToolPreviewState(),
+      GROUP_ID
+    );
+    state = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: 30
+    });
+    const first = advanceDynamicsToolPreviewSimulation(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      dtMs: 16.6666667
+    });
+    let settled = first;
+    for (let index = 0; index < 120; index += 1) {
+      settled = advanceDynamicsToolPreviewSimulation(session, settled, {
+        dynamicsGroupId: GROUP_ID,
+        dtMs: 16.6666667
+      });
+    }
+
+    const firstState = first.simulationStatesByGroupId[GROUP_ID];
+    const settledState = settled.simulationStatesByGroupId[GROUP_ID];
+    expect(firstState?.tick).toBe(1);
+    expect(settledState?.tick).toBe(121);
+    expect(Math.abs(settledState?.angularVelocity ?? 0)).toBeLessThan(
+      Math.abs(firstState?.angularVelocity ?? 0)
+    );
+    expect(Math.abs((settledState?.angle ?? 0) - 1)).toBeLessThan(
+      Math.abs((firstState?.angle ?? 0) - 1)
+    );
+  });
+
+  it("uses session-local definition overrides for immediate Quick Tune preview", () => {
+    const session = createDynamicsSession();
+    const group = createDynamicsGroup();
+    session.graph.dynamicsGroups.push(group);
+    const state: DynamicsToolPreviewState = {
+      selectedGroupId: GROUP_ID,
+      driverValuesByGroupId: {},
+      simulationStatesByGroupId: {
+        [GROUP_ID]: {
+          angle: 0.5,
+          angularVelocity: 0,
+          previousSource: 0,
+          previousSourceVelocity: 0,
+          tick: 1,
+          resetCounter: 1
+        }
+      },
+      definitionOverridesByGroupId: {},
+      resetSerial: 0
+    };
+    const tuned = setDynamicsToolPreviewDefinitionOverride(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      definition: {
+        ...group,
+        outputs: [
+          {
+            ...group.outputs[0]!,
+            strength: 4
+          }
+        ]
+      }
+    });
+
+    expect(createDynamicsToolPreviewEvaluation(session, tuned).output).toMatchObject({
+      offset: 2,
+      effectiveValue: 2
+    });
+
+    const cleared = clearDynamicsToolPreviewDefinitionOverride(tuned, GROUP_ID);
+    expect(createDynamicsToolPreviewEvaluation(session, cleared).output).toMatchObject({
+      offset: 5,
+      effectiveValue: 5
+    });
+  });
+
   it("resets only the session-local simulation state", () => {
     const session = createDynamicsSession();
     session.graph.dynamicsGroups.push(createDynamicsGroup());
@@ -171,6 +333,7 @@ describe("Dynamics Tool state", () => {
           resetCounter: 2
         }
       },
+      definitionOverridesByGroupId: {},
       resetSerial: 0
     };
 
@@ -205,6 +368,7 @@ describe("Dynamics Tool state", () => {
           resetCounter: 2
         }
       },
+      definitionOverridesByGroupId: {},
       resetSerial: 0
     };
 
