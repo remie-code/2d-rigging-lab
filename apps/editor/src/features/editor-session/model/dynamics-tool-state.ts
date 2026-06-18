@@ -4,6 +4,7 @@ import type {
   ParameterId,
   RuntimeDynamicsGroupState
 } from "@private-2d-rigging-lab/contracts";
+import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 import type {
   CreateDynamicsGroupPayloadDto,
   DynamicsInputPayloadDto,
@@ -538,6 +539,16 @@ export const setDynamicsToolPreviewDriverValue = (
     parameter === undefined ? input.value : clampParameterValue(parameter, input.value);
   const currentDriverValues =
     state.driverValuesByGroupId[input.dynamicsGroupId] ?? createDefaultDriverValues(session, group);
+  const currentValue = currentDriverValues[input.parameterId];
+  if (
+    state.selectedGroupId === input.dynamicsGroupId &&
+    currentValue !== undefined &&
+    sameDynamicsPreviewValue(currentValue, nextValue)
+  ) {
+    recordLive2dPerformanceCounter("dynamicsPreview.skippedNoOpUpdates");
+    return state;
+  }
+
   const driverValues = {
     ...currentDriverValues,
     [input.parameterId]: nextValue
@@ -550,6 +561,7 @@ export const setDynamicsToolPreviewDriverValue = (
     resetApplied: false
   });
 
+  recordLive2dPerformanceCounter("dynamicsPreview.appliedUpdates");
   return {
     ...state,
     selectedGroupId: input.dynamicsGroupId,
@@ -935,3 +947,7 @@ const normalizePreviewNumber = (value: number): number => Number(value.toFixed(6
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
+
+function sameDynamicsPreviewValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
+}

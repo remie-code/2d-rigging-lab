@@ -1,5 +1,6 @@
 import {
   orderRenderDrawablesBackToFront,
+  recordLive2dPerformanceCounter,
   type RenderDrawable,
   type RendererBackend,
   type RenderRgba8TextureSource,
@@ -222,6 +223,15 @@ export class WebGl2Renderer implements RendererBackend {
       return;
     }
 
+    recordLive2dPerformanceCounter("webgl2.meshUploads");
+    recordLive2dPerformanceCounter(
+      "webgl2.meshUploadVertexBytes",
+      upload.vertices.byteLength
+    );
+    recordLive2dPerformanceCounter(
+      "webgl2.meshUploadIndexBytes",
+      upload.indices.byteLength
+    );
     const texture = this.textureCache.getTexture(textureSource);
     const stageToClip = createStageToClipUniform(viewport);
     this.gl.useProgram(this.programInfo.program);
@@ -249,6 +259,7 @@ export class WebGl2Renderer implements RendererBackend {
     );
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+    recordLive2dPerformanceCounter("webgl2.bufferDataCalls");
     this.gl.bufferData(this.gl.ARRAY_BUFFER, upload.vertices, this.gl.DYNAMIC_DRAW);
     this.gl.enableVertexAttribArray(this.programInfo.attributes.position);
     this.gl.vertexAttribPointer(this.programInfo.attributes.position, 2, this.gl.FLOAT, false, 16, 0);
@@ -256,6 +267,7 @@ export class WebGl2Renderer implements RendererBackend {
     this.gl.vertexAttribPointer(this.programInfo.attributes.uv, 2, this.gl.FLOAT, false, 16, 8);
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+    recordLive2dPerformanceCounter("webgl2.bufferDataCalls");
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, upload.indices, this.gl.DYNAMIC_DRAW);
     this.gl.drawElements(
       this.gl.TRIANGLES,

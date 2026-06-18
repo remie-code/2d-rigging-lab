@@ -34,6 +34,7 @@ import {
 } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
+import { useRafCoalescedNumberCommit } from "../controls/raf-coalesced-number";
 
 export function ParameterBar() {
   const {
@@ -334,6 +335,10 @@ function ParameterSlider({
   const max = activeParameter?.max ?? 1;
   const step = activeParameter?.recommendedUiStep ?? 0.01;
   const currentPercent = projectParameterSliderPercent(min, max, currentValue);
+  const scrubCommit = useRafCoalescedNumberCommit({
+    counterPrefix: "parameterBar.slider",
+    onCommit: onChange
+  });
 
   const updateFromPointer = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -347,7 +352,7 @@ function ParameterSlider({
         return;
       }
 
-      onChange(
+      scrubCommit.schedule(
         projectParameterSliderValue({
           clientX: event.clientX,
           max,
@@ -358,7 +363,7 @@ function ParameterSlider({
         })
       );
     },
-    [max, min, onChange, step]
+    [max, min, scrubCommit, step]
   );
 
   const startThumbDrag = useCallback(
@@ -388,17 +393,22 @@ function ParameterSlider({
     [updateFromPointer]
   );
 
-  const endThumbDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (activePointerIdRef.current !== event.pointerId) {
-      return;
-    }
+  const endThumbDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (activePointerIdRef.current !== event.pointerId) {
+        return;
+      }
 
-    event.preventDefault();
-    activePointerIdRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }, []);
+      event.preventDefault();
+      updateFromPointer(event);
+      activePointerIdRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      scrubCommit.flush();
+    },
+    [scrubCommit, updateFromPointer]
+  );
 
   return (
     <div

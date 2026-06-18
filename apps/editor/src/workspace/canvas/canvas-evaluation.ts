@@ -9,6 +9,10 @@ import type {
   RigControlId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
+import {
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming
+} from "@private-2d-rigging-lab/render-core";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 import {
@@ -202,6 +206,7 @@ export function createCanvasEvaluatedScene(
   session: AuthoringSession,
   options: CanvasEvaluationOptions = {}
 ): CanvasEvaluatedScene {
+  const timingStart = startLive2dPerformanceTiming();
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const textureEntriesById = new Map(
@@ -321,7 +326,7 @@ export function createCanvasEvaluatedScene(
       .map((drawable) => drawable.bounds)
   );
 
-  return {
+  const scene = {
     canvasBounds: resolveEvaluationCanvasBounds(session),
     ...(artworkBounds === undefined ? {} : { artworkBounds }),
     drawables,
@@ -334,6 +339,8 @@ export function createCanvasEvaluatedScene(
         targetDrawableIds: [...relation.targetDrawableIds]
       }))
   };
+  recordLive2dPerformanceTiming("canvas.evaluation.ms", timingStart);
+  return scene;
 }
 
 function createEvaluationRigControls(input: {

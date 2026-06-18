@@ -9,6 +9,7 @@ import {
   createGeneratedMeshForDrawable,
   createPackageDocumentBaseFromAuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
+import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 import type {
   DynamicsGroupId,
   DrawableId,
@@ -924,10 +925,23 @@ export function EditorSessionProvider({
         return;
       }
 
-      setParameterValues((current) => ({
-        ...current,
-        [resolvedActiveParameterId]: clampParameterValue(parameter, value)
-      }));
+      const nextValue = clampParameterValue(parameter, value);
+      setParameterValues((current) => {
+        const currentValue = clampParameterValue(
+          parameter,
+          current[resolvedActiveParameterId] ?? parameter.default
+        );
+        if (samePreviewParameterValue(currentValue, nextValue)) {
+          recordLive2dPerformanceCounter("parameterBar.skippedNoOpUpdates");
+          return current;
+        }
+
+        recordLive2dPerformanceCounter("parameterBar.appliedUpdates");
+        return {
+          ...current,
+          [resolvedActiveParameterId]: nextValue
+        };
+      });
     },
     [activeTool, resolvedActiveParameterId, session]
   );
@@ -948,10 +962,23 @@ export function EditorSessionProvider({
       return;
     }
 
-    setParameterValues((current) => ({
-      ...current,
-      [resolvedActiveParameterId]: parameter.default
-    }));
+    const nextValue = clampParameterValue(parameter, parameter.default);
+    setParameterValues((current) => {
+      const currentValue = clampParameterValue(
+        parameter,
+        current[resolvedActiveParameterId] ?? parameter.default
+      );
+      if (samePreviewParameterValue(currentValue, nextValue)) {
+        recordLive2dPerformanceCounter("parameterBar.skippedNoOpUpdates");
+        return current;
+      }
+
+      recordLive2dPerformanceCounter("parameterBar.appliedUpdates");
+      return {
+        ...current,
+        [resolvedActiveParameterId]: nextValue
+      };
+    });
   }, [activeTool, resolvedActiveParameterId, session]);
 
   const openParameterManager = useCallback(() => {
@@ -1836,4 +1863,8 @@ function formatCommandFeedback(result: EditorSessionCommandResult): string {
 
 function formatParameterCommandFeedback(result: EditorSessionCommandResult): string {
   return result.diagnostics[0]?.message ?? "Parameter definition operation was rejected.";
+}
+
+function samePreviewParameterValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }

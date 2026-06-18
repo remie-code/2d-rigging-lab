@@ -4,6 +4,9 @@ import {
   DEFAULT_RENDER_UV_SPACE,
   createRenderScene,
   createRgba8TextureContentSignature,
+  recordLive2dPerformanceCounter,
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming,
   type RenderDrawable,
   type RenderMesh,
   type RenderRgba8TextureSource,
@@ -26,6 +29,7 @@ export function createRenderSceneFromCanvasProjection(
   projection: CanvasRenderProjection,
   options: CanvasRenderSceneAdapterOptions = {}
 ): RenderScene {
+  const timingStart = startLive2dPerformanceTiming();
   const hasSelection = hasIsolatableCanvasSelection(projection);
   const textureSourcesById = new Map<string, RenderRgba8TextureSource>();
   const drawables = projection.drawables
@@ -59,10 +63,13 @@ export function createRenderSceneFromCanvasProjection(
     })
     .filter((drawable): drawable is RenderDrawable => drawable !== undefined);
 
-  return createRenderScene({
+  const scene = createRenderScene({
     textureSources: [...textureSourcesById.values()],
     drawables
   });
+  recordLive2dPerformanceCounter("canvas.renderScene.textureSources", scene.textureSources.length);
+  recordLive2dPerformanceTiming("canvas.renderSceneAdapter.ms", timingStart);
+  return scene;
 }
 
 function createRenderMeshForDrawable(drawable: CanvasRenderableDrawable): RenderMesh {
@@ -105,12 +112,25 @@ function hasDrawableMeshTriangles(drawable: CanvasRenderableDrawable): boolean {
       return false;
     }
 
-    const destination = [
-      mesh.vertices[aIndex],
-      mesh.vertices[bIndex],
-      mesh.vertices[cIndex]
-    ] as const;
-    const source = [mesh.uvs[aIndex], mesh.uvs[bIndex], mesh.uvs[cIndex]] as const;
+    const destinationA = mesh.vertices[aIndex];
+    const destinationB = mesh.vertices[bIndex];
+    const destinationC = mesh.vertices[cIndex];
+    const sourceA = mesh.uvs[aIndex];
+    const sourceB = mesh.uvs[bIndex];
+    const sourceC = mesh.uvs[cIndex];
+    if (
+      destinationA === undefined ||
+      destinationB === undefined ||
+      destinationC === undefined ||
+      sourceA === undefined ||
+      sourceB === undefined ||
+      sourceC === undefined
+    ) {
+      return false;
+    }
+
+    const destination = [destinationA, destinationB, destinationC] as const;
+    const source = [sourceA, sourceB, sourceC] as const;
 
     return triangleHasArea(destination) && triangleHasArea(source);
   });

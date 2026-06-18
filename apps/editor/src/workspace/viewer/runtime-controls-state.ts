@@ -1,4 +1,5 @@
 import type { ParameterId } from "@private-2d-rigging-lab/contracts";
+import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 
 import {
   clampParameterValue,
@@ -127,7 +128,13 @@ export const setRuntimeParameterOverride = (
   };
 
   if (!isEditableRuntimeParameter(parameter)) {
+    if (nextOverrides[parameter.parameterId] === undefined) {
+      recordLive2dPerformanceCounter("runtimeControls.skippedNoOpUpdates");
+      return state;
+    }
+
     delete nextOverrides[parameter.parameterId];
+    recordLive2dPerformanceCounter("runtimeControls.appliedUpdates");
     return {
       ...state,
       parameterOverrides: nextOverrides
@@ -136,9 +143,21 @@ export const setRuntimeParameterOverride = (
 
   const clampedValue = clampParameterValue(parameter, value);
   if (sameParameterValue(clampedValue, getRuntimeParameterDefaultValue(parameter))) {
+    if (nextOverrides[parameter.parameterId] === undefined) {
+      recordLive2dPerformanceCounter("runtimeControls.skippedNoOpUpdates");
+      return state;
+    }
+
     delete nextOverrides[parameter.parameterId];
+    recordLive2dPerformanceCounter("runtimeControls.appliedUpdates");
   } else {
+    if (sameParameterValue(nextOverrides[parameter.parameterId] ?? Number.NaN, clampedValue)) {
+      recordLive2dPerformanceCounter("runtimeControls.skippedNoOpUpdates");
+      return state;
+    }
+
     nextOverrides[parameter.parameterId] = clampedValue;
+    recordLive2dPerformanceCounter("runtimeControls.appliedUpdates");
   }
 
   return {
@@ -151,6 +170,10 @@ export const resetRuntimeParameterOverride = (
   state: ViewerRuntimeControlsState,
   parameterId: ParameterId
 ): ViewerRuntimeControlsState => {
+  if (state.parameterOverrides[parameterId] === undefined) {
+    return state;
+  }
+
   const nextOverrides: Partial<Record<ParameterId, number>> = {
     ...state.parameterOverrides
   };
@@ -164,10 +187,13 @@ export const resetRuntimeParameterOverride = (
 
 export const resetAllRuntimeParameterOverrides = (
   state: ViewerRuntimeControlsState
-): ViewerRuntimeControlsState => ({
-  ...state,
-  parameterOverrides: {}
-});
+): ViewerRuntimeControlsState =>
+  Object.keys(state.parameterOverrides).length === 0
+    ? state
+    : {
+        ...state,
+        parameterOverrides: {}
+      };
 
 export const createRuntimeParameterValueMap = (
   parameters: readonly EditorParameter[],

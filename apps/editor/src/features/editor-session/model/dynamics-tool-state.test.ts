@@ -1,4 +1,5 @@
-import { DynamicsGroupIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+import { listInitializedParameters, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import { DynamicsGroupIdSchema, ParameterIdSchema, type ParameterId } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
 import { createEmptyAuthoringSession } from "./empty-authoring-session";
@@ -23,8 +24,8 @@ const GROUP_ID = DynamicsGroupIdSchema.parse("dyn_model_sway");
 describe("Dynamics Tool state", () => {
   it("derives input normalization defaults and output angle defaults from parameters", () => {
     const session = createDynamicsSession();
-    const input = createDefaultDynamicsInput(session.graph.parameters[0]!);
-    const output = createDefaultDynamicsOutput(session.graph.parameters[2]!);
+    const input = createDefaultDynamicsInput(requireInitializedParameter(session, DRIVER_X));
+    const output = createDefaultDynamicsOutput(requireInitializedParameter(session, OUTPUT_SWAY));
 
     expect(input).toMatchObject({
       parameterId: DRIVER_X,
@@ -44,10 +45,12 @@ describe("Dynamics Tool state", () => {
 
   it("adds multiple driver inputs without replacing the first input", () => {
     const session = createDynamicsSession();
+    const driverX = requireInitializedParameter(session, DRIVER_X);
+    const outputSway = requireInitializedParameter(session, OUTPUT_SWAY);
     const draft = addInputToDynamicsDraft(session, {
       ...createDynamicsGroupDraftFromSession(session),
-      inputs: [createDefaultDynamicsInput(session.graph.parameters[0]!)],
-      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+      inputs: [createDefaultDynamicsInput(driverX)],
+      outputs: [createDefaultDynamicsOutput(outputSway)]
     });
 
     expect(draft.inputs).toHaveLength(2);
@@ -57,12 +60,14 @@ describe("Dynamics Tool state", () => {
 
   it("blocks invalid normalization and duplicate output ownership", () => {
     const session = createDynamicsSession();
+    const driverX = requireInitializedParameter(session, DRIVER_X);
+    const outputSway = requireInitializedParameter(session, OUTPUT_SWAY);
     session.graph.dynamicsGroups.push({
       dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_existing_output"),
       displayName: "Existing Output",
       enabled: true,
       presetId: "hair",
-      inputs: [createDefaultDynamicsInput(session.graph.parameters[0]!)],
+      inputs: [createDefaultDynamicsInput(driverX)],
       pendulums: [
         {
           length: 0.8,
@@ -71,14 +76,14 @@ describe("Dynamics Tool state", () => {
           convergenceSpeed: 4
         }
       ],
-      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+      outputs: [createDefaultDynamicsOutput(outputSway)]
     });
 
     const draft = {
       ...createDynamicsGroupDraftFromSession(session),
       inputs: [
         {
-          ...createDefaultDynamicsInput(session.graph.parameters[0]!),
+          ...createDefaultDynamicsInput(driverX),
           normalization: {
             min: 0,
             center: 0,
@@ -86,7 +91,7 @@ describe("Dynamics Tool state", () => {
           }
         }
       ],
-      outputs: [createDefaultDynamicsOutput(session.graph.parameters[2]!)]
+      outputs: [createDefaultDynamicsOutput(outputSway)]
     };
 
     const issues = validateDynamicsToolDraft(session, draft);
@@ -179,6 +184,39 @@ describe("Dynamics Tool state", () => {
     });
     expect(reset.resetSerial).toBe(1);
   });
+
+  it("skips same-value preview driver updates without advancing the simulation", () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push(createDynamicsGroup());
+    const state: DynamicsToolPreviewState = {
+      selectedGroupId: GROUP_ID,
+      driverValuesByGroupId: {
+        [GROUP_ID]: {
+          [DRIVER_X]: 20
+        }
+      },
+      simulationStatesByGroupId: {
+        [GROUP_ID]: {
+          angle: 0.4,
+          angularVelocity: 3,
+          previousSource: 0.2,
+          previousSourceVelocity: 1,
+          tick: 4,
+          resetCounter: 2
+        }
+      },
+      resetSerial: 0
+    };
+
+    const same = setDynamicsToolPreviewDriverValue(session, state, {
+      dynamicsGroupId: GROUP_ID,
+      parameterId: DRIVER_X,
+      value: 20
+    });
+
+    expect(same).toBe(state);
+    expect(same.simulationStatesByGroupId[GROUP_ID]?.tick).toBe(4);
+  });
 });
 
 function createDynamicsSession() {
@@ -191,7 +229,11 @@ function createDynamicsSession() {
       min: -30,
       default: 0,
       max: 30,
-      recommendedUiStep: 1
+      recommendedUiStep: 1,
+      kind: "custom",
+      parameterType: "scalar",
+      group: "custom",
+      lockedFields: []
     },
     {
       parameterId: DRIVER_Y,
@@ -200,7 +242,11 @@ function createDynamicsSession() {
       min: -10,
       default: 0,
       max: 10,
-      recommendedUiStep: 0.5
+      recommendedUiStep: 0.5,
+      kind: "custom",
+      parameterType: "scalar",
+      group: "custom",
+      lockedFields: []
     },
     {
       parameterId: OUTPUT_SWAY,
@@ -209,7 +255,11 @@ function createDynamicsSession() {
       min: -20,
       default: 0,
       max: 20,
-      recommendedUiStep: 0.1
+      recommendedUiStep: 0.1,
+      kind: "custom",
+      parameterType: "scalar",
+      group: "custom",
+      lockedFields: []
     },
     {
       parameterId: NON_DRIVER,
@@ -218,10 +268,25 @@ function createDynamicsSession() {
       min: 0,
       default: 0.25,
       max: 1,
-      recommendedUiStep: 0.01
+      recommendedUiStep: 0.01,
+      kind: "custom",
+      parameterType: "scalar",
+      group: "custom",
+      lockedFields: []
     }
   );
   return session;
+}
+
+function requireInitializedParameter(session: AuthoringSession, parameterId: ParameterId) {
+  const parameter = listInitializedParameters(session.graph).find(
+    (candidate) => candidate.parameterId === parameterId
+  );
+  if (parameter === undefined) {
+    throw new Error(`Expected initialized parameter ${parameterId}.`);
+  }
+
+  return parameter;
 }
 
 function createDynamicsGroup() {

@@ -3,6 +3,7 @@ import { useCallback, useMemo, type ChangeEvent } from "react";
 
 import type { EditorParameter } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
+import { useRafCoalescedNumberCommit } from "../controls/raf-coalesced-number";
 import {
   createRuntimeControlsProjection,
   normalizeRuntimeControlsState,
@@ -147,6 +148,11 @@ function RuntimeParameterControlRow({
   readonly onReset: () => void;
   readonly row: RuntimeControlParameterRow;
 }) {
+  const sliderCommit = useRafCoalescedNumberCommit({
+    counterPrefix: "runtimeControls.slider",
+    onCommit: onChange
+  });
+
   return (
     <div
       className={cn(
@@ -170,7 +176,12 @@ function RuntimeParameterControlRow({
         className="h-2 min-w-0 accent-teal-500"
         max={row.max}
         min={row.min}
-        onChange={(event) => onChange(readNumericInputValue(event, row.currentValue))}
+        onBlur={sliderCommit.flush}
+        onChange={(event) =>
+          sliderCommit.schedule(readNumericInputValue(event, row.currentValue))
+        }
+        onPointerCancel={sliderCommit.flush}
+        onPointerUp={sliderCommit.flush}
         step={row.step}
         type="range"
         value={row.currentValue}

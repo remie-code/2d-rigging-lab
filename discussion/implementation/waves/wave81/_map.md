@@ -17,6 +17,12 @@
 | [wave81-domain-b-editor-dynamics-tool-authoring-preview-report.md](wave81-domain-b-editor-dynamics-tool-authoring-preview-report.md) | pass | Editor Dynamics Inspector, session-local preview, Canvas preview, Parameter Bar disablement, and history boundary. |
 | [wave81-final-integration-report.md](wave81-final-integration-report.md) | final complete / pass | Combined evidence, final verification, Fix Loop 1 evidence, forbidden-scope compliance, residual risks, and closeout status. |
 
+## Post-Check Notes
+
+| Path | Status | Notes |
+|---|---|---|
+| [wave81-dynamics-time-progression-status.md](wave81-dynamics-time-progression-status.md) | repository fact / next-wave basis | Records that Wave81 Dynamics Tool preview advances one solver step per driver change and does not yet include Editor preview animation loop or Viewer runtime time progression. |
+
 ## Completion Gate
 
 - Domain A review lanes: pass-classified.

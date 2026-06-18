@@ -3,6 +3,10 @@ import {
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
+import {
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming
+} from "@private-2d-rigging-lab/render-core";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 import {
@@ -160,6 +164,7 @@ export function createCanvasRenderProjection(
   selection: EditorSelection | null,
   options: CanvasProjectionOptions = {}
 ): CanvasRenderProjection {
+  const timingStart = startLive2dPerformanceTiming();
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const rigControlsById = new Map(
@@ -273,7 +278,7 @@ export function createCanvasRenderProjection(
     draft: options.deformerDraft ?? null
   });
 
-  return {
+  const projection = {
     canvasBounds: evaluatedScene.canvasBounds,
     ...(artworkBounds === undefined ? {} : { artworkBounds }),
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
@@ -291,6 +296,8 @@ export function createCanvasRenderProjection(
     hasRenderableArtwork: renderableDrawables.length > 0,
     contentKey: createProjectionContentKey(session, drawables)
   };
+  recordLive2dPerformanceTiming("canvas.projection.ms", timingStart);
+  return projection;
 }
 
 function createEvaluationRigDraftFromProjectionDraft(

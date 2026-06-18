@@ -1,5 +1,6 @@
 import {
   createRenderTextureCacheKey,
+  recordLive2dPerformanceCounter,
   type RenderRgba8TextureSource
 } from "@private-2d-rigging-lab/render-core";
 
@@ -19,6 +20,7 @@ export class WebGl2TextureCache {
     const key = createRenderTextureCacheKey(source);
     const cached = this.entriesByTextureId.get(source.textureId);
     if (cached?.key === key) {
+      recordLive2dPerformanceCounter("webgl2.textureCacheHits");
       return cached.texture;
     }
 
@@ -26,6 +28,8 @@ export class WebGl2TextureCache {
       this.gl.deleteTexture(cached.texture);
     }
 
+    recordLive2dPerformanceCounter("webgl2.textureUploads");
+    recordLive2dPerformanceCounter("webgl2.textureUploadBytes", source.bytes.byteLength);
     const texture = this.gl.createTexture();
     if (texture === null) {
       throw new Error(`WebGL2 texture creation failed for ${source.textureId}.`);

@@ -88,6 +88,7 @@
 | [wave79-plan.md](wave79-plan.md) | Wave 79 Viewer / Runtime View v0 dependency and Orch-Sylph plan | Final complete / pass |
 | [wave80-plan.md](wave80-plan.md) | Wave 80 Viewer Interaction + Runtime Controls Density Follow-up dependency and Orch-Sylph plan | Final complete / pass |
 | [wave81-plan.md](wave81-plan.md) | Wave 81 Dynamics Tool v0 + Additive Pendulum Runtime Contract dependency and Orch-Sylph plan | Final complete / pass |
+| [wave82-plan.md](wave82-plan.md) | Wave 82 Parameter Scrub Performance v1 + Dynamics Inspector Follow-up dependency and Orch-Sylph plan | Final complete / pass |
 
 ## Current Decision
 

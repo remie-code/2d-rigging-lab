@@ -154,6 +154,15 @@ describe("EditorSessionProvider history integration", () => {
       expect(harness.context().canUndo).toBe(false);
       expect(harness.context().canRedo).toBe(false);
 
+      const parameterValuesAfterFirstScrub = harness.context().parameterValues;
+      await act(async () => {
+        harness.context().setActiveParameterValue(1);
+      });
+
+      expect(harness.context().parameterValues).toBe(parameterValuesAfterFirstScrub);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(false);
+
       await act(async () => {
         harness.context().resetActiveParameterValue();
       });
@@ -1493,8 +1502,8 @@ function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGene
   return {
     source: "outline-v6d-adaptive-contour-constrainautor-rgba",
     mesh: {
-      meshId: "mesh_body",
-      drawableId: "draw_body",
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
       vertices: [],
       uvs: [],
       triangles: [],
@@ -1502,7 +1511,7 @@ function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGene
       triangleStableIds: [],
       topologyRevision: 0,
       bounds: { x: 0, y: 0, width: 10, height: 10 },
-      generationProvenanceId: "prov_generate_body"
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body")
     },
     qualityMetrics: {
       maxEdgeLength: 0,

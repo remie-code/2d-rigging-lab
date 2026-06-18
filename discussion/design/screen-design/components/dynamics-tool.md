@@ -48,17 +48,20 @@ Viewer / Runtime Viewは、作成済みDynamicsを完成品として確認する
 
 ```text
 1. Dynamics Toolを選ぶ
-2. Create Dynamics Group
-3. 作成時presetを選ぶ
+2. Group listを見る
+3. New Groupを押す
+4. 作成時presetを選ぶ
    例: Hair / Ribbon / Soft Cloth / Rigid Accessory
-4. Driver Inputsを追加する
+5. Driver Inputsを追加する
    例: Face Angle X, Face Angle Z, Body Angle X
-5. Output parameterを選ぶ
+6. Output parameterを選ぶ
    例: Hair Sway X
-6. Dynamics Inspector内のdriver previewを動かす
 7. Length / Sway / Reaction / Convergence / Output strengthを調整する
-8. warningが消えたらcommit
-9. Viewerで完成品として確認する
+8. CreateでGroupを作成する
+9. 作成されたGroup rowを開く
+10. Group Inspectorでdriver previewを動かす
+11. 必要ならEditで設定を調整し、Applyする
+12. Viewerで完成品として確認する
 ```
 
 重要なUX境界:
@@ -319,13 +322,87 @@ v0でやらないこと:
 
 ## 5. Inspector構成
 
-Dynamics Inspector:
+Dynamics Inspectorは、一覧、既存Groupの詳細、作成、編集を同じ画面に同時表示しない。初期/通常状態は軽いGroup listだけにする。
+
+### 5.1 List State
 
 ```text
+Dynamics Tool
+
+Groups
+  Hair Dynamics        On
+  Hair Back Dynamics   On
+  Ribbon Dynamics      Off
+
+  + New Group
+```
+
+List stateの責務:
+
+- Dynamics Groupの一覧を見る。
+- Group rowをクリックして、そのGroupのInspectorへ入る。
+- `New Group`で新規作成Inspectorへ入る。
+
+List stateに表示しないもの:
+
+- 選択中GroupのPreview。
+- Settings / Inputs / Advanced / Pendulum / Outputs。
+- Validation detail。
+- Create / Apply / Delete button。
+
+理由:
+
+- Dynamics Toolを開いた直後にユーザーへ重い設定フォームを見せない。
+- 「一覧を見て対象Groupを選ぶ」状態と「Groupを編集/previewする」状態を分ける。
+- Inspectorの縦幅を、今ユーザーが行う操作にだけ使う。
+
+### 5.2 Existing Group Inspector State
+
+Group rowをクリックすると、そのGroupのInspectorへ遷移する。
+
+```text
+< Back to Groups
+
 Dynamics Group
   Name
   Enabled
-  Create / Rename / Delete
+
+Preview
+  Driver scrub / sample controls
+  Current input source
+  Current pendulum angle
+  Current output offset
+  Current effective value
+  Reset Preview
+
+Actions
+  Edit
+  Delete Group
+```
+
+Existing Group Inspector stateの責務:
+
+- 既存Groupのpreviewを行う。
+- `Edit`で編集Inspectorへ入る。
+- `Delete Group`で既存Groupを削除する。
+- `Back to Groups`で一覧へ戻る。
+
+Existing Group Inspector stateに表示しないもの:
+
+- Settings / Inputs / Advanced / Pendulum / Outputsの編集フォーム。
+- Create / Apply button。
+- New Group button。
+
+### 5.3 Create Group Inspector State
+
+`New Group`を押すと、新規作成Inspectorへ遷移する。
+
+```text
+< Back to Groups
+
+Settings
+  Name
+  Enabled
   Creation preset
 
 Inputs
@@ -363,12 +440,76 @@ Outputs
   + Add Output
     disabled/reserved in v0
 
-Preview
-  Reset simulation
-  Driver scrub / sample controls
-  Current input source
-  Current pendulum angle
-  Current output value
+Validation
+  Missing input
+  Missing output
+  Output already owned
+  Invalid normalization
+  Unsafe coefficient range
+
+Actions
+  Create
+  Cancel
+```
+
+Create Group Inspector stateの責務:
+
+- 新規Dynamics Groupのdraftを編集する。
+- `Create`でGroupを作成する。
+- `Cancel`または`Back to Groups`でdraftを破棄して一覧へ戻る。
+
+Create Group Inspector stateに表示しないもの:
+
+- 既存Group preview。
+- Apply button。
+- Delete Group button。
+
+### 5.4 Edit Group Inspector State
+
+既存Group Inspectorの`Edit`を押すと、編集Inspectorへ遷移する。
+
+```text
+< Back to Group
+
+Settings
+  Name
+  Enabled
+  Creation preset / Custom indication
+
+Inputs
+  Normalization table
+    Angle: min / center / max
+    Position X: min / center / max
+    Position Y: min / center / max
+
+  Input rows
+    Parameter
+    Kind
+    Influence %
+    Invert
+    Remove
+    + Add Input
+
+Pendulum
+  Pendulum 1
+    Length
+    Sway
+    Reaction Speed
+    Convergence Speed
+
+  + Add Pendulum
+    disabled/reserved in v0
+
+Outputs
+  Output row
+    Parameter
+    Kind
+    Strength
+    Limit
+    Invert
+
+  + Add Output
+    disabled/reserved in v0
 
 Validation
   Missing input
@@ -376,13 +517,57 @@ Validation
   Output already owned
   Invalid normalization
   Unsafe coefficient range
+
+Actions
+  Apply
+  Cancel
 ```
+
+Edit Group Inspector stateの責務:
+
+- 既存Dynamics Groupのdraftを編集する。
+- `Apply`で既存Groupを更新する。
+- `Cancel`または`Back to Group`で変更を破棄し、既存Group Inspectorへ戻る。
+
+Edit Group Inspector stateに表示しないもの:
+
+- Create button。
+- New Group button。
+- Preview controls。ただしApply後に戻る既存Group InspectorでPreviewできる。
+
+### 5.5 State Model
+
+```text
+mode:
+  list
+  groupInspector(groupId)
+  createGroup(draft)
+  editGroup(groupId, draft)
+```
+
+遷移:
+
+```text
+list -- New Group --> createGroup
+list -- Group row --> groupInspector
+groupInspector -- Back to Groups --> list
+groupInspector -- Edit --> editGroup
+groupInspector -- Delete Group --> list
+createGroup -- Create --> groupInspector(createdGroup)
+createGroup -- Cancel / Back --> list
+editGroup -- Apply --> groupInspector(updatedGroup)
+editGroup -- Cancel / Back --> groupInspector(groupId)
+```
+
+この状態分離により、`Create`と`Apply`が同時に見えることを避ける。既存Groupを開いただけで全設定フォームが展開されることも避ける。
 
 ## 6. Preview責務
 
 Dynamics Toolはpreview責務を持つ。
 
 ただし、ここでのpreviewは完成品再生ではなく、係数調整のためのauthoring previewである。
+
+Previewは初期/通常のList stateでは表示しない。Group rowをクリックしてExisting Group Inspector stateへ入った時に表示する。
 
 Dynamics Tool中は、Parameter Barを通常のparameter editing surfaceとして使わない。Parameter Barは表示していてもdisabled状態にし、ユーザーが「keyform/parameter編集をしている」のではなく「Dynamicsのdriver previewを操作している」と分かる状態にする。
 
@@ -495,12 +680,12 @@ Viewerで扱わないもの:
 
 | State | 内容 |
 |---|---|
-| No Group | Dynamics group作成を促す。 |
-| New Group Draft | preset選択、初期input/output選択中。 |
-| Editing Group | 既存groupのinputs / pendulum / outputを編集している。 |
-| Previewing | session-only preview inputでsimulationを動かしている。 |
-| Invalid Binding | input/output不足、output ownership conflict、invalid normalizationなどでcommit不可。 |
-| Valid / Ready | 設定は有効で、Viewerで完成品確認へ進める。 |
+| List | 初期/通常状態。Group一覧と`New Group`だけを表示する。 |
+| Group Inspector | 既存Group詳細状態。Preview、Edit、Delete、Back to Groupsを表示する。 |
+| Create Group | 新規Group draft状態。Settings / Inputs / Advanced / Pendulum / Outputs / ValidationとCreate / Cancelを表示する。 |
+| Edit Group | 既存Group draft状態。Settings / Inputs / Advanced / Pendulum / Outputs / ValidationとApply / Cancelを表示する。 |
+| Invalid Draft | Create/Edit中にinput/output不足、output ownership conflict、invalid normalizationなどでCreate/Apply不可。 |
+| Previewing | Group Inspector中にsession-only preview inputでsimulationを動かしている。 |
 
 ## 11. Validation
 

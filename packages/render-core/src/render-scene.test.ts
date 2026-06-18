@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_RENDER_BLEND_MODE,
@@ -7,12 +7,21 @@ import {
   createRenderScene,
   createRenderTextureCacheKey,
   createRgba8TextureContentSignature,
+  clearRgba8TextureContentSignatureCache,
+  getLive2dPerformanceStats,
   orderRenderDrawablesBackToFront,
+  resetLive2dPerformanceStats,
   type RenderDrawable,
   type RenderRgba8TextureSource
 } from "./index.js";
 
 describe("render-core scene contract", () => {
+  afterEach(() => {
+    delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+    clearRgba8TextureContentSignatureCache();
+    resetLive2dPerformanceStats();
+  });
+
   it("orders drawables deterministically back-to-front", () => {
     const drawables = [
       createDrawable("draw_b", 0, 2),
@@ -63,6 +72,54 @@ describe("render-core scene contract", () => {
     expect(changedDimensions).not.toBe(first);
   });
 
+  it("memoizes content signatures by byte-array identity", () => {
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    clearRgba8TextureContentSignatureCache();
+    resetLive2dPerformanceStats();
+    const bytes = new Uint8Array([255, 0, 0, 255]);
+
+    const first = createRgba8TextureContentSignature({
+      textureId: "tex",
+      width: 1,
+      height: 1,
+      bytes
+    });
+    const sameIdentity = createRgba8TextureContentSignature({
+      textureId: "tex",
+      width: 1,
+      height: 1,
+      bytes
+    });
+    const changedIdentity = createRgba8TextureContentSignature({
+      textureId: "tex",
+      width: 1,
+      height: 1,
+      bytes: new Uint8Array([0, 255, 0, 255])
+    });
+
+    expect(sameIdentity).toBe(first);
+    expect(changedIdentity).not.toBe(first);
+    expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+      "textureSignature.cacheHits": 1,
+      "textureSignature.cacheMisses": 2,
+      "textureSignature.bytesHashed": 8
+    });
+  });
+
+  it("keeps performance instrumentation disabled by default", () => {
+    clearRgba8TextureContentSignatureCache();
+    resetLive2dPerformanceStats();
+
+    createRgba8TextureContentSignature({
+      textureId: "tex",
+      width: 1,
+      height: 1,
+      bytes: new Uint8Array([255, 0, 0, 255])
+    });
+
+    expect(getLive2dPerformanceStats()).toBeUndefined();
+  });
+
   it("uses signature, dimensions, id, and alpha mode for texture cache keys", () => {
     const source = createTextureSource("sig:a", "straight");
     expect(createRenderTextureCacheKey(source)).toBe("rgba8:tex:1x1:straight:sig:a");
@@ -98,6 +155,10 @@ function createDrawable(drawableId: string, drawOrder: number, stableIndex: numb
     blendMode: DEFAULT_RENDER_BLEND_MODE
   };
 }
+
+type Live2dPerformanceTestGlobal = typeof globalThis & {
+  __LIVE2D_PERF__?: boolean;
+};
 
 function createTextureSource(
   contentSignature: string,

@@ -175,6 +175,101 @@ describe("ParameterBar custom slider", () => {
     }
   });
 
+  it("coalesces thumb drag updates to the latest value per animation frame", async () => {
+    const animationFrame = installAnimationFrameMock();
+    const setActiveParameterValue = vi.fn();
+    installEditorSessionMock({
+      parameterValues: {},
+      session: createDrawableSession(),
+      setActiveParameterValue
+    });
+    const harness = await renderParameterBar();
+
+    try {
+      const track = getFakeElementByTestId(harness.container, "parameter-slider-track");
+      track.boundingClientRect = { left: 100, width: 200 };
+      const thumb = getFakeElementByTestId(harness.container, "parameter-slider-thumb");
+
+      getFakeReactProps(thumb).onPointerDown?.(
+        createPointerEvent({
+          clientX: 200,
+          currentTarget: thumb,
+          pointerId: 7
+        })
+      );
+      getFakeReactProps(thumb).onPointerMove?.(
+        createPointerEvent({
+          clientX: 250,
+          currentTarget: thumb,
+          pointerId: 7
+        })
+      );
+      getFakeReactProps(thumb).onPointerMove?.(
+        createPointerEvent({
+          clientX: 300,
+          currentTarget: thumb,
+          pointerId: 7
+        })
+      );
+
+      expect(setActiveParameterValue).not.toHaveBeenCalled();
+      animationFrame.flushNext();
+
+      expect(setActiveParameterValue).toHaveBeenCalledTimes(1);
+      expect(setActiveParameterValue).toHaveBeenCalledWith(30);
+    } finally {
+      animationFrame.restore();
+      await harness.cleanup();
+    }
+  });
+
+  it("flushes the final thumb drag value on pointer up", async () => {
+    const animationFrame = installAnimationFrameMock();
+    const setActiveParameterValue = vi.fn();
+    installEditorSessionMock({
+      parameterValues: {},
+      session: createDrawableSession(),
+      setActiveParameterValue
+    });
+    const harness = await renderParameterBar();
+
+    try {
+      const track = getFakeElementByTestId(harness.container, "parameter-slider-track");
+      track.boundingClientRect = { left: 100, width: 200 };
+      const thumb = getFakeElementByTestId(harness.container, "parameter-slider-thumb");
+
+      getFakeReactProps(thumb).onPointerDown?.(
+        createPointerEvent({
+          clientX: 200,
+          currentTarget: thumb,
+          pointerId: 9
+        })
+      );
+      getFakeReactProps(thumb).onPointerMove?.(
+        createPointerEvent({
+          clientX: 250,
+          currentTarget: thumb,
+          pointerId: 9
+        })
+      );
+      getFakeReactProps(thumb).onPointerUp?.(
+        createPointerEvent({
+          clientX: 300,
+          currentTarget: thumb,
+          pointerId: 9
+        })
+      );
+
+      expect(setActiveParameterValue).toHaveBeenCalledTimes(1);
+      expect(setActiveParameterValue).toHaveBeenCalledWith(30);
+      animationFrame.flushAll();
+      expect(setActiveParameterValue).toHaveBeenCalledTimes(1);
+    } finally {
+      animationFrame.restore();
+      await harness.cleanup();
+    }
+  });
+
   it("jumps to a keyform value from marker click", async () => {
     const setActiveParameterValue = vi.fn();
     installEditorSessionMock({
@@ -399,6 +494,8 @@ type FakeReactProps = {
   readonly onClick?: (event: { readonly stopPropagation: () => void }) => void;
   readonly onPointerDown?: (event: FakePointerEvent) => void;
   readonly onPointerMove?: (event: FakePointerEvent) => void;
+  readonly onPointerCancel?: (event: FakePointerEvent) => void;
+  readonly onPointerUp?: (event: FakePointerEvent) => void;
 };
 
 type FakeNode = FakeElement | FakeTextNode;
@@ -749,4 +846,49 @@ function getFakeReactProps(element: FakeElement): FakeReactProps {
   }
 
   return (element as unknown as Record<string, FakeReactProps>)[key] ?? {};
+}
+
+function installAnimationFrameMock(): {
+  readonly flushAll: () => void;
+  readonly flushNext: () => void;
+  readonly restore: () => void;
+} {
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextFrameId = 1;
+
+  globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  globalThis.cancelAnimationFrame = vi.fn((frameId: number) => {
+    callbacks.delete(frameId);
+  });
+
+  const flushNext = () => {
+    const entry = callbacks.entries().next().value;
+    if (entry === undefined) {
+      return;
+    }
+
+    const [frameId, callback] = entry;
+    callbacks.delete(frameId);
+    callback(0);
+  };
+
+  return {
+    flushAll: () => {
+      while (callbacks.size > 0) {
+        flushNext();
+      }
+    },
+    flushNext,
+    restore: () => {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
+    }
+  };
 }
