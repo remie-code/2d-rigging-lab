@@ -290,32 +290,7 @@ const createApplyTextureAtlasPreviewResult = (input: {
       {
         target: textureTarget,
         fields: textureFields
-      },
-      ...input.applied.drawableChanges.map((change) => ({
-        target: createDrawableTarget(change.drawableId),
-        fields: [
-          {
-            path: `/model/drawables/${change.drawableId}/textureId`,
-            before: change.before.textureId,
-            after: change.after.textureId
-          }
-        ]
-      })),
-      ...input.applied.meshUvChanges.map((change) => ({
-        target: createMeshTarget(change.meshId),
-        fields: [
-          {
-            path: `/model/meshes/${change.meshId}/uvs`,
-            before: toModelDiffJsonValue(change.before.uvs),
-            after: toModelDiffJsonValue(change.after.uvs)
-          },
-          {
-            path: `/model/meshes/${change.meshId}/topologyRevision`,
-            before: change.before.topologyRevision ?? null,
-            after: change.after.topologyRevision ?? null
-          }
-        ]
-      }))
+      }
     ],
     operationIds: [input.operationId]
   };
@@ -412,6 +387,7 @@ const summarizeLayout = (layout: TextureAtlasLayoutSummaryDto): string => {
   return JSON.stringify({
     layoutId: layout.layoutId,
     atlasTextureId: layout.atlasTextureId,
+    sourceSignatureDigest: layout.sourceSignature?.digest ?? null,
     settings: layout.settings,
     placements: page?.placements.map((placement) => ({
       placementId: placement.placementId,

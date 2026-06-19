@@ -6,14 +6,17 @@
 
 Texture Atlas Taskは、現在の編集済みモデルをruntimeで描画しやすいtexture asset構造へ変換するための専用Task画面である。
 
-このTaskの主目的は「今見えている絵を詰める」ことではなく、「runtimeで使われるDrawable textureをatlasへまとめ、Viewer / 将来runtimeで同じ見た目を保てる状態にする」ことである。
+このTaskの主目的は「今見えている絵を詰める」ことではなく、「runtimeで使われるDrawable textureをatlas artifactへまとめ、Viewer / 将来runtimeで同じ見た目を保てる状態にする」ことである。
+
+Wave88以降、`Apply Atlas` はauthoring modelをatlas向けに破壊的に差し替える操作ではない。`Apply Atlas` はruntime atlas artifactをproject stateへcommitし、Authoring Workspace Canvasが使うoriginal texture / original UVを保持する。
 
 満たすべきUX:
 
 - ユーザーが、どのDrawableがruntime assetとしてatlas対象になるかを理解できる。
 - Drawable Poolに残っている未所属Drawableが、runtime未使用として除外されることを理解できる。
 - atlas previewを大きく見ながら、padding、page size、配置状態、warningを確認できる。
-- Apply後、Canvas / Viewerの見た目がatlas適用前と実質的に変わらない。
+- Apply後、Canvasはoriginal texture / original UVのまま表示される。
+- Apply後、Viewerでは `Original` と `Atlas Runtime` を切り替えて完成品表示を確認できる。
 
 この画面はInspector内には置かない。Atlas previewは面積を必要とし、Inspectorに押し込むと対象一覧、警告、設定、previewが互いに圧迫し合うためである。
 
@@ -93,7 +96,7 @@ stateDiagram-v2
 | Preview Ready | uncommittedなatlas配置案をpreviewする。 |
 | Applied | previewされたatlas配置をproject stateへcommitした状態。 |
 
-Generate Previewまではproject stateを変更しない。Apply Atlasで初めてatlas asset / UV参照の変更をcommitする。
+Generate Previewまではproject stateを変更しない。Apply Atlasで初めてruntime atlas artifactをproject stateへcommitする。authoring `Drawable.textureId`、`Mesh.uvs`、`Mesh.topologyRevision` は変更しない。
 
 ## 5. 画面配置
 
@@ -187,7 +190,7 @@ v0で扱う設定は小さく保つ。
 | Padding | 4px / 8px程度の選択肢または数値入力。 |
 | Edge extrusion | 初期ON。texture bleedingを避けるため。 |
 | Generate Preview | 現在settingsでatlas layoutを再生成する。 |
-| Apply Atlas | preview済みlayoutをproject stateへcommitする。 |
+| Apply Atlas | preview済みlayoutをruntime atlas artifactとしてproject stateへcommitする。 |
 
 v0では扱わない:
 
@@ -226,22 +229,29 @@ Previewは、完成品のtexture asset確認に必要な情報へ絞る。Mesh�
 
 Apply Atlasで行うこと:
 
-- atlas texture assetを生成する。
-- Drawable texture referenceをatlas-backed referenceへ更新する。
-- DrawableのUVがatlas配置に対応するよう更新される。
-- atlas layout settings summaryをproject stateに保持する。
+- generated atlas texture entryをproject stateへcommitする。
+- generated atlas raw RGBA binary asset bytes / refをsession binary assetsへcommitする。
+- atlas layout settings、page、placementsを含むlayout summaryをproject stateに保持する。
+- source signature / freshness markerをlayout summaryへ保持する。
+- 既存atlas artifactがある場合は、original authoring sourceから再生成したartifactで決定論的に置き換える。
 
 Apply Atlasで行わないこと:
 
+- authoring `Drawable.textureId` をatlas texture idへ差し替えない。
+- authoring `Mesh.uvs` をatlas配置UVへ差し替えない。
+- source texture assetを削除しない。
 - mesh topologyを変更する。
 - deformer hierarchyを変更する。
 - keyform / dynamics / parameter設定を変更する。
 - runtime表示状態を変更する。
 - Drawable Pool上の未所属Drawableを削除する。
+- Workspace Directory Exportを実装しない。
 
 成功条件:
 
-- 同じparameter / dynamics状態なら、Canvas / Viewerの見た目がatlas適用前後で実質的に同じである。
+- Authoring Workspace CanvasはApply前後でoriginal texture / original UVの見た目を保持する。
+- Viewer `Original` はApply前と同じoriginal texture / original UVで表示する。
+- Viewer `Atlas Runtime` はcommitted atlas artifactを使い、authoring stateを変更せずに同等の完成品表示を行う。
 - texture bleedingが明らかに悪化しない。
 - hiddenだがruntime graphに所属しているDrawableが、後から表示されてもtexture missingにならない。
 - Drawable Pool上の未所属Drawableは、atlas対象外として認識できる。
@@ -258,13 +268,15 @@ Generate Preview後、以下が変わった場合はpreviewをstaleにする。
 
 stale状態ではApplyをdisableするか、Apply前に再生成を要求する。
 
+Apply済みartifactについても、layout summaryに保持したsource signatureと現在のsource inputsが一致しない場合はstaleとして扱う。Viewer `Atlas Runtime` は、atlas artifactがmissingまたはstaleの場合にdisabledになり、選択中なら `Original` へfallbackする。
+
 ## 11. Runtime / Camera Captureへの接続
 
 将来のcamera capture runtimeでは、parameterやdynamicsによってDrawableの表示状態や変形が変わる。Texture Atlasが「現在見えているDrawable」だけを対象にすると、runtime中に表示されたDrawableのtextureが欠落する可能性がある。
 
 そのため、v0から対象基準は「現在visible」ではなく「runtime graphに所属しているDrawable」とする。
 
-また、Atlas化はruntime描画のtexture bindやasset管理を安定させるための前段である。camera capture自体、tracking input、motion playback、export app連携はTexture Atlas Taskの責務ではない。
+また、Atlas化はruntime描画のtexture bindやasset管理を安定させるための前段である。camera capture自体、tracking input、motion playback、export app連携、Workspace Directory ExportはTexture Atlas Task v0 / Wave88の責務ではない。
 
 ## 12. 他UIとの関係
 
@@ -273,13 +285,13 @@ stale状態ではApplyをdisableするか、Apply前に再生成を要求する�
 | Authoring Workspace | Texture Atlas Taskの入口。Parts / Mesh / Deformer編集の結果がatlas対象選定に影響する。 |
 | Drawable Pool | 未所属Drawableはv0のatlas対象外として表示される。 |
 | Mesh Tool | mesh / UVの入力元。ただしTexture Atlas Taskはmesh編集をしない。 |
-| Viewer / Runtime View | Apply済みatlasが完成品表示で破綻しないか確認する場所。 |
+| Viewer / Runtime View | `Original` / `Atlas Runtime` を切り替え、Apply済みatlas artifactが完成品表示で破綻しないか確認する場所。 |
 | Validation / Diagnostics | project-wideな構造警告を扱う。atlas固有のpreview warningはTask内表示を主にする。 |
 
 ## 13. 未決事項
 
 - v0のdefault page sizeを `Auto` のみで始めるか、固定候補を併置するか。
-- source texture assetをApply後もproject内に保持するか、generated atlasから再構築可能な形へ整理するか。
-- single atlasで収まらない場合、v0でmulti-pageを扱うか、warningとして止めるか。
-- atlas layout summaryをproject save/load schema上でどの粒度まで永続化するか。
+- 旧layout summaryにsource signatureがない場合、移行を用意するか、stale扱いで再生成を要求するか。
+- single atlasで収まらない場合、v0ではwarningとして止める。multi-pageは将来scopeで再設計する。
 - Texture Atlas TaskからViewer / Runtime Viewへ進む導線を、Apply後のprimary actionにするかsecondary actionにするか。
+- Workspace Directory Export / AI-native structured workspace saveをいつ、どのartifact単位で設計するか。

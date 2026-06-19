@@ -12,10 +12,16 @@ import {
   type CanvasBitmapCache,
   type CanvasOverlayState
 } from "../canvas/canvas-renderer";
+import {
+  createViewerRenderSourceProjection,
+  type ViewerRenderSourceMode,
+  type ViewerRenderSourceProjectionResult
+} from "./viewer-render-source";
 
 export interface ViewerCleanStageProjectionOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
   readonly parameterValues?: ParameterValueMap;
+  readonly renderSourceMode?: ViewerRenderSourceMode;
 }
 
 export interface ViewerCleanStageRenderInput {
@@ -41,11 +47,24 @@ export function createViewerCleanStageProjection(
   session: AuthoringSession,
   options: ViewerCleanStageProjectionOptions = {}
 ): CanvasRenderProjection {
-  return createCanvasRenderProjection(session, null, {
+  return createViewerCleanStageRenderSourceProjection(session, options).projection;
+}
+
+export function createViewerCleanStageRenderSourceProjection(
+  session: AuthoringSession,
+  options: ViewerCleanStageProjectionOptions = {}
+): ViewerRenderSourceProjectionResult {
+  const originalProjection = createCanvasRenderProjection(session, null, {
     parameterValues: options.parameterValues ?? {},
     ...(options.editorHiddenPartIds === undefined
       ? {}
       : { editorHiddenPartIds: options.editorHiddenPartIds })
+  });
+
+  return createViewerRenderSourceProjection({
+    session,
+    originalProjection,
+    requestedMode: options.renderSourceMode ?? "original"
   });
 }
 

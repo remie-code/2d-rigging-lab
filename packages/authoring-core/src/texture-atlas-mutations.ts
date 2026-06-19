@@ -1,7 +1,6 @@
 import {
   OperationIdSchema,
   ProvenanceIdSchema,
-  type MeshTopologyRevisionDto,
   type OperationId,
   type ProvenanceId,
   type TextureId,
@@ -26,11 +25,18 @@ import type { AuthoringSession } from "./authoring-session.js";
 import { registerAuthoringSessionBinaryBytes } from "./binary-byte-registration.js";
 import { getDrawableById, getMeshById } from "./drawable-selectors.js";
 import {
+  createTextureAtlasSourceSignature,
+  sameTextureAtlasSourceSignature
+} from "./texture-atlas-source-signature.js";
+import {
   createTextureAtlasBinaryAssetReference,
   createTextureAtlasPageRgbaBytes
 } from "./texture-atlas-binary.js";
 import type { TextureAtlasPreview } from "./texture-atlas-packing.js";
-import type { TextureAtlasWarning } from "./texture-atlas-targets.js";
+import {
+  selectTextureAtlasTargets,
+  type TextureAtlasWarning
+} from "./texture-atlas-targets.js";
 
 export interface TextureAtlasDrawableChange {
   readonly drawableId: DrawableDto["drawableId"];
@@ -167,32 +173,6 @@ export const applyTextureAtlasPreview = async (
   const drawableChanges: TextureAtlasDrawableChange[] = [];
   const meshUvChanges: TextureAtlasMeshUvChange[] = [];
 
-  for (const placement of page.placements) {
-    const drawable = getDrawableById(session.graph, placement.drawableId);
-    const mesh = getMeshById(session.graph, placement.meshId);
-    if (drawable === undefined || mesh === undefined) {
-      continue;
-    }
-
-    const drawableBefore = structuredClone(drawable);
-    const meshBefore = structuredClone(mesh);
-
-    drawable.textureId = preview.atlasTextureId;
-    mesh.uvs = mesh.uvs.map((uv) => rewriteUvIntoAtlas(uv, placement, page.width, page.height));
-    mesh.topologyRevision = getNextTopologyRevision(mesh);
-
-    drawableChanges.push({
-      drawableId: drawable.drawableId,
-      before: drawableBefore,
-      after: structuredClone(drawable)
-    });
-    meshUvChanges.push({
-      meshId: mesh.meshId,
-      before: meshBefore,
-      after: structuredClone(mesh)
-    });
-  }
-
   session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
   session.dirty = true;
 
@@ -224,6 +204,22 @@ const createApplyGuardWarnings = (
   const warnings: TextureAtlasWarning[] = [];
   const page = preview.layoutSummary.pages[0];
 
+  const currentTargetSelection = selectTextureAtlasTargets(session);
+  const currentSourceSignature = createTextureAtlasSourceSignature({
+    settings: preview.settings,
+    targetSelection: currentTargetSelection,
+    packableTargets: currentTargetSelection.packableTargets
+  });
+
+  if (
+    !sameTextureAtlasSourceSignature(
+      currentSourceSignature,
+      preview.layoutSummary.sourceSignature
+    )
+  ) {
+    warnings.push(createStalePreviewWarningForSourceSignature(preview, currentSourceSignature.digest));
+  }
+
   for (const placement of page?.placements ?? []) {
     const target = targetByDrawableId.get(placement.drawableId);
     const drawable = getDrawableById(session.graph, placement.drawableId);
@@ -249,16 +245,6 @@ const createApplyGuardWarnings = (
 
   return warnings;
 };
-
-const rewriteUvIntoAtlas = (
-  uv: Vec2Dto,
-  placement: TextureAtlasPlacementDto,
-  pageWidth: number,
-  pageHeight: number
-): Vec2Dto => ({
-  x: normalizeZero((placement.contentRectPixels.x + uv.x * placement.contentRectPixels.width) / pageWidth),
-  y: normalizeZero((placement.contentRectPixels.y + uv.y * placement.contentRectPixels.height) / pageHeight)
-});
 
 const ensureTextureAtlas = (session: AuthoringSession): TextureAtlasFileDto => {
   if (session.graph.textureAtlas === undefined) {
@@ -384,8 +370,20 @@ const createStalePreviewWarning = (
   ]
 });
 
-const getNextTopologyRevision = (mesh: MeshDto): MeshTopologyRevisionDto =>
-  ((mesh.topologyRevision ?? 0) + 1) as MeshTopologyRevisionDto;
+const createStalePreviewWarningForSourceSignature = (
+  preview: Extract<TextureAtlasPreview, { readonly status: "ready" }>,
+  currentDigest: string
+): TextureAtlasWarning => ({
+  code: "atlas.apply.stalePreview",
+  severity: "error",
+  targetPath: "/assets/textureAtlas/layoutSummary/sourceSignature",
+  message: "Texture atlas preview source signature no longer matches the current atlas source inputs.",
+  textureId: preview.atlasTextureId,
+  details: [
+    `expectedDigest=${preview.layoutSummary.sourceSignature?.digest ?? "missing"}`,
+    `currentDigest=${currentDigest}`
+  ]
+});
 
 const sameVec2Array = (
   left: readonly Vec2Dto[],
@@ -399,8 +397,6 @@ const sameVec2Array = (
       value.x === rightValue.x &&
       value.y === rightValue.y;
   });
-
-const normalizeZero = (value: number): number => (Object.is(value, -0) ? 0 : value);
 
 const stripTexturePrefix = (textureId: string): string =>
   textureId.startsWith("tex_") ? textureId.slice("tex_".length) : textureId;

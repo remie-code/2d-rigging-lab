@@ -140,12 +140,25 @@ export type TextureAtlasLayoutSettingsDto = z.infer<
   typeof TextureAtlasLayoutSettingsSchema
 >;
 
+export const TextureAtlasSourceSignatureSchema = z.object({
+  schemaVersion: z.literal("texture-atlas-source-signature-v1"),
+  inputVersion: z.literal("atlas-source-inputs-v1"),
+  algorithmId: z.literal("stable-json-fnv1a32-v1"),
+  digest: z.string().regex(/^fnv1a32:[a-f0-9]{8}$/),
+  boundDrawableIds: z.array(DrawableIdSchema),
+  packableDrawableIds: z.array(DrawableIdSchema)
+});
+export type TextureAtlasSourceSignatureDto = z.infer<
+  typeof TextureAtlasSourceSignatureSchema
+>;
+
 export const TextureAtlasLayoutSummarySchema = z.object({
   schemaVersion: z.literal("texture-atlas-layout-v1"),
   layoutId: z.string().regex(/^atlas_layout_[A-Za-z0-9_-]+$/),
   atlasTextureId: TextureIdSchema,
   sourceTexturePolicy: z.literal("retain-source-textures-v1"),
   generatedByOperationId: OperationIdSchema.optional(),
+  sourceSignature: TextureAtlasSourceSignatureSchema.optional(),
   settings: TextureAtlasLayoutSettingsSchema,
   pages: z.array(TextureAtlasPageSchema).length(1)
 });

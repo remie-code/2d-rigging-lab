@@ -1,7 +1,10 @@
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
+  KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
+  ParameterIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
   RigControlIdSchema,
@@ -175,9 +178,111 @@ describe("texture atlas core mutation", () => {
     expect(cannotFit.warnings.map((warning) => warning.code)).toContain("atlas.pack.cannotFit");
   });
 
-  it("registers generated atlas bytes and rewrites drawable texture refs and mesh UVs without topology changes", async () => {
+  it("tracks atlas source signature freshness from source inputs only", async () => {
     const session = await createTextureAtlasFixtureSession();
-    const bodyBefore = structuredClone(session.graph.meshes[0]);
+    const baseDigest = createReadySourceSignatureDigest(session);
+
+    const uvChanged = structuredClone(session);
+    uvChanged.graph.meshes[0]!.uvs[1] = { x: 0.75, y: 0 };
+    expect(createReadySourceSignatureDigest(uvChanged)).not.toBe(baseDigest);
+
+    const topologyChanged = structuredClone(session);
+    topologyChanged.graph.meshes[0]!.topologyRevision = 7;
+    expect(createReadySourceSignatureDigest(topologyChanged)).not.toBe(baseDigest);
+
+    const sourceTextureBytesChanged = structuredClone(session);
+    const bodyBytes = sourceTextureBytesChanged.binaryAssets?.fileEntries.find((entry) =>
+      entry.path === "assets/textures/body.raw-rgba"
+    )?.bytes;
+    if (bodyBytes === undefined) {
+      throw new Error("Expected fixture body texture bytes.");
+    }
+    bodyBytes[0] = 128;
+    expect(createReadySourceSignatureDigest(sourceTextureBytesChanged)).not.toBe(baseDigest);
+
+    const membershipChanged = structuredClone(session);
+    membershipChanged.graph.rigControls[0]!.childDrawableIds = [DRAW_BODY];
+    expect(createReadySourceSignatureDigest(membershipChanged)).not.toBe(baseDigest);
+
+    const settingsChanged = createTextureAtlasPreview(session, {
+      pageWidth: 16,
+      pageHeight: 4,
+      paddingPixels: 1,
+      edgeExtrusionEnabled: true,
+      edgeExtrusionPixels: 1
+    });
+    expect(settingsChanged.status).toBe("ready");
+    if (settingsChanged.status !== "ready") {
+      return;
+    }
+    expect(settingsChanged.layoutSummary.sourceSignature?.digest).not.toBe(baseDigest);
+
+    const nonSourceChanged = structuredClone(session);
+    const nonSourceRigControl = nonSourceChanged.graph.rigControls[0];
+    if (nonSourceRigControl?.kind !== "rotation2d") {
+      throw new Error("Expected fixture rotation rig control.");
+    }
+    nonSourceRigControl.restAngleDegrees = 45;
+    nonSourceChanged.graph.keyformSets = [
+      {
+        keyformSetId: KeyformSetIdSchema.parse("keyset_atlas_non_source"),
+        target: {
+          kind: "drawable",
+          id: DRAW_BODY,
+          property: "opacity"
+        },
+        parameterId: ParameterIdSchema.parse("param_atlas_non_source"),
+        evaluator: "linear-1d-v1",
+        interpolation: "linear-1d-v1",
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [
+          { value: 0, statePatch: 0.5 },
+          { value: 1, statePatch: 1 }
+        ]
+      }
+    ];
+    nonSourceChanged.graph.dynamicsGroups = [
+      {
+        dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_atlas_non_source"),
+        displayName: "Atlas Non Source Dynamics",
+        enabled: true,
+        inputs: [
+          {
+            parameterId: ParameterIdSchema.parse("param_atlas_non_source"),
+            kind: "angle",
+            influencePercent: 100,
+            invert: false,
+            normalization: { min: 0, center: 0.5, max: 1 }
+          }
+        ],
+        pendulums: [
+          {
+            length: 1,
+            sway: 0.25,
+            reactionSpeed: 6,
+            convergenceSpeed: 3
+          }
+        ],
+        outputs: [
+          {
+            parameterId: ParameterIdSchema.parse("param_atlas_non_source_output"),
+            kind: "angle",
+            strength: 1,
+            invert: false,
+            limit: 1
+          }
+        ]
+      }
+    ];
+
+    expect(createReadySourceSignatureDigest(nonSourceChanged)).toBe(baseDigest);
+  });
+
+  it("registers generated atlas bytes while preserving drawable texture refs, mesh UVs, and topology revisions", async () => {
+    const session = await createTextureAtlasFixtureSession();
+    const drawablesBefore = structuredClone(session.graph.drawables);
+    const meshesBefore = structuredClone(session.graph.meshes);
     const preview = createTextureAtlasPreview(session, {
       pageWidth: 8,
       pageHeight: 4,
@@ -207,24 +312,26 @@ describe("texture atlas core mutation", () => {
     expect(readPixel(result.atlasBytes, 8, 1, 1)).toEqual([255, 0, 0, 255]);
     expect(readPixel(result.atlasBytes, 8, 5, 1)).toEqual([0, 255, 0, 255]);
     expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_BODY)?.textureId)
-      .toBe("tex_generated_atlas_page_0");
+      .toBe(TEX_BODY);
     expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_HIDDEN)?.textureId)
-      .toBe("tex_generated_atlas_page_0");
+      .toBe(TEX_HIDDEN);
     expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_POOL)?.textureId)
       .toBe(TEX_POOL);
-    expect(session.graph.meshes[0]?.vertices).toEqual(bodyBefore?.vertices);
-    expect(session.graph.meshes[0]?.triangles).toEqual(bodyBefore?.triangles);
-    expect(session.graph.meshes[0]?.uvs).toEqual([
-      { x: 1 / 8, y: 1 / 4 },
-      { x: 3 / 8, y: 1 / 4 },
-      { x: 3 / 8, y: 3 / 4 },
-      { x: 1 / 8, y: 3 / 4 }
-    ]);
-    expect(session.graph.meshes[0]?.topologyRevision).toBe(1);
+    expect(session.graph.drawables).toEqual(drawablesBefore);
+    expect(session.graph.meshes).toEqual(meshesBefore);
+    expect(result.drawableChanges).toEqual([]);
+    expect(result.meshUvChanges).toEqual([]);
     expect(getAuthoringSessionBinaryFileEntries(session).some((entry) =>
       entry.path === "assets/textures/generated_atlas_page_0.raw-rgba"
     )).toBe(true);
     expect(session.graph.textureAtlas?.layoutSummary?.pages[0]?.placements).toHaveLength(2);
+    expect(session.graph.textureAtlas?.layoutSummary?.sourceSignature).toMatchObject({
+      schemaVersion: "texture-atlas-source-signature-v1",
+      inputVersion: "atlas-source-inputs-v1",
+      algorithmId: "stable-json-fnv1a32-v1",
+      boundDrawableIds: [DRAW_BODY, DRAW_HIDDEN],
+      packableDrawableIds: [DRAW_BODY, DRAW_HIDDEN]
+    });
   });
 
   it("preserves generated atlas metadata and binary bytes through portable bundle round-trip", async () => {
@@ -249,6 +356,8 @@ describe("texture atlas core mutation", () => {
 
     expect(imported.session.graph.textureAtlas?.layoutSummary)
       .toEqual(session.graph.textureAtlas?.layoutSummary);
+    expect(imported.session.graph.textureAtlas?.layoutSummary?.sourceSignature?.digest)
+      .toMatch(/^fnv1a32:[a-f0-9]{8}$/);
     expect(imported.session.graph.textureAtlas?.textures.some((texture) =>
       texture.textureId === "tex_generated_atlas_page_0" &&
       texture.binaryAssetRef?.packageRelativePath ===
@@ -260,7 +369,7 @@ describe("texture atlas core mutation", () => {
     )).toBe(true);
   });
 
-  it("guards generation from an already atlas-applied state", async () => {
+  it("regenerates and replaces an existing atlas artifact from preserved source authoring state", async () => {
     const session = await createTextureAtlasFixtureSession();
     const preview = createTextureAtlasPreview(session, {
       pageWidth: 8,
@@ -270,16 +379,45 @@ describe("texture atlas core mutation", () => {
     const applied = await applyTextureAtlasPreview(session, { preview });
 
     expect(applied.status).toBe("applied");
+    expect(session.graph.textureAtlas?.layoutSummary?.settings.pageHeight).toBe(4);
 
     const reappliedPreview = createTextureAtlasPreview(session, {
       pageWidth: 8,
-      pageHeight: 4,
-      paddingPixels: 1
+      pageHeight: 8,
+      paddingPixels: 0
     });
 
-    expect(reappliedPreview.status).toBe("failed");
-    expect(reappliedPreview.warnings.map((warning) => warning.code)).toContain(
+    expect(reappliedPreview.status).toBe("ready");
+    expect(reappliedPreview.warnings.map((warning) => warning.code)).not.toContain(
       "atlas.target.alreadyAtlasApplied"
+    );
+    if (reappliedPreview.status !== "ready") {
+      return;
+    }
+
+    const replaced = await applyTextureAtlasPreview(session, { preview: reappliedPreview });
+
+    expect(replaced.status).toBe("applied");
+    if (replaced.status !== "applied") {
+      return;
+    }
+
+    expect(session.graph.textureAtlas?.layoutSummary?.settings).toMatchObject({
+      pageWidth: 8,
+      pageHeight: 8,
+      paddingPixels: 0
+    });
+    expect(session.graph.textureAtlas?.textures.find((texture) =>
+      texture.textureId === "tex_generated_atlas_page_0"
+    )?.dimensions).toEqual({
+      width: 8,
+      height: 8,
+      pixelFormat: "rgba8"
+    });
+    expect(session.graph.drawables.find((drawable) => drawable.drawableId === DRAW_BODY)?.textureId)
+      .toBe(TEX_BODY);
+    expect(session.graph.meshes.find((mesh) => mesh.meshId === MESH_BODY)?.uvs).toEqual(
+      createQuadMesh(MESH_BODY, DRAW_BODY).uvs
     );
   });
 });
@@ -293,6 +431,27 @@ const pickWarning = (warning: {
   targetPath: warning.targetPath,
   drawableId: warning.drawableId
 });
+
+const createReadySourceSignatureDigest = (session: AuthoringSession): string => {
+  const preview = createTextureAtlasPreview(session, {
+    pageWidth: 8,
+    pageHeight: 4,
+    paddingPixels: 1,
+    edgeExtrusionEnabled: true,
+    edgeExtrusionPixels: 1
+  });
+
+  if (preview.status !== "ready") {
+    throw new Error(`Expected ready atlas preview: ${preview.warnings.map((warning) => warning.code).join(",")}`);
+  }
+
+  const digest = preview.layoutSummary.sourceSignature?.digest;
+  if (digest === undefined) {
+    throw new Error("Expected atlas source signature digest.");
+  }
+
+  return digest;
+};
 
 const createTextureAtlasFixtureSession = async (): Promise<AuthoringSession> => {
   const bodyBytes = createSolidRgbaBytes(2, 2, [255, 0, 0, 255]);

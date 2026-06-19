@@ -284,6 +284,14 @@ describe("package-format DTO schemas", () => {
         layoutId: "atlas_layout_single_page_v1",
         atlasTextureId: "tex_generated_atlas_page_0",
         sourceTexturePolicy: "retain-source-textures-v1",
+        sourceSignature: {
+          schemaVersion: "texture-atlas-source-signature-v1",
+          inputVersion: "atlas-source-inputs-v1",
+          algorithmId: "stable-json-fnv1a32-v1",
+          digest: "fnv1a32:1234abcd",
+          boundDrawableIds: ["draw_body"],
+          packableDrawableIds: ["draw_body"]
+        },
         settings: {
           algorithmId: "single-page-shelf-v1",
           pageWidth: 64,
@@ -345,6 +353,7 @@ describe("package-format DTO schemas", () => {
     });
 
     expect(parsed.layoutSummary?.settings.algorithmId).toBe("single-page-shelf-v1");
+    expect(parsed.layoutSummary?.sourceSignature?.digest).toBe("fnv1a32:1234abcd");
     expect(parsed.layoutSummary?.pages[0]?.placements[0]).toMatchObject({
       drawableId: "draw_body",
       originalTextureId: "tex_body",

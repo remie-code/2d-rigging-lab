@@ -43,6 +43,7 @@ export * from "./source-asset-mutations.js";
 export * from "./texture-asset-selectors.js";
 export * from "./texture-asset-mutations.js";
 export * from "./texture-atlas-targets.js";
+export * from "./texture-atlas-source-signature.js";
 export * from "./texture-atlas-packing.js";
 export * from "./texture-atlas-binary.js";
 export * from "./texture-atlas-mutations.js";

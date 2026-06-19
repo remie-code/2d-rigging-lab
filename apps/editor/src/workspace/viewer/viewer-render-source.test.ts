@@ -1,0 +1,554 @@
+import {
+  applyTextureAtlasPreview,
+  createInitialAuthoringRevision,
+  createTextureAtlasPreview,
+  registerAuthoringSessionBinaryBytes,
+  type AuthoringSession,
+  type RegisterAuthoringSessionBinaryBytesInput
+} from "@private-2d-rigging-lab/authoring-core";
+import {
+  DrawableIdSchema,
+  DynamicsGroupIdSchema,
+  KeyformSetIdSchema,
+  MeshIdSchema,
+  PackageIdSchema,
+  ParameterIdSchema,
+  PartIdSchema,
+  ProvenanceIdSchema,
+  RigControlIdSchema,
+  SourceAssetIdSchema,
+  TextureIdSchema,
+  type DrawableId,
+  type RectDto,
+  type TextureId
+} from "@private-2d-rigging-lab/contracts";
+import { describe, expect, it } from "vitest";
+
+import { createCanvasRenderProjection } from "../canvas/canvas-projection";
+import {
+  createViewerCleanStageProjection,
+  createViewerCleanStageRenderSourceProjection
+} from "./viewer-clean-stage";
+
+type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
+
+const PART_ROOT = PartIdSchema.parse("part_viewer_atlas_root");
+const DRAW_BODY = DrawableIdSchema.parse("draw_viewer_atlas_body");
+const DRAW_SLEEVE = DrawableIdSchema.parse("draw_viewer_atlas_sleeve");
+const MESH_BODY = MeshIdSchema.parse("mesh_viewer_atlas_body");
+const MESH_SLEEVE = MeshIdSchema.parse("mesh_viewer_atlas_sleeve");
+const TEX_BODY = TextureIdSchema.parse("tex_viewer_atlas_body");
+const TEX_SLEEVE = TextureIdSchema.parse("tex_viewer_atlas_sleeve");
+const SOURCE_ASSET = SourceAssetIdSchema.parse("src_viewer_atlas_fixture");
+const PROVENANCE = ProvenanceIdSchema.parse("prov_viewer_atlas_fixture");
+const RIG_ROOT = RigControlIdSchema.parse("rig_viewer_atlas_root");
+const PARAM_NON_SOURCE = ParameterIdSchema.parse("param_viewer_atlas_non_source");
+const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_viewer_atlas_non_source");
+
+describe("viewer render source projection", () => {
+  it("keeps Original mode on authoring texture refs and mesh UVs", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const original = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "original"
+    });
+    const defaultProjection = createViewerCleanStageProjection(session);
+    const body = requireDrawable(original.projection, DRAW_BODY);
+
+    expect(original.requestedMode).toBe("original");
+    expect(original.effectiveMode).toBe("original");
+    expect(original.atlasRuntimeAvailability.status).toBe("available");
+    expect(body.textureId).toBe(TEX_BODY);
+    expect(body.renderWidth).toBe(2);
+    expect(body.renderHeight).toBe(2);
+    expect(body.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
+    expect(requireDrawable(defaultProjection, DRAW_BODY).textureId).toBe(TEX_BODY);
+  });
+
+  it("remaps Atlas Runtime texture refs, bytes, dimensions, and UVs without mutating graph", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const beforeGraph = structuredClone(session.graph);
+    const page = requireAtlasPage(session);
+    const atlasTexture = requireAtlasTextureEntry(session);
+    const atlasBinaryRef = atlasTexture.binaryAssetRef;
+    if (atlasBinaryRef === undefined) {
+      throw new Error("Expected generated atlas binary ref.");
+    }
+    const atlasBinary = requireBinaryEntry(session, atlasBinaryRef);
+    const bodyPlacement = requirePlacement(session, DRAW_BODY);
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+    const body = requireDrawable(result.projection, DRAW_BODY);
+
+    expect(result.requestedMode).toBe("atlasRuntime");
+    expect(result.effectiveMode).toBe("atlasRuntime");
+    expect(result.atlasRuntimeAvailability.status).toBe("available");
+    expect(body.textureId).toBe(atlasTexture.textureId);
+    expect(body.binaryAssetId).toBe(atlasBinaryRef.binaryAssetId);
+    expect(body.binaryAssetPath).toBe(atlasBinaryRef.packageRelativePath);
+    expect(body.renderBytes).toBe(atlasBinary.bytes);
+    expect(body.renderWidth).toBe(page.width);
+    expect(body.renderHeight).toBe(page.height);
+    expect(body.evaluatedMesh.uvs).toEqual([
+      bodyPlacement.uvRect.topLeft,
+      { x: bodyPlacement.uvRect.bottomRight.x, y: bodyPlacement.uvRect.topLeft.y },
+      bodyPlacement.uvRect.bottomRight,
+      { x: bodyPlacement.uvRect.topLeft.x, y: bodyPlacement.uvRect.bottomRight.y }
+    ]);
+    expect(session.graph).toEqual(beforeGraph);
+  });
+
+  it("keeps Canvas projection on original texture refs and mesh UVs after atlas commit", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+
+    const projection = createCanvasRenderProjection(session, null);
+    const body = requireDrawable(projection, DRAW_BODY);
+    const sleeve = requireDrawable(projection, DRAW_SLEEVE);
+
+    expect(session.graph.textureAtlas?.layoutSummary).toBeDefined();
+    expect(body.textureId).toBe(TEX_BODY);
+    expect(sleeve.textureId).toBe(TEX_SLEEVE);
+    expect(body.renderWidth).toBe(2);
+    expect(sleeve.renderWidth).toBe(2);
+    expect(body.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
+    expect(sleeve.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
+  });
+
+  it("disables Atlas Runtime when no committed atlas layout exists", () => {
+    const session = createViewerAtlasFixtureSession();
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+
+    expect(result.effectiveMode).toBe("original");
+    expect(result.atlasRuntimeAvailability).toMatchObject({
+      status: "unavailable",
+      code: "missingLayout",
+      disabledReason: "Apply a texture atlas first."
+    });
+    expect(requireDrawable(result.projection, DRAW_BODY).textureId).toBe(TEX_BODY);
+  });
+
+  it("disables Atlas Runtime when source inputs become stale", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const bodyMesh = session.graph.meshes.find((mesh) => mesh.meshId === MESH_BODY);
+    if (bodyMesh === undefined) {
+      throw new Error("Expected body mesh.");
+    }
+    bodyMesh.uvs = [
+      { x: 0.25, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 }
+    ];
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+
+    expect(result.effectiveMode).toBe("original");
+    expect(result.atlasRuntimeAvailability).toMatchObject({
+      status: "unavailable",
+      code: "staleSourceSignature",
+      disabledReason: "Atlas source changed; regenerate the atlas."
+    });
+  });
+
+  it("does not stale Atlas Runtime for deformer, keyform, or dynamics-only changes", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const rigControl = session.graph.rigControls.find(
+      (candidate) => candidate.rigControlId === RIG_ROOT
+    );
+    if (rigControl?.kind !== "rotation2d") {
+      throw new Error("Expected rotation rig control.");
+    }
+
+    rigControl.restAngleDegrees = 15;
+    session.graph.parameters.push({
+      parameterId: PARAM_NON_SOURCE,
+      displayName: "Non Source Parameter",
+      valueSource: "authoredInput",
+      min: -30,
+      default: 0,
+      max: 30,
+      recommendedUiStep: 1,
+      kind: "custom",
+      parameterType: "scalar",
+      group: "custom",
+      lockedFields: []
+    });
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_viewer_atlas_non_source_angle"),
+      target: {
+        kind: "rigControl",
+        id: RIG_ROOT,
+        property: "angleDegrees"
+      },
+      parameterId: PARAM_NON_SOURCE,
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        { value: -30, statePatch: -15 },
+        { value: 30, statePatch: 15 }
+      ]
+    });
+    session.graph.dynamicsGroups.push({
+      dynamicsGroupId: DYNAMICS_GROUP,
+      displayName: "Non Source Dynamics",
+      enabled: true,
+      presetId: "hair",
+      inputs: [
+        {
+          parameterId: PARAM_NON_SOURCE,
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: {
+            min: -30,
+            center: 0,
+            max: 30
+          }
+        }
+      ],
+      pendulums: [
+        {
+          length: 1,
+          sway: 0.05,
+          reactionSpeed: 8,
+          convergenceSpeed: 10
+        }
+      ],
+      outputs: [
+        {
+          parameterId: PARAM_NON_SOURCE,
+          kind: "angle",
+          strength: 10,
+          invert: false,
+          limit: 10
+        }
+      ]
+    });
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+
+    expect(result.effectiveMode).toBe("atlasRuntime");
+    expect(result.atlasRuntimeAvailability.status).toBe("available");
+  });
+
+  it("disables Atlas Runtime when a renderable drawable has no placement", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const page = requireAtlasPage(session);
+    page.placements = page.placements.filter((placement) => placement.drawableId !== DRAW_SLEEVE);
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+
+    expect(result.effectiveMode).toBe("original");
+    expect(result.atlasRuntimeAvailability).toMatchObject({
+      status: "unavailable",
+      code: "missingPlacement",
+      disabledReason: "Atlas placement is missing."
+    });
+  });
+});
+
+async function createAppliedAtlasRuntimeSession(): Promise<AuthoringSession> {
+  const session = createViewerAtlasFixtureSession();
+  const preview = createTextureAtlasPreview(session, {
+    pageWidth: 8,
+    pageHeight: 8,
+    paddingPixels: 1,
+    edgeExtrusionEnabled: true
+  });
+  if (preview.status !== "ready") {
+    throw new Error(`Expected ready atlas preview: ${preview.warnings[0]?.message ?? "failed"}`);
+  }
+
+  const result = await applyTextureAtlasPreview(session, { preview });
+  if (result.status !== "applied") {
+    throw new Error(`Expected atlas apply: ${result.warnings[0]?.message ?? "failed"}`);
+  }
+
+  return result.session;
+}
+
+function createViewerAtlasFixtureSession(): AuthoringSession {
+  const bodyBytes = createSolidRgbaBytes(2, 2, [255, 0, 0, 255]);
+  const sleeveBytes = createSolidRgbaBytes(2, 2, [0, 255, 0, 255]);
+  const bodyRef = createTextureBinaryAssetReference("body", bodyBytes);
+  const sleeveRef = createTextureBinaryAssetReference("sleeve", sleeveBytes);
+  const session: AuthoringSession = {
+    packageIdentity: {
+      packageId: PackageIdSchema.parse("pkg_viewer_atlas_fixture"),
+      packageDisplayName: "Viewer atlas fixture",
+      formatVersion: "open-model-package-v1"
+    },
+    packageRevision: 3,
+    authoringRevision: createInitialAuthoringRevision(),
+    dirty: false,
+    graph: {
+      coordinateSystem: "canvas-y-down-v1",
+      canvasSize: { width: 16, height: 16 },
+      parts: [
+        {
+          partId: PART_ROOT,
+          displayName: "Root",
+          childPartIds: [],
+          drawableIds: [DRAW_BODY, DRAW_SLEEVE],
+          children: [
+            { kind: "drawable", drawableId: DRAW_BODY },
+            { kind: "drawable", drawableId: DRAW_SLEEVE }
+          ]
+        }
+      ],
+      drawables: [
+        createDrawable(DRAW_BODY, MESH_BODY, TEX_BODY, "Body", 0),
+        createDrawable(DRAW_SLEEVE, MESH_SLEEVE, TEX_SLEEVE, "Sleeve", 1)
+      ],
+      meshes: [
+        createMesh(MESH_BODY, DRAW_BODY, { x: 0, y: 0, width: 2, height: 2 }),
+        createMesh(MESH_SLEEVE, DRAW_SLEEVE, { x: 4, y: 0, width: 2, height: 2 })
+      ],
+      parameters: [],
+      keyformSets: [],
+      rigControls: [
+        {
+          kind: "rotation2d",
+          rigControlId: RIG_ROOT,
+          displayName: "Runtime Root",
+          childDrawableIds: [DRAW_BODY, DRAW_SLEEVE],
+          childRigControlIds: [],
+          pivot: { x: 0, y: 0 },
+          restAngleDegrees: 0,
+          restTranslation: { x: 0, y: 0 },
+          restScale: { x: 1, y: 1 },
+          enabled: true
+        }
+      ],
+      dynamicsGroups: [],
+      masks: [],
+      drawOrder: [
+        { drawableId: DRAW_BODY, baseDrawOrder: 0, stableOrder: 0 },
+        { drawableId: DRAW_SLEEVE, baseDrawOrder: 1, stableOrder: 1 }
+      ],
+      rigControlRootIds: [RIG_ROOT],
+      stableOrder: [PART_ROOT, DRAW_BODY, DRAW_SLEEVE],
+      sourceAssets: [],
+      textureAtlas: {
+        schemaVersion: "texture-atlas-v1",
+        textures: [
+          createTextureEntry(TEX_BODY, "body", bodyRef),
+          createTextureEntry(TEX_SLEEVE, "sleeve", sleeveRef)
+        ]
+      },
+      provenanceRecords: [],
+      rightsRecords: []
+    }
+  };
+
+  registerTextureBytes(session, bodyRef, bodyBytes, TEX_BODY);
+  registerTextureBytes(session, sleeveRef, sleeveBytes, TEX_SLEEVE);
+
+  return session;
+}
+
+function createDrawable(
+  drawableId: DrawableId,
+  meshId: ReturnType<typeof MeshIdSchema.parse>,
+  textureId: TextureId,
+  displayName: string,
+  baseDrawOrder: number
+) {
+  return {
+    drawableId,
+    displayName,
+    partId: PART_ROOT,
+    sourceAssetId: SOURCE_ASSET,
+    textureId,
+    meshId,
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder,
+    sourceProvenanceId: PROVENANCE
+  };
+}
+
+function createMesh(
+  meshId: ReturnType<typeof MeshIdSchema.parse>,
+  drawableId: DrawableId,
+  bounds: RectDto
+) {
+  const right = bounds.x + bounds.width;
+  const bottom = bounds.y + bounds.height;
+
+  return {
+    meshId,
+    drawableId,
+    vertices: [
+      { x: bounds.x, y: bounds.y },
+      { x: right, y: bounds.y },
+      { x: right, y: bottom },
+      { x: bounds.x, y: bottom }
+    ],
+    uvs: createUnitQuadUvs(),
+    triangles: [
+      [0, 1, 2],
+      [0, 2, 3]
+    ] as [number, number, number][],
+    vertexStableIds: ["vtx_0", "vtx_1", "vtx_2", "vtx_3"],
+    triangleStableIds: ["tri_0", "tri_1"],
+    topologyRevision: 0,
+    bounds,
+    generationProvenanceId: PROVENANCE
+  };
+}
+
+function createTextureEntry(
+  textureId: TextureId,
+  token: string,
+  binaryAssetRef: BinaryAssetReference
+) {
+  return {
+    textureId,
+    filePath: `assets/textures/viewer-atlas-${token}.raw-rgba`,
+    dimensions: {
+      width: 2,
+      height: 2,
+      pixelFormat: "rgba8" as const
+    },
+    provenanceId: PROVENANCE,
+    binaryAssetRef
+  };
+}
+
+function createTextureBinaryAssetReference(
+  token: string,
+  bytes: Uint8Array
+): BinaryAssetReference {
+  return {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: `bin_viewer_atlas_${token}`,
+    packageRelativePath: `assets/textures/viewer-atlas-${token}.raw-rgba`,
+    digest: {
+      algorithm: "sha256",
+      hex: createDigestHex(token)
+    },
+    byteLength: bytes.byteLength,
+    mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+    storageStatus: "stored-package-local-v1",
+    provenanceId: PROVENANCE,
+    rightsAssetId: SOURCE_ASSET
+  };
+}
+
+function registerTextureBytes(
+  session: AuthoringSession,
+  binaryAssetRef: BinaryAssetReference,
+  bytes: Uint8Array,
+  textureId: TextureId
+): void {
+  registerAuthoringSessionBinaryBytes(session, {
+    binaryAssetRef,
+    bytes,
+    role: "texture-raster-v1",
+    sourceAssetId: SOURCE_ASSET,
+    textureId
+  });
+}
+
+function createSolidRgbaBytes(
+  width: number,
+  height: number,
+  color: readonly [number, number, number, number]
+): Uint8Array {
+  const bytes = new Uint8Array(width * height * 4);
+
+  for (let index = 0; index < width * height; index += 1) {
+    bytes[index * 4] = color[0];
+    bytes[index * 4 + 1] = color[1];
+    bytes[index * 4 + 2] = color[2];
+    bytes[index * 4 + 3] = color[3];
+  }
+
+  return bytes;
+}
+
+function createUnitQuadUvs() {
+  return [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 }
+  ];
+}
+
+function requireDrawable(
+  projection: ReturnType<typeof createCanvasRenderProjection>,
+  drawableId: DrawableId
+) {
+  const drawable = projection.drawables.find((candidate) => candidate.drawableId === drawableId);
+  if (drawable === undefined) {
+    throw new Error(`Expected drawable ${drawableId}.`);
+  }
+
+  return drawable;
+}
+
+function requireAtlasPage(session: AuthoringSession) {
+  const page = session.graph.textureAtlas?.layoutSummary?.pages[0];
+  if (page === undefined) {
+    throw new Error("Expected atlas page.");
+  }
+
+  return page;
+}
+
+function requireAtlasTextureEntry(session: AuthoringSession) {
+  const atlasTextureId = session.graph.textureAtlas?.layoutSummary?.atlasTextureId;
+  const texture = session.graph.textureAtlas?.textures.find(
+    (candidate) => candidate.textureId === atlasTextureId
+  );
+  if (texture === undefined) {
+    throw new Error("Expected atlas texture entry.");
+  }
+
+  return texture;
+}
+
+function requirePlacement(session: AuthoringSession, drawableId: DrawableId) {
+  const placement = requireAtlasPage(session).placements.find(
+    (candidate) => candidate.drawableId === drawableId
+  );
+  if (placement === undefined) {
+    throw new Error(`Expected atlas placement for ${drawableId}.`);
+  }
+
+  return placement;
+}
+
+function requireBinaryEntry(session: AuthoringSession, binaryAssetRef: BinaryAssetReference) {
+  const entry = session.binaryAssets?.fileEntries.find(
+    (candidate) => candidate.path === binaryAssetRef.packageRelativePath
+  );
+  if (entry === undefined) {
+    throw new Error("Expected binary entry.");
+  }
+
+  return entry;
+}
+
+function createDigestHex(seed: string): string {
+  let hash = "";
+  for (let index = 0; index < 64; index += 1) {
+    hash += ((seed.charCodeAt(index % seed.length) + index) % 16).toString(16);
+  }
+
+  return hash;
+}

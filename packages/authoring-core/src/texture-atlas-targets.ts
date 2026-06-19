@@ -102,20 +102,6 @@ export const selectTextureAtlasTargets = (
   const excluded: TextureAtlasExcludedTarget[] = [];
   const packableTargets: TextureAtlasPackableTarget[] = [];
 
-  if (session.graph.textureAtlas?.layoutSummary !== undefined) {
-    warnings.push({
-      code: "atlas.target.alreadyAtlasApplied",
-      severity: "error",
-      targetPath: "/assets/textureAtlas/layoutSummary",
-      message: "Texture atlas layout is already applied; regenerate from the original texture state is guarded in v0.",
-      textureId: session.graph.textureAtlas.layoutSummary.atlasTextureId,
-      details: [
-        `layoutId=${session.graph.textureAtlas.layoutSummary.layoutId}`,
-        `atlasTextureId=${session.graph.textureAtlas.layoutSummary.atlasTextureId}`
-      ]
-    });
-  }
-
   for (const drawable of sortedDrawables) {
     if (!boundDrawableIds.has(drawable.drawableId)) {
       excluded.push({

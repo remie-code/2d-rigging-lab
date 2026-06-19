@@ -313,9 +313,11 @@ describe("TextureAtlasTaskScreen", () => {
       .toBe("tex_generated_atlas_page_0");
     expect(result.session.graph.textureAtlas?.layoutSummary?.generatedByOperationId)
       .toBe(result.operationOutcome.result.operationId);
-    expect(findDrawableTextureId(result.session, DRAW_BODY)).toBe("tex_generated_atlas_page_0");
-    expect(findDrawableTextureId(result.session, DRAW_HIDDEN)).toBe("tex_generated_atlas_page_0");
+    expect(findDrawableTextureId(result.session, DRAW_BODY)).toBe(TEX_BODY);
+    expect(findDrawableTextureId(result.session, DRAW_HIDDEN)).toBe(TEX_HIDDEN);
     expect(findDrawableTextureId(result.session, DRAW_POOL)).toBe(TEX_POOL);
+    expect(findMeshUvs(result.session, MESH_BODY)).toEqual(findMeshUvs(session, MESH_BODY));
+    expect(findMeshUvs(result.session, MESH_HIDDEN)).toEqual(findMeshUvs(session, MESH_HIDDEN));
     expect(result.session.dirty).toBe(true);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
   });
@@ -667,6 +669,13 @@ function findDrawableTextureId(
   drawableId: ReturnType<typeof DrawableIdSchema.parse>
 ) {
   return session.graph.drawables.find((drawable) => drawable.drawableId === drawableId)?.textureId;
+}
+
+function findMeshUvs(
+  session: AuthoringSession,
+  meshId: ReturnType<typeof MeshIdSchema.parse>
+) {
+  return session.graph.meshes.find((mesh) => mesh.meshId === meshId)?.uvs;
 }
 
 function findIconButton(label: string) {

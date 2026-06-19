@@ -180,6 +180,13 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(viewerMarkup).toContain("Clean Stage");
     expect(viewerMarkup).toContain("Finished Model Preview");
     expect(markup).toContain("Runtime Controls");
+    expect(markup).toContain('data-testid="viewer-render-source-mode"');
+    expect(markup).toContain("Original");
+    expect(markup).toContain("Atlas Runtime");
+    expect(markup).toContain("Apply a texture atlas first.");
+    expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
+      markup.indexOf('aria-label="Search parameters"')
+    );
     expect(markup).toContain("Motion / Physics");
     expect(markup).toContain("Not configured");
     expect(viewerMarkup).toContain('aria-label="Back to Authoring Workspace"');
@@ -276,6 +283,25 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(requireDrawable(runtimeOverride.projection, DRAW_FACE).bounds.x).toBe(12);
     expect(runtimeOverride.parameterValues[FACE_ANGLE_X]).toBe(30);
     expect(authoringParameterValues[FACE_ANGLE_X]).toBe(-30);
+  });
+
+  it("falls back to Original projection when selected Atlas Runtime is unavailable", () => {
+    const session = createRuntimeScreenSession();
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      renderSourceMode: "atlasRuntime",
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      session
+    });
+
+    expect(projection.requestedRenderSourceMode).toBe("atlasRuntime");
+    expect(projection.renderSourceMode).toBe("original");
+    expect(projection.atlasRuntimeAvailability).toMatchObject({
+      status: "unavailable",
+      code: "missingLayout",
+      disabledReason: "Apply a texture atlas first."
+    });
+    expect(requireDrawable(projection.projection, DRAW_FACE).textureId).toBe(TEX_FACE);
   });
 
   it("advances Viewer Dynamics over runtime frames and keeps motion after driver stops", () => {

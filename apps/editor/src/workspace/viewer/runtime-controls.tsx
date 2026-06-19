@@ -16,24 +16,34 @@ import {
   type RuntimeControlsParameterFilterOptions,
   type ViewerRuntimeControlsState
 } from "./runtime-controls-state";
+import {
+  VIEWER_RENDER_SOURCE_LABELS,
+  type ViewerRenderSourceMode
+} from "./viewer-render-source";
 
 export interface RuntimeControlsProps {
+  readonly atlasRuntimeDisabledReason?: string;
   readonly className?: string;
   readonly excludedParameterIds?: ReadonlySet<ParameterId>;
   readonly hasDynamicsSimulation?: boolean;
+  readonly onRenderSourceModeChange: (mode: ViewerRenderSourceMode) => void;
   readonly onStateChange: (state: ViewerRuntimeControlsState) => void;
   readonly onResetSimulation?: () => void;
   readonly parameters: readonly EditorParameter[];
+  readonly renderSourceMode: ViewerRenderSourceMode;
   readonly state: ViewerRuntimeControlsState;
 }
 
 export function RuntimeControls({
+  atlasRuntimeDisabledReason,
   className,
   excludedParameterIds,
   hasDynamicsSimulation = false,
+  onRenderSourceModeChange,
   onStateChange,
   onResetSimulation,
   parameters,
+  renderSourceMode,
   state
 }: RuntimeControlsProps) {
   const filterOptions: RuntimeControlsParameterFilterOptions = useMemo(
@@ -84,6 +94,12 @@ export function RuntimeControls({
           </p>
         </div>
       </header>
+
+      <RenderSourceModeControl
+        mode={renderSourceMode}
+        onChange={onRenderSourceModeChange}
+        {...(atlasRuntimeDisabledReason === undefined ? {} : { atlasRuntimeDisabledReason })}
+      />
 
       <div className="grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-neutral-800 px-3 py-2">
         <label className="relative block">
@@ -166,6 +182,76 @@ export function RuntimeControls({
         </div>
       </footer>
     </aside>
+  );
+}
+
+function RenderSourceModeControl({
+  atlasRuntimeDisabledReason,
+  mode,
+  onChange
+}: {
+  readonly atlasRuntimeDisabledReason?: string;
+  readonly mode: ViewerRenderSourceMode;
+  readonly onChange: (mode: ViewerRenderSourceMode) => void;
+}) {
+  const atlasRuntimeDisabled = atlasRuntimeDisabledReason !== undefined;
+
+  return (
+    <div
+      className="border-b border-neutral-800 px-3 py-2"
+      data-testid="viewer-render-source-mode"
+    >
+      <div className="mb-1.5 text-[11px] font-medium uppercase text-neutral-500">
+        Render Source
+      </div>
+      <div className="grid h-8 grid-cols-2 overflow-hidden rounded border border-neutral-800 bg-neutral-950 p-0.5">
+        <button
+          aria-label="Use Original render source"
+          aria-pressed={mode === "original"}
+          className={cn(
+            "min-w-0 rounded-sm px-2 text-xs font-semibold transition",
+            mode === "original"
+              ? "bg-teal-600 text-neutral-950"
+              : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
+          )}
+          data-testid="viewer-render-source-original"
+          onClick={() => onChange("original")}
+          type="button"
+        >
+          {VIEWER_RENDER_SOURCE_LABELS.original}
+        </button>
+        <button
+          aria-label={
+            atlasRuntimeDisabled
+              ? `Atlas Runtime unavailable: ${atlasRuntimeDisabledReason}`
+              : "Use Atlas Runtime render source"
+          }
+          aria-pressed={mode === "atlasRuntime"}
+          className={cn(
+            "min-w-0 rounded-sm px-2 text-xs font-semibold transition disabled:cursor-not-allowed",
+            mode === "atlasRuntime"
+              ? "bg-teal-600 text-neutral-950"
+              : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100",
+            atlasRuntimeDisabled ? "disabled:text-neutral-700 disabled:hover:bg-transparent" : ""
+          )}
+          data-testid="viewer-render-source-atlas-runtime"
+          disabled={atlasRuntimeDisabled}
+          onClick={() => onChange("atlasRuntime")}
+          title={atlasRuntimeDisabledReason}
+          type="button"
+        >
+          {VIEWER_RENDER_SOURCE_LABELS.atlasRuntime}
+        </button>
+      </div>
+      {atlasRuntimeDisabled ? (
+        <p
+          className="mt-1.5 truncate text-[11px] text-neutral-500"
+          data-testid="viewer-render-source-disabled-reason"
+        >
+          {atlasRuntimeDisabledReason}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

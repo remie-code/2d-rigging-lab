@@ -2,7 +2,6 @@ import {
   createInitialAuthoringRevision,
   createTextureAtlasPreview,
   getDrawableById,
-  getMeshById,
   registerAuthoringSessionBinaryBytes,
   BinaryAssetReferenceSchema,
   TextureAtlasLayoutSummarySchema,
@@ -77,9 +76,11 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
   });
 
-  it("commits atlas apply through async Operation Core with generated texture, layout, refs, UVs, and log evidence", async () => {
+  it("commits atlas apply through async Operation Core with artifact-only model diff evidence", async () => {
     const session = createAtlasFixtureSession();
     const preview = createReadyPreview(session);
+    const drawablesBefore = structuredClone(session.graph.drawables);
+    const meshesBefore = structuredClone(session.graph.meshes);
     const core = createOperationCore({
       now: () => new Date("2026-06-19T00:00:00.000Z")
     });
@@ -101,7 +102,14 @@ describe("applyTextureAtlasPreview operation handler", () => {
     const layoutSummary = session.graph.textureAtlas?.layoutSummary;
     expect(layoutSummary).toMatchObject({
       atlasTextureId: TEX_ATLAS,
-      generatedByOperationId: OP_APPLY
+      generatedByOperationId: OP_APPLY,
+      sourceSignature: {
+        schemaVersion: "texture-atlas-source-signature-v1",
+        inputVersion: "atlas-source-inputs-v1",
+        algorithmId: "stable-json-fnv1a32-v1",
+        boundDrawableIds: [DRAW_BODY, DRAW_HIDDEN],
+        packableDrawableIds: [DRAW_BODY, DRAW_HIDDEN]
+      }
     });
     const textureEntry = session.graph.textureAtlas?.textures.find(
       (entry) => entry.textureId === TEX_ATLAS
@@ -126,36 +134,20 @@ describe("applyTextureAtlasPreview operation handler", () => {
       createdByOperationId: OP_APPLY
     });
 
-    expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_ATLAS);
-    expect(getDrawableById(session.graph, DRAW_HIDDEN)?.textureId).toBe(TEX_ATLAS);
+    expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_BODY);
+    expect(getDrawableById(session.graph, DRAW_HIDDEN)?.textureId).toBe(TEX_HIDDEN);
     expect(getDrawableById(session.graph, DRAW_POOL)?.textureId).toBe(TEX_POOL);
-    expect(getMeshById(session.graph, MESH_BODY)?.uvs).toEqual([
-      { x: 0.125, y: 0.25 },
-      { x: 0.375, y: 0.25 },
-      { x: 0.375, y: 0.75 },
-      { x: 0.125, y: 0.75 }
-    ]);
-    expect(getMeshById(session.graph, MESH_HIDDEN)?.uvs).toEqual([
-      { x: 0.625, y: 0.25 },
-      { x: 0.875, y: 0.25 },
-      { x: 0.875, y: 0.75 },
-      { x: 0.625, y: 0.75 }
-    ]);
-    expect(getMeshById(session.graph, MESH_BODY)?.topologyRevision).toBe(1);
-    expect(getMeshById(session.graph, MESH_HIDDEN)?.topologyRevision).toBe(1);
+    expect(session.graph.drawables).toEqual(drawablesBefore);
+    expect(session.graph.meshes).toEqual(meshesBefore);
 
     const changedPaths = outcome.result.modelDiff?.changed.flatMap((change) =>
       change.fields.map((field) => field.path)
     );
-    expect(changedPaths).toEqual(expect.arrayContaining([
+    expect(changedPaths).toEqual([
       "/assets/textureAtlas/textures/tex_generated_atlas_page_0",
       "/assets/textureAtlas/layoutSummary",
-      "/binaryAssets/assets/textures/generated_atlas_page_0.raw-rgba",
-      "/model/drawables/draw_operation_atlas_body/textureId",
-      "/model/drawables/draw_operation_atlas_hidden/textureId",
-      "/model/meshes/mesh_operation_atlas_body/uvs",
-      "/model/meshes/mesh_operation_atlas_hidden/uvs"
-    ]));
+      "/binaryAssets/assets/textures/generated_atlas_page_0.raw-rgba"
+    ]);
   });
 
   it("dry-runs atlas apply through async Operation Core without mutating the source session", async () => {
@@ -171,16 +163,63 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(result.status).toBe("dry_run");
     expect(result.modelDiff?.changed.flatMap((change) =>
       change.fields.map((field) => field.path)
-    )).toEqual(expect.arrayContaining([
+    )).toEqual([
+      "/assets/textureAtlas/textures/tex_generated_atlas_page_0",
       "/assets/textureAtlas/layoutSummary",
-      "/model/meshes/mesh_operation_atlas_body/uvs"
-    ]));
+      "/binaryAssets/assets/textures/generated_atlas_page_0.raw-rgba"
+    ]);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
     expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_BODY);
     expect(core.operationLog.entries).toHaveLength(0);
+  });
+
+  it("replaces an existing atlas artifact through Operation Core without authoring texture or UV rewrites", async () => {
+    const session = createAtlasFixtureSession();
+    const firstPreview = createReadyPreview(session);
+    const core = createOperationCore();
+
+    const firstOutcome = await core.commitOperationAsync(
+      session,
+      createApplyRequest(session, firstPreview)
+    );
+
+    expect(firstOutcome.result.status).toBe("committed");
+    expect(session.graph.textureAtlas?.layoutSummary?.settings.pageHeight).toBe(4);
+    expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_BODY);
+
+    const secondPreview = createReadyPreview(session, {
+      pageWidth: 8,
+      pageHeight: 8,
+      paddingPixels: 0
+    });
+    const secondOutcome = await core.commitOperationAsync(
+      session,
+      createApplyRequest(session, secondPreview)
+    );
+
+    expect(secondOutcome.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(2);
+    expect(session.authoringRevision).toBe(2);
+    expect(core.operationLog.entries).toHaveLength(2);
+    expect(session.graph.textureAtlas?.layoutSummary?.settings).toMatchObject({
+      pageWidth: 8,
+      pageHeight: 8,
+      paddingPixels: 0
+    });
+    expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_BODY);
+    expect(getDrawableById(session.graph, DRAW_HIDDEN)?.textureId).toBe(TEX_HIDDEN);
+    expect(session.graph.meshes.find((mesh) => mesh.meshId === MESH_BODY)?.uvs)
+      .toEqual(createQuadMesh(MESH_BODY, DRAW_BODY).uvs);
+    expect(secondOutcome.result.modelDiff?.changed.flatMap((change) =>
+      change.fields.map((field) => field.path)
+    )).toEqual([
+      "/assets/textureAtlas/textures/tex_generated_atlas_page_0",
+      "/assets/textureAtlas/layoutSummary",
+      "/binaryAssets/assets/textures/generated_atlas_page_0.raw-rgba"
+    ]);
   });
 
   it("rejects stale expected layouts before mutating the session", async () => {
@@ -276,14 +315,22 @@ function createApplyRequest(
   });
 }
 
-function createReadyPreview(session: AuthoringSession): ReadyTextureAtlasPreview {
+function createReadyPreview(
+  session: AuthoringSession,
+  options: Partial<{
+    readonly pageWidth: number;
+    readonly pageHeight: number;
+    readonly paddingPixels: number;
+    readonly edgeExtrusionEnabled: boolean;
+  }> = {}
+): ReadyTextureAtlasPreview {
   const preview = createTextureAtlasPreview(session, {
     atlasTextureId: TEX_ATLAS,
     editorHiddenPartIds: [PART_HIDDEN],
-    pageWidth: 8,
-    pageHeight: 4,
-    paddingPixels: 1,
-    edgeExtrusionEnabled: true
+    pageWidth: options.pageWidth ?? 8,
+    pageHeight: options.pageHeight ?? 4,
+    paddingPixels: options.paddingPixels ?? 1,
+    edgeExtrusionEnabled: options.edgeExtrusionEnabled ?? true
   });
   if (preview.status !== "ready") {
     throw new Error(`Expected ready preview: ${preview.warnings.map((warning) => warning.code).join(",")}`);

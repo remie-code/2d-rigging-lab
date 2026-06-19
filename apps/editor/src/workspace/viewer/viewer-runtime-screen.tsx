@@ -56,9 +56,13 @@ import {
   type ViewerRuntimeControlsState
 } from "./runtime-controls-state";
 import {
-  createViewerCleanStageProjection,
+  createViewerCleanStageRenderSourceProjection,
   renderViewerCleanStageProjection
 } from "./viewer-clean-stage";
+import type {
+  ViewerAtlasRuntimeAvailability,
+  ViewerRenderSourceMode
+} from "./viewer-render-source";
 import {
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
@@ -81,9 +85,12 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 
 export interface ViewerRuntimeCleanStageProjectionInput {
   readonly baseParameterValues: ParameterValueMap;
+  readonly atlasRuntimeAvailability: ViewerAtlasRuntimeAvailability;
   readonly parameterValues: ParameterValueMap;
   readonly parameters: readonly EditorParameter[];
   readonly projection: CanvasRenderProjection;
+  readonly renderSourceMode: ViewerRenderSourceMode;
+  readonly requestedRenderSourceMode: ViewerRenderSourceMode;
   readonly runtimePlaybackModel: ViewerRuntimePlaybackModel;
 }
 
@@ -92,6 +99,8 @@ export function ViewerRuntimeScreen() {
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
   const [runtimeControlsState, setRuntimeControlsState] =
     useState<ViewerRuntimeControlsState>(() => createInitialRuntimeControlsState());
+  const [renderSourceMode, setRenderSourceMode] =
+    useState<ViewerRenderSourceMode>("original");
   const [runtimePlaybackState, setRuntimePlaybackState] = useState<RuntimeStateDto | null>(null);
   const runtimePlaybackRef = useRef<ViewerRuntimePlaybackLoopInput | null>(null);
   const runtimePlaybackModel = useMemo(
@@ -111,12 +120,14 @@ export function ViewerRuntimeScreen() {
         runtimePlaybackModel,
         runtimePlaybackState: compatibleRuntimePlaybackState,
         runtimeControlsState,
+        renderSourceMode,
         session
       }),
     [
       editorHiddenPartIds,
       parameterValues,
       runtimeControlsState,
+      renderSourceMode,
       compatibleRuntimePlaybackState,
       runtimePlaybackModel,
       session
@@ -191,6 +202,12 @@ export function ViewerRuntimeScreen() {
     setRuntimePlaybackState(null);
   }, [runtimePlaybackModel.stateIdentityKey]);
 
+  useEffect(() => {
+    if (renderSourceMode !== cleanStage.renderSourceMode) {
+      setRenderSourceMode(cleanStage.renderSourceMode);
+    }
+  }, [cleanStage.renderSourceMode, renderSourceMode]);
+
   return (
     <section
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-[#111110]"
@@ -204,10 +221,15 @@ export function ViewerRuntimeScreen() {
         <RuntimeControls
           excludedParameterIds={cleanStage.runtimePlaybackModel.dynamicsOutputParameterIds}
           hasDynamicsSimulation={cleanStage.runtimePlaybackModel.enabledDynamicsGroupCount > 0}
+          onRenderSourceModeChange={setRenderSourceMode}
           onStateChange={setRuntimeControlsState}
           onResetSimulation={resetRuntimeSimulation}
           parameters={cleanStage.parameters}
+          renderSourceMode={cleanStage.renderSourceMode}
           state={runtimeControlsState}
+          {...(cleanStage.atlasRuntimeAvailability.status === "unavailable"
+            ? { atlasRuntimeDisabledReason: cleanStage.atlasRuntimeAvailability.disabledReason }
+            : {})}
         />
       </div>
     </section>
@@ -220,11 +242,13 @@ export function createViewerRuntimeCleanStageProjection({
   runtimePlaybackModel,
   runtimePlaybackState,
   runtimeControlsState,
+  renderSourceMode = "original",
   session
 }: {
   readonly authoringParameterValues: ParameterValueMap;
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
   readonly runtimeControlsState: ViewerRuntimeControlsState;
+  readonly renderSourceMode?: ViewerRenderSourceMode;
   readonly runtimePlaybackModel?: ViewerRuntimePlaybackModel;
   readonly runtimePlaybackState?: RuntimeStateDto | null;
   readonly session: AuthoringSession;
@@ -249,16 +273,21 @@ export function createViewerRuntimeCleanStageProjection({
       ? {}
       : { state: runtimePlaybackState })
   });
+  const renderSourceProjection = createViewerCleanStageRenderSourceProjection(session, {
+    parameterValues,
+    renderSourceMode,
+    ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
+  });
 
   return {
+    atlasRuntimeAvailability: renderSourceProjection.atlasRuntimeAvailability,
     baseParameterValues,
     parameterValues,
     parameters,
+    renderSourceMode: renderSourceProjection.effectiveMode,
+    requestedRenderSourceMode: renderSourceProjection.requestedMode,
     runtimePlaybackModel: playbackModel,
-    projection: createViewerCleanStageProjection(session, {
-      parameterValues,
-      ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
-    })
+    projection: renderSourceProjection.projection
   };
 }
 

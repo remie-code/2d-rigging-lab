@@ -48,8 +48,11 @@ Viewer / Runtime View v0では、次を採用する。
 - modalではなく専用Screen / Viewとして開く。
 - Clean Stageを主領域にする。
 - Runtime Controlsを主要操作面にする。
+- Runtime Controls上部にrender source mode controlを置き、`Original` / `Atlas Runtime` を切り替えられるようにする。
 - parameter一覧の絞り込みは名前検索だけにする。
 - parameter操作はsession-only overrideとして扱う。
+- `Atlas Runtime` はcommitted texture atlas artifactを使うViewer-only modeであり、authoring stateを変更しない。
+- atlas artifactがmissingまたはstaleの場合は `Atlas Runtime` をdisabledにし、選択中なら `Original` へfallbackする。
 - authoring overlayは表示しない。
 - runtime statusは常設しない。
 - dynamics / physics playbackはRuntime Controls下部に将来接続位置だけ設計上予約する。
@@ -100,9 +103,9 @@ Viewerをmodalにしない理由:
 +----------------------------------------------+---------------------------------+
 | Clean Stage                                  | Runtime Controls                |
 |                                              |                                 |
-| finished model preview                       | parameter name search           |
+| finished model preview                       | render source mode              |
 | no authoring overlays                        | parameter sliders / numbers     |
-| session parameter overrides reflected        | reset changed / reset all       |
+| session parameter overrides reflected        | parameter name search           |
 | neutral gray background by default           | future playback slot            |
 | view controls only                           |                                 |
 +----------------------------------------------+---------------------------------+
@@ -113,7 +116,7 @@ Viewerをmodalにしない理由:
 |---|---|
 | Viewer Header | Authoringへ戻る導線、対象model名、pose resetを扱う。 |
 | Clean Stage | 完成品としてのモデル表示を扱う。編集overlayは出さない。 |
-| Runtime Controls | parameter overrideを操作する主UI。Viewerで最も多く触る領域。 |
+| Runtime Controls | render source modeとparameter overrideを操作する主UI。Viewerで最も多く触る領域。 |
 | Future Playback Slot | Runtime Controls下部に置く、将来のdynamics / physics playback操作の接続場所。v0では操作UIを出さない。 |
 
 ## 6. Clean Stage
@@ -147,6 +150,7 @@ Runtime Controlsは、Viewer内での主要操作面である。
 
 表示するもの:
 
+- render source mode control: `Original` / `Atlas Runtime`。
 - parameter name search。
 - parameter slider。
 - numeric value input。
@@ -158,10 +162,14 @@ Runtime Controlsでは、parameter値を一時的に動かして完成品の見�
 
 これらの操作はproject fileを変更しない。keyformの追加、更新、削除も行わない。
 
-parameter searchはRuntime Controls最上部に常設する。
+render source mode controlはRuntime Controls最上部に置く。parameter searchはその直下に常設する。
 
 ```text
 Runtime Controls
+  Render Source
+  [ Original ] [ Atlas Runtime ]
+  Atlas Runtime unavailable reason (only when disabled)
+
   [ Search parameters...        ]
   [ Reset changed ] [ Reset all ]
 
@@ -174,6 +182,25 @@ Runtime Controls
 ```
 
 parameter group / category filterはv0では置かない。Editor上でユーザーがparameter groupを意識する明確な操作導線がないため、名前検索だけを正式な絞り込み手段にする。
+
+### Render Source Mode
+
+`Original`:
+
+- 既存Viewer behavior。
+- original texture / original UVを使う。
+- Apply済みatlas artifactの有無に関わらず、authoring graphのcommitted model stateを確認する。
+
+`Atlas Runtime`:
+
+- committed atlas artifactを使う。
+- `textureAtlas.layoutSummary`、generated atlas texture entry、generated binary asset bytes、source signatureを検証する。
+- Viewer projection上だけでtexture ref / bytes / dimensions / UVをremapする。
+- `session.graph`、authoring `Drawable.textureId`、authoring `Mesh.uvs`、`Mesh.topologyRevision` を変更しない。
+- atlas artifactがmissingまたはsource signature不一致でstaleの場合はdisabledにする。
+- disabled中に選択された場合はeffective modeを `Original` へ戻す。
+
+Runtime Controlsには詳細なartifact pathやsource signature payloadを出さない。必要な場合はDiagnostics / Evidence Viewへ委譲する。
 
 Parameter Barとの違い:
 
@@ -280,10 +307,14 @@ Viewer / Runtime View v0は、次を満たせばよい。
 - Clean Stageに現在のcommitted modelが表示される。
 - Authoring overlayが表示されない。
 - Runtime Controlsでparameterを動かせる。
-- Runtime Controls最上部でparameter名検索ができる。
+- parameter名検索がrender source mode controlの下に常設される。
 - parameter group / category filterは表示されない。
 - parameter overrideはsession-onlyであり、project authoring stateを書き換えない。
 - reset操作でparameter overrideを戻せる。
+- Runtime Controls最上部で `Original` / `Atlas Runtime` を切り替えられる。
+- `Atlas Runtime` はcommitted atlas artifactを使い、authoring stateを変更しない。
+- atlas artifactがmissingまたはstaleの場合は `Atlas Runtime` がdisabledになり、`Original` へfallbackする。
+- parameter名検索はrender source mode controlの下に置く。
 - clipping、opacity、mesh、deformer、keyform評価がViewer表示にも反映される。
 - runtime statusは常設されない。
 - 描画不能時だけClean Stage内にempty / error stateを表示できる。
@@ -294,7 +325,9 @@ Viewer / Runtime View v0は、次を満たせばよい。
 ## 13. 確定済み事項
 
 - parameter group / category filterはv0に含めない。
-- parameter searchはRuntime Controls最上部に置く。
+- render source mode controlはRuntime Controls最上部に置く。
+- parameter searchはrender source mode controlの直下に置く。
+- Viewer supports `Original` / `Atlas Runtime`; `Atlas Runtime` uses committed atlas artifact and is disabled when missing/stale.
 - runtime statusは常設しない。
 - 初期backgroundはneutral solid grayにする。
 - Future Playback SlotはRuntime Controls下部に置く。

@@ -4,10 +4,13 @@ import {
   TextureAtlasLayoutSummarySchema,
   type TextureAtlasLayoutSettingsDto,
   type TextureAtlasLayoutSummaryDto,
-  type TextureAtlasRectPixelsDto
+  type TextureAtlasRectPixelsDto,
+  TextureAtlasSourceSignatureSchema,
+  type TextureAtlasSourceSignatureDto
 } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
+import { createTextureAtlasSourceSignature } from "./texture-atlas-source-signature.js";
 import {
   selectTextureAtlasTargets,
   type TextureAtlasPackableTarget,
@@ -22,11 +25,13 @@ export const DEFAULT_TEXTURE_ATLAS_LAYOUT_ID = "atlas_layout_single_page_v1";
 
 export {
   TextureAtlasLayoutSettingsSchema,
-  TextureAtlasLayoutSummarySchema
+  TextureAtlasLayoutSummarySchema,
+  TextureAtlasSourceSignatureSchema
 };
 export type {
   TextureAtlasLayoutSettingsDto,
-  TextureAtlasLayoutSummaryDto
+  TextureAtlasLayoutSummaryDto,
+  TextureAtlasSourceSignatureDto
 };
 
 export interface TextureAtlasPreviewSettingsInput {
@@ -90,7 +95,12 @@ export const createTextureAtlasPreview = (
   const packed = packTextureAtlasTargets({
     targets: targetSelection.packableTargets,
     settings,
-    atlasTextureId
+    atlasTextureId,
+    sourceSignature: createTextureAtlasSourceSignature({
+      settings,
+      targetSelection,
+      packableTargets: targetSelection.packableTargets
+    })
   });
 
   if (packed.status === "failed") {
@@ -149,6 +159,7 @@ const packTextureAtlasTargets = (input: {
   readonly targets: readonly TextureAtlasPackableTarget[];
   readonly settings: TextureAtlasLayoutSettingsDto;
   readonly atlasTextureId: TextureId;
+  readonly sourceSignature: TextureAtlasSourceSignatureDto;
 }): PackTextureAtlasTargetsResult => {
   const placements: TextureAtlasLayoutSummaryDto["pages"][number]["placements"] = [];
   let cursorX = 0;
@@ -237,6 +248,7 @@ const packTextureAtlasTargets = (input: {
     layoutId: DEFAULT_TEXTURE_ATLAS_LAYOUT_ID,
     atlasTextureId: input.atlasTextureId,
     sourceTexturePolicy: "retain-source-textures-v1",
+    sourceSignature: input.sourceSignature,
     settings: input.settings,
     pages: [
       {

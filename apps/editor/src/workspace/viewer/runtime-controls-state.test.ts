@@ -309,6 +309,9 @@ describe("RuntimeControls UI", () => {
     });
 
     expect(markup).toContain("Runtime Controls");
+    expect(markup).toContain('data-testid="viewer-render-source-mode"');
+    expect(markup).toContain("Original");
+    expect(markup).toContain("Atlas Runtime");
     expect(markup).toContain('aria-label="Search parameters"');
     expect(markup).toContain("Face Angle X");
     expect(markup).toContain("Mouth Open");
@@ -319,7 +322,27 @@ describe("RuntimeControls UI", () => {
     expect(markup).not.toContain("Group");
   });
 
-  it("renders parameter name search as the top control and filters visible rows", () => {
+  it("renders render source mode above parameter search and shows a disabled reason", () => {
+    const markup = renderRuntimeControls({
+      atlasRuntimeDisabledReason: "Apply a texture atlas first.",
+      parameters: [
+        createParameter(FACE_ANGLE_X, "Face Angle X", { max: 30, min: -30 }),
+        createParameter(MOUTH_OPEN, "Mouth Open", { max: 1, min: 0 })
+      ],
+      state: createInitialRuntimeControlsState()
+    });
+
+    expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
+      markup.indexOf('aria-label="Search parameters"')
+    );
+    expect(markup).toContain('aria-label="Use Original render source"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('data-testid="viewer-render-source-disabled-reason"');
+    expect(markup).toContain("Apply a texture atlas first.");
+    expect(markup).toContain("Atlas Runtime unavailable: Apply a texture atlas first.");
+  });
+
+  it("renders parameter name search below render source mode and filters visible rows", () => {
     const markup = renderRuntimeControls({
       parameters: [
         createParameter(FACE_ANGLE_X, "Face Angle X", { max: 30, min: -30 }),
@@ -331,6 +354,9 @@ describe("RuntimeControls UI", () => {
       }
     });
 
+    expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
+      markup.indexOf('aria-label="Search parameters"')
+    );
     expect(markup.indexOf('aria-label="Search parameters"')).toBeLessThan(
       markup.indexOf('data-testid="runtime-parameter-list"')
     );
@@ -431,20 +457,27 @@ describe("RuntimeControls UI", () => {
 });
 
 function renderRuntimeControls({
+  atlasRuntimeDisabledReason,
   hasDynamicsSimulation = false,
   parameters,
+  renderSourceMode = "original",
   state
 }: {
+  readonly atlasRuntimeDisabledReason?: string;
   readonly hasDynamicsSimulation?: boolean;
   readonly parameters: readonly EditorParameter[];
+  readonly renderSourceMode?: "original" | "atlasRuntime";
   readonly state: ViewerRuntimeControlsState;
 }): string {
   return renderToStaticMarkup(
     createElement(RuntimeControls, {
       hasDynamicsSimulation,
+      onRenderSourceModeChange: vi.fn(),
       onStateChange: vi.fn(),
       onResetSimulation: vi.fn(),
       parameters,
+      renderSourceMode,
+      ...(atlasRuntimeDisabledReason === undefined ? {} : { atlasRuntimeDisabledReason }),
       state
     })
   );
@@ -468,8 +501,10 @@ async function renderRuntimeControlsInteractive({
   await act(async () => {
     reactRoot?.render(
       createElement(RuntimeControls, {
+        onRenderSourceModeChange: vi.fn(),
         onStateChange,
         parameters,
+        renderSourceMode: "original",
         state
       })
     );
