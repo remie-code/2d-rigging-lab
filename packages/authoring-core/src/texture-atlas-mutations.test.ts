@@ -76,6 +76,12 @@ describe("texture atlas core mutation", () => {
       }
     ]);
     expect(selection.warnings).toEqual([]);
+    const bodyBytes = session.binaryAssets?.fileEntries.find((entry) =>
+      entry.path === "assets/textures/body.raw-rgba"
+    )?.bytes;
+    expect(selection.packableTargets.find((target) =>
+      target.drawable.drawableId === DRAW_BODY
+    )?.textureBytes).toBe(bodyBytes);
   });
 
   it("emits deterministic target warnings for missing texture, mesh, binary, and invalid UV inputs", async () => {
@@ -332,6 +338,40 @@ describe("texture atlas core mutation", () => {
       boundDrawableIds: [DRAW_BODY, DRAW_HIDDEN],
       packableDrawableIds: [DRAW_BODY, DRAW_HIDDEN]
     });
+  });
+
+  it("keeps the direct authoring-core Apply freshness guard when source bytes change", async () => {
+    const session = await createTextureAtlasFixtureSession();
+    const preview = createTextureAtlasPreview(session, {
+      pageWidth: 8,
+      pageHeight: 4,
+      paddingPixels: 1,
+      edgeExtrusionEnabled: true,
+      edgeExtrusionPixels: 1
+    });
+    if (preview.status !== "ready") {
+      throw new Error("Expected ready preview.");
+    }
+    const bodyBytes = session.binaryAssets?.fileEntries.find((entry) =>
+      entry.path === "assets/textures/body.raw-rgba"
+    )?.bytes;
+    if (bodyBytes === undefined) {
+      throw new Error("Expected fixture body texture bytes.");
+    }
+    bodyBytes[0] = 127;
+
+    const result = await applyTextureAtlasPreview(session, { preview });
+
+    expect(result.status).toBe("failed");
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.warnings.map((warning) => warning.code)).toContain(
+      "atlas.apply.stalePreview"
+    );
+    expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
+    expect(session.authoringRevision).toBe(0);
+    expect(session.dirty).toBe(false);
   });
 
   it("preserves generated atlas metadata and binary bytes through portable bundle round-trip", async () => {

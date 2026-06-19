@@ -22,23 +22,28 @@ import {
   type RectDto,
   type TextureId
 } from "@private-2d-rigging-lab/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createCanvasRenderProjection } from "../canvas/canvas-projection";
 import {
   createViewerCleanStageProjection,
   createViewerCleanStageRenderSourceProjection
 } from "./viewer-clean-stage";
+import { createViewerRenderSourceProjection } from "./viewer-render-source";
 
 type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
 const PART_ROOT = PartIdSchema.parse("part_viewer_atlas_root");
+const PART_POOL = PartIdSchema.parse("part_viewer_atlas_pool");
 const DRAW_BODY = DrawableIdSchema.parse("draw_viewer_atlas_body");
 const DRAW_SLEEVE = DrawableIdSchema.parse("draw_viewer_atlas_sleeve");
+const DRAW_POOL = DrawableIdSchema.parse("draw_viewer_atlas_pool");
 const MESH_BODY = MeshIdSchema.parse("mesh_viewer_atlas_body");
 const MESH_SLEEVE = MeshIdSchema.parse("mesh_viewer_atlas_sleeve");
+const MESH_POOL = MeshIdSchema.parse("mesh_viewer_atlas_pool");
 const TEX_BODY = TextureIdSchema.parse("tex_viewer_atlas_body");
 const TEX_SLEEVE = TextureIdSchema.parse("tex_viewer_atlas_sleeve");
+const TEX_POOL = TextureIdSchema.parse("tex_viewer_atlas_pool");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_viewer_atlas_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_viewer_atlas_fixture");
 const RIG_ROOT = RigControlIdSchema.parse("rig_viewer_atlas_root");
@@ -62,6 +67,21 @@ describe("viewer render source projection", () => {
     expect(body.renderHeight).toBe(2);
     expect(body.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
     expect(requireDrawable(defaultProjection, DRAW_BODY).textureId).toBe(TEX_BODY);
+  });
+
+  it("keeps Original mode rendering unbound Drawable Pool drawables after atlas commit", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const original = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "original"
+    });
+    const pool = requireDrawable(original.projection, DRAW_POOL);
+
+    expect(original.effectiveMode).toBe("original");
+    expect(original.atlasRuntimeAvailability.status).toBe("available");
+    expect(pool.textureId).toBe(TEX_POOL);
+    expect(pool.renderWidth).toBe(2);
+    expect(pool.renderHeight).toBe(2);
+    expect(pool.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
   });
 
   it("remaps Atlas Runtime texture refs, bytes, dimensions, and UVs without mutating graph", async () => {
@@ -99,20 +119,71 @@ describe("viewer render source projection", () => {
     expect(session.graph).toEqual(beforeGraph);
   });
 
+  it("keeps Atlas Runtime available and omits unbound Drawable Pool drawables after atlas commit", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+
+    const result = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime"
+    });
+
+    expect(result.effectiveMode).toBe("atlasRuntime");
+    expect(result.atlasRuntimeAvailability.status).toBe("available");
+    expect(result.projection.drawables.map((drawable) => drawable.drawableId).sort()).toEqual(
+      [DRAW_BODY, DRAW_SLEEVE].sort()
+    );
+    expect(result.projection.drawables.some((drawable) => drawable.drawableId === DRAW_POOL)).toBe(
+      false
+    );
+  });
+
   it("keeps Canvas projection on original texture refs and mesh UVs after atlas commit", async () => {
     const session = await createAppliedAtlasRuntimeSession();
 
     const projection = createCanvasRenderProjection(session, null);
     const body = requireDrawable(projection, DRAW_BODY);
     const sleeve = requireDrawable(projection, DRAW_SLEEVE);
+    const pool = requireDrawable(projection, DRAW_POOL);
 
     expect(session.graph.textureAtlas?.layoutSummary).toBeDefined();
     expect(body.textureId).toBe(TEX_BODY);
     expect(sleeve.textureId).toBe(TEX_SLEEVE);
+    expect(pool.textureId).toBe(TEX_POOL);
     expect(body.renderWidth).toBe(2);
     expect(sleeve.renderWidth).toBe(2);
+    expect(pool.renderWidth).toBe(2);
     expect(body.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
     expect(sleeve.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
+    expect(pool.evaluatedMesh.uvs).toEqual(createUnitQuadUvs());
+  });
+
+  it("avoids atlas target selection and source signature work for Original projections", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const originalProjection = createCanvasRenderProjection(session, null);
+    const hooks = {
+      selectTextureAtlasTargets: vi.fn(() => {
+        throw new Error("Original mode must not select atlas targets.");
+      }),
+      createTextureAtlasSourceSignature: vi.fn(() => {
+        throw new Error("Original mode must not create atlas source signatures.");
+      }),
+      sameTextureAtlasSourceSignature: vi.fn(() => {
+        throw new Error("Original mode must not compare atlas source signatures.");
+      })
+    };
+
+    const result = createViewerRenderSourceProjection({
+      session,
+      originalProjection,
+      requestedMode: "original",
+      hooks
+    });
+
+    expect(result.effectiveMode).toBe("original");
+    expect(result.projection).toBe(originalProjection);
+    expect(result.atlasRuntimeAvailability.status).toBe("available");
+    expect(hooks.selectTextureAtlasTargets).not.toHaveBeenCalled();
+    expect(hooks.createTextureAtlasSourceSignature).not.toHaveBeenCalled();
+    expect(hooks.sameTextureAtlasSourceSignature).not.toHaveBeenCalled();
   });
 
   it("disables Atlas Runtime when no committed atlas layout exists", () => {
@@ -282,8 +353,10 @@ async function createAppliedAtlasRuntimeSession(): Promise<AuthoringSession> {
 function createViewerAtlasFixtureSession(): AuthoringSession {
   const bodyBytes = createSolidRgbaBytes(2, 2, [255, 0, 0, 255]);
   const sleeveBytes = createSolidRgbaBytes(2, 2, [0, 255, 0, 255]);
+  const poolBytes = createSolidRgbaBytes(2, 2, [0, 0, 255, 255]);
   const bodyRef = createTextureBinaryAssetReference("body", bodyBytes);
   const sleeveRef = createTextureBinaryAssetReference("sleeve", sleeveBytes);
+  const poolRef = createTextureBinaryAssetReference("pool", poolBytes);
   const session: AuthoringSession = {
     packageIdentity: {
       packageId: PackageIdSchema.parse("pkg_viewer_atlas_fixture"),
@@ -300,21 +373,32 @@ function createViewerAtlasFixtureSession(): AuthoringSession {
         {
           partId: PART_ROOT,
           displayName: "Root",
-          childPartIds: [],
+          childPartIds: [PART_POOL],
           drawableIds: [DRAW_BODY, DRAW_SLEEVE],
           children: [
             { kind: "drawable", drawableId: DRAW_BODY },
-            { kind: "drawable", drawableId: DRAW_SLEEVE }
+            { kind: "drawable", drawableId: DRAW_SLEEVE },
+            { kind: "part", partId: PART_POOL }
           ]
+        },
+        {
+          partId: PART_POOL,
+          displayName: "Drawable Pool",
+          parentPartId: PART_ROOT,
+          childPartIds: [],
+          drawableIds: [DRAW_POOL],
+          children: [{ kind: "drawable", drawableId: DRAW_POOL }]
         }
       ],
       drawables: [
         createDrawable(DRAW_BODY, MESH_BODY, TEX_BODY, "Body", 0),
-        createDrawable(DRAW_SLEEVE, MESH_SLEEVE, TEX_SLEEVE, "Sleeve", 1)
+        createDrawable(DRAW_SLEEVE, MESH_SLEEVE, TEX_SLEEVE, "Sleeve", 1),
+        createDrawable(DRAW_POOL, MESH_POOL, TEX_POOL, "Pool", 2, PART_POOL)
       ],
       meshes: [
         createMesh(MESH_BODY, DRAW_BODY, { x: 0, y: 0, width: 2, height: 2 }),
-        createMesh(MESH_SLEEVE, DRAW_SLEEVE, { x: 4, y: 0, width: 2, height: 2 })
+        createMesh(MESH_SLEEVE, DRAW_SLEEVE, { x: 4, y: 0, width: 2, height: 2 }),
+        createMesh(MESH_POOL, DRAW_POOL, { x: 8, y: 0, width: 2, height: 2 })
       ],
       parameters: [],
       keyformSets: [],
@@ -336,16 +420,18 @@ function createViewerAtlasFixtureSession(): AuthoringSession {
       masks: [],
       drawOrder: [
         { drawableId: DRAW_BODY, baseDrawOrder: 0, stableOrder: 0 },
-        { drawableId: DRAW_SLEEVE, baseDrawOrder: 1, stableOrder: 1 }
+        { drawableId: DRAW_SLEEVE, baseDrawOrder: 1, stableOrder: 1 },
+        { drawableId: DRAW_POOL, baseDrawOrder: 2, stableOrder: 2 }
       ],
       rigControlRootIds: [RIG_ROOT],
-      stableOrder: [PART_ROOT, DRAW_BODY, DRAW_SLEEVE],
+      stableOrder: [PART_ROOT, DRAW_BODY, DRAW_SLEEVE, PART_POOL, DRAW_POOL],
       sourceAssets: [],
       textureAtlas: {
         schemaVersion: "texture-atlas-v1",
         textures: [
           createTextureEntry(TEX_BODY, "body", bodyRef),
-          createTextureEntry(TEX_SLEEVE, "sleeve", sleeveRef)
+          createTextureEntry(TEX_SLEEVE, "sleeve", sleeveRef),
+          createTextureEntry(TEX_POOL, "pool", poolRef)
         ]
       },
       provenanceRecords: [],
@@ -355,6 +441,7 @@ function createViewerAtlasFixtureSession(): AuthoringSession {
 
   registerTextureBytes(session, bodyRef, bodyBytes, TEX_BODY);
   registerTextureBytes(session, sleeveRef, sleeveBytes, TEX_SLEEVE);
+  registerTextureBytes(session, poolRef, poolBytes, TEX_POOL);
 
   return session;
 }
@@ -364,12 +451,13 @@ function createDrawable(
   meshId: ReturnType<typeof MeshIdSchema.parse>,
   textureId: TextureId,
   displayName: string,
-  baseDrawOrder: number
+  baseDrawOrder: number,
+  partId: ReturnType<typeof PartIdSchema.parse> = PART_ROOT
 ) {
   return {
     drawableId,
     displayName,
-    partId: PART_ROOT,
+    partId,
     sourceAssetId: SOURCE_ASSET,
     textureId,
     meshId,

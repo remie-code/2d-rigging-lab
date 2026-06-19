@@ -51,8 +51,26 @@ const atlasScreenTestState = vi.hoisted(() => ({
     setActiveEntry: vi.fn(),
     setActiveTool: vi.fn(),
     surfaceLabel: "Atlas test surface"
-  }
+  },
+  pageRgbaGenerationCalls: 0
 }));
+
+vi.mock("@private-2d-rigging-lab/authoring-core", async () => {
+  const actual = await vi.importActual<typeof import("@private-2d-rigging-lab/authoring-core")>(
+    "@private-2d-rigging-lab/authoring-core"
+  );
+
+  return {
+    ...actual,
+    createTextureAtlasPageRgbaBytes: (
+      preview: Parameters<typeof actual.createTextureAtlasPageRgbaBytes>[0]
+    ) => {
+      atlasScreenTestState.pageRgbaGenerationCalls += 1;
+
+      return actual.createTextureAtlasPageRgbaBytes(preview);
+    }
+  };
+});
 
 vi.mock("../../features/editor-session/editor-session-context", async () => {
   const actual = await vi.importActual<
@@ -143,6 +161,7 @@ describe("TextureAtlasTaskScreen", () => {
   beforeEach(() => {
     atlasScreenTestState.editorSession = createEditorSessionMock(createAtlasFixtureSession());
     atlasScreenTestState.iconButtons.length = 0;
+    atlasScreenTestState.pageRgbaGenerationCalls = 0;
     atlasScreenTestState.uiStore.activeEntry = "atlas";
     atlasScreenTestState.uiStore.activeTool = "select";
     atlasScreenTestState.uiStore.setActiveEntry.mockClear();
@@ -201,6 +220,7 @@ describe("TextureAtlasTaskScreen", () => {
     });
 
     expect(previewState.preview.status).toBe("ready");
+    expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
     expect(readyProjection.previewStatus).toBe("ready");
     expect(readyProjection.canApply).toBe(true);
     expect(readyProjection.previewPage?.placements).toHaveLength(2);
@@ -213,6 +233,20 @@ describe("TextureAtlasTaskScreen", () => {
       .toEqual([255, 0, 0, 255]);
     expect(readPixel(readyProjection.previewPage!.image.rgbaBytes, 8, 5, 1))
       .toEqual([0, 255, 0, 255]);
+    const readyImage = readyProjection.previewPage!.image;
+    const rerenderedProjection = createTextureAtlasTaskProjection({
+      session,
+      editorHiddenPartIds: new Set([PART_HIDDEN]),
+      settings: {
+        pageSize: 8,
+        paddingPixels: 1,
+        edgeExtrusionEnabled: true
+      },
+      previewState
+    });
+
+    expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
+    expect(rerenderedProjection.previewPage?.image).toBe(readyImage);
 
     const staleSettingsProjection = createTextureAtlasTaskProjection({
       session,
@@ -227,8 +261,15 @@ describe("TextureAtlasTaskScreen", () => {
 
     expect(staleSettingsProjection.previewStatus).toBe("stale");
     expect(staleSettingsProjection.canApply).toBe(false);
+    expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
+    expect(staleSettingsProjection.previewPage?.image).toBe(readyImage);
     expect(staleSettingsProjection.warningRows.map((warning) => warning.code))
       .toContain("atlas.apply.stalePreview");
+    const staleMarkup = renderToStaticMarkup(
+      createElement(AtlasPreview, { projection: staleSettingsProjection })
+    );
+    expect(staleMarkup).toContain('data-testid="atlas-preview-image"');
+    expect(staleMarkup).toContain('data-testid="atlas-preview-stale-warning"');
 
     const changedSession = structuredClone(session);
     changedSession.graph.drawables[0] = {
@@ -249,6 +290,8 @@ describe("TextureAtlasTaskScreen", () => {
 
     expect(staleTargetProjection.previewStatus).toBe("stale");
     expect(staleTargetProjection.canApply).toBe(false);
+    expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
+    expect(staleTargetProjection.previewPage?.image).toBe(readyImage);
   });
 
   it("renders actual atlas image data behind placement overlays", () => {

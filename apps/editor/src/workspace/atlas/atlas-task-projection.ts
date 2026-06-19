@@ -22,6 +22,7 @@ export interface TextureAtlasTaskSettings {
 
 export interface TextureAtlasTaskPreviewState {
   readonly preview: TextureAtlasPreview;
+  readonly previewPage: TextureAtlasPreviewPage | null;
   readonly signature: string;
 }
 
@@ -136,7 +137,7 @@ export function createTextureAtlasTaskProjection(input: {
   const warningRows = createWarningRows(
     stale ? [...warningSource, createStaleTaskWarning()] : warningSource
   );
-  const previewPage = createPreviewPage(preview);
+  const previewPage = input.previewState?.previewPage ?? null;
   const readyPlacementCount = preview?.status === "ready"
     ? preview.layoutSummary.pages[0]?.placements.length ?? 0
     : 0;
@@ -193,6 +194,7 @@ export function createTextureAtlasTaskPreviewState(input: {
 
   return {
     preview,
+    previewPage: createPreviewPage(preview),
     signature: createTextureAtlasTaskInputSignature({
       session: input.session,
       ...createEditorHiddenInput(input.editorHiddenPartIds),

@@ -72,13 +72,23 @@ export type ApplyTextureAtlasPreviewResult =
 export interface ApplyTextureAtlasPreviewInput {
   readonly preview: TextureAtlasPreview;
   readonly operationId?: OperationId;
+  readonly freshnessValidation?: TextureAtlasPreviewFreshnessValidation;
+}
+
+export interface TextureAtlasPreviewFreshnessValidation {
+  readonly status: "validated-current-session";
+  readonly layoutSummary: TextureAtlasLayoutSummaryDto;
 }
 
 export const applyTextureAtlasPreview = async (
   session: AuthoringSession,
   input: ApplyTextureAtlasPreviewInput
 ): Promise<ApplyTextureAtlasPreviewResult> => {
-  const guardWarnings = createApplyGuardWarnings(session, input.preview);
+  const guardWarnings = createApplyGuardWarnings(
+    session,
+    input.preview,
+    input.freshnessValidation
+  );
   if (guardWarnings.length > 0 || input.preview.status !== "ready") {
     return {
       status: "failed",
@@ -182,7 +192,7 @@ export const applyTextureAtlasPreview = async (
     textureAtlas: structuredClone(textureAtlas),
     textureEntry: structuredClone(textureEntry),
     layoutSummary: structuredClone(layoutSummary),
-    atlasBytes: new Uint8Array(atlasBytes),
+    atlasBytes,
     drawableChanges,
     meshUvChanges,
     warnings: [],
@@ -192,9 +202,14 @@ export const applyTextureAtlasPreview = async (
 
 const createApplyGuardWarnings = (
   session: AuthoringSession,
-  preview: TextureAtlasPreview
+  preview: TextureAtlasPreview,
+  freshnessValidation: TextureAtlasPreviewFreshnessValidation | undefined
 ): readonly TextureAtlasWarning[] => {
   if (preview.status !== "ready") {
+    return [];
+  }
+
+  if (hasValidatedCurrentSessionFreshness(preview, freshnessValidation)) {
     return [];
   }
 
@@ -244,6 +259,32 @@ const createApplyGuardWarnings = (
   }
 
   return warnings;
+};
+
+const hasValidatedCurrentSessionFreshness = (
+  preview: Extract<TextureAtlasPreview, { readonly status: "ready" }>,
+  freshnessValidation: TextureAtlasPreviewFreshnessValidation | undefined
+): boolean =>
+  freshnessValidation?.status === "validated-current-session" &&
+  sameLayoutSummaryForFreshness(
+    freshnessValidation.layoutSummary,
+    preview.layoutSummary
+  );
+
+const sameLayoutSummaryForFreshness = (
+  left: TextureAtlasLayoutSummaryDto,
+  right: TextureAtlasLayoutSummaryDto
+): boolean =>
+  JSON.stringify(normalizeLayoutSummaryForFreshness(left)) ===
+  JSON.stringify(normalizeLayoutSummaryForFreshness(right));
+
+const normalizeLayoutSummaryForFreshness = (
+  layoutSummary: TextureAtlasLayoutSummaryDto
+): TextureAtlasLayoutSummaryDto => {
+  const normalized = structuredClone(layoutSummary);
+  delete normalized.generatedByOperationId;
+
+  return normalized;
 };
 
 const ensureTextureAtlas = (session: AuthoringSession): TextureAtlasFileDto => {

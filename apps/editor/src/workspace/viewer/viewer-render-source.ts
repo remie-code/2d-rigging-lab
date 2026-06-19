@@ -4,7 +4,7 @@ import {
   selectTextureAtlasTargets,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
-import type { DrawableId } from "@private-2d-rigging-lab/contracts";
+import type { DrawableId, RectDto } from "@private-2d-rigging-lab/contracts";
 
 import {
   isRenderableDrawable,
@@ -50,14 +50,27 @@ export interface ViewerRenderSourceProjectionResult {
   readonly atlasRuntimeAvailability: ViewerAtlasRuntimeAvailability;
 }
 
+export interface ViewerRenderSourceProjectionHooks {
+  readonly createTextureAtlasSourceSignature?: typeof createTextureAtlasSourceSignature;
+  readonly sameTextureAtlasSourceSignature?: typeof sameTextureAtlasSourceSignature;
+  readonly selectTextureAtlasTargets?: typeof selectTextureAtlasTargets;
+}
+
 type TextureAtlasFile = NonNullable<AuthoringSession["graph"]["textureAtlas"]>;
 type TextureAtlasLayoutSummary = NonNullable<TextureAtlasFile["layoutSummary"]>;
+type TextureAtlasSourceSignature = NonNullable<TextureAtlasLayoutSummary["sourceSignature"]>;
 type TextureAtlasPage = TextureAtlasLayoutSummary["pages"][number];
 type TextureAtlasPlacement = TextureAtlasPage["placements"][number];
 type TextureAtlasEntry = TextureAtlasFile["textures"][number];
 type BinaryAssetReference = NonNullable<TextureAtlasEntry["binaryAssetRef"]>;
 
-interface ViewerAtlasRuntimeSource {
+interface ResolvedViewerRenderSourceProjectionHooks {
+  readonly createTextureAtlasSourceSignature: typeof createTextureAtlasSourceSignature;
+  readonly sameTextureAtlasSourceSignature: typeof sameTextureAtlasSourceSignature;
+  readonly selectTextureAtlasTargets: typeof selectTextureAtlasTargets;
+}
+
+interface ViewerAtlasRuntimeStaticSource {
   readonly textureId: TextureAtlasEntry["textureId"];
   readonly binaryAssetId: BinaryAssetReference["binaryAssetId"];
   readonly binaryAssetPath: BinaryAssetReference["packageRelativePath"];
@@ -68,10 +81,24 @@ interface ViewerAtlasRuntimeSource {
   readonly contentKey: string;
 }
 
+interface ViewerAtlasRuntimeSource extends ViewerAtlasRuntimeStaticSource {
+  readonly runtimeDrawableIds: ReadonlySet<DrawableId>;
+}
+
 type ViewerAtlasRuntimeSourceResult =
   | {
       readonly status: "available";
       readonly source: ViewerAtlasRuntimeSource;
+    }
+  | Extract<ViewerAtlasRuntimeAvailability, { readonly status: "unavailable" }>;
+
+type ViewerAtlasRuntimeStaticSourceResult =
+  | {
+      readonly status: "available";
+      readonly layoutSummary: TextureAtlasLayoutSummary;
+      readonly page: TextureAtlasPage;
+      readonly sourceSignature: TextureAtlasSourceSignature;
+      readonly source: ViewerAtlasRuntimeStaticSource;
     }
   | Extract<ViewerAtlasRuntimeAvailability, { readonly status: "unavailable" }>;
 
@@ -92,8 +119,12 @@ const UNAVAILABLE_REASONS = {
 export function resolveViewerAtlasRuntimeAvailability(input: {
   readonly session: AuthoringSession;
   readonly originalProjection: CanvasRenderProjection;
+  readonly hooks?: ViewerRenderSourceProjectionHooks;
 }): ViewerAtlasRuntimeAvailability {
-  const result = resolveViewerAtlasRuntimeSource(input);
+  const result = resolveViewerAtlasRuntimeSource({
+    session: input.session,
+    hooks: resolveViewerRenderSourceProjectionHooks(input.hooks)
+  });
 
   return result.status === "available" ? { status: "available" } : result;
 }
@@ -102,23 +133,40 @@ export function createViewerRenderSourceProjection(input: {
   readonly session: AuthoringSession;
   readonly originalProjection: CanvasRenderProjection;
   readonly requestedMode?: ViewerRenderSourceMode;
+  readonly hooks?: ViewerRenderSourceProjectionHooks;
 }): ViewerRenderSourceProjectionResult {
   const requestedMode = input.requestedMode ?? "original";
-  const atlasRuntime = resolveViewerAtlasRuntimeSource({
-    session: input.session,
-    originalProjection: input.originalProjection
+
+  if (requestedMode === "atlasRuntime") {
+    const atlasRuntime = resolveViewerAtlasRuntimeSource({
+      session: input.session,
+      hooks: resolveViewerRenderSourceProjectionHooks(input.hooks)
+    });
+    const atlasRuntimeAvailability: ViewerAtlasRuntimeAvailability =
+      atlasRuntime.status === "available" ? { status: "available" } : atlasRuntime;
+
+    if (atlasRuntime.status === "available") {
+      return {
+        requestedMode,
+        effectiveMode: "atlasRuntime",
+        atlasRuntimeAvailability,
+        projection: remapProjectionToAtlasRuntime(input.originalProjection, atlasRuntime.source)
+      };
+    }
+
+    return {
+      requestedMode,
+      effectiveMode: "original",
+      projection: input.originalProjection,
+      atlasRuntimeAvailability
+    };
+  }
+
+  const atlasRuntime = resolveViewerAtlasRuntimeStaticSource({
+    session: input.session
   });
   const atlasRuntimeAvailability: ViewerAtlasRuntimeAvailability =
     atlasRuntime.status === "available" ? { status: "available" } : atlasRuntime;
-
-  if (requestedMode === "atlasRuntime" && atlasRuntime.status === "available") {
-    return {
-      requestedMode,
-      effectiveMode: "atlasRuntime",
-      atlasRuntimeAvailability,
-      projection: remapProjectionToAtlasRuntime(input.originalProjection, atlasRuntime.source)
-    };
-  }
 
   return {
     requestedMode,
@@ -130,8 +178,70 @@ export function createViewerRenderSourceProjection(input: {
 
 const resolveViewerAtlasRuntimeSource = (input: {
   readonly session: AuthoringSession;
-  readonly originalProjection: CanvasRenderProjection;
+  readonly hooks: ResolvedViewerRenderSourceProjectionHooks;
 }): ViewerAtlasRuntimeSourceResult => {
+  const staticResult = resolveViewerAtlasRuntimeStaticSource({
+    session: input.session
+  });
+  if (staticResult.status === "unavailable") {
+    return staticResult;
+  }
+
+  const currentTargetSelection = input.hooks.selectTextureAtlasTargets(input.session);
+  const currentSourceSignature = input.hooks.createTextureAtlasSourceSignature({
+    settings: staticResult.layoutSummary.settings,
+    targetSelection: currentTargetSelection,
+    packableTargets: currentTargetSelection.packableTargets
+  });
+
+  if (
+    !input.hooks.sameTextureAtlasSourceSignature(
+      staticResult.sourceSignature,
+      currentSourceSignature
+    )
+  ) {
+    return unavailable("staleSourceSignature", "/assets/textureAtlas/layoutSummary/sourceSignature", [
+      `expectedDigest=${staticResult.sourceSignature.digest}`,
+      `currentDigest=${currentSourceSignature.digest}`
+    ]);
+  }
+
+  const runtimeDrawableIds = new Set<DrawableId>();
+  for (const target of currentTargetSelection.packableTargets) {
+    runtimeDrawableIds.add(target.drawable.drawableId);
+    const placement = staticResult.source.placementsByDrawableId.get(target.drawable.drawableId);
+    if (placement === undefined) {
+      return unavailable(
+        "missingPlacement",
+        `/assets/textureAtlas/layoutSummary/pages/${staticResult.page.pageId}/placements/${target.drawable.drawableId}`
+      );
+    }
+
+    if (
+      placement.meshId !== target.mesh.meshId ||
+      placement.originalTextureId !== target.drawable.textureId
+    ) {
+      return unavailable("invalidPlacement", `/model/drawables/${target.drawable.drawableId}`, [
+        `placementMeshId=${placement.meshId}`,
+        `currentMeshId=${target.mesh.meshId}`,
+        `placementOriginalTextureId=${placement.originalTextureId}`,
+        `currentTextureId=${target.drawable.textureId}`
+      ]);
+    }
+  }
+
+  return {
+    status: "available",
+    source: {
+      ...staticResult.source,
+      runtimeDrawableIds
+    }
+  };
+};
+
+const resolveViewerAtlasRuntimeStaticSource = (input: {
+  readonly session: AuthoringSession;
+}): ViewerAtlasRuntimeStaticSourceResult => {
   const layoutSummary = input.session.graph.textureAtlas?.layoutSummary;
   if (layoutSummary === undefined) {
     return unavailable("missingLayout", "/assets/textureAtlas/layoutSummary");
@@ -200,25 +310,12 @@ const resolveViewerAtlasRuntimeSource = (input: {
     ]);
   }
 
-  if (layoutSummary.sourceSignature === undefined) {
+  const sourceSignature = layoutSummary.sourceSignature;
+  if (sourceSignature === undefined) {
     return unavailable(
       "missingSourceSignature",
       "/assets/textureAtlas/layoutSummary/sourceSignature"
     );
-  }
-
-  const currentTargetSelection = selectTextureAtlasTargets(input.session);
-  const currentSourceSignature = createTextureAtlasSourceSignature({
-    settings: layoutSummary.settings,
-    targetSelection: currentTargetSelection,
-    packableTargets: currentTargetSelection.packableTargets
-  });
-
-  if (!sameTextureAtlasSourceSignature(layoutSummary.sourceSignature, currentSourceSignature)) {
-    return unavailable("staleSourceSignature", "/assets/textureAtlas/layoutSummary/sourceSignature", [
-      `expectedDigest=${layoutSummary.sourceSignature.digest}`,
-      `currentDigest=${currentSourceSignature.digest}`
-    ]);
   }
 
   const placementsByDrawableId = new Map<DrawableId, TextureAtlasPlacement>();
@@ -236,40 +333,11 @@ const resolveViewerAtlasRuntimeSource = (input: {
     placementsByDrawableId.set(placement.drawableId, placement);
   }
 
-  for (const target of currentTargetSelection.packableTargets) {
-    const placement = placementsByDrawableId.get(target.drawable.drawableId);
-    if (placement === undefined) {
-      return unavailable(
-        "missingPlacement",
-        `/assets/textureAtlas/layoutSummary/pages/${page.pageId}/placements/${target.drawable.drawableId}`
-      );
-    }
-
-    if (
-      placement.meshId !== target.mesh.meshId ||
-      placement.originalTextureId !== target.drawable.textureId
-    ) {
-      return unavailable("invalidPlacement", `/model/drawables/${target.drawable.drawableId}`, [
-        `placementMeshId=${placement.meshId}`,
-        `currentMeshId=${target.mesh.meshId}`,
-        `placementOriginalTextureId=${placement.originalTextureId}`,
-        `currentTextureId=${target.drawable.textureId}`
-      ]);
-    }
-  }
-
-  for (const drawable of input.originalProjection.drawables) {
-    if (!isRenderableDrawable(drawable)) {
-      continue;
-    }
-
-    if (!placementsByDrawableId.has(drawable.drawableId)) {
-      return unavailable("missingPlacement", `/model/drawables/${drawable.drawableId}`);
-    }
-  }
-
   return {
     status: "available",
+    layoutSummary,
+    page,
+    sourceSignature,
     source: {
       textureId: textureEntry.textureId,
       binaryAssetId: binaryAssetRef.binaryAssetId,
@@ -285,7 +353,7 @@ const resolveViewerAtlasRuntimeSource = (input: {
         textureEntry.textureId,
         binaryAssetRef.binaryAssetId,
         binaryEntry.bytes.byteLength,
-        layoutSummary.sourceSignature.digest
+        sourceSignature.digest
       ].join(":")
     }
   };
@@ -294,13 +362,82 @@ const resolveViewerAtlasRuntimeSource = (input: {
 const remapProjectionToAtlasRuntime = (
   projection: CanvasRenderProjection,
   source: ViewerAtlasRuntimeSource
-): CanvasRenderProjection => ({
-  ...projection,
-  drawables: projection.drawables.map((drawable) =>
-    remapDrawableToAtlasRuntime(drawable, source)
-  ),
-  contentKey: `${projection.contentKey}|${source.contentKey}`
-});
+): CanvasRenderProjection => {
+  const {
+    artworkBounds: _previousArtworkBounds,
+    selectionBounds: _previousSelectionBounds,
+    meshOverlay: previousMeshOverlay,
+    meshOverlays: previousMeshOverlays,
+    deformerOverlay: previousDeformerOverlay,
+    ...projectionBase
+  } = projection;
+  void _previousArtworkBounds;
+  void _previousSelectionBounds;
+  const drawables = projection.drawables
+    .filter((drawable) => source.runtimeDrawableIds.has(drawable.drawableId))
+    .map((drawable) => remapDrawableToAtlasRuntime(drawable, source));
+  const renderableDrawables = drawables.filter(
+    (drawable) => drawable.visible && isRenderableDrawable(drawable)
+  );
+  const selectedDrawableIds = new Set(
+    [...projection.selectedDrawableIds].filter((drawableId) =>
+      source.runtimeDrawableIds.has(drawableId)
+    )
+  );
+  const selectedVisibleDrawables = drawables.filter(
+    (drawable) => drawable.visible && selectedDrawableIds.has(drawable.drawableId)
+  );
+  const artworkBounds = unionDrawableBounds(renderableDrawables);
+  const selectionBounds = unionDrawableBounds(selectedVisibleDrawables);
+  const maskRelations = projection.maskRelations
+    .map((relation) => ({
+      ...relation,
+      sourceDrawableIds: relation.sourceDrawableIds.filter((drawableId) =>
+        source.runtimeDrawableIds.has(drawableId)
+      ),
+      targetDrawableIds: relation.targetDrawableIds.filter((drawableId) =>
+        source.runtimeDrawableIds.has(drawableId)
+      )
+    }))
+    .filter(
+      (relation) =>
+        relation.sourceDrawableIds.length > 0 &&
+        relation.targetDrawableIds.length > 0
+    );
+  const meshOverlays = previousMeshOverlays?.filter((overlay) =>
+    source.runtimeDrawableIds.has(overlay.drawableId)
+  );
+  const meshOverlay =
+    previousMeshOverlay === undefined ||
+    !source.runtimeDrawableIds.has(previousMeshOverlay.drawableId)
+      ? undefined
+      : previousMeshOverlay;
+  const deformerOverlay =
+    previousDeformerOverlay === undefined
+      ? undefined
+      : {
+          ...previousDeformerOverlay,
+          childDrawableIds: previousDeformerOverlay.childDrawableIds.filter((drawableId) =>
+            source.runtimeDrawableIds.has(drawableId)
+          )
+        };
+
+  return {
+    ...projectionBase,
+    ...(artworkBounds === undefined ? {} : { artworkBounds }),
+    ...(selectionBounds === undefined ? {} : { selectionBounds }),
+    selectedDrawableIds,
+    drawables,
+    maskRelations,
+    ...(meshOverlays === undefined ? {} : { meshOverlays }),
+    ...(meshOverlay === undefined ? {} : { meshOverlay }),
+    ...(deformerOverlay === undefined ? {} : { deformerOverlay }),
+    hasRenderableArtwork: renderableDrawables.length > 0,
+    contentKey: `${projection.contentKey}|${source.contentKey}|runtime:${[
+      ...source.runtimeDrawableIds
+    ].join(",")}`
+  };
+};
 
 const remapDrawableToAtlasRuntime = (
   drawable: CanvasRenderableDrawable,
@@ -343,6 +480,16 @@ const remapUvIntoPlacement = (
   };
 };
 
+const resolveViewerRenderSourceProjectionHooks = (
+  hooks: ViewerRenderSourceProjectionHooks | undefined
+): ResolvedViewerRenderSourceProjectionHooks => ({
+  createTextureAtlasSourceSignature:
+    hooks?.createTextureAtlasSourceSignature ?? createTextureAtlasSourceSignature,
+  sameTextureAtlasSourceSignature:
+    hooks?.sameTextureAtlasSourceSignature ?? sameTextureAtlasSourceSignature,
+  selectTextureAtlasTargets: hooks?.selectTextureAtlasTargets ?? selectTextureAtlasTargets
+});
+
 const unavailable = (
   code: ViewerAtlasRuntimeUnavailableCode,
   targetPath: string,
@@ -356,6 +503,29 @@ const unavailable = (
 
 const isPositiveSafeInteger = (value: number): boolean =>
   Number.isSafeInteger(value) && value > 0;
+
+const unionDrawableBounds = (
+  drawables: readonly CanvasRenderableDrawable[]
+): RectDto | undefined => {
+  const bounds = drawables
+    .map((drawable) => drawable.bounds)
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (bounds.length === 0) {
+    return undefined;
+  }
+
+  const left = Math.min(...bounds.map((rect) => rect.x));
+  const top = Math.min(...bounds.map((rect) => rect.y));
+  const right = Math.max(...bounds.map((rect) => rect.x + rect.width));
+  const bottom = Math.max(...bounds.map((rect) => rect.y + rect.height));
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+};
 
 const isValidUvRect = (placement: TextureAtlasPlacement): boolean => {
   const left = placement.uvRect.topLeft.x;

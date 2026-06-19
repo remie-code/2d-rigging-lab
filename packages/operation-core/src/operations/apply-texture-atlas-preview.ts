@@ -156,7 +156,11 @@ const applyTextureAtlasPreviewOperation = async (
   );
   const applied = await applyTextureAtlasPreview(session, {
     preview: recreatedPreview,
-    operationId
+    operationId,
+    freshnessValidation: {
+      status: "validated-current-session",
+      layoutSummary: recreatedPreview.layoutSummary
+    }
   });
 
   if (applied.status !== "applied") {

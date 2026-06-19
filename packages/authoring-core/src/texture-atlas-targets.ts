@@ -403,7 +403,7 @@ const createPackableTarget = (
     drawable: structuredClone(drawable),
     mesh: structuredClone(mesh),
     textureEntry: structuredClone(textureEntry),
-    textureBytes: new Uint8Array(binaryEntry.bytes),
+    textureBytes: binaryEntry.bytes,
     textureSize: {
       width: Math.round(mesh.bounds.width),
       height: Math.round(mesh.bounds.height)
