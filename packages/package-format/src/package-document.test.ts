@@ -6,6 +6,7 @@ import {
   DynamicsFileSchema,
   SourceManifestSchema,
   TextureAtlasEntrySchema,
+  TextureAtlasFileSchema,
   TexturePreviewReferenceSchema,
   parsePackageDocument
 } from "./index.js";
@@ -256,6 +257,100 @@ describe("package-format DTO schemas", () => {
       referenceKind: "deterministic-data-url-v1",
       dataUrl: "https://example.test/body.png"
     }).success).toBe(false);
+  });
+
+  it("parses texture atlas layout summary with generated page dimensions and placements", () => {
+    const parsed = TextureAtlasFileSchema.parse({
+      schemaVersion: "texture-atlas-v1",
+      textures: [
+        {
+          textureId: "tex_generated_atlas_page_0",
+          filePath: "assets/textures/generated_atlas_page_0.raw-rgba",
+          contentHash: "sha256:atlas-page",
+          dimensions: {
+            width: 64,
+            height: 32,
+            pixelFormat: "rgba8"
+          },
+          provenanceId: "prov_generated_atlas_page_0_generation"
+        },
+        {
+          textureId: "tex_body",
+          filePath: "assets/textures/body.raw-rgba"
+        }
+      ],
+      layoutSummary: {
+        schemaVersion: "texture-atlas-layout-v1",
+        layoutId: "atlas_layout_single_page_v1",
+        atlasTextureId: "tex_generated_atlas_page_0",
+        sourceTexturePolicy: "retain-source-textures-v1",
+        settings: {
+          algorithmId: "single-page-shelf-v1",
+          pageWidth: 64,
+          pageHeight: 32,
+          paddingPixels: 2,
+          edgeExtrusion: {
+            enabled: true,
+            pixels: 1
+          }
+        },
+        pages: [
+          {
+            pageId: "atlas_page_0",
+            textureId: "tex_generated_atlas_page_0",
+            width: 64,
+            height: 32,
+            pixelFormat: "rgba8",
+            placements: [
+              {
+                placementId: "atlas_place_draw_body",
+                pageId: "atlas_page_0",
+                drawableId: "draw_body",
+                meshId: "mesh_body",
+                originalTextureId: "tex_body",
+                atlasTextureId: "tex_generated_atlas_page_0",
+                sourceTextureSize: {
+                  width: 4,
+                  height: 4
+                },
+                sourceRectPixels: {
+                  x: 0,
+                  y: 0,
+                  width: 4,
+                  height: 4
+                },
+                contentRectPixels: {
+                  x: 2,
+                  y: 2,
+                  width: 4,
+                  height: 4
+                },
+                paddedRectPixels: {
+                  x: 0,
+                  y: 0,
+                  width: 8,
+                  height: 8
+                },
+                uvRect: {
+                  topLeft: { x: 2 / 64, y: 2 / 32 },
+                  bottomRight: { x: 6 / 64, y: 6 / 32 }
+                },
+                hiddenAtApply: true,
+                hiddenReasons: ["runtime-visibility-off"]
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(parsed.layoutSummary?.settings.algorithmId).toBe("single-page-shelf-v1");
+    expect(parsed.layoutSummary?.pages[0]?.placements[0]).toMatchObject({
+      drawableId: "draw_body",
+      originalTextureId: "tex_body",
+      atlasTextureId: "tex_generated_atlas_page_0",
+      hiddenAtApply: true
+    });
   });
 
   it("rejects external or non-texture texture atlas entry paths", () => {

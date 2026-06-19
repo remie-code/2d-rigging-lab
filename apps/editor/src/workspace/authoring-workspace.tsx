@@ -1,6 +1,7 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 
 import { AppBar } from "./app-bar";
+import { TextureAtlasTaskScreen } from "./atlas/texture-atlas-task-screen";
 import { PsdImportModal } from "../features/psd-import/components/psd-import-modal";
 import { CanvasPreviewPanel } from "./panels/canvas-preview-panel";
 import { DiagnosticsScreen } from "./diagnostics/diagnostics-screen";
@@ -34,15 +35,18 @@ export function AuthoringWorkspaceContent({
   const showProjectStorage = activeEntry === "storage";
   const showDiagnostics = activeEntry === "validate";
   const showViewer = activeEntry === "viewer";
+  const showAtlas = activeEntry === "atlas";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      {showParameterManager || showProjectStorage || showDiagnostics || showViewer ? (
+      {showParameterManager || showProjectStorage || showDiagnostics || showViewer || showAtlas ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {showViewer ? (
             <ViewerRuntimeScreen />
+          ) : showAtlas ? (
+            <TextureAtlasTaskScreen />
           ) : showDiagnostics ? (
             <DiagnosticsScreen />
           ) : showParameterManager ? (
@@ -84,7 +88,7 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      {showViewer || showDiagnostics ? null : <ParameterBar />}
+      {showViewer || showDiagnostics || showAtlas ? null : <ParameterBar />}
       <PsdImportModal />
     </main>
   );

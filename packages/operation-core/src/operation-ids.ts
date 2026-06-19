@@ -207,6 +207,12 @@ const operationToken = (request: OperationRequestDto): string => {
     ].map(sanitizeIdToken).join("_")}`;
   }
 
+  if (request.operationType === "applyTextureAtlasPreview") {
+    return `apply_texture_atlas_preview_${sanitizeIdToken(
+      stripIdPrefix(request.payload.expectedLayoutSummary.atlasTextureId, "tex_")
+    )}`;
+  }
+
   if (request.operationType === "createRotation2dRigControl") {
     return `create_rotation2d_rig_control_${sanitizeIdToken(request.payload.displayName)}`;
   }

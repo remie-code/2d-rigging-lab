@@ -48,6 +48,7 @@ import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
 import { updateRigControlOperationHandler } from "./operations/update-rig-control.js";
 import { editKeyformKeyOperationHandler } from "./operations/edit-keyform-key.js";
+import { applyTextureAtlasPreviewOperationHandler } from "./operations/apply-texture-atlas-preview.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -62,11 +63,21 @@ export interface OperationHandler {
     request: OperationRequestDto,
     operationId: OperationId
   ): OperationApplyOutcome;
+  dryRunAsync?(
+    session: AuthoringSession,
+    request: OperationRequestDto,
+    operationId: OperationId
+  ): Promise<OperationApplyOutcome>;
   commit(
     session: AuthoringSession,
     request: OperationRequestDto,
     operationId: OperationId
   ): OperationApplyOutcome;
+  commitAsync?(
+    session: AuthoringSession,
+    request: OperationRequestDto,
+    operationId: OperationId
+  ): Promise<OperationApplyOutcome>;
 }
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
@@ -118,7 +129,8 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
-  [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]
+  [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler],
+  [applyTextureAtlasPreviewOperationHandler.operationType, applyTextureAtlasPreviewOperationHandler]
 ]);
 
 export const getOperationHandler = (operationType: OperationType): OperationHandler | undefined =>

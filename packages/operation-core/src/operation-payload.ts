@@ -50,6 +50,7 @@ import {
   ReparentRigControlPayloadSchema,
   UpdateRigControlPayloadSchema
 } from "./payloads/rig-control.js";
+import { ApplyTextureAtlasPreviewPayloadSchema } from "./payloads/texture-atlas.js";
 
 export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("importPsdSourceAsset"), payload: ImportPsdSourceAssetPayloadSchema }),
@@ -118,6 +119,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),
   z.object({ operationType: z.literal("setDrawOrder"), payload: SetDrawOrderPayloadSchema }),
   z.object({ operationType: z.literal("setRuntimeVisibility"), payload: SetRuntimeVisibilityPayloadSchema }),
-  z.object({ operationType: z.literal("setRightsMetadata"), payload: SetRightsMetadataPayloadSchema })
+  z.object({ operationType: z.literal("setRightsMetadata"), payload: SetRightsMetadataPayloadSchema }),
+  z.object({
+    operationType: z.literal("applyTextureAtlasPreview"),
+    payload: ApplyTextureAtlasPreviewPayloadSchema
+  })
 ]);
 export type OperationPayloadDto = z.infer<typeof OperationPayloadSchema>;

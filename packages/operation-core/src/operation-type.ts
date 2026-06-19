@@ -40,7 +40,8 @@ export const operationTypes = [
   "setMaskRelation",
   "setDrawOrder",
   "setRuntimeVisibility",
-  "setRightsMetadata"
+  "setRightsMetadata",
+  "applyTextureAtlasPreview"
 ] as const;
 
 export const OperationTypeSchema = z.enum(operationTypes);

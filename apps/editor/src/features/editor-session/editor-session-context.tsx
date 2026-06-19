@@ -3,7 +3,8 @@ import type {
   DrawableGeneratedMeshResult,
   GeneratedMeshPreviewCommitMethod,
   StructureOrderDrop,
-  StructureOrderItem
+  StructureOrderItem,
+  TextureAtlasPreview
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createGeneratedMeshForDrawable,
@@ -91,6 +92,11 @@ import type {
   EditorSessionGestureCommitController
 } from "./model/editor-session-gesture-commit";
 import { commitEditorSessionGestureWithHistory } from "./model/editor-session-gesture-commit";
+import {
+  commitTextureAtlasPreview,
+  createTextureAtlasSessionChangedWarning,
+  type TextureAtlasEditorSessionCommandResult
+} from "./model/texture-atlas-session-command";
 import {
   createDrawableSelection,
   getSelectedDrawableIds,
@@ -430,6 +436,9 @@ interface EditorSessionContextValue {
     readonly label: string;
   };
   readonly commitPsdImport: (plan: PsdImportPlan) => void;
+  readonly applyTextureAtlasPreview: (
+    preview: TextureAtlasPreview
+  ) => Promise<TextureAtlasEditorSessionCommandResult>;
 }
 
 const EditorSessionContext = createContext<EditorSessionContextValue | null>(null);
@@ -776,6 +785,47 @@ export function EditorSessionProvider({
       setPsdImportOpen(false);
     },
     [setEditorSessionState]
+  );
+
+  const applyTextureAtlasPreview = useCallback(
+    async (preview: TextureAtlasPreview): Promise<TextureAtlasEditorSessionCommandResult> => {
+      const currentState = editorStateRef.current;
+      const result = await commitTextureAtlasPreview(currentState.session, preview, {
+        editorHiddenPartIds
+      });
+
+      if (!result.committed) {
+        if (result.warnings.length > 0) {
+          console.warn("Texture Atlas Apply was rejected.", result.warnings);
+        }
+        return result;
+      }
+
+      if (editorStateRef.current.session !== currentState.session) {
+        const staleResult: TextureAtlasEditorSessionCommandResult = {
+          committed: false,
+          session: editorStateRef.current.session,
+          warnings: [createTextureAtlasSessionChangedWarning()]
+        };
+        console.warn("Texture Atlas Apply was rejected.", staleResult.warnings);
+        return staleResult;
+      }
+
+      const nextHistory = recordEditorSessionCommit(currentState.history, {
+        before: currentState.session,
+        after: result.session,
+        label: "Apply Texture Atlas"
+      });
+      setEditorSessionState({
+        session: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument
+      });
+      clearTransientCommitState();
+
+      return result;
+    },
+    [clearTransientCommitState, editorHiddenPartIds, setEditorSessionState]
   );
 
   const applyCommand = useCallback(
@@ -1775,10 +1825,12 @@ export function EditorSessionProvider({
       updateCustomParameter,
       deleteCustomParameter,
       resolvePsdImportDestination,
-      commitPsdImport
+      commitPsdImport,
+      applyTextureAtlasPreview
     }),
     [
       applyCommand,
+      applyTextureAtlasPreview,
       advanceDynamicsToolPreviewSimulation,
       collapsedPartIds,
       applyMeshDraft,
