@@ -23,6 +23,7 @@ import {
 import {
   createV6DAlphaBoundsFallbackMesh,
   filterV6DConstrainautorTrianglesToMainMask,
+  markV6DConstrainautorBoundaryRepairFinalVerificationFailed,
   recoverV6DConstrainautorTriangles,
   type FilteredTriangles,
   type V6DConstrainautorPoint
@@ -194,10 +195,10 @@ export const createAutoOutlineV6DAdaptiveContourConstrainautorMesh = (
       density,
       virtualPaddingPixels: virtualInput.paddingPixels,
       reason: "v6d-constraint-recovery-failed",
-      diagnostics: {
+      diagnostics: markV6DConstrainautorBoundaryRepairFinalVerificationFailed({
         ...diagnostics,
         failureStage: "final-boundary-verification"
-      },
+      }),
       provenance: createAdaptiveContourFallbackProvenance(candidateInput, "v6d-constraint-recovery-failed", [
         "v6d-adaptive-contour-final-boundary-constraint-verification-failed"
       ])

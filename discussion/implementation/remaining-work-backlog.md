@@ -1,12 +1,12 @@
 # 残作業バックログ
 
 > 状態: 2026-06-19 / Wave84 final complete / pass。
-> このファイルは、古い Wave54-Wave80 前提のバックログを構造ごと破棄し、現行リポジトリの根拠から再作成した次 wave 計画用の短い棚卸である。
+> このファイルは、古い Wave54-Wave80 前提の backlog を構造ごと破棄し、現行の repository evidence から再作成した次 wave 計画用の短い棚卸である。
 
 ## 0. 陳腐化判定
 
-- 旧バックログは陳腐化している。Wave81-Wave84 で Dynamics Tool v0、Dynamics preview time progression、Quick Tune、Viewer Runtime Dynamics playback、runtime-core solver consolidation が完了したため、「Dynamics clarify before Viewer playback」という前提は無効になった。
-- `discussion/implementation/current-capability-map.md` は存在するが、冒頭から Wave54-era assumptions を含む履歴用 map である。次 wave の判断では、この backlog、`discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、Wave84 reports/reviews を優先する。
+- 旧 backlog は stale。Wave81-Wave84 で Dynamics Tool v0、Dynamics preview time progression、Quick Tune、Viewer Runtime Dynamics playback、runtime-core solver consolidation が完了したため、「Dynamics clarify before Viewer playback」という前提は obsolete。
+- `discussion/implementation/current-capability-map.md` は存在するが、冒頭から Wave54-era assumptions を含む historical map である。次 wave の判断では、この backlog、`discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、Wave84 reports/reviews を優先する。
 - 不確実性: この更新は maps、Wave84 artifacts、targeted `rg` による source/test 確認に基づく。GUI をブラウザで手動確認したわけではない。
 
 ## 1. 現在実装済みの機能
@@ -16,45 +16,45 @@
 - Wave57 後の React Editor foundation が、現在の GUI baseline である。
 - Authoring Workspace には、App Bar、Toolbox entries、Structure / Parts Tree、Canvas / Preview、Inspector、Parameter Bar、Project Storage、Parameter Manager route、Viewer route が含まれる。
 - Project open/save は、React Editor の App Bar / Project Storage surface から project-defined portable bundle path を使用する。
-- 根拠: `apps/editor/src/workspace/authoring-workspace.tsx`, `apps/editor/src/workspace/app-bar.tsx`, `apps/editor/src/workspace/workspace-data.ts`, `apps/editor/src/workspace/project-storage/project-storage-screen.tsx`, `discussion/implementation/orchestration/_map.md`。
+- 根拠: `apps/editor/src/workspace/authoring-workspace.tsx`, `apps/editor/src/workspace/app-bar.tsx`, `apps/editor/src/workspace/workspace-data.ts`, `apps/editor/src/workspace/project-storage/project-storage-screen.tsx`, `discussion/implementation/orchestration/_map.md`.
 
 ### PSD Import / Asset Intake
 
 - Browser PSD parser adapter は Editor 内に存在し、`@webtoon/psd` は承認済みの Editor/browser adapter boundary の内側でのみ使用する。
 - 現在の PSD import は、明示的なユーザー主導の import planning と commit path をサポートしている。対象は source metadata、materialized raw RGBA layer evidence、structural scaffold planning、group/leaf approval、生成された Part Container / Drawable / Texture / empty Mesh scaffold refs、hidden PSD group から editor-hidden Part への gate behavior、parser boundary tests である。
 - PSD 由来の drawables は、import 後に Editor Canvas / Preview に表示される。
-- 根拠: `apps/editor/src/editor-workflow/browser-psd-parser-adapter.ts`, `apps/editor/src/features/psd-import/model/psd-import-planner.ts`, `apps/editor/src/features/psd-import/model/psd-import-commit.ts`, `apps/editor/src/features/psd-import/model/psd-import-hidden-part-bridge.test.ts`, `discussion/implementation/_map.md` の Wave58-W61 記載。
+- 根拠: `apps/editor/src/editor-workflow/browser-psd-parser-adapter.ts`, `apps/editor/src/features/psd-import/model/psd-import-planner.ts`, `apps/editor/src/features/psd-import/model/psd-import-commit.ts`, `apps/editor/src/features/psd-import/model/psd-import-hidden-part-bridge.test.ts`, `discussion/implementation/_map.md` の Wave58-W61 entries。
 
 ### Parts / Hierarchy / Canvas
 
 - Mixed ordered Part Container / Drawable hierarchy は実装済みで、draw order authority、collapse/expand state、editor-hidden Part behavior、Drawable-only multi-select、DnD reorder/reparent をサポートする。
 - Canvas rendering は、imported PSD drawables、selection、zoom/pan/fit/1:1 style controls、visibility reflection、clipping relation support、evaluated keyform/deformer parameter maps、WebGL/rendering foundations をサポートする。
-- 根拠: `apps/editor/src/features/editor-session/model/session-tree.ts`, `apps/editor/src/features/editor-session/model/session-tree.test.ts`, `apps/editor/src/workspace/panels/structure-tree-panel.tsx`, `apps/editor/src/workspace/canvas/canvas-renderer.ts`, `apps/editor/src/workspace/canvas/canvas-evaluation.ts`, `discussion/implementation/_map.md` の Waves59-W61 と Wave76 の記載。
+- 根拠: `apps/editor/src/features/editor-session/model/session-tree.ts`, `apps/editor/src/features/editor-session/model/session-tree.test.ts`, `apps/editor/src/workspace/panels/structure-tree-panel.tsx`, `apps/editor/src/workspace/canvas/canvas-renderer.ts`, `apps/editor/src/workspace/canvas/canvas-evaluation.ts`, `discussion/implementation/_map.md` の Waves59-W61 and Wave76 entries。
 
 ### Mesh
 
 - Mesh Tool v0 と、その後の auto-outline mainline は実装済み。現在の default path は v6D-lineage adaptive contour-constrainautor output であり、backend selector を露出するのではなく product-facing presets を提供する。
 - Mesh batch preview/apply は対象条件を満たす Drawable selection に対して存在し、existing-mesh exclusion も実装済み。
-- Lower-level bounded topology / UV operations と tests は存在するが、atlas packing、UV unwrap、renderer pixel correctness、広範な manual topology editor UX は現在の product capability としては主張しない。
-- 根拠: `apps/editor/src/features/editor-session/model/mesh-tool-state.ts`, `apps/editor/src/features/editor-session/model/mesh-tool-state.test.ts`, `packages/authoring-core/src/mesh-generation.ts`, `packages/authoring-core/src/mesh-generation.test.ts`, `discussion/implementation/orchestration/_map.md` の Wave70-W71 と Wave76 の記載。
+- Lower-level bounded topology / UV operations と tests は存在するが、atlas packing、UV unwrap、renderer pixel correctness、広範な manual topology editor UX は現在の product claims ではない。
+- 根拠: `apps/editor/src/features/editor-session/model/mesh-tool-state.ts`, `apps/editor/src/features/editor-session/model/mesh-tool-state.test.ts`, `packages/authoring-core/src/mesh-generation.ts`, `packages/authoring-core/src/mesh-generation.test.ts`, `discussion/implementation/orchestration/_map.md` の Wave70-W71 and Wave76 entries。
 
 ### Rig / Deformers
 
 - Rotation Deformer と Warp Deformer authoring は実装済み。Deformer Tree、Drawable Pool、binding/reparent operations、parent-child local-space semantics、Canvas rotation interaction、Warp control point editing、keyed Warp edge/corner scale handles を備える。
 - 関連する unbound または Deformer Tree selection に対する batch create / wrap-selected authoring が存在する。
-- 根拠: `apps/editor/src/features/editor-session/model/rig-tool-state.ts`, `apps/editor/src/features/editor-session/model/deformer-tree-wrap-selection.ts`, `apps/editor/src/workspace/panels/rig-tool-inspector.tsx`, `apps/editor/src/workspace/canvas/rotation-deformer-gesture.ts`, `apps/editor/src/workspace/canvas/warp-deformer-scale.ts`, `discussion/implementation/_map.md` の Waves72-W78 記載。
+- 根拠: `apps/editor/src/features/editor-session/model/rig-tool-state.ts`, `apps/editor/src/features/editor-session/model/deformer-tree-wrap-selection.ts`, `apps/editor/src/workspace/panels/rig-tool-inspector.tsx`, `apps/editor/src/workspace/canvas/rotation-deformer-gesture.ts`, `apps/editor/src/workspace/canvas/warp-deformer-scale.ts`, `discussion/implementation/_map.md` の Waves72-W78。
 
 ### Parameters / Keyforms / Undo
 
 - Preset/custom parameter surfaces、Parameter Manager、active Parameter Bar、current-value editing、marker navigation、undo/redo、parameter-aware Inspector flows は実装済み。
 - Keyforms は、現在受け入れ済みの v0 targets をカバーする。対象は Drawable opacity、Warp Deformer offsets / opacity multiplier、Rotation Deformer angle / translation / opacity multiplier。deformer keyforms の save/load hardening も存在する。
-- 根拠: `apps/editor/src/features/editor-session/model/parameter-keyform-state.ts`, `apps/editor/src/features/editor-session/model/parameter-manager-projection.ts`, `apps/editor/src/workspace/panels/parameter-bar.tsx`, `apps/editor/src/workspace/parameter-manager/parameter-manager-screen.tsx`, `discussion/implementation/orchestration/_map.md` の Waves64-W75 記載。
+- 根拠: `apps/editor/src/features/editor-session/model/parameter-keyform-state.ts`, `apps/editor/src/features/editor-session/model/parameter-manager-projection.ts`, `apps/editor/src/workspace/panels/parameter-bar.tsx`, `apps/editor/src/workspace/parameter-manager/parameter-manager-screen.tsx`, `discussion/implementation/orchestration/_map.md` の Waves64-W75。
 
 ### Viewer / Runtime View
 
 - Dedicated Viewer / Runtime View は、完成モデルを確認するための clean surface として実装済み。Runtime Controls、session-only parameter overrides、parameter search、reset affordances、Parameter Bar suppression、clean stage overlay suppression、Viewer-local pan/zoom、Parts Container visibility parity を備える。
 - Wave84 は authored Dynamics Groups を Viewer playback へ接続した。driver parameter changes は runtime-core evaluation に入力され、pendulum motion は driver stop 後も継続/収束し、Dynamics outputs は keyform/deformer evaluation 前に注入される。output parameters は Runtime Controls から除外され、`Reset simulation` は session-local simulation state のみをリセットする。
-- 根拠: `apps/editor/src/workspace/viewer/viewer-runtime-screen.tsx`, `apps/editor/src/workspace/viewer/viewer-runtime-playback.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.ts`, `apps/editor/src/workspace/viewer/viewer-runtime-screen.test.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.test.ts`, `discussion/implementation/waves/wave84/wave84-final-integration-report.md`。
+- 根拠: `apps/editor/src/workspace/viewer/viewer-runtime-screen.tsx`, `apps/editor/src/workspace/viewer/viewer-runtime-playback.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.ts`, `apps/editor/src/workspace/viewer/viewer-runtime-screen.test.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.test.ts`, `discussion/implementation/waves/wave84/wave84-final-integration-report.md`.
 
 ### Dynamics
 
@@ -65,7 +65,7 @@
 ### Diagnostics / Preflight / Codex Surfaces
 
 - Repo/package-level Product Preflight、validator diagnostics、Codex proposal validation/diff/approval/rerun helpers、PSD import-plan command surfaces は packages 内に実装済み。
-- 現在の React Editor source では、対象を絞った search 上、完成した Diagnostics / Evidence View または Codex / Automation View は確認できない。これらの人間向け React UI 完成版は、現在の機能ではなく残作業として扱う。
+- 現在の React Editor source では、targeted search 上、完成した Diagnostics / Evidence View または Codex / Automation View は確認できない。これらの full human-facing React UI は、現在の機能ではなく残作業として扱う。
 - 根拠: `packages/validator-core/src/product-preflight-report.ts`, `packages/validator-core/src/product-preflight-report-diff.ts`, `packages/validator-core/src/codex-proposal-rerun-validation.ts`, `packages/ai-interface/src/ai-codex-proposal-command.ts`, `packages/ai-interface/src/ai-product-preflight-command.ts`, `apps/editor/src` を対象にした targeted `rg`。
 
 ## 2. 実装可能な残作業バックログ
@@ -79,7 +79,7 @@
 
 ### Diagnostics / Evidence React View v0
 
-- 陳腐化した Wave54 UI を復活させるのではなく、既存の validator/Product Preflight/package evidence を中心に、現在の React read-only Diagnostics / Evidence surface を構築する。
+- stale な Wave54 UI を復活させるのではなく、既存の validator/Product Preflight/package evidence を中心に、現在の React read-only Diagnostics / Evidence surface を構築する。
 - 最小有用スコープ: 現在の Product Preflight summary、blocking diagnostics、evidence refs、PSD import evidence summary、runtime/viewer evidence status、operation-log refs。
 - repair generation、auto-fix、LLM/provider integration、external transport は追加しない。
 
@@ -101,7 +101,7 @@
 ### Current Capability 文書の更新
 
 - `current-capability-map.md` を refresh または supersede し、Wave54-era baselines を current として主張しない状態にする。
-- map の陳腐化が blocking になった場合のみ、専用 docs wave で implementation map descriptions を更新する。この backlog replacement では意図的に maps を編集していない。
+- map staleness が blocking になった場合のみ、専用 docs wave で implementation map descriptions を更新する。この backlog replacement では意図的に maps を編集していない。
 
 ## 3. ユーザー判断 / 設計判断が必要なバックログ
 
@@ -117,7 +117,7 @@
 
 ## 4. 品質 / ドキュメント / テスト負債
 
-- `current-capability-map.md` は陳腐化しており、refresh されるまでは現在の planning truth として扱わない。
+- `current-capability-map.md` は stale であり、refresh されるまでは現在の planning truth として扱わない。
 - `discussion/design/screen-design/_map.md` には、まだ一部 Wave54-era statements が残っている。design intent として使い、implementation claims は Wave57-Wave84 maps と source で確認する。
 - `discussion/implementation/_map.md` は、file table 内でこの backlog をまだ post-Wave80 と説明している。blocking ではないが、docs/map refresh で整理すべき。
 - Wave84 では、real Canvas Dynamics smoothness、pointer feel、real rAF cadence に関する browser/manual visual QA は記録されていない。
@@ -157,7 +157,7 @@
 
 - import review clarity が現在の主な user pain であれば、PSD Import UX polish v1。
 - deterministic proposals を扱う operator workflow が human diagnostics より重要であれば、Codex / Automation React View v0。
-- 陳腐化した maps によって planning accuracy が阻害されている場合は、Capability map refresh。
+- stale maps によって planning accuracy が阻害されている場合は、Capability map refresh。
 
 ## 7. 根拠リンク
 

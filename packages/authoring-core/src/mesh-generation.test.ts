@@ -2253,7 +2253,269 @@ describe("alpha-aware mesh generation", () => {
         invalidConstraintEndpointCount: 0,
         duplicateConstraintEdgeCount: 0,
         crossingConstraintEdgeCount: 1,
-        pointOnConstraintEdgeCount: 0
+        pointOnConstraintEdgeCount: 0,
+        boundaryRepair: {
+          attempted: false,
+          result: "not-attempted-non-crossing-only",
+          candidateCount: 0,
+          removedBoundaryPointCount: 0,
+          preRepairCrossingConstraintEdgeCount: 1
+        }
+      }
+    });
+  });
+
+  it("reports v6d crossing pair samples with sanitized and input edge indexes", () => {
+    const crossing = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 2],
+        [1, 3]
+      ]
+    });
+
+    expect(crossing.status).toBe("failed");
+    expect(crossing.diagnostics).toMatchObject({
+      invalidConstraintInputReasons: [
+        "not-enough-constraint-edges",
+        "crossing-constraint-edge"
+      ],
+      crossingConstraintEdgeCount: 1,
+      pointOnConstraintEdgeCount: 0,
+      crossingConstraintEdgePairSample: {
+        coordinateSpace: "candidate-texture-pixels",
+        sampleLimit: 8,
+        sampledPairCount: 1,
+        totalPairCount: 1,
+        sampleTruncated: false,
+        pairs: [
+          {
+            sanitizedConstraintEdgeIndexes: [0, 1],
+            sanitizedConstraintEdgePointIndexes: [
+              [0, 2],
+              [1, 3]
+            ],
+            inputConstraintEdgeIndexes: [0, 1],
+            inputConstraintEdgePointIndexes: [
+              [0, 2],
+              [1, 3]
+            ],
+            segments: [
+              {
+                start: { x: 0, y: 0 },
+                end: { x: 1, y: 1 }
+              },
+              {
+                start: { x: 1, y: 0 },
+                end: { x: 0, y: 1 }
+              }
+            ]
+          }
+        ]
+      }
+    });
+  });
+
+  it("caps v6d crossing pair samples while preserving the exact crossing count", () => {
+    const crossing = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 5, role: "boundary", stableOrder: 0 },
+        { x: 10, y: 5, role: "boundary", stableOrder: 1 },
+        { x: 5, y: 0, role: "boundary", stableOrder: 2 },
+        { x: 5, y: 10, role: "boundary", stableOrder: 3 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 4 },
+        { x: 9, y: 9, role: "boundary", stableOrder: 5 },
+        { x: 1, y: 9, role: "boundary", stableOrder: 6 },
+        { x: 9, y: 1, role: "boundary", stableOrder: 7 },
+        { x: 2, y: 0, role: "boundary", stableOrder: 8 },
+        { x: 8, y: 10, role: "boundary", stableOrder: 9 },
+        { x: 0, y: 2, role: "boundary", stableOrder: 10 },
+        { x: 10, y: 8, role: "boundary", stableOrder: 11 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+        [6, 7],
+        [8, 9],
+        [10, 11]
+      ]
+    });
+
+    const sample = crossing.diagnostics.crossingConstraintEdgePairSample;
+    expect(crossing.status).toBe("failed");
+    expect(crossing.diagnostics.crossingConstraintEdgeCount).toBe(15);
+    expect(sample).toMatchObject({
+      sampleLimit: 8,
+      sampledPairCount: 8,
+      totalPairCount: 15,
+      sampleTruncated: true
+    });
+    expect(sample?.pairs).toHaveLength(8);
+    expect(crossing.diagnostics.boundaryRepair).toMatchObject({
+      attempted: false,
+      result: "not-attempted-crossing-pair-count",
+      candidateCount: 0,
+      preRepairCrossingConstraintEdgeCount: 15
+    });
+  });
+
+  it("repairs a single crossing cyclic v6d boundary by removing one endpoint", () => {
+    const repaired = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0]
+      ]
+    });
+
+    expect(repaired.status).toBe("generated");
+    expect(repaired.constraintEdges).toHaveLength(3);
+    expect(repaired.triangles.length).toBeGreaterThan(0);
+    expect(repaired.diagnostics).toMatchObject({
+      constraintEdgeCount: 3,
+      preservedConstraintEdgeCount: 3,
+      missingConstraintEdgeCount: 0,
+      constraintRecoveryFailed: false,
+      crossingConstraintEdgeCount: 0,
+      pointOnConstraintEdgeCount: 0,
+      boundaryRepair: {
+        attempted: true,
+        result: "repaired",
+        candidateCount: 4,
+        removedBoundaryPointCount: 1,
+        preRepairCrossingConstraintEdgeCount: 1,
+        postRepairCrossingConstraintEdgeCount: 0,
+        postRepairPointOnConstraintEdgeCount: 0,
+        repairedConstraintEdgeCount: 3,
+        preRepairCrossingConstraintEdgePairSample: {
+          totalPairCount: 1,
+          pairs: [
+            {
+              sanitizedConstraintEdgeIndexes: [0, 2],
+              inputConstraintEdgeIndexes: [0, 2],
+              sanitizedConstraintEdgePointIndexes: [
+                [0, 1],
+                [2, 3]
+              ]
+            }
+          ]
+        }
+      }
+    });
+  });
+
+  it("does not activate v6d crossing repair for duplicate, zero-length, or point-on-edge invalid input", () => {
+    const cases = [
+      {
+        name: "duplicate",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+          { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+          { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [1, 0]
+        ]
+      },
+      {
+        name: "zero-length",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+          { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+          { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [1, 1]
+        ]
+      },
+      {
+        name: "point-on-edge",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 2, y: 0, role: "boundary", stableOrder: 1 },
+          { x: 2, y: 2, role: "boundary", stableOrder: 2 },
+          { x: 0, y: 2, role: "boundary", stableOrder: 3 },
+          { x: 1, y: 0, role: "interior", stableOrder: 0 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0]
+        ]
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const result = recoverV6DConstrainautorTriangles(testCase);
+      expect(result.status, testCase.name).toBe("failed");
+      expect(result.diagnostics.boundaryRepair, testCase.name).toMatchObject({
+        attempted: false,
+        result: "not-attempted-non-crossing-only",
+        candidateCount: 0,
+        removedBoundaryPointCount: 0
+      });
+    }
+  });
+
+  it("preserves v6d fallback when every bounded repair candidate remains invalid", () => {
+    const failedRepair = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 4, y: 2, role: "boundary", stableOrder: 0 },
+        { x: 4, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 3, y: 4, role: "boundary", stableOrder: 2 },
+        { x: 2, y: 3, role: "boundary", stableOrder: 3 },
+        { x: 2, y: 2, role: "boundary", stableOrder: 4 },
+        { x: 4, y: 3, role: "boundary", stableOrder: 5 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0]
+      ]
+    });
+
+    expect(failedRepair).toMatchObject({
+      status: "failed",
+      reason: "v6d-invalid-constraint-input",
+      diagnostics: {
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: ["crossing-constraint-edge"],
+        crossingConstraintEdgeCount: 1,
+        boundaryRepair: {
+          attempted: true,
+          result: "failed-no-candidate-succeeded",
+          candidateCount: 4,
+          failedCandidateCount: 4,
+          removedBoundaryPointCount: 0,
+          preRepairCrossingConstraintEdgeCount: 1
+        }
       }
     });
   });
