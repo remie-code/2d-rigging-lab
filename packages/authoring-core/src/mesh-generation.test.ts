@@ -2211,20 +2211,49 @@ describe("alpha-aware mesh generation", () => {
 
     expect(duplicateZeroLength).toMatchObject({
       status: "failed",
-      reason: "v6d-constrainautor-generation-failed",
+      reason: "v6d-invalid-constraint-input",
       diagnostics: {
         dependencyGateStatus: "available",
-        constraintRecoveryFailed: true
+        constraintRecoveryFailed: true,
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: ["zero-length-constraint-edge"],
+        inputPointCount: 4,
+        finitePointCount: 4,
+        sanitizedPointCount: 3,
+        mergedPointCount: 1,
+        inputConstraintEdgeCount: 4,
+        sanitizedConstraintEdgeCount: 3,
+        zeroLengthConstraintEdgeCount: 1,
+        invalidConstraintEndpointCount: 0,
+        duplicateConstraintEdgeCount: 0,
+        crossingConstraintEdgeCount: 0,
+        pointOnConstraintEdgeCount: 0
       }
     });
     expect(crossing).toMatchObject({
       status: "failed",
-      reason: "v6d-constrainautor-generation-failed",
+      reason: "v6d-invalid-constraint-input",
       diagnostics: {
         dependencyGateStatus: "available",
         constraintEdgeCount: 2,
         missingConstraintEdgeCount: 2,
-        constraintRecoveryFailed: true
+        constraintRecoveryFailed: true,
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: [
+          "not-enough-constraint-edges",
+          "crossing-constraint-edge"
+        ],
+        inputPointCount: 4,
+        finitePointCount: 4,
+        sanitizedPointCount: 4,
+        mergedPointCount: 0,
+        inputConstraintEdgeCount: 2,
+        sanitizedConstraintEdgeCount: 2,
+        zeroLengthConstraintEdgeCount: 0,
+        invalidConstraintEndpointCount: 0,
+        duplicateConstraintEdgeCount: 0,
+        crossingConstraintEdgeCount: 1,
+        pointOnConstraintEdgeCount: 0
       }
     });
   });

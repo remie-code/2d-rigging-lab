@@ -27,6 +27,7 @@ import {
   createDynamicsGroupCreatePayloadFromDraft,
   createDynamicsGroupDraftFromGroup,
   createDynamicsGroupDraftFromSession,
+  createDynamicsToolGroupDiagnosticSummaries,
   createDynamicsGroupUpdatePayloadFromDraft,
   DYNAMICS_TOOL_PREVIEW_STEP_MS,
   DYNAMICS_TOOL_PRESETS,
@@ -39,6 +40,7 @@ import {
   validateDynamicsToolDraft,
   type DynamicsAxisKind,
   type DynamicsToolDraft,
+  type DynamicsToolGroupDiagnosticSummary,
   type DynamicsToolGroup,
   type DynamicsToolPresetId,
   type DynamicsToolValidationIssue
@@ -75,6 +77,10 @@ export function DynamicsToolInspector() {
     updateDynamicsGroup
   } = useEditorSession();
   const parameters = useMemo(() => listEditorParameters(session), [session]);
+  const groupDiagnosticSummaries = useMemo(
+    () => createDynamicsToolGroupDiagnosticSummaries(session),
+    [session]
+  );
   const [mode, setMode] = useState<DynamicsInspectorMode>({ kind: "list" });
   const [draft, setDraft] = useState<DynamicsToolDraft>(() =>
     createDynamicsGroupDraftFromSession(session)
@@ -254,6 +260,7 @@ export function DynamicsToolInspector() {
 
       {mode.kind === "list" ? (
         <GroupList
+          diagnosticSummaries={groupDiagnosticSummaries}
           groups={session.graph.dynamicsGroups}
           onNewGroup={openCreate}
           onOpenGroup={openGroup}
@@ -264,6 +271,7 @@ export function DynamicsToolInspector() {
         <ExistingGroupInspector
           dynamicsToolPreview={dynamicsToolPreview}
           group={activeGroup}
+          groupDiagnosticSummary={groupDiagnosticSummaries.get(activeGroup.dynamicsGroupId)}
           onAdvancePreview={advanceDynamicsToolPreviewSimulation}
           onBack={returnToList}
           onClearQuickTunePreview={clearDynamicsToolPreviewDefinitionOverride}
@@ -338,10 +346,12 @@ function DynamicsToolHeader() {
 }
 
 function GroupList({
+  diagnosticSummaries,
   groups,
   onNewGroup,
   onOpenGroup
 }: {
+  readonly diagnosticSummaries: ReadonlyMap<DynamicsGroupId, DynamicsToolGroupDiagnosticSummary>;
   readonly groups: readonly DynamicsToolGroup[];
   readonly onNewGroup: () => void;
   readonly onOpenGroup: (groupId: DynamicsGroupId) => void;
@@ -357,21 +367,38 @@ function GroupList({
             No Dynamics Groups.
           </div>
         ) : null}
-        {groups.map((group) => (
-          <button
-            className="flex min-h-8 items-center justify-between rounded border border-neutral-800 bg-neutral-950 px-2 text-left text-xs font-medium text-neutral-300 transition hover:border-teal-700"
-            data-dynamics-group-id={group.dynamicsGroupId}
-            data-testid="dynamics-group-row"
-            key={group.dynamicsGroupId}
-            onClick={() => onOpenGroup(group.dynamicsGroupId)}
-            type="button"
-          >
-            <span className="min-w-0 truncate">{group.displayName}</span>
-            <span className="ml-2 text-[10px] uppercase text-neutral-500">
-              {group.enabled ? "On" : "Off"}
-            </span>
-          </button>
-        ))}
+        {groups.map((group) => {
+          const summary = diagnosticSummaries.get(group.dynamicsGroupId);
+          return (
+            <button
+              className="flex min-h-8 items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-left text-xs font-medium text-neutral-300 transition hover:border-teal-700"
+              data-dynamics-group-id={group.dynamicsGroupId}
+              data-testid="dynamics-group-row"
+              key={group.dynamicsGroupId}
+              onClick={() => onOpenGroup(group.dynamicsGroupId)}
+              type="button"
+            >
+              <span className="min-w-0 truncate">{group.displayName}</span>
+              <span className="ml-2 flex shrink-0 items-center gap-1">
+                {summary === undefined ? null : (
+                  <span
+                    aria-label={formatDynamicsGroupWarningLabel(summary)}
+                    className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-amber-700/70 bg-amber-950/45 px-1 text-[10px] font-semibold text-amber-100"
+                    data-testid="dynamics-group-warning-icon"
+                    data-warning-count={summary.issues.length}
+                    title={formatDynamicsGroupWarningLabel(summary)}
+                  >
+                    <AlertTriangle aria-hidden="true" size={11} strokeWidth={1.9} />
+                    <span className="ml-0.5">{summary.issues.length}</span>
+                  </span>
+                )}
+                <span className="text-[10px] uppercase text-neutral-500">
+                  {group.enabled ? "On" : "Off"}
+                </span>
+              </span>
+            </button>
+          );
+        })}
         <button
           className="flex min-h-8 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100"
           data-testid="dynamics-new-draft"
@@ -389,6 +416,7 @@ function GroupList({
 function ExistingGroupInspector({
   dynamicsToolPreview,
   group,
+  groupDiagnosticSummary,
   onAdvancePreview,
   onBack,
   onClearQuickTunePreview,
@@ -403,6 +431,7 @@ function ExistingGroupInspector({
 }: {
   readonly dynamicsToolPreview: ReturnType<typeof useEditorSession>["dynamicsToolPreview"];
   readonly group: DynamicsToolGroup;
+  readonly groupDiagnosticSummary?: DynamicsToolGroupDiagnosticSummary;
   readonly onAdvancePreview: (
     dynamicsGroupId: DynamicsGroupId,
     dtMs: number
@@ -511,6 +540,10 @@ function ExistingGroupInspector({
           <SummaryRow label="Name" value={group.displayName} />
           <SummaryRow label="Enabled" value={group.enabled ? "On" : "Off"} />
         </div>
+      </Section>
+
+      <Section title="Validation">
+        <GroupDiagnosticIssues summary={groupDiagnosticSummary} />
       </Section>
 
       <Section title="Preview">
@@ -1361,6 +1394,49 @@ function ValidationIssues({
       ))}
     </ul>
   );
+}
+
+function GroupDiagnosticIssues({
+  summary
+}: {
+  readonly summary?: DynamicsToolGroupDiagnosticSummary;
+}) {
+  if (summary === undefined || summary.issues.length === 0) {
+    return (
+      <div
+        className="flex min-h-8 items-center gap-2 rounded border border-teal-900/70 bg-teal-950/25 px-2 text-xs font-medium text-teal-100"
+        data-testid="dynamics-group-validation-ok"
+      >
+        <Check aria-hidden="true" size={14} strokeWidth={1.9} />
+        Ready
+      </div>
+    );
+  }
+
+  return (
+    <ul className="flex flex-col gap-2" data-testid="dynamics-group-validation-summary">
+      {summary.issues.map((issue) => (
+        <li
+          className="flex gap-2 rounded border border-amber-900/70 bg-amber-950/25 px-2 py-1.5 text-xs text-amber-100"
+          data-code={issue.code}
+          data-testid="dynamics-group-validation-warning"
+          key={issue.id}
+        >
+          <AlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 shrink-0"
+            size={13}
+            strokeWidth={1.8}
+          />
+          <span className="min-w-0">{issue.message}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function formatDynamicsGroupWarningLabel(summary: DynamicsToolGroupDiagnosticSummary): string {
+  return summary.issues.map((issue) => issue.title).join("; ");
 }
 
 function Section({

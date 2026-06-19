@@ -197,6 +197,28 @@ export interface MeshGenerationV6ConstrainautorDiagnostics {
   readonly missingConstraintEdgeCount: number;
   readonly constraintRecoveryFailed: boolean;
   readonly outsideTriangleCount: number;
+  readonly failureStage?:
+    | "constraint-input"
+    | "delaunay-untriangulated"
+    | "backend-threw"
+    | "post-constrain-recovery"
+    | "final-boundary-verification";
+  readonly invalidConstraintInputReasons?: readonly string[];
+  readonly inputPointCount?: number;
+  readonly finitePointCount?: number;
+  readonly sanitizedPointCount?: number;
+  readonly mergedPointCount?: number;
+  readonly inputConstraintEdgeCount?: number;
+  readonly sanitizedConstraintEdgeCount?: number;
+  readonly zeroLengthConstraintEdgeCount?: number;
+  readonly invalidConstraintEndpointCount?: number;
+  readonly duplicateConstraintEdgeCount?: number;
+  readonly crossingConstraintEdgeCount?: number;
+  readonly pointOnConstraintEdgeCount?: number;
+  readonly untriangulatedPointCount?: number;
+  readonly untriangulatedPointIndexes?: readonly number[];
+  readonly postConstrainTriangleCount?: number;
+  readonly filteredTriangleCount?: number;
   readonly thrownErrorKind?: string;
 }
 

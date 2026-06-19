@@ -564,6 +564,7 @@ describe("EditorSessionProvider history integration", () => {
       expect(harness.context().psdImportOpen).toBe(false);
       expect(harness.context().parameterValues).toEqual({});
       expect(harness.context().meshDraft).toBeNull();
+      expect(harness.context().meshGenerationDiagnostic).toBeNull();
       expect(harness.context().rigDraft).toBeNull();
       expect(harness.context().rigOperationFeedback).toBeNull();
       expect(harness.context().parameterOperationFeedback).toBeNull();
@@ -577,6 +578,38 @@ describe("EditorSessionProvider history integration", () => {
       expect(harness.context().projectStorage.fileName).toBe(
         "loaded-project.portable-project.json"
       );
+    } finally {
+      warn.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps mesh generation failure diagnostics transient and clears them on cancel", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      await act(async () => {
+        harness.context().previewMeshDraft(
+          DrawableIdSchema.parse("draw_missing_mesh_diagnostic"),
+          "standard"
+        );
+      });
+
+      expect(harness.context().meshDrafts).toEqual([]);
+      expect(harness.context().meshGenerationDiagnostic).toMatchObject({
+        kind: "generationFailed",
+        drawableId: DrawableIdSchema.parse("draw_missing_mesh_diagnostic"),
+        presetId: "standard",
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        failureReason: "createGeneratedMeshForDrawable returned no preview result."
+      });
+
+      await act(async () => {
+        harness.context().cancelMeshDraft();
+      });
+
+      expect(harness.context().meshGenerationDiagnostic).toBeNull();
     } finally {
       warn.mockRestore();
       await harness.cleanup();

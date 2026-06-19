@@ -680,6 +680,42 @@ describe("rig tool state", () => {
       keyformKeyCount: 2
     });
   });
+
+  it("adds compact mesh-missing warnings to Deformer Tree drawable rows", () => {
+    const session = createFixtureSession();
+    session.graph.meshes = session.graph.meshes.filter((mesh) => mesh.meshId !== MESH_HAIR);
+    const result = commitCreateWarpDeformer(session, {
+      displayName: "Hair Warp",
+      childDrawableIds: [DRAW_HAIR],
+      childRigControlIds: [],
+      domainBounds: { x: 50, y: 20, width: 30, height: 40 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+    expect(result.committed).toBe(true);
+
+    const rows = createDeformerTreeRows(result.session, null);
+    const hairRow = rows.find(
+      (row): row is Extract<(typeof rows)[number], { readonly kind: "drawableRef" }> =>
+        row.kind === "drawableRef" && row.drawableId === DRAW_HAIR
+    );
+
+    expect(hairRow).toMatchObject({
+      kind: "drawableRef",
+      displayName: "Hair",
+      detail: "Bound Drawable reference",
+      warning: {
+        count: 1,
+        codes: ["mesh.drawableMeshMissing"]
+      }
+    });
+    expect(hairRow?.warning?.label).toContain("mesh is missing");
+    expect(hairRow?.displayName).not.toContain("mesh is missing");
+    expect(hairRow?.detail).not.toContain("mesh is missing");
+  });
 });
 
 function createFixtureSession(): AuthoringSession {

@@ -1,11 +1,13 @@
 import { Eye, FolderOpen, PanelLeft, Redo2, Save, Undo2 } from "lucide-react";
-import { useRef, type ChangeEvent } from "react";
+import { useMemo, useRef, type ChangeEvent } from "react";
 
 import { StatusBadge } from "../components/status-badge";
 import { useEditorSession } from "../features/editor-session/editor-session-context";
+import { createEditorDiagnosticsProjection } from "../features/editor-session/model/editor-diagnostics-state";
 import { cn } from "../lib/class-name";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
 import { IconButton } from "../ui/icon-button";
+import { DiagnosticsWarningBadge } from "./diagnostics/diagnostics-warning-badge";
 import { taskEntries } from "./workspace-data";
 
 export function AppBar() {
@@ -22,12 +24,18 @@ export function AppBar() {
     projectStorage,
     redo,
     saveProject,
+    session,
     undo
   } = useEditorSession();
   const openProjectInputRef = useRef<HTMLInputElement | null>(null);
   const storageBusy = projectStorage.status === "loading" || projectStorage.status === "saving";
   const workspaceModeLabel =
     activeEntry === "viewer" ? "Viewer / Runtime View" : "Authoring Workspace";
+  const diagnosticsWarningCount = useMemo(
+    () => createEditorDiagnosticsProjection(session).warningItemCount,
+    [session]
+  );
+  const showDiagnosticsBadge = activeEntry !== "viewer" && diagnosticsWarningCount > 0;
 
   const activateEntry = (entry: WorkspaceEntryId) => {
     setActiveEntry(entry);
@@ -64,7 +72,7 @@ export function AppBar() {
             <button
               aria-pressed={selected}
               className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition",
+                "relative inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition",
                 "border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-amber-500/60 hover:text-amber-100",
                 selected && "border-amber-500/70 bg-amber-950/30 text-amber-100"
               )}
@@ -74,6 +82,12 @@ export function AppBar() {
             >
               <Icon aria-hidden="true" size={15} strokeWidth={1.8} />
               <span>{entry.label}</span>
+              {entry.id === "validate" && showDiagnosticsBadge ? (
+                <DiagnosticsWarningBadge
+                  className="absolute -right-2 -top-2"
+                  count={diagnosticsWarningCount}
+                />
+              ) : null}
             </button>
           );
         })}

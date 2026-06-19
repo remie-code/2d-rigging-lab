@@ -15,6 +15,10 @@ import type {
 
 import { isDeformerTreeTargetSelected } from "./editor-selection";
 import type { DeformerTreeSelectionTarget, EditorSelection } from "./editor-selection";
+import {
+  createDrawableMeshMissingWarningMap,
+  type CompactTreeWarning
+} from "./session-tree";
 
 export const DEFAULT_WARP_DEFORMER_TRANSFORM_COLUMNS = 5;
 export const DEFAULT_WARP_DEFORMER_TRANSFORM_ROWS = 5;
@@ -135,6 +139,7 @@ export type DrawablePoolItem =
       readonly partDisplayName: string;
       readonly selected: boolean;
       readonly displayOnly: false;
+      readonly warning?: CompactTreeWarning;
     };
 
 export type DeformerTreeRow =
@@ -177,6 +182,7 @@ export type DeformerTreeRow =
       readonly displayName: string;
       readonly detail: string;
       readonly selected: boolean;
+      readonly warning?: CompactTreeWarning;
     };
 
 export function createWarpDeformerDraftForDrawable(
@@ -511,6 +517,7 @@ export function createDeformerTreeRows(
   const drawableLabels = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable.displayName])
   );
+  const meshWarningsByDrawableId = createDrawableMeshMissingWarningMap(session);
   const rootIds = resolveDeformerRootIds(session, readModels);
   const visited = new Set<string>();
   const rows: DeformerTreeRow[] = [];
@@ -536,6 +543,9 @@ export function createDeformerTreeRows(
         depth: depth + 1,
         displayName: drawableLabels.get(childDrawableId) ?? childDrawableId,
         detail: "Bound Drawable reference",
+        ...(meshWarningsByDrawableId.get(childDrawableId) === undefined
+          ? {}
+          : { warning: meshWarningsByDrawableId.get(childDrawableId)! }),
         selected: isDeformerTreeTargetSelected(selection, {
           kind: "boundDrawable",
           drawableId: childDrawableId,
@@ -569,6 +579,7 @@ export function createDrawablePoolItems(
       .filter((drawable) => !boundDrawableIds.has(drawable.drawableId))
       .map((drawable) => [drawable.drawableId, drawable])
   );
+  const meshWarningsByDrawableId = createDrawableMeshMissingWarningMap(session);
   const emittedDrawableIds = new Set<DrawableId>();
   const visitedPartIds = new Set<PartId>();
   const rows: DrawablePoolItem[] = [];
@@ -585,6 +596,9 @@ export function createDrawablePoolItems(
       depth,
       displayName: drawable.displayName,
       partDisplayName: partsById.get(drawable.partId)?.displayName ?? "Missing part",
+      ...(meshWarningsByDrawableId.get(drawable.drawableId) === undefined
+        ? {}
+        : { warning: meshWarningsByDrawableId.get(drawable.drawableId)! }),
       selected: isDeformerTreeTargetSelected(selection, {
         kind: "poolDrawable",
         drawableId: drawable.drawableId

@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -123,6 +124,7 @@ export function StructureTreePanel() {
             data-row-kind={row.kind}
             data-drop-placement={dropIntent?.key === rowKey(row) ? dropIntent.placement : undefined}
             data-tree-order={row.kind === "drawable" ? row.order : undefined}
+            data-warning-count={row.warning?.count}
             data-testid={row.selected ? "parts-tree-selected-row" : "parts-tree-row"}
             draggable={row.draggable}
             key={rowKey(row)}
@@ -175,7 +177,7 @@ export function StructureTreePanel() {
             }}
             role="treeitem"
             style={{ marginLeft: `${row.depth * 14}px` }}
-            title={`${row.name} - ${row.detail}`}
+            title={rowTitle(row)}
           >
             <span className="flex size-5 items-center justify-center text-neutral-600">
               <GripVertical aria-hidden="true" size={13} strokeWidth={1.8} />
@@ -243,6 +245,16 @@ export function StructureTreePanel() {
               >
                 {row.name}
               </span>
+              {row.warning === undefined ? null : (
+                <span
+                  aria-label={row.warning.label}
+                  className="flex size-5 shrink-0 items-center justify-center text-amber-300"
+                  data-testid="parts-tree-warning-icon"
+                  title={row.warning.label}
+                >
+                  <AlertTriangle aria-hidden="true" size={13} strokeWidth={1.9} />
+                </span>
+              )}
             </button>
           </div>
         ))}
@@ -285,6 +297,11 @@ function StructureViewButton({
 
 function rowKey(row: StructureTreeRow): string {
   return `${row.kind}:${row.id}`;
+}
+
+function rowTitle(row: StructureTreeRow): string {
+  const base = `${row.name} - ${row.detail}`;
+  return row.warning === undefined ? base : `${base} - ${row.warning.label}`;
 }
 
 function visibilityLabel(row: StructureTreeRow): string {

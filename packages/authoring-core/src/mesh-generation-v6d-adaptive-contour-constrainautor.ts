@@ -182,7 +182,8 @@ export const createAutoOutlineV6DAdaptiveContourConstrainautorMesh = (
     preservedConstraintEdgeCount: finalConstraintCounts.preserved,
     missingConstraintEdgeCount: finalConstraintCounts.missing,
     constraintRecoveryFailed: finalConstraintCounts.missing > 0,
-    outsideTriangleCount: filtered.outsideOrCrossingTriangleCount
+    outsideTriangleCount: filtered.outsideOrCrossingTriangleCount,
+    filteredTriangleCount: filtered.triangles.length
   } satisfies MeshGenerationV6ConstrainautorDiagnostics;
 
   if (filtered.triangles.length === 0 || finalConstraintCounts.missing > 0) {
@@ -193,7 +194,10 @@ export const createAutoOutlineV6DAdaptiveContourConstrainautorMesh = (
       density,
       virtualPaddingPixels: virtualInput.paddingPixels,
       reason: "v6d-constraint-recovery-failed",
-      diagnostics,
+      diagnostics: {
+        ...diagnostics,
+        failureStage: "final-boundary-verification"
+      },
       provenance: createAdaptiveContourFallbackProvenance(candidateInput, "v6d-constraint-recovery-failed", [
         "v6d-adaptive-contour-final-boundary-constraint-verification-failed"
       ])

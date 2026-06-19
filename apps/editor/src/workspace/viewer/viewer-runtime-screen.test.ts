@@ -201,6 +201,21 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(markup).not.toContain("Group");
   });
 
+  it("does not surface diagnostics warnings or badges in the Viewer route", () => {
+    viewerRuntimeTestState.editorSession.session =
+      createRuntimeScreenSessionWithDiagnosticsWarning();
+
+    const markup = renderToStaticMarkup(
+      createElement(AuthoringWorkspaceContent, { activeEntry: "viewer" })
+    );
+
+    expect(markup).toContain('data-testid="viewer-runtime-screen"');
+    expect(markup).not.toContain('data-testid="diagnostics-warning-badge"');
+    expect(markup).not.toContain('data-testid="diagnostics-screen"');
+    expect(markup).not.toContain("Deterministic warning list");
+    expect(markup).not.toMatch(/validation warning/i);
+  });
+
   it("returns to Authoring Workspace through the Back action without authoring state mutation", () => {
     renderToStaticMarkup(createElement(ViewerRuntimeScreen));
 
@@ -699,6 +714,17 @@ function createRuntimeScreenSessionWithDynamics(
       }
     ]
   });
+
+  return session;
+}
+
+function createRuntimeScreenSessionWithDiagnosticsWarning(): AuthoringSession {
+  const session = createRuntimeScreenSessionWithDynamics();
+  session.graph.keyformSets = session.graph.keyformSets.filter(
+    (keyformSet) =>
+      keyformSet.evaluator !== "linear-1d-v1" ||
+      keyformSet.parameterId !== HAIR_SWAY_X
+  );
 
   return session;
 }

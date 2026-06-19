@@ -24,6 +24,10 @@ import {
   listEditorParameters,
   type EditorParameter
 } from "./parameter-keyform-state";
+import {
+  createEditorDiagnosticsProjection,
+  type EditorDiagnosticItem
+} from "./editor-diagnostics-state";
 
 export type DynamicsAxisKind = "angle" | "positionX" | "positionY";
 export type DynamicsToolPresetId = "hair" | "ribbon" | "softCloth" | "rigidAccessory";
@@ -52,6 +56,11 @@ export interface DynamicsToolValidationIssue {
   readonly code: string;
   readonly message: string;
   readonly path?: string;
+}
+
+export interface DynamicsToolGroupDiagnosticSummary {
+  readonly dynamicsGroupId: DynamicsGroupId;
+  readonly issues: readonly EditorDiagnosticItem[];
 }
 
 export interface DynamicsToolPreviewState {
@@ -488,6 +497,35 @@ export const validateDynamicsToolDraft = (
 export const hasBlockingDynamicsToolIssues = (
   issues: readonly DynamicsToolValidationIssue[]
 ): boolean => issues.some((issue) => issue.severity === "error");
+
+export const createDynamicsToolGroupDiagnosticSummaries = (
+  session: AuthoringSession
+): ReadonlyMap<DynamicsGroupId, DynamicsToolGroupDiagnosticSummary> => {
+  const summaries = new Map<DynamicsGroupId, EditorDiagnosticItem[]>();
+
+  for (const item of createEditorDiagnosticsProjection(session).items) {
+    if (item.category !== "dynamics") {
+      continue;
+    }
+
+    for (const dynamicsGroupId of resolveDiagnosticDynamicsGroupIds(item)) {
+      const current = summaries.get(dynamicsGroupId) ?? [];
+      if (!current.some((candidate) => candidate.id === item.id)) {
+        summaries.set(dynamicsGroupId, [...current, item]);
+      }
+    }
+  }
+
+  return new Map(
+    [...summaries.entries()].map(([dynamicsGroupId, issues]) => [
+      dynamicsGroupId,
+      {
+        dynamicsGroupId,
+        issues: [...issues].sort((left, right) => left.id.localeCompare(right.id))
+      }
+    ])
+  );
+};
 
 export const selectDynamicsToolPreviewGroup = (
   session: AuthoringSession,
@@ -1084,6 +1122,23 @@ const warningIssue = (
   message,
   ...(path === undefined ? {} : { path })
 });
+
+const resolveDiagnosticDynamicsGroupIds = (
+  item: EditorDiagnosticItem
+): readonly DynamicsGroupId[] => {
+  const ids: DynamicsGroupId[] = [];
+  if (item.target.kind === "dynamicsGroup") {
+    ids.push(item.target.id as DynamicsGroupId);
+  }
+
+  for (const hint of item.actionHints ?? []) {
+    if (hint.target.kind === "dynamicsGroup") {
+      ids.push(hint.target.id as DynamicsGroupId);
+    }
+  }
+
+  return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+};
 
 const isDynamicsToolPresetId = (
   value: string | undefined

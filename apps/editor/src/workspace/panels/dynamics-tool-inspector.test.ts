@@ -23,6 +23,7 @@ const DRIVER_X = ParameterIdSchema.parse("param_dynamics_driver_x");
 const DRIVER_Y = ParameterIdSchema.parse("param_dynamics_driver_y");
 const OUTPUT = ParameterIdSchema.parse("param_dynamics_output");
 const GROUP_ID = DynamicsGroupIdSchema.parse("dyn_inspector_sway");
+const DUPLICATE_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_inspector_duplicate");
 
 describe("DynamicsToolInspector", () => {
   it("initially renders only the group list and New Group action", () => {
@@ -51,6 +52,8 @@ describe("DynamicsToolInspector", () => {
     expect(markup).toContain('data-testid="dynamics-tool-inspector"');
     expect(markup).toContain('data-testid="dynamics-group-list"');
     expect(markup).toContain("Inspector Sway");
+    expect(markup).toContain('data-testid="dynamics-group-warning-icon"');
+    expect(markup).toContain("Dynamics output keyform is missing");
     expect(markup).toContain('data-testid="dynamics-new-draft"');
     expect(markup).not.toContain("Settings");
     expect(markup).not.toContain("Inputs");
@@ -61,6 +64,54 @@ describe("DynamicsToolInspector", () => {
     expect(markup).not.toContain("Preview");
     expect(markup).not.toContain("Apply");
     expect(markup).not.toContain("Delete Group");
+  });
+
+  it("surfaces loaded Dynamics diagnostics in the group list and group inspector", async () => {
+    const session = createDynamicsSession();
+    session.graph.dynamicsGroups.push({
+      ...session.graph.dynamicsGroups[0]!,
+      dynamicsGroupId: DUPLICATE_GROUP_ID,
+      displayName: "Duplicate Output"
+    });
+    const preview = {
+      ...createInitialDynamicsToolPreviewState(),
+      selectedGroupId: GROUP_ID
+    };
+    const animationFrame = installAnimationFrameMock();
+    editorSessionMock.current = {
+      advanceDynamicsToolPreviewSimulation: vi.fn(),
+      clearDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      createDynamicsGroup: vi.fn(),
+      deleteDynamicsGroup: vi.fn(),
+      dynamicsToolPreview: preview,
+      dynamicsToolPreviewEvaluation: createDynamicsToolPreviewEvaluation(session, preview),
+      resetDynamicsToolPreviewSimulation: vi.fn(),
+      session,
+      setDynamicsToolPreviewDefinitionOverride: vi.fn(),
+      setDynamicsToolPreviewDriverValue: vi.fn(),
+      setDynamicsToolPreviewGroupId: vi.fn(),
+      updateDynamicsGroup: vi.fn()
+    };
+    const harness = await renderDynamicsToolInspector();
+
+    try {
+      expect(getFakeElementsByTestId(harness.container, "dynamics-group-warning-icon"))
+        .toHaveLength(2);
+
+      await clickTestId(harness.container, "dynamics-group-row");
+      const warningCodes = getFakeElementsByTestId(
+        harness.container,
+        "dynamics-group-validation-warning"
+      ).map((element) => element.getAttribute("data-code"));
+
+      expect(warningCodes).toContain("dynamics.outputKeyformMissing");
+      expect(warningCodes).toContain("dynamics.outputOwnershipDuplicate");
+      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
+        .toContain("This Dynamics output parameter has no keyform set");
+    } finally {
+      animationFrame.restore();
+      await harness.cleanup();
+    }
   });
 
   it("moves through group, edit, create, cancel, apply, and delete states", async () => {

@@ -1,11 +1,14 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  type DrawableId,
   MeshIdSchema,
+  type MeshId,
   PartIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  type TextureId
 } from "@private-2d-rigging-lab/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -15,7 +18,8 @@ import {
   MeshToolInspector
 } from "./mesh-tool-inspector";
 import type {
-  MeshToolDraft
+  MeshToolDraft,
+  MeshToolGenerationDiagnostic
 } from "../../features/editor-session/editor-session-context";
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 
@@ -83,17 +87,158 @@ describe("MeshToolInspector target section", () => {
     expect(warning).toContain("Existing meshes excluded");
     expect(warning).toContain("Generated Drawable");
   });
+
+  it("shows fallback mesh diagnostics with copyable generation details", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY, {
+          fallbackReason: "v6-contour-extraction-failed",
+          fallbackSteps: [
+            {
+              method: "auto-outline-v6d-adaptive-contour-constrainautor",
+              reason: "v6-contour-extraction-failed"
+            }
+          ]
+        })
+      ],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("Mesh diagnostic");
+    expect(card).toContain("Mesh generation used fallback");
+    expect(card).toContain("Copy diagnostic details");
+    expect(card).toContain("auto-outline-v6d-adaptive-contour-constrainautor");
+    expect(card).toContain("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(card).toContain("Empty Drawable");
+    expect(card).toContain("v6-contour-extraction-failed");
+    expect(card).toContain("&quot;triangles&quot;: 1");
+    expect(card).toContain("&quot;vertices&quot;: 3");
+  });
+
+  it("copies v6d constrainautor diagnostics fields from quality metrics", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY, {
+          fallbackReason: "v6d-invalid-constraint-input",
+          fallbackSteps: [
+            {
+              method: "auto-outline-v6d-adaptive-contour-constrainautor",
+              reason: "v6d-invalid-constraint-input"
+            }
+          ],
+          qualityMetrics: createV6DInvalidConstraintQualityMetrics()
+        })
+      ],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("&quot;constrainautorDiagnostics&quot;");
+    expect(card).toContain("&quot;failureStage&quot;: &quot;constraint-input&quot;");
+    expect(card).toContain("&quot;invalidConstraintInputReasons&quot;");
+    expect(card).toContain("&quot;zeroLengthConstraintEdgeCount&quot;: 1");
+    expect(card).toContain("&quot;sanitizedConstraintEdgeCount&quot;: 2");
+  });
+
+  it("shows fallback mesh diagnostics for drawableSet target drafts", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY),
+        createDraft(DRAW_GENERATED, MESH_GENERATED, {
+          fallbackReason: "v6-contour-extraction-failed",
+          fallbackSteps: [
+            {
+              method: "auto-outline-v6d-adaptive-contour-constrainautor",
+              reason: "v6-contour-extraction-failed"
+            }
+          ]
+        })
+      ],
+      selection: {
+        kind: "drawableSet",
+        ids: [DRAW_EMPTY, DRAW_GENERATED]
+      }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("Mesh generation used fallback");
+    expect(card).toContain("Generated Drawable");
+    expect(card).toContain("v6-contour-extraction-failed");
+    expect(card).toContain("&quot;id&quot;: &quot;draw_generated&quot;");
+    expect(card).toContain("&quot;triangles&quot;: 1");
+  });
+
+  it("shows 0-triangle mesh diagnostics without verbose warning row text", () => {
+    const markup = renderInspector({
+      meshDrafts: [createDraft(DRAW_EMPTY, MESH_EMPTY, { triangleCount: 0 })],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("Mesh preview has 0 triangles.");
+    expect(card).toContain("&quot;triangles&quot;: 0");
+    expect(card).toContain("&quot;vertices&quot;: 3");
+  });
+
+  it("shows 0-triangle mesh diagnostics for drawableSet target drafts", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY),
+        createDraft(DRAW_GENERATED, MESH_GENERATED, { triangleCount: 0 })
+      ],
+      selection: {
+        kind: "drawableSet",
+        ids: [DRAW_EMPTY, DRAW_GENERATED]
+      }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("Mesh preview has 0 triangles.");
+    expect(card).toContain("Generated Drawable");
+    expect(card).toContain("&quot;id&quot;: &quot;draw_generated&quot;");
+    expect(card).toContain("&quot;triangles&quot;: 0");
+  });
+
+  it("shows transient generation failure diagnostics and copy payload details", () => {
+    const markup = renderInspector({
+      meshDrafts: [],
+      meshGenerationDiagnostic: {
+        kind: "generationFailed",
+        drawableId: DRAW_EMPTY,
+        drawableName: "Empty Drawable",
+        presetId: "standard",
+        densityHint: "medium",
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        meshBounds: { x: 0, y: 0, width: 20, height: 20 },
+        vertexCount: 0,
+        triangleCount: 0,
+        failureReason: "createGeneratedMeshForDrawable returned no preview result."
+      },
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("createGeneratedMeshForDrawable returned no preview result.");
+    expect(card).toContain("&quot;diagnosticKind&quot;: &quot;generationFailed&quot;");
+    expect(card).toContain("&quot;id&quot;: &quot;draw_empty&quot;");
+    expect(card).toContain("&quot;name&quot;: &quot;Empty Drawable&quot;");
+    expect(card).toContain("&quot;width&quot;: 20");
+    expect(card).toContain("&quot;triangles&quot;: 0");
+  });
 });
 
 function renderInspector(input: {
   readonly selection: EditorSelection;
   readonly meshDrafts: readonly MeshToolDraft[];
+  readonly meshGenerationDiagnostic?: MeshToolGenerationDiagnostic | null;
 }): string {
   editorSessionMock.current = {
     applyMeshDraft: vi.fn(),
     cancelMeshDraft: vi.fn(),
     editorHiddenPartIds: new Set(),
     meshDraft: input.meshDrafts.length === 1 ? input.meshDrafts[0] : null,
+    meshGenerationDiagnostic: input.meshGenerationDiagnostic ?? null,
     meshDrafts: input.meshDrafts,
     previewMeshDraft: vi.fn(),
     previewMeshDrafts: vi.fn(),
@@ -117,14 +262,93 @@ function sectionMarkup(markup: string, testId: string): string {
   return match[0];
 }
 
-function createDraft(drawableId: typeof DRAW_EMPTY, meshId: typeof MESH_EMPTY): MeshToolDraft {
+function createDraft(
+  drawableId: DrawableId,
+  meshId: MeshId,
+  options: {
+    readonly fallbackReason?: MeshToolDraft["fallbackReason"];
+    readonly fallbackSteps?: MeshToolDraft["fallbackSteps"];
+    readonly qualityMetrics?: MeshToolDraft["qualityMetrics"];
+    readonly triangleCount?: number;
+  } = {}
+): MeshToolDraft {
+  const mesh = createGeneratedMesh(meshId, drawableId);
+  if (options.triangleCount === 0) {
+    mesh.triangles = [];
+  }
+
   return {
     drawableId,
     presetId: "standard",
     commitMode: "single",
     method: "auto-outline-v6d-adaptive-contour-constrainautor",
-    mesh: createGeneratedMesh(meshId, drawableId),
-    source: "bounds-grid"
+    mesh,
+    source: "outline-v6d-adaptive-contour-constrainautor-rgba",
+    ...(options.fallbackReason === undefined ? {} : { fallbackReason: options.fallbackReason }),
+    ...(options.fallbackSteps === undefined ? {} : { fallbackSteps: options.fallbackSteps }),
+    ...(options.qualityMetrics === undefined ? {} : { qualityMetrics: options.qualityMetrics })
+  };
+}
+
+function createV6DInvalidConstraintQualityMetrics(): MeshToolDraft["qualityMetrics"] {
+  return {
+    maxEdgeLength: 20,
+    maxTriangleArea: 200,
+    minAngleDegrees: 45,
+    maxVertexValence: 2,
+    refinementIterationCount: 0,
+    fallbackReason: "v6d-invalid-constraint-input",
+    triangulationMode: "v6-backend-blocked-fallback",
+    v6Metrics: {
+      algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+      methodId: "auto-outline-v6d-adaptive-contour-constrainautor",
+      backendId: "v6d-adaptive-contour-constrainautor",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+      actualSourceId: "alpha-aware-rgba",
+      outputKind: "fallback-output",
+      preset: "medium",
+      fallbackReason: "v6d-invalid-constraint-input",
+      fallbackSteps: [
+        {
+          method: "auto-outline-v6d-adaptive-contour-constrainautor",
+          reason: "v6d-invalid-constraint-input"
+        }
+      ],
+      vertexCount: 3,
+      triangleCount: 1,
+      boundaryVertexCount: 3,
+      interiorVertexCount: 0,
+      alphaBoundsAvailable: true,
+      contourLoopCount: 1,
+      holeLikeRegionCount: 0,
+      removedTriangleCount: 0,
+      outsideOrCrossingTriangleCount: 0,
+      multiIslandHandling: "main-island-only",
+      holeHandling: "supported",
+      provenance: ["dependency-available", "fallback-v6d-invalid-constraint-input"],
+      constrainautorDiagnostics: {
+        dependencyGateStatus: "available",
+        constraintEdgeCount: 2,
+        preservedConstraintEdgeCount: 0,
+        missingConstraintEdgeCount: 2,
+        constraintRecoveryFailed: true,
+        outsideTriangleCount: 0,
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: ["zero-length-constraint-edge"],
+        inputPointCount: 4,
+        finitePointCount: 4,
+        sanitizedPointCount: 3,
+        mergedPointCount: 1,
+        inputConstraintEdgeCount: 3,
+        sanitizedConstraintEdgeCount: 2,
+        zeroLengthConstraintEdgeCount: 1,
+        invalidConstraintEndpointCount: 0,
+        duplicateConstraintEdgeCount: 0,
+        crossingConstraintEdgeCount: 0,
+        pointOnConstraintEdgeCount: 0
+      }
+    }
   };
 }
 
@@ -165,9 +389,9 @@ function createFixtureSession(): AuthoringSession {
 }
 
 function createDrawable(
-  drawableId: typeof DRAW_EMPTY,
-  meshId: typeof MESH_EMPTY,
-  textureId: typeof TEX_EMPTY,
+  drawableId: DrawableId,
+  meshId: MeshId,
+  textureId: TextureId,
   displayName: string
 ) {
   return {
@@ -184,7 +408,7 @@ function createDrawable(
   };
 }
 
-function createGeneratedMesh(meshId: typeof MESH_EMPTY, drawableId: typeof DRAW_EMPTY) {
+function createGeneratedMesh(meshId: MeshId, drawableId: DrawableId) {
   return {
     meshId,
     drawableId,

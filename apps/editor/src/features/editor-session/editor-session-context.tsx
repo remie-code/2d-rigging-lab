@@ -15,6 +15,7 @@ import type {
   DrawableId,
   ParameterId,
   PartId,
+  RectDto,
   RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import type {
@@ -192,6 +193,29 @@ export interface MeshToolDraft {
   readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
 }
 
+export type MeshToolGenerationDiagnosticKind =
+  | "generationFailed"
+  | "fallback"
+  | "emptyResult";
+
+export interface MeshToolGenerationDiagnostic {
+  readonly kind: MeshToolGenerationDiagnosticKind;
+  readonly drawableId: DrawableId;
+  readonly drawableName?: string;
+  readonly presetId: MeshGenerationPresetId;
+  readonly densityHint?: string;
+  readonly method: GeneratedMeshPreviewCommitMethod;
+  readonly source?: DrawableGeneratedMeshResult["source"];
+  readonly meshBounds?: RectDto;
+  readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
+  readonly vertexCount: number;
+  readonly triangleCount: number;
+  readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
+  readonly fallbackSteps?: DrawableGeneratedMeshResult["fallbackSteps"];
+  readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
+  readonly failureReason?: string;
+}
+
 export function logMeshGenerationPreviewDebug(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
@@ -250,6 +274,7 @@ interface EditorSessionContextValue {
   readonly editorHiddenPartIds: ReadonlySet<PartId>;
   readonly meshDraft: MeshToolDraft | null;
   readonly meshDrafts: readonly MeshToolDraft[];
+  readonly meshGenerationDiagnostic: MeshToolGenerationDiagnostic | null;
   readonly rigDraft: WarpDeformerDraft | null;
   readonly structureRows: readonly StructureTreeRow[];
   readonly deformerRows: readonly DeformerTreeRow[];
@@ -455,6 +480,8 @@ export function EditorSessionProvider({
   );
   const [meshDrafts, setMeshDrafts] = useState<readonly MeshToolDraft[]>([]);
   const meshDraft = useMemo(() => createMeshToolDraftCompatValue(meshDrafts), [meshDrafts]);
+  const [meshGenerationDiagnostic, setMeshGenerationDiagnostic] =
+    useState<MeshToolGenerationDiagnostic | null>(null);
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
@@ -512,6 +539,7 @@ export function EditorSessionProvider({
   useEffect(() => {
     if (activeTool !== "mesh") {
       setMeshDrafts([]);
+      setMeshGenerationDiagnostic(null);
     }
   }, [activeTool]);
 
@@ -539,6 +567,7 @@ export function EditorSessionProvider({
 
   useEffect(() => {
     setMeshDrafts((current) => filterMeshDraftsForSelection(current, selection));
+    setMeshGenerationDiagnostic(null);
   }, [selection]);
 
   const resolvePsdImportDestination = useCallback(() => {
@@ -552,6 +581,7 @@ export function EditorSessionProvider({
 
   const clearTransientCommitState = useCallback(() => {
     setMeshDrafts([]);
+    setMeshGenerationDiagnostic(null);
     setRigDraft(null);
     setDynamicsToolPreview(createInitialDynamicsToolPreviewState());
     setRigOperationFeedback(null);
@@ -1145,6 +1175,7 @@ export function EditorSessionProvider({
 
   const cancelMeshDraft = useCallback(() => {
     setMeshDrafts([]);
+    setMeshGenerationDiagnostic(null);
   }, []);
 
   const previewMeshDraft = useCallback(
@@ -1152,14 +1183,15 @@ export function EditorSessionProvider({
       drawableId: DrawableId,
       presetId: MeshGenerationPresetId
     ) => {
-      const draft = createMeshToolDraft({
+      const result = createMeshToolDraft({
         commitMode: "single",
         drawableId,
         presetId,
         session
       });
 
-      setMeshDrafts(draft === undefined ? [] : [draft]);
+      setMeshDrafts(result.draft === undefined ? [] : [result.draft]);
+      setMeshGenerationDiagnostic(result.diagnostic);
     },
     [session]
   );
@@ -1172,18 +1204,21 @@ export function EditorSessionProvider({
       const eligibleDrawableIds = createMeshDrawableBatchTargets(session, drawableIds)
         .filter((target) => target.eligible)
         .map((target) => target.drawableId);
-      const drafts = eligibleDrawableIds
-        .map((drawableId) =>
-          createMeshToolDraft({
-            commitMode: "batchEligible",
-            drawableId,
-            presetId,
-            session
-          })
-        )
+      const results = eligibleDrawableIds.map((drawableId) =>
+        createMeshToolDraft({
+          commitMode: "batchEligible",
+          drawableId,
+          presetId,
+          session
+        })
+      );
+      const drafts = results
+        .map((result) => result.draft)
         .filter(isDefined);
+      const firstDiagnostic = results.find((result) => result.diagnostic !== null)?.diagnostic ?? null;
 
       setMeshDrafts(drafts);
+      setMeshGenerationDiagnostic(firstDiagnostic);
     },
     [session]
   );
@@ -1240,6 +1275,7 @@ export function EditorSessionProvider({
     );
     if (result.committed) {
       setMeshDrafts([]);
+      setMeshGenerationDiagnostic(null);
       if (draftsToApply.length === 1 && draftsToApply[0]?.commitMode === "single") {
         const committedDrawableId = committedDrawableIds[0]!;
         setSelection({ kind: "drawable", id: committedDrawableId });
@@ -1637,6 +1673,7 @@ export function EditorSessionProvider({
       selection,
       meshDraft,
       meshDrafts,
+      meshGenerationDiagnostic,
       rigDraft,
       structureRows,
       deformerRows,
@@ -1774,6 +1811,7 @@ export function EditorSessionProvider({
       inspector,
       meshDraft,
       meshDrafts,
+      meshGenerationDiagnostic,
       moveDrawableRigControlBinding,
       openProjectFile,
       openProjectFromPortableBundle,
@@ -1836,13 +1874,25 @@ export function useEditorSession() {
   return context;
 }
 
+interface MeshToolDraftResult {
+  readonly draft?: MeshToolDraft;
+  readonly diagnostic: MeshToolGenerationDiagnostic | null;
+}
+
 function createMeshToolDraft(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
   readonly commitMode: MeshToolDraft["commitMode"];
-}): MeshToolDraft | undefined {
+}): MeshToolDraftResult {
   const preset = getMeshGenerationPreset(input.presetId);
+  const drawable = input.session.graph.drawables.find(
+    (candidate) => candidate.drawableId === input.drawableId
+  );
+  const existingMesh =
+    drawable === undefined
+      ? undefined
+      : input.session.graph.meshes.find((candidate) => candidate.meshId === drawable.meshId);
   const generated = createGeneratedMeshForDrawable({
     session: input.session,
     drawableId: input.drawableId,
@@ -1864,20 +1914,36 @@ function createMeshToolDraft(input: {
   });
 
   if (generated === undefined) {
-    return undefined;
+    return {
+      diagnostic: {
+        kind: "generationFailed",
+        drawableId: input.drawableId,
+        ...(drawable === undefined ? {} : { drawableName: drawable.displayName }),
+        presetId: input.presetId,
+        densityHint: preset.densityHint,
+        method: DEFAULT_MESH_GENERATION_METHOD,
+        ...(existingMesh === undefined ? {} : { meshBounds: existingMesh.bounds }),
+        vertexCount: 0,
+        triangleCount: 0,
+        failureReason: "createGeneratedMeshForDrawable returned no preview result."
+      }
+    };
   }
 
   return {
-    drawableId: input.drawableId,
-    presetId: input.presetId,
-    commitMode: input.commitMode,
-    method: DEFAULT_MESH_GENERATION_METHOD,
-    mesh: generated.mesh,
-    source: generated.source,
-    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
-    ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
-    ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
-    ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
+    draft: {
+      drawableId: input.drawableId,
+      presetId: input.presetId,
+      commitMode: input.commitMode,
+      method: DEFAULT_MESH_GENERATION_METHOD,
+      mesh: generated.mesh,
+      source: generated.source,
+      ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+      ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
+      ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
+      ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
+    },
+    diagnostic: null
   };
 }
 

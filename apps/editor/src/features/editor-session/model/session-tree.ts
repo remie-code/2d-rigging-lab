@@ -9,7 +9,17 @@ import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
 import type { EditorSelection } from "./editor-selection";
 import { isDrawableSelected } from "./editor-selection";
+import {
+  createEditorDiagnosticsProjection,
+  type EditorDiagnosticItem
+} from "./editor-diagnostics-state";
 import { ROOT_PART_ID } from "./empty-authoring-session";
+
+export interface CompactTreeWarning {
+  readonly count: number;
+  readonly label: string;
+  readonly codes: readonly string[];
+}
 
 interface StructureTreeRowBase {
   readonly depth: number;
@@ -21,6 +31,7 @@ interface StructureTreeRowBase {
   readonly effectiveHidden: boolean;
   readonly canToggleVisibility: boolean;
   readonly draggable: boolean;
+  readonly warning?: CompactTreeWarning;
   readonly parentPartId?: PartId;
 }
 
@@ -120,6 +131,7 @@ export function createStructureTreeRows(
   const drawablesById = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable])
   );
+  const meshWarningsByDrawableId = createDrawableMeshMissingWarningMap(session);
   const drawOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
   const collapsedPartIds = state.collapsedPartIds ?? new Set<PartId>();
   const editorHiddenPartIds = state.editorHiddenPartIds ?? new Set<PartId>();
@@ -202,6 +214,9 @@ export function createStructureTreeRows(
       effectiveHidden,
       canToggleVisibility: true,
       draggable: true,
+      ...(meshWarningsByDrawableId.get(drawable.drawableId) === undefined
+        ? {}
+        : { warning: meshWarningsByDrawableId.get(drawable.drawableId)! }),
       runtimeVisible: drawable.runtimeVisibility,
       order: drawOrderByDrawableId.get(drawable.drawableId) ?? Number.MAX_SAFE_INTEGER,
       selected: isDrawableSelected(selection, drawable.drawableId)
@@ -213,6 +228,35 @@ export function createStructureTreeRows(
   }
 
   return rows;
+}
+
+export function createDrawableMeshMissingWarningMap(
+  session: AuthoringSession
+): ReadonlyMap<DrawableId, CompactTreeWarning> {
+  const warningsByDrawableId = new Map<DrawableId, EditorDiagnosticItem[]>();
+
+  for (const item of createEditorDiagnosticsProjection(session).items) {
+    if (item.code !== "mesh.drawableMeshMissing" || item.target.kind !== "drawable") {
+      continue;
+    }
+
+    const drawableId = item.target.id as DrawableId;
+    warningsByDrawableId.set(drawableId, [
+      ...(warningsByDrawableId.get(drawableId) ?? []),
+      item
+    ]);
+  }
+
+  return new Map(
+    [...warningsByDrawableId.entries()].map(([drawableId, items]) => [
+      drawableId,
+      {
+        count: items.length,
+        label: items.map((item) => item.message).join("; "),
+        codes: sortedStrings(items.map((item) => item.code))
+      }
+    ])
+  );
 }
 
 export function createInspectorProjection(
@@ -610,3 +654,6 @@ function isDescendantPart(
 function isDefined<TValue>(value: TValue | undefined): value is TValue {
   return value !== undefined;
 }
+
+const sortedStrings = (values: readonly string[]): readonly string[] =>
+  [...values].sort((left, right) => left.localeCompare(right));

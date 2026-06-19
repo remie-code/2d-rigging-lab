@@ -3,6 +3,7 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { AppBar } from "./app-bar";
 import { PsdImportModal } from "../features/psd-import/components/psd-import-modal";
 import { CanvasPreviewPanel } from "./panels/canvas-preview-panel";
+import { DiagnosticsScreen } from "./diagnostics/diagnostics-screen";
 import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
@@ -31,16 +32,19 @@ export function AuthoringWorkspaceContent({
 }) {
   const showParameterManager = activeEntry === "parameters";
   const showProjectStorage = activeEntry === "storage";
+  const showDiagnostics = activeEntry === "validate";
   const showViewer = activeEntry === "viewer";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      {showParameterManager || showProjectStorage || showViewer ? (
+      {showParameterManager || showProjectStorage || showDiagnostics || showViewer ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {showViewer ? (
             <ViewerRuntimeScreen />
+          ) : showDiagnostics ? (
+            <DiagnosticsScreen />
           ) : showParameterManager ? (
             <ParameterManagerScreen />
           ) : (
@@ -80,7 +84,7 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      {showViewer ? null : <ParameterBar />}
+      {showViewer || showDiagnostics ? null : <ParameterBar />}
       <PsdImportModal />
     </main>
   );

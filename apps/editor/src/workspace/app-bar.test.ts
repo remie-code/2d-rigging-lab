@@ -8,6 +8,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DynamicsGroupIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+
+import { createEmptyAuthoringSession } from "../features/editor-session/model/empty-authoring-session";
+
 const appBarTestState = vi.hoisted(() => ({
   editorSession: {
     canUndo: false,
@@ -21,14 +25,17 @@ const appBarTestState = vi.hoisted(() => ({
     },
     undo: vi.fn(),
     redo: vi.fn(),
-    saveProject: vi.fn()
+    saveProject: vi.fn(),
+    session: undefined as unknown
   },
   iconButtons: [] as Array<{
     readonly disabled: boolean;
     readonly label: string;
     readonly onClick?: ButtonHTMLAttributes<HTMLButtonElement>["onClick"];
   }>,
-  setActiveEntry: vi.fn()
+  activeEntry: "import",
+  setActiveEntry: vi.fn(),
+  surfaceLabel: "Mock Surface"
 }));
 
 vi.mock("../features/editor-session/editor-session-context", () => ({
@@ -44,8 +51,8 @@ vi.mock("../state/editor-ui-store", () => ({
     }) => unknown
   ) =>
     selector({
-      surfaceLabel: "Mock Surface",
-      activeEntry: "canvas",
+      surfaceLabel: appBarTestState.surfaceLabel,
+      activeEntry: appBarTestState.activeEntry,
       setActiveEntry: appBarTestState.setActiveEntry
     })
 }));
@@ -83,11 +90,13 @@ import { AppBar, createOpenProjectFileChangeHandler } from "./app-bar";
 
 describe("AppBar history controls", () => {
   beforeEach(() => {
+    appBarTestState.activeEntry = "import";
     appBarTestState.editorSession.canUndo = false;
     appBarTestState.editorSession.canRedo = false;
     appBarTestState.editorSession.projectIdentityLabel = "Loaded model · rev 7";
     appBarTestState.editorSession.projectSaveStatusLabel = "Saved";
     appBarTestState.editorSession.projectStorage.status = "idle";
+    appBarTestState.editorSession.session = createEmptyAuthoringSession();
     appBarTestState.editorSession.openProjectFile.mockClear();
     appBarTestState.editorSession.openPsdImport.mockClear();
     appBarTestState.editorSession.undo.mockClear();
@@ -174,6 +183,27 @@ describe("AppBar history controls", () => {
     expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledWith(file);
     expect(input.value).toBe("");
   });
+
+  it("renders the Validate warning badge from diagnostics count outside Viewer", () => {
+    appBarTestState.editorSession.session = createAppBarWarningSession();
+
+    const markup = renderToStaticMarkup(createElement(AppBar));
+
+    expect(markup).toContain('data-testid="diagnostics-warning-badge"');
+    expect(markup).toContain('aria-label="2 validation warnings"');
+    expect(markup).toContain(">2</span>");
+  });
+
+  it("hides the Validate warning badge when diagnostics are empty or Viewer is active", () => {
+    const emptyMarkup = renderToStaticMarkup(createElement(AppBar));
+    expect(emptyMarkup).not.toContain('data-testid="diagnostics-warning-badge"');
+
+    appBarTestState.activeEntry = "viewer";
+    appBarTestState.editorSession.session = createAppBarWarningSession();
+    const viewerMarkup = renderToStaticMarkup(createElement(AppBar));
+
+    expect(viewerMarkup).not.toContain('data-testid="diagnostics-warning-badge"');
+  });
 });
 
 function buttonMarkup(markup: string, label: string): string {
@@ -192,4 +222,44 @@ function findIconButton(label: string) {
   }
 
   return button;
+}
+
+function createAppBarWarningSession() {
+  const session = createEmptyAuthoringSession();
+  const missingDriverId = ParameterIdSchema.parse("param_app_bar_badge_missing_driver");
+  const missingOutputId = ParameterIdSchema.parse("param_app_bar_badge_missing_output");
+  session.graph.dynamicsGroups.push({
+    dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_app_bar_badge"),
+    displayName: "Badge Dynamics",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: missingDriverId,
+        kind: "angle",
+        influencePercent: 100,
+        invert: false,
+        normalization: { min: -30, center: 0, max: 30 }
+      }
+    ],
+    pendulums: [
+      {
+        length: 0.8,
+        sway: 0.7,
+        reactionSpeed: 12,
+        convergenceSpeed: 4
+      }
+    ],
+    outputs: [
+      {
+        parameterId: missingOutputId,
+        kind: "angle",
+        strength: 10,
+        invert: false,
+        limit: 15
+      }
+    ]
+  });
+
+  return session;
 }

@@ -1,5 +1,8 @@
+import { useMemo } from "react";
+
 import { toolboxSections } from "../workspace-data";
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import { createEditorDiagnosticsProjection } from "../../features/editor-session/model/editor-diagnostics-state";
 import { cn } from "../../lib/class-name";
 import {
   useEditorUiStore,
@@ -7,14 +10,19 @@ import {
   type WorkspaceToolId
 } from "../../state/editor-ui-store";
 import { IconButton } from "../../ui/icon-button";
+import { DiagnosticsWarningBadge } from "../diagnostics/diagnostics-warning-badge";
 
 export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal" | "vertical" }) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveTool = useEditorUiStore((state) => state.setActiveTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const { openPsdImport } = useEditorSession();
+  const { openPsdImport, session } = useEditorSession();
   const horizontal = layout === "horizontal";
+  const diagnosticsWarningCount = useMemo(
+    () => createEditorDiagnosticsProjection(session).warningItemCount,
+    [session]
+  );
 
   const activateEntry = (entry: WorkspaceEntryId) => {
     setActiveEntry(entry);
@@ -51,6 +59,9 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
 
             return (
               <IconButton
+                className={
+                  item.id === "validate" && diagnosticsWarningCount > 0 ? "relative" : undefined
+                }
                 key={item.id}
                 label={item.label}
                 onClick={() => {
@@ -64,6 +75,12 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
                 pressed={pressed}
               >
                 <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+                {item.id === "validate" && diagnosticsWarningCount > 0 ? (
+                  <DiagnosticsWarningBadge
+                    className="absolute -right-2 -top-2"
+                    count={diagnosticsWarningCount}
+                  />
+                ) : null}
               </IconButton>
             );
           })}

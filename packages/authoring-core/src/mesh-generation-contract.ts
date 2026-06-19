@@ -203,6 +203,8 @@ export type MeshGenerationV6FallbackReason =
   | "v6c-poly2tri-triangulation-threw"
   | "v6c-poly2tri-boundary-missing"
   | "v6d-constrainautor-generation-failed"
+  | "v6d-invalid-constraint-input"
+  | "v6d-untriangulated-points"
   | "v6d-constraint-recovery-failed"
   | "v6d-backend-threw"
   | "v6d-support-ring-geometry-invalid"

@@ -1,5 +1,7 @@
 import {
+  AlertTriangle,
   Check,
+  Copy,
   Eye,
   EyeOff,
   RefreshCw,
@@ -12,7 +14,11 @@ import { getPartOrderedChildren } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
-import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import {
+  useEditorSession,
+  type MeshToolDraft,
+  type MeshToolGenerationDiagnostic
+} from "../../features/editor-session/editor-session-context";
 import {
   createMeshDrawableBatchTargets,
   getMeshGenerationPreset,
@@ -33,6 +39,7 @@ export function MeshToolInspector() {
     applyMeshDraft,
     cancelMeshDraft,
     editorHiddenPartIds,
+    meshGenerationDiagnostic,
     meshDrafts,
     previewMeshDraft,
     previewMeshDrafts,
@@ -174,6 +181,14 @@ export function MeshToolInspector() {
     ? !isGenerating
     : !isGenerating && eligibleBatchTargets.length > 0;
   const canApplyPreview = draftsForTarget.length > 0;
+  const diagnostic = createMeshDiagnosticView({
+    draft: currentDraft,
+    draftsForTarget,
+    lastGenerationDiagnostic: meshGenerationDiagnostic,
+    preset,
+    session,
+    targetDrawableIds
+  });
   const targetNameItems = target.kind === "drawableSet"
     ? target.drawables.map((candidate) => ({
         drawableId: candidate.drawable.drawableId,
@@ -215,6 +230,8 @@ export function MeshToolInspector() {
           {workflowStatus}
         </p>
       </section>
+
+      {diagnostic === null ? null : <MeshDiagnosticCard diagnostic={diagnostic} />}
 
       {excludedBatchTargets.length === 0 ? null : (
         <ExistingMeshWarning targets={excludedBatchTargets} />
@@ -513,6 +530,269 @@ function formatBatchWorkflowStatus(
   }
 
   return `${eligibleTargets.length} eligible / ${excludedTargets.length} excluded`;
+}
+
+interface MeshDiagnosticView {
+  readonly title: string;
+  readonly reason: string;
+  readonly details: readonly {
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly copyPayload: string;
+}
+
+function MeshDiagnosticCard({ diagnostic }: { readonly diagnostic: MeshDiagnosticView }) {
+  return (
+    <section
+      className="rounded-md border border-amber-700/60 bg-amber-950/20 p-3"
+      data-testid="mesh-tool-diagnostic-card"
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-amber-200">
+        <AlertTriangle aria-hidden="true" size={14} strokeWidth={1.8} />
+        <h3>{diagnostic.title}</h3>
+      </div>
+      <p
+        className="mt-2 text-xs text-amber-100"
+        data-testid="mesh-tool-diagnostic-reason"
+      >
+        {diagnostic.reason}
+      </p>
+      <dl className="mt-3 grid gap-1.5">
+        {diagnostic.details.map((detail) => (
+          <div
+            className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 text-xs"
+            data-testid="mesh-tool-diagnostic-detail"
+            key={detail.label}
+          >
+            <dt className="text-amber-100/60">{detail.label}</dt>
+            <dd className="min-w-0 truncate text-amber-50">{detail.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <button
+        className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded border border-amber-700/70 bg-amber-950/30 px-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/30"
+        data-testid="mesh-tool-copy-diagnostic"
+        onClick={() => copyTextToClipboard(diagnostic.copyPayload)}
+        type="button"
+      >
+        <Copy aria-hidden="true" size={14} strokeWidth={1.8} />
+        Copy diagnostic details
+      </button>
+      <pre className="sr-only" data-testid="mesh-tool-diagnostic-copy-payload">
+        {diagnostic.copyPayload}
+      </pre>
+    </section>
+  );
+}
+
+function createMeshDiagnosticView(input: {
+  readonly draft: MeshToolDraft | null;
+  readonly draftsForTarget: readonly MeshToolDraft[];
+  readonly lastGenerationDiagnostic: MeshToolGenerationDiagnostic | null;
+  readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+  readonly session: AuthoringSession;
+  readonly targetDrawableIds: readonly DrawableId[];
+}): MeshDiagnosticView | null {
+  if (
+    input.lastGenerationDiagnostic !== null &&
+    input.targetDrawableIds.includes(input.lastGenerationDiagnostic.drawableId)
+  ) {
+    return createMeshDiagnosticViewFromDiagnostic(input.lastGenerationDiagnostic, input.preset);
+  }
+
+  if (input.draft === null) {
+    return createFirstMeshDiagnosticViewFromDrafts(input);
+  }
+
+  const currentDraftDiagnostic = createMeshDiagnosticViewFromDraft(input.draft, input);
+  return currentDraftDiagnostic ?? createFirstMeshDiagnosticViewFromDrafts(input);
+}
+
+function createFirstMeshDiagnosticViewFromDrafts(input: {
+  readonly draftsForTarget: readonly MeshToolDraft[];
+  readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+  readonly session: AuthoringSession;
+}): MeshDiagnosticView | null {
+  for (const draft of input.draftsForTarget) {
+    const diagnostic = createMeshDiagnosticViewFromDraft(draft, input);
+    if (diagnostic !== null) {
+      return diagnostic;
+    }
+  }
+
+  return null;
+}
+
+function createMeshDiagnosticViewFromDraft(
+  draft: MeshToolDraft,
+  input: {
+    readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+    readonly session: AuthoringSession;
+  }
+): MeshDiagnosticView | null {
+  const drawable = input.session.graph.drawables.find(
+    (candidate) => candidate.drawableId === draft.drawableId
+  );
+  const diagnostic = createMeshDiagnosticFromDraft(draft, drawable?.displayName, input.preset);
+  return diagnostic === null ? null : createMeshDiagnosticViewFromDiagnostic(diagnostic, input.preset);
+}
+
+function createMeshDiagnosticFromDraft(
+  draft: MeshToolDraft,
+  drawableName: string | undefined,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+): MeshToolGenerationDiagnostic | null {
+  const v6Metrics = draft.qualityMetrics?.v6Metrics;
+  const triangleCount = draft.mesh.triangles.length;
+  const isFallback =
+    draft.fallbackReason !== undefined ||
+    v6Metrics?.outputKind === "fallback-output" ||
+    v6Metrics?.outputKind === "blocked";
+
+  if (triangleCount === 0) {
+    return {
+      kind: "emptyResult",
+      drawableId: draft.drawableId,
+      ...(drawableName === undefined ? {} : { drawableName }),
+      presetId: draft.presetId,
+      densityHint: preset.densityHint,
+      method: draft.method,
+      source: draft.source,
+      meshBounds: draft.mesh.bounds,
+      ...(draft.alphaBounds === undefined ? {} : { alphaBounds: draft.alphaBounds }),
+      vertexCount: draft.mesh.vertices.length,
+      triangleCount,
+      ...(draft.fallbackReason === undefined ? {} : { fallbackReason: draft.fallbackReason }),
+      ...(draft.fallbackSteps === undefined ? {} : { fallbackSteps: draft.fallbackSteps }),
+      ...(draft.qualityMetrics === undefined ? {} : { qualityMetrics: draft.qualityMetrics })
+    };
+  }
+
+  if (!isFallback) {
+    return null;
+  }
+
+  return {
+    kind: "fallback",
+    drawableId: draft.drawableId,
+    ...(drawableName === undefined ? {} : { drawableName }),
+    presetId: draft.presetId,
+    densityHint: preset.densityHint,
+    method: draft.method,
+    source: draft.source,
+    meshBounds: draft.mesh.bounds,
+    ...(draft.alphaBounds === undefined ? {} : { alphaBounds: draft.alphaBounds }),
+    vertexCount: draft.mesh.vertices.length,
+    triangleCount,
+    ...(draft.fallbackReason === undefined ? {} : { fallbackReason: draft.fallbackReason }),
+    ...(draft.fallbackSteps === undefined ? {} : { fallbackSteps: draft.fallbackSteps }),
+    ...(draft.qualityMetrics === undefined ? {} : { qualityMetrics: draft.qualityMetrics })
+  };
+}
+
+function createMeshDiagnosticViewFromDiagnostic(
+  diagnostic: MeshToolGenerationDiagnostic,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+): MeshDiagnosticView {
+  const reason = formatMeshDiagnosticReason(diagnostic);
+  const payload = createMeshDiagnosticPayload(diagnostic, preset);
+
+  return {
+    title: "Mesh diagnostic",
+    reason,
+    details: [
+      { label: "Drawable", value: diagnostic.drawableName ?? diagnostic.drawableId },
+      { label: "Preset", value: preset.label },
+      { label: "Method", value: diagnostic.method },
+      {
+        label: "Triangles",
+        value: `${diagnostic.triangleCount} / ${diagnostic.vertexCount} vertices`
+      },
+      ...(diagnostic.fallbackReason === undefined
+        ? []
+        : [{ label: "Fallback", value: diagnostic.fallbackReason }])
+    ],
+    copyPayload: [
+      "Mesh generation diagnostic",
+      `reason: ${reason}`,
+      "payload:",
+      JSON.stringify(payload, null, 2)
+    ].join("\n")
+  };
+}
+
+function formatMeshDiagnosticReason(diagnostic: MeshToolGenerationDiagnostic): string {
+  if (diagnostic.kind === "generationFailed") {
+    return diagnostic.failureReason ?? "Mesh generation returned no preview.";
+  }
+
+  if (diagnostic.kind === "emptyResult") {
+    return "Mesh preview has 0 triangles.";
+  }
+
+  return diagnostic.fallbackReason === undefined
+    ? "Mesh generation used fallback output."
+    : `Mesh generation used fallback: ${diagnostic.fallbackReason}.`;
+}
+
+function createMeshDiagnosticPayload(
+  diagnostic: MeshToolGenerationDiagnostic,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+) {
+  const v6Metrics = diagnostic.qualityMetrics?.v6Metrics;
+  return {
+    diagnosticKind: diagnostic.kind,
+    algorithmId: v6Metrics?.algorithmId ?? resolveLegacyAlgorithmId(diagnostic),
+    method: diagnostic.method,
+    source: diagnostic.source,
+    preset: {
+      id: diagnostic.presetId,
+      label: preset.label,
+      densityHint: diagnostic.densityHint ?? preset.densityHint
+    },
+    drawable: {
+      id: diagnostic.drawableId,
+      name: diagnostic.drawableName
+    },
+    bounds: {
+      mesh: diagnostic.meshBounds,
+      alpha: diagnostic.alphaBounds
+    },
+    counts: {
+      vertices: diagnostic.vertexCount,
+      triangles: diagnostic.triangleCount,
+      boundaryVertices: v6Metrics?.boundaryVertexCount,
+      interiorVertices: v6Metrics?.interiorVertexCount,
+      contourLoops: v6Metrics?.contourLoopCount,
+      sampledBoundaryPoints: v6Metrics?.contourPipelineDiagnostics?.boundaryPointCount,
+      removedTriangles: v6Metrics?.removedTriangleCount,
+      outsideOrCrossingTriangles: v6Metrics?.outsideOrCrossingTriangleCount
+    },
+    fallback: {
+      reason: diagnostic.fallbackReason,
+      steps: diagnostic.fallbackSteps
+    },
+    failureReason: diagnostic.failureReason,
+    qualityMetrics: diagnostic.qualityMetrics
+  };
+}
+
+function resolveLegacyAlgorithmId(diagnostic: MeshToolGenerationDiagnostic): string | undefined {
+  return (
+    diagnostic.qualityMetrics?.envelopeMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.softBoundaryMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.softApronMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.contourBandMetrics?.algorithmId
+  );
+}
+
+function copyTextToClipboard(value: string): void {
+  if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+    return;
+  }
+
+  void navigator.clipboard.writeText(value);
 }
 
 function ExistingMeshWarning({

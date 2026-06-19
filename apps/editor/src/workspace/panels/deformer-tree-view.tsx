@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Folder,
@@ -158,6 +159,7 @@ export function DeformerTreeView() {
               data-row-kind="bound-drawable-ref"
               data-row-id={row.drawableId}
               data-selected={String(row.selected)}
+              data-warning-count={row.warning?.count}
               data-parent-rig-control-id={row.parentRigControlId}
               data-testid="deformer-tree-drawable-ref"
               draggable
@@ -179,7 +181,7 @@ export function DeformerTreeView() {
               }
               role="treeitem"
               style={{ marginLeft: `${row.depth * 14}px` }}
-              title={`${row.displayName} - ${row.detail}`}
+              title={drawableRowTitle(row.displayName, row.detail, row.warning)}
               type="button"
             >
               <span className="flex size-5 shrink-0 items-center justify-center text-neutral-500">
@@ -195,6 +197,16 @@ export function DeformerTreeView() {
                 <span className="truncate text-sm font-medium text-neutral-300">
                   {row.displayName}
                 </span>
+                {row.warning === undefined ? null : (
+                  <span
+                    aria-label={row.warning.label}
+                    className="flex size-5 shrink-0 items-center justify-center text-amber-300"
+                    data-testid="deformer-tree-warning-icon"
+                    title={row.warning.label}
+                  >
+                    <AlertTriangle aria-hidden="true" size={13} strokeWidth={1.9} />
+                  </span>
+                )}
               </span>
             </button>
           ) : (
@@ -338,6 +350,7 @@ export function DeformerTreeView() {
                     data-row-kind="drawable-pool-item"
                     data-row-id={item.drawableId}
                     data-selected={String(item.selected)}
+                    data-warning-count={item.warning?.count}
                     data-testid="deformer-tree-drawable-pool-row"
                     draggable
                     key={`pool:${item.drawableId}`}
@@ -355,6 +368,7 @@ export function DeformerTreeView() {
                       })
                     }
                     type="button"
+                    title={drawableRowTitle(item.displayName, item.partDisplayName, item.warning)}
                   >
                     <Layers
                       aria-hidden="true"
@@ -363,8 +377,20 @@ export function DeformerTreeView() {
                       strokeWidth={1.8}
                     />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-neutral-300">
-                        {item.displayName}
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="block min-w-0 truncate text-sm font-medium text-neutral-300">
+                          {item.displayName}
+                        </span>
+                        {item.warning === undefined ? null : (
+                          <span
+                            aria-label={item.warning.label}
+                            className="flex size-5 shrink-0 items-center justify-center text-amber-300"
+                            data-testid="deformer-tree-warning-icon"
+                            title={item.warning.label}
+                          >
+                            <AlertTriangle aria-hidden="true" size={13} strokeWidth={1.9} />
+                          </span>
+                        )}
                       </span>
                       <span className="block truncate text-[11px] text-neutral-600">
                         {item.partDisplayName}
@@ -399,6 +425,15 @@ function startDrag(
   setDragging(payload);
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(DEFORMER_TREE_DRAG_TYPE, JSON.stringify(payload));
+}
+
+function drawableRowTitle(
+  displayName: string,
+  detail: string,
+  warning: { readonly label: string } | undefined
+): string {
+  const base = `${displayName} - ${detail}`;
+  return warning === undefined ? base : `${base} - ${warning.label}`;
 }
 
 function readDragPayload(

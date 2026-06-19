@@ -1,145 +1,177 @@
-# 残作業 Backlog
+# 残作業バックログ
 
-> 状態: 2026-06-08 / Wave54 Domains A-H reports/reviews `pass` により、Task Window & Surface Separation v0 は Domain H verification まで通過済み。Wave54 final integration / Domain J は未完了なので、Wave53 Workspace Layout Migration v0 が最新の final implementation-proven baseline のまま。
-> 目的: 次の実装境界を選ぶための、残作業と decision gate の簡潔な index。完了済み wave 履歴は final report と map に置き、この backlog には置かない。
+> 状態: 2026-06-19 / Wave84 final complete / pass。
+> このファイルは、古い Wave54-Wave80 前提のバックログを構造ごと破棄し、現行リポジトリの根拠から再作成した次 wave 計画用の短い棚卸である。
 
-## 受理済み判断
+## 0. 陳腐化判定
 
-- Wave39 Product Preflight v0 は、Editor run/read/save/load/rerun evidence を持つ truthful で session-generated な read-only product report として `implementation-proven`。
-- Wave40 Codex-facing proposal API / diff validation surface は、Codex-submitted proposal の deterministic operation catalog、schema/catalog/preflight validation、dry-run diff preview、rerun validation / Product Preflight、approval-gated commit、transcript/evidence recording、Editor review workflow、fixtures、desktop/mobile e2e smoke として `implementation-proven`。
-- Wave41 Product Preflight read/diff/report ergonomics は、deterministic Product Preflight report diff、category/status transition summary、evidence/diagnostic ref changes、rerun affordance、Codex-facing read/diff command helpers、Editor comparison workflow、fixtures、desktop/mobile focused e2e smoke として `implementation-proven`。
-- Wave42 Quality gate tightening / E2E registry and source guardrails は product capability ではなく、Wave42 boundary guard、source organization guard hardening、focused e2e registry/list/check/single-selection runner、dependency / forbidden-scope guard refinement、docs/traceability registration として Domain A-E implementation/review と final verification が完了。Clean integration review は [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md) に記録済みで、W42-F-001 bookkeeping fix は final report/maps に反映済み。
-- Wave43 Validator Contract / Evidence Naming Consistency は product capability ではなく、validator/evidence coverage matrix、validator contract prose refresh、diagnostic policy/schema/traceability naming sync、representative Wave43 checker、active fixture manifest validator diagnostic label cleanup として Domain A-E implementation/review と final verification が完了。Clean integration review は [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) に `pass` として記録済み。
-- 次 wave 選定では「ユーザー判断なしに進められる」ことを優先価値として扱わない。ユーザー判断がプロダクトの正しい方向に必要なら、それは回避すべき負債ではなく、支払うべき設計コストとして扱う。
-- Wave44 は PSD を主入力フォーマットとする real parser/dependency/materialization pilot として final verification bookkeeping 済み。Domains A-F で dependency/security/fixture boundary、`@webtoon/psd@0.4.0` scripts-only dependency、`test_data/sample_model.psd` explicit-path parse smoke、parser-free PSD evidence contracts、selected `headwear` layer raw RGBA materialization evidence JSON、validator/Product Preflight diagnostics、private/local fixture regression が実装・レビュー済み。Domain G documentation refresh は Review-Sylph `pass` 済み、Domain H final verification report は記録済み。Review-Sylph clean integration review は [recorded `pass`](reviews/wave44/wave44-domain-h-clean-integration-review.md)。
-- Wave45 は Editor/browser explicit PSD import adapter scope、browser parser bridge/session evidence、package/operation PSD import evidence bridge、Editor explicit PSD Import layer tree UX、validator/Product Preflight PSD import diagnostics、focused `psdImportFocused` e2e、parser import boundary guard、fixture/traceability registration、Domain G documentation refresh、Domain H final verification / integration bookkeeping、Domain H clean integration review として `pass` 済み。Wave45 final complete / final pass は [Domain H report](waves/wave45/wave45-domain-h-integration-review-and-final-report.md) と [clean integration review](reviews/wave45/wave45-domain-h-clean-integration-review.md) に記録済み。
-- Wave46 は Domains A-G、Domain H final verification / integration bookkeeping、Domain H clean integration review として `pass` 済み。Wave46 は selected PSD layer asset boundary、Editor/browser selected-layer materialization service、parser-free package/operation `importPsdLayerMaterialization` bridge、Editor selected layer intake UX、validator/Product Preflight materialized asset diagnostics、focused `psdImportFocused` selected `headwear` layer save/load/persistence regression、fixture/traceability markdown registration を実装済み範囲にした。Domain H は不足していた Domain B review artifact を取得し、F1 fix-loop / independent re-review pass を記録した。Wave46 final complete / final pass は [Domain H report](waves/wave46/wave46-domain-h-integration-review-and-final-report.md) と [clean integration review](reviews/wave46/wave46-domain-h-clean-integration-review.md) に記録済み。
-- Wave47 は Domains A-G、Domain H final verification / integration bookkeeping、Domain H clean integration review として `pass` 済み。explicit multi-leaf PSD batch boundary、Editor/browser batch materialization service、parser-free package/operation batch intake and generated part scaffold bridge、Editor multi-layer selection / batch intake UX、validator/Product Preflight batch diagnostics、focused `psdMultiLayerBatchFocused` save/load/persistence regression、fixture/traceability markdown registration、capability/backlog/map 同期を実装済み範囲にした。対象は `test_data/sample_model.psd` の `headwear`、`eyewear`、`tie / tie` の明示選択 leaf layer batch に限定する。Wave47 final complete / final pass は [Domain H report](waves/wave47/wave47-domain-h-integration-review-and-final-report.md) と [clean integration review](reviews/wave47/wave47-domain-h-clean-integration-review.md) に記録済み。
-- Wave48 は Domains A-G の implementation / Review-Sylph `pass` evidence、H-F1/H-F2 blocker fix、Domain H final integration rerun / clean review `pass` を反映済み。group-aware import-plan boundary、browser candidate service、parser-free package/operation approval bridge、Editor preview / explicit leaf approval UX、validator/Product Preflight import-plan diagnostics、focused `psdImportPlanFocused` save/load/portable/parser-boundary regression、fixture/traceability markdown registration を最新の implementation-proven baseline として扱う。対象は private/local `test_data/sample_model.psd` の `psd:root` preview（`126` candidates）から `headwear`、`eyewear`、`tie / tie` だけを明示 approve して既存 batch intake へ流す経路に限定する。
-- Wave49 は Domains A-G、Domain H final integration report、Domain H final integration review が `pass` 済み。Wave48固定3 leaf proofを、任意eligible PSD leaf refsの明示approval/executionとCodex-friendly human-equivalent in-process operation surfaceへ拡張した。focused proof は `psdImportPlanCodexFocused`: `candidates=126`, `approved=front hair`, `front hair` / `psd:root/group[2]/layer[0]`, `materializedBytes=1537600`, stale approval context rejected。Editor/repoは提案・推論・自動分類・auto-deformer placement・auto-fix・automatic commit・外部transportを持たない方針を [../design/codex-friendly-automation-policy.md](../design/codex-friendly-automation-policy.md) にAccepted user decisionとして記録済み。
-- Wave50 has final integration report `pass` for explicit deterministic PSD structural initial state. The focused proof is `psdStructuralInitialStateFocused`: hidden `headwear` / `psd:root/layer[1]`, `front hair` / `psd:root/group[2]/layer[0]`, `eyewear` / `psd:root/layer[3]`, `tie / tie` / `psd:root/group[6]/layer[0]`, generated group part containers `part_hair_front_group_psd_root_group_2_structural` and `part_tie_group_psd_root_group_6_structural`, sourceOrder-derived order, visible/runtime-hidden rows, save/load, Codex-facing structural read projection through `getPsdImportPlanState`, and stale approval-context rejection through existing `psdImportPlanCodexFocused`. Wave50 remains the prior final implementation-proven baseline for this explicit structural initial state scope.
-- Wave51 has final integration report `pass` for the first screen-design debt foundation. The proven scope is targeted production `data-testid` behavior coupling removal in PSD import-plan / structural scaffold flows, minimal Task/View Shell metadata, PSD Import Task structured observation projector, standalone production `data-testid` boundary guard, and focused PSD regression preservation. Wave51 does not complete full visual redesign, full panel migration, final toolbox/modal/window behavior, Diagnostics / Evidence View final UI, Codex / Automation View final UI, Mesh / Atlas / Parameter / Variant UI, or structural-specific Codex execute/stale parity.
-- Wave52 has final integration report/review `pass` evidence for bounded PSD Import Task Migration v0: Generic Task Shell / Task Chrome, PSD Import Task Human UI, App Shell task reachability from Empty / Authoring Workspace, PSD Import no longer being a default always-visible workspace panel, narrow structured observation consumption, required focused PSD e2e passes, and `check:testids` in standard `check`. `check:testids:fixtures` is available but not standard `check`. Wave52 does not complete final Toolbox placement, final modal/task-window/dedicated-view policy, full visual redesign, Diagnostics / Evidence final view, Codex / Automation final view, Mesh / Atlas / Parameter / Variant UI, broad DOM/text oracle migration, or structural-specific Codex execute/stale parity.
-- Wave53 has final integration report/review `pass` evidence for Workspace Layout Migration v0: Authoring Workspace v0 skeleton, App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip placement, PSD Import reachable as a Task Shell task through the Toolbox launcher, existing PSD focused paths, desktop/mobile smoke, production `data-testid` guard, fixture guard, parser import boundary, focused registry, Wave42 boundary, source/dependency guards, typecheck, unit, aggregate `check`, and duplicate drawable-list risk assessment. Wave53 remains the latest final implementation-proven baseline for this bounded v0 skeleton until Wave54 Domain J completes.
-- Wave54 Domains A-H have reports/reviews `pass` and Domain H verification `pass` for Task Window & Surface Separation v0: generic workspace-scoped Task Window Shell v0, PSD Import opening/operating as a task window route from Toolbox, bounded PSD task-window content polish, reachable Diagnostics / Evidence skeleton, reachable Codex / Automation skeleton, selector/test-facing scope hardening, `taskWindowRoutingFocused`, required PSD focused IDs, desktop/mobile smoke, typecheck/unit/e2e/check, production `data-testid` guard, fixture guard, parser boundary, focused registry, Wave42 boundary, and source/dependency guards. Wave54 A-H does not claim final Wave54 completion, full Diagnostics / Evidence View, full Codex / Automation View, LLM/provider/proposal generation, semantic recognition, auto-fix, external transport, Mesh / Atlas / Parameter / Variant UI, full visual redesign, or final modal/window policy.
-- Wave44 では `test_data/sample_model.psd` 由来の派生 artifact を必要に応じて repository に残してよい。ただし private/local fixture 由来として扱い、public distributable demo asset とは分離する。
-- Photoshop 風の最終合成再現は Wave44 の目標ではない。layer order、opacity、blend mode、mask、clipping、effects、color profile などを反映した合成 preview は、将来の Viewer / renderer maturity の範囲として扱う。
-- Product Preflight は、現在の趣味/個人利用ツールの範囲では session-generated read-only report のままにする。Codex は read/diff/rerun affordance から必要なPreflight情報を取得できるため、persisted/exported artifact、CI/release gate、demo gate、Codex以外の外部ツール向けPreflight artifactは、具体的な必要が出るまでスコープ外とする。
-- AI inference と repair proposal generation は Codex 側の責務。
-- repo/tool 側の責務は Codex-facing API、state/preflight read、operation catalog、proposal validation、dry-run、diff surface、rerun validation surface、approval-gated commit、transcript、evidence recording。
-- repo-side repair candidate generation、candidate ranking、natural-language repair、LLM provider integration、auto-fix は主張しない。
-- parser/decode/archive/filesystem/renderer/pixel/Cubism support は、将来の wave がその境界を明示的に変更しない限り unsupported のまま。
+- 旧バックログは陳腐化している。Wave81-Wave84 で Dynamics Tool v0、Dynamics preview time progression、Quick Tune、Viewer Runtime Dynamics playback、runtime-core solver consolidation が完了したため、「Dynamics clarify before Viewer playback」という前提は無効になった。
+- `discussion/implementation/current-capability-map.md` は存在するが、冒頭から Wave54-era assumptions を含む履歴用 map である。次 wave の判断では、この backlog、`discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、Wave84 reports/reviews を優先する。
+- 不確実性: この更新は maps、Wave84 artifacts、targeted `rg` による source/test 確認に基づく。GUI をブラウザで手動確認したわけではない。
 
-## リポジトリ事実
+## 1. 現在実装済みの機能
 
-- browser-local project persistence、same-origin IndexedDB byte restore、project-defined portable JSON bundle v0 は実装済み。
-- bounded topology/UV direct edit は実装済み。advanced/freeform topology、unwrap、atlas、texture sampling correctness は未実装。
-- parser-free PSD adapter/profile metadata は存在する。Wave44 A-F で scripts-only explicit-path real PSD parse smoke、layer/group tree evidence、selected layer raw RGBA materialization evidence JSON、PSD evidence validator/Product Preflight diagnostics、private/local fixture regression は存在する。Wave45 で Editor/browser explicit PSD import adapter、browser parser bridge/session evidence、package/operation PSD import evidence bridge、Editor explicit PSD Import layer tree UX、validator/Product Preflight PSD import diagnostics、focused `psdImportFocused` e2e、parser import boundary guard、fixture/traceability registration は存在する。Wave46 で explicit selected-layer raw RGBA materialized asset candidate/intake、private/local package texture binary asset boundary、texture/drawable/part mapping evidence、validator/Product Preflight materialized asset diagnostics、focused selected `headwear` layer persistence regression は存在する。Wave47 で explicit selected leaf-layer batch raw RGBA materialized asset intake、generated texture/drawable/mesh/part scaffold evidence、validator/Product Preflight batch diagnostics、focused selected `headwear` / `eyewear` / `tie / tie` batch persistence regression は存在する。Wave48 で root/group import-plan candidate preview、explicit eligible leaf approval、parser-free import-plan approval bridge、approved-leaf-only batch execution、import-plan diagnostics、focused `psdImportPlanFocused` save/load/portable/parser-boundary regression は final integration rerun / clean review `pass` として記録済みである。Wave49 で arbitrary eligible leaf explicit approval/execution and Codex-facing in-process parity は final baseline として記録済みである。Wave50 final evidence で explicit structural scaffold preview/execution、PSD groups -> project part containers、PSD leaves -> texture/drawable/empty mesh scaffold、hidden leaves -> runtime-hidden drawables、sourceOrder/source refs/generated refs/evidence、validator/Product Preflight structural diagnostics、Codex-facing structural read projection は存在する。Wave51 final evidence で targeted production `data-testid` behavior coupling removal、Task/View Shell metadata、PSD Import structured observation projector、standalone production `data-testid` boundary guard、focused PSD regression preservation は存在する。Wave52 final evidence で PSD Import Task Shell reachability、default always-visible panel解除、narrow observation consumption、focused PSD regression pass、standard `check` への `check:testids` 統合は存在する。Wave53 final evidence で Authoring Workspace v0 skeleton placement と regression/guard pass は存在する。Wave54 A-H verified evidence で workspace-scoped task window shell、PSD Import task-window route、Diagnostics / Evidence skeleton、Codex / Automation skeleton、selector/test-facing scope hardening、`taskWindowRoutingFocused`、required focused PSD pass、desktop/mobile smoke、guard pass は存在する。PNG workflow、drag/drop/filesystem/archive intake、all-layer one-click PSD import、recursive group auto import、group-as-artmesh import、semantic recognition、auto-rigging、initial grid mesh generation、Photoshop full compositing、renderer/pixel oracle、texture sampling correctness、full screen visual redesign は未実装。
-- Wave49 final evidence adds arbitrary eligible leaf explicit approval/execution for `front hair` / `psd:root/group[2]/layer[0]`, Codex-facing `packages/ai-interface` / in-process command parity, result refs/evidence/failure taxonomy for downstream explicit operations, validator/Product Preflight generalized diagnostics, and focused id `psdImportPlanCodexFocused` while preserving `psdImportPlanFocused`, `psdMultiLayerBatchFocused`, and `psdImportFocused`。
-- Wave50 final evidence adds explicit deterministic structural initial state with structural plan/approval/operation evidence, group part container refs, leaf drawable/texture/mesh refs, source refs/sourceOrder/visibility/opacity/bounds, hidden initial runtime visibility, Product Preflight structural diagnostics, Codex-facing structural read projection, focused e2e preservation, and final verification. It does not add semantic recognition, proposal generation, auto-rigging, structural-specific Codex execute/stale command, external transport, persisted source PSD bytes/raw parser objects, public demo assets, Photoshop compositing, renderer/pixel oracle, or Cubism compatibility.
-- Wave51-Wave54 A-H evidence starts screen-design implementation debt work and adds production `data-testid` boundary protection, bounded PSD Import task-shell migration, Workspace Layout Migration v0 skeleton, workspace-scoped task-window routing v0, Diagnostics / Evidence skeleton, Codex / Automation skeleton, and selector/test-facing scope hardening. It does not add new authoring capability, does not complete the planned screen design, and leaves full Diagnostics / Evidence migration, full Codex / Automation migration, final visual redesign, final task-window/dedicated-view policy, mobile registered task-window gate, and broad DOM/text oracle migration as future work.
-- Editor Viewer/Preview は semantic inspection/runtime evidence であり、full renderer や pixel oracle ではない。
-- AI command support は deterministic read/inspect/validate/dry-run/commit/log/transcript、Product Preflight observation/read/diff/rerun affordance helper/schema、Codex proposal operation catalog、proposal validation、diff preview/rerun validation bridge、approval lifecycle bridge。inference と proposal generation は実行しない。
+### Editor / Workspace
 
-## 判断負荷が小さい候補（優先基準ではない）
+- Wave57 後の React Editor foundation が、現在の GUI baseline である。
+- Authoring Workspace には、App Bar、Toolbox entries、Structure / Parts Tree、Canvas / Preview、Inspector、Parameter Bar、Project Storage、Parameter Manager route、Viewer route が含まれる。
+- Project open/save は、React Editor の App Bar / Project Storage surface から project-defined portable bundle path を使用する。
+- 根拠: `apps/editor/src/workspace/authoring-workspace.tsx`, `apps/editor/src/workspace/app-bar.tsx`, `apps/editor/src/workspace/workspace-data.ts`, `apps/editor/src/workspace/project-storage/project-storage-screen.tsx`, `discussion/implementation/orchestration/_map.md`。
 
-これらは、現在のプロダクト方針を変えずに implementation task または documentation task として scope できる。ただし、判断負荷が小さいこと自体は優先理由にしない。優先度は依存関係、プロダクト価値、次の実装を妨げる blocker の大きさで決める。
+### PSD Import / Asset Intake
 
-| 候補 | Scope boundary（範囲境界） | 補足 |
-|---|---|---|
-| Documentation/map consistency maintenance | `discussion/implementation/_map.md`、`discussion/implementation/orchestration/_map.md`、`discussion/implementation/current-capability-map.md`、`discussion/implementation/remaining-work-backlog.md`、screen-design status notes、traceability markdown は Wave54 Domain I で A-H evidence に同期する。今後は Domain J final gate または next wave の差分が出た時だけ狭く更新する。 | 追加の product capability ではない。 |
-| Quality gate guard maintenance | Wave42 で追加した boundary guard、source organization fixture guard、focused e2e registry/list/check/single-selection runner、dependency / forbidden-scope guard self-test は、今後 blind spot が見つかった場所で小さく強化する。 | 追加の product capability ではない。schema cleanup、runtime/viewer naming cleanup、dynamics create-flow atomicityは別wave候補として残す。 |
-| Production `data-testid` guard fixture placement | Wave52 Domain E で `check:testids` は standard `check` に統合済み。`check:testids:fixtures` は利用可能だが standard `check` には含めない。 | fixture guard を broader standard quality gate または CI-only path に広げるかは後続guardrail判断。 |
-| Product Preflight fixture/traceability sync | warning-gated markdown rows に machine-readable mirror が後で必要になった場合、Wave40 / Wave39 とそれ以前の比較可能な rows をまとめて backfill する。 | 現在の Wave40 / Wave39 review では JSON mirror update なしが受理済み。 |
+- Browser PSD parser adapter は Editor 内に存在し、`@webtoon/psd` は承認済みの Editor/browser adapter boundary の内側でのみ使用する。
+- 現在の PSD import は、明示的なユーザー主導の import planning と commit path をサポートしている。対象は source metadata、materialized raw RGBA layer evidence、structural scaffold planning、group/leaf approval、生成された Part Container / Drawable / Texture / empty Mesh scaffold refs、hidden PSD group から editor-hidden Part への gate behavior、parser boundary tests である。
+- PSD 由来の drawables は、import 後に Editor Canvas / Preview に表示される。
+- 根拠: `apps/editor/src/editor-workflow/browser-psd-parser-adapter.ts`, `apps/editor/src/features/psd-import/model/psd-import-planner.ts`, `apps/editor/src/features/psd-import/model/psd-import-commit.ts`, `apps/editor/src/features/psd-import/model/psd-import-hidden-part-bridge.test.ts`, `discussion/implementation/_map.md` の Wave58-W61 記載。
 
-## ユーザー判断が必要
+### Parts / Hierarchy / Canvas
 
-| 判断 | 方向付けが必要な理由 |
-|---|---|
-| Post-Wave54 screen-design priority | Wave54 Domain H verification が pass し、Diagnostics / Evidence と Codex / Automation は skeleton reachability まで進んだ。Domain J後の次境界では full Diagnostics / Evidence migration、full Codex / Automation migration、PSD Import Task final polish、final task-window/dedicated-view policy、mobile task-window routing registry coverage、`check:testids:fixtures` の broader quality-gate placement のどれを優先するか決める必要がある。Wave54 A-H は v0/skeletonであり full visual redesign ではない。 |
-| Public/demo asset policy | real rights-clean public assets をいつ許可するか、private/local fixtures を distributable demo assets からどう分離するかを決める必要がある。 |
-| Archive/filesystem implementation | project-defined JSON bundle で当面十分か、ZIP/archive、File System Access API、directory picker、drag-drop、native filesystem、cloud/cross-profile persistence を実装するかを決める必要がある。 |
-| Real image/PSD pipeline | Wave44 A-F で PSD scripts-only parser smoke と selected-layer materialization evidence pilot は実装済み。Wave45 で explicit Editor/browser PSD import UX と focused e2e は final verification / clean integration review `pass` 済み。Wave46 で selected `headwear` layer の private/local materialized project texture/drawable/part mapping と focused persistence regression は final verification / clean integration review `pass` 済み。Wave47 で selected `headwear` / `eyewear` / `tie / tie` leaf layer batch の private/local materialized project asset intake、generated scaffold evidence、focused persistence regression、documentation/map synchronization、final integration / clean integration review は `pass` 済み。Wave48 で `psd:root` / group import-plan preview、explicit eligible leaf approval、approved-leaf-only batch execution、import-plan diagnostics、save/load/portable boundary は final integration rerun / clean review `pass` として記録済みである。Wave49 で任意eligible leaf refsの明示approval/execution、Codex-friendly in-process operation surface、result refs/taxonomy、validator/Product Preflight diagnosticsを final baseline として記録済み。Wave50 で explicit structural scaffold initial state、group part containers、leaf texture/drawable/empty mesh scaffold、hidden runtime-hidden drawable、sourceOrder/save-load/Codex read projection/structural diagnostics/final verification を final baseline として記録済み。all-layer one-click PSD import、recursive group auto import、group-as-artmesh import、semantic recognition、auto-rigging、initial grid mesh generation、broader/general PSD materialization、drag/drop/filesystem/archive intake、PNG image set workflow、Photoshop風full compositing、renderer/pixel oracle、texture sampling correctness は別判断。 |
-| Renderer/viewer direction | semantic editor-internal Viewer/Preview を維持するか、standalone/full-renderer/pixel-oracle work を始めるかを決める必要がある。 |
-| Cubism compatibility policy | 現在の方針では Cubism SDK/Core、import/export、`.moc3`、`.model3.json`、Cubism Physics は non-goals。compatibility 方向には明示的な承認が必要。 |
+- Mixed ordered Part Container / Drawable hierarchy は実装済みで、draw order authority、collapse/expand state、editor-hidden Part behavior、Drawable-only multi-select、DnD reorder/reparent をサポートする。
+- Canvas rendering は、imported PSD drawables、selection、zoom/pan/fit/1:1 style controls、visibility reflection、clipping relation support、evaluated keyform/deformer parameter maps、WebGL/rendering foundations をサポートする。
+- 根拠: `apps/editor/src/features/editor-session/model/session-tree.ts`, `apps/editor/src/features/editor-session/model/session-tree.test.ts`, `apps/editor/src/workspace/panels/structure-tree-panel.tsx`, `apps/editor/src/workspace/canvas/canvas-renderer.ts`, `apps/editor/src/workspace/canvas/canvas-evaluation.ts`, `discussion/implementation/_map.md` の Waves59-W61 と Wave76 の記載。
 
-## 依存関係 / セキュリティ / 権利 / UX Gate
+### Mesh
 
-| Gate | 適用対象 |
-|---|---|
-| Dependency/license/provenance review | ZIP/archive libraries、PSD/PNG/image decode libraries、renderer libraries、media sniffing utilities。 |
-| Malicious file and parser trust boundaries | real PSD/PNG parsing、media signature/header decode、archive import、user-provided binary processing。 |
-| Browser permission and UX design | File System Access API、directory picker、drag-drop、native filesystem affordances、persistent storage recovery states。 |
-| Rights and fixture policy | public tutorial/demo assets、local sample PSD usage、distributable fixture manifests、public/private asset split。 |
-| Storage guarantees | cross-profile/cloud persistence、quota limits、private-browsing behavior、same-origin IndexedDB failure/corruption modes。 |
-| Destructive authoring semantics | recursive delete、delete-with-reassign、multi-select bulk changes、group transform、drag/drop reparenting。 |
-| Test oracle design | renderer/pixel oracle、texture sampling correctness、automatic triangulation/retopology correctness、atlas/UV unwrap validation。 |
+- Mesh Tool v0 と、その後の auto-outline mainline は実装済み。現在の default path は v6D-lineage adaptive contour-constrainautor output であり、backend selector を露出するのではなく product-facing presets を提供する。
+- Mesh batch preview/apply は対象条件を満たす Drawable selection に対して存在し、existing-mesh exclusion も実装済み。
+- Lower-level bounded topology / UV operations と tests は存在するが、atlas packing、UV unwrap、renderer pixel correctness、広範な manual topology editor UX は現在の product capability としては主張しない。
+- 根拠: `apps/editor/src/features/editor-session/model/mesh-tool-state.ts`, `apps/editor/src/features/editor-session/model/mesh-tool-state.test.ts`, `packages/authoring-core/src/mesh-generation.ts`, `packages/authoring-core/src/mesh-generation.test.ts`, `discussion/implementation/orchestration/_map.md` の Wave70-W71 と Wave76 の記載。
 
-## 明示的な将来範囲 / 非目標
+### Rig / Deformers
 
-- Cubism SDK/Core integration、Cubism import/export/load compatibility、`.moc3`、`.model3.json`、Cubism Physics compatibility。
-- full renderer、standalone viewer app、render target、texture sampling correctness、pixel oracle。
-- Wave44-Wave50 final evidence の explicit-path PSD parser smoke、selected-layer raw RGBA materialization evidence、explicit Editor/browser PSD import UX、selected-layer project texture intake、explicit selected leaf-layer batch intake、root/group import-plan preview / approved leaf intake / Codex-facing in-process explicit operation parity / explicit structural initial state を超える範囲: post-import rigging proposal flow、initial grid mesh generation、all-layer one-click PSD import、recursive group auto import、group-as-artmesh import、semantic recognition、auto-rigging、drag/drop/filesystem/archive intake、broader/general PSD materialization beyond explicit selected/approved structural subset paths、PNG image set workflow、texture sampling correctness、Photoshop 風 compositing。
-- Wave51-Wave54 A-H screen-design foundationを超える範囲: full workspace visual redesign、full panel migration、final toolbox/task-window/dedicated-view framework across tools、PSD Import Task final polish、Diagnostics / Evidence View full UI/migration、Codex / Automation View full UI/migration、Product Preflight current-state DOM-independent read、mobile task-window routing registered focused gate、broad DOM/text oracle migration、`check:testids:fixtures` broader quality-gate integration。
-- ZIP/archive/native filesystem/cloud transport と drag-drop implementation。
-- LLM/provider/prompt integration、repo-side repair reasoning、repair candidate generation/ranking、natural-language repair、auto-fix、automatic commit。
-- direct vertex physics、cloth/collision/IK、full timeline bake、motion export、lip sync、video editor、marketplace/registry/plugin distribution、public SDK。
+- Rotation Deformer と Warp Deformer authoring は実装済み。Deformer Tree、Drawable Pool、binding/reparent operations、parent-child local-space semantics、Canvas rotation interaction、Warp control point editing、keyed Warp edge/corner scale handles を備える。
+- 関連する unbound または Deformer Tree selection に対する batch create / wrap-selected authoring が存在する。
+- 根拠: `apps/editor/src/features/editor-session/model/rig-tool-state.ts`, `apps/editor/src/features/editor-session/model/deformer-tree-wrap-selection.ts`, `apps/editor/src/workspace/panels/rig-tool-inspector.tsx`, `apps/editor/src/workspace/canvas/rotation-deformer-gesture.ts`, `apps/editor/src/workspace/canvas/warp-deformer-scale.ts`, `discussion/implementation/_map.md` の Waves72-W78 記載。
 
-## 文書 / 品質負債
+### Parameters / Keyforms / Undo
 
-- Wave43 validator/evidence contract prose、diagnostic policy/schema/traceability naming、active fixture manifest validator diagnostic label、representative checker work は final report、map、capability map へ同期済み。Product capability boundary は Wave41 から変更なし。
-- Product Preflight durability/export、CI/release gate、demo gate、外部ツール向けPreflight artifactは、具体的な必要が出るまで保留する。現時点ではCodex-facing read/diff/rerun affordanceとEditor session reportで足りる。
-- Wave43 checker は token-based representative drift detection であり、semantic parser や full catalog mirror ではない。将来 accepted scope が full mirror を要求する場合だけ別waveで扱う。
-- E2E smoke coverage は広い。将来の wave が shared Editor workflow に触れる場合は、分解を継続するべき。
-- Source organization と `check:source` guardrails は、blind spots が見つかった場所で broad refactor なしに tighten するべき。
-- Wave51 production `data-testid` guard はfocused static text/regex guardで、TypeScript AST / runtime behavior analyzerではない。dynamic selector constructionやindirect aliasは逃す可能性がある。Wave52 で `check:testids` は standard `check` に統合済みだが、`check:testids:fixtures` は standard `check` には含まれない。
-- Wave51 PSD Import structured observation projectorは、Wave52 で Task Shell status、compact diagnostics summary、test-facing `data-*` summary へ狭く消費された。Codex-facing read API、最終test-facing surface、Diagnostics / Evidence final viewへの接続は後続waveに残る。
-- Wave54 A-H後も legacy support panels には evidence/debug/Codex-heavy UI が残る。Diagnostics / Evidence と Codex / Automation は skeleton route として到達可能だが、full migration は未完了である。Duplicate drawable-list hooks は e2e selector helper で Parts Tree / legacy Drawable Authoring に scope されたが、将来の新規テストも stable wrapper / selector scope helper を使う必要がある。
-- 既存DOM/text oracleは意図的に残っている。screen-design migrationでは、visible textを消す前にstructured test-facing / evidence surfaceを決める必要がある。
-- Schema cleanup と runtime/viewer/package-format/editor workflow evidence naming cleanup は compatibility-sensitive なため、適切な schema/source behavior wave まで待つべき。Wave43 は active validator diagnostic label の `portableBundle.digestMismatch` alignment のみ実施した。
-- Dynamics create-flow atomicity は advanced dynamics expansion の前に再検討するべき。
+- Preset/custom parameter surfaces、Parameter Manager、active Parameter Bar、current-value editing、marker navigation、undo/redo、parameter-aware Inspector flows は実装済み。
+- Keyforms は、現在受け入れ済みの v0 targets をカバーする。対象は Drawable opacity、Warp Deformer offsets / opacity multiplier、Rotation Deformer angle / translation / opacity multiplier。deformer keyforms の save/load hardening も存在する。
+- 根拠: `apps/editor/src/features/editor-session/model/parameter-keyform-state.ts`, `apps/editor/src/features/editor-session/model/parameter-manager-projection.ts`, `apps/editor/src/workspace/panels/parameter-bar.tsx`, `apps/editor/src/workspace/parameter-manager/parameter-manager-screen.tsx`, `discussion/implementation/orchestration/_map.md` の Waves64-W75 記載。
 
-## Evidence リンクと使い方
+### Viewer / Runtime View
 
-| Evidence | リンク |
-|---|---|
-| Current capability map | [current-capability-map.md](current-capability-map.md) |
-| 2026-06-04 inventory report | [reports/current-capability-backlog-inventory-2026-06-04.md](reports/current-capability-backlog-inventory-2026-06-04.md) |
-| Implementation map | [_map.md](_map.md) |
-| Orchestration map | [orchestration/_map.md](orchestration/_map.md) |
-| Wave39 final report | [waves/wave39/wave39-final-report.md](waves/wave39/wave39-final-report.md) |
-| Wave39 clean integration review | [reviews/wave39/wave39-clean-integration-review.md](reviews/wave39/wave39-clean-integration-review.md) |
-| Wave40 final report | [waves/wave40/wave40-final-report.md](waves/wave40/wave40-final-report.md) |
-| Wave40 clean integration review | [reviews/wave40/wave40-clean-integration-review.md](reviews/wave40/wave40-clean-integration-review.md) |
-| Wave41 final report | [waves/wave41/wave41-final-report.md](waves/wave41/wave41-final-report.md) |
-| Wave41 clean integration review | [reviews/wave41/wave41-clean-integration-review.md](reviews/wave41/wave41-clean-integration-review.md) |
-| Wave42 final report | [waves/wave42/wave42-final-report.md](waves/wave42/wave42-final-report.md) |
-| Wave42 clean integration review | [reviews/wave42/wave42-clean-integration-review.md](reviews/wave42/wave42-clean-integration-review.md) |
-| Wave43 final report | [waves/wave43/wave43-final-report.md](waves/wave43/wave43-final-report.md) |
-| Wave43 clean integration review | [reviews/wave43/wave43-clean-integration-review.md](reviews/wave43/wave43-clean-integration-review.md) |
-| Wave44 plan | [orchestration/wave44-plan.md](orchestration/wave44-plan.md) |
-| Wave44 Domain A-F reports | [A](waves/wave44/wave44-domain-a-psd-dependency-security-fixture-boundary-report.md), [B](waves/wave44/wave44-domain-b-psd-parser-dependency-node-smoke-report.md), [C](waves/wave44/wave44-domain-c-psd-layer-tree-contract-profile-boundary-report.md), [D](waves/wave44/wave44-domain-d-psd-raster-layer-materialization-pilot-report.md), [E](waves/wave44/wave44-domain-e-psd-validator-provenance-security-diagnostics-report.md), [F](waves/wave44/wave44-domain-f-psd-fixture-evidence-node-regression-report.md) |
-| Wave44 Domain A-F reviews | [A](reviews/wave44/wave44-domain-a-psd-dependency-security-fixture-boundary-review.md), [B](reviews/wave44/wave44-domain-b-psd-parser-dependency-node-smoke-review.md), [C](reviews/wave44/wave44-domain-c-psd-layer-tree-contract-profile-boundary-review.md), [D](reviews/wave44/wave44-domain-d-psd-raster-layer-materialization-pilot-review.md), [E](reviews/wave44/wave44-domain-e-psd-validator-provenance-security-diagnostics-review.md), [F](reviews/wave44/wave44-domain-f-psd-fixture-evidence-node-regression-review.md) |
-| Wave44 Domain G report | [waves/wave44/wave44-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave44/wave44-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave44 Domain G review | [reviews/wave44/wave44-domain-g-docs-traceability-boundary-refresh-review.md](reviews/wave44/wave44-domain-g-docs-traceability-boundary-refresh-review.md) |
-| Wave44 Domain H final verification report | [waves/wave44/wave44-domain-h-integration-review-and-final-report.md](waves/wave44/wave44-domain-h-integration-review-and-final-report.md) |
-| Wave44 clean integration review | [reviews/wave44/wave44-domain-h-clean-integration-review.md](reviews/wave44/wave44-domain-h-clean-integration-review.md) |
-| Wave45 plan | [orchestration/wave45-plan.md](orchestration/wave45-plan.md) |
-| Wave45 Domain A-G reports | [A](waves/wave45/wave45-domain-a-browser-parser-dependency-scope-trust-boundary-report.md), [B](waves/wave45/wave45-domain-b-browser-psd-parser-bridge-session-evidence-report.md), [C](waves/wave45/wave45-domain-c-package-operation-psd-import-evidence-bridge-report.md), [D](waves/wave45/wave45-domain-d-editor-explicit-psd-import-layer-tree-ux-report.md), [E](waves/wave45/wave45-domain-e-validator-product-preflight-psd-import-diagnostics-report.md), [F](waves/wave45/wave45-domain-f-psd-import-focused-e2e-regression-report.md), [G](waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave45 Domain A-E/G/H reviews | [A](reviews/wave45/wave45-domain-a-browser-parser-dependency-scope-trust-boundary-review.md), [B](reviews/wave45/wave45-domain-b-browser-psd-parser-bridge-session-evidence-review.md), [C](reviews/wave45/wave45-domain-c-package-operation-psd-import-evidence-bridge-review.md), [D](reviews/wave45/wave45-domain-d-editor-explicit-psd-import-layer-tree-ux-review.md), [E](reviews/wave45/wave45-domain-e-validator-product-preflight-psd-import-diagnostics-review.md), [G](reviews/wave45/wave45-domain-g-docs-traceability-boundary-refresh-review.md), [H clean](reviews/wave45/wave45-domain-h-clean-integration-review.md) |
-| Wave45 Domain G report | [waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave45/wave45-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave45 Domain H final verification report | [waves/wave45/wave45-domain-h-integration-review-and-final-report.md](waves/wave45/wave45-domain-h-integration-review-and-final-report.md) |
-| Wave45 Domain H clean integration review | [reviews/wave45/wave45-domain-h-clean-integration-review.md](reviews/wave45/wave45-domain-h-clean-integration-review.md) |
-| Wave46 plan | [orchestration/wave46-plan.md](orchestration/wave46-plan.md) |
-| Wave46 Domain A-H reports | [A](waves/wave46/wave46-domain-a-materialized-layer-asset-boundary-storage-policy-report.md), [B](waves/wave46/wave46-domain-b-browser-selected-layer-materialization-service-report.md), [C](waves/wave46/wave46-domain-c-package-operation-texture-intake-part-mapping-bridge-report.md), [D](waves/wave46/wave46-domain-d-editor-selected-layer-intake-part-mapping-ux-report.md), [E](waves/wave46/wave46-domain-e-validator-product-preflight-materialized-asset-diagnostics-orch-report.md), [F](waves/wave46/wave46-domain-f-psd-selected-layer-focused-e2e-persistence-regression-report.md), [G](waves/wave46/wave46-domain-g-docs-traceability-boundary-refresh-report.md), [H](waves/wave46/wave46-domain-h-integration-review-and-final-report.md) |
-| Wave46 Domain A-H reviews | [A](reviews/wave46/wave46-domain-a-materialized-layer-asset-boundary-storage-policy-review.md), [B](reviews/wave46/wave46-domain-b-browser-selected-layer-materialization-service-review.md), [C](reviews/wave46/wave46-domain-c-package-operation-texture-intake-part-mapping-bridge-review.md), [D](reviews/wave46/wave46-domain-d-editor-selected-layer-intake-part-mapping-ux-review.md), [E](reviews/wave46/wave46-domain-e-validator-product-preflight-materialized-asset-diagnostics-review.md), [F](reviews/wave46/wave46-domain-f-psd-selected-layer-focused-e2e-persistence-regression-review.md), [G](reviews/wave46/wave46-domain-g-docs-traceability-boundary-refresh-review.md), [H clean](reviews/wave46/wave46-domain-h-clean-integration-review.md) |
-| Wave46 Domain G report | [waves/wave46/wave46-domain-g-docs-traceability-boundary-refresh-report.md](waves/wave46/wave46-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave47 plan | [orchestration/wave47-plan.md](orchestration/wave47-plan.md) |
-| Wave47 Domain A-G reports | [A](waves/wave47/wave47-domain-a-batch-layer-boundary-sample-target-inventory-report.md), [B](waves/wave47/wave47-domain-b-browser-multi-layer-materialization-service-report.md), [C](waves/wave47/wave47-domain-c-package-operation-batch-intake-part-scaffold-bridge-report.md), [D](waves/wave47/wave47-domain-d-editor-multi-layer-selection-batch-intake-ux-report.md), [E](waves/wave47/wave47-domain-e-validator-product-preflight-batch-diagnostics-report.md), [F](waves/wave47/wave47-domain-f-psd-multi-layer-focused-e2e-persistence-regression-report.md), [G](waves/wave47/wave47-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave47 Domain H final report | [waves/wave47/wave47-domain-h-integration-review-and-final-report.md](waves/wave47/wave47-domain-h-integration-review-and-final-report.md) |
-| Wave47 Domain A-H reviews | [A](reviews/wave47/wave47-domain-a-batch-layer-boundary-sample-target-inventory-review.md), [B](reviews/wave47/wave47-domain-b-browser-multi-layer-materialization-service-review.md), [C](reviews/wave47/wave47-domain-c-package-operation-batch-intake-part-scaffold-bridge-review.md), [D](reviews/wave47/wave47-domain-d-editor-multi-layer-selection-batch-intake-ux-review.md), [E](reviews/wave47/wave47-domain-e-validator-product-preflight-batch-diagnostics-review.md), [F](reviews/wave47/wave47-domain-f-psd-multi-layer-focused-e2e-persistence-regression-review.md), [G](reviews/wave47/wave47-domain-g-docs-traceability-boundary-refresh-review.md), [H clean](reviews/wave47/wave47-domain-h-clean-integration-review.md) |
-| Wave48 plan | [orchestration/wave48-plan.md](orchestration/wave48-plan.md) |
-| Wave48 Domain A-G reports | [A](waves/wave48/wave48-domain-a-import-plan-boundary-sample-group-inventory-report.md), [B](waves/wave48/wave48-domain-b-browser-psd-import-plan-candidate-service-report.md), [C](waves/wave48/wave48-domain-c-package-operation-import-plan-approval-bridge-report.md), [D](waves/wave48/wave48-domain-d-editor-import-plan-preview-explicit-approval-ux-report.md), [E](waves/wave48/wave48-domain-e-validator-product-preflight-import-plan-diagnostics-report.md), [F](waves/wave48/wave48-domain-f-psd-import-plan-focused-e2e-persistence-regression-report.md), [G](waves/wave48/wave48-domain-g-docs-traceability-boundary-refresh-report.md) |
-| Wave48 Domain A-G reviews | [A](reviews/wave48/wave48-domain-a-import-plan-boundary-sample-group-inventory-review.md), [B](reviews/wave48/wave48-domain-b-browser-psd-import-plan-candidate-service-review.md), [C](reviews/wave48/wave48-domain-c-package-operation-import-plan-approval-bridge-review.md), [D](reviews/wave48/wave48-domain-d-editor-import-plan-preview-explicit-approval-ux-review.md), [E](reviews/wave48/wave48-domain-e-validator-product-preflight-import-plan-diagnostics-review.md), [F](reviews/wave48/wave48-domain-f-psd-import-plan-focused-e2e-persistence-regression-review.md), [G](reviews/wave48/wave48-domain-g-docs-traceability-boundary-refresh-review.md) |
+- Dedicated Viewer / Runtime View は、完成モデルを確認するための clean surface として実装済み。Runtime Controls、session-only parameter overrides、parameter search、reset affordances、Parameter Bar suppression、clean stage overlay suppression、Viewer-local pan/zoom、Parts Container visibility parity を備える。
+- Wave84 は authored Dynamics Groups を Viewer playback へ接続した。driver parameter changes は runtime-core evaluation に入力され、pendulum motion は driver stop 後も継続/収束し、Dynamics outputs は keyform/deformer evaluation 前に注入される。output parameters は Runtime Controls から除外され、`Reset simulation` は session-local simulation state のみをリセットする。
+- 根拠: `apps/editor/src/workspace/viewer/viewer-runtime-screen.tsx`, `apps/editor/src/workspace/viewer/viewer-runtime-playback.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.ts`, `apps/editor/src/workspace/viewer/viewer-runtime-screen.test.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.test.ts`, `discussion/implementation/waves/wave84/wave84-final-integration-report.md`。
 
-この backlog は [current-capability-map.md](current-capability-map.md) と一緒に使う。wave ごとに decision boundary を1つ選び、完了済み履歴はリンク先 reports に置き、unsupported claims は明示し続ける。Wave54 A-H reports/reviews と Domain H verification `pass` は反映済みだが、Wave54 final integration / Domain J は未完了である。
+### Dynamics
+
+- Dynamics Tool v0 は、parameter-driven secondary motion authoring として実装済み。multiple driver inputs、one pendulum、one additive output、preset-based creation、create/edit/list/group inspector states、validation、Inspector-local preview drivers、time-progressing preview、reset preview、Quick Tune を備える。
+- Wave84 は、物理ステップの意味論を `packages/runtime-core` に集約した。Editor preview は、独自の solver formula を持つのではなく runtime-core stepping helpers を使用する。
+- 根拠: `apps/editor/src/features/editor-session/model/dynamics-tool-state.ts`, `apps/editor/src/workspace/panels/dynamics-tool-inspector.tsx`, `packages/runtime-core/src/dynamics-evaluation.ts`, `packages/runtime-core/src/parameter-resolution.ts`, `packages/runtime-core/src/runtime-core.ts`, Wave81-W84 reports。
+
+### Diagnostics / Preflight / Codex Surfaces
+
+- Repo/package-level Product Preflight、validator diagnostics、Codex proposal validation/diff/approval/rerun helpers、PSD import-plan command surfaces は packages 内に実装済み。
+- 現在の React Editor source では、対象を絞った search 上、完成した Diagnostics / Evidence View または Codex / Automation View は確認できない。これらの人間向け React UI 完成版は、現在の機能ではなく残作業として扱う。
+- 根拠: `packages/validator-core/src/product-preflight-report.ts`, `packages/validator-core/src/product-preflight-report-diff.ts`, `packages/validator-core/src/codex-proposal-rerun-validation.ts`, `packages/ai-interface/src/ai-codex-proposal-command.ts`, `packages/ai-interface/src/ai-product-preflight-command.ts`, `apps/editor/src` を対象にした targeted `rg`。
+
+## 2. 実装可能な残作業バックログ
+
+### Viewer / Dynamics Hardening
+
+- Viewer Dynamics playback について、browser/manual visual QA を実行し記録する。対象は real rAF cadence、perceived motion smoothness、pointer/slider feel、reset behavior、Canvas visual response。
+- 大きめの projects で Viewer per-frame runtime evaluation が目に見える負荷になる可能性に備え、focused performance profiling を追加する。
+- 小さな runtime/viewer unification spike を追加し、Viewer が runtime-core effective parameters を使いながら Editor Canvas projection で描画している現在の boundary を文書化またはテストする。
+- ユーザー判断で変更されない限り、`Reset simulation`、play/pause なし、frame stepping なし、output exclusion を維持する。
+
+### Diagnostics / Evidence React View v0
+
+- 陳腐化した Wave54 UI を復活させるのではなく、既存の validator/Product Preflight/package evidence を中心に、現在の React read-only Diagnostics / Evidence surface を構築する。
+- 最小有用スコープ: 現在の Product Preflight summary、blocking diagnostics、evidence refs、PSD import evidence summary、runtime/viewer evidence status、operation-log refs。
+- repair generation、auto-fix、LLM/provider integration、external transport は追加しない。
+
+### Codex / Automation React View v0
+
+- deterministic Codex-facing package APIs のために、現在の React status/review surface を構築する。対象は proposal validation、dry-run diff preview、rerun validation、approval-gated commit status、transcript/evidence refs、PSD import-plan command availability。
+- read-only または approval-gated に保つ。repo 内で proposals を生成しない。
+
+### PSD Import UX Polish
+
+- 現在の Import Review preview を screen-design target と照合し、必要なら user-visible preview clarity の不足分を実装する。対象は visible layer/group preview、hidden group gate explanation、issue badge clarity、planned Parts structure review。
+- clipping pixel parity、Photoshop compositing parity、semantic recognition、all-layer auto import はこのスコープに含めない。
+
+### Texture Atlas Task v0
+
+- product priority として選ばれた場合、bounded Texture Atlas Task を実装する。対象は visible materialized drawables の deterministic packing、preview、Apply、validator/Product Preflight evidence。
+- 既存 package DTOs には texture atlas entries への言及があるが、full atlas packing/UI は現在の product capability ではない。
+
+### Current Capability 文書の更新
+
+- `current-capability-map.md` を refresh または supersede し、Wave54-era baselines を current として主張しない状態にする。
+- map の陳腐化が blocking になった場合のみ、専用 docs wave で implementation map descriptions を更新する。この backlog replacement では意図的に maps を編集していない。
+
+## 3. ユーザー判断 / 設計判断が必要なバックログ
+
+- Wave84 後の次の product direction を選ぶ。候補は Viewer/Dynamics hardening、Diagnostics/Evidence UI、Codex/Automation UI、Texture Atlas、PSD Import polish、renderer/pixel maturity。
+- disabled Dynamics Groups が Viewer Runtime Controls 内で output parameters を引き続き reserve/exclude すべきかを決める。現在受け入れ済みの挙動では、disabled groups を含め、Dynamics outputs として使われるすべての parameters を除外する。
+- Diagnostics / Evidence と Codex / Automation を、専用 views、task surfaces、または現在の React workspace 内の compact panels のどれにするかを決める。
+- Texture Atlas v0 を今 user-facing priority にするかを決め、atlas data を project-authored、generated-on-apply、または Apply までの session preview のどれとして扱うかを定義する。
+- Variant / Expression Manager を near-term feature にするかを決め、実装前に exclusive/additive semantics を定義する。
+- public/demo asset policy を決める。rights-clean public sample assets を許可するか、private/local PSD fixtures を distributable demo material からどう分離するかを定義する。
+- archive/filesystem direction を決める。project-defined JSON bundle のみを維持するか、ZIP/archive、File System Access API、directory picker、drag/drop、cloud、cross-profile persistence を追加するかを選ぶ。
+- renderer direction を決める。semantic Editor/Viewer rendering と evidence を維持するか、full renderer、standalone viewer、texture sampling correctness、pixel oracle に投資するかを選ぶ。
+- Cubism compatibility は、明示的な方向転換がある場合にのみ検討する。現在の product は project-defined であり、Cubism clone ではない。
+
+## 4. 品質 / ドキュメント / テスト負債
+
+- `current-capability-map.md` は陳腐化しており、refresh されるまでは現在の planning truth として扱わない。
+- `discussion/design/screen-design/_map.md` には、まだ一部 Wave54-era statements が残っている。design intent として使い、implementation claims は Wave57-Wave84 maps と source で確認する。
+- `discussion/implementation/_map.md` は、file table 内でこの backlog をまだ post-Wave80 と説明している。blocking ではないが、docs/map refresh で整理すべき。
+- Wave84 では、real Canvas Dynamics smoothness、pointer feel、real rAF cadence に関する browser/manual visual QA は記録されていない。
+- Wave84 では persistence/schema files を触っていないため、persistence roundtrip tests は実行していない。将来 persistence-adjacent work では、focused portable bundle/save-load tests を再実行するべき。
+- Wave82 performance instrumentation は存在するが、quantified benchmark baseline は記録されていない。
+- Wave76 clipping fix は fake-GL proof であり、real WebGL/readPixels pixel proof ではない。
+- broad visual/pixel oracle は意図的に存在しない。Playwright coverage は flows には有用だが、layout quality や rendered-image correctness の証明ではない。
+- `check:testids:fixtures` は利用可能だが、standard `check` には含まれていない。より広い quality-gate placement は判断事項として残っている。
+- 既存の DOM/text test oracles は、structured test-facing/evidence surfaces が存在してから移行するべき。
+
+## 5. 方向転換がない限り明示的に非目標
+
+- Cubism SDK/Core integration、Cubism import/export/load compatibility、`.moc3`、`.model3.json`、`.physics3.json`、Cubism Physics compatibility。
+- LLM provider integration、prompt loops、natural-language repair、repo-side proposal generation/ranking、auto-rigging inference、auto-fix、automatic commit、external HTTP/WebSocket/MCP proposal transport。
+- PSD all-layer one-click import、recursive group auto import、group-as-artmesh import、semantic recognition、automatic rig proposal placement、Photoshop full compositing parity、blend/effects/color-management parity、persisted source PSD bytes/raw parser objects。
+- ZIP/archive/native filesystem/cloud transport、File System Access API、directory picker、drag/drop intake、cross-profile storage guarantees。
+- Full renderer、standalone runtime app、texture sampling correctness proof、public render target、pixel-level comparison oracle。
+- Dynamics multi-pendulum、multi-output、same-output mixer/blending、frame stepping、output meters/sliders in Viewer、timeline/motion clip playback、external camera/motion input、direct vertex physics、cloth、collision、IK。
+- Viewer screenshot/export、Compare/Diff、crop guide、favorite/pinned parameters、authoring operations inside Viewer。
+- rights/fixture policy が明示的に受け入れられるまで、public redistributable demo assets は扱わない。
+
+## 6. 推奨する次の計画候補
+
+1. Viewer / Dynamics hardening v1。
+   - 理由: Wave84 は runtime playback path を完了した直後であり、manual visual QA、real rAF smoothness、larger-project performance、Viewer が runtime-core drawable snapshots ではなく Editor Canvas projection を使っている点に residual risks を記録している。
+   - よい境界: focused browser/manual QA、小さな source/test hardening、runtime/viewer projection unification decision の文書化。新しい Dynamics schema features は避ける。
+
+2. Diagnostics / Evidence React View v0。
+   - 理由: Product Preflight、validator、runtime evidence、PSD evidence、Codex-friendly diagnostics は packages に存在するが、targeted source search では Editor rebuild 後の現在の full React human-facing Diagnostics/Evidence view は見つからなかった。
+   - よい境界: report summary、diagnostic details、evidence refs、rerun affordance を持つ read-only current-session surface。repair generation は避ける。
+
+3. Texture Atlas Task v0。
+   - 理由: editor は PSD 由来の texture-backed drawables を import/draw でき、mesh/deformer/viewer paths を持ち、atlas packing を証明済み範囲外として繰り返し扱っている。Atlas v0 は、Cubism 方針や pixel-oracle 方針を変えずに、asset organization と render readiness を前に進められる。
+   - よい境界: visible drawables の deterministic packing、preview/apply、package evidence、validator/Product Preflight diagnostics。
+
+補助候補:
+
+- import review clarity が現在の主な user pain であれば、PSD Import UX polish v1。
+- deterministic proposals を扱う operator workflow が human diagnostics より重要であれば、Codex / Automation React View v0。
+- 陳腐化した maps によって planning accuracy が阻害されている場合は、Capability map refresh。
+
+## 7. 根拠リンク
+
+- 実装マップ: [discussion/implementation/_map.md](_map.md)
+- オーケストレーションマップ: [discussion/implementation/orchestration/_map.md](orchestration/_map.md)
+- Wave84 計画: [discussion/implementation/orchestration/wave84-plan.md](orchestration/wave84-plan.md)
+- Wave84 final report: [discussion/implementation/waves/wave84/wave84-final-integration-report.md](waves/wave84/wave84-final-integration-report.md)
+- Wave84 final clean review: [discussion/implementation/reviews/wave84/wave84-final-clean-integration-review.md](reviews/wave84/wave84-final-clean-integration-review.md)
+- Viewer 画面仕様: [discussion/design/screen-design/screens/viewer-runtime-view.md](../design/screen-design/screens/viewer-runtime-view.md)
+- Dynamics Tool 仕様: [discussion/design/screen-design/components/dynamics-tool.md](../design/screen-design/components/dynamics-tool.md)
+- 画面設計マップ: [discussion/design/screen-design/_map.md](../design/screen-design/_map.md)
+- 履歴用 capability map: [discussion/implementation/current-capability-map.md](current-capability-map.md)
+- Viewer source/tests: `apps/editor/src/workspace/viewer/viewer-runtime-screen.tsx`, `apps/editor/src/workspace/viewer/viewer-runtime-playback.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.ts`, `apps/editor/src/workspace/viewer/viewer-runtime-screen.test.ts`, `apps/editor/src/workspace/viewer/runtime-controls-state.test.ts`
+- Dynamics source/tests: `apps/editor/src/features/editor-session/model/dynamics-tool-state.ts`, `apps/editor/src/workspace/panels/dynamics-tool-inspector.tsx`, `packages/runtime-core/src/dynamics-evaluation.ts`, `packages/runtime-core/src/parameter-resolution.ts`, `packages/runtime-core/src/runtime-core.ts`
+- PSD import source/tests: `apps/editor/src/editor-workflow/browser-psd-parser-adapter.ts`, `apps/editor/src/features/psd-import/model/psd-import-planner.ts`, `apps/editor/src/features/psd-import/model/psd-import-commit.ts`, `apps/editor/src/features/psd-import/model/psd-import-hidden-part-bridge.test.ts`
+- Mesh/Rig/Parameter source anchors: `apps/editor/src/features/editor-session/model/mesh-tool-state.ts`, `apps/editor/src/features/editor-session/model/rig-tool-state.ts`, `apps/editor/src/features/editor-session/model/parameter-keyform-state.ts`, `apps/editor/src/workspace/parameter-manager/parameter-manager-screen.tsx`
+- Preflight/Codex package anchors: `packages/validator-core/src/product-preflight-report.ts`, `packages/validator-core/src/product-preflight-report-diff.ts`, `packages/validator-core/src/codex-proposal-rerun-validation.ts`, `packages/ai-interface/src/ai-codex-proposal-command.ts`, `packages/ai-interface/src/ai-product-preflight-command.ts`
