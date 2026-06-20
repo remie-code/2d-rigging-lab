@@ -122,7 +122,7 @@ function createMeshToolCommand(target: EditorDiagnosticTarget): EditorDiagnostic
     label: "Open Mesh Tool",
     target,
     run: (actions) => {
-      actions.setActiveEntry("import");
+      actions.setActiveEntry("workspace");
       actions.setActiveTool("mesh");
       actions.selectDrawable(target.id as DrawableId);
     }
@@ -135,7 +135,7 @@ function createRigToolCommand(target: EditorDiagnosticTarget): EditorDiagnosticJ
     label: "Open Rig Tool",
     target,
     run: (actions) => {
-      actions.setActiveEntry("import");
+      actions.setActiveEntry("workspace");
       actions.setActiveTool("rig");
       actions.selectDeformerTreeTarget({
         kind: "rigControl",
@@ -163,7 +163,7 @@ function createDynamicsToolCommand(target: EditorDiagnosticTarget): EditorDiagno
     label: "Open Dynamics Group",
     target,
     run: (actions) => {
-      actions.setActiveEntry("import");
+      actions.setActiveEntry("workspace");
       actions.setActiveTool("dynamics");
       actions.setDynamicsToolPreviewGroupId(target.id as DynamicsGroupId);
     }

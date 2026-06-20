@@ -3,13 +3,13 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { AppBar } from "./app-bar";
 import { TextureAtlasTaskScreen } from "./atlas/texture-atlas-task-screen";
 import { PsdImportModal } from "../features/psd-import/components/psd-import-modal";
+import { useEditorSession } from "../features/editor-session/editor-session-context";
 import { CanvasPreviewPanel } from "./panels/canvas-preview-panel";
 import { DiagnosticsScreen } from "./diagnostics/diagnostics-screen";
 import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
 import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
-import { ProjectStorageScreen } from "./project-storage/project-storage-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
 import { ViewerRuntimeScreen } from "./viewer/viewer-runtime-screen";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
@@ -31,8 +31,8 @@ export function AuthoringWorkspaceContent({
 }: {
   readonly activeEntry: WorkspaceEntryId;
 }) {
+  const { hasOpenWorkspace, workspaceStorage } = useEditorSession();
   const showParameterManager = activeEntry === "parameters";
-  const showProjectStorage = activeEntry === "storage";
   const showDiagnostics = activeEntry === "validate";
   const showViewer = activeEntry === "viewer";
   const showAtlas = activeEntry === "atlas";
@@ -41,7 +41,9 @@ export function AuthoringWorkspaceContent({
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
       <AppBar />
 
-      {showParameterManager || showProjectStorage || showDiagnostics || showViewer || showAtlas ? (
+      {!hasOpenWorkspace ? (
+        <WorkspaceGateMessage message={workspaceStorage.message} />
+      ) : showParameterManager || showDiagnostics || showViewer || showAtlas ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {showViewer ? (
             <ViewerRuntimeScreen />
@@ -51,9 +53,7 @@ export function AuthoringWorkspaceContent({
             <DiagnosticsScreen />
           ) : showParameterManager ? (
             <ParameterManagerScreen />
-          ) : (
-            <ProjectStorageScreen />
-          )}
+          ) : null}
         </div>
       ) : (
         <>
@@ -88,8 +88,19 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      {showViewer || showDiagnostics || showAtlas ? null : <ParameterBar />}
-      <PsdImportModal />
+      {!hasOpenWorkspace || showViewer || showDiagnostics || showAtlas ? null : <ParameterBar />}
+      {hasOpenWorkspace ? <PsdImportModal /> : null}
     </main>
+  );
+}
+
+function WorkspaceGateMessage({ message }: { readonly message: string }) {
+  return (
+    <section className="grid min-h-0 flex-1 place-items-center px-4 text-center">
+      <div>
+        <h1 className="text-sm font-semibold text-neutral-100">No workspace is open</h1>
+        <p className="mt-2 max-w-md text-xs leading-5 text-neutral-500">{message}</p>
+      </div>
+    </section>
   );
 }

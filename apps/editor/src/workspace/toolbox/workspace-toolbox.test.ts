@@ -10,10 +10,11 @@ import { WorkspaceToolbox } from "./workspace-toolbox";
 const toolboxTestState = vi.hoisted(() => ({
   editorSession: {
     openPsdImport: vi.fn(),
+    psdImportOpen: false,
     session: undefined as unknown
   },
   uiStore: {
-    activeEntry: "import",
+    activeEntry: "workspace",
     activeTool: "select",
     setActiveEntry: vi.fn(),
     setActiveTool: vi.fn()
@@ -68,9 +69,10 @@ vi.mock("../../ui/icon-button", () => ({
 describe("WorkspaceToolbox diagnostics badge", () => {
   beforeEach(() => {
     toolboxTestState.editorSession.openPsdImport.mockClear();
+    toolboxTestState.editorSession.psdImportOpen = false;
     toolboxTestState.editorSession.session = createEmptyAuthoringSession();
     toolboxTestState.iconButtons.splice(0, toolboxTestState.iconButtons.length);
-    toolboxTestState.uiStore.activeEntry = "import";
+    toolboxTestState.uiStore.activeEntry = "workspace";
     toolboxTestState.uiStore.activeTool = "select";
     toolboxTestState.uiStore.setActiveEntry.mockClear();
     toolboxTestState.uiStore.setActiveTool.mockClear();
@@ -91,7 +93,28 @@ describe("WorkspaceToolbox diagnostics badge", () => {
     expect(markup).toContain('aria-label="2 validation warnings"');
     expect(markup).toContain(">2</span>");
   });
+
+  it("keeps Import PSD as an action and removes Project Storage from the Toolbox", () => {
+    const markup = renderToStaticMarkup(createElement(WorkspaceToolbox));
+
+    expect(markup).toContain('aria-label="Import PSD"');
+    expect(markup).not.toContain("Project Storage");
+
+    findIconButton("Import PSD").onClick?.({} as never);
+
+    expect(toolboxTestState.editorSession.openPsdImport).toHaveBeenCalledTimes(1);
+    expect(toolboxTestState.uiStore.setActiveEntry).not.toHaveBeenCalled();
+  });
 });
+
+function findIconButton(label: string) {
+  const button = toolboxTestState.iconButtons.find((candidate) => candidate.label === label);
+  if (button === undefined) {
+    throw new Error(`IconButton "${label}" was not rendered.`);
+  }
+
+  return button;
+}
 
 function createToolboxWarningSession() {
   const session = createEmptyAuthoringSession();

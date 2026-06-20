@@ -106,7 +106,7 @@ export function TextureAtlasTaskScreen() {
           <IconButton
             className="size-8 shrink-0"
             label="Back to Authoring Workspace"
-            onClick={() => setActiveEntry("import")}
+            onClick={() => setActiveEntry("workspace")}
             tooltipSide="bottom"
           >
             <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.8} />
@@ -234,8 +234,12 @@ function AtlasPreviewImageLayer({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (canvas === null || context === null) {
+    if (canvas === null) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    if (context === null) {
       return;
     }
 

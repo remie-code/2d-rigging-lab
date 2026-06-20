@@ -10,6 +10,7 @@ const projectStorageTestState = vi.hoisted(() => ({
   editorSession: {
     canRedo: false,
     canUndo: false,
+    exportPortableProject: vi.fn(),
     openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
     projectIdentityLabel: "Untitled model · rev 0",
@@ -24,7 +25,7 @@ const projectStorageTestState = vi.hoisted(() => ({
       binaryPayloadCount: null,
       binaryFileCount: null,
       completedAt: null
-    },
+    } as ProjectStorageState,
     redo: vi.fn(),
     saveProject: vi.fn(),
     session: {
@@ -54,7 +55,7 @@ const projectStorageTestState = vi.hoisted(() => ({
         provenanceRecords: [],
         rightsRecords: []
       }
-    },
+    } as unknown as AuthoringSession,
     undo: vi.fn()
   },
   setActiveEntry: vi.fn()
@@ -74,7 +75,7 @@ vi.mock("../../state/editor-ui-store", () => ({
   ) =>
     selector({
       surfaceLabel: "Mock Surface",
-      activeEntry: "storage",
+      activeEntry: "workspace",
       setActiveEntry: projectStorageTestState.setActiveEntry
     })
 }));
@@ -86,6 +87,7 @@ describe("ProjectStorageScreen", () => {
     projectStorageTestState.editorSession.projectStorage = createIdleStorageState();
     projectStorageTestState.editorSession.session = createStorageSession();
     projectStorageTestState.editorSession.openProjectFile.mockClear();
+    projectStorageTestState.editorSession.exportPortableProject.mockClear();
     projectStorageTestState.editorSession.saveProject.mockClear();
     projectStorageTestState.setActiveEntry.mockClear();
   });
@@ -93,12 +95,12 @@ describe("ProjectStorageScreen", () => {
   it("renders the storage workspace task with portable bundle controls and status", () => {
     const markup = renderProjectStorageScreen();
 
-    expect(markup).toContain("Project Storage");
+    expect(markup).toContain("Portable JSON");
     expect(markup).toContain("Current Project");
     expect(markup).toContain("Untitled model · rev 0");
-    expect(markup).toContain("Open portable project bundle file");
-    expect(markup).toContain(">Open<");
-    expect(markup).toContain(">Save<");
+    expect(markup).toContain("Import Portable JSON file");
+    expect(markup).toContain(">Import Portable JSON<");
+    expect(markup).toContain(">Export Portable JSON<");
     expect(markup).toContain("No portable project operation has run in this session.");
   });
 
@@ -251,5 +253,5 @@ function createStorageSession(
       provenanceRecords: [],
       rightsRecords: []
     }
-  } as AuthoringSession;
+  } as unknown as AuthoringSession;
 }

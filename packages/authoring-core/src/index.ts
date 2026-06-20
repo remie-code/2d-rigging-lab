@@ -5,6 +5,8 @@ export * from "./authoring-session.js";
 export * from "./from-package-document.js";
 export * from "./package-document-from-authoring-session.js";
 export * from "./portable-project-bundle.js";
+export * from "./workspace-open.js";
+export * from "./workspace-save.js";
 export * from "./package-document-assets.js";
 export * from "./package-document-editor-state.js";
 export * from "./package-document-manifest.js";

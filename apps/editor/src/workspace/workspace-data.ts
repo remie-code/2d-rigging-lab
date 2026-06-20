@@ -1,7 +1,6 @@
 import {
   Eye,
   FileInput,
-  FolderOpen,
   LayoutGrid,
   MousePointer2,
   ShieldCheck,
@@ -15,8 +14,10 @@ import {
 
 import type { WorkspaceEntryId, WorkspaceToolId } from "../state/editor-ui-store";
 
+export type WorkspaceTaskActionId = "import";
+
 export type ToolboxItem = {
-  id: WorkspaceToolId | WorkspaceEntryId;
+  id: WorkspaceToolId | WorkspaceEntryId | WorkspaceTaskActionId;
   label: string;
   kind: "tool" | "task" | "view";
   icon: LucideIcon;
@@ -44,7 +45,6 @@ export const toolboxSections: ToolboxSection[] = [
       { id: "parameters", label: "Parameters", kind: "task", icon: SlidersHorizontal },
       { id: "variants", label: "Variants", kind: "task", icon: Smile },
       { id: "atlas", label: "Texture Atlas", kind: "task", icon: LayoutGrid },
-      { id: "storage", label: "Project Storage", kind: "task", icon: FolderOpen },
       { id: "validate", label: "Validate", kind: "task", icon: ShieldCheck }
     ]
   },

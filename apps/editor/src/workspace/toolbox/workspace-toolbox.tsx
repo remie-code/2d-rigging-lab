@@ -17,18 +17,20 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
   const activeEntry = useEditorUiStore((state) => state.activeEntry);
   const setActiveTool = useEditorUiStore((state) => state.setActiveTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
-  const { openPsdImport, session } = useEditorSession();
+  const { openPsdImport, psdImportOpen, session } = useEditorSession();
   const horizontal = layout === "horizontal";
   const diagnosticsWarningCount = useMemo(
     () => createEditorDiagnosticsProjection(session).warningItemCount,
     [session]
   );
 
-  const activateEntry = (entry: WorkspaceEntryId) => {
-    setActiveEntry(entry);
-    if (entry === "import") {
+  const activateTaskOrView = (itemId: string) => {
+    if (itemId === "import") {
       openPsdImport();
+      return;
     }
+
+    setActiveEntry(itemId as WorkspaceEntryId);
   };
 
   return (
@@ -55,7 +57,9 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
             const pressed =
               item.kind === "tool"
                 ? activeTool === item.id
-                : activeEntry === item.id;
+                : item.id === "import"
+                  ? psdImportOpen
+                  : activeEntry === item.id;
 
             return (
               <IconButton
@@ -70,7 +74,7 @@ export function WorkspaceToolbox({ layout = "vertical" }: { layout?: "horizontal
                     return;
                   }
 
-                  activateEntry(item.id as WorkspaceEntryId);
+                  activateTaskOrView(item.id);
                 }}
                 pressed={pressed}
               >

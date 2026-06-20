@@ -8,11 +8,13 @@ export function TaskViewEntryBar() {
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
   const { openPsdImport } = useEditorSession();
 
-  const activateEntry = (entry: WorkspaceEntryId) => {
-    setActiveEntry(entry);
+  const activateEntry = (entry: string) => {
     if (entry === "import") {
       openPsdImport();
+      return;
     }
+
+    setActiveEntry(entry as WorkspaceEntryId);
   };
 
   return (
@@ -33,7 +35,7 @@ export function TaskViewEntryBar() {
               selected && "border-amber-500/70 bg-amber-950/30 text-amber-100"
             )}
             key={entry.id}
-            onClick={() => activateEntry(entry.id as WorkspaceEntryId)}
+            onClick={() => activateEntry(entry.id)}
             type="button"
           >
             <Icon aria-hidden="true" size={15} strokeWidth={1.8} />

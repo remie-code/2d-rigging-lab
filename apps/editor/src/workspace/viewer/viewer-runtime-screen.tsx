@@ -299,7 +299,7 @@ interface ViewerRuntimePlaybackLoopInput {
 export function returnToAuthoringWorkspace(
   setActiveEntry: (entry: WorkspaceEntryId) => void
 ): void {
-  setActiveEntry("import");
+  setActiveEntry("workspace");
 }
 
 function ViewerCleanStageCanvas({

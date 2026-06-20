@@ -409,7 +409,7 @@ describe("TextureAtlasTaskScreen", () => {
     );
 
     expect(atlasScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
-    expect(atlasScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("import");
+    expect(atlasScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("workspace");
     expect(editorSession.openPsdImport).not.toHaveBeenCalled();
   });
 
@@ -433,22 +433,34 @@ function createEditorSessionMock(
     applyTextureAtlasPreview: vi.fn(),
     canRedo: false,
     canUndo: false,
+    createWorkspace: vi.fn(),
     editorHiddenPartIds,
+    exportPortableProject: vi.fn(),
+    hasOpenWorkspace: true,
     openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
+    openWorkspace: vi.fn(),
     parameterValues: {},
     projectIdentityLabel: "Atlas Fixture",
     projectSaveStatusLabel: "Saved",
     projectStorage: {
       status: "idle"
     },
+    psdImportOpen: false,
     redo: vi.fn(),
     resetActiveParameterValue: vi.fn(),
+    saveWorkspaceAs: vi.fn(),
     saveProject: vi.fn(),
     selectDrawable: vi.fn(),
     session,
     setActiveParameterValue: vi.fn(),
-    undo: vi.fn()
+    undo: vi.fn(),
+    workspaceIdentityLabel: "Atlas Fixture",
+    workspaceSaveStatusLabel: "Saved",
+    workspaceStorage: {
+      status: "saved",
+      message: "Workspace ready."
+    }
   };
 }
 

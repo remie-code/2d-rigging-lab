@@ -27,16 +27,13 @@ Wave53 final integration report/review `pass` により、Toolbox v0 は Authori
 | Rig      |  Active tool
 | Dynamics |  Active tool
 |----------|
-| Import   |  Task
-| Params   |  Task
-| Variant  |  Task
-| Atlas    |  Task
-| Storage  |  Task
-| Validate |  Task
+| Import   |  Workspace-internal task
+| Params   |  Workspace-internal task
+| Variant  |  Workspace-internal task
+| Atlas    |  Workspace-internal task
+| Validate |  Workspace-internal task
 |----------|
-| Viewer   |  View
-| Evidence |  View
-| Codex    |  View
+| Viewer   |  Workspace-internal view
 +----------+
 ```
 
@@ -45,10 +42,12 @@ Wave53 final integration report/review `pass` により、Toolbox v0 は Authori
 | 種別 | 役割 | 起動後の主な表示先 | 例 |
 |---|---|---|---|
 | Active Tool | workspace内の作業モードを切り替える | Canvas / Inspector / Tool Panel | Select, Mesh, Rig, Dynamics |
-| Task | まとまった作業画面を開く | Task window / task view | Import, Parameter Manager, Variant / Expression, Texture Atlas, Storage, Validate |
-| View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer, Diagnostics, Codex |
+| Task | まとまった作業画面を開く | Task window / task view | Import, Parameter Manager, Variant / Expression, Texture Atlas, Validate |
+| View | 補助情報や別視点を開く | Drawer / side view / dedicated view | Viewer |
 
-Viewerは専用画面として開く。Diagnostics / Codexは、Wave54 A-H では bounded skeleton route として workspace-scoped task window に開けるが、情報量や作業文脈に応じた final drawer / side view / dedicated view policy は後続議論で決める。
+Viewerは専用画面として開く。
+
+Workspace Save / Open / Save As / Portable JSON Import / Portable JSON ExportはToolboxに置かない。これらはworkspace内部の作業ではなく、HeaderのWorkspace menuが扱うapp-level / workspace-level操作である。詳細は [../screens/workspace-save-and-navigation.md](../screens/workspace-save-and-navigation.md) を参照する。
 
 ## 4. Icon Policy
 
@@ -80,11 +79,8 @@ Viewerは専用画面として開く。Diagnostics / Codexは、Wave54 A-H で�
 | Parameter Manager | Task | `SlidersHorizontal` | Parameter Manager |
 | Variant / Expression | Task | `Smile` | Variant / Expression |
 | Texture Atlas | Task | `LayoutGrid` | Texture Atlas |
-| Storage | Task | `FolderOpen` | Project storage |
 | Validate | Task | `ShieldCheck` | Product Preflight |
 | Viewer | View | `Eye` | Viewer / Runtime |
-| Diagnostics | View | `Activity` | Diagnostics / Evidence |
-| Codex | View | `Bot` | Codex / Automation |
 
 Icon候補は最終実装時に利用可能な `lucide` icon名へ調整してよい。ただし、性質ごとの分類とtooltip文言はこの仕様を基準にする。
 
@@ -101,4 +97,4 @@ Icon候補は最終実装時に利用可能な `lucide` icon名へ調整して�
 - Toolboxは Wave53 v0 では左端配置済み。Wave54 A-H では PSD Import / Diagnostics / Codex route 接続済み。final visual / accessibility policy として左端固定を確定するかは未決。
 - label expanded modeを常時提供するか、将来のaccessibility preferenceに回すか。
 - Task itemは Wave54 A-H で workspace-scoped task window v0 として実装済みだが、全task向け final modal / task-window / dedicated task view policy は未決。
-- Diagnostics / Codex skeleton は Wave54 A-H で task window route として到達可能だが、final viewをdrawerにするか、dedicated viewにするかは未決。
+- Project StorageはWorkspace-first UXではToolboxから外し、HeaderのWorkspace menuまたはWorkspace detailsへ移す。

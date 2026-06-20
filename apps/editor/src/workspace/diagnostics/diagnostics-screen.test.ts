@@ -205,7 +205,7 @@ describe("DiagnosticsScreen", () => {
       markup.indexOf("Validation / Diagnostics")
     );
     expect(diagnosticsScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
-    expect(diagnosticsScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("import");
+    expect(diagnosticsScreenTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("workspace");
     expect(diagnosticsScreenTestState.uiStore.setActiveTool).not.toHaveBeenCalled();
     expect(editorSession.openPsdImport).not.toHaveBeenCalled();
   });
@@ -217,8 +217,12 @@ function createEditorSessionMock(session: AuthoringSession) {
     canUndo: false,
     closePsdImport: vi.fn(),
     commitPsdImport: vi.fn(),
+    createWorkspace: vi.fn(),
+    exportPortableProject: vi.fn(),
+    hasOpenWorkspace: true,
     openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
+    openWorkspace: vi.fn(),
     projectIdentityLabel: "Diagnostics Fixture",
     projectSaveStatusLabel: "Saved",
     projectStorage: {
@@ -230,13 +234,20 @@ function createEditorSessionMock(session: AuthoringSession) {
       label: "Diagnostics Root",
       parentPartId: PART_ROOT
     })),
+    saveWorkspaceAs: vi.fn(),
     saveProject: vi.fn(),
     selectDeformerTreeTarget: vi.fn(),
     selectDrawable: vi.fn(),
     session,
     setActiveParameterId: vi.fn(),
     setDynamicsToolPreviewGroupId: vi.fn(),
-    undo: vi.fn()
+    undo: vi.fn(),
+    workspaceIdentityLabel: "Diagnostics Fixture",
+    workspaceSaveStatusLabel: "Saved",
+    workspaceStorage: {
+      status: "saved",
+      message: "Workspace ready."
+    }
   };
 }
 

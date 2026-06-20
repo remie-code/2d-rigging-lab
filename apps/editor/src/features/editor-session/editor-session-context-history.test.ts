@@ -20,8 +20,20 @@ import {
   RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
+  TriangleIdSchema,
   type ParameterId
 } from "@private-2d-rigging-lab/contracts";
+import {
+  PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+  type PsdAdapterLayerMaterializationEvidenceDto,
+  type PsdAdapterParserEvidenceDto,
+  type PsdAdapterResultDto
+} from "@private-2d-rigging-lab/operation-core";
+import type {
+  BrowserPsdMaterializedLayerBytes,
+  BrowserPsdParserInput,
+  BrowserPsdParserResult
+} from "../../editor-workflow/browser-psd-parser-adapter";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
@@ -29,10 +41,30 @@ import { describe, expect, it, vi } from "vitest";
 import {
   EditorSessionProvider,
   logMeshGenerationPreviewDebug,
+  type DirtyWorkspaceReplacementConfirmation,
   useEditorSession
 } from "./editor-session-context";
-import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
+import { ROOT_PART_ID, createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { DeformerTreeSelectionTarget } from "./model/editor-selection";
+import { createPsdImportPlan } from "../psd-import/model/psd-import-planner";
+import {
+  createFakeWorkspaceDirectoryHandle,
+  type FakeWorkspaceDirectoryHandle
+} from "../workspace-storage/model/fake-workspace-directory";
+import {
+  createEditorWorkspace,
+  type WorkspaceDirectoryPicker
+} from "../workspace-storage/model/workspace-session-storage";
+import {
+  createTextureAtlasTaskPreviewState
+} from "../../workspace/atlas/atlas-task-projection";
+
+const parsePsdForEditorImportMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../editor-workflow/browser-psd-parser-adapter", () => ({
+  createPsdSourceAssetId: (planToken: string) => `src_${planToken}`,
+  parsePsdForEditorImport: parsePsdForEditorImportMock
+}));
 
 type EditorSessionContextSnapshot = ReturnType<typeof useEditorSession>;
 type FakeNode = FakeElement | FakeTextNode;
@@ -65,6 +97,40 @@ const TRANSIENT_DRAFT_DRAWABLE_ID = DrawableIdSchema.parse("draw_provider_fixtur
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+const PSD_WRITE_LAYER_ID = "psd:root/layer[write-once]";
+const PSD_WRITE_GROUP_ID = "psd:root/group[write-once]";
+const PSD_WRITE_BYTES = new Uint8Array([
+  255, 0, 0, 255,
+  0, 255, 0, 255,
+  0, 0, 255, 255,
+  255, 255, 255, 255
+]);
+const PSD_SOURCE_DIGEST = {
+  algorithm: "sha256" as const,
+  hex: "abababababababababababababababababababababababababababababababab"
+};
+const PSD_PARSER_EVIDENCE: PsdAdapterParserEvidenceDto = {
+  evidenceKind: "psd-parser-evidence-v1",
+  parserName: "provider-write-once-parser",
+  parserPackageName: "provider-write-once-parser",
+  parserVersion: "0.0.0",
+  adapterName: "provider-write-once-adapter",
+  adapterVersion: "0.0.0",
+  runtime: "browser",
+  privateShapePolicy: "parser-private-shape-excluded-v1"
+};
+const ATLAS_SOURCE_PART_ID = PartIdSchema.parse("part_atlas_write_once");
+const ATLAS_SOURCE_DRAWABLE_ID = DrawableIdSchema.parse("draw_atlas_write_once");
+const ATLAS_SOURCE_MESH_ID = MeshIdSchema.parse("mesh_atlas_write_once");
+const ATLAS_SOURCE_TEXTURE_ID = TextureIdSchema.parse("tex_atlas_write_once_source");
+const ATLAS_SOURCE_ASSET_ID = SourceAssetIdSchema.parse("src_atlas_write_once");
+const ATLAS_SOURCE_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_atlas_write_once");
+const ATLAS_SOURCE_BYTES = new Uint8Array([
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255
+]);
 
 describe("EditorSessionProvider history integration", () => {
   it("includes v6 adaptive contour diagnostics in mesh preview debug logs", () => {
@@ -135,6 +201,38 @@ describe("EditorSessionProvider history integration", () => {
       expect(hasCustomParameter(harness.context())).toBe(true);
       expect(harness.context().canUndo).toBe(true);
       expect(harness.context().canRedo).toBe(false);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects PSD import and editing commands before a workspace is open", async () => {
+    const harness = await renderEditorSessionProbe({ initialWorkspaceOpen: false });
+
+    try {
+      await act(async () => {
+        harness.context().openPsdImport();
+      });
+
+      expect(harness.context().psdImportOpen).toBe(false);
+      expect(harness.context().workspaceStorage).toMatchObject({
+        status: "no-workspace",
+        errorCode: "workspace.required"
+      });
+      expect(harness.context().workspaceStorage.message).toContain(
+        "Create or open a workspace"
+      );
+
+      const result = await act(async () =>
+        harness.context().createCustomParameter(createCustomParameterPayload())
+      );
+
+      expect(result.committed).toBe(false);
+      expect(result.diagnostics[0]).toMatchObject({
+        checkId: "workspace.required",
+        severity: "error"
+      });
+      expect(hasCustomParameter(harness.context())).toBe(false);
     } finally {
       await harness.cleanup();
     }
@@ -459,8 +557,13 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
-  it("marks the current project saved after portable bundle save", async () => {
-    const harness = await renderEditorSessionProbe();
+  it("marks the current workspace saved after workspace save", async () => {
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "history-save.ail2d-workspace"
+    });
+    const harness = await renderEditorSessionProbe({
+      initialWorkspaceDirectory: workspaceDirectory
+    });
 
     try {
       await act(async () => {
@@ -476,9 +579,236 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().session.dirty).toBe(false);
-      expect(harness.context().projectStorage.status).toBe("saved");
+      expect(harness.context().workspaceStorage.status).toBe("saved");
       expect(harness.context().projectSaveStatusLabel).toBe("Saved");
-      expect(harness.context().projectStorage.binaryPayloadCount).toBe(0);
+      expect(workspaceDirectory.readTextFile("workspace.json")).toContain(
+        "directory-workspace-v1"
+      );
+      expect(workspaceDirectory.readTextFile("model/parameters.json")).toContain(
+        "param_custom_history"
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cancels opening another workspace when dirty replacement is canceled", async () => {
+    const currentDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current.ail2d-workspace"
+    });
+    const nextDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "next.ail2d-workspace"
+    });
+    const picker: WorkspaceDirectoryPicker = {
+      pickDirectory: vi.fn(async () => nextDirectory)
+    };
+    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "cancel" as const);
+    const harness = await renderEditorSessionProbe({
+      confirmDirtyWorkspaceReplacement,
+      initialWorkspaceDirectory: currentDirectory,
+      workspaceDirectoryPicker: picker
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      await act(async () => {
+        await harness.context().openWorkspace();
+      });
+
+      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "open-workspace" })
+      );
+      expect(picker.pickDirectory).not.toHaveBeenCalled();
+      expect(hasCustomParameter(harness.context())).toBe(true);
+      expect(harness.context().workspaceIdentityLabel).toContain("current.ail2d-workspace");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("saves the dirty workspace before opening another workspace", async () => {
+    const currentDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current-save-open.ail2d-workspace"
+    });
+    const nextDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "next-open.ail2d-workspace"
+    });
+    await createEditorWorkspace({
+      session: createLoadedProjectSession(),
+      picker: { pickDirectory: async () => nextDirectory }
+    });
+    const picker: WorkspaceDirectoryPicker = {
+      pickDirectory: vi.fn(async () => nextDirectory)
+    };
+    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "save-and-open" as const);
+    const harness = await renderEditorSessionProbe({
+      confirmDirtyWorkspaceReplacement,
+      initialWorkspaceDirectory: currentDirectory,
+      workspaceDirectoryPicker: picker
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      await act(async () => {
+        await harness.context().openWorkspace();
+      });
+
+      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "open-workspace" })
+      );
+      expect(picker.pickDirectory).toHaveBeenCalledTimes(1);
+      expect(currentDirectory.readTextFile("model/parameters.json")).toContain(
+        "param_custom_history"
+      );
+      expect(harness.context().session.packageIdentity.packageDisplayName).toBe("Loaded Project");
+      expect(harness.context().workspaceIdentityLabel).toContain("next-open.ail2d-workspace");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cancels Portable JSON import replacement when dirty replacement is canceled", async () => {
+    const currentDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current-import-cancel.ail2d-workspace"
+    });
+    const importedDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "imported-portable.ail2d-workspace"
+    });
+    const picker: WorkspaceDirectoryPicker = {
+      pickDirectory: vi.fn(async () => importedDirectory)
+    };
+    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "cancel" as const);
+    const loadedBundle = await exportAuthoringSessionPortableBundle({
+      session: createLoadedProjectSession(),
+      updatedAt: "2026-06-20T00:00:00.000Z"
+    });
+    const harness = await renderEditorSessionProbe({
+      confirmDirtyWorkspaceReplacement,
+      initialWorkspaceDirectory: currentDirectory,
+      workspaceDirectoryPicker: picker
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      await act(async () => {
+        await harness.context().openProjectFromPortableBundle(loadedBundle.bundleJson, {
+          fileName: "loaded.portable-project.json"
+        });
+      });
+
+      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "import-portable-json" })
+      );
+      expect(picker.pickDirectory).not.toHaveBeenCalled();
+      expect(hasCustomParameter(harness.context())).toBe(true);
+      expect(harness.context().session.packageIdentity.packageDisplayName).toBe("Untitled model");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("writes PSD import raw RGBA to the workspace once and later Save skips it", async () => {
+    parsePsdForEditorImportMock.mockReset();
+    parsePsdForEditorImportMock.mockImplementation(async (input: BrowserPsdParserInput) =>
+      createPsdWriteOnceParserResult(input)
+    );
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "psd-write-once.ail2d-workspace"
+    });
+    const plan = await createPsdImportPlan({
+      fileName: "write-once.psd",
+      bytes: new ArrayBuffer(16),
+      destination: {
+        parentPartId: ROOT_PART_ID,
+        label: "Project Root"
+      },
+      packageRevision: 0
+    });
+    const rawRgbaPath = plan.materializedLayerBytes[0]?.binaryAssetRef.packageRelativePath;
+    if (rawRgbaPath === undefined) {
+      throw new Error("Expected PSD import plan to include materialized raw RGBA bytes.");
+    }
+    const harness = await renderEditorSessionProbe({
+      initialWorkspaceDirectory: workspaceDirectory
+    });
+
+    try {
+      await act(async () => {
+        harness.context().commitPsdImport(plan);
+        await waitForCondition(
+          () => workspaceDirectory.getWriteCount(rawRgbaPath) === 1,
+          `Expected ${rawRgbaPath} to be written once after PSD import.`
+        );
+      });
+
+      expect(workspaceDirectory.readBinaryFile(rawRgbaPath)).toEqual(
+        plan.materializedLayerBytes[0]?.bytes
+      );
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+
+      await act(async () => {
+        await harness.context().saveProject();
+      });
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+    } finally {
+      await harness.cleanup();
+      parsePsdForEditorImportMock.mockReset();
+    }
+  });
+
+  it("writes Texture Atlas generated raw RGBA to the workspace once and later Save skips it", async () => {
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "atlas-write-once.ail2d-workspace"
+    });
+    const initialSession = await createAtlasWriteOnceSession();
+    const previewState = createTextureAtlasTaskPreviewState({
+      session: initialSession,
+      editorHiddenPartIds: new Set(),
+      settings: {
+        pageSize: 8,
+        paddingPixels: 1,
+        edgeExtrusionEnabled: true
+      }
+    });
+    if (previewState.preview.status !== "ready") {
+      throw new Error("Expected Texture Atlas preview to be ready.");
+    }
+    const harness = await renderEditorSessionProbe({
+      initialSession,
+      initialWorkspaceDirectory: workspaceDirectory
+    });
+
+    try {
+      const result = await act(async () =>
+        harness.context().applyTextureAtlasPreview(previewState.preview)
+      );
+
+      expect(result.committed).toBe(true);
+      if (!result.committed) {
+        throw new Error("Expected Texture Atlas Apply to commit.");
+      }
+      const rawRgbaPath = getGeneratedAtlasRawRgbaPath(result.session);
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+
+      await act(async () => {
+        await harness.context().saveProject();
+      });
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
     } finally {
       await harness.cleanup();
     }
@@ -486,8 +816,19 @@ describe("EditorSessionProvider history integration", () => {
 
   it("loads a portable bundle by replacing session and clearing transient editor state", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const currentWorkspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current-loaded-portable.ail2d-workspace"
+    });
+    const importedWorkspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "loaded-portable.ail2d-workspace"
+    });
     const harness = await renderEditorSessionProbe({
-      initialSession: createTextureBundleSession()
+      confirmDirtyWorkspaceReplacement: async () => "save-and-open" as const,
+      initialSession: createTextureBundleSession(),
+      initialWorkspaceDirectory: currentWorkspaceDirectory,
+      workspaceDirectoryPicker: {
+        pickDirectory: async () => importedWorkspaceDirectory
+      }
     });
 
     try {
@@ -556,6 +897,14 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().session.packageIdentity.packageDisplayName).toBe(
+        "Loaded Project"
+      );
+      expect(harness.context().hasOpenWorkspace).toBe(true);
+      expect(harness.context().workspaceStorage.status).toBe("saved");
+      expect(importedWorkspaceDirectory.readTextFile("workspace.json")).toContain(
+        "directory-workspace-v1"
+      );
+      expect(importedWorkspaceDirectory.readTextFile("manifest.json")).toContain(
         "Loaded Project"
       );
       expect(harness.context().session.graph.parameters.map((parameter) => parameter.parameterId))
@@ -850,7 +1199,11 @@ function Probe({
 }
 
 async function renderEditorSessionProbe(options: {
+  readonly confirmDirtyWorkspaceReplacement?: DirtyWorkspaceReplacementConfirmation;
   readonly initialSession?: AuthoringSession;
+  readonly initialWorkspaceDirectory?: FakeWorkspaceDirectoryHandle;
+  readonly initialWorkspaceOpen?: boolean;
+  readonly workspaceDirectoryPicker?: WorkspaceDirectoryPicker;
 } = {}): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly context: () => EditorSessionContextSnapshot;
@@ -867,9 +1220,21 @@ async function renderEditorSessionProbe(options: {
         null,
         createElement(
           EditorSessionProvider,
-          options.initialSession === undefined
-            ? null
-            : { initialSession: options.initialSession },
+          {
+            ...(options.confirmDirtyWorkspaceReplacement === undefined
+              ? {}
+              : { confirmDirtyWorkspaceReplacement: options.confirmDirtyWorkspaceReplacement }),
+            initialWorkspaceOpen: options.initialWorkspaceOpen ?? true,
+            ...(options.initialSession === undefined
+              ? {}
+              : { initialSession: options.initialSession }),
+            ...(options.initialWorkspaceDirectory === undefined
+              ? {}
+              : { initialWorkspaceDirectory: options.initialWorkspaceDirectory }),
+            ...(options.workspaceDirectoryPicker === undefined
+              ? {}
+              : { workspaceDirectoryPicker: options.workspaceDirectoryPicker })
+          },
           createElement(Probe, {
             onRender: (nextContext) => {
               context = nextContext;
@@ -1597,6 +1962,329 @@ function createBinaryAssetReference(): BinaryAssetReference {
     provenanceId: ProvenanceIdSchema.parse("prov_provider_fixture"),
     rightsAssetId: "rights_provider_fixture"
   } as BinaryAssetReference;
+}
+
+async function createPsdWriteOnceParserResult(
+  input: BrowserPsdParserInput
+): Promise<BrowserPsdParserResult> {
+  const materialization = await createPsdWriteOnceMaterialization(input);
+  const layerBytes = createPsdWriteOnceLayerBytes(materialization);
+
+  return {
+    adapterResult: createPsdWriteOnceAdapterResult(materialization),
+    materializedLayerBytes: [layerBytes],
+    sourceDigest: PSD_SOURCE_DIGEST,
+    sourceByteLength: input.bytes.byteLength,
+    sourceFilePath: `assets/sources/private/${input.planToken}/${input.fileName}`
+  };
+}
+
+function createPsdWriteOnceAdapterResult(
+  materialization: PsdAdapterLayerMaterializationEvidenceDto
+): PsdAdapterResultDto {
+  return {
+    schemaVersion: "psd-adapter-result-v1",
+    sourceProfile: "layered-character-psd-profile-v1",
+    adapterName: "provider-write-once-adapter",
+    adapterVersion: "0.0.0",
+    intakeKind: "realPsdParseResult",
+    parser: PSD_PARSER_EVIDENCE,
+    canvas: {
+      width: 2,
+      height: 2,
+      bounds: { x: 0, y: 0, width: 2, height: 2 }
+    },
+    sourceGroups: [
+      {
+        sourceGroupId: "psd:root",
+        originalName: "Write Once Import",
+        normalizedName: "write once import",
+        groupPath: ["Write Once Import"],
+        sourceOrder: 0,
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        unsupportedFeatures: []
+      },
+      {
+        sourceGroupId: PSD_WRITE_GROUP_ID,
+        originalName: "Write Once Group",
+        normalizedName: "write once group",
+        parentGroupId: "psd:root",
+        groupPath: ["Write Once Import", "Write Once Group"],
+        sourceOrder: 1,
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        unsupportedFeatures: []
+      }
+    ],
+    sourceLayers: [
+      {
+        sourceLayerId: PSD_WRITE_LAYER_ID,
+        originalName: "Write Once",
+        normalizedName: "write once",
+        parentGroupId: PSD_WRITE_GROUP_ID,
+        groupPath: ["Write Once Import", "Write Once Group"],
+        sourceOrder: 2,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        role: "editableLayer",
+        unsupportedFeatures: []
+      }
+    ],
+    unsupportedFeatures: [],
+    materializationEvidence: [materialization],
+    diagnostics: []
+  };
+}
+
+async function createPsdWriteOnceMaterialization(
+  input: BrowserPsdParserInput
+): Promise<PsdAdapterLayerMaterializationEvidenceDto> {
+  const digest = {
+    algorithm: "sha256" as const,
+    hex: await computeTestSha256Hex(PSD_WRITE_BYTES)
+  };
+  const binaryAssetRef: NonNullable<PsdAdapterLayerMaterializationEvidenceDto["binaryAssetRef"]> = {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: `bin_${input.planToken}_write_once_rgba`,
+    packageRelativePath: `assets/textures/psd/${input.planToken}/write_once.raw-rgba`,
+    digest,
+    byteLength: PSD_WRITE_BYTES.byteLength,
+    mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+    storageStatus: "stored-package-local-v1",
+    provenanceId: ProvenanceIdSchema.parse(`prov_${input.planToken}_write_once`),
+    rightsAssetId: input.sourceAssetId
+  };
+
+  return {
+    evidenceKind: "psd-layer-materialization-evidence-v1",
+    materializationId: `mat_${input.planToken}_write_once`,
+    sourceLayerRef: {
+      sourceAssetId: input.sourceAssetId,
+      sourceLayerId: PSD_WRITE_LAYER_ID,
+      sourceLayerName: "Write Once",
+      sourceLayerPath: ["Write Once Import", "Write Once Group", "Write Once"]
+    },
+    mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+    byteLength: PSD_WRITE_BYTES.byteLength,
+    digest,
+    width: 2,
+    height: 2,
+    binaryAssetRef,
+    provenance: {
+      sourceFilePath: input.fileName,
+      sourceDigest: PSD_SOURCE_DIGEST,
+      sourceByteLength: input.bytes.byteLength,
+      sourceMediaType: "image/vnd.adobe.photoshop",
+      privacyLabel: "packageLocalAsset",
+      publicDistribution: "notPublicDistributable",
+      generatedBy: "provider-write-once-adapter",
+      publicDemoAsset: false
+    },
+    parser: PSD_PARSER_EVIDENCE,
+    extraction: {
+      extractionKind: "selectedLayerRasterV1",
+      optionsSchemaVersion: "psd-layer-extraction-options-v1",
+      options: {
+        channelOrder: "rgba",
+        includeEffects: false,
+        includeHiddenLayers: false,
+        composeWithOtherLayers: false,
+        layerSelection: PSD_WRITE_LAYER_ID
+      }
+    }
+  };
+}
+
+function createPsdWriteOnceLayerBytes(
+  materialization: PsdAdapterLayerMaterializationEvidenceDto
+): BrowserPsdMaterializedLayerBytes {
+  if (materialization.binaryAssetRef === undefined) {
+    throw new Error("Expected materialized PSD layer binary asset ref.");
+  }
+
+  return {
+    sourceLayerId: PSD_WRITE_LAYER_ID,
+    materializationId: materialization.materializationId,
+    binaryAssetRef: materialization.binaryAssetRef,
+    width: 2,
+    height: 2,
+    bytes: PSD_WRITE_BYTES
+  };
+}
+
+async function createAtlasWriteOnceSession(): Promise<AuthoringSession> {
+  const session = createEmptyAuthoringSession();
+  const binaryAssetRef = await createAtlasSourceBinaryAssetReference();
+
+  session.graph.parts[0] = {
+    ...session.graph.parts[0]!,
+    childPartIds: [ATLAS_SOURCE_PART_ID],
+    children: [{ kind: "part", partId: ATLAS_SOURCE_PART_ID }]
+  };
+  session.graph.parts.push({
+    partId: ATLAS_SOURCE_PART_ID,
+    displayName: "Atlas Write Once",
+    parentPartId: ROOT_PART_ID,
+    childPartIds: [],
+    drawableIds: [ATLAS_SOURCE_DRAWABLE_ID],
+    children: [{ kind: "drawable", drawableId: ATLAS_SOURCE_DRAWABLE_ID }]
+  });
+  session.graph.drawables.push({
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    displayName: "Atlas Source",
+    partId: ATLAS_SOURCE_PART_ID,
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    textureId: ATLAS_SOURCE_TEXTURE_ID,
+    meshId: ATLAS_SOURCE_MESH_ID,
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder: 0,
+    sourceProvenanceId: ATLAS_SOURCE_PROVENANCE_ID
+  });
+  session.graph.meshes.push({
+    meshId: ATLAS_SOURCE_MESH_ID,
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    vertices: [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 0, y: 2 }
+    ],
+    uvs: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ],
+    triangles: [[0, 1, 2]],
+    vertexStableIds: ["vtx_atlas_write_once_0", "vtx_atlas_write_once_1", "vtx_atlas_write_once_2"],
+    triangleStableIds: [TriangleIdSchema.parse("tri_atlas_write_once_0")],
+    topologyRevision: 1,
+    bounds: { x: 0, y: 0, width: 2, height: 2 },
+    generationProvenanceId: ATLAS_SOURCE_PROVENANCE_ID
+  });
+  session.graph.drawOrder.push({
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    baseDrawOrder: 0,
+    stableOrder: 0
+  });
+  session.graph.stableOrder.push(
+    ATLAS_SOURCE_PART_ID,
+    ATLAS_SOURCE_DRAWABLE_ID,
+    ATLAS_SOURCE_MESH_ID
+  );
+  session.graph.sourceAssets.push({
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    kind: "generated-fixture-v1",
+    filePath: "assets/sources/generated/atlas-write-once.json",
+    contentHash: "sha256:atlas-write-once",
+    importProfile: "split-png-fallback-v1",
+    layers: [],
+    diagnostics: []
+  });
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: ATLAS_SOURCE_TEXTURE_ID,
+        filePath: binaryAssetRef.packageRelativePath,
+        sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+        sourceLayerId: "layer_atlas_write_once",
+        provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+        dimensions: { width: 2, height: 2, pixelFormat: "rgba8" },
+        binaryAssetRef
+      }
+    ]
+  };
+  session.graph.provenanceRecords.push({
+    provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+    assetId: ATLAS_SOURCE_TEXTURE_ID,
+    assetKind: "texture",
+    filePath: binaryAssetRef.packageRelativePath,
+    contentHash: `sha256:${binaryAssetRef.digest.hex}`,
+    creator: "test fixture",
+    license: "private-local",
+    redistributionAllowed: false,
+    aiUsed: false,
+    transformHistory: [],
+    relatedOperationIds: []
+  });
+  session.graph.rightsRecords.push({
+    assetId: ATLAS_SOURCE_ASSET_ID,
+    rightsStatus: "cleared",
+    license: "private-local",
+    redistributionAllowed: false
+  });
+  registerAuthoringSessionBinaryBytes(session, {
+    binaryAssetRef,
+    bytes: ATLAS_SOURCE_BYTES,
+    role: "texture-raster-v1",
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    textureId: ATLAS_SOURCE_TEXTURE_ID
+  });
+
+  return session;
+}
+
+async function createAtlasSourceBinaryAssetReference(): Promise<BinaryAssetReference> {
+  return {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: "bin_atlas_write_once_source_rgba",
+    packageRelativePath: "assets/textures/atlas-write-once-source.raw-rgba",
+    digest: {
+      algorithm: "sha256",
+      hex: await computeTestSha256Hex(ATLAS_SOURCE_BYTES)
+    },
+    byteLength: ATLAS_SOURCE_BYTES.byteLength,
+    mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+    storageStatus: "stored-package-local-v1",
+    provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+    rightsAssetId: ATLAS_SOURCE_ASSET_ID
+  } as BinaryAssetReference;
+}
+
+function getGeneratedAtlasRawRgbaPath(session: AuthoringSession): string {
+  const atlasTextureId = session.graph.textureAtlas?.layoutSummary?.atlasTextureId;
+  const texture = session.graph.textureAtlas?.textures.find(
+    (candidate) => candidate.textureId === atlasTextureId
+  );
+  const path = texture?.binaryAssetRef?.packageRelativePath;
+  if (path === undefined) {
+    throw new Error("Expected generated Texture Atlas binary asset path.");
+  }
+
+  return path;
+}
+
+async function computeTestSha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto?.subtle?.digest("SHA-256", bytes);
+  if (digest === undefined) {
+    throw new Error("SHA-256 digest support is required for this test.");
+  }
+
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function waitForCondition(check: () => boolean, message: string): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (check()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error(message);
 }
 
 function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGeneratedMeshResult {

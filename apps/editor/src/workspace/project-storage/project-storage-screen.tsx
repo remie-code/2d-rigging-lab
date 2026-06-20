@@ -7,11 +7,11 @@ import { useEditorUiStore } from "../../state/editor-ui-store";
 
 export function ProjectStorageScreen() {
   const {
+    exportPortableProject,
     openProjectFile,
     projectIdentityLabel,
     projectSaveStatusLabel,
     projectStorage,
-    saveProject,
     session
   } = useEditorSession();
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
@@ -32,13 +32,13 @@ export function ProjectStorageScreen() {
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-[#151514]">
       <header className="flex min-h-14 items-center justify-between gap-3 border-b border-neutral-800 px-4 py-2">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-neutral-50">Project Storage</h1>
+          <h1 className="truncate text-sm font-semibold text-neutral-50">Portable JSON</h1>
           <p className="truncate text-xs text-neutral-500">{projectIdentityLabel}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <input
             accept="application/json,.json"
-            aria-label="Open portable project bundle file"
+            aria-label="Import Portable JSON file"
             className="sr-only"
             onChange={handleFileChange}
             ref={inputRef}
@@ -51,23 +51,23 @@ export function ProjectStorageScreen() {
             type="button"
           >
             <FolderOpen aria-hidden="true" size={15} strokeWidth={1.8} />
-            Open
+            Import Portable JSON
           </button>
           <button
             className="inline-flex h-8 items-center gap-2 rounded border border-emerald-700/70 bg-emerald-950/40 px-2.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600"
             disabled={busy}
             onClick={() => {
-              void saveProject();
+              void exportPortableProject();
             }}
             type="button"
           >
             <Download aria-hidden="true" size={15} strokeWidth={1.8} />
-            Save
+            Export Portable JSON
           </button>
           <button
-            aria-label="Close Project Storage"
+            aria-label="Close Portable JSON"
             className="inline-flex size-8 items-center justify-center rounded border border-neutral-800 bg-neutral-950 text-neutral-300 transition hover:border-amber-500/70 hover:text-amber-100"
-            onClick={() => setActiveEntry("import")}
+            onClick={() => setActiveEntry("workspace")}
             type="button"
           >
             <X aria-hidden="true" size={16} strokeWidth={1.8} />

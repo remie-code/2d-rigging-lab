@@ -12,6 +12,7 @@ import {
 } from "@private-2d-rigging-lab/authoring-core";
 import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 import type {
+  DiagnosticDto,
   DynamicsGroupId,
   DrawableId,
   ParameterId,
@@ -53,8 +54,6 @@ import {
   createIdleProjectStorageState,
   createLoadedProjectStorageState,
   createLoadingProjectStorageState,
-  createProjectIdentityLabel,
-  createProjectSaveStatusLabel,
   createProjectStorageErrorState,
   createSavedProjectStorageState,
   createSavingProjectStorageState,
@@ -62,6 +61,31 @@ import {
 } from "../project-storage/model/project-storage-state";
 import { commitPsdImportPlan } from "../psd-import/model/psd-import-commit";
 import type { PsdImportPlan } from "../psd-import/model/psd-import-types";
+import {
+  detectWorkspaceDirectoryAccess,
+  type WorkspaceDirectoryHandleLike
+} from "../workspace-storage/model/workspace-directory-io";
+import {
+  createEditorWorkspace,
+  openEditorWorkspace,
+  saveEditorWorkspace,
+  saveEditorWorkspaceAs,
+  toEditorWorkspaceStorageError,
+  type WorkspaceDirectoryPicker
+} from "../workspace-storage/model/workspace-session-storage";
+import {
+  createCreatingWorkspaceStorageState,
+  createInitialWorkspaceStorageState,
+  createOpeningWorkspaceStorageState,
+  createSavedWorkspaceStorageState,
+  createSavingWorkspaceStorageState,
+  createWorkspaceBlockedStorageState,
+  createWorkspaceIdentityLabel,
+  createWorkspaceSaveStatusLabel,
+  createWorkspaceStorageErrorState,
+  type EditorWorkspaceTarget,
+  type WorkspaceStorageState
+} from "../workspace-storage/model/workspace-storage-state";
 import {
   commitDrawableMaskSourceEdit,
   commitDrawableNameEdit,
@@ -296,12 +320,20 @@ interface EditorSessionContextValue {
   readonly projectStorage: ProjectStorageState;
   readonly projectIdentityLabel: string;
   readonly projectSaveStatusLabel: string;
+  readonly workspaceStorage: WorkspaceStorageState;
+  readonly workspaceIdentityLabel: string;
+  readonly workspaceSaveStatusLabel: string;
+  readonly hasOpenWorkspace: boolean;
   readonly psdImportOpen: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly undo: () => void;
   readonly redo: () => void;
+  readonly createWorkspace: () => Promise<void>;
+  readonly openWorkspace: () => Promise<void>;
+  readonly saveWorkspaceAs: () => Promise<void>;
   readonly saveProject: () => Promise<void>;
+  readonly exportPortableProject: () => Promise<void>;
   readonly openProjectFile: (file: File) => Promise<void>;
   readonly openProjectFromPortableBundle: (
     bundleText: string,
@@ -445,14 +477,37 @@ const EditorSessionContext = createContext<EditorSessionContextValue | null>(nul
 
 export interface EditorSessionProviderProps {
   readonly children?: ReactNode;
+  readonly confirmDirtyWorkspaceReplacement?: DirtyWorkspaceReplacementConfirmation;
   readonly initialSelection?: EditorSelection | null;
   readonly initialSession?: AuthoringSession;
+  readonly initialWorkspaceDirectory?: WorkspaceDirectoryHandleLike;
+  readonly initialWorkspaceOpen?: boolean;
+  readonly workspaceDirectoryPicker?: WorkspaceDirectoryPicker;
+  readonly workspaceGlobalObject?: unknown;
 }
+
+export type DirtyWorkspaceReplacementReason = "open-workspace" | "import-portable-json";
+export type DirtyWorkspaceReplacementDecision = "save-and-open" | "cancel";
+
+export interface DirtyWorkspaceReplacementRequest {
+  readonly reason: DirtyWorkspaceReplacementReason;
+  readonly workspaceName: string | null;
+  readonly message: string;
+}
+
+export type DirtyWorkspaceReplacementConfirmation = (
+  request: DirtyWorkspaceReplacementRequest
+) => DirtyWorkspaceReplacementDecision | Promise<DirtyWorkspaceReplacementDecision>;
 
 export function EditorSessionProvider({
   children,
+  confirmDirtyWorkspaceReplacement = confirmDirtyWorkspaceReplacementWithBrowser,
+  initialWorkspaceDirectory,
+  initialWorkspaceOpen = false,
   initialSelection = null,
-  initialSession
+  initialSession,
+  workspaceDirectoryPicker,
+  workspaceGlobalObject
 }: EditorSessionProviderProps) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
@@ -497,6 +552,36 @@ export function EditorSessionProvider({
   const [projectStorage, setProjectStorage] = useState<ProjectStorageState>(() =>
     createIdleProjectStorageState()
   );
+  const workspaceDirectoryAccess = useMemo(
+    () => detectWorkspaceDirectoryAccess(workspaceGlobalObject),
+    [workspaceGlobalObject]
+  );
+  const workspaceAccessSupported =
+    workspaceDirectoryAccess.supported ||
+    workspaceDirectoryPicker !== undefined ||
+    initialWorkspaceDirectory !== undefined ||
+    initialWorkspaceOpen;
+  const [workspaceStorage, setWorkspaceStorage] = useState<WorkspaceStorageState>(() =>
+    initialWorkspaceDirectory === undefined && !initialWorkspaceOpen
+      ? createInitialWorkspaceStorageState({ supported: workspaceAccessSupported })
+      : createSavedWorkspaceStorageState({
+          workspaceName: initialWorkspaceDirectory?.name ?? "Test Workspace",
+          binaryWriteCount: 0,
+          binarySkipCount: 0,
+          message: "Workspace is ready."
+        })
+  );
+  const [workspaceTarget, setWorkspaceTarget] = useState<EditorWorkspaceTarget | null>(() =>
+    initialWorkspaceDirectory === undefined
+      ? null
+      : {
+          directory: initialWorkspaceDirectory,
+          workspaceName: initialWorkspaceDirectory.name
+        }
+  );
+  const [workspaceOpenOverride, setWorkspaceOpenOverride] = useState(
+    initialWorkspaceDirectory !== undefined || initialWorkspaceOpen
+  );
   const [psdImportOpen, setPsdImportOpen] = useState(false);
   const resolvedActiveParameterId = useMemo(
     () => resolveActiveParameterId(session, activeParameterId),
@@ -530,14 +615,27 @@ export function EditorSessionProvider({
     () => createDynamicsToolPreviewEvaluation(session, dynamicsToolPreview),
     [dynamicsToolPreview, session]
   );
-  const projectIdentityLabel = useMemo(
-    () => createProjectIdentityLabel(session),
-    [session]
+  const hasOpenWorkspace = workspaceOpenOverride || workspaceTarget !== null;
+  const workspaceIdentityLabel = useMemo(
+    () =>
+      createWorkspaceIdentityLabel({
+        session,
+        target: workspaceTarget,
+        hasOpenWorkspace
+      }),
+    [hasOpenWorkspace, session, workspaceTarget]
   );
-  const projectSaveStatusLabel = useMemo(
-    () => createProjectSaveStatusLabel(session, projectStorage),
-    [projectStorage, session]
+  const workspaceSaveStatusLabel = useMemo(
+    () =>
+      createWorkspaceSaveStatusLabel({
+        session,
+        storageState: workspaceStorage,
+        hasOpenWorkspace
+      }),
+    [hasOpenWorkspace, session, workspaceStorage]
   );
+  const projectIdentityLabel = workspaceIdentityLabel;
+  const projectSaveStatusLabel = workspaceSaveStatusLabel;
 
   useEffect(() => {
     if (activeParameterId !== resolvedActiveParameterId) {
@@ -612,12 +710,28 @@ export function EditorSessionProvider({
     setPsdImportOpen(false);
   }, [clearTransientCommitState]);
 
+  const requireOpenWorkspace = useCallback((action: string): boolean => {
+    if (hasOpenWorkspace) {
+      return true;
+    }
+
+    setWorkspaceStorage(createWorkspaceBlockedStorageState(action));
+    return false;
+  }, [hasOpenWorkspace]);
+
   const runCommandWithHistory = useCallback(
     <Result extends EditorSessionCommandResult,>(
       command: (currentSession: AuthoringSession) => Result,
       label?: string
     ): Result => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace(label ?? "editing")) {
+        return createWorkspaceRequiredCommandResult(
+          currentState.session,
+          label ?? "editing"
+        ) as Result;
+      }
+
       const baseInput = {
         currentSession: currentState.session,
         history: currentState.history,
@@ -642,7 +756,7 @@ export function EditorSessionProvider({
 
       return outcome.result;
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
 
   const undo = useCallback(() => {
@@ -675,7 +789,255 @@ export function EditorSessionProvider({
     clearTransientCommitState();
   }, [clearTransientCommitState, setEditorSessionState]);
 
+  const applyWorkspaceStorageError = useCallback((error: unknown, workspaceName?: string | null) => {
+    const workspaceError = toEditorWorkspaceStorageError(error);
+    setWorkspaceStorage(
+      createWorkspaceStorageErrorState({
+        status: classifyWorkspaceStorageErrorStatus(workspaceError.code),
+        workspaceName: workspaceName ?? null,
+        code: workspaceError.code,
+        message: workspaceError.message,
+        ...(workspaceError.path === undefined ? {} : { path: workspaceError.path })
+      })
+    );
+  }, []);
+
+  const persistSessionToWorkspace = useCallback(
+    async (input: {
+      readonly target: EditorWorkspaceTarget | null;
+      readonly sessionToSave: AuthoringSession;
+      readonly history: EditorSessionHistoryState;
+      readonly baseDocument: unknown;
+      readonly message?: string;
+    }) => {
+      if (input.target === null) {
+        setWorkspaceStorage(createWorkspaceBlockedStorageState("saving"));
+        return null;
+      }
+
+      setWorkspaceStorage(createSavingWorkspaceStorageState(input.target.workspaceName));
+
+      try {
+        const result = await saveEditorWorkspace({
+          target: input.target,
+          session: input.sessionToSave,
+          baseDocument: input.baseDocument,
+          editorHiddenPartIds
+        });
+
+        if (editorStateRef.current.session === input.sessionToSave) {
+          const savedSession = structuredClone(input.sessionToSave);
+          savedSession.dirty = false;
+          setEditorSessionState({
+            session: savedSession,
+            history: input.history,
+            baseDocument: result.packageDocument
+          });
+          setWorkspaceStorage(
+            createSavedWorkspaceStorageState({
+              workspaceName: result.workspaceName,
+              binaryWriteCount: result.binaryWriteCount,
+              binarySkipCount: result.binarySkipCount,
+              ...(input.message === undefined ? {} : { message: input.message }),
+              completedAt: result.savedAt
+            })
+          );
+        }
+
+        return result;
+      } catch (error) {
+        applyWorkspaceStorageError(error, input.target.workspaceName);
+        return null;
+      }
+    },
+    [applyWorkspaceStorageError, editorHiddenPartIds, setEditorSessionState]
+  );
+
+  const prepareDirtyWorkspaceReplacement = useCallback(
+    async (reason: DirtyWorkspaceReplacementReason): Promise<boolean> => {
+      const currentState = editorStateRef.current;
+      if (!hasOpenWorkspace || !currentState.session.dirty) {
+        return true;
+      }
+
+      const message = reason === "open-workspace"
+        ? "Save the current workspace before opening another workspace?"
+        : "Save the current workspace before importing Portable JSON?";
+      const decision = await confirmDirtyWorkspaceReplacement({
+        reason,
+        workspaceName: workspaceTarget?.workspaceName ?? null,
+        message
+      });
+
+      if (decision === "cancel") {
+        return false;
+      }
+
+      const saved = await persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: currentState.session,
+        history: currentState.history,
+        baseDocument: currentState.baseDocument,
+        message: "Saved current workspace before replacing it."
+      });
+
+      return saved !== null;
+    },
+    [
+      confirmDirtyWorkspaceReplacement,
+      hasOpenWorkspace,
+      persistSessionToWorkspace,
+      workspaceTarget
+    ]
+  );
+
+  const createWorkspace = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    setWorkspaceStorage(createCreatingWorkspaceStorageState());
+
+    try {
+      const result = await createEditorWorkspace({
+        session: currentState.session,
+        baseDocument: currentState.baseDocument,
+        editorHiddenPartIds,
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+      });
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: currentState.history,
+        baseDocument: result.packageDocument
+      });
+      resetEditorLocalStateAfterProjectLoad({
+        loadedSession: result.session,
+        editorHiddenPartIds: result.editorHiddenPartIds
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: result.binaryFileCount,
+          binarySkipCount: 0,
+          message: `Created workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
+      );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+    }
+  }, [
+    applyWorkspaceStorageError,
+    editorHiddenPartIds,
+    resetEditorLocalStateAfterProjectLoad,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
+
+  const openWorkspace = useCallback(async () => {
+    if (!(await prepareDirtyWorkspaceReplacement("open-workspace"))) {
+      return;
+    }
+
+    setWorkspaceStorage(createOpeningWorkspaceStorageState());
+
+    try {
+      const result = await openEditorWorkspace({
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+      });
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: createEmptyEditorSessionHistory(),
+        baseDocument: result.packageDocument
+      });
+      resetEditorLocalStateAfterProjectLoad({
+        loadedSession: result.session,
+        editorHiddenPartIds: result.editorHiddenPartIds
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: 0,
+          binarySkipCount: result.binaryFileCount,
+          message: `Opened workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
+      );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+    }
+  }, [
+    applyWorkspaceStorageError,
+    prepareDirtyWorkspaceReplacement,
+    resetEditorLocalStateAfterProjectLoad,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
+
   const saveProject = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    await persistSessionToWorkspace({
+      target: workspaceTarget,
+      sessionToSave: currentState.session,
+      history: currentState.history,
+      baseDocument: currentState.baseDocument
+    });
+  }, [persistSessionToWorkspace, workspaceTarget]);
+
+  const saveWorkspaceAs = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    setWorkspaceStorage(createCreatingWorkspaceStorageState());
+
+    try {
+      const result = await saveEditorWorkspaceAs({
+        session: currentState.session,
+        baseDocument: currentState.baseDocument,
+        editorHiddenPartIds,
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+      });
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: currentState.history,
+        baseDocument: result.packageDocument
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: result.binaryFileCount,
+          binarySkipCount: 0,
+          message: `Saved as workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
+      );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+    }
+  }, [
+    applyWorkspaceStorageError,
+    editorHiddenPartIds,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
+
+  const exportPortableProject = useCallback(async () => {
     const currentState = editorStateRef.current;
     setProjectStorage(createSavingProjectStorageState());
 
@@ -690,41 +1052,59 @@ export function EditorSessionProvider({
         fileName: result.fileName
       });
 
-      if (editorStateRef.current.session === currentState.session) {
-        const savedSession = structuredClone(currentState.session);
-        savedSession.dirty = false;
-        setEditorSessionState({
-          session: savedSession,
-          history: currentState.history,
-          baseDocument: result.packageDocument
-        });
-      }
-
       setProjectStorage(createSavedProjectStorageState(result));
     } catch (error) {
       setProjectStorage(
         createProjectStorageErrorState(toEditorProjectStorageError(error, "save"), "save")
       );
     }
-  }, [editorHiddenPartIds, setEditorSessionState]);
+  }, [editorHiddenPartIds]);
 
   const openProjectFromPortableBundle = useCallback(
     async (bundleText: string, options: { readonly fileName?: string } = {}) => {
+      if (!(await prepareDirtyWorkspaceReplacement("import-portable-json"))) {
+        return;
+      }
+
       setProjectStorage(createLoadingProjectStorageState(options.fileName));
 
       try {
         const result = await importEditorProjectBundle({ bundleText });
-        setEditorSessionState({
+        setWorkspaceStorage(createCreatingWorkspaceStorageState());
+        const workspaceResult = await createEditorWorkspace({
           session: result.session,
+          baseDocument: result.packageDocument,
+          editorHiddenPartIds: result.editorHiddenPartIds,
+          ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+          ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+        });
+        setWorkspaceTarget(workspaceResult.target);
+        setWorkspaceOpenOverride(true);
+        setActiveEntry("workspace");
+        setEditorSessionState({
+          session: workspaceResult.session,
           history: createEmptyEditorSessionHistory(),
-          baseDocument: result.packageDocument
+          baseDocument: workspaceResult.packageDocument
         });
         resetEditorLocalStateAfterProjectLoad({
-          loadedSession: result.session,
+          loadedSession: workspaceResult.session,
           editorHiddenPartIds: result.editorHiddenPartIds
         });
         setProjectStorage(createLoadedProjectStorageState(result, options.fileName));
+        setWorkspaceStorage(
+          createSavedWorkspaceStorageState({
+            workspaceName: workspaceResult.target.workspaceName,
+            binaryWriteCount: workspaceResult.binaryFileCount,
+            binarySkipCount: 0,
+            message: `Imported portable JSON into ${workspaceResult.target.workspaceName}.`,
+            completedAt: workspaceResult.openedAt
+          })
+        );
       } catch (error) {
+        const workspaceError = toEditorWorkspaceStorageError(error);
+        if (!workspaceError.code.startsWith("workspace.unknown")) {
+          applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+        }
         setProjectStorage(
           createProjectStorageErrorState(
             toEditorProjectStorageError(error, "open"),
@@ -734,13 +1114,20 @@ export function EditorSessionProvider({
         );
       }
     },
-    [resetEditorLocalStateAfterProjectLoad, setEditorSessionState]
+    [
+      applyWorkspaceStorageError,
+      prepareDirtyWorkspaceReplacement,
+      resetEditorLocalStateAfterProjectLoad,
+      setActiveEntry,
+      setEditorSessionState,
+      workspaceDirectoryPicker,
+      workspaceGlobalObject,
+      workspaceTarget
+    ]
   );
 
   const openProjectFile = useCallback(
     async (file: File) => {
-      setProjectStorage(createLoadingProjectStorageState(file.name));
-
       try {
         await openProjectFromPortableBundle(await readPortableProjectFileText(file), {
           fileName: file.name
@@ -760,6 +1147,10 @@ export function EditorSessionProvider({
 
   const commitPsdImport = useCallback(
     (plan: PsdImportPlan) => {
+      if (!requireOpenWorkspace("importing PSD")) {
+        return;
+      }
+
       const currentState = editorStateRef.current;
       const result = commitPsdImportPlan({ session: currentState.session, plan });
       const nextHistory = recordEditorSessionCommit(currentState.history, {
@@ -783,12 +1174,27 @@ export function EditorSessionProvider({
       setSelection({ kind: "part", id: plan.importRootPartId });
       setSelectionAnchorDrawableId(null);
       setPsdImportOpen(false);
+      void persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument,
+        message: "Saved PSD import to workspace."
+      });
     },
-    [setEditorSessionState]
+    [persistSessionToWorkspace, requireOpenWorkspace, setEditorSessionState, workspaceTarget]
   );
 
   const applyTextureAtlasPreview = useCallback(
     async (preview: TextureAtlasPreview): Promise<TextureAtlasEditorSessionCommandResult> => {
+      if (!requireOpenWorkspace("applying Texture Atlas")) {
+        return {
+          committed: false,
+          session: editorStateRef.current.session,
+          warnings: [createWorkspaceRequiredDiagnostic("applying Texture Atlas")]
+        };
+      }
+
       const currentState = editorStateRef.current;
       const result = await commitTextureAtlasPreview(currentState.session, preview, {
         editorHiddenPartIds
@@ -822,10 +1228,24 @@ export function EditorSessionProvider({
         baseDocument: currentState.baseDocument
       });
       clearTransientCommitState();
+      await persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument,
+        message: "Saved Texture Atlas artifact to workspace."
+      });
 
       return result;
     },
-    [clearTransientCommitState, editorHiddenPartIds, setEditorSessionState]
+    [
+      clearTransientCommitState,
+      editorHiddenPartIds,
+      persistSessionToWorkspace,
+      requireOpenWorkspace,
+      setEditorSessionState,
+      workspaceTarget
+    ]
   );
 
   const applyCommand = useCallback(
@@ -1653,6 +2073,10 @@ export function EditorSessionProvider({
   const commitGestureCommand = useCallback(
     (gesture: EditorSessionGestureCommit<unknown>) => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace("editing")) {
+        return;
+      }
+
       const outcome = commitEditorSessionGestureWithHistory({
         gesture,
         currentSession: currentState.session,
@@ -1672,7 +2096,7 @@ export function EditorSessionProvider({
         console.warn("Gesture command was rejected.", result.diagnostics);
       }
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
 
   const commitGestureController = useCallback(
@@ -1683,6 +2107,10 @@ export function EditorSessionProvider({
       controller: EditorSessionGestureCommitController<Preview, Result>
     ): Result | null => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace("editing")) {
+        return createWorkspaceRequiredCommandResult(currentState.session, "editing") as Result;
+      }
+
       const outcome = controller.commitOnce({
         currentSession: currentState.session,
         history: currentState.history
@@ -1712,8 +2140,16 @@ export function EditorSessionProvider({
 
       return result;
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
+
+  const openPsdImport = useCallback(() => {
+    if (!requireOpenWorkspace("importing PSD")) {
+      return;
+    }
+
+    setPsdImportOpen(true);
+  }, [requireOpenWorkspace]);
 
   const value = useMemo<EditorSessionContextValue>(
     () => ({
@@ -1739,15 +2175,23 @@ export function EditorSessionProvider({
       projectStorage,
       projectIdentityLabel,
       projectSaveStatusLabel,
+      workspaceStorage,
+      workspaceIdentityLabel,
+      workspaceSaveStatusLabel,
+      hasOpenWorkspace,
       psdImportOpen,
       canUndo: canUndoEditorSessionHistory(history),
       canRedo: canRedoEditorSessionHistory(history),
       undo,
       redo,
+      createWorkspace,
+      openWorkspace,
+      saveWorkspaceAs,
       saveProject,
+      exportPortableProject,
       openProjectFile,
       openProjectFromPortableBundle,
-      openPsdImport: () => setPsdImportOpen(true),
+      openPsdImport,
       closePsdImport: () => setPsdImportOpen(false),
       openParameterManager,
       setActiveParameterId,
@@ -1873,11 +2317,20 @@ export function EditorSessionProvider({
       parameterValues,
       projectIdentityLabel,
       projectSaveStatusLabel,
+      workspaceStorage,
+      workspaceIdentityLabel,
+      workspaceSaveStatusLabel,
+      hasOpenWorkspace,
       projectStorage,
       psdImportOpen,
       previewMeshDraft,
       previewMeshDrafts,
       applyRigDraft,
+      createWorkspace,
+      openWorkspace,
+      saveWorkspaceAs,
+      exportPortableProject,
+      openPsdImport,
       redo,
       reparentRigControl,
       resetActiveParameterValue,
@@ -2035,6 +2488,67 @@ function formatCommandFeedback(result: EditorSessionCommandResult): string {
 
 function formatParameterCommandFeedback(result: EditorSessionCommandResult): string {
   return result.diagnostics[0]?.message ?? "Parameter definition operation was rejected.";
+}
+
+function createWorkspaceRequiredCommandResult(
+  session: AuthoringSession,
+  action: string
+): EditorSessionCommandResult {
+  return {
+    committed: false,
+    session,
+    diagnostics: [createWorkspaceRequiredDiagnostic(action)]
+  };
+}
+
+function createWorkspaceRequiredDiagnostic(action: string): DiagnosticDto {
+  return {
+    checkId: "workspace.required" as DiagnosticDto["checkId"],
+    status: "fail",
+    severity: "error",
+    phase: "editor.workspace",
+    target: {
+      kind: "package",
+      id: "current"
+    },
+    message: `Create or open a workspace before ${action}.`,
+    evidence: [],
+    relatedAC: [],
+    relatedScenarios: [],
+    repairCandidateIds: []
+  };
+}
+
+function classifyWorkspaceStorageErrorStatus(
+  code: string
+): NonNullable<Parameters<typeof createWorkspaceStorageErrorState>[0]["status"]> {
+  if (code === "permission-denied") {
+    return "permission-denied";
+  }
+
+  if (code === "permission-lost") {
+    return "permission-lost";
+  }
+
+  if (code === "unsupported") {
+    return "unsupported";
+  }
+
+  return "save-failed";
+}
+
+function confirmDirtyWorkspaceReplacementWithBrowser(
+  request: DirtyWorkspaceReplacementRequest
+): DirtyWorkspaceReplacementDecision {
+  const confirm = globalThis.confirm;
+
+  if (typeof confirm !== "function") {
+    return "cancel";
+  }
+
+  return confirm(`${request.message}\n\nOK saves and continues. Cancel keeps the current workspace.`)
+    ? "save-and-open"
+    : "cancel";
 }
 
 function samePreviewParameterValue(left: number, right: number): boolean {

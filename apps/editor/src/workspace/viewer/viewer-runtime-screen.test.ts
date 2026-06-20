@@ -31,9 +31,13 @@ const viewerRuntimeTestState = vi.hoisted(() => ({
   editorSession: {
     canRedo: false,
     canUndo: false,
+    createWorkspace: vi.fn(),
     editorHiddenPartIds: new Set(),
+    exportPortableProject: vi.fn(),
+    hasOpenWorkspace: true,
     openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
+    openWorkspace: vi.fn(),
     parameterValues: {},
     projectIdentityLabel: "Viewer Fixture · rev 7",
     projectSaveStatusLabel: "Saved",
@@ -42,11 +46,18 @@ const viewerRuntimeTestState = vi.hoisted(() => ({
     },
     redo: vi.fn(),
     resetActiveParameterValue: vi.fn(),
+    saveWorkspaceAs: vi.fn(),
     saveProject: vi.fn(),
     selectDrawable: vi.fn(),
     session: undefined as unknown as AuthoringSession,
     setActiveParameterValue: vi.fn(),
-    undo: vi.fn()
+    undo: vi.fn(),
+    workspaceIdentityLabel: "Viewer Fixture · rev 7",
+    workspaceSaveStatusLabel: "Saved",
+    workspaceStorage: {
+      status: "saved",
+      message: "Workspace ready."
+    }
   },
   iconButtons: [] as Array<{
     readonly disabled: boolean;
@@ -202,7 +213,7 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(markup).not.toContain("Mesh overlay");
     expect(markup).not.toContain("Deformer overlay");
     expect(markup).not.toContain("Screenshot");
-    expect(markup).not.toContain("Export");
+    expect(viewerMarkup).not.toContain("Export");
     expect(markup).not.toContain("Compare");
     expect(markup).not.toContain("Favorite");
     expect(markup).not.toContain("Group");
@@ -231,31 +242,29 @@ describe("ViewerRuntimeScreen integration", () => {
     );
 
     expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
-    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("import");
+    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("workspace");
     expect(viewerRuntimeTestState.editorSession.setActiveParameterValue).not.toHaveBeenCalled();
     expect(viewerRuntimeTestState.editorSession.resetActiveParameterValue).not.toHaveBeenCalled();
     expect(viewerRuntimeTestState.editorSession.selectDrawable).not.toHaveBeenCalled();
   });
 
-  it("wires the right-side AppBar Viewer icon to the viewer active entry", () => {
-    viewerRuntimeTestState.uiStore.activeEntry = "import";
-
+  it("does not duplicate Viewer navigation in the AppBar", () => {
     renderToStaticMarkup(createElement(AppBar));
 
-    const viewerButton = findIconButton("Viewer");
-    viewerButton.onClick?.({} as ReactMouseEvent<HTMLButtonElement>);
-
-    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
-    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("viewer");
+    expect(
+      viewerRuntimeTestState.iconButtons.some((button) => button.label === "Viewer")
+    ).toBe(false);
     expect(viewerRuntimeTestState.editorSession.openPsdImport).not.toHaveBeenCalled();
   });
 
-  it("marks the right-side AppBar Viewer icon pressed when Viewer is active", () => {
+  it("keeps Viewer navigation in workspace-internal surfaces instead of the AppBar", () => {
     viewerRuntimeTestState.uiStore.activeEntry = "viewer";
 
     renderToStaticMarkup(createElement(AppBar));
 
-    expect(findIconButton("Viewer").pressed).toBe(true);
+    expect(
+      viewerRuntimeTestState.iconButtons.some((button) => button.label === "Viewer")
+    ).toBe(false);
   });
 
   it("feeds Runtime Controls overrides into the Clean Stage projection without mutating authoring values", () => {
@@ -535,7 +544,7 @@ describe("ViewerRuntimeScreen integration", () => {
   it("keeps the Back helper scoped to activeEntry only", () => {
     returnToAuthoringWorkspace(viewerRuntimeTestState.uiStore.setActiveEntry);
 
-    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("import");
+    expect(viewerRuntimeTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("workspace");
   });
 });
 

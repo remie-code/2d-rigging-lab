@@ -45,7 +45,7 @@ export function DiagnosticsScreen() {
           <IconButton
             className="size-8 shrink-0"
             label="Back to Authoring Workspace"
-            onClick={() => setActiveEntry("import")}
+            onClick={() => setActiveEntry("workspace")}
             tooltipSide="bottom"
           >
             <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.8} />
@@ -146,7 +146,9 @@ export function DiagnosticsScreen() {
                                 </p>
                               </div>
                             </div>
-                            <DiagnosticDetails details={item.details} />
+                            {item.details === undefined ? null : (
+                              <DiagnosticDetails details={item.details} />
+                            )}
                           </div>
                           <div className="flex flex-wrap items-start justify-end gap-2">
                             {commands.length === 0 ? (
@@ -234,5 +236,5 @@ function formatDiagnosticTarget(item: EditorDiagnosticItem): string {
 }
 
 function formatDiagnosticDetail(value: string | readonly string[]): string {
-  return Array.isArray(value) ? value.join(", ") : value;
+  return typeof value === "string" ? value : value.join(", ");
 }

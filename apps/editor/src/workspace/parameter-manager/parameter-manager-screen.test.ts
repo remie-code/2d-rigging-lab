@@ -50,7 +50,7 @@ describe("ParameterManagerTable", () => {
         null,
         createElement(
           EditorSessionProvider,
-          null,
+          { initialWorkspaceOpen: true },
           createElement(AuthoringWorkspaceContent, { activeEntry: "parameters" })
         )
       )

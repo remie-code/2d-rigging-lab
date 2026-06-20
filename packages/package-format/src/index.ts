@@ -26,3 +26,6 @@ export * from "./package-file-paths.js";
 export * from "./package-json-serialization.js";
 export * from "./package-file-set.js";
 export * from "./package-binary-file-set.js";
+export * from "./workspace-metadata.js";
+export * from "./workspace-file-set.js";
+export * from "./workspace-save-plan.js";
