@@ -9,16 +9,23 @@ import {
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
+import type { EditKeyformKeyPayloadDto } from "@private-2d-rigging-lab/operation-core";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { commitEditKeyformKey } from "../../features/editor-session/model/editor-session-commands";
 import {
   createEmptyAuthoringSession,
   ROOT_PART_ID
 } from "../../features/editor-session/model/empty-authoring-session";
 import { createParameterBarProjection } from "../../features/editor-session/model/parameter-keyform-state";
+import { createFakeWorkspaceDirectoryHandle } from "../../features/workspace-storage/model/fake-workspace-directory";
+import {
+  createEditorWorkspace,
+  openEditorWorkspace
+} from "../../features/workspace-storage/model/workspace-session-storage";
 
 const editorSessionMock = vi.hoisted(() => ({ current: undefined as unknown }));
 const editorUiStoreMock = vi.hoisted(() => ({
@@ -108,6 +115,87 @@ describe("ParameterBar custom slider", () => {
     expect(markup).toContain("Rotation angle");
     expect(markup).toContain("Translation");
     expect(markup).toContain("Opacity multiplier");
+  });
+
+  it("renders keyform command feedback in the bar", () => {
+    installEditorSessionMock({
+      parameterOperationFeedback: "No keyform exists at this parameter value.",
+      parameterValues: {},
+      session: createDrawableSession()
+    });
+
+    const markup = renderToStaticMarkup(createElement(ParameterBar));
+
+    expect(markup).toContain('data-testid="parameter-bar-feedback"');
+    expect(markup).toContain("No keyform exists at this parameter value.");
+  });
+
+  it("deletes a workspace-restored rig-control translation keyform through the Delete button", async () => {
+    let currentSession = await createWorkspaceRestoredRotationSessionWithTranslationKeyforms();
+    const parameterValues = { [FACE_ANGLE_X]: 30 };
+    const editKeyformKey = vi.fn((payload: EditKeyformKeyPayloadDto) => {
+      const result = commitEditKeyformKey(currentSession, payload);
+      currentSession = result.session;
+      editorSessionMock.current = {
+        ...editorSessionMock.current,
+        parameterBar: createParameterBarProjection(currentSession, FACE_ANGLE_X, parameterValues),
+        parameterOperationFeedback: result.committed ? null : "Keyform operation was rejected.",
+        session: currentSession
+      };
+    });
+    installEditorSessionMock({
+      editKeyformKey,
+      parameterValues,
+      selection: { kind: "rigControl", id: RIG_FACE_ROTATION },
+      session: currentSession
+    });
+    const harness = await renderParameterBar();
+
+    try {
+      const targetSelect = getFakeElementByAttribute(
+        harness.container,
+        "aria-label",
+        "Keyform target"
+      );
+      targetSelect.value = "rigControl:rig_parameter_bar_rotation:translation";
+      await act(async () => {
+        getFakeReactProps(targetSelect).onChange?.({
+          currentTarget: targetSelect
+        });
+      });
+
+      const deleteButton = getFakeElementByAttribute(
+        harness.container,
+        "aria-label",
+        "Delete keyform at current value"
+      );
+
+      expect(deleteButton.disabled).toBe(false);
+
+      await act(async () => {
+        getFakeReactProps(deleteButton).onClick?.();
+      });
+
+      expect(editKeyformKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "deleteCurrent",
+          keyValue: 30,
+          target: { kind: "rigControl", id: RIG_FACE_ROTATION },
+          targetProperty: "translation"
+        })
+      );
+      expect(
+        currentSession.graph.keyformSets.find(
+          (keyformSet) =>
+            keyformSet.evaluator === "linear-1d-v1" &&
+            keyformSet.target.kind === "rigControl" &&
+            keyformSet.target.id === RIG_FACE_ROTATION &&
+            keyformSet.target.property === "translation"
+        )?.keys
+      ).toEqual([{ value: -30, statePatch: { x: -4, y: 1 } }]);
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("keeps track pointer down as a no-op", async () => {
@@ -369,11 +457,15 @@ describe("ParameterBar custom slider", () => {
 });
 
 function installEditorSessionMock({
+  editKeyformKey = vi.fn(),
+  parameterOperationFeedback = null,
   parameterValues,
   selection = { kind: "drawable", id: DRAW_FACE },
   session,
   setActiveParameterValue = vi.fn()
 }: {
+  readonly editKeyformKey?: (payload: EditKeyformKeyPayloadDto) => void;
+  readonly parameterOperationFeedback?: string | null;
   readonly parameterValues: Readonly<Record<string, number>>;
   readonly selection?: { readonly kind: "drawable"; readonly id: typeof DRAW_FACE } | {
     readonly kind: "rigControl";
@@ -384,10 +476,10 @@ function installEditorSessionMock({
 }): void {
   editorSessionMock.current = {
     activeParameterId: FACE_ANGLE_X,
-    editKeyformKey: vi.fn(),
+    editKeyformKey,
     openParameterManager: vi.fn(),
     parameterBar: createParameterBarProjection(session, FACE_ANGLE_X, parameterValues),
-    parameterOperationFeedback: null,
+    parameterOperationFeedback,
     parameterValues,
     resetActiveParameterValue: vi.fn(),
     selection,
@@ -482,6 +574,46 @@ function createRotationSession(): AuthoringSession {
   return session;
 }
 
+function createRotationSessionWithTranslationKeyforms(): AuthoringSession {
+  const session = createRotationSession();
+  const keyformSetId = KeyformSetIdSchema.parse("keyset_workspace_restored_translation");
+  session.graph.keyformSets.push({
+    keyformSetId,
+    target: {
+      kind: "rigControl",
+      id: RIG_FACE_ROTATION,
+      property: "translation"
+    },
+    parameterId: FACE_ANGLE_X,
+    evaluator: "linear-1d-v1",
+    interpolation: "linear-1d-v1",
+    compositionMode: "replace",
+    compositionOrder: 0,
+    keys: [
+      { value: -30, statePatch: { x: -4, y: 1 } },
+      { value: 30, statePatch: { x: 4, y: -1 } }
+    ]
+  });
+  session.graph.stableOrder.push(keyformSetId);
+  return session;
+}
+
+async function createWorkspaceRestoredRotationSessionWithTranslationKeyforms(): Promise<
+  AuthoringSession
+> {
+  const directory = createFakeWorkspaceDirectoryHandle({
+    name: "parameter-bar-keyforms.ail2d-workspace"
+  });
+
+  await createEditorWorkspace({
+    session: createRotationSessionWithTranslationKeyforms(),
+    picker: { pickDirectory: async () => directory }
+  });
+  return (await openEditorWorkspace({
+    picker: { pickDirectory: async () => directory }
+  })).session;
+}
+
 type FakePointerEvent = {
   readonly clientX: number;
   readonly currentTarget: FakeElement;
@@ -491,7 +623,8 @@ type FakePointerEvent = {
 };
 
 type FakeReactProps = {
-  readonly onClick?: (event: { readonly stopPropagation: () => void }) => void;
+  readonly onChange?: (event: { readonly currentTarget: FakeElement }) => void;
+  readonly onClick?: (event?: { readonly stopPropagation: () => void }) => void;
   readonly onPointerDown?: (event: FakePointerEvent) => void;
   readonly onPointerMove?: (event: FakePointerEvent) => void;
   readonly onPointerCancel?: (event: FakePointerEvent) => void;

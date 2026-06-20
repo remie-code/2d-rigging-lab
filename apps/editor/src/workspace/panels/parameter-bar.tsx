@@ -42,6 +42,7 @@ export function ParameterBar() {
     editKeyformKey,
     openParameterManager,
     parameterBar,
+    parameterOperationFeedback,
     parameterValues,
     resetActiveParameterValue,
     selection,
@@ -214,6 +215,15 @@ export function ParameterBar() {
             Dynamics preview
           </span>
         ) : null}
+        {parameterOperationFeedback === null ? null : (
+          <span
+            className="max-w-56 shrink truncate rounded border border-amber-800/70 bg-amber-950/40 px-2 py-1 text-[11px] font-medium text-amber-100"
+            data-testid="parameter-bar-feedback"
+            title={parameterOperationFeedback}
+          >
+            {parameterOperationFeedback}
+          </span>
+        )}
         <BarButton
           disabled={disabledForDynamics}
           label="Reset active parameter"

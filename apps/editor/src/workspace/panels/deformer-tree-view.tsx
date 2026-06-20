@@ -15,7 +15,10 @@ import { useMemo, useState, type DragEvent, type MouseEvent } from "react";
 import type { DrawableId, RigControlId } from "@private-2d-rigging-lab/contracts";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
-import { createDeformerTreeSelectableTargets } from "../../features/editor-session/model/rig-tool-state";
+import {
+  createDeformerTreeSelectableTargets,
+  type DeformerTreeRow
+} from "../../features/editor-session/model/rig-tool-state";
 import type { DeformerTreeSelectionTarget } from "../../features/editor-session/model/editor-selection";
 import { cn } from "../../lib/class-name";
 
@@ -48,17 +51,23 @@ export function DeformerTreeView() {
     selectDeformerTreeTarget
   } = useEditorSession();
   const [poolCollapsed, setPoolCollapsed] = useState(true);
+  const [collapsedRigControlIds, setCollapsedRigControlIds] =
+    useState<ReadonlySet<RigControlId>>(() => new Set());
   const [dragging, setDragging] = useState<DeformerDragPayload | null>(null);
   const [dropTargetId, setDropTargetId] = useState<RigControlId | null>(null);
   const [localFeedback, setLocalFeedback] = useState<string | null>(null);
   const parentByRigControlId = useMemo(() => createParentMap(deformerRows), [deformerRows]);
+  const visibleDeformerRows = useMemo(
+    () => createVisibleDeformerRows(deformerRows, collapsedRigControlIds),
+    [collapsedRigControlIds, deformerRows]
+  );
   const visibleSelectionTargets = useMemo(
     () =>
       createDeformerTreeSelectableTargets(
-        deformerRows,
+        visibleDeformerRows,
         poolCollapsed ? [] : drawablePoolItems
       ),
-    [deformerRows, drawablePoolItems, poolCollapsed]
+    [visibleDeformerRows, drawablePoolItems, poolCollapsed]
   );
   const hasDeformerRows = deformerRows.some((row) => row.kind !== "drawableRef");
   const drawablePoolDrawableCount = useMemo(
@@ -66,6 +75,19 @@ export function DeformerTreeView() {
     [drawablePoolItems]
   );
   const feedback = localFeedback ?? rigOperationFeedback;
+
+  const toggleRigControlCollapsed = (rigControlId: RigControlId) => {
+    setCollapsedRigControlIds((current) => {
+      const next = new Set(current);
+      if (next.has(rigControlId)) {
+        next.delete(rigControlId);
+      } else {
+        next.add(rigControlId);
+      }
+
+      return next;
+    });
+  };
 
   const selectTreeTarget = (
     event: MouseEvent<HTMLElement>,
@@ -149,7 +171,7 @@ export function DeformerTreeView() {
           No Deformers
         </div>
       ) : (
-        deformerRows.map((row) =>
+        visibleDeformerRows.map((row) =>
           row.kind === "drawableRef" ? (
             <button
               className={cn(
@@ -210,16 +232,26 @@ export function DeformerTreeView() {
               </span>
             </button>
           ) : (
-            <button
+            <div
               className={cn(
-                "grid min-h-8 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border px-2 py-1 text-left transition",
+                "grid min-h-8 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border px-2 py-1 text-left transition",
                 row.selected
                   ? "border-teal-500/80 bg-teal-950/35"
                   : "border-neutral-800 bg-neutral-950/45 hover:border-neutral-700",
                 dropTargetId === row.rigControlId ? "border-amber-400/80 bg-amber-950/25" : ""
               )}
+              aria-expanded={
+                rowHasVisibleChildren(row)
+                  ? !collapsedRigControlIds.has(row.rigControlId)
+                  : undefined
+              }
               data-row-kind={row.kind === "warpDeformer" ? "warp-deformer" : "rotation-deformer"}
               data-row-id={row.rigControlId}
+              data-collapsed={
+                rowHasVisibleChildren(row)
+                  ? String(collapsedRigControlIds.has(row.rigControlId))
+                  : undefined
+              }
               data-keyform-key-count={row.keyformKeyCount}
               data-keyform-set-count={row.keyformSetCount}
               data-parent-rig-control-id={row.parentRigControlId}
@@ -227,12 +259,6 @@ export function DeformerTreeView() {
               data-testid={row.selected ? "deformer-tree-selected-row" : "deformer-tree-row"}
               draggable
               key={`deformer:${row.rigControlId}`}
-              onClick={(event) =>
-                selectTreeTarget(event, {
-                  kind: "rigControl",
-                  rigControlId: row.rigControlId
-                })
-              }
               onDragEnd={() => {
                 setDragging(null);
                 setDropTargetId(null);
@@ -248,38 +274,66 @@ export function DeformerTreeView() {
               role="treeitem"
               style={{ marginLeft: `${row.depth * 14}px` }}
               title={`${row.displayName} - ${row.detail}${row.keyformKeyCount > 0 ? ` - ${row.keyformSetCount} keyed properties / ${row.keyformKeyCount} keys` : ""}`}
-              type="button"
             >
-              <span className="flex size-5 shrink-0 items-center justify-center text-teal-300">
-                {row.kind === "warpDeformer" ? (
-                  <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
-                ) : (
-                  <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-neutral-100">
-                  {row.displayName}
+              {rowHasVisibleChildren(row) ? (
+                <button
+                  aria-label={`${collapsedRigControlIds.has(row.rigControlId) ? "Expand" : "Collapse"} ${row.displayName}`}
+                  className="flex size-6 shrink-0 items-center justify-center rounded border border-neutral-800 bg-neutral-900 text-neutral-400 transition hover:border-neutral-700 hover:text-neutral-200"
+                  data-testid="deformer-tree-deformer-toggle"
+                  draggable={false}
+                  onClick={() => toggleRigControlCollapsed(row.rigControlId)}
+                  type="button"
+                >
+                  {collapsedRigControlIds.has(row.rigControlId) ? (
+                    <ChevronRight aria-hidden="true" size={14} strokeWidth={1.8} />
+                  ) : (
+                    <ChevronDown aria-hidden="true" size={14} strokeWidth={1.8} />
+                  )}
+                </button>
+              ) : (
+                <span className="size-6 shrink-0" />
+              )}
+              <button
+                className="grid min-h-6 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded text-left"
+                onClick={(event) =>
+                  selectTreeTarget(event, {
+                    kind: "rigControl",
+                    rigControlId: row.rigControlId
+                  })
+                }
+                type="button"
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center text-teal-300">
+                  {row.kind === "warpDeformer" ? (
+                    <Spline aria-hidden="true" size={14} strokeWidth={1.8} />
+                  ) : (
+                    <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
+                  )}
                 </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1">
-                {row.keyformKeyCount > 0 ? (
-                  <span
-                    className="inline-flex h-5 items-center gap-1 rounded border border-amber-700/70 bg-amber-950/45 px-1.5 text-[10px] font-medium uppercase text-amber-100"
-                    data-keyform-key-count={row.keyformKeyCount}
-                    data-keyform-set-count={row.keyformSetCount}
-                    data-testid="deformer-tree-keyform-count"
-                    title={`${row.keyformSetCount} keyed properties / ${row.keyformKeyCount} keys`}
-                  >
-                    <KeyRound aria-hidden="true" size={10} strokeWidth={1.9} />
-                    Keyed {row.keyformKeyCount}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-neutral-100">
+                    {row.displayName}
                   </span>
-                ) : null}
-                <span className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-400">
-                  {row.childRigControlCount + row.childDrawableCount}
                 </span>
-              </span>
-            </button>
+                <span className="flex shrink-0 items-center gap-1">
+                  {row.keyformKeyCount > 0 ? (
+                    <span
+                      className="inline-flex h-5 items-center gap-1 rounded border border-amber-700/70 bg-amber-950/45 px-1.5 text-[10px] font-medium uppercase text-amber-100"
+                      data-keyform-key-count={row.keyformKeyCount}
+                      data-keyform-set-count={row.keyformSetCount}
+                      data-testid="deformer-tree-keyform-count"
+                      title={`${row.keyformSetCount} keyed properties / ${row.keyformKeyCount} keys`}
+                    >
+                      <KeyRound aria-hidden="true" size={10} strokeWidth={1.9} />
+                      Keyed {row.keyformKeyCount}
+                    </span>
+                  ) : null}
+                  <span className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[10px] font-medium uppercase text-neutral-400">
+                    {row.childRigControlCount + row.childDrawableCount}
+                  </span>
+                </span>
+              </button>
+            </div>
           )
         )
       )}
@@ -415,6 +469,37 @@ export function DeformerTreeView() {
       )}
     </div>
   );
+}
+
+export function createVisibleDeformerRows(
+  rows: readonly DeformerTreeRow[],
+  collapsedRigControlIds: ReadonlySet<RigControlId>
+): readonly DeformerTreeRow[] {
+  const visibleRows: DeformerTreeRow[] = [];
+  let collapsedAncestorDepth: number | null = null;
+
+  for (const row of rows) {
+    if (collapsedAncestorDepth !== null) {
+      if (row.depth > collapsedAncestorDepth) {
+        continue;
+      }
+
+      collapsedAncestorDepth = null;
+    }
+
+    visibleRows.push(row);
+    if (rowHasVisibleChildren(row) && collapsedRigControlIds.has(row.rigControlId)) {
+      collapsedAncestorDepth = row.depth;
+    }
+  }
+
+  return visibleRows;
+}
+
+function rowHasVisibleChildren(
+  row: DeformerTreeRow
+): row is Exclude<DeformerTreeRow, { readonly kind: "drawableRef" }> {
+  return row.kind !== "drawableRef" && row.childRigControlCount + row.childDrawableCount > 0;
 }
 
 function startDrag(
