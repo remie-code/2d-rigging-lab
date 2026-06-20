@@ -4,7 +4,8 @@ import {
   OperationLogEntrySchema,
   OperationPayloadSchema,
   OperationRequestSchema,
-  OperationResultSchema
+  OperationResultSchema,
+  OperationTypeSchema
 } from "./index.js";
 
 const psdAdapterResultPayload = {
@@ -384,6 +385,12 @@ const operationPayloads = [
       bezierRows: 2,
       opacityMultiplier: 0.5
     }
+  },
+  {
+    operationType: "deleteRigControl",
+    payload: {
+      rigControlId: "rig_face_warp"
+    }
   }
 ] as const;
 
@@ -402,6 +409,19 @@ const dryRunCreateParameterRequest = {
     max: 1,
     default: 1,
     recommendedUiStep: 0.01
+  }
+};
+
+const dryRunDeleteRigControlRequest = {
+  schemaVersion: "operation-request-v1",
+  operationId: "op_delete_face_warp",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: true,
+  basePackageRevision: 0,
+  operationType: "deleteRigControl",
+  payload: {
+    rigControlId: "rig_face_warp"
   }
 };
 
@@ -454,7 +474,8 @@ describe("operation-core DTO schemas", () => {
       "bindRigControlChild",
       "moveDrawableRigControlBinding",
       "reparentRigControl",
-      "updateRigControl"
+      "updateRigControl",
+      "deleteRigControl"
     ]);
   });
 
@@ -510,6 +531,18 @@ describe("operation-core DTO schemas", () => {
 
     expect(parsed.dryRun).toBe(true);
     expect(parsed.operationType).toBe("createParameter");
+  });
+
+  it("parses deleteRigControl operation type and request payload", () => {
+    const operationType = OperationTypeSchema.parse("deleteRigControl");
+    const request = OperationRequestSchema.parse(dryRunDeleteRigControlRequest);
+
+    expect(operationType).toBe("deleteRigControl");
+    expect(request.operationType).toBe("deleteRigControl");
+    if (request.operationType !== "deleteRigControl") {
+      throw new Error("Expected deleteRigControl request.");
+    }
+    expect(request.payload.rigControlId).toBe("rig_face_warp");
   });
 
   it("parses operation results and log entries with required fields", () => {

@@ -3,14 +3,15 @@ import type { StructureOrderDrop, StructureOrderItem } from "@private-2d-rigging
 import type { DiagnosticDto, DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
-  createRigControlIdFromDisplayName,
   OperationRequestSchema,
   type CreateDynamicsGroupPayloadDto,
   type CreateRotation2dRigControlPayloadDto,
   type CreateWarpDeformerPayloadDto,
   type DeleteDynamicsGroupPayloadDto,
+  type DeleteRigControlPayloadDto,
   type EditKeyformKeyPayloadDto,
   type GenerateMeshPayloadDto,
+  type OperationResultDto,
   type UpdateDynamicsGroupPayloadDto,
   type UpdateRigControlPayloadDto,
   type OperationRequestDto
@@ -27,6 +28,7 @@ export interface EditorSessionCommandResult {
   readonly committed: boolean;
   readonly session: AuthoringSession;
   readonly diagnostics: readonly DiagnosticDto[];
+  readonly operationResult?: OperationResultDto;
 }
 
 export interface CreateWarpDeformerCommandResult extends EditorSessionCommandResult {
@@ -299,7 +301,6 @@ export function commitCreateWarpDeformer(
   session: AuthoringSession,
   payload: EditorCreateWarpDeformerPayloadDto
 ): CreateWarpDeformerCommandResult {
-  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
   const result = commitSingleOperation(session, {
     operationType: "createWarpDeformer",
     payload: {
@@ -307,21 +308,22 @@ export function commitCreateWarpDeformer(
       opacityMultiplier: payload.opacityMultiplier ?? 1
     }
   });
+  const rigControlId = extractAddedRigControlId(result.operationResult);
 
-  return result.committed ? { ...result, rigControlId } : result;
+  return result.committed && rigControlId !== undefined ? { ...result, rigControlId } : result;
 }
 
 export function commitCreateRotationDeformer(
   session: AuthoringSession,
   payload: CreateRotation2dRigControlPayloadDto
 ): CreateRotationDeformerCommandResult {
-  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
   const result = commitSingleOperation(session, {
     operationType: "createRotation2dRigControl",
     payload
   });
+  const rigControlId = extractAddedRigControlId(result.operationResult);
 
-  return result.committed ? { ...result, rigControlId } : result;
+  return result.committed && rigControlId !== undefined ? { ...result, rigControlId } : result;
 }
 
 export function commitBindDrawableToRigControl(
@@ -375,6 +377,16 @@ export function commitUpdateRigControl(
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "updateRigControl",
+    payload
+  });
+}
+
+export function commitDeleteRigControl(
+  session: AuthoringSession,
+  payload: DeleteRigControlPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "deleteRigControl",
     payload
   });
 }
@@ -539,7 +551,8 @@ function commitOperationInPlace(
   return {
     committed: outcome.result.status === "committed",
     session,
-    diagnostics: outcome.result.diagnostics
+    diagnostics: outcome.result.diagnostics,
+    operationResult: outcome.result
   };
 }
 
@@ -553,4 +566,14 @@ function noOp(session: AuthoringSession): EditorSessionCommandResult {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function extractAddedRigControlId(
+  operationResult: OperationResultDto | undefined
+): RigControlId | undefined {
+  const target = operationResult?.modelDiff?.added.find(
+    (candidate) => candidate.kind === "rigControl"
+  );
+
+  return target?.id as RigControlId | undefined;
 }

@@ -95,6 +95,7 @@ import {
   commitDrawableRuntimeVisibility,
   commitCreateDynamicsGroup,
   commitDeleteDynamicsGroup,
+  commitDeleteRigControl,
   commitEditKeyformKey,
   commitBindDrawableToRigControl,
   commitCreateRotationDeformer,
@@ -109,6 +110,7 @@ import {
   commitUpdateRigControl,
   type EditorSessionCommandResult
 } from "./model/editor-session-commands";
+import { commitMeshApplyAutoRefit } from "./model/mesh-apply-auto-refit";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { DeformerTreeSelectionTarget, EditorSelection } from "./model/editor-selection";
 import type {
@@ -437,6 +439,7 @@ interface EditorSessionContextValue {
     parentRigControlId: RigControlId | null
   ) => void;
   readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
+  readonly deleteRigControl: (rigControlId: RigControlId) => void;
   readonly editKeyformKey: (payload: EditKeyformKeyPayloadDto) => void;
   readonly createDynamicsGroup: (
     payload: CreateDynamicsGroupPayloadDto
@@ -1739,7 +1742,15 @@ export function EditorSessionProvider({
 
         return committedDrawableIds.length === 0
           ? { committed: false, session: sessionForCommand, diagnostics }
-          : { committed: true, session: nextSession, diagnostics };
+          : (() => {
+              const refitResult = commitMeshApplyAutoRefit(nextSession, committedDrawableIds);
+              diagnostics.push(...refitResult.diagnostics);
+              return {
+                committed: true,
+                session: refitResult.session,
+                diagnostics
+              };
+            })();
       },
       draftsToApply.length === 1 ? "Apply mesh" : "Apply meshes"
     );
@@ -2070,6 +2081,23 @@ export function EditorSessionProvider({
     [applyRigCommand]
   );
 
+  const deleteRigControl = useCallback(
+    (rigControlId: RigControlId) => {
+      applyRigCommand(
+        (currentSession) => commitDeleteRigControl(currentSession, { rigControlId }),
+        () => {
+          setSelection(null);
+          setSelectionAnchorDrawableId(null);
+          setSelectionAnchorDeformerTreeTarget(null);
+          setRigDraft(null);
+          setRigOperationFeedback(null);
+        },
+        "Delete Deformer"
+      );
+    },
+    [applyRigCommand]
+  );
+
   const commitGestureCommand = useCallback(
     (gesture: EditorSessionGestureCommit<unknown>) => {
       const currentState = editorStateRef.current;
@@ -2259,6 +2287,7 @@ export function EditorSessionProvider({
       moveDrawableRigControlBinding,
       reparentRigControl,
       updateRigControl,
+      deleteRigControl,
       editKeyformKey,
       createDynamicsGroup,
       updateDynamicsGroup,
@@ -2297,6 +2326,7 @@ export function EditorSessionProvider({
       deformerRows,
       deleteCustomParameter,
       deleteDynamicsGroup,
+      deleteRigControl,
       drawablePoolItems,
       dynamicsToolPreview,
       dynamicsToolPreviewEvaluation,

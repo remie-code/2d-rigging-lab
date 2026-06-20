@@ -19,6 +19,7 @@ import {
   createWarpDeformerMetadata,
   getWarpDeformerBezierControlPointCount,
   hasWarpDeformerBezierSurfaceCardinality,
+  type KeyformSetDto,
   type RigControlDto
 } from "@private-2d-rigging-lab/package-format";
 
@@ -166,6 +167,24 @@ export interface UpdateRigControlMutationResult {
   readonly session: AuthoringSession;
   readonly rigControlBefore: RigControlDto;
   readonly rigControlAfter: RigControlDto;
+  readonly authoringRevision: AuthoringRevision;
+}
+
+export interface DeleteRigControlInput {
+  readonly rigControlId: RigControlId;
+}
+
+export interface DeleteRigControlMutationResult {
+  readonly session: AuthoringSession;
+  readonly rigControlBefore: RigControlDto;
+  readonly parentRigControlBefore?: RigControlDto;
+  readonly parentRigControlAfter?: RigControlDto;
+  readonly childRigControlChanges: readonly RigControlMutationChange[];
+  readonly removedKeyformSets: readonly KeyformSetDto[];
+  readonly rigControlRootIdsBefore: readonly RigControlId[];
+  readonly rigControlRootIdsAfter: readonly RigControlId[];
+  readonly stableOrderBefore: readonly string[];
+  readonly stableOrderAfter: readonly string[];
   readonly authoringRevision: AuthoringRevision;
 }
 
@@ -748,6 +767,246 @@ export const updateRigControl = (
     rigControlAfter,
     authoringRevision: session.authoringRevision
   };
+};
+
+export const deleteRigControl = (
+  session: AuthoringSession,
+  input: DeleteRigControlInput
+): DeleteRigControlMutationResult => {
+  const rigControl = getRigControlById(session.graph, input.rigControlId);
+  if (rigControl === undefined) {
+    throw new AuthoringMutationError(
+      "missing_rig_control",
+      `Rig control does not exist: ${input.rigControlId}`
+    );
+  }
+
+  assertCanDeleteRigControl(session.graph, rigControl);
+
+  const parentRigControl =
+    rigControl.parentId === undefined
+      ? undefined
+      : getRigControlById(session.graph, rigControl.parentId);
+  const childRigControls = rigControl.childRigControlIds.map((childRigControlId) => {
+    const childRigControl = getRigControlById(session.graph, childRigControlId);
+    if (childRigControl === undefined) {
+      throw new Error(`Expected child rig control after delete precondition: ${childRigControlId}`);
+    }
+    return childRigControl;
+  });
+  const removedKeyformSetIds = new Set<string>(
+    session.graph.keyformSets
+      .filter((keyformSet) => keyformSet.target.kind === "rigControl" && keyformSet.target.id === rigControl.rigControlId)
+      .map((keyformSet) => keyformSet.keyformSetId)
+  );
+
+  const rigControlBefore = structuredClone(rigControl);
+  const parentRigControlBefore =
+    parentRigControl === undefined ? undefined : structuredClone(parentRigControl);
+  const childRigControlBefores = new Map<RigControlId, RigControlDto>(
+    childRigControls.map((childRigControl) => [
+      childRigControl.rigControlId,
+      structuredClone(childRigControl)
+    ])
+  );
+  const removedKeyformSets = session.graph.keyformSets
+    .filter((keyformSet) => removedKeyformSetIds.has(keyformSet.keyformSetId))
+    .map((keyformSet) => structuredClone(keyformSet));
+  const rigControlRootIdsBefore = cloneDto(session.graph.rigControlRootIds);
+  const stableOrderBefore = [...session.graph.stableOrder];
+
+  if (parentRigControl === undefined) {
+    session.graph.rigControlRootIds = replaceSingleRigControlIdWithChildren(
+      session.graph.rigControlRootIds,
+      rigControl.rigControlId,
+      rigControl.childRigControlIds
+    );
+  } else {
+    parentRigControl.childRigControlIds = replaceSingleRigControlIdWithChildren(
+      parentRigControl.childRigControlIds,
+      rigControl.rigControlId,
+      rigControl.childRigControlIds
+    );
+    parentRigControl.childDrawableIds.push(...rigControl.childDrawableIds);
+  }
+
+  for (const childRigControl of childRigControls) {
+    if (parentRigControl === undefined) {
+      delete childRigControl.parentId;
+      continue;
+    }
+
+    childRigControl.parentId = parentRigControl.rigControlId;
+  }
+
+  session.graph.rigControls = session.graph.rigControls.filter(
+    (candidate) => candidate.rigControlId !== rigControl.rigControlId
+  );
+  session.graph.keyformSets = session.graph.keyformSets.filter(
+    (keyformSet) => !removedKeyformSetIds.has(keyformSet.keyformSetId)
+  );
+  session.graph.stableOrder = session.graph.stableOrder.filter(
+    (stableId) => stableId !== rigControl.rigControlId && !removedKeyformSetIds.has(stableId)
+  );
+
+  const parentRigControlAfter =
+    parentRigControl === undefined ? undefined : structuredClone(parentRigControl);
+  const childRigControlChanges = childRigControls.map((childRigControl) => {
+    const before = childRigControlBefores.get(childRigControl.rigControlId);
+    if (before === undefined) {
+      throw new Error(`Expected child rig control before snapshot: ${childRigControl.rigControlId}`);
+    }
+
+    return {
+      before,
+      after: structuredClone(childRigControl)
+    };
+  });
+  const rigControlRootIdsAfter = cloneDto(session.graph.rigControlRootIds);
+  const stableOrderAfter = [...session.graph.stableOrder];
+
+  session.authoringRevision = incrementAuthoringRevision(session.authoringRevision);
+  session.dirty = true;
+
+  return {
+    session,
+    rigControlBefore,
+    ...(parentRigControlBefore === undefined ? {} : { parentRigControlBefore }),
+    ...(parentRigControlAfter === undefined ? {} : { parentRigControlAfter }),
+    childRigControlChanges,
+    removedKeyformSets,
+    rigControlRootIdsBefore,
+    rigControlRootIdsAfter,
+    stableOrderBefore,
+    stableOrderAfter,
+    authoringRevision: session.authoringRevision
+  };
+};
+
+const assertCanDeleteRigControl = (
+  graph: AuthoringGraph,
+  rigControl: RigControlDto
+): void => {
+  assertCoherentRigControlParentState(graph, rigControl);
+  assertUniqueChildIds(rigControl.childDrawableIds, "drawable");
+  assertUniqueChildIds(rigControl.childRigControlIds, "rigControl");
+  assertNoReachableRigControlCycle(graph, rigControl);
+
+  for (const childDrawableId of rigControl.childDrawableIds) {
+    assertDrawableDeleteSource(graph, rigControl, childDrawableId);
+  }
+
+  for (const childRigControlId of rigControl.childRigControlIds) {
+    const childRigControl = getRigControlById(graph, childRigControlId);
+    if (childRigControl === undefined) {
+      throw new AuthoringMutationError(
+        "missing_rig_control",
+        `Child rig control does not exist: ${childRigControlId}`
+      );
+    }
+
+    assertCoherentRigControlParentState(graph, childRigControl);
+    if (childRigControl.parentId !== rigControl.rigControlId) {
+      throw new AuthoringMutationError(
+        "rig_control_parent_child_mismatch",
+        `Rig control ${childRigControlId} is not parented by ${rigControl.rigControlId}`
+      );
+    }
+  }
+};
+
+const assertNoReachableRigControlCycle = (
+  graph: AuthoringGraph,
+  deleteTarget: RigControlDto
+): void => {
+  const visiting = new Set<RigControlId>();
+  const visited = new Set<RigControlId>();
+
+  const visit = (rigControlId: RigControlId): void => {
+    if (visiting.has(rigControlId)) {
+      throw new AuthoringMutationError(
+        "rig_control_cycle",
+        `Rig control cycle is reachable from delete target ${deleteTarget.rigControlId}: ${rigControlId}`
+      );
+    }
+    if (visited.has(rigControlId)) {
+      return;
+    }
+
+    const rigControl = getRigControlById(graph, rigControlId);
+    if (rigControl === undefined) {
+      throw new AuthoringMutationError(
+        "missing_rig_control",
+        `Child rig control does not exist: ${rigControlId}`
+      );
+    }
+
+    visiting.add(rigControlId);
+    for (const childRigControlId of rigControl.childRigControlIds) {
+      visit(childRigControlId);
+    }
+    visiting.delete(rigControlId);
+    visited.add(rigControlId);
+  };
+
+  visit(deleteTarget.rigControlId);
+};
+
+const assertDrawableDeleteSource = (
+  graph: AuthoringGraph,
+  parentRigControl: RigControlDto,
+  childDrawableId: DrawableId
+): void => {
+  if (getDrawableById(graph, childDrawableId) === undefined) {
+    throw new AuthoringMutationError(
+      "missing_drawable",
+      `Rig control child drawable does not exist: ${childDrawableId}`
+    );
+  }
+
+  const parentChildCount = countOccurrences(parentRigControl.childDrawableIds, childDrawableId);
+  if (parentChildCount !== 1) {
+    throw new AuthoringMutationError(
+      "duplicate_rig_control_child_binding",
+      `Parent rig control ${parentRigControl.rigControlId} lists drawable ${childDrawableId} more than once`
+    );
+  }
+
+  const existingParents = findRigControlsWithDrawableChild(graph, childDrawableId);
+  if (existingParents.length !== 1 || existingParents[0]?.rigControlId !== parentRigControl.rigControlId) {
+    throw new AuthoringMutationError(
+      existingParents.length > 1 ? "duplicate_rig_control_child_binding" : "rig_control_parent_child_mismatch",
+      `Drawable ${childDrawableId} is not coherently bound under parent ${parentRigControl.rigControlId}`
+    );
+  }
+};
+
+const replaceSingleRigControlIdWithChildren = (
+  currentIds: readonly RigControlId[],
+  targetId: RigControlId,
+  childIds: readonly RigControlId[]
+): RigControlId[] => {
+  let replacements = 0;
+  const nextIds: RigControlId[] = [];
+
+  for (const currentId of currentIds) {
+    if (currentId !== targetId) {
+      nextIds.push(currentId);
+      continue;
+    }
+
+    replacements += 1;
+    nextIds.push(...childIds);
+  }
+
+  if (replacements !== 1) {
+    throw new AuthoringMutationError(
+      "rig_control_parent_child_mismatch",
+      `Rig control ${targetId} must appear exactly once in its containing list`
+    );
+  }
+
+  return nextIds;
 };
 
 const assertUniqueRigControlId = (

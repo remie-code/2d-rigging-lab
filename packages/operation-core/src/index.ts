@@ -53,6 +53,7 @@ export * from "./operations/bind-rig-control-child.js";
 export * from "./operations/move-drawable-rig-control-binding.js";
 export * from "./operations/reparent-rig-control.js";
 export * from "./operations/update-rig-control.js";
+export * from "./operations/delete-rig-control.js";
 export * from "./operations/set-mask-relation.js";
 export * from "./operations/set-draw-order.js";
 export * from "./operations/set-rights-metadata.js";

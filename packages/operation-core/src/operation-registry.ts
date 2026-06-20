@@ -14,6 +14,7 @@ import { createParameterOperationHandler } from "./operations/create-parameter.j
 import { createRotation2dRigControlOperationHandler } from "./operations/create-rotation2d-rig-control.js";
 import { createWarpDeformerOperationHandler } from "./operations/create-warp-deformer.js";
 import { createWarpLattice2dRigControlOperationHandler } from "./operations/create-warp-lattice2d-rig-control.js";
+import { deleteRigControlOperationHandler } from "./operations/delete-rig-control.js";
 import { deletePartOperationHandler } from "./operations/delete-part.js";
 import { deleteDynamicsGroupOperationHandler } from "./operations/delete-dynamics-group.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
@@ -126,6 +127,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [moveDrawableRigControlBindingOperationHandler.operationType, moveDrawableRigControlBindingOperationHandler],
   [reparentRigControlOperationHandler.operationType, reparentRigControlOperationHandler],
   [updateRigControlOperationHandler.operationType, updateRigControlOperationHandler],
+  [deleteRigControlOperationHandler.operationType, deleteRigControlOperationHandler],
   [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],

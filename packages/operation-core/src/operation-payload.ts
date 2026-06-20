@@ -46,6 +46,7 @@ import {
   CreateWarpDeformerPayloadSchema,
   CreateRotation2dRigControlPayloadSchema,
   CreateWarpLattice2dRigControlPayloadSchema,
+  DeleteRigControlPayloadSchema,
   MoveDrawableRigControlBindingPayloadSchema,
   ReparentRigControlPayloadSchema,
   UpdateRigControlPayloadSchema
@@ -115,6 +116,10 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({
     operationType: z.literal("updateRigControl"),
     payload: UpdateRigControlPayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("deleteRigControl"),
+    payload: DeleteRigControlPayloadSchema
   }),
   z.object({ operationType: z.literal("setMaskRelation"), payload: SetMaskRelationPayloadSchema }),
   z.object({ operationType: z.literal("setDrawOrder"), payload: SetDrawOrderPayloadSchema }),

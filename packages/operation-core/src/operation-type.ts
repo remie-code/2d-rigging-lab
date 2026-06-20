@@ -37,6 +37,7 @@ export const operationTypes = [
   "moveDrawableRigControlBinding",
   "reparentRigControl",
   "updateRigControl",
+  "deleteRigControl",
   "setMaskRelation",
   "setDrawOrder",
   "setRuntimeVisibility",

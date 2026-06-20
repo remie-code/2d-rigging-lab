@@ -130,3 +130,8 @@ export const UpdateRigControlPayloadSchema = z
     { message: "updateRigControl requires at least one editable field" }
   );
 export type UpdateRigControlPayloadDto = z.infer<typeof UpdateRigControlPayloadSchema>;
+
+export const DeleteRigControlPayloadSchema = z.object({
+  rigControlId: RigControlIdSchema
+});
+export type DeleteRigControlPayloadDto = z.infer<typeof DeleteRigControlPayloadSchema>;

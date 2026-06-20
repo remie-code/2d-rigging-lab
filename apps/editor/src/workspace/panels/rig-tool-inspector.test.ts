@@ -9,9 +9,10 @@ import {
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
-import { createElement } from "react";
+import { act, createElement, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CommittedRotationDeformerInspector,
@@ -46,6 +47,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
         feedback: null,
         onCreateParentRotation: () => undefined,
         onCreateParentWarp: () => undefined,
+        onDelete: () => undefined,
         onReparent: () => undefined,
         onUpdate: () => undefined,
         readModel,
@@ -58,6 +60,7 @@ describe("RigToolInspector committed Warp Deformer", () => {
     expect(inputMarkup(markup, "Bezier columns")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier rows")).toContain("disabled");
     expect(inputMarkup(markup, "Bezier edit type")).toContain("readOnly");
+    expect(markup).toContain("Delete Deformer");
     expect(markup).not.toContain('aria-label="Opacity multiplier"');
 
     const payload = createWarpUpdatePayload(
@@ -83,6 +86,29 @@ describe("RigToolInspector committed Warp Deformer", () => {
     expect(payload).not.toHaveProperty("bezierColumns");
     expect(payload).not.toHaveProperty("bezierRows");
   });
+
+  it("renders Delete Deformer and invokes the delete callback", async () => {
+    const onDelete = vi.fn();
+    const rendered = await renderToFakeDom(
+      createElement(CommittedWarpDeformerInspector, {
+        feedback: null,
+        onCreateParentRotation: () => undefined,
+        onCreateParentWarp: () => undefined,
+        onDelete,
+        onReparent: () => undefined,
+        onUpdate: () => undefined,
+        readModel: createWarpReadModel(false),
+        session: createFixtureSession()
+      })
+    );
+
+    try {
+      clickButtonByText(rendered.container, "Delete Deformer");
+      expect(onDelete).toHaveBeenCalledWith(RIG_FACE_WARP);
+    } finally {
+      await rendered.cleanup();
+    }
+  });
 });
 
 describe("RigToolInspector committed Rotation Deformer", () => {
@@ -93,6 +119,7 @@ describe("RigToolInspector committed Rotation Deformer", () => {
         feedback: null,
         onCreateParentRotation: () => undefined,
         onCreateParentWarp: () => undefined,
+        onDelete: () => undefined,
         onReparent: () => undefined,
         onUpdate: () => undefined,
         readModel,
@@ -106,6 +133,7 @@ describe("RigToolInspector committed Rotation Deformer", () => {
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest translation y"))).toBe(false);
     expect(hasDisabledAttribute(inputMarkup(markup, "Rotation rest angle degrees"))).toBe(false);
     expect(markup).toContain("Setup transform");
+    expect(markup).toContain("Delete Deformer");
     expect(markup).not.toContain("Bound children");
     expect(markup).not.toContain("Angle keyforms");
     expect(markup).not.toContain("Rotation keyforms present");
@@ -127,6 +155,29 @@ describe("RigToolInspector committed Rotation Deformer", () => {
       restTranslation: { x: 7, y: -4 },
       restAngleDegrees: -25
     });
+  });
+
+  it("renders Delete Deformer and invokes the delete callback", async () => {
+    const onDelete = vi.fn();
+    const rendered = await renderToFakeDom(
+      createElement(CommittedRotationDeformerInspector, {
+        feedback: null,
+        onCreateParentRotation: () => undefined,
+        onCreateParentWarp: () => undefined,
+        onDelete,
+        onReparent: () => undefined,
+        onUpdate: () => undefined,
+        readModel: createRotationReadModel(false),
+        session: createFixtureSession()
+      })
+    );
+
+    try {
+      clickButtonByText(rendered.container, "Delete Deformer");
+      expect(onDelete).toHaveBeenCalledWith(RIG_FACE_ROTATION);
+    } finally {
+      await rendered.cleanup();
+    }
   });
 });
 
@@ -253,6 +304,351 @@ function buttonMarkup(markup: string, buttonText: string): string {
 
 function hasDisabledAttribute(markup: string): boolean {
   return /\sdisabled(?:=""|(?=[\s/>]))/.test(markup);
+}
+
+async function renderToFakeDom(element: ReactElement): Promise<{
+  readonly container: FakeElement;
+  readonly cleanup: () => Promise<void>;
+}> {
+  const fakeRoot = createFakeDomRoot();
+  let root: Root | null = createRoot(fakeRoot.container as unknown as Element);
+
+  await act(async () => {
+    root?.render(element);
+  });
+
+  return {
+    container: fakeRoot.container,
+    cleanup: async () => {
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+      fakeRoot.restore();
+    }
+  };
+}
+
+function clickButtonByText(container: FakeElement, text: string): void {
+  const button = findElement(container, (element) =>
+    element.localName === "button" && element.textContent.includes(text)
+  );
+  if (button === null) {
+    throw new Error(`Expected button with text ${text}.`);
+  }
+
+  button.dispatchEvent(new FakeDomEvent("click"));
+}
+
+function findElement(
+  element: FakeElement,
+  predicate: (element: FakeElement) => boolean
+): FakeElement | null {
+  if (predicate(element)) {
+    return element;
+  }
+
+  for (const child of element.childNodes) {
+    if (child instanceof FakeElement) {
+      const match = findElement(child, predicate);
+      if (match !== null) {
+        return match;
+      }
+    }
+  }
+
+  return null;
+}
+
+type FakeNode = FakeElement | FakeTextNode;
+
+class FakeDomEvent {
+  readonly bubbles = true;
+  cancelBubble = false;
+  currentTarget: FakeElement | null = null;
+  defaultPrevented = false;
+  target: FakeElement | null = null;
+
+  constructor(readonly type: string) {}
+
+  preventDefault(): void {
+    this.defaultPrevented = true;
+  }
+
+  stopPropagation(): void {
+    this.cancelBubble = true;
+  }
+}
+
+class FakeTextNode {
+  readonly nodeType = 3;
+  readonly nodeName = "#text";
+  parentNode: FakeElement | null = null;
+  nodeValue: string;
+
+  constructor(text: string, readonly ownerDocument: FakeDocument) {
+    this.nodeValue = text;
+  }
+
+  get textContent(): string {
+    return this.nodeValue;
+  }
+
+  set textContent(value: string) {
+    this.nodeValue = value;
+  }
+}
+
+class FakeElement {
+  readonly nodeType = 1;
+  readonly style: Record<string, string> = {};
+  readonly childNodes: FakeNode[] = [];
+  readonly listeners = new Map<string, Set<EventListener>>();
+  parentNode: FakeElement | null = null;
+  namespaceURI = "http://www.w3.org/1999/xhtml";
+  nodeValue: string | null = null;
+
+  private readonly attributes = new Map<string, string>();
+
+  constructor(readonly localName: string, readonly ownerDocument: FakeDocument) {}
+
+  get tagName(): string {
+    return this.localName.toUpperCase();
+  }
+
+  get nodeName(): string {
+    return this.tagName;
+  }
+
+  get firstChild(): FakeNode | null {
+    return this.childNodes[0] ?? null;
+  }
+
+  get multiple(): boolean {
+    return this.attributes.has("multiple");
+  }
+
+  set multiple(value: boolean) {
+    if (value) {
+      this.attributes.set("multiple", "");
+    } else {
+      this.attributes.delete("multiple");
+    }
+  }
+
+  get options(): FakeElement[] {
+    return this.childNodes.filter(
+      (child): child is FakeElement => child instanceof FakeElement && child.localName === "option"
+    );
+  }
+
+  get selected(): boolean {
+    return this.attributes.has("selected");
+  }
+
+  set selected(value: boolean) {
+    if (value) {
+      this.attributes.set("selected", "");
+    } else {
+      this.attributes.delete("selected");
+    }
+  }
+
+  get textContent(): string {
+    return this.childNodes.map((child) => child.textContent).join("");
+  }
+
+  set textContent(value: string) {
+    this.childNodes.splice(0, this.childNodes.length);
+    this.appendChild(this.ownerDocument.createTextNode(value));
+  }
+
+  appendChild(node: FakeNode): FakeNode {
+    node.parentNode?.removeChild(node);
+    this.childNodes.push(node);
+    node.parentNode = this;
+    return node;
+  }
+
+  insertBefore(node: FakeNode, before: FakeNode | null): FakeNode {
+    if (before === null) {
+      return this.appendChild(node);
+    }
+
+    node.parentNode?.removeChild(node);
+    const index = this.childNodes.indexOf(before);
+    if (index < 0) {
+      return this.appendChild(node);
+    }
+
+    this.childNodes.splice(index, 0, node);
+    node.parentNode = this;
+    return node;
+  }
+
+  removeChild(node: FakeNode): FakeNode {
+    const index = this.childNodes.indexOf(node);
+    if (index >= 0) {
+      this.childNodes.splice(index, 1);
+    }
+    node.parentNode = null;
+    return node;
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, String(value));
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+  }
+
+  get value(): string {
+    return this.attributes.get("value") ?? this.textContent;
+  }
+
+  set value(value: string) {
+    this.attributes.set("value", String(value));
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatchEvent(event: FakeDomEvent): boolean {
+    if (event.target === null) {
+      event.target = this;
+    }
+
+    let current: FakeElement | null = this;
+    while (current !== null) {
+      event.currentTarget = current;
+      current.listeners.get(event.type)?.forEach((listener) => {
+        listener.call(current, event as unknown as Event);
+      });
+      if (!event.bubbles || event.cancelBubble) {
+        break;
+      }
+      current = current.parentNode;
+    }
+
+    event.currentTarget = null;
+    return !event.defaultPrevented;
+  }
+
+  contains(node: FakeNode): boolean {
+    if (node === this) {
+      return true;
+    }
+
+    return this.childNodes.some(
+      (child) => child instanceof FakeElement && child.contains(node)
+    );
+  }
+}
+
+class FakeDocument {
+  readonly nodeType = 9;
+  readonly nodeName = "#document";
+  readonly namespaceURI = "http://www.w3.org/1999/xhtml";
+  readonly documentElement: FakeElement;
+  readonly body: FakeElement;
+  readonly defaultView: {
+    readonly document: FakeDocument;
+    readonly Element: typeof FakeElement;
+    readonly HTMLElement: typeof FakeElement;
+    readonly SVGElement: typeof FakeElement;
+    readonly HTMLIFrameElement: new () => object;
+  };
+  activeElement: FakeElement | null = null;
+
+  constructor() {
+    this.documentElement = new FakeElement("html", this);
+    this.body = new FakeElement("body", this);
+    this.documentElement.appendChild(this.body);
+    this.defaultView = {
+      document: this,
+      Element: FakeElement,
+      HTMLElement: FakeElement,
+      SVGElement: FakeElement,
+      HTMLIFrameElement: class HTMLIFrameElement {}
+    };
+  }
+
+  createElement(tagName: string): FakeElement {
+    return new FakeElement(tagName.toLowerCase(), this);
+  }
+
+  createElementNS(namespaceURI: string, tagName: string): FakeElement {
+    const element = this.createElement(tagName);
+    element.namespaceURI = namespaceURI;
+    return element;
+  }
+
+  createTextNode(text: string): FakeTextNode {
+    return new FakeTextNode(text, this);
+  }
+
+  addEventListener(): void {
+    return undefined;
+  }
+
+  removeEventListener(): void {
+    return undefined;
+  }
+}
+
+type ReactActGlobal = typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+};
+
+function createFakeDomRoot(): {
+  readonly container: FakeElement;
+  readonly restore: () => void;
+} {
+  const document = new FakeDocument();
+  const reactActGlobal = globalThis as ReactActGlobal;
+  const previous = {
+    document: globalThis.document,
+    window: globalThis.window,
+    Element: globalThis.Element,
+    HTMLElement: globalThis.HTMLElement,
+    HTMLIFrameElement: globalThis.HTMLIFrameElement,
+    SVGElement: globalThis.SVGElement,
+    IS_REACT_ACT_ENVIRONMENT: reactActGlobal.IS_REACT_ACT_ENVIRONMENT
+  };
+
+  globalThis.document = document as unknown as Document;
+  globalThis.window = document.defaultView as unknown as Window & typeof globalThis;
+  globalThis.Element = FakeElement as unknown as typeof Element;
+  globalThis.HTMLElement = FakeElement as unknown as typeof HTMLElement;
+  globalThis.HTMLIFrameElement =
+    document.defaultView.HTMLIFrameElement as unknown as typeof HTMLIFrameElement;
+  globalThis.SVGElement = FakeElement as unknown as typeof SVGElement;
+  reactActGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+
+  return {
+    container: document.createElement("div"),
+    restore: () => {
+      globalThis.document = previous.document;
+      globalThis.window = previous.window;
+      globalThis.Element = previous.Element;
+      globalThis.HTMLElement = previous.HTMLElement;
+      globalThis.HTMLIFrameElement = previous.HTMLIFrameElement;
+      globalThis.SVGElement = previous.SVGElement;
+      reactActGlobal.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
+    }
+  };
 }
 
 function createCoherentWrapReadModel(): DeformerTreeWrapSelectionReadModel {

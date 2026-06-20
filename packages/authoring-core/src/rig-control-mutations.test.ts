@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -26,6 +27,7 @@ import {
   bindRigControlChild,
   createRotation2dRigControl,
   createWarpLattice2dRigControl,
+  deleteRigControl,
   insertRigControlBetweenParentAndChild,
   moveDrawableRigControlBinding,
   reparentRigControl,
@@ -699,6 +701,236 @@ describe("rig control authoring mutations", () => {
       "Binding rig_parent under rig_child would create a rig control cycle"
     );
   });
+
+  it("deletes a parented deformer and promotes child deformers and drawables to the parent", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_child", "Child Drawable");
+    createRotation2dRigControl(session, createRotationRigControl("rig_parent", "Parent"));
+    createWarpLattice2dRigControl(session, createWarpLatticeRigControl("rig_child", "Child"));
+    createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_target", "Target", {
+        childDrawableIds: ["draw_child"],
+        childRigControlIds: ["rig_child"]
+      })
+    );
+    bindRigControlChild(session, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_target" }
+    });
+
+    const result = deleteRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(result.rigControlBefore.rigControlId).toBe("rig_target");
+    expect(result.parentRigControlBefore?.childRigControlIds).toEqual(["rig_target"]);
+    expect(result.parentRigControlAfter?.childRigControlIds).toEqual(["rig_child"]);
+    expect(result.parentRigControlAfter?.childDrawableIds).toEqual(["draw_child"]);
+    expect(result.childRigControlChanges[0]?.before.parentId).toBe("rig_target");
+    expect(result.childRigControlChanges[0]?.after.parentId).toBe("rig_parent");
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_target"))).toBeUndefined();
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent"))).toMatchObject({
+      childDrawableIds: ["draw_child"],
+      childRigControlIds: ["rig_child"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child"))).toMatchObject({
+      parentId: "rig_parent"
+    });
+    expect(session.graph.rigControlRootIds).toEqual(["rig_parent"]);
+    expect(session.graph.stableOrder).not.toContain("rig_target");
+  });
+
+  it("deletes a root deformer and promotes child deformers to roots while unbinding child drawables", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_child", "Child Drawable");
+    createWarpLattice2dRigControl(session, createWarpLatticeRigControl("rig_child", "Child"));
+    createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_target", "Target", {
+        childDrawableIds: ["draw_child"],
+        childRigControlIds: ["rig_child"]
+      })
+    );
+
+    const result = deleteRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(result.parentRigControlBefore).toBeUndefined();
+    expect(result.rigControlRootIdsBefore).toEqual(["rig_target"]);
+    expect(result.rigControlRootIdsAfter).toEqual(["rig_child"]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_target"))).toBeUndefined();
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child"))).not.toHaveProperty("parentId");
+    expect(session.graph.rigControls.some((rigControl) =>
+      rigControl.childDrawableIds.includes(DrawableIdSchema.parse("draw_child"))
+    )).toBe(false);
+  });
+
+  it("deletes only keyform sets that target the deleted deformer", () => {
+    const session = createFixtureSession();
+    createWarpLattice2dRigControl(session, createWarpLatticeRigControl("rig_child", "Child"));
+    createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_target", "Target", {
+        childRigControlIds: ["rig_child"]
+      })
+    );
+    session.graph.keyformSets.push(
+      {
+        keyformSetId: KeyformSetIdSchema.parse("keyset_target_offsets"),
+        target: {
+          kind: "rigControl",
+          id: RigControlIdSchema.parse("rig_target"),
+          property: "controlPointOffsets"
+        },
+        parameterId: ParameterIdSchema.parse("param_target"),
+        evaluator: "linear-1d-v1",
+        interpolation: "linear-1d-v1",
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [{ value: 0, statePatch: Array.from({ length: 4 }, () => ({ x: 0, y: 0 })) }]
+      },
+      {
+        keyformSetId: KeyformSetIdSchema.parse("keyset_child_offsets"),
+        target: {
+          kind: "rigControl",
+          id: RigControlIdSchema.parse("rig_child"),
+          property: "controlPointOffsets"
+        },
+        parameterId: ParameterIdSchema.parse("param_child"),
+        evaluator: "linear-1d-v1",
+        interpolation: "linear-1d-v1",
+        compositionMode: "replace",
+        compositionOrder: 0,
+        keys: [{ value: 0, statePatch: Array.from({ length: 4 }, () => ({ x: 0, y: 0 })) }]
+      }
+    );
+    session.graph.stableOrder.push("keyset_target_offsets", "keyset_child_offsets");
+
+    const result = deleteRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(result.removedKeyformSets.map((keyformSet) => keyformSet.keyformSetId)).toEqual([
+      "keyset_target_offsets"
+    ]);
+    expect(session.graph.keyformSets.map((keyformSet) => keyformSet.keyformSetId)).toEqual([
+      "keyset_child_offsets"
+    ]);
+    expect(session.graph.stableOrder).not.toContain("keyset_target_offsets");
+    expect(session.graph.stableOrder).toContain("keyset_child_offsets");
+  });
+
+  it("leaves drawables, meshes, parts, textures, draw order, and dynamics unchanged when deleting a deformer", () => {
+    const session = createFixtureSession();
+    addFixtureDrawable(session, "draw_child", "Child Drawable");
+    session.graph.meshes.push({
+      meshId: MeshIdSchema.parse("mesh_child"),
+      drawableId: DrawableIdSchema.parse("draw_child"),
+      vertices: [{ x: 0, y: 0 }],
+      uvs: [{ x: 0, y: 0 }],
+      triangles: [],
+      vertexStableIds: ["vtx_child_0"],
+      bounds: { x: 0, y: 0, width: 1, height: 1 },
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_child")
+    });
+    session.graph.drawOrder.push({
+      drawableId: DrawableIdSchema.parse("draw_child"),
+      baseDrawOrder: 2,
+      stableOrder: 2
+    });
+    session.graph.textureAtlas = {
+      schemaVersion: "texture-atlas-v1",
+      textures: [{ textureId: TextureIdSchema.parse("tex_child"), filePath: "assets/textures/child.png" }]
+    };
+    session.graph.dynamicsGroups.push({
+      dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_child"),
+      displayName: "Child Dynamics",
+      enabled: true,
+      inputs: [
+        {
+          parameterId: ParameterIdSchema.parse("param_driver"),
+          kind: "angle",
+          influencePercent: 100,
+          invert: false,
+          normalization: { min: -1, center: 0, max: 1 }
+        }
+      ],
+      pendulums: [{ length: 1, sway: 0.25, reactionSpeed: 8, convergenceSpeed: 4 }],
+      outputs: [
+        {
+          parameterId: ParameterIdSchema.parse("param_output"),
+          kind: "angle",
+          strength: 1,
+          invert: false,
+          limit: 1
+        }
+      ]
+    });
+    createWarpLattice2dRigControl(
+      session,
+      createWarpLatticeRigControl("rig_target", "Target", {
+        childDrawableIds: ["draw_child"]
+      })
+    );
+    const drawablesBefore = structuredClone(session.graph.drawables);
+    const meshesBefore = structuredClone(session.graph.meshes);
+    const partsBefore = structuredClone(session.graph.parts);
+    const textureAtlasBefore = structuredClone(session.graph.textureAtlas);
+    const drawOrderBefore = structuredClone(session.graph.drawOrder);
+    const dynamicsBefore = structuredClone(session.graph.dynamicsGroups);
+
+    deleteRigControl(session, {
+      rigControlId: RigControlIdSchema.parse("rig_target")
+    });
+
+    expect(session.graph.drawables).toEqual(drawablesBefore);
+    expect(session.graph.meshes).toEqual(meshesBefore);
+    expect(session.graph.parts).toEqual(partsBefore);
+    expect(session.graph.textureAtlas).toEqual(textureAtlasBefore);
+    expect(session.graph.drawOrder).toEqual(drawOrderBefore);
+    expect(session.graph.dynamicsGroups).toEqual(dynamicsBefore);
+  });
+
+  it("rejects missing and incoherent delete targets without mutating the graph", () => {
+    const missingSession = createFixtureSession();
+    expectDeleteError(missingSession, "rig_missing", "missing_rig_control");
+
+    const incoherentSession = createFixtureSession();
+    createRotation2dRigControl(incoherentSession, createRotationRigControl("rig_parent", "Parent"));
+    createRotation2dRigControl(incoherentSession, createRotationRigControl("rig_child", "Child"));
+    bindRigControlChild(incoherentSession, {
+      parentRigControlId: RigControlIdSchema.parse("rig_parent"),
+      child: { kind: "rigControl", id: "rig_child" }
+    });
+    const childRigControl = getRigControlById(incoherentSession.graph, RigControlIdSchema.parse("rig_child"));
+    if (childRigControl === undefined) {
+      throw new Error("Expected child rig control fixture.");
+    }
+    delete childRigControl.parentId;
+
+    expectDeleteError(incoherentSession, "rig_parent", "rig_control_parent_child_mismatch");
+  });
+
+  it("rejects existing rig-control cycles reachable from the delete target without mutating", () => {
+    const session = createFixtureSession();
+    createRotation2dRigControl(session, createRotationRigControl("rig_a", "A"));
+    createRotation2dRigControl(session, createRotationRigControl("rig_b", "B"));
+    const rigA = getRigControlById(session.graph, RigControlIdSchema.parse("rig_a"));
+    const rigB = getRigControlById(session.graph, RigControlIdSchema.parse("rig_b"));
+    if (rigA === undefined || rigB === undefined) {
+      throw new Error("Expected cycle fixture rig controls.");
+    }
+
+    rigA.parentId = RigControlIdSchema.parse("rig_b");
+    rigA.childRigControlIds = [RigControlIdSchema.parse("rig_b")];
+    rigB.parentId = RigControlIdSchema.parse("rig_a");
+    rigB.childRigControlIds = [RigControlIdSchema.parse("rig_a")];
+    session.graph.rigControlRootIds = [];
+
+    expectDeleteError(session, "rig_a", "rig_control_cycle");
+  });
 });
 
 const createRotationRigControl = (
@@ -773,6 +1005,26 @@ const expectWrapError = (
     wrapRigControlChildren(session, rigControl, {
       wrapChildren,
       ...(parentRigControlId === undefined ? {} : { parentRigControlId })
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(AuthoringMutationError);
+  expect((caught as AuthoringMutationError).code).toBe(expectedCode);
+  expect(session.graph).toEqual(before);
+};
+
+const expectDeleteError = (
+  session: AuthoringSession,
+  rigControlId: string,
+  expectedCode: AuthoringMutationError["code"]
+): void => {
+  const before = structuredClone(session.graph);
+  let caught: unknown;
+  try {
+    deleteRigControl(session, {
+      rigControlId: RigControlIdSchema.parse(rigControlId)
     });
   } catch (error) {
     caught = error;

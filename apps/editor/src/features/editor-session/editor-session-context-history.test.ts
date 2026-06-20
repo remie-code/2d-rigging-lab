@@ -21,7 +21,10 @@ import {
   SourceAssetIdSchema,
   TextureIdSchema,
   TriangleIdSchema,
-  type ParameterId
+  type MeshId,
+  type ParameterId,
+  type RectDto,
+  type RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import {
   PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
@@ -93,6 +96,7 @@ const BATCH_MESH_EXISTING = MeshIdSchema.parse("mesh_mesh_batch_existing");
 const BATCH_MESH_EMPTY_B = MeshIdSchema.parse("mesh_mesh_batch_empty_b");
 const WRAP_ROOT_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_wrap_existing_root");
 const WRAP_CREATED_ROTATION_ID = RigControlIdSchema.parse("rig_2_selected_rotation_deformer");
+const MESH_APPLY_AUTO_REFIT_WARP_ID = RigControlIdSchema.parse("rig_mesh_apply_auto_refit");
 const TRANSIENT_DRAFT_DRAWABLE_ID = DrawableIdSchema.parse("draw_provider_fixture");
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
@@ -1024,6 +1028,117 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
+  it("deletes the selected Deformer, clears selection, and keeps delete undoable and redoable", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createRotationSelectionSession(),
+      initialSelection: {
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      }
+    });
+
+    try {
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+
+      await act(async () => {
+        harness.context().deleteRigControl(ROTATION_RIG_CONTROL_ID);
+      });
+
+      expect(harness.context().selection).toBeNull();
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeUndefined();
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeDefined();
+      expect(harness.context().canRedo).toBe(true);
+
+      await act(async () => {
+        harness.context().redo();
+      });
+
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeUndefined();
+      expect(harness.context().selection).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("selects the actual suffixed rig control after duplicate display-name creation", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createDuplicateDisplayNameDrawableSession()
+    });
+
+    try {
+      await act(async () => {
+        harness.context().createRotationDeformerForDrawable(BATCH_DRAW_EMPTY_A);
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: RigControlIdSchema.parse("rig_twin_rotation_deformer")
+      });
+
+      await act(async () => {
+        harness.context().selectDrawable(BATCH_DRAW_EMPTY_B);
+        harness.context().createRotationDeformerForDrawable(BATCH_DRAW_EMPTY_B);
+      });
+
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: RigControlIdSchema.parse("rig_twin_rotation_deformer_2")
+      });
+      expect(findRigControl(
+        harness.context().session,
+        RigControlIdSchema.parse("rig_twin_rotation_deformer_2")
+      )).toMatchObject({
+        displayName: "Twin Rotation Deformer",
+        childDrawableIds: [BATCH_DRAW_EMPTY_B]
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-refits an unkeyed Warp ancestor after Mesh Apply and clears drafts", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe({
+      initialSession: createBatchMeshSessionWithAutoRefitWarp()
+    });
+
+    try {
+      await act(async () => {
+        harness.context().selectDrawable(BATCH_DRAW_EMPTY_A);
+        harness.context().previewMeshDraft(BATCH_DRAW_EMPTY_A, "standard");
+      });
+      expect(harness.context().meshDraft).toMatchObject({
+        drawableId: BATCH_DRAW_EMPTY_A,
+        presetId: "standard"
+      });
+
+      await act(async () => {
+        harness.context().applyMeshDraft();
+      });
+
+      expect(harness.context().meshDrafts).toEqual([]);
+      expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).triangles.length)
+        .toBeGreaterThan(0);
+      expect(rectContainsVertices(
+        getWarpDomain(harness.context().session, MESH_APPLY_AUTO_REFIT_WARP_ID),
+        requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).vertices
+      )).toBe(true);
+    } finally {
+      info.mockRestore();
+      warn.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
   it("selects the created wrapper after Deformer Tree wrap-selected Rig create", async () => {
     const harness = await renderEditorSessionProbe({
       initialSession: createDeformerTreeWrapProviderSession()
@@ -1200,6 +1315,7 @@ function Probe({
 
 async function renderEditorSessionProbe(options: {
   readonly confirmDirtyWorkspaceReplacement?: DirtyWorkspaceReplacementConfirmation;
+  readonly initialSelection?: EditorSessionContextSnapshot["selection"];
   readonly initialSession?: AuthoringSession;
   readonly initialWorkspaceDirectory?: FakeWorkspaceDirectoryHandle;
   readonly initialWorkspaceOpen?: boolean;
@@ -1225,6 +1341,9 @@ async function renderEditorSessionProbe(options: {
               ? {}
               : { confirmDirtyWorkspaceReplacement: options.confirmDirtyWorkspaceReplacement }),
             initialWorkspaceOpen: options.initialWorkspaceOpen ?? true,
+            ...(options.initialSelection === undefined
+              ? {}
+              : { initialSelection: options.initialSelection }),
             ...(options.initialSession === undefined
               ? {}
               : { initialSession: options.initialSession }),
@@ -1558,13 +1677,42 @@ async function selectBatchDrawables(
   });
 }
 
-function requireMesh(session: AuthoringSession, meshId: typeof BATCH_MESH_EMPTY_A) {
+function requireMesh(session: AuthoringSession, meshId: MeshId) {
   const mesh = session.graph.meshes.find((candidate) => candidate.meshId === meshId);
   if (mesh === undefined) {
     throw new Error(`Expected mesh ${meshId}.`);
   }
 
   return mesh;
+}
+
+function findRigControl(session: AuthoringSession, rigControlId: RigControlId) {
+  return session.graph.rigControls.find((candidate) => candidate.rigControlId === rigControlId);
+}
+
+function getWarpDomain(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): RectDto {
+  const rigControl = findRigControl(session, rigControlId);
+  if (rigControl?.kind !== "warpLattice2d") {
+    throw new Error(`Expected Warp Deformer ${rigControlId}.`);
+  }
+
+  return rigControl.domainBounds;
+}
+
+function rectContainsVertices(
+  rect: RectDto,
+  vertices: readonly { readonly x: number; readonly y: number }[]
+): boolean {
+  return vertices.every(
+    (vertex) =>
+      vertex.x >= rect.x &&
+      vertex.y >= rect.y &&
+      vertex.x <= rect.x + rect.width &&
+      vertex.y <= rect.y + rect.height
+  );
 }
 
 function createBatchMeshSession(): AuthoringSession {
@@ -1633,6 +1781,47 @@ function createBatchMeshSession(): AuthoringSession {
       rightsRecords: []
     }
   };
+}
+
+function createDuplicateDisplayNameDrawableSession(): AuthoringSession {
+  const session = createBatchMeshSession();
+  session.graph.drawables = session.graph.drawables.map((drawable) =>
+    drawable.drawableId === BATCH_DRAW_EMPTY_A || drawable.drawableId === BATCH_DRAW_EMPTY_B
+      ? { ...drawable, displayName: "Twin" }
+      : drawable
+  );
+
+  return session;
+}
+
+function createBatchMeshSessionWithAutoRefitWarp(): AuthoringSession {
+  const session = createBatchMeshSession();
+  session.graph.rigControls = [
+    {
+      kind: "warpLattice2d",
+      rigControlId: MESH_APPLY_AUTO_REFIT_WARP_ID,
+      displayName: "Mesh Apply Auto Refit",
+      childDrawableIds: [BATCH_DRAW_EMPTY_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      bindSpace: "rigControlLocalRest",
+      domainBounds: { x: 0, y: 0, width: 1, height: 1 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      restControlPoints: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 }
+      ],
+      interpolationMethod: "bilinear-grid-v1",
+      enabled: true
+    }
+  ];
+  session.graph.rigControlRootIds = [MESH_APPLY_AUTO_REFIT_WARP_ID];
+  session.graph.stableOrder = [...session.graph.stableOrder, MESH_APPLY_AUTO_REFIT_WARP_ID];
+
+  return session;
 }
 
 function createDeformerTreeWrapProviderSession(): AuthoringSession {
