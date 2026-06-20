@@ -48,6 +48,11 @@ discussion/
     orchestration/
     reviews/
     waves/
+  runtime-player/       # Editor外のRuntime Player / Capture Host appの調査、UX、設計
+    _map.md
+    architecture/
+    research/
+    screens/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -98,6 +103,7 @@ discussion/
 | `proposal/` | Live2D Feature Proposalのテンプレート、提案draft、非目標 | Undine | 互換実装、形式対応、SDK/Core代替を示唆しない |
 | `development_convention/` | P0/P1開発規約、/goal実装オーケストレーション規約、basis、review | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | L0用の薄いorchestration contractとdomain agent向け詳細規約を分離して管理する |
 | `implementation/` | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | Accepted development conventionに従い、実装証拠とレビュー成果物を永続化する |
+| `runtime-player/` | Editorが出力したRuntime Exportを読む外部Runtime Player / Capture Host appの調査、UX、設計、未決事項 | Undine / Sylph / Gnome | Editor本体と分離し、tracking input、runtime display、OBS想定、外部app境界を扱う |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。
