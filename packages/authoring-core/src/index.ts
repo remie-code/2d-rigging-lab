@@ -61,6 +61,7 @@ export * from "./runtime-graph-drawables.js";
 export * from "./runtime-graph-dynamics.js";
 export * from "./runtime-graph-rig-controls.js";
 export * from "./runtime-graph-keyforms.js";
+export * from "./runtime-export-assembly.js";
 export * from "./tutorial-mini-model-seed.js";
 export * from "./to-package-document.js";
 export * from "./to-runtime-graph.js";

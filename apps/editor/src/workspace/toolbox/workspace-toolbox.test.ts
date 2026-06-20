@@ -98,12 +98,23 @@ describe("WorkspaceToolbox diagnostics badge", () => {
     const markup = renderToStaticMarkup(createElement(WorkspaceToolbox));
 
     expect(markup).toContain('aria-label="Import PSD"');
+    expect(markup).toContain('aria-label="Runtime Export"');
     expect(markup).not.toContain("Project Storage");
 
     findIconButton("Import PSD").onClick?.({} as never);
 
     expect(toolboxTestState.editorSession.openPsdImport).toHaveBeenCalledTimes(1);
     expect(toolboxTestState.uiStore.setActiveEntry).not.toHaveBeenCalled();
+  });
+
+  it("opens the Runtime Export task from the Toolbox", () => {
+    renderToStaticMarkup(createElement(WorkspaceToolbox));
+
+    findIconButton("Runtime Export").onClick?.({} as never);
+
+    expect(toolboxTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
+    expect(toolboxTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("runtimeExport");
+    expect(toolboxTestState.editorSession.openPsdImport).not.toHaveBeenCalled();
   });
 });
 

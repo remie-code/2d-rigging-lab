@@ -12,6 +12,7 @@
 | [parameter-manager.md](parameter-manager.md) | Parameter Managerの内部遷移とレイアウト | Draft screen spec |
 | [variant-expression-manager.md](variant-expression-manager.md) | Variant / Expression Managerの内部遷移とレイアウト | Draft screen spec |
 | [texture-atlas-task.md](texture-atlas-task.md) | Texture Atlas Task v0。runtime graph所属Drawableをatlas対象にし、Applyでruntime atlas artifactをcommitし、authoring texture/UVは保持する専用Task画面 | Accepted v0 direction / Draft screen spec / Wave88 artifact-only Apply反映 |
+| [runtime-export-task.md](runtime-export-task.md) | Runtime Export Task v0。current Texture Atlasを必須にし、外部OBS/camera-driven runtime app向けdirectory runtime artifactを書き出す専用Task画面 | Accepted direction / Draft screen spec |
 | [project-storage-task.md](project-storage-task.md) | Project Storage Taskの内部遷移とレイアウト | Draft screen spec |
 | [workspace-save-and-navigation.md](workspace-save-and-navigation.md) | Workspace-first Save / Open UX、Header / Toolbox責務分離、directory workspace、Portable JSONとの境界、保存タイミング | Accepted direction / Draft screen spec |
 | [validation-task.md](validation-task.md) | Product Preflight / Validation Taskの内部遷移とレイアウト | Draft screen spec |

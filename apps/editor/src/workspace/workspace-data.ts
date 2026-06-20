@@ -1,6 +1,7 @@
 import {
   Eye,
   FileInput,
+  FolderOutput,
   LayoutGrid,
   MousePointer2,
   ShieldCheck,
@@ -45,6 +46,7 @@ export const toolboxSections: ToolboxSection[] = [
       { id: "parameters", label: "Parameters", kind: "task", icon: SlidersHorizontal },
       { id: "variants", label: "Variants", kind: "task", icon: Smile },
       { id: "atlas", label: "Texture Atlas", kind: "task", icon: LayoutGrid },
+      { id: "runtimeExport", label: "Runtime Export", kind: "task", icon: FolderOutput },
       { id: "validate", label: "Validate", kind: "task", icon: ShieldCheck }
     ]
   },

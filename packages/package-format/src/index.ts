@@ -29,3 +29,5 @@ export * from "./package-binary-file-set.js";
 export * from "./workspace-metadata.js";
 export * from "./workspace-file-set.js";
 export * from "./workspace-save-plan.js";
+export * from "./runtime-export.js";
+export * from "./runtime-export-file-set.js";

@@ -10,6 +10,7 @@ import { InspectorPanel } from "./panels/inspector-panel";
 import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
 import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
+import { RuntimeExportTaskScreen } from "./runtime-export/runtime-export-task-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
 import { ViewerRuntimeScreen } from "./viewer/viewer-runtime-screen";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
@@ -36,6 +37,7 @@ export function AuthoringWorkspaceContent({
   const showDiagnostics = activeEntry === "validate";
   const showViewer = activeEntry === "viewer";
   const showAtlas = activeEntry === "atlas";
+  const showRuntimeExport = activeEntry === "runtimeExport";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
@@ -43,12 +45,14 @@ export function AuthoringWorkspaceContent({
 
       {!hasOpenWorkspace ? (
         <WorkspaceGateMessage message={workspaceStorage.message} />
-      ) : showParameterManager || showDiagnostics || showViewer || showAtlas ? (
+      ) : showParameterManager || showDiagnostics || showViewer || showAtlas || showRuntimeExport ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {showViewer ? (
             <ViewerRuntimeScreen />
           ) : showAtlas ? (
             <TextureAtlasTaskScreen />
+          ) : showRuntimeExport ? (
+            <RuntimeExportTaskScreen />
           ) : showDiagnostics ? (
             <DiagnosticsScreen />
           ) : showParameterManager ? (
@@ -88,7 +92,9 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      {!hasOpenWorkspace || showViewer || showDiagnostics || showAtlas ? null : <ParameterBar />}
+      {!hasOpenWorkspace || showViewer || showDiagnostics || showAtlas || showRuntimeExport
+        ? null
+        : <ParameterBar />}
       {hasOpenWorkspace ? <PsdImportModal /> : null}
     </main>
   );

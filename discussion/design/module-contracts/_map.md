@@ -18,6 +18,7 @@
 | [package-file-format-contract.md](package-file-format-contract.md) | project-defined model package layout、layered character PSD profile、split PNG fallback、package DTO 対応 | layout tree / tableとも `runtime/states/` と `runtime/state-sequences/` generated evidenceへ更新済み |
 | [operation-contracts.md](operation-contracts.md) | GUI / AI / migration / repair が共有する operation request/response/log/diff 契約 | `RunDynamicsPreviewSequencePayloadSchema.context`、`finalRuntimeState`、state/sequence artifact refsへ更新済み |
 | [runtime-core-contract.md](runtime-core-contract.md) | Shared Runtime evaluation core、`parameter-grid-2d-v1`、Minimum Open Dynamics v1、parent-before-child rig control、snapshot契約 | RuntimeEvaluationContext正本、options profile廃止、state sequence initial/post-frame semanticsへ更新済み |
+| [runtime-export-v0-contract.md](runtime-export-v0-contract.md) | Editor外のOBS/camera-driven runtime app向けRuntime Export v0 contract。directory + raw RGBA、materialized runtime graph、atlas metadata、preflight境界 | Accepted direction / Draft module contract |
 | [validator-contract.md](validator-contract.md) | check catalog、severity/status、validation profile、report、repair candidate契約 | `runtime.profileMismatch`、`runtime.stateSequenceLengthMismatch`、state identity diagnosticsへ更新済み |
 | [gui-operation-contract.md](gui-operation-contract.md) | UI event -> operation mapping、semantic state、hit-test、GUI evidence契約 | Dynamics panel / preview reset / simple graphへ更新済み |
 | [ai-command-contract.md](ai-command-contract.md) | scenario-derived AI assistant command、dry-run、approval、diff、revalidation、transport adapter分類 | AI responseを `finalRuntimeState` / `finalRuntimeStateRef` と state/sequence artifact refsへ統一済み |
@@ -35,6 +36,7 @@
 | GUI authoring evidence は operation log 必須、Playwright trace/screenshot/session metadata は補助 | [operation-contracts.md](operation-contracts.md), [gui-operation-contract.md](gui-operation-contract.md), [validator-contract.md](validator-contract.md) |
 | AIはassistant / validatorとして扱い、dry-run / diff / repair suggestion / provenanceを中心にする | [ai-command-contract.md](ai-command-contract.md), [operation-contracts.md](operation-contracts.md) |
 | Minimum Open Dynamics v1 はdriver parameterからcomputed output parameterを生成し、通常keyform / rig control評価へ渡す。MVPではinitial RuntimeState evidence、full RuntimeState sequence evidence、1 group = 1 output、weighted sum、`scalarDampedFollowV1`固定式 | [package-file-format-contract.md](package-file-format-contract.md), [runtime-core-contract.md](runtime-core-contract.md), [operation-contracts.md](operation-contracts.md), [validator-contract.md](validator-contract.md), [gui-operation-contract.md](gui-operation-contract.md), [fixtures-and-contract-tests.md](fixtures-and-contract-tests.md) |
+| Runtime Export v0はWorkspace Save / Portable JSONとは別責務の実行用成果物。v0はdirectory + raw RGBA、materialized runtime graph、current atlas必須、player/camera appなし | [runtime-export-v0-contract.md](runtime-export-v0-contract.md), [../screen-design/screens/runtime-export-task.md](../screen-design/screens/runtime-export-task.md) |
 
 ## 参照入口
 

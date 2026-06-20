@@ -6,6 +6,7 @@ export type WorkspaceEntryId =
   | "parameters"
   | "variants"
   | "atlas"
+  | "runtimeExport"
   | "validate"
   | "viewer";
 
