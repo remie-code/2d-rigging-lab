@@ -65,10 +65,12 @@ import {
   type ViewerRenderSourceMode
 } from "./viewer-render-source";
 import {
+  createViewerRuntimeParameterSignature,
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
   evaluateViewerRuntimePlaybackFrame,
   isViewerRuntimePlaybackStateCompatible,
+  isViewerRuntimePlaybackStateSettled,
   resolveViewerRuntimeParameterValues,
   VIEWER_RUNTIME_FIXED_STEP_MS,
   type ViewerRuntimePlaybackModel
@@ -103,6 +105,12 @@ export function ViewerRuntimeScreen() {
   const [renderSourceMode, setRenderSourceMode] =
     useState<ViewerRenderSourceMode>("original");
   const [runtimePlaybackState, setRuntimePlaybackState] = useState<RuntimeStateDto | null>(null);
+  const runtimePlaybackStateRef = useRef<RuntimeStateDto | null>(null);
+  const [runtimeSimulationResetToken, setRuntimeSimulationResetToken] = useState(0);
+  const setRuntimePlaybackStateAndRef = useCallback((state: RuntimeStateDto | null) => {
+    runtimePlaybackStateRef.current = state;
+    setRuntimePlaybackState(state);
+  }, []);
   const atlasRuntimeSourceCache = useMemo(() => createViewerAtlasRuntimeSourceCache(), []);
   const runtimePlaybackRef = useRef<ViewerRuntimePlaybackLoopInput | null>(null);
   const runtimePlaybackModel = useMemo(
@@ -137,6 +145,14 @@ export function ViewerRuntimeScreen() {
       session
     ]
   );
+  const runtimeParameterSignature = useMemo(
+    () =>
+      createViewerRuntimeParameterSignature(
+        runtimePlaybackModel,
+        cleanStage.baseParameterValues
+      ),
+    [cleanStage.baseParameterValues, runtimePlaybackModel]
+  );
   runtimePlaybackRef.current = {
     authoredParameterValues: cleanStage.baseParameterValues,
     model: runtimePlaybackModel
@@ -147,25 +163,45 @@ export function ViewerRuntimeScreen() {
       return;
     }
 
-    setRuntimePlaybackState(
+    setRuntimePlaybackStateAndRef(
       createViewerRuntimeInitialState(
         playback.model,
         playback.authoredParameterValues,
         "manualCommand"
       )
     );
-  }, []);
+    setRuntimeSimulationResetToken((token) => token + 1);
+  }, [setRuntimePlaybackStateAndRef]);
+
+  useEffect(() => {
+    const currentState = runtimePlaybackStateRef.current;
+    if (
+      currentState !== null &&
+      !isViewerRuntimePlaybackStateCompatible(runtimePlaybackModel, currentState)
+    ) {
+      setRuntimePlaybackStateAndRef(null);
+    }
+  }, [runtimePlaybackModel, setRuntimePlaybackStateAndRef]);
 
   useEffect(() => {
     if (runtimePlaybackModel.enabledDynamicsGroupCount === 0) {
-      setRuntimePlaybackState(null);
+      setRuntimePlaybackStateAndRef(null);
       return undefined;
     }
 
     let lastTimestamp: number | null = null;
-    let frameRequest = 0;
+    let frameRequest: number | null = null;
+    let evaluatedFrameCount = 0;
     let active = true;
+    const scheduleNextFrame = () => {
+      if (!active || frameRequest !== null) {
+        return;
+      }
+
+      frameRequest = requestAnimationFrame(tick);
+    };
     const tick = (timestamp: number) => {
+      frameRequest = null;
       if (!active) {
         return;
       }
@@ -173,38 +209,51 @@ export function ViewerRuntimeScreen() {
       const deltaTimeMs =
         lastTimestamp === null ? VIEWER_RUNTIME_FIXED_STEP_MS : timestamp - lastTimestamp;
       lastTimestamp = timestamp;
-      setRuntimePlaybackState((previousState) => {
-        const playback = runtimePlaybackRef.current;
-        if (playback === null || playback.model.enabledDynamicsGroupCount === 0) {
-          return previousState;
-        }
-        const compatiblePreviousState =
-          previousState !== null &&
-          isViewerRuntimePlaybackStateCompatible(playback.model, previousState)
-            ? previousState
-            : null;
-
-        return evaluateViewerRuntimePlaybackFrame({
-          authoredParameterValues: playback.authoredParameterValues,
-          deltaTimeMs,
-          frameIndex: (compatiblePreviousState?.frameIndex ?? 0) + 1,
-          model: playback.model,
-          ...(compatiblePreviousState === null ? {} : { previousState: compatiblePreviousState })
-        }).nextState;
+      const playback = runtimePlaybackRef.current;
+      if (playback === null || playback.model.enabledDynamicsGroupCount === 0) {
+        return;
+      }
+      const previousState = runtimePlaybackStateRef.current;
+      const compatiblePreviousState =
+        previousState !== null &&
+        isViewerRuntimePlaybackStateCompatible(playback.model, previousState)
+          ? previousState
+          : null;
+      const result = evaluateViewerRuntimePlaybackFrame({
+        authoredParameterValues: playback.authoredParameterValues,
+        deltaTimeMs,
+        frameIndex: (compatiblePreviousState?.frameIndex ?? 0) + 1,
+        model: playback.model,
+        ...(compatiblePreviousState === null ? {} : { previousState: compatiblePreviousState })
       });
-      frameRequest = requestAnimationFrame(tick);
+      evaluatedFrameCount += 1;
+      setRuntimePlaybackStateAndRef(result.nextState);
+
+      if (
+        !isViewerRuntimePlaybackStateSettled({
+          authoredParameterValues: playback.authoredParameterValues,
+          evaluatedFrameCount,
+          model: playback.model,
+          state: result.nextState
+        })
+      ) {
+        scheduleNextFrame();
+      }
     };
-    frameRequest = requestAnimationFrame(tick);
+    scheduleNextFrame();
 
     return () => {
       active = false;
-      cancelAnimationFrame(frameRequest);
+      if (frameRequest !== null) {
+        cancelAnimationFrame(frameRequest);
+      }
     };
-  }, [runtimePlaybackModel]);
-
-  useEffect(() => {
-    setRuntimePlaybackState(null);
-  }, [runtimePlaybackModel.stateIdentityKey]);
+  }, [
+    runtimeParameterSignature,
+    runtimePlaybackModel,
+    runtimeSimulationResetToken,
+    setRuntimePlaybackStateAndRef
+  ]);
 
   useEffect(() => {
     if (renderSourceMode !== cleanStage.renderSourceMode) {

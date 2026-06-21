@@ -20,7 +20,8 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 
 | Path | Status | Content |
 |---|---|---|
-| [orchestration/player-wave1-plan.md](orchestration/player-wave1-plan.md) | Planned / ready for orchestration | Runtime Player Wave1: Electron app shell + Control/Stage placeholder screen |
+| [orchestration/player-wave1-plan.md](orchestration/player-wave1-plan.md) | Completed / final pass | Runtime Player Wave1: Electron app shell + Control/Stage placeholder screen |
+| [orchestration/player-wave2-plan.md](orchestration/player-wave2-plan.md) | Planned / ready for orchestration | Runtime Player Wave2: Runtime Export directory load + static Stage render |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
@@ -33,8 +34,9 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - `apps/runtime-player` now has the initial Electron/electron-vite shell, Control Window placeholder, Stage Window placeholder, preload bridge, and focused tests from Runtime Player Wave1 Domain A.
 - Domain A reviews passed with no findings.
 - Runtime Player Wave1 final integration / clean review passed with no findings.
-- Wave1 is closed as a placeholder-only Electron app shell wave. Manual Electron GUI / transparent Stage / OBS-style verification remains a documented desktop follow-up.
+- Wave1 is closed as a placeholder-only Electron app shell wave. User manually confirmed that Control Window and Stage Window appear as separate windows.
+- Runtime Player Wave2 is planned around opening a user-chosen Runtime Export directory, validating `runtime-export.json`, and rendering the static default-pose model in Stage.
 
 ## 5. Next Action
 
-Use `pnpm --filter @private-2d-rigging-lab/runtime-player dev` for manual desktop smoke verification, then plan the next Runtime Player wave for real Runtime Export loading, input adapter, runtime loop, or rendering only after explicit scope selection.
+Start Runtime Player Wave2 using [orchestration/player-wave2-plan.md](orchestration/player-wave2-plan.md). Do not proceed to input adapter, runtime parameter mapping, dynamics playback, or previous export restore until Runtime Export load + static Stage render is complete.

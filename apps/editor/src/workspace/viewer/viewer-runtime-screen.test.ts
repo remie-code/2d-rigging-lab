@@ -23,7 +23,8 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode
 } from "react";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -128,6 +129,10 @@ vi.mock("../../features/psd-import/components/psd-import-modal", () => ({
   PsdImportModal: () => createElement("div", { "data-testid": "mock-psd-import-modal" })
 }));
 
+vi.mock("./viewer-clean-stage", () => ({
+  renderViewerCleanStageProjection: vi.fn()
+}));
+
 import { AppBar } from "../app-bar";
 import { AuthoringWorkspaceContent } from "../authoring-workspace";
 import { screenToCanvasPoint } from "../canvas/canvas-projection";
@@ -142,7 +147,8 @@ import { createInitialRuntimeControlsState } from "./runtime-controls-state";
 import {
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
-  evaluateViewerRuntimePlaybackFrame
+  evaluateViewerRuntimePlaybackFrame,
+  VIEWER_RUNTIME_FIXED_STEP_MS
 } from "./viewer-runtime-playback";
 
 const PART_ROOT = PartIdSchema.parse("part_viewer_screen_root");
@@ -479,6 +485,143 @@ describe("ViewerRuntimeScreen integration", () => {
       previousSourceVelocity: 2
     });
     expect(projection.parameterValues[HAIR_SWAY_X]).toBe(0);
+  });
+
+  it("stops the Viewer Dynamics playback loop after settled state", async () => {
+    const animationFrame = installAnimationFrameMock();
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithDynamics();
+    viewerRuntimeTestState.editorSession.parameterValues = {};
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      expect(animationFrame.pendingCount()).toBe(1);
+
+      const flushedFrameCount = await flushAnimationFramesUntilIdle(animationFrame, 180);
+      expect(flushedFrameCount).toBeGreaterThanOrEqual(36);
+      expect(animationFrame.pendingCount()).toBe(0);
+
+      const requestCountAtIdle = getAnimationFrameRequestCount();
+      await flushAnimationFrames(animationFrame, 4);
+
+      expect(animationFrame.pendingCount()).toBe(0);
+      expect(getAnimationFrameRequestCount()).toBe(requestCountAtIdle);
+    } finally {
+      await harness.cleanup();
+      animationFrame.restore();
+    }
+  });
+
+  it("restarts Viewer Dynamics playback from idle when a driver value changes", async () => {
+    const animationFrame = installAnimationFrameMock();
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithDynamics();
+    viewerRuntimeTestState.editorSession.parameterValues = {};
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      await flushAnimationFramesUntilIdle(animationFrame, 180);
+      expect(animationFrame.pendingCount()).toBe(0);
+      expect(getViewerCanvasFirstDrawableBoundsX(harness.container)).toBe(0);
+      const requestCountAtIdle = getAnimationFrameRequestCount();
+
+      viewerRuntimeTestState.editorSession.parameterValues = {
+        [FACE_ANGLE_X]: 30
+      };
+      await harness.render();
+
+      expect(animationFrame.pendingCount()).toBe(1);
+      await flushAnimationFrames(animationFrame, 8);
+
+      expect(getAnimationFrameRequestCount()).toBeGreaterThan(requestCountAtIdle + 1);
+      expect(getViewerCanvasFirstDrawableBoundsX(harness.container)).not.toBe(0);
+      expect(animationFrame.pendingCount()).toBe(1);
+
+      await flushAnimationFramesUntilIdle(animationFrame, 360);
+      expect(animationFrame.pendingCount()).toBe(0);
+    } finally {
+      await harness.cleanup();
+      animationFrame.restore();
+    }
+  });
+
+  it("restarts Reset simulation while preserving Runtime Controls overrides", async () => {
+    const animationFrame = installAnimationFrameMock();
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithDynamics();
+    viewerRuntimeTestState.editorSession.parameterValues = {};
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      await flushAnimationFramesUntilIdle(animationFrame, 180);
+      await changeFakeInputValue(
+        getFakeElementByAttribute(harness.container, "aria-label", "Face Angle X value"),
+        "30"
+      );
+      expect(
+        getFakeElementByAttribute(harness.container, "aria-label", "Face Angle X value").value
+      ).toBe("30");
+      expect(animationFrame.pendingCount()).toBe(1);
+      const requestCountBeforeReset = getAnimationFrameRequestCount();
+
+      await clickTestId(harness.container, "viewer-reset-simulation");
+
+      expect(
+        getFakeElementByAttribute(harness.container, "aria-label", "Face Angle X value").value
+      ).toBe("30");
+      expect(animationFrame.pendingCount()).toBe(1);
+      expect(getAnimationFrameRequestCount()).toBeGreaterThan(requestCountBeforeReset);
+
+      await flushAnimationFrames(animationFrame, 2);
+      expect(
+        getFakeElementByAttribute(harness.container, "aria-label", "Face Angle X value").value
+      ).toBe("30");
+    } finally {
+      await harness.cleanup();
+      animationFrame.restore();
+    }
+  });
+
+  it("resets incompatible Viewer playback state when the runtime session identity changes", async () => {
+    const animationFrame = installAnimationFrameMock();
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithDynamics();
+    viewerRuntimeTestState.editorSession.parameterValues = {
+      [FACE_ANGLE_X]: 30
+    };
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      await flushAnimationFrames(animationFrame, 8);
+      expect(getViewerCanvasFirstDrawableBoundsX(harness.container)).not.toBe(0);
+
+      viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithDynamics({
+        packageId: PackageIdSchema.parse("pkg_viewer_runtime_screen_fixture_changed"),
+        packageRevision: 1
+      });
+      viewerRuntimeTestState.editorSession.parameterValues = {};
+      await harness.render();
+
+      expect(getViewerCanvasFirstDrawableBoundsX(harness.container)).toBe(0);
+      expect(animationFrame.pendingCount()).toBe(1);
+
+      await flushAnimationFrames(animationFrame, 1);
+      expect(getViewerCanvasFirstDrawableBoundsX(harness.container)).toBe(0);
+    } finally {
+      await harness.cleanup();
+      animationFrame.restore();
+    }
+  });
+
+  it("does not start the Viewer playback loop when Dynamics Groups are absent", async () => {
+    const animationFrame = installAnimationFrameMock();
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSession();
+    viewerRuntimeTestState.editorSession.parameterValues = {};
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      expect(animationFrame.pendingCount()).toBe(0);
+      expect(getAnimationFrameRequestCount()).toBe(0);
+    } finally {
+      await harness.cleanup();
+      animationFrame.restore();
+    }
   });
 
   it("passes editor Parts Container visibility into the Clean Stage projection", () => {
@@ -819,4 +962,471 @@ function createMesh(
 
 function createOffsets(count: number, x: number, y: number) {
   return Array.from({ length: count }, () => ({ x, y }));
+}
+
+async function renderViewerRuntimeScreenInteractive(): Promise<{
+  readonly cleanup: () => Promise<void>;
+  readonly container: FakeElement;
+  readonly render: () => Promise<void>;
+}> {
+  const fakeRoot = createFakeDomRoot();
+  let reactRoot: Root | null = createRoot(fakeRoot.container as unknown as Element);
+  const render = async () => {
+    await act(async () => {
+      reactRoot?.render(createElement(ViewerRuntimeScreen));
+    });
+  };
+
+  await render();
+
+  return {
+    container: fakeRoot.container,
+    render,
+    cleanup: async () => {
+      await act(async () => {
+        reactRoot?.unmount();
+      });
+      reactRoot = null;
+      fakeRoot.restore();
+    }
+  };
+}
+
+async function clickTestId(root: FakeElement, testId: string): Promise<void> {
+  const element = getFakeElementByAttribute(root, "data-testid", testId);
+  await act(async () => {
+    getFakeReactProps(element).onClick?.();
+  });
+}
+
+async function changeFakeInputValue(element: FakeElement, value: string): Promise<void> {
+  element.value = value;
+  await act(async () => {
+    getFakeReactProps(element).onChange?.({ currentTarget: element });
+  });
+}
+
+async function flushAnimationFrames(
+  animationFrame: InstalledAnimationFrameMock,
+  maxFrameCount: number
+): Promise<number> {
+  let flushedFrameCount = 0;
+  for (let frameIndex = 0; frameIndex < maxFrameCount; frameIndex += 1) {
+    if (animationFrame.pendingCount() === 0) {
+      break;
+    }
+
+    await act(async () => {
+      animationFrame.flushNext((frameIndex + 1) * VIEWER_RUNTIME_FIXED_STEP_MS);
+    });
+    flushedFrameCount += 1;
+  }
+
+  return flushedFrameCount;
+}
+
+async function flushAnimationFramesUntilIdle(
+  animationFrame: InstalledAnimationFrameMock,
+  maxFrameCount: number
+): Promise<number> {
+  const flushedFrameCount = await flushAnimationFrames(animationFrame, maxFrameCount);
+  if (animationFrame.pendingCount() !== 0) {
+    throw new Error(`Expected rAF loop to become idle within ${maxFrameCount} frames.`);
+  }
+
+  return flushedFrameCount;
+}
+
+function getAnimationFrameRequestCount(): number {
+  return vi.mocked(globalThis.requestAnimationFrame).mock.calls.length;
+}
+
+function getViewerCanvasFirstDrawableBoundsX(root: FakeElement): number {
+  const rawValue = getFakeElementByAttribute(
+    root,
+    "data-testid",
+    "viewer-clean-stage-canvas"
+  ).getAttribute("data-first-drawable-bounds-x");
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Expected finite first drawable x, got ${rawValue ?? "null"}.`);
+  }
+
+  return value;
+}
+
+type FakeReactProps = {
+  readonly onChange?: (event: { readonly currentTarget: FakeElement }) => void;
+  readonly onClick?: () => void;
+};
+
+type FakeNode = FakeElement | FakeTextNode;
+
+class FakeTextNode {
+  readonly nodeType = 3;
+  readonly nodeName = "#text";
+  readonly ownerDocument: FakeDocument;
+  parentNode: FakeElement | null = null;
+  data: string;
+  nodeValue: string;
+
+  constructor(text: string, ownerDocument: FakeDocument) {
+    this.data = text;
+    this.nodeValue = text;
+    this.ownerDocument = ownerDocument;
+  }
+
+  get textContent(): string {
+    return this.nodeValue;
+  }
+
+  set textContent(value: string) {
+    this.data = value;
+    this.nodeValue = value;
+  }
+}
+
+class FakeElement {
+  readonly nodeType = 1;
+  readonly ownerDocument: FakeDocument;
+  readonly style: Record<string, string> = {};
+  readonly childNodes: FakeNode[] = [];
+  readonly listeners = new Map<string, Set<EventListener>>();
+  disabled = false;
+  max = "";
+  min = "";
+  namespaceURI = "http://www.w3.org/1999/xhtml";
+  nodeValue: string | null = null;
+  parentNode: FakeElement | null = null;
+  selected = false;
+  tabIndex = 0;
+  type = "";
+  value = "";
+
+  private readonly attributes = new Map<string, string>();
+  private readonly pointerCaptures = new Set<number>();
+
+  constructor(
+    readonly localName: string,
+    ownerDocument: FakeDocument
+  ) {
+    this.ownerDocument = ownerDocument;
+  }
+
+  get tagName(): string {
+    return this.localName.toUpperCase();
+  }
+
+  get nodeName(): string {
+    return this.tagName;
+  }
+
+  get firstChild(): FakeNode | null {
+    return this.childNodes[0] ?? null;
+  }
+
+  get options(): FakeElement[] {
+    return this.childNodes.filter(
+      (child): child is FakeElement => child instanceof FakeElement && child.localName === "option"
+    );
+  }
+
+  get textContent(): string {
+    return this.childNodes.map((child) => child.textContent).join("");
+  }
+
+  set textContent(value: string) {
+    this.childNodes.splice(0, this.childNodes.length);
+    this.appendChild(this.ownerDocument.createTextNode(value));
+  }
+
+  appendChild(node: FakeNode): FakeNode {
+    node.parentNode?.removeChild(node);
+    this.childNodes.push(node);
+    node.parentNode = this;
+    return node;
+  }
+
+  insertBefore(node: FakeNode, before: FakeNode | null): FakeNode {
+    if (before === null) {
+      return this.appendChild(node);
+    }
+
+    node.parentNode?.removeChild(node);
+    const index = this.childNodes.indexOf(before);
+    if (index < 0) {
+      return this.appendChild(node);
+    }
+
+    this.childNodes.splice(index, 0, node);
+    node.parentNode = this;
+    return node;
+  }
+
+  removeChild(node: FakeNode): FakeNode {
+    const index = this.childNodes.indexOf(node);
+    if (index >= 0) {
+      this.childNodes.splice(index, 1);
+    }
+    node.parentNode = null;
+    return node;
+  }
+
+  setAttribute(name: string, value: string): void {
+    const normalized = String(value);
+    this.attributes.set(name, normalized);
+    if (name === "value") {
+      this.value = normalized;
+    } else if (name === "min") {
+      this.min = normalized;
+    } else if (name === "max") {
+      this.max = normalized;
+    } else if (name === "type") {
+      this.type = normalized;
+    } else if (name === "disabled") {
+      this.disabled = true;
+    } else if (name === "selected") {
+      this.selected = true;
+    } else if (name === "tabindex") {
+      this.tabIndex = Number(normalized);
+    }
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+    if (name === "disabled" || name === "selected") {
+      this[name] = false;
+    }
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: EventListener): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  contains(node: FakeNode): boolean {
+    if (node === this) {
+      return true;
+    }
+
+    return this.childNodes.some(
+      (child) => child instanceof FakeElement && child.contains(node)
+    );
+  }
+
+  focus(): void {
+    this.ownerDocument.activeElement = this;
+  }
+
+  getBoundingClientRect(): Pick<DOMRect, "left" | "top" | "width" | "height"> {
+    return {
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 100
+    };
+  }
+
+  setPointerCapture(pointerId: number): void {
+    this.pointerCaptures.add(pointerId);
+  }
+
+  releasePointerCapture(pointerId: number): void {
+    this.pointerCaptures.delete(pointerId);
+  }
+
+  hasPointerCapture(pointerId: number): boolean {
+    return this.pointerCaptures.has(pointerId);
+  }
+}
+
+class FakeDocument {
+  readonly nodeType = 9;
+  readonly nodeName = "#document";
+  readonly namespaceURI = "http://www.w3.org/1999/xhtml";
+  readonly documentElement: FakeElement;
+  readonly body: FakeElement;
+  readonly defaultView: {
+    readonly document: FakeDocument;
+    readonly Element: typeof FakeElement;
+    readonly HTMLElement: typeof FakeElement;
+    readonly SVGElement: typeof FakeElement;
+    readonly HTMLIFrameElement: new () => object;
+    readonly clearTimeout: typeof globalThis.clearTimeout;
+    readonly setTimeout: typeof globalThis.setTimeout;
+  };
+  activeElement: FakeElement | null = null;
+
+  constructor() {
+    this.documentElement = new FakeElement("html", this);
+    this.body = new FakeElement("body", this);
+    this.documentElement.appendChild(this.body);
+    this.defaultView = {
+      document: this,
+      Element: FakeElement,
+      HTMLElement: FakeElement,
+      SVGElement: FakeElement,
+      HTMLIFrameElement: class HTMLIFrameElement {},
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
+      setTimeout: globalThis.setTimeout.bind(globalThis)
+    };
+  }
+
+  createElement(tagName: string): FakeElement {
+    return new FakeElement(tagName.toLowerCase(), this);
+  }
+
+  createElementNS(namespaceURI: string, tagName: string): FakeElement {
+    const element = this.createElement(tagName);
+    element.namespaceURI = namespaceURI;
+    return element;
+  }
+
+  createTextNode(text: string): FakeTextNode {
+    return new FakeTextNode(text, this);
+  }
+
+  addEventListener(): void {
+    return undefined;
+  }
+
+  removeEventListener(): void {
+    return undefined;
+  }
+}
+
+type ReactActGlobal = typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+};
+
+function createFakeDomRoot(): {
+  readonly container: FakeElement;
+  readonly restore: () => void;
+} {
+  const document = new FakeDocument();
+  const reactActGlobal = globalThis as ReactActGlobal;
+  const previous = {
+    document: globalThis.document,
+    window: globalThis.window,
+    Element: globalThis.Element,
+    HTMLElement: globalThis.HTMLElement,
+    HTMLIFrameElement: globalThis.HTMLIFrameElement,
+    SVGElement: globalThis.SVGElement,
+    IS_REACT_ACT_ENVIRONMENT: reactActGlobal.IS_REACT_ACT_ENVIRONMENT
+  };
+
+  globalThis.document = document as unknown as Document;
+  globalThis.window = document.defaultView as unknown as Window & typeof globalThis;
+  globalThis.Element = FakeElement as unknown as typeof Element;
+  globalThis.HTMLElement = FakeElement as unknown as typeof HTMLElement;
+  globalThis.HTMLIFrameElement =
+    document.defaultView.HTMLIFrameElement as unknown as typeof HTMLIFrameElement;
+  globalThis.SVGElement = FakeElement as unknown as typeof SVGElement;
+  reactActGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+
+  return {
+    container: document.createElement("div"),
+    restore: () => {
+      globalThis.document = previous.document;
+      globalThis.window = previous.window;
+      globalThis.Element = previous.Element;
+      globalThis.HTMLElement = previous.HTMLElement;
+      globalThis.HTMLIFrameElement = previous.HTMLIFrameElement;
+      globalThis.SVGElement = previous.SVGElement;
+      reactActGlobal.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
+    }
+  };
+}
+
+function getFakeElementByAttribute(
+  root: FakeElement,
+  attributeName: string,
+  attributeValue: string
+): FakeElement {
+  const element = findFakeElements(
+    root,
+    (candidate) => candidate.getAttribute(attributeName) === attributeValue
+  )[0];
+  if (element === undefined) {
+    throw new Error(`Element with ${attributeName}="${attributeValue}" was not rendered.`);
+  }
+
+  return element;
+}
+
+function findFakeElements(
+  root: FakeElement,
+  predicate: (element: FakeElement) => boolean
+): FakeElement[] {
+  const matches: FakeElement[] = [];
+  if (predicate(root)) {
+    matches.push(root);
+  }
+
+  root.childNodes.forEach((child) => {
+    if (child instanceof FakeElement) {
+      matches.push(...findFakeElements(child, predicate));
+    }
+  });
+
+  return matches;
+}
+
+function getFakeReactProps(element: FakeElement): FakeReactProps {
+  const key = Object.keys(element).find((candidate) => candidate.startsWith("__reactProps$"));
+  if (key === undefined) {
+    return {};
+  }
+
+  return (element as unknown as Record<string, FakeReactProps>)[key] ?? {};
+}
+
+interface InstalledAnimationFrameMock {
+  readonly flushNext: (timestamp?: number) => void;
+  readonly pendingCount: () => number;
+  readonly restore: () => void;
+}
+
+function installAnimationFrameMock(): InstalledAnimationFrameMock {
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextFrameId = 1;
+
+  globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  globalThis.cancelAnimationFrame = vi.fn((frameId: number) => {
+    callbacks.delete(frameId);
+  });
+
+  return {
+    flushNext: (timestamp = 0) => {
+      const entry = callbacks.entries().next().value;
+      if (entry === undefined) {
+        return;
+      }
+
+      const [frameId, callback] = entry;
+      callbacks.delete(frameId);
+      callback(timestamp);
+    },
+    pendingCount: () => callbacks.size,
+    restore: () => {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
+    }
+  };
 }

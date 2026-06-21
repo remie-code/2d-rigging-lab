@@ -8,9 +8,11 @@ import type {
   RuntimeStateDto
 } from "@private-2d-rigging-lab/contracts";
 import {
+  computeDynamicsSource,
   createInitialRuntimeState,
   defaultRuntimeEvaluationOptions,
   evaluateRuntimeFrame,
+  type NormalizedDynamicsGroup,
   type NormalizedRuntimeGraph
 } from "@private-2d-rigging-lab/runtime-core";
 
@@ -19,6 +21,14 @@ import type { ParameterValueMap } from "../../features/editor-session/model/para
 export const VIEWER_RUNTIME_FIXED_STEP_MS = 16.6666667;
 export const VIEWER_RUNTIME_MAX_ELAPSED_MS = 100;
 const VIEWER_RUNTIME_MAX_SUB_STEPS = 6;
+// Viewer idle detection favors extra invisible frames over cutting off visible sway.
+export const VIEWER_RUNTIME_SETTLED_MIN_EVALUATED_FRAMES = 36;
+// Runtime dynamics source/angle values are normalized; this maps to sub-pixel Viewer motion.
+export const VIEWER_RUNTIME_SETTLED_ANGULAR_VELOCITY_EPSILON = 0.01;
+export const VIEWER_RUNTIME_SETTLED_SOURCE_VELOCITY_EPSILON = 0.0005;
+export const VIEWER_RUNTIME_SETTLED_ANGLE_TO_SOURCE_EPSILON = 0.01;
+// Output distance uses authored strength/limit units; 0.1 is at or below visible slider precision.
+export const VIEWER_RUNTIME_SETTLED_OUTPUT_TO_TARGET_EPSILON = 0.1;
 
 export interface ViewerRuntimePlaybackModel {
   readonly graph: NormalizedRuntimeGraph;
@@ -40,6 +50,13 @@ export interface ViewerRuntimePlaybackFrameResult {
   readonly parameterValues: ParameterValueMap;
 }
 
+export interface ViewerRuntimePlaybackSettledInput {
+  readonly authoredParameterValues: ParameterValueMap;
+  readonly evaluatedFrameCount: number;
+  readonly model: ViewerRuntimePlaybackModel;
+  readonly state: RuntimeStateDto | null | undefined;
+}
+
 export const createViewerRuntimePlaybackModel = (
   session: AuthoringSession
 ): ViewerRuntimePlaybackModel => {
@@ -48,13 +65,7 @@ export const createViewerRuntimePlaybackModel = (
   return {
     graph,
     dynamicsOutputParameterIds: createDynamicsOutputParameterIdSet(graph),
-    enabledDynamicsGroupCount: [...graph.dynamicsGroups.values()].filter(
-      (group) =>
-        group.enabled &&
-        group.inputs.length > 0 &&
-        group.pendulums.length > 0 &&
-        group.outputs.length > 0
-    ).length,
+    enabledDynamicsGroupCount: listPlayableDynamicsGroups(graph).length,
     stateIdentityKey: createRuntimeStateIdentityKey(graph)
   };
 };
@@ -127,6 +138,78 @@ export const isViewerRuntimePlaybackStateCompatible = (
   state.packageRevision === model.graph.packageRevision &&
   state.packageHash === model.graph.packageHash;
 
+export const createViewerRuntimeParameterSignature = (
+  model: ViewerRuntimePlaybackModel,
+  authoredParameterValues: ParameterValueMap
+): string => {
+  const parameterIds = new Set<ParameterId>(model.graph.parameters.keys());
+  for (const group of listPlayableDynamicsGroups(model.graph)) {
+    for (const input of group.inputs) {
+      parameterIds.add(input.parameterId);
+    }
+    for (const output of group.outputs) {
+      parameterIds.add(output.parameterId);
+    }
+  }
+
+  return [...parameterIds]
+    .sort((left, right) => left.localeCompare(right))
+    .map((parameterId) => {
+      const value =
+        authoredParameterValues[parameterId] ??
+        model.graph.parameters.get(parameterId)?.default ??
+        0;
+      return `${parameterId}:${formatRuntimeSignatureNumber(value)}`;
+    })
+    .join("|");
+};
+
+export const isViewerRuntimePlaybackStateSettled = ({
+  authoredParameterValues,
+  evaluatedFrameCount,
+  model,
+  state
+}: ViewerRuntimePlaybackSettledInput): boolean => {
+  if (model.enabledDynamicsGroupCount === 0) {
+    return true;
+  }
+
+  if (
+    state === null ||
+    state === undefined ||
+    !isViewerRuntimePlaybackStateCompatible(model, state) ||
+    evaluatedFrameCount < VIEWER_RUNTIME_SETTLED_MIN_EVALUATED_FRAMES
+  ) {
+    return false;
+  }
+
+  return listPlayableDynamicsGroups(model.graph).every((group) => {
+    const groupState = state.dynamicsGroups[group.dynamicsGroupId];
+    if (groupState === undefined) {
+      return false;
+    }
+
+    const targetSource = computeDynamicsSource(model.graph, group, authoredParameterValues);
+    const angleToSource = Math.abs(groupState.angle - targetSource);
+    const maxOutputDistance = Math.max(
+      ...group.outputs.map((output) => {
+        const rawDistance = Math.abs(angleToSource * output.strength);
+        return Math.min(rawDistance, Math.abs(output.limit));
+      }),
+      0
+    );
+
+    return (
+      Math.abs(groupState.angularVelocity) <=
+        VIEWER_RUNTIME_SETTLED_ANGULAR_VELOCITY_EPSILON &&
+      Math.abs(groupState.previousSourceVelocity) <=
+        VIEWER_RUNTIME_SETTLED_SOURCE_VELOCITY_EPSILON &&
+      angleToSource <= VIEWER_RUNTIME_SETTLED_ANGLE_TO_SOURCE_EPSILON &&
+      maxOutputDistance <= VIEWER_RUNTIME_SETTLED_OUTPUT_TO_TARGET_EPSILON
+    );
+  });
+};
+
 export const resolveViewerRuntimeParameterValues = (input: {
   readonly authoredParameterValues: ParameterValueMap;
   readonly model: ViewerRuntimePlaybackModel;
@@ -154,6 +237,17 @@ const createDynamicsOutputParameterIdSet = (
     )
   );
 
+const listPlayableDynamicsGroups = (
+  graph: NormalizedRuntimeGraph
+): readonly NormalizedDynamicsGroup[] =>
+  [...graph.dynamicsGroups.values()].filter(
+    (group) =>
+      group.enabled &&
+      group.inputs.length > 0 &&
+      group.pendulums.length > 0 &&
+      group.outputs.length > 0
+  );
+
 const createRuntimeStateIdentityKey = (graph: NormalizedRuntimeGraph): string =>
   `${graph.packageId}:${graph.packageRevision}:${graph.packageHash ?? ""}`;
 
@@ -177,3 +271,6 @@ const createEffectiveRuntimeParameterValueMap = (
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
+
+const formatRuntimeSignatureNumber = (value: number): string =>
+  Number.isFinite(value) ? String(Object.is(value, -0) ? 0 : value) : "non-finite";
