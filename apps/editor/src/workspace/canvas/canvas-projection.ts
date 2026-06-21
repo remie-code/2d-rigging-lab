@@ -216,8 +216,7 @@ export function createCanvasRenderProjection(
         ...(sourceLayer === undefined ? {} : { sourceLayer })
       });
       const selected = isDrawableSelected(selection, drawable.drawableId);
-      const selectedBySubtree =
-        !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
+      const selectedBySubtree = !selected && selectedDrawableIds.has(drawable.drawableId);
       const meshPreview = meshPreviewDrawableIds.has(drawable.drawableId);
 
       return {
@@ -654,6 +653,25 @@ function resolveSelectedDrawableIds(
 
   if (selection?.kind === "rigControl") {
     return collectRigControlDrawableIds(selection.id, rigControlsById);
+  }
+
+  if (selection?.kind === "deformerTreeSet") {
+    const result = new Set<DrawableId>();
+    for (const target of selection.targets) {
+      if (target.kind === "rigControl") {
+        for (const drawableId of collectRigControlDrawableIds(
+          target.rigControlId,
+          rigControlsById
+        )) {
+          result.add(drawableId);
+        }
+        continue;
+      }
+
+      result.add(target.drawableId);
+    }
+
+    return result;
   }
 
   if (selection?.kind !== "part") {

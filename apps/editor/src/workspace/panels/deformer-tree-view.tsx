@@ -51,12 +51,16 @@ export function DeformerTreeView() {
     selectDeformerTreeTarget
   } = useEditorSession();
   const [poolCollapsed, setPoolCollapsed] = useState(true);
-  const [collapsedRigControlIds, setCollapsedRigControlIds] =
+  const [expandedRigControlIds, setExpandedRigControlIds] =
     useState<ReadonlySet<RigControlId>>(() => new Set());
   const [dragging, setDragging] = useState<DeformerDragPayload | null>(null);
   const [dropTargetId, setDropTargetId] = useState<RigControlId | null>(null);
   const [localFeedback, setLocalFeedback] = useState<string | null>(null);
   const parentByRigControlId = useMemo(() => createParentMap(deformerRows), [deformerRows]);
+  const collapsedRigControlIds = useMemo(
+    () => createDefaultCollapsedRigControlIds(deformerRows, expandedRigControlIds),
+    [deformerRows, expandedRigControlIds]
+  );
   const visibleDeformerRows = useMemo(
     () => createVisibleDeformerRows(deformerRows, collapsedRigControlIds),
     [collapsedRigControlIds, deformerRows]
@@ -77,7 +81,7 @@ export function DeformerTreeView() {
   const feedback = localFeedback ?? rigOperationFeedback;
 
   const toggleRigControlCollapsed = (rigControlId: RigControlId) => {
-    setCollapsedRigControlIds((current) => {
+    setExpandedRigControlIds((current) => {
       const next = new Set(current);
       if (next.has(rigControlId)) {
         next.delete(rigControlId);
@@ -469,6 +473,21 @@ export function DeformerTreeView() {
       )}
     </div>
   );
+}
+
+export function createDefaultCollapsedRigControlIds(
+  rows: readonly DeformerTreeRow[],
+  expandedRigControlIds: ReadonlySet<RigControlId>
+): ReadonlySet<RigControlId> {
+  const collapsedRigControlIds = new Set<RigControlId>();
+
+  for (const row of rows) {
+    if (rowHasVisibleChildren(row) && !expandedRigControlIds.has(row.rigControlId)) {
+      collapsedRigControlIds.add(row.rigControlId);
+    }
+  }
+
+  return collapsedRigControlIds;
 }
 
 export function createVisibleDeformerRows(

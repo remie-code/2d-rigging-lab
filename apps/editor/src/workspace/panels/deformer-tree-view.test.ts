@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DrawableIdSchema, RigControlIdSchema } from "@private-2d-rigging-lab/contracts";
 
-import { DeformerTreeView, createVisibleDeformerRows } from "./deformer-tree-view";
+import {
+  DeformerTreeView,
+  createDefaultCollapsedRigControlIds,
+  createVisibleDeformerRows
+} from "./deformer-tree-view";
 import type { DeformerTreeRow } from "../../features/editor-session/model/rig-tool-state";
 
 const editorSessionMock = vi.hoisted(() => ({ current: undefined as unknown }));
@@ -19,7 +23,7 @@ vi.mock("../../features/editor-session/editor-session-context", () => ({
 }));
 
 describe("DeformerTreeView collapse state", () => {
-  it("renders disclosure controls only for Deformers with visible children", () => {
+  it("renders Deformers with visible children collapsed by default", () => {
     editorSessionMock.current = {
       bindDrawableToRigControl: vi.fn(),
       deformerRows: [
@@ -47,8 +51,35 @@ describe("DeformerTreeView collapse state", () => {
     const markup = renderToStaticMarkup(createElement(DeformerTreeView));
 
     expect(markup.match(/data-testid="deformer-tree-deformer-toggle"/g)).toHaveLength(1);
-    expect(markup).toContain('aria-label="Collapse Parent Warp"');
-    expect(markup).not.toContain('aria-label="Collapse Child Warp"');
+    expect(markup).toContain('aria-label="Expand Parent Warp"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('data-collapsed="true"');
+    expect(markup).not.toContain("Child Warp");
+  });
+
+  it("keeps explicitly expanded Deformers out of the default collapsed set", () => {
+    const rows = [
+      createWarpRow({
+        rigControlId: RIG_PARENT,
+        displayName: "Parent Warp",
+        depth: 0,
+        childRigControlCount: 1
+      }),
+      createWarpRow({
+        rigControlId: RIG_CHILD,
+        parentRigControlId: RIG_PARENT,
+        displayName: "Child Warp",
+        depth: 1,
+        childDrawableCount: 1
+      })
+    ] satisfies readonly DeformerTreeRow[];
+
+    expect(createDefaultCollapsedRigControlIds(rows, new Set())).toEqual(
+      new Set([RIG_PARENT, RIG_CHILD])
+    );
+    expect(createDefaultCollapsedRigControlIds(rows, new Set([RIG_PARENT]))).toEqual(
+      new Set([RIG_CHILD])
+    );
   });
 
   it("filters descendants under collapsed Deformers while leaving source rows intact", () => {
@@ -109,21 +140,11 @@ describe("DeformerTreeView diagnostics", () => {
     editorSessionMock.current = {
       bindDrawableToRigControl: vi.fn(),
       deformerRows: [
-        {
-          kind: "warpDeformer",
-          rigControlId: "rig_parent",
-          depth: 0,
+        createWarpRow({
+          rigControlId: RIG_PARENT,
           displayName: "Parent Warp",
-          detail: "Warp Deformer",
-          selected: false,
-          childDrawableCount: 1,
-          childRigControlCount: 0,
-          keyformSetCount: 0,
-          keyformKeyCount: 0,
-          transformLabel: "5 x 5 control points",
-          bezierLabel: "3 x 3 control points",
-          legacyDefaulted: false
-        },
+          depth: 0
+        }),
         {
           kind: "drawableRef",
           drawableId: "draw_warned",

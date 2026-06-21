@@ -109,6 +109,9 @@ describe("canvas render projection", () => {
     expect(projection.selectedDrawableIds).toEqual(
       new Set([DRAW_BACK, DRAW_FRONT, DRAW_HIDDEN, DRAW_MASK, DRAW_TARGET])
     );
+    expect(
+      projection.drawables.every((drawable) => !drawable.selected && drawable.selectedBySubtree)
+    ).toBe(true);
     expect(projection.selectionBounds).toEqual({ x: 0, y: 0, width: 40, height: 40 });
 
     const view = fitCanvasView(projection, { width: 640, height: 480 });
@@ -190,6 +193,16 @@ describe("canvas render projection", () => {
         createCanvasRenderProjection(session, {
           kind: "part",
           id: PART_FACE
+        })
+      )
+    ).toBe(true);
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+    expect(
+      hasIsolatableCanvasSelection(
+        createCanvasRenderProjection(session, {
+          kind: "rigControl",
+          id: RIG_FACE_WARP
         })
       )
     ).toBe(true);
@@ -414,6 +427,13 @@ describe("canvas render projection", () => {
     });
 
     expect(committedProjection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(
+      committedProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)
+    ).toMatchObject({
+      selected: false,
+      selectedBySubtree: true
+    });
+    expect(hasIsolatableCanvasSelection(committedProjection)).toBe(true);
     expect(committedProjection.deformerOverlay).toMatchObject({
       kind: "warp",
       rigControlId: RIG_FACE_WARP,
@@ -614,6 +634,7 @@ describe("canvas render projection", () => {
           resetCounter: 1
         }
       },
+      definitionOverridesByGroupId: {},
       resetSerial: 0
     });
     const projection = createCanvasRenderProjection(
@@ -737,6 +758,72 @@ describe("canvas render projection", () => {
         ]
       }
     });
+  });
+
+  it("projects parent Deformer selection as descendant drawable subtree selection", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_PARENT_WARP,
+        displayName: "Parent Warp",
+        childRigControlIds: [RIG_CHILD_WARP],
+        domainBounds: { x: 0, y: 0, width: 80, height: 80 }
+      }),
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_CHILD_WARP,
+        displayName: "Child Warp",
+        parentId: RIG_PARENT_WARP,
+        childDrawableIds: [DRAW_FRONT],
+        domainBounds: { x: 5, y: 5, width: 20, height: 20 }
+      })
+    );
+    session.graph.rigControlRootIds = [RIG_PARENT_WARP];
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "rigControl",
+      id: RIG_PARENT_WARP
+    });
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(
+      projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)
+    ).toMatchObject({
+      selected: false,
+      selectedBySubtree: true
+    });
+    expect(projection.selectionBounds).toEqual({ x: 5, y: 5, width: 20, height: 20 });
+    expect(hasIsolatableCanvasSelection(projection)).toBe(true);
+  });
+
+  it("projects Deformer tree multi-selection targets as isolatable drawable selections", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "deformerTreeSet",
+      targets: [
+        {
+          kind: "rigControl",
+          rigControlId: RIG_FACE_WARP
+        },
+        {
+          kind: "poolDrawable",
+          drawableId: DRAW_TARGET
+        }
+      ]
+    });
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT, DRAW_TARGET]));
+    expect(
+      projection.drawables
+        .filter((drawable) => projection.selectedDrawableIds.has(drawable.drawableId))
+        .map((drawable) => [drawable.drawableId, drawable.selected, drawable.selectedBySubtree])
+    ).toEqual([
+      [DRAW_TARGET, false, true],
+      [DRAW_FRONT, false, true]
+    ]);
+    expect(hasIsolatableCanvasSelection(projection)).toBe(true);
   });
 
   it("projects Warp control point preview into actual drawable geometry", () => {

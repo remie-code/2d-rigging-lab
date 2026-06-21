@@ -32,6 +32,10 @@ import {
   type PsdAdapterParserEvidenceDto,
   type PsdAdapterResultDto
 } from "@private-2d-rigging-lab/operation-core";
+import {
+  getLive2dPerformanceStats,
+  resetLive2dPerformanceStats
+} from "@private-2d-rigging-lab/render-core";
 import type {
   BrowserPsdMaterializedLayerBytes,
   BrowserPsdParserInput,
@@ -207,6 +211,54 @@ describe("EditorSessionProvider history integration", () => {
       expect(harness.context().canRedo).toBe(false);
     } finally {
       await harness.cleanup();
+    }
+  });
+
+  it("keeps history binary pressure counters default-off and enables them with the existing perf flag", async () => {
+    delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+    resetLive2dPerformanceStats();
+    const disabledHarness = await renderEditorSessionProbe({
+      initialSession: createTextureBundleSession()
+    });
+
+    try {
+      await act(async () => {
+        const result = disabledHarness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(getLive2dPerformanceStats()).toBeUndefined();
+    } finally {
+      await disabledHarness.cleanup();
+    }
+
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+    const enabledHarness = await renderEditorSessionProbe({
+      initialSession: createTextureBundleSession()
+    });
+
+    try {
+      await act(async () => {
+        const result = enabledHarness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+        "editorHistory.samples": 1,
+        "editorHistory.undoDepth": 1,
+        "editorHistory.redoDepth": 0,
+        "editorHistory.currentBinaryAssetCount": 1,
+        "editorHistory.currentBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.estimatedDeepClonedHistoryBinaryBytes": TEXTURE_BYTES.byteLength * 2,
+        "editorHistory.estimatedRetainedSharedHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.estimatedAvoidedDuplicateHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.retainedSharingRatioBasisPoints": 5000
+      });
+    } finally {
+      delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+      resetLive2dPerformanceStats();
+      await enabledHarness.cleanup();
     }
   });
 
@@ -2737,6 +2789,10 @@ class FakeDocument {
 
 type ReactActGlobal = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+};
+
+type Live2dPerformanceTestGlobal = typeof globalThis & {
+  __LIVE2D_PERF__?: boolean;
 };
 
 function createFakeDomRoot(): {

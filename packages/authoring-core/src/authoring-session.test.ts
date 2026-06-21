@@ -8,6 +8,8 @@ import { parsePackageDocument } from "@private-2d-rigging-lab/package-format";
 import { describe, expect, it } from "vitest";
 
 import {
+  cloneAuthoringSession,
+  cloneAuthoringSessionSharingBinaryAssets,
   createAuthoringSessionFromPackageDocument,
   createDryRunAuthoringSession,
   createParameter,
@@ -39,6 +41,65 @@ describe("authoring session foundation", () => {
     expect(original.authoringRevision).toBe(0);
     expect(dryRunSession.dirty).toBe(true);
     expect(original.dirty).toBe(false);
+  });
+
+  it("clones graph-edit sessions while sharing immutable binary byte payloads", () => {
+    const original = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const bytes = new Uint8Array([0x61, 0x62, 0x63]);
+    original.binaryAssets = {
+      fileEntries: [
+        {
+          path: "assets/textures/test.raw-rgba",
+          bytes,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          binaryAssetId: "bin_test_raw_rgba"
+        }
+      ],
+      binaryAssetIndex: {
+        schemaVersion: "binary-asset-index-v1",
+        assets: []
+      },
+      byteIntakeSummaries: []
+    };
+
+    const clone = cloneAuthoringSessionSharingBinaryAssets(original);
+    const parameter = createTestParameter("param_graph_edit_only");
+    createParameter(clone, parameter);
+
+    expect(clone).not.toBe(original);
+    expect(clone.graph).not.toBe(original.graph);
+    expect(clone.binaryAssets).not.toBe(original.binaryAssets);
+    expect(clone.binaryAssets?.fileEntries).not.toBe(original.binaryAssets.fileEntries);
+    expect(clone.binaryAssets?.fileEntries[0]).not.toBe(original.binaryAssets.fileEntries[0]);
+    expect(clone.binaryAssets?.fileEntries[0]?.bytes).toBe(bytes);
+    expect(clone.binaryAssets?.binaryAssetIndex).not.toBe(original.binaryAssets.binaryAssetIndex);
+    expect(getParameterById(clone.graph, parameter.parameterId)?.displayName).toBe("Graph Edit Only");
+    expect(getParameterById(original.graph, parameter.parameterId)).toBeUndefined();
+  });
+
+  it("keeps the generic authoring session clone as a full binary deep clone", () => {
+    const original = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const bytes = new Uint8Array([0x61, 0x62, 0x63]);
+    original.binaryAssets = {
+      fileEntries: [
+        {
+          path: "assets/textures/test.raw-rgba",
+          bytes,
+          mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+          binaryAssetId: "bin_test_raw_rgba"
+        }
+      ],
+      binaryAssetIndex: {
+        schemaVersion: "binary-asset-index-v1",
+        assets: []
+      },
+      byteIntakeSummaries: []
+    };
+
+    const clone = cloneAuthoringSession(original);
+
+    expect(clone.binaryAssets?.fileEntries[0]?.bytes).toEqual(bytes);
+    expect(clone.binaryAssets?.fileEntries[0]?.bytes).not.toBe(bytes);
   });
 
   it("creates a parameter and marks the session dirty with a new authoring revision", () => {

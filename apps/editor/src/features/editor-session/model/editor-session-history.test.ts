@@ -10,11 +10,21 @@ import {
   PartIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  type RigControlId
 } from "@private-2d-rigging-lab/contracts";
-import { describe, expect, it } from "vitest";
+import {
+  getLive2dPerformanceStats,
+  resetLive2dPerformanceStats
+} from "@private-2d-rigging-lab/render-core";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { commitEditKeyformKey } from "./editor-session-commands";
+import {
+  commitCreateWarpDeformer,
+  commitDeleteRigControl,
+  commitEditKeyformKey,
+  commitPartNameEdit
+} from "./editor-session-commands";
 import {
   canRedoEditorSessionHistory,
   canUndoEditorSessionHistory,
@@ -30,8 +40,15 @@ const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_A = PartIdSchema.parse("part_a");
 const DRAW_A = DrawableIdSchema.parse("draw_a");
 const PARAMETER_ID = ParameterIdSchema.parse("param_face_angle_x");
+const TEXTURE_PATH = "assets/textures/history-fixture.raw-rgba";
+const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63, 0x64]);
 
 describe("editor session history", () => {
+  afterEach(() => {
+    delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+    resetLive2dPerformanceStats();
+  });
+
   it("bounds undo depth and clears redo when a new commit is recorded", () => {
     const baseSession = createFixtureSession();
     const revisionOne = withPackageRevision(baseSession, 1);
@@ -72,9 +89,78 @@ describe("editor session history", () => {
     expect(redoEditorSessionHistory(history)).toBeNull();
   });
 
-  it("records existing keyform command commits and restores add, update, and delete", () => {
-    let currentSession = createFixtureSession();
+  it("records binary-backed commits without deep cloning unchanged bytes", () => {
+    const before = createBinaryBackedFixtureSession();
+    const after = withPartDisplayName(before, "Part A Updated");
+    const sharedBytes = getFirstBinaryBytes(before);
+
+    const history = recordEditorSessionCommit(createEmptyEditorSessionHistory(), {
+      before,
+      after,
+      label: "Update part"
+    });
+    const entry = history.undoStack[0]!;
+
+    expect(getFirstBinaryBytes(entry.before)).toBe(sharedBytes);
+    expect(getFirstBinaryBytes(entry.after)).toBe(sharedBytes);
+
+    after.graph.parts[1] = {
+      ...after.graph.parts[1]!,
+      displayName: "Mutated after recording"
+    };
+
+    expect(entry.after.graph.parts[1]?.displayName).toBe("Part A Updated");
+  });
+
+  it("returns undo and redo graph states with valid shared binary assets", () => {
+    const before = createBinaryBackedFixtureSession();
+    const after = withPartDisplayName(before, "Part A Updated");
+    const sharedBytes = getFirstBinaryBytes(before);
+    const history = recordEditorSessionCommit(createEmptyEditorSessionHistory(), {
+      before,
+      after,
+      label: "Update part"
+    });
+
+    const undo = undoEditorSessionHistory(history)!;
+    expect(undo.session.graph.parts[1]?.displayName).toBe("Part A");
+    expect(getFirstBinaryBytes(undo.session)).toBe(sharedBytes);
+
+    const redo = redoEditorSessionHistory(undo.history)!;
+    expect(redo.session.graph.parts[1]?.displayName).toBe("Part A Updated");
+    expect(getFirstBinaryBytes(redo.session)).toBe(sharedBytes);
+  });
+
+  it("keeps binary byte identity shared through multiple graph-only commits", () => {
+    let currentSession = createBinaryBackedFixtureSession();
     let history = createEmptyEditorSessionHistory();
+    const sharedBytes = getFirstBinaryBytes(currentSession);
+
+    for (const displayName of ["Part A One", "Part A Two", "Part A Three"]) {
+      const outcome = commitEditorSessionCommandWithHistory({
+        currentSession,
+        history,
+        label: "Rename part",
+        command: (session) => commitPartNameEdit(session, PART_A, displayName)
+      });
+
+      expect(outcome.result.committed).toBe(true);
+      currentSession = outcome.result.session;
+      history = outcome.history;
+      expect(getFirstBinaryBytes(currentSession)).toBe(sharedBytes);
+    }
+
+    expect(history.undoStack).toHaveLength(3);
+    for (const entry of history.undoStack) {
+      expect(getFirstBinaryBytes(entry.before)).toBe(sharedBytes);
+      expect(getFirstBinaryBytes(entry.after)).toBe(sharedBytes);
+    }
+  });
+
+  it("records existing keyform command commits and restores add, update, and delete for a binary-backed session", () => {
+    let currentSession = createBinaryBackedFixtureSession();
+    let history = createEmptyEditorSessionHistory();
+    const sharedBytes = getFirstBinaryBytes(currentSession);
 
     ({ currentSession, history } = applyKeyformCommand(
       currentSession,
@@ -98,19 +184,130 @@ describe("editor session history", () => {
       "deleteCurrent"
     ));
     expect(findOpacityKeyformValue(currentSession)).toBeUndefined();
+    expect(getFirstBinaryBytes(currentSession)).toBe(sharedBytes);
     expect(history.undoStack).toHaveLength(3);
 
     const undoDelete = undoEditorSessionHistory(history)!;
     expect(findOpacityKeyformValue(undoDelete.session)).toBe(0.25);
+    expect(getFirstBinaryBytes(undoDelete.session)).toBe(sharedBytes);
 
     const undoUpdate = undoEditorSessionHistory(undoDelete.history)!;
     expect(findOpacityKeyformValue(undoUpdate.session)).toBe(0.5);
+    expect(getFirstBinaryBytes(undoUpdate.session)).toBe(sharedBytes);
 
     const undoAdd = undoEditorSessionHistory(undoUpdate.history)!;
     expect(findOpacityKeyformValue(undoAdd.session)).toBeUndefined();
+    expect(getFirstBinaryBytes(undoAdd.session)).toBe(sharedBytes);
 
     const redoAdd = redoEditorSessionHistory(undoAdd.history)!;
     expect(findOpacityKeyformValue(redoAdd.session)).toBe(0.5);
+    expect(getFirstBinaryBytes(redoAdd.session)).toBe(sharedBytes);
+
+    const redoUpdate = redoEditorSessionHistory(redoAdd.history)!;
+    expect(findOpacityKeyformValue(redoUpdate.session)).toBe(0.25);
+    expect(getFirstBinaryBytes(redoUpdate.session)).toBe(sharedBytes);
+
+    const redoDelete = redoEditorSessionHistory(redoUpdate.history)!;
+    expect(findOpacityKeyformValue(redoDelete.session)).toBeUndefined();
+    expect(getFirstBinaryBytes(redoDelete.session)).toBe(sharedBytes);
+  });
+
+  it("keeps deformer create and delete undoable and redoable for a binary-backed session", () => {
+    let currentSession = createBinaryBackedFixtureSession();
+    let history = createEmptyEditorSessionHistory();
+    const sharedBytes = getFirstBinaryBytes(currentSession);
+
+    const createOutcome = commitEditorSessionCommandWithHistory({
+      currentSession,
+      history,
+      label: "Create Warp Deformer",
+      command: (session) =>
+        commitCreateWarpDeformer(session, {
+          partId: PART_A,
+          displayName: "History Warp",
+          childDrawableIds: [DRAW_A],
+          childRigControlIds: [],
+          domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+          transformColumns: 5,
+          transformRows: 5,
+          bezierColumns: 3,
+          bezierRows: 3,
+          bezierEditType: "cubicBezierSurfaceV1"
+        })
+    });
+    expect(createOutcome.result.committed).toBe(true);
+    const rigControlId = createOutcome.result.rigControlId!;
+    currentSession = createOutcome.result.session;
+    history = createOutcome.history;
+    expect(findRigControl(currentSession, rigControlId)).toBeDefined();
+    expect(getFirstBinaryBytes(currentSession)).toBe(sharedBytes);
+
+    const deleteOutcome = commitEditorSessionCommandWithHistory({
+      currentSession,
+      history,
+      label: "Delete Deformer",
+      command: (session) => commitDeleteRigControl(session, { rigControlId })
+    });
+    expect(deleteOutcome.result.committed).toBe(true);
+    currentSession = deleteOutcome.result.session;
+    history = deleteOutcome.history;
+    expect(findRigControl(currentSession, rigControlId)).toBeUndefined();
+    expect(getFirstBinaryBytes(currentSession)).toBe(sharedBytes);
+
+    const undoDelete = undoEditorSessionHistory(history)!;
+    expect(findRigControl(undoDelete.session, rigControlId)).toBeDefined();
+    expect(getFirstBinaryBytes(undoDelete.session)).toBe(sharedBytes);
+
+    const undoCreate = undoEditorSessionHistory(undoDelete.history)!;
+    expect(findRigControl(undoCreate.session, rigControlId)).toBeUndefined();
+    expect(getFirstBinaryBytes(undoCreate.session)).toBe(sharedBytes);
+
+    const redoCreate = redoEditorSessionHistory(undoCreate.history)!;
+    expect(findRigControl(redoCreate.session, rigControlId)).toBeDefined();
+    expect(getFirstBinaryBytes(redoCreate.session)).toBe(sharedBytes);
+
+    const redoDelete = redoEditorSessionHistory(redoCreate.history)!;
+    expect(findRigControl(redoDelete.session, rigControlId)).toBeUndefined();
+    expect(getFirstBinaryBytes(redoDelete.session)).toBe(sharedBytes);
+  });
+
+  it("keeps history binary pressure counters disabled by default", () => {
+    const before = createBinaryBackedFixtureSession();
+    const after = withPartDisplayName(before, "Part A Updated");
+    resetLive2dPerformanceStats();
+
+    recordEditorSessionCommit(createEmptyEditorSessionHistory(), {
+      before,
+      after,
+      label: "Update part"
+    });
+
+    expect(getLive2dPerformanceStats()).toBeUndefined();
+  });
+
+  it("records history binary pressure counters when the existing dev perf flag is enabled", () => {
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+    const before = createBinaryBackedFixtureSession();
+    const after = withPartDisplayName(before, "Part A Updated");
+
+    recordEditorSessionCommit(createEmptyEditorSessionHistory(), {
+      before,
+      after,
+      label: "Update part"
+    });
+
+    expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+      "editorHistory.samples": 1,
+      "editorHistory.undoDepth": 1,
+      "editorHistory.redoDepth": 0,
+      "editorHistory.currentBinaryAssetCount": 1,
+      "editorHistory.currentBinaryBytes": TEXTURE_BYTES.byteLength,
+      "editorHistory.estimatedDeepClonedHistoryBinaryBytes": TEXTURE_BYTES.byteLength * 2,
+      "editorHistory.estimatedRetainedSharedHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+      "editorHistory.estimatedAvoidedDuplicateHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+      "editorHistory.retainedSharingRatioBasisPoints": 5000
+    });
   });
 
   it("does not dirty history for rejected command results", () => {
@@ -242,6 +439,84 @@ function withPackageRevision(session: AuthoringSession, packageRevision: number)
   };
 }
 
+function withPartDisplayName(session: AuthoringSession, displayName: string): AuthoringSession {
+  const nextSession: AuthoringSession = {
+    ...session,
+    packageRevision: session.packageRevision + 1,
+    graph: structuredClone(session.graph),
+    binaryAssets: session.binaryAssets
+  };
+  nextSession.graph.parts[1] = {
+    ...nextSession.graph.parts[1]!,
+    displayName
+  };
+  return nextSession;
+}
+
+function createBinaryBackedFixtureSession(): AuthoringSession {
+  const session = createFixtureSession();
+  const binaryAssetRef = {
+    referenceKind: "package-binary-asset-ref-v1" as const,
+    binaryAssetId: "bin_history_fixture_texture",
+    packageRelativePath: TEXTURE_PATH,
+    digest: {
+      algorithm: "sha256" as const,
+      hex: "0".repeat(64)
+    },
+    byteLength: TEXTURE_BYTES.byteLength,
+    mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+    storageStatus: "stored-package-local-v1" as const,
+    provenanceId: ProvenanceIdSchema.parse("prov_a"),
+    rightsAssetId: "rights_history_fixture"
+  };
+
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: TextureIdSchema.parse("tex_a"),
+        filePath: TEXTURE_PATH,
+        sourceAssetId: SourceAssetIdSchema.parse("src_fixture"),
+        sourceLayerId: "layer_history_fixture",
+        provenanceId: ProvenanceIdSchema.parse("prov_a"),
+        binaryAssetRef
+      }
+    ]
+  };
+  session.binaryAssets = {
+    fileEntries: [
+      {
+        path: TEXTURE_PATH,
+        bytes: TEXTURE_BYTES,
+        mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+        binaryAssetId: "bin_history_fixture_texture"
+      }
+    ],
+    binaryAssetIndex: {
+      schemaVersion: "binary-asset-index-v1",
+      assets: []
+    },
+    byteIntakeSummaries: []
+  };
+
+  return session;
+}
+
+function getFirstBinaryBytes(session: AuthoringSession): Uint8Array {
+  const bytes = session.binaryAssets?.fileEntries[0]?.bytes;
+  if (bytes === undefined) {
+    throw new Error("Expected fixture binary bytes.");
+  }
+
+  return bytes;
+}
+
+function findRigControl(session: AuthoringSession, rigControlId: RigControlId) {
+  return session.graph.rigControls.find(
+    (candidate) => candidate.rigControlId === rigControlId
+  );
+}
+
 function createFixtureSession(): AuthoringSession {
   return {
     packageIdentity: {
@@ -305,3 +580,7 @@ function createFixtureSession(): AuthoringSession {
     }
   };
 }
+
+type Live2dPerformanceTestGlobal = typeof globalThis & {
+  __LIVE2D_PERF__?: boolean;
+};

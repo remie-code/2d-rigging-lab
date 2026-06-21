@@ -1,5 +1,9 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
-import type { StructureOrderDrop, StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
+import {
+  cloneAuthoringSessionForGraphEdit,
+  type AuthoringSession,
+  type StructureOrderDrop,
+  type StructureOrderItem
+} from "@private-2d-rigging-lab/authoring-core";
 import type { DiagnosticDto, DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
@@ -170,7 +174,7 @@ export function commitDrawableMaskSourceEdit(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   if (existingRelation !== undefined && existingRelation.targetDrawableIds.length > 1) {
     const removal = commitMaskRelationTargetRemovalOnSession(
       nextSession,
@@ -220,7 +224,7 @@ export function commitDrawableReorder(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const priorDiagnostics: DiagnosticDto[] = [];
   let hasCommitted = false;
   if (draggedDrawable.partId !== targetDrawable.partId) {
@@ -498,7 +502,7 @@ function commitMaskRelationTargetRemoval(
   relation: AuthoringSession["graph"]["masks"][number],
   targetDrawableId: DrawableId
 ): EditorSessionCommandResult {
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const result = commitMaskRelationTargetRemovalOnSession(nextSession, relation, targetDrawableId);
   return result.committed ? { ...result, session: nextSession } : { ...result, session };
 }
@@ -527,7 +531,7 @@ function commitSingleOperation(
   session: AuthoringSession,
   draft: OperationDraft
 ): EditorSessionCommandResult {
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const result = commitOperationInPlace(nextSession, draft);
   return result.committed ? { ...result, session: nextSession } : { ...result, session };
 }
