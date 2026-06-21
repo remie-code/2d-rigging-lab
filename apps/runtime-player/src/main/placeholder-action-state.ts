@@ -1,0 +1,65 @@
+import {
+  type RuntimePlayerPlaceholderAction,
+  type RuntimePlayerPlaceholderResult,
+  type RuntimePlayerStageStatus,
+  type RuntimePlayerStartupStatus,
+  runtimePlayerPlaceholderActions
+} from "../preload/runtime-player-bridge-contract";
+
+const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
+
+const placeholderMessages: Record<RuntimePlayerPlaceholderAction, string> = {
+  "open-runtime-export":
+    "Runtime Export directory selection is reserved for a later wave.",
+  "open-settings": "Settings are visible as a Wave1 placeholder only.",
+  "connect-input": "Input networking is not implemented in Wave1.",
+  "disconnect-input": "No input connection is active in this placeholder.",
+  "look-forward": "Look Forward calibration is reserved for tracking input work.",
+  "focus-stage": "Stage Window focus was requested.",
+  "reset-stage-position": "Stage Window placement reset was requested.",
+  "open-debug": "Debug details are reserved for a later developer panel."
+};
+
+export function isRuntimePlayerPlaceholderAction(
+  action: unknown
+): action is RuntimePlayerPlaceholderAction {
+  return typeof action === "string" && placeholderActionSet.has(action);
+}
+
+export function createStartupStatus(): RuntimePlayerStartupStatus {
+  return {
+    runtimeExport: {
+      loaded: false,
+      statusLabel: "No Runtime Export loaded",
+      expectedDirectorySuffix: ".runtime-export"
+    },
+    input: {
+      sourceLabel: "iFacialMocap",
+      transportLabel: "UDP",
+      receivePort: 49983,
+      connectionState: "not-connected"
+    },
+    stage: createStageStatus()
+  };
+}
+
+export function createStageStatus(): RuntimePlayerStageStatus {
+  return {
+    windowState: "created",
+    transparent: true,
+    captureTarget: true,
+    placeholderLabel: "Transparent Stage placeholder"
+  };
+}
+
+export function createPlaceholderResult(
+  action: RuntimePlayerPlaceholderAction,
+  message = placeholderMessages[action]
+): RuntimePlayerPlaceholderResult {
+  return {
+    action,
+    handled: false,
+    message,
+    atIso: new Date(0).toISOString()
+  };
+}

@@ -51,6 +51,7 @@ discussion/
   runtime-player/       # Editor外のRuntime Player / Capture Host appの調査、UX、設計
     _map.md
     architecture/
+    implementation/
     research/
     screens/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い

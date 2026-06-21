@@ -3,7 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./out/main/index.js",
+  "main": "./out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "build": "pnpm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run -c vitest.config.ts",
+    "preview": "electron-vite preview"
+  },
   "dependencies": {
     "@private-2d-rigging-lab/contracts": "workspace:*",
     "@private-2d-rigging-lab/render-core": "workspace:*",

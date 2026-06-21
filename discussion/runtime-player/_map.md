@@ -15,6 +15,7 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 | [research/](research/) | 外部入力ソース、通信仕様、成立性調査 | Created |
 | [screens/](screens/) | Runtime Playerの画面責務、初期画面、Live/Setup UX | Created |
 | [architecture/](architecture/) | Runtime Playerの技術スタック、process/window/package境界、runtime data flow | Created |
+| [implementation/](implementation/) | Runtime Player専用の実装wave計画、domain report、review記録 | Created |
 
 ## 3. Key Files
 
@@ -24,6 +25,7 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 | [screens/initial-runtime-player-screen.md](screens/initial-runtime-player-screen.md) | Draft / initial UX captured | Runtime Player起動時にユーザーが最初に見る画面、モデルロード後のLive/Setup画面、通常表示に載せない情報 |
 | [architecture/technology-stack-decision.md](architecture/technology-stack-decision.md) | Accepted baseline | Electron固定後のRuntime Player技術スタック、採用理由、app構成、非採用技術、未決事項 |
 | [architecture/runtime-player-development-policy.md](architecture/runtime-player-development-policy.md) | Accepted baseline | Runtime Player固有のprocess boundary、ディレクトリ粒度、ファイル分割、IPC、runtime loop、state ownership、test方針 |
+| [implementation/orchestration/player-wave1-plan.md](implementation/orchestration/player-wave1-plan.md) | Planned / ready for orchestration | Runtime Player Wave1: Electron app shell + initial placeholder screen |
 
 ## 4. Current Decisions
 
@@ -38,6 +40,7 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Runtime PlayerはControl Windowとtransparent Stage Windowを分ける。
 - Startup時は前回Runtime Exportを自動復元する。recent export listはfuture扱い。
 - iFacialMocap接続はユーザーにhandshakeを意識させず、Connect操作に受信開始・可能ならhandshake送信・接続状態判定を集約する。
+- Runtime Player Wave1は、Electron app shellとControl/Stage placeholder screenだけを実装対象にし、Runtime Export読み込みやinput接続は実装しない。
 
 ## 5. Next Questions
 

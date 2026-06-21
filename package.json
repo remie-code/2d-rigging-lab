@@ -12,17 +12,24 @@
     "smoke:wave44:psd-parser": "node scripts/wave44-psd-parser-smoke.mjs --psd test_data/sample_model.psd",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",
-    "check": "pnpm run typecheck && pnpm run test:unit && pnpm run check:deps && pnpm run check:source"
+    "check": "pnpm run typecheck && pnpm run test:unit && pnpm run check:deps && pnpm run check:source",
+    "runtime-player:install-electron": "pnpm --config.offline=false --filter @private-2d-rigging-lab/runtime-player exec install-electron --no"
   },
   "devDependencies": {
-    "@webtoon/psd": "0.4.0",
     "@types/node": "22.15.29",
+    "@webtoon/psd": "0.4.0",
     "typescript": "5.8.3",
     "vitest": "3.1.4"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ],
     "overrides": {
       "@radix-ui/react-slot": "1.2.4"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
