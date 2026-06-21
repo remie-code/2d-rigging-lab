@@ -2116,6 +2116,254 @@ describe("alpha-aware mesh generation", () => {
     })).toBe(true);
   });
 
+  it("generates disconnected v6d adaptive contour geometry for two separated alpha islands", () => {
+    const textureSize = { width: 48, height: 36 };
+    const meshBounds = { x: 0, y: 0, width: 48, height: 36 };
+    const opaquePixels = createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) => {
+      const leftLeg = x >= 7 && x <= 17 && y >= 5 && y <= 30 && !(x >= 7 && x <= 9 && y <= 9);
+      const rightLeg = x >= 30 && x <= 40 && y >= 5 && y <= 30 && !(x >= 38 && x <= 40 && y <= 9);
+      return leftLeg || rightLeg;
+    });
+    const baseInput = {
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor" as const,
+      densityHint: "medium" as const
+    };
+    const generated = createGeneratedMeshForDrawable(baseInput);
+    const second = createGeneratedMeshForDrawable(baseInput);
+
+    expect(second?.mesh).toEqual(generated?.mesh);
+    expect(second?.alphaBounds).toEqual(generated?.alphaBounds);
+    expect(getV6MultiIslandDiagnosticsForTest(second?.qualityMetrics?.v6Metrics)).toEqual(
+      getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics)
+    );
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    expectNoDuplicateStableIds(generated?.mesh);
+    expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
+    expect(countTrianglesCrossingVerticalGap(generated?.mesh, 21, 27)).toBe(0);
+    expect(generated?.mesh.vertices.some((vertex) => vertex.x < 21)).toBe(true);
+    expect(generated?.mesh.vertices.some((vertex) => vertex.x > 27)).toBe(true);
+    const leftIslandUvXRange = getUvXRangeForVertices(generated?.mesh, (vertex) => vertex.x < 21);
+    const rightIslandUvXRange = getUvXRangeForVertices(generated?.mesh, (vertex) => vertex.x > 27);
+    expect(leftIslandUvXRange?.max).toBeLessThan(0.5);
+    expect(rightIslandUvXRange?.min).toBeGreaterThan(0.5);
+    expect(leftIslandUvXRange?.min).toBeLessThanOrEqual(7 / textureSize.width);
+    expect(rightIslandUvXRange?.max).toBeGreaterThanOrEqual(40 / textureSize.width);
+    expect(generated?.alphaBounds?.x).toBeLessThanOrEqual(7);
+    expect(generated?.alphaBounds?.y).toBeLessThanOrEqual(5);
+    expect((generated?.alphaBounds?.x ?? 0) + (generated?.alphaBounds?.width ?? 0)).toBeGreaterThanOrEqual(41);
+    expect((generated?.alphaBounds?.y ?? 0) + (generated?.alphaBounds?.height ?? 0)).toBeGreaterThanOrEqual(31);
+
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(v6Metrics);
+    expect(v6Metrics?.multiIslandHandling).toBe("supported");
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 2,
+      generatedIslandCount: 2,
+      backendGeneratedIslandCount: 2,
+      skippedTinyNoiseIslandCount: 0,
+      skippedTinyNoisePixelCount: 0,
+      localizedFallbackCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands.map((island) => island.handling)).toEqual([
+      "generated",
+      "generated"
+    ]);
+    expect(
+      multiIslandDiagnostics?.islands.every(
+        (island) =>
+          typeof island.maxBoundaryVertices === "number" &&
+          island.maxBoundaryVertices > 0 &&
+          typeof island.maxInteriorVertices === "number"
+      )
+    ).toBe(true);
+    const budgetPolicy = multiIslandDiagnostics?.budgetPolicy;
+    const allocatedBoundaryTotal =
+      multiIslandDiagnostics?.islands.reduce((sum, island) => sum + (island.maxBoundaryVertices ?? 0), 0) ?? 0;
+    const allocatedInteriorTotal =
+      multiIslandDiagnostics?.islands.reduce((sum, island) => sum + (island.maxInteriorVertices ?? 0), 0) ?? 0;
+    expect(budgetPolicy?.allocatedMaxBoundaryVertices).toBe(allocatedBoundaryTotal);
+    expect(budgetPolicy?.allocatedMaxInteriorVertices).toBe(allocatedInteriorTotal);
+    expect(budgetPolicy?.allocatedMaxBoundaryVertices).toBeLessThanOrEqual(
+      budgetPolicy?.globalMaxBoundaryVertices ?? 0
+    );
+    expect(budgetPolicy?.allocatedMaxInteriorVertices).toBeLessThanOrEqual(
+      budgetPolicy?.globalMaxInteriorVertices ?? 0
+    );
+    expect(budgetPolicy?.minimumBoundaryFloorExceededGlobalCap).toBe(false);
+    expect(budgetPolicy?.minimumInteriorFloorExceededGlobalCap).toBe(false);
+    expect(
+      multiIslandDiagnostics?.islands.every(
+        (island) => (island.maxBoundaryVertices ?? Number.POSITIVE_INFINITY) < (budgetPolicy?.globalMaxBoundaryVertices ?? 0)
+      )
+    ).toBe(true);
+  });
+
+  it("skips tiny v6d adaptive contour alpha speck noise without emitting geometry in the noise bbox", () => {
+    const textureSize = { width: 64, height: 32 };
+    const meshBounds = { x: 0, y: 0, width: 64, height: 32 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: [
+          ...createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+            x >= 8 && x <= 35 && y >= 6 && y <= 25
+          ),
+          [58, 5],
+          [59, 5]
+        ]
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    expect(meshHasVertexInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(false);
+    expect(countTriangleCentroidsInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(0);
+
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics);
+    expect(generated?.qualityMetrics?.v6Metrics?.multiIslandHandling).toBe("supported");
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 1,
+      generatedIslandCount: 1,
+      skippedTinyNoiseIslandCount: 1,
+      skippedTinyNoisePixelCount: 2,
+      localizedFallbackCount: 0
+    });
+    expect([...new Set(multiIslandDiagnostics?.islands.map((island) => island.handling))].sort()).toEqual([
+      "generated",
+      "skipped-tiny-noise"
+    ]);
+  });
+
+  it("routes all tiny raw v6d adaptive contour islands to visible no-valid-island fallback", () => {
+    const textureSize = { width: 24, height: 14 };
+    const meshBounds = { x: 0, y: 0, width: 24, height: 14 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: [
+          [2, 2],
+          [8, 4],
+          [9, 4],
+          [18, 10]
+        ]
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("alpha-aware-rgba");
+    expect(generated?.fallbackReason).toBe("v6-contour-extraction-failed");
+    expect(generated?.fallbackSteps).toEqual([
+      {
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        reason: "v6-contour-extraction-failed"
+      }
+    ]);
+    expectValidMeshDto(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(v6Metrics);
+    expect(v6Metrics).toMatchObject({
+      actualSourceId: "alpha-aware-rgba",
+      outputKind: "fallback-output",
+      fallbackReason: "v6-contour-extraction-failed",
+      multiIslandHandling: "supported"
+    });
+    expect(v6Metrics?.provenance).not.toContain(
+      "v6d-adaptive-contour-constrainautor-delaunator-all-points"
+    );
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 3,
+      keptIslandCount: 0,
+      generatedIslandCount: 0,
+      backendGeneratedIslandCount: 0,
+      skippedTinyNoiseIslandCount: 3,
+      skippedTinyNoisePixelCount: 4,
+      localizedFallbackCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands.every((island) => island.handling === "skipped-tiny-noise")).toBe(true);
+  });
+
+  it("retains a small but meaningful separated v6d adaptive contour island", () => {
+    const textureSize = { width: 64, height: 36 };
+    const meshBounds = { x: 0, y: 0, width: 64, height: 36 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) => {
+          const body = x >= 8 && x <= 35 && y >= 7 && y <= 27;
+          const slimStrand = x >= 54 && x <= 55 && y >= 10 && y <= 24;
+          return body || slimStrand;
+        })
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
+    expect(meshHasVertexInRect(generated?.mesh, { x: 52, y: 8, width: 7, height: 19 })).toBe(true);
+    expect(countTrianglesCrossingVerticalGap(generated?.mesh, 40, 50)).toBe(0);
+
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics);
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 2,
+      generatedIslandCount: 2,
+      skippedTinyNoiseIslandCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands[1]).toMatchObject({
+      pixelCount: 30,
+      handling: "generated"
+    });
+  });
+
   it("filters v6d outside and crossing triangles before backend success", () => {
     const points = [
       { x: 0, y: 0, role: "boundary", stableOrder: 0 },
@@ -4372,6 +4620,180 @@ function expectRectInsideBounds(rect: RectDto, bounds: RectDto): void {
   expect(rect.y).toBeGreaterThanOrEqual(bounds.y);
   expect(rect.x + rect.width).toBeLessThanOrEqual(bounds.x + bounds.width);
   expect(rect.y + rect.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+}
+
+interface V6MultiIslandDiagnosticsForTest {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly budgetPolicy: {
+    readonly globalMaxBoundaryVertices: number;
+    readonly globalMaxInteriorVertices: number;
+    readonly allocatedMaxBoundaryVertices: number;
+    readonly allocatedMaxInteriorVertices: number;
+    readonly minimumBoundaryFloorExceededGlobalCap: boolean;
+    readonly minimumInteriorFloorExceededGlobalCap: boolean;
+  };
+  readonly islands: readonly {
+    readonly componentOrder: number;
+    readonly pixelCount: number;
+    readonly handling: "generated" | "localized-fallback" | "kept-not-generated" | "skipped-tiny-noise";
+    readonly maxBoundaryVertices?: number;
+    readonly maxInteriorVertices?: number;
+  }[];
+}
+
+function getV6MultiIslandDiagnosticsForTest(
+  v6Metrics: MeshGenerationV6Metrics | undefined
+): V6MultiIslandDiagnosticsForTest | undefined {
+  return (v6Metrics as unknown as { readonly multiIslandDiagnostics?: V6MultiIslandDiagnosticsForTest } | undefined)
+    ?.multiIslandDiagnostics;
+}
+
+function expectNoDuplicateStableIds(mesh: MeshDto | undefined): void {
+  expect(mesh).toBeDefined();
+  if (mesh === undefined) {
+    return;
+  }
+
+  expect(new Set(mesh.vertexStableIds).size).toBe(mesh.vertexStableIds.length);
+  const triangleStableIds = mesh.triangleStableIds ?? [];
+  expect(new Set(triangleStableIds).size).toBe(triangleStableIds.length);
+}
+
+function countTriangleVertexConnectedComponents(mesh: MeshDto | undefined): number {
+  if (mesh === undefined || mesh.triangles.length === 0) {
+    return 0;
+  }
+
+  const triangleIndexesByVertex = new Map<number, number[]>();
+  for (let triangleIndex = 0; triangleIndex < mesh.triangles.length; triangleIndex += 1) {
+    for (const vertexIndex of mesh.triangles[triangleIndex] ?? []) {
+      const current = triangleIndexesByVertex.get(vertexIndex);
+      if (current === undefined) {
+        triangleIndexesByVertex.set(vertexIndex, [triangleIndex]);
+        continue;
+      }
+
+      current.push(triangleIndex);
+    }
+  }
+
+  const visited = new Set<number>();
+  let componentCount = 0;
+  for (let triangleIndex = 0; triangleIndex < mesh.triangles.length; triangleIndex += 1) {
+    if (visited.has(triangleIndex)) {
+      continue;
+    }
+
+    componentCount += 1;
+    const stack = [triangleIndex];
+    visited.add(triangleIndex);
+    while (stack.length > 0) {
+      const currentTriangleIndex = stack.pop();
+      if (currentTriangleIndex === undefined) {
+        continue;
+      }
+
+      for (const vertexIndex of mesh.triangles[currentTriangleIndex] ?? []) {
+        for (const neighborTriangleIndex of triangleIndexesByVertex.get(vertexIndex) ?? []) {
+          if (visited.has(neighborTriangleIndex)) {
+            continue;
+          }
+
+          visited.add(neighborTriangleIndex);
+          stack.push(neighborTriangleIndex);
+        }
+      }
+    }
+  }
+
+  return componentCount;
+}
+
+function countTrianglesCrossingVerticalGap(
+  mesh: MeshDto | undefined,
+  gapLeft: number,
+  gapRight: number
+): number {
+  if (mesh === undefined) {
+    return 0;
+  }
+
+  return mesh.triangles.filter((triangle) => {
+    const vertices = triangle.map((vertexIndex) => mesh.vertices[vertexIndex]).filter(
+      (vertex): vertex is MeshDto["vertices"][number] => vertex !== undefined
+    );
+    const minX = Math.min(...vertices.map((vertex) => vertex.x));
+    const maxX = Math.max(...vertices.map((vertex) => vertex.x));
+    return minX < gapLeft && maxX > gapRight;
+  }).length;
+}
+
+function meshHasVertexInRect(mesh: MeshDto | undefined, rect: RectDto): boolean {
+  return mesh?.vertices.some((vertex) => pointInRect(vertex, rect)) ?? false;
+}
+
+function countTriangleCentroidsInRect(mesh: MeshDto | undefined, rect: RectDto): number {
+  if (mesh === undefined) {
+    return 0;
+  }
+
+  return mesh.triangles.filter((triangle) => {
+    const a = mesh.vertices[triangle[0]];
+    const b = mesh.vertices[triangle[1]];
+    const c = mesh.vertices[triangle[2]];
+    if (a === undefined || b === undefined || c === undefined) {
+      return false;
+    }
+
+    return pointInRect(
+      {
+        x: (a.x + b.x + c.x) / 3,
+        y: (a.y + b.y + c.y) / 3
+      },
+      rect
+    );
+  }).length;
+}
+
+function pointInRect(point: MeshDto["vertices"][number], rect: RectDto): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
+
+function getUvXRangeForVertices(
+  mesh: MeshDto | undefined,
+  predicate: (vertex: MeshDto["vertices"][number]) => boolean
+): { readonly min: number; readonly max: number } | undefined {
+  if (mesh === undefined) {
+    return undefined;
+  }
+
+  const values = mesh.vertices.flatMap((vertex, index) => {
+    if (!predicate(vertex)) {
+      return [];
+    }
+
+    const uv = mesh.uvs[index];
+    return uv === undefined ? [] : [uv.x];
+  });
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values)
+  };
 }
 
 function countMaxBoundaryNeighborCount(mesh: MeshDto | undefined, boundaryStableIdToken: string): number {

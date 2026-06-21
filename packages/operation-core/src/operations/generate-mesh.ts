@@ -339,6 +339,27 @@ const createMeshProvenanceRecord = (input: {
 
 type ProvenanceRecord = AuthoringSession["graph"]["provenanceRecords"][number];
 
+interface V6MultiIslandDiagnostics {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly rawOpaquePixelCount: number;
+  readonly largestComponentPixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly localizedFallbackReasons: readonly {
+    readonly componentOrder: number;
+    readonly reason: string;
+  }[];
+}
+
+type V6MetricsWithMultiIslandDiagnostics =
+  NonNullable<MeshGenerationQualityMetrics["v6Metrics"]> & {
+    readonly multiIslandDiagnostics?: V6MultiIslandDiagnostics;
+  };
+
 const formatQualityMetricsForTransformHistory = (
   metrics: MeshGenerationQualityMetrics | undefined
 ): readonly string[] => {
@@ -515,6 +536,7 @@ const formatV6MetricsForTransformHistory = (
     `meshQuality:v6OutsideOrCrossingTriangles=${v6.outsideOrCrossingTriangleCount}`,
     `meshQuality:v6MultiIslandHandling=${v6.multiIslandHandling}`,
     `meshQuality:v6HoleHandling=${v6.holeHandling}`,
+    ...formatV6MultiIslandDiagnosticsForTransformHistory(metrics),
     `meshQuality:v6Provenance=${v6.provenance.join(">")}`,
     ...formatV6ContourPipelineDiagnosticsForTransformHistory(metrics),
     ...formatV6ConstrainautorDiagnosticsForTransformHistory(metrics),
@@ -525,6 +547,39 @@ const formatV6MetricsForTransformHistory = (
     ...formatV6CustomCdtDiagnosticsForTransformHistory(metrics)
   ];
 };
+
+const formatV6MultiIslandDiagnosticsForTransformHistory = (
+  metrics: MeshGenerationQualityMetrics
+): readonly string[] => {
+  const diagnostics = getV6MultiIslandDiagnostics(metrics);
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    `meshQuality:v6RawAlphaComponents=${diagnostics.rawAlphaComponentCount}`,
+    `meshQuality:v6KeptIslands=${diagnostics.keptIslandCount}`,
+    `meshQuality:v6GeneratedIslands=${diagnostics.generatedIslandCount}`,
+    `meshQuality:v6BackendGeneratedIslands=${diagnostics.backendGeneratedIslandCount}`,
+    `meshQuality:v6SkippedTinyNoiseIslands=${diagnostics.skippedTinyNoiseIslandCount}`,
+    `meshQuality:v6SkippedTinyNoisePixels=${diagnostics.skippedTinyNoisePixelCount}`,
+    `meshQuality:v6RawOpaquePixels=${diagnostics.rawOpaquePixelCount}`,
+    `meshQuality:v6LargestComponentPixels=${diagnostics.largestComponentPixelCount}`,
+    `meshQuality:v6LocalizedFallbacks=${diagnostics.localizedFallbackCount}`,
+    ...(diagnostics.localizedFallbackReasons.length === 0
+      ? []
+      : [
+          `meshQuality:v6LocalizedFallbackReasons=${diagnostics.localizedFallbackReasons
+            .map((fallback) => `${fallback.componentOrder}:${fallback.reason}`)
+            .join("|")}`
+        ])
+  ];
+};
+
+const getV6MultiIslandDiagnostics = (
+  metrics: MeshGenerationQualityMetrics
+): V6MultiIslandDiagnostics | undefined =>
+  (metrics.v6Metrics as V6MetricsWithMultiIslandDiagnostics | undefined)?.multiIslandDiagnostics;
 
 const formatV6ContourPipelineDiagnosticsForTransformHistory = (
   metrics: MeshGenerationQualityMetrics

@@ -542,6 +542,35 @@ interface MeshDiagnosticView {
   readonly copyPayload: string;
 }
 
+interface MeshV6MultiIslandDiagnostics {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly rawOpaquePixelCount: number;
+  readonly largestComponentPixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly localizedFallbackReasons: readonly {
+    readonly componentOrder: number;
+    readonly reason: string;
+  }[];
+  readonly islands: readonly {
+    readonly componentOrder: number;
+    readonly pixelCount: number;
+    readonly bounds?: unknown;
+    readonly handling: "generated" | "localized-fallback" | "kept-not-generated" | "skipped-tiny-noise";
+    readonly vertexCount?: number;
+    readonly triangleCount?: number;
+  }[];
+}
+
+type MeshV6MetricsWithMultiIslandDiagnostics =
+  NonNullable<NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"]> & {
+    readonly multiIslandDiagnostics?: MeshV6MultiIslandDiagnostics;
+  };
+
 function MeshDiagnosticCard({ diagnostic }: { readonly diagnostic: MeshDiagnosticView }) {
   return (
     <section
@@ -644,11 +673,13 @@ function createMeshDiagnosticFromDraft(
   preset: ReturnType<typeof getMeshGenerationPreset>
 ): MeshToolGenerationDiagnostic | null {
   const v6Metrics = draft.qualityMetrics?.v6Metrics;
+  const multiIslandDiagnostics = getMeshV6MultiIslandDiagnostics(v6Metrics);
   const triangleCount = draft.mesh.triangles.length;
   const isFallback =
     draft.fallbackReason !== undefined ||
     v6Metrics?.outputKind === "fallback-output" ||
-    v6Metrics?.outputKind === "blocked";
+    v6Metrics?.outputKind === "blocked" ||
+    shouldShowMultiIslandDiagnostic(multiIslandDiagnostics);
 
   if (triangleCount === 0) {
     return {
@@ -697,6 +728,7 @@ function createMeshDiagnosticViewFromDiagnostic(
 ): MeshDiagnosticView {
   const reason = formatMeshDiagnosticReason(diagnostic);
   const payload = createMeshDiagnosticPayload(diagnostic, preset);
+  const multiIslandDetails = createMultiIslandDiagnosticDetails(diagnostic);
 
   return {
     title: "Mesh diagnostic",
@@ -709,6 +741,7 @@ function createMeshDiagnosticViewFromDiagnostic(
         label: "Triangles",
         value: `${diagnostic.triangleCount} / ${diagnostic.vertexCount} vertices`
       },
+      ...multiIslandDetails,
       ...(diagnostic.fallbackReason === undefined
         ? []
         : [{ label: "Fallback", value: diagnostic.fallbackReason }])
@@ -741,6 +774,7 @@ function createMeshDiagnosticPayload(
   preset: ReturnType<typeof getMeshGenerationPreset>
 ) {
   const v6Metrics = diagnostic.qualityMetrics?.v6Metrics;
+  const multiIsland = createMultiIslandDiagnosticPayload(v6Metrics);
   return {
     diagnosticKind: diagnostic.kind,
     algorithmId: v6Metrics?.algorithmId ?? resolveLegacyAlgorithmId(diagnostic),
@@ -769,6 +803,7 @@ function createMeshDiagnosticPayload(
       removedTriangles: v6Metrics?.removedTriangleCount,
       outsideOrCrossingTriangles: v6Metrics?.outsideOrCrossingTriangleCount
     },
+    multiIsland,
     fallback: {
       reason: diagnostic.fallbackReason,
       steps: diagnostic.fallbackSteps
@@ -776,6 +811,104 @@ function createMeshDiagnosticPayload(
     failureReason: diagnostic.failureReason,
     qualityMetrics: diagnostic.qualityMetrics
   };
+}
+
+function createMultiIslandDiagnosticDetails(
+  diagnostic: MeshToolGenerationDiagnostic
+): readonly { readonly label: string; readonly value: string }[] {
+  const diagnostics = getMeshV6MultiIslandDiagnostics(diagnostic.qualityMetrics?.v6Metrics);
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    {
+      label: "Islands",
+      value: `raw ${diagnostics.rawAlphaComponentCount} / kept ${diagnostics.keptIslandCount} / generated ${diagnostics.generatedIslandCount}`
+    },
+    ...(diagnostics.skippedTinyNoiseIslandCount === 0
+      ? []
+      : [
+          {
+            label: "Noise",
+            value: `${diagnostics.skippedTinyNoiseIslandCount} skipped / ${diagnostics.skippedTinyNoisePixelCount} px`
+          }
+        ]),
+    ...(diagnostics.localizedFallbackCount === 0
+      ? []
+      : [
+          {
+            label: "Local fail",
+            value: `${diagnostics.localizedFallbackCount}: ${formatLocalizedFallbackReasons(
+              diagnostics.localizedFallbackReasons
+            )}`
+          }
+        ])
+  ];
+}
+
+function createMultiIslandDiagnosticPayload(
+  v6Metrics: NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"] | undefined
+) {
+  const diagnostics = getMeshV6MultiIslandDiagnostics(v6Metrics);
+  if (diagnostics === undefined) {
+    return undefined;
+  }
+
+  return {
+    multiIslandHandling: v6Metrics?.multiIslandHandling,
+    rawAlphaComponentCount: diagnostics.rawAlphaComponentCount,
+    keptIslandCount: diagnostics.keptIslandCount,
+    generatedIslandCount: diagnostics.generatedIslandCount,
+    backendGeneratedIslandCount: diagnostics.backendGeneratedIslandCount,
+    skippedTinyNoiseIslandCount: diagnostics.skippedTinyNoiseIslandCount,
+    skippedTinyNoisePixelCount: diagnostics.skippedTinyNoisePixelCount,
+    rawOpaquePixelCount: diagnostics.rawOpaquePixelCount,
+    largestComponentPixelCount: diagnostics.largestComponentPixelCount,
+    localizedFallbackCount: diagnostics.localizedFallbackCount,
+    localizedFallbackReasons: diagnostics.localizedFallbackReasons,
+    islands: diagnostics.islands.map((island) => ({
+      componentOrder: island.componentOrder,
+      pixelCount: island.pixelCount,
+      bounds: island.bounds,
+      handling: island.handling,
+      vertexCount: island.vertexCount,
+      triangleCount: island.triangleCount
+    }))
+  };
+}
+
+function shouldShowMultiIslandDiagnostic(
+  diagnostics: MeshV6MultiIslandDiagnostics | undefined
+): boolean {
+  if (diagnostics === undefined) {
+    return false;
+  }
+
+  return (
+    diagnostics.keptIslandCount === 0 ||
+    diagnostics.localizedFallbackCount > 0 ||
+    diagnostics.islands.some(
+      (island) => island.handling === "localized-fallback" || island.handling === "kept-not-generated"
+    )
+  );
+}
+
+function getMeshV6MultiIslandDiagnostics(
+  v6Metrics: NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"] | undefined
+): MeshV6MultiIslandDiagnostics | undefined {
+  return (v6Metrics as MeshV6MetricsWithMultiIslandDiagnostics | undefined)
+    ?.multiIslandDiagnostics;
+}
+
+function formatLocalizedFallbackReasons(
+  reasons: readonly { readonly componentOrder: number; readonly reason: string }[]
+): string {
+  if (reasons.length === 0) {
+    return "none";
+  }
+
+  return reasons.map((reason) => `${reason.componentOrder}:${reason.reason}`).join(", ");
 }
 
 function resolveLegacyAlgorithmId(diagnostic: MeshToolGenerationDiagnostic): string | undefined {

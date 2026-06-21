@@ -143,6 +143,7 @@ const ATLAS_SOURCE_BYTES = new Uint8Array([
 describe("EditorSessionProvider history integration", () => {
   it("includes v6 adaptive contour diagnostics in mesh preview debug logs", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     try {
       logMeshGenerationPreviewDebug({
@@ -172,10 +173,20 @@ describe("EditorSessionProvider history integration", () => {
         adaptiveDensityDiagnostics: {
           resolvedBoundarySpacing: 12,
           resolvedMaxBoundaryVertices: 128
+        },
+        multiIslandDiagnostics: {
+          rawAlphaComponentCount: 2,
+          keptIslandCount: 1,
+          generatedIslandCount: 1,
+          skippedTinyNoiseIslandCount: 1,
+          skippedTinyNoisePixelCount: 2,
+          localizedFallbackCount: 0
         }
       });
+      expect(warn).not.toHaveBeenCalled();
     } finally {
       info.mockRestore();
+      warn.mockRestore();
     }
   });
 
@@ -2593,6 +2604,32 @@ function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGene
           resolvedMaxBoundaryVertices: 128,
           resolvedMaxInteriorVertices: 32,
           resolvedInteriorBoundaryClearance: 1.1
+        },
+        multiIslandDiagnostics: {
+          rawAlphaComponentCount: 2,
+          keptIslandCount: 1,
+          generatedIslandCount: 1,
+          backendGeneratedIslandCount: 1,
+          skippedTinyNoiseIslandCount: 1,
+          skippedTinyNoisePixelCount: 2,
+          rawOpaquePixelCount: 122,
+          largestComponentPixelCount: 120,
+          localizedFallbackCount: 0,
+          localizedFallbackReasons: [],
+          islands: [
+            {
+              componentOrder: 0,
+              pixelCount: 120,
+              bounds: { minX: 2, minY: 2, maxX: 13, maxY: 11 },
+              handling: "generated"
+            },
+            {
+              componentOrder: 1,
+              pixelCount: 2,
+              bounds: { minX: 18, minY: 1, maxX: 19, maxY: 1 },
+              handling: "skipped-tiny-noise"
+            }
+          ]
         }
       }
     }

@@ -141,6 +141,74 @@ describe("MeshToolInspector target section", () => {
     expect(card).toContain("&quot;sanitizedConstraintEdgeCount&quot;: 2");
   });
 
+  it("keeps successful skipped-noise multi-island diagnostics quiet", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY, {
+          qualityMetrics: createV6DMultiIslandQualityMetrics({
+            multiIslandDiagnostics: createSuccessNoiseMultiIslandDiagnostics()
+          })
+        })
+      ],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+
+    expect(markup).not.toContain('data-testid="mesh-tool-diagnostic-card"');
+    expect(markup).not.toContain("Mesh diagnostic");
+  });
+
+  it("copies multi-island diagnostics for no-valid-island fallback", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY, {
+          fallbackReason: "v6-contour-extraction-failed",
+          fallbackSteps: [
+            {
+              method: "auto-outline-v6d-adaptive-contour-constrainautor",
+              reason: "v6-contour-extraction-failed"
+            }
+          ],
+          qualityMetrics: createV6DMultiIslandQualityMetrics({
+            fallbackReason: "v6-contour-extraction-failed",
+            outputKind: "fallback-output",
+            multiIslandDiagnostics: createNoValidIslandMultiIslandDiagnostics()
+          })
+        })
+      ],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("raw 3 / kept 0 / generated 0");
+    expect(card).toContain("3 skipped / 4 px");
+    expect(card).toContain("&quot;multiIsland&quot;");
+    expect(card).toContain("&quot;multiIslandHandling&quot;: &quot;supported&quot;");
+    expect(card).toContain("&quot;rawAlphaComponentCount&quot;: 3");
+    expect(card).toContain("&quot;keptIslandCount&quot;: 0");
+    expect(card).toContain("&quot;skippedTinyNoiseIslandCount&quot;: 3");
+    expect(card).toContain("&quot;skippedTinyNoisePixelCount&quot;: 4");
+  });
+
+  it("shows localized multi-island fallback details without warning on skipped noise alone", () => {
+    const markup = renderInspector({
+      meshDrafts: [
+        createDraft(DRAW_EMPTY, MESH_EMPTY, {
+          qualityMetrics: createV6DMultiIslandQualityMetrics({
+            multiIslandDiagnostics: createLocalizedFallbackMultiIslandDiagnostics()
+          })
+        })
+      ],
+      selection: { kind: "drawable", id: DRAW_EMPTY }
+    });
+    const card = sectionMarkup(markup, "mesh-tool-diagnostic-card");
+
+    expect(card).toContain("Local fail");
+    expect(card).toContain("1: 1:v6d-invalid-constraint-input");
+    expect(card).toContain("&quot;localizedFallbackCount&quot;: 1");
+    expect(card).toContain("&quot;reason&quot;: &quot;v6d-invalid-constraint-input&quot;");
+    expect(card).toContain("&quot;handling&quot;: &quot;localized-fallback&quot;");
+  });
+
   it("shows fallback mesh diagnostics for drawableSet target drafts", () => {
     const markup = renderInspector({
       meshDrafts: [
@@ -349,6 +417,174 @@ function createV6DInvalidConstraintQualityMetrics(): MeshToolDraft["qualityMetri
         pointOnConstraintEdgeCount: 0
       }
     }
+  };
+}
+
+function createV6DMultiIslandQualityMetrics(input: {
+  readonly fallbackReason?: "v6-contour-extraction-failed";
+  readonly outputKind?: "backend-output" | "fallback-output";
+  readonly multiIslandDiagnostics: unknown;
+}): MeshToolDraft["qualityMetrics"] {
+  return {
+    maxEdgeLength: 20,
+    maxTriangleArea: 200,
+    minAngleDegrees: 45,
+    maxVertexValence: 2,
+    refinementIterationCount: 0,
+    ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason }),
+    triangulationMode: "v6d-adaptive-contour-constrainautor",
+    v6Metrics: {
+      algorithmId: "auto-outline-v6-alpha-constrained-delaunay",
+      methodId: "auto-outline-v6d-adaptive-contour-constrainautor",
+      backendId: "v6d-adaptive-contour-constrainautor",
+      backendImplementationStatus: "implemented",
+      requestedSourceId: "outline-v6d-adaptive-contour-constrainautor-rgba",
+      actualSourceId: input.outputKind === "fallback-output"
+        ? "alpha-aware-rgba"
+        : "outline-v6d-adaptive-contour-constrainautor-rgba",
+      outputKind: input.outputKind ?? "backend-output",
+      preset: "medium",
+      ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason }),
+      fallbackSteps: input.fallbackReason === undefined
+        ? []
+        : [
+            {
+              method: "auto-outline-v6d-adaptive-contour-constrainautor",
+              reason: input.fallbackReason
+            }
+          ],
+      vertexCount: 3,
+      triangleCount: 1,
+      boundaryVertexCount: 3,
+      interiorVertexCount: 0,
+      alphaBoundsAvailable: true,
+      contourLoopCount: 1,
+      holeLikeRegionCount: 0,
+      removedTriangleCount: 0,
+      outsideOrCrossingTriangleCount: 0,
+      multiIslandHandling: "supported",
+      holeHandling: "supported",
+      provenance: ["v6-contour-alpha-island-detection"],
+      adaptiveDensityDiagnostics: {
+        adaptiveDensityReferenceArea: 256,
+        adaptiveDensityEffectiveArea: 256,
+        adaptiveDensityAreaRatio: 1,
+        adaptiveDensityClampedAreaRatio: 1,
+        adaptiveDensitySpacingScale: 1,
+        adaptiveDensityVertexScale: 1,
+        adaptiveDensityBoundaryCapScale: 1,
+        resolvedBoundarySpacing: 12,
+        resolvedInteriorSpacing: 10,
+        resolvedMaxBoundaryVertices: 128,
+        resolvedMaxInteriorVertices: 32,
+        resolvedInteriorBoundaryClearance: 1.1
+      },
+      multiIslandDiagnostics: input.multiIslandDiagnostics
+    }
+  } as MeshToolDraft["qualityMetrics"];
+}
+
+function createSuccessNoiseMultiIslandDiagnostics() {
+  return {
+    rawAlphaComponentCount: 2,
+    keptIslandCount: 1,
+    generatedIslandCount: 1,
+    backendGeneratedIslandCount: 1,
+    skippedTinyNoiseIslandCount: 1,
+    skippedTinyNoisePixelCount: 2,
+    rawOpaquePixelCount: 122,
+    largestComponentPixelCount: 120,
+    localizedFallbackCount: 0,
+    localizedFallbackReasons: [],
+    islands: [
+      {
+        componentOrder: 0,
+        pixelCount: 120,
+        bounds: { minX: 8, minY: 6, maxX: 35, maxY: 25 },
+        handling: "generated",
+        vertexCount: 3,
+        triangleCount: 1
+      },
+      {
+        componentOrder: 1,
+        pixelCount: 2,
+        bounds: { minX: 58, minY: 5, maxX: 59, maxY: 5 },
+        handling: "skipped-tiny-noise"
+      }
+    ]
+  };
+}
+
+function createNoValidIslandMultiIslandDiagnostics() {
+  return {
+    rawAlphaComponentCount: 3,
+    keptIslandCount: 0,
+    generatedIslandCount: 0,
+    backendGeneratedIslandCount: 0,
+    skippedTinyNoiseIslandCount: 3,
+    skippedTinyNoisePixelCount: 4,
+    rawOpaquePixelCount: 4,
+    largestComponentPixelCount: 2,
+    localizedFallbackCount: 0,
+    localizedFallbackReasons: [],
+    islands: [
+      {
+        componentOrder: 0,
+        pixelCount: 1,
+        bounds: { minX: 2, minY: 2, maxX: 2, maxY: 2 },
+        handling: "skipped-tiny-noise"
+      },
+      {
+        componentOrder: 1,
+        pixelCount: 2,
+        bounds: { minX: 8, minY: 4, maxX: 9, maxY: 4 },
+        handling: "skipped-tiny-noise"
+      },
+      {
+        componentOrder: 2,
+        pixelCount: 1,
+        bounds: { minX: 18, minY: 10, maxX: 18, maxY: 10 },
+        handling: "skipped-tiny-noise"
+      }
+    ]
+  };
+}
+
+function createLocalizedFallbackMultiIslandDiagnostics() {
+  return {
+    rawAlphaComponentCount: 2,
+    keptIslandCount: 2,
+    generatedIslandCount: 2,
+    backendGeneratedIslandCount: 1,
+    skippedTinyNoiseIslandCount: 0,
+    skippedTinyNoisePixelCount: 0,
+    rawOpaquePixelCount: 220,
+    largestComponentPixelCount: 120,
+    localizedFallbackCount: 1,
+    localizedFallbackReasons: [
+      {
+        componentOrder: 1,
+        reason: "v6d-invalid-constraint-input"
+      }
+    ],
+    islands: [
+      {
+        componentOrder: 0,
+        pixelCount: 120,
+        bounds: { minX: 8, minY: 6, maxX: 35, maxY: 25 },
+        handling: "generated",
+        vertexCount: 3,
+        triangleCount: 1
+      },
+      {
+        componentOrder: 1,
+        pixelCount: 100,
+        bounds: { minX: 42, minY: 6, maxX: 58, maxY: 25 },
+        handling: "localized-fallback",
+        vertexCount: 3,
+        triangleCount: 1
+      }
+    ]
   };
 }
 

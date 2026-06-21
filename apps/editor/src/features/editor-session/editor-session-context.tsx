@@ -248,6 +248,25 @@ export interface MeshToolGenerationDiagnostic {
   readonly failureReason?: string;
 }
 
+interface MeshGenerationV6MultiIslandDiagnostics {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly localizedFallbackReasons: readonly {
+    readonly componentOrder: number;
+    readonly reason: string;
+  }[];
+}
+
+type MeshGenerationV6MetricsWithMultiIslandDiagnostics =
+  NonNullable<NonNullable<DrawableGeneratedMeshResult["qualityMetrics"]>["v6Metrics"]> & {
+    readonly multiIslandDiagnostics?: MeshGenerationV6MultiIslandDiagnostics;
+  };
+
 export function logMeshGenerationPreviewDebug(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
@@ -264,6 +283,7 @@ export function logMeshGenerationPreviewDebug(input: {
   const contourPipelineDiagnostics = v6Metrics?.contourPipelineDiagnostics;
   const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
   const adaptiveDensityDiagnostics = v6Metrics?.adaptiveDensityDiagnostics;
+  const multiIslandDiagnostics = getMeshGenerationV6MultiIslandDiagnostics(v6Metrics);
   const summary = {
     drawableId: input.drawableId,
     drawableName: drawable?.displayName,
@@ -283,6 +303,7 @@ export function logMeshGenerationPreviewDebug(input: {
     contourPipelineDiagnostics,
     constrainautorDiagnostics,
     adaptiveDensityDiagnostics,
+    multiIslandDiagnostics,
     supportRingDiagnostics,
     adaptiveStaggeredBandDiagnostics
   };
@@ -291,6 +312,13 @@ export function logMeshGenerationPreviewDebug(input: {
     ? console.warn
     : console.info;
   log("[mesh-generation:preview]", summary);
+}
+
+function getMeshGenerationV6MultiIslandDiagnostics(
+  v6Metrics: NonNullable<DrawableGeneratedMeshResult["qualityMetrics"]>["v6Metrics"] | undefined
+): MeshGenerationV6MultiIslandDiagnostics | undefined {
+  return (v6Metrics as MeshGenerationV6MetricsWithMultiIslandDiagnostics | undefined)
+    ?.multiIslandDiagnostics;
 }
 
 interface EditorSessionState {
