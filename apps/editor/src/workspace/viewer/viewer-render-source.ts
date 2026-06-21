@@ -11,6 +11,17 @@ import {
   type CanvasRenderableDrawable,
   type CanvasRenderProjection
 } from "../canvas/canvas-projection";
+import {
+  createViewerAtlasRuntimeSourceCacheKey,
+  readViewerAtlasRuntimeSourceCache,
+  writeViewerAtlasRuntimeSourceCache,
+  type ViewerAtlasRuntimeSourceCache
+} from "./viewer-atlas-runtime-source-cache";
+
+export {
+  createViewerAtlasRuntimeSourceCache,
+  type ViewerAtlasRuntimeSourceCache
+} from "./viewer-atlas-runtime-source-cache";
 
 export type ViewerRenderSourceMode = "original" | "atlasRuntime";
 
@@ -119,10 +130,12 @@ const UNAVAILABLE_REASONS = {
 export function resolveViewerAtlasRuntimeAvailability(input: {
   readonly session: AuthoringSession;
   readonly originalProjection: CanvasRenderProjection;
+  readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
   readonly hooks?: ViewerRenderSourceProjectionHooks;
 }): ViewerAtlasRuntimeAvailability {
   const result = resolveViewerAtlasRuntimeSource({
     session: input.session,
+    atlasRuntimeSourceCache: input.atlasRuntimeSourceCache,
     hooks: resolveViewerRenderSourceProjectionHooks(input.hooks)
   });
 
@@ -133,6 +146,7 @@ export function createViewerRenderSourceProjection(input: {
   readonly session: AuthoringSession;
   readonly originalProjection: CanvasRenderProjection;
   readonly requestedMode?: ViewerRenderSourceMode;
+  readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
   readonly hooks?: ViewerRenderSourceProjectionHooks;
 }): ViewerRenderSourceProjectionResult {
   const requestedMode = input.requestedMode ?? "original";
@@ -140,6 +154,7 @@ export function createViewerRenderSourceProjection(input: {
   if (requestedMode === "atlasRuntime") {
     const atlasRuntime = resolveViewerAtlasRuntimeSource({
       session: input.session,
+      atlasRuntimeSourceCache: input.atlasRuntimeSourceCache,
       hooks: resolveViewerRenderSourceProjectionHooks(input.hooks)
     });
     const atlasRuntimeAvailability: ViewerAtlasRuntimeAvailability =
@@ -177,6 +192,30 @@ export function createViewerRenderSourceProjection(input: {
 }
 
 const resolveViewerAtlasRuntimeSource = (input: {
+  readonly session: AuthoringSession;
+  readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
+  readonly hooks: ResolvedViewerRenderSourceProjectionHooks;
+}): ViewerAtlasRuntimeSourceResult => {
+  if (input.atlasRuntimeSourceCache === undefined) {
+    return resolveViewerAtlasRuntimeSourceUncached(input);
+  }
+
+  const cacheKey = createViewerAtlasRuntimeSourceCacheKey(input.session);
+  const cached = readViewerAtlasRuntimeSourceCache<ViewerAtlasRuntimeSourceResult>(
+    input.atlasRuntimeSourceCache,
+    cacheKey
+  );
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = resolveViewerAtlasRuntimeSourceUncached(input);
+  writeViewerAtlasRuntimeSourceCache(input.atlasRuntimeSourceCache, cacheKey, result);
+
+  return result;
+};
+
+const resolveViewerAtlasRuntimeSourceUncached = (input: {
   readonly session: AuthoringSession;
   readonly hooks: ResolvedViewerRenderSourceProjectionHooks;
 }): ViewerAtlasRuntimeSourceResult => {

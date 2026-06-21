@@ -1,8 +1,11 @@
 import {
   applyTextureAtlasPreview,
   createInitialAuthoringRevision,
+  createTextureAtlasSourceSignature,
   createTextureAtlasPreview,
   registerAuthoringSessionBinaryBytes,
+  sameTextureAtlasSourceSignature,
+  selectTextureAtlasTargets,
   type AuthoringSession,
   type RegisterAuthoringSessionBinaryBytesInput
 } from "@private-2d-rigging-lab/authoring-core";
@@ -10,6 +13,7 @@ import {
   DrawableIdSchema,
   DynamicsGroupIdSchema,
   KeyformSetIdSchema,
+  MaskRelationIdSchema,
   MeshIdSchema,
   PackageIdSchema,
   ParameterIdSchema,
@@ -29,7 +33,10 @@ import {
   createViewerCleanStageProjection,
   createViewerCleanStageRenderSourceProjection
 } from "./viewer-clean-stage";
-import { createViewerRenderSourceProjection } from "./viewer-render-source";
+import {
+  createViewerAtlasRuntimeSourceCache,
+  createViewerRenderSourceProjection
+} from "./viewer-render-source";
 
 type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
@@ -49,6 +56,7 @@ const PROVENANCE = ProvenanceIdSchema.parse("prov_viewer_atlas_fixture");
 const RIG_ROOT = RigControlIdSchema.parse("rig_viewer_atlas_root");
 const PARAM_NON_SOURCE = ParameterIdSchema.parse("param_viewer_atlas_non_source");
 const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_viewer_atlas_non_source");
+const MASK_BODY_TO_SLEEVE = MaskRelationIdSchema.parse("maskrel_viewer_atlas_body_to_sleeve");
 
 describe("viewer render source projection", () => {
   it("keeps Original mode on authoring texture refs and mesh UVs", async () => {
@@ -159,6 +167,7 @@ describe("viewer render source projection", () => {
   it("avoids atlas target selection and source signature work for Original projections", async () => {
     const session = await createAppliedAtlasRuntimeSession();
     const originalProjection = createCanvasRenderProjection(session, null);
+    const atlasRuntimeSourceCache = createViewerAtlasRuntimeSourceCache();
     const hooks = {
       selectTextureAtlasTargets: vi.fn(() => {
         throw new Error("Original mode must not select atlas targets.");
@@ -174,6 +183,7 @@ describe("viewer render source projection", () => {
     const result = createViewerRenderSourceProjection({
       session,
       originalProjection,
+      atlasRuntimeSourceCache,
       requestedMode: "original",
       hooks
     });
@@ -184,6 +194,84 @@ describe("viewer render source projection", () => {
     expect(hooks.selectTextureAtlasTargets).not.toHaveBeenCalled();
     expect(hooks.createTextureAtlasSourceSignature).not.toHaveBeenCalled();
     expect(hooks.sameTextureAtlasSourceSignature).not.toHaveBeenCalled();
+  });
+
+  it("caches Atlas Runtime static source resolution across unchanged projections", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const atlasRuntimeSourceCache = createViewerAtlasRuntimeSourceCache();
+    const hooks = createCountingAtlasRuntimeHooks();
+    const originalProjection = createCanvasRenderProjection(session, null);
+
+    const first = createViewerRenderSourceProjection({
+      session,
+      originalProjection,
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+    const second = createViewerRenderSourceProjection({
+      session,
+      originalProjection,
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+    const firstBody = requireDrawable(first.projection, DRAW_BODY);
+    const secondBody = requireDrawable(second.projection, DRAW_BODY);
+
+    expect(first.effectiveMode).toBe("atlasRuntime");
+    expect(second.effectiveMode).toBe("atlasRuntime");
+    expect(first.atlasRuntimeAvailability.status).toBe("available");
+    expect(second.atlasRuntimeAvailability.status).toBe("available");
+    expect(hooks.selectTextureAtlasTargets).toHaveBeenCalledTimes(1);
+    expect(hooks.createTextureAtlasSourceSignature).toHaveBeenCalledTimes(1);
+    expect(hooks.sameTextureAtlasSourceSignature).toHaveBeenCalledTimes(1);
+    expect(secondBody.renderBytes).toBe(firstBody.renderBytes);
+    expect(secondBody.textureId).toBe(firstBody.textureId);
+    expect(secondBody.evaluatedMesh.uvs).toEqual(firstBody.evaluatedMesh.uvs);
+  });
+
+  it("invalidates the Atlas Runtime source cache and preserves stale detection", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    const atlasRuntimeSourceCache = createViewerAtlasRuntimeSourceCache();
+    const hooks = createCountingAtlasRuntimeHooks();
+    const originalProjection = createCanvasRenderProjection(session, null);
+    const first = createViewerRenderSourceProjection({
+      session,
+      originalProjection,
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+    const bodyMesh = session.graph.meshes.find((mesh) => mesh.meshId === MESH_BODY);
+    if (bodyMesh === undefined) {
+      throw new Error("Expected body mesh.");
+    }
+    bodyMesh.uvs = [
+      { x: 0.25, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 }
+    ];
+
+    const stale = createViewerRenderSourceProjection({
+      session,
+      originalProjection: createCanvasRenderProjection(session, null),
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+
+    expect(first.effectiveMode).toBe("atlasRuntime");
+    expect(stale.effectiveMode).toBe("original");
+    expect(stale.atlasRuntimeAvailability).toMatchObject({
+      status: "unavailable",
+      code: "staleSourceSignature",
+      disabledReason: "Atlas source changed; regenerate the atlas."
+    });
+    expect(hooks.selectTextureAtlasTargets).toHaveBeenCalledTimes(2);
+    expect(hooks.createTextureAtlasSourceSignature).toHaveBeenCalledTimes(2);
+    expect(hooks.sameTextureAtlasSourceSignature).toHaveBeenCalledTimes(2);
   });
 
   it("disables Atlas Runtime when no committed atlas layout exists", () => {
@@ -312,6 +400,52 @@ describe("viewer render source projection", () => {
     expect(result.atlasRuntimeAvailability.status).toBe("available");
   });
 
+  it("keeps keyform projection and masks while reusing cached Atlas Runtime source", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    addRuntimeAngleKeyform(session);
+    session.graph.masks.push({
+      maskRelationId: MASK_BODY_TO_SLEEVE,
+      maskDrawableIds: [DRAW_BODY],
+      targetDrawableIds: [DRAW_SLEEVE],
+      enabled: true
+    });
+    const atlasRuntimeSourceCache = createViewerAtlasRuntimeSourceCache();
+    const hooks = createCountingAtlasRuntimeHooks();
+    const left = createViewerRenderSourceProjection({
+      session,
+      originalProjection: createCanvasRenderProjection(session, null, {
+        parameterValues: { [PARAM_NON_SOURCE]: -30 }
+      }),
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+    const right = createViewerRenderSourceProjection({
+      session,
+      originalProjection: createCanvasRenderProjection(session, null, {
+        parameterValues: { [PARAM_NON_SOURCE]: 30 }
+      }),
+      atlasRuntimeSourceCache,
+      requestedMode: "atlasRuntime",
+      hooks
+    });
+
+    expect(left.effectiveMode).toBe("atlasRuntime");
+    expect(right.effectiveMode).toBe("atlasRuntime");
+    expect(requireDrawable(left.projection, DRAW_BODY).bounds).not.toEqual(
+      requireDrawable(right.projection, DRAW_BODY).bounds
+    );
+    expect(right.projection.maskRelations).toEqual([
+      {
+        maskRelationId: MASK_BODY_TO_SLEEVE,
+        sourceDrawableIds: [DRAW_BODY],
+        targetDrawableIds: [DRAW_SLEEVE]
+      }
+    ]);
+    expect(hooks.selectTextureAtlasTargets).toHaveBeenCalledTimes(1);
+    expect(hooks.createTextureAtlasSourceSignature).toHaveBeenCalledTimes(1);
+  });
+
   it("disables Atlas Runtime when a renderable drawable has no placement", async () => {
     const session = await createAppliedAtlasRuntimeSession();
     const page = requireAtlasPage(session);
@@ -348,6 +482,47 @@ async function createAppliedAtlasRuntimeSession(): Promise<AuthoringSession> {
   }
 
   return result.session;
+}
+
+function createCountingAtlasRuntimeHooks() {
+  return {
+    selectTextureAtlasTargets: vi.fn(selectTextureAtlasTargets),
+    createTextureAtlasSourceSignature: vi.fn(createTextureAtlasSourceSignature),
+    sameTextureAtlasSourceSignature: vi.fn(sameTextureAtlasSourceSignature)
+  };
+}
+
+function addRuntimeAngleKeyform(session: AuthoringSession): void {
+  session.graph.parameters.push({
+    parameterId: PARAM_NON_SOURCE,
+    displayName: "Non Source Parameter",
+    valueSource: "authoredInput",
+    min: -30,
+    default: 0,
+    max: 30,
+    recommendedUiStep: 1,
+    kind: "custom",
+    parameterType: "scalar",
+    group: "custom",
+    lockedFields: []
+  });
+  session.graph.keyformSets.push({
+    keyformSetId: KeyformSetIdSchema.parse("keyset_viewer_atlas_non_source_angle"),
+    target: {
+      kind: "rigControl",
+      id: RIG_ROOT,
+      property: "angleDegrees"
+    },
+    parameterId: PARAM_NON_SOURCE,
+    evaluator: "linear-1d-v1",
+    interpolation: "linear-1d-v1",
+    compositionMode: "replace",
+    compositionOrder: 0,
+    keys: [
+      { value: -30, statePatch: -15 },
+      { value: 30, statePatch: 15 }
+    ]
+  });
 }
 
 function createViewerAtlasFixtureSession(): AuthoringSession {

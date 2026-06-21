@@ -33,6 +33,7 @@ import {
   resolveCanvasAutoFitPolicy
 } from "../canvas/canvas-auto-fit-policy";
 import {
+  createCanvasRenderProjection,
   fitArtworkView,
   fitCanvasView,
   formatZoomPercent,
@@ -55,13 +56,13 @@ import {
   createRuntimeParameterValueMap,
   type ViewerRuntimeControlsState
 } from "./runtime-controls-state";
+import { renderViewerCleanStageProjection } from "./viewer-clean-stage";
 import {
-  createViewerCleanStageRenderSourceProjection,
-  renderViewerCleanStageProjection
-} from "./viewer-clean-stage";
-import type {
-  ViewerAtlasRuntimeAvailability,
-  ViewerRenderSourceMode
+  createViewerAtlasRuntimeSourceCache,
+  createViewerRenderSourceProjection,
+  type ViewerAtlasRuntimeSourceCache,
+  type ViewerAtlasRuntimeAvailability,
+  type ViewerRenderSourceMode
 } from "./viewer-render-source";
 import {
   createViewerRuntimeInitialState,
@@ -102,6 +103,7 @@ export function ViewerRuntimeScreen() {
   const [renderSourceMode, setRenderSourceMode] =
     useState<ViewerRenderSourceMode>("original");
   const [runtimePlaybackState, setRuntimePlaybackState] = useState<RuntimeStateDto | null>(null);
+  const atlasRuntimeSourceCache = useMemo(() => createViewerAtlasRuntimeSourceCache(), []);
   const runtimePlaybackRef = useRef<ViewerRuntimePlaybackLoopInput | null>(null);
   const runtimePlaybackModel = useMemo(
     () => createViewerRuntimePlaybackModel(session),
@@ -121,6 +123,7 @@ export function ViewerRuntimeScreen() {
         runtimePlaybackState: compatibleRuntimePlaybackState,
         runtimeControlsState,
         renderSourceMode,
+        atlasRuntimeSourceCache,
         session
       }),
     [
@@ -128,6 +131,7 @@ export function ViewerRuntimeScreen() {
       parameterValues,
       runtimeControlsState,
       renderSourceMode,
+      atlasRuntimeSourceCache,
       compatibleRuntimePlaybackState,
       runtimePlaybackModel,
       session
@@ -237,6 +241,7 @@ export function ViewerRuntimeScreen() {
 }
 
 export function createViewerRuntimeCleanStageProjection({
+  atlasRuntimeSourceCache,
   authoringParameterValues,
   editorHiddenPartIds,
   runtimePlaybackModel,
@@ -252,6 +257,7 @@ export function createViewerRuntimeCleanStageProjection({
   readonly runtimePlaybackModel?: ViewerRuntimePlaybackModel;
   readonly runtimePlaybackState?: RuntimeStateDto | null;
   readonly session: AuthoringSession;
+  readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
 }): ViewerRuntimeCleanStageProjectionInput {
   const parameters = listEditorParameters(session);
   const playbackModel = runtimePlaybackModel ?? createViewerRuntimePlaybackModel(session);
@@ -273,10 +279,15 @@ export function createViewerRuntimeCleanStageProjection({
       ? {}
       : { state: runtimePlaybackState })
   });
-  const renderSourceProjection = createViewerCleanStageRenderSourceProjection(session, {
+  const originalProjection = createCanvasRenderProjection(session, null, {
     parameterValues,
-    renderSourceMode,
     ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
+  });
+  const renderSourceProjection = createViewerRenderSourceProjection({
+    session,
+    originalProjection,
+    atlasRuntimeSourceCache,
+    requestedMode: renderSourceMode
   });
 
   return {
