@@ -13,10 +13,12 @@ import {
   Vec2DtoSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
+  DrawableId,
   DiagnosticDto,
   ParameterId,
   RuntimeEvaluationContextDto,
-  RuntimeStateDto
+  RuntimeStateDto,
+  Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
@@ -185,6 +187,7 @@ export const createRuntimeSnapshot = (input: {
     options: input.options,
     includeVertices: keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
   });
+  const referenceVerticesByDrawableId = createReferenceVerticesByDrawableId(input.graph);
   const appliedKeyforms = applySamplesInEvaluationOrder({
     drawables: baseDrawables,
     samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind !== "rigControl"),
@@ -193,6 +196,7 @@ export const createRuntimeSnapshot = (input: {
   const rigControlEvaluation = evaluateRigControlHierarchy({
     graph: input.graph,
     drawables: appliedKeyforms.drawables,
+    referenceVerticesByDrawableId,
     samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind === "rigControl"),
     hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
   });
@@ -353,6 +357,18 @@ const createEvaluatedDrawables = (input: {
     )
     .sort((left, right) => left.evaluatedDrawOrder - right.evaluatedDrawOrder || left.drawableId.localeCompare(right.drawableId));
 };
+
+const createReferenceVerticesByDrawableId = (
+  graph: NormalizedRuntimeGraph
+): ReadonlyMap<DrawableId, readonly Vec2Dto[]> =>
+  new Map(
+    [...graph.drawables.values()]
+      .filter((drawable): drawable is NormalizedDrawable & { readonly vertices: readonly Vec2Dto[] } => drawable.vertices !== undefined)
+      .map((drawable) => [
+        drawable.drawableId,
+        drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }))
+      ] as const)
+  );
 
 const sampleRuntimeKeyformsInEvaluationOrder = (input: {
   readonly graph: NormalizedRuntimeGraph;

@@ -246,12 +246,12 @@ describe("runtime rig control hierarchy evidence", () => {
     expect(expectRigControl(first.snapshot.rigControls, "rig_child").worldTransform?.angleDegrees).toBe(90);
     expect(first.snapshot.drawables[0]).toMatchObject({
       drawableId: "draw_child",
-      bounds: { x: 8, y: 1, width: 2.5, height: 3 },
+      bounds: { x: 8.5, y: 1, width: 2.5, height: 3 },
       vertices: [
         { x: 10.5, y: 1 },
-        { x: 10.5, y: 4 },
-        { x: 8, y: 4 },
-        { x: 8, y: 1 }
+        { x: 11, y: 3 },
+        { x: 9, y: 4 },
+        { x: 8.5, y: 2 }
       ]
     });
     expect(first.runtimeDiff.drawableChanges).toEqual([

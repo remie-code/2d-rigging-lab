@@ -84,7 +84,7 @@ Check registry entries can override this mapping for a profile. Examples:
 - `evidence.guiOperationLogMissing` is `blocking` and fails `acceptance`.
 - `ai.dryRunMutatedPackage` is `blocking` and fails `aiDryRun` and `acceptance`.
 - `runtime.stateSequenceLengthMismatch` may warn in interactive contexts but fails strict, acceptance, or demo-safe replay evidence.
-- `rigControl.childOutsideWarpDomain` can become `needs_review` for acceptance.
+- `rigControl.warpBindingOutsideDomain` can become `needs_review` for acceptance. Current vertices leaving a parent warp visual domain after child deformation are not a warning by themselves when rest / bind membership remains valid.
 
 ### Required Diagnostic Fields
 

@@ -100,6 +100,7 @@
 | [wave91-plan.md](wave91-plan.md) | Wave 91 Deformer Lifecycle Cleanup dependency and Orch-Sylph plan | Final complete / pass |
 | [wave92-plan.md](wave92-plan.md) | Wave 92 Runtime Export v0 dependency and Orch-Sylph plan | Final complete / pass |
 | [wave93-plan.md](wave93-plan.md) | Wave 93 Editor History Binary Asset De-dup + Memory Pressure Reduction dependency and Orch-Sylph plan | Final complete / pass; final report and clean review recorded |
+| [wave94-plan.md](wave94-plan.md) | Wave 94 Nested Warp Rest/Bind Membership Semantics dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 
 ## Current Decision
 

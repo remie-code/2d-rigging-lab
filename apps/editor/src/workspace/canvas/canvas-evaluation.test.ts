@@ -15,7 +15,8 @@ import {
   TextureIdSchema,
   type DrawableId,
   type RectDto,
-  type RigControlId
+  type RigControlId,
+  type Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -218,6 +219,47 @@ describe("canvas evaluation", () => {
     expect(childOverlay.evaluatedControlPoints[1]).toEqual(face.evaluatedMesh.vertices[1]);
     expect(childOverlay.evaluatedControlPoints[2]).toEqual(face.evaluatedMesh.vertices[3]);
     expect(childOverlay.evaluatedControlPoints[3]).toEqual(face.evaluatedMesh.vertices[2]);
+  });
+
+  it("keeps a rest-inside vertex bound to the parent warp after child warp moves current outside", () => {
+    const vertices = evaluateNestedWarpCanvasVertices({
+      baseVertex: { x: 5, y: 5 },
+      childOffset: { x: 20, y: 0 },
+      childDomainBounds: { x: 5, y: 5, width: 1, height: 1 },
+      parentDomainBounds: { x: 0, y: 0, width: 10, height: 10 },
+      parentControlPointOffsets: createOffsets(4, 1, 2)
+    });
+
+    expect(vertices).toEqual([{ x: 26, y: 7 }]);
+  });
+
+  it("keeps a rest-outside vertex outside the parent warp even when child warp moves current inside", () => {
+    const vertices = evaluateNestedWarpCanvasVertices({
+      baseVertex: { x: 15, y: 5 },
+      childOffset: { x: -10, y: 0 },
+      childDomainBounds: { x: 15, y: 5, width: 1, height: 1 },
+      parentDomainBounds: { x: 0, y: 0, width: 10, height: 10 },
+      parentControlPointOffsets: createOffsets(4, 1, 2)
+    });
+
+    expect(vertices).toEqual([{ x: 5, y: 5 }]);
+  });
+
+  it("samples nonuniform parent warp displacement from rest coordinates instead of current coordinates", () => {
+    const vertices = evaluateNestedWarpCanvasVertices({
+      baseVertex: { x: 2, y: 5 },
+      childOffset: { x: 6, y: 0 },
+      childDomainBounds: { x: 2, y: 5, width: 1, height: 1 },
+      parentDomainBounds: { x: 0, y: 0, width: 10, height: 10 },
+      parentControlPointOffsets: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 0, y: 0 },
+        { x: 10, y: 0 }
+      ]
+    });
+
+    expect(vertices).toEqual([{ x: 10, y: 5 }]);
   });
 
   it("interpolates in-between scrub values and clamps values outside the parameter range", () => {
@@ -640,6 +682,62 @@ function createWarpOffsetsKeyformSet(
   };
 }
 
+function evaluateNestedWarpCanvasVertices(input: {
+  readonly baseVertex: Vec2Dto;
+  readonly childOffset: Vec2Dto;
+  readonly childDomainBounds: RectDto;
+  readonly parentDomainBounds: RectDto;
+  readonly parentControlPointOffsets: readonly Vec2Dto[];
+}): readonly Vec2Dto[] {
+  const session = createFixtureSession();
+  setFaceMeshToSingleVertex(session, input.baseVertex);
+  session.graph.rigControls.push(
+    createWarpRigControl(RIG_PARENT_WARP, {
+      childRigControlIds: [RIG_CHILD_WARP],
+      domainBounds: input.parentDomainBounds
+    }),
+    createWarpRigControl(RIG_CHILD_WARP, {
+      parentId: RIG_PARENT_WARP,
+      childDrawableIds: [DRAW_FACE],
+      domainBounds: input.childDomainBounds
+    })
+  );
+  session.graph.rigControlRootIds.push(RIG_PARENT_WARP);
+  session.graph.keyformSets.push(
+    createWarpOffsetsKeyformSet(RIG_CHILD_WARP, [
+      { value: -30, statePatch: createOffsets(4, 0, 0) },
+      {
+        value: 30,
+        statePatch: createOffsets(4, input.childOffset.x, input.childOffset.y)
+      }
+    ]),
+    createWarpOffsetsKeyformSet(RIG_PARENT_WARP, [
+      { value: -30, statePatch: createOffsets(4, 0, 0) },
+      { value: 30, statePatch: input.parentControlPointOffsets }
+    ])
+  );
+
+  return requireDrawable(
+    createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    }),
+    DRAW_FACE
+  ).evaluatedMesh.vertices;
+}
+
+function setFaceMeshToSingleVertex(session: AuthoringSession, vertex: Vec2Dto): void {
+  const mesh = session.graph.meshes.find((candidate) => candidate.meshId === MESH_FACE);
+  if (mesh === undefined) {
+    throw new Error("Expected face mesh.");
+  }
+
+  mesh.vertices = [cloneVec2(vertex)];
+  mesh.uvs = [{ x: 0, y: 0 }];
+  mesh.triangles = [];
+  mesh.vertexStableIds = ["vtx_single"];
+  mesh.bounds = { x: vertex.x, y: vertex.y, width: 0, height: 0 };
+}
+
 function createWarpRigControl(
   rigControlId: RigControlId,
   input: {
@@ -714,6 +812,10 @@ function createRotationRigControl(input: {
 
 function createOffsets(count: number, x: number, y: number) {
   return Array.from({ length: count }, () => ({ x, y }));
+}
+
+function cloneVec2(value: Vec2Dto): Vec2Dto {
+  return { x: value.x, y: value.y };
 }
 
 function createFixtureSession(): AuthoringSession {

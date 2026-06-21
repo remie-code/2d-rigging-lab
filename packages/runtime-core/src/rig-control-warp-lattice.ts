@@ -98,17 +98,24 @@ export const evaluateWarpLattice2dState = (input: {
 export const applyWarpLattice2dToVertices = (input: {
   readonly rigControl: NormalizedWarpLattice2dRigControl;
   readonly localState: WarpLattice2dLocalState;
-  readonly vertices: readonly Vec2Dto[];
+  readonly currentVertices: readonly Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
 }): Vec2Dto[] =>
-  input.vertices.map((vertex) =>
-    isPointInsideRect(vertex, input.rigControl.domainBounds)
+  input.currentVertices.map((currentVertex, index) => {
+    const referenceVertex = input.referenceVertices[index];
+    if (referenceVertex === undefined) {
+      return cloneVec2(currentVertex);
+    }
+
+    return isPointInsideRect(referenceVertex, input.rigControl.domainBounds)
       ? applyWarpLattice2dToVertex({
           rigControl: input.rigControl,
           localState: input.localState,
-          vertex
+          currentVertex,
+          referenceVertex
         })
-      : cloneVec2(vertex)
-  );
+      : cloneVec2(currentVertex);
+  });
 
 const applyWarpLattice2dSample = (input: {
   readonly rigControl: NormalizedWarpLattice2dRigControl;
@@ -194,11 +201,12 @@ const applyWarpLattice2dSample = (input: {
 const applyWarpLattice2dToVertex = (input: {
   readonly rigControl: NormalizedWarpLattice2dRigControl;
   readonly localState: WarpLattice2dLocalState;
-  readonly vertex: Vec2Dto;
+  readonly currentVertex: Vec2Dto;
+  readonly referenceVertex: Vec2Dto;
 }): Vec2Dto => {
   const { domainBounds, latticeColumns, latticeRows } = input.rigControl;
-  const normalizedX = (input.vertex.x - domainBounds.x) / domainBounds.width;
-  const normalizedY = (input.vertex.y - domainBounds.y) / domainBounds.height;
+  const normalizedX = (input.referenceVertex.x - domainBounds.x) / domainBounds.width;
+  const normalizedY = (input.referenceVertex.y - domainBounds.y) / domainBounds.height;
   const gridX = clamp(normalizedX, 0, 1) * (latticeColumns - 1);
   const gridY = clamp(normalizedY, 0, 1) * (latticeRows - 1);
   const column = Math.min(Math.floor(gridX), latticeColumns - 2);
@@ -214,8 +222,8 @@ const applyWarpLattice2dToVertex = (input: {
   const displacement = interpolateVec2(lower, upper, ty);
 
   return {
-    x: normalizeTransformNumber(input.vertex.x + displacement.x),
-    y: normalizeTransformNumber(input.vertex.y + displacement.y)
+    x: normalizeTransformNumber(input.currentVertex.x + displacement.x),
+    y: normalizeTransformNumber(input.currentVertex.y + displacement.y)
   };
 };
 

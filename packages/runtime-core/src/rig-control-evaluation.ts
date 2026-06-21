@@ -85,6 +85,7 @@ interface RigControlEffect {
 export const evaluateRigControlHierarchy = (input: {
   readonly graph: NormalizedRuntimeGraph;
   readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
 }): RigControlEvaluationResult => {
@@ -135,6 +136,7 @@ export const evaluateRigControlHierarchy = (input: {
   const transformedDrawables = applyRigControlTransformsToDrawables({
     drawables: input.drawables,
     graph: input.graph,
+    referenceVerticesByDrawableId: input.referenceVerticesByDrawableId,
     orderedRigControlIds,
     evaluatedById,
     hashPrecisionDecimals: input.hashPrecisionDecimals,
@@ -325,6 +327,7 @@ const evaluateWarpLatticeRigControl = (input: {
 const applyRigControlTransformsToDrawables = (input: {
   readonly drawables: readonly EvaluatedDrawableDto[];
   readonly graph: NormalizedRuntimeGraph;
+  readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly orderedRigControlIds: readonly RigControlId[];
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
   readonly hashPrecisionDecimals: number;
@@ -375,9 +378,33 @@ const applyRigControlTransformsToDrawables = (input: {
         opacity
       };
     }
+    const referenceVertices = input.referenceVerticesByDrawableId.get(drawable.drawableId);
+    if (referenceVertices === undefined) {
+      input.diagnostics.push(createMissingReferenceVerticesDiagnostic(drawable.drawableId, directRigControl.rigControl.rigControlId));
+      return {
+        ...drawable,
+        opacity
+      };
+    }
+
+    if (referenceVertices.length !== drawable.vertices.length) {
+      input.diagnostics.push(
+        createVertexStreamLengthMismatchDiagnostic({
+          drawableId: drawable.drawableId,
+          rigControlId: directRigControl.rigControl.rigControlId,
+          currentVertexCount: drawable.vertices.length,
+          referenceVertexCount: referenceVertices.length
+        })
+      );
+      return {
+        ...drawable,
+        opacity
+      };
+    }
 
     const transformedVertices = applyRigControlEffectChainToVertices({
-      vertices: drawable.vertices,
+      currentVertices: drawable.vertices,
+      referenceVertices,
       effects
     });
     return {
@@ -439,32 +466,51 @@ const createRigControlEffectChain = (input: {
 };
 
 const applyRigControlEffectChainToVertices = (input: {
-  readonly vertices: readonly Vec2Dto[];
+  readonly currentVertices: readonly Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
   readonly effects: readonly RigControlEffect[];
 }): Vec2Dto[] =>
-  input.effects.reduce<Vec2Dto[]>((vertices, effect) => applyRigControlEffectToVertices(effect, vertices), [
-    ...input.vertices
-  ]);
+  input.effects.reduce<RigControlVertexStreams>(
+    (streams, effect) => applyRigControlEffectToVertices(effect, streams),
+    {
+      currentVertices: cloneVertices(input.currentVertices),
+      referenceVertices: input.referenceVertices
+    }
+  ).currentVertices;
 
 const applyRigControlEffectToVertices = (
   effect: RigControlEffect,
-  vertices: readonly Vec2Dto[]
-): Vec2Dto[] => {
+  streams: RigControlVertexStreams
+): RigControlVertexStreams => {
   if (effect.rigControl.kind === "rotation2d") {
     const localMatrix = effect.evaluated.dto.localTransform?.matrix;
-    return effect.evaluated.dto.evaluationStatus === "evaluated" && localMatrix !== undefined
-      ? applyAffine2dToVertices(localMatrix, vertices)
-      : [...vertices];
+    return {
+      ...streams,
+      currentVertices:
+        effect.evaluated.dto.evaluationStatus === "evaluated" && localMatrix !== undefined
+          ? applyAffine2dToVertices(localMatrix, streams.currentVertices)
+          : cloneVertices(streams.currentVertices)
+    };
   }
 
-  return effect.evaluated.dto.evaluationStatus === "evaluated" && effect.evaluated.warpLatticeState !== undefined
-    ? applyWarpLattice2dToVertices({
-        rigControl: effect.rigControl,
-        localState: effect.evaluated.warpLatticeState,
-        vertices
-      })
-    : [...vertices];
+  return {
+    ...streams,
+    currentVertices:
+      effect.evaluated.dto.evaluationStatus === "evaluated" && effect.evaluated.warpLatticeState !== undefined
+        ? applyWarpLattice2dToVertices({
+            rigControl: effect.rigControl,
+            localState: effect.evaluated.warpLatticeState,
+            currentVertices: streams.currentVertices,
+            referenceVertices: streams.referenceVertices
+          })
+        : cloneVertices(streams.currentVertices)
+  };
 };
+
+interface RigControlVertexStreams {
+  readonly currentVertices: Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
+}
 
 const createMissingDrawableDiagnostic = (
   drawableId: DrawableId,
@@ -492,6 +538,38 @@ const createDuplicateDrawableParentDiagnostic = (
     evidence: [`drawableId=${drawableId}`]
   });
 
+const createMissingReferenceVerticesDiagnostic = (
+  drawableId: DrawableId,
+  rigControlId: RigControlId
+): DiagnosticDto =>
+  createRuntimeDiagnostic({
+    checkId: "rigControl.referenceVertexStreamMissing",
+    severity: "error",
+    phase: "rigControl_evaluation",
+    target: { kind: "rigControl", id: rigControlId },
+    message: `Drawable ${drawableId} cannot be rig-evaluated because its reference vertex stream is missing.`,
+    evidence: [`drawableId=${drawableId}`]
+  });
+
+const createVertexStreamLengthMismatchDiagnostic = (input: {
+  readonly drawableId: DrawableId;
+  readonly rigControlId: RigControlId;
+  readonly currentVertexCount: number;
+  readonly referenceVertexCount: number;
+}): DiagnosticDto =>
+  createRuntimeDiagnostic({
+    checkId: "rigControl.vertexStreamLengthMismatch",
+    severity: "error",
+    phase: "rigControl_evaluation",
+    target: { kind: "rigControl", id: input.rigControlId },
+    message: `Drawable ${input.drawableId} cannot be rig-evaluated because current and reference vertex streams differ in length.`,
+    evidence: [
+      `drawableId=${input.drawableId}`,
+      `currentVertices=${input.currentVertexCount}`,
+      `referenceVertices=${input.referenceVertexCount}`
+    ]
+  });
+
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const extractRotationDegrees = (matrix: Affine2dMatrixDto): number => {
@@ -503,3 +581,6 @@ const extractScale = (matrix: Affine2dMatrixDto): Vec2Dto => ({
   x: Number(Math.hypot(matrix.a, matrix.b).toFixed(12)),
   y: Number(Math.hypot(matrix.c, matrix.d).toFixed(12))
 });
+
+const cloneVertices = (vertices: readonly Vec2Dto[]): Vec2Dto[] =>
+  vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }));

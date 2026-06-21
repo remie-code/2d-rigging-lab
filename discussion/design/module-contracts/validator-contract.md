@@ -175,7 +175,7 @@ transportCapability.unsupported
 | `rigControl.warpLatticeUnsupportedProperty` | rigControl_semantic | error | all: fail | AC-MVP-009, AC-MVP-010 |
 | `rigControl.warpLatticeMalformedPatch` | rigControl_semantic | error | all: fail | AC-MVP-009, AC-MVP-010 |
 | `rigControl.warpLatticeRuntimeEvidenceMismatch` | rigControl_evaluation | error | strict/acceptance: fail when evaluated `warpLattice2d` runtime evidence disagrees with package lattice shape, domain, affected drawable refs, or keyform patch evidence | AC-MVP-009, AC-MVP-012 |
-| `rigControl.childOutsideWarpDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
+| `rigControl.warpBindingOutsideDomain` | rigControl_evaluation | warning | acceptance: needs_review | AC-DEF-005 |
 | `dynamics.requiredGroupMissing` | dynamics_semantic | error | acceptance fixture / metadata requiring Dynamics: fail | AC-PHYS-001 |
 | `dynamics.driverMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
 | `dynamics.outputMissing` | dynamics_semantic | error | acceptance: fail | AC-PHYS-002 |
@@ -237,6 +237,7 @@ Rig control validation rules:
 - `rigControl.warpLatticeUnsupportedProperty` fires when a `warpLattice2d` keyform targets a property other than `controlPointOffsets`.
 - `rigControl.warpLatticeMalformedPatch` fires when a `controlPointOffsets` keyform patch is not a `Vec2[]` with one offset per rest control point, or uses a composition mode outside `replace` / `additiveDelta`.
 - `rigControl.warpLatticeRuntimeEvidenceMismatch` fires when current runtime evidence for an enabled `warpLattice2d` is present but does not prove evaluated project-defined warp lattice semantics, including stale unsupported/no-op status, domain bounds mismatch, affected target mismatch, missing affected drawable evidence, or mismatched runtime keyform patch shape.
+- `rigControl.warpBindingOutsideDomain` fires when a rest / bind coordinate is outside the expected parent warp domain. A current vertex leaving the parent visual domain after child deformation is not itself a diagnostic when rest / bind membership still evaluates deterministically.
 - Warp lattice diagnostics prove project-defined `warpLattice2d` shape, `controlPointOffsets` keyform patches, affected target refs, and semantic bilinear runtime evidence only. They do not prove Cubism deformers, Cubism Physics, `.moc3`, `.model3.json`, image parser/decode, archive/filesystem transport, renderer output, texture sampling, or pixel-level correctness.
 
 Mesh validation rules:

@@ -17,7 +17,7 @@
 
 ### 1.2 公式・参照事実
 
-- RigControl参照レポートは、親子循環、参照切れ、keyform range、NaN、warp foldover、child vertex outside warp domain、preview/runtime snapshot差分を解析的に検出可能な候補としている。
+- RigControl参照レポートは、親子循環、参照切れ、keyform range、NaN、warp foldover、rest / bind座標がexpected warp domain外にあるbinding問題、preview/runtime snapshot差分を解析的に検出可能な候補としている。
 - Viewer / Preview参照レポートは、Editor warning、Viewer diagnostics、Validator report、AI-readable diffでdiagnostics語彙を共有することを推奨している。
 - Runtime評価セマンティクス参照レポートは、severityを `info`, `warning`, `error`, `blocking` に分け、statusを `pass`, `warning`, `fail`, `needs_review`, `not_applicable` と分ける案を提示している。
 

@@ -191,7 +191,7 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `keyform.grid2dDuplicateKey` | AC-PARAM-005, SC-PARAM-004 | `keyform-grid-invalid` |
 | `keyform.tooManyParametersForMvp` | AC-MVP-010, SC-PARAM-005 | `keyform-grid-overdimension` |
 | `rigControl.cycle` | AC-MVP-009, SC-DEF-006 | `invalid-rigControl-cycle` |
-| `rigControl.childOutsideWarpDomain` | AC-DEF-005, SC-DEF-005 | `parent-child-out-of-domain` |
+| `rigControl.warpBindingOutsideDomain` | AC-DEF-005, SC-DEF-005 | `warp-binding-outside-domain` |
 | `dynamics.driverMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-driver` |
 | `dynamics.outputMissing` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-missing-output` |
 | `dynamics.outputTargetDuplicate` | AC-PHYS-002, SC-DYN-003 | `invalid-dynamics-output-target-duplicate` |
@@ -250,7 +250,8 @@ export type TraceabilityEntryDto = z.infer<typeof TraceabilityEntrySchema>;
 | `invalid-mask-reference` | fail report | mask validation |
 | `rights-provenance-missing` | rights/provenance fail report | rights hygiene validation |
 | `keyform-grid-overdimension` | too-many-parameters needs_review/fail report | MVP grid limitation |
-| `parent-child-out-of-domain` | warp-domain warning / needs_review report | rig control quality validation |
+| `nested-warp-rest-binding` | nested warp rest/bind membership runtime diff | rig control runtime semantics |
+| `warp-binding-outside-domain` | rest/bind warp-domain warning / needs_review report | rig control quality validation |
 | `runtime-load-blocking` | runtime load blocking report | runtime validator gate |
 | `ai-invalid-mutation` | AI dry-run mutation fail report | AI safety gate |
 | `out-of-range-parameter-dry-run` | clamped snapshot + validation diff | external input handling |

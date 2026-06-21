@@ -262,7 +262,11 @@ export function createCanvasEvaluatedScene(
         directRigControlByDrawableId.get(drawable.drawableId),
         rigControlsById
       );
-      const vertices = applyRigControlChainToVertices(baseMesh.vertices, chain);
+      const vertices = applyRigControlChainToVertices({
+        chain,
+        currentVertices: baseMesh.vertices,
+        referenceVertices: baseMesh.vertices
+      });
       const bounds = computeEvaluatedMeshBounds(baseMesh, vertices);
       const partAncestorIds = collectPartAncestorIds(drawable.partId, partsById);
       const hiddenByPart =
@@ -705,14 +709,26 @@ function createDrawableRigControlChain(
   return chain;
 }
 
-function applyRigControlChainToVertices(
-  vertices: readonly Vec2Dto[],
-  chain: readonly EvaluationRigControl[]
-): readonly Vec2Dto[] {
-  let current = vertices.map(cloneVec2);
+function applyRigControlChainToVertices(input: {
+  readonly currentVertices: readonly Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
+  readonly chain: readonly EvaluationRigControl[];
+}): readonly Vec2Dto[] {
+  if (input.currentVertices.length !== input.referenceVertices.length) {
+    return input.currentVertices.map(cloneVec2);
+  }
 
-  for (const rigControl of createLocalSpaceEvaluationChain(chain)) {
-    current = current.map((vertex) => applyRigControlToPoint(rigControl, vertex));
+  let current = input.currentVertices.map(cloneVec2);
+  const reference = input.referenceVertices.map(cloneVec2);
+
+  for (const rigControl of createLocalSpaceEvaluationChain(input.chain)) {
+    current = current.map((vertex, index) =>
+      applyRigControlToPoint({
+        currentPoint: vertex,
+        referencePoint: reference[index] ?? vertex,
+        rigControl
+      })
+    );
   }
 
   return current;
@@ -723,9 +739,14 @@ function applyRigControlChainToPoint(
   chain: readonly EvaluationRigControl[]
 ): Vec2Dto {
   let current = cloneVec2(point);
+  const reference = cloneVec2(point);
 
   for (const rigControl of createLocalSpaceEvaluationChain(chain)) {
-    current = applyRigControlToPoint(rigControl, current);
+    current = applyRigControlToPoint({
+      currentPoint: current,
+      referencePoint: reference,
+      rigControl
+    });
   }
 
   return current;
@@ -737,25 +758,30 @@ function createLocalSpaceEvaluationChain(
   return [...chain].reverse();
 }
 
-function applyRigControlToPoint(
-  rigControl: EvaluationRigControl,
-  point: Vec2Dto
-): Vec2Dto {
-  if (!rigControl.enabled) {
-    return cloneVec2(point);
+function applyRigControlToPoint(input: {
+  readonly rigControl: EvaluationRigControl;
+  readonly currentPoint: Vec2Dto;
+  readonly referencePoint: Vec2Dto;
+}): Vec2Dto {
+  if (!input.rigControl.enabled) {
+    return cloneVec2(input.currentPoint);
   }
 
-  if (rigControl.kind === "rotation") {
+  if (input.rigControl.kind === "rotation") {
     return applyRotationToPoint({
-      angleDegrees: rigControl.angleDegrees,
-      pivot: rigControl.pivot,
-      point,
-      scale: rigControl.scale,
-      translation: rigControl.translation
+      angleDegrees: input.rigControl.angleDegrees,
+      pivot: input.rigControl.pivot,
+      point: input.currentPoint,
+      scale: input.rigControl.scale,
+      translation: input.rigControl.translation
     });
   }
 
-  return applyWarpLatticeToPoint(rigControl, point);
+  return applyWarpLatticeToPoint({
+    currentPoint: input.currentPoint,
+    referencePoint: input.referencePoint,
+    rigControl: input.rigControl
+  });
 }
 
 function applyRotationToPoint(input: {
@@ -781,22 +807,27 @@ function applyRotationToPoint(input: {
   };
 }
 
-function applyWarpLatticeToPoint(
-  rigControl: EvaluationWarpRigControl,
-  point: Vec2Dto
-): Vec2Dto {
+function applyWarpLatticeToPoint(input: {
+  readonly rigControl: EvaluationWarpRigControl;
+  readonly currentPoint: Vec2Dto;
+  readonly referencePoint: Vec2Dto;
+}): Vec2Dto {
+  const { rigControl } = input;
+
   if (
     rigControl.latticeColumns < 2 ||
     rigControl.latticeRows < 2 ||
     rigControl.domainBounds.width <= 0 ||
     rigControl.domainBounds.height <= 0 ||
-    !pointInRect(point, rigControl.domainBounds)
+    !pointInRect(input.referencePoint, rigControl.domainBounds)
   ) {
-    return cloneVec2(point);
+    return cloneVec2(input.currentPoint);
   }
 
-  const normalizedX = (point.x - rigControl.domainBounds.x) / rigControl.domainBounds.width;
-  const normalizedY = (point.y - rigControl.domainBounds.y) / rigControl.domainBounds.height;
+  const normalizedX =
+    (input.referencePoint.x - rigControl.domainBounds.x) / rigControl.domainBounds.width;
+  const normalizedY =
+    (input.referencePoint.y - rigControl.domainBounds.y) / rigControl.domainBounds.height;
   const gridX = clamp(normalizedX, 0, 1) * (rigControl.latticeColumns - 1);
   const gridY = clamp(normalizedY, 0, 1) * (rigControl.latticeRows - 1);
   const column = Math.min(Math.floor(gridX), rigControl.latticeColumns - 2);
@@ -812,8 +843,8 @@ function applyWarpLatticeToPoint(
   const displacement = interpolateVec2(lower, upper, ty);
 
   return {
-    x: normalizeTransformNumber(point.x + displacement.x),
-    y: normalizeTransformNumber(point.y + displacement.y)
+    x: normalizeTransformNumber(input.currentPoint.x + displacement.x),
+    y: normalizeTransformNumber(input.currentPoint.y + displacement.y)
   };
 }
 
