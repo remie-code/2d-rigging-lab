@@ -14,6 +14,7 @@
 |---|---|---|
 | [technology-stack-decision.md](technology-stack-decision.md) | Accepted baseline | Electron固定後のRuntime Player技術スタック、採用理由、app構成、非採用技術、未決事項 |
 | [runtime-player-development-policy.md](runtime-player-development-policy.md) | Accepted baseline | Runtime Player固有のprocess boundary、ディレクトリ粒度、ファイル分割、IPC、runtime loop、state ownership、test方針 |
+| [workspace-package-bundling-decision.md](workspace-package-bundling-decision.md) | Accepted short-term / long-term migration required | 開発中はworkspace packageをElectron bundleへ含め、長期的にはbuild済みJS exportsへ移行する判断 |
 
 ## 3. Current Architecture Decisions
 
@@ -26,12 +27,14 @@
 - Tracking inputはElectron main process側で受け、rendererへはpreload API / IPCで渡す。
 - OBS等でcaptureされる表示はtransparent Stage Windowに分離する。
 - Runtime Player開発では、process boundary、runtime hot path、IPC contract、state ownership、file splitを明示的なreview対象にする。
+- 開発中はRuntime Player main/preloadで使うworkspace packageをElectron bundleへ含める。長期的には `packages/**` をbuild済みJS exportsへ移行する。
 
 ## 4. Next Reads
 
 1. Runtime Playerの起動画面・Control Window・Stage Window UXは [../screens/initial-runtime-player-screen.md](../screens/initial-runtime-player-screen.md) を読む。
 2. iFacialMocap入力仕様とadapter境界は [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md) を読む。
 3. 実装計画を作る場合は [technology-stack-decision.md](technology-stack-decision.md) と [runtime-player-development-policy.md](runtime-player-development-policy.md) をbasisにする。
+4. workspace packageをElectron main/preloadから使う場合は [workspace-package-bundling-decision.md](workspace-package-bundling-decision.md) を読む。
 
 ## 5. Open Questions
 

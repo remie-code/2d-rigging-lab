@@ -9,8 +9,6 @@ import {
 const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
 const placeholderMessages: Record<RuntimePlayerPlaceholderAction, string> = {
-  "open-runtime-export":
-    "Runtime Export directory selection is reserved for a later wave.",
   "open-settings": "Settings are visible as a Wave1 placeholder only.",
   "connect-input": "Input networking is not implemented in Wave1.",
   "disconnect-input": "No input connection is active in this placeholder.",
@@ -29,9 +27,9 @@ export function isRuntimePlayerPlaceholderAction(
 export function createStartupStatus(): RuntimePlayerStartupStatus {
   return {
     runtimeExport: {
+      status: "empty",
       loaded: false,
-      statusLabel: "No Runtime Export loaded",
-      expectedDirectorySuffix: ".runtime-export"
+      statusLabel: "No Runtime Export loaded"
     },
     input: {
       sourceLabel: "iFacialMocap",

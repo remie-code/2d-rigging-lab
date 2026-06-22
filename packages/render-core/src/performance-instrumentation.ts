@@ -97,6 +97,6 @@ function ensureLive2dPerformanceStats(): Live2dPerformanceStats {
 }
 
 function readPerformanceNow(): number {
-  const now = (globalThis as Live2dPerformanceGlobal).performance?.now;
-  return now === undefined ? Date.now() : now();
+  const performance = (globalThis as Live2dPerformanceGlobal).performance;
+  return performance?.now === undefined ? Date.now() : performance.now();
 }

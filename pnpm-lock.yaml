@@ -108,6 +108,9 @@ importers:
       '@private-2d-rigging-lab/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@private-2d-rigging-lab/package-format':
+        specifier: workspace:*
+        version: link:../../packages/package-format
       '@private-2d-rigging-lab/render-core':
         specifier: workspace:*
         version: link:../../packages/render-core

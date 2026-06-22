@@ -1,6 +1,10 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { PartId, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import {
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming
+} from "@private-2d-rigging-lab/render-core";
+import {
   ArrowLeft,
   Focus,
   Maximize2,
@@ -68,11 +72,13 @@ import {
   createViewerRuntimeParameterSignature,
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
+  createViewerRuntimeReusableParameterValues,
   evaluateViewerRuntimePlaybackFrame,
   isViewerRuntimePlaybackStateCompatible,
   isViewerRuntimePlaybackStateSettled,
   resolveViewerRuntimeParameterValues,
   VIEWER_RUNTIME_FIXED_STEP_MS,
+  type ViewerRuntimeReusableParameterValues,
   type ViewerRuntimePlaybackModel
 } from "./viewer-runtime-playback";
 
@@ -104,30 +110,61 @@ export function ViewerRuntimeScreen() {
     useState<ViewerRuntimeControlsState>(() => createInitialRuntimeControlsState());
   const [renderSourceMode, setRenderSourceMode] =
     useState<ViewerRenderSourceMode>("original");
-  const [runtimePlaybackState, setRuntimePlaybackState] = useState<RuntimeStateDto | null>(null);
-  const runtimePlaybackStateRef = useRef<RuntimeStateDto | null>(null);
+  const [runtimePlaybackFrame, setRuntimePlaybackFrame] =
+    useState<ViewerRuntimePlaybackScreenFrame | null>(null);
+  const runtimePlaybackFrameRef = useRef<ViewerRuntimePlaybackScreenFrame | null>(null);
   const [runtimeSimulationResetToken, setRuntimeSimulationResetToken] = useState(0);
+  const setRuntimePlaybackFrameAndRef = useCallback(
+    (frame: ViewerRuntimePlaybackScreenFrame | null) => {
+      runtimePlaybackFrameRef.current = frame;
+      setRuntimePlaybackFrame(frame);
+    },
+    []
+  );
   const setRuntimePlaybackStateAndRef = useCallback((state: RuntimeStateDto | null) => {
-    runtimePlaybackStateRef.current = state;
-    setRuntimePlaybackState(state);
-  }, []);
+    setRuntimePlaybackFrameAndRef(state === null ? null : { state });
+  }, [setRuntimePlaybackFrameAndRef]);
+  const setRuntimePlaybackResultAndRef = useCallback(
+    (input: {
+      readonly authoredParameterValues: ParameterValueMap;
+      readonly model: ViewerRuntimePlaybackModel;
+      readonly result: ReturnType<typeof evaluateViewerRuntimePlaybackFrame>;
+    }) => {
+      setRuntimePlaybackFrameAndRef({
+        state: input.result.nextState,
+        reusableParameterValues: createViewerRuntimeReusableParameterValues({
+          authoredParameterValues: input.authoredParameterValues,
+          model: input.model,
+          parameterValues: input.result.parameterValues,
+          state: input.result.nextState
+        })
+      });
+    },
+    [setRuntimePlaybackFrameAndRef]
+  );
   const atlasRuntimeSourceCache = useMemo(() => createViewerAtlasRuntimeSourceCache(), []);
   const runtimePlaybackRef = useRef<ViewerRuntimePlaybackLoopInput | null>(null);
   const runtimePlaybackModel = useMemo(
     () => createViewerRuntimePlaybackModel(session),
     [session]
   );
+  const runtimePlaybackState = runtimePlaybackFrame?.state ?? null;
   const compatibleRuntimePlaybackState =
     runtimePlaybackState !== null &&
     isViewerRuntimePlaybackStateCompatible(runtimePlaybackModel, runtimePlaybackState)
       ? runtimePlaybackState
       : null;
+  const compatibleRuntimeReusableParameterValues =
+    compatibleRuntimePlaybackState === null
+      ? null
+      : runtimePlaybackFrame?.reusableParameterValues ?? null;
   const cleanStage = useMemo(
     () =>
       createViewerRuntimeCleanStageProjection({
         authoringParameterValues: parameterValues,
         editorHiddenPartIds,
         runtimePlaybackModel,
+        runtimeReusableParameterValues: compatibleRuntimeReusableParameterValues,
         runtimePlaybackState: compatibleRuntimePlaybackState,
         runtimeControlsState,
         renderSourceMode,
@@ -141,6 +178,7 @@ export function ViewerRuntimeScreen() {
       renderSourceMode,
       atlasRuntimeSourceCache,
       compatibleRuntimePlaybackState,
+      compatibleRuntimeReusableParameterValues,
       runtimePlaybackModel,
       session
     ]
@@ -174,7 +212,7 @@ export function ViewerRuntimeScreen() {
   }, [setRuntimePlaybackStateAndRef]);
 
   useEffect(() => {
-    const currentState = runtimePlaybackStateRef.current;
+    const currentState = runtimePlaybackFrameRef.current?.state ?? null;
     if (
       currentState !== null &&
       !isViewerRuntimePlaybackStateCompatible(runtimePlaybackModel, currentState)
@@ -213,7 +251,7 @@ export function ViewerRuntimeScreen() {
       if (playback === null || playback.model.enabledDynamicsGroupCount === 0) {
         return;
       }
-      const previousState = runtimePlaybackStateRef.current;
+      const previousState = runtimePlaybackFrameRef.current?.state ?? null;
       const compatiblePreviousState =
         previousState !== null &&
         isViewerRuntimePlaybackStateCompatible(playback.model, previousState)
@@ -227,7 +265,11 @@ export function ViewerRuntimeScreen() {
         ...(compatiblePreviousState === null ? {} : { previousState: compatiblePreviousState })
       });
       evaluatedFrameCount += 1;
-      setRuntimePlaybackStateAndRef(result.nextState);
+      setRuntimePlaybackResultAndRef({
+        authoredParameterValues: playback.authoredParameterValues,
+        model: playback.model,
+        result
+      });
 
       if (
         !isViewerRuntimePlaybackStateSettled({
@@ -252,6 +294,7 @@ export function ViewerRuntimeScreen() {
     runtimeParameterSignature,
     runtimePlaybackModel,
     runtimeSimulationResetToken,
+    setRuntimePlaybackResultAndRef,
     setRuntimePlaybackStateAndRef
   ]);
 
@@ -295,6 +338,7 @@ export function createViewerRuntimeCleanStageProjection({
   editorHiddenPartIds,
   runtimePlaybackModel,
   runtimePlaybackState,
+  runtimeReusableParameterValues,
   runtimeControlsState,
   renderSourceMode = "original",
   session
@@ -305,55 +349,67 @@ export function createViewerRuntimeCleanStageProjection({
   readonly renderSourceMode?: ViewerRenderSourceMode;
   readonly runtimePlaybackModel?: ViewerRuntimePlaybackModel;
   readonly runtimePlaybackState?: RuntimeStateDto | null;
+  readonly runtimeReusableParameterValues?: ViewerRuntimeReusableParameterValues | null;
   readonly session: AuthoringSession;
   readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
 }): ViewerRuntimeCleanStageProjectionInput {
-  const parameters = listEditorParameters(session);
-  const playbackModel = runtimePlaybackModel ?? createViewerRuntimePlaybackModel(session);
-  const runtimeParameterValues = createRuntimeParameterValueMap(
-    parameters,
-    runtimeControlsState,
-    {
-      excludedParameterIds: playbackModel.dynamicsOutputParameterIds
-    }
-  );
-  const baseParameterValues = {
-    ...authoringParameterValues,
-    ...runtimeParameterValues
-  };
-  const parameterValues = resolveViewerRuntimeParameterValues({
-    authoredParameterValues: baseParameterValues,
-    model: playbackModel,
-    ...(runtimePlaybackState === undefined || runtimePlaybackState === null
-      ? {}
-      : { state: runtimePlaybackState })
-  });
-  const originalProjection = createCanvasRenderProjection(session, null, {
-    parameterValues,
-    ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
-  });
-  const renderSourceProjection = createViewerRenderSourceProjection({
-    session,
-    originalProjection,
-    atlasRuntimeSourceCache,
-    requestedMode: renderSourceMode
-  });
+  const timingStart = startLive2dPerformanceTiming();
+  try {
+    const parameters = listEditorParameters(session);
+    const playbackModel = runtimePlaybackModel ?? createViewerRuntimePlaybackModel(session);
+    const runtimeParameterValues = createRuntimeParameterValueMap(
+      parameters,
+      runtimeControlsState,
+      {
+        excludedParameterIds: playbackModel.dynamicsOutputParameterIds
+      }
+    );
+    const baseParameterValues = {
+      ...authoringParameterValues,
+      ...runtimeParameterValues
+    };
+    const parameterValues = resolveViewerRuntimeParameterValues({
+      authoredParameterValues: baseParameterValues,
+      model: playbackModel,
+      reusableParameterValues: runtimeReusableParameterValues,
+      ...(runtimePlaybackState === undefined || runtimePlaybackState === null
+        ? {}
+        : { state: runtimePlaybackState })
+    });
+    const originalProjection = createCanvasRenderProjection(session, null, {
+      parameterValues,
+      ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
+    });
+    const renderSourceProjection = createViewerRenderSourceProjection({
+      session,
+      originalProjection,
+      atlasRuntimeSourceCache,
+      requestedMode: renderSourceMode
+    });
 
-  return {
-    atlasRuntimeAvailability: renderSourceProjection.atlasRuntimeAvailability,
-    baseParameterValues,
-    parameterValues,
-    parameters,
-    renderSourceMode: renderSourceProjection.effectiveMode,
-    requestedRenderSourceMode: renderSourceProjection.requestedMode,
-    runtimePlaybackModel: playbackModel,
-    projection: renderSourceProjection.projection
-  };
+    return {
+      atlasRuntimeAvailability: renderSourceProjection.atlasRuntimeAvailability,
+      baseParameterValues,
+      parameterValues,
+      parameters,
+      renderSourceMode: renderSourceProjection.effectiveMode,
+      requestedRenderSourceMode: renderSourceProjection.requestedMode,
+      runtimePlaybackModel: playbackModel,
+      projection: renderSourceProjection.projection
+    };
+  } finally {
+    recordLive2dPerformanceTiming("viewer.cleanStageProjection.ms", timingStart);
+  }
 }
 
 interface ViewerRuntimePlaybackLoopInput {
   readonly authoredParameterValues: ParameterValueMap;
   readonly model: ViewerRuntimePlaybackModel;
+}
+
+interface ViewerRuntimePlaybackScreenFrame {
+  readonly reusableParameterValues?: ViewerRuntimeReusableParameterValues;
+  readonly state: RuntimeStateDto;
 }
 
 export function returnToAuthoringWorkspace(

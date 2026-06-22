@@ -18,6 +18,10 @@ import {
   type RectDto,
   type TextureId
 } from "@private-2d-rigging-lab/contracts";
+import {
+  getLive2dPerformanceStats,
+  resetLive2dPerformanceStats
+} from "@private-2d-rigging-lab/render-core";
 import type {
   ButtonHTMLAttributes,
   MouseEvent as ReactMouseEvent,
@@ -147,9 +151,14 @@ import { createInitialRuntimeControlsState } from "./runtime-controls-state";
 import {
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
+  createViewerRuntimeReusableParameterValues,
   evaluateViewerRuntimePlaybackFrame,
   VIEWER_RUNTIME_FIXED_STEP_MS
 } from "./viewer-runtime-playback";
+
+type Live2dPerformanceTestGlobal = typeof globalThis & {
+  __LIVE2D_PERF__?: boolean;
+};
 
 const PART_ROOT = PartIdSchema.parse("part_viewer_screen_root");
 const PART_FACE = PartIdSchema.parse("part_viewer_screen_face");
@@ -184,6 +193,8 @@ describe("ViewerRuntimeScreen integration", () => {
     viewerRuntimeTestState.iconButtons.splice(0, viewerRuntimeTestState.iconButtons.length);
     viewerRuntimeTestState.uiStore.activeEntry = "viewer";
     viewerRuntimeTestState.uiStore.setActiveEntry.mockClear();
+    delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+    resetLive2dPerformanceStats();
   });
 
   it("renders the dedicated Viewer screen from the viewer active entry and suppresses ParameterBar", () => {
@@ -359,6 +370,176 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(Math.abs((settledState?.angle ?? 0) - 1)).toBeLessThan(
       Math.abs((firstState?.angle ?? 0) - 1)
     );
+  });
+
+  it("reuses active Viewer Runtime frame parameter values for Clean Stage projection", () => {
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+    const session = createRuntimeScreenSessionWithDynamics();
+    const model = createViewerRuntimePlaybackModel(session);
+    const authoredParameterValues = {
+      [FACE_ANGLE_X]: 30
+    };
+    const activeFrame = evaluateViewerRuntimePlaybackFrame({
+      authoredParameterValues,
+      deltaTimeMs: VIEWER_RUNTIME_FIXED_STEP_MS,
+      frameIndex: 1,
+      model,
+      previousState: createViewerRuntimeInitialState(model, {
+        [FACE_ANGLE_X]: 0
+      })
+    });
+    const reusedProjection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: authoredParameterValues,
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      runtimePlaybackModel: model,
+      runtimePlaybackState: activeFrame.nextState,
+      runtimeReusableParameterValues: createViewerRuntimeReusableParameterValues({
+        authoredParameterValues,
+        model,
+        parameterValues: activeFrame.parameterValues,
+        state: activeFrame.nextState
+      }),
+      session
+    });
+    const statsAfterReuse = getLive2dPerformanceStats();
+
+    expect(statsAfterReuse?.counters).toMatchObject({
+      "viewer.runtimeFrame.evaluations": 1,
+      "viewer.runtimeFrame.deltaZeroReevaluationSkipped": 1
+    });
+    expect(
+      statsAfterReuse?.counters["viewer.runtimeFrame.deltaZeroReevaluationFallback"]
+    ).toBeUndefined();
+    expect(statsAfterReuse?.timings["viewer.runtimeFrame.ms"]?.count).toBe(1);
+    expect(statsAfterReuse?.timings["viewer.cleanStageProjection.ms"]?.count).toBe(1);
+    expect(reusedProjection.parameterValues[HAIR_SWAY_X]).toBe(
+      activeFrame.parameterValues[HAIR_SWAY_X]
+    );
+
+    const fallbackProjection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: authoredParameterValues,
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      runtimePlaybackModel: model,
+      runtimePlaybackState: activeFrame.nextState,
+      session
+    });
+
+    expect(reusedProjection.parameterValues).toEqual(fallbackProjection.parameterValues);
+    expect(requireDrawable(reusedProjection.projection, DRAW_FACE).bounds).toEqual(
+      requireDrawable(fallbackProjection.projection, DRAW_FACE).bounds
+    );
+    expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+      "viewer.runtimeFrame.evaluations": 2,
+      "viewer.runtimeFrame.deltaZeroReevaluationSkipped": 1,
+      "viewer.runtimeFrame.deltaZeroReevaluationFallback": 1
+    });
+  });
+
+  it("falls back to zero-delta evaluation when the reusable Viewer Runtime frame is stale", () => {
+    const oldSession = createRuntimeScreenSessionWithDynamics();
+    const oldModel = createViewerRuntimePlaybackModel(oldSession);
+    const authoredParameterValues = {
+      [FACE_ANGLE_X]: 30
+    };
+    const activeFrame = evaluateViewerRuntimePlaybackFrame({
+      authoredParameterValues,
+      deltaTimeMs: VIEWER_RUNTIME_FIXED_STEP_MS,
+      frameIndex: 1,
+      model: oldModel,
+      previousState: createViewerRuntimeInitialState(oldModel, {
+        [FACE_ANGLE_X]: 0
+      })
+    });
+    const staleReusableValues = createViewerRuntimeReusableParameterValues({
+      authoredParameterValues,
+      model: oldModel,
+      parameterValues: activeFrame.parameterValues,
+      state: activeFrame.nextState
+    });
+    const nextSession = createRuntimeScreenSessionWithDynamics({
+      packageId: PackageIdSchema.parse("pkg_viewer_runtime_screen_fixture_stale_reuse"),
+      packageRevision: 1
+    });
+    const nextModel = createViewerRuntimePlaybackModel(nextSession);
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      runtimePlaybackModel: nextModel,
+      runtimePlaybackState: activeFrame.nextState,
+      runtimeReusableParameterValues: staleReusableValues,
+      session: nextSession
+    });
+
+    expect(projection.parameterValues[HAIR_SWAY_X]).toBe(0);
+    expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+      "viewer.runtimeFrame.evaluations": 1,
+      "viewer.runtimeFrame.deltaZeroReevaluationFallback": 1
+    });
+    expect(
+      getLive2dPerformanceStats()?.counters[
+        "viewer.runtimeFrame.deltaZeroReevaluationSkipped"
+      ]
+    ).toBeUndefined();
+  });
+
+  it("keeps no-dynamics Clean Stage projection off the runtime evaluation path", () => {
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {
+        [FACE_ANGLE_X]: -30
+      },
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      session: createRuntimeScreenSession()
+    });
+
+    expect(requireDrawable(projection.projection, DRAW_FACE).bounds.x).toBe(-12);
+    expect(getLive2dPerformanceStats()?.timings["viewer.cleanStageProjection.ms"]?.count).toBe(1);
+    expect(
+      getLive2dPerformanceStats()?.counters["viewer.runtimeFrame.evaluations"]
+    ).toBeUndefined();
+    expect(
+      getLive2dPerformanceStats()?.counters[
+        "viewer.runtimeFrame.deltaZeroReevaluationFallback"
+      ]
+    ).toBeUndefined();
+  });
+
+  it("keeps Viewer runtime performance instrumentation disabled by default", () => {
+    const session = createRuntimeScreenSessionWithDynamics();
+    const model = createViewerRuntimePlaybackModel(session);
+    const authoredParameterValues = {
+      [FACE_ANGLE_X]: 30
+    };
+    const activeFrame = evaluateViewerRuntimePlaybackFrame({
+      authoredParameterValues,
+      deltaTimeMs: VIEWER_RUNTIME_FIXED_STEP_MS,
+      frameIndex: 1,
+      model,
+      previousState: createViewerRuntimeInitialState(model, {
+        [FACE_ANGLE_X]: 0
+      })
+    });
+
+    createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: authoredParameterValues,
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      runtimePlaybackModel: model,
+      runtimePlaybackState: activeFrame.nextState,
+      runtimeReusableParameterValues: createViewerRuntimeReusableParameterValues({
+        authoredParameterValues,
+        model,
+        parameterValues: activeFrame.parameterValues,
+        state: activeFrame.nextState
+      }),
+      session
+    });
+
+    expect(getLive2dPerformanceStats()).toBeUndefined();
   });
 
   it("injects Dynamics output offsets into the Viewer Clean Stage before keyform evaluation", () => {

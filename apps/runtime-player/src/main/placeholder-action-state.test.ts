@@ -12,9 +12,9 @@ describe("Runtime Player Wave1 placeholder state", () => {
     const status = createStartupStatus();
 
     expect(status.runtimeExport).toEqual({
+      status: "empty",
       loaded: false,
-      statusLabel: "No Runtime Export loaded",
-      expectedDirectorySuffix: ".runtime-export"
+      statusLabel: "No Runtime Export loaded"
     });
     expect(status.input).toEqual({
       sourceLabel: "iFacialMocap",
@@ -34,16 +34,17 @@ describe("Runtime Player Wave1 placeholder state", () => {
   });
 
   it("keeps placeholder feedback deterministic", () => {
-    expect(createPlaceholderResult("open-runtime-export")).toEqual({
-      action: "open-runtime-export",
+    expect(createPlaceholderResult("open-settings")).toEqual({
+      action: "open-settings",
       handled: false,
-      message: "Runtime Export directory selection is reserved for a later wave.",
+      message: "Settings are visible as a Wave1 placeholder only.",
       atIso: "1970-01-01T00:00:00.000Z"
     });
   });
 
   it("accepts only declared placeholder actions", () => {
     expect(isRuntimePlayerPlaceholderAction("connect-input")).toBe(true);
+    expect(isRuntimePlayerPlaceholderAction("open-runtime-export")).toBe(false);
     expect(isRuntimePlayerPlaceholderAction("read-runtime-export")).toBe(false);
   });
 });

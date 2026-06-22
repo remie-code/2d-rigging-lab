@@ -8,6 +8,11 @@ import type {
   RuntimeStateDto
 } from "@private-2d-rigging-lab/contracts";
 import {
+  recordLive2dPerformanceCounter,
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming
+} from "@private-2d-rigging-lab/render-core";
+import {
   computeDynamicsSource,
   createInitialRuntimeState,
   defaultRuntimeEvaluationOptions,
@@ -50,6 +55,14 @@ export interface ViewerRuntimePlaybackFrameResult {
   readonly parameterValues: ParameterValueMap;
 }
 
+export interface ViewerRuntimeReusableParameterValues {
+  readonly model: ViewerRuntimePlaybackModel;
+  readonly parameterSignature: string;
+  readonly parameterValues: ParameterValueMap;
+  readonly state: RuntimeStateDto;
+  readonly stateIdentityKey: string;
+}
+
 export interface ViewerRuntimePlaybackSettledInput {
   readonly authoredParameterValues: ParameterValueMap;
   readonly evaluatedFrameCount: number;
@@ -87,48 +100,76 @@ export const createViewerRuntimeInitialState = (
 export const evaluateViewerRuntimePlaybackFrame = (
   input: ViewerRuntimePlaybackFrameInput
 ): ViewerRuntimePlaybackFrameResult => {
-  const compatiblePreviousState =
-    input.previousState === undefined ||
-    !isViewerRuntimePlaybackStateCompatible(input.model, input.previousState)
-      ? undefined
-      : input.previousState;
-  const previousState =
-    compatiblePreviousState ??
-    createViewerRuntimeInitialState(input.model, input.authoredParameterValues);
-  const frameIndex = input.frameIndex ?? previousState.frameIndex + 1;
-  const result = evaluateRuntimeFrame(
-    input.model.graph,
-    {
-      schemaVersion: "runtime-evaluation-input-v1",
-      frameIndex,
-      deltaTimeMs: clamp(input.deltaTimeMs, 0, VIEWER_RUNTIME_MAX_ELAPSED_MS),
-      authoredParameterValues: input.authoredParameterValues,
-      resetReasons: [],
-      targetIds: []
-    },
-    previousState,
-    {
-      ...defaultRuntimeEvaluationOptions(),
-      maxSubSteps: VIEWER_RUNTIME_MAX_SUB_STEPS
-    },
-    {
-      source: {
-        surface: "viewer"
-      },
-      policy: {
-        strictness: "interactive"
-      }
-    }
-  );
+  const timingStart = startLive2dPerformanceTiming();
+  recordLive2dPerformanceCounter("viewer.runtimeFrame.evaluations");
 
-  return {
-    nextState: result.nextState,
-    parameterValues: createEffectiveRuntimeParameterValueMap(
-      input.authoredParameterValues,
-      result.snapshot.parameters
-    )
-  };
+  try {
+    const compatiblePreviousState =
+      input.previousState === undefined ||
+      !isViewerRuntimePlaybackStateCompatible(input.model, input.previousState)
+        ? undefined
+        : input.previousState;
+    const previousState =
+      compatiblePreviousState ??
+      createViewerRuntimeInitialState(input.model, input.authoredParameterValues);
+    const frameIndex = input.frameIndex ?? previousState.frameIndex + 1;
+    const result = evaluateRuntimeFrame(
+      input.model.graph,
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex,
+        deltaTimeMs: clamp(input.deltaTimeMs, 0, VIEWER_RUNTIME_MAX_ELAPSED_MS),
+        authoredParameterValues: input.authoredParameterValues,
+        resetReasons: [],
+        targetIds: []
+      },
+      previousState,
+      {
+        ...defaultRuntimeEvaluationOptions(),
+        maxSubSteps: VIEWER_RUNTIME_MAX_SUB_STEPS
+      },
+      {
+        source: {
+          surface: "viewer"
+        },
+        policy: {
+          strictness: "interactive"
+        }
+      }
+    );
+
+    return {
+      nextState: result.nextState,
+      parameterValues: createEffectiveRuntimeParameterValueMap(
+        input.authoredParameterValues,
+        result.snapshot.parameters
+      )
+    };
+  } finally {
+    recordLive2dPerformanceTiming("viewer.runtimeFrame.ms", timingStart);
+  }
 };
+
+export const createViewerRuntimeReusableParameterValues = ({
+  authoredParameterValues,
+  model,
+  parameterValues,
+  state
+}: {
+  readonly authoredParameterValues: ParameterValueMap;
+  readonly model: ViewerRuntimePlaybackModel;
+  readonly parameterValues: ParameterValueMap;
+  readonly state: RuntimeStateDto;
+}): ViewerRuntimeReusableParameterValues => ({
+  model,
+  parameterSignature: createViewerRuntimeParameterSignature(
+    model,
+    authoredParameterValues
+  ),
+  parameterValues,
+  state,
+  stateIdentityKey: model.stateIdentityKey
+});
 
 export const isViewerRuntimePlaybackStateCompatible = (
   model: ViewerRuntimePlaybackModel,
@@ -213,12 +254,29 @@ export const isViewerRuntimePlaybackStateSettled = ({
 export const resolveViewerRuntimeParameterValues = (input: {
   readonly authoredParameterValues: ParameterValueMap;
   readonly model: ViewerRuntimePlaybackModel;
+  readonly reusableParameterValues?: ViewerRuntimeReusableParameterValues | null;
   readonly state?: RuntimeStateDto;
 }): ParameterValueMap => {
   if (input.model.enabledDynamicsGroupCount === 0) {
     return input.authoredParameterValues;
   }
 
+  if (
+    input.state !== undefined &&
+    input.reusableParameterValues !== undefined &&
+    input.reusableParameterValues !== null &&
+    input.state === input.reusableParameterValues.state &&
+    isViewerRuntimeReusableParameterValuesCompatible({
+      authoredParameterValues: input.authoredParameterValues,
+      model: input.model,
+      reusableParameterValues: input.reusableParameterValues
+    })
+  ) {
+    recordLive2dPerformanceCounter("viewer.runtimeFrame.deltaZeroReevaluationSkipped");
+    return input.reusableParameterValues.parameterValues;
+  }
+
+  recordLive2dPerformanceCounter("viewer.runtimeFrame.deltaZeroReevaluationFallback");
   return evaluateViewerRuntimePlaybackFrame({
     authoredParameterValues: input.authoredParameterValues,
     deltaTimeMs: 0,
@@ -227,6 +285,21 @@ export const resolveViewerRuntimeParameterValues = (input: {
     ...(input.state === undefined ? {} : { previousState: input.state })
   }).parameterValues;
 };
+
+export const isViewerRuntimeReusableParameterValuesCompatible = ({
+  authoredParameterValues,
+  model,
+  reusableParameterValues
+}: {
+  readonly authoredParameterValues: ParameterValueMap;
+  readonly model: ViewerRuntimePlaybackModel;
+  readonly reusableParameterValues: ViewerRuntimeReusableParameterValues;
+}): boolean =>
+  reusableParameterValues.model === model &&
+  reusableParameterValues.stateIdentityKey === model.stateIdentityKey &&
+  isViewerRuntimePlaybackStateCompatible(model, reusableParameterValues.state) &&
+  reusableParameterValues.parameterSignature ===
+    createViewerRuntimeParameterSignature(model, authoredParameterValues);
 
 const createDynamicsOutputParameterIdSet = (
   graph: NormalizedRuntimeGraph

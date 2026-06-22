@@ -34,78 +34,15 @@ button {
 
 .stage-window-shell {
   position: relative;
-  display: grid;
   width: 100vw;
   height: 100vh;
-  place-items: center;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 42%, rgb(20 184 166 / 0.14), transparent 31%),
-    transparent;
+  background: transparent;
 }
 
-.stage-model-aura {
-  position: absolute;
-  width: min(54vw, 24rem);
-  aspect-ratio: 1;
-  border: 1px solid rgb(45 212 191 / 0.22);
-  border-radius: 9999px;
-  background: rgb(8 47 73 / 0.10);
-  box-shadow:
-    0 0 42px rgb(20 184 166 / 0.12),
-    inset 0 0 36px rgb(250 204 21 / 0.08);
-}
-
-.stage-model-placeholder {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  width: min(38vw, 17rem);
-  min-width: 11rem;
-  filter: drop-shadow(0 24px 42px rgb(0 0 0 / 0.36));
-}
-
-.stage-model-head {
-  width: 47%;
-  aspect-ratio: 0.82;
-  border: 1px solid rgb(153 246 228 / 0.45);
-  border-radius: 46% 46% 48% 48%;
-  background:
-    linear-gradient(140deg, rgb(20 184 166 / 0.34), rgb(245 158 11 / 0.12)),
-    rgb(15 23 42 / 0.32);
-}
-
-.stage-model-neck {
-  width: 18%;
-  height: 1.7rem;
-  margin-top: -0.2rem;
-  border-inline: 1px solid rgb(153 246 228 / 0.34);
-  background: rgb(20 184 166 / 0.14);
-}
-
-.stage-model-body {
-  width: 78%;
-  aspect-ratio: 1.38;
-  border: 1px solid rgb(153 246 228 / 0.35);
-  border-radius: 48% 48% 18% 18%;
-  background:
-    linear-gradient(120deg, rgb(15 118 110 / 0.28), rgb(250 204 21 / 0.10)),
-    rgb(15 23 42 / 0.22);
-}
-
-.stage-window-label {
-  position: absolute;
-  bottom: max(1.25rem, 4vh);
-  left: 50%;
-  max-width: min(82vw, 26rem);
-  translate: -50% 0;
-  margin: 0;
-  border: 1px solid rgb(23 23 23 / 0.35);
-  border-radius: 0.375rem;
-  background: rgb(10 12 12 / 0.36);
-  padding: 0.45rem 0.7rem;
-  color: rgb(204 251 241 / 0.92);
-  font-size: 0.8125rem;
-  font-weight: 650;
-  text-align: center;
+.stage-render-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
 }

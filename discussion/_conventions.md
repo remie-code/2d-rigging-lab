@@ -51,6 +51,7 @@ discussion/
   runtime-player/       # Editor外のRuntime Player / Capture Host appの調査、UX、設計
     _map.md
     architecture/
+    backlog/
     implementation/
     research/
     screens/

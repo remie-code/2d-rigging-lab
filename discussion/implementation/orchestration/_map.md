@@ -103,7 +103,8 @@
 | [wave94-plan.md](wave94-plan.md) | Wave 94 Nested Warp Rest/Bind Membership Semantics dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 | [wave95-plan.md](wave95-plan.md) | Wave 95 Mesh v6D Multi-Alpha-Island Generation dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 | [wave96-plan.md](wave96-plan.md) | Wave 96 Viewer Atlas Runtime Performance Cache dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
-| [wave97-plan.md](wave97-plan.md) | Wave 97 Viewer Dynamics Idle Playback Throttle dependency and Orch-Sylph plan | Planned / ready for orchestration |
+| [wave97-plan.md](wave97-plan.md) | Wave 97 Viewer Dynamics Idle Playback Throttle dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
+| [wave98-plan.md](wave98-plan.md) | Wave 98 Viewer Dynamics Performance Instrumentation + Duplicate Runtime Evaluation Removal dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 
 ## Current Decision
 

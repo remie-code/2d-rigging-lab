@@ -8,7 +8,9 @@ Runtime Playerは、Editorが生成したRuntime Export directoryを読み込み
 
 Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas authoring、Runtime Export生成はこのトピックの責務ではない。
 
-## 2. Directories
+## 2. Directory Map
+
+このmapは `discussion/runtime-player/` 直下のディレクトリだけを展開する。各ディレクトリ内の詳細ファイルは、そのディレクトリの `_map.md` を読む。
 
 | Path | Role | Status |
 |---|---|---|
@@ -16,43 +18,24 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 | [screens/](screens/) | Runtime Playerの画面責務、初期画面、Live/Setup UX | Created |
 | [architecture/](architecture/) | Runtime Playerの技術スタック、process/window/package境界、runtime data flow | Created |
 | [implementation/](implementation/) | Runtime Player専用の実装wave計画、domain report、review記録 | Created |
+| [backlog/](backlog/) | 後から実行すべきタスク、延期されたリスク、将来wave候補 | Created |
 
-## 3. Key Files
+## 3. Reading Routes
 
-| Path | Status | Content |
-|---|---|---|
-| [research/ifacialmocap-input-adapter-research.md](research/ifacialmocap-input-adapter-research.md) | Draft / initial research captured | iFacialMocapをRuntime Playerのtracking input adapterとして使うための公式仕様・実現性・設計含意 |
-| [screens/initial-runtime-player-screen.md](screens/initial-runtime-player-screen.md) | Draft / initial UX captured | Runtime Player起動時にユーザーが最初に見る画面、モデルロード後のLive/Setup画面、通常表示に載せない情報 |
-| [architecture/technology-stack-decision.md](architecture/technology-stack-decision.md) | Accepted baseline | Electron固定後のRuntime Player技術スタック、採用理由、app構成、非採用技術、未決事項 |
-| [architecture/runtime-player-development-policy.md](architecture/runtime-player-development-policy.md) | Accepted baseline | Runtime Player固有のprocess boundary、ディレクトリ粒度、ファイル分割、IPC、runtime loop、state ownership、test方針 |
-| [implementation/orchestration/player-wave1-plan.md](implementation/orchestration/player-wave1-plan.md) | Planned / ready for orchestration | Runtime Player Wave1: Electron app shell + initial placeholder screen |
+- Runtime Playerの技術判断やprocess/window/package境界を確認する場合は [architecture/](architecture/) を読む。
+- Runtime Playerの画面UXを確認する場合は [screens/](screens/) を読む。
+- iFacialMocapなど外部入力仕様を確認する場合は [research/](research/) を読む。
+- 実装waveの計画・結果・review記録を確認する場合は [implementation/](implementation/) を読む。
+- 後から実行すべきタスクや延期されたリスクを確認する場合は [backlog/](backlog/) を読む。
 
-## 4. Current Decisions
+## 4. Current State Summary
 
-- Runtime PlayerはEditor外の追加アプリとして扱う。
-- Runtime Playerはface tracking engineではなく、tracking input consumerとして設計する。
-- 入力ソースは将来切り替え可能なadapter境界を持つ。
-- v0候補の入力ソースはiFacialMocapであり、自前face trackingは当面作らない。
-- Browser-only appではなく、UDP/TCP受信可能なdesktop host appを前提に検討する。
-- App shellはElectronに固定する。
-- 技術スタックはTypeScript-first、electron-vite、React/Vite、既存runtime-core/render-webgl2再利用をbaselineにする。
-- Runtime Player開発では、process boundary、runtime hot path、IPC contract、state ownership、file splitを明示的なreview対象にする。
-- Runtime PlayerはControl Windowとtransparent Stage Windowを分ける。
-- Startup時は前回Runtime Exportを自動復元する。recent export listはfuture扱い。
-- iFacialMocap接続はユーザーにhandshakeを意識させず、Connect操作に受信開始・可能ならhandshake送信・接続状態判定を集約する。
-- Runtime Player Wave1は、Electron app shellとControl/Stage placeholder screenだけを実装対象にし、Runtime Export読み込みやinput接続は実装しない。
+- Runtime PlayerはEditor外のElectron desktop appとして進めている。
+- Control Windowとtransparent Stage Windowを分ける。
+- Runtime Playerはface tracking engineではなくtracking input consumerである。
+- v0候補の入力ソースはiFacialMocap。
+- Runtime Export loadとstatic Stage renderは実装済みだが、実物Runtime Exportでの視覚確認と後続input adapter作業が残っている。
 
-## 5. Next Questions
+## 5. Next Navigation
 
-1. Runtime Export directoryの読み込み、raw RGBA texture upload、materialized graph renderingをどのpackage/app境界で実装するか。
-2. iFacialMocapのnormalized tracking signalsを、Runtime Export内のparameterへどうmapping/calibrationするか。
-3. Stage Windowのposition / size / always-on-top / click-throughをv0でどこまで扱うか。
-4. Transparent Window実装のOS差分をどう扱うか。
-5. iFacialMocap handshake送信に必要なiPhone IP入力を必須にするか、passive listen中心にするか。
-
-## 6. Out of Scope For Current Research
-
-- 自前face tracking modelの実装。
-- iFacialMocap以外のadapter実装。
-- OBS pluginやvirtual camera実装。
-- Runtime Playerの実装計画。
+次に作業候補を選ぶ時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。

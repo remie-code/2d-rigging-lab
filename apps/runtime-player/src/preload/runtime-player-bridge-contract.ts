@@ -1,5 +1,9 @@
+import type {
+  RuntimeExportApi,
+  RuntimeExportStatus
+} from "./runtime-export-bridge-contract";
+
 export const runtimePlayerPlaceholderActions = [
-  "open-runtime-export",
   "open-settings",
   "connect-input",
   "disconnect-input",
@@ -20,11 +24,7 @@ export type RuntimePlayerInputSourceSnapshot = {
 };
 
 export type RuntimePlayerStartupStatus = {
-  readonly runtimeExport: {
-    readonly loaded: false;
-    readonly statusLabel: "No Runtime Export loaded";
-    readonly expectedDirectorySuffix: ".runtime-export";
-  };
+  readonly runtimeExport: RuntimeExportStatus;
   readonly input: RuntimePlayerInputSourceSnapshot;
   readonly stage: RuntimePlayerStageStatus;
 };
@@ -44,6 +44,7 @@ export type RuntimePlayerPlaceholderResult = {
 };
 
 export type RuntimePlayerApi = {
+  readonly runtimeExport: RuntimeExportApi;
   readonly getStartupStatus: () => Promise<RuntimePlayerStartupStatus>;
   readonly getStageStatus: () => Promise<RuntimePlayerStageStatus>;
   readonly performPlaceholderAction: (

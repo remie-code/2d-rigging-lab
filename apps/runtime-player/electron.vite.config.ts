@@ -7,10 +7,17 @@ import { defineConfig } from "electron-vite";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = path.resolve(packageRoot, "src");
+const workspacePackagesToBundleInElectron = [
+  "@private-2d-rigging-lab/package-format",
+  "@private-2d-rigging-lab/contracts"
+];
 
 export default defineConfig({
   main: {
     build: {
+      externalizeDeps: {
+        exclude: workspacePackagesToBundleInElectron
+      },
       lib: {
         entry: path.resolve(sourceRoot, "main/main.ts")
       }
@@ -18,6 +25,9 @@ export default defineConfig({
   },
   preload: {
     build: {
+      externalizeDeps: {
+        exclude: workspacePackagesToBundleInElectron
+      },
       lib: {
         entry: path.resolve(sourceRoot, "preload/preload.ts")
       }
