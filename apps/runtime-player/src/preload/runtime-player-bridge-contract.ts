@@ -38,13 +38,49 @@ export type RuntimePlayerStageStatus = {
 
 export type RuntimePlayerPlaceholderResult = {
   readonly action: RuntimePlayerPlaceholderAction;
-  readonly handled: false;
+  readonly handled: boolean;
   readonly message: string;
   readonly atIso: string;
 };
 
+export type RuntimePlayerStageViewStatusKind =
+  | "empty"
+  | "ready"
+  | "warning"
+  | "error";
+
+export type RuntimePlayerStageViewStatusTone =
+  | "neutral"
+  | "success"
+  | "warning"
+  | "error";
+
+export type RuntimePlayerStageViewStatusReport = {
+  readonly status: RuntimePlayerStageViewStatusKind;
+  readonly statusLabel: string;
+  readonly message: string;
+  readonly details: readonly string[];
+};
+
+export type RuntimePlayerStageViewStatus = RuntimePlayerStageViewStatusReport & {
+  readonly tone: RuntimePlayerStageViewStatusTone;
+  readonly updatedAtIso: string;
+};
+
+export type RuntimePlayerStageViewApi = {
+  readonly getStatus: () => Promise<RuntimePlayerStageViewStatus>;
+  readonly reportStatus: (
+    status: RuntimePlayerStageViewStatusReport
+  ) => Promise<RuntimePlayerStageViewStatus>;
+  readonly onStatusChanged: (
+    callback: (status: RuntimePlayerStageViewStatus) => void
+  ) => () => void;
+  readonly onResetViewRequested: (callback: () => void) => () => void;
+};
+
 export type RuntimePlayerApi = {
   readonly runtimeExport: RuntimeExportApi;
+  readonly stageView: RuntimePlayerStageViewApi;
   readonly getStartupStatus: () => Promise<RuntimePlayerStartupStatus>;
   readonly getStageStatus: () => Promise<RuntimePlayerStageStatus>;
   readonly performPlaceholderAction: (

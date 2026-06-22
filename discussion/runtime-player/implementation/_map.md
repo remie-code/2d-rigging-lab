@@ -22,11 +22,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 |---|---|---|
 | [orchestration/player-wave1-plan.md](orchestration/player-wave1-plan.md) | Completed / final pass | Runtime Player Wave1: Electron app shell + Control/Stage placeholder screen |
 | [orchestration/player-wave2-plan.md](orchestration/player-wave2-plan.md) | Completed / final pass | Runtime Player Wave2: Runtime Export directory load + static Stage render |
+| [orchestration/player-wave3-plan.md](orchestration/player-wave3-plan.md) | Completed / final pass | Runtime Player Wave3: runtime-core evaluated default pose + Stage pan/zoom/reset view |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
 | [waves/wave2/runtime-player-wave2-domain-a-runtime-export-loader-ipc-report.md](waves/wave2/runtime-player-wave2-domain-a-runtime-export-loader-ipc-report.md) | Pass | Runtime Player Wave2 Domain A Runtime Export loader + IPC contract |
 | [waves/wave2/runtime-player-wave2-domain-b-static-stage-renderer-report.md](waves/wave2/runtime-player-wave2-domain-b-static-stage-renderer-report.md) | Pass | Runtime Player Wave2 Domain B static Stage renderer |
 | [waves/wave2/runtime-player-wave2-final-integration-report.md](waves/wave2/runtime-player-wave2-final-integration-report.md) | Pass | Runtime Player Wave2 final integration report |
+| [waves/wave3/_map.md](waves/wave3/_map.md) | Pass | Runtime Player Wave3 report map |
+| [waves/wave3/runtime-player-wave3-domain-a-default-pose-evaluation-adapter-report.md](waves/wave3/runtime-player-wave3-domain-a-default-pose-evaluation-adapter-report.md) | Pass | Runtime Player Wave3 Domain A evaluated default pose adapter |
+| [waves/wave3/runtime-player-wave3-domain-b-stage-evaluated-render-and-view-transform-report.md](waves/wave3/runtime-player-wave3-domain-b-stage-evaluated-render-and-view-transform-report.md) | Pass | Runtime Player Wave3 Domain B evaluated Stage render and view transform |
+| [waves/wave3/runtime-player-wave3-final-integration-report.md](waves/wave3/runtime-player-wave3-final-integration-report.md) | Pass | Runtime Player Wave3 final integration report |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -39,6 +44,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave2/runtime-player-wave2-domain-b-design-development-review.md](reviews/wave2/runtime-player-wave2-domain-b-design-development-review.md) | Pass | Runtime Player Wave2 Domain B design / development compliance review |
 | [reviews/wave2/runtime-player-wave2-domain-b-test-adequacy-review.md](reviews/wave2/runtime-player-wave2-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave2 Domain B test adequacy review |
 | [reviews/wave2/runtime-player-wave2-final-clean-integration-review.md](reviews/wave2/runtime-player-wave2-final-clean-integration-review.md) | Pass | Runtime Player Wave2 final clean integration review |
+| [reviews/wave3/_map.md](reviews/wave3/_map.md) | Pass | Runtime Player Wave3 review map |
+| [reviews/wave3/runtime-player-wave3-domain-a-spec-compliance-review.md](reviews/wave3/runtime-player-wave3-domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave3 Domain A spec compliance review |
+| [reviews/wave3/runtime-player-wave3-domain-a-design-development-review.md](reviews/wave3/runtime-player-wave3-domain-a-design-development-review.md) | Pass | Runtime Player Wave3 Domain A design / development compliance review |
+| [reviews/wave3/runtime-player-wave3-domain-a-test-adequacy-review.md](reviews/wave3/runtime-player-wave3-domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave3 Domain A test adequacy review |
+| [reviews/wave3/runtime-player-wave3-domain-b-spec-compliance-review.md](reviews/wave3/runtime-player-wave3-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave3 Domain B spec compliance review |
+| [reviews/wave3/runtime-player-wave3-domain-b-design-development-review.md](reviews/wave3/runtime-player-wave3-domain-b-design-development-review.md) | Pass | Runtime Player Wave3 Domain B design / development compliance review |
+| [reviews/wave3/runtime-player-wave3-domain-b-test-adequacy-review.md](reviews/wave3/runtime-player-wave3-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave3 Domain B test adequacy review |
+| [reviews/wave3/runtime-player-wave3-final-clean-integration-review.md](reviews/wave3/runtime-player-wave3-final-clean-integration-review.md) | Pass | Runtime Player Wave3 final clean integration review |
 
 ## 4. Current Implementation State
 
@@ -51,8 +64,11 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Runtime Player Wave2 Domain B is complete: Stage renders the loaded Runtime Export static/default pose through render-core/render-webgl2 on a transparent canvas, with placeholder UI removed after load.
 - Runtime Player Wave2 Domain B review lanes pass for spec compliance, design/development compliance, and test adequacy.
 - Runtime Player Wave2 final integration / clean review passed. Final verification passed Runtime Player typecheck, elevated unit tests (6 files / 30 tests; sandbox first hit Vitest/esbuild `spawn EPERM`), source organization guard, dependency guard, and diff whitespace check.
-- GUI/screenshot verification and real Runtime Export visual inspection remain manual verification items, especially alpha/clipping appearance and practical IPC payload size.
+- User manually confirmed Runtime Player can open a real Runtime Export and display the model, but Wave2 Stage is still a raw static mesh render that does not apply parameter defaults/keyforms/deformers/opacity keyforms.
+- Runtime Player Wave3 is complete: Stage now renders runtime-core evaluated default pose output instead of the raw rest mesh final state, and Stage supports session-local wheel zoom, left-drag pan, and reset view.
+- Runtime Player Wave3 review lanes and final clean integration review passed. No source/test fix is required for Wave3 pass.
+- GUI/screenshot verification and real Runtime Export visual inspection remain manual verification items, especially alpha/clipping appearance, default pose correctness, deformer/clipping stacks, and Stage interaction feel.
 
 ## 5. Next Action
 
-Manually verify Runtime Player Wave2 with the user's real Runtime Export using [waves/wave2/runtime-player-wave2-final-integration-report.md](waves/wave2/runtime-player-wave2-final-integration-report.md). Do not proceed to input adapter, runtime parameter mapping, dynamics playback, or previous export restore until the real-export visual check and remaining risks are accepted or scheduled.
+Manually verify Runtime Player Wave3 with the user's real Runtime Export using [waves/wave3/runtime-player-wave3-final-integration-report.md](waves/wave3/runtime-player-wave3-final-integration-report.md). Do not proceed to iFacialMocap input adapter, runtime parameter mapping, head/body/stage derived motion, or dynamics playback until evaluated default pose rendering and Stage interaction behavior are accepted or scheduled as residual risk.

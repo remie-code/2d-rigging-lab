@@ -2,11 +2,13 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 import {
   type RuntimePlayerApi,
+  type RuntimePlayerStageViewStatus,
   type RuntimePlayerPlaceholderAction,
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
 import { placeholderBridgeChannels } from "./placeholder-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
+import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
@@ -44,6 +46,19 @@ export function installRuntimePlayerBridge(): void {
           callback
         )
     },
+    stageView: {
+      getStatus: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.getStatus),
+      reportStatus: (status) =>
+        ipcRenderer.invoke(stageViewBridgeChannels.reportStatus, status),
+      onStatusChanged: (callback) =>
+        subscribeToStageViewStatusEvent(
+          stageViewBridgeChannels.statusChanged,
+          callback
+        ),
+      onResetViewRequested: (callback) =>
+        subscribeToVoidEvent(stageViewBridgeChannels.resetRequested, callback)
+    },
     getStartupStatus: () =>
       ipcRenderer.invoke(placeholderBridgeChannels.getStartupStatus),
     getStageStatus: () =>
@@ -59,6 +74,39 @@ export function installRuntimePlayerBridge(): void {
   };
 
   contextBridge.exposeInMainWorld("runtimePlayer", runtimePlayerApi);
+}
+
+function subscribeToVoidEvent(
+  channel: string,
+  callback: () => void
+): () => void {
+  const listener = () => {
+    callback();
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStageViewStatusEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStageViewStatus) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStageViewStatus
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
 }
 
 function subscribeToRuntimeExportEvent<TPayload extends

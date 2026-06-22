@@ -177,8 +177,46 @@ Source:
 
 - [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md)
 - [../architecture/runtime-player-development-policy.md](../architecture/runtime-player-development-policy.md)
+- [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
 
 Suggested next action:
 
 - planning-gateで、最初に扱うinput subsetとparameter mapping UXを決める。
 
+### 3.6 Head Pose Derived Body And Stage Motion
+
+- Status: Deferred
+- Kind: Future UX / feature
+- Priority: Medium after iFacialMocap input adapter exists
+
+Problem:
+
+- iFacialMocapは主に顔周辺のtracking sourceであり、Body Angle X/Zに直接対応するbody tracking signalは期待しにくい。
+- ただし、首から上だけが動くモデルはライブ表示として不自然に見えやすい。
+- `head` rotationとpositionから、体の追従、接近による拡大、モデル表示位置の平行移動を簡易推定する余地がある。
+- 特にBody Angle Z相当は、head rotationだけでなくhead positionの左右移動や奥行き変化も使って推定する可能性がある。
+- `head.positionRaw` は単位・座標系・安定性が未確認なので、まず入手とDebug確認が必須になる。
+
+Trigger:
+
+- iFacialMocap input adapterでhead rotation / head positionを取得できる。
+- Face Angle X/Y/Zだけではライブ表示の自然さが足りないと判断する。
+- Stage上のモデル位置、拡大率、body follow head演出を検討する。
+
+Desired outcome:
+
+- head rotation / positionをnormalized tracking frameに保持する。
+- Body Angle X/Zへ直接入力するのではなく、head rotation / positionを使う演出層として `Body follow head` のような派生mappingを設計する。
+- head positionからStage scale / translationへ反映するかどうかを、Runtime parameter mappingとは別責務として検討する。
+- ユーザーが混乱しないように、実測tracking値と自動演出値をDebug panelで区別して確認できる。
+
+Source:
+
+- [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md)
+- [../screens/initial-runtime-player-screen.md](../screens/initial-runtime-player-screen.md)
+- [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
+
+Suggested next action:
+
+- iFacialMocap adapterの実機frame確認後に、head rotation / positionの軸、符号、安定性、レンジを記録する。
+- その結果をもとに、Body follow head、Stage scale、Stage translationを同じwaveで扱うべきか分けるべきかplanning-gateで決める。

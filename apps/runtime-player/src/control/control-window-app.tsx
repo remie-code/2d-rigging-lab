@@ -17,6 +17,7 @@ import type { LucideIcon } from "lucide-react";
 
 import type {
   RuntimePlayerPlaceholderAction,
+  RuntimePlayerStageViewStatus,
   RuntimePlayerStartupStatus
 } from "../preload/runtime-player-bridge-contract";
 import type {
@@ -36,6 +37,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerStartupStatus | null>(null);
   const [runtimeExportStatus, setRuntimeExportStatus] =
     useState<RuntimeExportStatus | null>(null);
+  const [stageViewStatus, setStageViewStatus] =
+    useState<RuntimePlayerStageViewStatus | null>(null);
   const [feedback, setFeedback] = useState<ControlFeedback | null>(null);
 
   useEffect(() => {
@@ -53,6 +56,11 @@ export function ControlWindowApp(): ReactElement {
         setRuntimeExportStatus(status);
       }
     });
+    window.runtimePlayer.stageView.getStatus().then((status) => {
+      if (active) {
+        setStageViewStatus(status);
+      }
+    });
 
     const unsubscribeRuntimeExport =
       window.runtimePlayer.runtimeExport.onStatusChanged((status) => {
@@ -60,10 +68,17 @@ export function ControlWindowApp(): ReactElement {
           setRuntimeExportStatus(status);
         }
       });
+    const unsubscribeStageView =
+      window.runtimePlayer.stageView.onStatusChanged((status) => {
+        if (active) {
+          setStageViewStatus(status);
+        }
+      });
 
     return () => {
       active = false;
       unsubscribeRuntimeExport();
+      unsubscribeStageView();
     };
   }, []);
 
@@ -95,8 +110,12 @@ export function ControlWindowApp(): ReactElement {
     startupStatus?.input.connectionState === "not-connected"
       ? "Not connected"
       : "Checking";
-  const stageStatus =
+  const stageWindowStatus =
     startupStatus?.stage.windowState === "created" ? "Created" : "Checking";
+  const stageViewStatusLabel =
+    stageViewStatus?.statusLabel ?? "Checking Stage";
+  const stageViewStatusMessage =
+    stageViewStatus?.message ?? "Checking Stage render status.";
   const loadedRuntimeExport = runtimeExportStatus?.status === "loaded"
     ? runtimeExportStatus
     : null;
@@ -131,7 +150,9 @@ export function ControlWindowApp(): ReactElement {
         <StatusPill tone={runtimeExportTone}>
           {runtimeExportLoadedLabel}
         </StatusPill>
-        <StatusPill tone="teal">Stage {stageStatus}</StatusPill>
+        <StatusPill tone={getStageViewPillTone(stageViewStatus)}>
+          Stage {getStageViewPillLabel(stageViewStatus, stageWindowStatus)}
+        </StatusPill>
         <IconTextButton
           icon={Settings}
           label="Settings"
@@ -176,7 +197,8 @@ export function ControlWindowApp(): ReactElement {
           <div className="grid content-center gap-3 rounded-md border border-neutral-800 bg-[#111312] p-4">
             <StatusRow label="Runtime Export" value={runtimeExportStatusLabel} />
             <StatusRow label="Directory" value={runtimeExportDirectory} />
-            <StatusRow label="Stage Window" value={stageStatus} />
+            <StatusRow label="Stage Window" value={stageWindowStatus} />
+            <StatusRow label="Stage Render" value={stageViewStatusLabel} />
           </div>
         </section>
 
@@ -254,9 +276,14 @@ export function ControlWindowApp(): ReactElement {
           </Panel>
 
           <Panel title="Stage">
-            <StatusRow label="Window" value={stageStatus} />
+            <StatusRow label="Window" value={stageWindowStatus} />
+            <StatusRow label="Render" value={stageViewStatusLabel} />
+            <StatusRow label="Message" value={stageViewStatusMessage} />
             <StatusRow label="Transparent" value="On" />
             <StatusRow label="Capture target" value="Stage Window" />
+            {shouldShowStageStatusNotice(stageViewStatus) ? (
+              <StageStatusNotice status={stageViewStatus} />
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <IconTextButton
                 icon={Monitor}
@@ -373,6 +400,53 @@ function getFeedbackClass(tone: ControlFeedback["tone"]): string {
   return "border-neutral-800 bg-[#111312] text-neutral-300";
 }
 
+function getStageViewPillTone(
+  status: RuntimePlayerStageViewStatus | null
+): "amber" | "teal" | "red" {
+  if (status?.tone === "success") {
+    return "teal";
+  }
+
+  if (status?.tone === "error") {
+    return "red";
+  }
+
+  return "amber";
+}
+
+function getStageViewPillLabel(
+  status: RuntimePlayerStageViewStatus | null,
+  windowStatus: string
+): string {
+  if (status?.status === "ready") {
+    return "Ready";
+  }
+
+  if (status?.status === "warning") {
+    return "Diagnostics";
+  }
+
+  if (status?.status === "error") {
+    return "Error";
+  }
+
+  if (status?.status === "empty") {
+    return "Empty";
+  }
+
+  return windowStatus;
+}
+
+function shouldShowStageStatusNotice(
+  status: RuntimePlayerStageViewStatus | null
+): status is RuntimePlayerStageViewStatus {
+  return status !== null && (
+    status.tone === "warning" ||
+    status.tone === "error" ||
+    status.details.length > 0
+  );
+}
+
 function Panel({
   title,
   children
@@ -385,6 +459,41 @@ function Panel({
       <h2 className="text-sm font-semibold text-neutral-100">{title}</h2>
       <div className="mt-4 grid gap-2">{children}</div>
     </section>
+  );
+}
+
+function StageStatusNotice({
+  status
+}: {
+  readonly status: RuntimePlayerStageViewStatus;
+}): ReactElement {
+  const toneClass =
+    status.tone === "error"
+      ? "border-red-900 bg-red-950/25 text-red-100"
+      : status.tone === "warning"
+        ? "border-amber-800 bg-amber-950/25 text-amber-100"
+        : status.tone === "success"
+          ? "border-teal-800 bg-teal-950/25 text-teal-100"
+          : "border-neutral-800 bg-[#111312] text-neutral-300";
+
+  return (
+    <div className={`mt-2 rounded-md border p-3 text-sm ${toneClass}`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        <div className="min-w-0">
+          <p className="font-semibold">{status.message}</p>
+          {status.details.length > 0 ? (
+            <ul className="mt-2 grid gap-1 text-xs opacity-85">
+              {status.details.slice(0, 4).map((detail) => (
+                <li key={detail} className="break-words">
+                  {detail}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

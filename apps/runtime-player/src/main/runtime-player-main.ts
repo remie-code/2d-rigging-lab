@@ -2,6 +2,7 @@ import { app } from "electron";
 
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
+import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
 import {
   createRuntimePlayerWindows,
   loadRuntimePlayerWindows
@@ -10,7 +11,8 @@ import {
 export function startRuntimePlayerMain(): void {
   app.whenReady().then(async () => {
     const windows = createRuntimePlayerWindows();
-    registerPlaceholderBridgeHandlers();
+    registerPlaceholderBridgeHandlers({ windows });
+    registerStageViewBridgeHandlers({ windows });
     registerRuntimeExportBridgeHandlers({ windows });
     await loadRuntimePlayerWindows(windows);
 

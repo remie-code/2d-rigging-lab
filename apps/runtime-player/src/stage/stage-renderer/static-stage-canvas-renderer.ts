@@ -9,15 +9,28 @@ import {
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import {
-  createRuntimeExportStageRenderInput,
   type RuntimeExportStageRenderInput
 } from "./runtime-export-stage-scene";
+import { createEvaluatedRuntimeExportStageRenderInput } from "./evaluated-runtime-export-stage-scene";
+import { createStageRuntimeDiagnosticDetails } from "./stage-render-diagnostics";
 import { createStageViewport } from "./stage-viewport";
+import {
+  applyStagePanDelta,
+  applyStageWheelZoom,
+  createResetStageViewTransform,
+  type StageViewTransform,
+  type StageViewportPoint
+} from "./stage-view-transform";
 
 export interface StaticStageCanvasRenderer {
-  setPayload(payload: RuntimeExportLoadedPayload): void;
+  setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
+  resetView(): void;
   clear(): void;
   dispose(): void;
+}
+
+export interface StaticStageRenderResult {
+  readonly runtimeDiagnosticDetails: readonly string[];
 }
 
 const emptyScene: RenderScene = createRenderScene({
@@ -38,6 +51,9 @@ export function createStaticStageCanvasRenderer(
 
 class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private renderInput: RuntimeExportStageRenderInput | null = null;
+  private viewTransform: StageViewTransform = createResetStageViewTransform();
+  private activePanPointerId: number | null = null;
+  private lastPanPoint: StageViewportPoint | null = null;
   private readonly resizeObserver: ResizeObserver | undefined;
   private disposed = false;
 
@@ -53,16 +69,37 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
           });
     this.resizeObserver?.observe(canvas);
     window.addEventListener("resize", this.renderCurrent);
+    canvas.addEventListener("wheel", this.handleWheel, { passive: false });
+    canvas.addEventListener("pointerdown", this.handlePointerDown);
+    canvas.addEventListener("pointermove", this.handlePointerMove);
+    canvas.addEventListener("pointerup", this.handlePointerUp);
+    canvas.addEventListener("pointercancel", this.handlePointerUp);
+    canvas.addEventListener("lostpointercapture", this.handlePointerUp);
     this.renderCurrent();
   }
 
-  setPayload(payload: RuntimeExportLoadedPayload): void {
-    this.renderInput = createRuntimeExportStageRenderInput(payload);
+  setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult {
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload);
+
+    this.renderInput = renderInput;
+    this.viewTransform = createResetStageViewTransform();
+    this.renderCurrent();
+
+    return {
+      runtimeDiagnosticDetails: createStageRuntimeDiagnosticDetails(
+        renderInput.defaultPoseEvaluation.snapshot.diagnostics
+      )
+    };
+  }
+
+  resetView(): void {
+    this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
   }
 
   clear(): void {
     this.renderInput = null;
+    this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
   }
 
@@ -74,6 +111,12 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.disposed = true;
     this.resizeObserver?.disconnect();
     window.removeEventListener("resize", this.renderCurrent);
+    this.canvas.removeEventListener("wheel", this.handleWheel);
+    this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.removeEventListener("pointermove", this.handlePointerMove);
+    this.canvas.removeEventListener("pointerup", this.handlePointerUp);
+    this.canvas.removeEventListener("pointercancel", this.handlePointerUp);
+    this.canvas.removeEventListener("lostpointercapture", this.handlePointerUp);
     this.renderer.dispose();
   }
 
@@ -97,10 +140,86 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       createStageViewport({
         viewportWidth: canvasSize.width,
         viewportHeight: canvasSize.height,
-        modelBounds
+        modelBounds,
+        viewTransform: this.viewTransform
       })
     );
   };
+
+  private readonly handleWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    if (this.disposed || this.renderInput === null) {
+      return;
+    }
+
+    this.viewTransform = applyStageWheelZoom({
+      transform: this.viewTransform,
+      wheelDeltaY: normalizeWheelDeltaY(event, this.canvas),
+      anchor: getCanvasViewportPoint(this.canvas, event.clientX, event.clientY)
+    });
+    this.renderCurrent();
+  };
+
+  private readonly handlePointerDown = (event: PointerEvent): void => {
+    if (
+      this.disposed ||
+      this.renderInput === null ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    this.activePanPointerId = event.pointerId;
+    this.lastPanPoint = getCanvasViewportPoint(
+      this.canvas,
+      event.clientX,
+      event.clientY
+    );
+    safelySetPointerCapture(this.canvas, event.pointerId);
+  };
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    if (
+      this.disposed ||
+      this.activePanPointerId !== event.pointerId ||
+      this.lastPanPoint === null
+    ) {
+      return;
+    }
+
+    if ((event.buttons & 1) !== 1) {
+      this.finishPan(event.pointerId);
+      return;
+    }
+
+    event.preventDefault();
+    const nextPanPoint = getCanvasViewportPoint(
+      this.canvas,
+      event.clientX,
+      event.clientY
+    );
+    this.viewTransform = applyStagePanDelta(this.viewTransform, {
+      x: nextPanPoint.x - this.lastPanPoint.x,
+      y: nextPanPoint.y - this.lastPanPoint.y
+    });
+    this.lastPanPoint = nextPanPoint;
+    this.renderCurrent();
+  };
+
+  private readonly handlePointerUp = (event: PointerEvent): void => {
+    this.finishPan(event.pointerId);
+  };
+
+  private finishPan(pointerId: number): void {
+    if (this.activePanPointerId !== pointerId) {
+      return;
+    }
+
+    safelyReleasePointerCapture(this.canvas, pointerId);
+    this.activePanPointerId = null;
+    this.lastPanPoint = null;
+  }
 }
 
 function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement): {
@@ -128,4 +247,58 @@ function getDevicePixelRatio(): number {
   return Number.isFinite(window.devicePixelRatio)
     ? Math.max(1, window.devicePixelRatio)
     : 1;
+}
+
+function getCanvasViewportPoint(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number
+): StageViewportPoint {
+  const rect = canvas.getBoundingClientRect();
+  const cssWidth = rect.width || canvas.clientWidth || window.innerWidth || 1;
+  const cssHeight = rect.height || canvas.clientHeight || window.innerHeight || 1;
+
+  return {
+    x: (clientX - rect.left) * (canvas.width / cssWidth),
+    y: (clientY - rect.top) * (canvas.height / cssHeight)
+  };
+}
+
+function normalizeWheelDeltaY(
+  event: WheelEvent,
+  canvas: HTMLCanvasElement
+): number {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return event.deltaY * 16;
+  }
+
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return event.deltaY * (canvas.clientHeight || window.innerHeight || 1);
+  }
+
+  return event.deltaY;
+}
+
+function safelySetPointerCapture(
+  canvas: HTMLCanvasElement,
+  pointerId: number
+): void {
+  try {
+    canvas.setPointerCapture(pointerId);
+  } catch {
+    // Pointer capture is best-effort; panning still works while events arrive.
+  }
+}
+
+function safelyReleasePointerCapture(
+  canvas: HTMLCanvasElement,
+  pointerId: number
+): void {
+  try {
+    if (canvas.hasPointerCapture(pointerId)) {
+      canvas.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // Ignore release races from pointer cancel/lostpointercapture.
+  }
 }

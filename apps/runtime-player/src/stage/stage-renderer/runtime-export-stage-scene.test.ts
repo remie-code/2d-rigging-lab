@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { RUNTIME_EXPORT_RAW_RGBA_MEDIA_TYPE } from "@private-2d-rigging-lab/package-format";
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import { createEvaluatedRuntimeExportStageRenderInput } from "./evaluated-runtime-export-stage-scene";
 import { createRuntimeExportStageRenderInput } from "./runtime-export-stage-scene";
 import { createStageViewport } from "./stage-viewport";
 
@@ -44,6 +45,34 @@ type TestMesh = {
 type TestDrawOrderEntry = {
   readonly drawableId: string;
   readonly drawOrder: number;
+};
+
+type TestParameter = {
+  readonly parameterId: string;
+  readonly displayName: string;
+  readonly semanticRole: "face";
+  readonly valueSource: "authoredInput";
+  readonly runtimeRole: "external-input";
+  readonly externalInput: true;
+  readonly readOnly: false;
+  readonly min: number;
+  readonly max: number;
+  readonly default: number;
+};
+
+type TestKeyformBinding = {
+  readonly evaluator: "linear-1d-v1";
+  readonly keyformSetId: string;
+  readonly targetId: string;
+  readonly targetKind: "mesh" | "drawable";
+  readonly targetProperty: "vertices" | "opacity" | "drawOrder";
+  readonly parameterId: string;
+  readonly keys: readonly {
+    readonly value: number;
+    readonly statePatch: unknown;
+  }[];
+  readonly compositionMode: "replace";
+  readonly compositionOrder: number;
 };
 
 type TestMaskRelation = {
@@ -171,6 +200,68 @@ describe("stage scene adapter", () => {
     expect(mask?.clipping).toBeUndefined();
   });
 
+  it("maps evaluated default pose data for Stage rendering", () => {
+    const textureBytes = Uint8Array.from([
+      255, 0, 0, 255,
+      0, 255, 0, 255,
+      0, 0, 255, 255,
+      255, 255, 255, 255
+    ]);
+    const payload = createStagePayload({
+      textureBytes,
+      parameters: [createParameter("param_pose_default", 1)],
+      keyforms: [
+        createMeshKeyform("param_pose_default"),
+        createOpacityKeyform("param_pose_default"),
+        createDrawOrderKeyform("param_pose_default")
+      ]
+    });
+    const rawRenderInput = createRuntimeExportStageRenderInput(payload);
+    const evaluatedRenderInput = createEvaluatedRuntimeExportStageRenderInput(payload);
+    const rawBody = rawRenderInput.scene.drawables.find((drawable) =>
+      drawable.drawableId === "draw_body"
+    );
+    const evaluatedBody = evaluatedRenderInput.scene.drawables.find((drawable) =>
+      drawable.drawableId === "draw_body"
+    );
+
+    expect(rawBody).toMatchObject({
+      opacity: 1,
+      drawOrder: 3,
+      mesh: {
+        vertices: createRestVertices()
+      }
+    });
+    expect(evaluatedRenderInput.scene.textureSources[0]).toMatchObject({
+      kind: "rgba8",
+      textureId: "tex_atlas_page_0",
+      bytes: textureBytes,
+      alphaMode: "straight"
+    });
+    expect(evaluatedBody).toMatchObject({
+      opacity: 0.25,
+      drawOrder: 12,
+      visible: true,
+      mesh: {
+        vertices: createDeformedVertices(),
+        uvs: [
+          { x: 0.2, y: 0.3 },
+          { x: 0.7, y: 0.3 },
+          { x: 0.2, y: 0.8 }
+        ],
+        triangles: [[0, 1, 2]]
+      }
+    });
+    expect(evaluatedBody?.mesh.vertices).not.toEqual(rawBody?.mesh.vertices);
+    expect(evaluatedRenderInput.modelBounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 64
+    });
+    expect(evaluatedRenderInput.defaultPoseEvaluation.snapshot.diagnostics).toEqual([]);
+  });
+
   it("fits and centers model bounds in the stage viewport", () => {
     const viewport = createStageViewport({
       viewportWidth: 400,
@@ -204,13 +295,16 @@ function createStagePayload(input: {
   readonly meshes?: readonly TestMesh[];
   readonly drawOrder?: readonly TestDrawOrderEntry[];
   readonly masks?: readonly TestMaskRelation[];
+  readonly parameters?: readonly TestParameter[];
+  readonly keyforms?: readonly TestKeyformBinding[];
 } = {}): RuntimeExportLoadedPayload {
   const textureBytes = input.textureBytes ?? new Uint8Array(16);
   const page = createTexturePage(textureBytes);
   const sourcePackage = {
     packageId: "pkg_stage_adapter",
     packageDisplayName: "Stage Adapter Model",
-    packageRevision: 1
+    packageRevision: 1,
+    packageHash: "hash_stage_adapter"
   };
   const canvas = {
     coordinateSystem: "canvas-y-down-v1",
@@ -282,9 +376,10 @@ function createStagePayload(input: {
           height: 64
         },
         texturePages: [toTexturePageReference(page)],
-        parameters: [],
+        parameters: input.parameters ?? [],
         inputManifest: {
-          externalInputParameterIds: [],
+          externalInputParameterIds:
+            input.parameters?.map((parameter) => parameter.parameterId) ?? [],
           computedDynamicsOutputParameterIds: [],
           hiddenDirectControlParameterIds: []
         },
@@ -293,7 +388,7 @@ function createStagePayload(input: {
         drawOrder,
         masks: input.masks ?? [],
         rigControls: [],
-        keyforms: [],
+        keyforms: input.keyforms ?? [],
         dynamicsSolver: renderAssumptions.dynamics,
         dynamicsGroups: [],
         renderAssumptions
@@ -374,7 +469,7 @@ function createStagePayload(input: {
       packageRevision: sourcePackage.packageRevision,
       drawableCount: drawables.length,
       meshCount: meshes.length,
-      parameterCount: 0,
+      parameterCount: input.parameters?.length ?? 0,
       maskCount: input.masks?.length ?? 0,
       texturePage: {
         pageId: page.pageId,
@@ -395,6 +490,24 @@ function createStagePayload(input: {
     },
     loadedAtIso: "2026-06-22T00:00:00.000Z"
   } as unknown as RuntimeExportLoadedPayload;
+}
+
+function createParameter(
+  parameterId: string,
+  defaultValue: number
+): TestParameter {
+  return {
+    parameterId,
+    displayName: "Default Pose",
+    semanticRole: "face",
+    valueSource: "authoredInput",
+    runtimeRole: "external-input",
+    externalInput: true,
+    readOnly: false,
+    min: -1,
+    max: 1,
+    default: defaultValue
+  };
 }
 
 function createDrawable(
@@ -439,11 +552,7 @@ function createMesh(
   return {
     meshId,
     drawableId,
-    vertices: [
-      { x: 0, y: 0 },
-      { x: 32, y: 0 },
-      { x: 0, y: 32 }
-    ],
+    vertices: createRestVertices(),
     atlasUvs: atlasUvs.map((uv) => ({
       x: uv.x,
       y: uv.y
@@ -465,6 +574,75 @@ function createMesh(
   };
 }
 
+function createMeshKeyform(parameterId: string): TestKeyformBinding {
+  return {
+    evaluator: "linear-1d-v1",
+    keyformSetId: "keyset_stage_body_vertices",
+    targetId: "mesh_body",
+    targetKind: "mesh",
+    targetProperty: "vertices",
+    parameterId,
+    keys: [
+      {
+        value: 0,
+        statePatch: createRestVertices()
+      },
+      {
+        value: 1,
+        statePatch: createDeformedVertices()
+      }
+    ],
+    compositionMode: "replace",
+    compositionOrder: 0
+  };
+}
+
+function createOpacityKeyform(parameterId: string): TestKeyformBinding {
+  return {
+    evaluator: "linear-1d-v1",
+    keyformSetId: "keyset_stage_body_opacity",
+    targetId: "draw_body",
+    targetKind: "drawable",
+    targetProperty: "opacity",
+    parameterId,
+    keys: [
+      {
+        value: 0,
+        statePatch: 1
+      },
+      {
+        value: 1,
+        statePatch: 0.25
+      }
+    ],
+    compositionMode: "replace",
+    compositionOrder: 1
+  };
+}
+
+function createDrawOrderKeyform(parameterId: string): TestKeyformBinding {
+  return {
+    evaluator: "linear-1d-v1",
+    keyformSetId: "keyset_stage_body_draw_order",
+    targetId: "draw_body",
+    targetKind: "drawable",
+    targetProperty: "drawOrder",
+    parameterId,
+    keys: [
+      {
+        value: 0,
+        statePatch: 3
+      },
+      {
+        value: 1,
+        statePatch: 12
+      }
+    ],
+    compositionMode: "replace",
+    compositionOrder: 2
+  };
+}
+
 function createTexturePage(textureBytes: Uint8Array) {
   return {
     pageId: "atlas_page_0",
@@ -481,6 +659,22 @@ function createTexturePage(textureBytes: Uint8Array) {
     },
     binaryAssetId: "bin_atlas_page_0"
   } as const;
+}
+
+function createRestVertices() {
+  return [
+    { x: 0, y: 0 },
+    { x: 32, y: 0 },
+    { x: 0, y: 32 }
+  ];
+}
+
+function createDeformedVertices() {
+  return [
+    { x: -8, y: 1 },
+    { x: 96, y: 3 },
+    { x: 1, y: 90 }
+  ];
 }
 
 function toTexturePageReference(page: ReturnType<typeof createTexturePage>) {

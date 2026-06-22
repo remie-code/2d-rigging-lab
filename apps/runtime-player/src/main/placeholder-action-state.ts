@@ -52,12 +52,15 @@ export function createStageStatus(): RuntimePlayerStageStatus {
 
 export function createPlaceholderResult(
   action: RuntimePlayerPlaceholderAction,
-  message = placeholderMessages[action]
+  options: {
+    readonly message?: string;
+    readonly handled?: boolean;
+  } = {}
 ): RuntimePlayerPlaceholderResult {
   return {
     action,
-    handled: false,
-    message,
+    handled: options.handled ?? false,
+    message: options.message ?? placeholderMessages[action],
     atIso: new Date(0).toISOString()
   };
 }
