@@ -40,11 +40,21 @@ describe("Runtime Player auto mapping", () => {
         createParameter("param_mouth_smile", "Mouth Smile", "mouth.smile", {
           min: 0,
           max: 1
+        }),
+        createParameter("param_body_angle_x", "Body Angle X", "body.angle.x", {
+          semanticRole: "body",
+          min: -10,
+          max: 10
+        }),
+        createParameter("param_body_angle_z", "Body Angle Z", "body.angle.z", {
+          semanticRole: "body",
+          min: -10,
+          max: 10
         })
       ]
     }));
 
-    expect(slots).toHaveLength(9);
+    expect(slots).toHaveLength(11);
     expect(slots.map((slot) => [slot.slotId, slot.target?.parameterId])).toEqual([
       ["head-horizontal", "param_face_angle_x"],
       ["head-vertical", "param_face_angle_y"],
@@ -54,12 +64,62 @@ describe("Runtime Player auto mapping", () => {
       ["gaze-horizontal", "param_eyeball_x"],
       ["gaze-vertical", "param_eyeball_y"],
       ["mouth-open", "param_mouth_open"],
-      ["mouth-smile", "param_mouth_smile"]
+      ["mouth-smile", "param_mouth_smile"],
+      ["body-x", "param_body_angle_x"],
+      ["body-z", "param_body_angle_z"]
     ]);
     expect(slots.find((slot) => slot.slotId === "eye-blink-left")).toMatchObject({
       enabled: true,
       invert: true,
       strength: 1,
+      status: "mapped"
+    });
+    expect(slots.find((slot) => slot.slotId === "body-x")).toMatchObject({
+      group: "body",
+      enabled: true,
+      invert: false,
+      strength: 0.35,
+      smoothing: 0.75,
+      status: "mapped"
+    });
+    expect(slots.find((slot) => slot.slotId === "body-z")).toMatchObject({
+      group: "body",
+      enabled: true,
+      bodyRotationStrength: 0.25,
+      bodyPositionStrength: 0.4,
+      bodyRotationInvert: false,
+      bodyPositionInvert: false,
+      smoothing: 0.75,
+      status: "mapped"
+    });
+  });
+
+  it("maps body targets by standard display name and parameter id aliases", () => {
+    const slots = createAutoMappingSlots(createPayload({
+      parameters: [
+        createParameter("custom_body_x", "Body Angle X", "custom.body.x", {
+          semanticRole: "body",
+          min: -10,
+          max: 10
+        }),
+        createParameter("param_body_angle_z", "Custom Body Z", "custom.body.z", {
+          semanticRole: "body",
+          min: -10,
+          max: 10
+        })
+      ]
+    }));
+
+    expect(slots.find((slot) => slot.slotId === "body-x")).toMatchObject({
+      target: expect.objectContaining({
+        parameterId: "custom_body_x"
+      }),
+      status: "mapped"
+    });
+    expect(slots.find((slot) => slot.slotId === "body-z")).toMatchObject({
+      target: expect.objectContaining({
+        parameterId: "param_body_angle_z"
+      }),
       status: "mapped"
     });
   });
@@ -86,11 +146,22 @@ describe("Runtime Player auto mapping", () => {
         createParameter("param_authored_non_external_gaze_y", "Eyeball Y", "eyeball.y", {
           externalInput: false
         }),
-        createParameter("param_manifest_excluded_eye", "Eye Left Open", "eye.left.open")
+        createParameter("param_manifest_excluded_eye", "Eye Left Open", "eye.left.open"),
+        createParameter("param_hidden_body_x", "Body Angle X", "body.angle.x", {
+          runtimeRole: "hidden-from-direct-controls",
+          externalInput: false,
+          readOnly: true
+        }),
+        createParameter("param_computed_body_z", "Body Angle Z", "body.angle.z", {
+          runtimeRole: "computed-dynamics-output",
+          valueSource: "computedDynamics",
+          externalInput: false,
+          readOnly: true
+        })
       ],
       manifestExternalIds: ["param_face_angle_x"],
-      computedIds: ["param_computed_smile"],
-      hiddenIds: ["param_hidden_mouth_open"]
+      computedIds: ["param_computed_smile", "param_computed_body_z"],
+      hiddenIds: ["param_hidden_mouth_open", "param_hidden_body_x"]
     }));
 
     expect(slots.find((slot) => slot.slotId === "head-horizontal")).toMatchObject({
@@ -120,6 +191,17 @@ describe("Runtime Player auto mapping", () => {
       target: null,
       status: "missing-target"
     });
+    expect(slots.find((slot) => slot.slotId === "body-x")).toMatchObject({
+      target: null,
+      enabled: false,
+      status: "missing-target"
+    });
+    expect(slots.find((slot) => slot.slotId === "body-z")).toMatchObject({
+      target: null,
+      enabled: false,
+      status: "missing-target"
+    });
+    expect(slots.filter((slot) => slot.group !== "body")).toHaveLength(9);
   });
 });
 

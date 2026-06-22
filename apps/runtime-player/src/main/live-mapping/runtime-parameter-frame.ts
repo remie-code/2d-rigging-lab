@@ -12,6 +12,7 @@ import {
   findSemanticSlotDefinition,
   type SemanticSlotDefinition
 } from "./semantic-slot-definitions";
+import type { RuntimePlayerBodyFollowState } from "./body-follow-state";
 
 export type CreateRuntimeParameterFrameInput = {
   readonly runtimeExportPayload: RuntimeExportLoadedPayload;
@@ -21,6 +22,7 @@ export type CreateRuntimeParameterFrameInput = {
   readonly slots: readonly RuntimePlayerMappingSlot[];
   readonly sequence: number;
   readonly producedAtMs?: number;
+  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
 };
 
 export function createRuntimeParameterFrame(
@@ -39,7 +41,10 @@ export function createRuntimeParameterFrame(
       slot,
       trackingFrame: input.trackingFrame,
       sessionNeutral: input.sessionNeutral,
-      calibration: input.inputProfile.calibration
+      calibration: input.inputProfile.calibration,
+      ...(input.bodyFollowState === undefined
+        ? {}
+        : { bodyFollowState: input.bodyFollowState })
     });
 
     if (value === null || !Number.isFinite(value)) {
@@ -75,6 +80,7 @@ function createSlotParameterValue(input: {
   readonly trackingFrame: TrackingFrame;
   readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly calibration: InputProfileCalibration;
+  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
 }): number | null {
   switch (input.definition.sourceKind) {
     case "head-centered":
@@ -117,6 +123,10 @@ function createSlotParameterValue(input: {
           input.calibration.mouth.smileMax
         )
       });
+    case "body-x":
+      return createBodyXValue(input);
+    case "body-z":
+      return createBodyZValue(input);
   }
 }
 
@@ -133,14 +143,18 @@ function createHeadCenteredValue(input: {
   }
 
   const sign = getHeadPositiveSign(input.definition, input.calibration);
-  return createCenteredValue({
+  return createCenteredTargetValue({
     slot: input.slot,
-    current: rotation[sign.axis],
-    sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
-    profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
-    profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
-    profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
-    positiveDirection: sign.direction
+    normalized: readCenteredNormalizedValue({
+      current: rotation[sign.axis],
+      sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
+      profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
+      profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
+      profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
+      positiveDirection: sign.direction
+    }),
+    invert: input.slot.invert,
+    strength: input.slot.strength
   });
 }
 
@@ -166,56 +180,84 @@ function createGazeCenteredValue(input: {
     input.sessionNeutral?.rightEyeEulerDeg
   ], sign.axis);
 
-  return createCenteredValue({
+  return createCenteredTargetValue({
     slot: input.slot,
-    current,
-    sessionNeutral,
-    profileNeutral: input.calibration.eyes.neutral[sign.axis],
-    profileMin: input.calibration.eyes.min[sign.axis],
-    profileMax: input.calibration.eyes.max[sign.axis],
-    positiveDirection: sign.direction
+    normalized: readCenteredNormalizedValue({
+      current,
+      sessionNeutral,
+      profileNeutral: input.calibration.eyes.neutral[sign.axis],
+      profileMin: input.calibration.eyes.min[sign.axis],
+      profileMax: input.calibration.eyes.max[sign.axis],
+      positiveDirection: sign.direction
+    }),
+    invert: input.slot.invert,
+    strength: input.slot.strength
   });
 }
 
-function createCenteredValue(input: {
-  readonly slot: RuntimePlayerMappingSlot;
+function readCenteredNormalizedValue(input: {
   readonly current: number;
   readonly sessionNeutral: number | null | undefined;
   readonly profileNeutral: number;
   readonly profileMin: number;
   readonly profileMax: number;
   readonly positiveDirection: -1 | 1;
-}): number {
+}): number | null {
+  if (
+    !Number.isFinite(input.current) ||
+    !Number.isFinite(input.profileNeutral) ||
+    !Number.isFinite(input.profileMin) ||
+    !Number.isFinite(input.profileMax) ||
+    (
+      input.sessionNeutral !== null &&
+      input.sessionNeutral !== undefined &&
+      !Number.isFinite(input.sessionNeutral)
+    )
+  ) {
+    return null;
+  }
+
   const neutral = input.sessionNeutral ?? input.profileNeutral;
   const signedCurrent = (input.current - neutral) * input.positiveDirection;
   const signedProfileMin =
     (input.profileMin - input.profileNeutral) * input.positiveDirection;
   const signedProfileMax =
     (input.profileMax - input.profileNeutral) * input.positiveDirection;
-  const positiveRange = Math.max(0.0001, signedProfileMin, signedProfileMax);
-  const negativeRange = Math.max(0.0001, -signedProfileMin, -signedProfileMax);
+  const positiveRange = Math.max(
+    0.0001,
+    ...[signedProfileMin, signedProfileMax].filter(Number.isFinite)
+  );
+  const negativeRange = Math.max(
+    0.0001,
+    ...[-signedProfileMin, -signedProfileMax].filter(Number.isFinite)
+  );
   const normalized = signedCurrent >= 0
     ? signedCurrent / positiveRange
     : signedCurrent / negativeRange;
-  const adjusted = clamp(normalized, -1, 1) * (input.slot.invert ? -1 : 1);
 
-  return applyCenteredTargetValue(input.slot, adjusted);
+  return clamp(normalized, -1, 1);
 }
 
-function applyCenteredTargetValue(
-  slot: RuntimePlayerMappingSlot,
-  normalized: number
-): number {
-  if (slot.target === null) {
-    return 0;
+function createCenteredTargetValue(input: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly normalized: number | null;
+  readonly invert: boolean;
+  readonly strength: number;
+}): number | null {
+  if (input.slot.target === null || input.normalized === null) {
+    return null;
   }
 
-  const targetValue = normalized >= 0
-    ? slot.target.default + normalized * (slot.target.max - slot.target.default)
-    : slot.target.default + normalized * (slot.target.default - slot.target.min);
+  const adjusted = clamp(input.normalized, -1, 1) *
+    (input.invert ? -1 : 1);
+  const targetValue = adjusted >= 0
+    ? input.slot.target.default +
+      adjusted * (input.slot.target.max - input.slot.target.default)
+    : input.slot.target.default +
+      adjusted * (input.slot.target.default - input.slot.target.min);
 
-  return slot.target.default +
-    (targetValue - slot.target.default) * slot.strength;
+  return input.slot.target.default +
+    (targetValue - input.slot.target.default) * input.strength;
 }
 
 function createWeightValue(input: {
@@ -236,11 +278,158 @@ function createWeightValue(input: {
     (targetValue - input.slot.target.default) * input.slot.strength;
 }
 
+function createBodyXValue(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly trackingFrame: TrackingFrame;
+  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
+  readonly calibration: InputProfileCalibration;
+  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+}): number | null {
+  const rotation = input.trackingFrame.head.rotationEulerDeg;
+  if (rotation === undefined) {
+    return null;
+  }
+
+  const sign = getHeadPositiveSign(input.definition, input.calibration);
+  const targetValue = createCenteredTargetValue({
+    slot: input.slot,
+    normalized: readCenteredNormalizedValue({
+      current: rotation[sign.axis],
+      sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
+      profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
+      profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
+      profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
+      positiveDirection: sign.direction
+    }),
+    invert: input.slot.invert,
+    strength: input.slot.strength
+  });
+
+  return applyBodySmoothing(input.slot, targetValue, input.bodyFollowState);
+}
+
+function createBodyZValue(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly trackingFrame: TrackingFrame;
+  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
+  readonly calibration: InputProfileCalibration;
+  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+}): number | null {
+  const rotationComponent = readBodyZRotationComponent(input);
+  const positionComponent = readBodyZPositionComponent(input);
+
+  if (rotationComponent === null && positionComponent === null) {
+    return null;
+  }
+
+  const normalized = clamp(
+    (rotationComponent ?? 0) + (positionComponent ?? 0),
+    -1,
+    1
+  );
+  const targetValue = createCenteredTargetValue({
+    slot: input.slot,
+    normalized,
+    invert: false,
+    strength: 1
+  });
+
+  return applyBodySmoothing(input.slot, targetValue, input.bodyFollowState);
+}
+
+function readBodyZRotationComponent(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly trackingFrame: TrackingFrame;
+  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
+  readonly calibration: InputProfileCalibration;
+}): number | null {
+  const rotation = input.trackingFrame.head.rotationEulerDeg;
+  if (rotation === undefined) {
+    return null;
+  }
+
+  const sign = getHeadPositiveSign(input.definition, input.calibration);
+  const normalized = readCenteredNormalizedValue({
+    current: rotation[sign.axis],
+    sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
+    profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
+    profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
+    profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
+    positiveDirection: sign.direction
+  });
+
+  if (normalized === null) {
+    return null;
+  }
+
+  return normalized *
+    (input.slot.bodyRotationInvert === true ? -1 : 1) *
+    (input.slot.bodyRotationStrength ?? 0);
+}
+
+function readBodyZPositionComponent(input: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly trackingFrame: TrackingFrame;
+  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
+  readonly calibration: InputProfileCalibration;
+}): number | null {
+  const position = input.trackingFrame.head.positionRaw;
+  const positionCalibration = input.calibration.headPositionRaw;
+  const sign = positionCalibration?.learnedSigns.bodyRight;
+
+  if (
+    position === undefined ||
+    positionCalibration === undefined ||
+    sign === undefined
+  ) {
+    return null;
+  }
+
+  const normalized = readCenteredNormalizedValue({
+    current: position[sign.axis],
+    sessionNeutral: input.sessionNeutral?.headPositionRaw?.[sign.axis],
+    profileNeutral: positionCalibration.neutral[sign.axis],
+    profileMin: positionCalibration.min[sign.axis],
+    profileMax: positionCalibration.max[sign.axis],
+    positiveDirection: sign.direction
+  });
+
+  if (normalized === null) {
+    return null;
+  }
+
+  return normalized *
+    (input.slot.bodyPositionInvert === true ? -1 : 1) *
+    (input.slot.bodyPositionStrength ?? 0);
+}
+
+function applyBodySmoothing(
+  slot: RuntimePlayerMappingSlot,
+  targetValue: number | null,
+  bodyFollowState: RuntimePlayerBodyFollowState | undefined
+): number | null {
+  if (targetValue === null) {
+    return null;
+  }
+
+  return bodyFollowState?.apply({
+    slotId: slot.slotId,
+    targetValue,
+    smoothing: slot.smoothing ?? 0
+  }) ?? targetValue;
+}
+
 function getHeadPositiveSign(
   definition: SemanticSlotDefinition,
   calibration: InputProfileCalibration
 ): InputProfileLearnedSign {
-  if (definition.slotId === "head-horizontal") {
+  if (
+    definition.slotId === "head-horizontal" ||
+    definition.slotId === "body-x"
+  ) {
     return calibration.headRotationEulerDeg.learnedSigns.faceRight ??
       definition.fallbackPositiveSign!;
   }

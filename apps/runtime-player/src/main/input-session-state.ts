@@ -192,6 +192,8 @@ export class RuntimePlayerInputSessionState {
   setIdle(nowMs = this.nowMs()): RuntimePlayerInputStatus {
     this.connectionState = "idle";
     this.errorMessage = undefined;
+    this.latestRawFrame = undefined;
+    this.latestTrackingFrame = undefined;
     this.diagnostics = {
       ...this.diagnostics,
       updatedAtIso: new Date(nowMs).toISOString()
@@ -349,6 +351,9 @@ function createSessionNeutralSnapshot(
     ...(frame.head.rotationEulerDeg === undefined
       ? {}
       : { headRotationEulerDeg: frame.head.rotationEulerDeg }),
+    ...(frame.head.positionRaw === undefined
+      ? {}
+      : { headPositionRaw: frame.head.positionRaw }),
     ...(frame.eyes?.leftEulerDeg === undefined
       ? {}
       : { leftEyeEulerDeg: frame.eyes.leftEulerDeg }),

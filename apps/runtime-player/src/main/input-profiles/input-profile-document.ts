@@ -26,6 +26,15 @@ export type InputProfileCalibration = {
       readonly tiltRight?: InputProfileLearnedSign;
     };
   };
+  readonly headPositionRaw?: {
+    readonly neutral: TrackingVector3;
+    readonly min: TrackingVector3;
+    readonly max: TrackingVector3;
+    readonly learnedSigns: {
+      readonly bodyLeft?: InputProfileLearnedSign;
+      readonly bodyRight?: InputProfileLearnedSign;
+    };
+  };
   readonly eyes: {
     readonly neutral: TrackingVector3;
     readonly min: TrackingVector3;

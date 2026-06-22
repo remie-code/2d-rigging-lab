@@ -1,6 +1,8 @@
 import type {
+  RuntimePlayerInputCalibrationMode,
   RuntimePlayerInputCalibrationPromptKey,
   RuntimePlayerInputCalibrationPromptSnapshot,
+  RuntimePlayerInputCalibrationSectionKey,
   RuntimePlayerInputCalibrationSnapshot
 } from "../../preload/input-profile-bridge-contract";
 import type {
@@ -14,13 +16,21 @@ import type {
   InputProfileDirection,
   InputProfileLearnedSign
 } from "./input-profile-document";
+import {
+  getCalibrationPromptKeysForSections,
+  inputProfileCalibrationSectionKeys
+} from "./input-profile-calibration-sections";
 
 const directionalSampleThresholdDeg = 5;
 const eyeDirectionalSampleThresholdDeg = 3;
+const positionSampleThresholdRaw = 0.05;
 const blinkSampleThreshold = 0.35;
 const mouthOpenSampleThreshold = 0.2;
 const smileSampleThreshold = 0.18;
 const stableSamplesRequired = 2;
+const fullCalibrationPromptKeys = getCalibrationPromptKeysForSections(
+  inputProfileCalibrationSectionKeys
+);
 
 type CalibrationPromptDefinition = {
   readonly key: RuntimePlayerInputCalibrationPromptKey;
@@ -34,6 +44,7 @@ type PromptState = RuntimePlayerInputCalibrationPromptSnapshot & {
 
 type CalibrationFeatureValues = {
   readonly headRotationEulerDeg: TrackingVector3;
+  readonly headPositionRaw: TrackingVector3 | null;
   readonly eyeEulerDeg: TrackingVector3;
   readonly blinkLeft: number;
   readonly blinkRight: number;
@@ -44,6 +55,8 @@ type CalibrationFeatureValues = {
 type CalibrationRangeState = {
   headMin: TrackingVector3;
   headMax: TrackingVector3;
+  headPositionMin: TrackingVector3 | null;
+  headPositionMax: TrackingVector3 | null;
   eyeMin: TrackingVector3;
   eyeMax: TrackingVector3;
   blinkLeftMin: number;
@@ -72,7 +85,12 @@ type MutableEyeLearnedSigns = {
   eyesDown?: InputProfileLearnedSign;
 };
 
-const calibrationPromptDefinitions: readonly CalibrationPromptDefinition[] = [
+type MutableHeadPositionLearnedSigns = {
+  bodyLeft?: InputProfileLearnedSign;
+  bodyRight?: InputProfileLearnedSign;
+};
+
+const calibrationPromptDefinitions = [
   { key: "look-forward", label: "Look forward", requiredSampleCount: 1 },
   { key: "face-left", label: "Turn face left", requiredSampleCount: stableSamplesRequired },
   { key: "face-right", label: "Turn face right", requiredSampleCount: stableSamplesRequired },
@@ -86,12 +104,28 @@ const calibrationPromptDefinitions: readonly CalibrationPromptDefinition[] = [
   { key: "eyes-down", label: "Eyes down", requiredSampleCount: stableSamplesRequired },
   { key: "blink", label: "Blink", requiredSampleCount: stableSamplesRequired },
   { key: "open-mouth", label: "Open mouth", requiredSampleCount: stableSamplesRequired },
-  { key: "smile", label: "Smile", requiredSampleCount: stableSamplesRequired }
-];
+  { key: "smile", label: "Smile", requiredSampleCount: stableSamplesRequired },
+  { key: "head-position-left", label: "Move upper body left", requiredSampleCount: stableSamplesRequired },
+  { key: "head-position-right", label: "Move upper body right", requiredSampleCount: stableSamplesRequired }
+] as const satisfies readonly CalibrationPromptDefinition[];
+
+const calibrationPromptDefinitionsByKey = new Map<
+  RuntimePlayerInputCalibrationPromptKey,
+  CalibrationPromptDefinition
+>(
+  calibrationPromptDefinitions.map((definition) => [
+    definition.key,
+    definition
+  ] as const)
+);
 
 export type InputProfileCalibrationSessionOptions = {
   readonly sessionId: string;
   readonly displayName: string;
+  readonly mode?: RuntimePlayerInputCalibrationMode;
+  readonly section?: RuntimePlayerInputCalibrationSectionKey;
+  readonly targetProfileId?: string;
+  readonly promptKeys?: readonly RuntimePlayerInputCalibrationPromptKey[];
   readonly startedAtMs: number;
 };
 
@@ -110,6 +144,9 @@ export type InputProfileCalibrationAdvanceResult = {
 export class InputProfileCalibrationSession {
   private readonly sessionId: string;
   private readonly displayName: string;
+  private readonly mode: RuntimePlayerInputCalibrationMode;
+  private readonly section: RuntimePlayerInputCalibrationSectionKey | undefined;
+  private readonly targetProfileId: string | undefined;
   private readonly startedAtIso: string;
   private readonly prompts: PromptState[];
   private currentPromptIndex = 0;
@@ -117,19 +154,33 @@ export class InputProfileCalibrationSession {
   private range: CalibrationRangeState | null = null;
   private readonly headLearnedSigns: MutableHeadLearnedSigns = {};
   private readonly eyeLearnedSigns: MutableEyeLearnedSigns = {};
+  private readonly headPositionLearnedSigns: MutableHeadPositionLearnedSigns = {};
 
   constructor(options: InputProfileCalibrationSessionOptions) {
     this.sessionId = options.sessionId;
     this.displayName = options.displayName;
+    this.mode = options.mode ?? "full";
+    this.section = options.section;
+    this.targetProfileId = options.targetProfileId;
     this.startedAtIso = new Date(options.startedAtMs).toISOString();
-    this.prompts = calibrationPromptDefinitions.map((definition) => ({
-      key: definition.key,
-      label: definition.label,
-      status: "waiting",
-      sampleCount: 0,
-      requiredSampleCount: definition.requiredSampleCount,
-      message: "Waiting for sample."
-    }));
+    this.prompts = (options.promptKeys ?? fullCalibrationPromptKeys).map(
+      (promptKey) => {
+        const definition = calibrationPromptDefinitionsByKey.get(promptKey);
+
+        if (definition === undefined) {
+          throw new Error(`Unsupported calibration prompt: ${promptKey}`);
+        }
+
+        return {
+          key: definition.key,
+          label: definition.label,
+          status: "waiting",
+          sampleCount: 0,
+          requiredSampleCount: definition.requiredSampleCount,
+          message: "Waiting for sample."
+        };
+      }
+    );
   }
 
   getSnapshot(): RuntimePlayerInputCalibrationSnapshot {
@@ -140,6 +191,11 @@ export class InputProfileCalibrationSession {
     return {
       sessionId: this.sessionId,
       displayName: this.displayName,
+      mode: this.mode,
+      ...(this.section === undefined ? {} : { section: this.section }),
+      ...(this.targetProfileId === undefined
+        ? {}
+        : { targetProfileId: this.targetProfileId }),
       startedAtIso: this.startedAtIso,
       currentPromptIndex: this.currentPromptIndex,
       currentPrompt: this.prompts[this.currentPromptIndex] ?? null,
@@ -295,6 +351,10 @@ export class InputProfileCalibrationSession {
       throw new Error("Calibration cannot finish until every prompt is recorded.");
     }
 
+    if (!this.hasFullProfilePrompts()) {
+      throw new Error("Partial calibration cannot create a new input profile.");
+    }
+
     return {
       profileId: input.profileId,
       displayName: input.displayName,
@@ -309,6 +369,7 @@ export class InputProfileCalibrationSession {
           max: this.range.headMax,
           learnedSigns: this.headLearnedSigns
         },
+        headPositionRaw: this.createHeadPositionCalibration(),
         eyes: {
           neutral: this.neutral.eyeEulerDeg,
           min: this.range.eyeMin,
@@ -327,6 +388,68 @@ export class InputProfileCalibrationSession {
         }
       }
     };
+  }
+
+  createUpdatedProfile(input: {
+    readonly profile: InputProfile;
+    readonly updatedAtIso: string;
+  }): InputProfile {
+    const snapshot = this.getSnapshot();
+
+    if (!snapshot.canFinish || this.neutral === null || this.range === null) {
+      throw new Error("Calibration cannot finish until every prompt is recorded.");
+    }
+
+    if (!this.hasPrompt("head-position-left") || !this.hasPrompt("head-position-right")) {
+      throw new Error("Only head position section updates are supported.");
+    }
+
+    return {
+      ...input.profile,
+      updatedAtIso: input.updatedAtIso,
+      calibration: {
+        ...input.profile.calibration,
+        headPositionRaw: this.createHeadPositionCalibration()
+      }
+    };
+  }
+
+  getTargetProfileId(): string | undefined {
+    return this.targetProfileId;
+  }
+
+  private createHeadPositionCalibration(): NonNullable<
+    InputProfileCalibration["headPositionRaw"]
+  > {
+    if (
+      this.neutral?.headPositionRaw === null ||
+      this.neutral?.headPositionRaw === undefined ||
+      this.range?.headPositionMin === null ||
+      this.range?.headPositionMin === undefined ||
+      this.range.headPositionMax === null ||
+      this.range.headPositionMax === undefined ||
+      this.headPositionLearnedSigns.bodyLeft === undefined ||
+      this.headPositionLearnedSigns.bodyRight === undefined
+    ) {
+      throw new Error("Head position calibration is incomplete.");
+    }
+
+    return {
+      neutral: this.neutral.headPositionRaw,
+      min: this.range.headPositionMin,
+      max: this.range.headPositionMax,
+      learnedSigns: this.headPositionLearnedSigns
+    };
+  }
+
+  private hasFullProfilePrompts(): boolean {
+    return fullCalibrationPromptKeys.every((promptKey) =>
+      this.hasPrompt(promptKey)
+    );
+  }
+
+  private hasPrompt(promptKey: RuntimePlayerInputCalibrationPromptKey): boolean {
+    return this.prompts.some((prompt) => prompt.key === promptKey);
   }
 
   private recordLearnedSign(
@@ -367,6 +490,12 @@ export class InputProfileCalibrationSession {
         return;
       case "eyes-down":
         this.eyeLearnedSigns.eyesDown = learnedSign;
+        return;
+      case "head-position-left":
+        this.headPositionLearnedSigns.bodyLeft = learnedSign;
+        return;
+      case "head-position-right":
+        this.headPositionLearnedSigns.bodyRight = learnedSign;
         return;
       default:
         return;
@@ -440,6 +569,20 @@ function evaluatePromptSample(
         values.eyeEulerDeg.x - neutral.eyeEulerDeg.x,
         "x",
         eyeDirectionalSampleThresholdDeg
+      );
+    case "head-position-left":
+    case "head-position-right":
+      if (values.headPositionRaw === null || neutral.headPositionRaw === null) {
+        return {
+          accepted: false,
+          message: "Head position is not available in the tracking frame."
+        };
+      }
+
+      return evaluateDirectionalSample(
+        values.headPositionRaw.x - neutral.headPositionRaw.x,
+        "x",
+        positionSampleThresholdRaw
       );
     case "blink":
       return evaluateActivationSample(
@@ -552,6 +695,7 @@ function readCalibrationFeatureValues(
   return {
     headRotationEulerDeg:
       frame.head.rotationEulerDeg ?? createZeroVector3(),
+    headPositionRaw: frame.head.positionRaw ?? null,
     eyeEulerDeg: averageEyeEuler(frame),
     blinkLeft: readBlendshape(frame, "eyeBlink_L"),
     blinkRight: readBlendshape(frame, "eyeBlink_R"),
@@ -600,6 +744,8 @@ function createInitialRange(
   return {
     headMin: values.headRotationEulerDeg,
     headMax: values.headRotationEulerDeg,
+    headPositionMin: values.headPositionRaw,
+    headPositionMax: values.headPositionRaw,
     eyeMin: values.eyeEulerDeg,
     eyeMax: values.eyeEulerDeg,
     blinkLeftMin: values.blinkLeft,
@@ -620,6 +766,14 @@ function expandRange(
   return {
     headMin: minVector3(range.headMin, values.headRotationEulerDeg),
     headMax: maxVector3(range.headMax, values.headRotationEulerDeg),
+    headPositionMin: minOptionalVector3(
+      range.headPositionMin,
+      values.headPositionRaw
+    ),
+    headPositionMax: maxOptionalVector3(
+      range.headPositionMax,
+      values.headPositionRaw
+    ),
     eyeMin: minVector3(range.eyeMin, values.eyeEulerDeg),
     eyeMax: maxVector3(range.eyeMax, values.eyeEulerDeg),
     blinkLeftMin: Math.min(range.blinkLeftMin, values.blinkLeft),
@@ -631,6 +785,36 @@ function expandRange(
     smileMin: Math.min(range.smileMin, values.mouthSmile),
     smileMax: Math.max(range.smileMax, values.mouthSmile)
   };
+}
+
+function minOptionalVector3(
+  left: TrackingVector3 | null,
+  right: TrackingVector3 | null
+): TrackingVector3 | null {
+  if (left === null) {
+    return right;
+  }
+
+  if (right === null) {
+    return left;
+  }
+
+  return minVector3(left, right);
+}
+
+function maxOptionalVector3(
+  left: TrackingVector3 | null,
+  right: TrackingVector3 | null
+): TrackingVector3 | null {
+  if (left === null) {
+    return right;
+  }
+
+  if (right === null) {
+    return left;
+  }
+
+  return maxVector3(left, right);
 }
 
 function minVector3(left: TrackingVector3, right: TrackingVector3): TrackingVector3 {

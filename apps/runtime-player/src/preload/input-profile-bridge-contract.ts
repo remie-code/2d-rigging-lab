@@ -23,12 +23,14 @@ export type RuntimePlayerInputProfileSummary = {
   readonly createdAtIso: string;
   readonly updatedAtIso: string;
   readonly rangeStatus: "default" | "calibrated";
+  readonly calibrationSections: readonly RuntimePlayerInputCalibrationSectionStatus[];
 };
 
 export type RuntimePlayerInputSessionNeutralSnapshot = {
   readonly capturedAtIso: string;
   readonly frameTimestampMs: number;
   readonly headRotationEulerDeg?: TrackingVector3;
+  readonly headPositionRaw?: TrackingVector3;
   readonly leftEyeEulerDeg?: TrackingVector3;
   readonly rightEyeEulerDeg?: TrackingVector3;
   readonly jawOpen?: number;
@@ -49,7 +51,29 @@ export type RuntimePlayerInputCalibrationPromptKey =
   | "eyes-down"
   | "blink"
   | "open-mouth"
-  | "smile";
+  | "smile"
+  | "head-position-left"
+  | "head-position-right";
+
+export type RuntimePlayerInputCalibrationMode =
+  | "full"
+  | "missing-only"
+  | "section";
+
+export type RuntimePlayerInputCalibrationSectionKey =
+  | "head-rotation"
+  | "eyes-mouth"
+  | "head-position";
+
+export type RuntimePlayerInputCalibrationSectionReadiness =
+  | "ready"
+  | "missing";
+
+export type RuntimePlayerInputCalibrationSectionStatus = {
+  readonly key: RuntimePlayerInputCalibrationSectionKey;
+  readonly label: string;
+  readonly status: RuntimePlayerInputCalibrationSectionReadiness;
+};
 
 export type RuntimePlayerInputCalibrationPromptStatus =
   | "waiting"
@@ -68,6 +92,9 @@ export type RuntimePlayerInputCalibrationPromptSnapshot = {
 export type RuntimePlayerInputCalibrationSnapshot = {
   readonly sessionId: string;
   readonly displayName: string;
+  readonly mode: RuntimePlayerInputCalibrationMode;
+  readonly section?: RuntimePlayerInputCalibrationSectionKey;
+  readonly targetProfileId?: string;
   readonly startedAtIso: string;
   readonly currentPromptIndex: number;
   readonly currentPrompt:
@@ -108,6 +135,8 @@ export type RuntimePlayerInputProfileActionResult = {
 
 export type RuntimePlayerInputProfileStartCalibrationRequest = {
   readonly displayName?: string;
+  readonly mode?: RuntimePlayerInputCalibrationMode;
+  readonly section?: RuntimePlayerInputCalibrationSectionKey;
 };
 
 export type RuntimePlayerInputProfileFinishCalibrationRequest = {

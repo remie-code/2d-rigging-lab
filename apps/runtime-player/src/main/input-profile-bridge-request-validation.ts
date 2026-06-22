@@ -1,4 +1,6 @@
 import type {
+  RuntimePlayerInputCalibrationMode,
+  RuntimePlayerInputCalibrationSectionKey,
   RuntimePlayerInputProfileFinishCalibrationRequest,
   RuntimePlayerInputProfileStartCalibrationRequest
 } from "../preload/input-profile-bridge-contract";
@@ -8,6 +10,8 @@ const maxDisplayNameLength = 80;
 
 export type InputProfileStartCalibrationCommand = {
   readonly displayName: string;
+  readonly mode: RuntimePlayerInputCalibrationMode;
+  readonly section?: RuntimePlayerInputCalibrationSectionKey;
 };
 
 export type InputProfileFinishCalibrationCommand = {
@@ -22,9 +26,21 @@ export function readStartCalibrationRequest(
   request: unknown
 ): InputProfileStartCalibrationCommand {
   const rawRequest = readOptionalRecord(request, "Start calibration request");
+  const mode = readCalibrationMode(rawRequest?.mode);
+  const section = readCalibrationSection(rawRequest?.section);
+
+  if (mode === "section" && section === undefined) {
+    throw new Error("Section calibration request must include a section.");
+  }
+
+  if (mode !== "section" && section !== undefined) {
+    throw new Error("Calibration section can only be used with section mode.");
+  }
 
   return {
-    displayName: readOptionalDisplayName(rawRequest?.displayName)
+    displayName: readOptionalDisplayName(rawRequest?.displayName),
+    mode,
+    ...(section === undefined ? {} : { section })
   };
 }
 
@@ -97,6 +113,36 @@ function readOptionalDisplayName(value: unknown): string {
   }
 
   return trimmed;
+}
+
+function readCalibrationMode(value: unknown): RuntimePlayerInputCalibrationMode {
+  if (value === undefined) {
+    return "full";
+  }
+
+  if (value === "full" || value === "missing-only" || value === "section") {
+    return value;
+  }
+
+  throw new Error("Input profile calibration mode is unsupported.");
+}
+
+function readCalibrationSection(
+  value: unknown
+): RuntimePlayerInputCalibrationSectionKey | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === "head-rotation" ||
+    value === "eyes-mouth" ||
+    value === "head-position"
+  ) {
+    return value;
+  }
+
+  throw new Error("Input profile calibration section is unsupported.");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

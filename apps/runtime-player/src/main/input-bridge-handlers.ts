@@ -46,6 +46,7 @@ export interface RegisterInputBridgeHandlersInput {
   readonly createReceiver?: RuntimePlayerInputReceiverFactory;
   readonly nowMs?: () => number;
   readonly onTrackingFrame?: () => void | Promise<void>;
+  readonly onInputReset?: () => void | Promise<void>;
 }
 
 export type RuntimePlayerInputBridgeHandlersRegistration = {
@@ -81,6 +82,7 @@ export function registerInputBridgeHandlers(
     const config = readInputConnectRequest(request);
     await stopReceiver();
     throttle.cancel();
+    await input.onInputReset?.();
 
     const nextReceiver = createReceiver({
       config,
@@ -122,6 +124,7 @@ export function registerInputBridgeHandlers(
     await stopReceiver();
     throttle.cancel();
     const status = state.setIdle();
+    await input.onInputReset?.();
     broadcastInputSnapshot(input.windows, state);
     return status;
   }

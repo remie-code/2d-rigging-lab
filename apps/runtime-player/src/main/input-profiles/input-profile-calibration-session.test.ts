@@ -4,6 +4,7 @@ import type {
   RuntimePlayerInputCalibrationPromptKey
 } from "../../preload/input-profile-bridge-contract";
 import type { TrackingFrame } from "../../preload/input-tracking-frame-contract";
+import { createTemporaryDefaultInputProfile } from "./input-profile-defaults";
 import { InputProfileCalibrationSession } from "./input-profile-calibration-session";
 
 describe("InputProfileCalibrationSession", () => {
@@ -28,6 +29,8 @@ describe("InputProfileCalibrationSession", () => {
     recordCurrentPrompt(session, "blink");
     recordCurrentPrompt(session, "open-mouth");
     recordCurrentPrompt(session, "smile");
+    recordCurrentPrompt(session, "head-position-left");
+    recordCurrentPrompt(session, "head-position-right");
 
     expect(session.getSnapshot().canFinish).toBe(true);
 
@@ -65,6 +68,15 @@ describe("InputProfileCalibrationSession", () => {
     expect(profile.calibration.eyes.blinkRightMax).toBe(0.75);
     expect(profile.calibration.mouth.jawOpenMax).toBe(0.7);
     expect(profile.calibration.mouth.smileMax).toBe(0.6);
+    expect(profile.calibration.headPositionRaw).toEqual({
+      neutral: { x: 0, y: 0, z: 0 },
+      min: { x: -0.18, y: 0, z: 0 },
+      max: { x: 0.34, y: 0, z: 0 },
+      learnedSigns: {
+        bodyLeft: { axis: "x", direction: -1 },
+        bodyRight: { axis: "x", direction: 1 }
+      }
+    });
   });
 
   it("does not complete a directional prompt until stable samples match", () => {
@@ -89,6 +101,87 @@ describe("InputProfileCalibrationSession", () => {
 
     expect(third.snapshot.currentPrompt?.status).toBe("ok");
     expect(third.snapshot.currentPrompt?.sampleCount).toBe(2);
+  });
+
+  it("updates only the head position section for section calibration", () => {
+    const session = new InputProfileCalibrationSession({
+      sessionId: "calibration_test",
+      displayName: "Desk",
+      mode: "section",
+      section: "head-position",
+      targetProfileId: "profile_desk",
+      promptKeys: [
+        "look-forward",
+        "head-position-left",
+        "head-position-right"
+      ],
+      startedAtMs: 0
+    });
+    const baseProfile = {
+      ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
+      profileId: "profile_desk",
+      displayName: "Desk"
+    };
+
+    expect(session.getSnapshot()).toMatchObject({
+      mode: "section",
+      section: "head-position",
+      targetProfileId: "profile_desk",
+      totalPromptCount: 3
+    });
+
+    recordCurrentPrompt(session, "look-forward");
+    recordCurrentPrompt(session, "head-position-left");
+    recordCurrentPrompt(session, "head-position-right");
+
+    const updated = session.createUpdatedProfile({
+      profile: baseProfile,
+      updatedAtIso: "2026-06-23T00:00:00.000Z"
+    });
+
+    expect(updated.profileId).toBe("profile_desk");
+    expect(updated.displayName).toBe("Desk");
+    expect(updated.createdAtIso).toBe("2026-06-22T00:00:00.000Z");
+    expect(updated.updatedAtIso).toBe("2026-06-23T00:00:00.000Z");
+    expect(updated.calibration.headRotationEulerDeg).toEqual(
+      baseProfile.calibration.headRotationEulerDeg
+    );
+    expect(updated.calibration.headPositionRaw?.learnedSigns).toEqual({
+      bodyLeft: { axis: "x", direction: -1 },
+      bodyRight: { axis: "x", direction: 1 }
+    });
+  });
+
+  it("supports missing-only head position calibration prompts", () => {
+    const session = new InputProfileCalibrationSession({
+      sessionId: "calibration_test",
+      displayName: "Desk",
+      mode: "missing-only",
+      section: "head-position",
+      targetProfileId: "profile_desk",
+      promptKeys: [
+        "look-forward",
+        "head-position-left",
+        "head-position-right"
+      ],
+      startedAtMs: 0
+    });
+
+    expect(session.getSnapshot()).toMatchObject({
+      mode: "missing-only",
+      section: "head-position",
+      targetProfileId: "profile_desk",
+      currentPrompt: {
+        key: "look-forward"
+      },
+      totalPromptCount: 3
+    });
+
+    recordCurrentPrompt(session, "look-forward");
+    recordCurrentPrompt(session, "head-position-left");
+    recordCurrentPrompt(session, "head-position-right");
+
+    expect(session.getSnapshot().canFinish).toBe(true);
   });
 });
 
@@ -117,7 +210,8 @@ function createFrame(
     timestampMs: 1000,
     blendshapes: createBlendshapes(promptKey),
     head: {
-      rotationEulerDeg: createHeadRotation(promptKey)
+      rotationEulerDeg: createHeadRotation(promptKey),
+      positionRaw: createHeadPosition(promptKey)
     },
     eyes: {
       leftEulerDeg: createEyeRotation(promptKey),
@@ -142,6 +236,19 @@ function createHeadRotation(
       return { x: 0, y: 0, z: 8 };
     case "tilt-right":
       return { x: 0, y: 0, z: -9 };
+    default:
+      return { x: 0, y: 0, z: 0 };
+  }
+}
+
+function createHeadPosition(
+  promptKey: RuntimePlayerInputCalibrationPromptKey
+) {
+  switch (promptKey) {
+    case "head-position-left":
+      return { x: -0.18, y: 0, z: 0 };
+    case "head-position-right":
+      return { x: 0.34, y: 0, z: 0 };
     default:
       return { x: 0, y: 0, z: 0 };
   }

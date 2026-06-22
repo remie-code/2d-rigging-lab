@@ -7,13 +7,15 @@ export const runtimePlayerMappingSlotIds = [
   "gaze-horizontal",
   "gaze-vertical",
   "mouth-open",
-  "mouth-smile"
+  "mouth-smile",
+  "body-x",
+  "body-z"
 ] as const;
 
 export type RuntimePlayerMappingSlotId =
   (typeof runtimePlayerMappingSlotIds)[number];
 
-export type RuntimePlayerMappingSlotGroup = "head" | "eyes" | "mouth";
+export type RuntimePlayerMappingSlotGroup = "head" | "eyes" | "mouth" | "body";
 
 export type RuntimePlayerMappingTarget = {
   readonly parameterId: string;
@@ -37,6 +39,11 @@ export type RuntimePlayerMappingSlot = {
   readonly enabled: boolean;
   readonly invert: boolean;
   readonly strength: number;
+  readonly smoothing?: number;
+  readonly bodyRotationStrength?: number;
+  readonly bodyPositionStrength?: number;
+  readonly bodyRotationInvert?: boolean;
+  readonly bodyPositionInvert?: boolean;
   readonly status: RuntimePlayerMappingSlotStatusKind;
   readonly warningMessages: readonly string[];
 };
@@ -64,6 +71,11 @@ export type RuntimePlayerMappingSlotUpdateRequest = {
   readonly enabled?: boolean;
   readonly invert?: boolean;
   readonly strength?: number;
+  readonly smoothing?: number;
+  readonly bodyRotationStrength?: number;
+  readonly bodyPositionStrength?: number;
+  readonly bodyRotationInvert?: boolean;
+  readonly bodyPositionInvert?: boolean;
 };
 
 export type RuntimePlayerMappingActionResultKind =

@@ -54,6 +54,7 @@ describe("Look Forward session neutral", () => {
         capturedAtIso: "1970-01-01T00:00:02.500Z",
         frameTimestampMs: 1500,
         headRotationEulerDeg: { x: 1, y: 2, z: 3 },
+        headPositionRaw: { x: 4, y: 5, z: 6 },
         leftEyeEulerDeg: { x: 10, y: 11, z: 12 },
         rightEyeEulerDeg: { x: 7, y: 8, z: 9 },
         jawOpen: 0.5

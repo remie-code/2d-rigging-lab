@@ -3,6 +3,7 @@ import { app } from "electron";
 import { registerInputBridgeHandlers } from "./input-bridge-handlers";
 import { registerInputProfileBridgeHandlers } from "./input-profile-bridge-handlers";
 import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-handlers";
+import { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handlers";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
@@ -20,6 +21,7 @@ export function startRuntimePlayerMain(): void {
     registerStageViewBridgeHandlers({ windows });
     const liveParameters = registerLiveParameterBridgeHandlers({ windows });
     const liveMappingState = new RuntimePlayerLiveMappingState();
+    const bodyFollowState = new RuntimePlayerBodyFollowState();
     let publishLatestParameterFrame = async (): Promise<void> => {};
     let publishMappingStatus = (): void => {};
     let clearLiveParameterFrame = (): void => {
@@ -27,18 +29,26 @@ export function startRuntimePlayerMain(): void {
     };
     const inputBridge = registerInputBridgeHandlers({
       windows,
-      onTrackingFrame: () => publishLatestParameterFrame()
+      onTrackingFrame: () => publishLatestParameterFrame(),
+      onInputReset: () => {
+        bodyFollowState.reset();
+        clearLiveParameterFrame();
+      }
     });
     const inputProfileBridge = registerInputProfileBridgeHandlers({
       windows,
       inputState: inputBridge.state,
       userDataPath: app.getPath("userData"),
-      onProfileChanged: () => publishLatestParameterFrame()
+      onProfileChanged: () => {
+        bodyFollowState.reset();
+        return publishLatestParameterFrame();
+      }
     });
     const modelMappingBridge = registerModelMappingBridgeHandlers({
       windows,
       inputState: inputBridge.state,
       mappingState: liveMappingState,
+      bodyFollowState,
       liveParameters,
       getActiveInputProfile: inputProfileBridge.getActiveInputProfile
     });
@@ -48,17 +58,20 @@ export function startRuntimePlayerMain(): void {
     registerRuntimeExportBridgeHandlers({
       windows,
       onRuntimeExportChanging: () => {
+        bodyFollowState.reset();
         liveMappingState.clearRuntimeExport();
         clearLiveParameterFrame();
         publishMappingStatus();
       },
       onRuntimeExportLoaded: (payload) => {
+        bodyFollowState.reset();
         liveMappingState.setRuntimeExportPayload(payload);
         clearLiveParameterFrame();
         publishMappingStatus();
         void publishLatestParameterFrame();
       },
       onRuntimeExportCleared: () => {
+        bodyFollowState.reset();
         liveMappingState.clearRuntimeExport();
         clearLiveParameterFrame();
         publishMappingStatus();

@@ -8,6 +8,7 @@ import type {
 import type { TrackingFrame } from "../../preload/input-tracking-frame-contract";
 import type { InputProfile } from "../input-profiles/input-profile-document";
 import { createTemporaryDefaultInputProfile } from "../input-profiles/input-profile-defaults";
+import { RuntimePlayerBodyFollowState } from "./body-follow-state";
 import { createRuntimeParameterFrame } from "./runtime-parameter-frame";
 
 describe("Runtime Player parameter frame mapping", () => {
@@ -151,6 +152,186 @@ describe("Runtime Player parameter frame mapping", () => {
     expect(frame.parameterValues).toEqual({});
     expect(Object.values(frame.parameterValues).every(Number.isFinite)).toBe(true);
   });
+
+  it("creates body x and body z values from calibrated head rotation and head position", () => {
+    const bodyFollowState = new RuntimePlayerBodyFollowState();
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createTrackingFrame({
+        headY: -30,
+        headZ: -15,
+        headPositionX: 0.2
+      }),
+      sessionNeutral: {
+        capturedAtIso: "2026-06-22T00:00:01.000Z",
+        frameTimestampMs: 900,
+        headRotationEulerDeg: { x: 0, y: 0, z: 0 },
+        headPositionRaw: { x: 0, y: 0, z: 0 }
+      },
+      inputProfile: createBodyPositionProfile(),
+      slots: [
+        createSlot("body-x", target("param_body_angle_x", -10, 10, 0), {
+          strength: 0.35,
+          smoothing: 0.75
+        }),
+        createSlot("body-z", target("param_body_angle_z", -10, 10, 0), {
+          bodyRotationStrength: 0.25,
+          bodyPositionStrength: 0.4,
+          smoothing: 0.75
+        })
+      ],
+      sequence: 5,
+      producedAtMs: 1400,
+      bodyFollowState
+    });
+
+    expect(frame.parameterValues).toEqual({
+      param_body_angle_x: 3.5,
+      param_body_angle_z: 6.5
+    });
+  });
+
+  it("applies body z component strengths and component inversion", () => {
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createTrackingFrame({
+        headZ: -15,
+        headPositionX: 0.2
+      }),
+      sessionNeutral: {
+        capturedAtIso: "2026-06-22T00:00:01.000Z",
+        frameTimestampMs: 900,
+        headRotationEulerDeg: { x: 0, y: 0, z: 0 },
+        headPositionRaw: { x: 0, y: 0, z: 0 }
+      },
+      inputProfile: createBodyPositionProfile(),
+      slots: [
+        createSlot("body-z", target("param_body_angle_z", -10, 10, 0), {
+          bodyRotationStrength: 0.5,
+          bodyPositionStrength: 0.25,
+          bodyRotationInvert: true,
+          bodyPositionInvert: false
+        })
+      ],
+      sequence: 6,
+      producedAtMs: 1500
+    });
+
+    expect(frame.parameterValues).toEqual({
+      param_body_angle_z: -2.5
+    });
+  });
+
+  it("clamps body values and keeps all emitted body values finite", () => {
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createTrackingFrame({
+        headY: -999,
+        headZ: -999,
+        headPositionX: 999
+      }),
+      sessionNeutral: null,
+      inputProfile: createBodyPositionProfile(),
+      slots: [
+        createSlot("body-x", target("param_body_angle_x", -10, 10, 0), {
+          strength: 2
+        }),
+        createSlot("body-z", target("param_body_angle_z", -10, 10, 0), {
+          bodyRotationStrength: 2,
+          bodyPositionStrength: 2
+        })
+      ],
+      sequence: 7,
+      producedAtMs: 1600
+    });
+
+    expect(frame.parameterValues).toEqual({
+      param_body_angle_x: 10,
+      param_body_angle_z: 10
+    });
+    expect(Object.values(frame.parameterValues).every(Number.isFinite)).toBe(true);
+  });
+
+  it("uses body z rotation when head position calibration is missing without blocking other slots", () => {
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createTrackingFrame({
+        headY: -15,
+        headZ: -15,
+        jawOpen: 0.4
+      }),
+      sessionNeutral: null,
+      inputProfile: createTemporaryDefaultInputProfile(),
+      slots: [
+        createSlot("head-horizontal", target("param_face_angle_x", -30, 30, 0)),
+        createSlot("mouth-open", target("param_mouth_open", 0, 1, 0)),
+        createSlot("body-z", target("param_body_angle_z", -10, 10, 0), {
+          bodyRotationStrength: 0.25,
+          bodyPositionStrength: 0.4
+        })
+      ],
+      sequence: 8,
+      producedAtMs: 1700
+    });
+
+    expect(frame.parameterValues).toEqual({
+      param_face_angle_x: 15,
+      param_mouth_open: 0.5,
+      param_body_angle_z: 2.5
+    });
+  });
+
+  it("smooths body follow values and reset removes stale lag state", () => {
+    const bodyFollowState = new RuntimePlayerBodyFollowState();
+    const runtimeExportPayload = createPayload();
+    const inputProfile = createTemporaryDefaultInputProfile();
+    const slots = [
+      createSlot("body-x", target("param_body_angle_x", -10, 10, 0), {
+        strength: 0.35,
+        smoothing: 0.5
+      })
+    ];
+
+    createRuntimeParameterFrame({
+      runtimeExportPayload,
+      trackingFrame: createTrackingFrame({ headY: 0 }),
+      sessionNeutral: null,
+      inputProfile,
+      slots,
+      sequence: 9,
+      producedAtMs: 1800,
+      bodyFollowState
+    });
+    const laggedFrame = createRuntimeParameterFrame({
+      runtimeExportPayload,
+      trackingFrame: createTrackingFrame({ headY: -30 }),
+      sessionNeutral: null,
+      inputProfile,
+      slots,
+      sequence: 10,
+      producedAtMs: 1900,
+      bodyFollowState
+    });
+
+    bodyFollowState.reset();
+    const resetFrame = createRuntimeParameterFrame({
+      runtimeExportPayload,
+      trackingFrame: createTrackingFrame({ headY: -30 }),
+      sessionNeutral: null,
+      inputProfile,
+      slots,
+      sequence: 11,
+      producedAtMs: 2000,
+      bodyFollowState
+    });
+
+    expect(laggedFrame.parameterValues).toEqual({
+      param_body_angle_x: 1.75
+    });
+    expect(resetFrame.parameterValues).toEqual({
+      param_body_angle_x: 3.5
+    });
+  });
 });
 
 function createPayload(): RuntimeExportLoadedPayload {
@@ -164,7 +345,10 @@ function createPayload(): RuntimeExportLoadedPayload {
 }
 
 function createTrackingFrame(input: {
+  readonly headX?: number;
   readonly headY?: number;
+  readonly headZ?: number;
+  readonly headPositionX?: number;
   readonly eyeY?: number;
   readonly eyeBlinkLeft?: number;
   readonly jawOpen?: number;
@@ -187,10 +371,13 @@ function createTrackingFrame(input: {
     },
     head: {
       rotationEulerDeg: {
-        x: 0,
+        x: input.headX ?? 0,
         y: input.headY ?? 0,
-        z: 0
-      }
+        z: input.headZ ?? 0
+      },
+      ...(input.headPositionX === undefined
+        ? {}
+        : { positionRaw: { x: input.headPositionX, y: 0, z: 0 } })
     }
   };
 
@@ -203,6 +390,26 @@ function createTrackingFrame(input: {
     eyes: {
       leftEulerDeg: { x: 0, y: input.eyeY, z: 0 },
       rightEulerDeg: { x: 0, y: input.eyeY, z: 0 }
+    }
+  };
+}
+
+function createBodyPositionProfile(): InputProfile {
+  const profile = createTemporaryDefaultInputProfile();
+
+  return {
+    ...profile,
+    calibration: {
+      ...profile.calibration,
+      headPositionRaw: {
+        neutral: { x: 0, y: 0, z: 0 },
+        min: { x: -0.2, y: 0, z: 0 },
+        max: { x: 0.2, y: 0, z: 0 },
+        learnedSigns: {
+          bodyLeft: { axis: "x", direction: -1 },
+          bodyRight: { axis: "x", direction: 1 }
+        }
+      }
     }
   };
 }
@@ -256,13 +463,22 @@ function createSlot(
   mappingTarget: RuntimePlayerMappingTarget,
   options: Partial<Pick<
     RuntimePlayerMappingSlot,
-    "enabled" | "invert" | "strength"
+    | "enabled"
+    | "invert"
+    | "strength"
+    | "smoothing"
+    | "bodyRotationStrength"
+    | "bodyPositionStrength"
+    | "bodyRotationInvert"
+    | "bodyPositionInvert"
   >> = {}
 ): RuntimePlayerMappingSlot {
   return {
     slotId,
     label: slotId,
-    group: slotId.startsWith("mouth")
+    group: slotId.startsWith("body")
+      ? "body"
+      : slotId.startsWith("mouth")
       ? "mouth"
       : slotId.startsWith("eye") || slotId.startsWith("gaze")
         ? "eyes"
@@ -271,6 +487,19 @@ function createSlot(
     enabled: options.enabled ?? true,
     invert: options.invert ?? false,
     strength: options.strength ?? 1,
+    ...(options.smoothing === undefined ? {} : { smoothing: options.smoothing }),
+    ...(options.bodyRotationStrength === undefined
+      ? {}
+      : { bodyRotationStrength: options.bodyRotationStrength }),
+    ...(options.bodyPositionStrength === undefined
+      ? {}
+      : { bodyPositionStrength: options.bodyPositionStrength }),
+    ...(options.bodyRotationInvert === undefined
+      ? {}
+      : { bodyRotationInvert: options.bodyRotationInvert }),
+    ...(options.bodyPositionInvert === undefined
+      ? {}
+      : { bodyPositionInvert: options.bodyPositionInvert }),
     status: options.enabled === false ? "disabled" : "mapped",
     warningMessages: []
   };

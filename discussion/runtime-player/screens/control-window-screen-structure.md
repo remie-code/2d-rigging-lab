@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave5実装事実: v0は `Header + Overview / Input / Mapping` のみを実体ページとして公開する。`Model` / `Stage` / 専用 `Diagnostics` ページはまだ公開しない。
+> Wave6実装事実: Runtime Playerは `Header + Overview / Input / Mapping` のみを実体ページとして公開する。Wave6はこの構成内にInput head position calibrationとMapping Body groupを追加した。`Model` / `Stage` / 専用 `Diagnostics` ページはまだ公開しない。
 
 ## 1. Position
 
@@ -14,7 +14,7 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 - Runtime Export未ロードでも可能な操作と、モデルロード後にだけ意味を持つ操作が混ざる。
 - Diagnosticsが通常UXを圧迫する。
 
-そのため、Wave5 v0のControl Windowは次の構造にする。
+そのため、現在のControl Windowは次の構造にする。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -29,7 +29,7 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 
 Stage Windowはこの構造に含めない。Stage Windowは常にmodel onlyである。
 
-将来、Model / Stage / Diagnosticsを専用ページに分ける余地は残すが、Wave5では空のplaceholder pageを出さない。
+将来、Model / Stage / Diagnosticsを専用ページに分ける余地は残すが、現在は空のplaceholder pageを出さない。
 
 ## 2. Persistent Header
 
@@ -97,7 +97,7 @@ Future page候補:
 | Stage | Stage Windowの表示、focus、view reset、透明/背景確認 |
 | Diagnostics | raw / parsed / normalized / mapped values、copy diagnostics |
 
-Wave5ではDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
+現在はDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
 
 ## 4. Overview Page
 
@@ -183,6 +183,7 @@ Input pageの原則:
 - Input Profileはモデル非依存として扱う。
 - `Recalibrate`はInput Profileの再調整なのでInput pageに置く。
 - Runtime Exportの有無でInput操作をdisableしない。
+- Wave6ではInput Profile sectionに `Head rotation`、`Eyes / mouth`、`Head position left/right` のready/missing状態を表示し、`Run Missing Only` と head-position-only `Calibrate` / `Recalibrate` を置く。
 
 ## 6. Input Calibration Sub-Screen
 
@@ -279,10 +280,34 @@ Calibration中の指示は、1つの長い説明文ではなく、短いprompt�
 | Open mouth | mouth open range | `Mouth Open`用 |
 | Smile | smile range | `Mouth Smile`用 |
 
+Wave6 implemented prompts:
+
+- Move head left / right for head position calibration.
+
 Future prompts:
 
-- Move head left / right for head position and future Stage Motion。
 - Move closer / farther for future scale / depth behavior。
+
+### 6.4 Wave6 Head Position Recalibration
+
+Wave6では、既存の保存済みInput Profileを壊さずにhead position left/right calibrationを追加できる。
+
+```text
+Input Profile
+  Head rotation                 Ready      Recalibrate
+  Eyes / mouth                  Ready      Recalibrate
+  Head position left/right      Missing    Calibrate
+
+[ Run Missing Only ] [ Full Calibration ]
+```
+
+必要な挙動:
+
+- 既存profileに`headPositionRaw`がなくてもprofileは読み込める。
+- `Run Missing Only`は、保存済みprofileで不足しているsectionだけを案内する。
+- `Head position left/right`の個別Calibrate/Recalibrateは、head rotation / eyes / mouthを再記録しない。
+- `Look Forward`はsession neutralとしてhead rotationとhead positionの両方を更新できる。
+- Stage Motionやnear/far distance responseはまだ実装しない。
 
 ### 6.2 How To Show Prompts
 
@@ -314,7 +339,7 @@ v0ではguided recordingを基本にする。
 
 ## 7. Future Model Page
 
-Model pageはRuntime Exportのロード状態を扱う将来ページ候補である。Wave5では専用navとして公開せず、Runtime Export open/statusはHeaderとOverviewで扱う。
+Model pageはRuntime Exportのロード状態を扱う将来ページ候補である。現在は専用navとして公開せず、Runtime Export open/statusはHeaderとOverviewで扱う。
 
 Input接続やmapping編集をここに置かない。
 
@@ -381,6 +406,10 @@ Runtime Exportがない場合、Mapping pageは説明と`Open Runtime Export`導
 | Mouth                                                                          |
 |   Mouth Open      <- Jaw open         Strength [100% -----]  [On]              |
 |   Mouth Smile     <- Smile            Strength [ 80% -----]  [On]              |
+|--------------------------------------------------------------------------------|
+| Body                                                                           |
+|   Body X         <- Head horizontal  Strength [ 35% ---] Lag [75%] [Invert][On]|
+|   Body Z         <- Head tilt + X    Rotation [25%] Position [40%] Lag [75%]   |
 +--------------------------------------------------------------------------------+
 ```
 
@@ -390,7 +419,9 @@ Mapping pageの原則:
 - semantic slot単位で見せる。
 - ユーザーが最初に触るのは`enabled`、`invert`、`strength`。
 - raw source selection、deadzone、smoothing、curveはAdvancedへ逃がす。
-- Model Mapping Profileの永続保存はWave5では扱わない。
+- Model Mapping Profileの永続保存は現在のv0では扱わない。
+- Wave6のBody controlsはBody X strength/lag/invert、Body Z rotation strength/invert、position strength/invert、lagを扱う。保存済みModel Mapping Profileにはまだ書き込まない。
+- Body targetsがない場合はmissing body slotsとして見せ、既存head / eyes / mouth live mappingを止めない。
 
 Live確認:
 
@@ -399,7 +430,7 @@ Live確認:
 
 ## 9. Future Stage Page
 
-Stage pageは、OBSや配信用にStage Windowを整える将来ページ候補である。Wave5では専用navとして公開せず、`Focus Stage`などの最小操作をHeader/Overviewから行う。
+Stage pageは、OBSや配信用にStage Windowを整える将来ページ候補である。現在は専用navとして公開せず、`Focus Stage`などの最小操作をHeader/Overviewから行う。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -440,7 +471,7 @@ Stage pageに置かないもの:
 
 Diagnostics pageは、問題調査と開発確認のための将来の逃がし先である。
 
-Wave5では専用nav pageにせず、Control Window内のsecondary/collapsible debug panelとして通常UXから畳んでおく。
+現在は専用nav pageにせず、Control Window内のsecondary/collapsible debug panelとして通常UXから畳んでおく。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -499,9 +530,9 @@ Stage Windowに出さないもの:
 
 必要な操作はControl Windowから行う。
 
-## 12. Wave5 Implementation Shape
+## 12. Current Implementation Shape
 
-Wave5で実装されたv0形状:
+Wave5/Wave6で実装された現在の形状:
 
 - Persistent Header。
 - `Overview` / `Input` / `Mapping` のみのnavigation。
@@ -509,6 +540,9 @@ Wave5で実装されたv0形状:
 - Diagnosticsはsecondary collapsible debug panelとして残す。
 - Stage Windowはcanvas model-onlyで、debug overlay、raw tracking text、parameter sliderを出さない。
 - Mainがprofile/calibration/mapping/live parameter frameを所有し、Stageはsanitized parameter valuesをruntime-core評価へ渡す。
+- Input Profileはhead position left/right section readinessとmissing-only/head-position-only recalibrationを持つ。
+- Mappingは既存9個のhead/eyes/mouth slotsを保ち、Body X/Z slotsとBody Follow controlsを追加する。
+- Body Follow outputはmain-owned sanitized parameter frameとしてStageへ届く。Stageはraw tracking/head-position/debug body dataを受け取らない。
 
 Future page候補:
 
@@ -526,3 +560,4 @@ Future page候補:
 - `Hide Control`をどのwaveで実装するか。
 - Model Mapping Profileの永続保存先とRuntime Export fingerprint。
 - Stage Windowのalways-on-top / click-through / background previewをどのwaveで扱うか。
+- Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。

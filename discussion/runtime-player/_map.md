@@ -37,8 +37,13 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Runtime Export load、runtime-core evaluated default pose Stage render、Stage pan/zoom、iFacialMocap UDP receive / parse / normalize / Control diagnosticsは実装済み。
 - Runtime Export loadとInput Source connectionは独立しており、Runtime Export未ロードでもiFacialMocap接続とdiagnostics確認ができる。
 - Runtime Player Wave5でInput Profile永続保存、Look Forward session neutral、Guided Calibration v0、Auto Mapping v0、slot controls、sanitized live parameter frame、Stage runtime-core Live Evaluationが実装済み。
+- ユーザー実機確認でWave5のlive motionは動作し、顔・目・口は自然に見える。ただし体が静止する違和感が大きいことが確認された。
+- Runtime Player Wave6はDomain A/B実装・review・Domain C docs/report integrationが完了。既存Input Profileへhead position left/right calibrationを追加でき、Auto Mappingは既存9個のhead/eyes/mouth slotsを保ったまま`body-x` / `body-z` slotsを追加する。
+- Wave6 Body Follow v0は、`Body Angle X`をhead horizontal由来、`Body Angle Z`をhead tilt + head positionX由来としてmain-owned sanitized runtime parameter frameへ出力する。
 - Control Window Wave5 v0は `Overview` / `Input` / `Mapping` のみを公開する。Stage Windowはmodel-onlyを維持する。
-- Persistent Model Mapping Profile save、advanced mapping editor、Body Follow、head-position Stage Motion、TCP transport、dedicated Model/Stage/Diagnostics pagesはfuture。
+- Wave6後もStage Windowはmodel-onlyで、raw tracking frame / raw head position / debug body dataを受け取らない。
+- Runtime Player Wave6 final clean integration reviewは別Review-Sylph artifactとして未実施。
+- Persistent Model Mapping Profile save、advanced mapping editor、head-position Stage Motion、near/far distance response、Broadcast/OBS UX、TCP transport、dedicated Model/Stage/Diagnostics pagesはfuture。
 
 ## 5. Next Navigation
 

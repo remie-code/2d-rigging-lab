@@ -1,7 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
-> Wave5実装事実: Input Profile / Look Forward / Guided Calibration v0 / Auto Mapping v0 / Stage Live Parameter Application が実装済み。Persistent Model Mapping Profile save、advanced source selection、smoothing/deadzone/curve、Body Follow、Stage Motionはfuture。
+> Wave6実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application が実装済み。Persistent Model Mapping Profile save、advanced source selection、deadzone/curve、Stage Motionはfuture。
 
 ## 1. Goal
 
@@ -18,7 +18,7 @@
 - Stage上でモデルがLiveに動き、ユーザーが自然さを確認できる。
 - 違和感がある箇所だけ、意味単位で調整できる。
 
-Wave5 source/test evidence:
+Wave5/Wave6 source/test evidence:
 
 - Control Window exposes `Overview` / `Input` / `Mapping` only.
 - Input Profile persists to `<electron userData>/input-profiles/ifacialmocap/profiles.json`.
@@ -26,7 +26,8 @@ Wave5 source/test evidence:
 - Guided calibration records range and learned signs.
 - Auto Mapping creates semantic slots and filters direct output targets to external-input authored parameters.
 - Main emits sanitized `runtime-player-live-parameter-frame-v1`; Stage evaluates it through runtime-core and remains model-only.
-- Manual real-device Stage motion verification remains required for closeout confidence.
+- Wave6 adds head position left/right calibration, missing-only recalibration, Body X/Z semantic slots, Body Follow controls, and Body Follow output through the same sanitized live parameter frame path.
+- Manual real-device Stage body motion verification remains required for closeout confidence.
 
 ## 2. Concept Split
 
@@ -36,7 +37,7 @@ Tracking Setupは3層に分ける。
 |---|---|---|
 | Input Source | iFacialMocap接続そのもの。transport、port、remote、FPS、raw diagnostics | No |
 | Input Profile | その人、端末、カメラ位置、iFacialMocapのキャリブレーション | No |
-| Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。Wave5ではsession/local stateで、永続保存しない | Yes |
+| Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。現在はsession/local stateで、永続保存しない | Yes |
 
 この分離は複数モデル・複数ユーザーに対応するために必要である。
 
@@ -49,7 +50,7 @@ Input Profileはモデル非依存の設定である。
 - 顔回転のneutral / min / max。
 - 目線のneutral / min / max。
 - 口開閉のneutral / min / max。
-- head positionの基準値と観測range。
+- head positionの基準値、観測range、Body Z lateral component用のlearned signs。
 - source種別とtransport。
 - 入力値の補正に必要なmetadata。
 
@@ -127,6 +128,8 @@ v0では1ファイル管理でよい。
 
 将来、明示操作として`Save current forward to profile default`を追加してもよい。
 
+Wave6では、同じprofile documentに任意の`calibration.headPositionRaw` sectionを追加する。古いprofileにこのsectionがなくても読み込みは成功し、head position sectionだけが`Missing`として扱われる。
+
 ### 3.1 Existing Profile
 
 既存profileがある場合、Connect後に前回使ったInput Profileを自動選択する。
@@ -171,6 +174,8 @@ Connect succeeded.
 - `Record Range`でrangeを再記録する。
 - 変更は明示的に保存する。
 - いきなり既存profileを上書きしない。
+- Wave6では`Run Missing Only`で不足sectionだけを記録できる。
+- Wave6では`Head position left/right`だけを個別にCalibrate/Recalibrateできる。
 
 別ユーザーや別環境向けには、`New Profile`または`Duplicate Profile`を用意する。
 
@@ -228,16 +233,17 @@ Auto Mappingはraw fieldではなく、意味単位のslotとして扱う。
 | Gaze Y | eye Euler first | `Eyeball Y` |
 | Mouth Open | `jawOpen` | `Mouth Open` |
 | Mouth Smile | `mouthSmile_L/R` | `Mouth Smile` |
+| Body X | calibrated head horizontal with body lag/strength | `Body Angle X` |
+| Body Z | calibrated head tilt + optional calibrated head positionX | `Body Angle Z` |
 
 Future slots:
 
-- Body Follow from head rotation / head position。
 - Stage Motion from head position。
 - Mouth vowel / expression blendshape mapping。
 
 ### 5.2 Mapping Result
 
-Wave5 v0では、Runtime Exportロード後にAuto Mappingで初期生成する。
+Wave5/Wave6 v0では、Runtime Exportロード後にAuto Mappingで初期生成する。
 
 Persistent Model Mapping Profile save/readは未実装である。slotごとの`enabled / invert / strength`はControlで編集できるが、編集状態はRuntime Playerの実行中状態であり、profile fileとして保存しない。
 
@@ -250,9 +256,11 @@ Status: Auto mapped 5 / 5
 
 未対応parameterがある場合はwarningとして出すが、最初のLive体験を止めない。
 
+Wave6ではBody X/Z targetがあるRuntime Exportでbody slotsを追加する。Body targetがない場合はmissing body slotsとして見せるが、既存のhead / eyes / mouth live mappingは止めない。
+
 ## 6. Future Model Mapping Profile
 
-Model Mapping Profileはモデル依存の将来設定である。Wave5 v0では保存しない。
+Model Mapping Profileはモデル依存の将来設定である。現在のv0では保存しない。
 
 含む情報:
 
@@ -301,6 +309,10 @@ Eyeball Y       <- Gaze vertical     [strength] [invert]
 Mouth
 Mouth Open      <- Jaw open          [strength]
 Mouth Smile     <- Smile             [strength]
+
+Body
+Body X          <- Head horizontal    [strength] [lag] [invert]
+Body Z          <- Head tilt + X      [rotation strength] [position strength] [lag]
 ```
 
 Advancedに逃がす項目:
@@ -310,6 +322,8 @@ Advancedに逃がす項目:
 - smoothing。
 - response curve。
 - per-side merge rules。
+
+Wave6 Body Follow controls do not require users to tune raw head position tables.
 
 ## 8. Strength
 
@@ -344,7 +358,7 @@ Blinkは実装上 `Eye Open = 1 - blink` のような変換になるためsensit
 
 ## 9. Live Confirmation
 
-Live ConfirmationはWave5でsource/testレベル実装済みである。
+Live ConfirmationはWave5/Wave6でsource/testレベル実装済みである。
 
 Debug値だけでは、ユーザーは「モデルが使える状態になった」と判断できない。Stage上のモデルが実際に動くことが、Runtime Playerの中心体験である。
 
@@ -361,6 +375,8 @@ Implementation facts:
 - diagnostics remain Control UI/debug state and are not used as the Stage live-rate state path.
 - Stage receives sanitized parameter values, coalesces latest frames on the render path, and evaluates runtime-core with authored parameter overrides.
 - Stage does not receive raw tracking frames or render debug/setup UI.
+- Wave6 Body Follow is also main-owned and emits only sanitized `parameterValues`. Stage receives no raw head position or debug body data.
+- Existing profiles without head position calibration still drive face / eyes / mouth. Body Z's position component is skipped until head position calibration exists.
 
 ```text
 Input receiving
@@ -370,7 +386,7 @@ Mapping ready
 Live active
 ```
 
-## 10. Wave5 Implemented Scope
+## 10. Wave5 / Wave6 Implemented Scope
 
 Wave名:
 
@@ -388,13 +404,25 @@ Wave名:
 - Tracking frameをruntime parameterへ反映し、StageでLive確認できる。
 - Final integrationで、実装事実に合わせて関連screen docs / mapsを更新する。
 
+Wave6実装済み範囲:
+
+- 既存Input Profileへの任意`headPositionRaw` section追加。
+- `Head position left/right` section readiness。
+- `Run Missing Only`による不足sectionだけのキャリブレーション。
+- head-position-only Calibrate/Recalibrate。
+- Look Forward session neutralのhead position対応。
+- Auto MappingのBody X/Z slots追加。既存9個のhead/eyes/mouth slotsは維持する。
+- Body X: calibrated head horizontal由来の弱いlag付きfollow。
+- Body Z: calibrated head tilt + optional calibrated head positionX合成。
+- Body Follow controls: Body X strength/lag/invert、Body Z rotation strength/invert、position strength/invert、lag。
+- Body outputs are emitted through sanitized live parameter frames and Stage remains model-only.
+
 Future:
 
-- Body Follow。
 - Stage Motion。
 - persistent profile management UIの完成版。
 - persistent Model Mapping Profile save/read。
-- smoothing / curve / deadzone。
+- curve / deadzone。
 - TCP transport。
 - multiple input sources。
 
@@ -409,6 +437,9 @@ Future:
 - `Use temporary defaults`はWave5 v0に含める。保存はしない。
 - Gaze X/Yはv0ではeye Eulerを優先する。
 - Model Mapping Profile永続保存はWave5 v0に含めない。
+- Head position calibrationはInput Profileに含め、Runtime Export固有のModel Mapping Profileには含めない。
+- Body Follow controlsはWave6ではsession-local mapping stateであり、まだ永続保存しない。
+- Stage Motion、near/far distance response、Broadcast/OBS UX、Body Angle YはWave6に含めない。
 
 ## 12. Open Questions
 
@@ -416,4 +447,4 @@ Future:
 - Runtime Export fingerprintを何で決めるか。
 - Head rotationの軸符号は実機range dataで確定する。
 - Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。
-- Body Follow / head-position Stage Motionをどのwaveで扱うか。
+- head-position Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。

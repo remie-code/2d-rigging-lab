@@ -9,6 +9,7 @@ import {
   type InputProfileDocument,
   type InputProfileLearnedSign
 } from "./input-profile-document";
+import { isInputProfileHeadPositionCalibrationReady } from "./input-profile-calibration-sections";
 
 export type InputProfileDocumentParseResult =
   | {
@@ -142,11 +143,16 @@ function parseInputProfileCalibration(
   const headRotationEulerDeg = parseHeadCalibration(
     value.headRotationEulerDeg
   );
+  const headPositionRaw =
+    value.headPositionRaw === undefined
+      ? undefined
+      : parseHeadPositionCalibration(value.headPositionRaw);
   const eyes = parseEyeCalibration(value.eyes);
   const mouth = parseMouthCalibration(value.mouth);
 
   if (
     headRotationEulerDeg === null ||
+    headPositionRaw === null ||
     eyes === null ||
     mouth === null
   ) {
@@ -155,6 +161,7 @@ function parseInputProfileCalibration(
 
   return {
     headRotationEulerDeg,
+    ...(headPositionRaw === undefined ? {} : { headPositionRaw }),
     eyes,
     mouth
   };
@@ -222,6 +229,34 @@ function parseEyeCalibration(
   };
 }
 
+function parseHeadPositionCalibration(
+  value: unknown
+): NonNullable<InputProfileCalibration["headPositionRaw"]> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const neutral = parseVector3(value.neutral);
+  const min = parseVector3(value.min);
+  const max = parseVector3(value.max);
+  const learnedSigns = parseHeadPositionLearnedSigns(value.learnedSigns);
+
+  if (neutral === null || min === null || max === null) {
+    return null;
+  }
+
+  const headPositionRaw = {
+    neutral,
+    min,
+    max,
+    learnedSigns
+  };
+
+  return isInputProfileHeadPositionCalibrationReady(headPositionRaw)
+    ? headPositionRaw
+    : null;
+}
+
 function parseMouthCalibration(
   value: unknown
 ): InputProfileCalibration["mouth"] | null {
@@ -280,6 +315,19 @@ function parseEyeLearnedSigns(
     ...readLearnedSignField(value, "eyesRight"),
     ...readLearnedSignField(value, "eyesUp"),
     ...readLearnedSignField(value, "eyesDown")
+  };
+}
+
+function parseHeadPositionLearnedSigns(
+  value: unknown
+): NonNullable<InputProfileCalibration["headPositionRaw"]>["learnedSigns"] {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    ...readLearnedSignField(value, "bodyLeft"),
+    ...readLearnedSignField(value, "bodyRight")
   };
 }
 

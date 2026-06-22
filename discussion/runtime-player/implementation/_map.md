@@ -25,6 +25,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave3-plan.md](orchestration/player-wave3-plan.md) | Completed / final pass | Runtime Player Wave3: runtime-core evaluated default pose + Stage pan/zoom/reset view |
 | [orchestration/player-wave4-plan.md](orchestration/player-wave4-plan.md) | Completed / final pass | Runtime Player Wave4: iFacialMocap UDP receive + tracking debug diagnostics |
 | [orchestration/player-wave5-plan.md](orchestration/player-wave5-plan.md) | Completed / final pass | Runtime Player Wave5: Tracking Setup + Live Mapping v0 |
+| [orchestration/player-wave6-plan.md](orchestration/player-wave6-plan.md) | Completed / final pass | Runtime Player Wave6: Body Follow v0 from head rotation / head position |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -43,6 +44,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave5/runtime-player-wave5-domain-a-control-input-profile-calibration-report.md](waves/wave5/runtime-player-wave5-domain-a-control-input-profile-calibration-report.md) | Pass | Runtime Player Wave5 Domain A Control shell, Input Profile, Look Forward, Guided Calibration v0 |
 | [waves/wave5/runtime-player-wave5-domain-b-auto-mapping-stage-live-report.md](waves/wave5/runtime-player-wave5-domain-b-auto-mapping-stage-live-report.md) | Pass | Runtime Player Wave5 Domain B Auto Mapping, live parameter frames, Stage live runtime-core evaluation |
 | [waves/wave5/runtime-player-wave5-final-integration-report.md](waves/wave5/runtime-player-wave5-final-integration-report.md) | Pass | Runtime Player Wave5 final integration report |
+| [waves/wave6/_map.md](waves/wave6/_map.md) | Pass | Runtime Player Wave6 report map |
+| [waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md](waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md) | Pass | Runtime Player Wave6 Domain A Input Profile head position calibration and missing-only recalibration |
+| [waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md](waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md) | Pass | Runtime Player Wave6 Domain B Body X/Z auto mapping, controls, and sanitized live body follow |
+| [waves/wave6/runtime-player-wave6-final-integration-report.md](waves/wave6/runtime-player-wave6-final-integration-report.md) | Pass | Runtime Player Wave6 final integration report and docs/maps alignment |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -79,6 +84,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave5/runtime-player-wave5-domain-b-design-development-review.md](reviews/wave5/runtime-player-wave5-domain-b-design-development-review.md) | Pass | Runtime Player Wave5 Domain B design / development compliance review |
 | [reviews/wave5/runtime-player-wave5-domain-b-test-adequacy-review.md](reviews/wave5/runtime-player-wave5-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave5 Domain B test adequacy review |
 | [reviews/wave5/runtime-player-wave5-final-clean-integration-review.md](reviews/wave5/runtime-player-wave5-final-clean-integration-review.md) | Pass | Runtime Player Wave5 final clean integration review |
+| [reviews/wave6/_map.md](reviews/wave6/_map.md) | Pass | Runtime Player Wave6 review map |
+| [reviews/wave6/runtime-player-wave6-domain-a-spec-compliance-review.md](reviews/wave6/runtime-player-wave6-domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave6 Domain A spec compliance review |
+| [reviews/wave6/runtime-player-wave6-domain-a-design-development-review.md](reviews/wave6/runtime-player-wave6-domain-a-design-development-review.md) | Pass | Runtime Player Wave6 Domain A design / development compliance review |
+| [reviews/wave6/runtime-player-wave6-domain-a-test-adequacy-review.md](reviews/wave6/runtime-player-wave6-domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave6 Domain A test adequacy re-review |
+| [reviews/wave6/runtime-player-wave6-domain-b-spec-compliance-review.md](reviews/wave6/runtime-player-wave6-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave6 Domain B spec compliance review |
+| [reviews/wave6/runtime-player-wave6-domain-b-design-development-review.md](reviews/wave6/runtime-player-wave6-domain-b-design-development-review.md) | Pass | Runtime Player Wave6 Domain B design / development compliance review |
+| [reviews/wave6/runtime-player-wave6-domain-b-test-adequacy-review.md](reviews/wave6/runtime-player-wave6-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave6 Domain B test adequacy review |
+| [reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](reviews/wave6/runtime-player-wave6-final-clean-integration-review.md) | Pass | Runtime Player Wave6 final clean integration review |
 
 ## 4. Current Implementation State
 
@@ -103,8 +116,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Runtime Player Wave5 is complete at source/test/final integration level: Control Window now exposes `Overview` / `Input` / `Mapping`, Input Profile persists under Electron `userData`, `Look Forward` is session-local, Guided Calibration v0 records range and learned signs, Auto Mapping targets standard external-input parameters, and Stage live motion uses sanitized parameter frames plus runtime-core evaluation.
 - Diagnostics remain Control-side throttled UI/debug state; Stage live motion is not driven by the diagnostics 10Hz stream.
 - Stage Window remains model-only with a Stage-specific preload surface and does not receive raw tracking frames or broad Control APIs.
-- Manual real-device verification remains for final confidence: real iFacialMocap input moving a loaded Runtime Export model on clean Stage, guided calibration through UI, Runtime restart profile reload, and reload/clear stale live state behavior.
+- User manually confirmed Wave5 with real iFacialMocap and a real Runtime Export: calibration, Auto Mapping, and Stage live motion work, and face/eye/mouth motion is natural.
+- Remaining live naturalness gap: the body stays still while the head/face move naturally.
+- Runtime Player Wave6 Domain A/B implementation and reviews are complete, and Domain C docs/report integration is complete. Wave6 added Body Follow v0: head rotation / head position derived `Body Angle X/Z`, head position left/right calibration, missing-only/head-position-only recalibration, and body mapping controls.
+- Existing profiles without head position calibration remain usable for face / eyes / mouth live mapping. Missing head position calibration skips only the Body Z position component; it does not block existing live mapping.
+- Auto Mapping now creates 11 slots when body targets exist by preserving the existing nine Wave5 head/eyes/mouth slots and adding `body-x` / `body-z`.
+- Body follow values are generated in main through sanitized live parameter frames. Stage remains model-only and receives no raw tracking frame, raw head position, or debug body data.
+- Runtime Player Wave6 final clean integration review passed: [reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](reviews/wave6/runtime-player-wave6-final-clean-integration-review.md).
 
 ## 5. Next Action
 
-Use [waves/wave5/runtime-player-wave5-final-integration-report.md](waves/wave5/runtime-player-wave5-final-integration-report.md), [reviews/wave5/runtime-player-wave5-final-clean-integration-review.md](reviews/wave5/runtime-player-wave5-final-clean-integration-review.md), and [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md) as the current Wave5 basis. Next planning should start from the remaining future items: manual real-device verification, persistent Model Mapping Profile, dedicated Model/Stage/Diagnostics pages, advanced mapping controls, Body Follow/head-position Stage Motion, and Stage/window display operations.
+Wave6 is closed at source/test/docs/review level after the final clean integration review pass. Remaining work is manual real-device/Electron verification for body follow feel and defaults. For the next implementation candidate, use [../backlog/runtime-player-backlog.md](../backlog/runtime-player-backlog.md) plus the Wave6 final review outcome.

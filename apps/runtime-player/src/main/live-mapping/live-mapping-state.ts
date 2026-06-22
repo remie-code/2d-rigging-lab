@@ -68,12 +68,30 @@ export class RuntimePlayerLiveMappingState {
       const enabled = request.enabled ?? slot.enabled;
       const invert = request.invert ?? slot.invert;
       const strength = request.strength ?? slot.strength;
+      const smoothing = request.smoothing ?? slot.smoothing;
+      const bodyRotationStrength =
+        request.bodyRotationStrength ?? slot.bodyRotationStrength;
+      const bodyPositionStrength =
+        request.bodyPositionStrength ?? slot.bodyPositionStrength;
+      const bodyRotationInvert =
+        request.bodyRotationInvert ?? slot.bodyRotationInvert;
+      const bodyPositionInvert =
+        request.bodyPositionInvert ?? slot.bodyPositionInvert;
 
       return {
         ...slot,
         enabled,
         invert,
         strength,
+        ...(smoothing === undefined ? {} : { smoothing }),
+        ...(bodyRotationStrength === undefined
+          ? {}
+          : { bodyRotationStrength }),
+        ...(bodyPositionStrength === undefined
+          ? {}
+          : { bodyPositionStrength }),
+        ...(bodyRotationInvert === undefined ? {} : { bodyRotationInvert }),
+        ...(bodyPositionInvert === undefined ? {} : { bodyPositionInvert }),
         status: slot.target === null
           ? "missing-target"
           : enabled

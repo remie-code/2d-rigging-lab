@@ -8,6 +8,11 @@ import type {
   RuntimePlayerInputProfileStorageState,
   RuntimePlayerInputProfileSummary
 } from "../preload/input-profile-bridge-contract";
+import { createInputProfileCalibrationSectionStatuses } from "./input-profiles/input-profile-calibration-sections";
+import {
+  createInputProfileCalibrationSessionStart,
+  findInputProfileById
+} from "./input-profiles/input-profile-calibration-start";
 import { createTemporaryDefaultInputProfile } from "./input-profiles/input-profile-defaults";
 import { createInputProfileId } from "./input-profiles/input-profile-id";
 import type { InputProfile } from "./input-profiles/input-profile-document";
@@ -114,13 +119,20 @@ export function registerInputProfileBridgeHandlers(
     async (_event, request: unknown) => {
       const command = readStartCalibrationRequest(request);
       const startedAtMs = nowMs();
-      calibrationSession = new InputProfileCalibrationSession({
-        sessionId: `calibration_${startedAtMs}`,
-        displayName: command.displayName,
+      const startResult = await createInputProfileCalibrationSessionStart({
+        command,
+        store,
+        temporaryDefaultsActive,
         startedAtMs
       });
 
-      return publishActionResult("ok", "Input calibration started.");
+      if (startResult.result === "unavailable") {
+        return publishActionResult("unavailable", startResult.message);
+      }
+
+      calibrationSession = startResult.session;
+
+      return publishActionResult("ok", startResult.message);
     }
   );
   ipcMain.handle(inputProfileBridgeChannels.cancelCalibration, async () => {
@@ -178,17 +190,34 @@ export function registerInputProfileBridgeHandlers(
       const command = readFinishCalibrationRequest(request);
       const createdAtMs = nowMs();
       const createdAtIso = new Date(createdAtMs).toISOString();
+      const targetProfileId = calibrationSession.getTargetProfileId();
       let profile: InputProfile;
 
       try {
-        profile = calibrationSession.createProfile({
-          profileId: createInputProfileId({
+        if (targetProfileId === undefined) {
+          profile = calibrationSession.createProfile({
+            profileId: createInputProfileId({
+              displayName: command.displayName,
+              nowMs: createdAtMs
+            }),
             displayName: command.displayName,
-            nowMs: createdAtMs
-          }),
-          displayName: command.displayName,
-          createdAtIso
-        });
+            createdAtIso
+          });
+        } else {
+          const baseProfile = await findInputProfileById(store, targetProfileId);
+
+          if (baseProfile === null) {
+            return publishActionResult(
+              "unavailable",
+              `Input profile ${targetProfileId} was not found.`
+            );
+          }
+
+          profile = calibrationSession.createUpdatedProfile({
+            profile: baseProfile,
+            updatedAtIso: createdAtIso
+          });
+        }
       } catch (error) {
         return publishActionResult("unavailable", toErrorMessage(error));
       }
@@ -197,7 +226,12 @@ export function registerInputProfileBridgeHandlers(
       temporaryDefaultsActive = false;
       calibrationSession = null;
 
-      return publishActionResult("ok", "Input profile saved.");
+      return publishActionResult(
+        "ok",
+        targetProfileId === undefined
+          ? "Input profile saved."
+          : "Input profile calibration updated."
+      );
     }
   );
 
@@ -321,7 +355,10 @@ function summarizeInputProfile(
     transport: profile.transport,
     createdAtIso: profile.createdAtIso,
     updatedAtIso: profile.updatedAtIso,
-    rangeStatus: temporary ? "default" : "calibrated"
+    rangeStatus: temporary ? "default" : "calibrated",
+    calibrationSections: createInputProfileCalibrationSectionStatuses(
+      profile.calibration
+    )
   };
 }
 

@@ -117,6 +117,29 @@ describe("Runtime Player input session state", () => {
     expect(state.getStatus(2001).connectionState).toBe("stale");
   });
 
+  it("clears the latest live-rate tracking frame when returning to idle", () => {
+    const state = createState(() => 1000);
+    state.setListening({
+      source: "ifacialmocap",
+      transport: "udp",
+      receivePort: 49983
+    });
+    state.recordReceivedFrame({
+      rawFrame: sampleFrame,
+      remote: {
+        address: "192.168.1.30",
+        port: 49983
+      }
+    });
+
+    expect(state.getLatestTrackingFrame()).not.toBeNull();
+
+    state.setIdle(1200);
+
+    expect(state.getLatestTrackingFrame()).toBeNull();
+    expect(state.createDiagnosticsCopyPayload(1300).latestRawFrame).toBeUndefined();
+  });
+
   it("keeps parser diagnostics for malformed frames without throwing", () => {
     const state = createState(() => 1000);
     state.setListening({

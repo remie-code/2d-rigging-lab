@@ -135,6 +135,30 @@ function MappingSlotRow({
   readonly slot: RuntimePlayerMappingSlot;
   readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
 }): ReactElement {
+  if (slot.group === "body") {
+    return (
+      <BodyMappingSlotRow
+        slot={slot}
+        onUpdateSlot={onUpdateSlot}
+      />
+    );
+  }
+
+  return (
+    <StandardMappingSlotRow
+      slot={slot}
+      onUpdateSlot={onUpdateSlot}
+    />
+  );
+}
+
+function StandardMappingSlotRow({
+  slot,
+  onUpdateSlot
+}: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+}): ReactElement {
   return (
     <div className="grid gap-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-3 text-sm xl:grid-cols-[minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto_minmax(10rem,14rem)] xl:items-center">
       <div className="min-w-0">
@@ -208,6 +232,267 @@ function MappingSlotRow({
   );
 }
 
+function BodyMappingSlotRow({
+  slot,
+  onUpdateSlot
+}: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-3 text-sm">
+      <div className="grid gap-3 xl:grid-cols-[minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] xl:items-center">
+        <div className="min-w-0">
+          <div className="font-medium text-neutral-100">{slot.label}</div>
+          <div className="mt-1 text-xs text-neutral-500">
+            {slot.target?.projectPresetAlias ?? "No target alias"}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="truncate font-medium text-neutral-200">
+            {slot.target?.displayName ?? "Unmapped"}
+          </div>
+          <div className="mt-1 text-xs text-neutral-500">
+            {slot.target?.parameterId ?? "Missing target parameter"}
+          </div>
+        </div>
+        <StatusPill tone={getSlotPillTone(slot)}>
+          {getSlotPillLabel(slot)}
+        </StatusPill>
+        <EnabledToggle
+          slot={slot}
+          onUpdateSlot={onUpdateSlot}
+        />
+      </div>
+
+      {slot.slotId === "body-z" ? (
+        <BodyZControls
+          slot={slot}
+          onUpdateSlot={onUpdateSlot}
+        />
+      ) : (
+        <BodyXControls
+          slot={slot}
+          onUpdateSlot={onUpdateSlot}
+        />
+      )}
+    </div>
+  );
+}
+
+function EnabledToggle({
+  slot,
+  onUpdateSlot
+}: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+}): ReactElement {
+  return (
+    <label className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-neutral-200">
+      <input
+        type="checkbox"
+        checked={slot.enabled}
+        disabled={slot.target === null}
+        onChange={(event) =>
+          onUpdateSlot({
+            slotId: slot.slotId,
+            enabled: event.currentTarget.checked
+          })
+        }
+        className="size-4 accent-teal-400"
+      />
+      Enabled
+    </label>
+  );
+}
+
+function BodyXControls({
+  slot,
+  onUpdateSlot
+}: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 md:grid-cols-[auto_minmax(10rem,1fr)_minmax(10rem,1fr)] md:items-center">
+      <InvertToggle
+        label="Invert"
+        checked={slot.invert}
+        disabled={slot.target === null}
+        onChange={(invert) =>
+          onUpdateSlot({
+            slotId: slot.slotId,
+            invert
+          })
+        }
+      />
+      <NumberSlider
+        label="Strength"
+        value={slot.strength}
+        max={2}
+        disabled={slot.target === null || !slot.enabled}
+        formatValue={(value) => `${Math.round(value * 100)}%`}
+        onChange={(strength) =>
+          onUpdateSlot({
+            slotId: slot.slotId,
+            strength
+          })
+        }
+      />
+      <NumberSlider
+        label="Lag"
+        value={slot.smoothing ?? 0}
+        max={0.95}
+        disabled={slot.target === null || !slot.enabled}
+        formatValue={(value) => `${Math.round(value * 100)}%`}
+        onChange={(smoothing) =>
+          onUpdateSlot({
+            slotId: slot.slotId,
+            smoothing
+          })
+        }
+      />
+    </div>
+  );
+}
+
+function BodyZControls({
+  slot,
+  onUpdateSlot
+}: {
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-2">
+        <InvertToggle
+          label="Rotation invert"
+          checked={slot.bodyRotationInvert ?? false}
+          disabled={slot.target === null}
+          onChange={(bodyRotationInvert) =>
+            onUpdateSlot({
+              slotId: slot.slotId,
+              bodyRotationInvert
+            })
+          }
+        />
+        <NumberSlider
+          label="Rotation strength"
+          value={slot.bodyRotationStrength ?? 0}
+          max={2}
+          disabled={slot.target === null || !slot.enabled}
+          formatValue={(value) => `${Math.round(value * 100)}%`}
+          onChange={(bodyRotationStrength) =>
+            onUpdateSlot({
+              slotId: slot.slotId,
+              bodyRotationStrength
+            })
+          }
+        />
+      </div>
+      <div className="grid gap-2">
+        <InvertToggle
+          label="Position invert"
+          checked={slot.bodyPositionInvert ?? false}
+          disabled={slot.target === null}
+          onChange={(bodyPositionInvert) =>
+            onUpdateSlot({
+              slotId: slot.slotId,
+              bodyPositionInvert
+            })
+          }
+        />
+        <NumberSlider
+          label="Position strength"
+          value={slot.bodyPositionStrength ?? 0}
+          max={2}
+          disabled={slot.target === null || !slot.enabled}
+          formatValue={(value) => `${Math.round(value * 100)}%`}
+          onChange={(bodyPositionStrength) =>
+            onUpdateSlot({
+              slotId: slot.slotId,
+              bodyPositionStrength
+            })
+          }
+        />
+      </div>
+      <div className="grid gap-2">
+        <NumberSlider
+          label="Lag"
+          value={slot.smoothing ?? 0}
+          max={0.95}
+          disabled={slot.target === null || !slot.enabled}
+          formatValue={(value) => `${Math.round(value * 100)}%`}
+          onChange={(smoothing) =>
+            onUpdateSlot({
+              slotId: slot.slotId,
+              smoothing
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function InvertToggle({
+  label,
+  checked,
+  disabled,
+  onChange
+}: {
+  readonly label: string;
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly onChange: (checked: boolean) => void;
+}): ReactElement {
+  return (
+    <label className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-neutral-200">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        className="size-4 accent-teal-400"
+      />
+      {label}
+    </label>
+  );
+}
+
+function NumberSlider({
+  label,
+  value,
+  max,
+  disabled,
+  formatValue,
+  onChange
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly max: number;
+  readonly disabled: boolean;
+  readonly formatValue: (value: number) => string;
+  readonly onChange: (value: number) => void;
+}): ReactElement {
+  return (
+    <label className="grid gap-1 text-xs font-semibold text-neutral-200">
+      <span>{label} {formatValue(value)}</span>
+      <input
+        type="range"
+        min="0"
+        max={max}
+        step="0.05"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        className="w-full accent-teal-400"
+      />
+    </label>
+  );
+}
+
 function groupMappingSlots(
   status: RuntimePlayerMappingStatus | null
 ): readonly {
@@ -228,6 +513,10 @@ function groupMappingSlots(
     {
       label: "Mouth",
       slots: slots.filter((slot) => slot.group === "mouth")
+    },
+    {
+      label: "Body",
+      slots: slots.filter((slot) => slot.group === "body")
     }
   ].filter((group) => group.slots.length > 0);
 }

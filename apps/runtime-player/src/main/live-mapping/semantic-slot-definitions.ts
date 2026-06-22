@@ -14,16 +14,24 @@ export type SemanticSlotSourceKind =
   | "blink-left"
   | "blink-right"
   | "mouth-open"
-  | "mouth-smile";
+  | "mouth-smile"
+  | "body-x"
+  | "body-z";
 
 export type SemanticSlotDefinition = {
   readonly slotId: RuntimePlayerMappingSlotId;
   readonly label: string;
   readonly group: RuntimePlayerMappingSlotGroup;
-  readonly targetAlias: string;
+  readonly targetAliases: readonly string[];
   readonly targetDisplayName: string;
   readonly sourceKind: SemanticSlotSourceKind;
   readonly defaultInvert: boolean;
+  readonly defaultStrength: number;
+  readonly defaultSmoothing?: number;
+  readonly defaultBodyRotationStrength?: number;
+  readonly defaultBodyPositionStrength?: number;
+  readonly defaultBodyRotationInvert?: boolean;
+  readonly defaultBodyPositionInvert?: boolean;
   readonly fallbackPositiveSign?: InputProfileLearnedSign;
 };
 
@@ -32,87 +40,124 @@ export const semanticSlotDefinitions: readonly SemanticSlotDefinition[] = [
     slotId: "head-horizontal",
     label: "Head horizontal",
     group: "head",
-    targetAlias: "face.angle.x",
+    targetAliases: ["face.angle.x"],
     targetDisplayName: "Face Angle X",
     sourceKind: "head-centered",
     defaultInvert: false,
+    defaultStrength: 1,
     fallbackPositiveSign: sign("y", -1)
   },
   {
     slotId: "head-vertical",
     label: "Head vertical",
     group: "head",
-    targetAlias: "face.angle.y",
+    targetAliases: ["face.angle.y"],
     targetDisplayName: "Face Angle Y",
     sourceKind: "head-centered",
     defaultInvert: false,
+    defaultStrength: 1,
     fallbackPositiveSign: sign("x", 1)
   },
   {
     slotId: "head-tilt",
     label: "Head tilt",
     group: "head",
-    targetAlias: "face.angle.z",
+    targetAliases: ["face.angle.z"],
     targetDisplayName: "Face Angle Z",
     sourceKind: "head-centered",
     defaultInvert: false,
+    defaultStrength: 1,
     fallbackPositiveSign: sign("z", -1)
   },
   {
     slotId: "eye-blink-left",
     label: "Eye blink left",
     group: "eyes",
-    targetAlias: "eye.left.open",
+    targetAliases: ["eye.left.open"],
     targetDisplayName: "Eye Left Open",
     sourceKind: "blink-left",
-    defaultInvert: true
+    defaultInvert: true,
+    defaultStrength: 1
   },
   {
     slotId: "eye-blink-right",
     label: "Eye blink right",
     group: "eyes",
-    targetAlias: "eye.right.open",
+    targetAliases: ["eye.right.open"],
     targetDisplayName: "Eye Right Open",
     sourceKind: "blink-right",
-    defaultInvert: true
+    defaultInvert: true,
+    defaultStrength: 1
   },
   {
     slotId: "gaze-horizontal",
     label: "Gaze horizontal",
     group: "eyes",
-    targetAlias: "eyeball.x",
+    targetAliases: ["eyeball.x"],
     targetDisplayName: "Eyeball X",
     sourceKind: "gaze-centered",
     defaultInvert: false,
+    defaultStrength: 1,
     fallbackPositiveSign: sign("y", -1)
   },
   {
     slotId: "gaze-vertical",
     label: "Gaze vertical",
     group: "eyes",
-    targetAlias: "eyeball.y",
+    targetAliases: ["eyeball.y"],
     targetDisplayName: "Eyeball Y",
     sourceKind: "gaze-centered",
     defaultInvert: false,
+    defaultStrength: 1,
     fallbackPositiveSign: sign("x", 1)
   },
   {
     slotId: "mouth-open",
     label: "Mouth open",
     group: "mouth",
-    targetAlias: "mouth.open",
+    targetAliases: ["mouth.open"],
     targetDisplayName: "Mouth Open",
     sourceKind: "mouth-open",
-    defaultInvert: false
+    defaultInvert: false,
+    defaultStrength: 1
   },
   {
     slotId: "mouth-smile",
     label: "Mouth smile",
     group: "mouth",
-    targetAlias: "mouth.smile",
+    targetAliases: ["mouth.smile"],
     targetDisplayName: "Mouth Smile",
     sourceKind: "mouth-smile",
-    defaultInvert: false
+    defaultInvert: false,
+    defaultStrength: 1
+  },
+  {
+    slotId: "body-x",
+    label: "Body X",
+    group: "body",
+    targetAliases: ["body.angle.x", "param_body_angle_x"],
+    targetDisplayName: "Body Angle X",
+    sourceKind: "body-x",
+    defaultInvert: false,
+    defaultStrength: 0.35,
+    defaultSmoothing: 0.75,
+    fallbackPositiveSign: sign("y", -1)
+  },
+  {
+    slotId: "body-z",
+    label: "Body Z",
+    group: "body",
+    targetAliases: ["body.angle.z", "param_body_angle_z"],
+    targetDisplayName: "Body Angle Z",
+    sourceKind: "body-z",
+    defaultInvert: false,
+    defaultStrength: 1,
+    defaultSmoothing: 0.75,
+    defaultBodyRotationStrength: 0.25,
+    defaultBodyPositionStrength: 0.4,
+    defaultBodyRotationInvert: false,
+    defaultBodyPositionInvert: false,
+    fallbackPositiveSign: sign("z", -1)
   }
 ];
 

@@ -183,40 +183,72 @@ Suggested next action:
 
 - planning-gateで、最初に扱うinput subsetとparameter mapping UXを決める。
 
-### 3.6 Head Pose Derived Body And Stage Motion
+### 3.6 Body Follow v0 From Head Pose
 
-- Status: Deferred
-- Kind: Future UX / feature
-- Priority: Medium after iFacialMocap input adapter exists
+- Status: Done
+- Final clean integration review: pass ([../implementation/reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](../implementation/reviews/wave6/runtime-player-wave6-final-clean-integration-review.md))
+- Kind: Future UX / feature completed by Runtime Player Wave6
+- Priority: N/A
 
 Problem:
 
 - iFacialMocapは主に顔周辺のtracking sourceであり、Body Angle X/Zに直接対応するbody tracking signalは期待しにくい。
-- ただし、首から上だけが動くモデルはライブ表示として不自然に見えやすい。
-- `head` rotationとpositionから、体の追従、接近による拡大、モデル表示位置の平行移動を簡易推定する余地がある。
-- 特にBody Angle Z相当は、head rotationだけでなくhead positionの左右移動や奥行き変化も使って推定する可能性がある。
-- `head.positionRaw` は単位・座標系・安定性が未確認なので、まず入手とDebug確認が必須になる。
+- Wave5のユーザー実機確認では、顔・目・口のlive motionは自然に見える一方、首から上だけが動いて体が静止する違和感が大きかった。
 
-Trigger:
+Implemented outcome:
 
-- iFacialMocap input adapterでhead rotation / head positionを取得できる。
-- Face Angle X/Y/Zだけではライブ表示の自然さが足りないと判断する。
-- Stage上のモデル位置、拡大率、body follow head演出を検討する。
-
-Desired outcome:
-
-- head rotation / positionをnormalized tracking frameに保持する。
-- Body Angle X/Zへ直接入力するのではなく、head rotation / positionを使う演出層として `Body follow head` のような派生mappingを設計する。
-- head positionからStage scale / translationへ反映するかどうかを、Runtime parameter mappingとは別責務として検討する。
-- ユーザーが混乱しないように、実測tracking値と自動演出値をDebug panelで区別して確認できる。
+- Existing Input Profiles can remain usable without `headPositionRaw`.
+- Saved profiles can add head position left/right calibration through missing-only or head-position-only recalibration.
+- Auto Mapping preserves the existing nine Wave5 head/eyes/mouth slots and adds Body X/Z slots when matching body targets exist.
+- `Body Angle X` uses calibrated head horizontal input with conservative strength and lag.
+- `Body Angle Z` combines calibrated head tilt and optional calibrated head positionX.
+- Body outputs are emitted through the existing sanitized live parameter frame path.
+- Stage remains model-only and receives no raw tracking frame, raw head position, or debug body data.
 
 Source:
 
-- [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md)
+- [../implementation/orchestration/player-wave6-plan.md](../implementation/orchestration/player-wave6-plan.md)
+- [../implementation/waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md](../implementation/waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md)
+- [../implementation/waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md](../implementation/waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md)
+- [../implementation/waves/wave6/runtime-player-wave6-final-integration-report.md](../implementation/waves/wave6/runtime-player-wave6-final-integration-report.md)
+
+Remaining manual verification:
+
+- Run Electron Runtime Player with real iFacialMocap input and a Runtime Export with authored Body Angle X/Z keyforms.
+- Tune default Body X/Z strengths and lag if real-device visual evidence shows the defaults feel wrong.
+
+### 3.7 Head-Position Stage Motion And Broadcast-Ready Stage
+
+- Status: Deferred
+- Kind: Future UX / feature
+- Priority: Medium after Body Follow visual verification, high before broadcast/capture workflows
+
+Problem:
+
+- Wave6 intentionally stops at authored Body Angle X/Z parameter output.
+- Head position may also be useful for Stage scale, Stage translation, near/far distance response, or capture-friendly Stage controls, but those are separate from Runtime Export parameter mapping.
+- Adding Stage Motion or Broadcast/OBS UX too early would mix model parameter follow, window/capture behavior, and display composition.
+
+Trigger:
+
+- Body Follow v0 is manually verified with real iFacialMocap and a real Runtime Export.
+- User wants the on-stage model to move/scale with head position, not only body angle parameters.
+- Stage Window position / size / always-on-top / click-through / OBS capture behavior becomes the next practical bottleneck.
+
+Desired outcome:
+
+- Decide whether head position should drive Stage translation, Stage scale, both, or neither.
+- Keep Stage Motion separate from Body Follow parameter mapping.
+- Define capture-safe Stage controls without adding debug UI to Stage.
+- Preserve the existing rule that Stage receives sanitized display/runtime data, not raw tracking diagnostics.
+
+Source:
+
 - [../screens/initial-runtime-player-screen.md](../screens/initial-runtime-player-screen.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
 - [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
 
 Suggested next action:
 
-- iFacialMocap adapterの実機frame確認後に、head rotation / positionの軸、符号、安定性、レンジを記録する。
-- その結果をもとに、Body follow head、Stage scale、Stage translationを同じwaveで扱うべきか分けるべきかplanning-gateで決める。
+- After manual body follow verification, run a planning gate for Stage Motion / Broadcast-ready Stage as a separate wave.

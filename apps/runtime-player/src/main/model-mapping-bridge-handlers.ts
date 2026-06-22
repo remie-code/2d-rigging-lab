@@ -7,6 +7,7 @@ import type {
 } from "../preload/model-mapping-bridge-contract";
 import type { InputProfile } from "./input-profiles/input-profile-document";
 import type { RuntimePlayerLiveParameterBridgeRegistration } from "./live-parameter-bridge-handlers";
+import type { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { createRuntimeParameterFrame } from "./live-mapping/runtime-parameter-frame";
 import { readMappingSlotUpdateRequest } from "./model-mapping-bridge-request-validation";
@@ -17,6 +18,7 @@ export type RegisterModelMappingBridgeHandlersInput = {
   readonly windows: RuntimePlayerWindowSet;
   readonly inputState: RuntimePlayerInputSessionState;
   readonly mappingState: RuntimePlayerLiveMappingState;
+  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
   readonly liveParameters: RuntimePlayerLiveParameterBridgeRegistration;
   readonly getActiveInputProfile: () => Promise<InputProfile | null>;
   readonly nowMs?: () => number;
@@ -64,7 +66,10 @@ export function registerModelMappingBridgeHandlers(
       inputProfile,
       slots: input.mappingState.getSlots(),
       sequence: ++liveFrameSequence,
-      producedAtMs: nowMs()
+      producedAtMs: nowMs(),
+      ...(input.bodyFollowState === undefined
+        ? {}
+        : { bodyFollowState: input.bodyFollowState })
     });
 
     input.liveParameters.publishFrame(frame);
@@ -106,6 +111,8 @@ export function registerModelMappingBridgeHandlers(
       );
     }
 
+    input.bodyFollowState?.reset();
+
     return publishActionResult("ok", "Auto Mapping regenerated.");
   });
   ipcMain.handle(
@@ -114,6 +121,7 @@ export function registerModelMappingBridgeHandlers(
       try {
         const command = readMappingSlotUpdateRequest(request);
         input.mappingState.updateSlot(command);
+        input.bodyFollowState?.reset();
       } catch (error) {
         return publishActionResult("validation-error", toErrorMessage(error));
       }

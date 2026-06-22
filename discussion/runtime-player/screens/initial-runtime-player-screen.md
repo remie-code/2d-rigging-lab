@@ -12,6 +12,8 @@ Runtime Playerの主責務は、Editorが生成したRuntime Export directoryを
 
 Wave5実装後は、Runtime Exportロード、Input Profileまたはtemporary defaults、Auto Mappingが揃うと、mainがsanitized runtime parameter frameをStageへ送り、Stageがruntime-core評価を通してモデルをLive更新する。
 
+Wave6実装後は、既存Input Profileへhead position left/right calibrationを追加できる。Auto Mappingは既存のhead / eyes / mouth slotsを保ったままBody X/Z slotsを追加し、Body Follow v0の値も同じsanitized runtime parameter frameとしてStageへ届く。
+
 この画面仕様では、Runtime Playerの体験を次の3つに分けて扱う。
 
 - `Input Setup`: 入力ソースと通信できるかを確認する。モデル不要。
@@ -178,7 +180,7 @@ Input Profileまたはtemporary defaultsとAuto Mappingが揃うと、tracking f
 
 ## 7. Live State: Tracking Applied To Model
 
-Tracking mappingが有効になった後のWave5実装状態。
+Tracking mappingが有効になった後のWave6実装状態。
 
 ```text
 Control Window
@@ -188,7 +190,9 @@ Control Window
 │ [ Look Forward ] [ Disconnect ]            │
 │                                            │
 │ Model Mapping                              │
-│ Auto mapped 5 / 5                          │
+│ Auto mapped semantic slots                 │
+│ Body Follow                                │
+│ Ready when Body X/Z targets exist          │
 │ Live active                                │
 │ [ Edit Mapping ]                           │
 │                                            │
@@ -208,10 +212,13 @@ Source/test evidence:
 - Main owns input session, profile/calibration, model mapping, and sanitized live parameter frame production.
 - Stage receives only Runtime Export identity and `parameterValues`; raw tracking frame、blendshapes、diagnosticsは受け取らない。
 - Stage evaluates the loaded Runtime Export through runtime-core with authored parameter overrides and renders only the canvas.
+- Wave6 adds Body X/Z output to the same sanitized live parameter frame path. Stage still receives no raw head position or debug body data.
+- Existing profiles without head position calibration remain usable for face / eyes / mouth live mapping; Body Z's position component is skipped until head position calibration exists.
 
 Manual verification remaining:
 
 - Real iFacialMocap inputが、実Runtime Exportモデルをclean Stage上で動かすこと。
+- Body Angle X/Z keyformsを持つ実Runtime Exportで、Body Follow v0がclean Stage上で自然に見えること。
 - Runtime Export reload/clear後にstale live poseが残らないこと。
 
 Live stateでユーザーが頻繁に使う操作:
@@ -247,11 +254,14 @@ Live stateで表示してよいstatus:
 - `Look Forward`はsession neutralであり、profile永続neutralを即時上書きしない。
 - Auto Mapping v0は標準parameter名とinput manifestを使い、computed/dynamics-owned/hidden/internal targetを直接出力先にしない。
 - Persistent Model Mapping Profile saveはWave5では未実装。
+- Wave6ではInput Profileにhead position left/right calibration sectionを追加し、missing-only / head-position-only recalibrationを実装済み。
+- Wave6ではAuto MappingにBody X/Z slotsを追加し、Body Follow v0をmain-owned sanitized runtime parameter frameとしてStageへ反映する。
+- Stage Motion、near/far distance response、Broadcast/OBS UX、Body Angle Y、persistent Model Mapping Profile saveはWave6では未実装。
 
 ## 9. Remaining Open Questions
 
 - 前回Runtime Export自動復元をいつ実装するか。
 - Model Mapping Profileの保存場所とRuntime Export fingerprintの扱い。
 - Stage Windowの位置・サイズ・always-on-top・クリック透過をどこまでv0で扱うか。
-- head position由来のStage motion / body followをどのwaveで扱うか。
+- head position由来のStage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。
 - Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。

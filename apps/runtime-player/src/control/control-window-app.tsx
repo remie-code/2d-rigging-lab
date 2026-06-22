@@ -445,10 +445,11 @@ function renderActivePage(input: {
             window.runtimePlayer.inputProfile.useTemporaryDefaults()
           )
         }
-        onStartCalibration={() =>
+        onStartCalibration={(request = {}) =>
           void input.runInputProfileAction(() =>
             window.runtimePlayer.inputProfile.startCalibration({
-              displayName: input.calibrationName
+              displayName: input.calibrationName,
+              ...request
             })
           )
         }
@@ -492,7 +493,8 @@ function renderActivePage(input: {
           input.setActivePage("input");
           void input.runInputProfileAction(() =>
             window.runtimePlayer.inputProfile.startCalibration({
-              displayName: input.calibrationName
+              displayName: input.calibrationName,
+              mode: "full"
             })
           );
         }}
@@ -529,7 +531,8 @@ function renderActivePage(input: {
         input.setActivePage("input");
         void input.runInputProfileAction(() =>
           window.runtimePlayer.inputProfile.startCalibration({
-            displayName: input.calibrationName
+            displayName: input.calibrationName,
+            mode: "full"
           })
         );
       }}

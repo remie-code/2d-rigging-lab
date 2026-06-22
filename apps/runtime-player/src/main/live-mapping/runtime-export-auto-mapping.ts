@@ -14,7 +14,7 @@ export function createAutoMappingSlots(
 
   return semanticSlotDefinitions.map((definition) => {
     const target = findTargetForDefinition(directTargets, {
-      alias: definition.targetAlias,
+      aliases: definition.targetAliases,
       displayName: definition.targetDisplayName
     });
 
@@ -25,7 +25,22 @@ export function createAutoMappingSlots(
       target,
       enabled: target !== null,
       invert: definition.defaultInvert,
-      strength: 1,
+      strength: definition.defaultStrength,
+      ...(definition.defaultSmoothing === undefined
+        ? {}
+        : { smoothing: definition.defaultSmoothing }),
+      ...(definition.defaultBodyRotationStrength === undefined
+        ? {}
+        : { bodyRotationStrength: definition.defaultBodyRotationStrength }),
+      ...(definition.defaultBodyPositionStrength === undefined
+        ? {}
+        : { bodyPositionStrength: definition.defaultBodyPositionStrength }),
+      ...(definition.defaultBodyRotationInvert === undefined
+        ? {}
+        : { bodyRotationInvert: definition.defaultBodyRotationInvert }),
+      ...(definition.defaultBodyPositionInvert === undefined
+        ? {}
+        : { bodyPositionInvert: definition.defaultBodyPositionInvert }),
       status: target === null ? "missing-target" : "mapped",
       warningMessages: target === null
         ? [`Missing external-input target for ${definition.targetDisplayName}.`]
@@ -90,16 +105,26 @@ function toMappingTarget(
 function findTargetForDefinition(
   targets: readonly RuntimePlayerMappingTarget[],
   input: {
-    readonly alias: string;
+    readonly aliases: readonly string[];
     readonly displayName: string;
   }
 ): RuntimePlayerMappingTarget | null {
   const aliasMatch = targets.find((target) =>
-    target.projectPresetAlias === input.alias
+    target.projectPresetAlias !== undefined &&
+    input.aliases.includes(target.projectPresetAlias)
   );
 
   if (aliasMatch !== undefined) {
     return aliasMatch;
+  }
+
+  const normalizedAliases = input.aliases.map(normalizeDisplayName);
+  const parameterIdMatch = targets.find((target) =>
+    normalizedAliases.includes(normalizeDisplayName(target.parameterId))
+  );
+
+  if (parameterIdMatch !== undefined) {
+    return parameterIdMatch;
   }
 
   const normalizedDisplayName = normalizeDisplayName(input.displayName);

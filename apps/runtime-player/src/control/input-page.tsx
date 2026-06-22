@@ -3,6 +3,7 @@ import {
   Activity,
   Crosshair,
   Play,
+  RefreshCcw,
   Save,
   StepForward,
   SlidersHorizontal,
@@ -29,6 +30,8 @@ import {
 } from "./control-window-formatters";
 import type { RuntimePlayerInputStatus } from "../preload/input-bridge-contract";
 import type {
+  RuntimePlayerInputCalibrationSectionStatus,
+  RuntimePlayerInputProfileStartCalibrationRequest,
   RuntimePlayerInputCalibrationPromptSnapshot,
   RuntimePlayerInputProfileStatus
 } from "../preload/input-profile-bridge-contract";
@@ -69,7 +72,9 @@ export function InputPage({
   readonly onLookForward: () => void;
   readonly onSetActiveProfile: (profileId: string) => void;
   readonly onUseTemporaryDefaults: () => void;
-  readonly onStartCalibration: () => void;
+  readonly onStartCalibration: (
+    request?: RuntimePlayerInputProfileStartCalibrationRequest
+  ) => void;
   readonly onCancelCalibration: () => void;
   readonly onRecordCalibrationSample: () => void;
   readonly onAdvanceCalibrationPrompt: () => void;
@@ -80,6 +85,17 @@ export function InputPage({
   const inputDisconnectEnabled =
     inputStatus !== null && inputStatus.connectionState !== "idle";
   const calibration = profileStatus?.calibration ?? null;
+  const activeProfile = profileStatus?.activeProfile ?? null;
+  const calibrationSections = activeProfile?.calibrationSections ?? [];
+  const hasMissingCalibrationSection = calibrationSections.some(
+    (section) => section.status === "missing"
+  );
+  const missingOnlyDisabled =
+    activeProfile !== null && !hasMissingCalibrationSection;
+  const canUpdateSavedProfile =
+    profileStatus?.profileMode === "saved" &&
+    activeProfile !== null &&
+    !profileStatus.temporaryDefaultsActive;
 
   return (
     <div className="grid gap-4">
@@ -195,6 +211,26 @@ export function InputPage({
               </select>
             </label>
           ) : null}
+          {calibrationSections.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              <p className="text-xs font-semibold text-neutral-500">
+                Calibration sections
+              </p>
+              {calibrationSections.map((section) => (
+                <CalibrationSectionRow
+                  key={section.key}
+                  section={section}
+                  canUpdateHeadPosition={canUpdateSavedProfile}
+                  onCalibrateHeadPosition={() =>
+                    onStartCalibration({
+                      mode: "section",
+                      section: "head-position"
+                    })
+                  }
+                />
+              ))}
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <IconTextButton
               icon={Crosshair}
@@ -205,9 +241,24 @@ export function InputPage({
             />
             <IconTextButton
               icon={Play}
-              label="Start Calibration"
-              onClick={onStartCalibration}
+              label="Run Missing Only"
+              onClick={() =>
+                onStartCalibration({
+                  mode: "missing-only"
+                })
+              }
               variant="secondary"
+              disabled={missingOnlyDisabled}
+            />
+            <IconTextButton
+              icon={RefreshCcw}
+              label="Full Calibration"
+              onClick={() =>
+                onStartCalibration({
+                  mode: "full"
+                })
+              }
+              variant="ghost"
             />
             <IconTextButton
               icon={SlidersHorizontal}
@@ -274,6 +325,39 @@ export function InputPage({
             />
           </div>
         </Panel>
+      ) : null}
+    </div>
+  );
+}
+
+function CalibrationSectionRow({
+  section,
+  canUpdateHeadPosition,
+  onCalibrateHeadPosition
+}: {
+  readonly section: RuntimePlayerInputCalibrationSectionStatus;
+  readonly canUpdateHeadPosition: boolean;
+  readonly onCalibrateHeadPosition: () => void;
+}): ReactElement {
+  const tone = section.status === "ready" ? "teal" : "amber";
+  const showHeadPositionAction = section.key === "head-position";
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm">
+      <p className="min-w-0 truncate font-medium text-neutral-100">
+        {section.label}
+      </p>
+      <StatusPill tone={tone}>
+        {section.status === "ready" ? "Ready" : "Missing"}
+      </StatusPill>
+      {showHeadPositionAction ? (
+        <IconTextButton
+          icon={RefreshCcw}
+          label={section.status === "ready" ? "Recalibrate" : "Calibrate"}
+          onClick={onCalibrateHeadPosition}
+          variant="ghost"
+          disabled={!canUpdateHeadPosition}
+        />
       ) : null}
     </div>
   );
