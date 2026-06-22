@@ -6,7 +6,9 @@ import {
   createWebGl2RendererFromCanvas,
   type WebGl2Renderer
 } from "@private-2d-rigging-lab/render-webgl2";
+import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
+import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import {
   type RuntimeExportStageRenderInput
@@ -21,9 +23,12 @@ import {
   type StageViewTransform,
   type StageViewportPoint
 } from "./stage-view-transform";
+import { canApplyLiveParameterFrame } from "./stage-live-parameter-frame-match";
 
 export interface StaticStageCanvasRenderer {
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
+  setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
+  clearLiveParameterFrame(): void;
   resetView(): void;
   clear(): void;
   dispose(): void;
@@ -50,7 +55,12 @@ export function createStaticStageCanvasRenderer(
 }
 
 class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
+  private payload: RuntimeExportLoadedPayload | null = null;
   private renderInput: RuntimeExportStageRenderInput | null = null;
+  private liveRuntimeState: RuntimeStateDto | null = null;
+  private latestLiveParameterFrame: RuntimePlayerLiveParameterFrame | null = null;
+  private liveAnimationFrameId: number | null = null;
+  private lastLiveSourceTimestampMs: number | null = null;
   private viewTransform: StageViewTransform = createResetStageViewTransform();
   private activePanPointerId: number | null = null;
   private lastPanPoint: StageViewportPoint | null = null;
@@ -81,15 +91,45 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult {
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload);
 
+    this.payload = payload;
     this.renderInput = renderInput;
+    this.liveRuntimeState = renderInput.poseEvaluation.nextState;
+    this.latestLiveParameterFrame = null;
+    this.lastLiveSourceTimestampMs = null;
     this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
 
     return {
       runtimeDiagnosticDetails: createStageRuntimeDiagnosticDetails(
-        renderInput.defaultPoseEvaluation.snapshot.diagnostics
+        renderInput.poseEvaluation.snapshot.diagnostics
       )
     };
+  }
+
+  setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
+    if (
+      this.disposed ||
+      !canApplyLiveParameterFrame(frame, this.payload)
+    ) {
+      return;
+    }
+
+    this.latestLiveParameterFrame = frame;
+    this.requestLiveRender();
+  }
+
+  clearLiveParameterFrame(): void {
+    this.latestLiveParameterFrame = null;
+    this.lastLiveSourceTimestampMs = null;
+
+    if (this.payload === null || this.disposed) {
+      return;
+    }
+
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(this.payload);
+    this.renderInput = renderInput;
+    this.liveRuntimeState = renderInput.poseEvaluation.nextState;
+    this.renderCurrent();
   }
 
   resetView(): void {
@@ -98,7 +138,12 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   }
 
   clear(): void {
+    this.payload = null;
     this.renderInput = null;
+    this.liveRuntimeState = null;
+    this.latestLiveParameterFrame = null;
+    this.lastLiveSourceTimestampMs = null;
+    this.cancelLiveRender();
     this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
   }
@@ -117,7 +162,67 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.canvas.removeEventListener("pointerup", this.handlePointerUp);
     this.canvas.removeEventListener("pointercancel", this.handlePointerUp);
     this.canvas.removeEventListener("lostpointercapture", this.handlePointerUp);
+    this.cancelLiveRender();
     this.renderer.dispose();
+  }
+
+  private requestLiveRender(): void {
+    if (this.liveAnimationFrameId !== null) {
+      return;
+    }
+
+    this.liveAnimationFrameId = window.requestAnimationFrame(() => {
+      this.liveAnimationFrameId = null;
+      try {
+        this.renderLatestLiveParameterFrame();
+      } catch (error) {
+        console.error("Stage live parameter render failed.", error);
+        this.clear();
+      }
+    });
+  }
+
+  private cancelLiveRender(): void {
+    if (this.liveAnimationFrameId === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(this.liveAnimationFrameId);
+    this.liveAnimationFrameId = null;
+  }
+
+  private renderLatestLiveParameterFrame(): void {
+    const payload = this.payload;
+    const liveFrame = this.latestLiveParameterFrame;
+
+    if (
+      this.disposed ||
+      liveFrame === null ||
+      !canApplyLiveParameterFrame(liveFrame, payload)
+    ) {
+      return;
+    }
+
+    const deltaTimeMs = this.lastLiveSourceTimestampMs === null
+      ? 0
+      : Math.max(0, liveFrame.sourceFrameTimestampMs - this.lastLiveSourceTimestampMs);
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        authoredParameterValues: liveFrame.parameterValues,
+        frameIndex: liveFrame.sequence,
+        deltaTimeMs,
+        resetReasons: [],
+        ...(this.liveRuntimeState === null
+          ? {}
+          : { previousState: this.liveRuntimeState })
+      }
+    );
+
+    this.renderInput = renderInput;
+    this.liveRuntimeState = renderInput.poseEvaluation.nextState;
+    this.lastLiveSourceTimestampMs = liveFrame.sourceFrameTimestampMs;
+    this.renderCurrent();
   }
 
   private readonly renderCurrent = (): void => {

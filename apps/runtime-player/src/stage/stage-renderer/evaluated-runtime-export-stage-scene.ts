@@ -15,9 +15,10 @@ import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import {
-  evaluateRuntimeExportDefaultPose,
-  type RuntimeExportDefaultPoseEvaluation
-} from "../runtime-evaluation/default-runtime-pose-evaluator";
+  evaluateRuntimeExportPose,
+  type RuntimeExportPoseEvaluation,
+  type RuntimeExportPoseEvaluationOptions
+} from "../runtime-evaluation/runtime-export-pose-evaluator";
 import type {
   RuntimeExportDrawableRenderResource,
   RuntimeExportRuntimeGraphAdapterInput
@@ -28,20 +29,22 @@ import type {
 } from "./runtime-export-stage-scene";
 
 export interface EvaluatedRuntimeExportStageRenderInput extends RuntimeExportStageRenderInput {
-  readonly defaultPoseEvaluation: RuntimeExportDefaultPoseEvaluation;
+  readonly poseEvaluation: RuntimeExportPoseEvaluation;
 }
 
 export function createEvaluatedRuntimeExportStageRenderInput(
-  payload: RuntimeExportLoadedPayload
+  payload: RuntimeExportLoadedPayload,
+  options: RuntimeExportPoseEvaluationOptions = {}
 ): EvaluatedRuntimeExportStageRenderInput {
-  const defaultPoseEvaluation = evaluateRuntimeExportDefaultPose(
-    createDefaultPoseEvaluationInput(payload)
+  const poseEvaluation = evaluateRuntimeExportPose(
+    createPoseEvaluationInput(payload),
+    options
   );
   const textureSource = createTextureSource(payload);
   const drawables = createEvaluatedRenderDrawables({
-    snapshot: defaultPoseEvaluation.snapshot,
+    snapshot: poseEvaluation.snapshot,
     textureSource,
-    drawableRenderResources: defaultPoseEvaluation.adapter.renderResources.drawableRenderResources
+    drawableRenderResources: poseEvaluation.adapter.renderResources.drawableRenderResources
   });
 
   return {
@@ -50,11 +53,11 @@ export function createEvaluatedRuntimeExportStageRenderInput(
       drawables
     }),
     modelBounds: createStageModelBounds(payload),
-    defaultPoseEvaluation
+    poseEvaluation
   };
 }
 
-function createDefaultPoseEvaluationInput(
+function createPoseEvaluationInput(
   payload: RuntimeExportLoadedPayload
 ): RuntimeExportRuntimeGraphAdapterInput {
   return {

@@ -286,6 +286,45 @@ describe("Runtime Export default pose evaluation", () => {
     expect(result.snapshot.diagnostics).toEqual([]);
   });
 
+  it("evaluates a live pose snapshot from authored parameter values", () => {
+    const payload = createRuntimeExportPayload({
+      modelOverrides: {
+        parameters: [
+          createParameter("param_face_angle_x", {
+            default: 0,
+            projectPresetAlias: "face.angle.x"
+          })
+        ],
+        keyforms: [createMeshKeyform()]
+      }
+    });
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        authoredParameterValues: {
+          param_face_angle_x: 1
+        },
+        frameIndex: 7,
+        resetReasons: []
+      }
+    );
+    const body = renderInput.scene.drawables.find((drawable) =>
+      drawable.drawableId === "draw_body"
+    );
+
+    expect(renderInput.poseEvaluation.snapshot.parameters).toContainEqual({
+      parameterId: "param_face_angle_x",
+      valueSource: "authoredInput",
+      authoredValue: 1,
+      baseValue: 1,
+      effectiveValue: 1,
+      clamped: false,
+      source: "viewerOverride"
+    });
+    expect(body?.mesh.vertices).toEqual(createDeformedVertices());
+    expect(renderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
+  });
+
   it("evaluates Runtime Export rig controls and rig-control keyforms through runtime-core", () => {
     const payload = createRuntimeExportPayload({
       modelOverrides: {
@@ -482,7 +521,7 @@ describe("Runtime Export default pose evaluation", () => {
       width: 64,
       height: 64
     });
-    expect(renderInput.defaultPoseEvaluation.snapshot.diagnostics).toEqual([]);
+    expect(renderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
   });
 });
 

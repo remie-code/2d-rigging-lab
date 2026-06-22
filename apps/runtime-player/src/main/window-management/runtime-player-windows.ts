@@ -6,9 +6,10 @@ import {
 } from "./browser-window-options";
 import {
   type RuntimePlayerRendererEntry,
-  getPreloadFilePath,
+  getControlPreloadFilePath,
   getRendererDevUrl,
-  getRendererHtmlFilePath
+  getRendererHtmlFilePath,
+  getStagePreloadFilePath
 } from "./renderer-entry-url";
 
 export type RuntimePlayerWindowSet = {
@@ -17,11 +18,14 @@ export type RuntimePlayerWindowSet = {
 };
 
 export function createRuntimePlayerWindows(): RuntimePlayerWindowSet {
-  const preloadFilePath = getPreloadFilePath();
+  const controlPreloadFilePath = getControlPreloadFilePath();
+  const stagePreloadFilePath = getStagePreloadFilePath();
   const controlWindow = new BrowserWindow(
-    createControlWindowOptions(preloadFilePath)
+    createControlWindowOptions(controlPreloadFilePath)
   );
-  const stageWindow = new BrowserWindow(createStageWindowOptions(preloadFilePath));
+  const stageWindow = new BrowserWindow(
+    createStageWindowOptions(stagePreloadFilePath)
+  );
 
   controlWindow.once("ready-to-show", () => {
     controlWindow.show();

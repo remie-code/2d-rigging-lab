@@ -5,8 +5,12 @@ export type RuntimePlayerRendererEntry = "control" | "stage";
 
 const mainDirectoryPath = path.dirname(fileURLToPath(import.meta.url));
 
-export function getPreloadFilePath(): string {
+export function getControlPreloadFilePath(): string {
   return path.join(mainDirectoryPath, "../preload/preload.mjs");
+}
+
+export function getStagePreloadFilePath(): string {
+  return path.join(mainDirectoryPath, "../preload/stage-preload.mjs");
 }
 
 export function getRendererHtmlFilePath(

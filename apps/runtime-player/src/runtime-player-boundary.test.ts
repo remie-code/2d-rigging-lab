@@ -35,6 +35,57 @@ describe("Runtime Player process boundaries", () => {
     expect(stageSource).not.toContain("Runtime Export");
   });
 
+  it("keeps Stage production files away from raw tracking input", () => {
+    const stageFiles = collectProductionFiles(path.join(sourceRoot, "stage"));
+    const stageSource = stageFiles
+      .map((filePath) => readFileSync(filePath, "utf8"))
+      .join("\n");
+
+    expect(stageSource).not.toContain("TrackingFrame");
+    expect(stageSource).not.toContain("rawFrame");
+    expect(stageSource).not.toContain("blendshapes");
+  });
+
+  it("uses a minimal Stage preload bridge instead of the Control API", () => {
+    const stageWindowApp = readFileSync(
+      path.join(sourceRoot, "stage", "stage-window-app.tsx"),
+      "utf8"
+    );
+    const stageBridgeContract = readFileSync(
+      path.join(sourceRoot, "preload", "runtime-player-stage-bridge-contract.ts"),
+      "utf8"
+    );
+    const stageBridge = readFileSync(
+      path.join(sourceRoot, "preload", "runtime-player-stage-bridge.ts"),
+      "utf8"
+    );
+    const windowManagement = readFileSync(
+      path.join(sourceRoot, "main", "window-management", "runtime-player-windows.ts"),
+      "utf8"
+    );
+
+    expect(stageWindowApp).toContain("window.runtimePlayerStage");
+    expect(stageWindowApp).not.toContain("window.runtimePlayer.");
+    expect(stageBridge).toContain("runtimePlayerStage");
+    expect(windowManagement).toContain("getControlPreloadFilePath");
+    expect(windowManagement).toContain("getStagePreloadFilePath");
+
+    for (const source of [stageBridgeContract, stageBridge]) {
+      expect(source).not.toContain("RuntimePlayerInputApi");
+      expect(source).not.toContain("RuntimePlayerInputProfileApi");
+      expect(source).not.toContain("RuntimePlayerModelMappingApi");
+      expect(source).not.toContain("RuntimePlayerApi");
+      expect(source).not.toContain("inputProfile");
+      expect(source).not.toContain("modelMapping");
+      expect(source).not.toContain("getDiagnostics");
+      expect(source).not.toContain("copyDiagnostics");
+      expect(source).not.toContain("openDirectory");
+      expect(source).not.toContain("TrackingFrame");
+      expect(source).not.toContain("rawFrame");
+      expect(source).not.toContain("blendshapes");
+    }
+  });
+
   it("keeps the main process away from React UI modules", () => {
     const mainFiles = collectProductionFiles(path.join(sourceRoot, "main"));
 

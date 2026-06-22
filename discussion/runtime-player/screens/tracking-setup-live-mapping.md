@@ -1,6 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
+> Wave5実装事実: Input Profile / Look Forward / Guided Calibration v0 / Auto Mapping v0 / Stage Live Parameter Application が実装済み。Persistent Model Mapping Profile save、advanced source selection、smoothing/deadzone/curve、Body Follow、Stage Motionはfuture。
 
 ## 1. Goal
 
@@ -17,6 +18,16 @@
 - Stage上でモデルがLiveに動き、ユーザーが自然さを確認できる。
 - 違和感がある箇所だけ、意味単位で調整できる。
 
+Wave5 source/test evidence:
+
+- Control Window exposes `Overview` / `Input` / `Mapping` only.
+- Input Profile persists to `<electron userData>/input-profiles/ifacialmocap/profiles.json`.
+- `Look Forward` updates session neutral and does not overwrite persistent profile neutral.
+- Guided calibration records range and learned signs.
+- Auto Mapping creates semantic slots and filters direct output targets to external-input authored parameters.
+- Main emits sanitized `runtime-player-live-parameter-frame-v1`; Stage evaluates it through runtime-core and remains model-only.
+- Manual real-device Stage motion verification remains required for closeout confidence.
+
 ## 2. Concept Split
 
 Tracking Setupは3層に分ける。
@@ -25,7 +36,7 @@ Tracking Setupは3層に分ける。
 |---|---|---|
 | Input Source | iFacialMocap接続そのもの。transport、port、remote、FPS、raw diagnostics | No |
 | Input Profile | その人、端末、カメラ位置、iFacialMocapのキャリブレーション | No |
-| Model Mapping Profile | そのモデルをどのparameterでどう動かすか | Yes |
+| Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。Wave5ではsession/local stateで、永続保存しない | Yes |
 
 この分離は複数モデル・複数ユーザーに対応するために必要である。
 
@@ -213,8 +224,8 @@ Auto Mappingはraw fieldではなく、意味単位のslotとして扱う。
 | Head Rotation Z | head rotation roll | `Face Angle Z` |
 | Eye Blink Left | `eyeBlink_L` | `Eye Left Open` |
 | Eye Blink Right | `eyeBlink_R` | `Eye Right Open` |
-| Gaze X | eye Euler or `eyeLookIn/Out` | `Eyeball X` |
-| Gaze Y | eye Euler or `eyeLookUp/Down` | `Eyeball Y` |
+| Gaze X | eye Euler first | `Eyeball X` |
+| Gaze Y | eye Euler first | `Eyeball Y` |
 | Mouth Open | `jawOpen` | `Mouth Open` |
 | Mouth Smile | `mouthSmile_L/R` | `Mouth Smile` |
 
@@ -226,9 +237,9 @@ Future slots:
 
 ### 5.2 Mapping Result
 
-Runtime Exportロード後、既存のModel Mapping Profileがあれば自動適用する。
+Wave5 v0では、Runtime Exportロード後にAuto Mappingで初期生成する。
 
-なければAuto Mappingで初期生成する。
+Persistent Model Mapping Profile save/readは未実装である。slotごとの`enabled / invert / strength`はControlで編集できるが、編集状態はRuntime Playerの実行中状態であり、profile fileとして保存しない。
 
 ```text
 Model Mapping
@@ -239,9 +250,9 @@ Status: Auto mapped 5 / 5
 
 未対応parameterがある場合はwarningとして出すが、最初のLive体験を止めない。
 
-## 6. Model Mapping Profile
+## 6. Future Model Mapping Profile
 
-Model Mapping Profileはモデル依存の設定である。
+Model Mapping Profileはモデル依存の将来設定である。Wave5 v0では保存しない。
 
 含む情報:
 
@@ -267,7 +278,7 @@ Model Mapping Profileはモデル依存の設定である。
 - raw input range profile。
 - session neutral。
 
-Runtime Exportを開いた時、そのモデルIDまたはexport fingerprintに紐づくModel Mapping Profileを探す。なければAuto Mappingする。
+将来は、Runtime Exportを開いた時に、そのモデルIDまたはexport fingerprintに紐づくModel Mapping Profileを探す。なければAuto Mappingする。
 
 ## 7. Mapping Edit UX
 
@@ -333,7 +344,7 @@ Blinkは実装上 `Eye Open = 1 - blink` のような変換になるためsensit
 
 ## 9. Live Confirmation
 
-Live Confirmationは次スコープで必須である。
+Live ConfirmationはWave5でsource/testレベル実装済みである。
 
 Debug値だけでは、ユーザーは「モデルが使える状態になった」と判断できない。Stage上のモデルが実際に動くことが、Runtime Playerの中心体験である。
 
@@ -344,6 +355,13 @@ Live Confirmationで必要なこと:
 - Control Windowには小さく状態を出す。
 - Stageにはdebug overlayを出さない。
 
+Implementation facts:
+
+- main receives UDP frames, updates input session state, and publishes latest mapped values at input frame receipt rather than only through throttled diagnostics.
+- diagnostics remain Control UI/debug state and are not used as the Stage live-rate state path.
+- Stage receives sanitized parameter values, coalesces latest frames on the render path, and evaluates runtime-core with authored parameter overrides.
+- Stage does not receive raw tracking frames or render debug/setup UI.
+
 ```text
 Input receiving
 Model loaded
@@ -352,13 +370,13 @@ Mapping ready
 Live active
 ```
 
-## 10. Candidate Next Wave Scope
+## 10. Wave5 Implemented Scope
 
-候補名:
+Wave名:
 
 `Runtime Player Wave5: Tracking Setup & Live Mapping v0`
 
-含めるべき範囲:
+実装済み範囲:
 
 - Runtime Export未ロードでもInput Checkできる現行UXを正としてdocs更新。
 - Input Profileがない場合のCalibration導線。
@@ -375,6 +393,7 @@ Future:
 - Body Follow。
 - Stage Motion。
 - persistent profile management UIの完成版。
+- persistent Model Mapping Profile save/read。
 - smoothing / curve / deadzone。
 - TCP transport。
 - multiple input sources。
@@ -387,11 +406,14 @@ Future:
 - 次回Connect時は`activeProfileId`を読み、自動選択する。
 - profileがない場合はCalibration導線を主導線にする。
 - profile読み込み失敗時はtemporary defaultsへフォールバックし、Diagnosticsに警告を出す。
+- `Use temporary defaults`はWave5 v0に含める。保存はしない。
+- Gaze X/Yはv0ではeye Eulerを優先する。
+- Model Mapping Profile永続保存はWave5 v0に含めない。
 
 ## 12. Open Questions
 
 - Model Mapping Profileの保存形式と保存場所。
 - Runtime Export fingerprintを何で決めるか。
-- Gaze X/Yはeye Eulerを優先するか、`eyeLook*` blendshapeを優先するか。
 - Head rotationの軸符号は実機range dataで確定する。
-- `Use temporary defaults`をv0に入れるか、初回は必ずprofile作成に誘導するか。
+- Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。
+- Body Follow / head-position Stage Motionをどのwaveで扱うか。

@@ -36,8 +36,10 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - v0候補の入力ソースはiFacialMocap。
 - Runtime Export load、runtime-core evaluated default pose Stage render、Stage pan/zoom、iFacialMocap UDP receive / parse / normalize / Control diagnosticsは実装済み。
 - Runtime Export loadとInput Source connectionは独立しており、Runtime Export未ロードでもiFacialMocap接続とdiagnostics確認ができる。
-- 次の主題は、Input Profile / Look Forward / Auto Mapping / Model Mapping Profile / Stage Live Confirmationを含むTracking Setup & Live Mappingである。
+- Runtime Player Wave5でInput Profile永続保存、Look Forward session neutral、Guided Calibration v0、Auto Mapping v0、slot controls、sanitized live parameter frame、Stage runtime-core Live Evaluationが実装済み。
+- Control Window Wave5 v0は `Overview` / `Input` / `Mapping` のみを公開する。Stage Windowはmodel-onlyを維持する。
+- Persistent Model Mapping Profile save、advanced mapping editor、Body Follow、head-position Stage Motion、TCP transport、dedicated Model/Stage/Diagnostics pagesはfuture。
 
 ## 5. Next Navigation
 
-次に作業候補を選ぶ時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。
+次に作業候補を選ぶ時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [screens/](screens/)、[architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。

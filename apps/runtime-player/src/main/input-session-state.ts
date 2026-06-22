@@ -8,6 +8,7 @@ import type {
   RuntimePlayerInputRemoteEndpoint,
   RuntimePlayerInputStatus
 } from "../preload/input-bridge-contract";
+import type { RuntimePlayerInputSessionNeutralSnapshot } from "../preload/input-profile-bridge-contract";
 import type { TrackingFrame } from "../preload/input-tracking-frame-contract";
 import { parseIFacialMocapFrame } from "./input-adapters/ifacialmocap/ifacialmocap-frame-parser";
 import { normalizeIFacialMocapParsedFrame } from "./input-adapters/ifacialmocap/ifacialmocap-normalizer";
@@ -43,6 +44,8 @@ export class RuntimePlayerInputSessionState {
   private errorMessage: string | undefined;
   private diagnostics: RuntimePlayerInputDiagnosticsSnapshot = {};
   private latestRawFrame: string | undefined;
+  private latestTrackingFrame: TrackingFrame | undefined;
+  private sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null = null;
   private readonly packetTimestampsMs: number[] = [];
 
   constructor(options: RuntimePlayerInputSessionStateOptions = {}) {
@@ -85,6 +88,44 @@ export class RuntimePlayerInputSessionState {
     return this.diagnostics;
   }
 
+  getLatestTrackingFrame(): TrackingFrame | null {
+    return this.latestTrackingFrame ?? null;
+  }
+
+  getSessionNeutral(): RuntimePlayerInputSessionNeutralSnapshot | null {
+    return this.sessionNeutral;
+  }
+
+  captureLookForward(
+    nowMs = this.nowMs()
+  ):
+    | {
+        readonly result: "captured";
+        readonly neutral: RuntimePlayerInputSessionNeutralSnapshot;
+      }
+    | {
+        readonly result: "unavailable";
+        readonly message: string;
+      } {
+    if (this.latestTrackingFrame === undefined) {
+      return {
+        result: "unavailable",
+        message: "Look Forward needs a received tracking frame."
+      };
+    }
+
+    const neutral = createSessionNeutralSnapshot(
+      this.latestTrackingFrame,
+      nowMs
+    );
+    this.sessionNeutral = neutral;
+
+    return {
+      result: "captured",
+      neutral
+    };
+  }
+
   createDiagnosticsCopyPayload(
     copiedAtMs = this.nowMs()
   ): RuntimePlayerInputDiagnosticsCopyPayload {
@@ -117,6 +158,7 @@ export class RuntimePlayerInputSessionState {
     this.estimatedFps = undefined;
     this.errorMessage = undefined;
     this.latestRawFrame = undefined;
+    this.latestTrackingFrame = undefined;
     this.packetTimestampsMs.splice(0);
     this.diagnostics = {
       updatedAtIso: new Date(nowMs).toISOString(),
@@ -192,6 +234,7 @@ export class RuntimePlayerInputSessionState {
     const normalization = normalizeIFacialMocapParsedFrame(parsedFrame, {
       rawFrameSampleMaxLength
     });
+    this.latestTrackingFrame = normalization.trackingFrame;
     this.diagnostics = this.createDiagnosticsSnapshot({
       parsedFrame,
       trackingFrame: normalization.trackingFrame,
@@ -294,4 +337,56 @@ function truncateRawFrameSample(rawFrame: string): string {
   }
 
   return `${rawFrame.slice(0, rawFrameSampleMaxLength - 3)}...`;
+}
+
+function createSessionNeutralSnapshot(
+  frame: TrackingFrame,
+  capturedAtMs: number
+): RuntimePlayerInputSessionNeutralSnapshot {
+  return {
+    capturedAtIso: new Date(capturedAtMs).toISOString(),
+    frameTimestampMs: frame.timestampMs,
+    ...(frame.head.rotationEulerDeg === undefined
+      ? {}
+      : { headRotationEulerDeg: frame.head.rotationEulerDeg }),
+    ...(frame.eyes?.leftEulerDeg === undefined
+      ? {}
+      : { leftEyeEulerDeg: frame.eyes.leftEulerDeg }),
+    ...(frame.eyes?.rightEulerDeg === undefined
+      ? {}
+      : { rightEyeEulerDeg: frame.eyes.rightEulerDeg }),
+    ...readOptionalBlendshape(frame, "jawOpen", "jawOpen"),
+    ...readOptionalMouthSmile(frame)
+  };
+}
+
+function readOptionalBlendshape<TKey extends "jawOpen">(
+  frame: TrackingFrame,
+  blendshapeName: string,
+  outputKey: TKey
+): Partial<Record<TKey, number>> {
+  const value = frame.blendshapes[blendshapeName];
+
+  return value === undefined ? {} : { [outputKey]: value } as Record<TKey, number>;
+}
+
+function readOptionalMouthSmile(
+  frame: TrackingFrame
+): Pick<RuntimePlayerInputSessionNeutralSnapshot, "mouthSmile"> | Record<string, never> {
+  const leftSmile = frame.blendshapes.mouthSmile_L;
+  const rightSmile = frame.blendshapes.mouthSmile_R;
+
+  if (leftSmile !== undefined && rightSmile !== undefined) {
+    return {
+      mouthSmile: (leftSmile + rightSmile) / 2
+    };
+  }
+
+  if (leftSmile !== undefined || rightSmile !== undefined) {
+    return {
+      mouthSmile: leftSmile ?? rightSmile ?? 0
+    };
+  }
+
+  return {};
 }

@@ -7,6 +7,9 @@ import {
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
 import { inputBridgeChannels } from "./input-bridge-channels";
+import { inputProfileBridgeChannels } from "./input-profile-bridge-channels";
+import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
+import { modelMappingBridgeChannels } from "./model-mapping-bridge-channels";
 import { placeholderBridgeChannels } from "./placeholder-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
@@ -14,6 +17,15 @@ import type {
   RuntimePlayerInputDiagnosticsSnapshot,
   RuntimePlayerInputStatus
 } from "./input-bridge-contract";
+import type {
+  RuntimePlayerInputProfileActionResult,
+  RuntimePlayerInputProfileStatus
+} from "./input-profile-bridge-contract";
+import type { RuntimePlayerLiveParameterFrame } from "./live-parameter-bridge-contract";
+import type {
+  RuntimePlayerMappingActionResult,
+  RuntimePlayerMappingStatus
+} from "./model-mapping-bridge-contract";
 import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
@@ -64,6 +76,65 @@ export function installRuntimePlayerBridge(): void {
         subscribeToInputEvent(inputBridgeChannels.statusChanged, callback),
       onDiagnosticsChanged: (callback) =>
         subscribeToInputEvent(inputBridgeChannels.diagnosticsChanged, callback)
+    },
+    inputProfile: {
+      getStatus: () =>
+        ipcRenderer.invoke(inputProfileBridgeChannels.getStatus),
+      setActiveProfile: (request) =>
+        ipcRenderer.invoke(inputProfileBridgeChannels.setActiveProfile, request),
+      useTemporaryDefaults: () =>
+        ipcRenderer.invoke(inputProfileBridgeChannels.useTemporaryDefaults),
+      lookForward: () =>
+        ipcRenderer.invoke(inputProfileBridgeChannels.lookForward),
+      startCalibration: (request = {}) =>
+        ipcRenderer.invoke(
+          inputProfileBridgeChannels.startCalibration,
+          request
+        ),
+      cancelCalibration: () =>
+        ipcRenderer.invoke(inputProfileBridgeChannels.cancelCalibration),
+      recordCalibrationSample: () =>
+        ipcRenderer.invoke(
+          inputProfileBridgeChannels.recordCalibrationSample
+        ),
+      advanceCalibrationPrompt: () =>
+        ipcRenderer.invoke(
+          inputProfileBridgeChannels.advanceCalibrationPrompt
+        ),
+      finishCalibration: (request = {}) =>
+        ipcRenderer.invoke(
+          inputProfileBridgeChannels.finishCalibration,
+          request
+        ),
+      onStatusChanged: (callback) =>
+        subscribeToInputProfileEvent(
+          inputProfileBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    modelMapping: {
+      getStatus: () =>
+        ipcRenderer.invoke(modelMappingBridgeChannels.getStatus),
+      regenerateAutoMapping: () =>
+        ipcRenderer.invoke(modelMappingBridgeChannels.regenerateAutoMapping),
+      updateSlot: (request) =>
+        ipcRenderer.invoke(modelMappingBridgeChannels.updateSlot, request),
+      onStatusChanged: (callback) =>
+        subscribeToModelMappingEvent(
+          modelMappingBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    liveParameters: {
+      getLatestFrame: () =>
+        ipcRenderer.invoke(liveParameterBridgeChannels.getLatestFrame),
+      onFrame: (callback) =>
+        subscribeToLiveParameterFrameEvent(
+          liveParameterBridgeChannels.frame,
+          callback
+        ),
+      onCleared: (callback) =>
+        subscribeToVoidEvent(liveParameterBridgeChannels.cleared, callback)
     },
     stageView: {
       getStatus: () =>
@@ -150,6 +221,56 @@ function subscribeToInputEvent<TPayload extends
   callback: (payload: TPayload) => void
 ): () => void {
   const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToInputProfileEvent<TPayload extends
+  RuntimePlayerInputProfileStatus | RuntimePlayerInputProfileActionResult>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToModelMappingEvent<TPayload extends
+  RuntimePlayerMappingStatus | RuntimePlayerMappingActionResult>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToLiveParameterFrameEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerLiveParameterFrame) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerLiveParameterFrame
+  ) => {
     callback(payload);
   };
 

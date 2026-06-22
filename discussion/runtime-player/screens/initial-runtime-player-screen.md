@@ -8,7 +8,9 @@ Runtime PlayerはEditorではない。
 
 Runtime Playerの主責務は、Editorが生成したRuntime Export directoryを読み込み、tracking inputを受け取り、Clean Stage上で完成モデルをライブ表示することである。
 
-ただし、現在の実装事実として、tracking inputの接続とdiagnostics確認はRuntime Exportに依存しない。ユーザーはRuntime Exportを開く前でもiFacialMocapへ接続し、受信状態を確認できる。
+現在の実装事実として、tracking inputの接続とdiagnostics確認はRuntime Exportに依存しない。ユーザーはRuntime Exportを開く前でもiFacialMocapへ接続し、受信状態を確認できる。
+
+Wave5実装後は、Runtime Exportロード、Input Profileまたはtemporary defaults、Auto Mappingが揃うと、mainがsanitized runtime parameter frameをStageへ送り、Stageがruntime-core評価を通してモデルをLive更新する。
 
 この画面仕様では、Runtime Playerの体験を次の3つに分けて扱う。
 
@@ -172,11 +174,11 @@ Stage Window
 
 Runtime Exportロード後、Stageはruntime-coreで評価されたdefault poseを表示する。
 
-現時点の実装では、tracking frameはまだruntime parameterへ適用されない。次のTracking Setup / Mapping waveで、Stage上のモデルがinputに追従して動く状態を作る。
+Input Profileまたはtemporary defaultsとAuto Mappingが揃うと、tracking frameはruntime parameter valuesへ変換され、Stage上のモデルへLive適用される。
 
 ## 7. Live State: Tracking Applied To Model
 
-Tracking mappingが有効になった後の目標状態。
+Tracking mappingが有効になった後のWave5実装状態。
 
 ```text
 Control Window
@@ -200,6 +202,17 @@ Stage Window
   transparent background
   no setup/debug UI
 ```
+
+Source/test evidence:
+
+- Main owns input session, profile/calibration, model mapping, and sanitized live parameter frame production.
+- Stage receives only Runtime Export identity and `parameterValues`; raw tracking frame、blendshapes、diagnosticsは受け取らない。
+- Stage evaluates the loaded Runtime Export through runtime-core with authored parameter overrides and renders only the canvas.
+
+Manual verification remaining:
+
+- Real iFacialMocap inputが、実Runtime Exportモデルをclean Stage上で動かすこと。
+- Runtime Export reload/clear後にstale live poseが残らないこと。
 
 Live stateでユーザーが頻繁に使う操作:
 
@@ -229,11 +242,16 @@ Live stateで表示してよいstatus:
 - Stage Windowにはsetup/debug UIを載せない。
 - Model motion確認はStageで行い、Parameter slidersはRuntime Playerの通常UXに出さない。
 - Debug / DiagnosticsはControl Window内の補助層として残す。
+- Control WindowのWave5 navは `Overview` / `Input` / `Mapping` のみ。
+- Input ProfileはElectron `userData`配下へ保存する。
+- `Look Forward`はsession neutralであり、profile永続neutralを即時上書きしない。
+- Auto Mapping v0は標準parameter名とinput manifestを使い、computed/dynamics-owned/hidden/internal targetを直接出力先にしない。
+- Persistent Model Mapping Profile saveはWave5では未実装。
 
 ## 9. Remaining Open Questions
 
 - 前回Runtime Export自動復元をいつ実装するか。
-- Input Profileの保存場所と選択UI。
 - Model Mapping Profileの保存場所とRuntime Export fingerprintの扱い。
 - Stage Windowの位置・サイズ・always-on-top・クリック透過をどこまでv0で扱うか。
 - head position由来のStage motion / body followをどのwaveで扱うか。
+- Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。

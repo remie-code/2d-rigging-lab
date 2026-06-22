@@ -1,6 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
+> Wave5実装事実: v0は `Header + Overview / Input / Mapping` のみを実体ページとして公開する。`Model` / `Stage` / 専用 `Diagnostics` ページはまだ公開しない。
 
 ## 1. Position
 
@@ -13,23 +14,22 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 - Runtime Export未ロードでも可能な操作と、モデルロード後にだけ意味を持つ操作が混ざる。
 - Diagnosticsが通常UXを圧迫する。
 
-そのため、Control Windowは次の構造にする。
+そのため、Wave5 v0のControl Windowは次の構造にする。
 
 ```text
 +--------------------------------------------------------------------------------+
 | Runtime Player                  Model: loaded       Input: live       Live: on   |
-| [Open Export] [Look Forward] [Focus Stage] [Hide Control]                       |
+| [Open Export] [Look Forward] [Focus Stage]                                      |
 +----------------------+---------------------------------------------------------+
 | Overview             |                                                         |
 | Input                |  selected page content                                  |
-| Model                |                                                         |
 | Mapping              |                                                         |
-| Stage                |                                                         |
-| Diagnostics          |                                                         |
 +----------------------+---------------------------------------------------------+
 ```
 
 Stage Windowはこの構造に含めない。Stage Windowは常にmodel onlyである。
+
+将来、Model / Stage / Diagnosticsを専用ページに分ける余地は残すが、Wave5では空のplaceholder pageを出さない。
 
 ## 2. Persistent Header
 
@@ -39,7 +39,7 @@ Headerは、どのページにいてもLive状態と頻出操作を見失わな�
 +--------------------------------------------------------------------------------+
 | Runtime Player                                                                  |
 | Model: kipfel-black.runtime-export  Input: iFacialMocap / 59 fps  Live: Active  |
-| [Open Export] [Look Forward] [Focus Stage] [Hide Control]              [Settings]|
+| [Open Export] [Look Forward] [Focus Stage]                              |
 +--------------------------------------------------------------------------------+
 ```
 
@@ -54,7 +54,11 @@ Headerに置く操作:
 - `Open Export`: Runtime Exportを開く、または切り替える。
 - `Look Forward`: 現在の顔向きをsession neutralへ設定する。頻出操作なので深い画面へ沈めない。
 - `Focus Stage`: Stage Windowを前面へ出す。
+
+Future操作:
+
 - `Hide Control`: 配信中にControl Windowを隠す。
+- `Settings`: window/display設定が増えた時に扱う。
 
 Headerに置かない操作:
 
@@ -71,10 +75,7 @@ Headerに置かない操作:
 +----------------------+
 | Overview             |
 | Input                |
-| Model                |
 | Mapping              |
-| Stage                |
-| Diagnostics          |
 +----------------------+
 ```
 
@@ -84,12 +85,19 @@ Headerに置かない操作:
 |---|---|
 | Overview | ライブ表示に必要な状態が揃っているか、次に何をすべきか |
 | Input | iFacialMocap接続、transport、port、local IP、Input Profile |
-| Model | Runtime Export load/change、model summary、artifact status |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
+
+Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
+
+Future page候補:
+
+| Page | Future responsibility |
+|---|---|
+| Model | Runtime Export load/change、model summary、artifact status |
 | Stage | Stage Windowの表示、focus、view reset、透明/背景確認 |
 | Diagnostics | raw / parsed / normalized / mapped values、copy diagnostics |
 
-Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
+Wave5ではDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
 
 ## 4. Overview Page
 
@@ -304,9 +312,9 @@ v0ではguided recordingを基本にする。
 
 ただし、将来は`Free Record Range`を追加してもよい。これは慣れたユーザーが数秒間自由に顔・目・口を動かしてrangeを更新する簡易操作である。
 
-## 7. Model Page
+## 7. Future Model Page
 
-Model pageはRuntime Exportのロード状態を扱う。
+Model pageはRuntime Exportのロード状態を扱う将来ページ候補である。Wave5では専用navとして公開せず、Runtime Export open/statusはHeaderとOverviewで扱う。
 
 Input接続やmapping編集をここに置かない。
 
@@ -357,7 +365,7 @@ Runtime Exportがない場合、Mapping pageは説明と`Open Runtime Export`導
 | Mapping Profile                                                                |
 |   Profile:      Auto mapping for kipfel-black                                  |
 |   Status:       Auto mapped 5 / 5                                              |
-|   [Auto Map] [Save Mapping Profile]                                            |
+|   [Auto Map]                                                                   |
 |--------------------------------------------------------------------------------|
 | Head Rotation                                                                  |
 |   Face Angle X  <- Head horizontal     Strength [100% -----]  [Invert] [On]    |
@@ -382,15 +390,16 @@ Mapping pageの原則:
 - semantic slot単位で見せる。
 - ユーザーが最初に触るのは`enabled`、`invert`、`strength`。
 - raw source selection、deadzone、smoothing、curveはAdvancedへ逃がす。
+- Model Mapping Profileの永続保存はWave5では扱わない。
 
 Live確認:
 
 - Mapping変更はStageへ即時反映される。
 - Stage Windowにdebug overlayは出さない。
 
-## 9. Stage Page
+## 9. Future Stage Page
 
-Stage pageは、OBSや配信用にStage Windowを整える場所。
+Stage pageは、OBSや配信用にStage Windowを整える将来ページ候補である。Wave5では専用navとして公開せず、`Focus Stage`などの最小操作をHeader/Overviewから行う。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -427,11 +436,11 @@ Stage pageに置かないもの:
 - Raw diagnostics。
 - Runtime Export artifact details。
 
-## 10. Diagnostics Page
+## 10. Future Diagnostics Page / Wave5 Debug Panel
 
-Diagnostics pageは、問題調査と開発確認のための逃がし先。
+Diagnostics pageは、問題調査と開発確認のための将来の逃がし先である。
 
-通常UXでは閉じておく。
+Wave5では専用nav pageにせず、Control Window内のsecondary/collapsible debug panelとして通常UXから畳んでおく。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -490,36 +499,30 @@ Stage Windowに出さないもの:
 
 必要な操作はControl Windowから行う。
 
-## 12. Recommended Next Implementation Shape
+## 12. Wave5 Implementation Shape
 
-次の実装waveで一気に完全な多画面管理アプリを作る必要はない。
+Wave5で実装されたv0形状:
 
-ただし、構造はこの形へ寄せる。
+- Persistent Header。
+- `Overview` / `Input` / `Mapping` のみのnavigation。
+- Runtime Export open/status、input connection、profile/calibration、mapping/live readinessをControlで扱う。
+- Diagnosticsはsecondary collapsible debug panelとして残す。
+- Stage Windowはcanvas model-onlyで、debug overlay、raw tracking text、parameter sliderを出さない。
+- Mainがprofile/calibration/mapping/live parameter frameを所有し、Stageはsanitized parameter valuesをruntime-core評価へ渡す。
 
-優先順:
+Future page候補:
 
-1. Control Window shell:
-   - Header。
-   - Left nav。
-   - Overview page。
-2. Existing controls relocation:
-   - Runtime Export load -> Model / Overview。
-   - Input connection -> Input / Overview。
-   - Debug panel -> Diagnostics。
-3. Tracking Setup:
-   - Look Forward。
-   - Input Profile no-profile guidance。
-   - Mapping page。
-4. Live Confirmation:
-   - mapping outputをStageへ反映。
-   - Stageはcleanのまま。
+- Model page。
+- Stage page。
+- Dedicated Diagnostics page。
+- Hide Control / display settings。
+- Persistent Model Mapping Profile management。
 
 この順なら、今の縦積み画面から段階的に移行できる。
 
 ## 13. Open Questions
 
-- Calibration guided sub-screenをpageとして扱うか、drawer/modalとして扱うか。
-- Headerの`Look Forward`は常時表示か、input receiving時だけ有効化か。
-- `Hide Control`をv0で実装するか、後続に回すか。
-- Mapping pageのslot行はcompact tableにするか、group cardにするか。
-- Model Mapping Profileの永続保存先。
+- Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。
+- `Hide Control`をどのwaveで実装するか。
+- Model Mapping Profileの永続保存先とRuntime Export fingerprint。
+- Stage Windowのalways-on-top / click-through / background previewをどのwaveで扱うか。

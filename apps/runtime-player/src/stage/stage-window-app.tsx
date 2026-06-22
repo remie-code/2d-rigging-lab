@@ -52,6 +52,7 @@ export function StageWindowApp(): ReactElement {
         const result = renderer.setPayload(payload);
         reportStageViewStatus(createStageLoadedStatusReport(result));
         setRenderState("loaded");
+        applyLatestLiveParameterFrame(renderer);
       } catch (error) {
         console.error("Stage render failed.", error);
         clearRendererAfterError(renderer);
@@ -82,7 +83,7 @@ export function StageWindowApp(): ReactElement {
       }
     };
 
-    window.runtimePlayer.runtimeExport.getLoadedPayload()
+    window.runtimePlayerStage.runtimeExport.getLoadedPayload()
       .then((payload) => {
         if (payload === null) {
           clearStage();
@@ -94,15 +95,15 @@ export function StageWindowApp(): ReactElement {
       .catch(clearStage);
 
     const unsubscribe =
-      window.runtimePlayer.runtimeExport.onLoadedPayload((payload) => {
+      window.runtimePlayerStage.runtimeExport.onLoadedPayload((payload) => {
         renderPayload(payload);
       });
     const unsubscribeStatus =
-      window.runtimePlayer.runtimeExport.onStatusChanged((status) => {
+      window.runtimePlayerStage.runtimeExport.onStatusChanged((status) => {
         handleStatusChange(status, clearStage);
       });
     const unsubscribeStageViewReset =
-      window.runtimePlayer.stageView.onResetViewRequested(() => {
+      window.runtimePlayerStage.stageView.onResetViewRequested(() => {
         if (!active) {
           return;
         }
@@ -119,12 +120,30 @@ export function StageWindowApp(): ReactElement {
           setRenderState("error");
         }
       });
+    const unsubscribeLiveParameters =
+      window.runtimePlayerStage.liveParameters.onFrame((frame) => {
+        if (!active) {
+          return;
+        }
+
+        renderer.setLiveParameterFrame(frame);
+      });
+    const unsubscribeLiveParameterClear =
+      window.runtimePlayerStage.liveParameters.onCleared(() => {
+        if (!active) {
+          return;
+        }
+
+        renderer.clearLiveParameterFrame();
+      });
 
     return () => {
       active = false;
       unsubscribe();
       unsubscribeStatus();
       unsubscribeStageViewReset();
+      unsubscribeLiveParameters();
+      unsubscribeLiveParameterClear();
       renderer.dispose();
     };
   }, []);
@@ -168,7 +187,7 @@ function createStageLoadedStatusReport(input: {
   return {
     status: "ready",
     statusLabel: "Stage ready",
-    message: "Stage is rendering the evaluated default pose.",
+    message: "Stage is rendering the model.",
     details: []
   };
 }
@@ -195,9 +214,23 @@ function createStageErrorStatusReport(input: {
 }
 
 function reportStageViewStatus(status: RuntimePlayerStageViewStatusReport): void {
-  window.runtimePlayer.stageView.reportStatus(status).catch((error: unknown) => {
+  window.runtimePlayerStage.stageView.reportStatus(status).catch((error: unknown) => {
     console.error("Stage status report failed.", error);
   });
+}
+
+function applyLatestLiveParameterFrame(
+  renderer: StaticStageCanvasRenderer
+): void {
+  window.runtimePlayerStage.liveParameters.getLatestFrame()
+    .then((frame) => {
+      if (frame !== null) {
+        renderer.setLiveParameterFrame(frame);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error("Stage live parameter frame read failed.", error);
+    });
 }
 
 function clearRendererAfterError(renderer: StaticStageCanvasRenderer): void {

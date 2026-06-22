@@ -29,7 +29,10 @@ export default defineConfig({
         exclude: workspacePackagesToBundleInElectron
       },
       lib: {
-        entry: path.resolve(sourceRoot, "preload/preload.ts")
+        entry: {
+          preload: path.resolve(sourceRoot, "preload/preload.ts"),
+          "stage-preload": path.resolve(sourceRoot, "preload/stage-preload.ts")
+        }
       }
     }
   },

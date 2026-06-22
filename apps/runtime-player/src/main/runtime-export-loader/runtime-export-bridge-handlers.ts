@@ -22,6 +22,9 @@ export interface RegisterRuntimeExportBridgeHandlersInput {
   readonly windows: RuntimePlayerWindowSet;
   readonly session?: RuntimeExportSessionState;
   readonly loadDirectory?: RuntimeExportDirectoryLoader;
+  readonly onRuntimeExportChanging?: () => void;
+  readonly onRuntimeExportLoaded?: (payload: RuntimeExportLoadedPayload) => void;
+  readonly onRuntimeExportCleared?: () => void;
 }
 
 export function registerRuntimeExportBridgeHandlers(
@@ -38,7 +41,16 @@ export function registerRuntimeExportBridgeHandlers(
     openRuntimeExportDirectory({
       windows: input.windows,
       session,
-      loadDirectory
+      loadDirectory,
+      ...(input.onRuntimeExportChanging === undefined
+        ? {}
+        : { onRuntimeExportChanging: input.onRuntimeExportChanging }),
+      ...(input.onRuntimeExportLoaded === undefined
+        ? {}
+        : { onRuntimeExportLoaded: input.onRuntimeExportLoaded }),
+      ...(input.onRuntimeExportCleared === undefined
+        ? {}
+        : { onRuntimeExportCleared: input.onRuntimeExportCleared })
     })
   );
 
@@ -49,6 +61,9 @@ async function openRuntimeExportDirectory(input: {
   readonly windows: RuntimePlayerWindowSet;
   readonly session: RuntimeExportSessionState;
   readonly loadDirectory: RuntimeExportDirectoryLoader;
+  readonly onRuntimeExportChanging?: () => void;
+  readonly onRuntimeExportLoaded?: (payload: RuntimeExportLoadedPayload) => void;
+  readonly onRuntimeExportCleared?: () => void;
 }): Promise<RuntimeExportOpenDirectoryResult> {
   const selection = await dialog.showOpenDialog(input.windows.controlWindow, {
     title: "Open Runtime Export",
@@ -64,6 +79,7 @@ async function openRuntimeExportDirectory(input: {
   }
 
   const directoryPath = selection.filePaths[0];
+  input.onRuntimeExportChanging?.();
   broadcastStatus(
     input.windows,
     input.session.setLoading(directoryPath)
@@ -76,6 +92,7 @@ async function openRuntimeExportDirectory(input: {
       payload: loaded.payload
     });
 
+    input.onRuntimeExportLoaded?.(loaded.payload);
     broadcastStatus(input.windows, status);
     sendToWindow(
       input.windows.stageWindow,
@@ -94,6 +111,7 @@ async function openRuntimeExportDirectory(input: {
       failedAtIso: new Date().toISOString()
     });
 
+    input.onRuntimeExportCleared?.();
     broadcastStatus(input.windows, status);
 
     return {
