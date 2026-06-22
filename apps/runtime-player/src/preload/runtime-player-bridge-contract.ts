@@ -2,6 +2,7 @@ import type {
   RuntimeExportApi,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 
 export const runtimePlayerPlaceholderActions = [
   "open-settings",
@@ -80,6 +81,7 @@ export type RuntimePlayerStageViewApi = {
 
 export type RuntimePlayerApi = {
   readonly runtimeExport: RuntimeExportApi;
+  readonly input: RuntimePlayerInputApi;
   readonly stageView: RuntimePlayerStageViewApi;
   readonly getStartupStatus: () => Promise<RuntimePlayerStartupStatus>;
   readonly getStageStatus: () => Promise<RuntimePlayerStageStatus>;

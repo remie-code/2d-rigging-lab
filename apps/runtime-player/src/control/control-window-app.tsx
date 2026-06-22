@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import {
+  Activity,
   AlertTriangle,
-  Bug,
   Crosshair,
   FolderOpen,
   Loader2,
@@ -10,16 +10,23 @@ import {
   Plug,
   RotateCcw,
   Settings,
-  Unplug,
-  WifiOff
+  Unplug
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import {
+  InputDiagnosticsPanel,
+  type InputDiagnosticsCopyState
+} from "./input-diagnostics-panel";
 import type {
   RuntimePlayerPlaceholderAction,
   RuntimePlayerStageViewStatus,
   RuntimePlayerStartupStatus
 } from "../preload/runtime-player-bridge-contract";
+import type {
+  RuntimePlayerInputDiagnosticsSnapshot,
+  RuntimePlayerInputStatus
+} from "../preload/input-bridge-contract";
 import type {
   RuntimeExportOpenDirectoryResult,
   RuntimeExportStatus
@@ -37,9 +44,19 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerStartupStatus | null>(null);
   const [runtimeExportStatus, setRuntimeExportStatus] =
     useState<RuntimeExportStatus | null>(null);
+  const [inputSourceStatus, setInputSourceStatus] =
+    useState<RuntimePlayerInputStatus | null>(null);
+  const [inputDiagnostics, setInputDiagnostics] =
+    useState<RuntimePlayerInputDiagnosticsSnapshot | null>(null);
   const [stageViewStatus, setStageViewStatus] =
     useState<RuntimePlayerStageViewStatus | null>(null);
   const [feedback, setFeedback] = useState<ControlFeedback | null>(null);
+  const [receivePortInput, setReceivePortInput] = useState("49983");
+  const [iphoneHostInput, setIphoneHostInput] = useState("");
+  const [inputBusy, setInputBusy] = useState(false);
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+  const [copyDiagnosticsState, setCopyDiagnosticsState] =
+    useState<InputDiagnosticsCopyState>("idle");
 
   useEffect(() => {
     let active = true;
@@ -61,6 +78,19 @@ export function ControlWindowApp(): ReactElement {
         setStageViewStatus(status);
       }
     });
+    window.runtimePlayer.input.getStatus().then((status) => {
+      if (active) {
+        setInputSourceStatus(status);
+        setInputDiagnostics(status.diagnostics);
+        setReceivePortInput(String(status.receivePort));
+        setIphoneHostInput(status.iphoneHost ?? "");
+      }
+    });
+    window.runtimePlayer.input.getDiagnostics().then((diagnostics) => {
+      if (active) {
+        setInputDiagnostics(diagnostics);
+      }
+    });
 
     const unsubscribeRuntimeExport =
       window.runtimePlayer.runtimeExport.onStatusChanged((status) => {
@@ -74,11 +104,26 @@ export function ControlWindowApp(): ReactElement {
           setStageViewStatus(status);
         }
       });
+    const unsubscribeInputStatus =
+      window.runtimePlayer.input.onStatusChanged((status) => {
+        if (active) {
+          setInputSourceStatus(status);
+          setInputDiagnostics(status.diagnostics);
+        }
+      });
+    const unsubscribeInputDiagnostics =
+      window.runtimePlayer.input.onDiagnosticsChanged((diagnostics) => {
+        if (active) {
+          setInputDiagnostics(diagnostics);
+        }
+      });
 
     return () => {
       active = false;
       unsubscribeRuntimeExport();
       unsubscribeStageView();
+      unsubscribeInputStatus();
+      unsubscribeInputDiagnostics();
     };
   }, []);
 
@@ -104,12 +149,83 @@ export function ControlWindowApp(): ReactElement {
     setFeedback(createRuntimeExportFeedback(result));
   }
 
+  async function connectInputSource(): Promise<void> {
+    const receivePort = parseReceivePortInput(receivePortInput);
+
+    if (receivePort === null) {
+      setFeedback({
+        message: "Receive port must be an integer from 1 to 65535.",
+        tone: "error"
+      });
+      return;
+    }
+
+    setInputBusy(true);
+    setFeedback(null);
+
+    try {
+      const status = await window.runtimePlayer.input.connect({
+        receivePort,
+        iphoneHost: iphoneHostInput.trim()
+      });
+      setInputSourceStatus(status);
+      setInputDiagnostics(status.diagnostics);
+      setFeedback({
+        message: getInputConnectFeedback(status),
+        tone: status.connectionState === "error" ? "error" : "success"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    } finally {
+      setInputBusy(false);
+    }
+  }
+
+  async function disconnectInputSource(): Promise<void> {
+    setInputBusy(true);
+    setFeedback(null);
+
+    try {
+      const status = await window.runtimePlayer.input.disconnect();
+      setInputSourceStatus(status);
+      setInputDiagnostics(status.diagnostics);
+      setFeedback({
+        message: "Input receiver stopped.",
+        tone: "neutral"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    } finally {
+      setInputBusy(false);
+    }
+  }
+
+  async function copyInputDiagnostics(): Promise<void> {
+    try {
+      const payload = await window.runtimePlayer.input.copyDiagnostics();
+      await writeClipboardText(JSON.stringify(payload, null, 2));
+      setCopyDiagnosticsState("copied");
+      setFeedback({
+        message: "Input diagnostics copied.",
+        tone: "success"
+      });
+    } catch (error) {
+      setCopyDiagnosticsState("error");
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   const runtimeExportStatusLabel =
     runtimeExportStatus?.statusLabel ?? pendingStatusLabel;
-  const inputStatus =
-    startupStatus?.input.connectionState === "not-connected"
-      ? "Not connected"
-      : "Checking";
   const stageWindowStatus =
     startupStatus?.stage.windowState === "created" ? "Created" : "Checking";
   const stageViewStatusLabel =
@@ -129,6 +245,9 @@ export function ControlWindowApp(): ReactElement {
     : runtimeExportStatus?.status === "error"
       ? "red"
       : "amber";
+  const inputActive = isInputReceiverActive(inputSourceStatus);
+  const inputDisconnectEnabled =
+    inputSourceStatus !== null && inputSourceStatus.connectionState !== "idle";
 
   return (
     <main className="min-h-screen bg-[#101214] text-neutral-100">
@@ -146,7 +265,9 @@ export function ControlWindowApp(): ReactElement {
             </p>
           </div>
         </div>
-        <StatusPill tone="amber">{inputStatus}</StatusPill>
+        <StatusPill tone={getInputStatusPillTone(inputSourceStatus)}>
+          {getInputStatusPillLabel(inputSourceStatus)}
+        </StatusPill>
         <StatusPill tone={runtimeExportTone}>
           {runtimeExportLoadedLabel}
         </StatusPill>
@@ -241,24 +362,71 @@ export function ControlWindowApp(): ReactElement {
           <Panel title="Input Source">
             <StatusRow label="Source" value="iFacialMocap" />
             <StatusRow label="Transport" value="UDP" />
-            <StatusRow label="Receive port" value="49983" />
+            <StatusRow
+              label="Connection"
+              value={getInputConnectionLabel(inputSourceStatus)}
+            />
+            <StatusRow
+              label="Local IP"
+              value={formatInputLocalIps(inputSourceStatus)}
+            />
+            <StatusRow
+              label="Remote"
+              value={formatInputRemote(inputSourceStatus)}
+            />
+            <StatusRow label="FPS" value={formatInputFps(inputSourceStatus)} />
+            <StatusRow
+              label="Last packet"
+              value={formatInputLastPacket(inputSourceStatus)}
+            />
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs font-semibold text-neutral-500">
+                  Receive port
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={receivePortInput}
+                  onChange={(event) => setReceivePortInput(event.target.value)}
+                  disabled={inputActive || inputBusy}
+                  className="min-h-10 rounded-md border border-neutral-700 bg-neutral-950 px-3 text-neutral-100 outline-none focus:border-teal-500 disabled:opacity-60"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs font-semibold text-neutral-500">
+                  iPhone IP
+                </span>
+                <input
+                  type="text"
+                  value={iphoneHostInput}
+                  onChange={(event) => setIphoneHostInput(event.target.value)}
+                  disabled={inputActive || inputBusy}
+                  placeholder="Optional"
+                  className="min-h-10 rounded-md border border-neutral-700 bg-neutral-950 px-3 text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-teal-500 disabled:opacity-60"
+                />
+              </label>
+            </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <IconTextButton
-                icon={Plug}
-                label="Connect"
-                onClick={() => void runPlaceholderAction("connect-input")}
+                icon={inputBusy ? Loader2 : Plug}
+                label={inputBusy ? "Connecting" : "Connect"}
+                onClick={() => void connectInputSource()}
                 variant="secondary"
+                disabled={inputBusy || inputActive}
               />
               <IconTextButton
                 icon={Unplug}
                 label="Disconnect"
-                onClick={() => void runPlaceholderAction("disconnect-input")}
+                onClick={() => void disconnectInputSource()}
                 variant="ghost"
+                disabled={inputBusy || !inputDisconnectEnabled}
               />
             </div>
             <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500">
-              <WifiOff aria-hidden="true" className="size-4 text-amber-300" />
-              Network receive is not active in this wave.
+              <Activity aria-hidden="true" className="size-4 text-teal-300" />
+              <span>{getInputActivityLabel(inputSourceStatus)}</span>
             </div>
           </Panel>
 
@@ -303,22 +471,14 @@ export function ControlWindowApp(): ReactElement {
           </Panel>
         </section>
 
-        <section className="flex flex-col gap-3 rounded-md border border-neutral-800 bg-[#151716] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-neutral-100">
-              Debug
-            </h2>
-            <p className="mt-1 text-xs text-neutral-500">
-              Developer diagnostics placeholder.
-            </p>
-          </div>
-          <IconTextButton
-            icon={Bug}
-            label="Debug"
-            onClick={() => void runPlaceholderAction("open-debug")}
-            variant="ghost"
-          />
-        </section>
+        <InputDiagnosticsPanel
+          status={inputSourceStatus}
+          diagnostics={inputDiagnostics}
+          expanded={diagnosticsExpanded}
+          copyState={copyDiagnosticsState}
+          onToggleExpanded={() => setDiagnosticsExpanded((value) => !value)}
+          onCopyDiagnostics={() => void copyInputDiagnostics()}
+        />
 
         <div
           aria-live="polite"
@@ -354,6 +514,196 @@ function createRuntimeExportFeedback(
     message: result.runtimeExport.error.message,
     tone: "error"
   };
+}
+
+function parseReceivePortInput(value: string): number | null {
+  const port = Number(value);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null;
+  }
+
+  return port;
+}
+
+function getInputConnectFeedback(status: RuntimePlayerInputStatus): string {
+  if (status.connectionState === "error") {
+    return status.errorMessage ?? "Input receiver failed to start.";
+  }
+
+  if (status.iphoneHost !== undefined) {
+    const handshake = status.diagnostics.handshake;
+    if (handshake?.result === "error") {
+      return `Listening on UDP ${status.receivePort}; start request failed: ${handshake.errorMessage ?? "unknown error"}.`;
+    }
+
+    if (handshake?.result === "sent") {
+      return `Listening on UDP ${status.receivePort}; start request sent to ${status.iphoneHost}.`;
+    }
+
+    return `Listening on UDP ${status.receivePort}; start request pending for ${status.iphoneHost}.`;
+  }
+
+  return `Listening on UDP ${status.receivePort}.`;
+}
+
+function isInputReceiverActive(
+  status: RuntimePlayerInputStatus | null
+): boolean {
+  return (
+    status?.connectionState === "listening" ||
+    status?.connectionState === "receiving" ||
+    status?.connectionState === "stale"
+  );
+}
+
+function getInputStatusPillTone(
+  status: RuntimePlayerInputStatus | null
+): "amber" | "teal" | "red" {
+  if (status?.connectionState === "receiving") {
+    return "teal";
+  }
+
+  if (status?.connectionState === "error") {
+    return "red";
+  }
+
+  return "amber";
+}
+
+function getInputStatusPillLabel(
+  status: RuntimePlayerInputStatus | null
+): string {
+  if (status === null) {
+    return "Input checking";
+  }
+
+  if (status.connectionState === "receiving") {
+    return "Input receiving";
+  }
+
+  if (status.connectionState === "listening") {
+    return "Input listening";
+  }
+
+  if (status.connectionState === "stale") {
+    return "Input stale";
+  }
+
+  if (status.connectionState === "error") {
+    return "Input error";
+  }
+
+  return "Input idle";
+}
+
+function getInputConnectionLabel(
+  status: RuntimePlayerInputStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  if (status.connectionState === "error") {
+    return status.errorMessage ?? "Error";
+  }
+
+  return status.connectionState;
+}
+
+function formatInputLocalIps(
+  status: RuntimePlayerInputStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  if (status.localIpCandidates.length === 0) {
+    return "None detected";
+  }
+
+  return status.localIpCandidates.join(", ");
+}
+
+function formatInputRemote(status: RuntimePlayerInputStatus | null): string {
+  if (status?.remote === undefined) {
+    return "None";
+  }
+
+  return `${status.remote.address}:${status.remote.port}`;
+}
+
+function formatInputFps(status: RuntimePlayerInputStatus | null): string {
+  if (status?.estimatedFps === undefined) {
+    return "Unknown";
+  }
+
+  return `${formatControlNumber(status.estimatedFps)} fps`;
+}
+
+function formatInputLastPacket(
+  status: RuntimePlayerInputStatus | null
+): string {
+  if (status?.lastPacketAgeMs === undefined) {
+    return "None";
+  }
+
+  return `${status.lastPacketAgeMs} ms ago`;
+}
+
+function getInputActivityLabel(status: RuntimePlayerInputStatus | null): string {
+  if (status === null) {
+    return "Checking input receiver.";
+  }
+
+  if (status.connectionState === "listening") {
+    return "Listening for iFacialMocap UDP packets.";
+  }
+
+  if (status.connectionState === "receiving") {
+    return `${status.packetCount} packets received.`;
+  }
+
+  if (status.connectionState === "stale") {
+    return "No recent packet received.";
+  }
+
+  if (status.connectionState === "error") {
+    return status.errorMessage ?? "Input receiver error.";
+  }
+
+  return "Receiver is idle.";
+}
+
+function formatControlNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+async function writeClipboardText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText !== undefined) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  document.body.append(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Clipboard write failed.");
+    }
+  } finally {
+    textArea.remove();
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function getRuntimeExportDirectoryLabel(

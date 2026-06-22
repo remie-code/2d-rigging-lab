@@ -23,6 +23,9 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave1-plan.md](orchestration/player-wave1-plan.md) | Completed / final pass | Runtime Player Wave1: Electron app shell + Control/Stage placeholder screen |
 | [orchestration/player-wave2-plan.md](orchestration/player-wave2-plan.md) | Completed / final pass | Runtime Player Wave2: Runtime Export directory load + static Stage render |
 | [orchestration/player-wave3-plan.md](orchestration/player-wave3-plan.md) | Completed / final pass | Runtime Player Wave3: runtime-core evaluated default pose + Stage pan/zoom/reset view |
+| [orchestration/player-wave4-plan.md](orchestration/player-wave4-plan.md) | Completed / final pass | Runtime Player Wave4: iFacialMocap UDP receive + tracking debug diagnostics |
+| [orchestration/player-wave5-plan.md](orchestration/player-wave5-plan.md) | Planned / ready for orchestration | Runtime Player Wave5: Tracking Setup + Live Mapping v0 |
+| [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
 | [waves/wave2/runtime-player-wave2-domain-a-runtime-export-loader-ipc-report.md](waves/wave2/runtime-player-wave2-domain-a-runtime-export-loader-ipc-report.md) | Pass | Runtime Player Wave2 Domain A Runtime Export loader + IPC contract |
@@ -32,6 +35,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave3/runtime-player-wave3-domain-a-default-pose-evaluation-adapter-report.md](waves/wave3/runtime-player-wave3-domain-a-default-pose-evaluation-adapter-report.md) | Pass | Runtime Player Wave3 Domain A evaluated default pose adapter |
 | [waves/wave3/runtime-player-wave3-domain-b-stage-evaluated-render-and-view-transform-report.md](waves/wave3/runtime-player-wave3-domain-b-stage-evaluated-render-and-view-transform-report.md) | Pass | Runtime Player Wave3 Domain B evaluated Stage render and view transform |
 | [waves/wave3/runtime-player-wave3-final-integration-report.md](waves/wave3/runtime-player-wave3-final-integration-report.md) | Pass | Runtime Player Wave3 final integration report |
+| [waves/wave4/_map.md](waves/wave4/_map.md) | Pass | Runtime Player Wave4 report map |
+| [waves/wave4/runtime-player-wave4-domain-a-input-contract-parser-normalizer-report.md](waves/wave4/runtime-player-wave4-domain-a-input-contract-parser-normalizer-report.md) | Pass | Runtime Player Wave4 Domain A input contract, parser, and normalizer |
+| [waves/wave4/runtime-player-wave4-domain-b-udp-receiver-control-diagnostics-report.md](waves/wave4/runtime-player-wave4-domain-b-udp-receiver-control-diagnostics-report.md) | Pass | Runtime Player Wave4 Domain B UDP receiver and Control diagnostics |
+| [waves/wave4/runtime-player-wave4-final-integration-report.md](waves/wave4/runtime-player-wave4-final-integration-report.md) | Pass | Runtime Player Wave4 final integration report |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -52,6 +59,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave3/runtime-player-wave3-domain-b-design-development-review.md](reviews/wave3/runtime-player-wave3-domain-b-design-development-review.md) | Pass | Runtime Player Wave3 Domain B design / development compliance review |
 | [reviews/wave3/runtime-player-wave3-domain-b-test-adequacy-review.md](reviews/wave3/runtime-player-wave3-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave3 Domain B test adequacy review |
 | [reviews/wave3/runtime-player-wave3-final-clean-integration-review.md](reviews/wave3/runtime-player-wave3-final-clean-integration-review.md) | Pass | Runtime Player Wave3 final clean integration review |
+| [reviews/wave4/_map.md](reviews/wave4/_map.md) | Pass | Runtime Player Wave4 review map |
+| [reviews/wave4/runtime-player-wave4-domain-a-spec-compliance-review.md](reviews/wave4/runtime-player-wave4-domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave4 Domain A spec compliance review |
+| [reviews/wave4/runtime-player-wave4-domain-a-design-development-review.md](reviews/wave4/runtime-player-wave4-domain-a-design-development-review.md) | Pass | Runtime Player Wave4 Domain A design / development compliance review |
+| [reviews/wave4/runtime-player-wave4-domain-a-test-adequacy-review.md](reviews/wave4/runtime-player-wave4-domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave4 Domain A test adequacy review |
+| [reviews/wave4/runtime-player-wave4-domain-b-spec-compliance-review.md](reviews/wave4/runtime-player-wave4-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave4 Domain B spec compliance review |
+| [reviews/wave4/runtime-player-wave4-domain-b-design-development-review.md](reviews/wave4/runtime-player-wave4-domain-b-design-development-review.md) | Pass | Runtime Player Wave4 Domain B design / development compliance review |
+| [reviews/wave4/runtime-player-wave4-domain-b-test-adequacy-review.md](reviews/wave4/runtime-player-wave4-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave4 Domain B test adequacy review |
+| [reviews/wave4/runtime-player-wave4-final-clean-integration-review.md](reviews/wave4/runtime-player-wave4-final-clean-integration-review.md) | Pass | Runtime Player Wave4 final clean integration review |
 
 ## 4. Current Implementation State
 
@@ -67,8 +82,13 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - User manually confirmed Runtime Player can open a real Runtime Export and display the model, but Wave2 Stage is still a raw static mesh render that does not apply parameter defaults/keyforms/deformers/opacity keyforms.
 - Runtime Player Wave3 is complete: Stage now renders runtime-core evaluated default pose output instead of the raw rest mesh final state, and Stage supports session-local wheel zoom, left-drag pan, and reset view.
 - Runtime Player Wave3 review lanes and final clean integration review passed. No source/test fix is required for Wave3 pass.
-- GUI/screenshot verification and real Runtime Export visual inspection remain manual verification items, especially alpha/clipping appearance, default pose correctness, deformer/clipping stacks, and Stage interaction feel.
+- User manually confirmed Wave3 behavior with a real Runtime Export: default-parameter model display, mouse pan, and wheel zoom work as expected.
+- Runtime Player Wave4 is complete: iFacialMocap UDP receive, parser/normalizer, main-owned input diagnostics state, 10Hz Control diagnostics throttling, Control Window connect/disconnect, Debug / Diagnostics panel, and Copy diagnostics are implemented.
+- Runtime Player Wave4 review lanes and final clean integration review passed. No source/test fix is required for Wave4 pass.
+- Runtime Player Wave4 remains a receive/parse/debug wave only. Runtime parameter mapping, model motion, body follow, head-position Stage motion, dynamics playback, TCP transport, and Stage debug UI remain out of scope.
+- User real-device diagnostics confirmed that Connect alone can receive iFacialMocap UDP frames in the current environment; handshake was not attempted, packets arrived at about 59.5fps, and parser/normalization warnings were zero in the captured sample.
+- Runtime Export load is not required for input connection or diagnostics. Runtime Export is required for Stage model display and future model parameter mapping.
 
 ## 5. Next Action
 
-Manually verify Runtime Player Wave3 with the user's real Runtime Export using [waves/wave3/runtime-player-wave3-final-integration-report.md](waves/wave3/runtime-player-wave3-final-integration-report.md). Do not proceed to iFacialMocap input adapter, runtime parameter mapping, head/body/stage derived motion, or dynamics playback until evaluated default pose rendering and Stage interaction behavior are accepted or scheduled as residual risk.
+Proceed to a Tracking Setup & Live Mapping planning gate using [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md) and [waves/wave4/runtime-player-wave4-final-integration-report.md](waves/wave4/runtime-player-wave4-final-integration-report.md). Next implementation should keep input connection, input profile, model mapping profile, and Stage Live Confirmation as distinct UX responsibilities.

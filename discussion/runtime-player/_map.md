@@ -34,7 +34,9 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Control Windowとtransparent Stage Windowを分ける。
 - Runtime Playerはface tracking engineではなくtracking input consumerである。
 - v0候補の入力ソースはiFacialMocap。
-- Runtime Export loadとstatic Stage renderは実装済みだが、実物Runtime Exportでの視覚確認と後続input adapter作業が残っている。
+- Runtime Export load、runtime-core evaluated default pose Stage render、Stage pan/zoom、iFacialMocap UDP receive / parse / normalize / Control diagnosticsは実装済み。
+- Runtime Export loadとInput Source connectionは独立しており、Runtime Export未ロードでもiFacialMocap接続とdiagnostics確認ができる。
+- 次の主題は、Input Profile / Look Forward / Auto Mapping / Model Mapping Profile / Stage Live Confirmationを含むTracking Setup & Live Mappingである。
 
 ## 5. Next Navigation
 

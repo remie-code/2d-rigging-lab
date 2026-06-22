@@ -1,0 +1,397 @@
+# Tracking Setup / Live Mapping UX
+
+> iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
+
+## 1. Goal
+
+ユーザーが得るべき体験は、「データが取れている」ではなく、「自分の顔にモデルが自然についてくる」である。
+
+そのため、次のUXはdebug viewerではなく、Tracking Setupとして設計する。
+
+主な到達点:
+
+- iFacialMocapからtracking frameを受信できる。
+- 入力側のprofile / calibration状態が分かる。
+- Runtime Exportロード後、標準parameterへAuto Mappingされる。
+- `Look Forward`で現在の正面をいつでも取り直せる。
+- Stage上でモデルがLiveに動き、ユーザーが自然さを確認できる。
+- 違和感がある箇所だけ、意味単位で調整できる。
+
+## 2. Concept Split
+
+Tracking Setupは3層に分ける。
+
+| Layer | Meaning | Model Required |
+|---|---|---|
+| Input Source | iFacialMocap接続そのもの。transport、port、remote、FPS、raw diagnostics | No |
+| Input Profile | その人、端末、カメラ位置、iFacialMocapのキャリブレーション | No |
+| Model Mapping Profile | そのモデルをどのparameterでどう動かすか | Yes |
+
+この分離は複数モデル・複数ユーザーに対応するために必要である。
+
+## 3. Input Profile Lifecycle
+
+Input Profileはモデル非依存の設定である。
+
+含む情報:
+
+- 顔回転のneutral / min / max。
+- 目線のneutral / min / max。
+- 口開閉のneutral / min / max。
+- head positionの基準値と観測range。
+- source種別とtransport。
+- 入力値の補正に必要なmetadata。
+
+含めない情報:
+
+- Runtime Export固有のparameter名。
+- モデルごとのstrength / invert。
+- Stage上のモデル表示位置。
+
+### 3.0 Storage
+
+Input ProfileはRuntime Player側のPCローカル設定として保存する。
+
+保存場所:
+
+```text
+<electron userData>/
+  input-profiles/
+    ifacialmocap/
+      profiles.json
+```
+
+理由:
+
+- Input ProfileはRuntime ExportにもEditor workspaceにも属さない。
+- ユーザー、端末、カメラ位置、iFacialMocap sourceに属する。
+- 複数モデルで使い回すべきである。
+- PCローカルのRuntime Player設定なので、Electronの`userData`が自然である。
+
+v0では1ファイル管理でよい。
+
+```json
+{
+  "schemaVersion": "runtime-player-input-profiles-v1",
+  "activeProfileId": "profile_remie_desk",
+  "profiles": [
+    {
+      "profileId": "profile_remie_desk",
+      "displayName": "Remie / desk",
+      "source": "ifacialmocap",
+      "transport": "udp",
+      "createdAtIso": "2026-06-22T00:00:00.000Z",
+      "updatedAtIso": "2026-06-22T00:00:00.000Z",
+      "calibration": {
+        "headRotationEulerDeg": {
+          "neutral": { "x": 0, "y": 0, "z": 0 },
+          "min": { "x": -20, "y": -30, "z": -15 },
+          "max": { "x": 20, "y": 30, "z": 15 },
+          "learnedSigns": {
+            "faceLeft": { "axis": "y", "direction": 1 },
+            "faceRight": { "axis": "y", "direction": -1 },
+            "tiltLeft": { "axis": "z", "direction": 1 },
+            "tiltRight": { "axis": "z", "direction": -1 }
+          }
+        },
+        "eyes": {
+          "neutral": {},
+          "min": {},
+          "max": {},
+          "learnedSigns": {}
+        },
+        "mouth": {
+          "jawOpenMin": 0,
+          "jawOpenMax": 0.8,
+          "smileMin": 0,
+          "smileMax": 0.7
+        }
+      }
+    }
+  ]
+}
+```
+
+`calibration.headRotationEulerDeg.neutral`はprofile作成時の基準値であり、毎回の`Look Forward`結果で即時上書きしない。毎回の`Look Forward`はsession neutral offsetとして別に保持する。
+
+将来、明示操作として`Save current forward to profile default`を追加してもよい。
+
+### 3.1 Existing Profile
+
+既存profileがある場合、Connect後に前回使ったInput Profileを自動選択する。
+
+```text
+Input Calibration
+Receiving: 59 fps
+Profile: Remie / iPhone front camera
+Status: Range calibrated
+[ Look Forward ] [ Record Range ] [ Profile... ]
+```
+
+ユーザーは毎回フルキャリブレーションしない。
+
+ただし、`Look Forward`は姿勢や座り位置で頻繁に必要になるため、常時押せる場所に置く。
+
+保存済みprofileの読み込みに失敗した場合は、temporary defaultsへフォールバックし、Diagnosticsに警告を出す。
+
+### 3.2 No Profile
+
+profileがない場合、キャリブレーション機能を自動的に起動するのが望ましい。
+
+```text
+No input profile
+Connect succeeded.
+
+1. Look forward
+2. Move your face, eyes, and mouth
+3. Save input profile
+
+[ Start Calibration ] [ Use temporary defaults ]
+```
+
+`Start Calibration`を主導線にする。
+
+`Use temporary defaults`は開発・デモ・急ぎの確認用の逃げ道として残す。これを選んだ場合、profileは保存されず、default rangeとsession neutralだけでLive確認する。
+
+### 3.3 Recalibration
+
+既存profileを再調整したい場合:
+
+- `Record Range`でrangeを再記録する。
+- 変更は明示的に保存する。
+- いきなり既存profileを上書きしない。
+
+別ユーザーや別環境向けには、`New Profile`または`Duplicate Profile`を用意する。
+
+```text
+Input Profiles
+- Remie / desk
+- Remie / standing
+- Guest
+
+[ New Profile ] [ Duplicate ] [ Recalibrate ]
+```
+
+## 4. Look Forward
+
+`Look Forward`は任意のタイミングで押せる必要がある。
+
+意味:
+
+- 現在の顔向きを、このセッションの正面として扱う。
+- 入力値のsession neutral offsetを更新する。
+- Input Profileの永続rangeをただちに汚さない。
+
+配置:
+
+- Control WindowのInput / Calibration領域に常時表示する。
+- Runtime Export未ロードでも使える。
+- Runtime Exportロード後もLive確認中に頻繁に使える。
+
+将来拡張:
+
+- `Save current forward to profile default` は別操作として検討する。
+
+## 5. Auto Mapping
+
+Auto MappingはRuntime Exportロード後に実行する。
+
+理由:
+
+- 出力先parameter一覧はRuntime Exportに含まれる。
+- Editor側の標準parameter名があるため、多くは自動割り当てできる。
+- 入力接続とは独立してよいが、モデルparameterなしでは最終mappingを確定できない。
+
+### 5.1 Semantic Slots
+
+Auto Mappingはraw fieldではなく、意味単位のslotとして扱う。
+
+| Slot | Input Candidate | Default Target |
+|---|---|---|
+| Head Rotation X | head rotation yaw/pitch mapping decision | `Face Angle X` |
+| Head Rotation Y | head rotation yaw/pitch mapping decision | `Face Angle Y` |
+| Head Rotation Z | head rotation roll | `Face Angle Z` |
+| Eye Blink Left | `eyeBlink_L` | `Eye Left Open` |
+| Eye Blink Right | `eyeBlink_R` | `Eye Right Open` |
+| Gaze X | eye Euler or `eyeLookIn/Out` | `Eyeball X` |
+| Gaze Y | eye Euler or `eyeLookUp/Down` | `Eyeball Y` |
+| Mouth Open | `jawOpen` | `Mouth Open` |
+| Mouth Smile | `mouthSmile_L/R` | `Mouth Smile` |
+
+Future slots:
+
+- Body Follow from head rotation / head position。
+- Stage Motion from head position。
+- Mouth vowel / expression blendshape mapping。
+
+### 5.2 Mapping Result
+
+Runtime Exportロード後、既存のModel Mapping Profileがあれば自動適用する。
+
+なければAuto Mappingで初期生成する。
+
+```text
+Model Mapping
+Profile: Auto mapping for kipfel-black
+Status: Auto mapped 5 / 5
+[ Edit Mapping ]
+```
+
+未対応parameterがある場合はwarningとして出すが、最初のLive体験を止めない。
+
+## 6. Model Mapping Profile
+
+Model Mapping Profileはモデル依存の設定である。
+
+含む情報:
+
+- semantic slot。
+- target parameter。
+- enabled / disabled。
+- invert。
+- strength。
+- output range / limit。
+- optional advanced source selection。
+
+保存場所はInput Profileとは分ける。将来候補:
+
+```text
+<electron userData>/
+  model-mapping-profiles/
+    <runtime-export-fingerprint>.json
+```
+
+含めない情報:
+
+- iPhone接続先。
+- raw input range profile。
+- session neutral。
+
+Runtime Exportを開いた時、そのモデルIDまたはexport fingerprintに紐づくModel Mapping Profileを探す。なければAuto Mappingする。
+
+## 7. Mapping Edit UX
+
+ユーザーが見るべきものはraw field名ではなく、「顔向き」「まばたき」「目線」「口」などの意味である。
+
+```text
+Model Mapping
+
+Head Rotation
+Face Angle X  <- Head horizontal     [strength] [invert]
+Face Angle Y  <- Head vertical       [strength] [invert]
+Face Angle Z  <- Head tilt           [strength] [invert]
+
+Eyes
+Eye Left Open   <- Left blink        [strength] [invert]
+Eye Right Open  <- Right blink       [strength] [invert]
+Eyeball X       <- Gaze horizontal   [strength] [invert]
+Eyeball Y       <- Gaze vertical     [strength] [invert]
+
+Mouth
+Mouth Open      <- Jaw open          [strength]
+Mouth Smile     <- Smile             [strength]
+```
+
+Advancedに逃がす項目:
+
+- raw source selection。
+- deadzone。
+- smoothing。
+- response curve。
+- per-side merge rules。
+
+## 8. Strength
+
+Strengthは、入力変化をモデルparameterへどれくらい強く反映するかを表す。
+
+概念式:
+
+```text
+normalized = (input - neutral) / calibratedRange
+output = normalized * parameterRange * strength
+```
+
+例:
+
+- 入力head yawが正面から20度。
+- calibration上の最大yawが30度。
+- `Face Angle X`のparameter範囲が `-30..30`。
+- strengthが100%。
+
+この場合、出力はおおよそ20になる。
+
+strengthが50%なら10、130%なら26になる。
+
+ユーザー向け意味:
+
+- 動きが大きすぎる: strengthを下げる。
+- 動きが小さすぎる: strengthを上げる。
+- 逆に動く: invertを切り替える。
+- 使いたくない: slotをdisableする。
+
+Blinkは実装上 `Eye Open = 1 - blink` のような変換になるためsensitivityに近いが、UX上はまずStrengthで統一する。
+
+## 9. Live Confirmation
+
+Live Confirmationは次スコープで必須である。
+
+Debug値だけでは、ユーザーは「モデルが使える状態になった」と判断できない。Stage上のモデルが実際に動くことが、Runtime Playerの中心体験である。
+
+Live Confirmationで必要なこと:
+
+- Tracking frameをruntime parameterへ反映する。
+- Stage上のモデルがinputに追従して動く。
+- Control Windowには小さく状態を出す。
+- Stageにはdebug overlayを出さない。
+
+```text
+Input receiving
+Model loaded
+Input profile ready
+Mapping ready
+Live active
+```
+
+## 10. Candidate Next Wave Scope
+
+候補名:
+
+`Runtime Player Wave5: Tracking Setup & Live Mapping v0`
+
+含めるべき範囲:
+
+- Runtime Export未ロードでもInput Checkできる現行UXを正としてdocs更新。
+- Input Profileがない場合のCalibration導線。
+- Input Profileの`userData/input-profiles/ifacialmocap/profiles.json`永続保存。
+- `Look Forward`のsession neutral実装。
+- Runtime Exportロード後のAuto Mapping。
+- Head / blink / mouth / gazeの最低限のsemantic slot mapping。
+- Slotごとのenabled / invert / strength。
+- Tracking frameをruntime parameterへ反映し、StageでLive確認できる。
+- Final integrationで、実装事実に合わせて関連screen docs / mapsを更新する。
+
+Future:
+
+- Body Follow。
+- Stage Motion。
+- persistent profile management UIの完成版。
+- smoothing / curve / deadzone。
+- TCP transport。
+- multiple input sources。
+
+## 11. Decided Items
+
+- Input ProfileはElectron `userData`配下の`input-profiles/ifacialmocap/profiles.json`へ保存する。
+- `Calibration range / learned signs`はInput Profileとして永続保存する。
+- `Look Forward`はsession neutral offsetとして扱い、profileの永続neutralをただちに上書きしない。
+- 次回Connect時は`activeProfileId`を読み、自動選択する。
+- profileがない場合はCalibration導線を主導線にする。
+- profile読み込み失敗時はtemporary defaultsへフォールバックし、Diagnosticsに警告を出す。
+
+## 12. Open Questions
+
+- Model Mapping Profileの保存形式と保存場所。
+- Runtime Export fingerprintを何で決めるか。
+- Gaze X/Yはeye Eulerを優先するか、`eyeLook*` blendshapeを優先するか。
+- Head rotationの軸符号は実機range dataで確定する。
+- `Use temporary defaults`をv0に入れるか、初回は必ずprofile作成に誘導するか。

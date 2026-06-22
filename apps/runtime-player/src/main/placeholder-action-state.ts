@@ -10,12 +10,12 @@ const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
 const placeholderMessages: Record<RuntimePlayerPlaceholderAction, string> = {
   "open-settings": "Settings are visible as a Wave1 placeholder only.",
-  "connect-input": "Input networking is not implemented in Wave1.",
-  "disconnect-input": "No input connection is active in this placeholder.",
+  "connect-input": "Input connection is handled by the Runtime Player input bridge.",
+  "disconnect-input": "Input disconnection is handled by the Runtime Player input bridge.",
   "look-forward": "Look Forward calibration is reserved for tracking input work.",
   "focus-stage": "Stage Window focus was requested.",
   "reset-stage-position": "Stage Window placement reset was requested.",
-  "open-debug": "Debug details are reserved for a later developer panel."
+  "open-debug": "Input diagnostics are available in the Control Window debug panel."
 };
 
 export function isRuntimePlayerPlaceholderAction(

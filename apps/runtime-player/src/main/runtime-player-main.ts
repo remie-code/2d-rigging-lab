@@ -1,5 +1,6 @@
 import { app } from "electron";
 
+import { registerInputBridgeHandlers } from "./input-bridge-handlers";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
 import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
@@ -14,6 +15,7 @@ export function startRuntimePlayerMain(): void {
     registerPlaceholderBridgeHandlers({ windows });
     registerStageViewBridgeHandlers({ windows });
     registerRuntimeExportBridgeHandlers({ windows });
+    const inputBridge = registerInputBridgeHandlers({ windows });
     await loadRuntimePlayerWindows(windows);
 
     app.on("activate", () => {
@@ -23,6 +25,10 @@ export function startRuntimePlayerMain(): void {
 
       windows.controlWindow.show();
       windows.controlWindow.focus();
+    });
+
+    app.on("before-quit", () => {
+      void inputBridge.disconnect();
     });
   });
 

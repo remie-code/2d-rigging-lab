@@ -6,9 +6,14 @@ import {
   type RuntimePlayerPlaceholderAction,
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
+import { inputBridgeChannels } from "./input-bridge-channels";
 import { placeholderBridgeChannels } from "./placeholder-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
+import type {
+  RuntimePlayerInputDiagnosticsSnapshot,
+  RuntimePlayerInputStatus
+} from "./input-bridge-contract";
 import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
@@ -45,6 +50,20 @@ export function installRuntimePlayerBridge(): void {
           runtimeExportBridgeChannels.loadedPayload,
           callback
         )
+    },
+    input: {
+      getStatus: () => ipcRenderer.invoke(inputBridgeChannels.getStatus),
+      connect: (request = {}) =>
+        ipcRenderer.invoke(inputBridgeChannels.connect, request),
+      disconnect: () => ipcRenderer.invoke(inputBridgeChannels.disconnect),
+      getDiagnostics: () =>
+        ipcRenderer.invoke(inputBridgeChannels.getDiagnostics),
+      copyDiagnostics: () =>
+        ipcRenderer.invoke(inputBridgeChannels.copyDiagnostics),
+      onStatusChanged: (callback) =>
+        subscribeToInputEvent(inputBridgeChannels.statusChanged, callback),
+      onDiagnosticsChanged: (callback) =>
+        subscribeToInputEvent(inputBridgeChannels.diagnosticsChanged, callback)
     },
     stageView: {
       getStatus: () =>
@@ -111,6 +130,22 @@ function subscribeToStageViewStatusEvent(
 
 function subscribeToRuntimeExportEvent<TPayload extends
   RuntimeExportLoadedPayload | RuntimeExportStatus>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToInputEvent<TPayload extends
+  RuntimePlayerInputStatus | RuntimePlayerInputDiagnosticsSnapshot>(
   channel: string,
   callback: (payload: TPayload) => void
 ): () => void {
