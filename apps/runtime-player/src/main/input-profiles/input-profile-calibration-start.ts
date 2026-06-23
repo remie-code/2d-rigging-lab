@@ -6,7 +6,9 @@ import type { InputProfile } from "./input-profile-document";
 import { InputProfileCalibrationSession } from "./input-profile-calibration-session";
 import {
   getCalibrationPromptKeysForSections,
-  getMissingInputProfileCalibrationSections
+  getMissingInputProfileCalibrationSections,
+  isInputProfileHeadPositionCalibrationSectionKey,
+  isInputProfileHeadPositionLeftRightCalibrationReady
 } from "./input-profile-calibration-sections";
 import {
   InputProfileStore,
@@ -53,7 +55,10 @@ export async function createInputProfileCalibrationSessionStart(input: {
   });
 
   if (input.command.mode === "section") {
-    if (input.command.section !== "head-position") {
+    if (
+      input.command.section === undefined ||
+      !isInputProfileHeadPositionCalibrationSectionKey(input.command.section)
+    ) {
       return {
         result: "unavailable",
         message: "Only head position section calibration is supported."
@@ -67,12 +72,25 @@ export async function createInputProfileCalibrationSessionStart(input: {
       };
     }
 
+    if (
+      input.command.section === "head-position-near-far" &&
+      !isInputProfileHeadPositionLeftRightCalibrationReady(
+        editableProfile.calibration.headPositionRaw
+      )
+    ) {
+      return {
+        result: "unavailable",
+        message: "Head position near/far calibration needs left/right calibration first."
+      };
+    }
+
     return {
       result: "ok",
       message: "Head position calibration started.",
       session: createHeadPositionCalibrationSession({
         mode: "section",
         profile: editableProfile,
+        sections: [input.command.section],
         startedAtMs: input.startedAtMs
       })
     };
@@ -101,10 +119,7 @@ export async function createInputProfileCalibrationSessionStart(input: {
     };
   }
 
-  if (
-    missingSections.length !== 1 ||
-    missingSections[0] !== "head-position"
-  ) {
+  if (!missingSections.every(isInputProfileHeadPositionCalibrationSectionKey)) {
     return {
       result: "unavailable",
       message: "Only missing head position calibration is supported."
@@ -117,6 +132,7 @@ export async function createInputProfileCalibrationSessionStart(input: {
     session: createHeadPositionCalibrationSession({
       mode: "missing-only",
       profile: editableProfile,
+      sections: missingSections,
       startedAtMs: input.startedAtMs
     })
   };
@@ -149,15 +165,16 @@ function createFullCalibrationSession(input: {
 function createHeadPositionCalibrationSession(input: {
   readonly mode: "missing-only" | "section";
   readonly profile: InputProfile;
+  readonly sections: readonly RuntimePlayerInputCalibrationSectionKey[];
   readonly startedAtMs: number;
 }): InputProfileCalibrationSession {
   return new InputProfileCalibrationSession({
     sessionId: `calibration_${input.startedAtMs}`,
     displayName: input.profile.displayName,
     mode: input.mode,
-    section: "head-position",
+    ...(input.sections.length === 1 ? { section: input.sections[0] } : {}),
     targetProfileId: input.profile.profileId,
-    promptKeys: getCalibrationPromptKeysForSections(["head-position"]),
+    promptKeys: getCalibrationPromptKeysForSections(input.sections),
     startedAtMs: input.startedAtMs
   });
 }

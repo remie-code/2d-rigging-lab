@@ -12,7 +12,8 @@ import type { TrackingVector3 } from "../../preload/input-tracking-frame-contrac
 export const inputProfileCalibrationSectionKeys = [
   "head-rotation",
   "eyes-mouth",
-  "head-position"
+  "head-position-left-right",
+  "head-position-near-far"
 ] as const satisfies readonly RuntimePlayerInputCalibrationSectionKey[];
 
 const headRotationPromptKeys = [
@@ -34,10 +35,20 @@ const eyesMouthPromptKeys = [
   "smile"
 ] as const satisfies readonly RuntimePlayerInputCalibrationPromptKey[];
 
-const headPositionPromptKeys = [
+const headPositionLeftRightPromptKeys = [
   "head-position-left",
   "head-position-right"
 ] as const satisfies readonly RuntimePlayerInputCalibrationPromptKey[];
+
+const headPositionNearFarPromptKeys = [
+  "head-position-near",
+  "head-position-far"
+] as const satisfies readonly RuntimePlayerInputCalibrationPromptKey[];
+
+export const inputProfileHeadPositionCalibrationSectionKeys = [
+  "head-position-left-right",
+  "head-position-near-far"
+] as const satisfies readonly RuntimePlayerInputCalibrationSectionKey[];
 
 export function createInputProfileCalibrationSectionStatuses(
   calibration: InputProfileCalibration | null
@@ -54,9 +65,18 @@ export function createInputProfileCalibrationSectionStatuses(
       status: calibration === null ? "missing" : "ready"
     },
     {
-      key: "head-position",
+      key: "head-position-left-right",
       label: "Head position left/right",
-      status: isInputProfileHeadPositionCalibrationReady(
+      status: isInputProfileHeadPositionLeftRightCalibrationReady(
+        calibration?.headPositionRaw
+      )
+        ? "ready"
+        : "missing"
+    },
+    {
+      key: "head-position-near-far",
+      label: "Head position near/far",
+      status: isInputProfileHeadPositionNearFarCalibrationReady(
         calibration?.headPositionRaw
       )
         ? "ready"
@@ -65,7 +85,7 @@ export function createInputProfileCalibrationSectionStatuses(
   ];
 }
 
-export function isInputProfileHeadPositionCalibrationReady(
+export function isInputProfileHeadPositionLeftRightCalibrationReady(
   headPositionRaw: InputProfileCalibration["headPositionRaw"] | undefined
 ): boolean {
   return (
@@ -75,6 +95,28 @@ export function isInputProfileHeadPositionCalibrationReady(
     isFiniteVector3(headPositionRaw.max) &&
     isUsableLearnedSign(headPositionRaw.learnedSigns?.bodyLeft) &&
     isUsableLearnedSign(headPositionRaw.learnedSigns?.bodyRight)
+  );
+}
+
+export function isInputProfileHeadPositionNearFarCalibrationReady(
+  headPositionRaw: InputProfileCalibration["headPositionRaw"] | undefined
+): boolean {
+  return (
+    headPositionRaw !== undefined &&
+    isFiniteVector3(headPositionRaw.neutral) &&
+    isFiniteVector3(headPositionRaw.min) &&
+    isFiniteVector3(headPositionRaw.max) &&
+    isUsableLearnedSign(headPositionRaw.learnedSigns?.bodyNear) &&
+    isUsableLearnedSign(headPositionRaw.learnedSigns?.bodyFar)
+  );
+}
+
+export function isInputProfileHeadPositionCalibrationSectionKey(
+  section: RuntimePlayerInputCalibrationSectionKey
+): boolean {
+  return (
+    section === "head-position-left-right" ||
+    section === "head-position-near-far"
   );
 }
 
@@ -101,8 +143,11 @@ export function getCalibrationPromptKeysForSections(
       case "eyes-mouth":
         promptKeys.push(...eyesMouthPromptKeys);
         break;
-      case "head-position":
-        promptKeys.push(...headPositionPromptKeys);
+      case "head-position-left-right":
+        promptKeys.push(...headPositionLeftRightPromptKeys);
+        break;
+      case "head-position-near-far":
+        promptKeys.push(...headPositionNearFarPromptKeys);
         break;
     }
   }

@@ -133,6 +133,59 @@ describe("RuntimePlayerBrowserSourceSession status sampling", () => {
       message: "WebGL render failed."
     });
   });
+
+  it("samples Stage display status while broadcasting every composed transform", () => {
+    let nowMs = 0;
+    const timers = createManualTimers();
+    const session = new RuntimePlayerBrowserSourceSession({
+      token: "token_fixture",
+      nowMs: () => nowMs,
+      timers,
+      statusNotificationIntervalMs: 500
+    });
+    const notifications: RuntimePlayerBrowserSourceStatus[] = [];
+    const client = createClient();
+
+    session.onStatusChanged((status) => notifications.push(status));
+    session.addClient(client);
+    notifications.length = 0;
+    client.messages.length = 0;
+
+    nowMs = 10;
+    session.publishStageDisplayState(createStageDisplayState(10), {
+      notify: "sampled"
+    });
+    nowMs = 20;
+    session.publishStageDisplayState(createStageDisplayState(20), {
+      notify: "sampled"
+    });
+
+    const stageMessages = client.messages.filter((message) =>
+      message.type === "stage-display-state-changed"
+    );
+
+    expect(stageMessages).toHaveLength(2);
+    expect(stageMessages.at(-1)).toMatchObject({
+      stageDisplayState: {
+        stageView: {
+          transform: {
+            pan: { x: 20, y: 0 }
+          }
+        }
+      }
+    });
+    expect(JSON.stringify(stageMessages.at(-1))).not.toContain("headPosition");
+    expect(JSON.stringify(stageMessages.at(-1))).not.toContain("debug");
+    expect(notifications).toHaveLength(0);
+
+    nowMs = 510;
+    timers.runNext();
+
+    expect(notifications).toHaveLength(1);
+    expect(
+      notifications[0]?.stageDisplayState.stageView.transform?.pan.x
+    ).toBe(20);
+  });
 });
 
 function createClient(): BrowserSourceSessionClient & {
@@ -161,6 +214,24 @@ function createLiveParameterFrame(sequence: number): RuntimePlayerLiveParameterF
     sourceFrameTimestampMs: 1000 + sequence * 16,
     parameterValues: {
       ParamAngleX: sequence
+    }
+  };
+}
+
+function createStageDisplayState(panX: number) {
+  return {
+    stageWindow: {
+      bounds: null
+    },
+    stageView: {
+      transform: {
+        zoomScale: 1,
+        pan: {
+          x: panX,
+          y: 0
+        },
+        coordinateSpace: "stage-viewport-px-v1" as const
+      }
     }
   };
 }

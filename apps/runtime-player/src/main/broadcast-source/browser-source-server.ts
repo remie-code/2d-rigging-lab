@@ -213,8 +213,10 @@ export class RuntimePlayerBrowserSourceServer {
   publishStageDisplayState(input: {
     readonly stageWindow: RuntimePlayerBrowserSourceStageDisplayState["stageWindow"];
     readonly stageView: RuntimePlayerBrowserSourceStageDisplayState["stageView"];
-  }): void {
-    this.#session.publishStageDisplayState(input);
+  }, options: {
+    readonly notify?: "immediate" | "sampled";
+  } = {}): void {
+    this.#session.publishStageDisplayState(input, options);
   }
 
   async #handleHttpRequest(

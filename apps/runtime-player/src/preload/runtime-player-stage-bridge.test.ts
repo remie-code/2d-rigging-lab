@@ -101,6 +101,38 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     );
   });
 
+  it("delivers display transform payloads and clears them with null", () => {
+    const api = installAndReadRuntimePlayerStageApi();
+    const callback = vi.fn();
+    const transform = createTransform({
+      zoomScale: 1.2,
+      pan: { x: 18, y: 0 }
+    });
+
+    const unsubscribe =
+      api.stageView.onApplyDisplayViewTransformRequested(callback);
+
+    expect(electronMocks.on).toHaveBeenCalledWith(
+      stageViewBridgeChannels.applyDisplayViewTransformRequested,
+      expect.any(Function)
+    );
+    const listener = electronMocks.on.mock.calls[0]?.[1] as
+      | ((event: unknown, payload: RuntimePlayerStageViewTransform | null) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.({}, transform);
+    listener?.({}, null);
+    unsubscribe();
+
+    expect(callback).toHaveBeenCalledWith(transform);
+    expect(callback).toHaveBeenCalledWith(null);
+    expect(electronMocks.removeListener).toHaveBeenCalledWith(
+      stageViewBridgeChannels.applyDisplayViewTransformRequested,
+      listener
+    );
+  });
+
   it("delivers arrangeStateChanged payloads and cleans up subscriptions", () => {
     const api = installAndReadRuntimePlayerStageApi();
     const callback = vi.fn();

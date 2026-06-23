@@ -246,15 +246,20 @@ export class RuntimePlayerBrowserSourceSession {
   publishStageDisplayState(input: {
     readonly stageWindow: RuntimePlayerBrowserSourceStageDisplayState["stageWindow"];
     readonly stageView: RuntimePlayerBrowserSourceStageDisplayState["stageView"];
-  }): void {
+  }, options: {
+    readonly notify?: BrowserSourceStatusNotificationMode;
+  } = {}): void {
     this.#stageDisplayState = {
       stageWindow: input.stageWindow,
       stageView: input.stageView,
       updatedAtIso: this.#nowIso()
     };
-    this.#updateStatus({
-      stageDisplayState: this.#stageDisplayState
-    });
+    this.#updateStatus(
+      {
+        stageDisplayState: this.#stageDisplayState
+      },
+      options.notify === undefined ? {} : { notify: options.notify }
+    );
     this.#broadcast({
       type: "stage-display-state-changed",
       protocolVersion: runtimePlayerBrowserSourceProtocolVersion,

@@ -13,13 +13,17 @@ describe("stage view bridge channels", () => {
       setArrangeMode: "runtime-player:stage-view:set-arrange-mode",
       setClickThrough: "runtime-player:stage-view:set-click-through",
       setAlwaysOnTop: "runtime-player:stage-view:set-always-on-top",
+      updateStageMotionSettings:
+        "runtime-player:stage-view:update-stage-motion-settings",
       copyWindowTitle: "runtime-player:stage-view:copy-window-title",
       getViewTransform: "runtime-player:stage-view:get-view-transform",
       getArrangeState: "runtime-player:stage-view:get-arrange-state",
       stateChanged: "runtime-player:stage-view:state-changed",
       arrangeStateChanged: "runtime-player:stage-view:arrange-state-changed",
       applyViewTransformRequested:
-        "runtime-player:stage-view:apply-view-transform-requested"
+        "runtime-player:stage-view:apply-view-transform-requested",
+      applyDisplayViewTransformRequested:
+        "runtime-player:stage-view:apply-display-view-transform-requested"
     });
   });
 });

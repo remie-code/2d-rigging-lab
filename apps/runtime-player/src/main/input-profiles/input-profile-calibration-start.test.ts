@@ -33,12 +33,41 @@ describe("createInputProfileCalibrationSessionStart", () => {
     expect(result.result === "ok" ? result.session.getSnapshot() : null)
       .toMatchObject({
         mode: "missing-only",
-        section: "head-position",
         targetProfileId: "profile_desk",
         prompts: [
           { key: "look-forward" },
           { key: "head-position-left" },
-          { key: "head-position-right" }
+          { key: "head-position-right" },
+          { key: "head-position-near" },
+          { key: "head-position-far" }
+        ],
+        totalPromptCount: 5
+      });
+  });
+
+  it("starts missing-only near/far calibration when left/right is ready", async () => {
+    const store = await createStoreWithLateralHeadPositionProfile();
+
+    const result = await createInputProfileCalibrationSessionStart({
+      command: {
+        displayName: "Desk",
+        mode: "missing-only"
+      },
+      store,
+      temporaryDefaultsActive: false,
+      startedAtMs: 1000
+    });
+
+    expect(result.result).toBe("ok");
+    expect(result.result === "ok" ? result.session.getSnapshot() : null)
+      .toMatchObject({
+        mode: "missing-only",
+        section: "head-position-near-far",
+        targetProfileId: "profile_desk",
+        prompts: [
+          { key: "look-forward" },
+          { key: "head-position-near" },
+          { key: "head-position-far" }
         ],
         totalPromptCount: 3
       });
@@ -87,7 +116,7 @@ describe("createInputProfileCalibrationSessionStart", () => {
       command: {
         displayName: "Desk",
         mode: "section",
-        section: "head-position"
+        section: "head-position-left-right"
       },
       store,
       temporaryDefaultsActive: false,
@@ -97,6 +126,26 @@ describe("createInputProfileCalibrationSessionStart", () => {
     expect(result).toEqual({
       result: "unavailable",
       message: "Head position recalibration needs a saved input profile."
+    });
+  });
+
+  it("rejects near/far section calibration before left/right is ready", async () => {
+    const store = await createStoreWithProfile();
+
+    const result = await createInputProfileCalibrationSessionStart({
+      command: {
+        displayName: "Desk",
+        mode: "section",
+        section: "head-position-near-far"
+      },
+      store,
+      temporaryDefaultsActive: false,
+      startedAtMs: 1000
+    });
+
+    expect(result).toEqual({
+      result: "unavailable",
+      message: "Head position near/far calibration needs left/right calibration first."
     });
   });
 
@@ -133,6 +182,8 @@ describe("createInputProfileCalibrationSessionStart", () => {
     recordCurrentPrompt(start.session, "look-forward");
     recordCurrentPrompt(start.session, "head-position-left");
     recordCurrentPrompt(start.session, "head-position-right");
+    recordCurrentPrompt(start.session, "head-position-near");
+    recordCurrentPrompt(start.session, "head-position-far");
 
     const baseProfile = await findInputProfileById(
       store,
@@ -175,11 +226,13 @@ describe("createInputProfileCalibrationSessionStart", () => {
     expect(persisted?.calibration.mouth).toEqual(before.calibration.mouth);
     expect(persisted?.calibration.headPositionRaw).toEqual({
       neutral: { x: 0, y: 0, z: 0 },
-      min: { x: -0.18, y: 0, z: 0 },
-      max: { x: 0.34, y: 0, z: 0 },
+      min: { x: -0.18, y: 0, z: -0.28 },
+      max: { x: 0.34, y: 0, z: 0.22 },
       learnedSigns: {
         bodyLeft: { axis: "x", direction: -1 },
-        bodyRight: { axis: "x", direction: 1 }
+        bodyRight: { axis: "x", direction: 1 },
+        bodyNear: { axis: "z", direction: -1 },
+        bodyFar: { axis: "z", direction: 1 }
       }
     });
   });
@@ -197,6 +250,36 @@ async function createStoreWithProfile(): Promise<InputProfileStore> {
   };
 
   await store.saveProfile(profile);
+
+  return store;
+}
+
+async function createStoreWithLateralHeadPositionProfile(): Promise<InputProfileStore> {
+  const userDataPath = await mkdtemp(
+    path.join(os.tmpdir(), "runtime-player-calibration-start-")
+  );
+  const store = new InputProfileStore({ userDataPath });
+  const profile = {
+    ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
+    profileId: "profile_desk",
+    displayName: "Desk"
+  };
+
+  await store.saveProfile({
+    ...profile,
+    calibration: {
+      ...profile.calibration,
+      headPositionRaw: {
+        neutral: { x: 0, y: 0, z: 0 },
+        min: { x: -0.18, y: 0, z: 0 },
+        max: { x: 0.34, y: 0, z: 0 },
+        learnedSigns: {
+          bodyLeft: { axis: "x", direction: -1 },
+          bodyRight: { axis: "x", direction: 1 }
+        }
+      } as const
+    }
+  });
 
   return store;
 }
@@ -245,6 +328,10 @@ function createHeadPosition(
       return { x: -0.18, y: 0, z: 0 };
     case "head-position-right":
       return { x: 0.34, y: 0, z: 0 };
+    case "head-position-near":
+      return { x: 0, y: 0, z: -0.28 };
+    case "head-position-far":
+      return { x: 0, y: 0, z: 0.22 };
     default:
       return { x: 0, y: 0, z: 0 };
   }

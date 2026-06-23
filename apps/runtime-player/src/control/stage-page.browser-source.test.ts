@@ -16,6 +16,7 @@ import type { RuntimeExportStatus } from "../preload/runtime-export-bridge-contr
 import {
   runtimePlayerStageViewCoordinateSpace,
   runtimePlayerStageWindowTitle,
+  type RuntimePlayerStageMotionSettingsUpdate,
   type RuntimePlayerStageStateSnapshot
 } from "../preload/runtime-player-bridge-contract";
 
@@ -172,11 +173,14 @@ function renderStagePage(
   return renderToStaticMarkup(
     createElement(StagePage, {
       stageState: createStageState(),
+      inputProfileStatus: null,
       runtimeExportStatus: createRuntimeExportStatus(),
       browserSourceStatus,
       onFocusStage: noop,
       onResetView: noop,
       onCenterModel: noop,
+      onUpdateStageMotionSettings: noopStageMotionUpdate,
+      onStartDepthScaleCalibration: noop,
       onSetArrangeMode: noop,
       onSetClickThrough: noop,
       onSetAlwaysOnTop: noop,
@@ -189,6 +193,12 @@ function renderStagePage(
 }
 
 function noop(): void {
+  return undefined;
+}
+
+function noopStageMotionUpdate(
+  _update: RuntimePlayerStageMotionSettingsUpdate
+): void {
   return undefined;
 }
 
@@ -227,6 +237,23 @@ function createStageState(): RuntimePlayerStageStateSnapshot {
           y: 0
         },
         coordinateSpace: runtimePlayerStageViewCoordinateSpace
+      }
+    },
+    stageMotion: {
+      settings: {
+        enabled: false,
+        horizontal: {
+          strengthPx: 80,
+          limitPx: 120,
+          invert: false
+        },
+        scale: {
+          strength: 0.06,
+          limit: 0.1,
+          invert: false
+        },
+        deadZone: 0.03,
+        reaction: 8
       }
     },
     persistence: {

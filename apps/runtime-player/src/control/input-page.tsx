@@ -90,6 +90,10 @@ export function InputPage({
   const hasMissingCalibrationSection = calibrationSections.some(
     (section) => section.status === "missing"
   );
+  const headPositionLeftRightReady = calibrationSections.some(
+    (section) =>
+      section.key === "head-position-left-right" && section.status === "ready"
+  );
   const missingOnlyDisabled =
     activeProfile !== null && !hasMissingCalibrationSection;
   const canUpdateSavedProfile =
@@ -220,11 +224,17 @@ export function InputPage({
                 <CalibrationSectionRow
                   key={section.key}
                   section={section}
-                  canUpdateHeadPosition={canUpdateSavedProfile}
-                  onCalibrateHeadPosition={() =>
+                  canUpdateSection={
+                    canUpdateSavedProfile &&
+                    (
+                      section.key !== "head-position-near-far" ||
+                      headPositionLeftRightReady
+                    )
+                  }
+                  onCalibrateSection={() =>
                     onStartCalibration({
                       mode: "section",
-                      section: "head-position"
+                      section: section.key
                     })
                   }
                 />
@@ -332,15 +342,17 @@ export function InputPage({
 
 function CalibrationSectionRow({
   section,
-  canUpdateHeadPosition,
-  onCalibrateHeadPosition
+  canUpdateSection,
+  onCalibrateSection
 }: {
   readonly section: RuntimePlayerInputCalibrationSectionStatus;
-  readonly canUpdateHeadPosition: boolean;
-  readonly onCalibrateHeadPosition: () => void;
+  readonly canUpdateSection: boolean;
+  readonly onCalibrateSection: () => void;
 }): ReactElement {
   const tone = section.status === "ready" ? "teal" : "amber";
-  const showHeadPositionAction = section.key === "head-position";
+  const showHeadPositionAction =
+    section.key === "head-position-left-right" ||
+    section.key === "head-position-near-far";
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm">
@@ -354,9 +366,9 @@ function CalibrationSectionRow({
         <IconTextButton
           icon={RefreshCcw}
           label={section.status === "ready" ? "Recalibrate" : "Calibrate"}
-          onClick={onCalibrateHeadPosition}
+          onClick={onCalibrateSection}
           variant="ghost"
-          disabled={!canUpdateHeadPosition}
+          disabled={!canUpdateSection}
         />
       ) : null}
     </div>

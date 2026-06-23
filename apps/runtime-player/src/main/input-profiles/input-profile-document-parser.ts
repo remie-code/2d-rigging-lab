@@ -9,7 +9,7 @@ import {
   type InputProfileDocument,
   type InputProfileLearnedSign
 } from "./input-profile-document";
-import { isInputProfileHeadPositionCalibrationReady } from "./input-profile-calibration-sections";
+import { isInputProfileHeadPositionLeftRightCalibrationReady } from "./input-profile-calibration-sections";
 
 export type InputProfileDocumentParseResult =
   | {
@@ -252,7 +252,7 @@ function parseHeadPositionCalibration(
     learnedSigns
   };
 
-  return isInputProfileHeadPositionCalibrationReady(headPositionRaw)
+  return isInputProfileHeadPositionLeftRightCalibrationReady(headPositionRaw)
     ? headPositionRaw
     : null;
 }
@@ -327,7 +327,9 @@ function parseHeadPositionLearnedSigns(
 
   return {
     ...readLearnedSignField(value, "bodyLeft"),
-    ...readLearnedSignField(value, "bodyRight")
+    ...readLearnedSignField(value, "bodyRight"),
+    ...readLearnedSignField(value, "bodyNear"),
+    ...readLearnedSignField(value, "bodyFar")
   };
 }
 

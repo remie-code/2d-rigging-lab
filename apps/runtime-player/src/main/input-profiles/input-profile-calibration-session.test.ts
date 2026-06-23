@@ -31,6 +31,8 @@ describe("InputProfileCalibrationSession", () => {
     recordCurrentPrompt(session, "smile");
     recordCurrentPrompt(session, "head-position-left");
     recordCurrentPrompt(session, "head-position-right");
+    recordCurrentPrompt(session, "head-position-near");
+    recordCurrentPrompt(session, "head-position-far");
 
     expect(session.getSnapshot().canFinish).toBe(true);
 
@@ -70,11 +72,13 @@ describe("InputProfileCalibrationSession", () => {
     expect(profile.calibration.mouth.smileMax).toBe(0.6);
     expect(profile.calibration.headPositionRaw).toEqual({
       neutral: { x: 0, y: 0, z: 0 },
-      min: { x: -0.18, y: 0, z: 0 },
-      max: { x: 0.34, y: 0, z: 0 },
+      min: { x: -0.18, y: 0, z: -0.28 },
+      max: { x: 0.34, y: 0, z: 0.22 },
       learnedSigns: {
         bodyLeft: { axis: "x", direction: -1 },
-        bodyRight: { axis: "x", direction: 1 }
+        bodyRight: { axis: "x", direction: 1 },
+        bodyNear: { axis: "z", direction: -1 },
+        bodyFar: { axis: "z", direction: 1 }
       }
     });
   });
@@ -108,7 +112,7 @@ describe("InputProfileCalibrationSession", () => {
       sessionId: "calibration_test",
       displayName: "Desk",
       mode: "section",
-      section: "head-position",
+      section: "head-position-left-right",
       targetProfileId: "profile_desk",
       promptKeys: [
         "look-forward",
@@ -125,7 +129,7 @@ describe("InputProfileCalibrationSession", () => {
 
     expect(session.getSnapshot()).toMatchObject({
       mode: "section",
-      section: "head-position",
+      section: "head-position-left-right",
       targetProfileId: "profile_desk",
       totalPromptCount: 3
     });
@@ -152,34 +156,74 @@ describe("InputProfileCalibrationSession", () => {
     });
   });
 
-  it("supports missing-only head position calibration prompts", () => {
+  it("updates only near/far while preserving existing left/right calibration", () => {
     const session = new InputProfileCalibrationSession({
       sessionId: "calibration_test",
       displayName: "Desk",
       mode: "missing-only",
-      section: "head-position",
+      section: "head-position-near-far",
+      targetProfileId: "profile_desk",
+      promptKeys: [
+        "look-forward",
+        "head-position-near",
+        "head-position-far"
+      ],
+      startedAtMs: 0
+    });
+    const baseProfile = createProfileWithLateralHeadPosition();
+
+    recordCurrentPrompt(session, "look-forward");
+    recordCurrentPrompt(session, "head-position-near");
+    recordCurrentPrompt(session, "head-position-far");
+
+    const updated = session.createUpdatedProfile({
+      profile: baseProfile,
+      updatedAtIso: "2026-06-23T00:00:00.000Z"
+    });
+
+    expect(updated.calibration.headPositionRaw).toEqual({
+      neutral: { x: 0, y: 0, z: 0 },
+      min: { x: -0.18, y: 0, z: -0.28 },
+      max: { x: 0.34, y: 0, z: 0.22 },
+      learnedSigns: {
+        bodyLeft: { axis: "x", direction: -1 },
+        bodyRight: { axis: "x", direction: 1 },
+        bodyNear: { axis: "z", direction: -1 },
+        bodyFar: { axis: "z", direction: 1 }
+      }
+    });
+  });
+
+  it("supports missing-only left/right and near/far head position prompts", () => {
+    const session = new InputProfileCalibrationSession({
+      sessionId: "calibration_test",
+      displayName: "Desk",
+      mode: "missing-only",
       targetProfileId: "profile_desk",
       promptKeys: [
         "look-forward",
         "head-position-left",
-        "head-position-right"
+        "head-position-right",
+        "head-position-near",
+        "head-position-far"
       ],
       startedAtMs: 0
     });
 
     expect(session.getSnapshot()).toMatchObject({
       mode: "missing-only",
-      section: "head-position",
       targetProfileId: "profile_desk",
       currentPrompt: {
         key: "look-forward"
       },
-      totalPromptCount: 3
+      totalPromptCount: 5
     });
 
     recordCurrentPrompt(session, "look-forward");
     recordCurrentPrompt(session, "head-position-left");
     recordCurrentPrompt(session, "head-position-right");
+    recordCurrentPrompt(session, "head-position-near");
+    recordCurrentPrompt(session, "head-position-far");
 
     expect(session.getSnapshot().canFinish).toBe(true);
   });
@@ -220,6 +264,30 @@ function createFrame(
   };
 }
 
+function createProfileWithLateralHeadPosition() {
+  const profile = {
+    ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
+    profileId: "profile_desk",
+    displayName: "Desk"
+  };
+
+  return {
+    ...profile,
+    calibration: {
+      ...profile.calibration,
+      headPositionRaw: {
+        neutral: { x: 0, y: 0, z: 0 },
+        min: { x: -0.18, y: 0, z: 0 },
+        max: { x: 0.34, y: 0, z: 0 },
+        learnedSigns: {
+          bodyLeft: { axis: "x", direction: -1 },
+          bodyRight: { axis: "x", direction: 1 }
+        }
+      } as const
+    }
+  };
+}
+
 function createHeadRotation(
   promptKey: RuntimePlayerInputCalibrationPromptKey
 ) {
@@ -249,6 +317,10 @@ function createHeadPosition(
       return { x: -0.18, y: 0, z: 0 };
     case "head-position-right":
       return { x: 0.34, y: 0, z: 0 };
+    case "head-position-near":
+      return { x: 0, y: 0, z: -0.28 };
+    case "head-position-far":
+      return { x: 0, y: 0, z: 0.22 };
     default:
       return { x: 0, y: 0, z: 0 };
   }

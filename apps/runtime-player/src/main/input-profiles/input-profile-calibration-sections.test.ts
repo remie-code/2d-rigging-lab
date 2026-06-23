@@ -8,7 +8,7 @@ import {
 } from "./input-profile-calibration-sections";
 
 describe("input profile calibration sections", () => {
-  it("marks old profiles as missing only head position", () => {
+  it("marks old profiles as missing both head position sections", () => {
     const profile = createTemporaryDefaultInputProfile(
       "2026-06-22T00:00:00.000Z"
     );
@@ -27,21 +27,30 @@ describe("input profile calibration sections", () => {
         status: "ready"
       },
       {
-        key: "head-position",
+        key: "head-position-left-right",
         label: "Head position left/right",
+        status: "missing"
+      },
+      {
+        key: "head-position-near-far",
+        label: "Head position near/far",
         status: "missing"
       }
     ]);
     expect(getMissingInputProfileCalibrationSections(profile.calibration))
-      .toEqual(["head-position"]);
+      .toEqual(["head-position-left-right", "head-position-near-far"]);
   });
 
-  it("uses only neutral and head position prompts for head position section", () => {
-    expect(getCalibrationPromptKeysForSections(["head-position"])).toEqual([
-      "look-forward",
-      "head-position-left",
-      "head-position-right"
-    ]);
+  it("uses only neutral and lateral prompts for left/right section", () => {
+    expect(
+      getCalibrationPromptKeysForSections(["head-position-left-right"])
+    ).toEqual(["look-forward", "head-position-left", "head-position-right"]);
+  });
+
+  it("uses only neutral and depth prompts for near/far section", () => {
+    expect(
+      getCalibrationPromptKeysForSections(["head-position-near-far"])
+    ).toEqual(["look-forward", "head-position-near", "head-position-far"]);
   });
 
   it("marks present head position without complete learned signs as missing", () => {
@@ -62,15 +71,15 @@ describe("input profile calibration sections", () => {
 
     expect(
       createInputProfileCalibrationSectionStatuses(calibration)
-        .find((section) => section.key === "head-position")
+        .find((section) => section.key === "head-position-left-right")
     ).toEqual({
-      key: "head-position",
+      key: "head-position-left-right",
       label: "Head position left/right",
       status: "missing"
     });
   });
 
-  it("marks head position ready only when both lateral learned signs exist", () => {
+  it("marks left/right ready and near/far missing for old lateral calibration", () => {
     const profile = createTemporaryDefaultInputProfile(
       "2026-06-22T00:00:00.000Z"
     );
@@ -89,11 +98,54 @@ describe("input profile calibration sections", () => {
 
     expect(
       createInputProfileCalibrationSectionStatuses(calibration)
-        .find((section) => section.key === "head-position")
-    ).toEqual({
-      key: "head-position",
-      label: "Head position left/right",
-      status: "ready"
-    });
+        .filter((section) => section.key.startsWith("head-position"))
+    ).toEqual([
+      {
+        key: "head-position-left-right",
+        label: "Head position left/right",
+        status: "ready"
+      },
+      {
+        key: "head-position-near-far",
+        label: "Head position near/far",
+        status: "missing"
+      }
+    ]);
+  });
+
+  it("marks both head position sections ready when depth signs exist", () => {
+    const profile = createTemporaryDefaultInputProfile(
+      "2026-06-22T00:00:00.000Z"
+    );
+    const calibration = {
+      ...profile.calibration,
+      headPositionRaw: {
+        neutral: { x: 0, y: 0, z: 0 },
+        min: { x: -0.1, y: 0, z: -0.2 },
+        max: { x: 0.1, y: 0, z: 0.3 },
+        learnedSigns: {
+          bodyLeft: { axis: "x", direction: -1 },
+          bodyRight: { axis: "x", direction: 1 },
+          bodyNear: { axis: "z", direction: -1 },
+          bodyFar: { axis: "z", direction: 1 }
+        }
+      } as const
+    };
+
+    expect(
+      createInputProfileCalibrationSectionStatuses(calibration)
+        .filter((section) => section.key.startsWith("head-position"))
+    ).toEqual([
+      {
+        key: "head-position-left-right",
+        label: "Head position left/right",
+        status: "ready"
+      },
+      {
+        key: "head-position-near-far",
+        label: "Head position near/far",
+        status: "ready"
+      }
+    ]);
   });
 });

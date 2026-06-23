@@ -21,10 +21,15 @@ import {
   getRuntimeExportDirectoryLabel
 } from "./control-window-formatters";
 import { BrowserSourceOutputPanel } from "./browser-source-output-panel";
+import { StageMotionPanel } from "./stage-motion-panel";
 import type {
+  RuntimePlayerStageMotionSettingsUpdate,
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerWindowBounds
 } from "../preload/runtime-player-bridge-contract";
+import type {
+  RuntimePlayerInputProfileStatus
+} from "../preload/input-profile-bridge-contract";
 import type {
   RuntimePlayerBrowserSourceStatus
 } from "../preload/browser-source-status-contract";
@@ -32,11 +37,14 @@ import type { RuntimeExportStatus } from "../preload/runtime-export-bridge-contr
 
 export function StagePage({
   stageState,
+  inputProfileStatus,
   runtimeExportStatus,
   browserSourceStatus,
   onFocusStage,
   onResetView,
   onCenterModel,
+  onUpdateStageMotionSettings,
+  onStartDepthScaleCalibration,
   onSetArrangeMode,
   onSetClickThrough,
   onSetAlwaysOnTop,
@@ -46,11 +54,16 @@ export function StagePage({
   onRetryRuntimeExportRestore
 }: {
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
+  readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly runtimeExportStatus: RuntimeExportStatus | null;
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly onFocusStage: () => void;
   readonly onResetView: () => void;
   readonly onCenterModel: () => void;
+  readonly onUpdateStageMotionSettings: (
+    update: RuntimePlayerStageMotionSettingsUpdate
+  ) => void;
+  readonly onStartDepthScaleCalibration: () => void;
   readonly onSetArrangeMode: (enabled: boolean) => void;
   readonly onSetClickThrough: (enabled: boolean) => void;
   readonly onSetAlwaysOnTop: (enabled: boolean) => void;
@@ -63,6 +76,7 @@ export function StagePage({
   const transform = stageState?.stageView.transform ?? null;
   const persistence = stageState?.persistence ?? null;
   const capture = stageState?.capture ?? null;
+  const stageMotionSettings = stageState?.stageMotion.settings ?? null;
   const restoreFailed =
     runtimeExportStatus?.status === "error" &&
     (runtimeExportStatus.operation === "startup-restore" ||
@@ -70,7 +84,7 @@ export function StagePage({
 
   return (
     <div className="grid gap-4">
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-3">
         <Panel title="Stage Window">
           <StatusRow
             label="Status"
@@ -137,6 +151,14 @@ export function StagePage({
             />
           </div>
         </Panel>
+
+        <StageMotionPanel
+          settings={stageMotionSettings}
+          persistenceLabel={persistence?.statusLabel ?? "Checking"}
+          inputProfileStatus={inputProfileStatus}
+          onUpdateSettings={onUpdateStageMotionSettings}
+          onStartDepthScaleCalibration={onStartDepthScaleCalibration}
+        />
       </section>
 
       <BrowserSourceOutputPanel

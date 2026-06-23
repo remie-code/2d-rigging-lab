@@ -36,6 +36,7 @@ export interface StaticStageCanvasRenderer {
     transform: StageViewTransform,
     options?: StaticStageViewTransformSetOptions
   ): void;
+  setDisplayViewTransform(transform: StageViewTransform | null): void;
   setViewInteractionEnabled(enabled: boolean): void;
   resetView(): void;
   centerModel(): void;
@@ -80,6 +81,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private liveAnimationFrameId: number | null = null;
   private lastLiveSourceTimestampMs: number | null = null;
   private viewTransform: StageViewTransform = createResetStageViewTransform();
+  private displayViewTransform: StageViewTransform | null = null;
   private activePanPointerId: number | null = null;
   private lastPanPoint: StageViewportPoint | null = null;
   private viewInteractionEnabled = true;
@@ -161,11 +163,19 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     options: StaticStageViewTransformSetOptions = {}
   ): void {
     this.viewTransform = normalizeStageViewTransform(transform);
+    this.displayViewTransform = null;
     this.renderCurrent();
 
     if (options.notify ?? true) {
       this.reportViewTransformChanged();
     }
+  }
+
+  setDisplayViewTransform(transform: StageViewTransform | null): void {
+    this.displayViewTransform = transform === null
+      ? null
+      : normalizeStageViewTransform(transform);
+    this.renderCurrent();
   }
 
   setViewInteractionEnabled(enabled: boolean): void {
@@ -292,7 +302,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         viewportWidth: canvasSize.width,
         viewportHeight: canvasSize.height,
         modelBounds,
-        viewTransform: this.viewTransform
+        viewTransform: this.displayViewTransform ?? this.viewTransform
       })
     );
   };
@@ -309,6 +319,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     event.preventDefault();
+    this.displayViewTransform = null;
     this.viewTransform = applyStageWheelZoom({
       transform: this.viewTransform,
       wheelDeltaY: normalizeWheelDeltaY(event, this.canvas),
@@ -359,6 +370,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     event.preventDefault();
+    this.displayViewTransform = null;
     const nextPanPoint = getCanvasViewportPoint(
       this.canvas,
       event.clientX,

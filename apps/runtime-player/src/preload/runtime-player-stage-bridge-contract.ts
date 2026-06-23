@@ -31,6 +31,9 @@ export type RuntimePlayerStageViewReporterApi = {
   readonly onApplyViewTransformRequested: (
     callback: (transform: RuntimePlayerStageViewTransform) => void
   ) => () => void;
+  readonly onApplyDisplayViewTransformRequested: (
+    callback: (transform: RuntimePlayerStageViewTransform | null) => void
+  ) => () => void;
   readonly onArrangeStateChanged: (
     callback: (state: RuntimePlayerStageArrangeState) => void
   ) => () => void;

@@ -1,8 +1,13 @@
 import {
   runtimePlayerStageViewCoordinateSpace,
+  type RuntimePlayerStageMotionSettings,
   type RuntimePlayerStageViewTransform,
   type RuntimePlayerWindowBounds
 } from "../../preload/runtime-player-bridge-contract";
+import {
+  normalizeRuntimePlayerStageMotionSettings,
+  runtimePlayerDefaultStageMotionSettings
+} from "./window-state-stage-motion-settings";
 
 export const runtimePlayerWindowStateSchemaVersion =
   "runtime-player-window-state-v1" as const;
@@ -22,6 +27,9 @@ export type RuntimePlayerWindowStateDocument = {
   >;
   readonly stageView: {
     readonly transform: RuntimePlayerStageViewTransform;
+  };
+  readonly stageMotion: {
+    readonly settings: RuntimePlayerStageMotionSettings;
   };
   readonly stageEnvironment: {
     readonly alwaysOnTop: boolean;
@@ -73,6 +81,9 @@ export function createEmptyRuntimePlayerWindowStateDocument(
     stageView: {
       transform: createResetRuntimePlayerStageViewTransform()
     },
+    stageMotion: {
+      settings: runtimePlayerDefaultStageMotionSettings
+    },
     stageEnvironment: {
       alwaysOnTop: false
     }
@@ -111,6 +122,7 @@ export function parseRuntimePlayerWindowStateDocument(
     value.stageEnvironment,
     warningMessages
   );
+  const stageMotion = parseStageMotion(value.stageMotion, warningMessages);
 
   if (transform === null && value.stageView !== undefined) {
     warningMessages.push(
@@ -127,6 +139,7 @@ export function parseRuntimePlayerWindowStateDocument(
       stageView: {
         transform: transform ?? createResetRuntimePlayerStageViewTransform()
       },
+      stageMotion,
       stageEnvironment: {
         alwaysOnTop: stageEnvironment.alwaysOnTop
       }
@@ -214,6 +227,28 @@ function parseStageEnvironment(
 
   return {
     alwaysOnTop: normalizeRuntimePlayerStageAlwaysOnTop(value.alwaysOnTop)
+  };
+}
+
+function parseStageMotion(
+  value: unknown,
+  warningMessages: string[]
+): RuntimePlayerWindowStateDocument["stageMotion"] {
+  if (value === undefined) {
+    return {
+      settings: runtimePlayerDefaultStageMotionSettings
+    };
+  }
+
+  if (!isRecord(value)) {
+    warningMessages.push("Stage Motion settings were invalid and were reset.");
+    return {
+      settings: runtimePlayerDefaultStageMotionSettings
+    };
+  }
+
+  return {
+    settings: normalizeRuntimePlayerStageMotionSettings(value.settings)
   };
 }
 

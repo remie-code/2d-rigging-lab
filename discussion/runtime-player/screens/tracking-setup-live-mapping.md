@@ -1,7 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
-> Wave8実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save / Runtime Export startup restore / Stage Capture Target controls が実装済み。Input Source auto-connect、advanced source selection、deadzone/curve、Stage Motion、Spout/OBS automationはfuture。
+> Wave11実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / near/far calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save / Runtime Export startup restore / Stage Capture Target controls / Browser Source Output / Stage Motion が実装済み。Input Source auto-connect、advanced source selection、mapping deadzone/curve、Spout/OBS automationはfuture。
 
 ## 1. Goal
 
@@ -32,6 +32,8 @@ Wave5/Wave6/Wave7 source/test evidence:
 - Wave8 adds separate Startup State for last successful Runtime Export restore at `<electron userData>/startup-state/runtime-player-startup.json`.
 - Runtime Export startup restore does not auto-connect Input Source; iFacialMocap connection remains a manual Control action.
 - Wave8 adds Stage Capture Target controls while preserving the Stage model-only boundary.
+- Wave11 adds explicit Input Profile near/far head-position calibration and Stage Motion. Stage Motion is a Stage-level display transform, not Model Mapping.
+- Browser Source receives the composed Stage transform for Stage Motion and does not receive raw tracking/debug/calibration data.
 - Manual real-device Stage body motion verification remains required for closeout confidence.
 
 ## 2. Concept Split
@@ -57,6 +59,7 @@ Input Profileはモデル非依存の設定である。
 - 目線のneutral / min / max。
 - 口開閉のneutral / min / max。
 - head positionの基準値、観測range、Body Z lateral component用のlearned signs。
+- head position near/far depth calibration range and learned signs for Stage Motion depth scale。
 - source種別とtransport。
 - 入力値の補正に必要なmetadata。
 
@@ -65,6 +68,7 @@ Input Profileはモデル非依存の設定である。
 - Runtime Export固有のparameter名。
 - モデルごとのstrength / invert。
 - Stage上のモデル表示位置。
+- Stage Motion settings。これはWindow State / local display settingsに保存する。
 
 ### 3.0 Storage
 
@@ -135,6 +139,8 @@ v0では1ファイル管理でよい。
 将来、明示操作として`Save current forward to profile default`を追加してもよい。
 
 Wave6では、同じprofile documentに任意の`calibration.headPositionRaw` sectionを追加する。古いprofileにこのsectionがなくても読み込みは成功し、head position sectionだけが`Missing`として扱われる。
+
+Wave11では、`headPositionRaw`内のreadinessを`head-position-left-right`と`head-position-near-far`に分ける。left/rightだけを持つ既存profileは読み込み可能で、near/farだけが`Missing`として扱われる。Depth Scaleはこの明示near/far calibrationが揃うまでproduction-ready扱いにしない。
 
 ### 3.1 Existing Profile
 
@@ -244,8 +250,9 @@ Auto Mappingはraw fieldではなく、意味単位のslotとして扱う。
 
 Future slots:
 
-- Stage Motion from head position。
 - Mouth vowel / expression blendshape mapping。
+
+Stage Motion from head position is not a Model Mapping slot. Wave11 implements it on the Stage page as a Stage-level display transform layered on top of saved manual Stage pan/zoom.
 
 ### 5.2 Mapping Result
 
@@ -438,6 +445,7 @@ Implementation facts:
 - Stage does not receive raw tracking frames or render debug/setup UI.
 - Wave6 Body Follow is also main-owned and emits only sanitized `parameterValues`. Stage receives no raw head position or debug body data.
 - Existing profiles without head position calibration still drive face / eyes / mouth. Body Z's position component is skipped until head position calibration exists.
+- Wave11 Stage Motion is main-owned and emits sanitized composed Stage display transform for native Stage / Browser Source. Existing profiles without near/far still allow horizontal Stage Motion readiness where applicable, but Depth Scale remains visibly missing until near/far calibration is recorded.
 
 ```text
 Input receiving
@@ -501,9 +509,20 @@ Wave8実装済み範囲:
 - Always-on-top defaults Off and is persisted in Window State.
 - Stage remains model-only in normal mode and still receives no raw tracking/debug data.
 
+Wave11実装済み範囲:
+
+- Input Profileは`head-position-left-right`と`head-position-near-far` readinessを分ける。
+- Guided calibrationに`Move closer` / `Move farther` promptsを追加する。
+- Existing profiles without near/far data still load; missing-only calibration can guide only near/far when left/right is ready.
+- `normalizeInputProfileHeadPositionDepth`により、Stage Motion depth scale用のdeterministic normalized depthを得る。
+- Stage Motion settings are on the Stage page, not Mapping.
+- Stage Motion settings auto-save through Window State / local display settings.
+- Manual Stage pan/zoom remains the saved base transform; live horizontal/scale offsets are transient and are not saved.
+- Browser Source receives only the sanitized composed Stage transform, not raw tracking frame, raw head position, calibration internals, or debug diagnostics.
+- Wave10 native local preview live rendering suspension remains active while Browser Source continues receiving Stage Motion.
+
 Future:
 
-- Stage Motion。
 - persistent profile management UIの完成版。
 - curve / deadzone。
 - TCP transport。
@@ -522,16 +541,20 @@ Future:
 - Gaze X/Yはv0ではeye Eulerを優先する。
 - Model Mapping Profile永続保存はWave7で実装済み。手動`Save`ではなく自動保存である。
 - Head position calibrationはInput Profileに含め、Runtime Export固有のModel Mapping Profileには含めない。
+- Near/far calibration is explicit Input Profile data and is required for production-grade Stage Motion depth scale.
 - Body Follow controlsはWave7でModel Mapping Profileへ永続保存する。
 - Mapping page上部の`Mapping Profile` cardで状態表示付き自動保存を扱う。
 - Window State PersistenceはModel Mapping Profileとは別に保存する。Stage Window bounds、Control Window bounds、Stage view pan/zoomを`<electron userData>/window-state/runtime-player.json`へ自動保存する。
 - Stage Page v0は空のplaceholderではなく、Stage Window bounds、Stage view transform、Focus Stage、Reset View、Center Model、保存状態を扱う実体pageとして実装済み。
 - Runtime Export startup restoreはStartup Stateとして`<electron userData>/startup-state/runtime-player-startup.json`へ保存する。Input Source auto-connectはしない。
-- Broadcast Stage Setup v0はWave8でControl recovery、Stage Arrange、click-through、always-on-top、Capture Target checklistまで実装済み。OBS automation、Spout、Stage Motion、near/far distance response、Body Angle Yは未実装でfuture。
+- Broadcast Stage Setup v0はWave8でControl recovery、Stage Arrange、click-through、always-on-top、Capture Target checklistまで実装済み。
+- Stage Motion / near-far depth scaleはWave11で実装済み。これはStage pageのdisplay transformであり、Mapping page / Model Mapping Profile / Runtime Exportには含めない。
+- OBS automation、Spout、Body Angle Yは未実装でfuture。
 
 ## 12. Open Questions
 
 - Head rotationの軸符号は実機range dataで確定する。
 - Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
-- head-position Stage Motion、near/far distance response、Spout output、OBS automationをどのwaveで扱うか。
+- Stage Motionのleft/right方向、near/far scale方向、strength/limit/dead-zone/reaction defaultsを実機とOBS Browser Sourceでどう調整するか。
+- Spout output、OBS automationをどのwaveで扱うか。
 - Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。

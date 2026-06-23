@@ -9,6 +9,7 @@ import {
   createEmptyRuntimePlayerWindowStateDocument,
   type RuntimePlayerWindowStateDocument
 } from "./window-state-document";
+import { runtimePlayerDefaultStageMotionSettings } from "./window-state-stage-motion-settings";
 import type {
   RuntimePlayerWindowStateStore,
   RuntimePlayerWindowStateStoreSnapshot
@@ -191,6 +192,57 @@ describe("RuntimePlayerWindowStateController", () => {
           alwaysOnTop: true
         }
       })
+    );
+  });
+
+  it("updates Stage Motion settings as persisted window state only", async () => {
+    vi.useFakeTimers();
+    const { controller, saveDocument } = createController({
+      debounceMs: 25,
+      nowIso: createSequentialNowIso([
+        "2026-06-23T00:03:01.000Z"
+      ])
+    });
+
+    expect(controller.getStageMotionSettings()).toEqual(
+      runtimePlayerDefaultStageMotionSettings
+    );
+
+    const settings = controller.updateStageMotionSettings({
+      enabled: true,
+      horizontal: {
+        strengthPx: 96
+      },
+      scale: {
+        invert: true
+      }
+    });
+
+    expect(settings).toEqual({
+      ...runtimePlayerDefaultStageMotionSettings,
+      enabled: true,
+      horizontal: {
+        ...runtimePlayerDefaultStageMotionSettings.horizontal,
+        strengthPx: 96
+      },
+      scale: {
+        ...runtimePlayerDefaultStageMotionSettings.scale,
+        invert: true
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(saveDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        updatedAtIso: "2026-06-23T00:03:01.000Z",
+        stageMotion: {
+          settings
+        }
+      })
+    );
+    expect(saveDocument.mock.calls[0]?.[0]).not.toHaveProperty(
+      "stageMotion.liveOffset"
     );
   });
 });

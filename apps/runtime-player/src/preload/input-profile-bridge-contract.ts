@@ -53,7 +53,9 @@ export type RuntimePlayerInputCalibrationPromptKey =
   | "open-mouth"
   | "smile"
   | "head-position-left"
-  | "head-position-right";
+  | "head-position-right"
+  | "head-position-near"
+  | "head-position-far";
 
 export type RuntimePlayerInputCalibrationMode =
   | "full"
@@ -63,7 +65,8 @@ export type RuntimePlayerInputCalibrationMode =
 export type RuntimePlayerInputCalibrationSectionKey =
   | "head-rotation"
   | "eyes-mouth"
-  | "head-position";
+  | "head-position-left-right"
+  | "head-position-near-far";
 
 export type RuntimePlayerInputCalibrationSectionReadiness =
   | "ready"

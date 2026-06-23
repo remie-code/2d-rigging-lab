@@ -28,7 +28,7 @@ describe("parseInputProfileDocument", () => {
     ).toBeUndefined();
   });
 
-  it("loads valid head position calibration when present", () => {
+  it("loads valid lateral-only head position calibration when present", () => {
     const profile = {
       ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
       calibration: {
@@ -41,6 +41,39 @@ describe("parseInputProfileDocument", () => {
           learnedSigns: {
             bodyLeft: { axis: "x", direction: -1 },
             bodyRight: { axis: "x", direction: 1 }
+          }
+        }
+      }
+    };
+    const result = parseInputProfileDocument({
+      schemaVersion: "runtime-player-input-profiles-v1",
+      activeProfileId: profile.profileId,
+      profiles: [profile]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      result.ok
+        ? result.document.profiles[0]?.calibration.headPositionRaw
+        : null
+    ).toEqual(profile.calibration.headPositionRaw);
+  });
+
+  it("loads valid near/far head position calibration when present", () => {
+    const profile = {
+      ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
+      calibration: {
+        ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z")
+          .calibration,
+        headPositionRaw: {
+          neutral: { x: 0.05, y: 0, z: -0.7 },
+          min: { x: -0.18, y: 0, z: -0.9 },
+          max: { x: 0.34, y: 0, z: -0.4 },
+          learnedSigns: {
+            bodyLeft: { axis: "x", direction: -1 },
+            bodyRight: { axis: "x", direction: 1 },
+            bodyNear: { axis: "z", direction: 1 },
+            bodyFar: { axis: "z", direction: -1 }
           }
         }
       }

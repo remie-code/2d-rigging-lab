@@ -41,12 +41,22 @@ describe("input profile bridge request validation", () => {
     expect(
       readStartCalibrationRequest({
         mode: "section",
-        section: "head-position"
+        section: "head-position-left-right"
       })
     ).toEqual({
       displayName: "iFacialMocap Profile",
       mode: "section",
-      section: "head-position"
+      section: "head-position-left-right"
+    });
+    expect(
+      readStartCalibrationRequest({
+        mode: "section",
+        section: "head-position-near-far"
+      })
+    ).toEqual({
+      displayName: "iFacialMocap Profile",
+      mode: "section",
+      section: "head-position-near-far"
     });
     expect(() => readStartCalibrationRequest({ mode: "bad" })).toThrow(
       "Input profile calibration mode is unsupported."
@@ -57,7 +67,7 @@ describe("input profile bridge request validation", () => {
     expect(() =>
       readStartCalibrationRequest({
         mode: "missing-only",
-        section: "head-position"
+        section: "head-position-near-far"
       })
     ).toThrow("Calibration section can only be used with section mode.");
   });

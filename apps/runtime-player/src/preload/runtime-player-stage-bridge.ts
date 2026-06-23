@@ -60,6 +60,11 @@ export function installRuntimePlayerStageBridge(): void {
           stageViewBridgeChannels.applyViewTransformRequested,
           callback
         ),
+      onApplyDisplayViewTransformRequested: (callback) =>
+        subscribeToStageViewDisplayTransformEvent(
+          stageViewBridgeChannels.applyDisplayViewTransformRequested,
+          callback
+        ),
       onArrangeStateChanged: (callback) =>
         subscribeToStageArrangeStateEvent(
           stageViewBridgeChannels.arrangeStateChanged,
@@ -93,6 +98,24 @@ function subscribeToStageViewTransformEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerStageViewTransform
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStageViewDisplayTransformEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStageViewTransform | null) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStageViewTransform | null
   ) => {
     callback(payload);
   };

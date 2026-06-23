@@ -4,6 +4,7 @@ import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
 import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageCaptureState,
+  RuntimePlayerStageMotionSettings,
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
   RuntimePlayerStageViewStatus,
@@ -24,11 +25,17 @@ export interface RegisterStageViewBridgeHandlersInput {
   readonly windowState: RuntimePlayerWindowStateController;
   readonly state?: RuntimePlayerStageViewStatusState;
   readonly onCaptureStateChanged?: () => void;
+  readonly onStageMotionSettingsChanged?: (
+    settings: RuntimePlayerStageMotionSettings
+  ) => void;
 }
 
 export interface RuntimePlayerStageViewBridgeRegistration {
   readonly statusState: RuntimePlayerStageViewStatusState;
   getCaptureState(): RuntimePlayerStageCaptureState;
+  publishDisplayViewTransform(
+    transform: RuntimePlayerStageViewTransform | null
+  ): void;
   disableClickThrough(): boolean;
 }
 
@@ -128,6 +135,16 @@ export function registerStageViewBridgeHandlers(
       enabled: readIpcBoolean(enabled)
     })
   );
+  ipcMain.handle(
+    stageViewBridgeChannels.updateStageMotionSettings,
+    (_event, update: unknown) =>
+      updateStageMotionSettings({
+        input,
+        getState,
+        publishState,
+        update
+      })
+  );
   ipcMain.handle(stageViewBridgeChannels.copyWindowTitle, () =>
     copyStageWindowTitle(input, getState)
   );
@@ -168,6 +185,13 @@ export function registerStageViewBridgeHandlers(
     statusState,
     getCaptureState: () =>
       createRuntimePlayerStageCaptureState(input, mutableCaptureState),
+    publishDisplayViewTransform: (transform) => {
+      sendToWindow(
+        input.windows.stageWindow,
+        stageViewBridgeChannels.applyDisplayViewTransformRequested,
+        transform
+      );
+    },
     disableClickThrough: () => {
       if (!mutableCaptureState.clickThroughEnabled) {
         return false;
@@ -192,6 +216,7 @@ function sendToWindow(
   payload: RuntimePlayerStageViewStatus |
     RuntimePlayerStageStateSnapshot |
     RuntimePlayerStageViewTransform |
+    null |
     RuntimePlayerStageArrangeState
 ): void {
   if (window.isDestroyed() || window.webContents.isDestroyed()) {
@@ -224,6 +249,9 @@ function createStageStateSnapshot(
       transform: normalizeRuntimePlayerStageViewTransform(
         input.windowState.getStageViewTransform()
       )
+    },
+    stageMotion: {
+      settings: input.windowState.getStageMotionSettings()
     },
     persistence: input.windowState.getPersistenceSnapshot(),
     capture: createRuntimePlayerStageCaptureState(input, mutableCaptureState)
@@ -394,6 +422,24 @@ function setAlwaysOnTopEnabled(input: {
     message: input.enabled
       ? "Stage always-on-top enabled."
       : "Stage always-on-top disabled.",
+    status: input.getState()
+  });
+}
+
+function updateStageMotionSettings(input: {
+  readonly input: RegisterStageViewBridgeHandlersInput;
+  readonly getState: () => RuntimePlayerStageStateSnapshot;
+  readonly publishState: () => void;
+  readonly update: unknown;
+}): RuntimePlayerStageViewActionResult {
+  const settings = input.input.windowState.updateStageMotionSettings(
+    input.update
+  );
+  input.input.onStageMotionSettingsChanged?.(settings);
+  input.publishState();
+
+  return createStageViewActionResult({
+    message: "Stage Motion settings updated.",
     status: input.getState()
   });
 }

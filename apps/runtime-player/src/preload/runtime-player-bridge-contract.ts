@@ -86,6 +86,30 @@ export type RuntimePlayerStageViewTransform = {
   readonly coordinateSpace: typeof runtimePlayerStageViewCoordinateSpace;
 };
 
+export type RuntimePlayerStageMotionSettings = {
+  readonly enabled: boolean;
+  readonly horizontal: {
+    readonly strengthPx: number;
+    readonly limitPx: number;
+    readonly invert: boolean;
+  };
+  readonly scale: {
+    readonly strength: number;
+    readonly limit: number;
+    readonly invert: boolean;
+  };
+  readonly deadZone: number;
+  readonly reaction: number;
+};
+
+export type RuntimePlayerStageMotionSettingsUpdate = {
+  readonly enabled?: boolean;
+  readonly horizontal?: Partial<RuntimePlayerStageMotionSettings["horizontal"]>;
+  readonly scale?: Partial<RuntimePlayerStageMotionSettings["scale"]>;
+  readonly deadZone?: number;
+  readonly reaction?: number;
+};
+
 export type RuntimePlayerWindowBounds = {
   readonly x: number;
   readonly y: number;
@@ -106,6 +130,9 @@ export type RuntimePlayerStageStateSnapshot = {
   readonly stageView: {
     readonly renderStatus: RuntimePlayerStageViewStatus;
     readonly transform: RuntimePlayerStageViewTransform;
+  };
+  readonly stageMotion: {
+    readonly settings: RuntimePlayerStageMotionSettings;
   };
   readonly persistence: {
     readonly status: RuntimePlayerStageStatePersistenceStatus;
@@ -156,6 +183,9 @@ export type RuntimePlayerStageViewApi = {
   ) => Promise<RuntimePlayerStageViewActionResult>;
   readonly setAlwaysOnTop: (
     enabled: boolean
+  ) => Promise<RuntimePlayerStageViewActionResult>;
+  readonly updateStageMotionSettings: (
+    update: RuntimePlayerStageMotionSettingsUpdate
   ) => Promise<RuntimePlayerStageViewActionResult>;
   readonly copyWindowTitle: () => Promise<RuntimePlayerStageViewActionResult>;
   readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;

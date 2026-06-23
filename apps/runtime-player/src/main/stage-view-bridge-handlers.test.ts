@@ -22,6 +22,7 @@ import type {
 } from "../preload/runtime-player-bridge-contract";
 import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
 import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
+import { runtimePlayerDefaultStageMotionSettings } from "./window-state/window-state-stage-motion-settings";
 import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-windows";
 import type { RuntimePlayerWindowStateController } from "./window-state/window-state-controller";
 import {
@@ -231,6 +232,63 @@ describe("registerStageViewBridgeHandlers", () => {
     expect(result.status.capture.alwaysOnTopEnabled).toBe(true);
   });
 
+  it("updateStageMotionSettings persists settings and publishes Control state", () => {
+    const { controlWindow, windowState, onStageMotionSettingsChanged } =
+      createHarness();
+
+    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.updateStageMotionSettings,
+      {
+        enabled: true,
+        horizontal: {
+          strengthPx: 96
+        }
+      }
+    );
+
+    expect(windowState.updateStageMotionSettings).toHaveBeenCalledWith({
+      enabled: true,
+      horizontal: {
+        strengthPx: 96
+      }
+    });
+    expect(onStageMotionSettingsChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        horizontal: expect.objectContaining({
+          strengthPx: 96
+        })
+      })
+    );
+    expect(controlWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.stateChanged,
+      expect.objectContaining({
+        stageMotion: expect.objectContaining({
+          settings: expect.objectContaining({
+            enabled: true
+          })
+        })
+      })
+    );
+    expect(result.status.stageMotion.settings.enabled).toBe(true);
+  });
+
+  it("publishes display transforms to the Stage window without saving base view", () => {
+    const { stageWindow, windowState, registration } = createHarness();
+    const transform = createTransform({
+      zoomScale: 1.2,
+      pan: { x: 14, y: -2 }
+    });
+
+    registration.publishDisplayViewTransform(transform);
+
+    expect(windowState.updateStageViewTransform).not.toHaveBeenCalled();
+    expect(stageWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.applyDisplayViewTransformRequested,
+      transform
+    );
+  });
+
   it("copyWindowTitle writes the stable Stage title to the clipboard", () => {
     createHarness();
 
@@ -353,6 +411,7 @@ function createHarness(options: {
   readonly stageWindow: ReturnType<typeof createFakeWindow>;
   readonly windowState: ReturnType<typeof createFakeWindowState>;
   readonly onCaptureStateChanged: ReturnType<typeof vi.fn>;
+  readonly onStageMotionSettingsChanged: ReturnType<typeof vi.fn>;
   readonly registration: ReturnType<typeof registerStageViewBridgeHandlers>;
 } {
   const controlWindow = createFakeWindow({
@@ -368,6 +427,7 @@ function createHarness(options: {
     options.windowState?.alwaysOnTop ?? false
   );
   const onCaptureStateChanged = vi.fn();
+  const onStageMotionSettingsChanged = vi.fn();
   const windows: RuntimePlayerWindowSet = {
     controlWindow:
       controlWindow as unknown as RuntimePlayerWindowSet["controlWindow"],
@@ -377,7 +437,8 @@ function createHarness(options: {
   const registration = registerStageViewBridgeHandlers({
     windows,
     windowState: windowState.controller,
-    onCaptureStateChanged
+    onCaptureStateChanged,
+    onStageMotionSettingsChanged
   });
 
   return {
@@ -385,6 +446,7 @@ function createHarness(options: {
     stageWindow,
     windowState,
     onCaptureStateChanged,
+    onStageMotionSettingsChanged,
     registration
   };
 }
@@ -430,9 +492,11 @@ function createFakeWindowState(
 ) {
   let transform = initialTransform;
   let alwaysOnTop = initialAlwaysOnTop;
+  let stageMotionSettings = runtimePlayerDefaultStageMotionSettings;
   const listeners = new Set<() => void>();
   const getStageViewTransform = vi.fn(() => transform);
   const getStageAlwaysOnTop = vi.fn(() => alwaysOnTop);
+  const getStageMotionSettings = vi.fn(() => stageMotionSettings);
   const updateStageViewTransform = vi.fn((value: unknown) => {
     transform = normalizeRuntimePlayerStageViewTransform(value);
     for (const listener of listeners) {
@@ -446,6 +510,35 @@ function createFakeWindowState(
       listener();
     }
     return alwaysOnTop;
+  });
+  const updateStageMotionSettings = vi.fn((value: unknown) => {
+    if (typeof value === "object" && value !== null && "enabled" in value) {
+      stageMotionSettings = {
+        ...stageMotionSettings,
+        enabled: value.enabled === true
+      };
+    }
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "horizontal" in value &&
+      typeof value.horizontal === "object" &&
+      value.horizontal !== null &&
+      "strengthPx" in value.horizontal &&
+      typeof value.horizontal.strengthPx === "number"
+    ) {
+      stageMotionSettings = {
+        ...stageMotionSettings,
+        horizontal: {
+          ...stageMotionSettings.horizontal,
+          strengthPx: value.horizontal.strengthPx
+        }
+      };
+    }
+    for (const listener of listeners) {
+      listener();
+    }
+    return stageMotionSettings;
   });
   const getPersistenceSnapshot = vi.fn(() => ({
     status: "saved" as const,
@@ -465,15 +558,19 @@ function createFakeWindowState(
     controller: {
       getStageViewTransform,
       getStageAlwaysOnTop,
+      getStageMotionSettings,
       updateStageViewTransform,
       updateStageAlwaysOnTop,
+      updateStageMotionSettings,
       getPersistenceSnapshot,
       subscribe
     } as unknown as RuntimePlayerWindowStateController,
     getStageViewTransform,
     getStageAlwaysOnTop,
+    getStageMotionSettings,
     updateStageViewTransform,
     updateStageAlwaysOnTop,
+    updateStageMotionSettings,
     getPersistenceSnapshot,
     subscribe
   };

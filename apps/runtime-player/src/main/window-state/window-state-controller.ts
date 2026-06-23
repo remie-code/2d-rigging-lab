@@ -1,8 +1,10 @@
 import type {
+  RuntimePlayerStageMotionSettings,
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewTransform,
   RuntimePlayerWindowBounds
 } from "../../preload/runtime-player-bridge-contract";
+import { applyRuntimePlayerStageMotionSettingsUpdate } from "./window-state-stage-motion-settings";
 import {
   normalizeRuntimePlayerStageAlwaysOnTop,
   normalizeRuntimePlayerStageViewTransform,
@@ -54,6 +56,10 @@ export class RuntimePlayerWindowStateController {
 
   getStageAlwaysOnTop(): boolean {
     return this.document.stageEnvironment.alwaysOnTop;
+  }
+
+  getStageMotionSettings(): RuntimePlayerStageMotionSettings {
+    return this.document.stageMotion.settings;
   }
 
   getPersistenceSnapshot(): RuntimePlayerStageStateSnapshot["persistence"] {
@@ -125,6 +131,26 @@ export class RuntimePlayerWindowStateController {
 
     this.scheduleSave();
     return alwaysOnTop;
+  }
+
+  updateStageMotionSettings(
+    update: unknown
+  ): RuntimePlayerStageMotionSettings {
+    const settings = applyRuntimePlayerStageMotionSettingsUpdate(
+      this.document.stageMotion.settings,
+      update
+    );
+
+    this.document = {
+      ...this.document,
+      updatedAtIso: this.nowIso(),
+      stageMotion: {
+        settings
+      }
+    };
+
+    this.scheduleSave();
+    return settings;
   }
 
   async flush(): Promise<void> {

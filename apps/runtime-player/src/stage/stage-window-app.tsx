@@ -143,6 +143,28 @@ export function StageWindowApp(): ReactElement {
           setRenderState("error");
         }
       });
+    const unsubscribeStageDisplayViewTransform =
+      window.runtimePlayerStage.stageView.onApplyDisplayViewTransformRequested(
+        (transform) => {
+          if (!active) {
+            return;
+          }
+
+          try {
+            renderer.setDisplayViewTransform(
+              transform === null ? null : readStageViewTransform(transform)
+            );
+          } catch (error) {
+            console.error("Stage display transform apply failed.", error);
+            clearRendererAfterError(renderer);
+            reportStageViewStatus(createStageErrorStatusReport({
+              message: "Stage display transform apply failed.",
+              error
+            }));
+            setRenderState("error");
+          }
+        }
+      );
     window.runtimePlayerStage.stageView.getArrangeState()
       .then(applyArrangeState)
       .catch((error: unknown) => {
@@ -174,6 +196,7 @@ export function StageWindowApp(): ReactElement {
       unsubscribe();
       unsubscribeStatus();
       unsubscribeStageViewTransform();
+      unsubscribeStageDisplayViewTransform();
       unsubscribeArrangeState();
       unsubscribeLiveParameters();
       unsubscribeLiveParameterClear();

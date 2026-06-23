@@ -222,34 +222,33 @@ Remaining manual verification:
 - Run Electron Runtime Player with real iFacialMocap input and a Runtime Export with authored Body Angle X/Z keyforms.
 - Tune default Body X/Z strengths and lag if real-device visual evidence shows the defaults feel wrong.
 
-### 3.7 Head-Position Stage Motion And Broadcast Follow-ups
+### 3.7 Head-Position Stage Motion
 
-- Status: Deferred
-- Kind: Future UX / feature
-- Priority: Medium after Broadcast Stage Setup v0 manual verification
+- Status: Done at source/test/review level through Runtime Player Wave11; manual OBS and real-device tuning pending
+- Final integration report: pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave11
+- Priority: Manual verification is high before treating tuned Stage Motion as product-ready
 
 Problem:
 
 - Wave6 intentionally stops at authored Body Angle X/Z parameter output.
-- Head position may also be useful for Stage scale, Stage translation, or near/far distance response, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
+- Head position may also be useful for Stage scale and Stage translation, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
 - Wave8 intentionally stopped at native capture-target controls and did not add Stage Motion, Spout, or OBS automation.
 - Wave9 added Browser Source Output as the primary broadcast candidate and kept Spout2 deferred.
 - Wave10 kept Browser Source as the fixed primary broadcast path and added duplicate native local preview live render suspension, sampled Control diagnostics, and Browser Source resync de-duplication.
 
-Trigger:
+Implemented outcome:
 
-- Body Follow v0 is manually verified with real iFacialMocap and a real Runtime Export.
-- User wants the on-stage model to move/scale with head position, not only body angle parameters.
-- User wants on-stage model translation/scale from head position, not only body angle parameters.
-- Browser Source manual OBS probe fails a critical condition, or the user explicitly wants Spout2/OBS automation.
-
-Desired outcome:
-
-- Decide whether head position should drive Stage translation, Stage scale, both, or neither.
-- Keep Stage Motion separate from Body Follow parameter mapping.
-- Preserve Wave8 capture-safe Stage controls without adding debug UI to Stage.
-- Preserve the existing rule that Stage receives sanitized display/runtime data, not raw tracking diagnostics.
-- Keep Spout2 as a separate feasibility track unless Browser Source fails a critical probe condition.
+- Input Profile now has explicit near/far head-position calibration in addition to left/right.
+- Existing Input Profiles without near/far still load; near/far is shown as missing and recoverable through Input calibration.
+- Stage Motion belongs to the Stage page, not the Mapping page.
+- Manual Stage pan/zoom remains the saved base transform.
+- Head position X adds transient horizontal Stage offset.
+- Calibrated near/far depth adds transient Stage scale offset.
+- Settings auto-save through Window State / local display settings.
+- Current live offsets and smoothed runtime state are not saved.
+- Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
+- Wave10 native local preview live rendering suspension remains effective; Browser Source continues receiving Stage Motion while native preview is suspended.
 
 Source:
 
@@ -260,12 +259,18 @@ Source:
 - [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 - [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
 - [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+- [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
+- [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
 
-Suggested next action:
+Remaining manual verification:
 
-- Complete Wave9 Browser Source manual OBS probe first.
-- If Browser Source fails a critical condition, run a Spout2 feasibility planning gate or a narrow Browser Source follow-up, depending on the observed failure.
-- If user wants model translation/scale from head position, run a separate Stage Motion planning gate.
+- Recalibrate or missing-only calibrate near/far with real iFacialMocap input.
+- Confirm left/right Stage offset direction and depth scale direction in native Stage and OBS Browser Source.
+- Tune strength, limit, invert, dead zone, and reaction with real motion.
+- Confirm manual Stage pan/zoom remains the base transform.
+- Restart Runtime Player and confirm Stage Motion settings restore.
+- Confirm Browser Source parity and Wave10 native preview suspension/resume behavior.
+- Compare CPU/GPU usage or perceived smoothness after Wave10 suspension while Stage Motion is active.
 
 ### 3.8 Model Mapping Profile Auto Save
 
@@ -361,15 +366,15 @@ Implemented scope:
 - Stage page actions: `Focus Stage`, `Reset View`, `Center Model`。
 - Save status: `Saved / Saving / Save failed` and optional `Retry`。
 
-Out of scope:
+Out of scope for Wave7:
 
 - Runtime Export auto restore。
 - Stage transparency。
 - click-through。
 - always-on-top。
 - OBS/capture settings。
-- head-position Stage Motion。
-- near/far distance response。
+- head-position Stage Motion。Completed later by Wave11.
+- near/far distance response。Completed later by Wave11 as Stage Motion depth scale.
 
 Storage:
 
@@ -462,8 +467,8 @@ Out of scope:
 - obs-websocket integration.
 - automatic OBS source creation.
 - Input Source auto-connect.
-- head-position Stage Motion.
-- near/far distance response.
+- head-position Stage Motion. Completed later by Wave11.
+- near/far distance response. Completed later by Wave11 as Stage Motion depth scale.
 
 Source:
 
@@ -486,8 +491,8 @@ Remaining manual verification:
 
 ### 3.12 OBS Browser Source Probe
 
-- Status: Done at source/test level through Wave10 performance foundation; manual OBS verification pending
-- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md))
+- Status: Done at source/test level through Wave11 Stage Motion; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md))
 - Kind: Broadcast output probe completed by Runtime Player Wave9
 - Priority: Manual verification is high before treating Browser Source as product-ready
 
@@ -513,6 +518,7 @@ Implemented outcome:
 - Native Stage local live rendering resumes after the zero-client grace period, and reconnect during grace avoids preview bounce.
 - Control reports local preview suspension and samples repeated Browser Source live-frame/renderer diagnostics without hiding important server/client/export/render transitions.
 - Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
+- Wave11 adds Stage Motion to the same Browser Source path: Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
 - Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
 
 Source:
@@ -522,8 +528,10 @@ Source:
 - [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 - [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
 - [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md)
+- [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
 - [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 - [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
+- [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
 - [../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md)
 
 Remaining manual verification:
@@ -542,6 +550,11 @@ Remaining manual verification:
 - Confirm Control reports local preview live rendering suspension while Browser Source is connected.
 - Move face/head with iFacialMocap and confirm model motion.
 - Confirm body follow/dynamics remain visible in Browser Source while native local preview live rendering is suspended.
+- Enable Stage Motion and confirm left/right Stage offset in Browser Source.
+- Confirm near/far depth scale in Browser Source after explicit near/far calibration.
+- Confirm Browser Source composition matches native local preview when native preview is active.
+- Confirm manual Stage pan/zoom remains the base transform while Stage Motion adds only transient offsets.
+- Restart Runtime Player and confirm Stage Motion settings restore.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
 - Disconnect/close OBS Browser Source and confirm native Stage local preview resumes after the grace period.
 - Compare CPU/GPU usage or perceived smoothness against the Wave9 duplicate-render baseline.
@@ -549,6 +562,6 @@ Remaining manual verification:
 
 Suggested next action:
 
-- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave10.
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave11.
 - If it passes, keep Browser Source as the primary broadcast path.
 - If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.

@@ -95,6 +95,38 @@ describe("StaticStageCanvasRenderer live suspension behavior", () => {
     expect(rendererMocks.render.mock.calls.length)
       .toBeGreaterThan(renderCountAfterPayload);
   });
+
+  it("uses display view transform without reporting it as saved base view", () => {
+    vi.stubGlobal("window", createWindowStub());
+    vi.stubGlobal("ResizeObserver", undefined);
+    vi.stubGlobal("WheelEvent", {
+      DOM_DELTA_LINE: 1,
+      DOM_DELTA_PAGE: 2
+    });
+
+    const onViewTransformChanged = vi.fn();
+    const renderer = createStaticStageCanvasRenderer(
+      createCanvasStub() as unknown as HTMLCanvasElement,
+      { onViewTransformChanged }
+    );
+
+    renderer.setPayload(createPayload());
+    renderer.setViewTransform({
+      zoomScale: 1,
+      pan: { x: 5, y: 0 }
+    });
+    renderer.setDisplayViewTransform({
+      zoomScale: 1,
+      pan: { x: 40, y: 0 }
+    });
+
+    expect(onViewTransformChanged).toHaveBeenCalledTimes(1);
+    expect(readLatestViewportTranslateX()).toBeCloseTo(91.2, 1);
+
+    renderer.setDisplayViewTransform(null);
+
+    expect(readLatestViewportTranslateX()).toBeCloseTo(56.2, 1);
+  });
 });
 
 function createWindowStub(): {
@@ -215,4 +247,12 @@ function createLiveParameterFrame(sequence: number): RuntimePlayerLiveParameterF
       ParamAngleX: sequence
     }
   };
+}
+
+function readLatestViewportTranslateX(): number {
+  const viewport = rendererMocks.render.mock.calls.at(-1)?.[1] as
+    | { stageToViewport?: { translate?: { x?: number } } }
+    | undefined;
+
+  return viewport?.stageToViewport?.translate?.x ?? Number.NaN;
 }

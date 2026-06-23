@@ -4,11 +4,16 @@ import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-
 import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
 import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
 import { LocalPreviewLiveRenderSuspensionPolicy } from "./broadcast-source/local-preview-live-render-suspension";
+import type { TrackingFrame } from "../preload/input-tracking-frame-contract";
 import type {
-  RuntimePlayerBrowserSourceStageDisplayState
-} from "../preload/browser-source-status-contract";
+  RuntimePlayerInputSessionNeutralSnapshot
+} from "../preload/input-profile-bridge-contract";
+import type {
+  RuntimePlayerStageViewTransform
+} from "../preload/runtime-player-bridge-contract";
 import { registerInputBridgeHandlers } from "./input-bridge-handlers";
 import { registerInputProfileBridgeHandlers } from "./input-profile-bridge-handlers";
+import type { InputProfile } from "./input-profiles/input-profile-document";
 import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-handlers";
 import { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
@@ -16,7 +21,14 @@ import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handl
 import { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
-import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
+import {
+  registerStageViewBridgeHandlers,
+  type RuntimePlayerStageViewBridgeRegistration
+} from "./stage-view-bridge-handlers";
+import { RuntimePlayerStageMotionRuntime } from "./stage-motion/stage-motion-runtime";
+import {
+  publishRuntimePlayerStageMotionDisplayState
+} from "./stage-motion/stage-motion-transport";
 import { RuntimePlayerStartupStateStore } from "./startup-state/runtime-player-startup-state-store";
 import { RuntimePlayerWindowStateController } from "./window-state/window-state-controller";
 import { RuntimePlayerWindowStateStore } from "./window-state/window-state-store";
@@ -67,28 +79,105 @@ export function startRuntimePlayerMain(): void {
       windows,
       statusProvider: browserSourceServer
     });
-    const publishBrowserSourceStageDisplayState = (): void => {
-      browserSourceServer.publishStageDisplayState(
-        createBrowserSourceStageDisplayState({
-          windows,
-          windowState
-        })
+    const stageMotionRuntime = new RuntimePlayerStageMotionRuntime();
+    let stageViewBridge: RuntimePlayerStageViewBridgeRegistration | null = null;
+    let isLocalPreviewLiveRenderSuspended = false;
+    let latestNativeStageDisplayTransform: RuntimePlayerStageViewTransform | null =
+      null;
+    let getLatestTrackingFrameForStageMotion = (): TrackingFrame | null => null;
+    let getSessionNeutralForStageMotion =
+      (): RuntimePlayerInputSessionNeutralSnapshot | null => null;
+    let getActiveInputProfileForStageMotion:
+      () => Promise<InputProfile | null> = async () => null;
+    const getStageWindowBoundsForBrowserSource = () =>
+      windows.stageWindow.isDestroyed()
+        ? null
+        : windows.stageWindow.getBounds();
+    const publishStageMotionTransport = (input: {
+      readonly browserSourceTransform: RuntimePlayerStageViewTransform;
+      readonly nativeDisplayTransform: RuntimePlayerStageViewTransform | null;
+      readonly notify?: "immediate" | "sampled";
+    }): void => {
+      publishRuntimePlayerStageMotionDisplayState({
+        browserSourceTransform: input.browserSourceTransform,
+        nativeDisplayTransform: input.nativeDisplayTransform,
+        stageWindowBounds: getStageWindowBoundsForBrowserSource(),
+        deliverToNativeStageWindow:
+          stageViewBridge !== null && !isLocalPreviewLiveRenderSuspended,
+        ...(input.notify === undefined ? {} : { notify: input.notify }),
+        publishBrowserSourceStageDisplayState: (state, options) => {
+          browserSourceServer.publishStageDisplayState(state, options);
+        },
+        publishNativeStageDisplayTransform: (transform) => {
+          stageViewBridge?.publishDisplayViewTransform(transform);
+        }
+      });
+    };
+    const publishNativeStageDisplayTransform = (): void => {
+      if (stageViewBridge === null || isLocalPreviewLiveRenderSuspended) {
+        return;
+      }
+
+      stageViewBridge.publishDisplayViewTransform(
+        latestNativeStageDisplayTransform
       );
     };
+    const publishLatestStageMotionDisplayState = async (input: {
+      readonly notify?: "immediate" | "sampled";
+    } = {}): Promise<void> => {
+      const trackingFrame = getLatestTrackingFrameForStageMotion();
+      const inputProfile = await getActiveInputProfileForStageMotion();
+      const result = stageMotionRuntime.update({
+        baseTransform: windowState.getStageViewTransform(),
+        settings: windowState.getStageMotionSettings(),
+        trackingFrame,
+        inputProfile,
+        sessionNeutral: inputBridgeSessionNeutralForStageMotion()
+      });
+
+      latestNativeStageDisplayTransform = result.nativeDisplayTransform;
+      publishStageMotionTransport({
+        browserSourceTransform: result.browserSourceTransform,
+        nativeDisplayTransform: result.nativeDisplayTransform,
+        ...(input.notify === undefined ? {} : { notify: input.notify })
+      });
+    };
+    const clearStageMotionDisplayTransform = (input: {
+      readonly notify?: "immediate" | "sampled";
+    } = {}): void => {
+      stageMotionRuntime.reset();
+      latestNativeStageDisplayTransform = null;
+      publishStageMotionTransport({
+        browserSourceTransform: windowState.getStageViewTransform(),
+        nativeDisplayTransform: null,
+        ...(input.notify === undefined ? {} : { notify: input.notify })
+      });
+    };
+    const inputBridgeSessionNeutralForStageMotion = () =>
+      getSessionNeutralForStageMotion();
     const unsubscribeBrowserSourceStageDisplayState =
-      windowState.subscribe(publishBrowserSourceStageDisplayState);
-    publishBrowserSourceStageDisplayState();
+      windowState.subscribe(() => {
+        void publishLatestStageMotionDisplayState({
+          notify: "immediate"
+        });
+      });
+    clearStageMotionDisplayTransform({ notify: "immediate" });
     await browserSourceServer.start().catch(() => undefined);
     let trayMenu: RuntimePlayerTrayMenuRegistration | null = null;
-    const stageViewBridge = registerStageViewBridgeHandlers({
+    stageViewBridge = registerStageViewBridgeHandlers({
       windows,
       windowState,
       onCaptureStateChanged: () => {
         trayMenu?.refresh();
+      },
+      onStageMotionSettingsChanged: () => {
+        stageMotionRuntime.reset();
+        void publishLatestStageMotionDisplayState({
+          notify: "immediate"
+        });
       }
     });
     const stageLiveParameters = registerLiveParameterBridgeHandlers({ windows });
-    let isLocalPreviewLiveRenderSuspended = false;
     const localPreviewLiveRenderPolicy =
       new LocalPreviewLiveRenderSuspensionPolicy({
         onStateChanged: (state) => {
@@ -103,12 +192,14 @@ export function startRuntimePlayerMain(): void {
 
           if (state.suspended) {
             stageLiveParameters.clearStageWindowLiveParameterFrame();
+            stageViewBridge?.publishDisplayViewTransform(null);
             return;
           }
 
           stageLiveParameters.publishLatestFrameToStageWindow({
             resetBeforePublish: true
           });
+          publishNativeStageDisplayTransform();
         }
       });
     const unsubscribeLocalPreviewLiveRenderPolicy =
@@ -127,6 +218,9 @@ export function startRuntimePlayerMain(): void {
           deliverToStageWindow: !localPreviewLiveRenderPolicy.isSuspended()
         });
         browserSourceServer.publishLiveParameterFrame(frame);
+        void publishLatestStageMotionDisplayState({
+          notify: "sampled"
+        });
       },
       publishLatestFrameToStageWindow:
         stageLiveParameters.publishLatestFrameToStageWindow,
@@ -137,6 +231,9 @@ export function startRuntimePlayerMain(): void {
       clear: () => {
         stageLiveParameters.clear();
         browserSourceServer.clearLatestFrame();
+        clearStageMotionDisplayTransform({
+          notify: "immediate"
+        });
       }
     };
     const liveMappingState = new RuntimePlayerLiveMappingState();
@@ -157,18 +254,29 @@ export function startRuntimePlayerMain(): void {
       onTrackingFrame: () => publishLatestParameterFrame(),
       onInputReset: () => {
         bodyFollowState.reset();
+        stageMotionRuntime.reset();
         clearLiveParameterFrame();
       }
     });
+    getLatestTrackingFrameForStageMotion = () =>
+      inputBridge.state.getLatestTrackingFrame();
+    getSessionNeutralForStageMotion = () =>
+      inputBridge.state.getSessionNeutral();
     const inputProfileBridge = registerInputProfileBridgeHandlers({
       windows,
       inputState: inputBridge.state,
       userDataPath: app.getPath("userData"),
       onProfileChanged: () => {
         bodyFollowState.reset();
+        stageMotionRuntime.reset();
+        void publishLatestStageMotionDisplayState({
+          notify: "immediate"
+        });
         return publishLatestParameterFrame();
       }
     });
+    getActiveInputProfileForStageMotion =
+      inputProfileBridge.getActiveInputProfile;
     const modelMappingBridge = registerModelMappingBridgeHandlers({
       windows,
       inputState: inputBridge.state,
@@ -234,13 +342,14 @@ export function startRuntimePlayerMain(): void {
         showControl: () =>
           showRuntimePlayerControlWindow(windows.controlWindow),
         focusStage: () => focusRuntimePlayerStageWindow(windows.stageWindow),
-        disableClickThrough: () => stageViewBridge.disableClickThrough(),
+        disableClickThrough: () => stageViewBridge?.disableClickThrough() ??
+          false,
         quit: () => {
           quitController.requestQuit();
         }
       },
       getClickThroughRecoveryState: () => ({
-        enabled: stageViewBridge.getCaptureState().clickThroughEnabled
+        enabled: stageViewBridge?.getCaptureState().clickThroughEnabled ?? false
       })
     });
     await loadRuntimePlayerWindows(windows);
@@ -264,23 +373,4 @@ export function startRuntimePlayerMain(): void {
       requestRuntimePlayerQuit();
     }
   });
-}
-
-function createBrowserSourceStageDisplayState(input: {
-  readonly windows: ReturnType<typeof createRuntimePlayerWindows>;
-  readonly windowState: RuntimePlayerWindowStateController;
-}): {
-  readonly stageWindow: RuntimePlayerBrowserSourceStageDisplayState["stageWindow"];
-  readonly stageView: RuntimePlayerBrowserSourceStageDisplayState["stageView"];
-} {
-  return {
-    stageWindow: {
-      bounds: input.windows.stageWindow.isDestroyed()
-        ? null
-        : input.windows.stageWindow.getBounds()
-    },
-    stageView: {
-      transform: input.windowState.getStageViewTransform()
-    }
-  };
 }

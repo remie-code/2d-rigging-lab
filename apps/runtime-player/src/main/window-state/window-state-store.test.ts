@@ -8,6 +8,7 @@ import {
   createEmptyRuntimePlayerWindowStateDocument,
   parseRuntimePlayerWindowStateDocument
 } from "./window-state-document";
+import { runtimePlayerDefaultStageMotionSettings } from "./window-state-stage-motion-settings";
 import { RuntimePlayerWindowStateStore } from "./window-state-store";
 
 describe("RuntimePlayerWindowStateStore", () => {
@@ -36,6 +37,9 @@ describe("RuntimePlayerWindowStateStore", () => {
         },
         stageEnvironment: {
           alwaysOnTop: false
+        },
+        stageMotion: {
+          settings: runtimePlayerDefaultStageMotionSettings
         }
       }
     });
@@ -67,6 +71,21 @@ describe("RuntimePlayerWindowStateStore", () => {
       },
       stageEnvironment: {
         alwaysOnTop: true
+      },
+      stageMotion: {
+        settings: {
+          ...runtimePlayerDefaultStageMotionSettings,
+          enabled: true,
+          horizontal: {
+            ...runtimePlayerDefaultStageMotionSettings.horizontal,
+            strengthPx: 96,
+            limitPx: 144
+          },
+          scale: {
+            ...runtimePlayerDefaultStageMotionSettings.scale,
+            strength: 0.08
+          }
+        }
       }
     };
 
@@ -95,6 +114,23 @@ describe("RuntimePlayerWindowStateStore", () => {
       },
       stageEnvironment: {
         alwaysOnTop: true
+      },
+      stageMotion: {
+        settings: {
+          enabled: true,
+          horizontal: {
+            strengthPx: 96,
+            limitPx: 144,
+            invert: false
+          },
+          scale: {
+            strength: 0.08,
+            limit: 0.1,
+            invert: false
+          },
+          deadZone: 0.03,
+          reaction: 8
+        }
       }
     });
   });
@@ -163,7 +199,38 @@ describe("RuntimePlayerWindowStateStore", () => {
     expect(snapshot.document.windows).toEqual({});
     expect(snapshot.document.stageView.transform.zoomScale).toBe(1);
     expect(snapshot.document.stageEnvironment.alwaysOnTop).toBe(false);
+    expect(snapshot.document.stageMotion.settings).toEqual(
+      runtimePlayerDefaultStageMotionSettings
+    );
     expect(snapshot.warningMessages[0]).toContain("invalid JSON");
+  });
+
+  it("loads older window state files without Stage Motion settings", () => {
+    const result = parseRuntimePlayerWindowStateDocument({
+      schemaVersion: "runtime-player-window-state-v1",
+      updatedAtIso: "2026-06-23T00:00:00.000Z",
+      windows: {},
+      stageView: {
+        transform: {
+          zoomScale: 1.4,
+          pan: { x: 12, y: -6 },
+          coordinateSpace: "stage-viewport-px-v1"
+        }
+      },
+      stageEnvironment: {
+        alwaysOnTop: true
+      }
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      document: {
+        stageMotion: {
+          settings: runtimePlayerDefaultStageMotionSettings
+        }
+      },
+      warningMessages: []
+    });
   });
 
   it("keeps valid partial state and falls back invalid sections", () => {
@@ -207,6 +274,9 @@ describe("RuntimePlayerWindowStateStore", () => {
         },
         stageEnvironment: {
           alwaysOnTop: false
+        },
+        stageMotion: {
+          settings: runtimePlayerDefaultStageMotionSettings
         }
       },
       warningMessages: [

@@ -88,6 +88,8 @@ type MutableEyeLearnedSigns = {
 type MutableHeadPositionLearnedSigns = {
   bodyLeft?: InputProfileLearnedSign;
   bodyRight?: InputProfileLearnedSign;
+  bodyNear?: InputProfileLearnedSign;
+  bodyFar?: InputProfileLearnedSign;
 };
 
 const calibrationPromptDefinitions = [
@@ -106,7 +108,9 @@ const calibrationPromptDefinitions = [
   { key: "open-mouth", label: "Open mouth", requiredSampleCount: stableSamplesRequired },
   { key: "smile", label: "Smile", requiredSampleCount: stableSamplesRequired },
   { key: "head-position-left", label: "Move upper body left", requiredSampleCount: stableSamplesRequired },
-  { key: "head-position-right", label: "Move upper body right", requiredSampleCount: stableSamplesRequired }
+  { key: "head-position-right", label: "Move upper body right", requiredSampleCount: stableSamplesRequired },
+  { key: "head-position-near", label: "Move closer", requiredSampleCount: stableSamplesRequired },
+  { key: "head-position-far", label: "Move farther", requiredSampleCount: stableSamplesRequired }
 ] as const satisfies readonly CalibrationPromptDefinition[];
 
 const calibrationPromptDefinitionsByKey = new Map<
@@ -400,7 +404,7 @@ export class InputProfileCalibrationSession {
       throw new Error("Calibration cannot finish until every prompt is recorded.");
     }
 
-    if (!this.hasPrompt("head-position-left") || !this.hasPrompt("head-position-right")) {
+    if (!this.hasAnyHeadPositionPrompt()) {
       throw new Error("Only head position section updates are supported.");
     }
 
@@ -409,7 +413,9 @@ export class InputProfileCalibrationSession {
       updatedAtIso: input.updatedAtIso,
       calibration: {
         ...input.profile.calibration,
-        headPositionRaw: this.createHeadPositionCalibration()
+        headPositionRaw: this.createHeadPositionCalibration(
+          input.profile.calibration.headPositionRaw
+        )
       }
     };
   }
@@ -418,9 +424,18 @@ export class InputProfileCalibrationSession {
     return this.targetProfileId;
   }
 
-  private createHeadPositionCalibration(): NonNullable<
+  private createHeadPositionCalibration(
+    base?: InputProfileCalibration["headPositionRaw"]
+  ): NonNullable<
     InputProfileCalibration["headPositionRaw"]
   > {
+    const updatesLeftRight =
+      this.hasPrompt("head-position-left") ||
+      this.hasPrompt("head-position-right");
+    const updatesNearFar =
+      this.hasPrompt("head-position-near") ||
+      this.hasPrompt("head-position-far");
+
     if (
       this.neutral?.headPositionRaw === null ||
       this.neutral?.headPositionRaw === undefined ||
@@ -428,17 +443,70 @@ export class InputProfileCalibrationSession {
       this.range?.headPositionMin === undefined ||
       this.range.headPositionMax === null ||
       this.range.headPositionMax === undefined ||
-      this.headPositionLearnedSigns.bodyLeft === undefined ||
-      this.headPositionLearnedSigns.bodyRight === undefined
+      (updatesLeftRight &&
+        (
+          this.headPositionLearnedSigns.bodyLeft === undefined ||
+          this.headPositionLearnedSigns.bodyRight === undefined
+        )) ||
+      (updatesNearFar &&
+        (
+          this.headPositionLearnedSigns.bodyNear === undefined ||
+          this.headPositionLearnedSigns.bodyFar === undefined
+        ))
     ) {
       throw new Error("Head position calibration is incomplete.");
     }
 
+    if (
+      !updatesLeftRight &&
+      (
+        base === undefined ||
+        base.learnedSigns.bodyLeft === undefined ||
+        base.learnedSigns.bodyRight === undefined
+      )
+    ) {
+      throw new Error(
+        "Head position near/far calibration needs existing left/right calibration."
+      );
+    }
+
+    const neutral = this.neutral.headPositionRaw;
+    const updatedAxes = new Set<InputProfileAxis>();
+    if (updatesLeftRight) {
+      updatedAxes.add(
+        this.headPositionLearnedSigns.bodyRight?.axis ??
+          this.headPositionLearnedSigns.bodyLeft?.axis ??
+          "x"
+      );
+    }
+    if (updatesNearFar) {
+      updatedAxes.add(
+        this.headPositionLearnedSigns.bodyNear?.axis ??
+          this.headPositionLearnedSigns.bodyFar?.axis ??
+          "z"
+      );
+    }
+
     return {
-      neutral: this.neutral.headPositionRaw,
-      min: this.range.headPositionMin,
-      max: this.range.headPositionMax,
-      learnedSigns: this.headPositionLearnedSigns
+      neutral,
+      min: mergeHeadPositionRangeVector({
+        axisValue: "min",
+        neutral,
+        recorded: this.range.headPositionMin,
+        base,
+        updatedAxes
+      }),
+      max: mergeHeadPositionRangeVector({
+        axisValue: "max",
+        neutral,
+        recorded: this.range.headPositionMax,
+        base,
+        updatedAxes
+      }),
+      learnedSigns: {
+        ...base?.learnedSigns,
+        ...this.headPositionLearnedSigns
+      }
     };
   }
 
@@ -450,6 +518,15 @@ export class InputProfileCalibrationSession {
 
   private hasPrompt(promptKey: RuntimePlayerInputCalibrationPromptKey): boolean {
     return this.prompts.some((prompt) => prompt.key === promptKey);
+  }
+
+  private hasAnyHeadPositionPrompt(): boolean {
+    return this.prompts.some((prompt) =>
+      prompt.key === "head-position-left" ||
+      prompt.key === "head-position-right" ||
+      prompt.key === "head-position-near" ||
+      prompt.key === "head-position-far"
+    );
   }
 
   private recordLearnedSign(
@@ -497,6 +574,12 @@ export class InputProfileCalibrationSession {
       case "head-position-right":
         this.headPositionLearnedSigns.bodyRight = learnedSign;
         return;
+      case "head-position-near":
+        this.headPositionLearnedSigns.bodyNear = learnedSign;
+        return;
+      case "head-position-far":
+        this.headPositionLearnedSigns.bodyFar = learnedSign;
+        return;
       default:
         return;
     }
@@ -518,6 +601,38 @@ export class InputProfileCalibrationSession {
       ...update
     };
   }
+}
+
+function mergeHeadPositionRangeVector(input: {
+  readonly axisValue: "min" | "max";
+  readonly neutral: TrackingVector3;
+  readonly recorded: TrackingVector3;
+  readonly base?: InputProfileCalibration["headPositionRaw"];
+  readonly updatedAxes: ReadonlySet<InputProfileAxis>;
+}): TrackingVector3 {
+  return {
+    x: mergeHeadPositionRangeAxis(input, "x"),
+    y: mergeHeadPositionRangeAxis(input, "y"),
+    z: mergeHeadPositionRangeAxis(input, "z")
+  };
+}
+
+function mergeHeadPositionRangeAxis(
+  input: {
+    readonly axisValue: "min" | "max";
+    readonly neutral: TrackingVector3;
+    readonly recorded: TrackingVector3;
+    readonly base?: InputProfileCalibration["headPositionRaw"];
+    readonly updatedAxes: ReadonlySet<InputProfileAxis>;
+  },
+  axis: InputProfileAxis
+): number {
+  if (input.updatedAxes.has(axis) || input.base === undefined) {
+    return input.recorded[axis];
+  }
+
+  return input.neutral[axis] +
+    (input.base[input.axisValue][axis] - input.base.neutral[axis]);
 }
 
 function evaluatePromptSample(
@@ -582,6 +697,20 @@ function evaluatePromptSample(
       return evaluateDirectionalSample(
         values.headPositionRaw.x - neutral.headPositionRaw.x,
         "x",
+        positionSampleThresholdRaw
+      );
+    case "head-position-near":
+    case "head-position-far":
+      if (values.headPositionRaw === null || neutral.headPositionRaw === null) {
+        return {
+          accepted: false,
+          message: "Head position is not available in the tracking frame."
+        };
+      }
+
+      return evaluateDirectionalSample(
+        values.headPositionRaw.z - neutral.headPositionRaw.z,
+        "z",
         positionSampleThresholdRaw
       );
     case "blink":

@@ -178,6 +178,11 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(stageViewBridgeChannels.setClickThrough, enabled),
       setAlwaysOnTop: (enabled) =>
         ipcRenderer.invoke(stageViewBridgeChannels.setAlwaysOnTop, enabled),
+      updateStageMotionSettings: (update) =>
+        ipcRenderer.invoke(
+          stageViewBridgeChannels.updateStageMotionSettings,
+          update
+        ),
       copyWindowTitle: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.copyWindowTitle),
       getViewTransform: () =>

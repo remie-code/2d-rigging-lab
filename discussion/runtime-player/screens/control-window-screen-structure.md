@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave8実装事実: Runtime Playerは `Header + Overview / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
+> Wave11実装事実: Runtime Playerは `Header + Overview / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。Wave9/Wave10はBrowser Source Outputとnative local preview suspensionを追加した。Wave11はInput Profile near/far calibrationとStage page上のStage Motion panelを追加した。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
 
 ## 1. Position
 
@@ -86,9 +86,9 @@ Headerに置かない操作:
 | Page | Responsibility |
 |---|---|
 | Overview | ライブ表示に必要な状態が揃っているか、次に何をすべきか |
-| Input | iFacialMocap接続、transport、port、local IP、Input Profile |
+| Input | iFacialMocap接続、transport、port、local IP、Input Profile、near/farを含むhead position calibration |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
-| Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態、Capture Target readiness、Arrange Stage、click-through、always-on-top |
+| Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態、Stage Motion、Browser Source Output、Local Preview / Fallback、Capture Target readiness、Arrange Stage、click-through、always-on-top |
 
 Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
 
@@ -289,9 +289,9 @@ Wave6 implemented prompts:
 
 - Move head left / right for head position calibration.
 
-Future prompts:
+Wave11 implemented prompts:
 
-- Move closer / farther for future scale / depth behavior。
+- Move closer / farther for near/far depth calibration used by Stage Motion depth scale.
 
 ### 6.4 Wave6 Head Position Recalibration
 
@@ -312,7 +312,7 @@ Input Profile
 - `Run Missing Only`は、保存済みprofileで不足しているsectionだけを案内する。
 - `Head position left/right`の個別Calibrate/Recalibrateは、head rotation / eyes / mouthを再記録しない。
 - `Look Forward`はsession neutralとしてhead rotationとhead positionの両方を更新できる。
-- Stage Motionやnear/far distance responseはまだ実装しない。
+- Wave11では`Head position near/far` readinessとmissing-only / section calibrationも追加済みである。Stage Motion scale followはこの明示near/far calibrationを使い、left/right calibration中の偶発的なZ値をproduction depthとして扱わない。
 
 ### 6.2 How To Show Prompts
 
@@ -478,7 +478,7 @@ Stale export   [Auto Map] [Reset to Auto Map]
 
 Wave7のStage page v0は、Stage Window boundsとStage view transformを扱うページとして始まった。
 
-このページは空のplaceholderではない。Wave7で実体pageとして実装済みであり、Wave8ではBroadcast Stage Setup v0の操作も同じStage pageに追加した。Overviewを肥大化させないため、Stage表示・capture-target準備の低頻度操作はStage pageへ集約する。
+このページは空のplaceholderではない。Wave7で実体pageとして実装済みであり、Wave8ではBroadcast Stage Setup v0の操作も同じStage pageに追加した。Wave9/Wave10ではBrowser Source Outputとlocal preview suspension表示を追加し、Wave11ではStage Motion panelを追加した。Overviewを肥大化させないため、Stage表示・capture-target準備・Stage-level display transformの低頻度操作はStage pageへ集約する。
 
 Current Stage page responsibilities:
 
@@ -487,6 +487,9 @@ Current Stage page responsibilities:
 - Stage Windowを前面へ出す。
 - Stage viewをreset/centerする。
 - Window/View stateの自動保存状態を表示する。
+- Stage Motionのenabled、horizontal follow、depth scale、dead zone、reactionを扱う。
+- Depth Scaleのnear/far calibration readinessを表示し、不足時はInput calibrationへ誘導する。
+- Browser Source OutputのURL、server/client/render diagnostics、local preview suspension statusを扱う。
 - Runtime Export startup restore statusを表示し、失敗時はRetry/Open New導線を出す。
 - Stage Windowを一時arrange modeで移動できるようにする。
 - click-throughをControlからOn/Offし、tray/application menuから解除できるようにする。
@@ -511,6 +514,16 @@ Current Stage page responsibilities:
 |   Persistence:   Saved just now                                                 |
 |   [Reset View] [Center Model]                                                   |
 |--------------------------------------------------------------------------------|
+| Stage Motion                                                                   |
+|   Enabled:       On                                                            |
+|   Horizontal:    Strength 80 px / Limit 120 px / Invert off                    |
+|   Depth Scale:   Strength 6% / Limit 10% / Near/Far ready                      |
+|   Stabilization: Dead zone 0.03 / Reaction 8                                   |
+|   Persistence:   Saved just now                                                 |
+|--------------------------------------------------------------------------------|
+| Browser Source Output                                                          |
+|   URL, server/client/render status, heartbeat, local preview suspension         |
+|--------------------------------------------------------------------------------|
 | Persistence                                                                    |
 |   Scope:         This device                                                    |
 |   Storage:       window-state/runtime-player.json                               |
@@ -531,6 +544,8 @@ Stage page v0に置くもの:
 - Center Model。
 - Stage window bounds保存状態。
 - Stage pan/zoom保存状態。
+- Stage Motion設定とnear/far calibration readiness。
+- Browser Source Output status。
 - 保存状態 `Saved / Saving / Save failed`。
 - 必要なら `Retry`。
 - Runtime Export startup restore status。
@@ -551,6 +566,7 @@ Stage page v0に置かないもの:
 - background preview。
 - runtime parameter sliders。
 - debug diagnostics。
+- raw tracking/head-position values。
 
 ### 9.1 Stage Window Bounds vs Stage View Transform
 
@@ -703,7 +719,7 @@ Stage Windowに出さないもの:
 
 ## 12. Current Implementation Shape
 
-Wave5/Wave6/Wave7/Wave8で実装された現在の形状:
+Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11で実装された現在の形状:
 
 - Persistent Header。
 - `Overview` / `Input` / `Mapping` / `Stage` のnavigation。
@@ -722,6 +738,13 @@ Wave5/Wave6/Wave7/Wave8で実装された現在の形状:
 - Stage pageはCapture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleも扱う。
 - click-throughは起動時Offで、永続保存しない。
 - always-on-topはWindow Stateの`stageEnvironment.alwaysOnTop`として保存する。
+- Browser Source Outputはprimary broadcast pathとしてStage pageにあり、Browser Source接続中はnative local preview live renderingだけをsuspendする。
+- Input Profileは`Head position left/right`と`Head position near/far`のready/missing状態を分ける。
+- Stage MotionはStage page上のcompact panelとして実装済みで、Mapping pageには置かない。
+- Stage Motion設定はWindow State / local display settingとして自動保存する。
+- Manual Stage pan/zoomは保存済みbase transformであり、Stage Motionはその上に一時的なhorizontal/scale display offsetを合成する。
+- Browser SourceはStage Motion適用後のsanitized composed Stage transformを受け取り、raw tracking frame、raw head position、calibration internals、debug diagnosticsは受け取らない。
+- Wave10 native local preview suspension中もBrowser Source rendering、input processing、mapping、body follow、dynamics、Runtime Export state、Stage transform sync、Stage Motionはactiveのまま維持する。
 
 Future page候補:
 
@@ -737,5 +760,6 @@ Future page候補:
 - Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
 - Header上に明示的な`Hide Control`操作を置くか。Wave8ではControl close-hideとtray/menu recoveryを実装済み。
 - background previewを扱うか。
-- Stage Motion、near/far distance response、Spout Output、OBS automationをどのwaveで扱うか。
+- Stage Motionのreal-device default tuningをどこまで詰めるか。
+- Spout Output、OBS automationをどのwaveで扱うか。
 - Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。

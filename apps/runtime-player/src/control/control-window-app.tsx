@@ -36,6 +36,7 @@ import type {
 } from "../preload/input-bridge-contract";
 import type {
   RuntimePlayerInputProfileActionResult,
+  RuntimePlayerInputProfileStartCalibrationRequest,
   RuntimePlayerInputProfileStatus
 } from "../preload/input-profile-bridge-contract";
 import type {
@@ -652,6 +653,7 @@ function renderActivePage(input: {
     return (
       <StagePage
         stageState={input.stageState}
+        inputProfileStatus={input.inputProfileStatus}
         runtimeExportStatus={input.runtimeExportStatus}
         browserSourceStatus={input.browserSourceStatus}
         onFocusStage={() =>
@@ -667,6 +669,22 @@ function renderActivePage(input: {
             window.runtimePlayer.stageView.centerModel()
           )
         }
+        onUpdateStageMotionSettings={(update) =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.updateStageMotionSettings(update)
+          )
+        }
+        onStartDepthScaleCalibration={() => {
+          input.setActivePage("input");
+          void input.runInputProfileAction(() =>
+            window.runtimePlayer.inputProfile.startCalibration(
+              createDepthScaleCalibrationRequest({
+                profileStatus: input.inputProfileStatus,
+                calibrationName: input.calibrationName
+              })
+            )
+          );
+        }}
         onSetArrangeMode={(enabled) =>
           void input.runStageAction(() =>
             window.runtimePlayer.stageView.setArrangeMode(enabled)
@@ -732,6 +750,42 @@ function renderActivePage(input: {
       inputBusy={input.inputBusy}
       lookForwardAvailable={input.lookForwardAvailable}
     />
+  );
+}
+
+function createDepthScaleCalibrationRequest(input: {
+  readonly profileStatus: RuntimePlayerInputProfileStatus | null;
+  readonly calibrationName: string;
+}): RuntimePlayerInputProfileStartCalibrationRequest {
+  if (canStartNearFarSectionCalibration(input.profileStatus)) {
+    return {
+      displayName: input.calibrationName,
+      mode: "section",
+      section: "head-position-near-far"
+    };
+  }
+
+  return {
+    displayName: input.calibrationName,
+    mode: "missing-only"
+  };
+}
+
+function canStartNearFarSectionCalibration(
+  status: RuntimePlayerInputProfileStatus | null
+): boolean {
+  if (
+    status?.profileMode !== "saved" ||
+    status.activeProfile === null ||
+    status.temporaryDefaultsActive
+  ) {
+    return false;
+  }
+
+  return status.activeProfile.calibrationSections.some(
+    (section) =>
+      section.key === "head-position-left-right" &&
+      section.status === "ready"
   );
 }
 

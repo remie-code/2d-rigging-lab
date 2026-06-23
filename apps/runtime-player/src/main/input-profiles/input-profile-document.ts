@@ -33,6 +33,8 @@ export type InputProfileCalibration = {
     readonly learnedSigns: {
       readonly bodyLeft?: InputProfileLearnedSign;
       readonly bodyRight?: InputProfileLearnedSign;
+      readonly bodyNear?: InputProfileLearnedSign;
+      readonly bodyFar?: InputProfileLearnedSign;
     };
   };
   readonly eyes: {
