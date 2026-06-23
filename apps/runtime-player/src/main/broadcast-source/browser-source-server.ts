@@ -18,7 +18,10 @@ import {
   createBrowserSourceRuntimeExportResponse
 } from "./browser-source-runtime-export-payload";
 import { RuntimePlayerBrowserSourceSession } from "./browser-source-session";
-import type { BrowserSourceSessionStatusListener } from "./browser-source-session";
+import type {
+  BrowserSourceSessionStatusListener,
+  BrowserSourceSessionTimers
+} from "./browser-source-session";
 import { createBrowserSourceStageShellHtml } from "./browser-source-stage-shell";
 import {
   browserSourceStageDevAssetRoutePrefix,
@@ -56,7 +59,10 @@ export type RuntimePlayerBrowserSourceServerOptions = {
   readonly port?: number;
   readonly token?: string;
   readonly heartbeatIntervalMs?: number;
+  readonly statusNotificationIntervalMs?: number;
   readonly nowIso?: () => string;
+  readonly nowMs?: () => number;
+  readonly timers?: BrowserSourceSessionTimers;
   readonly stageClientAssets?: (
     tokenQuery: string
   ) => BrowserSourceStageClientAssets;
@@ -100,7 +106,15 @@ export class RuntimePlayerBrowserSourceServer {
       options.stageStaticAssetRendererDirectoryPath;
     this.#session = new RuntimePlayerBrowserSourceSession({
       token: this.#token,
-      ...(options.nowIso === undefined ? {} : { nowIso: options.nowIso })
+      ...(options.nowIso === undefined ? {} : { nowIso: options.nowIso }),
+      ...(options.nowMs === undefined ? {} : { nowMs: options.nowMs }),
+      ...(options.timers === undefined ? {} : { timers: options.timers }),
+      ...(options.statusNotificationIntervalMs === undefined
+        ? {}
+        : {
+            statusNotificationIntervalMs:
+              options.statusNotificationIntervalMs
+          })
     });
   }
 

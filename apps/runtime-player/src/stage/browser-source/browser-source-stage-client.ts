@@ -42,6 +42,7 @@ export type BrowserSourceStageClientSnapshot = {
   readonly connectionStatus: BrowserSourceStageNetworkStatus;
   readonly webgl2Available: "available" | "unavailable" | "unknown";
   readonly runtimeExportLoaded: boolean;
+  readonly runtimeExportApplyCount: number;
   readonly renderStatus: BrowserSourceStageRenderStatus;
   readonly message: string | null;
   readonly fps: number | null;
@@ -114,10 +115,12 @@ export type BrowserSourceStageClientOptions = {
   readonly nowMs?: () => number;
   readonly reconnectDelayMs?: number;
   readonly heartbeatIntervalMs?: number;
+  readonly diagnosticIntervalMs?: number;
 };
 
 const DEFAULT_RECONNECT_DELAY_MS = 1000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 5000;
+const DEFAULT_DIAGNOSTIC_INTERVAL_MS = 500;
 
 export class BrowserSourceStageClient {
   readonly #config: BrowserSourcePageConfig;
@@ -131,11 +134,16 @@ export class BrowserSourceStageClient {
   readonly #nowMs: () => number;
   readonly #reconnectDelayMs: number;
   readonly #heartbeatIntervalMs: number;
+  readonly #diagnosticIntervalMs: number;
   readonly #metrics = new BrowserSourceRenderMetrics();
   readonly #listeners = new Set<BrowserSourceStageClientListener>();
   #socket: BrowserSourceWebSocketLike | null = null;
   #reconnectTimer: BrowserSourceTimerHandle | null = null;
   #heartbeatTimer: BrowserSourceTimerHandle | null = null;
+  #diagnosticsTimer: BrowserSourceTimerHandle | null = null;
+  #lastDiagnosticsSentAtMs: number | null = null;
+  #runtimeExportPayloadKey: string | null = null;
+  #runtimeExportApplyCount = 0;
   #started = false;
   #snapshot: BrowserSourceStageClientSnapshot;
 
@@ -154,10 +162,13 @@ export class BrowserSourceStageClient {
       options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
     this.#heartbeatIntervalMs =
       options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+    this.#diagnosticIntervalMs =
+      options.diagnosticIntervalMs ?? DEFAULT_DIAGNOSTIC_INTERVAL_MS;
     this.#snapshot = {
       connectionStatus: "idle",
       webgl2Available: options.webgl2Available,
       runtimeExportLoaded: false,
+      runtimeExportApplyCount: 0,
       renderStatus: options.renderer === null ? "error" : "idle",
       message: options.initialMessage ?? null,
       fps: null,
@@ -194,6 +205,7 @@ export class BrowserSourceStageClient {
     this.#started = false;
     this.#clearReconnectTimer();
     this.#clearHeartbeatTimer();
+    this.#clearDiagnosticsTimer();
 
     const socket = this.#socket;
     this.#socket = null;
@@ -381,6 +393,7 @@ export class BrowserSourceStageClient {
   ): void {
     if (payload === null) {
       this.#metrics.clear();
+      this.#runtimeExportPayloadKey = null;
       this.#renderer?.clear();
       this.#updateSnapshot({
         runtimeExportLoaded: false,
@@ -392,6 +405,14 @@ export class BrowserSourceStageClient {
         frameAgeMs: null
       });
       this.#sendDiagnostics();
+      return;
+    }
+
+    const payloadKey = createRuntimeExportPayloadKey(payload);
+    if (
+      this.#runtimeExportPayloadKey === payloadKey &&
+      this.#snapshot.runtimeExportLoaded
+    ) {
       return;
     }
 
@@ -408,7 +429,7 @@ export class BrowserSourceStageClient {
 
     try {
       const loadedPayload = toRuntimeExportLoadedPayload(payload);
-      this.#renderRuntimeExport(loadedPayload);
+      this.#renderRuntimeExport(loadedPayload, payloadKey);
     } catch (error) {
       this.#renderer.clear();
       this.#updateSnapshot({
@@ -420,10 +441,16 @@ export class BrowserSourceStageClient {
     }
   }
 
-  #renderRuntimeExport(payload: RuntimeExportLoadedPayload): void {
+  #renderRuntimeExport(
+    payload: RuntimeExportLoadedPayload,
+    payloadKey: string
+  ): void {
     const result = this.#renderer?.setPayload(payload);
+    this.#runtimeExportPayloadKey = payloadKey;
+    this.#runtimeExportApplyCount += 1;
     this.#updateSnapshot({
       runtimeExportLoaded: true,
+      runtimeExportApplyCount: this.#runtimeExportApplyCount,
       renderStatus: "rendering",
       message:
         result !== undefined && result.runtimeDiagnosticDetails.length > 0
@@ -442,7 +469,7 @@ export class BrowserSourceStageClient {
         : this.#snapshot.renderStatus,
       message: this.#renderer === null ? this.#snapshot.message : null
     }));
-    this.#sendDiagnostics();
+    this.#sendDiagnosticsSampled();
   }
 
   #startHeartbeat(): void {
@@ -497,6 +524,40 @@ export class BrowserSourceStageClient {
   }
 
   #sendDiagnostics(): void {
+    this.#clearDiagnosticsTimer();
+    this.#sendDiagnosticsNow();
+  }
+
+  #sendDiagnosticsSampled(): void {
+    if (this.#diagnosticIntervalMs <= 0) {
+      this.#sendDiagnosticsNow();
+      return;
+    }
+
+    const nowMs = this.#nowMs();
+    if (
+      this.#lastDiagnosticsSentAtMs === null ||
+      nowMs - this.#lastDiagnosticsSentAtMs >= this.#diagnosticIntervalMs
+    ) {
+      this.#sendDiagnosticsNow();
+      return;
+    }
+
+    if (this.#diagnosticsTimer !== null) {
+      return;
+    }
+
+    this.#diagnosticsTimer = this.#timers.setTimeout(() => {
+      this.#diagnosticsTimer = null;
+      this.#sendDiagnosticsNow();
+    }, Math.max(
+      0,
+      this.#diagnosticIntervalMs - (nowMs - this.#lastDiagnosticsSentAtMs)
+    ));
+  }
+
+  #sendDiagnosticsNow(): void {
+    this.#lastDiagnosticsSentAtMs = this.#nowMs();
     const metrics = this.#metrics.snapshot(this.#nowMs());
     this.#sendClientMessage({
       type: "browser-source-renderer-diagnostics",
@@ -507,6 +568,15 @@ export class BrowserSourceStageClient {
       fps: metrics.fps,
       frameAgeMs: metrics.frameAgeMs
     });
+  }
+
+  #clearDiagnosticsTimer(): void {
+    if (this.#diagnosticsTimer === null) {
+      return;
+    }
+
+    this.#timers.clearTimeout(this.#diagnosticsTimer);
+    this.#diagnosticsTimer = null;
   }
 
   #reportDiagnostic(
@@ -576,4 +646,23 @@ function toClientMessage(error: unknown): string {
   return error instanceof Error
     ? error.message.slice(0, 240)
     : "Browser Source client operation failed.";
+}
+
+function createRuntimeExportPayloadKey(
+  payload: RuntimePlayerBrowserSourceRuntimeExportPayload
+): string {
+  const textureMetadata = payload.texturePage.metadata;
+  return [
+    payload.schemaVersion,
+    payload.summary.packageId,
+    payload.summary.packageRevision,
+    payload.loadedAtIso,
+    textureMetadata.pageId,
+    textureMetadata.path,
+    textureMetadata.width,
+    textureMetadata.height,
+    textureMetadata.pixelFormat,
+    textureMetadata.byteLength,
+    payload.texturePage.byteLength
+  ].join("|");
 }

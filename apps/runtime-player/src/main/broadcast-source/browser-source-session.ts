@@ -30,9 +30,28 @@ export type BrowserSourceSessionStatusListener = (
   status: RuntimePlayerBrowserSourceStatus
 ) => void;
 
+export type BrowserSourceSessionTimers = {
+  readonly setTimeout: (
+    callback: () => void,
+    delayMs: number
+  ) => BrowserSourceSessionTimerHandle;
+  readonly clearTimeout: (handle: BrowserSourceSessionTimerHandle) => void;
+};
+
+export type BrowserSourceSessionTimerHandle =
+  | number
+  | ReturnType<typeof globalThis.setTimeout>;
+
+type BrowserSourceStatusNotificationMode = "immediate" | "sampled";
+
+const DEFAULT_STATUS_NOTIFICATION_INTERVAL_MS = 500;
+
 export class RuntimePlayerBrowserSourceSession {
   readonly #token: string;
   readonly #nowIso: () => string;
+  readonly #nowMs: () => number;
+  readonly #timers: BrowserSourceSessionTimers;
+  readonly #statusNotificationIntervalMs: number;
   readonly #clients = new Map<number, BrowserSourceSessionClient>();
   readonly #listeners = new Set<BrowserSourceSessionStatusListener>();
   #nextClientId = 1;
@@ -41,15 +60,25 @@ export class RuntimePlayerBrowserSourceSession {
     | RuntimePlayerBrowserSourceRuntimeExportPayload
     | null = null;
   #latestFrame: RuntimePlayerLiveParameterFrame | null = null;
+  #lastStatusNotifiedAtMs: number | null = null;
+  #sampledStatusTimer: BrowserSourceSessionTimerHandle | null = null;
   #stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState =
     createEmptyStageDisplayState();
 
   constructor(input: {
     readonly token: string;
     readonly nowIso?: () => string;
+    readonly nowMs?: () => number;
+    readonly timers?: BrowserSourceSessionTimers;
+    readonly statusNotificationIntervalMs?: number;
   }) {
     this.#token = input.token;
     this.#nowIso = input.nowIso ?? (() => new Date().toISOString());
+    this.#nowMs = input.nowMs ?? (() => Date.now());
+    this.#timers = input.timers ?? defaultTimers;
+    this.#statusNotificationIntervalMs =
+      input.statusNotificationIntervalMs ??
+      DEFAULT_STATUS_NOTIFICATION_INTERVAL_MS;
     this.#status = {
       schemaVersion: "runtime-player-browser-source-status-v1",
       state: "stopped",
@@ -189,6 +218,8 @@ export class RuntimePlayerBrowserSourceSession {
         sequence: frame.sequence,
         producedAtIso: frame.producedAtIso
       }
+    }, {
+      notify: "sampled"
     });
     this.#broadcast({
       type: "live-parameter-frame",
@@ -370,18 +401,29 @@ export class RuntimePlayerBrowserSourceSession {
     }
 
     if (message.type === "browser-source-renderer-diagnostics") {
+      const latestRendererDiagnostics = {
+        clientId,
+        receivedAtIso: this.#nowIso(),
+        webgl2Available: message.webgl2Available,
+        runtimeExportLoaded: message.runtimeExportLoaded,
+        renderStatus: message.renderStatus,
+        message: message.message,
+        fps: message.fps,
+        frameAgeMs: message.frameAgeMs
+      };
+      const previousRendererDiagnostics =
+        this.#status.latestRendererDiagnostics;
+
       this.#updateStatus({
         lastClientHeartbeatAtIso: this.#nowIso(),
-        latestRendererDiagnostics: {
-          clientId,
-          receivedAtIso: this.#nowIso(),
-          webgl2Available: message.webgl2Available,
-          runtimeExportLoaded: message.runtimeExportLoaded,
-          renderStatus: message.renderStatus,
-          message: message.message,
-          fps: message.fps,
-          frameAgeMs: message.frameAgeMs
-        }
+        latestRendererDiagnostics
+      }, {
+        notify: isImportantRendererDiagnosticsChange(
+          previousRendererDiagnostics,
+          latestRendererDiagnostics
+        )
+          ? "immediate"
+          : "sampled"
       });
     }
   }
@@ -416,6 +458,7 @@ export class RuntimePlayerBrowserSourceSession {
     for (const client of clients) {
       client.close();
     }
+    this.#clearSampledStatusTimer();
   }
 
   #broadcast(message: RuntimePlayerBrowserSourceServerMessage): void {
@@ -425,7 +468,10 @@ export class RuntimePlayerBrowserSourceSession {
   }
 
   #updateStatus(
-    patch: Partial<RuntimePlayerBrowserSourceStatus>
+    patch: Partial<RuntimePlayerBrowserSourceStatus>,
+    options: {
+      readonly notify?: BrowserSourceStatusNotificationMode;
+    } = {}
   ): RuntimePlayerBrowserSourceStatus {
     this.#status = {
       ...this.#status,
@@ -433,11 +479,67 @@ export class RuntimePlayerBrowserSourceSession {
       updatedAtIso: this.#nowIso()
     };
 
-    for (const listener of this.#listeners) {
-      listener(this.#status);
+    if ((options.notify ?? "immediate") === "sampled") {
+      this.#notifyStatusChangedSampled();
+    } else {
+      this.#notifyStatusChangedImmediately();
     }
 
     return this.#status;
+  }
+
+  #notifyStatusChangedImmediately(): void {
+    this.#clearSampledStatusTimer();
+    this.#emitStatusChanged();
+  }
+
+  #notifyStatusChangedSampled(): void {
+    if (this.#listeners.size === 0) {
+      return;
+    }
+
+    if (this.#statusNotificationIntervalMs <= 0) {
+      this.#emitStatusChanged();
+      return;
+    }
+
+    const nowMs = this.#nowMs();
+    if (
+      this.#lastStatusNotifiedAtMs === null ||
+      nowMs - this.#lastStatusNotifiedAtMs >=
+        this.#statusNotificationIntervalMs
+    ) {
+      this.#emitStatusChanged();
+      return;
+    }
+
+    if (this.#sampledStatusTimer !== null) {
+      return;
+    }
+
+    this.#sampledStatusTimer = this.#timers.setTimeout(() => {
+      this.#sampledStatusTimer = null;
+      this.#emitStatusChanged();
+    }, Math.max(
+      0,
+      this.#statusNotificationIntervalMs - (nowMs - this.#lastStatusNotifiedAtMs)
+    ));
+  }
+
+  #emitStatusChanged(): void {
+    this.#lastStatusNotifiedAtMs = this.#nowMs();
+    for (const listener of this.#listeners) {
+      listener(this.#status);
+    }
+  }
+
+  #clearSampledStatusTimer(): void {
+    if (this.#sampledStatusTimer === null) {
+      return;
+    }
+
+    this.#timers.clearTimeout(this.#sampledStatusTimer);
+    this.#sampledStatusTimer = null;
   }
 }
 
@@ -466,3 +568,35 @@ function createEmptyStageDisplayState(): RuntimePlayerBrowserSourceStageDisplayS
     updatedAtIso: null
   };
 }
+
+function isImportantRendererDiagnosticsChange(
+  previous: RuntimePlayerBrowserSourceStatus["latestRendererDiagnostics"],
+  next: NonNullable<RuntimePlayerBrowserSourceStatus["latestRendererDiagnostics"]>
+): boolean {
+  return (
+    previous === null ||
+    previous.webgl2Available !== next.webgl2Available ||
+    previous.runtimeExportLoaded !== next.runtimeExportLoaded ||
+    previous.renderStatus !== next.renderStatus ||
+    previous.message !== next.message ||
+    next.renderStatus === "error"
+  );
+}
+
+const defaultTimers: BrowserSourceSessionTimers = {
+  setTimeout: (callback, delayMs) => {
+    const handle = globalThis.setTimeout(callback, delayMs);
+    if (
+      typeof handle === "object" &&
+      handle !== null &&
+      "unref" in handle &&
+      typeof handle.unref === "function"
+    ) {
+      handle.unref();
+    }
+    return handle;
+  },
+  clearTimeout: (handle) => {
+    globalThis.clearTimeout(handle);
+  }
+};

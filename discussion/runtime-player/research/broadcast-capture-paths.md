@@ -4,13 +4,13 @@
 
 ## 1. Status
 
-- Status: Direction updated by Runtime Player Wave9 source/tests.
+- Status: Direction updated by Runtime Player Wave9 source/tests and Runtime Player Wave10 performance foundation source/tests.
 - Date: 2026-06-23
 - Scope: Runtime Player の配信用出力経路。Editor 本体や OBS 自動操作は対象外。
 
-Wave8 implemented native Stage Window capture-target ergonomics. Wave9 supersedes the Wave8 "Window/Game Capture first" assumption for primary broadcast setup and makes OBS Browser Source the primary candidate to probe.
+Wave8 implemented native Stage Window capture-target ergonomics. Wave9 supersedes the Wave8 "Window/Game Capture first" assumption for primary broadcast setup and makes OBS Browser Source the primary candidate to probe. Wave10 keeps Browser Source as the fixed primary broadcast implementation path and reduces duplicate local Stage rendering while Browser Source clients are connected.
 
-Manual OBS Browser Source verification is still pending. Source/tests prove the Runtime Player side of the Browser Source output path, not that OBS CEF preserves alpha/performance in the user's environment.
+Manual OBS Browser Source verification is still pending. Source/tests prove the Runtime Player side of the Browser Source output path and Wave10 performance boundary, not that OBS CEF preserves alpha/performance in the user's environment.
 
 ## 2. External Facts
 
@@ -59,11 +59,25 @@ Wave9 adds an OBS Browser Source output probe:
 - Control Stage page now shows `Browser Source Output` as the primary broadcast setup/status panel.
 - Native Stage Window controls are retained under `Local Preview / Fallback`.
 
+## 4.1 Wave10 Performance Repository Facts
+
+Wave10 adds a Browser Source performance foundation without changing the accepted broadcast route:
+
+- Browser Source remains the fixed primary broadcast path.
+- Native Stage Window remains visible and usable as local preview/fallback when no Browser Source client is connected.
+- When Browser Source connected client count is greater than zero, only native Stage local live rendering is suspended.
+- The suspension does not stop Browser Source rendering, live parameter frame production, iFacialMocap input processing, mapping, body follow, dynamics, Runtime Export state, or Stage transform synchronization.
+- When Browser Source connected client count stays at zero for the grace period, native Stage local live rendering resumes.
+- Control reports the local preview suspension state while Browser Source is connected.
+- Control-facing Browser Source live-frame status and repeated renderer diagnostics are sampled around 500 ms; important server/client/export/render state changes remain immediate.
+- Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
+- No raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, or Control-only status fields are added to the Browser Source boundary.
+
 ## 5. Current Decision
 
-Accepted Wave9 direction:
+Accepted Wave9/Wave10 direction:
 
-- Treat OBS Browser Source as the primary broadcast candidate.
+- Treat OBS Browser Source as the fixed primary broadcast implementation path, while manual OBS verification remains required before claiming product-ready OBS behavior.
 - Keep the native Stage Window as local preview, arrangement/recovery surface, and fallback capture target.
 - Do not make Window/Game Capture the primary setup path.
 - Do not implement Spout2 sender until Browser Source fails a critical manual probe condition.
@@ -81,6 +95,7 @@ Browser Source output is intentionally narrow:
 - Control owns server/client/renderer diagnostics display.
 - The Browser Source page can request resync and send renderer diagnostics/heartbeat.
 - The Browser Source page cannot inspect raw input diagnostics or Control-only runtime state.
+- Wave10 samples Control-facing diagnostics/status only; it does not throttle Browser Source live motion frames.
 
 Security and locality:
 
@@ -89,7 +104,7 @@ Security and locality:
 - The token is visible in Control because the user must paste the URL into OBS.
 - The URL should not be shown in public capture if it should remain private.
 
-## 7. Native Stage Window Role After Wave9
+## 7. Native Stage Window Role After Wave10
 
 The native Stage Window remains useful:
 
@@ -100,6 +115,8 @@ The native Stage Window remains useful:
 
 But it is no longer the primary broadcast setup path. Documentation and UI should not lead with Window/Game Capture instructions.
 
+Wave10 adds one important runtime boundary: while Browser Source clients are connected, native Stage live rendering is suspended to avoid duplicate live WebGL work. The native Stage Window is not hidden or destroyed, and local preview resumes after the zero-client grace period.
+
 ## 8. Spout2 Future Track
 
 Spout2 remains deferred.
@@ -109,7 +126,7 @@ Spout2 should be revisited if Browser Source fails a critical probe condition, f
 - OBS Browser Source cannot preserve transparent alpha in the target environment.
 - OBS Browser Source cannot use WebGL2 reliably enough for the model.
 - Browser Source reload/visibility lifecycle cannot resync safely.
-- Browser Source performance is not acceptable with a real Runtime Export.
+- Browser Source performance is not acceptable with a real Runtime Export after Wave10's duplicate-render suspension.
 
 Future Spout2 questions remain:
 
@@ -120,7 +137,7 @@ Future Spout2 questions remain:
 
 ## 9. Manual OBS Browser Source Probe Checklist
 
-Run these after Wave9 source integration:
+Run these after Wave10 source/docs integration:
 
 - Add OBS Browser Source.
 - Paste Runtime Player Browser Source URL.
@@ -133,8 +150,12 @@ Run these after Wave9 source integration:
 - Confirm model renders without black/white fill.
 - Confirm WebGL2 status appears in Control.
 - Confirm connected client and heartbeat appear in Control.
+- Confirm Control reports local preview live rendering suspension while OBS Browser Source is connected.
 - Move face/head with iFacialMocap and confirm model motion.
+- Confirm body follow/dynamics remain visible in Browser Source while native local preview live rendering is suspended.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
+- Disconnect/close OBS Browser Source and confirm native Stage local preview resumes after the grace period.
+- Compare CPU/GPU usage or perceived smoothness against the Wave9 duplicate-render baseline.
 - Confirm OBS audio meter does not receive unintended audio.
 
 ## 10. Remaining Questions
@@ -142,4 +163,6 @@ Run these after Wave9 source integration:
 - Manual result: does OBS Browser Source preserve alpha and WebGL2 rendering with the user's target OBS/Windows/GPU setup?
 - Manual result: does Browser Source reconnect/resync behave well with OBS visibility changes and manual refresh?
 - Manual result: is live iFacialMocap motion smooth enough through Browser Source?
+- Manual result: does local preview suspension/resume behave understandably during OBS connect, refresh, and disconnect?
+- Manual result: does Wave10 improve perceived performance or CPU/GPU load enough for the real Runtime Export?
 - Decision after manual probe: keep Browser Source as primary path, run a narrow Browser Source follow-up, or escalate to Spout2 feasibility.

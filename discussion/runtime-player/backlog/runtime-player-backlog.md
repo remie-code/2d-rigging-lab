@@ -234,6 +234,7 @@ Problem:
 - Head position may also be useful for Stage scale, Stage translation, or near/far distance response, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
 - Wave8 intentionally stopped at native capture-target controls and did not add Stage Motion, Spout, or OBS automation.
 - Wave9 added Browser Source Output as the primary broadcast candidate and kept Spout2 deferred.
+- Wave10 kept Browser Source as the fixed primary broadcast path and added duplicate native local preview live render suspension, sampled Control diagnostics, and Browser Source resync de-duplication.
 
 Trigger:
 
@@ -485,8 +486,8 @@ Remaining manual verification:
 
 ### 3.12 OBS Browser Source Probe
 
-- Status: Done at source/test level; manual OBS verification pending
-- Final integration report: pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md))
+- Status: Done at source/test level through Wave10 performance foundation; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md))
 - Kind: Broadcast output probe completed by Runtime Player Wave9
 - Priority: Manual verification is high before treating Browser Source as product-ready
 
@@ -508,6 +509,10 @@ Implemented outcome:
 - Raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, and Control-only status fields do not cross into Browser Source.
 - Control shows connected client count, heartbeat, WebGL2, renderer status, Browser Source Runtime Export status, frame age, and FPS.
 - Native Stage Window controls remain available under `Local Preview / Fallback`.
+- Wave10 suspends only native Stage local live rendering while Browser Source client count is greater than zero; Browser Source rendering, live parameter frame production, input processing, mapping, body follow, dynamics, Runtime Export state, and Stage transform sync stay active.
+- Native Stage local live rendering resumes after the zero-client grace period, and reconnect during grace avoids preview bounce.
+- Control reports local preview suspension and samples repeated Browser Source live-frame/renderer diagnostics without hiding important server/client/export/render transitions.
+- Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
 - Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
 
 Source:
@@ -516,7 +521,9 @@ Source:
 - [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
 - [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 - [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
+- [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md)
 - [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+- [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
 - [../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md)
 
 Remaining manual verification:
@@ -532,12 +539,16 @@ Remaining manual verification:
 - Confirm model renders without black/white fill.
 - Confirm WebGL2 status appears in Control.
 - Confirm connected client and heartbeat appear in Control.
+- Confirm Control reports local preview live rendering suspension while Browser Source is connected.
 - Move face/head with iFacialMocap and confirm model motion.
+- Confirm body follow/dynamics remain visible in Browser Source while native local preview live rendering is suspended.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
+- Disconnect/close OBS Browser Source and confirm native Stage local preview resumes after the grace period.
+- Compare CPU/GPU usage or perceived smoothness against the Wave9 duplicate-render baseline.
 - Confirm OBS audio meter does not receive unintended audio.
 
 Suggested next action:
 
-- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input.
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave10.
 - If it passes, keep Browser Source as the primary broadcast path.
 - If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.

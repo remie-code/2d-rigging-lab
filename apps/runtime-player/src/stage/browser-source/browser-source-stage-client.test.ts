@@ -23,6 +23,7 @@ describe("BrowserSourceStageClient", () => {
   it("fetches the current payload, connects, requests resync, and applies live frames", async () => {
     const renderer = new FakeStageRenderer();
     const sockets = createFakeWebSocketFactory();
+    const timers = createManualTimers();
     const requestedUrls: string[] = [];
     const client = new BrowserSourceStageClient({
       config: createConfig(),
@@ -31,7 +32,7 @@ describe("BrowserSourceStageClient", () => {
       fetcher: createFetch(createLoadedResponse(), requestedUrls),
       webSocketFactory: sockets.factory,
       location: createLocation(),
-      timers: createManualTimers(),
+      timers,
       nowIso: () => "2026-06-23T01:00:02.000Z",
       nowMs: () => Date.parse("2026-06-23T01:00:02.250Z")
     });
@@ -71,6 +72,7 @@ describe("BrowserSourceStageClient", () => {
     expect(renderer.frames[0]?.parameterValues).toEqual({
       ParamAngleX: 12.5
     });
+    timers.runTimeouts();
     expect(readLastDiagnostics(sockets.instances[0])).toMatchObject({
       webgl2Available: "available",
       runtimeExportLoaded: true,
@@ -236,6 +238,120 @@ describe("BrowserSourceStageClient", () => {
     ]);
     expect(renderer.payloads).toHaveLength(0);
     expect(renderer.frames).toHaveLength(0);
+  });
+
+  it("samples renderer diagnostics for live frames without throttling renderer frame application", async () => {
+    const baseMs = Date.parse("2026-06-23T01:00:05.000Z");
+    let nowMs = baseMs;
+    const timers = createManualTimers();
+    const sockets = createFakeWebSocketFactory();
+    const renderer = new FakeStageRenderer();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: sockets.factory,
+      location: createLocation(),
+      timers,
+      heartbeatIntervalMs: 0,
+      diagnosticIntervalMs: 500,
+      nowMs: () => nowMs
+    });
+
+    client.start();
+    sockets.instances[0]?.open();
+    await flushAsync();
+    const initialDiagnosticsCount = readDiagnostics(sockets.instances[0]).length;
+
+    nowMs = baseMs + 10;
+    client.handleServerMessageData(JSON.stringify({
+      type: "live-parameter-frame",
+      protocolVersion: 1,
+      frame: createLiveParameterFrame({
+        sequence: 45,
+        sourceFrameTimestampMs: 1050,
+        producedAtIso: "2026-06-23T01:00:05.000Z"
+      }),
+      sentAtIso: "2026-06-23T01:00:05.000Z"
+    }));
+    nowMs = baseMs + 20;
+    client.handleServerMessageData(JSON.stringify({
+      type: "live-parameter-frame",
+      protocolVersion: 1,
+      frame: createLiveParameterFrame({
+        sequence: 46,
+        sourceFrameTimestampMs: 1066,
+        producedAtIso: "2026-06-23T01:00:05.016Z"
+      }),
+      sentAtIso: "2026-06-23T01:00:05.016Z"
+    }));
+
+    expect(renderer.frames).toHaveLength(2);
+    expect(readDiagnostics(sockets.instances[0])).toHaveLength(
+      initialDiagnosticsCount
+    );
+
+    nowMs = baseMs + 520;
+    timers.runTimeouts();
+
+    expect(readDiagnostics(sockets.instances[0])).toHaveLength(
+      initialDiagnosticsCount + 1
+    );
+    expect(readLastDiagnostics(sockets.instances[0])).toMatchObject({
+      frameAgeMs: 504
+    });
+  });
+
+  it("deduplicates identical Runtime Export payload application but applies replacement identities", () => {
+    const renderer = new FakeStageRenderer();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: createFakeWebSocketFactory().factory,
+      location: createLocation(),
+      timers: createManualTimers(),
+      heartbeatIntervalMs: 0
+    });
+    const runtimeExport = createBrowserSourcePayload();
+
+    client.handleServerMessageData(JSON.stringify({
+      type: "runtime-export-resync",
+      protocolVersion: 1,
+      runtimeExport,
+      runtimeExportStatus: createLoadedStatus(),
+      stageDisplayState: createStageDisplayState(),
+      latestFrame: null,
+      sentAtIso: "2026-06-23T01:00:03.000Z"
+    }));
+    client.handleServerMessageData(JSON.stringify({
+      type: "runtime-export-resync",
+      protocolVersion: 1,
+      runtimeExport,
+      runtimeExportStatus: createLoadedStatus(),
+      stageDisplayState: createStageDisplayState(),
+      latestFrame: null,
+      sentAtIso: "2026-06-23T01:00:04.000Z"
+    }));
+
+    expect(renderer.payloads).toHaveLength(1);
+    expect(client.getSnapshot().runtimeExportApplyCount).toBe(1);
+
+    client.handleServerMessageData(JSON.stringify({
+      type: "runtime-export-changed",
+      protocolVersion: 1,
+      runtimeExport: createBrowserSourcePayload({
+        packageRevision: 8,
+        loadedAtIso: "2026-06-23T01:01:00.000Z"
+      }),
+      runtimeExportStatus: createLoadedStatus(),
+      sentAtIso: "2026-06-23T01:01:00.000Z"
+    }));
+
+    expect(renderer.payloads).toHaveLength(2);
+    expect(client.getSnapshot().runtimeExportApplyCount).toBe(2);
   });
 
   it("reports WebGL2 unavailable when no renderer can be created", async () => {
@@ -434,12 +550,18 @@ function readSentMessageTypes(
 function readLastDiagnostics(
   socket: FakeWebSocket | undefined
 ): Record<string, unknown> | undefined {
+  return readDiagnostics(socket)
+    .at(-1);
+}
+
+function readDiagnostics(
+  socket: FakeWebSocket | undefined
+): Array<Record<string, unknown>> {
   return (socket?.sent ?? [])
     .map((message) => JSON.parse(message) as Record<string, unknown>)
     .filter((message) =>
       message.type === "browser-source-renderer-diagnostics"
-    )
-    .at(-1);
+    );
 }
 
 function createConfig() {
@@ -501,7 +623,13 @@ function createLoadedStatus() {
   } as const;
 }
 
-function createBrowserSourcePayload(): RuntimePlayerBrowserSourceRuntimeExportPayload {
+function createBrowserSourcePayload(input: {
+  readonly packageRevision?: number;
+  readonly loadedAtIso?: string;
+} = {}): RuntimePlayerBrowserSourceRuntimeExportPayload {
+  const packageRevision = input.packageRevision ?? 7;
+  const loadedAtIso = input.loadedAtIso ?? "2026-06-23T01:00:00.000Z";
+
   return {
     schemaVersion: "runtime-player-browser-source-runtime-export-v1",
     artifacts: {
@@ -525,7 +653,7 @@ function createBrowserSourcePayload(): RuntimePlayerBrowserSourceRuntimeExportPa
     summary: {
       modelDisplayName: "Fixture Model",
       packageId: "pkg_fixture",
-      packageRevision: 7,
+      packageRevision,
       drawableCount: 1,
       meshCount: 1,
       parameterCount: 1,
@@ -540,7 +668,7 @@ function createBrowserSourcePayload(): RuntimePlayerBrowserSourceRuntimeExportPa
       },
       requiredCapabilities: []
     },
-    loadedAtIso: "2026-06-23T01:00:00.000Z"
+    loadedAtIso
   };
 }
 

@@ -93,6 +93,10 @@ describe("StagePage Browser Source output", () => {
     expect(markup).toContain("Recommended OBS Size");
     expect(markup).toContain("1280 x 720");
     expect(markup).toContain("1 connected client");
+    expect(markup).toContain("Local Preview");
+    expect(markup).toContain(
+      "Live rendering suspended while Browser Source is connected"
+    );
     expect(markup).toContain("Stage Request");
     expect(markup).toContain("Served (200) at 2026-06-23T01:01:00.000Z");
     expect(markup).toContain("Asset Request");
@@ -130,6 +134,7 @@ describe("StagePage Browser Source output", () => {
     expect(markup).toContain("Port 49200 is unavailable.");
     expect(markup).toContain("URL unavailable");
     expect(markup).toContain("No Browser Source client connected");
+    expect(markup).toContain("Live rendering active");
     expect(markup).toContain("No boot/client diagnostic");
     expect(markup).toContain("No client diagnostics");
   });

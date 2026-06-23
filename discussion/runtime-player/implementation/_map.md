@@ -29,6 +29,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave7-plan.md](orchestration/player-wave7-plan.md) | Completed / final pass | Runtime Player Wave7: persistent Mapping / Body Follow profile + Stage page and Stage state persistence |
 | [orchestration/player-wave8-plan.md](orchestration/player-wave8-plan.md) | Completed / final pass | Runtime Player Wave8: Broadcast Stage Setup v0 |
 | [orchestration/player-wave9-plan.md](orchestration/player-wave9-plan.md) | Completed / final pass | Runtime Player Wave9: OBS Browser Source Probe |
+| [orchestration/player-wave10-plan.md](orchestration/player-wave10-plan.md) | Completed / final pass | Runtime Player Wave10: Broadcast Performance Foundation |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -65,6 +66,9 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave9/runtime-player-wave9-domain-b-browser-source-stage-client-report.md](waves/wave9/runtime-player-wave9-domain-b-browser-source-stage-client-report.md) | Pass after fix loop 1 | Runtime Player Wave9 Domain B Browser Source Stage client / render pipeline |
 | [waves/wave9/runtime-player-wave9-domain-c-browser-source-control-ux-report.md](waves/wave9/runtime-player-wave9-domain-c-browser-source-control-ux-report.md) | Pass | Runtime Player Wave9 Domain C Browser Source Control UX |
 | [waves/wave9/runtime-player-wave9-final-integration-report.md](waves/wave9/runtime-player-wave9-final-integration-report.md) | Pass | Runtime Player Wave9 final integration report, docs/maps alignment, verification, and manual OBS checklist |
+| [waves/wave10/_map.md](waves/wave10/_map.md) | Pass | Runtime Player Wave10 report map |
+| [waves/wave10/runtime-player-wave10-domain-a-broadcast-performance-foundation-report.md](waves/wave10/runtime-player-wave10-domain-a-broadcast-performance-foundation-report.md) | Pass | Runtime Player Wave10 Domain A Broadcast Performance Foundation |
+| [waves/wave10/runtime-player-wave10-final-integration-report.md](waves/wave10/runtime-player-wave10-final-integration-report.md) | Pass after closeout loop 3 | Runtime Player Wave10 final integration report, docs/maps alignment, preserved Domain A evidence, review-completion map closeout, manual OBS checklist, and residual risks |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -131,6 +135,9 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave9/runtime-player-wave9-domain-b-browser-source-stage-client-review.md](reviews/wave9/runtime-player-wave9-domain-b-browser-source-stage-client-review.md) | Pass after fix loop 1 | Runtime Player Wave9 Domain B Browser Source Stage client / render pipeline review |
 | [reviews/wave9/runtime-player-wave9-domain-c-browser-source-control-ux-review.md](reviews/wave9/runtime-player-wave9-domain-c-browser-source-control-ux-review.md) | Pass | Runtime Player Wave9 Domain C Browser Source Control UX review |
 | [reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](reviews/wave9/runtime-player-wave9-final-clean-integration-review.md) | Pass | Runtime Player Wave9 final clean integration review |
+| [reviews/wave10/_map.md](reviews/wave10/_map.md) | Pass | Runtime Player Wave10 review map |
+| [reviews/wave10/runtime-player-wave10-domain-a-broadcast-performance-foundation-review.md](reviews/wave10/runtime-player-wave10-domain-a-broadcast-performance-foundation-review.md) | Pass | Runtime Player Wave10 Domain A Broadcast Performance Foundation review |
+| [reviews/wave10/runtime-player-wave10-final-integration-review.md](reviews/wave10/runtime-player-wave10-final-integration-review.md) | Pass after docs-map fix loop 2 | Runtime Player Wave10 final integration review |
 
 ## 4. Current Implementation State
 
@@ -175,10 +182,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Stage remains model-only in normal mode. Capture Target checklist is local readiness only and does not claim OBS integration/readiness.
 - Runtime Player Wave9 Domain A/B/C implementation and reviews are complete, and Domain D final integration docs/report alignment is complete with `pass`: [waves/wave9/runtime-player-wave9-final-integration-report.md](waves/wave9/runtime-player-wave9-final-integration-report.md).
 - Wave9 implemented OBS Browser Source Probe: loopback `127.0.0.1` HTTP/WebSocket output, tokenized Browser Source URL, token-gated Runtime Export/live parameter transport, transparent model-only Browser Source Stage client, and Control Browser Source diagnostics.
-- Browser Source Output is now the primary broadcast candidate. Native Stage Window controls remain under `Local Preview / Fallback`.
+- Browser Source Output is now the fixed primary broadcast path. Native Stage Window controls remain under `Local Preview / Fallback`.
 - Browser Source receives Runtime Export payload plus sanitized live parameter frames only; raw tracking/debug/calibration data and private paths are not exposed.
+- Runtime Player Wave10 Domain A implementation/review is complete with `pass`, and Domain B final integration docs/report alignment plus final review are complete with `pass`: [waves/wave10/runtime-player-wave10-final-integration-report.md](waves/wave10/runtime-player-wave10-final-integration-report.md), [reviews/wave10/runtime-player-wave10-final-integration-review.md](reviews/wave10/runtime-player-wave10-final-integration-review.md).
+- Wave10 keeps Browser Source as the fixed primary broadcast path and suspends only native Stage local live rendering while Browser Source clients are connected.
+- Browser Source rendering, live parameter frame production, input processing, mapping, body follow, dynamics, Runtime Export state, and Stage transform sync remain active while native local preview live rendering is suspended.
+- Native Stage local live rendering resumes after the zero-client grace period, and reconnect during grace avoids preview bounce.
+- Control reports local preview suspension and samples Browser Source live-frame/repeated renderer diagnostics without hiding important server/client/export/render transitions.
+- Browser Source startup/resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, head-position Stage Motion, and near/far distance response remain out of scope.
 
 ## 5. Next Action
 
-Use [waves/wave9/runtime-player-wave9-final-integration-report.md](waves/wave9/runtime-player-wave9-final-integration-report.md), [waves/wave9/_map.md](waves/wave9/_map.md), and [reviews/wave9/_map.md](reviews/wave9/_map.md) as the latest Runtime Player implementation baseline. Next practical action is manual OBS Browser Source verification for URL load, transparent alpha, WebGL2/model rendering, Control client/heartbeat diagnostics, real iFacialMocap live motion, reconnect/resync, and audio meter behavior. Future planning should keep Spout2/OBS automation and Stage Motion separate unless user scope changes or Browser Source fails a critical manual probe condition.
+Use [waves/wave10/runtime-player-wave10-final-integration-report.md](waves/wave10/runtime-player-wave10-final-integration-report.md), [waves/wave10/_map.md](waves/wave10/_map.md), and [reviews/wave10/_map.md](reviews/wave10/_map.md) as the latest Runtime Player implementation baseline. Product-confidence next action is manual OBS Browser Source verification for URL load, transparent alpha, WebGL2/model rendering, Control client/heartbeat/suspension diagnostics, real iFacialMocap live motion, body follow/dynamics, reconnect/resync, native preview resume, perceived performance improvement, and audio meter behavior. Future planning should keep Spout2/OBS automation and Stage Motion separate unless user scope changes or Browser Source fails a critical manual probe condition.

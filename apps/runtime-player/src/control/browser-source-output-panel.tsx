@@ -40,6 +40,10 @@ export function BrowserSourceOutputPanel({
       />
       <StatusRow label="Clients" value={formatConnectedClients(status)} />
       <StatusRow
+        label="Local Preview"
+        value={formatLocalPreviewLiveRendering(status)}
+      />
+      <StatusRow
         label="Stage Request"
         value={formatStageRequest(status)}
       />
@@ -186,6 +190,18 @@ function formatConnectedClients(
   }
 
   return `${status.connectedClientCount} connected clients`;
+}
+
+function formatLocalPreviewLiveRendering(
+  status: RuntimePlayerBrowserSourceStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  return status.connectedClientCount > 0
+    ? "Live rendering suspended while Browser Source is connected"
+    : "Live rendering active";
 }
 
 function formatStageRequest(

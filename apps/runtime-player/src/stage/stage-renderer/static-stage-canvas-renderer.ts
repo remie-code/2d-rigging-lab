@@ -140,6 +140,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   clearLiveParameterFrame(): void {
     this.latestLiveParameterFrame = null;
     this.lastLiveSourceTimestampMs = null;
+    this.cancelLiveRender();
 
     if (this.payload === null || this.disposed) {
       return;

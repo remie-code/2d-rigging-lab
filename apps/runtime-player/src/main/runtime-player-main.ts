@@ -3,6 +3,7 @@ import { app } from "electron";
 import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-source-bridge-handlers";
 import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
 import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
+import { LocalPreviewLiveRenderSuspensionPolicy } from "./broadcast-source/local-preview-live-render-suspension";
 import type {
   RuntimePlayerBrowserSourceStageDisplayState
 } from "../preload/browser-source-status-contract";
@@ -87,12 +88,52 @@ export function startRuntimePlayerMain(): void {
       }
     });
     const stageLiveParameters = registerLiveParameterBridgeHandlers({ windows });
+    let isLocalPreviewLiveRenderSuspended = false;
+    const localPreviewLiveRenderPolicy =
+      new LocalPreviewLiveRenderSuspensionPolicy({
+        onStateChanged: (state) => {
+          if (state.suspended === isLocalPreviewLiveRenderSuspended) {
+            return;
+          }
+
+          isLocalPreviewLiveRenderSuspended = state.suspended;
+          stageLiveParameters.setStageWindowLiveFrameDeliveryEnabled(
+            !state.suspended
+          );
+
+          if (state.suspended) {
+            stageLiveParameters.clearStageWindowLiveParameterFrame();
+            return;
+          }
+
+          stageLiveParameters.publishLatestFrameToStageWindow({
+            resetBeforePublish: true
+          });
+        }
+      });
+    const unsubscribeLocalPreviewLiveRenderPolicy =
+      browserSourceServer.onStatusChanged((status) => {
+        localPreviewLiveRenderPolicy.updateConnectedClientCount(
+          status.connectedClientCount
+        );
+      });
+    localPreviewLiveRenderPolicy.updateConnectedClientCount(
+      browserSourceServer.getStatus().connectedClientCount
+    );
     const liveParameters = {
       getLatestFrame: stageLiveParameters.getLatestFrame,
       publishFrame: (frame: Parameters<typeof stageLiveParameters.publishFrame>[0]) => {
-        stageLiveParameters.publishFrame(frame);
+        stageLiveParameters.publishFrame(frame, {
+          deliverToStageWindow: !localPreviewLiveRenderPolicy.isSuspended()
+        });
         browserSourceServer.publishLiveParameterFrame(frame);
       },
+      publishLatestFrameToStageWindow:
+        stageLiveParameters.publishLatestFrameToStageWindow,
+      setStageWindowLiveFrameDeliveryEnabled:
+        stageLiveParameters.setStageWindowLiveFrameDeliveryEnabled,
+      clearStageWindowLiveParameterFrame:
+        stageLiveParameters.clearStageWindowLiveParameterFrame,
       clear: () => {
         stageLiveParameters.clear();
         browserSourceServer.clearLatestFrame();
@@ -210,6 +251,8 @@ export function startRuntimePlayerMain(): void {
 
     app.once("will-quit", () => {
       trayMenu?.dispose();
+      localPreviewLiveRenderPolicy.dispose();
+      unsubscribeLocalPreviewLiveRenderPolicy();
       unsubscribeBrowserSourceStageDisplayState();
       browserSourceBridge.dispose();
       void browserSourceServer.stop();
