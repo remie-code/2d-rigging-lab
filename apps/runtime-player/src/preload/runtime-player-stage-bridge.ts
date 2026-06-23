@@ -8,6 +8,7 @@ import type {
   RuntimePlayerStageApi
 } from "./runtime-player-stage-bridge-contract";
 import type {
+  RuntimePlayerStageArrangeState,
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
 import type {
@@ -45,6 +46,8 @@ export function installRuntimePlayerStageBridge(): void {
     stageView: {
       getViewTransform: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.getViewTransform),
+      getArrangeState: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.getArrangeState),
       reportStatus: (status) =>
         ipcRenderer.invoke(stageViewBridgeChannels.reportStatus, status),
       reportViewTransform: (transform) =>
@@ -55,6 +58,11 @@ export function installRuntimePlayerStageBridge(): void {
       onApplyViewTransformRequested: (callback) =>
         subscribeToStageViewTransformEvent(
           stageViewBridgeChannels.applyViewTransformRequested,
+          callback
+        ),
+      onArrangeStateChanged: (callback) =>
+        subscribeToStageArrangeStateEvent(
+          stageViewBridgeChannels.arrangeStateChanged,
           callback
         )
     }
@@ -85,6 +93,24 @@ function subscribeToStageViewTransformEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerStageViewTransform
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStageArrangeStateEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStageArrangeState) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStageArrangeState
   ) => {
     callback(payload);
   };

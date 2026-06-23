@@ -7,6 +7,8 @@ import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contra
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type { RuntimePlayerModelMappingApi } from "./model-mapping-bridge-contract";
 
+export const runtimePlayerStageWindowTitle = "Runtime Player Stage" as const;
+
 export const runtimePlayerPlaceholderActions = [
   "open-settings",
   "connect-input",
@@ -111,6 +113,7 @@ export type RuntimePlayerStageStateSnapshot = {
     readonly updatedAtIso: string;
     readonly warningMessages: readonly string[];
   };
+  readonly capture: RuntimePlayerStageCaptureState;
 };
 
 export type RuntimePlayerStageViewActionResult = {
@@ -118,6 +121,18 @@ export type RuntimePlayerStageViewActionResult = {
   readonly message: string;
   readonly status: RuntimePlayerStageStateSnapshot;
   readonly atIso: string;
+};
+
+export type RuntimePlayerStageArrangeState = {
+  readonly arrangeModeEnabled: boolean;
+};
+
+export type RuntimePlayerStageCaptureState = RuntimePlayerStageArrangeState & {
+  readonly clickThroughEnabled: boolean;
+  readonly alwaysOnTopEnabled: boolean;
+  readonly windowTitle: typeof runtimePlayerStageWindowTitle;
+  readonly background: "transparent";
+  readonly stageUi: "hidden" | "arrange-overlay-visible";
 };
 
 export type RuntimePlayerStageViewApi = {
@@ -132,6 +147,16 @@ export type RuntimePlayerStageViewApi = {
   readonly focusStage: () => Promise<RuntimePlayerStageViewActionResult>;
   readonly resetView: () => Promise<RuntimePlayerStageViewActionResult>;
   readonly centerModel: () => Promise<RuntimePlayerStageViewActionResult>;
+  readonly setArrangeMode: (
+    enabled: boolean
+  ) => Promise<RuntimePlayerStageViewActionResult>;
+  readonly setClickThrough: (
+    enabled: boolean
+  ) => Promise<RuntimePlayerStageViewActionResult>;
+  readonly setAlwaysOnTop: (
+    enabled: boolean
+  ) => Promise<RuntimePlayerStageViewActionResult>;
+  readonly copyWindowTitle: () => Promise<RuntimePlayerStageViewActionResult>;
   readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerStageViewStatus) => void

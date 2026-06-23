@@ -48,6 +48,7 @@ import type {
 } from "../preload/runtime-player-bridge-contract";
 import type {
   RuntimeExportOpenDirectoryResult,
+  RuntimeExportRestoreLastDirectoryResult,
   RuntimeExportStatus
 } from "../preload/runtime-export-bridge-contract";
 
@@ -55,6 +56,8 @@ type ControlFeedback = {
   readonly message: string;
   readonly tone: ControlFeedbackTone;
 };
+
+let runtimeExportStartupRestoreRequested = false;
 
 export function ControlWindowApp(): ReactElement {
   const [activePage, setActivePage] =
@@ -87,16 +90,54 @@ export function ControlWindowApp(): ReactElement {
 
   useEffect(() => {
     let active = true;
+    let startupRestoreTimer: number | null = null;
+
+    const scheduleStartupRestore = (): void => {
+      if (
+        runtimeExportStartupRestoreRequested ||
+        startupRestoreTimer !== null
+      ) {
+        return;
+      }
+
+      startupRestoreTimer = window.setTimeout(() => {
+        if (!active || runtimeExportStartupRestoreRequested) {
+          return;
+        }
+
+        runtimeExportStartupRestoreRequested = true;
+        void window.runtimePlayer.runtimeExport
+          .restoreLastDirectory({ reason: "startup" })
+          .then((result) => {
+            if (!active) {
+              return;
+            }
+
+            if (result.result !== "not-configured") {
+              setRuntimeExportStatus(result.runtimeExport);
+              setFeedback(createRuntimeExportRestoreFeedback(result));
+            }
+          })
+          .catch((error) => {
+            if (active) {
+              setFeedback({
+                message: getErrorMessage(error),
+                tone: "error"
+              });
+            }
+          });
+      }, 0);
+    };
 
     window.runtimePlayer.getStartupStatus().then((status) => {
       if (active) {
         setStartupStatus(status);
-        setRuntimeExportStatus(status.runtimeExport);
       }
     });
     window.runtimePlayer.runtimeExport.getStatus().then((status) => {
       if (active) {
         setRuntimeExportStatus(status);
+        scheduleStartupRestore();
       }
     });
     window.runtimePlayer.stageView.getStatus().then((status) => {
@@ -187,6 +228,9 @@ export function ControlWindowApp(): ReactElement {
 
     return () => {
       active = false;
+      if (startupRestoreTimer !== null) {
+        window.clearTimeout(startupRestoreTimer);
+      }
       unsubscribeRuntimeExport();
       unsubscribeStageView();
       unsubscribeStageState();
@@ -220,6 +264,18 @@ export function ControlWindowApp(): ReactElement {
     const result = await window.runtimePlayer.runtimeExport.openDirectory();
 
     setFeedback(createRuntimeExportFeedback(result));
+  }
+
+  async function retryRuntimeExportRestore(): Promise<void> {
+    const result = await window.runtimePlayer.runtimeExport.restoreLastDirectory({
+      reason: "retry"
+    });
+
+    if (result.result !== "not-configured") {
+      setRuntimeExportStatus(result.runtimeExport);
+    }
+
+    setFeedback(createRuntimeExportRestoreFeedback(result));
   }
 
   async function connectInputSource(): Promise<void> {
@@ -364,6 +420,7 @@ export function ControlWindowApp(): ReactElement {
     setCalibrationName,
     setActivePage,
     openRuntimeExportDirectory,
+    retryRuntimeExportRestore,
     connectInputSource,
     disconnectInputSource,
     runInputProfileAction,
@@ -437,6 +494,7 @@ function renderActivePage(input: {
   readonly setCalibrationName: (value: string) => void;
   readonly setActivePage: (page: ControlWindowPage) => void;
   readonly openRuntimeExportDirectory: () => Promise<void>;
+  readonly retryRuntimeExportRestore: () => Promise<void>;
   readonly connectInputSource: () => Promise<void>;
   readonly disconnectInputSource: () => Promise<void>;
   readonly runInputProfileAction: (
@@ -554,6 +612,7 @@ function renderActivePage(input: {
     return (
       <StagePage
         stageState={input.stageState}
+        runtimeExportStatus={input.runtimeExportStatus}
         onFocusStage={() =>
           void input.runStageAction(() => window.runtimePlayer.focusStage())
         }
@@ -566,6 +625,30 @@ function renderActivePage(input: {
           void input.runStageAction(() =>
             window.runtimePlayer.stageView.centerModel()
           )
+        }
+        onSetArrangeMode={(enabled) =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.setArrangeMode(enabled)
+          )
+        }
+        onSetClickThrough={(enabled) =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.setClickThrough(enabled)
+          )
+        }
+        onSetAlwaysOnTop={(enabled) =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.setAlwaysOnTop(enabled)
+          )
+        }
+        onCopyWindowTitle={() =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.copyWindowTitle()
+          )
+        }
+        onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
+        onRetryRuntimeExportRestore={() =>
+          void input.retryRuntimeExportRestore()
         }
       />
     );
@@ -580,6 +663,9 @@ function renderActivePage(input: {
       stageViewStatus={input.stageViewStatus}
       stageWindowStatus={input.stageWindowStatus}
       onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
+      onRetryRuntimeExportRestore={() =>
+        void input.retryRuntimeExportRestore()
+      }
       onConnectInput={() => void input.connectInputSource()}
       onLookForward={() =>
         void input.runInputProfileAction(() =>
@@ -620,6 +706,29 @@ function createRuntimeExportFeedback(
   if (result.result === "loaded") {
     return {
       message: `Runtime Export loaded: ${result.runtimeExport.summary.modelDisplayName}`,
+      tone: "success"
+    };
+  }
+
+  return {
+    message: result.runtimeExport.error.message,
+    tone: "error"
+  };
+}
+
+function createRuntimeExportRestoreFeedback(
+  result: RuntimeExportRestoreLastDirectoryResult
+): ControlFeedback {
+  if (result.result === "not-configured") {
+    return {
+      message: "No saved Runtime Export to restore.",
+      tone: "neutral"
+    };
+  }
+
+  if (result.result === "loaded") {
+    return {
+      message: `Runtime Export restored: ${result.runtimeExport.summary.modelDisplayName}`,
       tone: "success"
     };
   }

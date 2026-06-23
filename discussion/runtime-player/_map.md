@@ -49,9 +49,16 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Wave7でStage page v0を実体pageとして追加済み。Stage Window bounds、Stage view transform、Focus Stage、Reset View、Center Model、window-state保存状態を扱う。
 - Window StateはModel Mapping Profileとは別に`<electron userData>/window-state/runtime-player.json`へ自動保存する。Stage Window bounds、Control Window bounds、Stage view pan/zoomを含む。
 - Wave7後もStage Windowはmodel-onlyで、Runtime Export payloadとsanitized `parameterValues` live frameだけを受け取る。raw tracking frame / raw head position / debug body dataは受け取らない。
-- Wave7の残作業はElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。
-- advanced mapping editor、head-position Stage Motion、near/far distance response、Broadcast/OBS UX、TCP transport、dedicated Model/Diagnostics pagesはfuture。
+- Wave7のElectron手動確認はユーザー確認済み: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap trackingが期待通りに動作した。
+- Runtime Player Wave8 final integration is `pass`: [implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)。
+- Wave8でBroadcast Stage Setup v0を実装済み。Runtime Export startup restore、Control Window recovery、Stage Arrange mode、click-through、always-on-top、Capture Target checklist、stable Stage title / Copy Window Titleを追加した。
+- Runtime Export startup restoreはInput Source auto-connectをしない。Input Source connectionは引き続き手動Control actionである。
+- click-throughは起動時Offで、永続保存しない。tray/application menuのDisable Click-throughがrecovery pathになる。
+- always-on-topはdefault Offで、Window State `stageEnvironment.alwaysOnTop`として保存する。
+- Capture Target checklistはlocal readinessのみで、OBS integration/readinessを主張しない。Spout sender、OBS automation/source creation、head-position Stage Motion、near/far distance responseは引き続きout of scope / future。
+- Wave8のElectron/OBS-adjacent manual verificationは未完了: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。
+- advanced mapping editor、head-position Stage Motion、near/far distance response、Spout Output、TCP transport、dedicated Model/Diagnostics pagesはfuture。
 
 ## 5. Next Navigation
 
-Wave7の実装事実を確認する時は [implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](implementation/waves/wave7/runtime-player-wave7-final-integration-report.md)、Domain別詳細は [implementation/waves/wave7/_map.md](implementation/waves/wave7/_map.md)、review詳細は [implementation/reviews/wave7/_map.md](implementation/reviews/wave7/_map.md) を読む。次候補を再検討する時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [screens/](screens/)、[architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。
+Wave8の実装事実を確認する時は [implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)、Domain別詳細は [implementation/waves/wave8/_map.md](implementation/waves/wave8/_map.md)、review詳細は [implementation/reviews/wave8/_map.md](implementation/reviews/wave8/_map.md) を読む。Broadcast Stage Setup v0のUX確認では [screens/broadcast-stage-setup-v0.md](screens/broadcast-stage-setup-v0.md) と [research/broadcast-capture-paths.md](research/broadcast-capture-paths.md) も読む。さらに次候補を再検討する時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認する。

@@ -1,7 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
-> Wave7実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save が実装済み。advanced source selection、deadzone/curve、Stage Motionはfuture。
+> Wave8実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save / Runtime Export startup restore / Stage Capture Target controls が実装済み。Input Source auto-connect、advanced source selection、deadzone/curve、Stage Motion、Spout/OBS automationはfuture。
 
 ## 1. Goal
 
@@ -29,6 +29,9 @@ Wave5/Wave6/Wave7 source/test evidence:
 - Wave6 adds head position left/right calibration, missing-only recalibration, Body X/Z semantic slots, Body Follow controls, and Body Follow output through the same sanitized live parameter frame path.
 - Wave7 adds per-Runtime-Export Model Mapping Profile auto-save/restore and a separate Window State store for Stage/Control bounds plus Stage view pan/zoom.
 - Model Mapping Profile uses `<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`; Window State uses `<electron userData>/window-state/runtime-player.json`.
+- Wave8 adds separate Startup State for last successful Runtime Export restore at `<electron userData>/startup-state/runtime-player-startup.json`.
+- Runtime Export startup restore does not auto-connect Input Source; iFacialMocap connection remains a manual Control action.
+- Wave8 adds Stage Capture Target controls while preserving the Stage model-only boundary.
 - Manual real-device Stage body motion verification remains required for closeout confidence.
 
 ## 2. Concept Split
@@ -487,6 +490,17 @@ Wave7実装済み範囲:
 - Stage Window bounds、Control Window bounds、Stage view pan/zoomを自動保存する。
 - Stageは引き続きmodel-onlyで、Runtime Export payloadとsanitized `parameterValues` live frameだけを受け取る。
 
+Wave8実装済み範囲:
+
+- Last successful Runtime Export directory is saved separately from Window State and restored on startup after Control's initial renderer effect/status setup.
+- Invalid/missing startup restore path reports a non-crashing restore failure and remains available for Retry/Open New behavior.
+- Runtime Export startup restore does not auto-connect Input Source.
+- Control Window close hides the window; tray/application menu can show Control, focus Stage, disable click-through, and quit.
+- Stage page adds Capture Target checklist, Arrange Stage, click-through, always-on-top, and Copy Window Title.
+- Click-through always starts Off and is not persisted.
+- Always-on-top defaults Off and is persisted in Window State.
+- Stage remains model-only in normal mode and still receives no raw tracking/debug data.
+
 Future:
 
 - Stage Motion。
@@ -494,6 +508,7 @@ Future:
 - curve / deadzone。
 - TCP transport。
 - multiple input sources。
+- Spout output / OBS automation。
 
 ## 11. Decided Items
 
@@ -511,11 +526,12 @@ Future:
 - Mapping page上部の`Mapping Profile` cardで状態表示付き自動保存を扱う。
 - Window State PersistenceはModel Mapping Profileとは別に保存する。Stage Window bounds、Control Window bounds、Stage view pan/zoomを`<electron userData>/window-state/runtime-player.json`へ自動保存する。
 - Stage Page v0は空のplaceholderではなく、Stage Window bounds、Stage view transform、Focus Stage、Reset View、Center Model、保存状態を扱う実体pageとして実装済み。
-- Stage Motion、near/far distance response、Broadcast/OBS UX、Body Angle YはWave6に含めない。
+- Runtime Export startup restoreはStartup Stateとして`<electron userData>/startup-state/runtime-player-startup.json`へ保存する。Input Source auto-connectはしない。
+- Broadcast Stage Setup v0はWave8でControl recovery、Stage Arrange、click-through、always-on-top、Capture Target checklistまで実装済み。OBS automation、Spout、Stage Motion、near/far distance response、Body Angle Yは未実装でfuture。
 
 ## 12. Open Questions
 
 - Head rotationの軸符号は実機range dataで確定する。
 - Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
-- head-position Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。
-- Wave7のElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。
+- head-position Stage Motion、near/far distance response、Spout output、OBS automationをどのwaveで扱うか。
+- Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。

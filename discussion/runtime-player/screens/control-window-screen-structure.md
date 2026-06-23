@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave7実装事実: Runtime Playerは `Header + Overview / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
+> Wave8実装事実: Runtime Playerは `Header + Overview / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
 
 ## 1. Position
 
@@ -88,7 +88,7 @@ Headerに置かない操作:
 | Overview | ライブ表示に必要な状態が揃っているか、次に何をすべきか |
 | Input | iFacialMocap接続、transport、port、local IP、Input Profile |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
-| Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態 |
+| Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態、Capture Target readiness、Arrange Stage、click-through、always-on-top |
 
 Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
 
@@ -101,7 +101,7 @@ Future page候補:
 
 現在はDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
 
-Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。責務はBroadcast/OBS設定ではなく、Stageの表示位置と見え方を整えることである。
+Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。Wave8ではBroadcast/OBSを自動操作せず、Stage Windowをlocal capture targetとして整える操作を追加した。
 
 ## 4. Overview Page
 
@@ -474,21 +474,25 @@ Stale export   [Auto Map] [Reset to Auto Map]
 - すべての変更で押す必要がある手動`Save`。
 - Stage Window上の保存UI。
 
-## 9. Wave7 Stage Page v0
+## 9. Wave7 Stage Page v0 And Wave8 Capture Target Controls
 
-Stage page v0は、Stage Window boundsとStage view transformを扱うページである。
+Wave7のStage page v0は、Stage Window boundsとStage view transformを扱うページとして始まった。
 
-このページは空のplaceholderではない。Wave7で実体pageとして実装済みである。操作は少ないが、Overviewを肥大化させないために独立pageとして扱う。低頻度操作であり、Live readinessを確認するOverviewの視界を占有しない方がよい。
+このページは空のplaceholderではない。Wave7で実体pageとして実装済みであり、Wave8ではBroadcast Stage Setup v0の操作も同じStage pageに追加した。Overviewを肥大化させないため、Stage表示・capture-target準備の低頻度操作はStage pageへ集約する。
 
-Stage page v0の責務:
+Current Stage page responsibilities:
 
 - Stage WindowのOS上の位置・サイズを確認する。
 - Stage内のpan/zoomを確認する。
 - Stage Windowを前面へ出す。
 - Stage viewをreset/centerする。
 - Window/View stateの自動保存状態を表示する。
-
-Stage page v0はBroadcast-ready Stageではない。
+- Runtime Export startup restore statusを表示し、失敗時はRetry/Open New導線を出す。
+- Stage Windowを一時arrange modeで移動できるようにする。
+- click-throughをControlからOn/Offし、tray/application menuから解除できるようにする。
+- always-on-topをOn/Offし、Window Stateへ保存する。
+- Capture Target checklistを表示する。ただしOBS readinessやOBS integration statusは表示しない。
+- Stable native title `Runtime Player Stage` を表示し、Copy Window Titleを提供する。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -510,6 +514,13 @@ Stage page v0はBroadcast-ready Stageではない。
 | Persistence                                                                    |
 |   Scope:         This device                                                    |
 |   Storage:       window-state/runtime-player.json                               |
+|--------------------------------------------------------------------------------|
+| Capture Target                                                                 |
+|   Stage Window: Open       Runtime Export: Loaded                              |
+|   Model: Visible           Background: Transparent                             |
+|   Stage UI: Hidden         Window title: Runtime Player Stage [Copy]           |
+|   Click-through: Off [Toggle]    Always on top: Off [Toggle]                   |
+|   [Arrange Stage]                                                              |
 +--------------------------------------------------------------------------------+
 ```
 
@@ -522,14 +533,21 @@ Stage page v0に置くもの:
 - Stage pan/zoom保存状態。
 - 保存状態 `Saved / Saving / Save failed`。
 - 必要なら `Retry`。
+- Runtime Export startup restore status。
+- Capture Target checklist。
+- Arrange Stage。
+- Click-through toggle。
+- Always-on-top toggle。
+- Copy Window Title。
 
 Stage page v0に置かないもの:
 
 - Mapping slot編集。
 - Raw diagnostics。
 - Runtime Export artifact details。
-- transparency / click-through / always-on-top。
-- OBS説明。
+- OBS integration/readiness claim。
+- OBS source creation。
+- Spout output。
 - background preview。
 - runtime parameter sliders。
 - debug diagnostics。
@@ -568,25 +586,30 @@ Window State Persistenceも自動保存である。
 - Control Window bounds。
 - Stage Window bounds。
 - Stage view pan/zoom。
+- Stage environment `alwaysOnTop`。
 
 保存対象外:
 
 - Runtime Export auto restore。
 - Stage transparency。
 - click-through。
-- always-on-top。
-- OBS/capture settings。
+- OBS/capture automation settings。
 - Model Mapping Profile。
 
-保存場所:
+関連保存場所:
 
 ```text
 <electron userData>/
   window-state/
     runtime-player.json
+
+<electron userData>/
+  startup-state/
+    runtime-player-startup.json
 ```
 
 Model Mapping Profileとは保存場所を分ける。
+Runtime Export auto restoreはWindow Stateの保存対象ではないが、Wave8で別のStartup Stateとして保存する。
 
 ```text
 <electron userData>/
@@ -680,7 +703,7 @@ Stage Windowに出さないもの:
 
 ## 12. Current Implementation Shape
 
-Wave5/Wave6/Wave7で実装された現在の形状:
+Wave5/Wave6/Wave7/Wave8で実装された現在の形状:
 
 - Persistent Header。
 - `Overview` / `Input` / `Mapping` / `Stage` のnavigation。
@@ -695,6 +718,10 @@ Wave5/Wave6/Wave7で実装された現在の形状:
 - Body Follow outputはmain-owned sanitized parameter frameとしてStageへ届く。Stageはraw tracking/head-position/debug body dataを受け取らない。
 - Stage pageはStage Window bounds、Stage view pan/zoom、Focus Stage、Reset View、Center Model、window-state保存状態を扱う。
 - Window Stateは`<electron userData>/window-state/runtime-player.json`へ保存し、Model Mapping Profileとは分ける。
+- Runtime Export startup restoreは`<electron userData>/startup-state/runtime-player-startup.json`へ保存し、Window State / Model Mapping Profile / Input Profileとは分ける。
+- Stage pageはCapture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleも扱う。
+- click-throughは起動時Offで、永続保存しない。
+- always-on-topはWindow Stateの`stageEnvironment.alwaysOnTop`として保存する。
 
 Future page候補:
 
@@ -708,7 +735,7 @@ Future page候補:
 ## 13. Open Questions
 
 - Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
-- `Hide Control`をどのwaveで実装するか。
-- Stage Windowのalways-on-top / click-through / background previewをどのwaveで扱うか。
-- Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。
-- Wave7のElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。
+- Header上に明示的な`Hide Control`操作を置くか。Wave8ではControl close-hideとtray/menu recoveryを実装済み。
+- background previewを扱うか。
+- Stage Motion、near/far distance response、Spout Output、OBS automationをどのwaveで扱うか。
+- Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。

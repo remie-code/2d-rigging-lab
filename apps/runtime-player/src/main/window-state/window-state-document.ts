@@ -23,6 +23,9 @@ export type RuntimePlayerWindowStateDocument = {
   readonly stageView: {
     readonly transform: RuntimePlayerStageViewTransform;
   };
+  readonly stageEnvironment: {
+    readonly alwaysOnTop: boolean;
+  };
 };
 
 export type RuntimePlayerWindowStateDocumentParseResult =
@@ -69,6 +72,9 @@ export function createEmptyRuntimePlayerWindowStateDocument(
     windows: {},
     stageView: {
       transform: createResetRuntimePlayerStageViewTransform()
+    },
+    stageEnvironment: {
+      alwaysOnTop: false
     }
   };
 }
@@ -101,6 +107,10 @@ export function parseRuntimePlayerWindowStateDocument(
   const transform = parseRuntimePlayerStageViewTransform(
     isRecord(value.stageView) ? value.stageView.transform : undefined
   );
+  const stageEnvironment = parseStageEnvironment(
+    value.stageEnvironment,
+    warningMessages
+  );
 
   if (transform === null && value.stageView !== undefined) {
     warningMessages.push(
@@ -116,6 +126,9 @@ export function parseRuntimePlayerWindowStateDocument(
       windows,
       stageView: {
         transform: transform ?? createResetRuntimePlayerStageViewTransform()
+      },
+      stageEnvironment: {
+        alwaysOnTop: stageEnvironment.alwaysOnTop
       }
     },
     warningMessages
@@ -147,6 +160,12 @@ export function parseRuntimePlayerStageViewTransform(
   };
 }
 
+export function normalizeRuntimePlayerStageAlwaysOnTop(
+  value: unknown
+): boolean {
+  return typeof value === "boolean" ? value : false;
+}
+
 export function normalizeRuntimePlayerStageViewTransform(
   value: unknown
 ): RuntimePlayerStageViewTransform {
@@ -162,6 +181,39 @@ export function normalizeWindowBounds(
     y: Math.round(value.y),
     width: Math.max(1, Math.round(value.width)),
     height: Math.max(1, Math.round(value.height))
+  };
+}
+
+function parseStageEnvironment(
+  value: unknown,
+  warningMessages: string[]
+): RuntimePlayerWindowStateDocument["stageEnvironment"] {
+  if (value === undefined) {
+    return {
+      alwaysOnTop: false
+    };
+  }
+
+  if (!isRecord(value)) {
+    warningMessages.push(
+      "Stage environment state was invalid and was reset."
+    );
+    return {
+      alwaysOnTop: false
+    };
+  }
+
+  if (
+    value.alwaysOnTop !== undefined &&
+    typeof value.alwaysOnTop !== "boolean"
+  ) {
+    warningMessages.push(
+      "Stage always-on-top value was invalid and was reset."
+    );
+  }
+
+  return {
+    alwaysOnTop: normalizeRuntimePlayerStageAlwaysOnTop(value.alwaysOnTop)
   };
 }
 

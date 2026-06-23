@@ -1,22 +1,22 @@
-import { dialog, ipcMain, type BrowserWindow } from "electron";
+import { dialog, ipcMain } from "electron";
 
 import { runtimeExportBridgeChannels } from "../../preload/runtime-export-bridge-channels";
 import type {
   RuntimeExportLoadedPayload,
   RuntimeExportOpenDirectoryResult,
-  RuntimeExportStatus
+  RuntimeExportRestoreLastDirectoryResult,
+  RuntimeExportLoadOperation
 } from "../../preload/runtime-export-bridge-contract";
+import type { RuntimePlayerStartupStateStore } from "../startup-state/runtime-player-startup-state-store";
 import type { RuntimePlayerWindowSet } from "../window-management/runtime-player-windows";
+import { loadRuntimeExportDirectory } from "./runtime-export-directory-loader";
 import {
-  loadRuntimeExportDirectory,
-  type RuntimeExportDirectoryLoadResult
-} from "./runtime-export-directory-loader";
-import { toRuntimeExportLoadError } from "./runtime-export-errors";
+  loadRuntimeExportIntoSession,
+  toOpenDirectoryResult,
+  type RuntimeExportDirectoryLoader,
+  type RuntimeExportLifecycleCallbacks
+} from "./runtime-export-load-workflow";
 import { RuntimeExportSessionState } from "./runtime-export-session-state";
-
-export type RuntimeExportDirectoryLoader = (
-  directoryPath: string
-) => Promise<RuntimeExportDirectoryLoadResult>;
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -24,6 +24,7 @@ export interface RegisterRuntimeExportBridgeHandlersInput {
   readonly windows: RuntimePlayerWindowSet;
   readonly session?: RuntimeExportSessionState;
   readonly loadDirectory?: RuntimeExportDirectoryLoader;
+  readonly startupStateStore?: RuntimePlayerStartupStateStore;
   readonly onRuntimeExportChanging?: () => MaybePromise<void>;
   readonly onRuntimeExportLoaded?: (
     payload: RuntimeExportLoadedPayload
@@ -46,15 +47,22 @@ export function registerRuntimeExportBridgeHandlers(
       windows: input.windows,
       session,
       loadDirectory,
-      ...(input.onRuntimeExportChanging === undefined
+      ...(input.startupStateStore === undefined
         ? {}
-        : { onRuntimeExportChanging: input.onRuntimeExportChanging }),
-      ...(input.onRuntimeExportLoaded === undefined
+        : { startupStateStore: input.startupStateStore }),
+      callbacks: createLifecycleCallbacks(input)
+    })
+  );
+  ipcMain.handle(runtimeExportBridgeChannels.restoreLastDirectory, (_event, request) =>
+    restoreLastRuntimeExportDirectory({
+      windows: input.windows,
+      session,
+      loadDirectory,
+      operation: readRestoreOperation(request),
+      ...(input.startupStateStore === undefined
         ? {}
-        : { onRuntimeExportLoaded: input.onRuntimeExportLoaded }),
-      ...(input.onRuntimeExportCleared === undefined
-        ? {}
-        : { onRuntimeExportCleared: input.onRuntimeExportCleared })
+        : { startupStateStore: input.startupStateStore }),
+      callbacks: createLifecycleCallbacks(input)
     })
   );
 
@@ -65,11 +73,8 @@ async function openRuntimeExportDirectory(input: {
   readonly windows: RuntimePlayerWindowSet;
   readonly session: RuntimeExportSessionState;
   readonly loadDirectory: RuntimeExportDirectoryLoader;
-  readonly onRuntimeExportChanging?: () => MaybePromise<void>;
-  readonly onRuntimeExportLoaded?: (
-    payload: RuntimeExportLoadedPayload
-  ) => MaybePromise<void>;
-  readonly onRuntimeExportCleared?: () => MaybePromise<void>;
+  readonly startupStateStore?: RuntimePlayerStartupStateStore;
+  readonly callbacks?: RuntimeExportLifecycleCallbacks;
 }): Promise<RuntimeExportOpenDirectoryResult> {
   const selection = await dialog.showOpenDialog(input.windows.controlWindow, {
     title: "Open Runtime Export",
@@ -85,72 +90,114 @@ async function openRuntimeExportDirectory(input: {
   }
 
   const directoryPath = selection.filePaths[0];
-  await input.onRuntimeExportChanging?.();
-  broadcastStatus(
-    input.windows,
-    input.session.setLoading(directoryPath)
-  );
+  const result = await loadRuntimeExportIntoSession({
+    windows: input.windows,
+    session: input.session,
+    directoryPath,
+    operation: "manual-open",
+    loadDirectory: input.loadDirectory,
+    ...(input.callbacks === undefined ? {} : { callbacks: input.callbacks })
+  });
 
-  try {
-    const loaded = await input.loadDirectory(directoryPath);
-    const status = input.session.setLoaded({
-      directoryPath: loaded.directoryPath,
-      payload: loaded.payload
-    });
-
-    await input.onRuntimeExportLoaded?.(loaded.payload);
-    broadcastStatus(input.windows, status);
-    sendToWindow(
-      input.windows.stageWindow,
-      runtimeExportBridgeChannels.loadedPayload,
-      loaded.payload
+  if (result.result === "loaded") {
+    await saveLastRuntimeExportDirectoryIfAvailable(
+      input.startupStateStore,
+      result.runtimeExport.directoryPath
     );
+  }
 
+  return toOpenDirectoryResult(result);
+}
+
+async function restoreLastRuntimeExportDirectory(input: {
+  readonly windows: RuntimePlayerWindowSet;
+  readonly session: RuntimeExportSessionState;
+  readonly loadDirectory: RuntimeExportDirectoryLoader;
+  readonly operation: RuntimeExportLoadOperation;
+  readonly startupStateStore?: RuntimePlayerStartupStateStore;
+  readonly callbacks?: RuntimeExportLifecycleCallbacks;
+}): Promise<RuntimeExportRestoreLastDirectoryResult> {
+  const snapshot = await input.startupStateStore?.getSnapshot();
+  const directoryPath = snapshot?.document.lastRuntimeExportDirectory ?? null;
+
+  if (directoryPath === null) {
     return {
-      result: "loaded",
-      runtimeExport: status
-    };
-  } catch (error) {
-    const status = input.session.setError({
-      directoryPath,
-      error: toRuntimeExportLoadError(error),
-      failedAtIso: new Date().toISOString()
-    });
-
-    await input.onRuntimeExportCleared?.();
-    broadcastStatus(input.windows, status);
-
-    return {
-      result: "error",
-      runtimeExport: status
+      result: "not-configured",
+      runtimeExport: input.session.getStatus()
     };
   }
+
+  const result = await loadRuntimeExportIntoSession({
+    windows: input.windows,
+    session: input.session,
+    directoryPath,
+    operation: input.operation,
+    loadDirectory: input.loadDirectory,
+    ...(input.callbacks === undefined ? {} : { callbacks: input.callbacks })
+  });
+
+  if (result.result === "loaded") {
+    return {
+      result: "loaded",
+      runtimeExport: result.runtimeExport
+    };
+  }
+
+  return result;
 }
 
-function broadcastStatus(
-  windows: RuntimePlayerWindowSet,
-  status: RuntimeExportStatus
-): void {
-  sendToWindow(
-    windows.controlWindow,
-    runtimeExportBridgeChannels.statusChanged,
-    status
-  );
-  sendToWindow(
-    windows.stageWindow,
-    runtimeExportBridgeChannels.statusChanged,
-    status
-  );
+function createLifecycleCallbacks(
+  input: RegisterRuntimeExportBridgeHandlersInput
+): RuntimeExportLifecycleCallbacks {
+  return {
+    ...(input.onRuntimeExportChanging === undefined
+      ? {}
+      : { onRuntimeExportChanging: input.onRuntimeExportChanging }),
+    ...(input.onRuntimeExportLoaded === undefined
+      ? {}
+      : { onRuntimeExportLoaded: input.onRuntimeExportLoaded }),
+    ...(input.onRuntimeExportCleared === undefined
+      ? {}
+      : { onRuntimeExportCleared: input.onRuntimeExportCleared })
+  };
 }
 
-function sendToWindow(
-  window: BrowserWindow,
-  channel: string,
-  payload: RuntimeExportStatus | RuntimeExportLoadedPayload
-): void {
-  if (window.isDestroyed() || window.webContents.isDestroyed()) {
+async function saveLastRuntimeExportDirectoryIfAvailable(
+  startupStateStore: RuntimePlayerStartupStateStore | undefined,
+  directoryPath: string
+): Promise<void> {
+  if (startupStateStore === undefined) {
     return;
   }
 
-  window.webContents.send(channel, payload);
+  try {
+    await startupStateStore.saveLastRuntimeExportDirectory(directoryPath);
+  } catch {
+    // Runtime Export is already loaded; startup-state save failure should not
+    // convert a successful manual open into a load failure.
+  }
+}
+
+function readRestoreOperation(request: unknown): RuntimeExportLoadOperation {
+  if (request === undefined) {
+    return "startup-restore";
+  }
+
+  if (!isRecord(request)) {
+    throw new Error("Runtime Export restore request must be an object.");
+  }
+
+  if (request.reason === undefined || request.reason === "startup") {
+    return "startup-restore";
+  }
+
+  if (request.reason === "retry") {
+    return "retry-restore";
+  }
+
+  throw new Error("Unsupported Runtime Export restore reason.");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

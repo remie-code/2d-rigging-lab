@@ -37,7 +37,11 @@ export function createRuntimePlayerWindows(
   const stageWindow = new BrowserWindow(
     createStageWindowOptions(
       stagePreloadFilePath,
-      options.windowState?.windows.stage?.bounds
+      options.windowState?.windows.stage?.bounds,
+      {
+        alwaysOnTop:
+          options.windowState?.stageEnvironment.alwaysOnTop ?? false
+      }
     )
   );
 

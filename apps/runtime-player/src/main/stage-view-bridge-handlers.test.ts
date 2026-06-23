@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const electronMocks = vi.hoisted(() => ({
+  clipboardWriteText: vi.fn(),
   ipcMainHandle: vi.fn()
 }));
 
 vi.mock("electron", () => ({
+  clipboard: {
+    writeText: electronMocks.clipboardWriteText
+  },
   ipcMain: {
     handle: electronMocks.ipcMainHandle
   }
@@ -31,6 +35,7 @@ let handlers: Map<string, IpcHandler>;
 
 beforeEach(() => {
   handlers = new Map();
+  electronMocks.clipboardWriteText.mockReset();
   electronMocks.ipcMainHandle.mockReset();
   electronMocks.ipcMainHandle.mockImplementation(
     (channel: string, handler: IpcHandler) => {
@@ -111,8 +116,132 @@ describe("registerStageViewBridgeHandlers", () => {
       },
       persistence: {
         status: "saved"
+      },
+      capture: {
+        arrangeModeEnabled: false,
+        clickThroughEnabled: false,
+        alwaysOnTopEnabled: false,
+        windowTitle: "Runtime Player Stage",
+        background: "transparent",
+        stageUi: "hidden"
       }
     });
+  });
+
+  it("starts click-through off and applies persisted always-on-top to the Stage window", () => {
+    const { stageWindow } = createHarness({
+      windowState: {
+        alwaysOnTop: true
+      }
+    });
+
+    expect(stageWindow.setIgnoreMouseEvents).toHaveBeenCalledWith(false);
+    expect(stageWindow.setAlwaysOnTop).toHaveBeenCalledWith(true);
+    expect(
+      invokeHandler<RuntimePlayerStageStateSnapshot>(
+        stageViewBridgeChannels.getState
+      ).capture
+    ).toMatchObject({
+      clickThroughEnabled: false,
+      alwaysOnTopEnabled: true
+    });
+  });
+
+  it("setArrangeMode publishes Control state and Stage arrange state", () => {
+    const { controlWindow, stageWindow } = createHarness();
+
+    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setArrangeMode,
+      true
+    );
+
+    expect(result.status.capture).toMatchObject({
+      arrangeModeEnabled: true,
+      clickThroughEnabled: false,
+      stageUi: "arrange-overlay-visible"
+    });
+    expect(controlWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.stateChanged,
+      expect.objectContaining({
+        capture: expect.objectContaining({
+          arrangeModeEnabled: true
+        })
+      })
+    );
+    expect(stageWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.arrangeStateChanged,
+      {
+        arrangeModeEnabled: true
+      }
+    );
+  });
+
+  it("setClickThrough applies BrowserWindow mouse passthrough and disables arrange mode", () => {
+    const { stageWindow, onCaptureStateChanged } = createHarness();
+
+    invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setArrangeMode,
+      true
+    );
+    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setClickThrough,
+      true
+    );
+
+    expect(stageWindow.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+    expect(result.status.capture).toMatchObject({
+      arrangeModeEnabled: false,
+      clickThroughEnabled: true,
+      stageUi: "hidden"
+    });
+    expect(stageWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.arrangeStateChanged,
+      {
+        arrangeModeEnabled: false
+      }
+    );
+    expect(onCaptureStateChanged).toHaveBeenCalled();
+  });
+
+  it("bridge registration disables click-through for tray/menu recovery", () => {
+    const { stageWindow, registration } = createHarness();
+
+    invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setClickThrough,
+      true
+    );
+
+    expect(registration.getCaptureState().clickThroughEnabled).toBe(true);
+    expect(registration.disableClickThrough()).toBe(true);
+    expect(registration.getCaptureState().clickThroughEnabled).toBe(false);
+    expect(stageWindow.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
+    expect(registration.disableClickThrough()).toBe(false);
+  });
+
+  it("setAlwaysOnTop updates the Stage window and persisted window state", () => {
+    const { stageWindow, windowState } = createHarness();
+
+    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setAlwaysOnTop,
+      true
+    );
+
+    expect(stageWindow.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    expect(windowState.updateStageAlwaysOnTop).toHaveBeenCalledWith(true);
+    expect(result.status.capture.alwaysOnTopEnabled).toBe(true);
+  });
+
+  it("copyWindowTitle writes the stable Stage title to the clipboard", () => {
+    createHarness();
+
+    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.copyWindowTitle
+    );
+
+    expect(electronMocks.clipboardWriteText).toHaveBeenCalledWith(
+      "Runtime Player Stage"
+    );
+    expect(result.message).toContain("Runtime Player Stage");
   });
 
   it("resetView stores the reset transform and asks the Stage window to apply it", () => {
@@ -217,11 +346,14 @@ function createHarness(options: {
   readonly stageWindow?: FakeWindowOptions;
   readonly windowState?: {
     readonly transform?: RuntimePlayerStageViewTransform;
+    readonly alwaysOnTop?: boolean;
   };
 } = {}): {
   readonly controlWindow: ReturnType<typeof createFakeWindow>;
   readonly stageWindow: ReturnType<typeof createFakeWindow>;
   readonly windowState: ReturnType<typeof createFakeWindowState>;
+  readonly onCaptureStateChanged: ReturnType<typeof vi.fn>;
+  readonly registration: ReturnType<typeof registerStageViewBridgeHandlers>;
 } {
   const controlWindow = createFakeWindow({
     bounds: defaultControlBounds,
@@ -232,23 +364,28 @@ function createHarness(options: {
     ...options.stageWindow
   });
   const windowState = createFakeWindowState(
-    options.windowState?.transform ?? createResetRuntimePlayerStageViewTransform()
+    options.windowState?.transform ?? createResetRuntimePlayerStageViewTransform(),
+    options.windowState?.alwaysOnTop ?? false
   );
+  const onCaptureStateChanged = vi.fn();
   const windows: RuntimePlayerWindowSet = {
     controlWindow:
       controlWindow as unknown as RuntimePlayerWindowSet["controlWindow"],
     stageWindow: stageWindow as unknown as RuntimePlayerWindowSet["stageWindow"]
   };
 
-  registerStageViewBridgeHandlers({
+  const registration = registerStageViewBridgeHandlers({
     windows,
-    windowState: windowState.controller
+    windowState: windowState.controller,
+    onCaptureStateChanged
   });
 
   return {
     controlWindow,
     stageWindow,
-    windowState
+    windowState,
+    onCaptureStateChanged,
+    registration
   };
 }
 
@@ -278,6 +415,9 @@ function createFakeWindow(options: FakeWindowOptions = {}) {
     show: vi.fn(),
     focus: vi.fn(),
     getBounds: vi.fn(() => bounds),
+    getTitle: vi.fn(() => "Runtime Player Stage"),
+    setIgnoreMouseEvents: vi.fn(),
+    setAlwaysOnTop: vi.fn(),
     destroy: () => {
       destroyed = true;
     }
@@ -285,17 +425,27 @@ function createFakeWindow(options: FakeWindowOptions = {}) {
 }
 
 function createFakeWindowState(
-  initialTransform: RuntimePlayerStageViewTransform
+  initialTransform: RuntimePlayerStageViewTransform,
+  initialAlwaysOnTop: boolean
 ) {
   let transform = initialTransform;
+  let alwaysOnTop = initialAlwaysOnTop;
   const listeners = new Set<() => void>();
   const getStageViewTransform = vi.fn(() => transform);
+  const getStageAlwaysOnTop = vi.fn(() => alwaysOnTop);
   const updateStageViewTransform = vi.fn((value: unknown) => {
     transform = normalizeRuntimePlayerStageViewTransform(value);
     for (const listener of listeners) {
       listener();
     }
     return transform;
+  });
+  const updateStageAlwaysOnTop = vi.fn((value: unknown) => {
+    alwaysOnTop = typeof value === "boolean" ? value : false;
+    for (const listener of listeners) {
+      listener();
+    }
+    return alwaysOnTop;
   });
   const getPersistenceSnapshot = vi.fn(() => ({
     status: "saved" as const,
@@ -314,12 +464,16 @@ function createFakeWindowState(
   return {
     controller: {
       getStageViewTransform,
+      getStageAlwaysOnTop,
       updateStageViewTransform,
+      updateStageAlwaysOnTop,
       getPersistenceSnapshot,
       subscribe
     } as unknown as RuntimePlayerWindowStateController,
     getStageViewTransform,
+    getStageAlwaysOnTop,
     updateStageViewTransform,
+    updateStageAlwaysOnTop,
     getPersistenceSnapshot,
     subscribe
   };

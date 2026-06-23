@@ -20,7 +20,10 @@ vi.mock("electron", () => ({
 
 import type { RuntimePlayerStageApi } from "./runtime-player-stage-bridge-contract";
 import { installRuntimePlayerStageBridge } from "./runtime-player-stage-bridge";
-import type { RuntimePlayerStageViewTransform } from "./runtime-player-bridge-contract";
+import type {
+  RuntimePlayerStageArrangeState,
+  RuntimePlayerStageViewTransform
+} from "./runtime-player-bridge-contract";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 
 describe("installRuntimePlayerStageBridge stageView", () => {
@@ -45,6 +48,7 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     };
 
     api.stageView.getViewTransform();
+    api.stageView.getArrangeState();
     api.stageView.reportStatus(status);
     api.stageView.reportViewTransform(transform);
 
@@ -54,11 +58,15 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       2,
+      stageViewBridgeChannels.getArrangeState
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      3,
       stageViewBridgeChannels.reportStatus,
       status
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      3,
+      4,
       stageViewBridgeChannels.reportViewTransform,
       transform
     );
@@ -89,6 +97,34 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     expect(callback).toHaveBeenCalledWith(transform);
     expect(electronMocks.removeListener).toHaveBeenCalledWith(
       stageViewBridgeChannels.applyViewTransformRequested,
+      listener
+    );
+  });
+
+  it("delivers arrangeStateChanged payloads and cleans up subscriptions", () => {
+    const api = installAndReadRuntimePlayerStageApi();
+    const callback = vi.fn();
+    const state: RuntimePlayerStageArrangeState = {
+      arrangeModeEnabled: true
+    };
+
+    const unsubscribe = api.stageView.onArrangeStateChanged(callback);
+
+    expect(electronMocks.on).toHaveBeenCalledWith(
+      stageViewBridgeChannels.arrangeStateChanged,
+      expect.any(Function)
+    );
+    const listener = electronMocks.on.mock.calls[0]?.[1] as
+      | ((event: unknown, payload: RuntimePlayerStageArrangeState) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.({}, state);
+    unsubscribe();
+
+    expect(callback).toHaveBeenCalledWith(state);
+    expect(electronMocks.removeListener).toHaveBeenCalledWith(
+      stageViewBridgeChannels.arrangeStateChanged,
       listener
     );
   });

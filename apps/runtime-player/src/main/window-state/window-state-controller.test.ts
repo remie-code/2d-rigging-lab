@@ -76,6 +76,9 @@ describe("RuntimePlayerWindowStateController", () => {
       },
       stageView: {
         transform: latestTransform
+      },
+      stageEnvironment: {
+        alwaysOnTop: false
       }
     });
     expect(controller.getPersistenceSnapshot()).toMatchObject({
@@ -164,6 +167,31 @@ describe("RuntimePlayerWindowStateController", () => {
     expect(observedStatuses).toContain("saving");
     expect(observedStatuses.at(-1)).toBe("save-failed");
     expect(observedWarnings.at(-1)?.[0]).toContain("disk full");
+  });
+
+  it("updates Stage always-on-top as persisted window environment state", async () => {
+    vi.useFakeTimers();
+    const { controller, saveDocument } = createController({
+      debounceMs: 25,
+      nowIso: createSequentialNowIso([
+        "2026-06-23T00:02:01.000Z"
+      ])
+    });
+
+    expect(controller.getStageAlwaysOnTop()).toBe(false);
+    expect(controller.updateStageAlwaysOnTop(true)).toBe(true);
+    expect(controller.getStageAlwaysOnTop()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(saveDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        updatedAtIso: "2026-06-23T00:02:01.000Z",
+        stageEnvironment: {
+          alwaysOnTop: true
+        }
+      })
+    );
   });
 });
 

@@ -30,6 +30,7 @@ import type {
 } from "./model-mapping-bridge-contract";
 import type {
   RuntimeExportLoadedPayload,
+  RuntimeExportRestoreLastDirectoryRequest,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
 
@@ -52,6 +53,13 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(runtimeExportBridgeChannels.getStatus),
       openDirectory: () =>
         ipcRenderer.invoke(runtimeExportBridgeChannels.openDirectory),
+      restoreLastDirectory: (
+        request?: RuntimeExportRestoreLastDirectoryRequest
+      ) =>
+        ipcRenderer.invoke(
+          runtimeExportBridgeChannels.restoreLastDirectory,
+          request
+        ),
       getLoadedPayload: () =>
         ipcRenderer.invoke(runtimeExportBridgeChannels.getLoadedPayload),
       onStatusChanged: (callback) =>
@@ -160,6 +168,14 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(stageViewBridgeChannels.resetView),
       centerModel: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.centerModel),
+      setArrangeMode: (enabled) =>
+        ipcRenderer.invoke(stageViewBridgeChannels.setArrangeMode, enabled),
+      setClickThrough: (enabled) =>
+        ipcRenderer.invoke(stageViewBridgeChannels.setClickThrough, enabled),
+      setAlwaysOnTop: (enabled) =>
+        ipcRenderer.invoke(stageViewBridgeChannels.setAlwaysOnTop, enabled),
+      copyWindowTitle: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.copyWindowTitle),
       getViewTransform: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.getViewTransform),
       onStatusChanged: (callback) =>

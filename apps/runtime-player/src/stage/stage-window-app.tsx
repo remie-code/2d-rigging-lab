@@ -5,7 +5,10 @@ import type {
   RuntimeExportStatus,
   RuntimeExportLoadedPayload
 } from "../preload/runtime-export-bridge-contract";
-import type { RuntimePlayerStageViewStatusReport } from "../preload/runtime-player-bridge-contract";
+import type {
+  RuntimePlayerStageArrangeState,
+  RuntimePlayerStageViewStatusReport
+} from "../preload/runtime-player-bridge-contract";
 import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer
@@ -21,6 +24,7 @@ type StageRenderState = "empty" | "loaded" | "error";
 export function StageWindowApp(): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [renderState, setRenderState] = useState<StageRenderState>("empty");
+  const [arrangeModeEnabled, setArrangeModeEnabled] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +54,15 @@ export function StageWindowApp(): ReactElement {
 
     applyStoredStageViewTransform(renderer);
     reportStageViewStatus(createStageEmptyStatusReport());
+
+    const applyArrangeState = (state: RuntimePlayerStageArrangeState): void => {
+      if (!active) {
+        return;
+      }
+
+      renderer.setViewInteractionEnabled(!state.arrangeModeEnabled);
+      setArrangeModeEnabled(state.arrangeModeEnabled);
+    };
 
     const renderPayload = (payload: RuntimeExportLoadedPayload): void => {
       if (!active) {
@@ -130,6 +143,15 @@ export function StageWindowApp(): ReactElement {
           setRenderState("error");
         }
       });
+    window.runtimePlayerStage.stageView.getArrangeState()
+      .then(applyArrangeState)
+      .catch((error: unknown) => {
+        console.error("Stage arrange state read failed.", error);
+      });
+    const unsubscribeArrangeState =
+      window.runtimePlayerStage.stageView.onArrangeStateChanged(
+        applyArrangeState
+      );
     const unsubscribeLiveParameters =
       window.runtimePlayerStage.liveParameters.onFrame((frame) => {
         if (!active) {
@@ -152,6 +174,7 @@ export function StageWindowApp(): ReactElement {
       unsubscribe();
       unsubscribeStatus();
       unsubscribeStageViewTransform();
+      unsubscribeArrangeState();
       unsubscribeLiveParameters();
       unsubscribeLiveParameterClear();
       renderer.dispose();
@@ -169,7 +192,26 @@ export function StageWindowApp(): ReactElement {
         aria-hidden="true"
         className="stage-render-canvas"
       />
+      <StageArrangeOverlay enabled={arrangeModeEnabled} />
     </main>
+  );
+}
+
+export function StageArrangeOverlay({
+  enabled
+}: {
+  readonly enabled: boolean;
+}): ReactElement | null {
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <div className="stage-arrange-overlay" aria-hidden="true">
+      <div className="stage-arrange-handle">
+        <span className="stage-arrange-grip" />
+      </div>
+    </div>
   );
 }
 

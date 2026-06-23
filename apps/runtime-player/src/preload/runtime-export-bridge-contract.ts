@@ -60,6 +60,11 @@ export type RuntimeExportLoadedPayload = {
   readonly loadedAtIso: string;
 };
 
+export type RuntimeExportLoadOperation =
+  | "manual-open"
+  | "startup-restore"
+  | "retry-restore";
+
 export type RuntimeExportEmptyStatus = {
   readonly status: "empty";
   readonly loaded: false;
@@ -69,26 +74,31 @@ export type RuntimeExportEmptyStatus = {
 export type RuntimeExportLoadingStatus = {
   readonly status: "loading";
   readonly loaded: false;
-  readonly statusLabel: "Loading Runtime Export";
+  readonly statusLabel: "Loading Runtime Export" | "Restoring Runtime Export";
   readonly directoryPath: string;
+  readonly operation: RuntimeExportLoadOperation;
 };
 
 export type RuntimeExportLoadedStatus = {
   readonly status: "loaded";
   readonly loaded: true;
-  readonly statusLabel: "Runtime Export loaded";
+  readonly statusLabel: "Runtime Export loaded" | "Runtime Export restored";
   readonly directoryPath: string;
   readonly loadedAtIso: string;
   readonly summary: RuntimeExportSummary;
+  readonly operation: RuntimeExportLoadOperation;
 };
 
 export type RuntimeExportErrorStatus = {
   readonly status: "error";
   readonly loaded: false;
-  readonly statusLabel: "Runtime Export load failed";
+  readonly statusLabel:
+    | "Runtime Export load failed"
+    | "Runtime Export restore failed";
   readonly directoryPath: string;
   readonly failedAtIso: string;
   readonly error: RuntimeExportLoadError;
+  readonly operation: RuntimeExportLoadOperation;
 };
 
 export type RuntimeExportStatus =
@@ -111,9 +121,30 @@ export type RuntimeExportOpenDirectoryResult =
       readonly runtimeExport: RuntimeExportErrorStatus;
     };
 
+export type RuntimeExportRestoreLastDirectoryRequest = {
+  readonly reason?: "startup" | "retry";
+};
+
+export type RuntimeExportRestoreLastDirectoryResult =
+  | {
+      readonly result: "not-configured";
+      readonly runtimeExport: RuntimeExportStatus;
+    }
+  | {
+      readonly result: "loaded";
+      readonly runtimeExport: RuntimeExportLoadedStatus;
+    }
+  | {
+      readonly result: "error";
+      readonly runtimeExport: RuntimeExportErrorStatus;
+    };
+
 export type RuntimeExportApi = {
   readonly getStatus: () => Promise<RuntimeExportStatus>;
   readonly openDirectory: () => Promise<RuntimeExportOpenDirectoryResult>;
+  readonly restoreLastDirectory: (
+    request?: RuntimeExportRestoreLastDirectoryRequest
+  ) => Promise<RuntimeExportRestoreLastDirectoryResult>;
   readonly getLoadedPayload: () => Promise<RuntimeExportLoadedPayload | null>;
   readonly onStatusChanged: (
     callback: (status: RuntimeExportStatus) => void

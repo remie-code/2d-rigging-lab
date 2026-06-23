@@ -4,6 +4,7 @@ import type {
   RuntimePlayerWindowBounds
 } from "../../preload/runtime-player-bridge-contract";
 import {
+  normalizeRuntimePlayerStageAlwaysOnTop,
   normalizeRuntimePlayerStageViewTransform,
   normalizeWindowBounds,
   type RuntimePlayerWindowKey,
@@ -49,6 +50,10 @@ export class RuntimePlayerWindowStateController {
 
   getStageViewTransform(): RuntimePlayerStageViewTransform {
     return this.document.stageView.transform;
+  }
+
+  getStageAlwaysOnTop(): boolean {
+    return this.document.stageEnvironment.alwaysOnTop;
   }
 
   getPersistenceSnapshot(): RuntimePlayerStageStateSnapshot["persistence"] {
@@ -105,6 +110,21 @@ export class RuntimePlayerWindowStateController {
 
     this.scheduleSave();
     return normalizedTransform;
+  }
+
+  updateStageAlwaysOnTop(value: unknown): boolean {
+    const alwaysOnTop = normalizeRuntimePlayerStageAlwaysOnTop(value);
+
+    this.document = {
+      ...this.document,
+      updatedAtIso: this.nowIso(),
+      stageEnvironment: {
+        alwaysOnTop
+      }
+    };
+
+    this.scheduleSave();
+    return alwaysOnTop;
   }
 
   async flush(): Promise<void> {

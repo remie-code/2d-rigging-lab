@@ -34,6 +34,7 @@ describe("Runtime Player BrowserWindow options", () => {
     expect(options.frame).toBe(false);
     expect(options.transparent).toBe(true);
     expect(options.hasShadow).toBe(false);
+    expect(options.alwaysOnTop).toBe(false);
     expect(options.backgroundColor).toBe("#00000000");
     expect(options.width).toBe(stageWindowDefaultBounds.width);
     expect(options.webPreferences).toMatchObject({
@@ -46,12 +47,18 @@ describe("Runtime Player BrowserWindow options", () => {
   });
 
   it("applies restored Stage bounds before the window is shown", () => {
-    const options = createStageWindowOptions("preload-placeholder.mjs", {
-      x: 1200,
-      y: 80,
-      width: 900,
-      height: 1200
-    });
+    const options = createStageWindowOptions(
+      "preload-placeholder.mjs",
+      {
+        x: 1200,
+        y: 80,
+        width: 900,
+        height: 1200
+      },
+      {
+        alwaysOnTop: true
+      }
+    );
 
     expect(options).toMatchObject({
       x: 1200,
@@ -59,7 +66,8 @@ describe("Runtime Player BrowserWindow options", () => {
       width: 900,
       height: 1200,
       minWidth: stageWindowDefaultBounds.minWidth,
-      minHeight: stageWindowDefaultBounds.minHeight
+      minHeight: stageWindowDefaultBounds.minHeight,
+      alwaysOnTop: true
     });
   });
 

@@ -393,30 +393,9 @@ Each implementation domain needs the usual review lanes:
 
 Domain C performs the clean final integration review after A/B are complete.
 
-## 12. Orchestration Policy
+Root coordinator must wait for every child and close completed children. A timeout from child wait is polling, not failure. Do not abandon child agents.
 
-This wave follows the Implementation Orchestration skill.
-
-Root / Undine:
-
-- Owns wave plan, user questions, dependency graph, and final decision.
-- Must not implement Runtime Player Wave7 source changes.
-- Must wait for every started subagent.
-- Must treat wait timeouts as polling.
-- Must not close running children.
-
-Orch-Sylph:
-
-- Owns one domain loop.
-- Must start with bounded current-state confirmation.
-- Must delegate implementation and review.
-- Must wait for Gnome and all Review-Sylphs.
-- Must close completed children.
-- Must report domain verdict and evidence.
-
-No parent may pass the wave gate while a child is incomplete, running, or unresolved.
-
-## 13. Out of Scope
+## 12. Out of Scope
 
 - Broadcast / OBS capture workflow.
 - Transparent-window controls beyond existing Stage behavior.

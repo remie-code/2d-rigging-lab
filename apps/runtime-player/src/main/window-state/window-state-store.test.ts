@@ -33,12 +33,15 @@ describe("RuntimePlayerWindowStateStore", () => {
             },
             coordinateSpace: "stage-viewport-px-v1"
           }
+        },
+        stageEnvironment: {
+          alwaysOnTop: false
         }
       }
     });
   });
 
-  it("persists Stage and Control bounds plus Stage view transform", async () => {
+  it("persists Stage and Control bounds plus Stage view transform and always-on-top", async () => {
     const userDataPath = await mkdtemp(
       path.join(os.tmpdir(), "runtime-player-window-state-")
     );
@@ -61,6 +64,9 @@ describe("RuntimePlayerWindowStateStore", () => {
           pan: { x: -32, y: 140 },
           coordinateSpace: "stage-viewport-px-v1" as const
         }
+      },
+      stageEnvironment: {
+        alwaysOnTop: true
       }
     };
 
@@ -86,6 +92,9 @@ describe("RuntimePlayerWindowStateStore", () => {
           pan: { x: -32, y: 140 },
           coordinateSpace: "stage-viewport-px-v1"
         }
+      },
+      stageEnvironment: {
+        alwaysOnTop: true
       }
     });
   });
@@ -113,6 +122,9 @@ describe("RuntimePlayerWindowStateStore", () => {
           pan: { x: -24, y: 36 },
           coordinateSpace: "stage-viewport-px-v1" as const
         }
+      },
+      stageEnvironment: {
+        alwaysOnTop: true
       }
     };
 
@@ -150,6 +162,7 @@ describe("RuntimePlayerWindowStateStore", () => {
     expect(snapshot.state).toBe("read-failed");
     expect(snapshot.document.windows).toEqual({});
     expect(snapshot.document.stageView.transform.zoomScale).toBe(1);
+    expect(snapshot.document.stageEnvironment.alwaysOnTop).toBe(false);
     expect(snapshot.warningMessages[0]).toContain("invalid JSON");
   });
 
@@ -171,6 +184,9 @@ describe("RuntimePlayerWindowStateStore", () => {
           pan: { x: -32, y: 140 },
           coordinateSpace: "stage-viewport-px-v1"
         }
+      },
+      stageEnvironment: {
+        alwaysOnTop: "yes"
       }
     });
 
@@ -188,10 +204,14 @@ describe("RuntimePlayerWindowStateStore", () => {
             pan: { x: 0, y: 0 },
             coordinateSpace: "stage-viewport-px-v1"
           }
+        },
+        stageEnvironment: {
+          alwaysOnTop: false
         }
       },
       warningMessages: [
         "stage window bounds were invalid and were ignored.",
+        "Stage always-on-top value was invalid and was reset.",
         "Stage view transform was invalid and was reset."
       ]
     });

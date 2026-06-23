@@ -2,6 +2,7 @@ import type {
   RuntimeExportErrorStatus,
   RuntimeExportLoadedPayload,
   RuntimeExportLoadedStatus,
+  RuntimeExportLoadOperation,
   RuntimeExportLoadError,
   RuntimeExportLoadingStatus,
   RuntimeExportStatus
@@ -19,12 +20,18 @@ export class RuntimeExportSessionState {
     return this.#loadedPayload;
   }
 
-  setLoading(directoryPath: string): RuntimeExportLoadingStatus {
+  setLoading(
+    directoryPath: string,
+    operation: RuntimeExportLoadOperation = "manual-open"
+  ): RuntimeExportLoadingStatus {
     const status: RuntimeExportLoadingStatus = {
       status: "loading",
       loaded: false,
-      statusLabel: "Loading Runtime Export",
-      directoryPath
+      statusLabel: isRestoreOperation(operation)
+        ? "Restoring Runtime Export"
+        : "Loading Runtime Export",
+      directoryPath,
+      operation
     };
 
     this.#status = status;
@@ -36,14 +43,19 @@ export class RuntimeExportSessionState {
   setLoaded(input: {
     readonly directoryPath: string;
     readonly payload: RuntimeExportLoadedPayload;
+    readonly operation?: RuntimeExportLoadOperation;
   }): RuntimeExportLoadedStatus {
+    const operation = input.operation ?? "manual-open";
     const status: RuntimeExportLoadedStatus = {
       status: "loaded",
       loaded: true,
-      statusLabel: "Runtime Export loaded",
+      statusLabel: isRestoreOperation(operation)
+        ? "Runtime Export restored"
+        : "Runtime Export loaded",
       directoryPath: input.directoryPath,
       loadedAtIso: input.payload.loadedAtIso,
-      summary: input.payload.summary
+      summary: input.payload.summary,
+      operation
     };
 
     this.#status = status;
@@ -56,14 +68,19 @@ export class RuntimeExportSessionState {
     readonly directoryPath: string;
     readonly error: RuntimeExportLoadError;
     readonly failedAtIso: string;
+    readonly operation?: RuntimeExportLoadOperation;
   }): RuntimeExportErrorStatus {
+    const operation = input.operation ?? "manual-open";
     const status: RuntimeExportErrorStatus = {
       status: "error",
       loaded: false,
-      statusLabel: "Runtime Export load failed",
+      statusLabel: isRestoreOperation(operation)
+        ? "Runtime Export restore failed"
+        : "Runtime Export load failed",
       directoryPath: input.directoryPath,
       failedAtIso: input.failedAtIso,
-      error: input.error
+      error: input.error,
+      operation
     };
 
     this.#status = status;
@@ -79,4 +96,8 @@ export function createEmptyRuntimeExportStatus(): RuntimeExportStatus {
     loaded: false,
     statusLabel: "No Runtime Export loaded"
   };
+}
+
+function isRestoreOperation(operation: RuntimeExportLoadOperation): boolean {
+  return operation === "startup-restore" || operation === "retry-restore";
 }

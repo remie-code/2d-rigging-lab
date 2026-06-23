@@ -36,6 +36,7 @@ export interface StaticStageCanvasRenderer {
     transform: StageViewTransform,
     options?: StaticStageViewTransformSetOptions
   ): void;
+  setViewInteractionEnabled(enabled: boolean): void;
   resetView(): void;
   centerModel(): void;
   clear(): void;
@@ -81,6 +82,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private viewTransform: StageViewTransform = createResetStageViewTransform();
   private activePanPointerId: number | null = null;
   private lastPanPoint: StageViewportPoint | null = null;
+  private viewInteractionEnabled = true;
   private readonly resizeObserver: ResizeObserver | undefined;
   private disposed = false;
 
@@ -162,6 +164,14 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
     if (options.notify ?? true) {
       this.reportViewTransformChanged();
+    }
+  }
+
+  setViewInteractionEnabled(enabled: boolean): void {
+    this.viewInteractionEnabled = enabled;
+
+    if (!enabled && this.activePanPointerId !== null) {
+      this.finishPan(this.activePanPointerId);
     }
   }
 
@@ -287,11 +297,17 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   };
 
   private readonly handleWheel = (event: WheelEvent): void => {
-    event.preventDefault();
-    if (this.disposed || this.renderInput === null) {
+    if (
+      !shouldHandleStageViewInteraction({
+        disposed: this.disposed,
+        viewInteractionEnabled: this.viewInteractionEnabled,
+        hasRenderInput: this.renderInput !== null
+      })
+    ) {
       return;
     }
 
+    event.preventDefault();
     this.viewTransform = applyStageWheelZoom({
       transform: this.viewTransform,
       wheelDeltaY: normalizeWheelDeltaY(event, this.canvas),
@@ -303,8 +319,11 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
     if (
-      this.disposed ||
-      this.renderInput === null ||
+      !shouldHandleStageViewInteraction({
+        disposed: this.disposed,
+        viewInteractionEnabled: this.viewInteractionEnabled,
+        hasRenderInput: this.renderInput !== null
+      }) ||
       event.button !== 0
     ) {
       return;
@@ -323,9 +342,13 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private readonly handlePointerMove = (event: PointerEvent): void => {
     if (
       this.disposed ||
+      !this.viewInteractionEnabled ||
       this.activePanPointerId !== event.pointerId ||
       this.lastPanPoint === null
     ) {
+      if (!this.viewInteractionEnabled) {
+        this.finishPan(event.pointerId);
+      }
       return;
     }
 
@@ -366,6 +389,18 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private reportViewTransformChanged(): void {
     this.options.onViewTransformChanged?.(this.viewTransform);
   }
+}
+
+export function shouldHandleStageViewInteraction(input: {
+  readonly disposed: boolean;
+  readonly viewInteractionEnabled: boolean;
+  readonly hasRenderInput: boolean;
+}): boolean {
+  return (
+    !input.disposed &&
+    input.viewInteractionEnabled &&
+    input.hasRenderInput
+  );
 }
 
 function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement): {

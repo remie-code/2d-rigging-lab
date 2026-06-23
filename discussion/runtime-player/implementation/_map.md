@@ -27,6 +27,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave5-plan.md](orchestration/player-wave5-plan.md) | Completed / final pass | Runtime Player Wave5: Tracking Setup + Live Mapping v0 |
 | [orchestration/player-wave6-plan.md](orchestration/player-wave6-plan.md) | Completed / final pass | Runtime Player Wave6: Body Follow v0 from head rotation / head position |
 | [orchestration/player-wave7-plan.md](orchestration/player-wave7-plan.md) | Completed / final pass | Runtime Player Wave7: persistent Mapping / Body Follow profile + Stage page and Stage state persistence |
+| [orchestration/player-wave8-plan.md](orchestration/player-wave8-plan.md) | Completed / final pass | Runtime Player Wave8: Broadcast Stage Setup v0 |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -53,6 +54,11 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md](waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md) | Pass | Runtime Player Wave7 Domain A Model Mapping Profile auto-save / restore |
 | [waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md](waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md) | Pass | Runtime Player Wave7 Domain B Stage page + Window/View State auto-save |
 | [waves/wave7/runtime-player-wave7-final-integration-report.md](waves/wave7/runtime-player-wave7-final-integration-report.md) | Pass | Runtime Player Wave7 final integration report and docs/maps alignment |
+| [waves/wave8/_map.md](waves/wave8/_map.md) | Pass | Runtime Player Wave8 report map |
+| [waves/wave8/runtime-player-wave8-domain-a-control-recovery-tray-explicit-quit-report.md](waves/wave8/runtime-player-wave8-domain-a-control-recovery-tray-explicit-quit-report.md) | Pass | Runtime Player Wave8 Domain A Control recovery / tray-menu / explicit quit |
+| [waves/wave8/runtime-player-wave8-domain-b-runtime-export-auto-restore-report.md](waves/wave8/runtime-player-wave8-domain-b-runtime-export-auto-restore-report.md) | Pass | Runtime Player Wave8 Domain B Runtime Export startup-state / auto restore |
+| [waves/wave8/runtime-player-wave8-domain-c-stage-capture-controls-report.md](waves/wave8/runtime-player-wave8-domain-c-stage-capture-controls-report.md) | Pass | Runtime Player Wave8 Domain C Stage capture controls |
+| [waves/wave8/runtime-player-wave8-final-integration-report.md](waves/wave8/runtime-player-wave8-final-integration-report.md) | Pass | Runtime Player Wave8 final integration report and docs/maps alignment |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -104,6 +110,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave7/runtime-player-wave7-domain-b-spec-compliance-review.md](reviews/wave7/runtime-player-wave7-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave7 Domain B spec compliance review |
 | [reviews/wave7/runtime-player-wave7-domain-b-design-development-review.md](reviews/wave7/runtime-player-wave7-domain-b-design-development-review.md) | Pass | Runtime Player Wave7 Domain B design / development compliance review |
 | [reviews/wave7/runtime-player-wave7-domain-b-test-adequacy-review.md](reviews/wave7/runtime-player-wave7-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave7 Domain B test adequacy review |
+| [reviews/wave8/_map.md](reviews/wave8/_map.md) | Pass | Runtime Player Wave8 review map |
+| [reviews/wave8/runtime-player-wave8-domain-a-spec-compliance-review.md](reviews/wave8/runtime-player-wave8-domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave8 Domain A spec compliance review |
+| [reviews/wave8/runtime-player-wave8-domain-a-design-development-review.md](reviews/wave8/runtime-player-wave8-domain-a-design-development-review.md) | Pass | Runtime Player Wave8 Domain A design/development review |
+| [reviews/wave8/runtime-player-wave8-domain-a-test-adequacy-review.md](reviews/wave8/runtime-player-wave8-domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave8 Domain A test adequacy review |
+| [reviews/wave8/runtime-player-wave8-domain-b-spec-compliance-review.md](reviews/wave8/runtime-player-wave8-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave8 Domain B spec compliance review |
+| [reviews/wave8/runtime-player-wave8-domain-b-design-development-review.md](reviews/wave8/runtime-player-wave8-domain-b-design-development-review.md) | Pass | Runtime Player Wave8 Domain B design/development review |
+| [reviews/wave8/runtime-player-wave8-domain-b-test-adequacy-review.md](reviews/wave8/runtime-player-wave8-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave8 Domain B test adequacy follow-up review |
+| [reviews/wave8/runtime-player-wave8-domain-c-spec-compliance-review.md](reviews/wave8/runtime-player-wave8-domain-c-spec-compliance-review.md) | Pass | Runtime Player Wave8 Domain C spec compliance review |
+| [reviews/wave8/runtime-player-wave8-domain-c-design-development-review.md](reviews/wave8/runtime-player-wave8-domain-c-design-development-review.md) | Pass | Runtime Player Wave8 Domain C design/development review |
+| [reviews/wave8/runtime-player-wave8-domain-c-test-adequacy-review.md](reviews/wave8/runtime-player-wave8-domain-c-test-adequacy-review.md) | Pass | Runtime Player Wave8 Domain C test adequacy review |
 
 ## 4. Current Implementation State
 
@@ -139,8 +155,15 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Wave7 added persistent Model Mapping / Body Follow profile auto-save/restore under `<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`.
 - Wave7 added a real Stage page and Window State auto-save under `<electron userData>/window-state/runtime-player.json` for Stage/Control bounds plus Stage view pan/zoom.
 - Stage remains model-only and receives Runtime Export payloads plus sanitized live parameter frames with `parameterValues`, not raw tracking frames.
-- Remaining Wave7 closeout gap is manual Electron verification: Mapping/Body Follow tune restart/reopen restore, Stage move/resize restore, Stage pan/zoom restore, Stage page Focus/Reset/Center, and real iFacialMocap tracking after profile restore.
+- Wave7 manual Electron verification is complete by user confirmation: Mapping/Body Follow tune restart/reopen restore, Stage move/resize restore, Stage pan/zoom restore, Stage page Focus/Reset/Center, and real iFacialMocap tracking after profile restore behaved as expected.
+- Runtime Player Wave8 Domain A/B/C implementation and reviews are complete, and Domain D final integration docs/report alignment is complete with `pass`: [waves/wave8/runtime-player-wave8-final-integration-report.md](waves/wave8/runtime-player-wave8-final-integration-report.md).
+- Wave8 implemented Broadcast Stage Setup v0: Runtime Export startup restore, Control Window recovery, Stage Arrange mode, click-through, always-on-top, Capture Target checklist, and stable Stage title / Copy Window Title.
+- Runtime Export startup restore is separate from Input Source; it does not auto-connect iFacialMocap.
+- Startup State uses `<electron userData>/startup-state/runtime-player-startup.json`; Window State remains `<electron userData>/window-state/runtime-player.json`.
+- click-through starts Off and is not persisted. always-on-top defaults Off and is persisted as `stageEnvironment.alwaysOnTop`.
+- Stage remains model-only in normal mode. Capture Target checklist is local readiness only and does not claim OBS integration/readiness.
+- Spout sender, OBS automation/source creation, Input Source auto-connect, head-position Stage Motion, and near/far distance response remain out of scope.
 
 ## 5. Next Action
 
-Before treating Wave7 as manually accepted, run the manual Electron verification listed in [waves/wave7/runtime-player-wave7-final-integration-report.md](waves/wave7/runtime-player-wave7-final-integration-report.md) and [../backlog/runtime-player-backlog.md](../backlog/runtime-player-backlog.md). For next feature planning, start from the backlog and current screen docs rather than the Wave7 plan.
+Use [waves/wave8/runtime-player-wave8-final-integration-report.md](waves/wave8/runtime-player-wave8-final-integration-report.md), [waves/wave8/_map.md](waves/wave8/_map.md), and [reviews/wave8/_map.md](reviews/wave8/_map.md) as the Wave8 implementation baseline. Next practical action is manual Electron/OBS-adjacent verification for Control recovery, explicit quit, startup restore, Stage Arrange drag, click-through recovery, always-on-top persistence, Capture Target checklist/Copy Window Title, and OBS Window Capture title/alpha smoke. Future planning should keep Spout/OBS automation and Stage Motion separate unless user scope changes.

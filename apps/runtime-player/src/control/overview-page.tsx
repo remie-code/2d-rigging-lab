@@ -1,5 +1,11 @@
 import type { ReactElement } from "react";
-import { Crosshair, FolderOpen, Plug, SlidersHorizontal } from "lucide-react";
+import {
+  Crosshair,
+  FolderOpen,
+  Plug,
+  RefreshCcw,
+  SlidersHorizontal
+} from "lucide-react";
 
 import {
   ErrorNotice,
@@ -46,6 +52,7 @@ export function OverviewPage({
   stageViewStatus,
   stageWindowStatus,
   onOpenRuntimeExport,
+  onRetryRuntimeExportRestore,
   onConnectInput,
   onLookForward,
   onStartCalibration,
@@ -61,6 +68,7 @@ export function OverviewPage({
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageWindowStatus: string;
   readonly onOpenRuntimeExport: () => void;
+  readonly onRetryRuntimeExportRestore: () => void;
   readonly onConnectInput: () => void;
   readonly onLookForward: () => void;
   readonly onStartCalibration: () => void;
@@ -72,6 +80,9 @@ export function OverviewPage({
   const erroredRuntimeExport = runtimeExportStatus?.status === "error"
     ? runtimeExportStatus
     : null;
+  const restoreFailed =
+    erroredRuntimeExport?.operation === "startup-restore" ||
+    erroredRuntimeExport?.operation === "retry-restore";
 
   return (
     <div className="grid gap-4">
@@ -103,12 +114,23 @@ export function OverviewPage({
               details={erroredRuntimeExport.error.details}
             />
           ) : null}
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
+            {restoreFailed ? (
+              <IconTextButton
+                icon={RefreshCcw}
+                label="Retry Restore"
+                onClick={onRetryRuntimeExportRestore}
+                variant="secondary"
+                disabled={runtimeExportStatus?.status === "loading"}
+              />
+            ) : null}
             <IconTextButton
               icon={FolderOpen}
               label={
                 runtimeExportStatus?.status === "loaded"
                   ? "Open Different Export"
+                  : runtimeExportStatus?.status === "error"
+                    ? "Open New Export"
                   : "Open Runtime Export"
               }
               onClick={onOpenRuntimeExport}

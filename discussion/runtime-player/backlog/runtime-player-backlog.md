@@ -127,28 +127,30 @@ Problem:
 
 - Stage Windowはtransparent/capture-friendlyである必要がある。
 - Electronのtransparent/frameless windowやOBS capture behaviorはOSやGPU環境の差分を受ける。
-- Wave1/Wave2では実window表示の基本確認はできたが、OBS連携やOS差分は未検証。
+- Wave8でStage Arrange、click-through、always-on-top、Capture Target checklistはsource/test上実装済みだが、Electron-native挙動とOBS capture挙動は未検証。
 
 Trigger:
 
 - Playerを配信・収録用途で使い始める。
-- Stage Windowのposition / size / always-on-top / click-throughを実装する。
+- Stage Windowのposition / size / always-on-top / click-throughを配信・収録用途で実運用する。
 - packaging/distribution前。
 
 Desired outcome:
 
 - 対象OSでStageが透明背景としてcaptureできる。
 - captureに不要なUIが入らない。
-- always-on-top / click-through / window placementの仕様を決める。
+- always-on-top / click-through / window placementが対象OS上で期待どおり動く。
+- OBS Window Captureで`Runtime Player Stage`を選べ、alphaが期待どおり扱われる。
 
 Source:
 
 - [../architecture/technology-stack-decision.md](../architecture/technology-stack-decision.md)
 - [../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md](../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
 
 Suggested next action:
 
-- Stage Window behavior waveを切る前に、対象OSとOBS capture要件を整理する。
+- Wave8 final reportのmanual verification checklistを実行し、OS/OBS差分が出たらplatform-specific follow-up waveを切る。
 
 ### 3.5 iFacialMocap Input Adapter And Parameter Mapping
 
@@ -217,30 +219,32 @@ Remaining manual verification:
 - Run Electron Runtime Player with real iFacialMocap input and a Runtime Export with authored Body Angle X/Z keyforms.
 - Tune default Body X/Z strengths and lag if real-device visual evidence shows the defaults feel wrong.
 
-### 3.7 Head-Position Stage Motion And Broadcast-Ready Stage
+### 3.7 Head-Position Stage Motion And Broadcast Follow-ups
 
 - Status: Deferred
 - Kind: Future UX / feature
-- Priority: Medium after Body Follow visual verification, high before broadcast/capture workflows
+- Priority: Medium after Broadcast Stage Setup v0 manual verification
 
 Problem:
 
 - Wave6 intentionally stops at authored Body Angle X/Z parameter output.
-- Head position may also be useful for Stage scale, Stage translation, near/far distance response, or capture-friendly Stage controls, but those are separate from Runtime Export parameter mapping.
-- Adding Stage Motion or Broadcast/OBS UX too early would mix model parameter follow, window/capture behavior, and display composition.
+- Head position may also be useful for Stage scale, Stage translation, or near/far distance response, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
+- Wave8 intentionally stopped at capture-target controls and did not add Stage Motion, Spout, or OBS automation.
 
 Trigger:
 
 - Body Follow v0 is manually verified with real iFacialMocap and a real Runtime Export.
 - User wants the on-stage model to move/scale with head position, not only body angle parameters.
-- Stage Window position / size / always-on-top / click-through / OBS capture behavior becomes the next practical bottleneck.
+- User wants on-stage model translation/scale from head position, not only body angle parameters.
+- OBS Window Capture manual smoke shows Window Capture is insufficient, or the user explicitly wants Spout/OBS automation.
 
 Desired outcome:
 
 - Decide whether head position should drive Stage translation, Stage scale, both, or neither.
 - Keep Stage Motion separate from Body Follow parameter mapping.
-- Define capture-safe Stage controls without adding debug UI to Stage.
+- Preserve Wave8 capture-safe Stage controls without adding debug UI to Stage.
 - Preserve the existing rule that Stage receives sanitized display/runtime data, not raw tracking diagnostics.
+- Keep Spout as a separate feasibility track, because it is promising but heavier than the immediate Stage Window capture workflow.
 
 Source:
 
@@ -248,10 +252,14 @@ Source:
 - [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
 - [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
 - [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
 
 Suggested next action:
 
-- After manual body follow verification, run a planning gate for Stage Motion / Broadcast-ready Stage as a separate wave.
+- Complete Wave8 manual Electron/OBS-adjacent verification first.
+- If Window Capture is insufficient, run a Spout feasibility planning gate.
+- If user wants model translation/scale from head position, run a separate Stage Motion planning gate.
 
 ### 3.8 Model Mapping Profile Auto Save
 
@@ -386,16 +394,16 @@ Source:
 
 ### 3.10 Wave7 Manual Electron Persistence Verification
 
-- Status: Deferred
+- Status: Done
 - Kind: Runtime verification
-- Priority: High before treating Wave7 as fully manually accepted
+- Priority: N/A
 
 Problem:
 
 - Wave7 source checks, focused tests, typecheck, and review reports support a pass verdict, but Electron restart/reopen flows were not manually executed in Domain C.
 - These checks need a real Runtime Player session, real Runtime Export, and real iFacialMocap input for final product confidence.
 
-Required checks:
+Verified checks:
 
 - Mapping/Body Follow tune -> restart/reopen same Runtime Export -> restore。
 - Stage move/resize -> restart -> restore。
@@ -403,6 +411,67 @@ Required checks:
 - Stage page Focus/Reset/Center。
 - Real iFacialMocap tracking after profile restore。
 
+Result:
+
+- User manually confirmed all checks behaved as expected after Wave7.
+
 Source:
 
 - [../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md)
+
+### 3.11 Broadcast Stage Setup v0
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md))
+- Kind: Next UX / feature completed by Runtime Player Wave8
+- Priority: N/A
+
+Problem:
+
+- Before Wave8, Runtime Player could move the model naturally and persist mapping/stage state, but the Stage was not yet comfortable as a broadcast capture target.
+- Stage Window is frameless, so it needs an explicit arrangement path.
+- If Control Window is closed, the user needed a reliable way to recover it.
+- Click-through is useful for broadcast but dangerous without a recovery path.
+- OBS integration should not be overclaimed; Runtime Player can prepare the Stage as a capture target but cannot know whether OBS is actually capturing it.
+
+Implemented outcome:
+
+- Runtime Export startup restore stores the last successful Runtime Export path under `<electron userData>/startup-state/runtime-player-startup.json`.
+- Startup restore runs from Control after initial renderer effect/status setup and uses the same load workflow as manual open.
+- Missing/invalid saved Runtime Export paths show a non-crashing restore failure and remain available for Retry/Open New behavior.
+- Input Source auto-connect remains out of scope; iFacialMocap connect stays manual.
+- Control Window close hides the window; tray/application menu can show Control, focus Stage, disable click-through, and explicitly quit.
+- Explicit Quit flushes input disconnect, Model Mapping Profile, and Window State through the quit controller.
+- Stage Arrange mode shows a temporary native drag handle/overlay and disables normal Stage pan/zoom while active.
+- Normal Stage mode remains model-only.
+- Click-through can be toggled from Control, starts Off on startup, is not persisted, and can be disabled from tray/application menu.
+- Always-on-top can be toggled from Control, defaults Off, and is persisted in Window State as `stageEnvironment.alwaysOnTop`.
+- Capture Target checklist is local Runtime Player readiness only and does not claim OBS integration/readiness.
+- Stable Stage native title remains `Runtime Player Stage`, with Copy Window Title.
+
+Out of scope:
+
+- Spout sender implementation.
+- obs-websocket integration.
+- automatic OBS source creation.
+- Input Source auto-connect.
+- head-position Stage Motion.
+- near/far distance response.
+
+Source:
+
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/orchestration/player-wave8-plan.md](../implementation/orchestration/player-wave8-plan.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+
+Remaining manual verification:
+
+- Control close hides/reopens from tray/menu.
+- Explicit Quit flushes and exits.
+- Runtime Export valid/invalid startup restore.
+- Stage Arrange drag handle moves the native Stage Window.
+- Click-through toggle and tray recovery.
+- Always-on-top toggle and persistence.
+- Capture Target checklist and Copy Window Title.
+- OBS Window Capture title/alpha smoke check.

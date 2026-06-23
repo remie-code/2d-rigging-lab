@@ -47,6 +47,10 @@ describe("installRuntimePlayerBridge stageView", () => {
     api.stageView.focusStage();
     api.stageView.resetView();
     api.stageView.centerModel();
+    api.stageView.setArrangeMode(true);
+    api.stageView.setClickThrough(true);
+    api.stageView.setAlwaysOnTop(true);
+    api.stageView.copyWindowTitle();
     api.focusStage();
     api.resetStagePosition();
 
@@ -77,10 +81,29 @@ describe("installRuntimePlayerBridge stageView", () => {
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       7,
-      stageViewBridgeChannels.focusStage
+      stageViewBridgeChannels.setArrangeMode,
+      true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       8,
+      stageViewBridgeChannels.setClickThrough,
+      true
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      9,
+      stageViewBridgeChannels.setAlwaysOnTop,
+      true
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      10,
+      stageViewBridgeChannels.copyWindowTitle
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      11,
+      stageViewBridgeChannels.focusStage
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      12,
       stageViewBridgeChannels.resetView
     );
   });

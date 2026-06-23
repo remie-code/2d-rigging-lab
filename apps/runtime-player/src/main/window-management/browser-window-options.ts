@@ -1,5 +1,8 @@
 import type { BrowserWindowConstructorOptions } from "electron";
-import type { RuntimePlayerWindowBounds } from "../../preload/runtime-player-bridge-contract";
+import {
+  runtimePlayerStageWindowTitle,
+  type RuntimePlayerWindowBounds
+} from "../../preload/runtime-player-bridge-contract";
 
 export const controlWindowDefaultBounds = {
   width: 1040,
@@ -38,18 +41,22 @@ export function createControlWindowOptions(
 
 export function createStageWindowOptions(
   preloadFilePath: string,
-  restoredBounds?: RuntimePlayerWindowBounds
+  restoredBounds?: RuntimePlayerWindowBounds,
+  options: {
+    readonly alwaysOnTop?: boolean;
+  } = {}
 ): BrowserWindowConstructorOptions {
   return {
     ...createRestoredBoundsOptions(
       stageWindowDefaultBounds,
       restoredBounds
     ),
-    title: "Runtime Player Stage",
+    title: runtimePlayerStageWindowTitle,
     show: false,
     frame: false,
     transparent: true,
     hasShadow: false,
+    alwaysOnTop: options.alwaysOnTop ?? false,
     backgroundColor: "#00000000",
     webPreferences: {
       preload: preloadFilePath,
