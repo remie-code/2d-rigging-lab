@@ -1,4 +1,5 @@
 import type { BrowserWindowConstructorOptions } from "electron";
+import type { RuntimePlayerWindowBounds } from "../../preload/runtime-player-bridge-contract";
 
 export const controlWindowDefaultBounds = {
   width: 1040,
@@ -15,10 +16,14 @@ export const stageWindowDefaultBounds = {
 } as const;
 
 export function createControlWindowOptions(
-  preloadFilePath: string
+  preloadFilePath: string,
+  restoredBounds?: RuntimePlayerWindowBounds
 ): BrowserWindowConstructorOptions {
   return {
-    ...controlWindowDefaultBounds,
+    ...createRestoredBoundsOptions(
+      controlWindowDefaultBounds,
+      restoredBounds
+    ),
     title: "Runtime Player",
     show: false,
     backgroundColor: "#101214",
@@ -32,10 +37,14 @@ export function createControlWindowOptions(
 }
 
 export function createStageWindowOptions(
-  preloadFilePath: string
+  preloadFilePath: string,
+  restoredBounds?: RuntimePlayerWindowBounds
 ): BrowserWindowConstructorOptions {
   return {
-    ...stageWindowDefaultBounds,
+    ...createRestoredBoundsOptions(
+      stageWindowDefaultBounds,
+      restoredBounds
+    ),
     title: "Runtime Player Stage",
     show: false,
     frame: false,
@@ -49,5 +58,26 @@ export function createStageWindowOptions(
       sandbox: false,
       backgroundThrottling: false
     }
+  };
+}
+
+function createRestoredBoundsOptions(
+  defaults: typeof controlWindowDefaultBounds | typeof stageWindowDefaultBounds,
+  restoredBounds: RuntimePlayerWindowBounds | undefined
+): Pick<
+  BrowserWindowConstructorOptions,
+  "x" | "y" | "width" | "height" | "minWidth" | "minHeight"
+> {
+  if (restoredBounds === undefined) {
+    return defaults;
+  }
+
+  return {
+    x: restoredBounds.x,
+    y: restoredBounds.y,
+    width: Math.max(defaults.minWidth, restoredBounds.width),
+    height: Math.max(defaults.minHeight, restoredBounds.height),
+    minWidth: defaults.minWidth,
+    minHeight: defaults.minHeight
   };
 }

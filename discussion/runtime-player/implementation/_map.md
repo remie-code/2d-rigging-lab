@@ -26,6 +26,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave4-plan.md](orchestration/player-wave4-plan.md) | Completed / final pass | Runtime Player Wave4: iFacialMocap UDP receive + tracking debug diagnostics |
 | [orchestration/player-wave5-plan.md](orchestration/player-wave5-plan.md) | Completed / final pass | Runtime Player Wave5: Tracking Setup + Live Mapping v0 |
 | [orchestration/player-wave6-plan.md](orchestration/player-wave6-plan.md) | Completed / final pass | Runtime Player Wave6: Body Follow v0 from head rotation / head position |
+| [orchestration/player-wave7-plan.md](orchestration/player-wave7-plan.md) | Completed / final pass | Runtime Player Wave7: persistent Mapping / Body Follow profile + Stage page and Stage state persistence |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -48,6 +49,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md](waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md) | Pass | Runtime Player Wave6 Domain A Input Profile head position calibration and missing-only recalibration |
 | [waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md](waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md) | Pass | Runtime Player Wave6 Domain B Body X/Z auto mapping, controls, and sanitized live body follow |
 | [waves/wave6/runtime-player-wave6-final-integration-report.md](waves/wave6/runtime-player-wave6-final-integration-report.md) | Pass | Runtime Player Wave6 final integration report and docs/maps alignment |
+| [waves/wave7/_map.md](waves/wave7/_map.md) | Pass | Runtime Player Wave7 report map |
+| [waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md](waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md) | Pass | Runtime Player Wave7 Domain A Model Mapping Profile auto-save / restore |
+| [waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md](waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md) | Pass | Runtime Player Wave7 Domain B Stage page + Window/View State auto-save |
+| [waves/wave7/runtime-player-wave7-final-integration-report.md](waves/wave7/runtime-player-wave7-final-integration-report.md) | Pass | Runtime Player Wave7 final integration report and docs/maps alignment |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -92,6 +97,13 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave6/runtime-player-wave6-domain-b-design-development-review.md](reviews/wave6/runtime-player-wave6-domain-b-design-development-review.md) | Pass | Runtime Player Wave6 Domain B design / development compliance review |
 | [reviews/wave6/runtime-player-wave6-domain-b-test-adequacy-review.md](reviews/wave6/runtime-player-wave6-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave6 Domain B test adequacy review |
 | [reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](reviews/wave6/runtime-player-wave6-final-clean-integration-review.md) | Pass | Runtime Player Wave6 final clean integration review |
+| [reviews/wave7/_map.md](reviews/wave7/_map.md) | Pass | Runtime Player Wave7 review map |
+| [reviews/wave7/runtime-player-wave7-domain-a-spec-compliance-review.md](reviews/wave7/runtime-player-wave7-domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave7 Domain A spec compliance review |
+| [reviews/wave7/runtime-player-wave7-domain-a-design-development-review.md](reviews/wave7/runtime-player-wave7-domain-a-design-development-review.md) | Pass | Runtime Player Wave7 Domain A design / development compliance review |
+| [reviews/wave7/runtime-player-wave7-domain-a-test-adequacy-review.md](reviews/wave7/runtime-player-wave7-domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave7 Domain A test adequacy review |
+| [reviews/wave7/runtime-player-wave7-domain-b-spec-compliance-review.md](reviews/wave7/runtime-player-wave7-domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave7 Domain B spec compliance review |
+| [reviews/wave7/runtime-player-wave7-domain-b-design-development-review.md](reviews/wave7/runtime-player-wave7-domain-b-design-development-review.md) | Pass | Runtime Player Wave7 Domain B design / development compliance review |
+| [reviews/wave7/runtime-player-wave7-domain-b-test-adequacy-review.md](reviews/wave7/runtime-player-wave7-domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave7 Domain B test adequacy review |
 
 ## 4. Current Implementation State
 
@@ -123,7 +135,12 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Auto Mapping now creates 11 slots when body targets exist by preserving the existing nine Wave5 head/eyes/mouth slots and adding `body-x` / `body-z`.
 - Body follow values are generated in main through sanitized live parameter frames. Stage remains model-only and receives no raw tracking frame, raw head position, or debug body data.
 - Runtime Player Wave6 final clean integration review passed: [reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](reviews/wave6/runtime-player-wave6-final-clean-integration-review.md).
+- Runtime Player Wave7 Domain A/B implementation and reviews are complete, and Domain C docs/report alignment is complete with `pass`: [waves/wave7/runtime-player-wave7-final-integration-report.md](waves/wave7/runtime-player-wave7-final-integration-report.md).
+- Wave7 added persistent Model Mapping / Body Follow profile auto-save/restore under `<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`.
+- Wave7 added a real Stage page and Window State auto-save under `<electron userData>/window-state/runtime-player.json` for Stage/Control bounds plus Stage view pan/zoom.
+- Stage remains model-only and receives Runtime Export payloads plus sanitized live parameter frames with `parameterValues`, not raw tracking frames.
+- Remaining Wave7 closeout gap is manual Electron verification: Mapping/Body Follow tune restart/reopen restore, Stage move/resize restore, Stage pan/zoom restore, Stage page Focus/Reset/Center, and real iFacialMocap tracking after profile restore.
 
 ## 5. Next Action
 
-Wave6 is closed at source/test/docs/review level after the final clean integration review pass. Remaining work is manual real-device/Electron verification for body follow feel and defaults. For the next implementation candidate, use [../backlog/runtime-player-backlog.md](../backlog/runtime-player-backlog.md) plus the Wave6 final review outcome.
+Before treating Wave7 as manually accepted, run the manual Electron verification listed in [waves/wave7/runtime-player-wave7-final-integration-report.md](waves/wave7/runtime-player-wave7-final-integration-report.md) and [../backlog/runtime-player-backlog.md](../backlog/runtime-player-backlog.md). For next feature planning, start from the backlog and current screen docs rather than the Wave7 plan.

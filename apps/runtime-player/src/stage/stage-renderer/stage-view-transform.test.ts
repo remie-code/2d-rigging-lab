@@ -4,6 +4,8 @@ import { createStageViewport } from "./stage-viewport";
 import {
   applyStagePanDelta,
   applyStageWheelZoom,
+  centerStageViewTransform,
+  serializeStageViewTransform,
   createResetStageViewTransform
 } from "./stage-view-transform";
 
@@ -90,6 +92,36 @@ describe("stage view transform", () => {
     expect(zoomed.pan).toEqual({
       x: -20,
       y: -40
+    });
+  });
+
+  it("serializes reset transform with the Stage viewport coordinate space", () => {
+    expect(serializeStageViewTransform(createResetStageViewTransform()))
+      .toEqual({
+        zoomScale: 1,
+        pan: {
+          x: 0,
+          y: 0
+        },
+        coordinateSpace: "stage-viewport-px-v1"
+      });
+  });
+
+  it("centers the model by clearing pan while preserving zoom", () => {
+    expect(
+      centerStageViewTransform({
+        zoomScale: 2.5,
+        pan: {
+          x: -120,
+          y: 64
+        }
+      })
+    ).toEqual({
+      zoomScale: 2.5,
+      pan: {
+        x: 0,
+        y: 0
+      }
     });
   });
 });

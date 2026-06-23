@@ -15,6 +15,7 @@ import {
   getAutoMappingLabel,
   getInputConnectionLabel,
   getLiveReadinessLabel,
+  getMappingProfileLabel,
   getProfileStatusLabel,
   getRuntimeExportDirectoryLabel,
   getRuntimeExportLoadedLabel,
@@ -199,6 +200,10 @@ export function OverviewPage({
           })}
         />
           <StatusRow label="Auto Mapping" value={getAutoMappingLabel(mappingStatus)} />
+          <StatusRow
+            label="Mapping Profile"
+            value={getMappingProfileLabel(mappingStatus)}
+          />
           <StatusRow label="Stage Window" value={stageWindowStatus} />
           <StatusRow
             label="Stage Render"

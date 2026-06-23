@@ -49,7 +49,7 @@ export function createAutoMappingSlots(
   });
 }
 
-function createDirectTargetCandidates(
+export function createDirectTargetCandidates(
   payload: RuntimeExportLoadedPayload
 ): readonly RuntimePlayerMappingTarget[] {
   const manifest = payload.artifacts.model.inputManifest;

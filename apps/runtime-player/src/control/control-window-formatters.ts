@@ -293,6 +293,36 @@ export function getAutoMappingLabel(
   return `Auto mapped ${status.mappedSlotCount} / ${status.slots.length}`;
 }
 
+export function getMappingProfileLabel(
+  status: RuntimePlayerMappingStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  return status.profileStatus.label;
+}
+
+export function getMappingProfileTone(
+  status: RuntimePlayerMappingStatus | null
+): "amber" | "teal" | "red" | "neutral" {
+  const kind = status?.profileStatus.kind;
+
+  if (kind === "saved" || kind === "restored") {
+    return "teal";
+  }
+
+  if (kind === "save-failed" || kind === "load-warning") {
+    return "red";
+  }
+
+  if (kind === "unavailable") {
+    return "neutral";
+  }
+
+  return "amber";
+}
+
 export function formatControlNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }

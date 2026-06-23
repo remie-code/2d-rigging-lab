@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   type RuntimePlayerApi,
   type RuntimePlayerStageViewStatus,
+  type RuntimePlayerStageStateSnapshot,
+  type RuntimePlayerStageViewTransform,
   type RuntimePlayerPlaceholderAction,
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
@@ -117,6 +119,10 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(modelMappingBridgeChannels.getStatus),
       regenerateAutoMapping: () =>
         ipcRenderer.invoke(modelMappingBridgeChannels.regenerateAutoMapping),
+      resetToAutoMap: () =>
+        ipcRenderer.invoke(modelMappingBridgeChannels.resetToAutoMap),
+      retryProfileSave: () =>
+        ipcRenderer.invoke(modelMappingBridgeChannels.retryProfileSave),
       updateSlot: (request) =>
         ipcRenderer.invoke(modelMappingBridgeChannels.updateSlot, request),
       onStatusChanged: (callback) =>
@@ -139,11 +145,36 @@ export function installRuntimePlayerBridge(): void {
     stageView: {
       getStatus: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.getStatus),
+      getState: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.getState),
       reportStatus: (status) =>
         ipcRenderer.invoke(stageViewBridgeChannels.reportStatus, status),
+      reportViewTransform: (transform) =>
+        ipcRenderer.invoke(
+          stageViewBridgeChannels.reportViewTransform,
+          transform
+        ),
+      focusStage: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.focusStage),
+      resetView: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.resetView),
+      centerModel: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.centerModel),
+      getViewTransform: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.getViewTransform),
       onStatusChanged: (callback) =>
         subscribeToStageViewStatusEvent(
           stageViewBridgeChannels.statusChanged,
+          callback
+        ),
+      onStateChanged: (callback) =>
+        subscribeToStageViewStateEvent(
+          stageViewBridgeChannels.stateChanged,
+          callback
+        ),
+      onApplyViewTransformRequested: (callback) =>
+        subscribeToStageViewTransformEvent(
+          stageViewBridgeChannels.applyViewTransformRequested,
           callback
         ),
       onResetViewRequested: (callback) =>
@@ -158,9 +189,9 @@ export function installRuntimePlayerBridge(): void {
         placeholderBridgeChannels.performPlaceholderAction,
         assertPlaceholderAction(action)
       ),
-    focusStage: () => ipcRenderer.invoke(placeholderBridgeChannels.focusStage),
+    focusStage: () => ipcRenderer.invoke(stageViewBridgeChannels.focusStage),
     resetStagePosition: () =>
-      ipcRenderer.invoke(placeholderBridgeChannels.resetStagePosition)
+      ipcRenderer.invoke(stageViewBridgeChannels.resetView)
   };
 
   contextBridge.exposeInMainWorld("runtimePlayer", runtimePlayerApi);
@@ -188,6 +219,42 @@ function subscribeToStageViewStatusEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerStageViewStatus
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStageViewStateEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStageStateSnapshot) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStageStateSnapshot
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStageViewTransformEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStageViewTransform) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStageViewTransform
   ) => {
     callback(payload);
   };

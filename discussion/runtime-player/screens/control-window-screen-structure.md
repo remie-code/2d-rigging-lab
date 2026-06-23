@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave6実装事実: Runtime Playerは `Header + Overview / Input / Mapping` のみを実体ページとして公開する。Wave6はこの構成内にInput head position calibrationとMapping Body groupを追加した。`Model` / `Stage` / 専用 `Diagnostics` ページはまだ公開しない。
+> Wave7実装事実: Runtime Playerは `Header + Overview / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
 
 ## 1. Position
 
@@ -24,12 +24,13 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 | Overview             |                                                         |
 | Input                |  selected page content                                  |
 | Mapping              |                                                         |
+| Stage                |                                                         |
 +----------------------+---------------------------------------------------------+
 ```
 
 Stage Windowはこの構造に含めない。Stage Windowは常にmodel onlyである。
 
-将来、Model / Stage / Diagnosticsを専用ページに分ける余地は残すが、現在は空のplaceholder pageを出さない。
+将来、Model / Diagnosticsを専用ページに分ける余地は残すが、現在は空のplaceholder pageを出さない。
 
 ## 2. Persistent Header
 
@@ -76,6 +77,7 @@ Headerに置かない操作:
 | Overview             |
 | Input                |
 | Mapping              |
+| Stage                |
 +----------------------+
 ```
 
@@ -86,6 +88,7 @@ Headerに置かない操作:
 | Overview | ライブ表示に必要な状態が揃っているか、次に何をすべきか |
 | Input | iFacialMocap接続、transport、port、local IP、Input Profile |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
+| Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態 |
 
 Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
 
@@ -94,10 +97,11 @@ Future page候補:
 | Page | Future responsibility |
 |---|---|
 | Model | Runtime Export load/change、model summary、artifact status |
-| Stage | Stage Windowの表示、focus、view reset、透明/背景確認 |
 | Diagnostics | raw / parsed / normalized / mapped values、copy diagnostics |
 
 現在はDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
+
+Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。責務はBroadcast/OBS設定ではなく、Stageの表示位置と見え方を整えることである。
 
 ## 4. Overview Page
 
@@ -122,7 +126,7 @@ Overviewは、ユーザーが最初に見る通常画面である。
 |   [Look Forward] [Recalibrate]                                                |
 |--------------------------------------------------------------------------------|
 | Model Mapping                                                                  |
-|   Status: Auto mapped 5 / 5             Live ready                             |
+|   Status: Saved                         Auto mapped 11 / 11                    |
 |   [Edit Mapping]                                                               |
 |--------------------------------------------------------------------------------|
 | Stage                                                                          |
@@ -137,6 +141,7 @@ Overviewは、ユーザーが最初に見る通常画面である。
 - Input未接続: `Connect Input`を強調する。
 - Input Profileなし: `Start Calibration`を強調する。
 - Mappingなし: `Auto Mapping`を強調する。
+- Mapping Profile未保存/保存失敗: Mapping pageで保存状態を確認できるようにする。
 - すべて揃っている: `Live Active`を表示し、操作は最小にする。
 
 Overviewに置かないもの:
@@ -388,9 +393,10 @@ Runtime Exportがない場合、Mapping pageは説明と`Open Runtime Export`導
 | MAPPING                                                                        |
 +--------------------------------------------------------------------------------+
 | Mapping Profile                                                                |
-|   Profile:      Auto mapping for kipfel-black                                  |
-|   Status:       Auto mapped 5 / 5                                              |
-|   [Auto Map]                                                                   |
+|   Profile:      kipfel-black                                                   |
+|   Status:       Saved just now                                                 |
+|   Runtime:      kipfel-black.runtime-export                                    |
+|   [Auto Map] [Reset to Auto Map]                                                |
 |--------------------------------------------------------------------------------|
 | Head Rotation                                                                  |
 |   Face Angle X  <- Head horizontal     Strength [100% -----]  [Invert] [On]    |
@@ -419,8 +425,14 @@ Mapping pageの原則:
 - semantic slot単位で見せる。
 - ユーザーが最初に触るのは`enabled`、`invert`、`strength`。
 - raw source selection、deadzone、smoothing、curveはAdvancedへ逃がす。
-- Model Mapping Profileの永続保存は現在のv0では扱わない。
-- Wave6のBody controlsはBody X strength/lag/invert、Body Z rotation strength/invert、position strength/invert、lagを扱う。保存済みModel Mapping Profileにはまだ書き込まない。
+- Model Mapping Profileは、次の保存waveでは手動`Save`ではなく自動保存する。
+- Mapping変更は即時Stageへ反映し、最後の変更から短いdebounce後に保存する。
+- Mapping page上部の`Mapping Profile` cardで保存状態を表示する。
+- HeaderにはMapping保存ボタンを置かない。HeaderはRuntime Export open、Look Forward、Focus Stageなど全体操作に絞る。
+- Overviewには`Mapping: Saved / Needs setup / Stale / Save failed`程度の状態だけを出す。
+- 保存失敗時だけ`Retry`を表示する。
+- 試行錯誤で壊した場合の主導線は`Save`ではなく`Reset to Auto Map`にする。
+- Wave6のBody controlsはBody X strength/lag/invert、Body Z rotation strength/invert、position strength/invert、lagを扱う。永続保存waveではこれらもModel Mapping Profileへ保存する。
 - Body targetsがない場合はmissing body slotsとして見せ、既存head / eyes / mouth live mappingを止めない。
 
 Live確認:
@@ -428,9 +440,55 @@ Live確認:
 - Mapping変更はStageへ即時反映される。
 - Stage Windowにdebug overlayは出さない。
 
-## 9. Future Stage Page
+### 8.1 Model Mapping Profile Auto Save
 
-Stage pageは、OBSや配信用にStage Windowを整える将来ページ候補である。現在は専用navとして公開せず、`Focus Stage`などの最小操作をHeader/Overviewから行う。
+Model Mapping Profileはモデル依存の設定であり、Input Profileとは別物である。
+
+保存方式:
+
+- 自動保存を基本にする。
+- スライダーやtoggle変更は即時Stageへ反映する。
+- 永続保存はdebounceする。目安は最後の変更から`500ms〜1000ms`後。
+- Runtime Export切り替え、アプリ終了、window close前には保存flushを試みる。
+- 保存に失敗した場合だけ、明示的な`Retry`を表示する。
+
+Mapping Profile cardの状態表示:
+
+```text
+Saved
+Saving...
+Unsaved changes
+Save failed    [Retry]
+Stale export   [Auto Map] [Reset to Auto Map]
+```
+
+手動操作:
+
+- `Auto Map`: 現在のRuntime Exportから初期mappingを再生成する。
+- `Reset to Auto Map`: 保存済み調整を破棄して自動mappingへ戻す。
+- `Retry`: 保存失敗時だけ表示する。
+
+置かない操作:
+
+- Header上の`Save Mapping`。
+- すべての変更で押す必要がある手動`Save`。
+- Stage Window上の保存UI。
+
+## 9. Wave7 Stage Page v0
+
+Stage page v0は、Stage Window boundsとStage view transformを扱うページである。
+
+このページは空のplaceholderではない。Wave7で実体pageとして実装済みである。操作は少ないが、Overviewを肥大化させないために独立pageとして扱う。低頻度操作であり、Live readinessを確認するOverviewの視界を占有しない方がよい。
+
+Stage page v0の責務:
+
+- Stage WindowのOS上の位置・サイズを確認する。
+- Stage内のpan/zoomを確認する。
+- Stage Windowを前面へ出す。
+- Stage viewをreset/centerする。
+- Window/View stateの自動保存状態を表示する。
+
+Stage page v0はBroadcast-ready Stageではない。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -438,34 +496,124 @@ Stage pageは、OBSや配信用にStage Windowを整える将来ページ候補�
 +--------------------------------------------------------------------------------+
 | Stage Window                                                                   |
 |   Status:        Open                                                          |
-|   Background:    Transparent                                                   |
-|   Capture:       Use this window in OBS                                        |
-|   [Focus Stage] [Reset Stage View] [Center Model]                              |
+|   Size:          900 x 1200                                                     |
+|   Position:      x 1200 / y 80                                                  |
+|   Persistence:   Saved just now                                                 |
+|   [Focus Stage]                                                                |
 |--------------------------------------------------------------------------------|
 | View                                                                           |
-|   Zoom:          100%                                                          |
-|   Position:      x 0 / y 0                                                     |
-|   [Reset View]                                                                 |
+|   Zoom:          82%                                                           |
+|   Position:      x -32 / y 140                                                  |
+|   Persistence:   Saved just now                                                 |
+|   [Reset View] [Center Model]                                                   |
 |--------------------------------------------------------------------------------|
-| Preview Background                                                             |
-|   [Transparent] [Checker] [Solid Gray]                                         |
+| Persistence                                                                    |
+|   Scope:         This device                                                    |
+|   Storage:       window-state/runtime-player.json                               |
 +--------------------------------------------------------------------------------+
 ```
 
-Stage pageに置く候補:
+Stage page v0に置くもの:
 
 - Focus Stage。
 - Reset Stage View。
-- background preview。
-- future: always-on-top。
-- future: click-through。
-- future: stage size / safe area。
+- Center Model。
+- Stage window bounds保存状態。
+- Stage pan/zoom保存状態。
+- 保存状態 `Saved / Saving / Save failed`。
+- 必要なら `Retry`。
 
-Stage pageに置かないもの:
+Stage page v0に置かないもの:
 
 - Mapping slot編集。
 - Raw diagnostics。
 - Runtime Export artifact details。
+- transparency / click-through / always-on-top。
+- OBS説明。
+- background preview。
+- runtime parameter sliders。
+- debug diagnostics。
+
+### 9.1 Stage Window Bounds vs Stage View Transform
+
+Stage window boundsとStage view transformは別物として保存する。
+
+```text
+Stage window bounds
+  - window x / y
+  - window width / height
+  - OS上の表示位置とサイズ
+
+Stage view transform
+  - pan x / y
+  - zoom
+  - Stage内でモデルをどこにどう表示するか
+```
+
+ユーザー体験:
+
+1. Stage Windowの端や角をOS/Electron window resizeでDnDし、OBS等に載せたい枠の大きさにする。
+2. Stage内でマウスホイール/ドラッグして、モデルの表示位置と大きさを整える。
+3. Window boundsとview transformは自動保存される。
+4. 次回起動時に同じStage window位置・サイズ・モデル表示位置で戻る。
+
+v0ではStage page上で数値編集しない。OSの通常window move/resize、Stage内の既存pan/zoom操作、`Reset View`、`Center Model`で十分とする。
+
+### 9.2 Window State Persistence
+
+Window State Persistenceも自動保存である。
+
+保存対象:
+
+- Control Window bounds。
+- Stage Window bounds。
+- Stage view pan/zoom。
+
+保存対象外:
+
+- Runtime Export auto restore。
+- Stage transparency。
+- click-through。
+- always-on-top。
+- OBS/capture settings。
+- Model Mapping Profile。
+
+保存場所:
+
+```text
+<electron userData>/
+  window-state/
+    runtime-player.json
+```
+
+Model Mapping Profileとは保存場所を分ける。
+
+```text
+<electron userData>/
+  model-mapping-profiles/
+    <safe-package-id>/
+      <fingerprint>.json
+
+<electron userData>/
+  window-state/
+    runtime-player.json
+```
+
+理由:
+
+- Mapping Profileはモデルごとの「動き」の設定である。
+- Window Stateは端末・画面環境ごとの「見え方」の設定である。
+- 同じRuntime Exportを別PCで使ってもwindow位置は共有しない方が自然である。
+- 同じPCで別モデルを開いてもStage window位置・サイズは使い回せる方が自然である。
+
+保存タイミング:
+
+- window move/resize後にdebounce保存。
+- Stage pan/zoom変更後にdebounce保存。
+- close前にflush。
+- restore失敗時はdefault layoutへfallback。
+
+保存失敗は通常UXを邪魔しない。Stage pageまたはDiagnostics/Overviewに小さく出す程度にする。
 
 ## 10. Future Diagnostics Page / Wave5 Debug Panel
 
@@ -532,22 +680,25 @@ Stage Windowに出さないもの:
 
 ## 12. Current Implementation Shape
 
-Wave5/Wave6で実装された現在の形状:
+Wave5/Wave6/Wave7で実装された現在の形状:
 
 - Persistent Header。
-- `Overview` / `Input` / `Mapping` のみのnavigation。
+- `Overview` / `Input` / `Mapping` / `Stage` のnavigation。
 - Runtime Export open/status、input connection、profile/calibration、mapping/live readinessをControlで扱う。
 - Diagnosticsはsecondary collapsible debug panelとして残す。
 - Stage Windowはcanvas model-onlyで、debug overlay、raw tracking text、parameter sliderを出さない。
 - Mainがprofile/calibration/mapping/live parameter frameを所有し、Stageはsanitized parameter valuesをruntime-core評価へ渡す。
 - Input Profileはhead position left/right section readinessとmissing-only/head-position-only recalibrationを持つ。
 - Mappingは既存9個のhead/eyes/mouth slotsを保ち、Body X/Z slotsとBody Follow controlsを追加する。
+- Mapping / Body Follow controlsはModel Mapping ProfileとしてRuntime Export identityごとに自動保存/復元する。
+- Model Mapping Profileは`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`へ保存する。
 - Body Follow outputはmain-owned sanitized parameter frameとしてStageへ届く。Stageはraw tracking/head-position/debug body dataを受け取らない。
+- Stage pageはStage Window bounds、Stage view pan/zoom、Focus Stage、Reset View、Center Model、window-state保存状態を扱う。
+- Window Stateは`<electron userData>/window-state/runtime-player.json`へ保存し、Model Mapping Profileとは分ける。
 
 Future page候補:
 
 - Model page。
-- Stage page。
 - Dedicated Diagnostics page。
 - Hide Control / display settings。
 - Persistent Model Mapping Profile management。
@@ -556,8 +707,8 @@ Future page候補:
 
 ## 13. Open Questions
 
-- Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。
+- Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
 - `Hide Control`をどのwaveで実装するか。
-- Model Mapping Profileの永続保存先とRuntime Export fingerprint。
 - Stage Windowのalways-on-top / click-through / background previewをどのwaveで扱うか。
 - Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。
+- Wave7のElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。

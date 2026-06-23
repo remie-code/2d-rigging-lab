@@ -11,14 +11,19 @@ import type { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-st
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { createRuntimeParameterFrame } from "./live-mapping/runtime-parameter-frame";
 import { readMappingSlotUpdateRequest } from "./model-mapping-bridge-request-validation";
+import { ModelMappingProfileSaveController } from "./model-mapping-profiles/model-mapping-profile-save-controller";
+import type { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
 import type { RuntimePlayerInputSessionState } from "./input-session-state";
 import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-windows";
+import type { RuntimeExportLoadedPayload } from "../preload/runtime-export-bridge-contract";
 
 export type RegisterModelMappingBridgeHandlersInput = {
   readonly windows: RuntimePlayerWindowSet;
   readonly inputState: RuntimePlayerInputSessionState;
   readonly mappingState: RuntimePlayerLiveMappingState;
   readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+  readonly profileStore?: ModelMappingProfileStore;
+  readonly profileSaveDebounceMs?: number;
   readonly liveParameters: RuntimePlayerLiveParameterBridgeRegistration;
   readonly getActiveInputProfile: () => Promise<InputProfile | null>;
   readonly nowMs?: () => number;
@@ -26,6 +31,11 @@ export type RegisterModelMappingBridgeHandlersInput = {
 
 export type RuntimePlayerModelMappingBridgeRegistration = {
   readonly publishStatus: () => void;
+  readonly setRuntimeExportPayload: (
+    payload: RuntimeExportLoadedPayload
+  ) => Promise<RuntimePlayerMappingStatus>;
+  readonly clearRuntimeExport: () => RuntimePlayerMappingStatus;
+  readonly flushPendingProfileSave: () => Promise<void>;
   readonly publishLatestParameterFrame: () => Promise<void>;
   readonly clearLiveParameterFrame: () => void;
 };
@@ -35,6 +45,7 @@ export function registerModelMappingBridgeHandlers(
 ): RuntimePlayerModelMappingBridgeRegistration {
   const nowMs = input.nowMs ?? Date.now;
   let liveFrameSequence = 0;
+  let profileSaveController: ModelMappingProfileSaveController | null = null;
 
   const publishStatus = (): void => {
     sendToControlWindow(
@@ -43,6 +54,37 @@ export function registerModelMappingBridgeHandlers(
       input.mappingState.getStatus()
     );
   };
+  if (input.profileStore !== undefined) {
+    profileSaveController = new ModelMappingProfileSaveController({
+      mappingState: input.mappingState,
+      store: input.profileStore,
+      ...(input.profileSaveDebounceMs === undefined
+        ? {}
+        : { debounceMs: input.profileSaveDebounceMs }),
+      onStatusChanged: publishStatus
+    });
+  }
+
+  async function setRuntimeExportPayload(
+    payload: RuntimeExportLoadedPayload
+  ): Promise<RuntimePlayerMappingStatus> {
+    const profileLoadResult = input.profileStore === undefined
+      ? undefined
+      : await input.profileStore.loadProfile(payload);
+
+    return input.mappingState.setRuntimeExportPayload(
+      payload,
+      profileLoadResult
+    );
+  }
+
+  function clearRuntimeExport(): RuntimePlayerMappingStatus {
+    return input.mappingState.clearRuntimeExport();
+  }
+
+  async function flushPendingProfileSave(): Promise<void> {
+    await profileSaveController?.flush();
+  }
 
   async function publishLatestParameterFrame(): Promise<void> {
     const runtimeExportPayload = input.mappingState.getRuntimeExportPayload();
@@ -112,8 +154,48 @@ export function registerModelMappingBridgeHandlers(
     }
 
     input.bodyFollowState?.reset();
+    profileSaveController?.scheduleSave();
 
     return publishActionResult("ok", "Auto Mapping regenerated.");
+  });
+  ipcMain.handle(modelMappingBridgeChannels.resetToAutoMap, async () => {
+    const status = input.mappingState.regenerateAutoMapping();
+
+    if (status === null) {
+      return publishActionResult(
+        "unavailable",
+        "Open a Runtime Export before resetting mapping."
+      );
+    }
+
+    input.bodyFollowState?.reset();
+    input.mappingState.markMappingProfileUnsaved();
+    const saveOutcome = await profileSaveController?.saveNow();
+
+    if (saveOutcome?.result === "failed") {
+      return publishActionResult(
+        "save-failed",
+        "Auto Map restored, but profile save failed."
+      );
+    }
+
+    return publishActionResult("ok", "Reset to Auto Map saved.");
+  });
+  ipcMain.handle(modelMappingBridgeChannels.retryProfileSave, async () => {
+    const saveOutcome = await profileSaveController?.saveNow();
+
+    if (saveOutcome === undefined || saveOutcome.result === "unavailable") {
+      return publishActionResult(
+        "unavailable",
+        "Open a Runtime Export before saving mapping profile."
+      );
+    }
+
+    if (saveOutcome.result === "failed") {
+      return publishActionResult("save-failed", saveOutcome.message);
+    }
+
+    return publishActionResult("ok", saveOutcome.message);
   });
   ipcMain.handle(
     modelMappingBridgeChannels.updateSlot,
@@ -122,6 +204,7 @@ export function registerModelMappingBridgeHandlers(
         const command = readMappingSlotUpdateRequest(request);
         input.mappingState.updateSlot(command);
         input.bodyFollowState?.reset();
+        profileSaveController?.scheduleSave();
       } catch (error) {
         return publishActionResult("validation-error", toErrorMessage(error));
       }
@@ -132,6 +215,9 @@ export function registerModelMappingBridgeHandlers(
 
   return {
     publishStatus,
+    setRuntimeExportPayload,
+    clearRuntimeExport,
+    flushPendingProfileSave,
     publishLatestParameterFrame,
     clearLiveParameterFrame
   };

@@ -19,7 +19,9 @@ import { createStageViewport } from "./stage-viewport";
 import {
   applyStagePanDelta,
   applyStageWheelZoom,
+  centerStageViewTransform,
   createResetStageViewTransform,
+  normalizeStageViewTransform,
   type StageViewTransform,
   type StageViewportPoint
 } from "./stage-view-transform";
@@ -29,9 +31,23 @@ export interface StaticStageCanvasRenderer {
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
   clearLiveParameterFrame(): void;
+  getViewTransform(): StageViewTransform;
+  setViewTransform(
+    transform: StageViewTransform,
+    options?: StaticStageViewTransformSetOptions
+  ): void;
   resetView(): void;
+  centerModel(): void;
   clear(): void;
   dispose(): void;
+}
+
+export interface StaticStageCanvasRendererOptions {
+  readonly onViewTransformChanged?: (transform: StageViewTransform) => void;
+}
+
+export interface StaticStageViewTransformSetOptions {
+  readonly notify?: boolean;
 }
 
 export interface StaticStageRenderResult {
@@ -44,14 +60,15 @@ const emptyScene: RenderScene = createRenderScene({
 });
 
 export function createStaticStageCanvasRenderer(
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  options: StaticStageCanvasRendererOptions = {}
 ): StaticStageCanvasRenderer {
   const renderer = createWebGl2RendererFromCanvas(canvas);
   if (renderer === undefined) {
     throw new Error("Stage WebGL2 context is unavailable.");
   }
 
-  return new StaticStageCanvasRendererController(canvas, renderer);
+  return new StaticStageCanvasRendererController(canvas, renderer, options);
 }
 
 class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
@@ -69,7 +86,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly renderer: WebGl2Renderer
+    private readonly renderer: WebGl2Renderer,
+    private readonly options: StaticStageCanvasRendererOptions
   ) {
     this.resizeObserver =
       typeof ResizeObserver === "undefined"
@@ -96,7 +114,6 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.latestLiveParameterFrame = null;
     this.lastLiveSourceTimestampMs = null;
-    this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
 
     return {
@@ -132,9 +149,28 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.renderCurrent();
   }
 
-  resetView(): void {
-    this.viewTransform = createResetStageViewTransform();
+  getViewTransform(): StageViewTransform {
+    return this.viewTransform;
+  }
+
+  setViewTransform(
+    transform: StageViewTransform,
+    options: StaticStageViewTransformSetOptions = {}
+  ): void {
+    this.viewTransform = normalizeStageViewTransform(transform);
     this.renderCurrent();
+
+    if (options.notify ?? true) {
+      this.reportViewTransformChanged();
+    }
+  }
+
+  resetView(): void {
+    this.setViewTransform(createResetStageViewTransform());
+  }
+
+  centerModel(): void {
+    this.setViewTransform(centerStageViewTransform(this.viewTransform));
   }
 
   clear(): void {
@@ -144,7 +180,6 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.latestLiveParameterFrame = null;
     this.lastLiveSourceTimestampMs = null;
     this.cancelLiveRender();
-    this.viewTransform = createResetStageViewTransform();
     this.renderCurrent();
   }
 
@@ -263,6 +298,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       anchor: getCanvasViewportPoint(this.canvas, event.clientX, event.clientY)
     });
     this.renderCurrent();
+    this.reportViewTransformChanged();
   };
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
@@ -310,6 +346,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     });
     this.lastPanPoint = nextPanPoint;
     this.renderCurrent();
+    this.reportViewTransformChanged();
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
@@ -324,6 +361,10 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     safelyReleasePointerCapture(this.canvas, pointerId);
     this.activePanPointerId = null;
     this.lastPanPoint = null;
+  }
+
+  private reportViewTransformChanged(): void {
+    this.options.onViewTransformChanged?.(this.viewTransform);
   }
 }
 

@@ -1,4 +1,8 @@
 import type { RenderViewportTransform } from "@private-2d-rigging-lab/render-core";
+import {
+  runtimePlayerStageViewCoordinateSpace,
+  type RuntimePlayerStageViewTransform
+} from "../../preload/runtime-player-bridge-contract";
 
 export interface StageViewportPoint {
   readonly x: number;
@@ -26,6 +30,52 @@ const defaultZoomSensitivity = 0.0015;
 export function createResetStageViewTransform(): StageViewTransform {
   return {
     zoomScale: 1,
+    pan: {
+      x: 0,
+      y: 0
+    }
+  };
+}
+
+export function serializeStageViewTransform(
+  transform: StageViewTransform
+): RuntimePlayerStageViewTransform {
+  const normalizedTransform = normalizeStageViewTransform(transform);
+
+  return {
+    zoomScale: normalizedTransform.zoomScale,
+    pan: normalizedTransform.pan,
+    coordinateSpace: runtimePlayerStageViewCoordinateSpace
+  };
+}
+
+export function readStageViewTransform(
+  transform: RuntimePlayerStageViewTransform
+): StageViewTransform {
+  if (transform.coordinateSpace !== runtimePlayerStageViewCoordinateSpace) {
+    return createResetStageViewTransform();
+  }
+
+  return normalizeStageViewTransform(transform);
+}
+
+export function normalizeStageViewTransform(
+  transform: StageViewTransform
+): StageViewTransform {
+  return {
+    zoomScale: normalizeZoomScale(transform.zoomScale),
+    pan: {
+      x: normalizeNumber(transform.pan.x),
+      y: normalizeNumber(transform.pan.y)
+    }
+  };
+}
+
+export function centerStageViewTransform(
+  transform: StageViewTransform
+): StageViewTransform {
+  return {
+    zoomScale: normalizeZoomScale(transform.zoomScale),
     pan: {
       x: 0,
       y: 0
@@ -66,6 +116,10 @@ export function applyStageWheelZoom(
     minZoomScale,
     maxZoomScale
   );
+  const currentPan = {
+    x: normalizeNumber(input.transform.pan.x),
+    y: normalizeNumber(input.transform.pan.y)
+  };
   const wheelDeltaY = normalizeNumber(input.wheelDeltaY);
   const nextZoomScale = clamp(
     currentZoomScale * Math.exp(-wheelDeltaY * zoomSensitivity),
@@ -76,10 +130,7 @@ export function applyStageWheelZoom(
   if (nextZoomScale === currentZoomScale) {
     return {
       zoomScale: currentZoomScale,
-      pan: {
-        x: normalizeNumber(input.transform.pan.x),
-        y: normalizeNumber(input.transform.pan.y)
-      }
+      pan: currentPan
     };
   }
 
@@ -92,8 +143,8 @@ export function applyStageWheelZoom(
   return {
     zoomScale: nextZoomScale,
     pan: {
-      x: anchor.x - (anchor.x - input.transform.pan.x) * zoomRatio,
-      y: anchor.y - (anchor.y - input.transform.pan.y) * zoomRatio
+      x: anchor.x - (anchor.x - currentPan.x) * zoomRatio,
+      y: anchor.y - (anchor.y - currentPan.y) * zoomRatio
     }
   };
 }

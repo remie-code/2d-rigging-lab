@@ -6,27 +6,46 @@ import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-han
 import { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handlers";
+import { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
 import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
+import { RuntimePlayerWindowStateController } from "./window-state/window-state-controller";
+import { RuntimePlayerWindowStateStore } from "./window-state/window-state-store";
 import {
+  attachRuntimePlayerWindowStateTracking,
   createRuntimePlayerWindows,
   loadRuntimePlayerWindows
 } from "./window-management/runtime-player-windows";
 
 export function startRuntimePlayerMain(): void {
   app.whenReady().then(async () => {
-    const windows = createRuntimePlayerWindows();
+    const windowStateStore = new RuntimePlayerWindowStateStore({
+      userDataPath: app.getPath("userData")
+    });
+    const windowStateSnapshot = await windowStateStore.getSnapshot();
+    const windowState = new RuntimePlayerWindowStateController({
+      store: windowStateStore,
+      snapshot: windowStateSnapshot
+    });
+    const windows = createRuntimePlayerWindows({
+      windowState: windowState.getDocument()
+    });
+    attachRuntimePlayerWindowStateTracking({ windows, windowState });
     registerPlaceholderBridgeHandlers({ windows });
-    registerStageViewBridgeHandlers({ windows });
+    registerStageViewBridgeHandlers({ windows, windowState });
     const liveParameters = registerLiveParameterBridgeHandlers({ windows });
     const liveMappingState = new RuntimePlayerLiveMappingState();
     const bodyFollowState = new RuntimePlayerBodyFollowState();
+    const modelMappingProfileStore = new ModelMappingProfileStore({
+      userDataPath: app.getPath("userData")
+    });
     let publishLatestParameterFrame = async (): Promise<void> => {};
     let publishMappingStatus = (): void => {};
     let clearLiveParameterFrame = (): void => {
       liveParameters.clear();
     };
+    let quitAfterFlush = false;
     const inputBridge = registerInputBridgeHandlers({
       windows,
       onTrackingFrame: () => publishLatestParameterFrame(),
@@ -49,6 +68,7 @@ export function startRuntimePlayerMain(): void {
       inputState: inputBridge.state,
       mappingState: liveMappingState,
       bodyFollowState,
+      profileStore: modelMappingProfileStore,
       liveParameters,
       getActiveInputProfile: inputProfileBridge.getActiveInputProfile
     });
@@ -57,22 +77,24 @@ export function startRuntimePlayerMain(): void {
     clearLiveParameterFrame = modelMappingBridge.clearLiveParameterFrame;
     registerRuntimeExportBridgeHandlers({
       windows,
-      onRuntimeExportChanging: () => {
+      onRuntimeExportChanging: async () => {
+        await modelMappingBridge.flushPendingProfileSave();
         bodyFollowState.reset();
-        liveMappingState.clearRuntimeExport();
+        modelMappingBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         publishMappingStatus();
       },
-      onRuntimeExportLoaded: (payload) => {
+      onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
-        liveMappingState.setRuntimeExportPayload(payload);
+        await modelMappingBridge.setRuntimeExportPayload(payload);
         clearLiveParameterFrame();
         publishMappingStatus();
         void publishLatestParameterFrame();
       },
-      onRuntimeExportCleared: () => {
+      onRuntimeExportCleared: async () => {
+        await modelMappingBridge.flushPendingProfileSave();
         bodyFollowState.reset();
-        liveMappingState.clearRuntimeExport();
+        modelMappingBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         publishMappingStatus();
       }
@@ -88,8 +110,20 @@ export function startRuntimePlayerMain(): void {
       windows.controlWindow.focus();
     });
 
-    app.on("before-quit", () => {
-      void inputBridge.disconnect();
+    app.on("before-quit", (event) => {
+      if (quitAfterFlush) {
+        return;
+      }
+
+      event.preventDefault();
+      void Promise.allSettled([
+        inputBridge.disconnect(),
+        modelMappingBridge.flushPendingProfileSave(),
+        windowState.flush()
+      ]).finally(() => {
+        quitAfterFlush = true;
+        app.quit();
+      });
     });
   });
 

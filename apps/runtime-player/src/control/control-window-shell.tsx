@@ -3,7 +3,7 @@ import { Crosshair, FolderOpen, Monitor } from "lucide-react";
 
 import { IconTextButton, StatusPill } from "./control-window-components";
 
-export type ControlWindowPage = "overview" | "input" | "mapping";
+export type ControlWindowPage = "overview" | "input" | "mapping" | "stage";
 
 const controlWindowPages: readonly {
   readonly id: ControlWindowPage;
@@ -11,7 +11,8 @@ const controlWindowPages: readonly {
 }[] = [
   { id: "overview", label: "Overview" },
   { id: "input", label: "Input" },
-  { id: "mapping", label: "Mapping" }
+  { id: "mapping", label: "Mapping" },
+  { id: "stage", label: "Stage" }
 ];
 
 export function ControlWindowShell({

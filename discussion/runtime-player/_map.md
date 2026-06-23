@@ -42,9 +42,16 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Wave6 Body Follow v0は、`Body Angle X`をhead horizontal由来、`Body Angle Z`をhead tilt + head positionX由来としてmain-owned sanitized runtime parameter frameへ出力する。
 - Control Window Wave5 v0は `Overview` / `Input` / `Mapping` のみを公開する。Stage Windowはmodel-onlyを維持する。
 - Wave6後もStage Windowはmodel-onlyで、raw tracking frame / raw head position / debug body dataを受け取らない。
-- Runtime Player Wave6 final clean integration reviewは別Review-Sylph artifactとして未実施。
-- Persistent Model Mapping Profile save、advanced mapping editor、head-position Stage Motion、near/far distance response、Broadcast/OBS UX、TCP transport、dedicated Model/Stage/Diagnostics pagesはfuture。
+- Runtime Player Wave6 final clean integration reviewはpass済み。
+- Runtime Player Wave7 Domain A/Bは実装・review `pass`。Domain C final integration docs/report alignmentは [implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](implementation/waves/wave7/runtime-player-wave7-final-integration-report.md) に記録する。
+- Wave7でModel Mapping Profile auto-save/restoreを実装済み。Mapping調整はHeaderではなくMapping page上部の`Mapping Profile` cardで保存状態を表示し、手動Saveではなく自動保存する。
+- Model Mapping Profileは`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`へ保存する。Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallback。
+- Wave7でStage page v0を実体pageとして追加済み。Stage Window bounds、Stage view transform、Focus Stage、Reset View、Center Model、window-state保存状態を扱う。
+- Window StateはModel Mapping Profileとは別に`<electron userData>/window-state/runtime-player.json`へ自動保存する。Stage Window bounds、Control Window bounds、Stage view pan/zoomを含む。
+- Wave7後もStage Windowはmodel-onlyで、Runtime Export payloadとsanitized `parameterValues` live frameだけを受け取る。raw tracking frame / raw head position / debug body dataは受け取らない。
+- Wave7の残作業はElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。
+- advanced mapping editor、head-position Stage Motion、near/far distance response、Broadcast/OBS UX、TCP transport、dedicated Model/Diagnostics pagesはfuture。
 
 ## 5. Next Navigation
 
-次に作業候補を選ぶ時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [screens/](screens/)、[architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。
+Wave7の実装事実を確認する時は [implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](implementation/waves/wave7/runtime-player-wave7-final-integration-report.md)、Domain別詳細は [implementation/waves/wave7/_map.md](implementation/waves/wave7/_map.md)、review詳細は [implementation/reviews/wave7/_map.md](implementation/reviews/wave7/_map.md) を読む。次候補を再検討する時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認し、その後必要に応じて [screens/](screens/)、[architecture/](architecture/)、[research/](research/)、[implementation/](implementation/) の詳細へ進む。

@@ -4,7 +4,8 @@ import type {
 } from "./runtime-export-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type {
-  RuntimePlayerStageViewStatusReport
+  RuntimePlayerStageViewStatusReport,
+  RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
 
 export type RuntimePlayerStageRuntimeExportApi = {
@@ -18,10 +19,16 @@ export type RuntimePlayerStageRuntimeExportApi = {
 };
 
 export type RuntimePlayerStageViewReporterApi = {
+  readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;
   readonly reportStatus: (
     status: RuntimePlayerStageViewStatusReport
   ) => Promise<void>;
-  readonly onResetViewRequested: (callback: () => void) => () => void;
+  readonly reportViewTransform: (
+    transform: RuntimePlayerStageViewTransform
+  ) => Promise<void>;
+  readonly onApplyViewTransformRequested: (
+    callback: (transform: RuntimePlayerStageViewTransform) => void
+  ) => () => void;
 };
 
 export type RuntimePlayerStageApi = {

@@ -55,10 +55,29 @@ export type RuntimePlayerMappingRuntimeExportRef = {
   readonly modelDisplayName: string;
 };
 
+export type RuntimePlayerMappingProfileStatusKind =
+  | "unavailable"
+  | "auto-mapped"
+  | "restored"
+  | "stale"
+  | "unsaved"
+  | "saving"
+  | "saved"
+  | "save-failed"
+  | "load-warning";
+
+export type RuntimePlayerMappingProfileStatus = {
+  readonly kind: RuntimePlayerMappingProfileStatusKind;
+  readonly label: string;
+  readonly warningMessages: readonly string[];
+  readonly updatedAtIso?: string;
+};
+
 export type RuntimePlayerMappingStatus = {
   readonly status: "unavailable" | "ready";
   readonly statusLabel: string;
   readonly runtimeExport: RuntimePlayerMappingRuntimeExportRef | null;
+  readonly profileStatus: RuntimePlayerMappingProfileStatus;
   readonly slots: readonly RuntimePlayerMappingSlot[];
   readonly mappedSlotCount: number;
   readonly enabledSlotCount: number;
@@ -81,6 +100,7 @@ export type RuntimePlayerMappingSlotUpdateRequest = {
 export type RuntimePlayerMappingActionResultKind =
   | "ok"
   | "unavailable"
+  | "save-failed"
   | "validation-error";
 
 export type RuntimePlayerMappingActionResult = {
@@ -92,6 +112,8 @@ export type RuntimePlayerMappingActionResult = {
 export type RuntimePlayerModelMappingApi = {
   readonly getStatus: () => Promise<RuntimePlayerMappingStatus>;
   readonly regenerateAutoMapping: () => Promise<RuntimePlayerMappingActionResult>;
+  readonly resetToAutoMap: () => Promise<RuntimePlayerMappingActionResult>;
+  readonly retryProfileSave: () => Promise<RuntimePlayerMappingActionResult>;
   readonly updateSlot: (
     request: RuntimePlayerMappingSlotUpdateRequest
   ) => Promise<RuntimePlayerMappingActionResult>;

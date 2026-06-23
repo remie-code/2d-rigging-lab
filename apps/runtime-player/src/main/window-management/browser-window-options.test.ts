@@ -45,6 +45,40 @@ describe("Runtime Player BrowserWindow options", () => {
     });
   });
 
+  it("applies restored Stage bounds before the window is shown", () => {
+    const options = createStageWindowOptions("preload-placeholder.mjs", {
+      x: 1200,
+      y: 80,
+      width: 900,
+      height: 1200
+    });
+
+    expect(options).toMatchObject({
+      x: 1200,
+      y: 80,
+      width: 900,
+      height: 1200,
+      minWidth: stageWindowDefaultBounds.minWidth,
+      minHeight: stageWindowDefaultBounds.minHeight
+    });
+  });
+
+  it("keeps restored bounds above the window minimums", () => {
+    const options = createControlWindowOptions("preload-placeholder.mjs", {
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 100
+    });
+
+    expect(options).toMatchObject({
+      x: 10,
+      y: 20,
+      width: controlWindowDefaultBounds.minWidth,
+      height: controlWindowDefaultBounds.minHeight
+    });
+  });
+
   it("resolves separate renderer entries for Control and Stage", () => {
     expect(
       getRendererDevUrl("control", "http://127.0.0.1:5173/")

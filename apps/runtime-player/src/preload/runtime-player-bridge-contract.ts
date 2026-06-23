@@ -71,13 +71,76 @@ export type RuntimePlayerStageViewStatus = RuntimePlayerStageViewStatusReport & 
   readonly updatedAtIso: string;
 };
 
+export const runtimePlayerStageViewCoordinateSpace =
+  "stage-viewport-px-v1" as const;
+
+export type RuntimePlayerStageViewTransform = {
+  readonly zoomScale: number;
+  readonly pan: {
+    readonly x: number;
+    readonly y: number;
+  };
+  readonly coordinateSpace: typeof runtimePlayerStageViewCoordinateSpace;
+};
+
+export type RuntimePlayerWindowBounds = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+export type RuntimePlayerStageStatePersistenceStatus =
+  | "saved"
+  | "saving"
+  | "save-failed";
+
+export type RuntimePlayerStageStateSnapshot = {
+  readonly stageWindow: {
+    readonly windowState: "created" | "destroyed";
+    readonly bounds: RuntimePlayerWindowBounds | null;
+  };
+  readonly stageView: {
+    readonly renderStatus: RuntimePlayerStageViewStatus;
+    readonly transform: RuntimePlayerStageViewTransform;
+  };
+  readonly persistence: {
+    readonly status: RuntimePlayerStageStatePersistenceStatus;
+    readonly statusLabel: string;
+    readonly storageLabel: "window-state/runtime-player.json";
+    readonly updatedAtIso: string;
+    readonly warningMessages: readonly string[];
+  };
+};
+
+export type RuntimePlayerStageViewActionResult = {
+  readonly result: "ok" | "error";
+  readonly message: string;
+  readonly status: RuntimePlayerStageStateSnapshot;
+  readonly atIso: string;
+};
+
 export type RuntimePlayerStageViewApi = {
   readonly getStatus: () => Promise<RuntimePlayerStageViewStatus>;
+  readonly getState: () => Promise<RuntimePlayerStageStateSnapshot>;
   readonly reportStatus: (
     status: RuntimePlayerStageViewStatusReport
   ) => Promise<RuntimePlayerStageViewStatus>;
+  readonly reportViewTransform: (
+    transform: RuntimePlayerStageViewTransform
+  ) => Promise<RuntimePlayerStageStateSnapshot>;
+  readonly focusStage: () => Promise<RuntimePlayerStageViewActionResult>;
+  readonly resetView: () => Promise<RuntimePlayerStageViewActionResult>;
+  readonly centerModel: () => Promise<RuntimePlayerStageViewActionResult>;
+  readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerStageViewStatus) => void
+  ) => () => void;
+  readonly onStateChanged: (
+    callback: (status: RuntimePlayerStageStateSnapshot) => void
+  ) => () => void;
+  readonly onApplyViewTransformRequested: (
+    callback: (transform: RuntimePlayerStageViewTransform) => void
   ) => () => void;
   readonly onResetViewRequested: (callback: () => void) => () => void;
 };
@@ -94,8 +157,8 @@ export type RuntimePlayerApi = {
   readonly performPlaceholderAction: (
     action: RuntimePlayerPlaceholderAction
   ) => Promise<RuntimePlayerPlaceholderResult>;
-  readonly focusStage: () => Promise<RuntimePlayerPlaceholderResult>;
-  readonly resetStagePosition: () => Promise<RuntimePlayerPlaceholderResult>;
+  readonly focusStage: () => Promise<RuntimePlayerStageViewActionResult>;
+  readonly resetStagePosition: () => Promise<RuntimePlayerStageViewActionResult>;
 };
 
 declare global {

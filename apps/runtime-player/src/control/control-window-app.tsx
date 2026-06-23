@@ -26,6 +26,7 @@ import {
 import { InputPage } from "./input-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
+import { StagePage } from "./stage-page";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
   RuntimePlayerInputStatus
@@ -40,7 +41,8 @@ import type {
   RuntimePlayerMappingStatus
 } from "../preload/model-mapping-bridge-contract";
 import type {
-  RuntimePlayerPlaceholderAction,
+  RuntimePlayerStageStateSnapshot,
+  RuntimePlayerStageViewActionResult,
   RuntimePlayerStageViewStatus,
   RuntimePlayerStartupStatus
 } from "../preload/runtime-player-bridge-contract";
@@ -71,6 +73,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerMappingStatus | null>(null);
   const [stageViewStatus, setStageViewStatus] =
     useState<RuntimePlayerStageViewStatus | null>(null);
+  const [stageState, setStageState] =
+    useState<RuntimePlayerStageStateSnapshot | null>(null);
   const [feedback, setFeedback] = useState<ControlFeedback | null>(null);
   const [receivePortInput, setReceivePortInput] = useState("49983");
   const [iphoneHostInput, setIphoneHostInput] = useState("");
@@ -98,6 +102,12 @@ export function ControlWindowApp(): ReactElement {
     window.runtimePlayer.stageView.getStatus().then((status) => {
       if (active) {
         setStageViewStatus(status);
+      }
+    });
+    window.runtimePlayer.stageView.getState().then((status) => {
+      if (active) {
+        setStageState(status);
+        setStageViewStatus(status.stageView.renderStatus);
       }
     });
     window.runtimePlayer.input.getStatus().then((status) => {
@@ -139,6 +149,13 @@ export function ControlWindowApp(): ReactElement {
           setStageViewStatus(status);
         }
       });
+    const unsubscribeStageState =
+      window.runtimePlayer.stageView.onStateChanged((status) => {
+        if (active) {
+          setStageState(status);
+          setStageViewStatus(status.stageView.renderStatus);
+        }
+      });
     const unsubscribeInputStatus =
       window.runtimePlayer.input.onStatusChanged((status) => {
         if (active) {
@@ -172,6 +189,7 @@ export function ControlWindowApp(): ReactElement {
       active = false;
       unsubscribeRuntimeExport();
       unsubscribeStageView();
+      unsubscribeStageState();
       unsubscribeInputStatus();
       unsubscribeInputDiagnostics();
       unsubscribeInputProfile();
@@ -179,20 +197,23 @@ export function ControlWindowApp(): ReactElement {
     };
   }, []);
 
-  async function runPlaceholderAction(
-    action: RuntimePlayerPlaceholderAction
+  async function runStageAction(
+    action: () => Promise<RuntimePlayerStageViewActionResult>
   ): Promise<void> {
-    const result =
-      action === "focus-stage"
-        ? await window.runtimePlayer.focusStage()
-        : action === "reset-stage-position"
-          ? await window.runtimePlayer.resetStagePosition()
-          : await window.runtimePlayer.performPlaceholderAction(action);
-
-    setFeedback({
-      message: result.message,
-      tone: "neutral"
-    });
+    try {
+      const result = await action();
+      setStageState(result.status);
+      setStageViewStatus(result.status.stageView.renderStatus);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
   }
 
   async function openRuntimeExportDirectory(): Promise<void> {
@@ -313,7 +334,11 @@ export function ControlWindowApp(): ReactElement {
   }
 
   const stageWindowStatus =
-    startupStatus?.stage.windowState === "created" ? "Created" : "Checking";
+    stageState?.stageWindow.windowState === "created"
+      ? "Open"
+      : startupStatus?.stage.windowState === "created"
+        ? "Created"
+        : "Checking";
   const runtimeExportLabel =
     runtimeExportStatus?.statusLabel ?? pendingStatusLabel;
   const runtimeExportLoadedLabel =
@@ -327,6 +352,7 @@ export function ControlWindowApp(): ReactElement {
     inputProfileStatus,
     mappingStatus,
     stageViewStatus,
+    stageState,
     stageWindowStatus,
     receivePortInput,
     iphoneHostInput,
@@ -341,7 +367,8 @@ export function ControlWindowApp(): ReactElement {
     connectInputSource,
     disconnectInputSource,
     runInputProfileAction,
-    runMappingAction
+    runMappingAction,
+    runStageAction
   });
 
   return (
@@ -366,7 +393,9 @@ export function ControlWindowApp(): ReactElement {
           window.runtimePlayer.inputProfile.lookForward()
         )
       }
-      onFocusStage={() => void runPlaceholderAction("focus-stage")}
+      onFocusStage={() =>
+        void runStageAction(() => window.runtimePlayer.focusStage())
+      }
       lookForwardDisabled={!lookForwardAvailable}
       runtimeExportBusy={runtimeExportStatus?.status === "loading"}
     >
@@ -396,6 +425,7 @@ function renderActivePage(input: {
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
+  readonly stageState: RuntimePlayerStageStateSnapshot | null;
   readonly stageWindowStatus: string;
   readonly receivePortInput: string;
   readonly iphoneHostInput: string;
@@ -414,6 +444,9 @@ function renderActivePage(input: {
   ) => Promise<void>;
   readonly runMappingAction: (
     action: () => Promise<RuntimePlayerMappingActionResult>
+  ) => Promise<void>;
+  readonly runStageAction: (
+    action: () => Promise<RuntimePlayerStageViewActionResult>
   ) => Promise<void>;
 }): ReactElement {
   if (input.activePage === "input") {
@@ -498,14 +531,40 @@ function renderActivePage(input: {
             })
           );
         }}
-        onAutoMap={() =>
+        onResetToAutoMap={() =>
           void input.runMappingAction(() =>
-            window.runtimePlayer.modelMapping.regenerateAutoMapping()
+            window.runtimePlayer.modelMapping.resetToAutoMap()
+          )
+        }
+        onRetryProfileSave={() =>
+          void input.runMappingAction(() =>
+            window.runtimePlayer.modelMapping.retryProfileSave()
           )
         }
         onUpdateSlot={(request: RuntimePlayerMappingSlotUpdateRequest) =>
           void input.runMappingAction(() =>
             window.runtimePlayer.modelMapping.updateSlot(request)
+          )
+        }
+      />
+    );
+  }
+
+  if (input.activePage === "stage") {
+    return (
+      <StagePage
+        stageState={input.stageState}
+        onFocusStage={() =>
+          void input.runStageAction(() => window.runtimePlayer.focusStage())
+        }
+        onResetView={() =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.resetView()
+          )
+        }
+        onCenterModel={() =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.centerModel()
           )
         }
       />

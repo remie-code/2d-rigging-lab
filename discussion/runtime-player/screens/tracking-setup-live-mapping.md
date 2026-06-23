@@ -1,7 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
-> Wave6実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application が実装済み。Persistent Model Mapping Profile save、advanced source selection、deadzone/curve、Stage Motionはfuture。
+> Wave7実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save が実装済み。advanced source selection、deadzone/curve、Stage Motionはfuture。
 
 ## 1. Goal
 
@@ -18,15 +18,17 @@
 - Stage上でモデルがLiveに動き、ユーザーが自然さを確認できる。
 - 違和感がある箇所だけ、意味単位で調整できる。
 
-Wave5/Wave6 source/test evidence:
+Wave5/Wave6/Wave7 source/test evidence:
 
-- Control Window exposes `Overview` / `Input` / `Mapping` only.
+- Control Window exposes `Overview` / `Input` / `Mapping` / `Stage`.
 - Input Profile persists to `<electron userData>/input-profiles/ifacialmocap/profiles.json`.
 - `Look Forward` updates session neutral and does not overwrite persistent profile neutral.
 - Guided calibration records range and learned signs.
 - Auto Mapping creates semantic slots and filters direct output targets to external-input authored parameters.
 - Main emits sanitized `runtime-player-live-parameter-frame-v1`; Stage evaluates it through runtime-core and remains model-only.
 - Wave6 adds head position left/right calibration, missing-only recalibration, Body X/Z semantic slots, Body Follow controls, and Body Follow output through the same sanitized live parameter frame path.
+- Wave7 adds per-Runtime-Export Model Mapping Profile auto-save/restore and a separate Window State store for Stage/Control bounds plus Stage view pan/zoom.
+- Model Mapping Profile uses `<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`; Window State uses `<electron userData>/window-state/runtime-player.json`.
 - Manual real-device Stage body motion verification remains required for closeout confidence.
 
 ## 2. Concept Split
@@ -37,7 +39,8 @@ Tracking Setupは3層に分ける。
 |---|---|---|
 | Input Source | iFacialMocap接続そのもの。transport、port、remote、FPS、raw diagnostics | No |
 | Input Profile | その人、端末、カメラ位置、iFacialMocapのキャリブレーション | No |
-| Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。現在はsession/local stateで、永続保存しない | Yes |
+| Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。現在の実行中slot stateで、Mapping変更はStageへ即時反映する | Yes |
+| Model Mapping Profile | そのモデルをどう動かすかを次回起動へ持ち越す保存済みmapping設定。Wave7でRuntime Export identityごとの自動保存/復元を実装済み | Yes |
 
 この分離は複数モデル・複数ユーザーに対応するために必要である。
 
@@ -243,9 +246,8 @@ Future slots:
 
 ### 5.2 Mapping Result
 
-Wave5/Wave6 v0では、Runtime Exportロード後にAuto Mappingで初期生成する。
-
-Persistent Model Mapping Profile save/readは未実装である。slotごとの`enabled / invert / strength`はControlで編集できるが、編集状態はRuntime Playerの実行中状態であり、profile fileとして保存しない。
+Wave5/Wave6 v0では、Runtime Exportロード後にAuto Mappingで初期生成していた。
+Wave7では、Runtime Exportロード時に対応するModel Mapping Profileを読み、存在しない場合や読み込み失敗時はAuto Mappingへフォールバックする。slotごとの`enabled / invert / strength`、Body Follow controls、smoothingはControlで編集でき、Mapping変更はStageへ即時反映しつつdebounce後にprofile fileへ自動保存する。
 
 ```text
 Model Mapping
@@ -258,9 +260,36 @@ Status: Auto mapped 5 / 5
 
 Wave6ではBody X/Z targetがあるRuntime Exportでbody slotsを追加する。Body targetがない場合はmissing body slotsとして見せるが、既存のhead / eyes / mouth live mappingは止めない。
 
-## 6. Future Model Mapping Profile
+## 6. Wave7 Model Mapping Profile
 
-Model Mapping Profileはモデル依存の将来設定である。現在のv0では保存しない。
+Model Mapping Profileはモデル依存の設定である。Wave7で手動`Save`ではなく自動保存として実装済みである。
+
+実装方針は、手動`Save`ではなく自動保存である。
+
+理由:
+
+- Mapping調整はLive確認しながら細かく動かすため、毎回`Save`を押すUXは重い。
+- スライダー変更はStageへ即時反映されるので、保存状態もそれに追従する方が自然である。
+- Input Profileとは違い、Model Mapping Profileは「このRuntime Exportをどう動かすか」のローカル設定である。
+
+自動保存の原則:
+
+- スライダー/toggle変更は即時反映する。
+- 永続保存はdebounceする。目安は最後の変更から`500ms〜1000ms`後。
+- Runtime Export切り替え、window close、アプリ終了前にはflushする。
+- 保存失敗時だけ`Retry`を出す。
+- Headerには`Save Mapping`を置かない。
+- Mapping page上部の`Mapping Profile` cardに保存状態を出す。
+
+表示状態:
+
+```text
+Saved
+Saving...
+Unsaved changes
+Save failed [Retry]
+Stale export
+```
 
 含む情報:
 
@@ -272,13 +301,22 @@ Model Mapping Profileはモデル依存の将来設定である。現在のv0で
 - output range / limit。
 - optional advanced source selection。
 
-保存場所はInput Profileとは分ける。将来候補:
+保存場所はInput Profile、Window Stateとは分ける。
 
 ```text
 <electron userData>/
   model-mapping-profiles/
-    <runtime-export-fingerprint>.json
+    <safe-package-id>/
+      <fingerprint>.json
 ```
+
+Runtime Export identity:
+
+1. `manifest.sourcePackage.packageHash` がある場合はそれを優先する。
+2. `packageHash` がない場合は `packageId + packageRevision + parameterSignatureHash` を使う。
+3. `parameterSignatureHash` は、external-input authored direct targetの `parameterId / projectPresetAlias / displayName / min / max / default` から決める。
+
+`loadedAtIso` やdirectory pathはprofile identityに使わない。
 
 含めない情報:
 
@@ -286,7 +324,27 @@ Model Mapping Profileはモデル依存の将来設定である。現在のv0で
 - raw input range profile。
 - session neutral。
 
-将来は、Runtime Exportを開いた時に、そのモデルIDまたはexport fingerprintに紐づくModel Mapping Profileを探す。なければAuto Mappingする。
+Runtime Exportを開いた時に、そのRuntime Export identityに紐づくModel Mapping Profileを探す。なければAuto Mappingする。
+
+ユーザーが試行錯誤で値を崩した場合の復帰導線は、手動保存ではなく`Reset to Auto Map`である。
+
+Mapping Profileに保存する対象:
+
+- semantic slot ids。
+- target parameter id / alias。
+- enabled。
+- invert。
+- strength。
+- Body X strength / lag / invert。
+- Body Z rotation strength / position strength / component invert / lag。
+
+保存しない対象:
+
+- Input Profileのrange / learned signs。
+- session `Look Forward` neutral。
+- raw diagnostics。
+- Stage pan/zoom。
+- Stage / Control window bounds。
 
 ## 7. Mapping Edit UX
 
@@ -417,11 +475,22 @@ Wave6実装済み範囲:
 - Body Follow controls: Body X strength/lag/invert、Body Z rotation strength/invert、position strength/invert、lag。
 - Body outputs are emitted through sanitized live parameter frames and Stage remains model-only.
 
+Wave7実装済み範囲:
+
+- Model Mapping Profile auto-save/restore。
+- 保存先は`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`。
+- Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallback。
+- Mapping / Body Follow tuningはRuntime Export open時に復元し、profileがない/壊れている/stale targetを含む場合はAuto Mapping fallbackとstatus/warningで扱う。
+- `Reset to Auto Map`はmappingを再生成し、Body Follow lag stateをresetし、profileを保存する。
+- Stage Page v0をControl Window navに追加。
+- Window Stateは`<electron userData>/window-state/runtime-player.json`へ保存し、Model Mapping Profileとは分ける。
+- Stage Window bounds、Control Window bounds、Stage view pan/zoomを自動保存する。
+- Stageは引き続きmodel-onlyで、Runtime Export payloadとsanitized `parameterValues` live frameだけを受け取る。
+
 Future:
 
 - Stage Motion。
 - persistent profile management UIの完成版。
-- persistent Model Mapping Profile save/read。
 - curve / deadzone。
 - TCP transport。
 - multiple input sources。
@@ -436,15 +505,17 @@ Future:
 - profile読み込み失敗時はtemporary defaultsへフォールバックし、Diagnosticsに警告を出す。
 - `Use temporary defaults`はWave5 v0に含める。保存はしない。
 - Gaze X/Yはv0ではeye Eulerを優先する。
-- Model Mapping Profile永続保存はWave5 v0に含めない。
+- Model Mapping Profile永続保存はWave7で実装済み。手動`Save`ではなく自動保存である。
 - Head position calibrationはInput Profileに含め、Runtime Export固有のModel Mapping Profileには含めない。
-- Body Follow controlsはWave6ではsession-local mapping stateであり、まだ永続保存しない。
+- Body Follow controlsはWave7でModel Mapping Profileへ永続保存する。
+- Mapping page上部の`Mapping Profile` cardで状態表示付き自動保存を扱う。
+- Window State PersistenceはModel Mapping Profileとは別に保存する。Stage Window bounds、Control Window bounds、Stage view pan/zoomを`<electron userData>/window-state/runtime-player.json`へ自動保存する。
+- Stage Page v0は空のplaceholderではなく、Stage Window bounds、Stage view transform、Focus Stage、Reset View、Center Model、保存状態を扱う実体pageとして実装済み。
 - Stage Motion、near/far distance response、Broadcast/OBS UX、Body Angle YはWave6に含めない。
 
 ## 12. Open Questions
 
-- Model Mapping Profileの保存形式と保存場所。
-- Runtime Export fingerprintを何で決めるか。
 - Head rotationの軸符号は実機range dataで確定する。
-- Dedicated Model / Stage / Diagnostics pagesをどのwaveで実体化するか。
+- Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
 - head-position Stage Motion、near/far distance response、Broadcast/OBS UXをどのwaveで扱うか。
+- Wave7のElectron手動確認: Mapping/Body Follow tune後のrestart/reopen restore、Stage move/resize restore、Stage pan/zoom restore、Stage page Focus/Reset/Center、profile restore後のreal iFacialMocap tracking。

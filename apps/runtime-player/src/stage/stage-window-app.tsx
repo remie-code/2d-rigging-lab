@@ -10,6 +10,11 @@ import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer
 } from "./stage-renderer/static-stage-canvas-renderer";
+import {
+  readStageViewTransform,
+  serializeStageViewTransform,
+  type StageViewTransform
+} from "./stage-renderer/stage-view-transform";
 
 type StageRenderState = "empty" | "loaded" | "error";
 
@@ -28,7 +33,9 @@ export function StageWindowApp(): ReactElement {
 
     let renderer: StaticStageCanvasRenderer;
     try {
-      renderer = createStaticStageCanvasRenderer(canvas);
+      renderer = createStaticStageCanvasRenderer(canvas, {
+        onViewTransformChanged: reportStageViewTransform
+      });
     } catch (error) {
       console.error("Stage renderer setup failed.", error);
       reportStageViewStatus(createStageErrorStatusReport({
@@ -41,6 +48,7 @@ export function StageWindowApp(): ReactElement {
       };
     }
 
+    applyStoredStageViewTransform(renderer);
     reportStageViewStatus(createStageEmptyStatusReport());
 
     const renderPayload = (payload: RuntimeExportLoadedPayload): void => {
@@ -102,19 +110,21 @@ export function StageWindowApp(): ReactElement {
       window.runtimePlayerStage.runtimeExport.onStatusChanged((status) => {
         handleStatusChange(status, clearStage);
       });
-    const unsubscribeStageViewReset =
-      window.runtimePlayerStage.stageView.onResetViewRequested(() => {
+    const unsubscribeStageViewTransform =
+      window.runtimePlayerStage.stageView.onApplyViewTransformRequested((transform) => {
         if (!active) {
           return;
         }
 
         try {
-          renderer.resetView();
+          renderer.setViewTransform(readStageViewTransform(transform), {
+            notify: false
+          });
         } catch (error) {
-          console.error("Stage view reset failed.", error);
+          console.error("Stage view transform apply failed.", error);
           clearRendererAfterError(renderer);
           reportStageViewStatus(createStageErrorStatusReport({
-            message: "Stage view reset failed.",
+            message: "Stage view transform apply failed.",
             error
           }));
           setRenderState("error");
@@ -141,7 +151,7 @@ export function StageWindowApp(): ReactElement {
       active = false;
       unsubscribe();
       unsubscribeStatus();
-      unsubscribeStageViewReset();
+      unsubscribeStageViewTransform();
       unsubscribeLiveParameters();
       unsubscribeLiveParameterClear();
       renderer.dispose();
@@ -217,6 +227,28 @@ function reportStageViewStatus(status: RuntimePlayerStageViewStatusReport): void
   window.runtimePlayerStage.stageView.reportStatus(status).catch((error: unknown) => {
     console.error("Stage status report failed.", error);
   });
+}
+
+function reportStageViewTransform(transform: StageViewTransform): void {
+  window.runtimePlayerStage.stageView
+    .reportViewTransform(serializeStageViewTransform(transform))
+    .catch((error: unknown) => {
+      console.error("Stage view transform report failed.", error);
+    });
+}
+
+function applyStoredStageViewTransform(
+  renderer: StaticStageCanvasRenderer
+): void {
+  window.runtimePlayerStage.stageView.getViewTransform()
+    .then((transform) => {
+      renderer.setViewTransform(readStageViewTransform(transform), {
+        notify: false
+      });
+    })
+    .catch((error: unknown) => {
+      console.error("Stage view transform read failed.", error);
+    });
 }
 
 function applyLatestLiveParameterFrame(

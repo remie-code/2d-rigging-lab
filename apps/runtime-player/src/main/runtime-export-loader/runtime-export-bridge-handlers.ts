@@ -18,13 +18,17 @@ export type RuntimeExportDirectoryLoader = (
   directoryPath: string
 ) => Promise<RuntimeExportDirectoryLoadResult>;
 
+type MaybePromise<T> = T | Promise<T>;
+
 export interface RegisterRuntimeExportBridgeHandlersInput {
   readonly windows: RuntimePlayerWindowSet;
   readonly session?: RuntimeExportSessionState;
   readonly loadDirectory?: RuntimeExportDirectoryLoader;
-  readonly onRuntimeExportChanging?: () => void;
-  readonly onRuntimeExportLoaded?: (payload: RuntimeExportLoadedPayload) => void;
-  readonly onRuntimeExportCleared?: () => void;
+  readonly onRuntimeExportChanging?: () => MaybePromise<void>;
+  readonly onRuntimeExportLoaded?: (
+    payload: RuntimeExportLoadedPayload
+  ) => MaybePromise<void>;
+  readonly onRuntimeExportCleared?: () => MaybePromise<void>;
 }
 
 export function registerRuntimeExportBridgeHandlers(
@@ -61,9 +65,11 @@ async function openRuntimeExportDirectory(input: {
   readonly windows: RuntimePlayerWindowSet;
   readonly session: RuntimeExportSessionState;
   readonly loadDirectory: RuntimeExportDirectoryLoader;
-  readonly onRuntimeExportChanging?: () => void;
-  readonly onRuntimeExportLoaded?: (payload: RuntimeExportLoadedPayload) => void;
-  readonly onRuntimeExportCleared?: () => void;
+  readonly onRuntimeExportChanging?: () => MaybePromise<void>;
+  readonly onRuntimeExportLoaded?: (
+    payload: RuntimeExportLoadedPayload
+  ) => MaybePromise<void>;
+  readonly onRuntimeExportCleared?: () => MaybePromise<void>;
 }): Promise<RuntimeExportOpenDirectoryResult> {
   const selection = await dialog.showOpenDialog(input.windows.controlWindow, {
     title: "Open Runtime Export",
@@ -79,7 +85,7 @@ async function openRuntimeExportDirectory(input: {
   }
 
   const directoryPath = selection.filePaths[0];
-  input.onRuntimeExportChanging?.();
+  await input.onRuntimeExportChanging?.();
   broadcastStatus(
     input.windows,
     input.session.setLoading(directoryPath)
@@ -92,7 +98,7 @@ async function openRuntimeExportDirectory(input: {
       payload: loaded.payload
     });
 
-    input.onRuntimeExportLoaded?.(loaded.payload);
+    await input.onRuntimeExportLoaded?.(loaded.payload);
     broadcastStatus(input.windows, status);
     sendToWindow(
       input.windows.stageWindow,
@@ -111,7 +117,7 @@ async function openRuntimeExportDirectory(input: {
       failedAtIso: new Date().toISOString()
     });
 
-    input.onRuntimeExportCleared?.();
+    await input.onRuntimeExportCleared?.();
     broadcastStatus(input.windows, status);
 
     return {

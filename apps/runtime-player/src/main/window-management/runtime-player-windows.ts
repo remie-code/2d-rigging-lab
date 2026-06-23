@@ -11,20 +11,34 @@ import {
   getRendererHtmlFilePath,
   getStagePreloadFilePath
 } from "./renderer-entry-url";
+import type { RuntimePlayerWindowStateController } from "../window-state/window-state-controller";
+import type { RuntimePlayerWindowStateDocument } from "../window-state/window-state-document";
 
 export type RuntimePlayerWindowSet = {
   readonly controlWindow: BrowserWindow;
   readonly stageWindow: BrowserWindow;
 };
 
-export function createRuntimePlayerWindows(): RuntimePlayerWindowSet {
+export type CreateRuntimePlayerWindowsOptions = {
+  readonly windowState?: RuntimePlayerWindowStateDocument;
+};
+
+export function createRuntimePlayerWindows(
+  options: CreateRuntimePlayerWindowsOptions = {}
+): RuntimePlayerWindowSet {
   const controlPreloadFilePath = getControlPreloadFilePath();
   const stagePreloadFilePath = getStagePreloadFilePath();
   const controlWindow = new BrowserWindow(
-    createControlWindowOptions(controlPreloadFilePath)
+    createControlWindowOptions(
+      controlPreloadFilePath,
+      options.windowState?.windows.control?.bounds
+    )
   );
   const stageWindow = new BrowserWindow(
-    createStageWindowOptions(stagePreloadFilePath)
+    createStageWindowOptions(
+      stagePreloadFilePath,
+      options.windowState?.windows.stage?.bounds
+    )
   );
 
   controlWindow.once("ready-to-show", () => {
@@ -39,6 +53,14 @@ export function createRuntimePlayerWindows(): RuntimePlayerWindowSet {
     controlWindow,
     stageWindow
   };
+}
+
+export function attachRuntimePlayerWindowStateTracking(input: {
+  readonly windows: RuntimePlayerWindowSet;
+  readonly windowState: RuntimePlayerWindowStateController;
+}): void {
+  attachWindowBoundsTracking(input.windows.controlWindow, "control", input);
+  attachWindowBoundsTracking(input.windows.stageWindow, "stage", input);
 }
 
 export async function loadRuntimePlayerWindows(
@@ -62,4 +84,28 @@ async function loadRendererEntry(
   }
 
   await window.loadFile(getRendererHtmlFilePath(entry));
+}
+
+function attachWindowBoundsTracking(
+  window: BrowserWindow,
+  windowKey: "control" | "stage",
+  input: {
+    readonly windowState: RuntimePlayerWindowStateController;
+  }
+): void {
+  const updateBounds = (): void => {
+    if (window.isDestroyed()) {
+      return;
+    }
+
+    input.windowState.updateWindowBounds(windowKey, window.getBounds());
+  };
+
+  updateBounds();
+  window.on("move", updateBounds);
+  window.on("resize", updateBounds);
+  window.on("close", () => {
+    updateBounds();
+    void input.windowState.flush();
+  });
 }

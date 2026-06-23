@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
-import { FolderOpen, Plug, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { FolderOpen, Plug, RefreshCw, RotateCcw, SlidersHorizontal } from "lucide-react";
 
 import {
+  ErrorNotice,
   IconTextButton,
   Panel,
   StatusPill,
@@ -11,6 +12,7 @@ import {
   getAutoMappingLabel,
   getInputConnectionLabel,
   getLiveReadinessLabel,
+  getMappingProfileLabel,
   getProfileStatusLabel,
   getRuntimeExportLoadedLabel
 } from "./control-window-formatters";
@@ -37,7 +39,8 @@ export function MappingPage({
   onOpenRuntimeExport,
   onConnectInput,
   onStartCalibration,
-  onAutoMap,
+  onResetToAutoMap,
+  onRetryProfileSave,
   onUpdateSlot
 }: {
   readonly runtimeExportStatus: RuntimeExportStatus | null;
@@ -47,11 +50,50 @@ export function MappingPage({
   readonly onOpenRuntimeExport: () => void;
   readonly onConnectInput: () => void;
   readonly onStartCalibration: () => void;
-  readonly onAutoMap: () => void;
+  readonly onResetToAutoMap: () => void;
+  readonly onRetryProfileSave: () => void;
   readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
 }): ReactElement {
   return (
     <div className="grid gap-4">
+      <Panel title="Mapping Profile">
+        <StatusRow
+          label="Profile"
+          value={mappingStatus?.runtimeExport?.modelDisplayName ?? "Not loaded"}
+        />
+        <StatusRow
+          label="Status"
+          value={getMappingProfileLabel(mappingStatus)}
+        />
+        <StatusRow
+          label="Runtime"
+          value={mappingStatus?.runtimeExport?.packageId ?? "None"}
+        />
+        {mappingStatus?.profileStatus.warningMessages.length ? (
+          <ErrorNotice
+            title="Mapping profile warning"
+            details={mappingStatus.profileStatus.warningMessages}
+          />
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <IconTextButton
+            icon={RotateCcw}
+            label="Reset to Auto Map"
+            onClick={onResetToAutoMap}
+            variant="secondary"
+            disabled={runtimeExportStatus?.status !== "loaded"}
+          />
+          {mappingStatus?.profileStatus.kind === "save-failed" ? (
+            <IconTextButton
+              icon={RefreshCw}
+              label="Retry"
+              onClick={onRetryProfileSave}
+              variant="ghost"
+            />
+          ) : null}
+        </div>
+      </Panel>
+
       <Panel title="Mapping Readiness">
         <StatusRow
           label="Runtime Export"
@@ -92,13 +134,6 @@ export function MappingPage({
             label="Start Calibration"
             onClick={onStartCalibration}
             variant="ghost"
-          />
-          <IconTextButton
-            icon={RefreshCw}
-            label="Auto Map"
-            onClick={onAutoMap}
-            variant="ghost"
-            disabled={runtimeExportStatus?.status !== "loaded"}
           />
         </div>
       </Panel>

@@ -252,3 +252,157 @@ Source:
 Suggested next action:
 
 - After manual body follow verification, run a planning gate for Stage Motion / Broadcast-ready Stage as a separate wave.
+
+### 3.8 Model Mapping Profile Auto Save
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave7
+- Priority: N/A
+
+Problem:
+
+- Wave5/Wave6でMapping画面の`enabled / invert / strength`とBody Follow controlsを細かく調整できるようになった。
+- 現在のModel Mapping Stateはsession/local stateであり、Runtime Playerを再起動したりRuntime Exportを開き直すと調整値が失われる。
+- 特にBody Followは実機で自然に見える値へ詰めるため、保存されないことが強いUX欠落になる。
+
+Decision:
+
+- Model Mapping Profileは手動`Save`ではなく自動保存する。
+- Mapping page上部の`Mapping Profile` cardで`Saved / Saving / Unsaved changes / Save failed / Stale export`を表示する。
+- HeaderにはMapping保存ボタンを置かない。
+- 保存失敗時だけ`Retry`を出す。
+- 試行錯誤から戻る主導線は`Reset to Auto Map`にする。
+
+Implemented outcome:
+
+- Runtime Exportを開いた時、そのexportに対応するModel Mapping Profileが自動復元される。
+- Profileがない場合はAuto Mappingへフォールバックする。
+- Runtime Exportが古い/staleの場合は、状態を表示しつつ有効slotを復元し、stale targetはAuto Mappingへfallbackする。
+- Mapping変更はStageへ即時反映され、debounce後に保存される。
+- `Reset to Auto Map`はmappingを再生成し、Body Follow lag stateをresetし、profileを保存する。
+- 保存場所は`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`。
+- Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallback。
+
+Remaining manual verification:
+
+- Mapping / Body Follow tune -> restart/reopen same Runtime Export -> restore。
+- Real iFacialMocap tracking after profile restore。
+
+Original trigger:
+
+- Body Followの実機調整が有効であると確認された。
+- ユーザーが次回起動時にも同じmapping調整を復元したい。
+- Persistent Model Mapping Profile auto-save/readを次wave候補にする。
+
+Source:
+
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
+- [../implementation/orchestration/player-wave7-plan.md](../implementation/orchestration/player-wave7-plan.md)
+- [../implementation/waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md](../implementation/waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md)
+
+### 3.9 Stage Page + Window/View State Auto Save
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave7
+- Priority: N/A
+
+Problem:
+
+- Wave3以降、Stageはpan/zoomできるが、その表示状態はまだ次回起動へ持ち越せない。
+- Body FollowとMapping調整が自然になったことで、次に必要なのは「調整した動き」と「整えた表示位置」が次回も戻ってくる体験である。
+- OverviewにStage操作を増やすとLive readiness確認画面が肥大化する。Stage操作は低頻度なので専用pageへ逃がす方がよい。
+
+Decision:
+
+- Stage page v0を実体pageとして追加する。
+- Stage page v0はBroadcast/OBS設定ではなく、Stage Window boundsとStage view transformを扱う。
+- Window State Persistenceは自動保存する。
+- 保存場所はModel Mapping Profileとは分ける。
+
+Implemented outcome:
+
+- Stage page v0 is a real Control Window page.
+- Stage Window bounds and Control Window bounds are auto-saved.
+- Stage view transform stores pan/zoom with coordinate space `stage-viewport-px-v1`.
+- Focus Stage, Reset View, and Center Model are real Stage view actions.
+- Center Model preserves current zoom and recenters pan.
+- Window State storage is separate from Model Mapping Profile storage.
+- Storage path is `<electron userData>/window-state/runtime-player.json`.
+- Stage remains model-only and receives no raw tracking frame/debug setup UI.
+
+Remaining manual verification:
+
+- Stage move/resize -> restart -> restore。
+- Stage pan/zoom -> restart -> restore。
+- Stage page Focus/Reset/Center。
+
+Implemented scope:
+
+- Stage Window bounds: `x / y / width / height`。
+- Control Window bounds: `x / y / width / height`。同時に扱うかはplanningで最終確認する。
+- Stage view transform: `panX / panY / zoom`。
+- Stage page actions: `Focus Stage`, `Reset View`, `Center Model`。
+- Save status: `Saved / Saving / Save failed` and optional `Retry`。
+
+Out of scope:
+
+- Runtime Export auto restore。
+- Stage transparency。
+- click-through。
+- always-on-top。
+- OBS/capture settings。
+- head-position Stage Motion。
+- near/far distance response。
+
+Storage:
+
+```text
+<electron userData>/
+  window-state/
+    runtime-player.json
+```
+
+Rationale:
+
+- Model Mapping Profile is per Runtime Export and describes how the model moves.
+- Window State is per device/display environment and describes where/how the Stage is shown.
+- The same PC should generally reuse Stage window placement across models.
+- The same Runtime Export on another PC should not inherit window coordinates from a different display environment.
+
+Original trigger:
+
+- Model Mapping Profile auto-save is planned, and a parallel independent domain is desirable.
+- User wants the next launch to restore both motion tuning and Stage placement.
+
+Source:
+
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
+- [../implementation/orchestration/player-wave7-plan.md](../implementation/orchestration/player-wave7-plan.md)
+- [../implementation/waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md](../implementation/waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md)
+
+### 3.10 Wave7 Manual Electron Persistence Verification
+
+- Status: Deferred
+- Kind: Runtime verification
+- Priority: High before treating Wave7 as fully manually accepted
+
+Problem:
+
+- Wave7 source checks, focused tests, typecheck, and review reports support a pass verdict, but Electron restart/reopen flows were not manually executed in Domain C.
+- These checks need a real Runtime Player session, real Runtime Export, and real iFacialMocap input for final product confidence.
+
+Required checks:
+
+- Mapping/Body Follow tune -> restart/reopen same Runtime Export -> restore。
+- Stage move/resize -> restart -> restore。
+- Stage pan/zoom -> restart -> restore。
+- Stage page Focus/Reset/Center。
+- Real iFacialMocap tracking after profile restore。
+
+Source:
+
+- [../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md)
