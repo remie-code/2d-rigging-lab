@@ -1,351 +1,160 @@
 # Broadcast Stage Setup v0
 
-> Runtime Playerで、Stage Windowを配信ソフトに載せるための次実装範囲。
+> Runtime Player の Stage 周辺を配信準備に使うための画面責務。Wave9 以降、主経路は Browser Source Output であり、native Stage Window は local preview / fallback として扱う。
 
 ## 1. Status
 
-- Status: Implemented in Runtime Player Wave8; source/tests/reviews `pass`.
+- Status: Wave8 implemented native Stage Window setup controls; Wave9 demoted those controls to local preview/fallback and added Browser Source Output as the primary broadcast setup surface.
 - Date: 2026-06-23
-- Basis:
-  - [broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
-  - [control-window-screen-structure.md](control-window-screen-structure.md)
-  - [tracking-setup-live-mapping.md](tracking-setup-live-mapping.md)
-  - [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
-
-Wave8 implemented Broadcast Stage Setup v0 as source/test-verified functionality. Electron-native and OBS-adjacent manual checks remain pending and are listed in the final integration report; this document must not be read as evidence that those manual checks have been run.
-
-## 2. UX Goal
-
-Wave7までで、Runtime Playerは次の状態になった。
-
-- Runtime Exportを読み込める。
-- iFacialMocapでモデルを自然に動かせる。
-- Body Followを調整できる。
-- Mapping / Body Follow調整が保存復元される。
-- Stage Window位置・サイズ・pan/zoomが保存復元される。
-
-次にユーザーが得るべき体験は、モデルを「動かせる」から、配信ソフトへ「迷子にならずに載せられる」へ進むことである。
-
-Broadcast Stage Setup v0の目的:
-
-- Stage WindowをOBSなどのcapture targetとして扱いやすくする。
-- Stage Windowがframelessであることによる移動しづらさを解消する。
-- Control Windowを閉じても復帰できるようにする。
-- 配信中の誤操作を避けるためのclick-throughを安全に扱う。
-- 前回使ったRuntime Exportへ戻る手間を減らす。
-
-このwaveはOBSを自動操作するものではない。OBS側のsource作成・capture method・alpha確認はユーザー側の設定である。
-
-## 3. Primary User Story
-
-ユーザーはRuntime Playerを起動する。
-
-前回使っていたRuntime Exportが自動で読み込まれ、Stage Windowには前回のモデル・位置・サイズ・表示倍率でモデルが表示される。
-
-ユーザーはControl WindowのStage/Capture関連画面で、Stage Windowを配置し、必要ならalways-on-topやclick-throughを切り替える。
-
-OBSでは、ユーザーが`Runtime Player Stage`をWindow Captureなどで選ぶ。
-
-Control Windowを閉じてもアプリは終了せず、tray/menuから再表示できる。
-
-## 4. Implemented Scope
-
-### 4.1 Runtime Export Auto Restore
-
-前回開いたRuntime Export directoryを次回起動時に自動復元する。
-
-Implemented behavior:
-
-- 最後に成功して開いたRuntime Export pathを保存する。
-- 起動後、Control Windowの初期renderer effect/status setup後に、そのpathの自動復元を試みる。
-- 有効なら、手動Openと同じvalidation/session/payload broadcast pathで読み込む。
-- 無効ならクラッシュせず、Control Windowに復元失敗状態を出す。
-- 無効な保存pathは自動削除しない。ユーザーは`Retry Restore`または通常の`Open Runtime Export`/`Open New Export`から進める。
-- 成功したらlast runtime export pathを更新する。
-
-Out of scope:
-
-- Input Sourceの自動接続。
-- iFacialMocap接続設定の自動復元。
-- Runtime Exportの自動探索。
-
-Rationale:
-
-前回Runtime Exportの復元は、配信準備を短くする効果が大きい。
-
-一方、Input Sourceは現状Connectボタンを押せばよく、自動UDP待受を起動時に行う必要性はまだ低い。
-
-### 4.2 Control Window Recovery
-
-Control Windowを閉じた時、Runtime Playerを終了せず、Control Windowをhideする。
-
-Implemented behavior:
-
-- Control Window close は hide。
-- Stage Windowとinput receiverは維持される。
-- tray/application menuからControl Windowを再表示できる。
-- tray/application menuからStage Windowをfocusできる。
-- 明示的なQuit操作でRuntime Player全体を終了する。
-- 明示的Quitはinput disconnect、Model Mapping Profile flush、Window State flushを通る。
-
-Implemented tray/menu entries:
-
-- Show Control Window
-- Focus Stage
-- Disable Click-through, if click-through is currently enabled
-- Quit Runtime Player
-
-Rationale:
-
-Stage Windowだけが残り、Control Windowに戻れない状態は配信中の詰みになる。
-
-click-throughを扱う場合、Control Window recoveryは安全装置として必須である。
-
-### 4.3 Stage Arrange Mode
-
-Stage Windowはframelessなので、OS標準タイトルバーで移動できない。
-
-Stage Arrange Modeは、Stage Windowを配信前に配置するための一時モードである。
-
-Implemented behavior:
-
-- Control Windowから`Arrange Stage`を有効化する。
-- 有効中、Stage Window上に一時的なarrange overlay / native drag handleを表示する。
-- ユーザーはそのdrag regionを掴んでnative Stage Windowを移動できる想定で実装している。
-- Arrange mode中は、Stage pan/zoomとの操作衝突を避ける。
-- 通常モードではsetup overlayを消し、Stage Windowはmodel-onlyに戻る。
-
-Implementation notes:
-
-- Stage全体を常時ドラッグ可能にしない。
-- drag-anywhereはStage view panや将来のbroadcast操作と衝突するため避ける。
-- 配信に映る可能性がある補助UIは、Arrange mode中だけ表示する。
-- Wave8 implementation uses an Electron native draggable region (`app-region: drag`) on the temporary handle.
-- Native drag behavior still needs manual Windows Electron verification.
-
-### 4.4 Click-Through Toggle
-
-Stage Windowを配信中に誤操作しないため、click-throughをtoggleできるようにする。
-
-Implemented behavior:
-
-- Control Windowからclick-throughをOn/Offできる。
-- click-through On中はStage Windowがmouse inputを受け取らない。
-- Control Windowにはclick-through状態が明確に表示される。
-- tray/menuからclick-throughを解除できる。
-- click-throughは起動時に必ずOffから始まる。
-- click-throughは永続保存しない。
-- Arrange modeとclick-throughは同時にOnにしない。片方を有効にする時、もう片方は解除される。
-
-Safety requirement:
-
-- click-through On中でもユーザーが復帰できる導線が必須。
-- v0ではtray/menuの`Disable Click-through`を必須とする。
-- global shortcutはv0必須ではないが、将来候補として残す。
-
-Out of scope:
-
-- Stage上にclick-through解除UIを出すこと。click-through中はStageがmouseを受け取らないため不適切。
-
-### 4.5 Always-On-Top Toggle
-
-Stage Windowをalways-on-topにできるtoggleを追加する。
-
-Implemented behavior:
-
-- Default is off.
-- Control WindowからOn/Offできる。
-- 状態はWindow Stateの`stageEnvironment.alwaysOnTop`として保存する。
-- 不正な保存値はOffへfallbackする。
-
-Rationale:
-
-always-on-topは配置や運用時に便利なことがあるが、OBS Window Captureには必須ではなく、邪魔になる場面もある。
-
-### 4.6 Capture Target Checklist
-
-OBS連携状態そのものは検出できないため、`OBS Ready`とは呼ばない。
-
-Control Window上では、Stageがcapture targetとして扱いやすい状態かを表示する。
-
-Implemented label:
-
-- Capture Target
-
-Implemented checklist:
-
-- Stage Window: Open
-- Runtime Export: Loaded / Not loaded
-- Model: Visible
-- Background: Transparent
-- Stage UI: Hidden / model only
-- Window title: `Runtime Player Stage`
-- Click-through: On / Off
-- Always on top: On / Off
-
-Implemented actions:
-
-- Focus Stage
-- Arrange Stage
-- Reset View
-- Center Model
-- Copy Window Title
-
-Important:
-
-Runtime Player cannot reliably know:
-
-- whether OBS is running.
-- whether OBS has a source targeting Stage.
-- whether OBS preserves alpha.
-- whether the source is visible in the active scene.
-- whether stream/recording output is correct.
-
-Therefore the checklist is local readiness, not OBS verification.
-
-### 4.7 Stable Stage Window Title
-
-Keep Stage Window native title stable.
-
-Expected behavior:
-
-- Native window title remains `Runtime Player Stage` or another fixed title.
-- Do not include model name or session-specific values in the native title.
-- Provide `Copy Window Title` action in Control Window.
-
-Rationale:
-
-OBS Window Capture selection can depend on window title. A stable title makes user setup easier.
+- Current primary broadcast doc: [browser-source-output-probe-v0.md](browser-source-output-probe-v0.md)
+- Research basis: [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+
+This document no longer represents Window/Game Capture as the primary broadcast assumption. It records the still-useful native Stage Window behavior and its relationship to the Browser Source-first Wave9 probe.
+
+## 2. UX Goal After Wave9
+
+The user should prepare broadcast output from the `Stage` page in this order:
+
+1. Use `Browser Source Output` to copy the Runtime Player Browser Source URL and monitor server/client/render status.
+2. Use OBS Browser Source for the primary probe path.
+3. Use `Local Preview / Fallback` native Stage Window controls for local checking, arrangement, recovery, and fallback capture only.
+
+The Control Window must not claim OBS is capturing or streaming. It can report Runtime Player-owned facts:
+
+- Browser Source server state, bind address, port, and tokenized URL availability.
+- connected Browser Source client count.
+- latest live frame and heartbeat timestamps.
+- Browser Source renderer diagnostics, including WebGL2 and render status.
+- native Stage Window local preview state.
+
+## 3. Implemented Native Stage Window Scope
+
+Wave8 native Stage Window controls remain implemented:
+
+- Runtime Export startup restore.
+- Control Window close-hide recovery through tray/application menu.
+- explicit quit path.
+- Stage Arrange mode with temporary native drag handle.
+- click-through toggle, default off and not persisted.
+- tray/application menu click-through recovery.
+- always-on-top toggle, default off and persisted in Window State.
+- stable native title `Runtime Player Stage`.
+- Copy Window Title.
+- Stage Window bounds and Stage view pan/zoom persistence.
+
+After Wave9, these controls appear under `Local Preview / Fallback` rather than as the primary capture-target checklist.
+
+## 4. Implemented Browser Source Output Scope
+
+Wave9 Stage page behavior:
+
+- Shows `Browser Source Output` before local fallback controls.
+- Shows the tokenized Browser Source URL.
+- Provides `Copy URL`.
+- Shows server state/status label, bind address, port, and token availability as `Included in URL`.
+- Shows connected Browser Source client count.
+- Shows Runtime Export status for Browser Source output.
+- Shows latest live frame sequence/timestamp.
+- Shows client heartbeat and server heartbeat.
+- Shows renderer status/message, WebGL2 availability, Browser Source Runtime Export loaded flag, frame age, and FPS.
+- Shows server error details when available.
+- Provides concise OBS Browser Source setup guidance.
+- Does not expose a raw token field separate from the URL.
+- Does not provide OBS automation, source creation, or capture verification.
+- Does not add parameter sliders or editor-style controls.
 
 ## 5. Screen Placement
 
-The primary home should be the existing `Stage` page.
-
-Stage page after this scope should contain groups like:
+Current `Stage` page shape:
 
 ```text
 Stage
-  Window
-    Status: Open
-    Bounds: x, y, width, height
-    [Focus Stage] [Arrange Stage]
+  Stage Window
+    Status, position, size, render
+    Focus Stage, Arrange Stage
 
   View
-    Zoom: 80%
-    Pan: x, y
-    [Reset View] [Center Model]
+    Zoom, pan
+    Reset View, Center Model
 
-  Capture Target
-    Stage Window: Open
-    Model: Visible
-    Background: Transparent
-    Stage UI: Hidden
-    Window title: Runtime Player Stage [Copy]
-    Click-through: Off [Toggle]
-    Always on top: Off [Toggle]
+  Browser Source Output
+    URL, server, bind address, port, token availability
+    connected clients, Runtime Export, latest frame
+    client/server heartbeat
+    renderer, WebGL2, Browser Export, frame age, FPS
+    Copy URL
+    OBS Browser Source setup guidance
+
+  Local Preview / Fallback
+    Stage Window, Runtime Export, model, background, Stage UI
+    Window Title, click-through, always-on-top
+    native Stage Window controls
+
+  Auto Save
+    Window State persistence
 
   Startup
-    Last Runtime Export: loaded / missing / not set
-    [Open Runtime Export]
+    Runtime Export startup restore
 ```
-
-Do not move these controls to Overview by default.
 
 Rationale:
 
-- Overview should remain a quick live-status screen.
-- Stage setup is important but low-frequency.
-- Broadcast setup should not crowd calibration or mapping workflows.
+- Browser Source Output is the primary broadcast candidate.
+- Stage Window controls still matter for local preview and recovery.
+- OBS setup remains user-side configuration.
 
-## 6. Persistence
+## 6. Manual OBS Browser Source Checklist
 
-### Window State
+The UI docs/reports should preserve this manual checklist:
 
-The following belong to Window State or adjacent environment state:
+- Add OBS Browser Source.
+- Paste Runtime Player Browser Source URL.
+- Set width/height.
+- Set custom FPS to 30 or 60 for test.
+- Keep transparent background/custom CSS behavior enabled.
+- Initially leave `Shutdown source when not visible` off.
+- Initially leave `Refresh browser source when scene becomes active` off.
+- Confirm transparent areas show lower OBS layers.
+- Confirm model renders without black/white fill.
+- Confirm WebGL2 status appears in Control.
+- Confirm connected client and heartbeat appear in Control.
+- Move face/head with iFacialMocap and confirm model motion.
+- Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
+- Confirm OBS audio meter does not receive unintended audio.
 
-- Stage bounds.
-- Control bounds.
-- Stage view pan/zoom.
-- always-on-top.
+## 7. Out Of Scope
 
-The following is intentionally not persisted:
-
-- click-through.
-
-Reason:
-
-- Restoring click-through automatically can trap or surprise the user. Wave8 always starts click-through Off and relies on Control plus tray/application menu recovery for safety.
-
-### Runtime Export Restore
-
-Store last successful Runtime Export directory separately from Window State.
-
-Suggested location:
-
-```text
-<electron userData>/
-  startup-state/
-    runtime-player-startup.json
-```
-
-Implemented schema:
-
-```json
-{
-  "schemaVersion": "runtime-player-startup-state-v1",
-  "updatedAtIso": "2026-06-23T00:00:00.000Z",
-  "lastRuntimeExportDirectory": "C:/path/to/model.runtime-export"
-}
-```
-
-Do not store Input Profile or Model Mapping Profile here. Those already have their own ownership.
-
-## 7. Out of Scope
-
-- Spout sender implementation.
+- Spout sender / Spout2 implementation.
 - obs-websocket integration.
 - automatic OBS source creation.
 - automatic OBS capture verification.
+- making Window/Game Capture the primary setup path.
 - Input Source auto-connect.
-- input source profile switching beyond existing Input Profile behavior.
 - head-position Stage Motion.
 - near/far distance response.
 - packaging/distribution.
 - multi-output broadcast profiles.
+- remote-network Browser Source server.
+- exposing raw iFacialMocap or debug diagnostics to Browser Source.
 
-## 8. Acceptance Criteria Status
+## 8. Manual Checks Still Pending
 
-- Runtime Player startup can restore the last successful Runtime Export: implemented and covered by focused source tests.
-- If last Runtime Export is missing/invalid, Control Window reports that state without crashing: implemented and covered by focused source tests.
-- Closing Control Window does not trap the user; tray/menu can show Control Window again: implemented and covered by focused source tests; manual Electron check pending.
-- Runtime Player can still be explicitly quit: implemented and covered by focused source tests; manual Electron check pending.
-- Stage Arrange mode allows moving frameless Stage Window: implemented with native drag handle; manual Windows Electron drag check pending.
-- Stage Arrange mode does not leave setup UI visible in normal Stage mode: implemented and covered by focused source tests.
-- Click-through can be toggled from Control Window: implemented and covered by focused source tests; manual Electron check pending.
-- Click-through can be disabled from tray/menu: implemented and covered by focused source tests; manual Electron check pending.
-- Always-on-top can be toggled and defaults off: implemented and covered by focused source tests; manual Electron persistence/z-order check pending.
-- Capture Target checklist reflects app-owned readiness without claiming OBS integration: implemented and source-checked.
-- Stage native title remains stable and can be copied: implemented and source-checked.
-- Stage remains model-only during normal operation: implemented and protected by boundary/source tests.
+Browser Source manual checks:
 
-## 9. Resolved Planning Questions And Remaining Manual Checks
+- OBS Browser Source can load the URL.
+- OBS Browser Source preserves transparent alpha.
+- OBS Browser Source can render the model through WebGL2 without black/white fill.
+- Control shows WebGL2 status, connected client, heartbeat, and latest frame.
+- real iFacialMocap motion appears in Browser Source.
+- OBS hide/show and manual refresh reconnect/resync as expected.
+- OBS audio meter does not receive unintended audio.
 
-Resolved by Wave8:
-
-- click-through always starts Off and is not restored as On.
-- Stage Arrange uses a temporary arrange overlay with a small native drag handle.
-- Runtime Export auto restore is triggered from Control after initial renderer effect/status setup, with visible loading/status.
-- Invalid last Runtime Export path is kept for Retry/Open New behavior.
-- Tray/application menu recovery is implemented as the v0 recovery path.
-- Runtime Player exposes a local Capture Target checklist, not an OBS readiness claim.
-
-Manual verification still pending:
+Native Stage Window fallback checks:
 
 - Control close hides/reopens from tray/menu.
-- Explicit Quit flushes and exits.
+- explicit quit flushes and exits.
 - Runtime Export valid/invalid startup restore.
 - Stage Arrange drag handle moves the native Stage Window.
-- Click-through toggle and tray recovery.
-- Always-on-top toggle and persistence.
-- Capture Target checklist and Copy Window Title.
-- OBS Window Capture title/alpha smoke check.
+- click-through toggle and tray recovery.
+- always-on-top toggle and persistence.
+- native local preview/fallback controls remain usable.

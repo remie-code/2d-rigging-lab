@@ -8,6 +8,7 @@ import {
   type RuntimePlayerPlaceholderAction,
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
+import { browserSourceBridgeChannels } from "./browser-source-bridge-channels";
 import { inputBridgeChannels } from "./input-bridge-channels";
 import { inputProfileBridgeChannels } from "./input-profile-bridge-channels";
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
@@ -33,6 +34,9 @@ import type {
   RuntimeExportRestoreLastDirectoryRequest,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type {
+  RuntimePlayerBrowserSourceStatus
+} from "./browser-source-status-contract";
 
 const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
@@ -196,6 +200,15 @@ export function installRuntimePlayerBridge(): void {
       onResetViewRequested: (callback) =>
         subscribeToVoidEvent(stageViewBridgeChannels.resetRequested, callback)
     },
+    browserSource: {
+      getStatus: () =>
+        ipcRenderer.invoke(browserSourceBridgeChannels.getStatus),
+      onStatusChanged: (callback) =>
+        subscribeToBrowserSourceStatusEvent(
+          browserSourceBridgeChannels.statusChanged,
+          callback
+        )
+    },
     getStartupStatus: () =>
       ipcRenderer.invoke(placeholderBridgeChannels.getStartupStatus),
     getStageStatus: () =>
@@ -288,6 +301,24 @@ function subscribeToRuntimeExportEvent<TPayload extends
   callback: (payload: TPayload) => void
 ): () => void {
   const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToBrowserSourceStatusEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerBrowserSourceStatus) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerBrowserSourceStatus
+  ) => {
     callback(payload);
   };
 

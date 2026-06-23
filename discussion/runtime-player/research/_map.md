@@ -7,19 +7,20 @@
 | Path | Status | Content |
 |---|---|---|
 | [ifacialmocap-input-adapter-research.md](ifacialmocap-input-adapter-research.md) | Draft / initial research captured | iFacialMocapのUDP/TCP/VMC関連仕様、desktop host必要性、adapter設計含意 |
-| [broadcast-capture-paths.md](broadcast-capture-paths.md) | Direction accepted and implemented by Wave8 source/tests | OBS Window/Game Captureを先に扱い、Spoutは近い将来のfeasibility trackとして残す方針。Wave8はStage Window capture-target UXを実装済み |
+| [broadcast-capture-paths.md](broadcast-capture-paths.md) | Direction updated by Wave9 source/tests; manual OBS probe pending | OBS Browser Sourceをprimary broadcast candidateとしてprobeし、native Stage Windowはlocal preview/fallback、Spout2はBrowser Sourceのcritical failureまでdeferredとする方針 |
 
 ## Current Research Basis
 
 - iFacialMocap公式developer pageに、PCソフトを介さないUDP/TCP受信仕様がある。
 - Warudo documentationは、iFacialMocap / FaceMotion3DをARKit系face tracking sourceとして扱っている。
 - Browser-only runtimeは任意UDP/TCP受信に向かないため、desktop hostが必要になる可能性が高い。
-- Broadcast Stage v0では、既存Stage Windowをcapture targetにする方針をWave8で実装済み。Spoutは配信用outputとして有力だが、native/GPU texture sharing・OBS plugin・packagingの重さがあるため、まずfeasibility investigationに分ける。
-- Wave8はOBS automation/source creation/readiness detectionを実装していない。Capture Target checklistはRuntime Player内のlocal readinessのみを示す。
+- Broadcast outputはWave9でBrowser Source-first probeへ更新済み。Runtime Playerは`127.0.0.1` loopback server、tokenized Browser Source URL、token-gated Runtime Export/live parameter transport、transparent model-only Browser Source Stage client、Control diagnosticsを実装済み。
+- Native Stage Windowはlocal preview / fallbackとして残る。Wave8のWindow/Game Capture-first assumptionはprimary pathとしてはsuperseded。
+- Spout2、obs-websocket、automatic OBS source creation、automatic OBS capture verificationは未実装でout of scope。
 
 ## Next Research
 
-1. OBS Window Capture / Game CaptureでStage Window title selection、alpha、capture安定性を実機確認する。
-2. Spout sender feasibilityを別wave候補として調査する。
+1. OBS Browser SourceでRuntime Player URL、alpha、WebGL2、live motion、reload/resync、audio meterを実機確認する。
+2. Browser Source manual probeがcritical failureした場合だけ、Spout2 sender feasibilityを別wave候補として調査する。
 3. 現行iOS版iFacialMocapでの実設定画面とhandshake挙動を実機で確認する。
 4. UDP/TCPの安定性、遅延、長時間運用時の挙動を実験する。

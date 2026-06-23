@@ -94,3 +94,39 @@ button {
     );
   opacity: 0.9;
 }
+
+html.browser-source-stage-document,
+html.browser-source-stage-document body.browser-source-stage-body,
+html.browser-source-stage-document body.browser-source-stage-body #runtime-player-browser-source-root {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  background-color: transparent;
+}
+
+html.browser-source-stage-document body.browser-source-stage-body,
+html.browser-source-stage-document body.browser-source-stage-body #runtime-player-browser-source-root {
+  pointer-events: none;
+}
+
+html.browser-source-stage-document .browser-source-stage-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  background-color: transparent;
+  pointer-events: none;
+}
+
+html.browser-source-stage-document .browser-source-stage-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+  background-color: transparent;
+  pointer-events: none;
+}

@@ -117,7 +117,7 @@ Suggested next action:
 - 実物Runtime Exportでload timing logを追加するか、manual measurementを行う。
 - 問題がある場合は、main/Stage間のtexture bytes delivery設計を再検討する。
 
-### 3.4 Stage Window Platform Behavior
+### 3.4 Native Stage Window Platform Behavior
 
 - Status: Deferred
 - Kind: Platform risk
@@ -125,32 +125,35 @@ Suggested next action:
 
 Problem:
 
-- Stage Windowはtransparent/capture-friendlyである必要がある。
+- Wave9以降、native Stage Windowはprimary broadcast pathではなくlocal preview / fallbackである。
+- それでもStage Windowはtransparent/capture-friendly fallbackとして有用である。
 - Electronのtransparent/frameless windowやOBS capture behaviorはOSやGPU環境の差分を受ける。
-- Wave8でStage Arrange、click-through、always-on-top、Capture Target checklistはsource/test上実装済みだが、Electron-native挙動とOBS capture挙動は未検証。
+- Wave8でStage Arrange、click-through、always-on-top、stable Stage title / Copy Window Titleはsource/test上実装済みだが、Electron-native挙動は未検証。
 
 Trigger:
 
-- Playerを配信・収録用途で使い始める。
-- Stage Windowのposition / size / always-on-top / click-throughを配信・収録用途で実運用する。
+- Native Stage Windowをlocal preview / fallback captureとして実運用する。
+- Stage Windowのposition / size / always-on-top / click-throughを配信準備で実運用する。
 - packaging/distribution前。
 
 Desired outcome:
 
-- 対象OSでStageが透明背景としてcaptureできる。
+- 対象OSでStageが透明背景のlocal preview / fallbackとして使える。
 - captureに不要なUIが入らない。
 - always-on-top / click-through / window placementが対象OS上で期待どおり動く。
-- OBS Window Captureで`Runtime Player Stage`を選べ、alphaが期待どおり扱われる。
+- 必要ならOBS Window Capture fallbackで`Runtime Player Stage`を選べるか確認する。ただしPrimary probeはBrowser Sourceである。
 
 Source:
 
 - [../architecture/technology-stack-decision.md](../architecture/technology-stack-decision.md)
 - [../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md](../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md)
 - [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 
 Suggested next action:
 
-- Wave8 final reportのmanual verification checklistを実行し、OS/OBS差分が出たらplatform-specific follow-up waveを切る。
+- Browser Source manual OBS probeを優先する。
+- Native Stage Windowのmanual Electron checksを実行し、fallback/local previewで差分が出たらplatform-specific follow-up waveを切る。
 
 ### 3.5 iFacialMocap Input Adapter And Parameter Mapping
 
@@ -229,14 +232,15 @@ Problem:
 
 - Wave6 intentionally stops at authored Body Angle X/Z parameter output.
 - Head position may also be useful for Stage scale, Stage translation, or near/far distance response, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
-- Wave8 intentionally stopped at capture-target controls and did not add Stage Motion, Spout, or OBS automation.
+- Wave8 intentionally stopped at native capture-target controls and did not add Stage Motion, Spout, or OBS automation.
+- Wave9 added Browser Source Output as the primary broadcast candidate and kept Spout2 deferred.
 
 Trigger:
 
 - Body Follow v0 is manually verified with real iFacialMocap and a real Runtime Export.
 - User wants the on-stage model to move/scale with head position, not only body angle parameters.
 - User wants on-stage model translation/scale from head position, not only body angle parameters.
-- OBS Window Capture manual smoke shows Window Capture is insufficient, or the user explicitly wants Spout/OBS automation.
+- Browser Source manual OBS probe fails a critical condition, or the user explicitly wants Spout2/OBS automation.
 
 Desired outcome:
 
@@ -244,7 +248,7 @@ Desired outcome:
 - Keep Stage Motion separate from Body Follow parameter mapping.
 - Preserve Wave8 capture-safe Stage controls without adding debug UI to Stage.
 - Preserve the existing rule that Stage receives sanitized display/runtime data, not raw tracking diagnostics.
-- Keep Spout as a separate feasibility track, because it is promising but heavier than the immediate Stage Window capture workflow.
+- Keep Spout2 as a separate feasibility track unless Browser Source fails a critical probe condition.
 
 Source:
 
@@ -254,11 +258,12 @@ Source:
 - [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
 - [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 - [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 
 Suggested next action:
 
-- Complete Wave8 manual Electron/OBS-adjacent verification first.
-- If Window Capture is insufficient, run a Spout feasibility planning gate.
+- Complete Wave9 Browser Source manual OBS probe first.
+- If Browser Source fails a critical condition, run a Spout2 feasibility planning gate or a narrow Browser Source follow-up, depending on the observed failure.
 - If user wants model translation/scale from head position, run a separate Stage Motion planning gate.
 
 ### 3.8 Model Mapping Profile Auto Save
@@ -448,6 +453,7 @@ Implemented outcome:
 - Always-on-top can be toggled from Control, defaults Off, and is persisted in Window State as `stageEnvironment.alwaysOnTop`.
 - Capture Target checklist is local Runtime Player readiness only and does not claim OBS integration/readiness.
 - Stable Stage native title remains `Runtime Player Stage`, with Copy Window Title.
+- Wave9 later demoted this native capture-target surface to `Local Preview / Fallback`; it is no longer the primary broadcast setup path.
 
 Out of scope:
 
@@ -464,6 +470,7 @@ Source:
 - [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 - [../implementation/orchestration/player-wave8-plan.md](../implementation/orchestration/player-wave8-plan.md)
 - [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 
 Remaining manual verification:
 
@@ -473,5 +480,64 @@ Remaining manual verification:
 - Stage Arrange drag handle moves the native Stage Window.
 - Click-through toggle and tray recovery.
 - Always-on-top toggle and persistence.
-- Capture Target checklist and Copy Window Title.
-- OBS Window Capture title/alpha smoke check.
+- Local Preview / Fallback controls and Copy Window Title.
+- OBS Window Capture title/alpha fallback smoke check, only if fallback capture remains needed.
+
+### 3.12 OBS Browser Source Probe
+
+- Status: Done at source/test level; manual OBS verification pending
+- Final integration report: pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md))
+- Kind: Broadcast output probe completed by Runtime Player Wave9
+- Priority: Manual verification is high before treating Browser Source as product-ready
+
+Problem:
+
+- OBS Game Capture was not reliable for Chromium/Electron transparency in the target environment.
+- Runtime Player needed a broadcast path that does not depend on capturing the native Electron Stage Window.
+- Browser Source can load a Runtime Player-served web page, but OBS CEF/WebGL2/alpha/lifecycle behavior must be verified manually.
+
+Implemented outcome:
+
+- Runtime Player starts a loopback Browser Source HTTP/WebSocket server bound to `127.0.0.1`.
+- Control shows a tokenized Browser Source URL and `Copy URL`.
+- Missing/invalid token is rejected for protected HTTP routes and WebSocket upgrades.
+- `/stage`, Runtime Export status/payload, and WebSocket live transport are implemented.
+- Generated Browser Source JS/CSS assets are tokenless by accepted design, with `.js` / `.css` allowlist and path containment.
+- Browser Source Stage client is transparent, model-only, and independent of Electron preload APIs.
+- Browser Source receives Runtime Export payload plus sanitized live parameter frames only.
+- Raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, and Control-only status fields do not cross into Browser Source.
+- Control shows connected client count, heartbeat, WebGL2, renderer status, Browser Source Runtime Export status, frame age, and FPS.
+- Native Stage Window controls remain available under `Local Preview / Fallback`.
+- Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
+
+Source:
+
+- [../screens/browser-source-output-probe-v0.md](../screens/browser-source-output-probe-v0.md)
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+- [../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md)
+
+Remaining manual verification:
+
+- Add OBS Browser Source.
+- Paste Runtime Player Browser Source URL.
+- Set width/height.
+- Set custom FPS to 30 or 60 for test.
+- Keep transparent background/custom CSS behavior enabled.
+- Initially leave `Shutdown source when not visible` off.
+- Initially leave `Refresh browser source when scene becomes active` off.
+- Confirm transparent areas show lower OBS layers.
+- Confirm model renders without black/white fill.
+- Confirm WebGL2 status appears in Control.
+- Confirm connected client and heartbeat appear in Control.
+- Move face/head with iFacialMocap and confirm model motion.
+- Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
+- Confirm OBS audio meter does not receive unintended audio.
+
+Suggested next action:
+
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input.
+- If it passes, keep Browser Source as the primary broadcast path.
+- If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.

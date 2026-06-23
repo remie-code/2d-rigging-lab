@@ -6,6 +6,9 @@ import {
   type ControlFeedbackTone
 } from "./control-window-components";
 import {
+  copyBrowserSourceUrlFromStatus
+} from "./browser-source-control-actions";
+import {
   getInputStatusPillLabel,
   getInputStatusPillTone,
   getLiveReadinessLabel,
@@ -40,6 +43,9 @@ import type {
   RuntimePlayerMappingSlotUpdateRequest,
   RuntimePlayerMappingStatus
 } from "../preload/model-mapping-bridge-contract";
+import type {
+  RuntimePlayerBrowserSourceStatus
+} from "../preload/browser-source-status-contract";
 import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
@@ -78,6 +84,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerStageViewStatus | null>(null);
   const [stageState, setStageState] =
     useState<RuntimePlayerStageStateSnapshot | null>(null);
+  const [browserSourceStatus, setBrowserSourceStatus] =
+    useState<RuntimePlayerBrowserSourceStatus | null>(null);
   const [feedback, setFeedback] = useState<ControlFeedback | null>(null);
   const [receivePortInput, setReceivePortInput] = useState("49983");
   const [iphoneHostInput, setIphoneHostInput] = useState("");
@@ -177,6 +185,11 @@ export function ControlWindowApp(): ReactElement {
         setMappingStatus(status);
       }
     });
+    window.runtimePlayer.browserSource.getStatus().then((status) => {
+      if (active) {
+        setBrowserSourceStatus(status);
+      }
+    });
 
     const unsubscribeRuntimeExport =
       window.runtimePlayer.runtimeExport.onStatusChanged((status) => {
@@ -225,6 +238,12 @@ export function ControlWindowApp(): ReactElement {
           setMappingStatus(status);
         }
       });
+    const unsubscribeBrowserSource =
+      window.runtimePlayer.browserSource.onStatusChanged((status) => {
+        if (active) {
+          setBrowserSourceStatus(status);
+        }
+      });
 
     return () => {
       active = false;
@@ -238,6 +257,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeInputDiagnostics();
       unsubscribeInputProfile();
       unsubscribeModelMapping();
+      unsubscribeBrowserSource();
     };
   }, []);
 
@@ -353,6 +373,22 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function copyBrowserSourceUrl(): Promise<void> {
+    try {
+      setFeedback(
+        await copyBrowserSourceUrlFromStatus({
+          status: browserSourceStatus,
+          writeText: writeClipboardText
+        })
+      );
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   async function runInputProfileAction(
     action: () => Promise<RuntimePlayerInputProfileActionResult>
   ): Promise<void> {
@@ -409,6 +445,7 @@ export function ControlWindowApp(): ReactElement {
     mappingStatus,
     stageViewStatus,
     stageState,
+    browserSourceStatus,
     stageWindowStatus,
     receivePortInput,
     iphoneHostInput,
@@ -423,6 +460,7 @@ export function ControlWindowApp(): ReactElement {
     retryRuntimeExportRestore,
     connectInputSource,
     disconnectInputSource,
+    copyBrowserSourceUrl,
     runInputProfileAction,
     runMappingAction,
     runStageAction
@@ -483,6 +521,7 @@ function renderActivePage(input: {
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
+  readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly stageWindowStatus: string;
   readonly receivePortInput: string;
   readonly iphoneHostInput: string;
@@ -497,6 +536,7 @@ function renderActivePage(input: {
   readonly retryRuntimeExportRestore: () => Promise<void>;
   readonly connectInputSource: () => Promise<void>;
   readonly disconnectInputSource: () => Promise<void>;
+  readonly copyBrowserSourceUrl: () => Promise<void>;
   readonly runInputProfileAction: (
     action: () => Promise<RuntimePlayerInputProfileActionResult>
   ) => Promise<void>;
@@ -613,6 +653,7 @@ function renderActivePage(input: {
       <StagePage
         stageState={input.stageState}
         runtimeExportStatus={input.runtimeExportStatus}
+        browserSourceStatus={input.browserSourceStatus}
         onFocusStage={() =>
           void input.runStageAction(() => window.runtimePlayer.focusStage())
         }
@@ -641,6 +682,7 @@ function renderActivePage(input: {
             window.runtimePlayer.stageView.setAlwaysOnTop(enabled)
           )
         }
+        onCopyBrowserSourceUrl={() => void input.copyBrowserSourceUrl()}
         onCopyWindowTitle={() =>
           void input.runStageAction(() =>
             window.runtimePlayer.stageView.copyWindowTitle()

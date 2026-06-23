@@ -55,7 +55,11 @@ export default defineConfig({
       rollupOptions: {
         input: {
           control: path.resolve(sourceRoot, "control/index.html"),
-          stage: path.resolve(sourceRoot, "stage/index.html")
+          stage: path.resolve(sourceRoot, "stage/index.html"),
+          "browser-source-stage": path.resolve(
+            sourceRoot,
+            "stage/browser-source/index.html"
+          )
         }
       }
     },

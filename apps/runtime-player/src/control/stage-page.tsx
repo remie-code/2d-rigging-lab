@@ -20,33 +20,41 @@ import {
   formatControlNumber,
   getRuntimeExportDirectoryLabel
 } from "./control-window-formatters";
+import { BrowserSourceOutputPanel } from "./browser-source-output-panel";
 import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerWindowBounds
 } from "../preload/runtime-player-bridge-contract";
+import type {
+  RuntimePlayerBrowserSourceStatus
+} from "../preload/browser-source-status-contract";
 import type { RuntimeExportStatus } from "../preload/runtime-export-bridge-contract";
 
 export function StagePage({
   stageState,
   runtimeExportStatus,
+  browserSourceStatus,
   onFocusStage,
   onResetView,
   onCenterModel,
   onSetArrangeMode,
   onSetClickThrough,
   onSetAlwaysOnTop,
+  onCopyBrowserSourceUrl,
   onCopyWindowTitle,
   onOpenRuntimeExport,
   onRetryRuntimeExportRestore
 }: {
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
   readonly runtimeExportStatus: RuntimeExportStatus | null;
+  readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly onFocusStage: () => void;
   readonly onResetView: () => void;
   readonly onCenterModel: () => void;
   readonly onSetArrangeMode: (enabled: boolean) => void;
   readonly onSetClickThrough: (enabled: boolean) => void;
   readonly onSetAlwaysOnTop: (enabled: boolean) => void;
+  readonly onCopyBrowserSourceUrl: () => void;
   readonly onCopyWindowTitle: () => void;
   readonly onOpenRuntimeExport: () => void;
   readonly onRetryRuntimeExportRestore: () => void;
@@ -131,7 +139,12 @@ export function StagePage({
         </Panel>
       </section>
 
-      <Panel title="Capture Target">
+      <BrowserSourceOutputPanel
+        status={browserSourceStatus}
+        onCopyUrl={onCopyBrowserSourceUrl}
+      />
+
+      <Panel title="Local Preview / Fallback">
         <StatusRow
           label="Stage Window"
           value={formatStageWindowStatus(stageState)}
@@ -161,6 +174,10 @@ export function StagePage({
           label="Always on top"
           value={capture?.alwaysOnTopEnabled ? "On" : "Off"}
         />
+        <div className="mt-2 rounded-md border border-neutral-800 bg-[#111312] p-3 text-xs text-neutral-300">
+          Native Stage Window controls remain available for local preview and
+          fallback capture setup.
+        </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <IconTextButton
             icon={MousePointer2}

@@ -2,6 +2,7 @@ import type {
   RuntimeExportApi,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type { RuntimePlayerBrowserSourceApi } from "./browser-source-status-contract";
 import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
@@ -177,6 +178,7 @@ export type RuntimePlayerApi = {
   readonly modelMapping: RuntimePlayerModelMappingApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewApi;
+  readonly browserSource: RuntimePlayerBrowserSourceApi;
   readonly getStartupStatus: () => Promise<RuntimePlayerStartupStatus>;
   readonly getStageStatus: () => Promise<RuntimePlayerStageStatus>;
   readonly performPlaceholderAction: (

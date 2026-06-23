@@ -1,5 +1,11 @@
 import { app } from "electron";
 
+import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-source-bridge-handlers";
+import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
+import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
+import type {
+  RuntimePlayerBrowserSourceStageDisplayState
+} from "../preload/browser-source-status-contract";
 import { registerInputBridgeHandlers } from "./input-bridge-handlers";
 import { registerInputProfileBridgeHandlers } from "./input-profile-bridge-handlers";
 import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-handlers";
@@ -47,6 +53,31 @@ export function startRuntimePlayerMain(): void {
     });
     attachRuntimePlayerWindowStateTracking({ windows, windowState });
     registerPlaceholderBridgeHandlers({ windows });
+    const browserSourceConfigStore = new RuntimePlayerBrowserSourceConfigStore({
+      userDataPath: app.getPath("userData")
+    });
+    const browserSourceConfig =
+      await browserSourceConfigStore.getOrCreateConfig();
+    const browserSourceServer = new RuntimePlayerBrowserSourceServer({
+      port: browserSourceConfig.preferredPort,
+      token: browserSourceConfig.token
+    });
+    const browserSourceBridge = registerBrowserSourceBridgeHandlers({
+      windows,
+      statusProvider: browserSourceServer
+    });
+    const publishBrowserSourceStageDisplayState = (): void => {
+      browserSourceServer.publishStageDisplayState(
+        createBrowserSourceStageDisplayState({
+          windows,
+          windowState
+        })
+      );
+    };
+    const unsubscribeBrowserSourceStageDisplayState =
+      windowState.subscribe(publishBrowserSourceStageDisplayState);
+    publishBrowserSourceStageDisplayState();
+    await browserSourceServer.start().catch(() => undefined);
     let trayMenu: RuntimePlayerTrayMenuRegistration | null = null;
     const stageViewBridge = registerStageViewBridgeHandlers({
       windows,
@@ -55,7 +86,18 @@ export function startRuntimePlayerMain(): void {
         trayMenu?.refresh();
       }
     });
-    const liveParameters = registerLiveParameterBridgeHandlers({ windows });
+    const stageLiveParameters = registerLiveParameterBridgeHandlers({ windows });
+    const liveParameters = {
+      getLatestFrame: stageLiveParameters.getLatestFrame,
+      publishFrame: (frame: Parameters<typeof stageLiveParameters.publishFrame>[0]) => {
+        stageLiveParameters.publishFrame(frame);
+        browserSourceServer.publishLiveParameterFrame(frame);
+      },
+      clear: () => {
+        stageLiveParameters.clear();
+        browserSourceServer.clearLatestFrame();
+      }
+    };
     const liveMappingState = new RuntimePlayerLiveMappingState();
     const bodyFollowState = new RuntimePlayerBodyFollowState();
     const modelMappingProfileStore = new ModelMappingProfileStore({
@@ -106,12 +148,14 @@ export function startRuntimePlayerMain(): void {
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
         clearLiveParameterFrame();
+        browserSourceServer.clearRuntimeExport("Runtime Export changing");
         publishMappingStatus();
       },
       onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
         await modelMappingBridge.setRuntimeExportPayload(payload);
         clearLiveParameterFrame();
+        browserSourceServer.publishRuntimeExportLoaded(payload);
         publishMappingStatus();
         void publishLatestParameterFrame();
       },
@@ -120,6 +164,7 @@ export function startRuntimePlayerMain(): void {
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
         clearLiveParameterFrame();
+        browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
         publishMappingStatus();
       }
     });
@@ -165,6 +210,9 @@ export function startRuntimePlayerMain(): void {
 
     app.once("will-quit", () => {
       trayMenu?.dispose();
+      unsubscribeBrowserSourceStageDisplayState();
+      browserSourceBridge.dispose();
+      void browserSourceServer.stop();
     });
   });
 
@@ -173,4 +221,23 @@ export function startRuntimePlayerMain(): void {
       requestRuntimePlayerQuit();
     }
   });
+}
+
+function createBrowserSourceStageDisplayState(input: {
+  readonly windows: ReturnType<typeof createRuntimePlayerWindows>;
+  readonly windowState: RuntimePlayerWindowStateController;
+}): {
+  readonly stageWindow: RuntimePlayerBrowserSourceStageDisplayState["stageWindow"];
+  readonly stageView: RuntimePlayerBrowserSourceStageDisplayState["stageView"];
+} {
+  return {
+    stageWindow: {
+      bounds: input.windows.stageWindow.isDestroyed()
+        ? null
+        : input.windows.stageWindow.getBounds()
+    },
+    stageView: {
+      transform: input.windowState.getStageViewTransform()
+    }
+  };
 }
