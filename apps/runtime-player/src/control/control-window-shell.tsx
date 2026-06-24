@@ -3,13 +3,19 @@ import { Crosshair, FolderOpen, Monitor } from "lucide-react";
 
 import { IconTextButton, StatusPill } from "./control-window-components";
 
-export type ControlWindowPage = "overview" | "input" | "mapping" | "stage";
+export type ControlWindowPage =
+  | "overview"
+  | "live-controller"
+  | "input"
+  | "mapping"
+  | "stage";
 
 const controlWindowPages: readonly {
   readonly id: ControlWindowPage;
   readonly label: string;
 }[] = [
   { id: "overview", label: "Overview" },
+  { id: "live-controller", label: "Live Controller" },
   { id: "input", label: "Input" },
   { id: "mapping", label: "Mapping" },
   { id: "stage", label: "Stage" }

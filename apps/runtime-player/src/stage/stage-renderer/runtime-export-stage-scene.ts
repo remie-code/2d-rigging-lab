@@ -12,6 +12,12 @@ import {
 } from "@private-2d-rigging-lab/render-core";
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
+import {
+  resolveRuntimeVariantDrawableVisible
+} from "../../shared/runtime-export-variant-selection";
 
 export interface StageModelBounds {
   readonly x: number;
@@ -25,8 +31,13 @@ export interface RuntimeExportStageRenderInput {
   readonly modelBounds: StageModelBounds;
 }
 
+export interface RuntimeExportStageRenderOptions {
+  readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
+}
+
 export function createRuntimeExportStageRenderInput(
-  payload: RuntimeExportLoadedPayload
+  payload: RuntimeExportLoadedPayload,
+  options: RuntimeExportStageRenderOptions = {}
 ): RuntimeExportStageRenderInput {
   const textureSource = createTextureSource(payload);
   const meshesById = new Map(
@@ -72,7 +83,11 @@ export function createRuntimeExportStageRenderInput(
         drawOrder: drawOrderByDrawableId.get(drawable.drawableId) ??
           drawable.baseDrawOrder,
         stableIndex,
-        visible: drawable.visible,
+        visible: resolveRuntimeVariantDrawableVisible({
+          model: payload.artifacts.model,
+          drawable,
+          activeVariantSelection: options.activeVariantSelection ?? null
+        }),
         blendMode: DEFAULT_RENDER_BLEND_MODE,
         ...(clipping === undefined
           ? {}

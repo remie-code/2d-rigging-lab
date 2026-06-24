@@ -9,6 +9,10 @@ import type {
   RuntimePlayerBrowserSourceStageDisplayState,
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "../../preload/browser-source-status-contract";
+import {
+  runtimePlayerActiveVariantSelectionSchemaVersion,
+  type RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 
 const RUNTIME_EXPORT_STATUS_STATES = new Set([
   "empty",
@@ -43,10 +47,16 @@ export function readBrowserSourceRuntimeExportResponse(
 
   const runtimeExportStatus = readRuntimeExportStatus(value.runtimeExportStatus);
   const stageDisplayState = readStageDisplayState(value.stageDisplayState);
+  const activeVariantSelection = readActiveVariantSelection(
+    value.activeVariantSelection
+  );
   if (runtimeExportStatus === null) {
     return null;
   }
   if (stageDisplayState === null) {
+    return null;
+  }
+  if (activeVariantSelection === null) {
     return null;
   }
 
@@ -55,6 +65,7 @@ export function readBrowserSourceRuntimeExportResponse(
       status: "not-loaded",
       runtimeExportStatus,
       stageDisplayState,
+      activeVariantSelection,
       runtimeExport: null
     };
   }
@@ -69,6 +80,7 @@ export function readBrowserSourceRuntimeExportResponse(
       status: "loaded",
       runtimeExportStatus,
       stageDisplayState,
+      activeVariantSelection,
       runtimeExport
     };
   }
@@ -105,12 +117,16 @@ function readBrowserSourceServerMessageValue(
       ? null
       : readLiveParameterFrame(value.latestFrame);
     const stageDisplayState = readStageDisplayState(value.stageDisplayState);
+    const activeVariantSelection = readActiveVariantSelection(
+      value.activeVariantSelection
+    );
 
     if (
       runtimeExportStatus === null ||
       runtimeExport === null && value.runtimeExport !== null ||
       latestFrame === null && value.latestFrame !== null ||
-      stageDisplayState === null
+      stageDisplayState === null ||
+      activeVariantSelection === null
     ) {
       return null;
     }
@@ -122,6 +138,7 @@ function readBrowserSourceServerMessageValue(
       runtimeExportStatus,
       latestFrame,
       stageDisplayState,
+      activeVariantSelection,
       sentAtIso: value.sentAtIso
     };
   }
@@ -131,10 +148,14 @@ function readBrowserSourceServerMessageValue(
     const runtimeExport = value.runtimeExport === null
       ? null
       : readRuntimeExportPayload(value.runtimeExport);
+    const activeVariantSelection = readActiveVariantSelection(
+      value.activeVariantSelection
+    );
 
     if (
       runtimeExportStatus === null ||
-      runtimeExport === null && value.runtimeExport !== null
+      runtimeExport === null && value.runtimeExport !== null ||
+      activeVariantSelection === null
     ) {
       return null;
     }
@@ -144,6 +165,23 @@ function readBrowserSourceServerMessageValue(
       protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
       runtimeExport,
       runtimeExportStatus,
+      activeVariantSelection,
+      sentAtIso: value.sentAtIso
+    };
+  }
+
+  if (value.type === "active-variant-selection-changed") {
+    const activeVariantSelection = readActiveVariantSelection(
+      value.activeVariantSelection
+    );
+    if (activeVariantSelection === null) {
+      return null;
+    }
+
+    return {
+      type: "active-variant-selection-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      activeVariantSelection,
       sentAtIso: value.sentAtIso
     };
   }
@@ -276,6 +314,82 @@ function readRuntimeExportStatus(
     loadedAtIso: value.loadedAtIso,
     summary
   };
+}
+
+function readActiveVariantSelection(
+  value: unknown
+): RuntimePlayerActiveVariantSelectionState | null {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== runtimePlayerActiveVariantSelectionSchemaVersion ||
+    !(value.state === "ready" || value.state === "disabled") ||
+    !Array.isArray(value.activeSelections) ||
+    !(typeof value.updatedAtIso === "string" || value.updatedAtIso === null)
+  ) {
+    return null;
+  }
+
+  const activeSelections = value.activeSelections.map(readActiveSelectionEntry);
+  if (activeSelections.some((entry) => entry === null)) {
+    return null;
+  }
+
+  return {
+    schemaVersion: runtimePlayerActiveVariantSelectionSchemaVersion,
+    state: value.state,
+    activeSelections:
+      activeSelections as RuntimePlayerActiveVariantSelectionState["activeSelections"],
+    updatedAtIso: value.updatedAtIso
+  };
+}
+
+function readActiveSelectionEntry(
+  value: unknown
+): RuntimePlayerActiveVariantSelectionState["activeSelections"][number] | null {
+  if (!isRecord(value) || typeof value.variantGroupId !== "string") {
+    return null;
+  }
+
+  const activeSelection = readVariantActiveSelection(value.activeSelection);
+  if (activeSelection === null) {
+    return null;
+  }
+
+  return {
+    variantGroupId: value.variantGroupId,
+    activeSelection
+  };
+}
+
+function readVariantActiveSelection(
+  value: unknown
+): RuntimePlayerActiveVariantSelectionState["activeSelections"][number]["activeSelection"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (value.kind === "singleSelect" && typeof value.variantId === "string") {
+    return {
+      kind: "singleSelect",
+      variantId: value.variantId
+    };
+  }
+
+  if (value.kind === "multiToggle" && Array.isArray(value.variantIds)) {
+    const variantIds = value.variantIds.filter((variantId): variantId is string =>
+      typeof variantId === "string"
+    );
+    if (variantIds.length !== value.variantIds.length) {
+      return null;
+    }
+
+    return {
+      kind: "multiToggle",
+      variantIds: [...new Set(variantIds)]
+    };
+  }
+
+  return null;
 }
 
 function readRuntimeExportStatusSummary(

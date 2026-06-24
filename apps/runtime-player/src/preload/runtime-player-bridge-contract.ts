@@ -7,6 +7,7 @@ import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type { RuntimePlayerModelMappingApi } from "./model-mapping-bridge-contract";
+import type { RuntimePlayerVariantControllerApi } from "./runtime-variant-bridge-contract";
 
 export const runtimePlayerStageWindowTitle = "Runtime Player Stage" as const;
 
@@ -206,6 +207,7 @@ export type RuntimePlayerApi = {
   readonly input: RuntimePlayerInputApi;
   readonly inputProfile: RuntimePlayerInputProfileApi;
   readonly modelMapping: RuntimePlayerModelMappingApi;
+  readonly variants: RuntimePlayerVariantControllerApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewApi;
   readonly browserSource: RuntimePlayerBrowserSourceApi;

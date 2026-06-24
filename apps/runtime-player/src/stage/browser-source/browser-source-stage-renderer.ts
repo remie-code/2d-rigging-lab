@@ -3,6 +3,9 @@ import type {
   RuntimePlayerBrowserSourceStageViewTransform
 } from "../../preload/browser-source-status-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer,
@@ -23,6 +26,9 @@ export type BrowserSourceStageRendererSetup =
 
 export interface BrowserSourceStageRenderer {
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
+  setActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void;
   setViewTransform(
     transform: RuntimePlayerBrowserSourceStageViewTransform
   ): void;
@@ -60,6 +66,12 @@ class BrowserSourceStageRendererAdapter implements BrowserSourceStageRenderer {
 
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult {
     return this.renderer.setPayload(payload);
+  }
+
+  setActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void {
+    this.renderer.setActiveVariantSelection(activeVariantSelection);
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {

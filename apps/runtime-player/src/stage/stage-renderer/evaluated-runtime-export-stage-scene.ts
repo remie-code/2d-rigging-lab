@@ -37,7 +37,7 @@ export function createEvaluatedRuntimeExportStageRenderInput(
   options: RuntimeExportPoseEvaluationOptions = {}
 ): EvaluatedRuntimeExportStageRenderInput {
   const poseEvaluation = evaluateRuntimeExportPose(
-    createPoseEvaluationInput(payload),
+    createPoseEvaluationInput(payload, options),
     options
   );
   const textureSource = createTextureSource(payload);
@@ -58,12 +58,14 @@ export function createEvaluatedRuntimeExportStageRenderInput(
 }
 
 function createPoseEvaluationInput(
-  payload: RuntimeExportLoadedPayload
+  payload: RuntimeExportLoadedPayload,
+  options: RuntimeExportPoseEvaluationOptions
 ): RuntimeExportRuntimeGraphAdapterInput {
   return {
     model: payload.artifacts.model,
     atlas: payload.artifacts.atlas,
-    texturePages: payload.artifacts.manifest.texturePages
+    texturePages: payload.artifacts.manifest.texturePages,
+    activeVariantSelection: options.activeVariantSelection ?? null
   };
 }
 

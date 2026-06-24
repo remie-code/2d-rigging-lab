@@ -15,6 +15,7 @@ import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
 import { modelMappingBridgeChannels } from "./model-mapping-bridge-channels";
 import { placeholderBridgeChannels } from "./placeholder-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
+import { runtimeVariantBridgeChannels } from "./runtime-variant-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
@@ -34,6 +35,9 @@ import type {
   RuntimeExportRestoreLastDirectoryRequest,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type {
+  RuntimePlayerVariantControllerStatus
+} from "./runtime-variant-bridge-contract";
 import type {
   RuntimePlayerBrowserSourceStatus
 } from "./browser-source-status-contract";
@@ -140,6 +144,21 @@ export function installRuntimePlayerBridge(): void {
       onStatusChanged: (callback) =>
         subscribeToModelMappingEvent(
           modelMappingBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    variants: {
+      getStatus: () =>
+        ipcRenderer.invoke(runtimeVariantBridgeChannels.getStatus),
+      selectSingle: (request) =>
+        ipcRenderer.invoke(runtimeVariantBridgeChannels.selectSingle, request),
+      toggleMulti: (request) =>
+        ipcRenderer.invoke(runtimeVariantBridgeChannels.toggleMulti, request),
+      resetToDefault: () =>
+        ipcRenderer.invoke(runtimeVariantBridgeChannels.resetToDefault),
+      onStatusChanged: (callback) =>
+        subscribeToRuntimeVariantEvent(
+          runtimeVariantBridgeChannels.statusChanged,
           callback
         )
     },
@@ -323,6 +342,24 @@ function subscribeToBrowserSourceStatusEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerBrowserSourceStatus
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToRuntimeVariantEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerVariantControllerStatus) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerVariantControllerStatus
   ) => {
     callback(payload);
   };

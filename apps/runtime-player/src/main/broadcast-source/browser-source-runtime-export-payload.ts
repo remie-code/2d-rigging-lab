@@ -7,6 +7,9 @@ import type {
   RuntimePlayerBrowserSourceStageDisplayState,
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "../../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 
 export function toBrowserSourceRuntimeExportPayload(
   payload: RuntimeExportLoadedPayload
@@ -60,6 +63,7 @@ export function createBrowserSourceEmptyRuntimeExportStatus(
 export function createBrowserSourceRuntimeExportResponse(input: {
   readonly runtimeExportStatus: RuntimePlayerBrowserSourceRuntimeExportStatus;
   readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
+  readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
   readonly runtimeExport:
     RuntimePlayerBrowserSourceRuntimeExportPayload
     | null;
@@ -69,6 +73,7 @@ export function createBrowserSourceRuntimeExportResponse(input: {
       status: "loaded",
       runtimeExportStatus: input.runtimeExportStatus,
       stageDisplayState: input.stageDisplayState,
+      activeVariantSelection: input.activeVariantSelection,
       runtimeExport: input.runtimeExport
     };
   }
@@ -77,6 +82,7 @@ export function createBrowserSourceRuntimeExportResponse(input: {
     status: "not-loaded",
     runtimeExportStatus: input.runtimeExportStatus,
     stageDisplayState: input.stageDisplayState,
+    activeVariantSelection: input.activeVariantSelection,
     runtimeExport: null
   };
 }

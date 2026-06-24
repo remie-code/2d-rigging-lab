@@ -7,6 +7,9 @@ import type {
   RuntimePlayerBrowserSourceStageDisplayState
 } from "../../preload/browser-source-status-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import {
   createBrowserSourceHttpUrl,
   createBrowserSourceWebSocketUrl,
@@ -143,6 +146,8 @@ export class BrowserSourceStageClient {
   #diagnosticsTimer: BrowserSourceTimerHandle | null = null;
   #lastDiagnosticsSentAtMs: number | null = null;
   #runtimeExportPayloadKey: string | null = null;
+  #activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
+    null;
   #runtimeExportApplyCount = 0;
   #started = false;
   #snapshot: BrowserSourceStageClientSnapshot;
@@ -241,6 +246,7 @@ export class BrowserSourceStageClient {
 
     if (message.type === "runtime-export-resync") {
       this.#applyStageDisplayState(message.stageDisplayState);
+      this.#applyActiveVariantSelection(message.activeVariantSelection);
       this.#applyRuntimeExportPayload(message.runtimeExport);
       if (message.latestFrame !== null) {
         this.#applyLiveParameterFrame(message.latestFrame);
@@ -249,7 +255,13 @@ export class BrowserSourceStageClient {
     }
 
     if (message.type === "runtime-export-changed") {
+      this.#applyActiveVariantSelection(message.activeVariantSelection);
       this.#applyRuntimeExportPayload(message.runtimeExport);
+      return;
+    }
+
+    if (message.type === "active-variant-selection-changed") {
+      this.#applyActiveVariantSelection(message.activeVariantSelection);
       return;
     }
 
@@ -366,6 +378,9 @@ export class BrowserSourceStageClient {
       }
 
       this.#applyStageDisplayState(runtimeExportResponse.stageDisplayState);
+      this.#applyActiveVariantSelection(
+        runtimeExportResponse.activeVariantSelection
+      );
       this.#applyRuntimeExportPayload(runtimeExportResponse.runtimeExport);
     } catch (error) {
       this.#updateSnapshot({
@@ -394,6 +409,7 @@ export class BrowserSourceStageClient {
     if (payload === null) {
       this.#metrics.clear();
       this.#runtimeExportPayloadKey = null;
+      this.#activeVariantSelection = null;
       this.#renderer?.clear();
       this.#updateSnapshot({
         runtimeExportLoaded: false,
@@ -445,6 +461,7 @@ export class BrowserSourceStageClient {
     payload: RuntimeExportLoadedPayload,
     payloadKey: string
   ): void {
+    this.#renderer?.setActiveVariantSelection(this.#activeVariantSelection);
     const result = this.#renderer?.setPayload(payload);
     this.#runtimeExportPayloadKey = payloadKey;
     this.#runtimeExportApplyCount += 1;
@@ -458,6 +475,13 @@ export class BrowserSourceStageClient {
           : null
     });
     this.#sendDiagnostics();
+  }
+
+  #applyActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState
+  ): void {
+    this.#activeVariantSelection = activeVariantSelection;
+    this.#renderer?.setActiveVariantSelection(activeVariantSelection);
   }
 
   #applyLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {

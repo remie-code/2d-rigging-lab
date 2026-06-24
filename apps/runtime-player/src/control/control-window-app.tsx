@@ -27,6 +27,7 @@ import {
   type InputDiagnosticsCopyState
 } from "./input-diagnostics-panel";
 import { InputPage } from "./input-page";
+import { LiveControllerPage } from "./live-controller-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
 import { StagePage } from "./stage-page";
@@ -58,6 +59,10 @@ import type {
   RuntimeExportRestoreLastDirectoryResult,
   RuntimeExportStatus
 } from "../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerVariantActionResult,
+  RuntimePlayerVariantControllerStatus
+} from "../preload/runtime-variant-bridge-contract";
 
 type ControlFeedback = {
   readonly message: string;
@@ -81,6 +86,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerInputProfileStatus | null>(null);
   const [mappingStatus, setMappingStatus] =
     useState<RuntimePlayerMappingStatus | null>(null);
+  const [variantStatus, setVariantStatus] =
+    useState<RuntimePlayerVariantControllerStatus | null>(null);
   const [stageViewStatus, setStageViewStatus] =
     useState<RuntimePlayerStageViewStatus | null>(null);
   const [stageState, setStageState] =
@@ -186,6 +193,11 @@ export function ControlWindowApp(): ReactElement {
         setMappingStatus(status);
       }
     });
+    window.runtimePlayer.variants.getStatus().then((status) => {
+      if (active) {
+        setVariantStatus(status);
+      }
+    });
     window.runtimePlayer.browserSource.getStatus().then((status) => {
       if (active) {
         setBrowserSourceStatus(status);
@@ -239,6 +251,12 @@ export function ControlWindowApp(): ReactElement {
           setMappingStatus(status);
         }
       });
+    const unsubscribeVariants =
+      window.runtimePlayer.variants.onStatusChanged((status) => {
+        if (active) {
+          setVariantStatus(status);
+        }
+      });
     const unsubscribeBrowserSource =
       window.runtimePlayer.browserSource.onStatusChanged((status) => {
         if (active) {
@@ -258,6 +276,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeInputDiagnostics();
       unsubscribeInputProfile();
       unsubscribeModelMapping();
+      unsubscribeVariants();
       unsubscribeBrowserSource();
     };
   }, []);
@@ -426,6 +445,24 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function runVariantAction(
+    action: () => Promise<RuntimePlayerVariantActionResult>
+  ): Promise<void> {
+    try {
+      const result = await action();
+      setVariantStatus(result.status);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   const stageWindowStatus =
     stageState?.stageWindow.windowState === "created"
       ? "Open"
@@ -444,6 +481,7 @@ export function ControlWindowApp(): ReactElement {
     inputStatus,
     inputProfileStatus,
     mappingStatus,
+    variantStatus,
     stageViewStatus,
     stageState,
     browserSourceStatus,
@@ -464,6 +502,7 @@ export function ControlWindowApp(): ReactElement {
     copyBrowserSourceUrl,
     runInputProfileAction,
     runMappingAction,
+    runVariantAction,
     runStageAction
   });
 
@@ -497,14 +536,16 @@ export function ControlWindowApp(): ReactElement {
     >
       {page}
 
-      <InputDiagnosticsPanel
-        status={inputStatus}
-        diagnostics={inputDiagnostics}
-        expanded={diagnosticsExpanded}
-        copyState={copyDiagnosticsState}
-        onToggleExpanded={() => setDiagnosticsExpanded((value) => !value)}
-        onCopyDiagnostics={() => void copyInputDiagnostics()}
-      />
+      {shouldRenderInputDiagnosticsPanel(activePage) ? (
+        <InputDiagnosticsPanel
+          status={inputStatus}
+          diagnostics={inputDiagnostics}
+          expanded={diagnosticsExpanded}
+          copyState={copyDiagnosticsState}
+          onToggleExpanded={() => setDiagnosticsExpanded((value) => !value)}
+          onCopyDiagnostics={() => void copyInputDiagnostics()}
+        />
+      ) : null}
 
       <FeedbackNotice
         message={feedback?.message ?? `${runtimeExportLabel}.`}
@@ -514,12 +555,19 @@ export function ControlWindowApp(): ReactElement {
   );
 }
 
+export function shouldRenderInputDiagnosticsPanel(
+  activePage: ControlWindowPage
+): boolean {
+  return activePage !== "live-controller";
+}
+
 function renderActivePage(input: {
   readonly activePage: ControlWindowPage;
   readonly runtimeExportStatus: RuntimeExportStatus | null;
   readonly inputStatus: RuntimePlayerInputStatus | null;
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
+  readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
@@ -544,10 +592,63 @@ function renderActivePage(input: {
   readonly runMappingAction: (
     action: () => Promise<RuntimePlayerMappingActionResult>
   ) => Promise<void>;
+  readonly runVariantAction: (
+    action: () => Promise<RuntimePlayerVariantActionResult>
+  ) => Promise<void>;
   readonly runStageAction: (
     action: () => Promise<RuntimePlayerStageViewActionResult>
   ) => Promise<void>;
 }): ReactElement {
+  if (input.activePage === "live-controller") {
+    return (
+      <LiveControllerPage
+        variantStatus={input.variantStatus}
+        runtimeExportStatus={input.runtimeExportStatus}
+        inputStatus={input.inputStatus}
+        browserSourceStatus={input.browserSourceStatus}
+        stageState={input.stageState}
+        lookForwardAvailable={input.lookForwardAvailable}
+        onSelectSingleVariant={(group, variantId) =>
+          void input.runVariantAction(() =>
+            window.runtimePlayer.variants.selectSingle({
+              variantGroupId: group.variantGroupId,
+              variantId
+            })
+          )
+        }
+        onToggleMultiVariant={(group, variantId, active) =>
+          void input.runVariantAction(() =>
+            window.runtimePlayer.variants.toggleMulti({
+              variantGroupId: group.variantGroupId,
+              variantId,
+              active
+            })
+          )
+        }
+        onResetVariants={() =>
+          void input.runVariantAction(() =>
+            window.runtimePlayer.variants.resetToDefault()
+          )
+        }
+        onLookForward={() =>
+          void input.runInputProfileAction(() =>
+            window.runtimePlayer.inputProfile.lookForward()
+          )
+        }
+        onCenterModel={() =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.centerModel()
+          )
+        }
+        onUpdateStageMotionSettings={(update) =>
+          void input.runStageAction(() =>
+            window.runtimePlayer.stageView.updateStageMotionSettings(update)
+          )
+        }
+      />
+    );
+  }
+
   if (input.activePage === "input") {
     return (
       <InputPage

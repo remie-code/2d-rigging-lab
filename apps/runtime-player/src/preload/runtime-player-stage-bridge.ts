@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
+import { runtimeVariantBridgeChannels } from "./runtime-variant-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type { RuntimePlayerLiveParameterFrame } from "./live-parameter-bridge-contract";
 import type {
@@ -15,6 +16,9 @@ import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type {
+  RuntimePlayerVariantControllerStatus
+} from "./runtime-variant-bridge-contract";
 
 export function installRuntimePlayerStageBridge(): void {
   const runtimePlayerStageApi: RuntimePlayerStageApi = {
@@ -29,6 +33,15 @@ export function installRuntimePlayerStageBridge(): void {
       onLoadedPayload: (callback) =>
         subscribeToRuntimeExportEvent(
           runtimeExportBridgeChannels.loadedPayload,
+          callback
+        )
+    },
+    variants: {
+      getStatus: () =>
+        ipcRenderer.invoke(runtimeVariantBridgeChannels.getStatus),
+      onStatusChanged: (callback) =>
+        subscribeToRuntimeVariantEvent(
+          runtimeVariantBridgeChannels.statusChanged,
           callback
         )
     },
@@ -151,6 +164,24 @@ function subscribeToRuntimeExportEvent<TPayload extends
   callback: (payload: TPayload) => void
 ): () => void {
   const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToRuntimeVariantEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerVariantControllerStatus) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerVariantControllerStatus
+  ) => {
     callback(payload);
   };
 

@@ -4,6 +4,9 @@ import type {
 } from "./runtime-export-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type {
+  RuntimePlayerVariantControllerStatus
+} from "./runtime-variant-bridge-contract";
+import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageViewStatusReport,
   RuntimePlayerStageViewTransform
@@ -39,8 +42,16 @@ export type RuntimePlayerStageViewReporterApi = {
   ) => () => void;
 };
 
+export type RuntimePlayerStageVariantApi = {
+  readonly getStatus: () => Promise<RuntimePlayerVariantControllerStatus>;
+  readonly onStatusChanged: (
+    callback: (status: RuntimePlayerVariantControllerStatus) => void
+  ) => () => void;
+};
+
 export type RuntimePlayerStageApi = {
   readonly runtimeExport: RuntimePlayerStageRuntimeExportApi;
+  readonly variants: RuntimePlayerStageVariantApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewReporterApi;
 };

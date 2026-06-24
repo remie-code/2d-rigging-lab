@@ -104,6 +104,13 @@ describe("readBrowserSourceServerMessage", () => {
           rawFrame: "must-not-survive"
         }
       },
+      activeVariantSelection: {
+        ...createActiveVariantSelection(),
+        rawTrackingFrame: "must-not-survive",
+        calibration: {
+          debug: "must-not-survive"
+        }
+      },
       sentAtIso: "2026-06-23T01:00:02.000Z"
     }));
 
@@ -129,7 +136,45 @@ describe("readBrowserSourceServerMessage", () => {
           }
         },
         updatedAtIso: "2026-06-23T01:00:00.000Z"
+      },
+      activeVariantSelection: {
+        schemaVersion: "runtime-player-active-variant-selection-v1",
+        state: "ready",
+        activeSelections: [
+          {
+            variantGroupId: "vgrp_expression",
+            activeSelection: {
+              kind: "singleSelect",
+              variantId: "var_smile"
+            }
+          }
+        ],
+        updatedAtIso: "2026-06-23T01:00:00.000Z"
       }
+    });
+    expect(JSON.stringify(message)).not.toContain("must-not-survive");
+  });
+
+  it("reads active Variant selection updates without raw diagnostics", () => {
+    const message = readBrowserSourceServerMessage(JSON.stringify({
+      type: "active-variant-selection-changed",
+      protocolVersion: 1,
+      activeVariantSelection: {
+        ...createActiveVariantSelection(),
+        trackingFrame: {
+          raw: "must-not-survive"
+        },
+        debug: "must-not-survive",
+        calibration: "must-not-survive"
+      },
+      sentAtIso: "2026-06-23T01:00:03.000Z"
+    }));
+
+    expect(message).toStrictEqual({
+      type: "active-variant-selection-changed",
+      protocolVersion: 1,
+      activeVariantSelection: createActiveVariantSelection(),
+      sentAtIso: "2026-06-23T01:00:03.000Z"
     });
     expect(JSON.stringify(message)).not.toContain("must-not-survive");
   });
@@ -155,7 +200,8 @@ describe("readBrowserSourceRuntimeExportResponse", () => {
           transform: null
         },
         updatedAtIso: null
-      }
+      },
+      activeVariantSelection: createDisabledActiveVariantSelection()
     })).toStrictEqual({
       status: "not-loaded",
       runtimeExport: null,
@@ -174,7 +220,34 @@ describe("readBrowserSourceRuntimeExportResponse", () => {
           transform: null
         },
         updatedAtIso: null
-      }
+      },
+      activeVariantSelection: createDisabledActiveVariantSelection()
     });
   });
 });
+
+function createActiveVariantSelection() {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "ready",
+    activeSelections: [
+      {
+        variantGroupId: "vgrp_expression",
+        activeSelection: {
+          kind: "singleSelect",
+          variantId: "var_smile"
+        }
+      }
+    ],
+    updatedAtIso: "2026-06-23T01:00:00.000Z"
+  };
+}
+
+function createDisabledActiveVariantSelection() {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "disabled",
+    activeSelections: [],
+    updatedAtIso: null
+  };
+}

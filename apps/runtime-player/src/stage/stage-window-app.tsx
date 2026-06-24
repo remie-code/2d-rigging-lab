@@ -9,6 +9,9 @@ import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageViewStatusReport
 } from "../preload/runtime-player-bridge-contract";
+import type {
+  RuntimePlayerVariantControllerStatus
+} from "../preload/runtime-variant-bridge-contract";
 import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer
@@ -53,6 +56,7 @@ export function StageWindowApp(): ReactElement {
     }
 
     applyStoredStageViewTransform(renderer);
+    applyActiveVariantSelection(renderer);
     reportStageViewStatus(createStageEmptyStatusReport());
 
     const applyArrangeState = (state: RuntimePlayerStageArrangeState): void => {
@@ -122,6 +126,14 @@ export function StageWindowApp(): ReactElement {
     const unsubscribeStatus =
       window.runtimePlayerStage.runtimeExport.onStatusChanged((status) => {
         handleStatusChange(status, clearStage);
+      });
+    const unsubscribeVariantStatus =
+      window.runtimePlayerStage.variants.onStatusChanged((status) => {
+        if (!active) {
+          return;
+        }
+
+        applyRuntimeVariantStatusToStageRenderer(renderer, status);
       });
     const unsubscribeStageViewTransform =
       window.runtimePlayerStage.stageView.onApplyViewTransformRequested((transform) => {
@@ -195,6 +207,7 @@ export function StageWindowApp(): ReactElement {
       active = false;
       unsubscribe();
       unsubscribeStatus();
+      unsubscribeVariantStatus();
       unsubscribeStageViewTransform();
       unsubscribeStageDisplayViewTransform();
       unsubscribeArrangeState();
@@ -218,6 +231,25 @@ export function StageWindowApp(): ReactElement {
       <StageArrangeOverlay enabled={arrangeModeEnabled} />
     </main>
   );
+}
+
+function applyActiveVariantSelection(
+  renderer: StaticStageCanvasRenderer
+): void {
+  window.runtimePlayerStage.variants.getStatus()
+    .then((status) => {
+      applyRuntimeVariantStatusToStageRenderer(renderer, status);
+    })
+    .catch((error: unknown) => {
+      console.error("Stage Variant selection read failed.", error);
+    });
+}
+
+export function applyRuntimeVariantStatusToStageRenderer(
+  renderer: Pick<StaticStageCanvasRenderer, "setActiveVariantSelection">,
+  status: RuntimePlayerVariantControllerStatus
+): void {
+  renderer.setActiveVariantSelection(status.activeVariantSelection);
 }
 
 export function StageArrangeOverlay({

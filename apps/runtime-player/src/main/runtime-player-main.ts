@@ -21,6 +21,7 @@ import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handl
 import { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
+import { registerRuntimeVariantBridgeHandlers } from "./variant-controller/runtime-variant-bridge-handlers";
 import {
   registerStageViewBridgeHandlers,
   type RuntimePlayerStageViewBridgeRegistration
@@ -79,6 +80,15 @@ export function startRuntimePlayerMain(): void {
       windows,
       statusProvider: browserSourceServer
     });
+    const runtimeVariantBridge = registerRuntimeVariantBridgeHandlers({
+      windows
+    });
+    const unsubscribeRuntimeVariantBridge =
+      runtimeVariantBridge.onStatusChanged((status) => {
+        browserSourceServer.publishActiveVariantSelection(
+          status.activeVariantSelection
+        );
+      });
     const stageMotionRuntime = new RuntimePlayerStageMotionRuntime();
     let stageViewBridge: RuntimePlayerStageViewBridgeRegistration | null = null;
     let isLocalPreviewLiveRenderSuspended = false;
@@ -296,6 +306,7 @@ export function startRuntimePlayerMain(): void {
         await modelMappingBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
+        runtimeVariantBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
         publishMappingStatus();
@@ -303,8 +314,13 @@ export function startRuntimePlayerMain(): void {
       onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
         await modelMappingBridge.setRuntimeExportPayload(payload);
+        const variantStatus =
+          runtimeVariantBridge.setRuntimeExportPayload(payload);
         clearLiveParameterFrame();
-        browserSourceServer.publishRuntimeExportLoaded(payload);
+        browserSourceServer.publishRuntimeExportLoaded(
+          payload,
+          variantStatus.activeVariantSelection
+        );
         publishMappingStatus();
         void publishLatestParameterFrame();
       },
@@ -312,6 +328,7 @@ export function startRuntimePlayerMain(): void {
         await modelMappingBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
+        runtimeVariantBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
         publishMappingStatus();
@@ -363,6 +380,7 @@ export function startRuntimePlayerMain(): void {
       localPreviewLiveRenderPolicy.dispose();
       unsubscribeLocalPreviewLiveRenderPolicy();
       unsubscribeBrowserSourceStageDisplayState();
+      unsubscribeRuntimeVariantBridge();
       browserSourceBridge.dispose();
       void browserSourceServer.stop();
     });

@@ -9,6 +9,9 @@ import type {
   RuntimePlayerBrowserSourceStageViewTransform
 } from "../../preload/browser-source-status-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import {
   BrowserSourceStageClient,
   type BrowserSourceStageClientFetch,
@@ -163,6 +166,7 @@ describe("BrowserSourceStageClient", () => {
           pan: { x: 120, y: -64 }
         })
       }),
+      activeVariantSelection: createActiveVariantSelection("var_smile"),
       latestFrame: createLiveParameterFrame({
         sequence: 44,
         sourceFrameTimestampMs: 1040,
@@ -178,6 +182,18 @@ describe("BrowserSourceStageClient", () => {
         pan: { x: 120, y: -64 }
       })
     ]);
+    expect(renderer.activeVariantSelections.at(-1)).toMatchObject({
+      state: "ready",
+      activeSelections: [
+        {
+          variantGroupId: "vgrp_expression",
+          activeSelection: {
+            kind: "singleSelect",
+            variantId: "var_smile"
+          }
+        }
+      ]
+    });
     expect(renderer.frames).toHaveLength(1);
     expect(renderer.frames[0]).toMatchObject({
       sequence: 44,
@@ -238,6 +254,57 @@ describe("BrowserSourceStageClient", () => {
     ]);
     expect(renderer.payloads).toHaveLength(0);
     expect(renderer.frames).toHaveLength(0);
+  });
+
+  it("applies active Variant selection updates without reapplying Runtime Export payload", () => {
+    const renderer = new FakeStageRenderer();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: createFakeWebSocketFactory().factory,
+      location: createLocation(),
+      timers: createManualTimers(),
+      heartbeatIntervalMs: 0
+    });
+
+    client.handleServerMessageData(JSON.stringify({
+      type: "runtime-export-resync",
+      protocolVersion: 1,
+      runtimeExport: createBrowserSourcePayload(),
+      runtimeExportStatus: createLoadedStatus(),
+      stageDisplayState: createStageDisplayState(),
+      activeVariantSelection: createActiveVariantSelection(
+        "var_expression_default"
+      ),
+      latestFrame: null,
+      sentAtIso: "2026-06-23T01:00:03.000Z"
+    }));
+    client.handleServerMessageData(JSON.stringify({
+      type: "active-variant-selection-changed",
+      protocolVersion: 1,
+      activeVariantSelection: createActiveVariantSelection("var_smile"),
+      sentAtIso: "2026-06-23T01:00:04.000Z"
+    }));
+
+    expect(renderer.payloads).toHaveLength(1);
+    expect(renderer.activeVariantSelections.map((selection) =>
+      selection?.activeSelections[0]?.activeSelection
+    )).toEqual([
+      {
+        kind: "singleSelect",
+        variantId: "var_expression_default"
+      },
+      {
+        kind: "singleSelect",
+        variantId: "var_expression_default"
+      },
+      {
+        kind: "singleSelect",
+        variantId: "var_smile"
+      }
+    ]);
   });
 
   it("samples renderer diagnostics for live frames without throttling renderer frame application", async () => {
@@ -323,6 +390,7 @@ describe("BrowserSourceStageClient", () => {
       runtimeExport,
       runtimeExportStatus: createLoadedStatus(),
       stageDisplayState: createStageDisplayState(),
+      activeVariantSelection: createActiveVariantSelection(),
       latestFrame: null,
       sentAtIso: "2026-06-23T01:00:03.000Z"
     }));
@@ -332,6 +400,7 @@ describe("BrowserSourceStageClient", () => {
       runtimeExport,
       runtimeExportStatus: createLoadedStatus(),
       stageDisplayState: createStageDisplayState(),
+      activeVariantSelection: createActiveVariantSelection(),
       latestFrame: null,
       sentAtIso: "2026-06-23T01:00:04.000Z"
     }));
@@ -347,6 +416,7 @@ describe("BrowserSourceStageClient", () => {
         loadedAtIso: "2026-06-23T01:01:00.000Z"
       }),
       runtimeExportStatus: createLoadedStatus(),
+      activeVariantSelection: createActiveVariantSelection(),
       sentAtIso: "2026-06-23T01:01:00.000Z"
     }));
 
@@ -390,6 +460,7 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
   readonly payloads: RuntimeExportLoadedPayload[] = [];
   readonly frames: RuntimePlayerLiveParameterFrame[] = [];
   readonly transforms: RuntimePlayerBrowserSourceStageViewTransform[] = [];
+  readonly activeVariantSelections: Array<RuntimePlayerActiveVariantSelectionState | null> = [];
   clearCount = 0;
   clearFrameCount = 0;
   disposed = false;
@@ -401,6 +472,12 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
     return {
       runtimeDiagnosticDetails: []
     };
+  }
+
+  setActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void {
+    this.activeVariantSelections.push(activeVariantSelection);
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
@@ -586,6 +663,7 @@ function createLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportResponse
     status: "loaded",
     runtimeExportStatus: createLoadedStatus(),
     stageDisplayState: createStageDisplayState(),
+    activeVariantSelection: createActiveVariantSelection(),
     runtimeExport: createBrowserSourcePayload()
   };
 }
@@ -601,7 +679,36 @@ function createNotLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportRespo
       summary: null
     },
     stageDisplayState: createStageDisplayState(),
+    activeVariantSelection: createDisabledActiveVariantSelection(),
     runtimeExport: null
+  };
+}
+
+function createActiveVariantSelection(
+  variantId = "var_expression_default"
+): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "ready",
+    updatedAtIso: "2026-06-23T01:00:00.000Z",
+    activeSelections: [
+      {
+        variantGroupId: "vgrp_expression",
+        activeSelection: {
+          kind: "singleSelect",
+          variantId
+        }
+      }
+    ]
+  };
+}
+
+function createDisabledActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "disabled",
+    updatedAtIso: null,
+    activeSelections: []
   };
 }
 

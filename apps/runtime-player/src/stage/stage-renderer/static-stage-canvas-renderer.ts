@@ -10,6 +10,12 @@ import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
+import {
+  cloneActiveVariantSelectionState
+} from "../../shared/runtime-export-variant-selection";
 import {
   type RuntimeExportStageRenderInput
 } from "./runtime-export-stage-scene";
@@ -28,7 +34,13 @@ import {
 import { canApplyLiveParameterFrame } from "./stage-live-parameter-frame-match";
 
 export interface StaticStageCanvasRenderer {
-  setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
+  setPayload(
+    payload: RuntimeExportLoadedPayload,
+    options?: StaticStagePayloadSetOptions
+  ): StaticStageRenderResult;
+  setActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void;
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
   clearLiveParameterFrame(): void;
   getViewTransform(): StageViewTransform;
@@ -46,6 +58,10 @@ export interface StaticStageCanvasRenderer {
 
 export interface StaticStageCanvasRendererOptions {
   readonly onViewTransformChanged?: (transform: StageViewTransform) => void;
+}
+
+export interface StaticStagePayloadSetOptions {
+  readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
 }
 
 export interface StaticStageViewTransformSetOptions {
@@ -77,6 +93,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private payload: RuntimeExportLoadedPayload | null = null;
   private renderInput: RuntimeExportStageRenderInput | null = null;
   private liveRuntimeState: RuntimeStateDto | null = null;
+  private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
+    null;
   private latestLiveParameterFrame: RuntimePlayerLiveParameterFrame | null = null;
   private liveAnimationFrameId: number | null = null;
   private lastLiveSourceTimestampMs: number | null = null;
@@ -110,8 +128,18 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.renderCurrent();
   }
 
-  setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult {
-    const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload);
+  setPayload(
+    payload: RuntimeExportLoadedPayload,
+    options: StaticStagePayloadSetOptions = {}
+  ): StaticStageRenderResult {
+    if ("activeVariantSelection" in options) {
+      this.activeVariantSelection = cloneActiveVariantSelectionState(
+        options.activeVariantSelection ?? null
+      );
+    }
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload, {
+      activeVariantSelection: this.activeVariantSelection
+    });
 
     this.payload = payload;
     this.renderInput = renderInput;
@@ -125,6 +153,36 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         renderInput.poseEvaluation.snapshot.diagnostics
       )
     };
+  }
+
+  setActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void {
+    this.activeVariantSelection = cloneActiveVariantSelectionState(
+      activeVariantSelection
+    );
+
+    if (this.payload === null || this.disposed) {
+      return;
+    }
+
+    if (
+      this.latestLiveParameterFrame !== null &&
+      canApplyLiveParameterFrame(this.latestLiveParameterFrame, this.payload)
+    ) {
+      this.renderLatestLiveParameterFrame();
+      return;
+    }
+
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(
+      this.payload,
+      {
+        activeVariantSelection: this.activeVariantSelection
+      }
+    );
+    this.renderInput = renderInput;
+    this.liveRuntimeState = renderInput.poseEvaluation.nextState;
+    this.renderCurrent();
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
@@ -148,7 +206,12 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       return;
     }
 
-    const renderInput = createEvaluatedRuntimeExportStageRenderInput(this.payload);
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(
+      this.payload,
+      {
+        activeVariantSelection: this.activeVariantSelection
+      }
+    );
     this.renderInput = renderInput;
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.renderCurrent();
@@ -265,6 +328,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(
       payload,
       {
+        activeVariantSelection: this.activeVariantSelection,
         authoredParameterValues: liveFrame.parameterValues,
         frameIndex: liveFrame.sequence,
         deltaTimeMs,

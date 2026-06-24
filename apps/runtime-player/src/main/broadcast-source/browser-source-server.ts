@@ -9,6 +9,9 @@ import type { AddressInfo, Socket } from "node:net";
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
+import type {
   RuntimePlayerBrowserSourceStageDisplayState,
   RuntimePlayerBrowserSourceClientDiagnostic,
   RuntimePlayerBrowserSourceClientDiagnosticEvent,
@@ -194,8 +197,16 @@ export class RuntimePlayerBrowserSourceServer {
     this.#session.markStopped();
   }
 
-  publishRuntimeExportLoaded(payload: RuntimeExportLoadedPayload): void {
-    this.#session.publishRuntimeExportLoaded(payload);
+  publishRuntimeExportLoaded(
+    payload: RuntimeExportLoadedPayload,
+    activeVariantSelection?: RuntimePlayerActiveVariantSelectionState
+  ): void {
+    if (activeVariantSelection === undefined) {
+      this.#session.publishRuntimeExportLoaded(payload);
+      return;
+    }
+
+    this.#session.publishRuntimeExportLoaded(payload, activeVariantSelection);
   }
 
   clearRuntimeExport(statusLabel?: string): void {
@@ -217,6 +228,12 @@ export class RuntimePlayerBrowserSourceServer {
     readonly notify?: "immediate" | "sampled";
   } = {}): void {
     this.#session.publishStageDisplayState(input, options);
+  }
+
+  publishActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState
+  ): void {
+    this.#session.publishActiveVariantSelection(activeVariantSelection);
   }
 
   async #handleHttpRequest(
@@ -353,6 +370,7 @@ export class RuntimePlayerBrowserSourceServer {
       sendJson(response, 200, createBrowserSourceRuntimeExportResponse({
         runtimeExportStatus: this.#session.getStatus().runtimeExport,
         stageDisplayState: this.#session.getStageDisplayState(),
+        activeVariantSelection: this.#session.getActiveVariantSelection(),
         runtimeExport: this.#session.getRuntimeExportPayload()
       }));
       return;

@@ -4,6 +4,9 @@ import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-paramet
 import type {
   RuntimePlayerBrowserSourceStatus
 } from "../../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import {
   RuntimePlayerBrowserSourceSession,
   type BrowserSourceSessionClient,
@@ -186,6 +189,38 @@ describe("RuntimePlayerBrowserSourceSession status sampling", () => {
       notifications[0]?.stageDisplayState.stageView.transform?.pan.x
     ).toBe(20);
   });
+
+  it("includes current active Variant selection in Browser Source resync without raw diagnostics", () => {
+    const session = new RuntimePlayerBrowserSourceSession({
+      token: "token_fixture"
+    });
+    const client = createClient();
+
+    session.publishActiveVariantSelection(createActiveVariantSelection());
+    session.addClient(client);
+
+    const resync = client.messages.find((message) =>
+      message.type === "runtime-export-resync"
+    );
+
+    expect(resync).toMatchObject({
+      activeVariantSelection: {
+        state: "ready",
+        activeSelections: [
+          {
+            variantGroupId: "vgrp_expression",
+            activeSelection: {
+              kind: "singleSelect",
+              variantId: "var_smile"
+            }
+          }
+        ]
+      }
+    });
+    expect(JSON.stringify(resync)).not.toContain("tracking");
+    expect(JSON.stringify(resync)).not.toContain("debug");
+    expect(JSON.stringify(resync)).not.toContain("calibration");
+  });
 });
 
 function createClient(): BrowserSourceSessionClient & {
@@ -233,6 +268,23 @@ function createStageDisplayState(panX: number) {
         coordinateSpace: "stage-viewport-px-v1" as const
       }
     }
+  };
+}
+
+function createActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "ready",
+    activeSelections: [
+      {
+        variantGroupId: "vgrp_expression",
+        activeSelection: {
+          kind: "singleSelect",
+          variantId: "var_smile"
+        }
+      }
+    ],
+    updatedAtIso: "2026-06-24T00:00:00.000Z"
   };
 }
 

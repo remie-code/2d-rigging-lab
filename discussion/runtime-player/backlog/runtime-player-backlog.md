@@ -491,8 +491,8 @@ Remaining manual verification:
 
 ### 3.12 OBS Browser Source Probe
 
-- Status: Done at source/test level through Wave11 Stage Motion; manual OBS verification pending
-- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md))
+- Status: Done at source/test level through Wave12 Live Controller Variant Switching; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed
 - Kind: Broadcast output probe completed by Runtime Player Wave9
 - Priority: Manual verification is high before treating Browser Source as product-ready
 
@@ -510,7 +510,7 @@ Implemented outcome:
 - `/stage`, Runtime Export status/payload, and WebSocket live transport are implemented.
 - Generated Browser Source JS/CSS assets are tokenless by accepted design, with `.js` / `.css` allowlist and path containment.
 - Browser Source Stage client is transparent, model-only, and independent of Electron preload APIs.
-- Browser Source receives Runtime Export payload plus sanitized live parameter frames only.
+- Browser Source receives Runtime Export payload plus sanitized live parameter frames, Stage display state, and active Variant selection.
 - Raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, and Control-only status fields do not cross into Browser Source.
 - Control shows connected client count, heartbeat, WebGL2, renderer status, Browser Source Runtime Export status, frame age, and FPS.
 - Native Stage Window controls remain available under `Local Preview / Fallback`.
@@ -519,6 +519,7 @@ Implemented outcome:
 - Control reports local preview suspension and samples repeated Browser Source live-frame/renderer diagnostics without hiding important server/client/export/render transitions.
 - Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
 - Wave11 adds Stage Motion to the same Browser Source path: Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
+- Wave12 adds active Variant selection to the same Browser Source path: reload/resync receives the current session active Variant selection, and updates carry sanitized active Variant selection without raw tracking/debug/calibration data.
 - Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
 
 Source:
@@ -529,6 +530,7 @@ Source:
 - [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
 - [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md)
 - [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
+- [../implementation/orchestration/player-wave12-plan.md](../implementation/orchestration/player-wave12-plan.md)
 - [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 - [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
 - [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
@@ -553,6 +555,8 @@ Remaining manual verification:
 - Enable Stage Motion and confirm left/right Stage offset in Browser Source.
 - Confirm near/far depth scale in Browser Source after explicit near/far calibration.
 - Confirm Browser Source composition matches native local preview when native preview is active.
+- Switch Variants in Live Controller and confirm Browser Source matches the native Stage visible result.
+- Refresh Browser Source and confirm the current session active Variant selection is retained.
 - Confirm manual Stage pan/zoom remains the base transform while Stage Motion adds only transient offsets.
 - Restart Runtime Player and confirm Stage Motion settings restore.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
@@ -562,6 +566,68 @@ Remaining manual verification:
 
 Suggested next action:
 
-- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave11.
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave12.
 - If it passes, keep Browser Source as the primary broadcast path.
 - If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.
+
+### 3.13 Live Controller Variant Switching v0
+
+- Status: Done at source/test level through Runtime Player Wave12; manual broadcast verification pending
+- Kind: Live operation feature completed by Runtime Player Wave12
+- Priority: Manual verification is high before relying on Variant switching during real broadcast
+
+Problem:
+
+- Runtime Export can contain Variant Groups for expressions, outfits, and accessories.
+- Before Wave12, Runtime Player did not expose a live control surface for changing active Variants during broadcast.
+- Stage Window and OBS Browser Source needed to use the same active Variant selection.
+
+Implemented outcome:
+
+- Control Window includes a real `Live Controller` page.
+- Live Controller lists Runtime Export Variant Groups when present.
+- `singleSelect` chooses exactly one active Variant.
+- `multiToggle` allows zero or more active Variants.
+- `Reset to Model Default` restores Runtime Export default active selections.
+- New Runtime Exports with drawable `baseVisible` support runtime Variant switching with `baseVisible && activeVariantPredicate`.
+- Legacy exports without complete `baseVisible` still load, but Variant switching is disabled with re-export guidance.
+- Active Variant selection is session-only and is not persisted.
+- Loading, reloading, or restarting resets active Variant selection to Runtime Export defaults.
+- Clearing or unloading the Runtime Export clears active Variant selection until another export is loaded.
+- Native Stage Window and Browser Source use the same session active Variant selection.
+- Browser Source reload/resync includes current active Variant selection.
+- Browser Source receives sanitized active Variant selection only, not raw tracking frames, raw iFacialMocap diagnostics, calibration internals, or private file paths.
+- `Look Forward`, `Center Model`, and `Stage Motion` On/Off reuse existing ownership.
+- Wave10 native local preview suspension remains preserved.
+- Runtime Player Wave12 did not change Runtime Export schema/materialization.
+
+Deferred future scope:
+
+- Hotkeys.
+- StreamDeck / MIDI.
+- Separate compact controller window.
+- Player-side Variant definition editing.
+- Drawable membership editing.
+- Last-active Variant persistence.
+- Stage Motion quick strength sliders.
+- Body Follow quick controls.
+
+Source:
+
+- [../screens/live-controller-page.md](../screens/live-controller-page.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../implementation/orchestration/player-wave12-plan.md](../implementation/orchestration/player-wave12-plan.md)
+- [../../implementation/waves/wave102/wave102-final-integration-report.md](../../implementation/waves/wave102/wave102-final-integration-report.md)
+
+Remaining manual verification:
+
+- Open a new Runtime Export that includes Variants and drawable `baseVisible`.
+- Open `Live Controller`.
+- Switch a `singleSelect` expression/outfit Variant.
+- Toggle a `multiToggle` accessory Variant.
+- Confirm native Stage Window updates.
+- Confirm OBS Browser Source updates to the same visible result.
+- Click `Reset to Model Default`.
+- Reload Browser Source and confirm the current session active Variant selection remains.
+- Restart Runtime Player and confirm active Variant selection resets to Runtime Export defaults.
+- Open a legacy Runtime Export without `baseVisible` and confirm switching is disabled with re-export guidance.

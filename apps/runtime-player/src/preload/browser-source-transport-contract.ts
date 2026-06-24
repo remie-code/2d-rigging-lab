@@ -4,6 +4,9 @@ import type {
   RuntimePlayerBrowserSourceStageDisplayState,
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "./browser-source-status-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "./runtime-variant-bridge-contract";
 
 export const runtimePlayerBrowserSourceProtocolVersion = 1 as const;
 
@@ -26,6 +29,7 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
       readonly runtimeExportStatus:
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
+      readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
       readonly runtimeExport: RuntimePlayerBrowserSourceRuntimeExportPayload;
     }
   | {
@@ -33,6 +37,7 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
       readonly runtimeExportStatus:
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
+      readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
       readonly runtimeExport: null;
     };
 
@@ -52,6 +57,7 @@ export type RuntimePlayerBrowserSourceServerMessage =
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly latestFrame: RuntimePlayerLiveParameterFrame | null;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
+      readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
       readonly sentAtIso: string;
     }
   | {
@@ -62,6 +68,13 @@ export type RuntimePlayerBrowserSourceServerMessage =
         | null;
       readonly runtimeExportStatus:
         RuntimePlayerBrowserSourceRuntimeExportStatus;
+      readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly sentAtIso: string;
+    }
+  | {
+      readonly type: "active-variant-selection-changed";
+      readonly protocolVersion: typeof runtimePlayerBrowserSourceProtocolVersion;
+      readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
       readonly sentAtIso: string;
     }
   | {

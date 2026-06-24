@@ -28,11 +28,18 @@ import type {
   NormalizedRigControlNode,
   NormalizedRuntimeGraph
 } from "@private-2d-rigging-lab/runtime-core";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
+import {
+  resolveRuntimeVariantDrawableVisible
+} from "../../shared/runtime-export-variant-selection";
 
 export interface RuntimeExportRuntimeGraphAdapterInput {
   readonly model: RuntimeExportModelDto;
   readonly atlas?: RuntimeExportAtlasDto;
   readonly texturePages?: readonly RuntimeExportTexturePageMetadataDto[];
+  readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
 }
 
 export interface RuntimeExportDrawableRenderResource {
@@ -78,7 +85,12 @@ export function createRuntimeExportRuntimeGraph(
     coordinateSystem: input.model.canvas.coordinateSystem,
     parameters: createParameterMap(input.model),
     dynamicsGroups: createDynamicsGroupMap(input.model),
-    drawables: createDrawableMap(input.model, meshesById, textureLookup),
+    drawables: createDrawableMap({
+      model: input.model,
+      meshesById,
+      textureLookup,
+      activeVariantSelection: input.activeVariantSelection ?? null
+    }),
     rigControls: createRigControlMap(input.model),
     keyformBindings: input.model.keyforms.map(cloneKeyformBinding),
     masks: input.model.masks.map((mask) => ({
@@ -154,14 +166,16 @@ function createDynamicsGroupMap(
   );
 }
 
-function createDrawableMap(
-  model: RuntimeExportModelDto,
-  meshesById: ReadonlyMap<MeshId, RuntimeExportMeshDto>,
-  textureLookup: TextureLookup
+function createDrawableMap(input: {
+  readonly model: RuntimeExportModelDto;
+  readonly meshesById: ReadonlyMap<MeshId, RuntimeExportMeshDto>;
+  readonly textureLookup: TextureLookup;
+  readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null;
+}
 ): ReadonlyMap<DrawableId, NormalizedDrawable> {
   return new Map(
-    model.drawables.map((drawable) => {
-      const mesh = meshesById.get(drawable.meshId);
+    input.model.drawables.map((drawable) => {
+      const mesh = input.meshesById.get(drawable.meshId);
       if (mesh === undefined) {
         throw new Error(`runtime export drawable "${drawable.drawableId}" is missing mesh "${drawable.meshId}".`);
       }
@@ -172,8 +186,12 @@ function createDrawableMap(
           drawableId: drawable.drawableId,
           meshId: drawable.meshId,
           ...(drawable.partId === undefined ? {} : { partId: drawable.partId }),
-          texture: createDrawableTextureReference(drawable.texture, mesh, textureLookup),
-          visible: drawable.visible,
+          texture: createDrawableTextureReference(drawable.texture, mesh, input.textureLookup),
+          visible: resolveRuntimeVariantDrawableVisible({
+            model: input.model,
+            drawable,
+            activeVariantSelection: input.activeVariantSelection
+          }),
           opacity: drawable.opacity,
           baseDrawOrder: drawable.baseDrawOrder,
           bounds: cloneRect(drawable.bounds),

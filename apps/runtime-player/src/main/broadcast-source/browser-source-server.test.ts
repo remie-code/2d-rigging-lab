@@ -17,6 +17,9 @@ import type {
   RuntimeExportLoadedPayload,
   RuntimeExportSummary
 } from "../../preload/runtime-export-bridge-contract";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import { RuntimePlayerBrowserSourceServer } from "./browser-source-server";
 import type {
   BrowserSourceStageDevAssetFetch
@@ -147,6 +150,7 @@ describe("Runtime Player Browser Source server", () => {
     expect(emptyResponse).toStrictEqual({
       status: "not-loaded",
       runtimeExport: null,
+      activeVariantSelection: createDisabledActiveVariantSelection(),
       stageDisplayState: {
         stageWindow: {
           bounds: null
@@ -186,6 +190,7 @@ describe("Runtime Player Browser Source server", () => {
           maskCount: 0
         }
       },
+      activeVariantSelection: createDisabledActiveVariantSelection(),
       stageDisplayState: {
         stageWindow: {
           bounds: null
@@ -520,6 +525,7 @@ describe("Runtime Player Browser Source server", () => {
     expect(messages.find((message) =>
       message.type === "runtime-export-changed"
     )).toMatchObject({
+      activeVariantSelection: createDisabledActiveVariantSelection(),
       runtimeExport: {
         summary: {
           packageId: "pkg_fixture"
@@ -692,6 +698,7 @@ describe("Runtime Player Browser Source server", () => {
       message.type === "runtime-export-resync"
     );
     expect(initialResync).toMatchObject({
+      activeVariantSelection: createDisabledActiveVariantSelection(),
       runtimeExport: {
         summary: {
           packageId: "pkg_fixture"
@@ -1043,6 +1050,15 @@ function createLiveParameterFrame(): RuntimePlayerLiveParameterFrame {
     parameterValues: {
       ParamAngleX: 12.5
     }
+  };
+}
+
+function createDisabledActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: "runtime-player-active-variant-selection-v1",
+    state: "disabled",
+    activeSelections: [],
+    updatedAtIso: null
   };
 }
 

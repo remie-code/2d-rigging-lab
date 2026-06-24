@@ -14,6 +14,9 @@ import {
   type RuntimeExportRuntimeGraphAdapterInput,
   type RuntimeExportRuntimeGraphAdapterResult
 } from "./runtime-export-runtime-graph-adapter";
+import type {
+  RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 
 export interface RuntimeExportPoseEvaluation {
   readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
@@ -28,13 +31,17 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly deltaTimeMs?: number;
   readonly previousState?: RuntimeStateDto;
   readonly resetReasons?: readonly RuntimeResetReason[];
+  readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
 };
 
 export function evaluateRuntimeExportPose(
   input: RuntimeExportRuntimeGraphAdapterInput,
   options: RuntimeExportPoseEvaluationOptions = {}
 ): RuntimeExportPoseEvaluation {
-  const adapter = createRuntimeExportRuntimeGraph(input);
+  const adapter = createRuntimeExportRuntimeGraph({
+    ...input,
+    activeVariantSelection: options.activeVariantSelection ?? null
+  });
   const frameIndex = options.frameIndex ?? 0;
   const frameResetReasons: RuntimeResetReason[] = options.resetReasons === undefined
     ? ["packageLoad"]

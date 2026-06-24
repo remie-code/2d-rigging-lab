@@ -6,6 +6,10 @@ import {
   type RuntimePlayerBrowserSourceRuntimeExportPayload,
   type RuntimePlayerBrowserSourceServerMessage
 } from "../../preload/browser-source-transport-contract";
+import {
+  runtimePlayerActiveVariantSelectionSchemaVersion,
+  type RuntimePlayerActiveVariantSelectionState
+} from "../../preload/runtime-variant-bridge-contract";
 import type {
   RuntimePlayerBrowserSourceAssetRequestDiagnostic,
   RuntimePlayerBrowserSourceClientDiagnostic,
@@ -64,6 +68,8 @@ export class RuntimePlayerBrowserSourceSession {
   #sampledStatusTimer: BrowserSourceSessionTimerHandle | null = null;
   #stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState =
     createEmptyStageDisplayState();
+  #activeVariantSelection: RuntimePlayerActiveVariantSelectionState =
+    createDisabledActiveVariantSelectionState();
 
   constructor(input: {
     readonly token: string;
@@ -118,6 +124,10 @@ export class RuntimePlayerBrowserSourceSession {
 
   getStageDisplayState(): RuntimePlayerBrowserSourceStageDisplayState {
     return this.#stageDisplayState;
+  }
+
+  getActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
+    return this.#activeVariantSelection;
   }
 
   onStatusChanged(
@@ -182,8 +192,14 @@ export class RuntimePlayerBrowserSourceSession {
     });
   }
 
-  publishRuntimeExportLoaded(payload: RuntimeExportLoadedPayload): void {
+  publishRuntimeExportLoaded(
+    payload: RuntimeExportLoadedPayload,
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState =
+      this.#activeVariantSelection
+  ): void {
     this.#runtimeExport = toBrowserSourceRuntimeExportPayload(payload);
+    this.#activeVariantSelection =
+      cloneActiveVariantSelectionState(activeVariantSelection);
     this.#updateStatus({
       runtimeExport: createBrowserSourceLoadedRuntimeExportStatus(payload)
     });
@@ -192,12 +208,14 @@ export class RuntimePlayerBrowserSourceSession {
       protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
       runtimeExport: this.#runtimeExport,
       runtimeExportStatus: this.#status.runtimeExport,
+      activeVariantSelection: this.#activeVariantSelection,
       sentAtIso: this.#nowIso()
     });
   }
 
   clearRuntimeExport(statusLabel = "No Runtime Export loaded"): void {
     this.#runtimeExport = null;
+    this.#activeVariantSelection = createDisabledActiveVariantSelectionState();
     this.clearLatestFrame();
     this.#updateStatus({
       runtimeExport: createBrowserSourceEmptyRuntimeExportStatus(statusLabel)
@@ -207,6 +225,7 @@ export class RuntimePlayerBrowserSourceSession {
       protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
       runtimeExport: null,
       runtimeExportStatus: this.#status.runtimeExport,
+      activeVariantSelection: this.#activeVariantSelection,
       sentAtIso: this.#nowIso()
     });
   }
@@ -264,6 +283,19 @@ export class RuntimePlayerBrowserSourceSession {
       type: "stage-display-state-changed",
       protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
       stageDisplayState: this.#stageDisplayState,
+      sentAtIso: this.#nowIso()
+    });
+  }
+
+  publishActiveVariantSelection(
+    activeVariantSelection: RuntimePlayerActiveVariantSelectionState
+  ): void {
+    this.#activeVariantSelection =
+      cloneActiveVariantSelectionState(activeVariantSelection);
+    this.#broadcast({
+      type: "active-variant-selection-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      activeVariantSelection: this.#activeVariantSelection,
       sentAtIso: this.#nowIso()
     });
   }
@@ -441,6 +473,7 @@ export class RuntimePlayerBrowserSourceSession {
       runtimeExportStatus: this.#status.runtimeExport,
       latestFrame: this.#latestFrame,
       stageDisplayState: this.#stageDisplayState,
+      activeVariantSelection: this.#activeVariantSelection,
       sentAtIso: this.#nowIso()
     });
   }
@@ -571,6 +604,37 @@ function createEmptyStageDisplayState(): RuntimePlayerBrowserSourceStageDisplayS
       transform: null
     },
     updatedAtIso: null
+  };
+}
+
+function createDisabledActiveVariantSelectionState(): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: runtimePlayerActiveVariantSelectionSchemaVersion,
+    state: "disabled",
+    activeSelections: [],
+    updatedAtIso: null
+  };
+}
+
+function cloneActiveVariantSelectionState(
+  state: RuntimePlayerActiveVariantSelectionState
+): RuntimePlayerActiveVariantSelectionState {
+  return {
+    schemaVersion: state.schemaVersion,
+    state: state.state,
+    activeSelections: state.activeSelections.map((entry) => ({
+      variantGroupId: entry.variantGroupId,
+      activeSelection: entry.activeSelection.kind === "singleSelect"
+        ? {
+            kind: "singleSelect",
+            variantId: entry.activeSelection.variantId
+          }
+        : {
+            kind: "multiToggle",
+            variantIds: [...entry.activeSelection.variantIds]
+          }
+    })),
+    updatedAtIso: state.updatedAtIso
   };
 }
 
