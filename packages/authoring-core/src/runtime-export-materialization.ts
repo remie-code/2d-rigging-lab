@@ -90,7 +90,11 @@ export const createRuntimeExportArtifacts = (input: {
     input.session,
     includedDrawableIds
   );
-  const variantGroups = input.session.graph.variantGroups ?? [];
+  const sourceVariantGroups = input.session.graph.variantGroups ?? [];
+  const variantGroups = filterRuntimeExportVariantGroups(
+    sourceVariantGroups,
+    includedDrawableIds
+  );
   const defaultVariantActiveSelections = resolveDefaultVariantActiveSelections(variantGroups);
   const variantVisibilityPredicate = createVariantVisibilityPredicate({
     variantGroups,
@@ -139,14 +143,16 @@ export const createRuntimeExportArtifacts = (input: {
       throw new Error(`Missing runtime drawable projection for ${target.drawable.drawableId}.`);
     }
 
+    const baseVisible = normalizedDrawable.visible;
+
     return {
       drawableId: target.drawable.drawableId,
       displayName: target.drawable.displayName,
       meshId: target.mesh.meshId,
       ...(target.drawable.partId === undefined ? {} : { partId: target.drawable.partId }),
       includeReason: "runtime-target-v1" as const,
-      visible: normalizedDrawable.visible &&
-        variantVisibilityPredicate(target.drawable.drawableId),
+      baseVisible,
+      visible: baseVisible && variantVisibilityPredicate(target.drawable.drawableId),
       opacity: normalizedDrawable.opacity,
       baseDrawOrder: normalizedDrawable.baseDrawOrder,
       bounds: structuredClone(normalizedDrawable.bounds),
@@ -333,6 +339,28 @@ const createRuntimeExportVariants = (
     activeSelection: structuredClone(selection.activeSelection)
   }))
 });
+
+const filterRuntimeExportVariantGroups = (
+  variantGroups: RuntimeExportVariantsDto["variantGroups"],
+  includedDrawableIds: ReadonlySet<DrawableId>
+): RuntimeExportVariantsDto["variantGroups"] =>
+  variantGroups.map((group) => {
+    const filteredTargetDrawableIds = group.targetDrawableIds.filter((drawableId) =>
+      includedDrawableIds.has(drawableId)
+    );
+    const filteredMemberships = group.memberships
+      .filter((membership) => includedDrawableIds.has(membership.drawableId))
+      .map((membership) => ({
+        drawableId: membership.drawableId,
+        variantIds: [...membership.variantIds]
+      }));
+
+    return {
+      ...structuredClone(group),
+      targetDrawableIds: filteredTargetDrawableIds,
+      memberships: filteredMemberships
+    };
+  });
 
 const createRuntimeExportMasks = (
   session: AuthoringSession,

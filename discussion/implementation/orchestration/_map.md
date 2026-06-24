@@ -108,6 +108,7 @@
 | [wave99-plan.md](wave99-plan.md) | Wave 99 Variant / Expression Manager v0 dependency and Orch-Sylph plan | Final complete / pass; Variant Manager Canvas behavior verified |
 | [wave100-plan.md](wave100-plan.md) | Wave 100 Viewer Variant Switching v0 dependency and Orch-Sylph plan | Final complete / pass; Viewer Original / Atlas Runtime Variant switching verified |
 | [wave101-plan.md](wave101-plan.md) | Wave 101 Texture Atlas Skyline Packing + Blocking Issues UX dependency and Orch-Sylph plan | Planned / ready for orchestration |
+| [wave102-plan.md](wave102-plan.md) | Wave 102 Runtime Export Variant Visibility Foundation dependency and Orch-Sylph plan | Final complete / pass; Runtime Export `baseVisible` foundation implemented |
 
 ## Current Decision
 

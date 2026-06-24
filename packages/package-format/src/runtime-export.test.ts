@@ -125,6 +125,48 @@ describe("Runtime Export v0 package-format contract", () => {
     });
   });
 
+  it("accepts new drawable baseVisible while legacy drawables without it remain parseable", () => {
+    const artifacts = createMinimalRuntimeExportArtifacts();
+    const parsedLegacy = parseRuntimeExportModel(artifacts.model);
+
+    expect(parsedLegacy).toMatchObject({
+      success: true,
+      data: {
+        drawables: [
+          expect.objectContaining({
+            drawableId: "draw_body",
+            visible: true
+          })
+        ]
+      }
+    });
+    if (parsedLegacy.success) {
+      expect(parsedLegacy.data.drawables[0]?.baseVisible).toBeUndefined();
+    }
+
+    const parsedNew = parseRuntimeExportModel({
+      ...artifacts.model,
+      drawables: artifacts.model.drawables.map((drawable) => ({
+        ...drawable,
+        baseVisible: true,
+        visible: false
+      }))
+    });
+
+    expect(parsedNew).toMatchObject({
+      success: true,
+      data: {
+        drawables: [
+          expect.objectContaining({
+            drawableId: "draw_body",
+            baseVisible: true,
+            visible: false
+          })
+        ]
+      }
+    });
+  });
+
   it("rejects inconsistent Runtime Export Variant metadata", () => {
     const { defaultActiveSelections: _missingSelections, ...missingDefaultActiveSelections } =
       createRuntimeExportVariants();
@@ -219,6 +261,43 @@ describe("Runtime Export v0 package-format contract", () => {
         testCase.label
       ).toContain(testCase.issuePath);
     }
+  });
+
+  it("rejects Runtime Export Variant metadata that references non-exported drawables", () => {
+    const artifacts = createMinimalRuntimeExportArtifacts();
+    const parsed = parseRuntimeExportModel({
+      ...artifacts.model,
+      variants: {
+        ...createRuntimeExportVariants(),
+        variantGroups: [
+          {
+            ...createRuntimeExportVariants().variantGroups[0]!,
+            targetDrawableIds: ["draw_body", "draw_missing"],
+            memberships: [
+              {
+                drawableId: "draw_body",
+                variantIds: ["var_expression_default"]
+              },
+              {
+                drawableId: "draw_missing",
+                variantIds: ["var_expression_smile"]
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      return;
+    }
+    expect(parsed.issues.map((issue) => issue.path.join("/"))).toEqual(
+      expect.arrayContaining([
+        "variants/variantGroups/0/targetDrawableIds/1",
+        "variants/variantGroups/0/memberships/1/drawableId"
+      ])
+    );
   });
 
   it("validates v0 single-page artifacts while atlas schema allows future pages arrays", () => {

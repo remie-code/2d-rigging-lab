@@ -332,6 +332,7 @@ export const RuntimeExportDrawableSchema = z.object({
   meshId: MeshIdSchema,
   partId: PartIdSchema.optional(),
   includeReason: z.enum(["runtime-target-v1", "mask-source-v1"]),
+  baseVisible: z.boolean().optional(),
   visible: z.boolean(),
   opacity: z.number().min(0).max(1),
   baseDrawOrder: z.number().int(),
@@ -722,6 +723,28 @@ export const RuntimeExportModelSchema = z.object({
           code: "custom",
           path: ["masks", maskIndex, "targetDrawableIds", targetIndex],
           message: `Runtime Export mask target references missing drawable "${drawableId}".`
+        });
+      }
+    });
+  });
+
+  model.variants?.variantGroups.forEach((group, groupIndex) => {
+    group.targetDrawableIds.forEach((drawableId, targetIndex) => {
+      if (!drawableIds.has(drawableId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["variants", "variantGroups", groupIndex, "targetDrawableIds", targetIndex],
+          message: `Runtime Export variant target references missing drawable "${drawableId}".`
+        });
+      }
+    });
+
+    group.memberships.forEach((membership, membershipIndex) => {
+      if (!drawableIds.has(membership.drawableId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["variants", "variantGroups", groupIndex, "memberships", membershipIndex, "drawableId"],
+          message: `Runtime Export variant membership references missing drawable "${membership.drawableId}".`
         });
       }
     });

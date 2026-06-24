@@ -88,6 +88,22 @@ describe("runtime export assembly and preflight", () => {
       DRAW_BODY,
       DRAW_HIDDEN
     ]);
+    expect(result.artifacts.model.drawables.map((drawable) => ({
+      drawableId: drawable.drawableId,
+      baseVisible: drawable.baseVisible,
+      visible: drawable.visible
+    }))).toEqual([
+      {
+        drawableId: DRAW_BODY,
+        baseVisible: true,
+        visible: true
+      },
+      {
+        drawableId: DRAW_HIDDEN,
+        baseVisible: false,
+        visible: false
+      }
+    ]);
     expect(result.artifacts.model.drawables.map((drawable) => drawable.texture.path)).toEqual([
       "assets/textures/atlas_page_0.raw-rgba",
       "assets/textures/atlas_page_0.raw-rgba"
@@ -126,10 +142,51 @@ describe("runtime export assembly and preflight", () => {
     });
     expect(result.artifacts.model.drawables.find((drawable) =>
       drawable.drawableId === DRAW_BODY
+    )?.baseVisible).toBe(true);
+    expect(result.artifacts.model.drawables.find((drawable) =>
+      drawable.drawableId === DRAW_BODY
     )?.visible).toBe(false);
     expect(result.artifacts.model.drawables.find((drawable) =>
       drawable.drawableId === DRAW_HIDDEN
+    )?.baseVisible).toBe(false);
+    expect(result.artifacts.model.drawables.find((drawable) =>
+      drawable.drawableId === DRAW_HIDDEN
     )?.visible).toBe(false);
+  });
+
+  it("filters Runtime Export Variant targets and memberships to exported drawables", async () => {
+    const session = await createAppliedRuntimeExportFixtureSession();
+    session.graph.variantGroups = [createOutfitVariantGroupWithExcludedPool()];
+
+    const result = await assembleRuntimeExport(session, { createdAt: CREATED_AT });
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      return;
+    }
+    expect(result.artifacts.model.drawables.map((drawable) => drawable.drawableId)).toEqual([
+      DRAW_BODY,
+      DRAW_HIDDEN
+    ]);
+    expect(result.artifacts.model.variants?.variantGroups).toEqual([
+      {
+        ...createOutfitVariantGroup(),
+        targetDrawableIds: [DRAW_BODY, DRAW_HIDDEN],
+        memberships: [
+          { drawableId: DRAW_BODY, variantIds: ["var_outfit_alt"] },
+          { drawableId: DRAW_HIDDEN, variantIds: ["var_outfit_default"] }
+        ]
+      }
+    ]);
+    expect(result.artifacts.model.variants?.defaultActiveSelections).toEqual([
+      {
+        variantGroupId: "vgrp_outfit",
+        activeSelection: {
+          kind: "singleSelect",
+          variantId: "var_outfit_default"
+        }
+      }
+    ]);
   });
 
   it("keeps Texture Atlas targets bound-drawable based for default-hidden Variant drawables", async () => {
@@ -396,6 +453,16 @@ const createOutfitVariantGroup = (): VariantGroupDto => ({
     kind: "singleSelect",
     variantId: "var_outfit_default"
   }
+});
+
+const createOutfitVariantGroupWithExcludedPool = (): VariantGroupDto => ({
+  ...createOutfitVariantGroup(),
+  targetDrawableIds: [DRAW_BODY, DRAW_HIDDEN, DRAW_POOL],
+  memberships: [
+    { drawableId: DRAW_BODY, variantIds: ["var_outfit_alt"] },
+    { drawableId: DRAW_HIDDEN, variantIds: ["var_outfit_default"] },
+    { drawableId: DRAW_POOL, variantIds: ["var_outfit_default"] }
+  ]
 });
 
 const createAppliedRuntimeExportFixtureSession = async (): Promise<AuthoringSession> => {
