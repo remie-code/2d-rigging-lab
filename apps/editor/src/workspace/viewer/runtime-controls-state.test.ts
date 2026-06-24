@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditorParameter } from "../../features/editor-session/model/parameter-keyform-state";
-import { RuntimeControls } from "./runtime-controls";
+import { RuntimeControls, type RuntimeControlsProps } from "./runtime-controls";
 import {
   createInitialRuntimeControlsState,
   createRuntimeControlsProjection,
@@ -22,6 +22,11 @@ const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
 const MOUTH_OPEN = ParameterIdSchema.parse("param_mouth_open");
 const HAIR_SWAY = ParameterIdSchema.parse("param_hair_sway_output");
 const CUSTOM_BROW = ParameterIdSchema.parse("param_custom_brow");
+const GROUP_EXPRESSION = "vgrp_runtime_controls_expression";
+const GROUP_ACCESSORY = "vgrp_runtime_controls_accessory";
+const VAR_DEFAULT = "var_runtime_controls_default";
+const VAR_SMILE = "var_runtime_controls_smile";
+const VAR_GLASSES = "var_runtime_controls_glasses";
 
 describe("viewer runtime controls state", () => {
   it("filters editable parameters by display name or id and excludes computedDynamics", () => {
@@ -293,6 +298,60 @@ function createParameter(
   };
 }
 
+function createRuntimeVariantGroups(): NonNullable<RuntimeControlsProps["variantGroups"]> {
+  return [
+    {
+      variantGroupId: GROUP_EXPRESSION as never,
+      displayName: "Expression",
+      mode: "singleSelect",
+      variants: [
+        { variantId: VAR_DEFAULT as never, displayName: "Default" },
+        { variantId: VAR_SMILE as never, displayName: "Smile" }
+      ],
+      targetDrawableIds: [],
+      memberships: [],
+      defaultActive: {
+        kind: "singleSelect",
+        variantId: VAR_DEFAULT as never
+      }
+    },
+    {
+      variantGroupId: GROUP_ACCESSORY as never,
+      displayName: "Accessory",
+      mode: "multiToggle",
+      variants: [{ variantId: VAR_GLASSES as never, displayName: "Glasses" }],
+      targetDrawableIds: [],
+      memberships: [],
+      defaultActive: {
+        kind: "multiToggle",
+        variantIds: []
+      }
+    }
+  ];
+}
+
+function createRuntimeVariantActiveSelections(input: {
+  readonly expressionVariantId?: typeof VAR_DEFAULT | typeof VAR_SMILE;
+  readonly accessoryVariantIds?: readonly (typeof VAR_GLASSES)[];
+} = {}): NonNullable<RuntimeControlsProps["variantActiveSelections"]> {
+  return [
+    {
+      variantGroupId: GROUP_EXPRESSION as never,
+      activeSelection: {
+        kind: "singleSelect",
+        variantId: (input.expressionVariantId ?? VAR_DEFAULT) as never
+      }
+    },
+    {
+      variantGroupId: GROUP_ACCESSORY as never,
+      activeSelection: {
+        kind: "multiToggle",
+        variantIds: (input.accessoryVariantIds ?? []) as never
+      }
+    }
+  ];
+}
+
 describe("RuntimeControls UI", () => {
   it("renders a Viewer runtime controls surface without an EditorSession provider", () => {
     const markup = renderRuntimeControls({
@@ -315,6 +374,7 @@ describe("RuntimeControls UI", () => {
     expect(markup).toContain('aria-label="Search parameters"');
     expect(markup).toContain("Face Angle X");
     expect(markup).toContain("Mouth Open");
+    expect(markup).not.toContain('data-testid="viewer-variants-section"');
     expect(markup).not.toContain("Hair Sway Output");
     expect(markup).not.toContain("Parameter Bar");
     expect(markup).not.toContain("Keyform");
@@ -340,6 +400,31 @@ describe("RuntimeControls UI", () => {
     expect(markup).toContain('data-testid="viewer-render-source-disabled-reason"');
     expect(markup).toContain("Apply a texture atlas first.");
     expect(markup).toContain("Atlas Runtime unavailable: Apply a texture atlas first.");
+  });
+
+  it("renders collapsed Variants between render source mode and parameter search", () => {
+    const markup = renderRuntimeControls({
+      parameters: [
+        createParameter(FACE_ANGLE_X, "Face Angle X", { max: 30, min: -30 })
+      ],
+      state: createInitialRuntimeControlsState(),
+      variantActiveSelections: createRuntimeVariantActiveSelections(),
+      variantGroups: createRuntimeVariantGroups()
+    });
+
+    expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
+      markup.indexOf('data-testid="viewer-variants-section"')
+    );
+    expect(markup.indexOf('data-testid="viewer-variants-section"')).toBeLessThan(
+      markup.indexOf('aria-label="Search parameters"')
+    );
+    expect(markup).toContain('data-testid="viewer-variants-summary"');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain("Expression: Default");
+    expect(markup).toContain("Accessory: None");
+    expect(markup).not.toContain('data-testid="viewer-variants-expanded-controls"');
+    expect(markup).not.toContain('aria-label="Select Smile in Expression"');
+    expect(markup).not.toContain('aria-label="Toggle Glasses in Accessory"');
   });
 
   it("renders parameter name search below render source mode and filters visible rows", () => {
@@ -419,6 +504,88 @@ describe("RuntimeControls UI", () => {
     expect(markup).not.toContain("Pause");
   });
 
+  it("expands Variants and emits single-select and multi-toggle selections", async () => {
+    const onVariantActiveSelectionChange = vi.fn();
+    const onResetVariants = vi.fn();
+    const harness = await renderRuntimeControlsInteractive({
+      onVariantActiveSelectionChange,
+      onResetVariants,
+      parameters: [
+        createParameter(FACE_ANGLE_X, "Face Angle X", { max: 30, min: -30 })
+      ],
+      state: createInitialRuntimeControlsState(),
+      variantActiveSelections: createRuntimeVariantActiveSelections({
+        expressionVariantId: VAR_SMILE
+      }),
+      variantGroups: createRuntimeVariantGroups()
+    });
+
+    try {
+      await clickFakeElement(
+        getFakeElementByAttribute(harness.container, "data-testid", "viewer-variants-toggle")
+      );
+
+      expect(
+        getFakeElementByAttribute(
+          harness.container,
+          "data-testid",
+          "viewer-variants-expanded-controls"
+        )
+      ).toBeDefined();
+      expect(
+        getFakeElementByAttribute(
+          harness.container,
+          "aria-label",
+          "Select Default in Expression"
+        )
+      ).toBeDefined();
+      expect(
+        getFakeElementByAttribute(
+          harness.container,
+          "aria-label",
+          "Toggle Glasses in Accessory"
+        )
+      ).toBeDefined();
+
+      await clickFakeElement(
+        getFakeElementByAttribute(
+          harness.container,
+          "aria-label",
+          "Select Default in Expression"
+        )
+      );
+      await clickFakeElement(
+        getFakeElementByAttribute(
+          harness.container,
+          "aria-label",
+          "Toggle Glasses in Accessory"
+        )
+      );
+
+      expect(onVariantActiveSelectionChange).toHaveBeenCalledWith({
+        variantGroupId: GROUP_EXPRESSION,
+        activeSelection: {
+          kind: "singleSelect",
+          variantId: VAR_DEFAULT
+        }
+      });
+      expect(onVariantActiveSelectionChange).toHaveBeenCalledWith({
+        variantGroupId: GROUP_ACCESSORY,
+        activeSelection: {
+          kind: "multiToggle",
+          variantIds: [VAR_GLASSES]
+        }
+      });
+
+      await clickFakeElement(
+        getFakeElementByAttribute(harness.container, "data-testid", "viewer-reset-variants")
+      );
+      expect(onResetVariants).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("coalesces runtime slider changes and flushes the final value", async () => {
     const animationFrame = installAnimationFrameMock();
     const onStateChange = vi.fn();
@@ -461,36 +628,52 @@ function renderRuntimeControls({
   hasDynamicsSimulation = false,
   parameters,
   renderSourceMode = "original",
-  state
+  state,
+  variantActiveSelections,
+  variantGroups
 }: {
   readonly atlasRuntimeDisabledReason?: string;
   readonly hasDynamicsSimulation?: boolean;
   readonly parameters: readonly EditorParameter[];
   readonly renderSourceMode?: "original" | "atlasRuntime";
   readonly state: ViewerRuntimeControlsState;
+  readonly variantActiveSelections?: RuntimeControlsProps["variantActiveSelections"];
+  readonly variantGroups?: RuntimeControlsProps["variantGroups"];
 }): string {
   return renderToStaticMarkup(
     createElement(RuntimeControls, {
       hasDynamicsSimulation,
       onRenderSourceModeChange: vi.fn(),
+      onResetVariants: vi.fn(),
       onStateChange: vi.fn(),
+      onVariantActiveSelectionChange: vi.fn(),
       onResetSimulation: vi.fn(),
       parameters,
       renderSourceMode,
       ...(atlasRuntimeDisabledReason === undefined ? {} : { atlasRuntimeDisabledReason }),
-      state
+      state,
+      ...(variantActiveSelections === undefined ? {} : { variantActiveSelections }),
+      ...(variantGroups === undefined ? {} : { variantGroups })
     })
   );
 }
 
 async function renderRuntimeControlsInteractive({
-  onStateChange,
+  onStateChange = vi.fn(),
+  onVariantActiveSelectionChange,
+  onResetVariants,
   parameters,
-  state
+  state,
+  variantActiveSelections,
+  variantGroups
 }: {
-  readonly onStateChange: (state: ViewerRuntimeControlsState) => void;
+  readonly onStateChange?: (state: ViewerRuntimeControlsState) => void;
+  readonly onVariantActiveSelectionChange?: RuntimeControlsProps["onVariantActiveSelectionChange"];
+  readonly onResetVariants?: RuntimeControlsProps["onResetVariants"];
   readonly parameters: readonly EditorParameter[];
   readonly state: ViewerRuntimeControlsState;
+  readonly variantActiveSelections?: RuntimeControlsProps["variantActiveSelections"];
+  readonly variantGroups?: RuntimeControlsProps["variantGroups"];
 }): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly container: FakeElement;
@@ -502,10 +685,16 @@ async function renderRuntimeControlsInteractive({
     reactRoot?.render(
       createElement(RuntimeControls, {
         onRenderSourceModeChange: vi.fn(),
+        ...(onResetVariants === undefined ? {} : { onResetVariants }),
         onStateChange,
+        ...(onVariantActiveSelectionChange === undefined
+          ? {}
+          : { onVariantActiveSelectionChange }),
         parameters,
         renderSourceMode: "original",
-        state
+        state,
+        ...(variantActiveSelections === undefined ? {} : { variantActiveSelections }),
+        ...(variantGroups === undefined ? {} : { variantGroups })
       })
     );
   });
@@ -525,6 +714,7 @@ async function renderRuntimeControlsInteractive({
 type FakeReactProps = {
   readonly onBlur?: () => void;
   readonly onChange?: (event: { readonly currentTarget: FakeElement }) => void;
+  readonly onClick?: () => void;
   readonly onPointerCancel?: () => void;
   readonly onPointerUp?: () => void;
 };
@@ -793,6 +983,28 @@ function getFakeInputByType(root: FakeElement, type: string): FakeElement {
   }
 
   return input;
+}
+
+function getFakeElementByAttribute(
+  root: FakeElement,
+  attributeName: string,
+  attributeValue: string
+): FakeElement {
+  const element = findFakeElements(
+    root,
+    (candidate) => candidate.getAttribute(attributeName) === attributeValue
+  )[0];
+  if (element === undefined) {
+    throw new Error(`Element with ${attributeName}="${attributeValue}" was not rendered.`);
+  }
+
+  return element;
+}
+
+async function clickFakeElement(element: FakeElement): Promise<void> {
+  await act(async () => {
+    getFakeReactProps(element).onClick?.();
+  });
 }
 
 function findFakeElements(

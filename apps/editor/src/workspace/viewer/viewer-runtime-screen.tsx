@@ -1,4 +1,9 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  createVariantVisibilityPredicate,
+  type AuthoringSession,
+  type VariantActiveSelectionEntry,
+  type VariantVisibilityPredicate
+} from "@private-2d-rigging-lab/authoring-core";
 import type { PartId, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import {
   recordLive2dPerformanceTiming,
@@ -69,6 +74,13 @@ import {
   type ViewerRenderSourceMode
 } from "./viewer-render-source";
 import {
+  createInitialViewerVariantActiveSelections,
+  createViewerVariantGroupsSignature,
+  getViewerVariantGroups,
+  reconcileViewerVariantActiveSelections,
+  sameViewerVariantActiveSelections
+} from "./viewer-variant-selection";
+import {
   createViewerRuntimeParameterSignature,
   createViewerRuntimeInitialState,
   createViewerRuntimePlaybackModel,
@@ -110,6 +122,11 @@ export function ViewerRuntimeScreen() {
     useState<ViewerRuntimeControlsState>(() => createInitialRuntimeControlsState());
   const [renderSourceMode, setRenderSourceMode] =
     useState<ViewerRenderSourceMode>("original");
+  const variantGroups = getViewerVariantGroups(session);
+  const variantGroupsSignature = createViewerVariantGroupsSignature(variantGroups);
+  const [viewerVariantActiveSelections, setViewerVariantActiveSelections] = useState<
+    readonly VariantActiveSelectionEntry[]
+  >(() => createInitialViewerVariantActiveSelections(variantGroups));
   const [runtimePlaybackFrame, setRuntimePlaybackFrame] =
     useState<ViewerRuntimePlaybackScreenFrame | null>(null);
   const runtimePlaybackFrameRef = useRef<ViewerRuntimePlaybackScreenFrame | null>(null);
@@ -144,6 +161,41 @@ export function ViewerRuntimeScreen() {
   );
   const atlasRuntimeSourceCache = useMemo(() => createViewerAtlasRuntimeSourceCache(), []);
   const runtimePlaybackRef = useRef<ViewerRuntimePlaybackLoopInput | null>(null);
+  useEffect(() => {
+    setViewerVariantActiveSelections((current) => {
+      const reconciled = reconcileViewerVariantActiveSelections(variantGroups, current);
+
+      return sameViewerVariantActiveSelections(current, reconciled) ? current : reconciled;
+    });
+  }, [variantGroups, variantGroupsSignature]);
+  const variantVisibilityPredicate = useMemo(
+    () =>
+      createVariantVisibilityPredicate({
+        variantGroups,
+        activeSelections: viewerVariantActiveSelections
+      }),
+    [variantGroups, variantGroupsSignature, viewerVariantActiveSelections]
+  );
+  const setViewerVariantActiveSelection = useCallback(
+    (entry: VariantActiveSelectionEntry) => {
+      setViewerVariantActiveSelections((current) => {
+        const reconciled = reconcileViewerVariantActiveSelections(variantGroups, [
+          ...current.filter((candidate) => candidate.variantGroupId !== entry.variantGroupId),
+          entry
+        ]);
+
+        return sameViewerVariantActiveSelections(current, reconciled) ? current : reconciled;
+      });
+    },
+    [variantGroups, variantGroupsSignature]
+  );
+  const resetViewerVariants = useCallback(() => {
+    setViewerVariantActiveSelections((current) => {
+      const defaults = createInitialViewerVariantActiveSelections(variantGroups);
+
+      return sameViewerVariantActiveSelections(current, defaults) ? current : defaults;
+    });
+  }, [variantGroups, variantGroupsSignature]);
   const runtimePlaybackModel = useMemo(
     () => createViewerRuntimePlaybackModel(session),
     [session]
@@ -169,6 +221,7 @@ export function ViewerRuntimeScreen() {
         runtimeControlsState,
         renderSourceMode,
         atlasRuntimeSourceCache,
+        variantVisibilityPredicate,
         session
       }),
     [
@@ -180,6 +233,7 @@ export function ViewerRuntimeScreen() {
       compatibleRuntimePlaybackState,
       compatibleRuntimeReusableParameterValues,
       runtimePlaybackModel,
+      variantVisibilityPredicate,
       session
     ]
   );
@@ -318,11 +372,15 @@ export function ViewerRuntimeScreen() {
           excludedParameterIds={cleanStage.runtimePlaybackModel.dynamicsOutputParameterIds}
           hasDynamicsSimulation={cleanStage.runtimePlaybackModel.enabledDynamicsGroupCount > 0}
           onRenderSourceModeChange={setRenderSourceMode}
+          onResetVariants={resetViewerVariants}
           onStateChange={setRuntimeControlsState}
+          onVariantActiveSelectionChange={setViewerVariantActiveSelection}
           onResetSimulation={resetRuntimeSimulation}
           parameters={cleanStage.parameters}
           renderSourceMode={cleanStage.renderSourceMode}
           state={runtimeControlsState}
+          variantActiveSelections={viewerVariantActiveSelections}
+          variantGroups={variantGroups}
           {...(cleanStage.atlasRuntimeAvailability.status === "unavailable"
             ? { atlasRuntimeDisabledReason: cleanStage.atlasRuntimeAvailability.disabledReason }
             : {})}
@@ -341,6 +399,7 @@ export function createViewerRuntimeCleanStageProjection({
   runtimeReusableParameterValues,
   runtimeControlsState,
   renderSourceMode = "original",
+  variantVisibilityPredicate,
   session
 }: {
   readonly authoringParameterValues: ParameterValueMap;
@@ -352,6 +411,7 @@ export function createViewerRuntimeCleanStageProjection({
   readonly runtimeReusableParameterValues?: ViewerRuntimeReusableParameterValues | null;
   readonly session: AuthoringSession;
   readonly atlasRuntimeSourceCache?: ViewerAtlasRuntimeSourceCache;
+  readonly variantVisibilityPredicate?: VariantVisibilityPredicate;
 }): ViewerRuntimeCleanStageProjectionInput {
   const timingStart = startLive2dPerformanceTiming();
   try {
@@ -378,7 +438,8 @@ export function createViewerRuntimeCleanStageProjection({
     });
     const originalProjection = createCanvasRenderProjection(session, null, {
       parameterValues,
-      ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds })
+      ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds }),
+      ...(variantVisibilityPredicate === undefined ? {} : { variantVisibilityPredicate })
     });
     const renderSourceProjection = createViewerRenderSourceProjection({
       session,
@@ -433,6 +494,10 @@ function ViewerCleanStageCanvas({
   const [viewport, setViewport] = useState<CanvasViewportSize>(DEFAULT_VIEWPORT);
   const [view, setView] = useState<CanvasViewState>(DEFAULT_VIEW);
   const [isPanning, setIsPanning] = useState(false);
+  const visibleDrawableCount = useMemo(
+    () => projection.drawables.filter((drawable) => drawable.visible).length,
+    [projection]
+  );
   const renderableDrawableCount = useMemo(
     () =>
       projection.drawables.filter((drawable) => drawable.visible && isRenderableDrawable(drawable))
@@ -634,6 +699,7 @@ function ViewerCleanStageCanvas({
           data-renderable-drawable-count={renderableDrawableCount}
           data-selected-drawable-count={projection.selectedDrawableIds.size}
           data-testid="viewer-clean-stage-canvas"
+          data-visible-drawable-count={visibleDrawableCount}
           data-zoom-percent={formatZoomPercent(view.zoom)}
           onPointerCancel={finishPointerDrag}
           onPointerDown={onPointerDown}

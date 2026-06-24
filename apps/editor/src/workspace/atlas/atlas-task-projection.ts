@@ -8,6 +8,7 @@ import type {
   TextureAtlasWarningCode
 } from "@private-2d-rigging-lab/authoring-core";
 import {
+  DEFAULT_TEXTURE_ATLAS_PACKING_ALGORITHM_ID,
   createTextureAtlasPageRgbaBytes,
   createTextureAtlasPreview,
   selectTextureAtlasTargets
@@ -37,6 +38,7 @@ export interface TextureAtlasTaskProjection {
     readonly includedCount: number;
     readonly excludedCount: number;
     readonly warningCount: number;
+    readonly blockingIssueCount: number;
     readonly pageSizeLabel: string;
     readonly usageLabel: string;
     readonly paddingLabel: string;
@@ -45,6 +47,7 @@ export interface TextureAtlasTaskProjection {
   readonly includedRows: readonly TextureAtlasIncludedRow[];
   readonly excludedRows: readonly TextureAtlasExcludedRow[];
   readonly warningRows: readonly TextureAtlasWarningRow[];
+  readonly blockingIssues: readonly TextureAtlasBlockingIssueRow[];
   readonly previewPage: TextureAtlasPreviewPage | null;
 }
 
@@ -73,7 +76,18 @@ export interface TextureAtlasWarningRow {
   readonly message: string;
   readonly severity: TextureAtlasWarning["severity"];
   readonly targetPath: string;
+  readonly drawableId?: DrawableId;
   readonly details: readonly string[];
+}
+
+export interface TextureAtlasBlockingIssueRow {
+  readonly id: string;
+  readonly code: TextureAtlasWarningCode;
+  readonly title: string;
+  readonly message: string;
+  readonly targetLabel: string;
+  readonly contextLabel: string;
+  readonly sourceRef: string;
 }
 
 export interface TextureAtlasPreviewPage {
@@ -137,6 +151,13 @@ export function createTextureAtlasTaskProjection(input: {
   const warningRows = createWarningRows(
     stale ? [...warningSource, createStaleTaskWarning()] : warningSource
   );
+  const blockingIssues = createBlockingIssueRows({
+    warnings: warningRows,
+    includedTargets: targetSelection.included,
+    pageSizeLabel: `${input.settings.pageSize} x ${input.settings.pageSize}`,
+    paddingLabel: `${input.settings.paddingPixels}px`,
+    edgeExtrusionLabel: input.settings.edgeExtrusionEnabled ? "On" : "Off"
+  });
   const previewPage = input.previewState?.previewPage ?? null;
   const readyPlacementCount = preview?.status === "ready"
     ? preview.layoutSummary.pages[0]?.placements.length ?? 0
@@ -153,6 +174,7 @@ export function createTextureAtlasTaskProjection(input: {
       includedCount: targetSelection.included.length,
       excludedCount: targetSelection.excluded.length,
       warningCount: warningRows.length,
+      blockingIssueCount: blockingIssues.length,
       pageSizeLabel: `${input.settings.pageSize} x ${input.settings.pageSize}`,
       usageLabel: formatUsage(preview),
       paddingLabel: `${input.settings.paddingPixels}px`,
@@ -175,6 +197,7 @@ export function createTextureAtlasTaskProjection(input: {
       targetPath: target.targetPath
     })),
     warningRows,
+    blockingIssues,
     previewPage
   };
 }
@@ -220,6 +243,7 @@ export function createTextureAtlasTaskInputSignature(input: {
     authoringRevision: input.session.authoringRevision,
     packageRevision: input.session.packageRevision,
     editorHiddenPartIds,
+    packingAlgorithmId: DEFAULT_TEXTURE_ATLAS_PACKING_ALGORITHM_ID,
     settings: normalizeSettings(input.settings),
     included: targetSelection.included.map((target) => ({
       drawableId: target.drawableId,
@@ -374,8 +398,73 @@ function createWarningRows(warnings: readonly TextureAtlasWarning[]): TextureAtl
     message: warning.message,
     severity: warning.severity,
     targetPath: warning.targetPath,
+    ...(warning.drawableId === undefined ? {} : { drawableId: warning.drawableId }),
     details: warning.details
   }));
+}
+
+function createBlockingIssueRows(input: {
+  readonly warnings: readonly TextureAtlasWarningRow[];
+  readonly includedTargets: readonly {
+    readonly drawableId: DrawableId;
+    readonly displayName: string;
+  }[];
+  readonly pageSizeLabel: string;
+  readonly paddingLabel: string;
+  readonly edgeExtrusionLabel: string;
+}): TextureAtlasBlockingIssueRow[] {
+  const includedByDrawableId = new Map(
+    input.includedTargets.map((target) => [target.drawableId, target])
+  );
+
+  return input.warnings
+    .filter((warning) => warning.severity === "error")
+    .map((warning) => {
+      const drawableId = getWarningDrawableId(warning);
+      const displayName = drawableId === undefined
+        ? getWarningDetailValue(warning, "displayName")
+        : includedByDrawableId.get(drawableId)?.displayName ??
+          getWarningDetailValue(warning, "displayName");
+      const targetLabel = displayName !== undefined
+        ? `Drawable ${displayName}`
+        : drawableId !== undefined
+          ? `Drawable ${drawableId}`
+          : "Texture Atlas";
+
+      return {
+        id: `blocking:${warning.id}`,
+        code: warning.code,
+        title: warning.label,
+        message: createBlockingIssueMessage({
+          warning,
+          targetLabel,
+          pageSizeLabel: input.pageSizeLabel
+        }),
+        targetLabel,
+        contextLabel: [
+          `Page ${input.pageSizeLabel}`,
+          `Padding ${input.paddingLabel}`,
+          `Edge extrusion ${input.edgeExtrusionLabel}`
+        ].join(" / "),
+        sourceRef: warning.targetPath
+      };
+    });
+}
+
+function createBlockingIssueMessage(input: {
+  readonly warning: TextureAtlasWarningRow;
+  readonly targetLabel: string;
+  readonly pageSizeLabel: string;
+}): string {
+  if (input.warning.code === "atlas.pack.cannotFit") {
+    return `${input.targetLabel} cannot fit in ${input.pageSizeLabel}.`;
+  }
+
+  if (input.warning.code === "atlas.apply.stalePreview") {
+    return "Generate Preview again before applying this atlas.";
+  }
+
+  return input.warning.message;
 }
 
 function createStaleTaskWarning(): TextureAtlasWarning {
@@ -386,6 +475,26 @@ function createStaleTaskWarning(): TextureAtlasWarning {
     message: "Atlas preview is stale. Generate Preview again before applying.",
     details: ["reason=task-input-changed"]
   };
+}
+
+function getWarningDrawableId(warning: TextureAtlasWarningRow): DrawableId | undefined {
+  if (warning.drawableId !== undefined) {
+    return warning.drawableId;
+  }
+
+  const detailValue = getWarningDetailValue(warning, "drawableId");
+
+  return detailValue === undefined ? undefined : (detailValue as DrawableId);
+}
+
+function getWarningDetailValue(
+  warning: TextureAtlasWarningRow,
+  key: string
+): string | undefined {
+  const prefix = `${key}=`;
+  const detail = warning.details.find((candidate) => candidate.startsWith(prefix));
+
+  return detail?.slice(prefix.length);
 }
 
 function resolveDrawablePartPathLabel(

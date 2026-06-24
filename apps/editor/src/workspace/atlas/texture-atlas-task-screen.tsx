@@ -162,7 +162,7 @@ export function TextureAtlasTaskScreen() {
 
 export function AtlasPreview({ projection }: { readonly projection: TextureAtlasTaskProjection }) {
   const page = projection.previewPage;
-  const previewStatusLabel = formatPreviewStatus(projection.previewStatus);
+  const previewStatusLabel = formatPreviewStatus(projection);
 
   return (
     <section
@@ -176,7 +176,7 @@ export function AtlasPreview({ projection }: { readonly projection: TextureAtlas
             Atlas Preview
           </h2>
           <div
-            className="mt-0.5 text-[11px] font-medium uppercase text-neutral-500"
+            className="mt-0.5 truncate text-[11px] font-medium uppercase text-neutral-500"
             data-testid="atlas-preview-state"
           >
             {previewStatusLabel}
@@ -197,11 +197,13 @@ export function AtlasPreview({ projection }: { readonly projection: TextureAtlas
         >
           {page === null ? (
             <div className="absolute inset-0 grid place-items-center px-4 text-center text-xs font-medium text-neutral-500">
-              {projection.previewStatus === "failed"
-                ? "Preview failed"
-                : projection.previewStatus === "stale"
-                  ? "Preview stale"
-                  : "Generate Preview"}
+              {projection.previewStatus === "failed" ? (
+                <AtlasPreviewFailureCard projection={projection} />
+              ) : projection.previewStatus === "stale" ? (
+                "Preview stale"
+              ) : (
+                "Generate Preview"
+              )}
             </div>
           ) : (
             <>
@@ -297,7 +299,7 @@ function AtlasPlacement({
   );
 }
 
-function AtlasSidebar({
+export function AtlasSidebar({
   applyStatus,
   onSettingsChange,
   projection
@@ -310,7 +312,7 @@ function AtlasSidebar({
     <aside className="min-h-0 overflow-auto border-t border-neutral-800 bg-[#171716] xl:border-l xl:border-t-0">
       <section className="border-b border-neutral-800 p-3">
         <h2 className="text-xs font-semibold uppercase text-neutral-500">Target Summary</h2>
-        <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
           <SummaryMetric
             label="Included"
             testId="atlas-included-count"
@@ -326,6 +328,11 @@ function AtlasSidebar({
             testId="atlas-warning-count"
             value={projection.summary.warningCount}
           />
+          <SummaryMetric
+            label="Blocking"
+            testId="atlas-blocking-count"
+            value={projection.summary.blockingIssueCount}
+          />
         </dl>
         <dl className="mt-3 grid gap-1.5 text-xs">
           <InlineMetric label="Page" value={projection.summary.pageSizeLabel} />
@@ -335,6 +342,8 @@ function AtlasSidebar({
         </dl>
         <ApplyStatusMessage status={applyStatus} />
       </section>
+
+      <BlockingIssuesSection projection={projection} />
 
       <section className="border-b border-neutral-800 p-3">
         <h2 className="text-xs font-semibold uppercase text-neutral-500">Settings</h2>
@@ -446,6 +455,85 @@ function AtlasSidebar({
         )}
       </section>
     </aside>
+  );
+}
+
+function AtlasPreviewFailureCard({
+  projection
+}: {
+  readonly projection: TextureAtlasTaskProjection;
+}) {
+  const primaryIssue = projection.blockingIssues[0];
+
+  return (
+    <div
+      className="max-w-72 rounded border border-rose-800/80 bg-neutral-950/90 px-4 py-3 text-left shadow-lg"
+      data-testid="atlas-preview-failure-card"
+    >
+      <div className="text-xs font-semibold uppercase text-rose-200">
+        {primaryIssue?.title ?? "Preview failed"}
+      </div>
+      <div className="mt-1 text-xs font-medium text-neutral-200">
+        {primaryIssue?.targetLabel ?? "Texture Atlas"}
+      </div>
+      <div className="mt-1 text-[11px] leading-5 text-neutral-400">
+        {primaryIssue?.contextLabel ?? projection.summary.pageSizeLabel}
+      </div>
+      <div className="mt-2 text-[11px] font-semibold uppercase text-neutral-500">
+        See Blocking Issues
+      </div>
+    </div>
+  );
+}
+
+function BlockingIssuesSection({
+  projection
+}: {
+  readonly projection: TextureAtlasTaskProjection;
+}) {
+  return (
+    <section
+      className="border-b border-neutral-800 p-3"
+      data-testid="atlas-blocking-issues-section"
+    >
+      <h2 className="text-xs font-semibold uppercase text-neutral-500">Blocking Issues</h2>
+      {projection.blockingIssues.length === 0 ? (
+        <div
+          className="mt-3 rounded border border-neutral-800 bg-neutral-950/45 px-3 py-2 text-xs font-medium text-neutral-500"
+          data-testid="atlas-blocking-empty"
+        >
+          No blocking issues
+        </div>
+      ) : (
+        <ul className="mt-3 divide-y divide-rose-950 overflow-hidden rounded border border-rose-900/75">
+          {projection.blockingIssues.map((issue) => (
+            <li
+              className="bg-rose-950/25 px-3 py-2 text-xs"
+              data-atlas-blocking-code={issue.code}
+              data-testid="atlas-blocking-issue-row"
+              key={issue.id}
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0 text-rose-300"
+                  size={14}
+                  strokeWidth={1.9}
+                />
+                <div className="min-w-0">
+                  <div className="font-semibold text-rose-100">{issue.title}</div>
+                  <div className="mt-1 break-words text-neutral-200">{issue.message}</div>
+                  <div className="mt-1 break-words text-neutral-400">{issue.contextLabel}</div>
+                  <div className="mt-1 break-words font-mono text-[11px] text-neutral-500">
+                    {issue.sourceRef}
+                  </div>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -624,10 +712,12 @@ function AtlasActionButton({
   );
 }
 
-function formatPreviewStatus(status: TextureAtlasTaskProjection["previewStatus"]): string {
-  switch (status) {
+function formatPreviewStatus(projection: TextureAtlasTaskProjection): string {
+  switch (projection.previewStatus) {
     case "failed":
-      return "Preview failed";
+      return projection.blockingIssues[0] === undefined
+        ? "Preview failed"
+        : `Preview failed: ${projection.blockingIssues[0].title}`;
     case "missing":
       return "No preview";
     case "ready":

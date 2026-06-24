@@ -362,6 +362,91 @@ describe("package-format DTO schemas", () => {
     });
   });
 
+  it("parses texture atlas layout settings for new skyline artifacts", () => {
+    const parsed = TextureAtlasFileSchema.parse({
+      schemaVersion: "texture-atlas-v1",
+      textures: [
+        {
+          textureId: "tex_generated_atlas_page_0",
+          filePath: "assets/textures/generated_atlas_page_0.raw-rgba"
+        }
+      ],
+      layoutSummary: {
+        schemaVersion: "texture-atlas-layout-v1",
+        layoutId: "atlas_layout_single_page_v1",
+        atlasTextureId: "tex_generated_atlas_page_0",
+        sourceTexturePolicy: "retain-source-textures-v1",
+        sourceSignature: {
+          schemaVersion: "texture-atlas-source-signature-v1",
+          inputVersion: "atlas-source-inputs-v1",
+          algorithmId: "stable-json-fnv1a32-v1",
+          digest: "fnv1a32:1234abcd",
+          boundDrawableIds: ["draw_body"],
+          packableDrawableIds: ["draw_body"]
+        },
+        settings: {
+          algorithmId: "single-page-skyline-v1",
+          pageWidth: 64,
+          pageHeight: 32,
+          paddingPixels: 2,
+          edgeExtrusion: {
+            enabled: true,
+            pixels: 1
+          }
+        },
+        pages: [
+          {
+            pageId: "atlas_page_0",
+            textureId: "tex_generated_atlas_page_0",
+            width: 64,
+            height: 32,
+            pixelFormat: "rgba8",
+            placements: [
+              {
+                placementId: "atlas_place_draw_body",
+                pageId: "atlas_page_0",
+                drawableId: "draw_body",
+                meshId: "mesh_body",
+                originalTextureId: "tex_body",
+                atlasTextureId: "tex_generated_atlas_page_0",
+                sourceTextureSize: {
+                  width: 4,
+                  height: 4
+                },
+                sourceRectPixels: {
+                  x: 0,
+                  y: 0,
+                  width: 4,
+                  height: 4
+                },
+                contentRectPixels: {
+                  x: 2,
+                  y: 2,
+                  width: 4,
+                  height: 4
+                },
+                paddedRectPixels: {
+                  x: 0,
+                  y: 0,
+                  width: 8,
+                  height: 8
+                },
+                uvRect: {
+                  topLeft: { x: 2 / 64, y: 2 / 32 },
+                  bottomRight: { x: 6 / 64, y: 6 / 32 }
+                },
+                hiddenAtApply: false,
+                hiddenReasons: []
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(parsed.layoutSummary?.settings.algorithmId).toBe("single-page-skyline-v1");
+  });
+
   it("rejects external or non-texture texture atlas entry paths", () => {
     const validEntry = {
       textureId: "tex_body",

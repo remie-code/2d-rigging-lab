@@ -1,4 +1,5 @@
 import {
+  createVariantVisibilityPredicate,
   createInitialAuthoringRevision,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
@@ -163,14 +164,28 @@ type Live2dPerformanceTestGlobal = typeof globalThis & {
 const PART_ROOT = PartIdSchema.parse("part_viewer_screen_root");
 const PART_FACE = PartIdSchema.parse("part_viewer_screen_face");
 const DRAW_FACE = DrawableIdSchema.parse("draw_viewer_screen_face");
+const DRAW_EXPRESSION_DEFAULT = DrawableIdSchema.parse("draw_viewer_screen_expression_default");
+const DRAW_EXPRESSION_ALT = DrawableIdSchema.parse("draw_viewer_screen_expression_alt");
+const DRAW_ACCESSORY = DrawableIdSchema.parse("draw_viewer_screen_accessory");
 const MESH_FACE = MeshIdSchema.parse("mesh_viewer_screen_face");
+const MESH_EXPRESSION_DEFAULT = MeshIdSchema.parse("mesh_viewer_screen_expression_default");
+const MESH_EXPRESSION_ALT = MeshIdSchema.parse("mesh_viewer_screen_expression_alt");
+const MESH_ACCESSORY = MeshIdSchema.parse("mesh_viewer_screen_accessory");
 const TEX_FACE = TextureIdSchema.parse("tex_viewer_screen_face");
+const TEX_EXPRESSION_DEFAULT = TextureIdSchema.parse("tex_viewer_screen_expression_default");
+const TEX_EXPRESSION_ALT = TextureIdSchema.parse("tex_viewer_screen_expression_alt");
+const TEX_ACCESSORY = TextureIdSchema.parse("tex_viewer_screen_accessory");
 const SOURCE_ASSET = SourceAssetIdSchema.parse("src_viewer_screen_fixture");
 const PROVENANCE = ProvenanceIdSchema.parse("prov_viewer_screen_fixture");
 const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
 const HAIR_SWAY_X = ParameterIdSchema.parse("param_viewer_hair_sway_x");
 const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_viewer_hair_sway_x");
 const RIG_FACE_WARP = RigControlIdSchema.parse("rig_viewer_screen_face_warp");
+const GROUP_EXPRESSION = "vgrp_viewer_screen_expression";
+const GROUP_ACCESSORY = "vgrp_viewer_screen_accessory";
+const VAR_EXPRESSION_DEFAULT = "var_viewer_screen_expression_default";
+const VAR_EXPRESSION_ALT = "var_viewer_screen_expression_alt";
+const VAR_ACCESSORY = "var_viewer_screen_accessory";
 
 describe("ViewerRuntimeScreen integration", () => {
   beforeEach(() => {
@@ -211,6 +226,7 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(markup).toContain('data-testid="viewer-render-source-mode"');
     expect(markup).toContain("Original");
     expect(markup).toContain("Atlas Runtime");
+    expect(markup).not.toContain('data-testid="viewer-variants-section"');
     expect(markup).toContain("Apply a texture atlas first.");
     expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
       markup.indexOf('aria-label="Search parameters"')
@@ -234,6 +250,24 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(markup).not.toContain("Compare");
     expect(markup).not.toContain("Favorite");
     expect(markup).not.toContain("Group");
+  });
+
+  it("renders Viewer Variants collapsed between render source and parameter search", () => {
+    viewerRuntimeTestState.editorSession.session = createRuntimeScreenSessionWithVariants();
+
+    const markup = renderToStaticMarkup(createElement(ViewerRuntimeScreen));
+
+    expect(markup).toContain('data-testid="viewer-variants-section"');
+    expect(markup.indexOf('data-testid="viewer-render-source-mode"')).toBeLessThan(
+      markup.indexOf('data-testid="viewer-variants-section"')
+    );
+    expect(markup.indexOf('data-testid="viewer-variants-section"')).toBeLessThan(
+      markup.indexOf('aria-label="Search parameters"')
+    );
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain("Expression: Happy");
+    expect(markup).toContain("Accessory: None");
+    expect(markup).not.toContain('data-testid="viewer-variants-expanded-controls"');
   });
 
   it("does not surface diagnostics warnings or badges in the Viewer route", () => {
@@ -328,6 +362,56 @@ describe("ViewerRuntimeScreen integration", () => {
       disabledReason: "Apply a texture atlas first."
     });
     expect(requireDrawable(projection.projection, DRAW_FACE).textureId).toBe(TEX_FACE);
+  });
+
+  it("applies Project default Variant selection to the Viewer Original projection", () => {
+    const session = createRuntimeScreenSessionWithVariants();
+    const beforeSession = JSON.stringify(session);
+    const variantVisibilityPredicate = createVariantVisibilityPredicate({
+      variantGroups: session.graph.variantGroups ?? []
+    });
+
+    const projection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      session,
+      variantVisibilityPredicate
+    });
+
+    expect(requireDrawable(projection.projection, DRAW_FACE).visible).toBe(true);
+    expect(requireDrawable(projection.projection, DRAW_EXPRESSION_DEFAULT).visible).toBe(true);
+    expect(requireDrawable(projection.projection, DRAW_EXPRESSION_ALT).visible).toBe(false);
+    expect(requireDrawable(projection.projection, DRAW_ACCESSORY).visible).toBe(false);
+    expect(projection.projection.drawables.filter((drawable) => drawable.visible).length).toBe(2);
+    expect(session.dirty).toBe(false);
+    expect(JSON.stringify(session)).toBe(beforeSession);
+  });
+
+  it("keeps Variant-neutral drawables controlled by existing visibility predicates", () => {
+    const session = createRuntimeScreenSessionWithVariants();
+    const variantVisibilityPredicate = createVariantVisibilityPredicate({
+      variantGroups: session.graph.variantGroups ?? []
+    });
+    const visibleProjection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      editorHiddenPartIds: new Set(),
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      session,
+      variantVisibilityPredicate
+    });
+    const hiddenPartProjection = createViewerRuntimeCleanStageProjection({
+      authoringParameterValues: {},
+      editorHiddenPartIds: new Set([PART_FACE]),
+      runtimeControlsState: createInitialRuntimeControlsState(),
+      session,
+      variantVisibilityPredicate
+    });
+
+    expect(requireDrawable(visibleProjection.projection, DRAW_FACE).visible).toBe(true);
+    expect(requireDrawable(hiddenPartProjection.projection, DRAW_FACE).visible).toBe(false);
+    expect(requireDrawable(hiddenPartProjection.projection, DRAW_EXPRESSION_DEFAULT).visible).toBe(
+      false
+    );
   });
 
   it("advances Viewer Dynamics over runtime frames and keeps motion after driver stops", () => {
@@ -805,6 +889,59 @@ describe("ViewerRuntimeScreen integration", () => {
     }
   });
 
+  it("switches Viewer-local Variants and resets them without mutating Project state", async () => {
+    const session = createRuntimeScreenSessionWithVariants();
+    const beforeVariantGroups = structuredClone(session.graph.variantGroups);
+    viewerRuntimeTestState.editorSession.session = session;
+    viewerRuntimeTestState.editorSession.parameterValues = {};
+    const harness = await renderViewerRuntimeScreenInteractive();
+
+    try {
+      expect(getViewerCanvasVisibleDrawableCount(harness.container)).toBe(2);
+      expect(getViewerVariantsSummary(harness.container)).toContain("Expression: Happy");
+      expect(getViewerVariantsSummary(harness.container)).toContain("Accessory: None");
+      expect(
+        getFakeElementByAttribute(harness.container, "data-testid", "viewer-variants-toggle")
+          .getAttribute("aria-expanded")
+      ).toBe("false");
+
+      await clickTestId(harness.container, "viewer-variants-toggle");
+      expect(
+        getFakeElementByAttribute(
+          harness.container,
+          "data-testid",
+          "viewer-variants-expanded-controls"
+        )
+      ).toBeDefined();
+
+      await clickFakeElementByAttribute(
+        harness.container,
+        "aria-label",
+        "Select Sad in Expression"
+      );
+      expect(getViewerVariantsSummary(harness.container)).toContain("Expression: Sad");
+      expect(getViewerCanvasVisibleDrawableCount(harness.container)).toBe(2);
+
+      await clickFakeElementByAttribute(
+        harness.container,
+        "aria-label",
+        "Toggle Glasses in Accessory"
+      );
+      expect(getViewerVariantsSummary(harness.container)).toContain("Accessory: Glasses");
+      expect(getViewerCanvasVisibleDrawableCount(harness.container)).toBe(3);
+
+      await clickTestId(harness.container, "viewer-reset-variants");
+      expect(getViewerVariantsSummary(harness.container)).toContain("Expression: Happy");
+      expect(getViewerVariantsSummary(harness.container)).toContain("Accessory: None");
+      expect(getViewerCanvasVisibleDrawableCount(harness.container)).toBe(2);
+      expect(session.graph.variantGroups).toEqual(beforeVariantGroups);
+      expect(session.dirty).toBe(false);
+      expect(viewerRuntimeTestState.editorSession.saveProject).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("passes editor Parts Container visibility into the Clean Stage projection", () => {
     const session = createRuntimeScreenSession();
     const visibleProjection = createViewerRuntimeCleanStageProjection({
@@ -999,6 +1136,111 @@ function createRuntimeScreenSession(
   } as AuthoringSession;
 }
 
+function createRuntimeScreenSessionWithVariants(): AuthoringSession {
+  const session = createRuntimeScreenSession();
+  const facePart = session.graph.parts.find((part) => part.partId === PART_FACE);
+  if (facePart === undefined) {
+    throw new Error("Expected face part.");
+  }
+
+  facePart.drawableIds.push(DRAW_EXPRESSION_DEFAULT, DRAW_EXPRESSION_ALT, DRAW_ACCESSORY);
+  facePart.children?.push(
+    { kind: "drawable", drawableId: DRAW_EXPRESSION_DEFAULT },
+    { kind: "drawable", drawableId: DRAW_EXPRESSION_ALT },
+    { kind: "drawable", drawableId: DRAW_ACCESSORY }
+  );
+  session.graph.drawables.push(
+    createDrawable(
+      DRAW_EXPRESSION_DEFAULT,
+      MESH_EXPRESSION_DEFAULT,
+      TEX_EXPRESSION_DEFAULT,
+      "Happy"
+    ),
+    createDrawable(DRAW_EXPRESSION_ALT, MESH_EXPRESSION_ALT, TEX_EXPRESSION_ALT, "Sad"),
+    createDrawable(DRAW_ACCESSORY, MESH_ACCESSORY, TEX_ACCESSORY, "Glasses")
+  );
+  session.graph.meshes.push(
+    createMesh(MESH_EXPRESSION_DEFAULT, DRAW_EXPRESSION_DEFAULT, {
+      height: 20,
+      width: 20,
+      x: 16,
+      y: 16
+    }),
+    createMesh(MESH_EXPRESSION_ALT, DRAW_EXPRESSION_ALT, {
+      height: 20,
+      width: 20,
+      x: 40,
+      y: 16
+    }),
+    createMesh(MESH_ACCESSORY, DRAW_ACCESSORY, {
+      height: 12,
+      width: 36,
+      x: 30,
+      y: 42
+    })
+  );
+  session.graph.drawOrder.push(
+    { drawableId: DRAW_EXPRESSION_DEFAULT, baseDrawOrder: 1, stableOrder: 1 },
+    { drawableId: DRAW_EXPRESSION_ALT, baseDrawOrder: 2, stableOrder: 2 },
+    { drawableId: DRAW_ACCESSORY, baseDrawOrder: 3, stableOrder: 3 }
+  );
+  session.graph.stableOrder.push(
+    DRAW_EXPRESSION_DEFAULT,
+    DRAW_EXPRESSION_ALT,
+    DRAW_ACCESSORY
+  );
+  session.graph.textureAtlas?.textures.push(
+    createRuntimeScreenTexture(TEX_EXPRESSION_DEFAULT, "expression-default"),
+    createRuntimeScreenTexture(TEX_EXPRESSION_ALT, "expression-alt"),
+    createRuntimeScreenTexture(TEX_ACCESSORY, "accessory")
+  );
+  session.graph.variantGroups = [
+    {
+      variantGroupId: GROUP_EXPRESSION as never,
+      displayName: "Expression",
+      mode: "singleSelect",
+      variants: [
+        { variantId: VAR_EXPRESSION_DEFAULT as never, displayName: "Happy" },
+        { variantId: VAR_EXPRESSION_ALT as never, displayName: "Sad" }
+      ],
+      targetDrawableIds: [DRAW_EXPRESSION_DEFAULT, DRAW_EXPRESSION_ALT],
+      memberships: [
+        {
+          drawableId: DRAW_EXPRESSION_DEFAULT,
+          variantIds: [VAR_EXPRESSION_DEFAULT as never]
+        },
+        {
+          drawableId: DRAW_EXPRESSION_ALT,
+          variantIds: [VAR_EXPRESSION_ALT as never]
+        }
+      ],
+      defaultActive: {
+        kind: "singleSelect",
+        variantId: VAR_EXPRESSION_DEFAULT as never
+      }
+    },
+    {
+      variantGroupId: GROUP_ACCESSORY as never,
+      displayName: "Accessory",
+      mode: "multiToggle",
+      variants: [{ variantId: VAR_ACCESSORY as never, displayName: "Glasses" }],
+      targetDrawableIds: [DRAW_ACCESSORY],
+      memberships: [
+        {
+          drawableId: DRAW_ACCESSORY,
+          variantIds: [VAR_ACCESSORY as never]
+        }
+      ],
+      defaultActive: {
+        kind: "multiToggle",
+        variantIds: []
+      }
+    }
+  ];
+
+  return session;
+}
+
 function createRuntimeScreenSessionWithDynamics(
   options: {
     readonly packageId?: ReturnType<typeof PackageIdSchema.parse>;
@@ -1086,6 +1328,16 @@ function createRuntimeScreenSessionWithDiagnosticsWarning(): AuthoringSession {
   );
 
   return session;
+}
+
+function createRuntimeScreenTexture(textureId: TextureId, token: string) {
+  return {
+    textureId,
+    filePath: `assets/textures/viewer-runtime-screen-${token}.rgba`,
+    sourceAssetId: SOURCE_ASSET,
+    sourceLayerId: `layer_viewer_runtime_screen_${token}`,
+    provenanceId: PROVENANCE
+  };
 }
 
 function createDrawable(
@@ -1234,6 +1486,40 @@ function getViewerCanvasFirstDrawableBoundsX(root: FakeElement): number {
   }
 
   return value;
+}
+
+function getViewerCanvasVisibleDrawableCount(root: FakeElement): number {
+  const rawValue = getFakeElementByAttribute(
+    root,
+    "data-testid",
+    "viewer-clean-stage-canvas"
+  ).getAttribute("data-visible-drawable-count");
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Expected finite visible count, got ${rawValue ?? "null"}.`);
+  }
+
+  return value;
+}
+
+function getViewerVariantsSummary(root: FakeElement): string {
+  return getFakeElementByAttribute(
+    root,
+    "data-testid",
+    "viewer-variants-summary"
+  ).textContent;
+}
+
+async function clickFakeElementByAttribute(
+  root: FakeElement,
+  attributeName: string,
+  attributeValue: string
+): Promise<void> {
+  await act(async () => {
+    getFakeReactProps(
+      getFakeElementByAttribute(root, attributeName, attributeValue)
+    ).onClick?.();
+  });
 }
 
 type FakeReactProps = {

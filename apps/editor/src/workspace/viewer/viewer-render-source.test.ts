@@ -3,6 +3,7 @@ import {
   createInitialAuthoringRevision,
   createTextureAtlasSourceSignature,
   createTextureAtlasPreview,
+  createVariantVisibilityPredicate,
   registerAuthoringSessionBinaryBytes,
   sameTextureAtlasSourceSignature,
   selectTextureAtlasTargets,
@@ -57,6 +58,9 @@ const RIG_ROOT = RigControlIdSchema.parse("rig_viewer_atlas_root");
 const PARAM_NON_SOURCE = ParameterIdSchema.parse("param_viewer_atlas_non_source");
 const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_viewer_atlas_non_source");
 const MASK_BODY_TO_SLEEVE = MaskRelationIdSchema.parse("maskrel_viewer_atlas_body_to_sleeve");
+const GROUP_ATLAS_VARIANT = "vgrp_viewer_atlas_variant";
+const VAR_ATLAS_DEFAULT = "var_viewer_atlas_default";
+const VAR_ATLAS_SLEEVE = "var_viewer_atlas_sleeve";
 
 describe("viewer render source projection", () => {
   it("keeps Original mode on authoring texture refs and mesh UVs", async () => {
@@ -142,6 +146,31 @@ describe("viewer render source projection", () => {
     expect(result.projection.drawables.some((drawable) => drawable.drawableId === DRAW_POOL)).toBe(
       false
     );
+  });
+
+  it("applies Variant visibility before Atlas Runtime remaps the projection", async () => {
+    const session = await createAppliedAtlasRuntimeSession();
+    addAtlasVariantGroup(session);
+    const variantVisibilityPredicate = createVariantVisibilityPredicate({
+      variantGroups: session.graph.variantGroups ?? []
+    });
+
+    const original = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "original",
+      variantVisibilityPredicate
+    });
+    const atlasRuntime = createViewerCleanStageRenderSourceProjection(session, {
+      renderSourceMode: "atlasRuntime",
+      variantVisibilityPredicate
+    });
+
+    expect(original.effectiveMode).toBe("original");
+    expect(atlasRuntime.effectiveMode).toBe("atlasRuntime");
+    expect(requireDrawable(original.projection, DRAW_BODY).visible).toBe(true);
+    expect(requireDrawable(original.projection, DRAW_SLEEVE).visible).toBe(false);
+    expect(requireDrawable(atlasRuntime.projection, DRAW_BODY).visible).toBe(true);
+    expect(requireDrawable(atlasRuntime.projection, DRAW_SLEEVE).visible).toBe(false);
+    expect(requireDrawable(atlasRuntime.projection, DRAW_SLEEVE).textureId).not.toBe(TEX_SLEEVE);
   });
 
   it("keeps Canvas projection on original texture refs and mesh UVs after atlas commit", async () => {
@@ -482,6 +511,31 @@ async function createAppliedAtlasRuntimeSession(): Promise<AuthoringSession> {
   }
 
   return result.session;
+}
+
+function addAtlasVariantGroup(session: AuthoringSession): void {
+  session.graph.variantGroups = [
+    {
+      variantGroupId: GROUP_ATLAS_VARIANT as never,
+      displayName: "Sleeve Variant",
+      mode: "singleSelect",
+      variants: [
+        { variantId: VAR_ATLAS_DEFAULT as never, displayName: "Default" },
+        { variantId: VAR_ATLAS_SLEEVE as never, displayName: "Sleeve" }
+      ],
+      targetDrawableIds: [DRAW_SLEEVE],
+      memberships: [
+        {
+          drawableId: DRAW_SLEEVE,
+          variantIds: [VAR_ATLAS_SLEEVE as never]
+        }
+      ],
+      defaultActive: {
+        kind: "singleSelect",
+        variantId: VAR_ATLAS_DEFAULT as never
+      }
+    }
+  ];
 }
 
 function createCountingAtlasRuntimeHooks() {

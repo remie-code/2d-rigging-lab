@@ -1,6 +1,16 @@
+import type {
+  AuthoringSession,
+  VariantActiveSelectionEntry
+} from "@private-2d-rigging-lab/authoring-core";
 import type { ParameterId } from "@private-2d-rigging-lab/contracts";
-import { RotateCcw, Search, SlidersHorizontal } from "lucide-react";
-import { useCallback, useMemo, type ChangeEvent } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
+  Search,
+  SlidersHorizontal
+} from "lucide-react";
+import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 
 import type { EditorParameter } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
@@ -20,6 +30,17 @@ import {
   VIEWER_RENDER_SOURCE_LABELS,
   type ViewerRenderSourceMode
 } from "./viewer-render-source";
+import {
+  createViewerVariantSummaryItems,
+  hasViewerVariantActiveSelectionChanges,
+  resolveViewerVariantActiveSelection,
+  setViewerVariantSingleSelect,
+  toggleViewerVariantMultiToggle
+} from "./viewer-variant-selection";
+
+type RuntimeControlsVariantGroup = NonNullable<
+  AuthoringSession["graph"]["variantGroups"]
+>[number];
 
 export interface RuntimeControlsProps {
   readonly atlasRuntimeDisabledReason?: string;
@@ -27,11 +48,15 @@ export interface RuntimeControlsProps {
   readonly excludedParameterIds?: ReadonlySet<ParameterId>;
   readonly hasDynamicsSimulation?: boolean;
   readonly onRenderSourceModeChange: (mode: ViewerRenderSourceMode) => void;
+  readonly onResetVariants?: () => void;
   readonly onStateChange: (state: ViewerRuntimeControlsState) => void;
+  readonly onVariantActiveSelectionChange?: (entry: VariantActiveSelectionEntry) => void;
   readonly onResetSimulation?: () => void;
   readonly parameters: readonly EditorParameter[];
   readonly renderSourceMode: ViewerRenderSourceMode;
   readonly state: ViewerRuntimeControlsState;
+  readonly variantActiveSelections?: readonly VariantActiveSelectionEntry[];
+  readonly variantGroups?: readonly RuntimeControlsVariantGroup[];
 }
 
 export function RuntimeControls({
@@ -40,12 +65,17 @@ export function RuntimeControls({
   excludedParameterIds,
   hasDynamicsSimulation = false,
   onRenderSourceModeChange,
+  onResetVariants,
   onStateChange,
+  onVariantActiveSelectionChange,
   onResetSimulation,
   parameters,
   renderSourceMode,
-  state
+  state,
+  variantActiveSelections = [],
+  variantGroups = []
 }: RuntimeControlsProps) {
+  const [variantsCollapsed, setVariantsCollapsed] = useState(true);
   const filterOptions: RuntimeControlsParameterFilterOptions = useMemo(
     () =>
       excludedParameterIds === undefined
@@ -100,6 +130,17 @@ export function RuntimeControls({
         onChange={onRenderSourceModeChange}
         {...(atlasRuntimeDisabledReason === undefined ? {} : { atlasRuntimeDisabledReason })}
       />
+
+      {variantGroups.length === 0 ? null : (
+        <RuntimeVariantsSection
+          activeSelections={variantActiveSelections}
+          collapsed={variantsCollapsed}
+          onActiveSelectionChange={onVariantActiveSelectionChange}
+          onCollapsedChange={setVariantsCollapsed}
+          onReset={onResetVariants}
+          variantGroups={variantGroups}
+        />
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b border-neutral-800 px-3 py-2">
         <label className="relative block">
@@ -251,6 +292,228 @@ function RenderSourceModeControl({
           {atlasRuntimeDisabledReason}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function RuntimeVariantsSection({
+  activeSelections,
+  collapsed,
+  onActiveSelectionChange,
+  onCollapsedChange,
+  onReset,
+  variantGroups
+}: {
+  readonly activeSelections: readonly VariantActiveSelectionEntry[];
+  readonly collapsed: boolean;
+  readonly onActiveSelectionChange?: (entry: VariantActiveSelectionEntry) => void;
+  readonly onCollapsedChange: (collapsed: boolean) => void;
+  readonly onReset?: () => void;
+  readonly variantGroups: readonly RuntimeControlsVariantGroup[];
+}) {
+  const summaryItems = useMemo(
+    () => createViewerVariantSummaryItems(variantGroups, activeSelections),
+    [activeSelections, variantGroups]
+  );
+  const changed = useMemo(
+    () => hasViewerVariantActiveSelectionChanges(variantGroups, activeSelections),
+    [activeSelections, variantGroups]
+  );
+  const controlsDisabled = onActiveSelectionChange === undefined;
+
+  const applySingleSelect = useCallback(
+    (
+      group: RuntimeControlsVariantGroup,
+      variantId: RuntimeControlsVariantGroup["variants"][number]["variantId"]
+    ) => {
+      const nextSelections = setViewerVariantSingleSelect(
+        variantGroups,
+        activeSelections,
+        group,
+        variantId
+      );
+      const nextEntry = nextSelections.find(
+        (entry) => entry.variantGroupId === group.variantGroupId
+      );
+
+      if (nextEntry !== undefined) {
+        onActiveSelectionChange?.(nextEntry);
+      }
+    },
+    [activeSelections, onActiveSelectionChange, variantGroups]
+  );
+  const applyMultiToggle = useCallback(
+    (
+      group: RuntimeControlsVariantGroup,
+      variantId: RuntimeControlsVariantGroup["variants"][number]["variantId"]
+    ) => {
+      const nextSelections = toggleViewerVariantMultiToggle(
+        variantGroups,
+        activeSelections,
+        group,
+        variantId
+      );
+      const nextEntry = nextSelections.find(
+        (entry) => entry.variantGroupId === group.variantGroupId
+      );
+
+      if (nextEntry !== undefined) {
+        onActiveSelectionChange?.(nextEntry);
+      }
+    },
+    [activeSelections, onActiveSelectionChange, variantGroups]
+  );
+
+  return (
+    <section
+      className="border-b border-neutral-800 px-3 py-2"
+      data-testid="viewer-variants-section"
+    >
+      <button
+        aria-expanded={!collapsed}
+        className="flex w-full min-w-0 items-start justify-between gap-2 text-left"
+        data-testid="viewer-variants-toggle"
+        onClick={() => onCollapsedChange(!collapsed)}
+        type="button"
+      >
+        <span className="min-w-0">
+          <span className="block text-[11px] font-medium uppercase text-neutral-500">
+            Variants
+          </span>
+          <span
+            className="mt-0.5 block truncate text-xs text-neutral-300"
+            data-testid="viewer-variants-summary"
+          >
+            {summaryItems
+              .map((item) => `${item.groupName}: ${item.activeLabel}`)
+              .join("; ")}
+          </span>
+        </span>
+        <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded border border-neutral-800 bg-neutral-950 text-neutral-400">
+          {collapsed ? (
+            <ChevronRight aria-hidden="true" size={14} strokeWidth={1.8} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={14} strokeWidth={1.8} />
+          )}
+        </span>
+      </button>
+
+      {collapsed ? null : (
+        <div className="mt-2 grid gap-2" data-testid="viewer-variants-expanded-controls">
+          {variantGroups.map((group) => (
+            <RuntimeVariantGroupControl
+              activeSelections={activeSelections}
+              controlsDisabled={controlsDisabled}
+              group={group}
+              key={group.variantGroupId}
+              onMultiToggle={applyMultiToggle}
+              onSingleSelect={applySingleSelect}
+              variantGroups={variantGroups}
+            />
+          ))}
+
+          <button
+            className="inline-flex h-8 w-fit items-center gap-1.5 rounded border border-neutral-800 bg-neutral-950 px-2 text-[11px] font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100 disabled:cursor-not-allowed disabled:border-neutral-900 disabled:text-neutral-700"
+            data-testid="viewer-reset-variants"
+            disabled={!changed || onReset === undefined}
+            onClick={onReset}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={13} strokeWidth={1.8} />
+            <span>Reset variants</span>
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RuntimeVariantGroupControl({
+  activeSelections,
+  controlsDisabled,
+  group,
+  onMultiToggle,
+  onSingleSelect,
+  variantGroups
+}: {
+  readonly activeSelections: readonly VariantActiveSelectionEntry[];
+  readonly controlsDisabled: boolean;
+  readonly group: RuntimeControlsVariantGroup;
+  readonly onMultiToggle: (
+    group: RuntimeControlsVariantGroup,
+    variantId: RuntimeControlsVariantGroup["variants"][number]["variantId"]
+  ) => void;
+  readonly onSingleSelect: (
+    group: RuntimeControlsVariantGroup,
+    variantId: RuntimeControlsVariantGroup["variants"][number]["variantId"]
+  ) => void;
+  readonly variantGroups: readonly RuntimeControlsVariantGroup[];
+}) {
+  const activeSelection = resolveViewerVariantActiveSelection(
+    variantGroups,
+    activeSelections,
+    group
+  );
+  const activeVariantIds = new Set(
+    activeSelection.kind === "singleSelect"
+      ? [activeSelection.variantId]
+      : activeSelection.variantIds
+  );
+
+  return (
+    <div
+      className="rounded border border-neutral-800 bg-neutral-950/70 px-2 py-2"
+      data-testid="viewer-variant-group"
+      data-variant-group-id={group.variantGroupId}
+    >
+      <div className="mb-1.5 flex min-w-0 items-center justify-between gap-2">
+        <div className="truncate text-xs font-semibold text-neutral-100">
+          {group.displayName}
+        </div>
+        <div className="shrink-0 text-[10px] font-medium uppercase text-neutral-600">
+          {group.mode === "singleSelect" ? "Single" : "Multi"}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {group.variants.map((variant) => {
+          const active = activeVariantIds.has(variant.variantId);
+          const buttonLabel =
+            group.mode === "singleSelect"
+              ? `Select ${variant.displayName} in ${group.displayName}`
+              : `Toggle ${variant.displayName} in ${group.displayName}`;
+
+          return (
+            <button
+              aria-label={buttonLabel}
+              aria-pressed={active}
+              className={cn(
+                "min-h-7 min-w-0 rounded border px-2 text-[11px] font-medium transition",
+                active
+                  ? "border-teal-600 bg-teal-600 text-neutral-950"
+                  : "border-neutral-800 bg-[#151514] text-neutral-400 hover:border-teal-700 hover:text-teal-100",
+                controlsDisabled
+                  ? "cursor-not-allowed border-neutral-900 text-neutral-700 hover:border-neutral-900 hover:text-neutral-700"
+                  : ""
+              )}
+              data-testid={
+                group.mode === "singleSelect"
+                  ? "viewer-variant-single-option"
+                  : "viewer-variant-multi-toggle"
+              }
+              disabled={controlsDisabled}
+              key={variant.variantId}
+              onClick={() =>
+                group.mode === "singleSelect"
+                  ? onSingleSelect(group, variant.variantId)
+                  : onMultiToggle(group, variant.variantId)
+              }
+              type="button"
+            >
+              {variant.displayName}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

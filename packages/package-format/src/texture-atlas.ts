@@ -126,8 +126,16 @@ export const TextureAtlasPageSchema = z.object({
 });
 export type TextureAtlasPageDto = z.infer<typeof TextureAtlasPageSchema>;
 
+export const TextureAtlasPackingAlgorithmIdSchema = z.enum([
+  "single-page-shelf-v1",
+  "single-page-skyline-v1"
+]);
+export type TextureAtlasPackingAlgorithmIdDto = z.infer<
+  typeof TextureAtlasPackingAlgorithmIdSchema
+>;
+
 export const TextureAtlasLayoutSettingsSchema = z.object({
-  algorithmId: z.literal("single-page-shelf-v1"),
+  algorithmId: TextureAtlasPackingAlgorithmIdSchema,
   pageWidth: z.number().int().positive(),
   pageHeight: z.number().int().positive(),
   paddingPixels: z.number().int().nonnegative(),

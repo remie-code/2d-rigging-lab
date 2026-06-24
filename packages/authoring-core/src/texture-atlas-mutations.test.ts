@@ -157,6 +157,7 @@ describe("texture atlas core mutation", () => {
     }
 
     expect(first.layoutSummary).toEqual(second.layoutSummary);
+    expect(first.layoutSummary.settings.algorithmId).toBe("single-page-skyline-v1");
     expect(first.layoutSummary.pages[0]?.placements.map((placement) => ({
       drawableId: placement.drawableId,
       contentRectPixels: placement.contentRectPixels,
@@ -331,6 +332,8 @@ describe("texture atlas core mutation", () => {
       entry.path === "assets/textures/generated_atlas_page_0.raw-rgba"
     )).toBe(true);
     expect(session.graph.textureAtlas?.layoutSummary?.pages[0]?.placements).toHaveLength(2);
+    expect(session.graph.textureAtlas?.layoutSummary?.settings.algorithmId)
+      .toBe("single-page-skyline-v1");
     expect(session.graph.textureAtlas?.layoutSummary?.sourceSignature).toMatchObject({
       schemaVersion: "texture-atlas-source-signature-v1",
       inputVersion: "atlas-source-inputs-v1",

@@ -105,6 +105,9 @@
 | [wave96-plan.md](wave96-plan.md) | Wave 96 Viewer Atlas Runtime Performance Cache dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 | [wave97-plan.md](wave97-plan.md) | Wave 97 Viewer Dynamics Idle Playback Throttle dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
 | [wave98-plan.md](wave98-plan.md) | Wave 98 Viewer Dynamics Performance Instrumentation + Duplicate Runtime Evaluation Removal dependency and Orch-Sylph plan | Final complete / pass; final integration report and clean review recorded |
+| [wave99-plan.md](wave99-plan.md) | Wave 99 Variant / Expression Manager v0 dependency and Orch-Sylph plan | Final complete / pass; Variant Manager Canvas behavior verified |
+| [wave100-plan.md](wave100-plan.md) | Wave 100 Viewer Variant Switching v0 dependency and Orch-Sylph plan | Final complete / pass; Viewer Original / Atlas Runtime Variant switching verified |
+| [wave101-plan.md](wave101-plan.md) | Wave 101 Texture Atlas Skyline Packing + Blocking Issues UX dependency and Orch-Sylph plan | Planned / ready for orchestration |
 
 ## Current Decision
 

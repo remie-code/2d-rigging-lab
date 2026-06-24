@@ -33,7 +33,7 @@ import {
   createTextureAtlasTaskPreviewState,
   createTextureAtlasTaskProjection
 } from "./atlas-task-projection";
-import { AtlasPreview, TextureAtlasTaskScreen } from "./texture-atlas-task-screen";
+import { AtlasPreview, AtlasSidebar, TextureAtlasTaskScreen } from "./texture-atlas-task-screen";
 
 type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
@@ -179,6 +179,7 @@ describe("TextureAtlasTaskScreen", () => {
     expect(projection.summary.includedCount).toBe(2);
     expect(projection.summary.excludedCount).toBe(1);
     expect(projection.summary.warningCount).toBe(0);
+    expect(projection.summary.blockingIssueCount).toBe(0);
     expect(projection.includedRows.map((row) => row.drawableId)).toEqual([
       DRAW_BODY,
       DRAW_HIDDEN
@@ -220,6 +221,7 @@ describe("TextureAtlasTaskScreen", () => {
     });
 
     expect(previewState.preview.status).toBe("ready");
+    expect(previewState.preview.settings.algorithmId).toBe("single-page-skyline-v1");
     expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
     expect(readyProjection.previewStatus).toBe("ready");
     expect(readyProjection.canApply).toBe(true);
@@ -261,6 +263,8 @@ describe("TextureAtlasTaskScreen", () => {
 
     expect(staleSettingsProjection.previewStatus).toBe("stale");
     expect(staleSettingsProjection.canApply).toBe(false);
+    expect(staleSettingsProjection.blockingIssues.map((issue) => issue.code))
+      .toContain("atlas.apply.stalePreview");
     expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
     expect(staleSettingsProjection.previewPage?.image).toBe(readyImage);
     expect(staleSettingsProjection.warningRows.map((warning) => warning.code))
@@ -290,8 +294,76 @@ describe("TextureAtlasTaskScreen", () => {
 
     expect(staleTargetProjection.previewStatus).toBe("stale");
     expect(staleTargetProjection.canApply).toBe(false);
+    expect(staleTargetProjection.blockingIssues.map((issue) => issue.code))
+      .toContain("atlas.apply.stalePreview");
     expect(atlasScreenTestState.pageRgbaGenerationCalls).toBe(1);
     expect(staleTargetProjection.previewPage?.image).toBe(readyImage);
+  });
+
+  it("surfaces failed preview blockers above settings and in the preview failure card", () => {
+    const session = createAtlasFixtureSession();
+    const previewState = createTextureAtlasTaskPreviewState({
+      session,
+      editorHiddenPartIds: new Set([PART_HIDDEN]),
+      settings: {
+        pageSize: 3,
+        paddingPixels: 1,
+        edgeExtrusionEnabled: true
+      }
+    });
+    const failedProjection = createTextureAtlasTaskProjection({
+      session,
+      editorHiddenPartIds: new Set([PART_HIDDEN]),
+      settings: {
+        pageSize: 3,
+        paddingPixels: 1,
+        edgeExtrusionEnabled: true
+      },
+      previewState
+    });
+
+    expect(previewState.preview.status).toBe("failed");
+    expect(failedProjection.previewStatus).toBe("failed");
+    expect(failedProjection.canApply).toBe(false);
+    expect(failedProjection.summary.blockingIssueCount).toBe(1);
+    expect(failedProjection.blockingIssues[0]).toMatchObject({
+      code: "atlas.pack.cannotFit",
+      title: "Cannot fit in selected page size",
+      targetLabel: "Drawable Body",
+      contextLabel: "Page 3 x 3 / Padding 1px / Edge extrusion On",
+      sourceRef: "/model/drawables/draw_atlas_task_body"
+    });
+
+    const sidebarMarkup = renderToStaticMarkup(
+      createElement(AtlasSidebar, {
+        applyStatus: { status: "idle" },
+        onSettingsChange: vi.fn(),
+        projection: failedProjection
+      })
+    );
+    const targetSummaryIndex = sidebarMarkup.indexOf("Target Summary");
+    const blockingIndex = sidebarMarkup.indexOf("Blocking Issues");
+    const settingsIndex = sidebarMarkup.indexOf("Settings");
+    const includedIndex = sidebarMarkup.indexOf("Included", settingsIndex);
+    const warningsIndex = sidebarMarkup.indexOf("Warnings", settingsIndex);
+
+    expect(sidebarMarkup).toContain('data-testid="atlas-blocking-count">1');
+    expect(sidebarMarkup).toContain('data-testid="atlas-blocking-issue-row"');
+    expect(sidebarMarkup).toContain("Drawable Body cannot fit in 3 x 3.");
+    expect(targetSummaryIndex).toBeGreaterThanOrEqual(0);
+    expect(blockingIndex).toBeGreaterThan(targetSummaryIndex);
+    expect(blockingIndex).toBeLessThan(settingsIndex);
+    expect(blockingIndex).toBeLessThan(includedIndex);
+    expect(blockingIndex).toBeLessThan(warningsIndex);
+
+    const previewMarkup = renderToStaticMarkup(
+      createElement(AtlasPreview, { projection: failedProjection })
+    );
+
+    expect(previewMarkup).toContain('data-testid="atlas-preview-failure-card"');
+    expect(previewMarkup).toContain("See Blocking Issues");
+    expect(previewMarkup).toContain("Preview failed: Cannot fit in selected page size");
+    expect(countOccurrences(previewMarkup, 'data-testid="atlas-preview-state"')).toBe(1);
   });
 
   it("renders actual atlas image data behind placement overlays", () => {
@@ -374,6 +446,9 @@ describe("TextureAtlasTaskScreen", () => {
     expect(markup).toContain('data-testid="atlas-included-count">2');
     expect(markup).toContain('data-testid="atlas-excluded-count">1');
     expect(markup).toContain('data-testid="atlas-warning-count">0');
+    expect(markup).toContain('data-testid="atlas-blocking-count">0');
+    expect(markup).toContain("Blocking Issues");
+    expect(markup).toContain("No blocking issues");
     expect(markup).toContain('data-testid="atlas-page-size"');
     expect(markup).toContain('data-testid="atlas-padding"');
     expect(markup).toContain('data-testid="atlas-edge-extrusion"');
@@ -740,4 +815,8 @@ function findIconButton(label: string) {
   }
 
   return button;
+}
+
+function countOccurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
 }

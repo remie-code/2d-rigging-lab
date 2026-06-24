@@ -98,6 +98,7 @@ const applyTextureAtlasPreviewOperation = async (
   }
 
   const recreatedPreview = createTextureAtlasPreview(session, {
+    algorithmId: request.payload.settings.algorithmId,
     atlasTextureId: request.payload.expectedLayoutSummary.atlasTextureId,
     editorHiddenPartIds: request.payload.editorHiddenPartIds,
     pageWidth: request.payload.settings.pageWidth,

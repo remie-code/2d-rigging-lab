@@ -1,4 +1,7 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import type {
+  AuthoringSession,
+  VariantVisibilityPredicate
+} from "@private-2d-rigging-lab/authoring-core";
 import type { PartId } from "@private-2d-rigging-lab/contracts";
 
 import type { ParameterValueMap } from "../../features/editor-session/model/parameter-keyform-state";
@@ -22,6 +25,7 @@ export interface ViewerCleanStageProjectionOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
   readonly parameterValues?: ParameterValueMap;
   readonly renderSourceMode?: ViewerRenderSourceMode;
+  readonly variantVisibilityPredicate?: VariantVisibilityPredicate;
 }
 
 export interface ViewerCleanStageRenderInput {
@@ -58,7 +62,10 @@ export function createViewerCleanStageRenderSourceProjection(
     parameterValues: options.parameterValues ?? {},
     ...(options.editorHiddenPartIds === undefined
       ? {}
-      : { editorHiddenPartIds: options.editorHiddenPartIds })
+      : { editorHiddenPartIds: options.editorHiddenPartIds }),
+    ...(options.variantVisibilityPredicate === undefined
+      ? {}
+      : { variantVisibilityPredicate: options.variantVisibilityPredicate })
   });
 
   return createViewerRenderSourceProjection({

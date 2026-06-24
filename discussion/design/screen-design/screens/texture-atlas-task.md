@@ -100,17 +100,20 @@ Generate Previewまではproject stateを変更しない。Apply Atlasで初め�
 
 ## 5. 画面配置
 
-Texture Atlas Taskは専用画面として、中央に大きなAtlas Preview、右側に対象summary / settings / warningsを置く。
+Texture Atlas Taskは専用画面として、中央に大きなAtlas Preview、右側に対象summary / blocking issues / settings / listsを置く。
 
 ```text
 +----------------------------------------------------------------------------------+
 | <- Back   Texture Atlas                                      Generate   Apply     |
 +-------------------------------------------------------------+--------------------+
-| Atlas Preview                                               | Target Summary     |
+| Atlas Preview                         PREVIEW FAILED: ...   | Target Summary     |
 |                                                             | - Included count   |
 | [atlas page with packed rects]                              | - Excluded count   |
-|                                                             | - Warnings count   |
+|                                                             | - Blocking count   |
 | hover/select rect -> Drawable name                          |                    |
+|                                                             | Blocking Issues    |
+| [preview failure card when failed]                          | - Cannot fit ...   |
+|                                                             |                    |
 | zoom / pan                                                  | Settings           |
 | page size / usage / padding guide                           | - Size             |
 |                                                             | - Padding          |
@@ -130,6 +133,7 @@ Texture Atlas Taskは専用画面として、中央に大きなAtlas Preview、�
 | Header | Back、画面名、Generate Preview、Apply Atlasを置く。 |
 | Atlas Preview | atlas page、packed rect、hover/select feedback、usageを大きく表示する。 |
 | Target Summary | Included / Excluded / Warningsの数と意味を表示する。 |
+| Blocking Issues | Generate Preview失敗やApply不可の直接原因を、右ペイン上部で表示する。 |
 | Settings | page size、padding、edge extrusionなどv0で必要な設定だけを置く。 |
 | Target Lists | 対象Drawable、除外理由、警告理由を確認する。 |
 
@@ -140,10 +144,38 @@ Texture Atlas Taskは専用画面として、中央に大きなAtlas Preview、�
 - Included Drawable count
 - Excluded Drawable count
 - Warning count
+- Blocking issue count
 - Atlas page size
 - Estimated usage
 - Padding
 - Edge extrusion on/off
+
+### Blocking Issues
+
+Blocking Issuesには、Generate Preview失敗またはApply不可の直接原因を表示する。
+
+表示位置:
+
+- 右ペインのTarget Summary直下。
+- Settings、Included List、Excluded List、Warningsより上。
+
+表示するもの:
+
+- 失敗理由の短い見出し。
+- 失敗対象Drawableの名前。
+- 必要なら対象page sizeや現在設定の短い説明。
+- 詳細確認に必要な最小限のsource ref。
+
+例:
+
+```text
+Blocking Issues
+
+Cannot fit in selected page size
+Drawable draw_r0_... cannot fit in 4096 x 4096.
+```
+
+Blocking Issuesは、右ペイン下部のWarningsより優先される。Generate Previewを押した直後にユーザーが原因を見つけられることを重視する。
 
 ### Included List
 
@@ -169,7 +201,7 @@ Excluded Listにはv0でatlas対象にしないものを表示する。
 
 ### Warnings
 
-WarningsにはApply前にユーザーが確認すべき問題だけを表示する。
+WarningsにはApply前にユーザーが確認すべき補助的な問題を表示する。
 
 例:
 
@@ -177,6 +209,8 @@ WarningsにはApply前にユーザーが確認すべき問題だけを表示す�
 - `Invalid texture bounds`
 - `Cannot fit in selected page size`
 - `Atlas preview is stale`
+
+Generate Preview失敗やApply不可の直接原因は、Warnings下部だけに置かず、Blocking Issuesとして右ペイン上部にも表示する。
 
 警告はDiagnostics一覧へ無理に集約しなくてよい。Texture Atlas Task内で発生し、Task内で解決する問題はこの画面に表示する。
 
@@ -191,6 +225,8 @@ v0で扱う設定は小さく保つ。
 | Edge extrusion | 初期ON。texture bleedingを避けるため。 |
 | Generate Preview | 現在settingsでatlas layoutを再生成する。 |
 | Apply Atlas | preview済みlayoutをruntime atlas artifactとしてproject stateへcommitする。 |
+
+Packing algorithmの詳細は画面仕様ではなく、[../../texture-atlas/](../../texture-atlas/_map.md) に分離する。次の改善対象は、現行 `single-page-shelf-v1` の隙間の多さを解消する `single-page-skyline-v1` である。
 
 v0では扱わない:
 
@@ -212,6 +248,7 @@ Atlas Previewに表示するもの:
 - hover/select中Drawableの名前
 - atlas usage
 - overflow / cannot fit warning
+- Preview失敗時の失敗原因要約カード
 - zoom / pan
 
 表示しないもの:
@@ -224,6 +261,31 @@ Atlas Previewに表示するもの:
 - mesh wire / deformer handles
 
 Previewは、完成品のtexture asset確認に必要な情報へ絞る。MeshやDeformerの編集情報はここでは扱わない。
+
+### Preview Failure Display
+
+Generate Previewが失敗した場合、Atlas Preview中央に失敗原因の要約カードを表示する。
+
+表示するもの:
+
+- 失敗理由の短いtitle。例: `Cannot fit in selected page size`。
+- 対象Drawable名または件数。
+- 次に見るべき場所。例: `See Blocking Issues`。
+
+表示しないもの:
+
+- raw payload全文。
+- operation ID。
+- stack trace。
+- 長いsource refの全文。
+
+既存のTitle rowにある `PREVIEW FAILED` 表示は維持する。ただし、高さを増やす新しいheader rowは作らない。必要なら同じtitle row内に短い失敗要約を追加する。
+
+重要:
+
+- Generate Preview失敗時に画面全体の縦位置がずれないこと。
+- Header / title rowの高さを失敗時だけ増やさないこと。
+- 長い詳細はPreview中央カードと右ペイン上部のBlocking Issuesへ逃がすこと。
 
 ## 9. Apply Behavior
 
@@ -295,3 +357,4 @@ Apply済みartifactについても、layout summaryに保持したsource signatu
 - single atlasで収まらない場合、v0ではwarningとして止める。multi-pageは将来scopeで再設計する。
 - Texture Atlas TaskからViewer / Runtime Viewへ進む導線を、Apply後のprimary actionにするかsecondary actionにするか。
 - Workspace Directory Export / AI-native structured workspace saveをいつ、どのartifact単位で設計するか。
+- `single-page-skyline-v1` 導入後、usage表示をcontent面積基準のままにするか、packing効率を示す補助metricを追加するか。

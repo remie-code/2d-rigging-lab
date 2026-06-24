@@ -4,6 +4,8 @@ import {
   getDrawableById,
   registerAuthoringSessionBinaryBytes,
   BinaryAssetReferenceSchema,
+  TEXTURE_ATLAS_SHELF_ALGORITHM_ID,
+  TEXTURE_ATLAS_SKYLINE_ALGORITHM_ID,
   TextureAtlasLayoutSummarySchema,
   type AuthoringSession,
   type TextureAtlasLayoutSettingsDto,
@@ -103,6 +105,9 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(layoutSummary).toMatchObject({
       atlasTextureId: TEX_ATLAS,
       generatedByOperationId: OP_APPLY,
+      settings: {
+        algorithmId: TEXTURE_ATLAS_SKYLINE_ALGORITHM_ID
+      },
       sourceSignature: {
         schemaVersion: "texture-atlas-source-signature-v1",
         inputVersion: "atlas-source-inputs-v1",
@@ -243,6 +248,34 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
     expect(getDrawableById(session.graph, DRAW_HIDDEN)?.textureId).toBe(TEX_HIDDEN);
+  });
+
+  it("rejects payloads whose settings algorithm does not match the expected layout", async () => {
+    const session = createAtlasFixtureSession();
+    const preview = createReadyPreview(session);
+    const expectedLayoutSummary = TextureAtlasLayoutSummarySchema.parse({
+      ...preview.layoutSummary,
+      settings: {
+        ...preview.layoutSummary.settings,
+        algorithmId: TEXTURE_ATLAS_SHELF_ALGORITHM_ID
+      }
+    });
+
+    const outcome = await createOperationCore().commitOperationAsync(
+      session,
+      createApplyRequest(session, preview, {
+        expectedLayoutSummary
+      })
+    );
+
+    expect(outcome.result.status).toBe("rejected");
+    expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
+      "operation.applyTextureAtlasPreview.settingsMismatch"
+    );
+    expect(outcome.operationLogLength).toBe(0);
+    expect(session.packageRevision).toBe(0);
+    expect(session.authoringRevision).toBe(0);
+    expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
   });
 
   it("rejects payloads whose current settings recreate a failed preview", async () => {
