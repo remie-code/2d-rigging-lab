@@ -1,3 +1,4 @@
+import { createVariantVisibilityPredicate } from "@private-2d-rigging-lab/authoring-core";
 import {
   CircleOff,
   Focus,
@@ -108,7 +109,8 @@ export function CanvasPreviewPanel() {
     rigDraft,
     selectDrawable,
     selection,
-    session
+    session,
+    variantPreviewActiveSelections
   } = useEditorSession();
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
@@ -143,6 +145,14 @@ export function CanvasPreviewPanel() {
     }),
     [deformerOverlayVisible, meshOverlayVisible, overlays]
   );
+  const variantVisibilityPredicate = useMemo(
+    () =>
+      createVariantVisibilityPredicate({
+        variantGroups: session.graph.variantGroups ?? [],
+        activeSelections: variantPreviewActiveSelections
+      }),
+    [session.graph.variantGroups, variantPreviewActiveSelections]
+  );
   const createProjection = useCallback(
     (preview: CanvasPreviewProjectionPreview = {}) => {
       const effectiveParameterValues =
@@ -157,6 +167,7 @@ export function CanvasPreviewPanel() {
         controlPointPreview: preview.controlPointPreview ?? null,
         rotationPreview: preview.rotationPreview ?? null,
         parameterValues: effectiveParameterValues,
+        variantVisibilityPredicate,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
           : {})
@@ -170,7 +181,8 @@ export function CanvasPreviewPanel() {
       parameterValues,
       rigDraft,
       selection,
-      session
+      session,
+      variantVisibilityPredicate
     ]
   );
   const projection = useMemo(() => createProjection(), [createProjection]);

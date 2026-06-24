@@ -52,6 +52,10 @@ export const buildPackageDocumentModelFiles = (
     drawOrder: {
       ...cloneDto(baseModelFiles.drawOrder),
       entries: cloneDto(session.graph.drawOrder)
+    },
+    variants: {
+      schemaVersion: "variants-file-v1",
+      variantGroups: cloneDto(session.graph.variantGroups ?? [])
     }
   };
 

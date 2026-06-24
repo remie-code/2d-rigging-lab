@@ -42,7 +42,17 @@ export const operationTypes = [
   "setDrawOrder",
   "setRuntimeVisibility",
   "setRightsMetadata",
-  "applyTextureAtlasPreview"
+  "applyTextureAtlasPreview",
+  "createVariantGroup",
+  "updateVariantGroup",
+  "deleteVariantGroup",
+  "createVariant",
+  "updateVariant",
+  "deleteVariant",
+  "addVariantTargetDrawable",
+  "removeVariantTargetDrawable",
+  "setVariantMembership",
+  "setVariantDefaultActiveSelection"
 ] as const;
 
 export const OperationTypeSchema = z.enum(operationTypes);

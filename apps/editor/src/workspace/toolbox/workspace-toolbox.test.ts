@@ -116,6 +116,16 @@ describe("WorkspaceToolbox diagnostics badge", () => {
     expect(toolboxTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("runtimeExport");
     expect(toolboxTestState.editorSession.openPsdImport).not.toHaveBeenCalled();
   });
+
+  it("opens the Variants task from the Toolbox", () => {
+    renderToStaticMarkup(createElement(WorkspaceToolbox));
+
+    findIconButton("Variants").onClick?.({} as never);
+
+    expect(toolboxTestState.uiStore.setActiveEntry).toHaveBeenCalledTimes(1);
+    expect(toolboxTestState.uiStore.setActiveEntry).toHaveBeenCalledWith("variants");
+    expect(toolboxTestState.editorSession.openPsdImport).not.toHaveBeenCalled();
+  });
 });
 
 function findIconButton(label: string) {

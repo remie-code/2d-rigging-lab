@@ -50,6 +50,18 @@ import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamic
 import { updateRigControlOperationHandler } from "./operations/update-rig-control.js";
 import { editKeyformKeyOperationHandler } from "./operations/edit-keyform-key.js";
 import { applyTextureAtlasPreviewOperationHandler } from "./operations/apply-texture-atlas-preview.js";
+import {
+  addVariantTargetDrawableOperationHandler,
+  createVariantGroupOperationHandler,
+  createVariantOperationHandlerEntry,
+  deleteVariantGroupOperationHandler,
+  deleteVariantOperationHandler,
+  removeVariantTargetDrawableOperationHandler,
+  setVariantDefaultActiveSelectionOperationHandler,
+  setVariantMembershipOperationHandler,
+  updateVariantGroupOperationHandler,
+  updateVariantOperationHandler
+} from "./operations/variants.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -132,7 +144,20 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
   [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler],
-  [applyTextureAtlasPreviewOperationHandler.operationType, applyTextureAtlasPreviewOperationHandler]
+  [applyTextureAtlasPreviewOperationHandler.operationType, applyTextureAtlasPreviewOperationHandler],
+  [createVariantGroupOperationHandler.operationType, createVariantGroupOperationHandler],
+  [updateVariantGroupOperationHandler.operationType, updateVariantGroupOperationHandler],
+  [deleteVariantGroupOperationHandler.operationType, deleteVariantGroupOperationHandler],
+  [createVariantOperationHandlerEntry.operationType, createVariantOperationHandlerEntry],
+  [updateVariantOperationHandler.operationType, updateVariantOperationHandler],
+  [deleteVariantOperationHandler.operationType, deleteVariantOperationHandler],
+  [addVariantTargetDrawableOperationHandler.operationType, addVariantTargetDrawableOperationHandler],
+  [removeVariantTargetDrawableOperationHandler.operationType, removeVariantTargetDrawableOperationHandler],
+  [setVariantMembershipOperationHandler.operationType, setVariantMembershipOperationHandler],
+  [
+    setVariantDefaultActiveSelectionOperationHandler.operationType,
+    setVariantDefaultActiveSelectionOperationHandler
+  ]
 ]);
 
 export const getOperationHandler = (operationType: OperationType): OperationHandler | undefined =>

@@ -1,7 +1,7 @@
 # Viewer / Runtime View 画面仕様
 
 > 状態: Accepted v0 direction / Draft screen spec。
-> 最終更新: 2026-06-17。
+> 最終更新: 2026-06-24。
 
 ## 1. 役割
 
@@ -49,8 +49,11 @@ Viewer / Runtime View v0では、次を採用する。
 - Clean Stageを主領域にする。
 - Runtime Controlsを主要操作面にする。
 - Runtime Controls上部にrender source mode controlを置き、`Original` / `Atlas Runtime` を切り替えられるようにする。
+- Runtime Controls内にVariant切り替えsectionを置き、render source mode controlの下、parameter searchの上に配置する。
+- Variant切り替えsectionは折りたたみ可能にし、折りたたみ時も現在のactive Variant summaryだけは見えるようにする。
 - parameter一覧の絞り込みは名前検索だけにする。
 - parameter操作はsession-only overrideとして扱う。
+- Variant切り替えはsession-only preview active selectionとして扱い、Projectのdefault active selectionやmembership定義を書き換えない。
 - `Atlas Runtime` はcommitted texture atlas artifactを使うViewer-only modeであり、authoring stateを変更しない。
 - atlas artifactがmissingまたはstaleの場合は `Atlas Runtime` をdisabledにし、選択中なら `Original` へfallbackする。
 - authoring overlayは表示しない。
@@ -151,6 +154,7 @@ Runtime Controlsは、Viewer内での主要操作面である。
 表示するもの:
 
 - render source mode control: `Original` / `Atlas Runtime`。
+- Variant切り替えsection。Variant Groupが存在する場合だけ表示する。
 - parameter name search。
 - parameter slider。
 - numeric value input。
@@ -162,13 +166,20 @@ Runtime Controlsでは、parameter値を一時的に動かして完成品の見�
 
 これらの操作はproject fileを変更しない。keyformの追加、更新、削除も行わない。
 
-render source mode controlはRuntime Controls最上部に置く。parameter searchはその直下に常設する。
+render source mode controlはRuntime Controls最上部に置く。Variant Groupが存在する場合は、その直下にVariant切り替えsectionを置く。parameter searchはVariant切り替えsectionの下に常設する。
 
 ```text
 Runtime Controls
   Render Source
   [ Original ] [ Atlas Runtime ]
   Atlas Runtime unavailable reason (only when disabled)
+
+  Variants                         [v]
+  Expression: Default
+  Outfit: Hoodie
+  Accessory: Glasses On / Cat ears Off
+
+  [ Reset variants ]
 
   [ Search parameters...        ]
   [ Reset changed ] [ Reset all ]
@@ -182,6 +193,46 @@ Runtime Controls
 ```
 
 parameter group / category filterはv0では置かない。Editor上でユーザーがparameter groupを意識する明確な操作導線がないため、名前検索だけを正式な絞り込み手段にする。
+
+### Variants
+
+Viewer / Runtime Viewでは、完成品確認としてVariant Groupごとのactive Variantを切り替えられるようにする。
+
+このsectionは、Variant定義、membership、Group mode、default active selectionを編集する場所ではない。それらはVariant / Expression Managerの責務である。Viewerでは、あくまで「この差分を選んだ時に完成品としてどう見えるか」を確認する。
+
+初期状態:
+
+- ProjectにVariant Groupが存在しない場合、このsectionは表示しない。
+- ProjectにVariant Groupが存在する場合、Viewer初期表示はGroupごとのdefault active selectionを使う。
+- default active selectionが欠けているGroupは、Variant / Expression Manager側の補正規則に従ってDefaultまたは先頭Variantへ解決された状態を使う。
+
+操作:
+
+- `single select` Groupは、segment control、compact select、または同等の「1つだけ選ぶ」UIで切り替える。
+- `multi toggle` Groupは、checkbox / toggle群でON/OFFを切り替える。
+- GroupやVariant数が多い場合は、常時すべてを広げず、Groupごとのcompact rowまたはpopoverへ逃がしてよい。
+- `Reset variants` は、Viewer内のpreview active selectionをProjectのdefault active selectionへ戻す。
+
+折りたたみ:
+
+- Variants sectionは折りたたみ可能にする。
+- 折りたたみ時も、現在のactive Variant summaryを1行または短い複数行で表示する。
+- 折りたたみ時にVariantの詳細操作UIは隠す。
+- parameter slidersを確認している時間の方が長いため、Variants sectionがRuntime Controlsの縦幅を占有し続けないことを重視する。
+- 折りたたみ状態はsession-local UI stateでよい。Project stateには保存しない。
+
+表示への反映:
+
+- Variant切り替えはClean Stageへ即時反映する。
+- `Original` と `Atlas Runtime` の両方で同じactive Variant selectionを使う。
+- `Atlas Runtime` がdisabledまたはstaleで `Original` にfallbackしても、active Variant selectionは維持する。
+- Variant falseのDrawableは、parameter / keyform / opacity / dynamicsが表示を要求しても描画されない。
+- Variant trueのDrawableは、既存のParts visibility、Drawable visibility、keyform opacity、clipping、mesh / deformer評価に従う。
+
+保存:
+
+- ViewerでのVariant切り替えはsession-only preview active selectionであり、Workspace SaveやPortable JSONへProject defaultとして保存しない。
+- Projectのdefault active selectionを変更したい場合はVariant / Expression Managerで行う。
 
 ### Render Source Mode
 
@@ -208,6 +259,8 @@ Parameter Barとの違い:
 |---|---|
 | Parameter Bar | Authoring Workspaceでactive parameterを編集し、keyform操作を行う。 |
 | Viewer Runtime Controls | Viewer内で複数parameterを動かし、完成品としての見え方を確認する。 |
+| Variant / Expression Manager | Variant定義、membership、default active selectionを編集する。 |
+| Viewer Variants section | Viewer内でsession-onlyにVariantを切り替え、完成品として確認する。 |
 
 ## 8. Runtime State 表示
 
@@ -307,6 +360,11 @@ Viewer / Runtime View v0は、次を満たせばよい。
 - Clean Stageに現在のcommitted modelが表示される。
 - Authoring overlayが表示されない。
 - Runtime Controlsでparameterを動かせる。
+- Runtime ControlsでVariant Groupごとのactive Variantを切り替えられる。
+- Variant Groupがない場合、Variant sectionは表示されない。
+- Viewer初期表示ではProjectのdefault active selectionが反映される。
+- ViewerのVariant切り替えはsession-onlyであり、Project default active selectionを書き換えない。
+- Variants sectionは折りたたみ可能であり、折りたたみ時もactive Variant summaryが見える。
 - parameter名検索がrender source mode controlの下に常設される。
 - parameter group / category filterは表示されない。
 - parameter overrideはsession-onlyであり、project authoring stateを書き換えない。
@@ -314,8 +372,9 @@ Viewer / Runtime View v0は、次を満たせばよい。
 - Runtime Controls最上部で `Original` / `Atlas Runtime` を切り替えられる。
 - `Atlas Runtime` はcommitted atlas artifactを使い、authoring stateを変更しない。
 - atlas artifactがmissingまたはstaleの場合は `Atlas Runtime` がdisabledになり、`Original` へfallbackする。
-- parameter名検索はrender source mode controlの下に置く。
+- parameter名検索はrender source mode controlとVariant sectionの下に置く。
 - clipping、opacity、mesh、deformer、keyform評価がViewer表示にも反映される。
+- Variant predicateがViewer表示にも反映され、すべてのVariant対象Drawableが同時表示される状態にならない。
 - runtime statusは常設されない。
 - 描画不能時だけClean Stage内にempty / error stateを表示できる。
 - 初期backgroundはneutral solid grayである。
@@ -326,7 +385,10 @@ Viewer / Runtime View v0は、次を満たせばよい。
 
 - parameter group / category filterはv0に含めない。
 - render source mode controlはRuntime Controls最上部に置く。
-- parameter searchはrender source mode controlの直下に置く。
+- Variant Groupが存在する場合、Variant切り替えsectionはrender source mode controlの下、parameter searchの上に置く。
+- Variants sectionは折りたたみ可能にし、折りたたみ時もactive Variant summaryを表示する。
+- ViewerでのVariant切り替えはsession-only preview active selectionであり、Project default active selectionは変更しない。
+- parameter searchはrender source mode controlまたはVariant切り替えsectionの下に置く。
 - Viewer supports `Original` / `Atlas Runtime`; `Atlas Runtime` uses committed atlas artifact and is disabled when missing/stale.
 - runtime statusは常設しない。
 - 初期backgroundはneutral solid grayにする。

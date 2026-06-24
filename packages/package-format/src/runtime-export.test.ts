@@ -5,6 +5,7 @@ import {
   RUNTIME_EXPORT_MANIFEST_PATH,
   RUNTIME_EXPORT_MODEL_PATH,
   RUNTIME_EXPORT_RAW_RGBA_MEDIA_TYPE,
+  RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
   RuntimeExportAtlasSchema,
   RuntimeExportManifestSchema,
   RuntimeExportModelSchema,
@@ -93,6 +94,131 @@ describe("Runtime Export v0 package-format contract", () => {
         hex: DIGEST_HEX
       }
     }).success).toBe(false);
+  });
+
+  it("keeps runtime variants optional while accepting Variant metadata", () => {
+    const artifacts = createMinimalRuntimeExportArtifacts();
+
+    expect(RuntimeExportModelSchema.parse(artifacts.model).variants).toBeUndefined();
+
+    const parsed = parseRuntimeExportModel({
+      ...artifacts.model,
+      variants: createRuntimeExportVariants()
+    });
+
+    expect(parsed).toMatchObject({
+      success: true,
+      data: {
+        variants: {
+          schemaVersion: RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
+          defaultActiveSelections: [
+            {
+              variantGroupId: "vgrp_expression",
+              activeSelection: {
+                kind: "singleSelect",
+                variantId: "var_expression_default"
+              }
+            }
+          ]
+        }
+      }
+    });
+  });
+
+  it("rejects inconsistent Runtime Export Variant metadata", () => {
+    const { defaultActiveSelections: _missingSelections, ...missingDefaultActiveSelections } =
+      createRuntimeExportVariants();
+    const missingGroupSelection = {
+      ...createRuntimeExportVariants(),
+      defaultActiveSelections: [
+        ...createRuntimeExportVariants().defaultActiveSelections,
+        {
+          variantGroupId: "vgrp_missing",
+          activeSelection: {
+            kind: "singleSelect",
+            variantId: "var_expression_default"
+          }
+        }
+      ]
+    };
+    const groupDefaultSelectionMismatch = {
+      ...createRuntimeExportVariants(),
+      defaultActiveSelections: [
+        {
+          variantGroupId: "vgrp_expression",
+          activeSelection: {
+            kind: "singleSelect",
+            variantId: "var_expression_smile"
+          }
+        }
+      ]
+    };
+    const wrongSelectionKind = {
+      ...createRuntimeExportVariants(),
+      defaultActiveSelections: [
+        {
+          variantGroupId: "vgrp_expression",
+          activeSelection: {
+            kind: "multiToggle",
+            variantIds: ["var_expression_default"]
+          }
+        }
+      ]
+    };
+    const missingVariantSelection = {
+      ...createRuntimeExportVariants(),
+      defaultActiveSelections: [
+        {
+          variantGroupId: "vgrp_expression",
+          activeSelection: {
+            kind: "singleSelect",
+            variantId: "var_expression_missing"
+          }
+        }
+      ]
+    };
+
+    for (const testCase of [
+      {
+        label: "missing defaultActiveSelections",
+        variants: missingDefaultActiveSelections,
+        issuePath: "variants/defaultActiveSelections"
+      },
+      {
+        label: "selection references missing group",
+        variants: missingGroupSelection,
+        issuePath: "variants/defaultActiveSelections/1/variantGroupId"
+      },
+      {
+        label: "group default and explicit selection mismatch",
+        variants: groupDefaultSelectionMismatch,
+        issuePath: "variants/variantGroups/0/defaultActive"
+      },
+      {
+        label: "explicit selection kind does not match group mode",
+        variants: wrongSelectionKind,
+        issuePath: "variants/defaultActiveSelections/0/activeSelection/kind"
+      },
+      {
+        label: "explicit selection references missing Variant",
+        variants: missingVariantSelection,
+        issuePath: "variants/defaultActiveSelections/0/activeSelection/variantId"
+      }
+    ]) {
+      const parsed = parseRuntimeExportModel({
+        ...createMinimalRuntimeExportArtifacts().model,
+        variants: testCase.variants
+      });
+
+      expect(parsed.success, testCase.label).toBe(false);
+      if (parsed.success) {
+        continue;
+      }
+      expect(
+        parsed.issues.map((issue) => issue.path.join("/")),
+        testCase.label
+      ).toContain(testCase.issuePath);
+    }
   });
 
   it("validates v0 single-page artifacts while atlas schema allows future pages arrays", () => {
@@ -439,6 +565,41 @@ const createTexturePage = (pageIndex: number) => ({
     hex: DIGEST_HEX
   },
   binaryAssetId: `bin_atlas_page_${pageIndex}`
+});
+
+const createRuntimeExportVariants = () => ({
+  schemaVersion: RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
+  variantGroups: [
+    {
+      variantGroupId: "vgrp_expression",
+      displayName: "Expression",
+      mode: "singleSelect",
+      variants: [
+        { variantId: "var_expression_default", displayName: "Default" },
+        { variantId: "var_expression_smile", displayName: "Smile" }
+      ],
+      targetDrawableIds: ["draw_body"],
+      memberships: [
+        {
+          drawableId: "draw_body",
+          variantIds: ["var_expression_default"]
+        }
+      ],
+      defaultActive: {
+        kind: "singleSelect",
+        variantId: "var_expression_default"
+      }
+    }
+  ],
+  defaultActiveSelections: [
+    {
+      variantGroupId: "vgrp_expression",
+      activeSelection: {
+        kind: "singleSelect",
+        variantId: "var_expression_default"
+      }
+    }
+  ]
 });
 
 const toTexturePageReference = (page: ReturnType<typeof createTexturePage>) => ({

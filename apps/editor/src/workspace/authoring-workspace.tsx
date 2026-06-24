@@ -11,6 +11,7 @@ import { ParameterBar } from "./panels/parameter-bar";
 import { StructureTreePanel } from "./panels/structure-tree-panel";
 import { ParameterManagerScreen } from "./parameter-manager/parameter-manager-screen";
 import { RuntimeExportTaskScreen } from "./runtime-export/runtime-export-task-screen";
+import { VariantManagerScreen } from "./variants/variant-manager-screen";
 import { WorkspaceToolbox } from "./toolbox/workspace-toolbox";
 import { ViewerRuntimeScreen } from "./viewer/viewer-runtime-screen";
 import { useEditorUiStore, type WorkspaceEntryId } from "../state/editor-ui-store";
@@ -38,6 +39,7 @@ export function AuthoringWorkspaceContent({
   const showViewer = activeEntry === "viewer";
   const showAtlas = activeEntry === "atlas";
   const showRuntimeExport = activeEntry === "runtimeExport";
+  const showVariants = activeEntry === "variants";
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#10100f] text-neutral-100">
@@ -45,7 +47,7 @@ export function AuthoringWorkspaceContent({
 
       {!hasOpenWorkspace ? (
         <WorkspaceGateMessage message={workspaceStorage.message} />
-      ) : showParameterManager || showDiagnostics || showViewer || showAtlas || showRuntimeExport ? (
+      ) : showParameterManager || showDiagnostics || showViewer || showAtlas || showRuntimeExport || showVariants ? (
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {showViewer ? (
             <ViewerRuntimeScreen />
@@ -53,6 +55,8 @@ export function AuthoringWorkspaceContent({
             <TextureAtlasTaskScreen />
           ) : showRuntimeExport ? (
             <RuntimeExportTaskScreen />
+          ) : showVariants ? (
+            <VariantManagerScreen />
           ) : showDiagnostics ? (
             <DiagnosticsScreen />
           ) : showParameterManager ? (
@@ -92,7 +96,7 @@ export function AuthoringWorkspaceContent({
         </>
       )}
 
-      {!hasOpenWorkspace || showViewer || showDiagnostics || showAtlas || showRuntimeExport
+      {!hasOpenWorkspace || showViewer || showDiagnostics || showAtlas || showRuntimeExport || showVariants
         ? null
         : <ParameterBar />}
       {hasOpenWorkspace ? <PsdImportModal /> : null}

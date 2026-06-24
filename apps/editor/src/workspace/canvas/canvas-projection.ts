@@ -1,6 +1,7 @@
 import {
   getPartOrderedChildren,
-  type AuthoringSession
+  type AuthoringSession,
+  type VariantVisibilityPredicate
 } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
@@ -148,6 +149,7 @@ export interface CanvasProjectionOptions {
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
   readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
   readonly parameterValues?: ParameterValueMap;
+  readonly variantVisibilityPredicate?: VariantVisibilityPredicate;
 }
 
 const DEFAULT_VIEW: CanvasViewState = {
@@ -193,6 +195,9 @@ export function createCanvasRenderProjection(
     controlPointPreview: options.controlPointPreview ?? null,
     rotationPreview: options.rotationPreview ?? null,
     parameterValues: options.parameterValues ?? {},
+    ...(options.variantVisibilityPredicate === undefined
+      ? {}
+      : { variantVisibilityPredicate: options.variantVisibilityPredicate }),
     selection,
     ...(options.editorHiddenPartIds === undefined
       ? {}

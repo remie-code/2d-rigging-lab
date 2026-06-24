@@ -140,7 +140,21 @@ export type AuthoringMutationErrorCode =
   | "invalid_warp_lattice_rest_control_points"
   | "invalid_warp_lattice_interpolation"
   | "invalid_warp_deformer_transform_grid"
-  | "invalid_warp_deformer_bezier_surface";
+  | "invalid_warp_deformer_bezier_surface"
+  | "duplicate_variant_group"
+  | "missing_variant_group"
+  | "invalid_variant_group_display_name"
+  | "no_op_variant_group_update"
+  | "duplicate_variant"
+  | "missing_variant"
+  | "invalid_variant_display_name"
+  | "last_variant_delete"
+  | "duplicate_variant_target_drawable"
+  | "variant_target_drawable_already_owned"
+  | "missing_variant_target_drawable"
+  | "missing_variant_membership"
+  | "no_op_variant_membership_update"
+  | "invalid_variant_default_active";
 
 export class AuthoringMutationError extends Error {
   readonly code: AuthoringMutationErrorCode;

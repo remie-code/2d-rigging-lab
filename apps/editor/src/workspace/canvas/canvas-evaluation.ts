@@ -1,6 +1,7 @@
 import {
   createStructureDrawOrderIndex,
-  type AuthoringSession
+  type AuthoringSession,
+  type VariantVisibilityPredicate
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
   DrawableId,
@@ -124,6 +125,7 @@ export interface CanvasEvaluationOptions {
   readonly parameterValues?: ParameterValueMap;
   readonly selection?: EditorSelection | null;
   readonly overlayToggles?: Readonly<Record<string, boolean>>;
+  readonly variantVisibilityPredicate?: VariantVisibilityPredicate;
 }
 
 export type CanvasEvaluationRigDraft =
@@ -237,6 +239,7 @@ export function createCanvasEvaluatedScene(
   );
   const maskSourcesByTargetId = createMaskSourceIndex(session);
   const meshDraftsByDrawableId = createMeshDraftIndex(options);
+  const variantVisibilityPredicate = options.variantVisibilityPredicate ?? (() => true);
 
   const drawables = session.graph.drawables
     .map((drawable): CanvasEvaluatedDrawable | undefined => {
@@ -314,7 +317,10 @@ export function createCanvasEvaluatedScene(
             drawable.defaultOpacity,
           chain
         }),
-        visible: drawable.runtimeVisibility && !hiddenByPart,
+        visible:
+          drawable.runtimeVisibility &&
+          !hiddenByPart &&
+          variantVisibilityPredicate(drawable.drawableId),
         drawOrder: frontOrderByDrawableId.get(drawable.drawableId) ?? drawable.baseDrawOrder,
         maskSourceDrawableIds: maskSourcesByTargetId.get(drawable.drawableId) ?? [],
         rigControlChainIds: chain

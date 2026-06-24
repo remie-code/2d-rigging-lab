@@ -4,7 +4,8 @@ import type {
   GeneratedMeshPreviewCommitMethod,
   StructureOrderDrop,
   StructureOrderItem,
-  TextureAtlasPreview
+  TextureAtlasPreview,
+  VariantActiveSelectionEntry
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createGeneratedMeshForDrawable,
@@ -22,12 +23,22 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 import type {
   CreateDynamicsGroupPayloadDto,
+  CreateVariantGroupPayloadDto,
+  CreateVariantPayloadDto,
   CreateParameterPayloadDto,
+  DeleteVariantGroupPayloadDto,
+  DeleteVariantPayloadDto,
   DeleteDynamicsGroupPayloadDto,
   DeleteParameterPayloadDto,
   EditKeyformKeyPayloadDto,
+  AddVariantTargetDrawablePayloadDto,
+  RemoveVariantTargetDrawablePayloadDto,
+  SetVariantDefaultActiveSelectionPayloadDto,
+  SetVariantMembershipPayloadDto,
   UpdateDynamicsGroupPayloadDto,
   UpdateParameterPayloadDto,
+  UpdateVariantGroupPayloadDto,
+  UpdateVariantPayloadDto,
   UpdateRigControlPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
@@ -123,6 +134,22 @@ import {
   createTextureAtlasSessionChangedWarning,
   type TextureAtlasEditorSessionCommandResult
 } from "./model/texture-atlas-session-command";
+import {
+  commitAddVariantTargetDrawable,
+  commitCreateVariant,
+  commitCreateVariantGroup,
+  commitDeleteVariant,
+  commitDeleteVariantGroup,
+  commitRemoveVariantTargetDrawable,
+  commitSetVariantDefaultActiveSelection,
+  commitSetVariantMembership,
+  commitUpdateVariant,
+  commitUpdateVariantGroup
+} from "../variants/model/variant-session-commands";
+import {
+  reconcileVariantPreviewActiveSelections,
+  upsertVariantPreviewActiveSelection
+} from "../variants/model/variant-preview-state";
 import {
   createDrawableSelection,
   getSelectedDrawableIds,
@@ -347,6 +374,7 @@ interface EditorSessionContextValue {
   readonly dynamicsToolPreviewEvaluation: DynamicsToolPreviewEvaluation;
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
+  readonly variantPreviewActiveSelections: readonly VariantActiveSelectionEntry[];
   readonly projectStorage: ProjectStorageState;
   readonly projectIdentityLabel: string;
   readonly projectSaveStatusLabel: string;
@@ -478,6 +506,40 @@ interface EditorSessionContextValue {
   readonly deleteDynamicsGroup: (
     payload: DeleteDynamicsGroupPayloadDto
   ) => EditorSessionCommandResult;
+  readonly createVariantGroup: (
+    payload: CreateVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateVariantGroup: (
+    payload: UpdateVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteVariantGroup: (
+    payload: DeleteVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly createVariant: (
+    payload: CreateVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateVariant: (
+    payload: UpdateVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteVariant: (
+    payload: DeleteVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly addVariantTargetDrawable: (
+    payload: AddVariantTargetDrawablePayloadDto
+  ) => EditorSessionCommandResult;
+  readonly removeVariantTargetDrawable: (
+    payload: RemoveVariantTargetDrawablePayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantMembership: (
+    payload: SetVariantMembershipPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantDefaultActiveSelection: (
+    payload: SetVariantDefaultActiveSelectionPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantPreviewActiveSelection: (
+    selection: VariantActiveSelectionEntry
+  ) => void;
+  readonly resetVariantPreviewActiveSelections: () => void;
   readonly commitGestureCommand: (gesture: EditorSessionGestureCommit<unknown>) => void;
   readonly commitGestureController: <
     Preview,
@@ -567,6 +629,10 @@ export function EditorSessionProvider({
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
   const [dynamicsToolPreview, setDynamicsToolPreview] =
     useState<DynamicsToolPreviewState>(createInitialDynamicsToolPreviewState);
+  const [variantPreviewActiveSelectionsState, setVariantPreviewActiveSelectionsState] =
+    useState<readonly VariantActiveSelectionEntry[]>(() =>
+      reconcileVariantPreviewActiveSelections(session.graph.variantGroups ?? [], undefined)
+    );
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
     () => createInitialCollapsedPartIds(session)
   );
@@ -646,6 +712,14 @@ export function EditorSessionProvider({
     () => createDynamicsToolPreviewEvaluation(session, dynamicsToolPreview),
     [dynamicsToolPreview, session]
   );
+  const variantPreviewActiveSelections = useMemo(
+    () =>
+      reconcileVariantPreviewActiveSelections(
+        session.graph.variantGroups ?? [],
+        variantPreviewActiveSelectionsState
+      ),
+    [session.graph.variantGroups, variantPreviewActiveSelectionsState]
+  );
   const hasOpenWorkspace = workspaceOpenOverride || workspaceTarget !== null;
   const workspaceIdentityLabel = useMemo(
     () =>
@@ -722,6 +796,12 @@ export function EditorSessionProvider({
     setMeshGenerationDiagnostic(null);
     setRigDraft(null);
     setDynamicsToolPreview(createInitialDynamicsToolPreviewState());
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(
+        editorStateRef.current.session.graph.variantGroups ?? [],
+        undefined
+      )
+    );
     setRigOperationFeedback(null);
     setParameterOperationFeedback(null);
   }, []);
@@ -738,6 +818,9 @@ export function EditorSessionProvider({
     setParameterValues({});
     setCollapsedPartIds(createInitialCollapsedPartIds(input.loadedSession));
     setEditorHiddenPartIds(new Set(input.editorHiddenPartIds));
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(input.loadedSession.graph.variantGroups ?? [], undefined)
+    );
     setPsdImportOpen(false);
   }, [clearTransientCommitState]);
 
@@ -1414,6 +1497,118 @@ export function EditorSessionProvider({
       ),
     [runCommandWithHistory]
   );
+
+  const createVariantGroup = useCallback(
+    (payload: CreateVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateVariantGroup(currentSession, payload),
+        "Create Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateVariantGroup = useCallback(
+    (payload: UpdateVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateVariantGroup(currentSession, payload),
+        "Update Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteVariantGroup = useCallback(
+    (payload: DeleteVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteVariantGroup(currentSession, payload),
+        "Delete Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const createVariant = useCallback(
+    (payload: CreateVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateVariant(currentSession, payload),
+        "Create Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateVariant = useCallback(
+    (payload: UpdateVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateVariant(currentSession, payload),
+        "Update Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteVariant = useCallback(
+    (payload: DeleteVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteVariant(currentSession, payload),
+        "Delete Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const addVariantTargetDrawable = useCallback(
+    (payload: AddVariantTargetDrawablePayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitAddVariantTargetDrawable(currentSession, payload),
+        "Add Variant target Drawable"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const removeVariantTargetDrawable = useCallback(
+    (payload: RemoveVariantTargetDrawablePayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitRemoveVariantTargetDrawable(currentSession, payload),
+        "Remove Variant target Drawable"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantMembership = useCallback(
+    (payload: SetVariantMembershipPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitSetVariantMembership(currentSession, payload),
+        "Set Variant membership"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantDefaultActiveSelection = useCallback(
+    (payload: SetVariantDefaultActiveSelectionPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitSetVariantDefaultActiveSelection(currentSession, payload),
+        "Set Variant default active selection"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantPreviewActiveSelection = useCallback(
+    (entry: VariantActiveSelectionEntry) => {
+      setVariantPreviewActiveSelectionsState((current) =>
+        upsertVariantPreviewActiveSelection(
+          editorStateRef.current.session.graph.variantGroups ?? [],
+          current,
+          entry
+        )
+      );
+    },
+    []
+  );
+
+  const resetVariantPreviewActiveSelections = useCallback(() => {
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(
+        editorStateRef.current.session.graph.variantGroups ?? [],
+        undefined
+      )
+    );
+  }, []);
 
   const setDynamicsToolPreviewGroupId = useCallback(
     (dynamicsGroupId: DynamicsGroupId | null) => {
@@ -2228,6 +2423,7 @@ export function EditorSessionProvider({
       dynamicsToolPreviewEvaluation,
       rigOperationFeedback,
       parameterOperationFeedback,
+      variantPreviewActiveSelections,
       projectStorage,
       projectIdentityLabel,
       projectSaveStatusLabel,
@@ -2320,6 +2516,18 @@ export function EditorSessionProvider({
       createDynamicsGroup,
       updateDynamicsGroup,
       deleteDynamicsGroup,
+      createVariantGroup,
+      updateVariantGroup,
+      deleteVariantGroup,
+      createVariant,
+      updateVariant,
+      deleteVariant,
+      addVariantTargetDrawable,
+      removeVariantTargetDrawable,
+      setVariantMembership,
+      setVariantDefaultActiveSelection,
+      setVariantPreviewActiveSelection,
+      resetVariantPreviewActiveSelections,
       commitGestureCommand,
       commitGestureController,
       createCustomParameter,
@@ -2333,6 +2541,7 @@ export function EditorSessionProvider({
       applyCommand,
       applyTextureAtlasPreview,
       advanceDynamicsToolPreviewSimulation,
+      addVariantTargetDrawable,
       collapsedPartIds,
       applyMeshDraft,
       cancelMeshDraft,
@@ -2349,12 +2558,16 @@ export function EditorSessionProvider({
       createWarpDeformerForDeformerTreeSelection,
       createCustomParameter,
       createDynamicsGroup,
+      createVariant,
+      createVariantGroup,
       commitGestureCommand,
       commitGestureController,
       deformerRows,
       deleteCustomParameter,
       deleteDynamicsGroup,
       deleteRigControl,
+      deleteVariant,
+      deleteVariantGroup,
       drawablePoolItems,
       dynamicsToolPreview,
       dynamicsToolPreviewEvaluation,
@@ -2393,6 +2606,7 @@ export function EditorSessionProvider({
       reparentRigControl,
       resetActiveParameterValue,
       resetDynamicsToolPreviewSimulation,
+      resetVariantPreviewActiveSelections,
       resetRigDraft,
       resolvePsdImportDestination,
       rigOperationFeedback,
@@ -2405,6 +2619,9 @@ export function EditorSessionProvider({
       selectRigControl,
       selectDeformerTreeTarget,
       session,
+      setVariantDefaultActiveSelection,
+      setVariantMembership,
+      setVariantPreviewActiveSelection,
       setActiveParameterId,
       setActiveParameterValue,
       setDynamicsToolPreviewDefinitionOverride,
@@ -2418,8 +2635,12 @@ export function EditorSessionProvider({
       undo,
       updateCustomParameter,
       updateDynamicsGroup,
+      updateVariant,
+      updateVariantGroup,
       updateRigControl,
-      updateRigDraft
+      updateRigDraft,
+      removeVariantTargetDrawable,
+      variantPreviewActiveSelections
     ]
   );
 

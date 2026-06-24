@@ -42,6 +42,13 @@ import {
   TextureAtlasPlacementSchema,
   TextureAtlasSourceSignatureSchema
 } from "./texture-atlas.js";
+import {
+  VariantDefaultActiveSelectionSchema,
+  VariantGroupIdSchema,
+  VariantGroupSchema,
+  type VariantDefaultActiveSelectionDto,
+  type VariantGroupDto
+} from "./model-variants.js";
 
 export const RUNTIME_EXPORT_MANIFEST_PATH = "runtime-export.json";
 export const RUNTIME_EXPORT_MODEL_PATH = "runtime/model.json";
@@ -51,6 +58,7 @@ export const RUNTIME_EXPORT_TEXTURE_PAGE_EXTENSION = ".raw-rgba";
 export const RUNTIME_EXPORT_RAW_RGBA_MEDIA_TYPE =
   "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
 export const RUNTIME_EXPORT_PIXEL_FORMAT = "rgba8";
+export const RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION = "runtime-export-variants-v0";
 
 export class RuntimeExportContractError extends Error {
   constructor(message: string) {
@@ -503,6 +511,100 @@ export type RuntimeExportDynamicsGroupDto = z.infer<
   typeof RuntimeExportDynamicsGroupSchema
 >;
 
+export const RuntimeExportVariantDefaultActiveSelectionSchema = z.object({
+  variantGroupId: VariantGroupIdSchema,
+  activeSelection: VariantDefaultActiveSelectionSchema
+}).strict();
+export type RuntimeExportVariantDefaultActiveSelectionDto = z.infer<
+  typeof RuntimeExportVariantDefaultActiveSelectionSchema
+>;
+
+export const RuntimeExportVariantsSchema = z.object({
+  schemaVersion: z.literal(RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION),
+  variantGroups: z.array(VariantGroupSchema),
+  defaultActiveSelections: z.array(RuntimeExportVariantDefaultActiveSelectionSchema)
+}).strict().superRefine((variants, context) => {
+  const groupIds = variants.variantGroups.map((group) => group.variantGroupId);
+  const variantIds = variants.variantGroups.flatMap((group) =>
+    group.variants.map((variant) => variant.variantId)
+  );
+  const selectionGroupIds = variants.defaultActiveSelections.map((selection) =>
+    selection.variantGroupId
+  );
+
+  addDuplicateFieldIssue({
+    values: groupIds,
+    context,
+    pathPrefix: ["variantGroups"],
+    label: "variant group id"
+  });
+  addDuplicateFieldIssue({
+    values: variantIds,
+    context,
+    pathPrefix: ["variantGroups"],
+    label: "variant id"
+  });
+  addDuplicateFieldIssue({
+    values: selectionGroupIds,
+    context,
+    pathPrefix: ["defaultActiveSelections"],
+    label: "variant default active selection group id"
+  });
+
+  const groupsById = new Map(
+    variants.variantGroups.map((group) => [group.variantGroupId, group])
+  );
+  const selectionsByGroupId = new Map(
+    variants.defaultActiveSelections.map((selection) => [
+      selection.variantGroupId,
+      selection
+    ])
+  );
+
+  variants.variantGroups.forEach((group, groupIndex) => {
+    const selection = selectionsByGroupId.get(group.variantGroupId);
+    if (selection === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["defaultActiveSelections"],
+        message:
+          `Runtime Export variants default active selections are missing group "${group.variantGroupId}".`
+      });
+      return;
+    }
+
+    if (!isSameVariantDefaultActiveSelection(selection.activeSelection, group.defaultActive)) {
+      context.addIssue({
+        code: "custom",
+        path: ["variantGroups", groupIndex, "defaultActive"],
+        message:
+          `Runtime Export variants group defaultActive must match defaultActiveSelections for "${group.variantGroupId}".`
+      });
+    }
+  });
+
+  variants.defaultActiveSelections.forEach((selection, selectionIndex) => {
+    const group = groupsById.get(selection.variantGroupId);
+    if (group === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["defaultActiveSelections", selectionIndex, "variantGroupId"],
+        message:
+          `Runtime Export variants default active selection references missing group "${selection.variantGroupId}".`
+      });
+      return;
+    }
+
+    addVariantDefaultActiveSelectionIssues({
+      group,
+      selection: selection.activeSelection,
+      context,
+      path: ["defaultActiveSelections", selectionIndex, "activeSelection"]
+    });
+  });
+});
+export type RuntimeExportVariantsDto = z.infer<typeof RuntimeExportVariantsSchema>;
+
 export const RuntimeExportModelSchema = z.object({
   schemaVersion: z.literal("runtime-export-model-v0"),
   sourcePackage: RuntimeExportSourcePackageSchema,
@@ -519,6 +621,7 @@ export const RuntimeExportModelSchema = z.object({
   keyforms: z.array(RuntimeExportKeyformBindingSchema),
   dynamicsSolver: RuntimeExportDynamicsSolverContractSchema,
   dynamicsGroups: z.array(RuntimeExportDynamicsGroupSchema),
+  variants: RuntimeExportVariantsSchema.optional(),
   renderAssumptions: RuntimeExportRenderAssumptionsSchema
 }).strict().superRefine((model, context) => {
   addDuplicateFieldIssue({
@@ -819,6 +922,70 @@ function addRawRgbaByteLengthIssue(input: {
       message: `Runtime Export raw RGBA byteLength must equal width * height * 4 (${expectedByteLength}).`
     });
   }
+}
+
+function addVariantDefaultActiveSelectionIssues(input: {
+  readonly group: VariantGroupDto;
+  readonly selection: VariantDefaultActiveSelectionDto;
+  readonly context: z.RefinementCtx;
+  readonly path: readonly (string | number)[];
+}): void {
+  if (input.selection.kind !== input.group.mode) {
+    input.context.addIssue({
+      code: "custom",
+      path: [...input.path, "kind"],
+      message:
+        `Runtime Export variant default active selection kind must match group mode "${input.group.mode}".`
+    });
+    return;
+  }
+
+  const variantIds = new Set(input.group.variants.map((variant) => variant.variantId));
+
+  if (input.selection.kind === "singleSelect") {
+    if (!variantIds.has(input.selection.variantId)) {
+      input.context.addIssue({
+        code: "custom",
+        path: [...input.path, "variantId"],
+        message:
+          `Runtime Export variant default active selection references missing Variant "${input.selection.variantId}".`
+      });
+    }
+    return;
+  }
+
+  input.selection.variantIds.forEach((variantId, index) => {
+    if (!variantIds.has(variantId)) {
+      input.context.addIssue({
+        code: "custom",
+        path: [...input.path, "variantIds", index],
+        message:
+          `Runtime Export variant default active selection references missing Variant "${variantId}".`
+      });
+    }
+  });
+}
+
+function isSameVariantDefaultActiveSelection(
+  left: VariantDefaultActiveSelectionDto,
+  right: VariantDefaultActiveSelectionDto
+): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+
+  if (left.kind === "singleSelect" && right.kind === "singleSelect") {
+    return left.variantId === right.variantId;
+  }
+
+  if (left.kind === "multiToggle" && right.kind === "multiToggle") {
+    return (
+      left.variantIds.length === right.variantIds.length &&
+      left.variantIds.every((variantId, index) => right.variantIds[index] === variantId)
+    );
+  }
+
+  return false;
 }
 
 function addDuplicateFieldIssue(input: {

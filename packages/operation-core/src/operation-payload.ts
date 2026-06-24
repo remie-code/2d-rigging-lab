@@ -52,6 +52,18 @@ import {
   UpdateRigControlPayloadSchema
 } from "./payloads/rig-control.js";
 import { ApplyTextureAtlasPreviewPayloadSchema } from "./payloads/texture-atlas.js";
+import {
+  AddVariantTargetDrawablePayloadSchema,
+  CreateVariantGroupPayloadSchema,
+  CreateVariantPayloadSchema,
+  DeleteVariantGroupPayloadSchema,
+  DeleteVariantPayloadSchema,
+  RemoveVariantTargetDrawablePayloadSchema,
+  SetVariantDefaultActiveSelectionPayloadSchema,
+  SetVariantMembershipPayloadSchema,
+  UpdateVariantGroupPayloadSchema,
+  UpdateVariantPayloadSchema
+} from "./payloads/variants.js";
 
 export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({ operationType: z.literal("importPsdSourceAsset"), payload: ImportPsdSourceAssetPayloadSchema }),
@@ -128,6 +140,25 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
   z.object({
     operationType: z.literal("applyTextureAtlasPreview"),
     payload: ApplyTextureAtlasPreviewPayloadSchema
+  }),
+  z.object({ operationType: z.literal("createVariantGroup"), payload: CreateVariantGroupPayloadSchema }),
+  z.object({ operationType: z.literal("updateVariantGroup"), payload: UpdateVariantGroupPayloadSchema }),
+  z.object({ operationType: z.literal("deleteVariantGroup"), payload: DeleteVariantGroupPayloadSchema }),
+  z.object({ operationType: z.literal("createVariant"), payload: CreateVariantPayloadSchema }),
+  z.object({ operationType: z.literal("updateVariant"), payload: UpdateVariantPayloadSchema }),
+  z.object({ operationType: z.literal("deleteVariant"), payload: DeleteVariantPayloadSchema }),
+  z.object({
+    operationType: z.literal("addVariantTargetDrawable"),
+    payload: AddVariantTargetDrawablePayloadSchema
+  }),
+  z.object({
+    operationType: z.literal("removeVariantTargetDrawable"),
+    payload: RemoveVariantTargetDrawablePayloadSchema
+  }),
+  z.object({ operationType: z.literal("setVariantMembership"), payload: SetVariantMembershipPayloadSchema }),
+  z.object({
+    operationType: z.literal("setVariantDefaultActiveSelection"),
+    payload: SetVariantDefaultActiveSelectionPayloadSchema
   })
 ]);
 export type OperationPayloadDto = z.infer<typeof OperationPayloadSchema>;

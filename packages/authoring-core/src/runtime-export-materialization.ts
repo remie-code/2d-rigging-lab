@@ -10,6 +10,7 @@ import {
   RUNTIME_EXPORT_MANIFEST_PATH,
   RUNTIME_EXPORT_MODEL_PATH,
   RUNTIME_EXPORT_PIXEL_FORMAT,
+  RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
   RuntimeExportAtlasSchema,
   RuntimeExportModelSchema,
   assertRuntimeExportV0SinglePageArtifacts,
@@ -25,6 +26,7 @@ import {
   type RuntimeExportRenderAssumptionsDto,
   type RuntimeExportTexturePageMetadataDto,
   type RuntimeExportTexturePagePathDto,
+  type RuntimeExportVariantsDto,
   type TextureAtlasEntryDto,
   type TextureAtlasLayoutSummaryDto,
   type TextureAtlasPageDto,
@@ -38,6 +40,11 @@ import type {
 } from "./runtime-export-assembly.js";
 import { toRuntimeGraph } from "./to-runtime-graph.js";
 import type { TextureAtlasTargetSelectionResult } from "./texture-atlas-targets.js";
+import {
+  createVariantVisibilityPredicate,
+  resolveDefaultVariantActiveSelections,
+  type VariantActiveSelectionEntry
+} from "./variant-evaluation.js";
 
 type RuntimeExportKeyformProjection =
   ReturnType<typeof toRuntimeGraph>["keyformBindings"][number];
@@ -83,6 +90,12 @@ export const createRuntimeExportArtifacts = (input: {
     input.session,
     includedDrawableIds
   );
+  const variantGroups = input.session.graph.variantGroups ?? [];
+  const defaultVariantActiveSelections = resolveDefaultVariantActiveSelections(variantGroups);
+  const variantVisibilityPredicate = createVariantVisibilityPredicate({
+    variantGroups,
+    activeSelections: defaultVariantActiveSelections
+  });
   const textureRefByDrawableId = new Map<DrawableId, RuntimeExportDrawableTextureReferenceDto>();
 
   for (const target of includedTargets) {
@@ -132,7 +145,8 @@ export const createRuntimeExportArtifacts = (input: {
       meshId: target.mesh.meshId,
       ...(target.drawable.partId === undefined ? {} : { partId: target.drawable.partId }),
       includeReason: "runtime-target-v1" as const,
-      visible: normalizedDrawable.visible,
+      visible: normalizedDrawable.visible &&
+        variantVisibilityPredicate(target.drawable.drawableId),
       opacity: normalizedDrawable.opacity,
       baseDrawOrder: normalizedDrawable.baseDrawOrder,
       bounds: structuredClone(normalizedDrawable.bounds),
@@ -199,6 +213,14 @@ export const createRuntimeExportArtifacts = (input: {
       .map(materializeRuntimeExportKeyformBinding),
     dynamicsSolver: renderAssumptions.dynamics,
     dynamicsGroups: [...runtimeGraph.dynamicsGroups.values()].map((group) => structuredClone(group)),
+    ...(variantGroups.length === 0
+      ? {}
+      : {
+          variants: createRuntimeExportVariants(
+            variantGroups,
+            defaultVariantActiveSelections
+          )
+        }),
     renderAssumptions
   }) satisfies RuntimeExportModelDto;
   const atlas = RuntimeExportAtlasSchema.parse({
@@ -298,6 +320,18 @@ const createRuntimeExportInputManifest = (
   hiddenDirectControlParameterIds: parameters
     .filter((parameter) => parameter.runtimeRole === "hidden-from-direct-controls")
     .map((parameter) => parameter.parameterId)
+});
+
+const createRuntimeExportVariants = (
+  variantGroups: RuntimeExportVariantsDto["variantGroups"],
+  defaultActiveSelections: readonly VariantActiveSelectionEntry[]
+): RuntimeExportVariantsDto => ({
+  schemaVersion: RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
+  variantGroups: structuredClone(variantGroups),
+  defaultActiveSelections: defaultActiveSelections.map((selection) => ({
+    variantGroupId: selection.variantGroupId,
+    activeSelection: structuredClone(selection.activeSelection)
+  }))
 });
 
 const createRuntimeExportMasks = (

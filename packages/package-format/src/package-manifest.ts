@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { PackageIdSchema } from "@private-2d-rigging-lab/contracts";
 
+import { VARIANTS_MODEL_FILE_PATH } from "./model-variants.js";
+
 export const PackageFormatVersionSchema = z.literal("open-model-package-v1");
 export const PackageStableOrderVersionSchema = z.literal("stable-order-v1");
 export const PackageRevisionSchema = z.number().int().nonnegative();
@@ -18,6 +20,7 @@ export const RequiredModelFilesSchema = z.object({
   dynamics: z.literal("model/dynamics.json"),
   masks: z.literal("model/masks.json"),
   drawOrder: z.literal("model/draw-order.json"),
+  variants: z.literal(VARIANTS_MODEL_FILE_PATH).optional(),
   editorState: z.literal("model/editor-state.json").optional()
 });
 export type RequiredModelFilesDto = z.infer<typeof RequiredModelFilesSchema>;

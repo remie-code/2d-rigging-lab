@@ -16,10 +16,12 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import {
   BinaryAssetReferenceSchema,
+  RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
   computePackageBinarySha256Digest,
   createPackageBinaryFileEntry,
   getPackageBinaryByteLength,
-  type BinaryAssetReferenceDto
+  type BinaryAssetReferenceDto,
+  type VariantGroupDto
 } from "@private-2d-rigging-lab/package-format";
 import { describe, expect, it } from "vitest";
 
@@ -29,6 +31,7 @@ import { registerAuthoringSessionBinaryBytes } from "./binary-byte-registration.
 import { assembleRuntimeExport, preflightRuntimeExport } from "./runtime-export-assembly.js";
 import { applyTextureAtlasPreview } from "./texture-atlas-mutations.js";
 import { createTextureAtlasPreview } from "./texture-atlas-packing.js";
+import { selectTextureAtlasTargets } from "./texture-atlas-targets.js";
 
 const CREATED_AT = "2026-06-20T00:00:00.000Z";
 const PART_ROOT = PartIdSchema.parse("part_root");
@@ -89,11 +92,79 @@ describe("runtime export assembly and preflight", () => {
       "assets/textures/atlas_page_0.raw-rgba",
       "assets/textures/atlas_page_0.raw-rgba"
     ]);
+    expect(result.artifacts.model.variants).toBeUndefined();
     expect(result.artifacts.atlas.placements.map((placement) => placement.drawableId)).toEqual([
       DRAW_BODY,
       DRAW_HIDDEN
     ]);
     expect(result.texturePageBytes[0]?.bytes.byteLength).toBe(8 * 4 * 4);
+  });
+
+  it("materializes Variant metadata and applies default active selection to initial visibility", async () => {
+    const session = await createAppliedRuntimeExportFixtureSession();
+    const variantGroup = createOutfitVariantGroup();
+    session.graph.variantGroups = [variantGroup];
+
+    const result = await assembleRuntimeExport(session, { createdAt: CREATED_AT });
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      return;
+    }
+    expect(result.artifacts.model.variants).toEqual({
+      schemaVersion: RUNTIME_EXPORT_VARIANTS_SCHEMA_VERSION,
+      variantGroups: [variantGroup],
+      defaultActiveSelections: [
+        {
+          variantGroupId: "vgrp_outfit",
+          activeSelection: {
+            kind: "singleSelect",
+            variantId: "var_outfit_default"
+          }
+        }
+      ]
+    });
+    expect(result.artifacts.model.drawables.find((drawable) =>
+      drawable.drawableId === DRAW_BODY
+    )?.visible).toBe(false);
+    expect(result.artifacts.model.drawables.find((drawable) =>
+      drawable.drawableId === DRAW_HIDDEN
+    )?.visible).toBe(false);
+  });
+
+  it("keeps Texture Atlas targets bound-drawable based for default-hidden Variant drawables", async () => {
+    const session = await createRuntimeExportFixtureSession();
+    session.graph.variantGroups = [createOutfitVariantGroup()];
+
+    const selection = selectTextureAtlasTargets(session);
+
+    expect(selection.boundDrawableIds).toEqual([DRAW_BODY, DRAW_HIDDEN]);
+    expect(selection.included.map((target) => target.drawableId)).toEqual([
+      DRAW_BODY,
+      DRAW_HIDDEN
+    ]);
+    expect(selection.packableTargets.map((target) => target.drawable.drawableId)).toEqual([
+      DRAW_BODY,
+      DRAW_HIDDEN
+    ]);
+  });
+
+  it("does not stale Runtime Export when only Variant membership or default active changes", async () => {
+    const session = await createAppliedRuntimeExportFixtureSession();
+
+    expect((await preflightRuntimeExport(session)).status).toBe("ready");
+
+    session.graph.variantGroups = [createOutfitVariantGroup()];
+    expect((await preflightRuntimeExport(session)).status).toBe("ready");
+
+    session.graph.variantGroups[0]!.defaultActive = {
+      kind: "singleSelect",
+      variantId: "var_outfit_alt"
+    };
+    expect((await preflightRuntimeExport(session)).status).toBe("ready");
+
+    session.graph.variantGroups[0]!.memberships[0]!.variantIds = ["var_outfit_default"];
+    expect((await preflightRuntimeExport(session)).status).toBe("ready");
   });
 
   it("hard-blocks when no committed atlas exists", async () => {
@@ -307,6 +378,25 @@ const expectBlocker = async (
   }
   expect(result.preflight.blockers.map((blocker) => blocker.code)).toContain(code);
 };
+
+const createOutfitVariantGroup = (): VariantGroupDto => ({
+  variantGroupId: "vgrp_outfit",
+  displayName: "Outfit",
+  mode: "singleSelect",
+  variants: [
+    { variantId: "var_outfit_default", displayName: "Default" },
+    { variantId: "var_outfit_alt", displayName: "Alt" }
+  ],
+  targetDrawableIds: [DRAW_BODY, DRAW_HIDDEN],
+  memberships: [
+    { drawableId: DRAW_BODY, variantIds: ["var_outfit_alt"] },
+    { drawableId: DRAW_HIDDEN, variantIds: ["var_outfit_default"] }
+  ],
+  defaultActive: {
+    kind: "singleSelect",
+    variantId: "var_outfit_default"
+  }
+});
 
 const createAppliedRuntimeExportFixtureSession = async (): Promise<AuthoringSession> => {
   const session = await createRuntimeExportFixtureSession();

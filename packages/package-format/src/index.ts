@@ -14,6 +14,7 @@ export * from "./package-transport-capabilities.js";
 export * from "./package-transport-boundary.js";
 export * from "./product-preflight-package-bridge.js";
 export * from "./model-graph.js";
+export * from "./model-variants.js";
 export * from "./warp-deformer-contract.js";
 export * from "./parameter-metadata.js";
 export * from "./parameter-presets.js";

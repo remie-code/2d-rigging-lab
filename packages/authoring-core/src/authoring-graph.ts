@@ -13,7 +13,8 @@ import type {
   RigControlDto,
   RightsRecordDto,
   SourceAssetDto,
-  TextureAtlasFileDto
+  TextureAtlasFileDto,
+  VariantGroupDto
 } from "@private-2d-rigging-lab/package-format";
 
 export interface AuthoringGraph {
@@ -28,6 +29,7 @@ export interface AuthoringGraph {
   dynamicsGroups: DynamicsGroupDto[];
   masks: MaskRelationDto[];
   drawOrder: DrawOrderEntryDto[];
+  variantGroups?: VariantGroupDto[];
   rigControlRootIds: ModelGraphDto["rigControlRootIds"];
   stableOrder: string[];
   sourceAssets: SourceAssetDto[];
@@ -50,6 +52,7 @@ export const createAuthoringGraphFromPackageDocument = (
   dynamicsGroups: cloneDto(packageDocument.model.dynamics.dynamicsGroups),
   masks: cloneDto(packageDocument.model.masks.masks),
   drawOrder: cloneDto(packageDocument.model.drawOrder.entries),
+  variantGroups: cloneDto(packageDocument.model.variants?.variantGroups ?? []),
   rigControlRootIds: cloneDto(packageDocument.model.graph.rigControlRootIds),
   stableOrder: cloneDto(packageDocument.model.graph.stableOrder),
   sourceAssets: cloneDto(packageDocument.assets.sourceManifest.sourceAssets),
