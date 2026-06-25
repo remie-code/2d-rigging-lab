@@ -246,11 +246,14 @@ function isAllowedViteDevAssetPath(pathname: string): boolean {
     pathname.startsWith("/stage/browser-source/") ||
     pathname.startsWith("/stage/stage-renderer/") ||
     pathname.startsWith("/stage/runtime-evaluation/") ||
+    pathname.startsWith("/shared/") ||
     pathname.startsWith("/styles/") ||
     pathname.startsWith("/preload/browser-source-") ||
     pathname === "/preload/runtime-player-bridge-contract.ts" ||
     pathname === "/preload/live-parameter-bridge-contract.ts" ||
-    pathname === "/preload/runtime-export-bridge-contract.ts"
+    pathname === "/preload/runtime-export-bridge-contract.ts" ||
+    pathname === "/preload/runtime-variant-bridge-contract.ts" ||
+    pathname === "/preload/performance-diagnostics-contract.ts"
   );
 }
 
@@ -356,11 +359,11 @@ function shouldRewriteViteDevAsset(contentType: string): boolean {
 function rewriteViteDevAssetImports(source: string): string {
   return source
     .replace(
-      /(["'`])\/(@vite\/client|@vite\/env|@react-refresh|@id\/[^"'`()\s]+|@fs\/[^"'`()\s]+|node_modules\/(?:\.vite\/deps\/|@vite\/|vite\/|react\/|react-dom\/|scheduler\/)[^"'`()\s]+|stage\/[^"'`()\s]+|styles\/[^"'`()\s]+|preload\/[^"'`()\s]+)/g,
+      /(["'`])\/(@vite\/client|@vite\/env|@react-refresh|@id\/[^"'`()\s]+|@fs\/[^"'`()\s]+|node_modules\/(?:\.vite\/deps\/|@vite\/|vite\/|react\/|react-dom\/|scheduler\/)[^"'`()\s]+|stage\/[^"'`()\s]+|shared\/[^"'`()\s]+|styles\/[^"'`()\s]+|preload\/[^"'`()\s]+)/g,
       `$1${browserSourceStageDevAssetRoutePrefix}$2`
     )
     .replace(
-      /(url\(\s*)\/(@vite\/client|@vite\/env|@react-refresh|@id\/[^"'`()\s]+|@fs\/[^"'`()\s]+|node_modules\/(?:\.vite\/deps\/|@vite\/|vite\/|react\/|react-dom\/|scheduler\/)[^"'`()\s]+|stage\/[^"'`()\s]+|styles\/[^"'`()\s]+|preload\/[^"'`()\s]+)(\s*\))/g,
+      /(url\(\s*)\/(@vite\/client|@vite\/env|@react-refresh|@id\/[^"'`()\s]+|@fs\/[^"'`()\s]+|node_modules\/(?:\.vite\/deps\/|@vite\/|vite\/|react\/|react-dom\/|scheduler\/)[^"'`()\s]+|stage\/[^"'`()\s]+|shared\/[^"'`()\s]+|styles\/[^"'`()\s]+|preload\/[^"'`()\s]+)(\s*\))/g,
       `$1${browserSourceStageDevAssetRoutePrefix}$2$3`
     );
 }

@@ -77,6 +77,9 @@ describe("Browser Source Stage client assets", () => {
             'import "/@fs/C:/workspace/remie/code/ai-native-live2d-editor/packages/render-core/src/index.ts";',
             `import "/@fs/${runtimePlayerViteDepPath}?v=fixture";`,
             'import "/stage/browser-source/browser-source-stage-app.tsx";',
+            'import "/shared/runtime-export-variant-selection.ts";',
+            'import "/preload/runtime-variant-bridge-contract.ts";',
+            'import "/preload/performance-diagnostics-contract.ts";',
             'import "/node_modules/.vite/deps/react.js?v=fixture";',
             'import "/node_modules/react-dom/client.js?v=fixture";',
             'import "/styles/global.css";'
@@ -103,6 +106,15 @@ describe("Browser Source Stage client assets", () => {
     );
     expect(asset?.bytes.toString("utf8")).toContain(
       'import "/browser-source-dev-assets/stage/browser-source/browser-source-stage-app.tsx";'
+    );
+    expect(asset?.bytes.toString("utf8")).toContain(
+      'import "/browser-source-dev-assets/shared/runtime-export-variant-selection.ts";'
+    );
+    expect(asset?.bytes.toString("utf8")).toContain(
+      'import "/browser-source-dev-assets/preload/runtime-variant-bridge-contract.ts";'
+    );
+    expect(asset?.bytes.toString("utf8")).toContain(
+      'import "/browser-source-dev-assets/preload/performance-diagnostics-contract.ts";'
     );
     expect(asset?.bytes.toString("utf8")).toContain(
       'import "/browser-source-dev-assets/node_modules/.vite/deps/react.js?v=fixture";'
@@ -302,7 +314,7 @@ describe("Browser Source Stage client assets", () => {
     ]);
   });
 
-  it("proxies Browser Source dev graph imports for Vite env and the runtime player bridge contract", async () => {
+  it("proxies Browser Source dev graph imports for Vite env, shared modules, and selected preload contracts", async () => {
     const requestedUrls: string[] = [];
     const viteClientEnvPath = resolveViteClientEnvPath();
     const asset = await readBrowserSourceStageDevAsset({
@@ -317,7 +329,10 @@ describe("Browser Source Stage client assets", () => {
           "text/javascript; charset=utf-8",
           [
             `import "/@fs/${viteClientEnvPath}";`,
-            'import { runtimePlayerStageViewCoordinateSpace } from "/preload/runtime-player-bridge-contract.ts";'
+            'import { runtimePlayerStageViewCoordinateSpace } from "/preload/runtime-player-bridge-contract.ts";',
+            'import { cloneActiveVariantSelectionState } from "/shared/runtime-export-variant-selection.ts";',
+            'import { runtimePlayerRuntimeVariantBridgeApiName } from "/preload/runtime-variant-bridge-contract.ts";',
+            'import { runtimePlayerPerformanceDiagnosticsVersion } from "/preload/performance-diagnostics-contract.ts";'
           ].join("\n")
         );
       }
@@ -329,6 +344,15 @@ describe("Browser Source Stage client assets", () => {
     );
     expect(rewrittenSource).toContain(
       'from "/browser-source-dev-assets/preload/runtime-player-bridge-contract.ts";'
+    );
+    expect(rewrittenSource).toContain(
+      'from "/browser-source-dev-assets/shared/runtime-export-variant-selection.ts";'
+    );
+    expect(rewrittenSource).toContain(
+      'from "/browser-source-dev-assets/preload/runtime-variant-bridge-contract.ts";'
+    );
+    expect(rewrittenSource).toContain(
+      'from "/browser-source-dev-assets/preload/performance-diagnostics-contract.ts";'
     );
 
     const viteEnvAsset = await readBrowserSourceStageDevAsset({
@@ -358,13 +382,61 @@ describe("Browser Source Stage client assets", () => {
         );
       }
     });
+    const sharedAsset = await readBrowserSourceStageDevAsset({
+      requestPath:
+        "/browser-source-dev-assets/shared/runtime-export-variant-selection.ts",
+      requestSearch: "",
+      rendererServerUrl: "http://127.0.0.1:5173/",
+      fetcher: async (url) => {
+        requestedUrls.push(url);
+        return createFetchResponse(
+          200,
+          "text/javascript; charset=utf-8",
+          "export const cloneActiveVariantSelectionState = () => null;"
+        );
+      }
+    });
+    const runtimeVariantContractAsset = await readBrowserSourceStageDevAsset({
+      requestPath:
+        "/browser-source-dev-assets/preload/runtime-variant-bridge-contract.ts",
+      requestSearch: "",
+      rendererServerUrl: "http://127.0.0.1:5173/",
+      fetcher: async (url) => {
+        requestedUrls.push(url);
+        return createFetchResponse(
+          200,
+          "text/javascript; charset=utf-8",
+          "export const runtimePlayerRuntimeVariantBridgeApiName = 'runtimePlayerRuntimeVariant';"
+        );
+      }
+    });
+    const performanceDiagnosticsContractAsset = await readBrowserSourceStageDevAsset({
+      requestPath:
+        "/browser-source-dev-assets/preload/performance-diagnostics-contract.ts",
+      requestSearch: "",
+      rendererServerUrl: "http://127.0.0.1:5173/",
+      fetcher: async (url) => {
+        requestedUrls.push(url);
+        return createFetchResponse(
+          200,
+          "text/javascript; charset=utf-8",
+          "export const runtimePlayerPerformanceDiagnosticsVersion = 'runtime-player-performance-diagnostics-v1';"
+        );
+      }
+    });
 
     expect(viteEnvAsset?.statusCode).toBe(200);
     expect(bridgeContractAsset?.statusCode).toBe(200);
+    expect(sharedAsset?.statusCode).toBe(200);
+    expect(runtimeVariantContractAsset?.statusCode).toBe(200);
+    expect(performanceDiagnosticsContractAsset?.statusCode).toBe(200);
     expect(requestedUrls).toEqual([
       "http://127.0.0.1:5173/stage/stage-renderer/stage-view-transform.ts",
       `http://127.0.0.1:5173/@fs/${viteClientEnvPath}`,
-      "http://127.0.0.1:5173/preload/runtime-player-bridge-contract.ts"
+      "http://127.0.0.1:5173/preload/runtime-player-bridge-contract.ts",
+      "http://127.0.0.1:5173/shared/runtime-export-variant-selection.ts",
+      "http://127.0.0.1:5173/preload/runtime-variant-bridge-contract.ts",
+      "http://127.0.0.1:5173/preload/performance-diagnostics-contract.ts"
     ]);
   });
 

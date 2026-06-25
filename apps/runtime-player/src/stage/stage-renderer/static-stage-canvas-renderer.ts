@@ -9,6 +9,9 @@ import {
 import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
   RuntimePlayerActiveVariantSelectionState
@@ -52,12 +55,16 @@ export interface StaticStageCanvasRenderer {
   setViewInteractionEnabled(enabled: boolean): void;
   resetView(): void;
   centerModel(): void;
+  getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot;
   clear(): void;
   dispose(): void;
 }
 
 export interface StaticStageCanvasRendererOptions {
   readonly onViewTransformChanged?: (transform: StageViewTransform) => void;
+  readonly onRenderMetricsChanged?: (
+    snapshot: StaticStageRenderMetricsSnapshot
+  ) => void;
 }
 
 export interface StaticStagePayloadSetOptions {
@@ -71,6 +78,9 @@ export interface StaticStageViewTransformSetOptions {
 export interface StaticStageRenderResult {
   readonly runtimeDiagnosticDetails: readonly string[];
 }
+
+export type StaticStageRenderMetricsSnapshot =
+  RuntimePlayerStageRenderMetricsSnapshot;
 
 const emptyScene: RenderScene = createRenderScene({
   textureSources: [],
@@ -96,8 +106,26 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
     null;
   private latestLiveParameterFrame: RuntimePlayerLiveParameterFrame | null = null;
-  private liveAnimationFrameId: number | null = null;
+  private hasPendingLiveParameterFrame = false;
+  private scheduledAnimationFrameId: number | null = null;
   private lastLiveSourceTimestampMs: number | null = null;
+  private lastAnimationFrameTimestampMs: number | null = null;
+  private renderCount = 0;
+  private scheduledRenderCount = 0;
+  private immediateRenderCount = 0;
+  private liveFrameMessageCount = 0;
+  private stageViewTransformMessageCount = 0;
+  private stageDisplayTransformMessageCount = 0;
+  private duplicateTransformSkipCount = 0;
+  private coalescedLiveFrameCount = 0;
+  private lastRafDeltaMs: number | null = null;
+  private rafDeltaSampleCount = 0;
+  private lastRenderDurationMs: number | null = null;
+  private renderDurationSampleCount = 0;
+  private lastLiveRenderInputEvaluationDurationMs: number | null = null;
+  private liveRenderInputEvaluationDurationSampleCount = 0;
+  private lastScheduledFrameDurationMs: number | null = null;
+  private scheduledFrameDurationSampleCount = 0;
   private viewTransform: StageViewTransform = createResetStageViewTransform();
   private displayViewTransform: StageViewTransform | null = null;
   private activePanPointerId: number | null = null;
@@ -115,17 +143,17 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       typeof ResizeObserver === "undefined"
         ? undefined
         : new ResizeObserver(() => {
-            this.renderCurrent();
+            this.requestScheduledRender();
           });
     this.resizeObserver?.observe(canvas);
-    window.addEventListener("resize", this.renderCurrent);
+    window.addEventListener("resize", this.requestScheduledRender);
     canvas.addEventListener("wheel", this.handleWheel, { passive: false });
     canvas.addEventListener("pointerdown", this.handlePointerDown);
     canvas.addEventListener("pointermove", this.handlePointerMove);
     canvas.addEventListener("pointerup", this.handlePointerUp);
     canvas.addEventListener("pointercancel", this.handlePointerUp);
     canvas.addEventListener("lostpointercapture", this.handlePointerUp);
-    this.renderCurrent();
+    this.renderCurrentImmediate();
   }
 
   setPayload(
@@ -146,7 +174,9 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.latestLiveParameterFrame = null;
     this.lastLiveSourceTimestampMs = null;
-    this.renderCurrent();
+    this.hasPendingLiveParameterFrame = false;
+    this.cancelScheduledRender();
+    this.renderCurrentImmediate();
 
     return {
       runtimeDiagnosticDetails: createStageRuntimeDiagnosticDetails(
@@ -170,7 +200,10 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       this.latestLiveParameterFrame !== null &&
       canApplyLiveParameterFrame(this.latestLiveParameterFrame, this.payload)
     ) {
-      this.renderLatestLiveParameterFrame();
+      this.hasPendingLiveParameterFrame = false;
+      this.cancelScheduledRender();
+      this.applyLatestLiveParameterFrameToRenderInput();
+      this.renderCurrentImmediate();
       return;
     }
 
@@ -182,7 +215,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     );
     this.renderInput = renderInput;
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
-    this.renderCurrent();
+    this.cancelScheduledRender();
+    this.renderCurrentImmediate();
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
@@ -193,14 +227,22 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       return;
     }
 
+    this.liveFrameMessageCount += 1;
+    if (this.hasPendingLiveParameterFrame) {
+      this.coalescedLiveFrameCount += 1;
+      this.reportRenderMetricsChanged();
+    }
+
     this.latestLiveParameterFrame = frame;
-    this.requestLiveRender();
+    this.hasPendingLiveParameterFrame = true;
+    this.requestScheduledRender();
   }
 
   clearLiveParameterFrame(): void {
     this.latestLiveParameterFrame = null;
+    this.hasPendingLiveParameterFrame = false;
     this.lastLiveSourceTimestampMs = null;
-    this.cancelLiveRender();
+    this.cancelScheduledRender();
 
     if (this.payload === null || this.disposed) {
       return;
@@ -214,7 +256,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     );
     this.renderInput = renderInput;
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
-    this.renderCurrent();
+    this.renderCurrentImmediate();
   }
 
   getViewTransform(): StageViewTransform {
@@ -225,9 +267,19 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     transform: StageViewTransform,
     options: StaticStageViewTransformSetOptions = {}
   ): void {
-    this.viewTransform = normalizeStageViewTransform(transform);
+    const nextTransform = normalizeStageViewTransform(transform);
+    this.stageViewTransformMessageCount += 1;
+    if (
+      this.displayViewTransform === null &&
+      areStageViewTransformsEqual(this.viewTransform, nextTransform)
+    ) {
+      this.recordDuplicateTransformSkip();
+      return;
+    }
+
+    this.viewTransform = nextTransform;
     this.displayViewTransform = null;
-    this.renderCurrent();
+    this.requestScheduledRender();
 
     if (options.notify ?? true) {
       this.reportViewTransformChanged();
@@ -235,10 +287,18 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   }
 
   setDisplayViewTransform(transform: StageViewTransform | null): void {
-    this.displayViewTransform = transform === null
+    const nextTransform = transform === null
       ? null
       : normalizeStageViewTransform(transform);
-    this.renderCurrent();
+    this.stageDisplayTransformMessageCount += 1;
+
+    if (areNullableStageViewTransformsEqual(this.displayViewTransform, nextTransform)) {
+      this.recordDuplicateTransformSkip();
+      return;
+    }
+
+    this.displayViewTransform = nextTransform;
+    this.requestScheduledRender();
   }
 
   setViewInteractionEnabled(enabled: boolean): void {
@@ -257,14 +317,42 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.setViewTransform(centerStageViewTransform(this.viewTransform));
   }
 
+  getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {
+    return {
+      renderCount: this.renderCount,
+      scheduledRenderCount: this.scheduledRenderCount,
+      immediateRenderCount: this.immediateRenderCount,
+      liveFrameMessageCount: this.liveFrameMessageCount,
+      stageViewTransformMessageCount: this.stageViewTransformMessageCount,
+      stageDisplayTransformMessageCount: this.stageDisplayTransformMessageCount,
+      duplicateTransformSkipCount: this.duplicateTransformSkipCount,
+      coalescedLiveFrameCount: this.coalescedLiveFrameCount,
+      lastRafDeltaMs: this.lastRafDeltaMs,
+      rafDeltaSampleCount: this.rafDeltaSampleCount,
+      lastRenderDurationMs: this.lastRenderDurationMs,
+      renderDurationSampleCount: this.renderDurationSampleCount,
+      lastLiveRenderInputEvaluationDurationMs:
+        this.lastLiveRenderInputEvaluationDurationMs,
+      liveRenderInputEvaluationDurationSampleCount:
+        this.liveRenderInputEvaluationDurationSampleCount,
+      lastScheduledFrameDurationMs: this.lastScheduledFrameDurationMs,
+      scheduledFrameDurationSampleCount:
+        this.scheduledFrameDurationSampleCount,
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height,
+      devicePixelRatio: getDevicePixelRatio()
+    };
+  }
+
   clear(): void {
     this.payload = null;
     this.renderInput = null;
     this.liveRuntimeState = null;
     this.latestLiveParameterFrame = null;
+    this.hasPendingLiveParameterFrame = false;
     this.lastLiveSourceTimestampMs = null;
-    this.cancelLiveRender();
-    this.renderCurrent();
+    this.cancelScheduledRender();
+    this.renderCurrentImmediate();
   }
 
   dispose(): void {
@@ -274,45 +362,60 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
     this.disposed = true;
     this.resizeObserver?.disconnect();
-    window.removeEventListener("resize", this.renderCurrent);
+    window.removeEventListener("resize", this.requestScheduledRender);
     this.canvas.removeEventListener("wheel", this.handleWheel);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("pointermove", this.handlePointerMove);
     this.canvas.removeEventListener("pointerup", this.handlePointerUp);
     this.canvas.removeEventListener("pointercancel", this.handlePointerUp);
     this.canvas.removeEventListener("lostpointercapture", this.handlePointerUp);
-    this.cancelLiveRender();
+    this.cancelScheduledRender();
     this.renderer.dispose();
   }
 
-  private requestLiveRender(): void {
-    if (this.liveAnimationFrameId !== null) {
+  private readonly requestScheduledRender = (): void => {
+    if (this.disposed || this.scheduledAnimationFrameId !== null) {
       return;
     }
 
-    this.liveAnimationFrameId = window.requestAnimationFrame(() => {
-      this.liveAnimationFrameId = null;
+    this.scheduledAnimationFrameId = window.requestAnimationFrame((timestampMs) => {
+      this.scheduledAnimationFrameId = null;
+      this.recordAnimationFrameDelta(timestampMs);
       try {
-        this.renderLatestLiveParameterFrame();
+        this.renderScheduledFrame();
       } catch (error) {
-        console.error("Stage live parameter render failed.", error);
+        console.error("Stage scheduled render failed.", error);
         this.clear();
       }
     });
-  }
+  };
 
-  private cancelLiveRender(): void {
-    if (this.liveAnimationFrameId === null) {
+  private cancelScheduledRender(): void {
+    if (this.scheduledAnimationFrameId === null) {
       return;
     }
 
-    window.cancelAnimationFrame(this.liveAnimationFrameId);
-    this.liveAnimationFrameId = null;
+    window.cancelAnimationFrame(this.scheduledAnimationFrameId);
+    this.scheduledAnimationFrameId = null;
   }
 
-  private renderLatestLiveParameterFrame(): void {
+  private renderScheduledFrame(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    const scheduledFrameStartedAtMs = readCurrentTimeMs();
+    if (this.hasPendingLiveParameterFrame) {
+      this.applyLatestLiveParameterFrameToRenderInput();
+    }
+
+    this.renderCurrentScheduled(scheduledFrameStartedAtMs);
+  }
+
+  private applyLatestLiveParameterFrameToRenderInput(): void {
     const payload = this.payload;
     const liveFrame = this.latestLiveParameterFrame;
+    this.hasPendingLiveParameterFrame = false;
 
     if (
       this.disposed ||
@@ -325,6 +428,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     const deltaTimeMs = this.lastLiveSourceTimestampMs === null
       ? 0
       : Math.max(0, liveFrame.sourceFrameTimestampMs - this.lastLiveSourceTimestampMs);
+    const evaluationStartedAtMs = readCurrentTimeMs();
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(
       payload,
       {
@@ -338,18 +442,39 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
           : { previousState: this.liveRuntimeState })
       }
     );
+    const evaluationDurationMs = Math.max(
+      0,
+      readCurrentTimeMs() - evaluationStartedAtMs
+    );
 
     this.renderInput = renderInput;
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.lastLiveSourceTimestampMs = liveFrame.sourceFrameTimestampMs;
-    this.renderCurrent();
+    this.lastLiveRenderInputEvaluationDurationMs = evaluationDurationMs;
+    this.liveRenderInputEvaluationDurationSampleCount += 1;
   }
 
-  private readonly renderCurrent = (): void => {
+  private renderCurrentScheduled(scheduledFrameStartedAtMs: number): void {
+    this.renderCurrent("scheduled", {
+      scheduledFrameStartedAtMs
+    });
+  }
+
+  private renderCurrentImmediate(): void {
+    this.renderCurrent("immediate");
+  }
+
+  private renderCurrent(
+    mode: "scheduled" | "immediate",
+    options: {
+      readonly scheduledFrameStartedAtMs?: number;
+    } = {}
+  ): void {
     if (this.disposed) {
       return;
     }
 
+    const startedAtMs = readCurrentTimeMs();
     const canvasSize = resizeCanvasToDisplaySize(this.canvas);
     const renderInput = this.renderInput;
     const scene = renderInput?.scene ?? emptyScene;
@@ -369,7 +494,25 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         viewTransform: this.displayViewTransform ?? this.viewTransform
       })
     );
-  };
+    const endedAtMs = readCurrentTimeMs();
+    const durationMs = Math.max(0, endedAtMs - startedAtMs);
+    this.lastRenderDurationMs = durationMs;
+    this.renderDurationSampleCount += 1;
+    this.renderCount += 1;
+    if (mode === "scheduled") {
+      this.scheduledRenderCount += 1;
+      if (options.scheduledFrameStartedAtMs !== undefined) {
+        this.lastScheduledFrameDurationMs = Math.max(
+          0,
+          endedAtMs - options.scheduledFrameStartedAtMs
+        );
+        this.scheduledFrameDurationSampleCount += 1;
+      }
+    } else {
+      this.immediateRenderCount += 1;
+    }
+    this.reportRenderMetricsChanged();
+  }
 
   private readonly handleWheel = (event: WheelEvent): void => {
     if (
@@ -383,13 +526,23 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     event.preventDefault();
+    const hadDisplayViewTransform = this.displayViewTransform !== null;
     this.displayViewTransform = null;
-    this.viewTransform = applyStageWheelZoom({
+    const nextTransform = applyStageWheelZoom({
       transform: this.viewTransform,
       wheelDeltaY: normalizeWheelDeltaY(event, this.canvas),
       anchor: getCanvasViewportPoint(this.canvas, event.clientX, event.clientY)
     });
-    this.renderCurrent();
+    if (
+      !hadDisplayViewTransform &&
+      areStageViewTransformsEqual(this.viewTransform, nextTransform)
+    ) {
+      this.recordDuplicateTransformSkip();
+      return;
+    }
+
+    this.viewTransform = nextTransform;
+    this.requestScheduledRender();
     this.reportViewTransformChanged();
   };
 
@@ -434,18 +587,28 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     event.preventDefault();
+    const hadDisplayViewTransform = this.displayViewTransform !== null;
     this.displayViewTransform = null;
     const nextPanPoint = getCanvasViewportPoint(
       this.canvas,
       event.clientX,
       event.clientY
     );
-    this.viewTransform = applyStagePanDelta(this.viewTransform, {
+    const nextTransform = applyStagePanDelta(this.viewTransform, {
       x: nextPanPoint.x - this.lastPanPoint.x,
       y: nextPanPoint.y - this.lastPanPoint.y
     });
     this.lastPanPoint = nextPanPoint;
-    this.renderCurrent();
+    if (
+      !hadDisplayViewTransform &&
+      areStageViewTransformsEqual(this.viewTransform, nextTransform)
+    ) {
+      this.recordDuplicateTransformSkip();
+      return;
+    }
+
+    this.viewTransform = nextTransform;
+    this.requestScheduledRender();
     this.reportViewTransformChanged();
   };
 
@@ -465,6 +628,35 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
   private reportViewTransformChanged(): void {
     this.options.onViewTransformChanged?.(this.viewTransform);
+  }
+
+  private recordDuplicateTransformSkip(): void {
+    this.duplicateTransformSkipCount += 1;
+    this.reportRenderMetricsChanged();
+  }
+
+  private recordAnimationFrameDelta(timestampMs: number): void {
+    const resolvedTimestampMs = Number.isFinite(timestampMs)
+      ? timestampMs
+      : readCurrentTimeMs();
+
+    if (this.lastAnimationFrameTimestampMs !== null) {
+      this.lastRafDeltaMs = Math.max(
+        0,
+        resolvedTimestampMs - this.lastAnimationFrameTimestampMs
+      );
+      this.rafDeltaSampleCount += 1;
+    }
+
+    this.lastAnimationFrameTimestampMs = resolvedTimestampMs;
+  }
+
+  private reportRenderMetricsChanged(): void {
+    if (this.options.onRenderMetricsChanged === undefined) {
+      return;
+    }
+
+    this.options.onRenderMetricsChanged(this.getRenderMetricsSnapshot());
   }
 }
 
@@ -499,6 +691,34 @@ function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement): {
   }
 
   return { width, height };
+}
+
+function areNullableStageViewTransformsEqual(
+  left: StageViewTransform | null,
+  right: StageViewTransform | null
+): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return areStageViewTransformsEqual(left, right);
+}
+
+function areStageViewTransformsEqual(
+  left: StageViewTransform,
+  right: StageViewTransform
+): boolean {
+  return (
+    left.zoomScale === right.zoomScale &&
+    left.pan.x === right.pan.x &&
+    left.pan.y === right.pan.y
+  );
+}
+
+function readCurrentTimeMs(): number {
+  return typeof performance === "undefined"
+    ? Date.now()
+    : performance.now();
 }
 
 function getDevicePixelRatio(): number {

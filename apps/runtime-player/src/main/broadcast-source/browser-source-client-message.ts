@@ -1,6 +1,9 @@
 import type {
   RuntimePlayerBrowserSourceClientMessage
 } from "../../preload/browser-source-transport-contract";
+import {
+  readOptionalRuntimePlayerStageRenderMetricsSnapshot
+} from "../performance-diagnostics-metrics-validation";
 
 const WEBGL2_STATUSES = new Set(["available", "unavailable", "unknown"]);
 const RENDER_STATUSES = new Set(["idle", "loading", "rendering", "error"]);
@@ -50,7 +53,11 @@ export function readBrowserSourceClientMessage(
         MAX_DIAGNOSTIC_MESSAGE_LENGTH
       ),
       fps: readOptionalFiniteNumber(parsed.fps),
-      frameAgeMs: readOptionalFiniteNumber(parsed.frameAgeMs)
+      sourceFps: readOptionalFiniteNumber(parsed.sourceFps),
+      frameAgeMs: readOptionalFiniteNumber(parsed.frameAgeMs),
+      renderMetrics: readOptionalRuntimePlayerStageRenderMetricsSnapshot(
+        parsed.renderMetrics
+      )
     };
   }
 

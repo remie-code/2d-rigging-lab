@@ -80,7 +80,13 @@ describe("BrowserSourceStageClient", () => {
       webgl2Available: "available",
       runtimeExportLoaded: true,
       renderStatus: "rendering",
-      frameAgeMs: 250
+      sourceFps: null,
+      frameAgeMs: 250,
+      renderMetrics: {
+        renderCount: 0,
+        canvasWidth: 1280,
+        canvasHeight: 720
+      }
     });
   });
 
@@ -490,6 +496,26 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
 
   clearLiveParameterFrame(): void {
     this.clearFrameCount += 1;
+  }
+
+  getRenderMetricsSnapshot() {
+    return {
+      renderCount: 0,
+      scheduledRenderCount: 0,
+      immediateRenderCount: 0,
+      liveFrameMessageCount: 0,
+      stageViewTransformMessageCount: 0,
+      stageDisplayTransformMessageCount: 0,
+      duplicateTransformSkipCount: 0,
+      coalescedLiveFrameCount: 0,
+      lastRafDeltaMs: null,
+      rafDeltaSampleCount: 0,
+      lastRenderDurationMs: null,
+      renderDurationSampleCount: 0,
+      canvasWidth: 1280,
+      canvasHeight: 720,
+      devicePixelRatio: 1
+    };
   }
 
   clear(): void {

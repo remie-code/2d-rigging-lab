@@ -30,6 +30,7 @@ import { InputPage } from "./input-page";
 import { LiveControllerPage } from "./live-controller-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
+import { PerformanceDiagnosticsPage } from "./performance-diagnostics-page";
 import { StagePage } from "./stage-page";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
@@ -48,6 +49,9 @@ import type {
 import type {
   RuntimePlayerBrowserSourceStatus
 } from "../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "../preload/performance-diagnostics-contract";
 import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
@@ -92,6 +96,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerStageViewStatus | null>(null);
   const [stageState, setStageState] =
     useState<RuntimePlayerStageStateSnapshot | null>(null);
+  const [nativeStageRenderMetrics, setNativeStageRenderMetrics] =
+    useState<RuntimePlayerStageRenderMetricsSnapshot | null>(null);
   const [browserSourceStatus, setBrowserSourceStatus] =
     useState<RuntimePlayerBrowserSourceStatus | null>(null);
   const [feedback, setFeedback] = useState<ControlFeedback | null>(null);
@@ -167,6 +173,11 @@ export function ControlWindowApp(): ReactElement {
         setStageViewStatus(status.stageView.renderStatus);
       }
     });
+    window.runtimePlayer.stageView.getRenderMetrics().then((metrics) => {
+      if (active) {
+        setNativeStageRenderMetrics(metrics);
+      }
+    });
     window.runtimePlayer.input.getStatus().then((status) => {
       if (active) {
         setInputStatus(status);
@@ -223,6 +234,12 @@ export function ControlWindowApp(): ReactElement {
           setStageViewStatus(status.stageView.renderStatus);
         }
       });
+    const unsubscribeStageRenderMetrics =
+      window.runtimePlayer.stageView.onRenderMetricsChanged((metrics) => {
+        if (active) {
+          setNativeStageRenderMetrics(metrics);
+        }
+      });
     const unsubscribeInputStatus =
       window.runtimePlayer.input.onStatusChanged((status) => {
         if (active) {
@@ -272,6 +289,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeRuntimeExport();
       unsubscribeStageView();
       unsubscribeStageState();
+      unsubscribeStageRenderMetrics();
       unsubscribeInputStatus();
       unsubscribeInputDiagnostics();
       unsubscribeInputProfile();
@@ -409,6 +427,23 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function copyPerformanceDiagnosticsReport(
+    reportText: string
+  ): Promise<void> {
+    try {
+      await writeClipboardText(reportText);
+      setFeedback({
+        message: "Performance diagnostics report copied.",
+        tone: "success"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   async function runInputProfileAction(
     action: () => Promise<RuntimePlayerInputProfileActionResult>
   ): Promise<void> {
@@ -484,6 +519,7 @@ export function ControlWindowApp(): ReactElement {
     variantStatus,
     stageViewStatus,
     stageState,
+    nativeStageRenderMetrics,
     browserSourceStatus,
     stageWindowStatus,
     receivePortInput,
@@ -500,6 +536,7 @@ export function ControlWindowApp(): ReactElement {
     connectInputSource,
     disconnectInputSource,
     copyBrowserSourceUrl,
+    copyPerformanceDiagnosticsReport,
     runInputProfileAction,
     runMappingAction,
     runVariantAction,
@@ -558,7 +595,10 @@ export function ControlWindowApp(): ReactElement {
 export function shouldRenderInputDiagnosticsPanel(
   activePage: ControlWindowPage
 ): boolean {
-  return activePage !== "live-controller";
+  return (
+    activePage !== "live-controller" &&
+    activePage !== "performance-diagnostics"
+  );
 }
 
 function renderActivePage(input: {
@@ -570,6 +610,7 @@ function renderActivePage(input: {
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
+  readonly nativeStageRenderMetrics: RuntimePlayerStageRenderMetricsSnapshot | null;
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly stageWindowStatus: string;
   readonly receivePortInput: string;
@@ -586,6 +627,9 @@ function renderActivePage(input: {
   readonly connectInputSource: () => Promise<void>;
   readonly disconnectInputSource: () => Promise<void>;
   readonly copyBrowserSourceUrl: () => Promise<void>;
+  readonly copyPerformanceDiagnosticsReport: (
+    reportText: string
+  ) => Promise<void>;
   readonly runInputProfileAction: (
     action: () => Promise<RuntimePlayerInputProfileActionResult>
   ) => Promise<void>;
@@ -810,6 +854,20 @@ function renderActivePage(input: {
         onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
         onRetryRuntimeExportRestore={() =>
           void input.retryRuntimeExportRestore()
+        }
+      />
+    );
+  }
+
+  if (input.activePage === "performance-diagnostics") {
+    return (
+      <PerformanceDiagnosticsPage
+        inputStatus={input.inputStatus}
+        stageState={input.stageState}
+        nativeStageMetrics={input.nativeStageRenderMetrics}
+        browserSourceStatus={input.browserSourceStatus}
+        onCopyReport={(reportText) =>
+          void input.copyPerformanceDiagnosticsReport(reportText)
         }
       />
     );

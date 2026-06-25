@@ -491,8 +491,8 @@ Remaining manual verification:
 
 ### 3.12 OBS Browser Source Probe
 
-- Status: Done at source/test level through Wave12 Live Controller Variant Switching; manual OBS verification pending
-- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed
+- Status: Done at source/test level through Wave12 Live Controller Variant Switching; Wave13 adds Browser Source Performance Diagnostics metrics; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed; Wave13 final integration pass ([../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md))
 - Kind: Broadcast output probe completed by Runtime Player Wave9
 - Priority: Manual verification is high before treating Browser Source as product-ready
 
@@ -520,6 +520,7 @@ Implemented outcome:
 - Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
 - Wave11 adds Stage Motion to the same Browser Source path: Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
 - Wave12 adds active Variant selection to the same Browser Source path: reload/resync receives the current session active Variant selection, and updates carry sanitized active Variant selection without raw tracking/debug/calibration data.
+- Wave13 adds sanitized Browser Source renderer diagnostics/metrics for Performance Diagnostics reports. Reports separate source/input FPS from render FPS and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
 - Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
 
 Source:
@@ -531,9 +532,11 @@ Source:
 - [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md)
 - [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
 - [../implementation/orchestration/player-wave12-plan.md](../implementation/orchestration/player-wave12-plan.md)
+- [../implementation/orchestration/player-wave13-plan.md](../implementation/orchestration/player-wave13-plan.md)
 - [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
 - [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
 - [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
+- [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
 - [../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md)
 
 Remaining manual verification:
@@ -559,14 +562,16 @@ Remaining manual verification:
 - Refresh Browser Source and confirm the current session active Variant selection is retained.
 - Confirm manual Stage pan/zoom remains the base transform while Stage Motion adds only transient offsets.
 - Restart Runtime Player and confirm Stage Motion settings restore.
+- Run Performance Diagnostics with Browser Source connected and confirm source/input FPS and render FPS are separate.
+- Copy a Browser Source or Both report and confirm it excludes raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
 - Disconnect/close OBS Browser Source and confirm native Stage local preview resumes after the grace period.
-- Compare CPU/GPU usage or perceived smoothness against the Wave9 duplicate-render baseline.
+- Compare CPU/GPU usage, render FPS/source FPS, and perceived smoothness against the Wave9/Wave10 baseline.
 - Confirm OBS audio meter does not receive unintended audio.
 
 Suggested next action:
 
-- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave12.
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave13 final integration is ready.
 - If it passes, keep Browser Source as the primary broadcast path.
 - If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.
 
@@ -631,3 +636,71 @@ Remaining manual verification:
 - Reload Browser Source and confirm the current session active Variant selection remains.
 - Restart Runtime Player and confirm active Variant selection resets to Runtime Export defaults.
 - Open a legacy Runtime Export without `baseVisible` and confirm switching is disabled with re-export guidance.
+
+### 3.14 Stage Frame Pacing And Performance Diagnostics
+
+- Status: Done at source/test/final review level through Runtime Player Wave13; manual native/OBS verification pending
+- Kind: Performance / diagnostics feature in Runtime Player Wave13
+- Priority: High before treating smoothness improvements as product-ready
+
+Problem:
+
+- Runtime Player could be functionally correct while still feeling less smooth than expected.
+- Before Wave13, live parameter frames and Stage view/display transform changes could use different render rhythms.
+- Browser Source and native Stage needed comparable metrics that distinguish source/input FPS from actual render FPS.
+
+Implemented outcome:
+
+- Shared Stage renderer frame pacing converges live frames and Stage view/display transform invalidation on scheduled rAF rendering where practical.
+- Duplicate unchanged Stage view/display transforms are skipped and counted.
+- Metrics include render count, scheduled/immediate render count, live frame message count, Stage view/display transform counts, duplicate transform skip count, coalesced live frame count, rAF delta, render duration, canvas size, and devicePixelRatio.
+- Native Stage reports renderer metrics through Stage view IPC.
+- Browser Source reports sanitized renderer diagnostics/metrics through the Browser Source diagnostics path.
+- Control Window includes a low-priority `Performance Diagnostics` page.
+- Performance Diagnostics supports target `Native Stage` / `Browser Source` / `Both`, duration `10s` / `30s`, `Start Capture`, `Stop Capture`, `Copy Report`, `Clear Report`, report preview, target availability, and comparison run guidance.
+- Reports separate source/input FPS from render FPS and include enough counters for logs back to agents.
+- Reports exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Wave10 local preview suspension, Wave11 Stage Motion, and Wave12 Variant switching remain intended preserved behavior.
+
+Deferred future scope:
+
+- WebGL persistent buffer/cache redesign.
+- Runtime graph cache.
+- physics/body follow smoothing semantics changes.
+- input interpolation or server-side frame throttling/resampling.
+- Spout2.
+- OBS automation.
+- Browser Source protocol redesign.
+- binary websocket protocol.
+- Runtime Export format changes.
+- Editor changes.
+
+Source:
+
+- [../screens/performance-diagnostics.md](../screens/performance-diagnostics.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../implementation/orchestration/player-wave13-plan.md](../implementation/orchestration/player-wave13-plan.md)
+- [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
+- [../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md)
+- [../implementation/reviews/wave13/wave13-final-clean-integration-review.md](../implementation/reviews/wave13/wave13-final-clean-integration-review.md)
+
+Remaining manual verification:
+
+- Open Runtime Player with a real Runtime Export.
+- Confirm native Stage still displays and moves normally.
+- Run Performance Diagnostics for native Stage and copy the report.
+- Connect OBS Browser Source.
+- Run Performance Diagnostics for Browser Source connected state or Both.
+- Toggle Stage Motion off/on and capture both states.
+- Compare OBS Browser Source custom FPS off/30/60 if relevant.
+- Confirm report separates source/input FPS from render FPS.
+- Confirm report includes rAF delta, render duration, render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio.
+- Confirm copied report is safe to paste into `tmp/player-performance.log` or chat.
+- Confirm copied report excludes raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Subjectively check whether native Stage and Browser Source feel smoother than before.
+
+Suggested next action:
+
+- Run the manual native Stage and OBS Browser Source performance checklist with a real Runtime Export and iFacialMocap input.
+- If smoothness still feels wrong, use the copied Performance Diagnostics report as the basis for the next narrow performance follow-up.

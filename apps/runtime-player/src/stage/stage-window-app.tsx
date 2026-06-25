@@ -14,7 +14,8 @@ import type {
 } from "../preload/runtime-variant-bridge-contract";
 import {
   createStaticStageCanvasRenderer,
-  type StaticStageCanvasRenderer
+  type StaticStageCanvasRenderer,
+  type StaticStageRenderMetricsSnapshot
 } from "./stage-renderer/static-stage-canvas-renderer";
 import {
   readStageViewTransform,
@@ -41,7 +42,8 @@ export function StageWindowApp(): ReactElement {
     let renderer: StaticStageCanvasRenderer;
     try {
       renderer = createStaticStageCanvasRenderer(canvas, {
-        onViewTransformChanged: reportStageViewTransform
+        onViewTransformChanged: reportStageViewTransform,
+        onRenderMetricsChanged: reportStageRenderMetrics
       });
     } catch (error) {
       console.error("Stage renderer setup failed.", error);
@@ -331,6 +333,16 @@ function reportStageViewTransform(transform: StageViewTransform): void {
     .reportViewTransform(serializeStageViewTransform(transform))
     .catch((error: unknown) => {
       console.error("Stage view transform report failed.", error);
+    });
+}
+
+function reportStageRenderMetrics(
+  snapshot: StaticStageRenderMetricsSnapshot
+): void {
+  window.runtimePlayerStage.stageView
+    .reportRenderMetrics(snapshot)
+    .catch((error: unknown) => {
+      console.error("Stage render metrics report failed.", error);
     });
 }
 

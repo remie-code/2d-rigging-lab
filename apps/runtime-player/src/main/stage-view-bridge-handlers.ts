@@ -2,6 +2,9 @@ import { clipboard, ipcMain, type BrowserWindow } from "electron";
 
 import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
 import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "../preload/performance-diagnostics-contract";
+import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageCaptureState,
   RuntimePlayerStageMotionSettings,
@@ -19,6 +22,9 @@ import {
   createResetRuntimePlayerStageViewTransform,
   normalizeRuntimePlayerStageViewTransform
 } from "./window-state/window-state-document";
+import {
+  readRuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-metrics-validation";
 
 export interface RegisterStageViewBridgeHandlersInput {
   readonly windows: RuntimePlayerWindowSet;
@@ -47,6 +53,7 @@ export function registerStageViewBridgeHandlers(
     arrangeModeEnabled: false,
     clickThroughEnabled: false
   };
+  let latestRenderMetrics: RuntimePlayerStageRenderMetricsSnapshot | null = null;
   const getState = (): RuntimePlayerStageStateSnapshot =>
     createStageStateSnapshot(input, statusState.getStatus(), mutableCaptureState);
   const getArrangeState = (): RuntimePlayerStageArrangeState => ({
@@ -88,6 +95,9 @@ export function registerStageViewBridgeHandlers(
   ipcMain.handle(stageViewBridgeChannels.getViewTransform, () =>
     input.windowState.getStageViewTransform()
   );
+  ipcMain.handle(stageViewBridgeChannels.getRenderMetrics, () =>
+    latestRenderMetrics
+  );
   ipcMain.handle(stageViewBridgeChannels.reportStatus, (_event, report: unknown) => {
     const status = statusState.setReportedStatus(report);
     sendToWindow(
@@ -103,6 +113,19 @@ export function registerStageViewBridgeHandlers(
     (_event, transform: unknown) => {
       input.windowState.updateStageViewTransform(transform);
       return getState();
+    }
+  );
+  ipcMain.handle(
+    stageViewBridgeChannels.reportRenderMetrics,
+    (_event, snapshot: unknown) => {
+      latestRenderMetrics =
+        readRuntimePlayerStageRenderMetricsSnapshot(snapshot);
+      sendToWindow(
+        input.windows.controlWindow,
+        stageViewBridgeChannels.renderMetricsChanged,
+        latestRenderMetrics
+      );
+      return latestRenderMetrics;
     }
   );
   ipcMain.handle(stageViewBridgeChannels.focusStage, () =>
@@ -215,6 +238,7 @@ function sendToWindow(
   channel: string,
   payload: RuntimePlayerStageViewStatus |
     RuntimePlayerStageStateSnapshot |
+    RuntimePlayerStageRenderMetricsSnapshot |
     RuntimePlayerStageViewTransform |
     null |
     RuntimePlayerStageArrangeState

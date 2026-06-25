@@ -9,6 +9,7 @@ import type {
 import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer,
+  type StaticStageRenderMetricsSnapshot,
   type StaticStageRenderResult
 } from "../stage-renderer/static-stage-canvas-renderer";
 
@@ -34,6 +35,7 @@ export interface BrowserSourceStageRenderer {
   ): void;
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
   clearLiveParameterFrame(): void;
+  getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot;
   clear(): void;
   dispose(): void;
 }
@@ -86,6 +88,10 @@ class BrowserSourceStageRendererAdapter implements BrowserSourceStageRenderer {
 
   clearLiveParameterFrame(): void {
     this.renderer.clearLiveParameterFrame();
+  }
+
+  getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {
+    return this.renderer.getRenderMetricsSnapshot();
   }
 
   clear(): void {

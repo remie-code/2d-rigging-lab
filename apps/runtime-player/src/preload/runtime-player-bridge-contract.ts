@@ -7,6 +7,9 @@ import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type { RuntimePlayerModelMappingApi } from "./model-mapping-bridge-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
 import type { RuntimePlayerVariantControllerApi } from "./runtime-variant-bridge-contract";
 
 export const runtimePlayerStageWindowTitle = "Runtime Player Stage" as const;
@@ -190,11 +193,16 @@ export type RuntimePlayerStageViewApi = {
   ) => Promise<RuntimePlayerStageViewActionResult>;
   readonly copyWindowTitle: () => Promise<RuntimePlayerStageViewActionResult>;
   readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;
+  readonly getRenderMetrics:
+    () => Promise<RuntimePlayerStageRenderMetricsSnapshot | null>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerStageViewStatus) => void
   ) => () => void;
   readonly onStateChanged: (
     callback: (status: RuntimePlayerStageStateSnapshot) => void
+  ) => () => void;
+  readonly onRenderMetricsChanged: (
+    callback: (snapshot: RuntimePlayerStageRenderMetricsSnapshot) => void
   ) => () => void;
   readonly onApplyViewTransformRequested: (
     callback: (transform: RuntimePlayerStageViewTransform) => void

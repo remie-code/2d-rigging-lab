@@ -68,6 +68,11 @@ export function installRuntimePlayerStageBridge(): void {
           stageViewBridgeChannels.reportViewTransform,
           transform
         ),
+      reportRenderMetrics: (snapshot) =>
+        ipcRenderer.invoke(
+          stageViewBridgeChannels.reportRenderMetrics,
+          snapshot
+        ),
       onApplyViewTransformRequested: (callback) =>
         subscribeToStageViewTransformEvent(
           stageViewBridgeChannels.applyViewTransformRequested,

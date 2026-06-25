@@ -1,3 +1,7 @@
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
+
 export type RuntimePlayerBrowserSourceBindAddress = "127.0.0.1";
 
 export type RuntimePlayerBrowserSourceServerState =
@@ -61,7 +65,9 @@ export type RuntimePlayerBrowserSourceRendererDiagnostics = {
   readonly renderStatus: "idle" | "loading" | "rendering" | "error";
   readonly message: string | null;
   readonly fps: number | null;
+  readonly sourceFps?: number | null;
   readonly frameAgeMs: number | null;
+  readonly renderMetrics?: RuntimePlayerStageRenderMetricsSnapshot | null;
 };
 
 export type RuntimePlayerBrowserSourceClientDiagnosticEvent =

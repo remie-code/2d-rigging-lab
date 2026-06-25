@@ -120,7 +120,7 @@ describe("LiveControllerPage", () => {
 });
 
 describe("ControlWindowShell navigation", () => {
-  it("shows Live Controller in existing navigation", () => {
+  it("shows Live Controller and Performance Diagnostics in navigation", () => {
     const markup = renderToStaticMarkup(
       createElement(
         ControlWindowShell,
@@ -147,21 +147,26 @@ describe("ControlWindowShell navigation", () => {
     const overviewNavIndex = markup.indexOf(">Overview<");
     const liveControllerNavIndex = markup.indexOf(">Live Controller<");
     const inputNavIndex = markup.indexOf(">Input<");
+    const stageNavIndex = markup.indexOf(">Stage<");
+    const diagnosticsNavIndex = markup.indexOf(">Performance Diagnostics<");
 
     expect(overviewNavIndex).toBeGreaterThanOrEqual(0);
     expect(liveControllerNavIndex).toBeGreaterThan(overviewNavIndex);
     expect(inputNavIndex).toBeGreaterThan(liveControllerNavIndex);
+    expect(stageNavIndex).toBeGreaterThan(inputNavIndex);
+    expect(diagnosticsNavIndex).toBeGreaterThan(stageNavIndex);
   });
 });
 
 describe("ControlWindowApp diagnostics panel policy", () => {
-  it("hides raw input diagnostics on the Live Controller page only", () => {
+  it("hides raw input diagnostics on Live Controller and Performance Diagnostics pages", () => {
     const pages: readonly ControlWindowPage[] = [
       "overview",
       "live-controller",
       "input",
       "mapping",
-      "stage"
+      "stage",
+      "performance-diagnostics"
     ];
 
     expect(pages.map((page) => [
@@ -172,7 +177,8 @@ describe("ControlWindowApp diagnostics panel policy", () => {
       ["live-controller", false],
       ["input", true],
       ["mapping", true],
-      ["stage", true]
+      ["stage", true],
+      ["performance-diagnostics", false]
     ]);
   });
 });

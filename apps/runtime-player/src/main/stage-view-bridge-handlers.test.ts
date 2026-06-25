@@ -15,6 +15,9 @@ vi.mock("electron", () => ({
 }));
 
 import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "../preload/performance-diagnostics-contract";
+import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
   RuntimePlayerStageViewTransform,
@@ -127,6 +130,68 @@ describe("registerStageViewBridgeHandlers", () => {
         stageUi: "hidden"
       }
     });
+  });
+
+  it("stores Stage render metrics snapshots and publishes them to Control", () => {
+    const { controlWindow } = createHarness();
+    const metrics = createRenderMetrics();
+
+    expect(
+      invokeHandler<RuntimePlayerStageRenderMetricsSnapshot | null>(
+        stageViewBridgeChannels.getRenderMetrics
+      )
+    ).toBeNull();
+
+    expect(
+      invokeHandler<RuntimePlayerStageRenderMetricsSnapshot>(
+        stageViewBridgeChannels.reportRenderMetrics,
+        metrics
+      )
+    ).toEqual(metrics);
+    expect(
+      invokeHandler<RuntimePlayerStageRenderMetricsSnapshot | null>(
+        stageViewBridgeChannels.getRenderMetrics
+      )
+    ).toEqual(metrics);
+    expect(controlWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.renderMetricsChanged,
+      metrics
+    );
+  });
+
+  it.each([
+    ["negative count", { ...createRenderMetrics(), renderCount: -1 }],
+    ["non-integer count", { ...createRenderMetrics(), renderCount: 1.5 }],
+    ["NaN rAF delta", { ...createRenderMetrics(), lastRafDeltaMs: Number.NaN }],
+    [
+      "Infinity render duration",
+      { ...createRenderMetrics(), lastRenderDurationMs: Infinity }
+    ],
+    ["invalid canvas size", { ...createRenderMetrics(), canvasWidth: -1 }],
+    ["non-integer canvas size", { ...createRenderMetrics(), canvasHeight: 720.5 }],
+    [
+      "invalid device pixel ratio",
+      { ...createRenderMetrics(), devicePixelRatio: 0 }
+    ],
+    ["malformed nested renderMetrics", { renderMetrics: createRenderMetrics() }]
+  ])("rejects malformed Stage render metrics IPC payloads: %s", (_label, payload) => {
+    const { controlWindow } = createHarness();
+
+    expect(() =>
+      invokeHandler<RuntimePlayerStageRenderMetricsSnapshot>(
+        stageViewBridgeChannels.reportRenderMetrics,
+        payload
+      )
+    ).toThrow("Stage render metrics");
+    expect(
+      invokeHandler<RuntimePlayerStageRenderMetricsSnapshot | null>(
+        stageViewBridgeChannels.getRenderMetrics
+      )
+    ).toBeNull();
+    expect(controlWindow.webContents.send).not.toHaveBeenCalledWith(
+      stageViewBridgeChannels.renderMetricsChanged,
+      expect.anything()
+    );
   });
 
   it("starts click-through off and applies persisted always-on-top to the Stage window", () => {
@@ -584,6 +649,26 @@ function createTransform(input: {
     zoomScale: input.zoomScale,
     pan: input.pan,
     coordinateSpace: "stage-viewport-px-v1"
+  };
+}
+
+function createRenderMetrics(): RuntimePlayerStageRenderMetricsSnapshot {
+  return {
+    renderCount: 6,
+    scheduledRenderCount: 4,
+    immediateRenderCount: 2,
+    liveFrameMessageCount: 8,
+    stageViewTransformMessageCount: 3,
+    stageDisplayTransformMessageCount: 2,
+    duplicateTransformSkipCount: 1,
+    coalescedLiveFrameCount: 2,
+    lastRafDeltaMs: 16,
+    rafDeltaSampleCount: 3,
+    lastRenderDurationMs: 4,
+    renderDurationSampleCount: 6,
+    canvasWidth: 1280,
+    canvasHeight: 720,
+    devicePixelRatio: 1
   };
 }
 

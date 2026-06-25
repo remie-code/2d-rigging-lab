@@ -8,7 +8,8 @@ export type ControlWindowPage =
   | "live-controller"
   | "input"
   | "mapping"
-  | "stage";
+  | "stage"
+  | "performance-diagnostics";
 
 const controlWindowPages: readonly {
   readonly id: ControlWindowPage;
@@ -18,7 +19,8 @@ const controlWindowPages: readonly {
   { id: "live-controller", label: "Live Controller" },
   { id: "input", label: "Input" },
   { id: "mapping", label: "Mapping" },
-  { id: "stage", label: "Stage" }
+  { id: "stage", label: "Stage" },
+  { id: "performance-diagnostics", label: "Performance Diagnostics" }
 ];
 
 export function ControlWindowShell({

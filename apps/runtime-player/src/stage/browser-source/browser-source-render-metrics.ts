@@ -2,6 +2,7 @@ import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-paramet
 
 export type BrowserSourceRenderMetricSnapshot = {
   readonly fps: number | null;
+  readonly sourceFps: number | null;
   readonly frameAgeMs: number | null;
 };
 
@@ -34,6 +35,7 @@ export class BrowserSourceRenderMetrics {
   snapshot(nowMs: number): BrowserSourceRenderMetricSnapshot {
     return {
       fps: this.#fps,
+      sourceFps: this.#fps,
       frameAgeMs: this.#latestProducedAtMs === null
         ? null
         : Math.max(0, Math.round(nowMs - this.#latestProducedAtMs))

@@ -21,6 +21,9 @@ vi.mock("electron", () => ({
 import type { RuntimePlayerStageApi } from "./runtime-player-stage-bridge-contract";
 import { installRuntimePlayerStageBridge } from "./runtime-player-stage-bridge";
 import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
+import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
@@ -46,11 +49,13 @@ describe("installRuntimePlayerStageBridge stageView", () => {
       message: "Rendered.",
       details: []
     };
+    const metrics = createRenderMetrics();
 
     api.stageView.getViewTransform();
     api.stageView.getArrangeState();
     api.stageView.reportStatus(status);
     api.stageView.reportViewTransform(transform);
+    api.stageView.reportRenderMetrics(metrics);
 
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       1,
@@ -69,6 +74,11 @@ describe("installRuntimePlayerStageBridge stageView", () => {
       4,
       stageViewBridgeChannels.reportViewTransform,
       transform
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      5,
+      stageViewBridgeChannels.reportRenderMetrics,
+      metrics
     );
   });
 
@@ -180,5 +190,25 @@ function createTransform(input: {
     zoomScale: input.zoomScale,
     pan: input.pan,
     coordinateSpace: "stage-viewport-px-v1"
+  };
+}
+
+function createRenderMetrics(): RuntimePlayerStageRenderMetricsSnapshot {
+  return {
+    renderCount: 4,
+    scheduledRenderCount: 3,
+    immediateRenderCount: 1,
+    liveFrameMessageCount: 5,
+    stageViewTransformMessageCount: 2,
+    stageDisplayTransformMessageCount: 1,
+    duplicateTransformSkipCount: 0,
+    coalescedLiveFrameCount: 1,
+    lastRafDeltaMs: 16,
+    rafDeltaSampleCount: 3,
+    lastRenderDurationMs: 5,
+    renderDurationSampleCount: 4,
+    canvasWidth: 1280,
+    canvasHeight: 720,
+    devicePixelRatio: 1
   };
 }

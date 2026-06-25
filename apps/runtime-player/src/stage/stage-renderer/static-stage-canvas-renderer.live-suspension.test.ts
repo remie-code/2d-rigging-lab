@@ -89,6 +89,9 @@ describe("StaticStageCanvasRenderer live suspension behavior", () => {
       notify: false
     });
     expect(rendererMocks.render.mock.calls.length)
+      .toBe(renderCountAfterClear);
+    windowStub.runAnimationFrame(2);
+    expect(rendererMocks.render.mock.calls.length)
       .toBe(renderCountAfterClear + 1);
 
     renderer.setPayload(createPayload());
@@ -97,7 +100,8 @@ describe("StaticStageCanvasRenderer live suspension behavior", () => {
   });
 
   it("uses display view transform without reporting it as saved base view", () => {
-    vi.stubGlobal("window", createWindowStub());
+    const windowStub = createWindowStub();
+    vi.stubGlobal("window", windowStub);
     vi.stubGlobal("ResizeObserver", undefined);
     vi.stubGlobal("WheelEvent", {
       DOM_DELTA_LINE: 1,
@@ -121,9 +125,11 @@ describe("StaticStageCanvasRenderer live suspension behavior", () => {
     });
 
     expect(onViewTransformChanged).toHaveBeenCalledTimes(1);
+    windowStub.runAnimationFrame(1);
     expect(readLatestViewportTranslateX()).toBeCloseTo(91.2, 1);
 
     renderer.setDisplayViewTransform(null);
+    windowStub.runAnimationFrame(2);
 
     expect(readLatestViewportTranslateX()).toBeCloseTo(56.2, 1);
   });

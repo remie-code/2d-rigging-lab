@@ -6,6 +6,9 @@ import {
 import type {
   RuntimePlayerBrowserSourceStageDisplayState
 } from "../../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
   RuntimePlayerActiveVariantSelectionState
@@ -49,7 +52,9 @@ export type BrowserSourceStageClientSnapshot = {
   readonly renderStatus: BrowserSourceStageRenderStatus;
   readonly message: string | null;
   readonly fps: number | null;
+  readonly sourceFps: number | null;
   readonly frameAgeMs: number | null;
+  readonly renderMetrics: RuntimePlayerStageRenderMetricsSnapshot | null;
 };
 
 export type BrowserSourceStageClientListener = (
@@ -177,7 +182,9 @@ export class BrowserSourceStageClient {
       renderStatus: options.renderer === null ? "error" : "idle",
       message: options.initialMessage ?? null,
       fps: null,
-      frameAgeMs: null
+      sourceFps: null,
+      frameAgeMs: null,
+      renderMetrics: null
     };
   }
 
@@ -418,7 +425,9 @@ export class BrowserSourceStageClient {
           ? this.#snapshot.message
           : null,
         fps: null,
-        frameAgeMs: null
+        sourceFps: null,
+        frameAgeMs: null,
+        renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
       });
       this.#sendDiagnostics();
       return;
@@ -590,7 +599,9 @@ export class BrowserSourceStageClient {
       renderStatus: this.#snapshot.renderStatus,
       message: this.#snapshot.message,
       fps: metrics.fps,
-      frameAgeMs: metrics.frameAgeMs
+      sourceFps: metrics.sourceFps,
+      frameAgeMs: metrics.frameAgeMs,
+      renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
     });
   }
 
@@ -620,7 +631,8 @@ export class BrowserSourceStageClient {
   ): Partial<BrowserSourceStageClientSnapshot> {
     return {
       ...patch,
-      ...this.#metrics.snapshot(this.#nowMs())
+      ...this.#metrics.snapshot(this.#nowMs()),
+      renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
     };
   }
 

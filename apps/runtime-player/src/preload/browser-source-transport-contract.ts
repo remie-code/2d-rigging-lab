@@ -5,6 +5,9 @@ import type {
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "./browser-source-status-contract";
 import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
+import type {
   RuntimePlayerActiveVariantSelectionState
 } from "./runtime-variant-bridge-contract";
 
@@ -123,5 +126,7 @@ export type RuntimePlayerBrowserSourceClientMessage =
       readonly renderStatus: "idle" | "loading" | "rendering" | "error";
       readonly message: string | null;
       readonly fps: number | null;
+      readonly sourceFps?: number | null;
       readonly frameAgeMs: number | null;
+      readonly renderMetrics?: RuntimePlayerStageRenderMetricsSnapshot | null;
     };

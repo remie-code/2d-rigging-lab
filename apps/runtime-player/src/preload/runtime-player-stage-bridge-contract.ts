@@ -11,6 +11,9 @@ import type {
   RuntimePlayerStageViewStatusReport,
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
 
 export type RuntimePlayerStageRuntimeExportApi = {
   readonly getLoadedPayload: () => Promise<RuntimeExportLoadedPayload | null>;
@@ -30,6 +33,9 @@ export type RuntimePlayerStageViewReporterApi = {
   ) => Promise<void>;
   readonly reportViewTransform: (
     transform: RuntimePlayerStageViewTransform
+  ) => Promise<void>;
+  readonly reportRenderMetrics: (
+    snapshot: RuntimePlayerStageRenderMetricsSnapshot
   ) => Promise<void>;
   readonly onApplyViewTransformRequested: (
     callback: (transform: RuntimePlayerStageViewTransform) => void

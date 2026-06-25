@@ -446,7 +446,9 @@ export class RuntimePlayerBrowserSourceSession {
         renderStatus: message.renderStatus,
         message: message.message,
         fps: message.fps,
-        frameAgeMs: message.frameAgeMs
+        sourceFps: message.sourceFps ?? message.fps,
+        frameAgeMs: message.frameAgeMs,
+        renderMetrics: message.renderMetrics ?? null
       };
       const previousRendererDiagnostics =
         this.#status.latestRendererDiagnostics;

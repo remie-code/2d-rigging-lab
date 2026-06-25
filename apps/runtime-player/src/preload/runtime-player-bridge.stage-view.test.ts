@@ -23,6 +23,9 @@ import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
+import type {
+  RuntimePlayerStageRenderMetricsSnapshot
+} from "./performance-diagnostics-contract";
 import { installRuntimePlayerBridge } from "./runtime-player-bridge";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 
@@ -43,6 +46,7 @@ describe("installRuntimePlayerBridge stageView", () => {
 
     api.stageView.getState();
     api.stageView.getViewTransform();
+    api.stageView.getRenderMetrics();
     api.stageView.reportViewTransform(transform);
     api.stageView.focusStage();
     api.stageView.resetView();
@@ -65,51 +69,55 @@ describe("installRuntimePlayerBridge stageView", () => {
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       3,
+      stageViewBridgeChannels.getRenderMetrics
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      4,
       stageViewBridgeChannels.reportViewTransform,
       transform
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      4,
+      5,
       stageViewBridgeChannels.focusStage
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      5,
+      6,
       stageViewBridgeChannels.resetView
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      6,
+      7,
       stageViewBridgeChannels.centerModel
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      7,
+      8,
       stageViewBridgeChannels.setArrangeMode,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      8,
+      9,
       stageViewBridgeChannels.setClickThrough,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      9,
+      10,
       stageViewBridgeChannels.setAlwaysOnTop,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      10,
+      11,
       stageViewBridgeChannels.updateStageMotionSettings,
       { enabled: true }
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      11,
+      12,
       stageViewBridgeChannels.copyWindowTitle
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      12,
+      13,
       stageViewBridgeChannels.focusStage
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      13,
+      14,
       stageViewBridgeChannels.resetView
     );
   });
@@ -146,6 +154,32 @@ describe("installRuntimePlayerBridge stageView", () => {
       listener
     );
   });
+
+  it("delivers stageView renderMetricsChanged payloads and cleans up subscriptions", () => {
+    const api = installAndReadRuntimePlayerApi();
+    const callback = vi.fn();
+    const payload = createRenderMetrics();
+
+    const unsubscribe = api.stageView.onRenderMetricsChanged(callback);
+
+    expect(electronMocks.on).toHaveBeenCalledWith(
+      stageViewBridgeChannels.renderMetricsChanged,
+      expect.any(Function)
+    );
+    const listener = electronMocks.on.mock.calls[0]?.[1] as
+      | ((event: unknown, payload: RuntimePlayerStageRenderMetricsSnapshot) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.({}, payload);
+    unsubscribe();
+
+    expect(callback).toHaveBeenCalledWith(payload);
+    expect(electronMocks.removeListener).toHaveBeenCalledWith(
+      stageViewBridgeChannels.renderMetricsChanged,
+      listener
+    );
+  });
 });
 
 function installAndReadRuntimePlayerApi(): RuntimePlayerApi {
@@ -165,5 +199,25 @@ function createTransform(input: {
     zoomScale: input.zoomScale,
     pan: input.pan,
     coordinateSpace: "stage-viewport-px-v1"
+  };
+}
+
+function createRenderMetrics(): RuntimePlayerStageRenderMetricsSnapshot {
+  return {
+    renderCount: 10,
+    scheduledRenderCount: 8,
+    immediateRenderCount: 2,
+    liveFrameMessageCount: 12,
+    stageViewTransformMessageCount: 3,
+    stageDisplayTransformMessageCount: 4,
+    duplicateTransformSkipCount: 1,
+    coalescedLiveFrameCount: 2,
+    lastRafDeltaMs: 16,
+    rafDeltaSampleCount: 7,
+    lastRenderDurationMs: 4,
+    renderDurationSampleCount: 10,
+    canvasWidth: 1280,
+    canvasHeight: 720,
+    devicePixelRatio: 1
   };
 }

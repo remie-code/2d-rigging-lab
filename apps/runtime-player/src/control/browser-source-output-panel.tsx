@@ -79,7 +79,19 @@ export function BrowserSourceOutputPanel({
         value={formatBrowserRuntimeExport(diagnostics)}
       />
       <StatusRow label="Frame Age" value={formatFrameAge(diagnostics)} />
-      <StatusRow label="FPS" value={formatBrowserFps(diagnostics)} />
+      <StatusRow label="Source FPS" value={formatBrowserSourceFps(diagnostics)} />
+      <StatusRow
+        label="Render Count"
+        value={formatBrowserRenderCount(diagnostics)}
+      />
+      <StatusRow
+        label="rAF Delta"
+        value={formatBrowserRafDelta(diagnostics)}
+      />
+      <StatusRow
+        label="Render Duration"
+        value={formatBrowserRenderDuration(diagnostics)}
+      />
       {errorDetails.length > 0 ? (
         <ErrorNotice title="Browser Source server error" details={errorDetails} />
       ) : null}
@@ -412,16 +424,57 @@ function formatFrameAge(
     : `${Math.max(0, Math.round(diagnostics.frameAgeMs))} ms`;
 }
 
-function formatBrowserFps(
+function formatBrowserSourceFps(
   diagnostics: RuntimePlayerBrowserSourceRendererDiagnostics | null
 ): string {
   if (diagnostics === null) {
     return "No client diagnostics";
   }
 
-  return diagnostics.fps === null
+  const sourceFps = diagnostics.sourceFps ?? diagnostics.fps;
+
+  return sourceFps === null
     ? "Unknown"
-    : `${formatControlNumber(diagnostics.fps)} fps`;
+    : `${formatControlNumber(sourceFps)} fps`;
+}
+
+function formatBrowserRenderCount(
+  diagnostics: RuntimePlayerBrowserSourceRendererDiagnostics | null
+): string {
+  if (diagnostics === null) {
+    return "No client diagnostics";
+  }
+
+  return diagnostics.renderMetrics === undefined ||
+    diagnostics.renderMetrics === null
+    ? "Unknown"
+    : String(diagnostics.renderMetrics.renderCount);
+}
+
+function formatBrowserRafDelta(
+  diagnostics: RuntimePlayerBrowserSourceRendererDiagnostics | null
+): string {
+  if (diagnostics === null) {
+    return "No client diagnostics";
+  }
+
+  const value = diagnostics.renderMetrics?.lastRafDeltaMs;
+  return value === undefined || value === null
+    ? "Unknown"
+    : `${formatControlNumber(value)} ms`;
+}
+
+function formatBrowserRenderDuration(
+  diagnostics: RuntimePlayerBrowserSourceRendererDiagnostics | null
+): string {
+  if (diagnostics === null) {
+    return "No client diagnostics";
+  }
+
+  const value = diagnostics.renderMetrics?.lastRenderDurationMs;
+  return value === undefined || value === null
+    ? "Unknown"
+    : `${formatControlNumber(value)} ms`;
 }
 
 function formatStatusWord(value: string): string {

@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave12実装事実: Runtime Playerは `Header + Overview / Live Controller / Input / Mapping / Stage` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。Wave9/Wave10はBrowser Source Outputとnative local preview suspensionを追加した。Wave11はInput Profile near/far calibrationとStage page上のStage Motion panelを追加した。Wave12はLive Controllerでsession-only active Variant switchingを追加し、Stage WindowとBrowser Sourceへ同じsanitized active Variant selectionを反映する。`Model` / 専用 `Diagnostics` ページはまだ公開しない。
+> Wave13実装事実: Runtime Playerは `Header + Overview / Live Controller / Input / Mapping / Stage / Performance Diagnostics` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。Wave9/Wave10はBrowser Source Outputとnative local preview suspensionを追加した。Wave11はInput Profile near/far calibrationとStage page上のStage Motion panelを追加した。Wave12はLive Controllerでsession-only active Variant switchingを追加し、Stage WindowとBrowser Sourceへ同じsanitized active Variant selectionを反映する。Wave13はshared Stage renderer frame pacingとPerformance Diagnostics pageを追加する。`Model` page と raw/input 用の専用 `Diagnostics` page はまだ公開しない。
 
 ## 1. Position
 
@@ -26,12 +26,13 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 | Input                |                                                         |
 | Mapping              |                                                         |
 | Stage                |                                                         |
+| Performance Diag.    |                                                         |
 +----------------------+---------------------------------------------------------+
 ```
 
 Stage Windowはこの構造に含めない。Stage Windowは常にmodel onlyである。
 
-将来、Model / Diagnosticsを専用ページに分ける余地は残すが、現在は空のplaceholder pageを出さない。
+将来、Model pageやraw/input diagnostics専用pageに分ける余地は残すが、空のplaceholder pageは出さない。Wave13の`Performance Diagnostics`はそれらとは別の公開済み低優先度pageであり、render pacing evidenceを安全に採取するための画面である。
 
 ## 2. Persistent Header
 
@@ -80,6 +81,7 @@ Headerに置かない操作:
 | Input                |
 | Mapping              |
 | Stage                |
+| Performance Diag.    |
 +----------------------+
 ```
 
@@ -92,6 +94,7 @@ Headerに置かない操作:
 | Input | iFacialMocap接続、transport、port、local IP、Input Profile、near/farを含むhead position calibration |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
 | Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態、Stage Motion、Browser Source Output、Local Preview / Fallback、Capture Target readiness、Arrange Stage、click-through、always-on-top |
+| Performance Diagnostics | Native Stage / Browser Source / Both のtimed capture、source/input FPSとrender FPSの分離、frame pacing/render metrics report、Copy Report |
 
 Calibrationは独立navにしない。Input Profileの作成・再調整としてInput page内から起動する guided sub-screen とする。
 
@@ -100,11 +103,11 @@ Future page候補:
 | Page | Future responsibility |
 |---|---|
 | Model | Runtime Export load/change、model summary、artifact status |
-| Diagnostics | raw / parsed / normalized / mapped values、copy diagnostics |
+| Raw/Input Diagnostics | raw / parsed / normalized / mapped values、copy diagnostics |
 
-現在はDiagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。
+raw/input diagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。Wave13の`Performance Diagnostics` pageは公開済みだが、raw tracking frameを見るための画面ではない。
 
-Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。Wave8ではBroadcast/OBSを自動操作せず、Stage Windowをlocal capture targetとして整える操作を追加した。Live ControllerはWave12で実体pageとして追加済みであり、Stage pageの詳細設定を複製しない。
+Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。Wave8ではBroadcast/OBSを自動操作せず、Stage Windowをlocal capture targetとして整える操作を追加した。Live ControllerはWave12で実体pageとして追加済みであり、Stage pageの詳細設定を複製しない。Performance DiagnosticsはWave13で低優先度pageとして追加され、通常live操作導線とは分ける。
 
 ## 4. Overview Page
 
@@ -657,11 +660,14 @@ Runtime Export auto restoreはWindow Stateの保存対象ではないが、Wave8
 
 保存失敗は通常UXを邪魔しない。Stage pageまたはDiagnostics/Overviewに小さく出す程度にする。
 
-## 10. Future Diagnostics Page / Wave5 Debug Panel
+## 10. Diagnostics Separation
 
-Diagnostics pageは、問題調査と開発確認のための将来の逃がし先である。
+Runtime Playerには、用途の違うdiagnosticsが2種類ある。
 
-現在は専用nav pageにせず、Control Window内のsecondary/collapsible debug panelとして通常UXから畳んでおく。
+1. Wave5由来のraw/input diagnostics debug panel。
+2. Wave13のPerformance Diagnostics page。
+
+これらは混ぜない。raw/input diagnosticsは、問題調査と開発確認のための将来の逃がし先であり、現在は専用nav pageにせず、Control Window内のsecondary/collapsible debug panelとして通常UXから畳んでおく。
 
 ```text
 +--------------------------------------------------------------------------------+
@@ -694,6 +700,16 @@ Diagnosticsの原則:
 - Stage Windowへ表示しない。
 - Mapping後はmapped parameter valuesもここで見られるようにする。
 
+Performance Diagnosticsの原則:
+
+- 低優先度nav pageとして公開する。
+- Native Stage / Browser Source / Bothをtargetに選べる。
+- 10s / 30sのtimed capture、Start Capture、Stop Capture、Copy Report、Clear Report、report previewを持つ。
+- target availabilityと比較run guidanceを表示する。
+- reportはsource/input FPSとrender FPSを分け、rAF delta、render duration、render count、scheduled/immediate render count、live frame message count、Stage view/display transform counts、duplicate transform skip count、coalesced live frame count、canvas size、devicePixelRatioを含める。
+- reportはraw tracking frames、calibration internals、Browser Source token、private file paths、full Runtime Export payloadを含めない。
+- 詳細責務は [performance-diagnostics.md](performance-diagnostics.md) に置く。
+
 ## 11. Stage Window
 
 Stage Windowは設定画面ではない。
@@ -722,12 +738,12 @@ Stage Windowに出さないもの:
 
 ## 12. Current Implementation Shape
 
-Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12で実装された現在の形状:
+Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12/Wave13で実装された現在の形状:
 
 - Persistent Header。
-- `Overview` / `Live Controller` / `Input` / `Mapping` / `Stage` のnavigation。
+- `Overview` / `Live Controller` / `Input` / `Mapping` / `Stage` / `Performance Diagnostics` のnavigation。
 - Runtime Export open/status、input connection、profile/calibration、mapping/live readinessをControlで扱う。
-- Diagnosticsはsecondary collapsible debug panelとして残す。
+- raw/input Diagnosticsはsecondary collapsible debug panelとして残す。
 - Stage Windowはcanvas model-onlyで、debug overlay、raw tracking text、parameter sliderを出さない。
 - Mainがprofile/calibration/mapping/live parameter frameを所有し、Stageはsanitized parameter valuesをruntime-core評価へ渡す。
 - Input Profileはhead position left/right section readinessとmissing-only/head-position-only recalibrationを持つ。
@@ -753,11 +769,18 @@ Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12で実装された現在の形
 - New Runtime Exports with drawable `baseVisible` support runtime Variant switching; legacy exports without complete `baseVisible` still load but switching is disabled with re-export guidance.
 - Native Stage Window and Browser Source use the same session active Variant selection. Browser Source reload/resync includes the current active selection.
 - Browser Source receives sanitized active Variant selection only; raw tracking frames, iFacialMocap diagnostics, calibration internals, and private file paths do not cross into Browser Source for Variant switching.
+- Wave13でshared Stage renderer frame pacingを追加し、live framesとStage view/display transform invalidationは可能な範囲でscheduled rAF renderingへ合流する。
+- duplicate unchanged Stage view/display transformsはskipされ、skip countとしてmetricsに出る。
+- Native StageはStage view IPC経由でrenderer metricsをControlへ渡す。
+- Browser SourceはBrowser Source diagnostics pathでsanitized renderer diagnostics/metricsを渡す。
+- Performance Diagnostics pageはtarget Native Stage / Browser Source / Both、duration 10s / 30s、Start/Stop Capture、Copy Report、Clear Report、report preview、target availability、comparison run guidanceを扱う。
+- Performance Diagnostics reportはsource/input FPSとrender FPSを分け、agentsへ戻せるcounterを含むが、raw tracking frames、calibration internals、Browser Source token、private file paths、full Runtime Export payloadは含めない。
+- Wave10 local preview suspension、Wave11 Stage Motion、Wave12 Variant switchingはWave13後も維持する意図で扱う。
 
 Future page候補:
 
 - Model page。
-- Dedicated Diagnostics page。
+- Dedicated raw/input diagnostics page。
 - Hide Control / display settings。
 - Persistent Model Mapping Profile management。
 - Last-active Variant persistence。
@@ -766,7 +789,7 @@ Future page候補:
 
 ## 13. Open Questions
 
-- Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
+- Dedicated Model / raw-input Diagnostics pagesをどのwaveで実体化するか。Performance DiagnosticsはWave13で別pageとして実体化済み。
 - Header上に明示的な`Hide Control`操作を置くか。Wave8ではControl close-hideとtray/menu recoveryを実装済み。
 - background previewを扱うか。
 - Stage Motionのreal-device default tuningをどこまで詰めるか。
