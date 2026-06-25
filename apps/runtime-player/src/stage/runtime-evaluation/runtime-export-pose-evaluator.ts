@@ -6,6 +6,7 @@ import {
   createInitialRuntimeState,
   defaultRuntimeEvaluationOptions,
   evaluateRuntimeFrame,
+  type RuntimeCoreEvaluationProfile,
   type RuntimeSnapshotDto
 } from "@private-2d-rigging-lab/runtime-core";
 
@@ -23,6 +24,12 @@ export interface RuntimeExportPoseEvaluation {
   readonly initialState: RuntimeStateDto;
   readonly snapshot: RuntimeSnapshotDto;
   readonly nextState: RuntimeStateDto;
+  readonly evaluationProfile: RuntimeExportPoseEvaluationProfile;
+}
+
+export interface RuntimeExportPoseEvaluationProfile {
+  readonly runtimeCoreEvaluationDurationMs: number;
+  readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
 }
 
 export type RuntimeExportPoseEvaluationOptions = {
@@ -32,13 +39,14 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly previousState?: RuntimeStateDto;
   readonly resetReasons?: readonly RuntimeResetReason[];
   readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
+  readonly adapter?: RuntimeExportRuntimeGraphAdapterResult;
 };
 
 export function evaluateRuntimeExportPose(
   input: RuntimeExportRuntimeGraphAdapterInput,
   options: RuntimeExportPoseEvaluationOptions = {}
 ): RuntimeExportPoseEvaluation {
-  const adapter = createRuntimeExportRuntimeGraph({
+  const adapter = options.adapter ?? createRuntimeExportRuntimeGraph({
     ...input,
     activeVariantSelection: options.activeVariantSelection ?? null
   });
@@ -62,6 +70,7 @@ export function evaluateRuntimeExportPose(
       resetReasons: initialResetReasons
     }
   );
+  const runtimeCoreStartedAtMs = readCurrentTimeMs();
   const result = evaluateRuntimeFrame(
     adapter.graph,
     {
@@ -84,13 +93,37 @@ export function evaluateRuntimeExportPose(
       policy: {
         strictness: "interactive"
       }
+    },
+    {
+      enabled: true
     }
+  );
+  const runtimeCoreEvaluationDurationMs = Math.max(
+    0,
+    readCurrentTimeMs() - runtimeCoreStartedAtMs
   );
 
   return {
     adapter,
     initialState,
     snapshot: result.snapshot,
-    nextState: result.nextState
+    nextState: result.nextState,
+    evaluationProfile: {
+      runtimeCoreEvaluationDurationMs,
+      ...(result.profile === undefined
+        ? {}
+        : {
+            runtimeCoreProfile: {
+              ...result.profile,
+              runtimeCoreEvaluationDurationMs
+            }
+          })
+    }
   };
+}
+
+function readCurrentTimeMs(): number {
+  return typeof performance === "undefined"
+    ? Date.now()
+    : performance.now();
 }

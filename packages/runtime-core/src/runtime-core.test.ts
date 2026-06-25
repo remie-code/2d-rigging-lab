@@ -159,6 +159,87 @@ describe("runtime-core foundation evaluation", () => {
     expect(result.snapshots).toHaveLength(2);
     expect(result.finalState.frameIndex).toBe(2);
   });
+
+  it("returns a runtime-core profiling breakdown only when requested", () => {
+    const packageId = PackageIdSchema.parse("pkg_profile");
+    const drawableId = DrawableIdSchema.parse("draw_profile");
+    const meshId = MeshIdSchema.parse("mesh_profile");
+    const graph = createGraph({
+      packageId,
+      drawables: new Map([
+        [
+          drawableId,
+          {
+            drawableId,
+            meshId,
+            visible: true,
+            opacity: 1,
+            baseDrawOrder: 0,
+            bounds: { x: 0, y: 0, width: 10, height: 10 },
+            vertexCount: 4
+          }
+        ]
+      ])
+    });
+    const state = createInitialRuntimeState(graph, {
+      packageId,
+      packageRevision: 0,
+      resetReasons: ["packageLoad"]
+    });
+
+    const unprofiled = evaluateRuntimeFrame(
+      graph,
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex: 1,
+        deltaTimeMs: 0
+      },
+      state,
+      defaultRuntimeEvaluationOptions(),
+      { source: { surface: "preview" } }
+    );
+
+    let nowMs = 0;
+    const profiled = evaluateRuntimeFrame(
+      graph,
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex: 2,
+        deltaTimeMs: 0
+      },
+      state,
+      defaultRuntimeEvaluationOptions(),
+      { source: { surface: "preview" } },
+      {
+        enabled: true,
+        now: () => {
+          nowMs += 1;
+          return nowMs;
+        }
+      }
+    );
+
+    expect(unprofiled.profile).toBeUndefined();
+    expect(profiled.profile).toMatchObject({
+      runtimeCoreEvaluationDurationMs: expect.any(Number),
+      inputValidationDurationMs: expect.any(Number),
+      stateCompatibilityDurationMs: expect.any(Number),
+      dynamicsEvaluationDurationMs: expect.any(Number),
+      runtimeSnapshotCreationDurationMs: expect.any(Number),
+      parameterResolutionDurationMs: expect.any(Number),
+      keyformSamplingDurationMs: expect.any(Number),
+      keyformApplicationDurationMs: expect.any(Number),
+      deformerHierarchyEvaluationDurationMs: expect.any(Number),
+      drawableSnapshotCreationDurationMs: expect.any(Number),
+      visibilityDrawOrderEvaluationDurationMs: expect.any(Number),
+      maskEvaluationDurationMs: expect.any(Number),
+      snapshotValidationDurationMs: expect.any(Number)
+    });
+    expect(profiled.profile?.runtimeCoreEvaluationDurationMs)
+      .toBeGreaterThan(0);
+    expect(profiled.profile?.parameterResolutionDurationMs)
+      .toBeGreaterThan(0);
+  });
 });
 
 const createGraph = (

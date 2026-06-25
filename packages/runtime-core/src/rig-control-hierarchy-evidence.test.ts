@@ -14,6 +14,9 @@ import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { evaluateRuntimeFrame } from "./runtime-core.js";
 import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
+import type {
+  RuntimeCoreEvaluationProfilingOptions
+} from "./runtime-profiling.js";
 import { compareRuntimeSnapshots } from "./snapshot-comparison.js";
 import { evaluateViewerRuntimeSnapshot } from "./viewer-evaluation.js";
 
@@ -86,6 +89,28 @@ describe("runtime rig control hierarchy evidence", () => {
       drawableId: "draw_child",
       opacity: 0.2
     });
+  });
+
+  it("records rotation2d vertex transform duration when profiling is enabled", () => {
+    let nowMs = 0;
+    const result = evaluateSingleFrame(
+      createRotationRigControlGraph(),
+      1,
+      1,
+      {
+        enabled: true,
+        now: () => {
+          nowMs += 1;
+          return nowMs;
+        }
+      }
+    );
+
+    expect(result.profile?.deformerHierarchyEvaluationDurationMs)
+      .toBeGreaterThan(0);
+    expect(result.profile?.rotationDeformerVertexTransformDurationMs)
+      .toBeGreaterThan(0);
+    expect(result.profile?.warpDeformerVertexTransformDurationMs).toBe(0);
   });
 
   it("exposes rig control transform changes and affected drawable targets through runtime diff/evidence", () => {
@@ -421,7 +446,8 @@ describe("runtime rig control hierarchy evidence", () => {
 const evaluateSingleFrame = (
   graph: NormalizedRuntimeGraph,
   frameIndex: number,
-  rigAngle: number
+  rigAngle: number,
+  profilingOptions?: RuntimeCoreEvaluationProfilingOptions
 ) => {
   const input = RuntimeEvaluationInputSchema.parse({
     schemaVersion: "runtime-evaluation-input-v1",
@@ -450,7 +476,8 @@ const evaluateSingleFrame = (
     RuntimeEvaluationContextSchema.parse({
       source: { surface: "preview" },
       policy: { strictness: "interactive" }
-    })
+    }),
+    profilingOptions
   );
 };
 

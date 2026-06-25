@@ -14,6 +14,7 @@ export * from "./initial-state.js";
 export * from "./snapshot.js";
 export * from "./snapshot-comparison.js";
 export * from "./runtime-core.js";
+export * from "./runtime-profiling.js";
 export * from "./runtime-evidence-defaults.js";
 export * from "./runtime-artifact-json.js";
 export * from "./runtime-snapshot-artifacts.js";

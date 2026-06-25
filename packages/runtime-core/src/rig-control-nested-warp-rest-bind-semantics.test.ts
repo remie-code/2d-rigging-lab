@@ -17,6 +17,9 @@ import type {
 import { evaluateRuntimeFrame } from "./runtime-core.js";
 import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
+import type {
+  RuntimeCoreEvaluationProfilingOptions
+} from "./runtime-profiling.js";
 
 const PARAMETER_ID = ParameterIdSchema.parse("param_rig_value");
 const DRAWABLE_ID = DrawableIdSchema.parse("draw_subject");
@@ -98,9 +101,44 @@ describe("runtime nested warp rest/bind semantics", () => {
       ])
     );
   });
+
+  it("records warpLattice2d vertex transform duration when profiling is enabled", () => {
+    let nowMs = 0;
+    const result = evaluateFullFrameResult(
+      createNestedWarpGraph({
+        baseVertex: { x: 5, y: 5 },
+        childOffset: { x: 20, y: 0 },
+        childDomainBounds: { x: 5, y: 5, width: 1, height: 1 },
+        parentDomainBounds: { x: 0, y: 0, width: 10, height: 10 },
+        parentControlPointOffsets: createConstantControlPointOffsets({
+          x: 1,
+          y: 2
+        })
+      }),
+      {
+        enabled: true,
+        now: () => {
+          nowMs += 1;
+          return nowMs;
+        }
+      }
+    );
+
+    expect(result.profile?.deformerHierarchyEvaluationDurationMs)
+      .toBeGreaterThan(0);
+    expect(result.profile?.warpDeformerVertexTransformDurationMs)
+      .toBeGreaterThan(0);
+    expect(result.profile?.rotationDeformerVertexTransformDurationMs).toBe(0);
+  });
 });
 
-const evaluateFullFrame = (graph: NormalizedRuntimeGraph) => {
+const evaluateFullFrame = (graph: NormalizedRuntimeGraph) =>
+  evaluateFullFrameResult(graph).snapshot;
+
+const evaluateFullFrameResult = (
+  graph: NormalizedRuntimeGraph,
+  profilingOptions?: RuntimeCoreEvaluationProfilingOptions
+) => {
   const input = RuntimeEvaluationInputSchema.parse({
     schemaVersion: "runtime-evaluation-input-v1",
     frameIndex: 1,
@@ -128,8 +166,9 @@ const evaluateFullFrame = (graph: NormalizedRuntimeGraph) => {
     RuntimeEvaluationContextSchema.parse({
       source: { surface: "preview" },
       policy: { strictness: "interactive" }
-    })
-  ).snapshot;
+    }),
+    profilingOptions
+  );
 };
 
 const createNestedWarpGraph = (input: {

@@ -21,6 +21,11 @@ import type { RuntimeEvaluationInputInput } from "./runtime-input.js";
 import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import type { RuntimeEvaluationOptionsInput } from "./runtime-options.js";
 import { RuntimeEvaluationOptionsSchema } from "./runtime-options.js";
+import {
+  createRuntimeCoreEvaluationProfiler,
+  type RuntimeCoreEvaluationProfile,
+  type RuntimeCoreEvaluationProfilingOptions
+} from "./runtime-profiling.js";
 
 export type RuntimeEvaluationContextInput = z.input<typeof RuntimeEvaluationContextSchema>;
 export type RuntimeSequenceFrameInput = z.input<typeof RuntimeSequenceFrameSchema>;
@@ -28,6 +33,7 @@ export type RuntimeSequenceFrameInput = z.input<typeof RuntimeSequenceFrameSchem
 export interface RuntimeFrameEvaluationResult {
   readonly snapshot: RuntimeSnapshotDto;
   readonly nextState: RuntimeStateDto;
+  readonly profile?: RuntimeCoreEvaluationProfile;
 }
 
 export interface RuntimeSequenceEvaluationResult {
@@ -51,26 +57,50 @@ export const evaluateRuntimeFrame = (
   inputValue: RuntimeEvaluationInputInput,
   previousStateValue: RuntimeStateDto,
   optionsValue: RuntimeEvaluationOptionsInput,
-  contextValue: RuntimeEvaluationContextInput
+  contextValue: RuntimeEvaluationContextInput,
+  profilingOptions?: RuntimeCoreEvaluationProfilingOptions
 ): RuntimeFrameEvaluationResult => {
-  const input = RuntimeEvaluationInputSchema.parse(inputValue);
-  const previousState = RuntimeStateDtoSchema.parse(previousStateValue);
-  const options = RuntimeEvaluationOptionsSchema.parse(optionsValue);
-  const context = RuntimeEvaluationContextSchema.parse(contextValue);
-  const compatibility = createCompatibleRuntimeState(graph, previousState, input);
-  const nextState = advanceRuntimeState(graph, compatibility.state, input, options.maxSubSteps);
-  const snapshot = createRuntimeSnapshot({
-    graph,
-    evaluationInput: input,
-    state: nextState,
+  const profiler = createRuntimeCoreEvaluationProfiler(profilingOptions);
+  const {
+    input,
+    previousState,
     options,
-    context,
-    diagnostics: compatibility.diagnostics
-  });
+    context
+  } = profiler.measure("inputValidationDurationMs", () => ({
+    input: RuntimeEvaluationInputSchema.parse(inputValue),
+    previousState: RuntimeStateDtoSchema.parse(previousStateValue),
+    options: RuntimeEvaluationOptionsSchema.parse(optionsValue),
+    context: RuntimeEvaluationContextSchema.parse(contextValue)
+  }));
+  const compatibility = profiler.measure(
+    "stateCompatibilityDurationMs",
+    () => createCompatibleRuntimeState(graph, previousState, input)
+  );
+  const nextState = profiler.measure(
+    "dynamicsEvaluationDurationMs",
+    () => advanceRuntimeState(
+      graph,
+      compatibility.state,
+      input,
+      options.maxSubSteps
+    )
+  );
+  const snapshot = profiler.measure("runtimeSnapshotCreationDurationMs", () =>
+    createRuntimeSnapshot({
+      graph,
+      evaluationInput: input,
+      state: nextState,
+      options,
+      context,
+      diagnostics: compatibility.diagnostics,
+      profiling: profiler
+    }));
+  const profile = profiler.finish();
 
   return {
     snapshot,
-    nextState
+    nextState,
+    ...(profile === undefined ? {} : { profile })
   };
 };
 

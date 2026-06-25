@@ -22,7 +22,11 @@ import {
 import {
   type RuntimeExportStageRenderInput
 } from "./runtime-export-stage-scene";
-import { createEvaluatedRuntimeExportStageRenderInput } from "./evaluated-runtime-export-stage-scene";
+import {
+  createEvaluatedRuntimeExportStageRenderInput,
+  type RuntimeExportRenderInputEvaluationProfile
+} from "./evaluated-runtime-export-stage-scene";
+import { RuntimeExportEvaluationCache } from "./runtime-export-evaluation-cache";
 import { createStageRuntimeDiagnosticDetails } from "./stage-render-diagnostics";
 import { createStageViewport } from "./stage-viewport";
 import {
@@ -101,6 +105,7 @@ export function createStaticStageCanvasRenderer(
 
 class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private payload: RuntimeExportLoadedPayload | null = null;
+  private readonly evaluationCache = new RuntimeExportEvaluationCache();
   private renderInput: RuntimeExportStageRenderInput | null = null;
   private liveRuntimeState: RuntimeStateDto | null = null;
   private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
@@ -124,6 +129,51 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private renderDurationSampleCount = 0;
   private lastLiveRenderInputEvaluationDurationMs: number | null = null;
   private liveRenderInputEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreEvaluationDurationMs: number | null = null;
+  private runtimeCoreEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreInputValidationDurationMs: number | null = null;
+  private runtimeCoreInputValidationDurationSampleCount = 0;
+  private lastRuntimeCoreStateCompatibilityDurationMs: number | null = null;
+  private runtimeCoreStateCompatibilityDurationSampleCount = 0;
+  private lastRuntimeCoreDynamicsEvaluationDurationMs: number | null = null;
+  private runtimeCoreDynamicsEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreSnapshotCreationDurationMs: number | null = null;
+  private runtimeCoreSnapshotCreationDurationSampleCount = 0;
+  private lastRuntimeCoreParameterResolutionDurationMs: number | null = null;
+  private runtimeCoreParameterResolutionDurationSampleCount = 0;
+  private lastRuntimeCoreKeyformSamplingDurationMs: number | null = null;
+  private runtimeCoreKeyformSamplingDurationSampleCount = 0;
+  private lastRuntimeCoreKeyformApplicationDurationMs: number | null = null;
+  private runtimeCoreKeyformApplicationDurationSampleCount = 0;
+  private lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: number | null =
+    null;
+  private runtimeCoreDeformerHierarchyEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreWarpDeformerVertexTransformDurationMs: number | null =
+    null;
+  private runtimeCoreWarpDeformerVertexTransformDurationSampleCount = 0;
+  private lastRuntimeCoreRotationDeformerVertexTransformDurationMs:
+    number | null = null;
+  private runtimeCoreRotationDeformerVertexTransformDurationSampleCount = 0;
+  private lastRuntimeCoreDrawableSnapshotCreationDurationMs: number | null =
+    null;
+  private runtimeCoreDrawableSnapshotCreationDurationSampleCount = 0;
+  private lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: number | null =
+    null;
+  private runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreMaskEvaluationDurationMs: number | null = null;
+  private runtimeCoreMaskEvaluationDurationSampleCount = 0;
+  private lastRuntimeCoreSnapshotValidationDurationMs: number | null = null;
+  private runtimeCoreSnapshotValidationDurationSampleCount = 0;
+  private lastPoseEvaluationDurationMs: number | null = null;
+  private poseEvaluationDurationSampleCount = 0;
+  private lastSnapshotToRenderDrawableDurationMs: number | null = null;
+  private snapshotToRenderDrawableDurationSampleCount = 0;
+  private lastRenderInputSceneBuildDurationMs: number | null = null;
+  private renderInputSceneBuildDurationSampleCount = 0;
+  private lastRenderInputScaffoldBuildDurationMs: number | null = null;
+  private renderInputScaffoldBuildDurationSampleCount = 0;
+  private lastRenderInputClippingBuildDurationMs: number | null = null;
+  private renderInputClippingBuildDurationSampleCount = 0;
   private lastScheduledFrameDurationMs: number | null = null;
   private scheduledFrameDurationSampleCount = 0;
   private viewTransform: StageViewTransform = createResetStageViewTransform();
@@ -165,8 +215,10 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         options.activeVariantSelection ?? null
       );
     }
+    this.evaluationCache.clear();
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload, {
-      activeVariantSelection: this.activeVariantSelection
+      activeVariantSelection: this.activeVariantSelection,
+      evaluationCache: this.evaluationCache
     });
 
     this.payload = payload;
@@ -210,7 +262,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(
       this.payload,
       {
-        activeVariantSelection: this.activeVariantSelection
+        activeVariantSelection: this.activeVariantSelection,
+        evaluationCache: this.evaluationCache
       }
     );
     this.renderInput = renderInput;
@@ -251,7 +304,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(
       this.payload,
       {
-        activeVariantSelection: this.activeVariantSelection
+        activeVariantSelection: this.activeVariantSelection,
+        evaluationCache: this.evaluationCache
       }
     );
     this.renderInput = renderInput;
@@ -318,6 +372,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   }
 
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {
+    const evaluationCacheMetrics = this.evaluationCache.getMetricsSnapshot();
+
     return {
       renderCount: this.renderCount,
       scheduledRenderCount: this.scheduledRenderCount,
@@ -335,6 +391,91 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         this.lastLiveRenderInputEvaluationDurationMs,
       liveRenderInputEvaluationDurationSampleCount:
         this.liveRenderInputEvaluationDurationSampleCount,
+      evaluationCacheHitCount:
+        evaluationCacheMetrics.evaluationCacheHitCount,
+      evaluationCacheMissCount:
+        evaluationCacheMetrics.evaluationCacheMissCount,
+      evaluationCacheInvalidationCount:
+        evaluationCacheMetrics.evaluationCacheInvalidationCount,
+      lastRuntimeCoreEvaluationDurationMs:
+        this.lastRuntimeCoreEvaluationDurationMs,
+      runtimeCoreEvaluationDurationSampleCount:
+        this.runtimeCoreEvaluationDurationSampleCount,
+      lastRuntimeCoreInputValidationDurationMs:
+        this.lastRuntimeCoreInputValidationDurationMs,
+      runtimeCoreInputValidationDurationSampleCount:
+        this.runtimeCoreInputValidationDurationSampleCount,
+      lastRuntimeCoreStateCompatibilityDurationMs:
+        this.lastRuntimeCoreStateCompatibilityDurationMs,
+      runtimeCoreStateCompatibilityDurationSampleCount:
+        this.runtimeCoreStateCompatibilityDurationSampleCount,
+      lastRuntimeCoreDynamicsEvaluationDurationMs:
+        this.lastRuntimeCoreDynamicsEvaluationDurationMs,
+      runtimeCoreDynamicsEvaluationDurationSampleCount:
+        this.runtimeCoreDynamicsEvaluationDurationSampleCount,
+      lastRuntimeCoreSnapshotCreationDurationMs:
+        this.lastRuntimeCoreSnapshotCreationDurationMs,
+      runtimeCoreSnapshotCreationDurationSampleCount:
+        this.runtimeCoreSnapshotCreationDurationSampleCount,
+      lastRuntimeCoreParameterResolutionDurationMs:
+        this.lastRuntimeCoreParameterResolutionDurationMs,
+      runtimeCoreParameterResolutionDurationSampleCount:
+        this.runtimeCoreParameterResolutionDurationSampleCount,
+      lastRuntimeCoreKeyformSamplingDurationMs:
+        this.lastRuntimeCoreKeyformSamplingDurationMs,
+      runtimeCoreKeyformSamplingDurationSampleCount:
+        this.runtimeCoreKeyformSamplingDurationSampleCount,
+      lastRuntimeCoreKeyformApplicationDurationMs:
+        this.lastRuntimeCoreKeyformApplicationDurationMs,
+      runtimeCoreKeyformApplicationDurationSampleCount:
+        this.runtimeCoreKeyformApplicationDurationSampleCount,
+      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs:
+        this.lastRuntimeCoreDeformerHierarchyEvaluationDurationMs,
+      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount:
+        this.runtimeCoreDeformerHierarchyEvaluationDurationSampleCount,
+      lastRuntimeCoreWarpDeformerVertexTransformDurationMs:
+        this.lastRuntimeCoreWarpDeformerVertexTransformDurationMs,
+      runtimeCoreWarpDeformerVertexTransformDurationSampleCount:
+        this.runtimeCoreWarpDeformerVertexTransformDurationSampleCount,
+      lastRuntimeCoreRotationDeformerVertexTransformDurationMs:
+        this.lastRuntimeCoreRotationDeformerVertexTransformDurationMs,
+      runtimeCoreRotationDeformerVertexTransformDurationSampleCount:
+        this.runtimeCoreRotationDeformerVertexTransformDurationSampleCount,
+      lastRuntimeCoreDrawableSnapshotCreationDurationMs:
+        this.lastRuntimeCoreDrawableSnapshotCreationDurationMs,
+      runtimeCoreDrawableSnapshotCreationDurationSampleCount:
+        this.runtimeCoreDrawableSnapshotCreationDurationSampleCount,
+      lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs:
+        this.lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs,
+      runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount:
+        this.runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount,
+      lastRuntimeCoreMaskEvaluationDurationMs:
+        this.lastRuntimeCoreMaskEvaluationDurationMs,
+      runtimeCoreMaskEvaluationDurationSampleCount:
+        this.runtimeCoreMaskEvaluationDurationSampleCount,
+      lastRuntimeCoreSnapshotValidationDurationMs:
+        this.lastRuntimeCoreSnapshotValidationDurationMs,
+      runtimeCoreSnapshotValidationDurationSampleCount:
+        this.runtimeCoreSnapshotValidationDurationSampleCount,
+      lastPoseEvaluationDurationMs: this.lastPoseEvaluationDurationMs,
+      poseEvaluationDurationSampleCount:
+        this.poseEvaluationDurationSampleCount,
+      lastSnapshotToRenderDrawableDurationMs:
+        this.lastSnapshotToRenderDrawableDurationMs,
+      snapshotToRenderDrawableDurationSampleCount:
+        this.snapshotToRenderDrawableDurationSampleCount,
+      lastRenderInputSceneBuildDurationMs:
+        this.lastRenderInputSceneBuildDurationMs,
+      renderInputSceneBuildDurationSampleCount:
+        this.renderInputSceneBuildDurationSampleCount,
+      lastRenderInputScaffoldBuildDurationMs:
+        this.lastRenderInputScaffoldBuildDurationMs,
+      renderInputScaffoldBuildDurationSampleCount:
+        this.renderInputScaffoldBuildDurationSampleCount,
+      lastRenderInputClippingBuildDurationMs:
+        this.lastRenderInputClippingBuildDurationMs,
+      renderInputClippingBuildDurationSampleCount:
+        this.renderInputClippingBuildDurationSampleCount,
       lastScheduledFrameDurationMs: this.lastScheduledFrameDurationMs,
       scheduledFrameDurationSampleCount:
         this.scheduledFrameDurationSampleCount,
@@ -351,6 +492,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.latestLiveParameterFrame = null;
     this.hasPendingLiveParameterFrame = false;
     this.lastLiveSourceTimestampMs = null;
+    this.evaluationCache.clear();
     this.cancelScheduledRender();
     this.renderCurrentImmediate();
   }
@@ -370,6 +512,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.canvas.removeEventListener("pointercancel", this.handlePointerUp);
     this.canvas.removeEventListener("lostpointercapture", this.handlePointerUp);
     this.cancelScheduledRender();
+    this.evaluationCache.clear();
     this.renderer.dispose();
   }
 
@@ -433,6 +576,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       payload,
       {
         activeVariantSelection: this.activeVariantSelection,
+        evaluationCache: this.evaluationCache,
         authoredParameterValues: liveFrame.parameterValues,
         frameIndex: liveFrame.sequence,
         deltaTimeMs,
@@ -452,6 +596,9 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.lastLiveSourceTimestampMs = liveFrame.sourceFrameTimestampMs;
     this.lastLiveRenderInputEvaluationDurationMs = evaluationDurationMs;
     this.liveRenderInputEvaluationDurationSampleCount += 1;
+    this.recordLiveRenderInputEvaluationProfile(
+      renderInput.evaluationProfile
+    );
   }
 
   private renderCurrentScheduled(scheduledFrameStartedAtMs: number): void {
@@ -649,6 +796,76 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     this.lastAnimationFrameTimestampMs = resolvedTimestampMs;
+  }
+
+  private recordLiveRenderInputEvaluationProfile(
+    profile: RuntimeExportRenderInputEvaluationProfile | undefined
+  ): void {
+    if (profile === undefined) {
+      return;
+    }
+
+    this.lastRuntimeCoreEvaluationDurationMs =
+      profile.runtimeCoreEvaluationDurationMs;
+    this.runtimeCoreEvaluationDurationSampleCount += 1;
+    if (profile.runtimeCoreProfile !== undefined) {
+      this.lastRuntimeCoreInputValidationDurationMs =
+        profile.runtimeCoreProfile.inputValidationDurationMs;
+      this.runtimeCoreInputValidationDurationSampleCount += 1;
+      this.lastRuntimeCoreStateCompatibilityDurationMs =
+        profile.runtimeCoreProfile.stateCompatibilityDurationMs;
+      this.runtimeCoreStateCompatibilityDurationSampleCount += 1;
+      this.lastRuntimeCoreDynamicsEvaluationDurationMs =
+        profile.runtimeCoreProfile.dynamicsEvaluationDurationMs;
+      this.runtimeCoreDynamicsEvaluationDurationSampleCount += 1;
+      this.lastRuntimeCoreSnapshotCreationDurationMs =
+        profile.runtimeCoreProfile.runtimeSnapshotCreationDurationMs;
+      this.runtimeCoreSnapshotCreationDurationSampleCount += 1;
+      this.lastRuntimeCoreParameterResolutionDurationMs =
+        profile.runtimeCoreProfile.parameterResolutionDurationMs;
+      this.runtimeCoreParameterResolutionDurationSampleCount += 1;
+      this.lastRuntimeCoreKeyformSamplingDurationMs =
+        profile.runtimeCoreProfile.keyformSamplingDurationMs;
+      this.runtimeCoreKeyformSamplingDurationSampleCount += 1;
+      this.lastRuntimeCoreKeyformApplicationDurationMs =
+        profile.runtimeCoreProfile.keyformApplicationDurationMs;
+      this.runtimeCoreKeyformApplicationDurationSampleCount += 1;
+      this.lastRuntimeCoreDeformerHierarchyEvaluationDurationMs =
+        profile.runtimeCoreProfile.deformerHierarchyEvaluationDurationMs;
+      this.runtimeCoreDeformerHierarchyEvaluationDurationSampleCount += 1;
+      this.lastRuntimeCoreWarpDeformerVertexTransformDurationMs =
+        profile.runtimeCoreProfile.warpDeformerVertexTransformDurationMs;
+      this.runtimeCoreWarpDeformerVertexTransformDurationSampleCount += 1;
+      this.lastRuntimeCoreRotationDeformerVertexTransformDurationMs =
+        profile.runtimeCoreProfile.rotationDeformerVertexTransformDurationMs;
+      this.runtimeCoreRotationDeformerVertexTransformDurationSampleCount += 1;
+      this.lastRuntimeCoreDrawableSnapshotCreationDurationMs =
+        profile.runtimeCoreProfile.drawableSnapshotCreationDurationMs;
+      this.runtimeCoreDrawableSnapshotCreationDurationSampleCount += 1;
+      this.lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs =
+        profile.runtimeCoreProfile.visibilityDrawOrderEvaluationDurationMs;
+      this.runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount += 1;
+      this.lastRuntimeCoreMaskEvaluationDurationMs =
+        profile.runtimeCoreProfile.maskEvaluationDurationMs;
+      this.runtimeCoreMaskEvaluationDurationSampleCount += 1;
+      this.lastRuntimeCoreSnapshotValidationDurationMs =
+        profile.runtimeCoreProfile.snapshotValidationDurationMs;
+      this.runtimeCoreSnapshotValidationDurationSampleCount += 1;
+    }
+    this.lastPoseEvaluationDurationMs = profile.poseEvaluationDurationMs;
+    this.poseEvaluationDurationSampleCount += 1;
+    this.lastSnapshotToRenderDrawableDurationMs =
+      profile.snapshotToRenderDrawableDurationMs;
+    this.snapshotToRenderDrawableDurationSampleCount += 1;
+    this.lastRenderInputSceneBuildDurationMs =
+      profile.renderInputSceneBuildDurationMs;
+    this.renderInputSceneBuildDurationSampleCount += 1;
+    this.lastRenderInputScaffoldBuildDurationMs =
+      profile.renderInputScaffoldBuildDurationMs;
+    this.renderInputScaffoldBuildDurationSampleCount += 1;
+    this.lastRenderInputClippingBuildDurationMs =
+      profile.renderInputClippingBuildDurationMs;
+    this.renderInputClippingBuildDurationSampleCount += 1;
   }
 
   private reportRenderMetricsChanged(): void {

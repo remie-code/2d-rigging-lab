@@ -30,7 +30,7 @@ export type PerformanceDiagnosticsStageSample = {
 
 export type PerformanceDiagnosticsBrowserSourceSample = {
   readonly connectedClientCount: number;
-  readonly sourceFps: number | null;
+  readonly liveFrameSourceTimestampFpsLatest: number | null;
   readonly renderMetrics: RuntimePlayerStageRenderMetricsSnapshot | null;
 };
 
@@ -56,14 +56,59 @@ export type PerformanceDiagnosticsTargetReport = {
     | "no-stage"
     | "no-browser-source-client"
     | "metrics-unavailable";
-  readonly sourceInputFps: number | null;
+  readonly liveFrameSourceTimestampFpsLatest: number | null;
+  readonly liveFrameMessageFps: number | null;
+  readonly liveFrameMessageCount: number | null;
+  readonly appliedLiveFrameFps: number | null;
+  readonly appliedLiveFrameCount: number | null;
   readonly renderFps: number | null;
   readonly rafDeltaMs: PerformanceDiagnosticsMetricSummary;
   readonly renderDurationMs: PerformanceDiagnosticsMetricSummary;
   readonly liveRenderInputEvaluationDurationMs:
     PerformanceDiagnosticsMetricSummary;
+  readonly evaluationCacheHitCount: number | null;
+  readonly evaluationCacheMissCount: number | null;
+  readonly evaluationCacheInvalidationCount: number | null;
+  readonly runtimeCoreEvaluationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreInputValidationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreStateCompatibilityDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreDynamicsEvaluationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreSnapshotCreationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreParameterResolutionDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreKeyformSamplingDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreKeyformApplicationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreDeformerHierarchyEvaluationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreWarpDeformerVertexTransformDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreRotationDeformerVertexTransformDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreDrawableSnapshotCreationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreVisibilityDrawOrderEvaluationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreMaskEvaluationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreSnapshotValidationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly poseEvaluationDurationMs: PerformanceDiagnosticsMetricSummary;
+  readonly snapshotToRenderDrawableDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly renderInputSceneBuildDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly renderInputScaffoldBuildDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly renderInputClippingBuildDurationMs:
+    PerformanceDiagnosticsMetricSummary;
   readonly scheduledFrameDurationMs: PerformanceDiagnosticsMetricSummary;
-  readonly liveMessageCount: number | null;
   readonly stageTransformMessageCount: number | null;
   readonly stageViewTransformMessageCount: number | null;
   readonly stageDisplayTransformMessageCount: number | null;
@@ -92,8 +137,8 @@ export type PerformanceDiagnosticsReport = {
     readonly sampleCount: number;
   };
   readonly input: {
-    readonly sourceInputFps: number | null;
-    readonly liveMessageCount: number | null;
+    readonly inputReceiveFpsLatest: number | null;
+    readonly inputPacketCount: number | null;
   };
   readonly nativeStage: PerformanceDiagnosticsTargetReport;
   readonly browserSource: PerformanceDiagnosticsTargetReport;
@@ -134,7 +179,7 @@ export function createPerformanceDiagnosticsCaptureSample(input: {
     nativeStageMetrics: copyRenderMetricsSnapshot(input.nativeStageMetrics),
     browserSource: {
       connectedClientCount: input.browserSourceStatus?.connectedClientCount ?? 0,
-      sourceFps: latestBrowserDiagnostics?.sourceFps ??
+      liveFrameSourceTimestampFpsLatest: latestBrowserDiagnostics?.sourceFps ??
         latestBrowserDiagnostics?.fps ??
         null,
       renderMetrics: copyRenderMetricsSnapshot(
@@ -212,8 +257,8 @@ export function createPerformanceDiagnosticsReport(input: {
       sampleCount
     },
     input: {
-      sourceInputFps: readLatestInputFps(input.samples),
-      liveMessageCount: readInputPacketDelta(input.samples)
+      inputReceiveFpsLatest: readLatestInputFps(input.samples),
+      inputPacketCount: readInputPacketDelta(input.samples)
     },
     nativeStage: createNativeStageReport({
       target: input.target,
@@ -251,8 +296,10 @@ export function formatPerformanceDiagnosticsReport(
     `sampleCount: ${report.capture.sampleCount}`,
     "",
     "[Input]",
-    `sourceInputFps: ${formatNullableNumber(report.input.sourceInputFps)}`,
-    `liveMessageCount: ${formatNullableInteger(report.input.liveMessageCount)}`,
+    `inputReceiveFpsLatest: ${
+      formatNullableNumber(report.input.inputReceiveFpsLatest)
+    }`,
+    `inputPacketCount: ${formatNullableInteger(report.input.inputPacketCount)}`,
     "",
     ...formatTargetReport("Native Stage", report.nativeStage),
     "",
@@ -293,7 +340,6 @@ function createNativeStageReport(input: {
 
   if (metrics.length === 0) {
     return createUnavailableTargetReport("metrics-unavailable", {
-      sourceInputFps: readLatestInputFps(input.samples),
       stageMotionEnabled: latestStageState?.stageMotionEnabled ?? null
     });
   }
@@ -302,7 +348,7 @@ function createNativeStageReport(input: {
     availability: "available",
     durationMs: input.durationMs,
     metrics,
-    sourceInputFps: readLatestInputFps(input.samples),
+    liveFrameSourceTimestampFpsLatest: null,
     browserSourceClientCount: readLatestBrowserSourceClientCount(input.samples),
     stageMotionEnabled: latestStageState?.stageMotionEnabled ?? null
   });
@@ -328,12 +374,12 @@ function createBrowserSourceReport(input: {
   );
   const browserSourceClientCount =
     latestBrowserSource?.connectedClientCount ?? null;
-  const sourceInputFps =
-    latestBrowserSource?.sourceFps ?? readLatestInputFps(input.samples);
+  const liveFrameSourceTimestampFpsLatest =
+    latestBrowserSource?.liveFrameSourceTimestampFpsLatest ?? null;
 
   if ((browserSourceClientCount ?? 0) <= 0) {
     return createUnavailableTargetReport("no-browser-source-client", {
-      sourceInputFps,
+      liveFrameSourceTimestampFpsLatest,
       browserSourceClientCount,
       stageMotionEnabled: latestStageState?.stageMotionEnabled ?? null
     });
@@ -341,7 +387,7 @@ function createBrowserSourceReport(input: {
 
   if (metrics.length === 0) {
     return createUnavailableTargetReport("metrics-unavailable", {
-      sourceInputFps,
+      liveFrameSourceTimestampFpsLatest,
       browserSourceClientCount,
       stageMotionEnabled: latestStageState?.stageMotionEnabled ?? null
     });
@@ -351,7 +397,7 @@ function createBrowserSourceReport(input: {
     availability: "available",
     durationMs: input.durationMs,
     metrics,
-    sourceInputFps,
+    liveFrameSourceTimestampFpsLatest,
     browserSourceClientCount,
     stageMotionEnabled: latestStageState?.stageMotionEnabled ?? null
   });
@@ -361,13 +407,23 @@ function createMetricsTargetReport(input: {
   readonly availability: PerformanceDiagnosticsTargetReport["availability"];
   readonly durationMs: number;
   readonly metrics: readonly RuntimePlayerStageRenderMetricsSnapshot[];
-  readonly sourceInputFps: number | null;
+  readonly liveFrameSourceTimestampFpsLatest: number | null;
   readonly browserSourceClientCount: number | null;
   readonly stageMotionEnabled: boolean | null;
 }): PerformanceDiagnosticsTargetReport {
   const start = input.metrics[0] ?? null;
   const end = input.metrics.at(-1) ?? null;
   const renderCount = readMetricDelta(start, end, "renderCount");
+  const liveFrameMessageCount = readMetricDelta(
+    start,
+    end,
+    "liveFrameMessageCount"
+  );
+  const appliedLiveFrameCount = readMetricDelta(
+    start,
+    end,
+    "liveRenderInputEvaluationDurationSampleCount"
+  );
   const stageViewTransformMessageCount = readMetricDelta(
     start,
     end,
@@ -381,7 +437,16 @@ function createMetricsTargetReport(input: {
 
   return {
     availability: input.availability,
-    sourceInputFps: input.sourceInputFps,
+    liveFrameSourceTimestampFpsLatest:
+      input.liveFrameSourceTimestampFpsLatest,
+    liveFrameMessageFps: liveFrameMessageCount === null
+      ? null
+      : calculateFps(liveFrameMessageCount, input.durationMs),
+    liveFrameMessageCount,
+    appliedLiveFrameFps: appliedLiveFrameCount === null
+      ? null
+      : calculateFps(appliedLiveFrameCount, input.durationMs),
+    appliedLiveFrameCount,
     renderFps: renderCount === null
       ? null
       : calculateFps(renderCount, input.durationMs),
@@ -400,12 +465,136 @@ function createMetricsTargetReport(input: {
       sampleCountKey: "liveRenderInputEvaluationDurationSampleCount",
       valueKey: "lastLiveRenderInputEvaluationDurationMs"
     }),
+    evaluationCacheHitCount: readMetricDelta(
+      start,
+      end,
+      "evaluationCacheHitCount"
+    ),
+    evaluationCacheMissCount: readMetricDelta(
+      start,
+      end,
+      "evaluationCacheMissCount"
+    ),
+    evaluationCacheInvalidationCount: readMetricDelta(
+      start,
+      end,
+      "evaluationCacheInvalidationCount"
+    ),
+    runtimeCoreEvaluationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreEvaluationDurationSampleCount",
+      valueKey: "lastRuntimeCoreEvaluationDurationMs"
+    }),
+    runtimeCoreInputValidationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreInputValidationDurationSampleCount",
+      valueKey: "lastRuntimeCoreInputValidationDurationMs"
+    }),
+    runtimeCoreStateCompatibilityDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreStateCompatibilityDurationSampleCount",
+      valueKey: "lastRuntimeCoreStateCompatibilityDurationMs"
+    }),
+    runtimeCoreDynamicsEvaluationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreDynamicsEvaluationDurationSampleCount",
+      valueKey: "lastRuntimeCoreDynamicsEvaluationDurationMs"
+    }),
+    runtimeCoreSnapshotCreationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreSnapshotCreationDurationSampleCount",
+      valueKey: "lastRuntimeCoreSnapshotCreationDurationMs"
+    }),
+    runtimeCoreParameterResolutionDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreParameterResolutionDurationSampleCount",
+      valueKey: "lastRuntimeCoreParameterResolutionDurationMs"
+    }),
+    runtimeCoreKeyformSamplingDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreKeyformSamplingDurationSampleCount",
+      valueKey: "lastRuntimeCoreKeyformSamplingDurationMs"
+    }),
+    runtimeCoreKeyformApplicationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreKeyformApplicationDurationSampleCount",
+      valueKey: "lastRuntimeCoreKeyformApplicationDurationMs"
+    }),
+    runtimeCoreDeformerHierarchyEvaluationDurationMs:
+      summarizeMetricSamples({
+        metrics: input.metrics,
+        sampleCountKey:
+          "runtimeCoreDeformerHierarchyEvaluationDurationSampleCount",
+        valueKey: "lastRuntimeCoreDeformerHierarchyEvaluationDurationMs"
+      }),
+    runtimeCoreWarpDeformerVertexTransformDurationMs:
+      summarizeMetricSamples({
+        metrics: input.metrics,
+        sampleCountKey:
+          "runtimeCoreWarpDeformerVertexTransformDurationSampleCount",
+        valueKey: "lastRuntimeCoreWarpDeformerVertexTransformDurationMs"
+      }),
+    runtimeCoreRotationDeformerVertexTransformDurationMs:
+      summarizeMetricSamples({
+        metrics: input.metrics,
+        sampleCountKey:
+          "runtimeCoreRotationDeformerVertexTransformDurationSampleCount",
+        valueKey: "lastRuntimeCoreRotationDeformerVertexTransformDurationMs"
+      }),
+    runtimeCoreDrawableSnapshotCreationDurationMs:
+      summarizeMetricSamples({
+        metrics: input.metrics,
+        sampleCountKey:
+          "runtimeCoreDrawableSnapshotCreationDurationSampleCount",
+        valueKey: "lastRuntimeCoreDrawableSnapshotCreationDurationMs"
+      }),
+    runtimeCoreVisibilityDrawOrderEvaluationDurationMs:
+      summarizeMetricSamples({
+        metrics: input.metrics,
+        sampleCountKey:
+          "runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount",
+        valueKey: "lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs"
+      }),
+    runtimeCoreMaskEvaluationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreMaskEvaluationDurationSampleCount",
+      valueKey: "lastRuntimeCoreMaskEvaluationDurationMs"
+    }),
+    runtimeCoreSnapshotValidationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreSnapshotValidationDurationSampleCount",
+      valueKey: "lastRuntimeCoreSnapshotValidationDurationMs"
+    }),
+    poseEvaluationDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "poseEvaluationDurationSampleCount",
+      valueKey: "lastPoseEvaluationDurationMs"
+    }),
+    snapshotToRenderDrawableDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "snapshotToRenderDrawableDurationSampleCount",
+      valueKey: "lastSnapshotToRenderDrawableDurationMs"
+    }),
+    renderInputSceneBuildDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "renderInputSceneBuildDurationSampleCount",
+      valueKey: "lastRenderInputSceneBuildDurationMs"
+    }),
+    renderInputScaffoldBuildDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "renderInputScaffoldBuildDurationSampleCount",
+      valueKey: "lastRenderInputScaffoldBuildDurationMs"
+    }),
+    renderInputClippingBuildDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "renderInputClippingBuildDurationSampleCount",
+      valueKey: "lastRenderInputClippingBuildDurationMs"
+    }),
     scheduledFrameDurationMs: summarizeMetricSamples({
       metrics: input.metrics,
       sampleCountKey: "scheduledFrameDurationSampleCount",
       valueKey: "lastScheduledFrameDurationMs"
     }),
-    liveMessageCount: readMetricDelta(start, end, "liveFrameMessageCount"),
     stageTransformMessageCount: addNullableCounts(
       stageViewTransformMessageCount,
       stageDisplayTransformMessageCount
@@ -451,13 +640,44 @@ function createUnavailableTargetReport(
 ): PerformanceDiagnosticsTargetReport {
   return {
     availability,
-    sourceInputFps: null,
+    liveFrameSourceTimestampFpsLatest: null,
+    liveFrameMessageFps: null,
+    liveFrameMessageCount: null,
+    appliedLiveFrameFps: null,
+    appliedLiveFrameCount: null,
     renderFps: null,
     rafDeltaMs: createEmptyMetricSummary(),
     renderDurationMs: createEmptyMetricSummary(),
     liveRenderInputEvaluationDurationMs: createEmptyMetricSummary(),
+    evaluationCacheHitCount: null,
+    evaluationCacheMissCount: null,
+    evaluationCacheInvalidationCount: null,
+    runtimeCoreEvaluationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreInputValidationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreStateCompatibilityDurationMs: createEmptyMetricSummary(),
+    runtimeCoreDynamicsEvaluationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreSnapshotCreationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreParameterResolutionDurationMs: createEmptyMetricSummary(),
+    runtimeCoreKeyformSamplingDurationMs: createEmptyMetricSummary(),
+    runtimeCoreKeyformApplicationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreDeformerHierarchyEvaluationDurationMs:
+      createEmptyMetricSummary(),
+    runtimeCoreWarpDeformerVertexTransformDurationMs:
+      createEmptyMetricSummary(),
+    runtimeCoreRotationDeformerVertexTransformDurationMs:
+      createEmptyMetricSummary(),
+    runtimeCoreDrawableSnapshotCreationDurationMs:
+      createEmptyMetricSummary(),
+    runtimeCoreVisibilityDrawOrderEvaluationDurationMs:
+      createEmptyMetricSummary(),
+    runtimeCoreMaskEvaluationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreSnapshotValidationDurationMs: createEmptyMetricSummary(),
+    poseEvaluationDurationMs: createEmptyMetricSummary(),
+    snapshotToRenderDrawableDurationMs: createEmptyMetricSummary(),
+    renderInputSceneBuildDurationMs: createEmptyMetricSummary(),
+    renderInputScaffoldBuildDurationMs: createEmptyMetricSummary(),
+    renderInputClippingBuildDurationMs: createEmptyMetricSummary(),
     scheduledFrameDurationMs: createEmptyMetricSummary(),
-    liveMessageCount: null,
     stageTransformMessageCount: null,
     stageViewTransformMessageCount: null,
     stageDisplayTransformMessageCount: null,
@@ -479,11 +699,51 @@ function summarizeMetricSamples(input: {
     | "rafDeltaSampleCount"
     | "renderDurationSampleCount"
     | "liveRenderInputEvaluationDurationSampleCount"
+    | "runtimeCoreEvaluationDurationSampleCount"
+    | "runtimeCoreInputValidationDurationSampleCount"
+    | "runtimeCoreStateCompatibilityDurationSampleCount"
+    | "runtimeCoreDynamicsEvaluationDurationSampleCount"
+    | "runtimeCoreSnapshotCreationDurationSampleCount"
+    | "runtimeCoreParameterResolutionDurationSampleCount"
+    | "runtimeCoreKeyformSamplingDurationSampleCount"
+    | "runtimeCoreKeyformApplicationDurationSampleCount"
+    | "runtimeCoreDeformerHierarchyEvaluationDurationSampleCount"
+    | "runtimeCoreWarpDeformerVertexTransformDurationSampleCount"
+    | "runtimeCoreRotationDeformerVertexTransformDurationSampleCount"
+    | "runtimeCoreDrawableSnapshotCreationDurationSampleCount"
+    | "runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount"
+    | "runtimeCoreMaskEvaluationDurationSampleCount"
+    | "runtimeCoreSnapshotValidationDurationSampleCount"
+    | "poseEvaluationDurationSampleCount"
+    | "snapshotToRenderDrawableDurationSampleCount"
+    | "renderInputSceneBuildDurationSampleCount"
+    | "renderInputScaffoldBuildDurationSampleCount"
+    | "renderInputClippingBuildDurationSampleCount"
     | "scheduledFrameDurationSampleCount";
   readonly valueKey:
     | "lastRafDeltaMs"
     | "lastRenderDurationMs"
     | "lastLiveRenderInputEvaluationDurationMs"
+    | "lastRuntimeCoreEvaluationDurationMs"
+    | "lastRuntimeCoreInputValidationDurationMs"
+    | "lastRuntimeCoreStateCompatibilityDurationMs"
+    | "lastRuntimeCoreDynamicsEvaluationDurationMs"
+    | "lastRuntimeCoreSnapshotCreationDurationMs"
+    | "lastRuntimeCoreParameterResolutionDurationMs"
+    | "lastRuntimeCoreKeyformSamplingDurationMs"
+    | "lastRuntimeCoreKeyformApplicationDurationMs"
+    | "lastRuntimeCoreDeformerHierarchyEvaluationDurationMs"
+    | "lastRuntimeCoreWarpDeformerVertexTransformDurationMs"
+    | "lastRuntimeCoreRotationDeformerVertexTransformDurationMs"
+    | "lastRuntimeCoreDrawableSnapshotCreationDurationMs"
+    | "lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs"
+    | "lastRuntimeCoreMaskEvaluationDurationMs"
+    | "lastRuntimeCoreSnapshotValidationDurationMs"
+    | "lastPoseEvaluationDurationMs"
+    | "lastSnapshotToRenderDrawableDurationMs"
+    | "lastRenderInputSceneBuildDurationMs"
+    | "lastRenderInputScaffoldBuildDurationMs"
+    | "lastRenderInputClippingBuildDurationMs"
     | "lastScheduledFrameDurationMs";
 }): PerformanceDiagnosticsMetricSummary {
   let previousSampleCount = input.metrics[0]?.[input.sampleCountKey] ?? -1;
@@ -512,33 +772,22 @@ function summarizeMetricSamples(input: {
   };
 }
 
-function readMetricDelta<
-  TKey extends keyof RuntimePlayerStageRenderMetricsSnapshot
->(
+function readMetricDelta(
   start: RuntimePlayerStageRenderMetricsSnapshot | null,
   end: RuntimePlayerStageRenderMetricsSnapshot | null,
-  key: TKey
-): RuntimePlayerStageRenderMetricsSnapshot[TKey] extends number
-  ? number | null
-  : never {
+  key: keyof RuntimePlayerStageRenderMetricsSnapshot
+): number | null {
   if (start === null || end === null) {
-    return null as RuntimePlayerStageRenderMetricsSnapshot[TKey] extends number
-      ? number | null
-      : never;
+    return null;
   }
 
   const startValue = start[key];
   const endValue = end[key];
   if (typeof startValue !== "number" || typeof endValue !== "number") {
-    return null as RuntimePlayerStageRenderMetricsSnapshot[TKey] extends number
-      ? number | null
-      : never;
+    return null;
   }
 
-  return Math.max(0, endValue - startValue) as
-    RuntimePlayerStageRenderMetricsSnapshot[TKey] extends number
-      ? number | null
-      : never;
+  return Math.max(0, endValue - startValue);
 }
 
 function readInputPacketDelta(
@@ -652,6 +901,93 @@ function copyRenderMetricsSnapshot(
       snapshot.lastLiveRenderInputEvaluationDurationMs ?? null,
     liveRenderInputEvaluationDurationSampleCount:
       snapshot.liveRenderInputEvaluationDurationSampleCount ?? 0,
+    evaluationCacheHitCount: snapshot.evaluationCacheHitCount ?? 0,
+    evaluationCacheMissCount: snapshot.evaluationCacheMissCount ?? 0,
+    evaluationCacheInvalidationCount:
+      snapshot.evaluationCacheInvalidationCount ?? 0,
+    lastRuntimeCoreEvaluationDurationMs:
+      snapshot.lastRuntimeCoreEvaluationDurationMs ?? null,
+    runtimeCoreEvaluationDurationSampleCount:
+      snapshot.runtimeCoreEvaluationDurationSampleCount ?? 0,
+    lastRuntimeCoreInputValidationDurationMs:
+      snapshot.lastRuntimeCoreInputValidationDurationMs ?? null,
+    runtimeCoreInputValidationDurationSampleCount:
+      snapshot.runtimeCoreInputValidationDurationSampleCount ?? 0,
+    lastRuntimeCoreStateCompatibilityDurationMs:
+      snapshot.lastRuntimeCoreStateCompatibilityDurationMs ?? null,
+    runtimeCoreStateCompatibilityDurationSampleCount:
+      snapshot.runtimeCoreStateCompatibilityDurationSampleCount ?? 0,
+    lastRuntimeCoreDynamicsEvaluationDurationMs:
+      snapshot.lastRuntimeCoreDynamicsEvaluationDurationMs ?? null,
+    runtimeCoreDynamicsEvaluationDurationSampleCount:
+      snapshot.runtimeCoreDynamicsEvaluationDurationSampleCount ?? 0,
+    lastRuntimeCoreSnapshotCreationDurationMs:
+      snapshot.lastRuntimeCoreSnapshotCreationDurationMs ?? null,
+    runtimeCoreSnapshotCreationDurationSampleCount:
+      snapshot.runtimeCoreSnapshotCreationDurationSampleCount ?? 0,
+    lastRuntimeCoreParameterResolutionDurationMs:
+      snapshot.lastRuntimeCoreParameterResolutionDurationMs ?? null,
+    runtimeCoreParameterResolutionDurationSampleCount:
+      snapshot.runtimeCoreParameterResolutionDurationSampleCount ?? 0,
+    lastRuntimeCoreKeyformSamplingDurationMs:
+      snapshot.lastRuntimeCoreKeyformSamplingDurationMs ?? null,
+    runtimeCoreKeyformSamplingDurationSampleCount:
+      snapshot.runtimeCoreKeyformSamplingDurationSampleCount ?? 0,
+    lastRuntimeCoreKeyformApplicationDurationMs:
+      snapshot.lastRuntimeCoreKeyformApplicationDurationMs ?? null,
+    runtimeCoreKeyformApplicationDurationSampleCount:
+      snapshot.runtimeCoreKeyformApplicationDurationSampleCount ?? 0,
+    lastRuntimeCoreDeformerHierarchyEvaluationDurationMs:
+      snapshot.lastRuntimeCoreDeformerHierarchyEvaluationDurationMs ?? null,
+    runtimeCoreDeformerHierarchyEvaluationDurationSampleCount:
+      snapshot.runtimeCoreDeformerHierarchyEvaluationDurationSampleCount ?? 0,
+    lastRuntimeCoreWarpDeformerVertexTransformDurationMs:
+      snapshot.lastRuntimeCoreWarpDeformerVertexTransformDurationMs ?? null,
+    runtimeCoreWarpDeformerVertexTransformDurationSampleCount:
+      snapshot.runtimeCoreWarpDeformerVertexTransformDurationSampleCount ?? 0,
+    lastRuntimeCoreRotationDeformerVertexTransformDurationMs:
+      snapshot.lastRuntimeCoreRotationDeformerVertexTransformDurationMs ??
+      null,
+    runtimeCoreRotationDeformerVertexTransformDurationSampleCount:
+      snapshot.runtimeCoreRotationDeformerVertexTransformDurationSampleCount ??
+      0,
+    lastRuntimeCoreDrawableSnapshotCreationDurationMs:
+      snapshot.lastRuntimeCoreDrawableSnapshotCreationDurationMs ?? null,
+    runtimeCoreDrawableSnapshotCreationDurationSampleCount:
+      snapshot.runtimeCoreDrawableSnapshotCreationDurationSampleCount ?? 0,
+    lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs:
+      snapshot.lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs ?? null,
+    runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount:
+      snapshot.runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount ??
+      0,
+    lastRuntimeCoreMaskEvaluationDurationMs:
+      snapshot.lastRuntimeCoreMaskEvaluationDurationMs ?? null,
+    runtimeCoreMaskEvaluationDurationSampleCount:
+      snapshot.runtimeCoreMaskEvaluationDurationSampleCount ?? 0,
+    lastRuntimeCoreSnapshotValidationDurationMs:
+      snapshot.lastRuntimeCoreSnapshotValidationDurationMs ?? null,
+    runtimeCoreSnapshotValidationDurationSampleCount:
+      snapshot.runtimeCoreSnapshotValidationDurationSampleCount ?? 0,
+    lastPoseEvaluationDurationMs:
+      snapshot.lastPoseEvaluationDurationMs ?? null,
+    poseEvaluationDurationSampleCount:
+      snapshot.poseEvaluationDurationSampleCount ?? 0,
+    lastSnapshotToRenderDrawableDurationMs:
+      snapshot.lastSnapshotToRenderDrawableDurationMs ?? null,
+    snapshotToRenderDrawableDurationSampleCount:
+      snapshot.snapshotToRenderDrawableDurationSampleCount ?? 0,
+    lastRenderInputSceneBuildDurationMs:
+      snapshot.lastRenderInputSceneBuildDurationMs ?? null,
+    renderInputSceneBuildDurationSampleCount:
+      snapshot.renderInputSceneBuildDurationSampleCount ?? 0,
+    lastRenderInputScaffoldBuildDurationMs:
+      snapshot.lastRenderInputScaffoldBuildDurationMs ?? null,
+    renderInputScaffoldBuildDurationSampleCount:
+      snapshot.renderInputScaffoldBuildDurationSampleCount ?? 0,
+    lastRenderInputClippingBuildDurationMs:
+      snapshot.lastRenderInputClippingBuildDurationMs ?? null,
+    renderInputClippingBuildDurationSampleCount:
+      snapshot.renderInputClippingBuildDurationSampleCount ?? 0,
     lastScheduledFrameDurationMs:
       snapshot.lastScheduledFrameDurationMs ?? null,
     scheduledFrameDurationSampleCount:
@@ -669,17 +1005,104 @@ function formatTargetReport(
   return [
     `[${label}]`,
     `availability: ${report.availability}`,
-    `sourceInputFps: ${formatNullableNumber(report.sourceInputFps)}`,
+    `liveFrameSourceTimestampFpsLatest: ${
+      formatNullableNumber(report.liveFrameSourceTimestampFpsLatest)
+    }`,
+    `liveFrameMessageFps: ${
+      formatNullableNumber(report.liveFrameMessageFps)
+    }`,
+    `liveFrameMessageCount: ${
+      formatNullableInteger(report.liveFrameMessageCount)
+    }`,
+    `appliedLiveFrameFps: ${
+      formatNullableNumber(report.appliedLiveFrameFps)
+    }`,
+    `appliedLiveFrameCount: ${
+      formatNullableInteger(report.appliedLiveFrameCount)
+    }`,
     `renderFps: ${formatNullableNumber(report.renderFps)}`,
+    `renderCount: ${formatNullableInteger(report.renderCount)}`,
     `rafDeltaMs: ${formatMetricSummary(report.rafDeltaMs)}`,
     `renderDurationMs: ${formatMetricSummary(report.renderDurationMs)}`,
     `liveRenderInputEvaluationDurationMs: ${
       formatMetricSummary(report.liveRenderInputEvaluationDurationMs)
     }`,
+    `evaluationCacheHitCount: ${
+      formatNullableInteger(report.evaluationCacheHitCount)
+    }`,
+    `evaluationCacheMissCount: ${
+      formatNullableInteger(report.evaluationCacheMissCount)
+    }`,
+    `evaluationCacheInvalidationCount: ${
+      formatNullableInteger(report.evaluationCacheInvalidationCount)
+    }`,
+    `runtimeCoreEvaluationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreEvaluationDurationMs)
+    }`,
+    `runtimeCoreInputValidationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreInputValidationDurationMs)
+    }`,
+    `runtimeCoreStateCompatibilityDurationMs: ${
+      formatMetricSummary(report.runtimeCoreStateCompatibilityDurationMs)
+    }`,
+    `runtimeCoreDynamicsEvaluationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreDynamicsEvaluationDurationMs)
+    }`,
+    `runtimeCoreSnapshotCreationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreSnapshotCreationDurationMs)
+    }`,
+    `runtimeCoreParameterResolutionDurationMs: ${
+      formatMetricSummary(report.runtimeCoreParameterResolutionDurationMs)
+    }`,
+    `runtimeCoreKeyformSamplingDurationMs: ${
+      formatMetricSummary(report.runtimeCoreKeyformSamplingDurationMs)
+    }`,
+    `runtimeCoreKeyformApplicationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreKeyformApplicationDurationMs)
+    }`,
+    `runtimeCoreDeformerHierarchyEvaluationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreDeformerHierarchyEvaluationDurationMs)
+    }`,
+    `runtimeCoreWarpDeformerVertexTransformDurationMs: ${
+      formatMetricSummary(report.runtimeCoreWarpDeformerVertexTransformDurationMs)
+    }`,
+    `runtimeCoreRotationDeformerVertexTransformDurationMs: ${
+      formatMetricSummary(
+        report.runtimeCoreRotationDeformerVertexTransformDurationMs
+      )
+    }`,
+    `runtimeCoreDrawableSnapshotCreationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreDrawableSnapshotCreationDurationMs)
+    }`,
+    `runtimeCoreVisibilityDrawOrderEvaluationDurationMs: ${
+      formatMetricSummary(
+        report.runtimeCoreVisibilityDrawOrderEvaluationDurationMs
+      )
+    }`,
+    `runtimeCoreMaskEvaluationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreMaskEvaluationDurationMs)
+    }`,
+    `runtimeCoreSnapshotValidationDurationMs: ${
+      formatMetricSummary(report.runtimeCoreSnapshotValidationDurationMs)
+    }`,
+    `poseEvaluationDurationMs: ${
+      formatMetricSummary(report.poseEvaluationDurationMs)
+    }`,
+    `snapshotToRenderDrawableDurationMs: ${
+      formatMetricSummary(report.snapshotToRenderDrawableDurationMs)
+    }`,
+    `renderInputSceneBuildDurationMs: ${
+      formatMetricSummary(report.renderInputSceneBuildDurationMs)
+    }`,
+    `renderInputScaffoldBuildDurationMs: ${
+      formatMetricSummary(report.renderInputScaffoldBuildDurationMs)
+    }`,
+    `renderInputClippingBuildDurationMs: ${
+      formatMetricSummary(report.renderInputClippingBuildDurationMs)
+    }`,
     `scheduledFrameDurationMs: ${
       formatMetricSummary(report.scheduledFrameDurationMs)
     }`,
-    `liveMessageCount: ${formatNullableInteger(report.liveMessageCount)}`,
     `stageTransformMessageCount: ${
       formatNullableInteger(report.stageTransformMessageCount)
     }`,
@@ -695,7 +1118,6 @@ function formatTargetReport(
     `coalescedLiveFrameCount: ${
       formatNullableInteger(report.coalescedLiveFrameCount)
     }`,
-    `renderCount: ${formatNullableInteger(report.renderCount)}`,
     `scheduledRenderCount: ${formatNullableInteger(report.scheduledRenderCount)}`,
     `immediateRenderCount: ${formatNullableInteger(report.immediateRenderCount)}`,
     `browserSourceClientCount: ${

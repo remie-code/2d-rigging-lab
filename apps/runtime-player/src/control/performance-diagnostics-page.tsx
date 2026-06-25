@@ -306,16 +306,39 @@ export function PerformanceDiagnosticsPage({
             value={formatStageMotion(stageState)}
           />
           <StatusRow
-            label="Source FPS"
+            label="Input Receive FPS"
             value={formatNullableFps(
-              currentReport?.input.sourceInputFps ??
+              currentReport?.input.inputReceiveFpsLatest ??
                 inputStatus?.estimatedFps ??
                 null
             )}
           />
           <StatusRow
-            label="Render FPS"
+            label="Input Packet Count"
+            value={formatNullableCount(
+              currentReport?.input.inputPacketCount ??
+                inputStatus?.packetCount ??
+                null
+            )}
+          />
+          <StatusRow
+            label="Native Render FPS"
             value={formatNullableFps(currentReport?.nativeStage.renderFps ?? null)}
+          />
+          <StatusRow
+            label="Browser Render FPS"
+            value={formatNullableFps(
+              currentReport?.browserSource.renderFps ?? null
+            )}
+          />
+          <StatusRow
+            label="Browser Source Timestamp FPS"
+            value={formatNullableFps(
+              currentReport?.browserSource.liveFrameSourceTimestampFpsLatest ??
+                browserSourceStatus?.latestRendererDiagnostics?.sourceFps ??
+                browserSourceStatus?.latestRendererDiagnostics?.fps ??
+                null
+            )}
           />
         </Panel>
       </section>
@@ -436,4 +459,8 @@ function formatStageMotion(
 
 function formatNullableFps(value: number | null): string {
   return value === null ? "Unknown" : `${formatControlNumber(value)} fps`;
+}
+
+function formatNullableCount(value: number | null): string {
+  return value === null ? "Unknown" : String(Math.max(0, Math.round(value)));
 }

@@ -114,7 +114,9 @@ describe("StagePage Browser Source output", () => {
     expect(markup).toContain("Available");
     expect(markup).toContain("Loaded in Browser Source");
     expect(markup).toContain("18 ms");
+    expect(markup).toContain("Live Source Timestamp FPS");
     expect(markup).toContain("59.8 fps");
+    expect(markup).not.toContain(">Source FPS<");
     expect(markup).toContain("OBS Browser Source setup");
   });
 

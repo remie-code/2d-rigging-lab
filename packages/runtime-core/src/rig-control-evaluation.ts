@@ -45,6 +45,7 @@ import {
   evaluateWarpLattice2dState
 } from "./rig-control-warp-lattice.js";
 import type { WarpLattice2dLocalState } from "./rig-control-warp-lattice.js";
+import type { RuntimeCoreEvaluationProfiler } from "./runtime-profiling.js";
 
 export const EvaluatedRigControlSchema = z.object({
   rigControlId: RigControlIdSchema,
@@ -88,6 +89,7 @@ export const evaluateRigControlHierarchy = (input: {
   readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): RigControlEvaluationResult => {
   const diagnostics: DiagnosticDto[] = [];
   const patchesByRigControlId = groupRigControlSamples(input.samples);
@@ -140,7 +142,8 @@ export const evaluateRigControlHierarchy = (input: {
     orderedRigControlIds,
     evaluatedById,
     hashPrecisionDecimals: input.hashPrecisionDecimals,
-    diagnostics
+    diagnostics,
+    ...(input.profiling === undefined ? {} : { profiling: input.profiling })
   });
 
   return {
@@ -332,6 +335,7 @@ const applyRigControlTransformsToDrawables = (input: {
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
   readonly hashPrecisionDecimals: number;
   readonly diagnostics: DiagnosticDto[];
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): readonly EvaluatedDrawableDto[] => {
   const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
 
@@ -405,7 +409,8 @@ const applyRigControlTransformsToDrawables = (input: {
     const transformedVertices = applyRigControlEffectChainToVertices({
       currentVertices: drawable.vertices,
       referenceVertices,
-      effects
+      effects,
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
     });
     return {
       ...drawable,
@@ -469,41 +474,69 @@ const applyRigControlEffectChainToVertices = (input: {
   readonly currentVertices: readonly Vec2Dto[];
   readonly referenceVertices: readonly Vec2Dto[];
   readonly effects: readonly RigControlEffect[];
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): Vec2Dto[] =>
   input.effects.reduce<RigControlVertexStreams>(
-    (streams, effect) => applyRigControlEffectToVertices(effect, streams),
+    (streams, effect) => applyRigControlEffectToVertices({
+      effect,
+      streams,
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
+    }),
     {
       currentVertices: cloneVertices(input.currentVertices),
       referenceVertices: input.referenceVertices
     }
   ).currentVertices;
 
-const applyRigControlEffectToVertices = (
-  effect: RigControlEffect,
-  streams: RigControlVertexStreams
-): RigControlVertexStreams => {
-  if (effect.rigControl.kind === "rotation2d") {
-    const localMatrix = effect.evaluated.dto.localTransform?.matrix;
+const applyRigControlEffectToVertices = (input: {
+  readonly effect: RigControlEffect;
+  readonly streams: RigControlVertexStreams;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+}): RigControlVertexStreams => {
+  if (input.effect.rigControl.kind === "rotation2d") {
+    const localMatrix = input.effect.evaluated.dto.localTransform?.matrix;
     return {
-      ...streams,
+      ...input.streams,
       currentVertices:
-        effect.evaluated.dto.evaluationStatus === "evaluated" && localMatrix !== undefined
-          ? applyAffine2dToVertices(localMatrix, streams.currentVertices)
-          : cloneVertices(streams.currentVertices)
+        input.effect.evaluated.dto.evaluationStatus === "evaluated" &&
+          localMatrix !== undefined
+          ? input.profiling?.measure(
+              "rotationDeformerVertexTransformDurationMs",
+              () => applyAffine2dToVertices(
+                localMatrix,
+                input.streams.currentVertices
+              )
+            ) ?? applyAffine2dToVertices(
+              localMatrix,
+              input.streams.currentVertices
+            )
+          : cloneVertices(input.streams.currentVertices)
     };
   }
 
+  const warpRigControl = input.effect.rigControl;
+  const warpLatticeState = input.effect.evaluated.warpLatticeState;
+
   return {
-    ...streams,
+    ...input.streams,
     currentVertices:
-      effect.evaluated.dto.evaluationStatus === "evaluated" && effect.evaluated.warpLatticeState !== undefined
-        ? applyWarpLattice2dToVertices({
-            rigControl: effect.rigControl,
-            localState: effect.evaluated.warpLatticeState,
-            currentVertices: streams.currentVertices,
-            referenceVertices: streams.referenceVertices
+      input.effect.evaluated.dto.evaluationStatus === "evaluated" &&
+        warpLatticeState !== undefined
+        ? input.profiling?.measure(
+            "warpDeformerVertexTransformDurationMs",
+            () => applyWarpLattice2dToVertices({
+              rigControl: warpRigControl,
+              localState: warpLatticeState,
+              currentVertices: input.streams.currentVertices,
+              referenceVertices: input.streams.referenceVertices
+            })
+          ) ?? applyWarpLattice2dToVertices({
+            rigControl: warpRigControl,
+            localState: warpLatticeState,
+            currentVertices: input.streams.currentVertices,
+            referenceVertices: input.streams.referenceVertices
           })
-        : cloneVertices(streams.currentVertices)
+        : cloneVertices(input.streams.currentVertices)
   };
 };
 

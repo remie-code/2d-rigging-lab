@@ -79,7 +79,10 @@ export function BrowserSourceOutputPanel({
         value={formatBrowserRuntimeExport(diagnostics)}
       />
       <StatusRow label="Frame Age" value={formatFrameAge(diagnostics)} />
-      <StatusRow label="Source FPS" value={formatBrowserSourceFps(diagnostics)} />
+      <StatusRow
+        label="Live Source Timestamp FPS"
+        value={formatBrowserSourceTimestampFps(diagnostics)}
+      />
       <StatusRow
         label="Render Count"
         value={formatBrowserRenderCount(diagnostics)}
@@ -424,7 +427,7 @@ function formatFrameAge(
     : `${Math.max(0, Math.round(diagnostics.frameAgeMs))} ms`;
 }
 
-function formatBrowserSourceFps(
+function formatBrowserSourceTimestampFps(
   diagnostics: RuntimePlayerBrowserSourceRendererDiagnostics | null
 ): string {
   if (diagnostics === null) {

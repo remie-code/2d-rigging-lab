@@ -49,6 +49,10 @@ import type { EffectiveParameterResolution } from "./parameter-resolution.js";
 import { EvaluatedRigControlSchema, evaluateRigControlHierarchy } from "./rig-control-evaluation.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
+import type {
+  RuntimeCoreEvaluationProfiler,
+  RuntimeCoreEvaluationProfilePhaseKey
+} from "./runtime-profiling.js";
 import { createStableVertexHash as createStableGeometryVertexHash } from "./drawable-geometry.js";
 import {
   createEvaluatedDrawableTexture,
@@ -172,89 +176,139 @@ export const createRuntimeSnapshot = (input: {
   readonly options: RuntimeEvaluationOptionsDto;
   readonly context: RuntimeEvaluationContextDto;
   readonly diagnostics: readonly DiagnosticDto[];
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): RuntimeSnapshotDto => {
-  const parameterResolution = resolveEffectiveParameterValues({
-    graph: input.graph,
-    authoredParameterValues: input.evaluationInput.authoredParameterValues,
-    state: input.state
-  });
-  const keyformSampling = sampleRuntimeKeyformsInEvaluationOrder({
-    graph: input.graph,
-    effectiveParameterValues: parameterResolution.effectiveParameterValues
-  });
-  const baseDrawables = createEvaluatedDrawables({
-    graph: input.graph,
-    options: input.options,
-    includeVertices: keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
-  });
-  const referenceVerticesByDrawableId = createReferenceVerticesByDrawableId(input.graph);
-  const appliedKeyforms = applySamplesInEvaluationOrder({
-    drawables: baseDrawables,
-    samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind !== "rigControl"),
-    hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
-  });
-  const rigControlEvaluation = evaluateRigControlHierarchy({
-    graph: input.graph,
-    drawables: appliedKeyforms.drawables,
-    referenceVerticesByDrawableId,
-    samples: keyformSampling.samples.filter((sample) => sample.targetMetadata.targetKind === "rigControl"),
-    hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
-  });
-  const drawables = finalizeDrawablesForDetail(rigControlEvaluation.drawables, input.options, input.graph);
-
-  return RuntimeSnapshotSchema.parse({
-    schemaVersion: "runtime-snapshot-v1",
-    runtimeCoreVersion: "wave2-foundation",
-    snapshotId: RuntimeSnapshotIdSchema.parse(`snap_${input.graph.packageId.replace(/^pkg_/, "")}_${input.evaluationInput.frameIndex}`),
-    context: input.context,
-    packageId: input.graph.packageId,
-    packageRevision: input.graph.packageRevision,
-    ...(input.graph.packageHash === undefined ? {} : { packageHash: input.graph.packageHash }),
-    dirty: false,
-    evaluation: {
-      snapshotDetail: input.options.snapshotDetail,
-      evaluatorVersions: input.options.evaluatorVersions
-    },
-    parameters: createEvaluatedParameters(parameterResolution),
-    dynamics: createEvaluatedDynamics(
-      input.graph,
-      input.evaluationInput,
-      input.state,
+  const measure = <TValue>(
+    phase: RuntimeCoreEvaluationProfilePhaseKey,
+    evaluate: () => TValue
+  ): TValue =>
+    input.profiling === undefined
+      ? evaluate()
+      : input.profiling.measure(phase, evaluate);
+  const parameterResolution = measure(
+    "parameterResolutionDurationMs",
+    () => resolveEffectiveParameterValues({
+      graph: input.graph,
+      authoredParameterValues: input.evaluationInput.authoredParameterValues,
+      state: input.state
+    })
+  );
+  const keyformSampling = measure(
+    "keyformSamplingDurationMs",
+    () => sampleRuntimeKeyformsInEvaluationOrder({
+      graph: input.graph,
+      effectiveParameterValues: parameterResolution.effectiveParameterValues
+    })
+  );
+  const baseDrawables = measure(
+    "drawableSnapshotCreationDurationMs",
+    () => createEvaluatedDrawables({
+      graph: input.graph,
+      options: input.options,
+      includeVertices:
+        keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
+    })
+  );
+  const referenceVerticesByDrawableId = measure(
+    "drawableSnapshotCreationDurationMs",
+    () => createReferenceVerticesByDrawableId(input.graph)
+  );
+  const appliedKeyforms = measure(
+    "keyformApplicationDurationMs",
+    () => applySamplesInEvaluationOrder({
+      drawables: baseDrawables,
+      samples: keyformSampling.samples.filter(
+        (sample) => sample.targetMetadata.targetKind !== "rigControl"
+      ),
+      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
+    })
+  );
+  const rigControlEvaluation = measure(
+    "deformerHierarchyEvaluationDurationMs",
+    () => evaluateRigControlHierarchy({
+      graph: input.graph,
+      drawables: appliedKeyforms.drawables,
+      referenceVerticesByDrawableId,
+      samples: keyformSampling.samples.filter(
+        (sample) => sample.targetMetadata.targetKind === "rigControl"
+      ),
+      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals,
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
+    })
+  );
+  const drawables = measure(
+    "drawableSnapshotCreationDurationMs",
+    () => finalizeDrawablesForDetail(
+      rigControlEvaluation.drawables,
       input.options,
-      parameterResolution
-    ),
-    keyformSamples: keyformSampling.samples,
-    rigControls: rigControlEvaluation.rigControls,
-    parts: createEvaluatedParts(input.graph),
-    drawables,
-    masks: createEvaluatedMaskRelations(input.graph),
-    drawList: drawables.filter((drawable) => drawable.visible).map((drawable) => drawable.drawableId),
-    disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
-    diagnostics: [
-      ...input.diagnostics,
-      ...keyformSampling.diagnostics,
-      ...appliedKeyforms.diagnostics,
-      ...rigControlEvaluation.diagnostics
-    ],
-    ...(input.options.includeTrace
-      ? {
-          trace: {
-            phases: [
-              "parameter_resolution",
-              "dynamics_evaluation",
-              "keyform_sampling",
-              "rigControl_evaluation",
-              "mesh_evaluation",
-              "opacity_visibility",
-              "mask_resolution",
-              "draw_order_resolution",
-              "render_preparation"
-            ],
-            evaluatorVersionSummary: input.options.evaluatorVersions
+      input.graph
+    )
+  );
+  const masks = measure(
+    "maskEvaluationDurationMs",
+    () => createEvaluatedMaskRelations(input.graph)
+  );
+  const drawList = measure(
+    "visibilityDrawOrderEvaluationDurationMs",
+    () => drawables
+      .filter((drawable) => drawable.visible)
+      .map((drawable) => drawable.drawableId)
+  );
+
+  return measure("snapshotValidationDurationMs", () =>
+    RuntimeSnapshotSchema.parse({
+      schemaVersion: "runtime-snapshot-v1",
+      runtimeCoreVersion: "wave2-foundation",
+      snapshotId: RuntimeSnapshotIdSchema.parse(`snap_${input.graph.packageId.replace(/^pkg_/, "")}_${input.evaluationInput.frameIndex}`),
+      context: input.context,
+      packageId: input.graph.packageId,
+      packageRevision: input.graph.packageRevision,
+      ...(input.graph.packageHash === undefined ? {} : { packageHash: input.graph.packageHash }),
+      dirty: false,
+      evaluation: {
+        snapshotDetail: input.options.snapshotDetail,
+        evaluatorVersions: input.options.evaluatorVersions
+      },
+      parameters: createEvaluatedParameters(parameterResolution),
+      dynamics: createEvaluatedDynamics(
+        input.graph,
+        input.evaluationInput,
+        input.state,
+        input.options,
+        parameterResolution
+      ),
+      keyformSamples: keyformSampling.samples,
+      rigControls: rigControlEvaluation.rigControls,
+      parts: createEvaluatedParts(input.graph),
+      drawables,
+      masks,
+      drawList,
+      disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
+      diagnostics: [
+        ...input.diagnostics,
+        ...keyformSampling.diagnostics,
+        ...appliedKeyforms.diagnostics,
+        ...rigControlEvaluation.diagnostics
+      ],
+      ...(input.options.includeTrace
+        ? {
+            trace: {
+              phases: [
+                "parameter_resolution",
+                "dynamics_evaluation",
+                "keyform_sampling",
+                "rigControl_evaluation",
+                "mesh_evaluation",
+                "opacity_visibility",
+                "mask_resolution",
+                "draw_order_resolution",
+                "render_preparation"
+              ],
+              evaluatorVersionSummary: input.options.evaluatorVersions
+            }
           }
-        }
-      : {})
-  });
+        : {})
+    }));
 };
 
 const createEvaluatedParameters = (resolution: EffectiveParameterResolution): EvaluatedParameterDto[] =>

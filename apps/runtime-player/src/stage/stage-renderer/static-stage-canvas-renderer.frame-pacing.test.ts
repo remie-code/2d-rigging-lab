@@ -332,6 +332,28 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
     expect(renderer.getRenderMetricsSnapshot()).toMatchObject({
       lastLiveRenderInputEvaluationDurationMs: 3,
       liveRenderInputEvaluationDurationSampleCount: 1,
+      lastRuntimeCoreEvaluationDurationMs: 2,
+      runtimeCoreEvaluationDurationSampleCount: 1,
+      lastRuntimeCoreParameterResolutionDurationMs: 0.2,
+      runtimeCoreParameterResolutionDurationSampleCount: 1,
+      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
+      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1,
+      lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.8,
+      runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 1,
+      lastRuntimeCoreRotationDeformerVertexTransformDurationMs: 0.9,
+      runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 1,
+      lastRuntimeCoreMaskEvaluationDurationMs: 0.1,
+      runtimeCoreMaskEvaluationDurationSampleCount: 1,
+      lastPoseEvaluationDurationMs: 3,
+      poseEvaluationDurationSampleCount: 1,
+      lastSnapshotToRenderDrawableDurationMs: 4,
+      snapshotToRenderDrawableDurationSampleCount: 1,
+      lastRenderInputSceneBuildDurationMs: 5,
+      renderInputSceneBuildDurationSampleCount: 1,
+      lastRenderInputScaffoldBuildDurationMs: 0,
+      renderInputScaffoldBuildDurationSampleCount: 1,
+      lastRenderInputClippingBuildDurationMs: 0,
+      renderInputClippingBuildDurationSampleCount: 1,
       lastRenderDurationMs: 12,
       renderDurationSampleCount: 3,
       lastScheduledFrameDurationMs: 32,
@@ -392,6 +414,52 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
       rafDeltaSampleCount: 3,
       lastRafDeltaMs: 16
     });
+  });
+
+  it("does not rebuild evaluated runtime input for view transform changes", () => {
+    const windowStub = installStageGlobals();
+    const renderer = createStaticStageCanvasRenderer(
+      createCanvasStub() as unknown as HTMLCanvasElement
+    );
+    renderer.setPayload(createPayload());
+    rendererMocks.createEvaluatedRuntimeExportStageRenderInput.mockClear();
+    rendererMocks.render.mockClear();
+
+    renderer.setViewTransform({
+      zoomScale: 1,
+      pan: { x: 20, y: 0 }
+    }, {
+      notify: false
+    });
+    renderer.setDisplayViewTransform({
+      zoomScale: 1,
+      pan: { x: 60, y: 0 }
+    });
+
+    expect(rendererMocks.createEvaluatedRuntimeExportStageRenderInput)
+      .not.toHaveBeenCalled();
+
+    windowStub.runAnimationFrame(1, 100);
+
+    expect(rendererMocks.createEvaluatedRuntimeExportStageRenderInput)
+      .not.toHaveBeenCalled();
+    expect(rendererMocks.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears renderer-owned evaluation cache on clear, reload, and dispose", () => {
+    installStageGlobals();
+    const renderer = createStaticStageCanvasRenderer(
+      createCanvasStub() as unknown as HTMLCanvasElement
+    );
+    renderer.setPayload(createPayload());
+    const cache = readLatestEvaluationCache();
+    const clearSpy = vi.spyOn(cache, "clear");
+
+    renderer.clear();
+    renderer.setPayload(createPayload());
+    renderer.dispose();
+
+    expect(clearSpy).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -529,8 +597,42 @@ function createRenderInput(frameIndex: number) {
       },
       snapshot: {
         diagnostics: []
+      },
+      evaluationProfile: {
+        runtimeCoreEvaluationDurationMs: 2,
+        runtimeCoreProfile: createRuntimeCoreProfile()
       }
+    },
+    evaluationProfile: {
+      evaluationCacheStatus: frameIndex === 0 ? "miss" : "hit",
+      runtimeCoreEvaluationDurationMs: 2,
+      runtimeCoreProfile: createRuntimeCoreProfile(),
+      poseEvaluationDurationMs: 3,
+      snapshotToRenderDrawableDurationMs: 4,
+      renderInputSceneBuildDurationMs: 5,
+      renderInputScaffoldBuildDurationMs: 0,
+      renderInputClippingBuildDurationMs: 0
     }
+  };
+}
+
+function createRuntimeCoreProfile() {
+  return {
+    runtimeCoreEvaluationDurationMs: 2,
+    inputValidationDurationMs: 0.1,
+    stateCompatibilityDurationMs: 0.1,
+    dynamicsEvaluationDurationMs: 0.1,
+    runtimeSnapshotCreationDurationMs: 1.5,
+    parameterResolutionDurationMs: 0.2,
+    keyformSamplingDurationMs: 0.3,
+    keyformApplicationDurationMs: 0.4,
+    deformerHierarchyEvaluationDurationMs: 0.7,
+    warpDeformerVertexTransformDurationMs: 0.8,
+    rotationDeformerVertexTransformDurationMs: 0.9,
+    drawableSnapshotCreationDurationMs: 0.5,
+    visibilityDrawOrderEvaluationDurationMs: 0.1,
+    maskEvaluationDurationMs: 0.1,
+    snapshotValidationDurationMs: 0.6
   };
 }
 
@@ -594,4 +696,17 @@ function readLatestViewportTranslate(): { readonly x: number; readonly y: number
     x: viewport?.stageToViewport?.translate?.x ?? Number.NaN,
     y: viewport?.stageToViewport?.translate?.y ?? Number.NaN
   };
+}
+
+function readLatestEvaluationCache(): { readonly clear: () => void } {
+  const options = rendererMocks.createEvaluatedRuntimeExportStageRenderInput
+    .mock.calls.at(-1)?.[1] as
+      | { readonly evaluationCache?: { readonly clear: () => void } }
+      | undefined;
+  const cache = options?.evaluationCache;
+  if (cache === undefined) {
+    throw new Error("Expected renderer evaluation cache option.");
+  }
+
+  return cache;
 }

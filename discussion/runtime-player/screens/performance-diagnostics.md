@@ -1,16 +1,18 @@
 # Performance Diagnostics
 
-> Wave13で追加されたRuntime Player Control Windowの低優先度diagnostics page。目的は、native StageとOBS Browser Source相当のBrowser Source rendererから、frame pacingとrender metricsの安全なreportを採取すること。
+> Wave13で追加され、Wave14でdiagnostics terminologyが整理されたRuntime Player Control Windowの低優先度diagnostics page。目的は、native StageとOBS Browser Source相当のBrowser Source rendererから、frame pacingとrender metricsの安全なreportを採取すること。
 
 ## 1. Status
 
-- Status: Wave13 source/test facts reflected; final integration review and manual native/OBS checks are still pending.
+- Status: Wave14 source/test facts and final clean review pass reflected; manual real-model native/OBS diagnostics are still pending.
 - Scope owner: Control Window page plus renderer metrics surfaces.
 - Related docs:
   - [control-window-screen-structure.md](control-window-screen-structure.md)
   - [broadcast-stage-setup-v0.md](broadcast-stage-setup-v0.md)
   - [../implementation/orchestration/player-wave13-plan.md](../implementation/orchestration/player-wave13-plan.md)
   - [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
+  - [../implementation/orchestration/player-wave14-plan.md](../implementation/orchestration/player-wave14-plan.md)
+  - [../implementation/waves/wave14/wave14-final-integration-report.md](../implementation/waves/wave14/wave14-final-integration-report.md)
 
 This page is not the old raw/input diagnostics surface. It is for render pacing evidence that can be shared back to agents without exposing private or high-volume data.
 
@@ -50,9 +52,11 @@ It is not responsible for:
 |--------------------------------------------------------------------------------|
 | Report Preview                                                                 |
 |   Captured at: 2026-06-26T...                                                  |
-|   Native Stage: source/input FPS, render FPS, rAF delta, render duration        |
-|   Browser Source: source/input FPS, render FPS, rAF delta, render duration      |
-|   Counters: live frames, transforms, duplicate skips, coalesced live frames     |
+|   Input: inputReceiveFpsLatest, inputPacketCount                               |
+|   Native Stage: liveFrameMessageFps, appliedLiveFrameFps, renderFps             |
+|   Browser Source: liveFrameSourceTimestampFpsLatest, live/apply/render FPS      |
+|   Counters: liveFrameMessageCount, appliedLiveFrameCount, renderCount           |
+|   Pacing: rAF delta, render duration, live input evaluation, scheduled frame    |
 |--------------------------------------------------------------------------------|
 | Comparison Guidance                                                            |
 |   Native Stage only -> Browser Source connected -> Stage Motion off/on          |
@@ -67,24 +71,31 @@ Reports should include enough aggregate counters for future agents to reason abo
 
 - capture timestamp and requested/actual duration;
 - target availability;
-- source/input FPS;
-- render FPS;
-- render count;
+- `[Input]` `inputReceiveFpsLatest`;
+- `[Input]` `inputPacketCount`;
+- per-target `liveFrameMessageFps`;
+- per-target `liveFrameMessageCount`;
+- per-target `appliedLiveFrameFps`;
+- per-target `appliedLiveFrameCount`;
+- per-target `renderFps`;
+- per-target `renderCount`;
+- Browser Source `liveFrameSourceTimestampFpsLatest` when available;
 - scheduled render count;
 - immediate render count;
-- live frame message count;
 - Stage view/display transform counts;
 - duplicate transform skip count;
 - coalesced live frame count;
 - rAF delta p50 / p95 / max;
 - render duration p50 / p95 / max;
+- `liveRenderInputEvaluationDurationMs` p50 / p95 / max;
+- `scheduledFrameDurationMs` p50 / p95 / max;
 - canvas size;
 - devicePixelRatio;
 - Browser Source client count when available;
 - Stage Motion enabled state when available;
 - diagnostic version.
 
-Source/input FPS and render FPS must remain separate fields. Existing ambiguous `fps` values should not be used as the only performance signal.
+Input receive FPS, live-frame message FPS/count, applied/evaluated live-frame FPS/count, and render FPS/count must remain separate fields. Browser Source source timestamp interval diagnostics must use `liveFrameSourceTimestampFpsLatest`; it must not be labeled or interpreted as raw input receive FPS. Existing ambiguous transport values such as `fps` or `sourceFps` should not be used as the only performance signal.
 
 ## 5. Data Boundaries
 
@@ -117,8 +128,9 @@ Performance Diagnostics reads renderer diagnostics from those systems but does n
 Manual checks still need a real Runtime Export, real input, and OBS Browser Source where applicable:
 
 - run a 10s native Stage capture and copy the report;
-- connect OBS Browser Source and run Browser Source or Both capture;
-- confirm report separates source/input FPS from render FPS;
+- connect OBS Browser Source and run target `Both`;
+- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, and `scheduledFrameDurationMs`;
+- confirm `liveFrameSourceTimestampFpsLatest` is treated only as Browser Source source timestamp interval diagnostics, not raw input receive FPS;
 - confirm report includes rAF delta, render duration, render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio;
 - toggle Stage Motion off/on and compare reports;
 - compare OBS Browser Source custom FPS off/30/60 as a manual observation;

@@ -33,6 +33,8 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave11-plan.md](orchestration/player-wave11-plan.md) | Completed / final pass | Runtime Player Wave11: Stage Motion / Head Position Follow |
 | [orchestration/player-wave12-plan.md](orchestration/player-wave12-plan.md) | Completed at source/domain level | Runtime Player Wave12: Live Controller Variant switching |
 | [orchestration/player-wave13-plan.md](orchestration/player-wave13-plan.md) | Completed / final pass | Runtime Player Wave13: Stage Frame Pacing Diagnostics |
+| [orchestration/player-wave14-plan.md](orchestration/player-wave14-plan.md) | Completed / final pass | Runtime Player Wave14: Runtime Evaluation Cache / Diagnostics Semantics |
+| [orchestration/player-wave15-plan.md](orchestration/player-wave15-plan.md) | Ready to launch | Runtime Player Wave15: Runtime Snapshot Hot-Path Cleanup |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -79,6 +81,11 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave13/_map.md](waves/wave13/_map.md) | Pass | Runtime Player Wave13 report map |
 | [waves/wave13/domain-b-completion-report.md](waves/wave13/domain-b-completion-report.md) | Pass | Runtime Player Wave13 Performance Diagnostics Capture / Report UX completion report |
 | [waves/wave13/wave13-final-integration-report.md](waves/wave13/wave13-final-integration-report.md) | Pass | Runtime Player Wave13 final integration report, docs/maps alignment, clean review, and residual manual checks |
+| [waves/wave14/_map.md](waves/wave14/_map.md) | Pass | Runtime Player Wave14 report map |
+| [waves/wave14/domain-a-runtime-evaluation-cache-report.md](waves/wave14/domain-a-runtime-evaluation-cache-report.md) | Pass | Runtime Player Wave14 Domain A runtime evaluation cache implementation report |
+| [waves/wave14/domain-b-diagnostics-semantics-implementation-report.md](waves/wave14/domain-b-diagnostics-semantics-implementation-report.md) | Needs review, superseded by domain final | Runtime Player Wave14 Domain B diagnostics terminology implementation report |
+| [waves/wave14/domain-b-diagnostics-semantics-final-report.md](waves/wave14/domain-b-diagnostics-semantics-final-report.md) | Pass | Runtime Player Wave14 Domain B diagnostics semantics final report |
+| [waves/wave14/wave14-final-integration-report.md](waves/wave14/wave14-final-integration-report.md) | Pass | Runtime Player Wave14 Domain C final integration docs/maps alignment report |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -150,6 +157,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave10/runtime-player-wave10-final-integration-review.md](reviews/wave10/runtime-player-wave10-final-integration-review.md) | Pass after docs-map fix loop 2 | Runtime Player Wave10 final integration review |
 | [reviews/wave13/_map.md](reviews/wave13/_map.md) | Pass | Runtime Player Wave13 review map |
 | [reviews/wave13/wave13-final-clean-integration-review.md](reviews/wave13/wave13-final-clean-integration-review.md) | Pass after docs-map fix loop | Runtime Player Wave13 final clean integration review |
+| [reviews/wave14/_map.md](reviews/wave14/_map.md) | Pass | Runtime Player Wave14 review map |
+| [reviews/wave14/domain-a-runtime-evaluation-cache-clean-review.md](reviews/wave14/domain-a-runtime-evaluation-cache-clean-review.md) | Pass | Runtime Player Wave14 Domain A runtime evaluation cache clean review |
+| [reviews/wave14/domain-b-diagnostics-semantics-clean-review.md](reviews/wave14/domain-b-diagnostics-semantics-clean-review.md) | Pass | Runtime Player Wave14 Domain B diagnostics semantics clean review |
+| [reviews/wave14/wave14-final-clean-integration-review.md](reviews/wave14/wave14-final-clean-integration-review.md) | Pass | Runtime Player Wave14 final clean integration review |
 
 ## 4. Current Implementation State
 
@@ -208,10 +219,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Wave13 metrics include render count, scheduled/immediate render count, live frame message count, Stage view/display transform counts, duplicate transform skip count, coalesced live frame count, rAF delta, render duration, canvas size, and devicePixelRatio.
 - Wave13 Native Stage metrics report through Stage view IPC; Browser Source reports sanitized renderer diagnostics/metrics through the Browser Source diagnostics path.
 - Wave13 Control Window includes low-priority `Performance Diagnostics` with target Native Stage / Browser Source / Both, duration 10s / 30s, Start/Stop Capture, Copy Report, Clear Report, report preview, target availability, and comparison guidance.
-- Wave13 reports separate source/input FPS from render FPS and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Wave13 reports established separation between input/source indicators and render metrics, and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
 - Wave10 local preview suspension, Wave11 Stage Motion, and Wave12 Variant switching remain intended preserved behavior under Wave13.
+- Runtime Player Wave14 Domain A/B implementation and clean reviews are complete with `pass`; Domain C final integration docs/maps alignment and final clean Review-Sylph integration review are complete with `pass`: [waves/wave14/wave14-final-integration-report.md](waves/wave14/wave14-final-integration-report.md), [reviews/wave14/wave14-final-clean-integration-review.md](reviews/wave14/wave14-final-clean-integration-review.md).
+- Wave14 runtime evaluation cache stores invariant Runtime Export graph/scaffold/texture/template/clipping data keyed by Runtime Export identity and semantic active Variant selection. It does not cache snapshots, runtime state, dynamics state, authored/live values, evaluated vertices, opacity, draw order, visibility, or keyform samples.
+- Wave14 Performance Diagnostics terms distinguish `inputReceiveFpsLatest`, `inputPacketCount`, `liveFrameMessageFps`, `liveFrameMessageCount`, `appliedLiveFrameFps`, `appliedLiveFrameCount`, `renderFps`, and `renderCount`.
+- Wave14 keeps Browser Source source timestamp interval diagnostics separate as `liveFrameSourceTimestampFpsLatest`; this is not raw input receive FPS.
+- Wave14 preserves Browser Source/report privacy boundaries and the Wave10 local preview suspension, Wave11 Stage Motion, and Wave12 Variant switching behavior.
+- Real-model manual Electron/OBS diagnostics still need user confirmation after Wave14; run Performance Diagnostics target `Both` with OBS connected and compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, and `scheduledFrameDurationMs`.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, WebGL cache redesign, Runtime Export format changes, and Editor changes remain out of scope.
 
 ## 5. Next Action
 
-Use [waves/wave13/wave13-final-integration-report.md](waves/wave13/wave13-final-integration-report.md), [waves/wave13/_map.md](waves/wave13/_map.md), and [reviews/wave13/_map.md](reviews/wave13/_map.md) as the latest Runtime Player implementation baseline. Product-confidence next action is manual native Stage and OBS Browser Source verification with Performance Diagnostics captures: URL load, transparent alpha, WebGL2/model rendering, Control client/heartbeat/suspension diagnostics, real iFacialMocap live motion, body follow/dynamics, Variant switching parity, source/input FPS vs render FPS reports, reconnect/resync, native preview resume, perceived performance improvement, OBS custom FPS observations, and audio meter behavior.
+Use [waves/wave14/wave14-final-integration-report.md](waves/wave14/wave14-final-integration-report.md), [waves/wave14/_map.md](waves/wave14/_map.md), [reviews/wave14/_map.md](reviews/wave14/_map.md), and [reviews/wave14/wave14-final-clean-integration-review.md](reviews/wave14/wave14-final-clean-integration-review.md) as the latest final-pass Runtime Player implementation baseline. The next planned implementation unit is [orchestration/player-wave15-plan.md](orchestration/player-wave15-plan.md): runtime snapshot hot-path cleanup by gating heavy validation and deep profiling out of normal live rendering.
