@@ -221,6 +221,36 @@ describe("RuntimePlayerBrowserSourceSession status sampling", () => {
     expect(JSON.stringify(resync)).not.toContain("debug");
     expect(JSON.stringify(resync)).not.toContain("calibration");
   });
+
+  it("broadcasts runtime-core profiling mode and includes it in resync", () => {
+    const session = new RuntimePlayerBrowserSourceSession({
+      token: "token_fixture"
+    });
+    const client = createClient();
+
+    session.addClient(client);
+    client.messages.length = 0;
+
+    expect(session.publishRuntimeCoreProfiling("deep")).toBe("deep");
+
+    expect(client.messages).toContainEqual(
+      expect.objectContaining({
+        type: "runtime-core-profiling-changed",
+        runtimeCoreProfiling: "deep"
+      })
+    );
+    expect(JSON.stringify(client.messages)).not.toContain("tracking");
+    expect(JSON.stringify(client.messages)).not.toContain("calibration");
+
+    const secondClient = createClient();
+    session.addClient(secondClient);
+
+    expect(secondClient.messages.find((message) =>
+      message.type === "runtime-export-resync"
+    )).toMatchObject({
+      runtimeCoreProfiling: "deep"
+    });
+  });
 });
 
 function createClient(): BrowserSourceSessionClient & {

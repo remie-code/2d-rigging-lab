@@ -7,6 +7,7 @@ import type {
   RuntimePlayerBrowserSourceStageDisplayState
 } from "../../preload/browser-source-status-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
@@ -153,6 +154,7 @@ export class BrowserSourceStageClient {
   #runtimeExportPayloadKey: string | null = null;
   #activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
     null;
+  #runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode = "disabled";
   #runtimeExportApplyCount = 0;
   #started = false;
   #snapshot: BrowserSourceStageClientSnapshot;
@@ -254,6 +256,9 @@ export class BrowserSourceStageClient {
     if (message.type === "runtime-export-resync") {
       this.#applyStageDisplayState(message.stageDisplayState);
       this.#applyActiveVariantSelection(message.activeVariantSelection);
+      this.#applyRuntimeCoreProfiling(message.runtimeCoreProfiling, {
+        sendDiagnostics: false
+      });
       this.#applyRuntimeExportPayload(message.runtimeExport);
       if (message.latestFrame !== null) {
         this.#applyLiveParameterFrame(message.latestFrame);
@@ -279,6 +284,11 @@ export class BrowserSourceStageClient {
 
     if (message.type === "stage-display-state-changed") {
       this.#applyStageDisplayState(message.stageDisplayState);
+      return;
+    }
+
+    if (message.type === "runtime-core-profiling-changed") {
+      this.#applyRuntimeCoreProfiling(message.runtimeCoreProfiling);
       return;
     }
 
@@ -388,6 +398,10 @@ export class BrowserSourceStageClient {
       this.#applyActiveVariantSelection(
         runtimeExportResponse.activeVariantSelection
       );
+      this.#applyRuntimeCoreProfiling(
+        runtimeExportResponse.runtimeCoreProfiling,
+        { sendDiagnostics: false }
+      );
       this.#applyRuntimeExportPayload(runtimeExportResponse.runtimeExport);
     } catch (error) {
       this.#updateSnapshot({
@@ -491,6 +505,22 @@ export class BrowserSourceStageClient {
   ): void {
     this.#activeVariantSelection = activeVariantSelection;
     this.#renderer?.setActiveVariantSelection(activeVariantSelection);
+  }
+
+  #applyRuntimeCoreProfiling(
+    mode: RuntimePlayerRuntimeCoreProfilingMode,
+    options: {
+      readonly sendDiagnostics?: boolean;
+    } = {}
+  ): void {
+    const changed = this.#runtimeCoreProfiling !== mode;
+    this.#runtimeCoreProfiling = mode;
+    this.#renderer?.setRuntimeCoreProfiling(mode);
+
+    if ((options.sendDiagnostics ?? true) && changed) {
+      this.#updateSnapshot(this.#withMetrics({}));
+      this.#sendDiagnostics();
+    }
   }
 
   #applyLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {

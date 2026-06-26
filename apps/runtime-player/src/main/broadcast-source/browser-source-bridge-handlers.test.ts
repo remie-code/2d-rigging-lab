@@ -72,12 +72,36 @@ describe("registerBrowserSourceBridgeHandlers", () => {
     registration.dispose();
     expect(listeners.size).toBe(0);
   });
+
+  it("sets Browser Source runtime-core profiling through the narrow bridge", () => {
+    const setRuntimeCoreProfiling = vi.fn(() => "deep" as const);
+
+    registerBrowserSourceBridgeHandlers({
+      windows: createFakeWindows(),
+      statusProvider: {
+        getStatus: () => createStatus(),
+        onStatusChanged: () => () => undefined,
+        setRuntimeCoreProfiling
+      }
+    });
+
+    expect(
+      invokeHandler(browserSourceBridgeChannels.setRuntimeCoreProfiling, "deep")
+    ).toBe("deep");
+    expect(setRuntimeCoreProfiling).toHaveBeenCalledWith("deep");
+    expect(() =>
+      invokeHandler(
+        browserSourceBridgeChannels.setRuntimeCoreProfiling,
+        "full"
+      )
+    ).toThrow("profiling mode");
+  });
 });
 
-function invokeHandler(channel: string): unknown {
+function invokeHandler(channel: string, ...args: unknown[]): unknown {
   const handler = handlers.get(channel);
   expect(handler).toBeTypeOf("function");
-  return handler?.({});
+  return handler?.({}, ...args);
 }
 
 function createFakeWindows(): RuntimePlayerWindowSet {

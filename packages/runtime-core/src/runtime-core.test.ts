@@ -10,6 +10,7 @@ import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
 import { evaluateRuntimeFrame, evaluateRuntimeSequence } from "./runtime-core.js";
+import { createRuntimeSnapshot } from "./snapshot.js";
 
 describe("runtime-core foundation evaluation", () => {
   it("generates a minimal non-empty draw list snapshot", () => {
@@ -216,6 +217,9 @@ describe("runtime-core foundation evaluation", () => {
           nowMs += 1;
           return nowMs;
         }
+      },
+      {
+        snapshotValidation: "schema"
       }
     );
 
@@ -239,6 +243,121 @@ describe("runtime-core foundation evaluation", () => {
       .toBeGreaterThan(0);
     expect(profiled.profile?.parameterResolutionDurationMs)
       .toBeGreaterThan(0);
+    expect(profiled.profile?.snapshotValidationDurationMs)
+      .toBeGreaterThan(0);
+  });
+
+  it("skips snapshot schema validation when requested without changing snapshot output", () => {
+    const packageId = PackageIdSchema.parse("pkg_validation_skip");
+    const drawableId = DrawableIdSchema.parse("draw_validation_skip");
+    const meshId = MeshIdSchema.parse("mesh_validation_skip");
+    const graph = createGraph({
+      packageId,
+      drawables: new Map([
+        [
+          drawableId,
+          {
+            drawableId,
+            meshId,
+            visible: true,
+            opacity: 1,
+            baseDrawOrder: 0,
+            bounds: { x: 0, y: 0, width: 10, height: 10 },
+            vertexCount: 4
+          }
+        ]
+      ])
+    });
+    const state = createInitialRuntimeState(graph, {
+      packageId,
+      packageRevision: 0,
+      resetReasons: ["packageLoad"]
+    });
+    const input = {
+      schemaVersion: "runtime-evaluation-input-v1" as const,
+      frameIndex: 1,
+      deltaTimeMs: 0
+    };
+    const context = { source: { surface: "preview" as const } };
+    let schemaNowMs = 0;
+    const schemaValidated = evaluateRuntimeFrame(
+      graph,
+      input,
+      state,
+      defaultRuntimeEvaluationOptions(),
+      context,
+      {
+        enabled: true,
+        now: () => {
+          schemaNowMs += 1;
+          return schemaNowMs;
+        }
+      },
+      {
+        snapshotValidation: "schema"
+      }
+    );
+    let skipNowMs = 0;
+    const validationSkipped = evaluateRuntimeFrame(
+      graph,
+      input,
+      state,
+      defaultRuntimeEvaluationOptions(),
+      context,
+      {
+        enabled: true,
+        now: () => {
+          skipNowMs += 1;
+          return skipNowMs;
+        }
+      },
+      {
+        snapshotValidation: "skip"
+      }
+    );
+
+    expect(validationSkipped.snapshot).toEqual(schemaValidated.snapshot);
+    expect(validationSkipped.profile?.snapshotValidationDurationMs).toBe(0);
+    expect(schemaValidated.profile?.snapshotValidationDurationMs)
+      .toBeGreaterThan(0);
+  });
+
+  it("preserves schema validation when snapshot validation is requested", () => {
+    const packageId = PackageIdSchema.parse("pkg_validation_schema");
+    const graph = createGraph({
+      packageId,
+      packageRevision: -1
+    });
+
+    expect(() =>
+      createRuntimeSnapshot({
+        graph,
+        evaluationInput: {
+          schemaVersion: "runtime-evaluation-input-v1",
+          frameIndex: 0,
+          deltaTimeMs: 0,
+          resetReasons: [],
+          authoredParameterValues: {},
+          targetIds: []
+        },
+        state: {
+          schemaVersion: "runtime-state-v1",
+          packageId,
+          packageRevision: 0,
+          frameIndex: 0,
+          fixedStepMs: 16.6666667,
+          accumulatorMs: 0,
+          dynamicsGroups: {}
+        },
+        options: defaultRuntimeEvaluationOptions(),
+        context: {
+          source: { surface: "validator" },
+          policy: { strictness: "strict" }
+        },
+        diagnostics: [],
+        snapshotValidationMode: "schema"
+      })
+    ).toThrow();
   });
 });
 

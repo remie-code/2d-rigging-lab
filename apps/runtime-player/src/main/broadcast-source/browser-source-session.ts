@@ -18,6 +18,9 @@ import type {
   RuntimePlayerBrowserSourceStatus,
   RuntimePlayerBrowserSourceWsUpgradeRejectedDiagnostic
 } from "../../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerRuntimeCoreProfilingMode
+} from "../../preload/performance-diagnostics-contract";
 import {
   createBrowserSourceEmptyRuntimeExportStatus,
   createBrowserSourceLoadedRuntimeExportStatus,
@@ -70,6 +73,7 @@ export class RuntimePlayerBrowserSourceSession {
     createEmptyStageDisplayState();
   #activeVariantSelection: RuntimePlayerActiveVariantSelectionState =
     createDisabledActiveVariantSelectionState();
+  #runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode = "disabled";
 
   constructor(input: {
     readonly token: string;
@@ -128,6 +132,10 @@ export class RuntimePlayerBrowserSourceSession {
 
   getActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
     return this.#activeVariantSelection;
+  }
+
+  getRuntimeCoreProfiling(): RuntimePlayerRuntimeCoreProfilingMode {
+    return this.#runtimeCoreProfiling;
   }
 
   onStatusChanged(
@@ -298,6 +306,24 @@ export class RuntimePlayerBrowserSourceSession {
       activeVariantSelection: this.#activeVariantSelection,
       sentAtIso: this.#nowIso()
     });
+  }
+
+  publishRuntimeCoreProfiling(
+    mode: RuntimePlayerRuntimeCoreProfilingMode
+  ): RuntimePlayerRuntimeCoreProfilingMode {
+    if (this.#runtimeCoreProfiling === mode) {
+      return this.#runtimeCoreProfiling;
+    }
+
+    this.#runtimeCoreProfiling = mode;
+    this.#broadcast({
+      type: "runtime-core-profiling-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      runtimeCoreProfiling: this.#runtimeCoreProfiling,
+      sentAtIso: this.#nowIso()
+    });
+
+    return this.#runtimeCoreProfiling;
   }
 
   markStageRequest(
@@ -476,6 +502,7 @@ export class RuntimePlayerBrowserSourceSession {
       latestFrame: this.#latestFrame,
       stageDisplayState: this.#stageDisplayState,
       activeVariantSelection: this.#activeVariantSelection,
+      runtimeCoreProfiling: this.#runtimeCoreProfiling,
       sentAtIso: this.#nowIso()
     });
   }

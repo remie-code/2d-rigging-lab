@@ -14,11 +14,17 @@ export const stageViewBridgeChannels = {
   copyWindowTitle: "runtime-player:stage-view:copy-window-title",
   getViewTransform: "runtime-player:stage-view:get-view-transform",
   getRenderMetrics: "runtime-player:stage-view:get-render-metrics",
+  getRuntimeCoreProfiling:
+    "runtime-player:stage-view:get-runtime-core-profiling",
+  setRuntimeCoreProfiling:
+    "runtime-player:stage-view:set-runtime-core-profiling",
   getArrangeState: "runtime-player:stage-view:get-arrange-state",
   reportRenderMetrics: "runtime-player:stage-view:report-render-metrics",
   statusChanged: "runtime-player:stage-view:status-changed",
   stateChanged: "runtime-player:stage-view:state-changed",
   renderMetricsChanged: "runtime-player:stage-view:render-metrics-changed",
+  runtimeCoreProfilingChanged:
+    "runtime-player:stage-view:runtime-core-profiling-changed",
   arrangeStateChanged: "runtime-player:stage-view:arrange-state-changed",
   applyViewTransformRequested:
     "runtime-player:stage-view:apply-view-transform-requested",

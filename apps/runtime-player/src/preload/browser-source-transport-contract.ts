@@ -5,6 +5,7 @@ import type {
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "./browser-source-status-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 import type {
@@ -33,6 +34,7 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode;
       readonly runtimeExport: RuntimePlayerBrowserSourceRuntimeExportPayload;
     }
   | {
@@ -41,6 +43,7 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode;
       readonly runtimeExport: null;
     };
 
@@ -61,6 +64,7 @@ export type RuntimePlayerBrowserSourceServerMessage =
       readonly latestFrame: RuntimePlayerLiveParameterFrame | null;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode;
       readonly sentAtIso: string;
     }
   | {
@@ -95,6 +99,12 @@ export type RuntimePlayerBrowserSourceServerMessage =
       readonly type: "stage-display-state-changed";
       readonly protocolVersion: typeof runtimePlayerBrowserSourceProtocolVersion;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
+      readonly sentAtIso: string;
+    }
+  | {
+      readonly type: "runtime-core-profiling-changed";
+      readonly protocolVersion: typeof runtimePlayerBrowserSourceProtocolVersion;
+      readonly runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode;
       readonly sentAtIso: string;
     }
   | {

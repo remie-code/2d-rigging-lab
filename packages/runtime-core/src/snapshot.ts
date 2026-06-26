@@ -168,6 +168,7 @@ export const RuntimeSnapshotSchema = z.object({
     .optional()
 });
 export type RuntimeSnapshotDto = z.infer<typeof RuntimeSnapshotSchema>;
+export type RuntimeSnapshotValidationMode = "schema" | "skip";
 
 export const createRuntimeSnapshot = (input: {
   readonly graph: NormalizedRuntimeGraph;
@@ -177,6 +178,7 @@ export const createRuntimeSnapshot = (input: {
   readonly context: RuntimeEvaluationContextDto;
   readonly diagnostics: readonly DiagnosticDto[];
   readonly profiling?: RuntimeCoreEvaluationProfiler;
+  readonly snapshotValidationMode?: RuntimeSnapshotValidationMode;
 }): RuntimeSnapshotDto => {
   const measure = <TValue>(
     phase: RuntimeCoreEvaluationProfilePhaseKey,
@@ -255,60 +257,66 @@ export const createRuntimeSnapshot = (input: {
       .map((drawable) => drawable.drawableId)
   );
 
-  return measure("snapshotValidationDurationMs", () =>
-    RuntimeSnapshotSchema.parse({
-      schemaVersion: "runtime-snapshot-v1",
-      runtimeCoreVersion: "wave2-foundation",
-      snapshotId: RuntimeSnapshotIdSchema.parse(`snap_${input.graph.packageId.replace(/^pkg_/, "")}_${input.evaluationInput.frameIndex}`),
-      context: input.context,
-      packageId: input.graph.packageId,
-      packageRevision: input.graph.packageRevision,
-      ...(input.graph.packageHash === undefined ? {} : { packageHash: input.graph.packageHash }),
-      dirty: false,
-      evaluation: {
-        snapshotDetail: input.options.snapshotDetail,
-        evaluatorVersions: input.options.evaluatorVersions
-      },
-      parameters: createEvaluatedParameters(parameterResolution),
-      dynamics: createEvaluatedDynamics(
-        input.graph,
-        input.evaluationInput,
-        input.state,
-        input.options,
-        parameterResolution
-      ),
-      keyformSamples: keyformSampling.samples,
-      rigControls: rigControlEvaluation.rigControls,
-      parts: createEvaluatedParts(input.graph),
-      drawables,
-      masks,
-      drawList,
-      disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
-      diagnostics: [
-        ...input.diagnostics,
-        ...keyformSampling.diagnostics,
-        ...appliedKeyforms.diagnostics,
-        ...rigControlEvaluation.diagnostics
-      ],
-      ...(input.options.includeTrace
-        ? {
-            trace: {
-              phases: [
-                "parameter_resolution",
-                "dynamics_evaluation",
-                "keyform_sampling",
-                "rigControl_evaluation",
-                "mesh_evaluation",
-                "opacity_visibility",
-                "mask_resolution",
-                "draw_order_resolution",
-                "render_preparation"
-              ],
-              evaluatorVersionSummary: input.options.evaluatorVersions
-            }
+  const snapshot = {
+    schemaVersion: "runtime-snapshot-v1",
+    runtimeCoreVersion: "wave2-foundation",
+    snapshotId: RuntimeSnapshotIdSchema.parse(`snap_${input.graph.packageId.replace(/^pkg_/, "")}_${input.evaluationInput.frameIndex}`),
+    context: input.context,
+    packageId: PackageIdSchema.parse(input.graph.packageId),
+    packageRevision: input.graph.packageRevision,
+    ...(input.graph.packageHash === undefined ? {} : { packageHash: input.graph.packageHash }),
+    dirty: false,
+    evaluation: {
+      snapshotDetail: input.options.snapshotDetail,
+      evaluatorVersions: input.options.evaluatorVersions
+    },
+    parameters: createEvaluatedParameters(parameterResolution),
+    dynamics: createEvaluatedDynamics(
+      input.graph,
+      input.evaluationInput,
+      input.state,
+      input.options,
+      parameterResolution
+    ),
+    keyformSamples: keyformSampling.samples,
+    rigControls: rigControlEvaluation.rigControls,
+    parts: createEvaluatedParts(input.graph),
+    drawables,
+    masks,
+    drawList,
+    disabledFutureLayers: input.graph.disabledFutureLayers.map((layer) => layer.layerId),
+    diagnostics: [
+      ...input.diagnostics,
+      ...keyformSampling.diagnostics,
+      ...appliedKeyforms.diagnostics,
+      ...rigControlEvaluation.diagnostics
+    ],
+    ...(input.options.includeTrace
+      ? {
+          trace: {
+            phases: [
+              "parameter_resolution",
+              "dynamics_evaluation",
+              "keyform_sampling",
+              "rigControl_evaluation",
+              "mesh_evaluation",
+              "opacity_visibility",
+              "mask_resolution",
+              "draw_order_resolution",
+              "render_preparation"
+            ],
+            evaluatorVersionSummary: input.options.evaluatorVersions
           }
-        : {})
-    }));
+        }
+      : {})
+  } as unknown as RuntimeSnapshotDto;
+
+  if (input.snapshotValidationMode === "skip") {
+    return snapshot;
+  }
+
+  return measure("snapshotValidationDurationMs", () =>
+    RuntimeSnapshotSchema.parse(snapshot));
 };
 
 const createEvaluatedParameters = (resolution: EffectiveParameterResolution): EvaluatedParameterDto[] =>

@@ -13,6 +13,9 @@ import {
   runtimePlayerActiveVariantSelectionSchemaVersion,
   type RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerRuntimeCoreProfilingMode
+} from "../../preload/performance-diagnostics-contract";
 
 const RUNTIME_EXPORT_STATUS_STATES = new Set([
   "empty",
@@ -50,6 +53,9 @@ export function readBrowserSourceRuntimeExportResponse(
   const activeVariantSelection = readActiveVariantSelection(
     value.activeVariantSelection
   );
+  const runtimeCoreProfiling = readRuntimeCoreProfilingMode(
+    value.runtimeCoreProfiling
+  );
   if (runtimeExportStatus === null) {
     return null;
   }
@@ -59,6 +65,9 @@ export function readBrowserSourceRuntimeExportResponse(
   if (activeVariantSelection === null) {
     return null;
   }
+  if (runtimeCoreProfiling === null) {
+    return null;
+  }
 
   if (value.status === "not-loaded" && value.runtimeExport === null) {
     return {
@@ -66,6 +75,7 @@ export function readBrowserSourceRuntimeExportResponse(
       runtimeExportStatus,
       stageDisplayState,
       activeVariantSelection,
+      runtimeCoreProfiling,
       runtimeExport: null
     };
   }
@@ -81,6 +91,7 @@ export function readBrowserSourceRuntimeExportResponse(
       runtimeExportStatus,
       stageDisplayState,
       activeVariantSelection,
+      runtimeCoreProfiling,
       runtimeExport
     };
   }
@@ -120,13 +131,17 @@ function readBrowserSourceServerMessageValue(
     const activeVariantSelection = readActiveVariantSelection(
       value.activeVariantSelection
     );
+    const runtimeCoreProfiling = readRuntimeCoreProfilingMode(
+      value.runtimeCoreProfiling
+    );
 
     if (
       runtimeExportStatus === null ||
       runtimeExport === null && value.runtimeExport !== null ||
       latestFrame === null && value.latestFrame !== null ||
       stageDisplayState === null ||
-      activeVariantSelection === null
+      activeVariantSelection === null ||
+      runtimeCoreProfiling === null
     ) {
       return null;
     }
@@ -139,6 +154,7 @@ function readBrowserSourceServerMessageValue(
       latestFrame,
       stageDisplayState,
       activeVariantSelection,
+      runtimeCoreProfiling,
       sentAtIso: value.sentAtIso
     };
   }
@@ -222,6 +238,22 @@ function readBrowserSourceServerMessageValue(
     };
   }
 
+  if (value.type === "runtime-core-profiling-changed") {
+    const runtimeCoreProfiling = readRuntimeCoreProfilingMode(
+      value.runtimeCoreProfiling
+    );
+    if (runtimeCoreProfiling === null) {
+      return null;
+    }
+
+    return {
+      type: "runtime-core-profiling-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      runtimeCoreProfiling,
+      sentAtIso: value.sentAtIso
+    };
+  }
+
   if (value.type === "browser-source-server-heartbeat") {
     return {
       type: "browser-source-server-heartbeat",
@@ -243,6 +275,20 @@ function readBrowserSourceServerMessageValue(
       message: value.message.slice(0, 240),
       sentAtIso: value.sentAtIso
     };
+  }
+
+  return null;
+}
+
+function readRuntimeCoreProfilingMode(
+  value: unknown
+): RuntimePlayerRuntimeCoreProfilingMode | null {
+  if (value === undefined || value === null) {
+    return "disabled";
+  }
+
+  if (value === "disabled" || value === "deep") {
+    return value;
   }
 
   return null;

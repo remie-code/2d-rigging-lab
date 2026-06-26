@@ -7,7 +7,8 @@ import {
   defaultRuntimeEvaluationOptions,
   evaluateRuntimeFrame,
   type RuntimeCoreEvaluationProfile,
-  type RuntimeSnapshotDto
+  type RuntimeSnapshotDto,
+  type RuntimeSnapshotValidationMode
 } from "@private-2d-rigging-lab/runtime-core";
 
 import {
@@ -15,6 +16,9 @@ import {
   type RuntimeExportRuntimeGraphAdapterInput,
   type RuntimeExportRuntimeGraphAdapterResult
 } from "./runtime-export-runtime-graph-adapter";
+import type {
+  RuntimePlayerRuntimeCoreProfilingMode
+} from "../../preload/performance-diagnostics-contract";
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
@@ -40,6 +44,8 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly resetReasons?: readonly RuntimeResetReason[];
   readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
   readonly adapter?: RuntimeExportRuntimeGraphAdapterResult;
+  readonly snapshotValidation?: RuntimeSnapshotValidationMode;
+  readonly runtimeCoreProfiling?: RuntimePlayerRuntimeCoreProfilingMode;
 };
 
 export function evaluateRuntimeExportPose(
@@ -94,8 +100,9 @@ export function evaluateRuntimeExportPose(
         strictness: "interactive"
       }
     },
+    options.runtimeCoreProfiling === "deep" ? { enabled: true } : undefined,
     {
-      enabled: true
+      snapshotValidation: options.snapshotValidation ?? "skip"
     }
   );
   const runtimeCoreEvaluationDurationMs = Math.max(

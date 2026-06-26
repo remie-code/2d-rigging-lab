@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: Wave14 source/test facts and final clean review pass reflected; manual real-model native/OBS diagnostics are still pending.
+- Status: Wave15 source/test facts and final clean integration review pass reflected; manual real-model native/OBS diagnostics are still pending.
 - Scope owner: Control Window page plus renderer metrics surfaces.
 - Related docs:
   - [control-window-screen-structure.md](control-window-screen-structure.md)
@@ -13,6 +13,8 @@
   - [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
   - [../implementation/orchestration/player-wave14-plan.md](../implementation/orchestration/player-wave14-plan.md)
   - [../implementation/waves/wave14/wave14-final-integration-report.md](../implementation/waves/wave14/wave14-final-integration-report.md)
+  - [../implementation/orchestration/player-wave15-plan.md](../implementation/orchestration/player-wave15-plan.md)
+  - [../implementation/waves/wave15/wave15-final-integration-report.md](../implementation/waves/wave15/wave15-final-integration-report.md)
 
 This page is not the old raw/input diagnostics surface. It is for render pacing evidence that can be shared back to agents without exposing private or high-volume data.
 
@@ -23,6 +25,7 @@ Performance Diagnostics is responsible for:
 - selecting capture target: `Native Stage`, `Browser Source`, or `Both`;
 - selecting capture duration: `10s` or `30s`;
 - starting and stopping a timed capture;
+- requesting deep runtime-core profiling for the selected capture target while capture is active, so runtime-core phase summaries can be measured intentionally;
 - copying a compact report;
 - clearing the current report;
 - previewing the report inside Control Window;
@@ -35,8 +38,10 @@ It is not responsible for:
 - calibration internals;
 - Runtime Export artifact inspection;
 - OBS automation or OBS source creation;
-- changing renderer behavior while capture is running;
+- changing normal live renderer defaults outside the capture window;
 - replacing Stage page Browser Source setup controls.
+
+Wave15 intentionally makes the capture window observable: Performance Diagnostics can request deep runtime-core profiling for the selected target, and that may add measurement overhead while capture is active. This is the exception to normal live behavior, not a new default for Runtime Player rendering.
 
 ## 3. Screen Shape
 
@@ -88,6 +93,8 @@ Reports should include enough aggregate counters for future agents to reason abo
 - rAF delta p50 / p95 / max;
 - render duration p50 / p95 / max;
 - `liveRenderInputEvaluationDurationMs` p50 / p95 / max;
+- `runtimeCoreEvaluationDurationMs` p50 / p95 / max;
+- runtime-core phase summaries when deep profiling is active, including `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, and `runtimeCoreSnapshotValidationDurationMs`;
 - `scheduledFrameDurationMs` p50 / p95 / max;
 - canvas size;
 - devicePixelRatio;
@@ -97,9 +104,13 @@ Reports should include enough aggregate counters for future agents to reason abo
 
 Input receive FPS, live-frame message FPS/count, applied/evaluated live-frame FPS/count, and render FPS/count must remain separate fields. Browser Source source timestamp interval diagnostics must use `liveFrameSourceTimestampFpsLatest`; it must not be labeled or interpreted as raw input receive FPS. Existing ambiguous transport values such as `fps` or `sourceFps` should not be used as the only performance signal.
 
+Runtime Player normal live rendering keeps snapshot validation skipped for Stage / Browser Source pose evaluation and keeps deep runtime-core profiling disabled. Coarse render and evaluation metrics remain available in that default state. Deep runtime-core phase details are intentionally enabled only while Performance Diagnostics capture requests them for the selected target.
+
+If no live render evaluation happens during a deep capture window, runtime-core phase summaries can legitimately show `sampleCount=0` and `p50=unknown`, `p95=unknown`, or `max=unknown`. That means no deep-profiled runtime-core samples were observed, not necessarily that the renderer failed.
+
 ## 5. Data Boundaries
 
-Reports must exclude:
+Reports and Browser Source messages must exclude:
 
 - raw tracking frames;
 - raw head position values;
@@ -109,7 +120,7 @@ Reports must exclude:
 - full Runtime Export payload;
 - Runtime Export texture or mesh contents.
 
-Native Stage metrics travel through the Stage view IPC boundary. Browser Source metrics travel through the Browser Source diagnostics path as sanitized renderer diagnostics/metrics. The report boundary should keep compact aggregate DTOs rather than retaining broad status objects or renderer payloads.
+Native Stage metrics travel through the Stage view IPC boundary. Browser Source metrics travel through the Browser Source diagnostics path as sanitized renderer diagnostics/metrics. The report boundary should keep compact aggregate DTOs rather than retaining broad status objects or renderer payloads. Wave15 runtime-core profiling control messages carry only sanitized detail state such as `disabled` / `deep`, not raw model, tracking, calibration, token, path, texture, or mesh data.
 
 ## 6. Relationship To Stage Page
 
@@ -125,16 +136,21 @@ Performance Diagnostics reads renderer diagnostics from those systems but does n
 
 ## 7. Manual Verification Still Pending
 
-Manual checks still need a real Runtime Export, real input, and OBS Browser Source where applicable:
+Manual checks still need a real Runtime Export, real iFacialMocap input, and OBS Browser Source where applicable:
 
 - run a 10s native Stage capture and copy the report;
 - connect OBS Browser Source and run target `Both`;
-- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, and `scheduledFrameDurationMs`;
+- run a normal/default Performance Diagnostics capture if that mode is exposed by the build, and run a deep Performance Diagnostics capture; in the current Wave15 implementation, Start Capture intentionally requests deep runtime-core profiling for the selected target;
+- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, `runtimeCoreEvaluationDurationMs`, `scheduledFrameDurationMs`, and runtime-core phase fields;
+- compare normal live/default behavior before and after capture to confirm deep profiling is disabled when capture stops;
+- confirm `runtimeCoreSnapshotValidationDurationMs` is zero, unknown, or near-zero outside intentional deep/schema diagnostics;
+- confirm deep captures include runtime-core phase summaries when live render evaluation happens, and treat `unknown` / `sampleCount=0` as valid when no deep-profiled live frame is observed;
 - confirm `liveFrameSourceTimestampFpsLatest` is treated only as Browser Source source timestamp interval diagnostics, not raw input receive FPS;
 - confirm report includes rAF delta, render duration, render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio;
 - toggle Stage Motion off/on and compare reports;
 - compare OBS Browser Source custom FPS off/30/60 as a manual observation;
 - confirm native Stage and Browser Source still render normally after capture;
-- confirm copied report does not include raw tracking frames, calibration internals, Browser Source token, private paths, or full Runtime Export payload.
+- confirm copied report does not include raw tracking frames, calibration internals, Browser Source token, private paths, full Runtime Export payload, Runtime Export textures, or Runtime Export mesh data;
+- save the copied report to `tmp/report.log` for follow-up comparison.
 
 These checks should not be recorded as passed until manually executed.

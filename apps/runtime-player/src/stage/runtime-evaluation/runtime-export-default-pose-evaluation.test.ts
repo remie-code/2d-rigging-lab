@@ -323,6 +323,26 @@ describe("Runtime Export default pose evaluation", () => {
     });
     expect(body?.mesh.vertices).toEqual(createDeformedVertices());
     expect(renderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
+    expect(
+      renderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
+    ).toBeUndefined();
+
+    const profiledRenderInput = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        authoredParameterValues: {
+          param_face_angle_x: 1
+        },
+        frameIndex: 8,
+        resetReasons: [],
+        runtimeCoreProfiling: "deep"
+      }
+    );
+
+    expect(
+      profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
+        ?.snapshotValidationDurationMs
+    ).toBe(0);
   });
 
   it("evaluates Runtime Export rig controls and rig-control keyforms through runtime-core", () => {

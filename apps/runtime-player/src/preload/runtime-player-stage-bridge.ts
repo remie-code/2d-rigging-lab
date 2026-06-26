@@ -13,6 +13,9 @@ import type {
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode
+} from "./performance-diagnostics-contract";
+import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
@@ -73,6 +76,8 @@ export function installRuntimePlayerStageBridge(): void {
           stageViewBridgeChannels.reportRenderMetrics,
           snapshot
         ),
+      getRuntimeCoreProfiling: () =>
+        ipcRenderer.invoke(stageViewBridgeChannels.getRuntimeCoreProfiling),
       onApplyViewTransformRequested: (callback) =>
         subscribeToStageViewTransformEvent(
           stageViewBridgeChannels.applyViewTransformRequested,
@@ -86,6 +91,11 @@ export function installRuntimePlayerStageBridge(): void {
       onArrangeStateChanged: (callback) =>
         subscribeToStageArrangeStateEvent(
           stageViewBridgeChannels.arrangeStateChanged,
+          callback
+        ),
+      onRuntimeCoreProfilingChanged: (callback) =>
+        subscribeToRuntimeCoreProfilingEvent(
+          stageViewBridgeChannels.runtimeCoreProfilingChanged,
           callback
         )
     }
@@ -152,6 +162,24 @@ function subscribeToStageArrangeStateEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerStageArrangeState
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToRuntimeCoreProfilingEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerRuntimeCoreProfilingMode) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerRuntimeCoreProfilingMode
   ) => {
     callback(payload);
   };

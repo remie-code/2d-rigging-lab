@@ -159,6 +159,27 @@ describe("registerStageViewBridgeHandlers", () => {
     );
   });
 
+  it("stores runtime-core profiling mode and publishes it to the Stage window", () => {
+    const { stageWindow } = createHarness();
+
+    expect(
+      invokeHandler(stageViewBridgeChannels.getRuntimeCoreProfiling)
+    ).toBe("disabled");
+    expect(
+      invokeHandler(stageViewBridgeChannels.setRuntimeCoreProfiling, "deep")
+    ).toBe("deep");
+    expect(
+      invokeHandler(stageViewBridgeChannels.getRuntimeCoreProfiling)
+    ).toBe("deep");
+    expect(stageWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.runtimeCoreProfilingChanged,
+      "deep"
+    );
+    expect(() =>
+      invokeHandler(stageViewBridgeChannels.setRuntimeCoreProfiling, "full")
+    ).toThrow("profiling mode");
+  });
+
   it.each([
     ["negative count", { ...createRenderMetrics(), renderCount: -1 }],
     ["non-integer count", { ...createRenderMetrics(), renderCount: 1.5 }],

@@ -10,6 +10,7 @@ import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
@@ -57,6 +58,9 @@ export interface StaticStageCanvasRenderer {
   ): void;
   setDisplayViewTransform(transform: StageViewTransform | null): void;
   setViewInteractionEnabled(enabled: boolean): void;
+  setRuntimeCoreProfiling(
+    mode: RuntimePlayerRuntimeCoreProfilingMode
+  ): void;
   resetView(): void;
   centerModel(): void;
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot;
@@ -110,6 +114,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private liveRuntimeState: RuntimeStateDto | null = null;
   private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
     null;
+  private runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode =
+    "disabled";
   private latestLiveParameterFrame: RuntimePlayerLiveParameterFrame | null = null;
   private hasPendingLiveParameterFrame = false;
   private scheduledAnimationFrameId: number | null = null;
@@ -218,7 +224,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.evaluationCache.clear();
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload, {
       activeVariantSelection: this.activeVariantSelection,
-      evaluationCache: this.evaluationCache
+      evaluationCache: this.evaluationCache,
+      runtimeCoreProfiling: this.runtimeCoreProfiling
     });
 
     this.payload = payload;
@@ -263,7 +270,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       this.payload,
       {
         activeVariantSelection: this.activeVariantSelection,
-        evaluationCache: this.evaluationCache
+        evaluationCache: this.evaluationCache,
+        runtimeCoreProfiling: this.runtimeCoreProfiling
       }
     );
     this.renderInput = renderInput;
@@ -305,7 +313,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       this.payload,
       {
         activeVariantSelection: this.activeVariantSelection,
-        evaluationCache: this.evaluationCache
+        evaluationCache: this.evaluationCache,
+        runtimeCoreProfiling: this.runtimeCoreProfiling
       }
     );
     this.renderInput = renderInput;
@@ -363,6 +372,17 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
   }
 
+  setRuntimeCoreProfiling(
+    mode: RuntimePlayerRuntimeCoreProfilingMode
+  ): void {
+    if (this.runtimeCoreProfiling === mode) {
+      return;
+    }
+
+    this.runtimeCoreProfiling = mode;
+    this.reportRenderMetricsChanged();
+  }
+
   resetView(): void {
     this.setViewTransform(createResetStageViewTransform());
   }
@@ -373,8 +393,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {
     const evaluationCacheMetrics = this.evaluationCache.getMetricsSnapshot();
-
-    return {
+    const snapshot: StaticStageRenderMetricsSnapshot = {
       renderCount: this.renderCount,
       scheduledRenderCount: this.scheduledRenderCount,
       immediateRenderCount: this.immediateRenderCount,
@@ -401,6 +420,39 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         this.lastRuntimeCoreEvaluationDurationMs,
       runtimeCoreEvaluationDurationSampleCount:
         this.runtimeCoreEvaluationDurationSampleCount,
+      lastPoseEvaluationDurationMs: this.lastPoseEvaluationDurationMs,
+      poseEvaluationDurationSampleCount:
+        this.poseEvaluationDurationSampleCount,
+      lastSnapshotToRenderDrawableDurationMs:
+        this.lastSnapshotToRenderDrawableDurationMs,
+      snapshotToRenderDrawableDurationSampleCount:
+        this.snapshotToRenderDrawableDurationSampleCount,
+      lastRenderInputSceneBuildDurationMs:
+        this.lastRenderInputSceneBuildDurationMs,
+      renderInputSceneBuildDurationSampleCount:
+        this.renderInputSceneBuildDurationSampleCount,
+      lastRenderInputScaffoldBuildDurationMs:
+        this.lastRenderInputScaffoldBuildDurationMs,
+      renderInputScaffoldBuildDurationSampleCount:
+        this.renderInputScaffoldBuildDurationSampleCount,
+      lastRenderInputClippingBuildDurationMs:
+        this.lastRenderInputClippingBuildDurationMs,
+      renderInputClippingBuildDurationSampleCount:
+        this.renderInputClippingBuildDurationSampleCount,
+      lastScheduledFrameDurationMs: this.lastScheduledFrameDurationMs,
+      scheduledFrameDurationSampleCount:
+        this.scheduledFrameDurationSampleCount,
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height,
+      devicePixelRatio: getDevicePixelRatio()
+    };
+
+    if (this.runtimeCoreProfiling !== "deep") {
+      return snapshot;
+    }
+
+    return {
+      ...snapshot,
       lastRuntimeCoreInputValidationDurationMs:
         this.lastRuntimeCoreInputValidationDurationMs,
       runtimeCoreInputValidationDurationSampleCount:
@@ -456,32 +508,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       lastRuntimeCoreSnapshotValidationDurationMs:
         this.lastRuntimeCoreSnapshotValidationDurationMs,
       runtimeCoreSnapshotValidationDurationSampleCount:
-        this.runtimeCoreSnapshotValidationDurationSampleCount,
-      lastPoseEvaluationDurationMs: this.lastPoseEvaluationDurationMs,
-      poseEvaluationDurationSampleCount:
-        this.poseEvaluationDurationSampleCount,
-      lastSnapshotToRenderDrawableDurationMs:
-        this.lastSnapshotToRenderDrawableDurationMs,
-      snapshotToRenderDrawableDurationSampleCount:
-        this.snapshotToRenderDrawableDurationSampleCount,
-      lastRenderInputSceneBuildDurationMs:
-        this.lastRenderInputSceneBuildDurationMs,
-      renderInputSceneBuildDurationSampleCount:
-        this.renderInputSceneBuildDurationSampleCount,
-      lastRenderInputScaffoldBuildDurationMs:
-        this.lastRenderInputScaffoldBuildDurationMs,
-      renderInputScaffoldBuildDurationSampleCount:
-        this.renderInputScaffoldBuildDurationSampleCount,
-      lastRenderInputClippingBuildDurationMs:
-        this.lastRenderInputClippingBuildDurationMs,
-      renderInputClippingBuildDurationSampleCount:
-        this.renderInputClippingBuildDurationSampleCount,
-      lastScheduledFrameDurationMs: this.lastScheduledFrameDurationMs,
-      scheduledFrameDurationSampleCount:
-        this.scheduledFrameDurationSampleCount,
-      canvasWidth: this.canvas.width,
-      canvasHeight: this.canvas.height,
-      devicePixelRatio: getDevicePixelRatio()
+        this.runtimeCoreSnapshotValidationDurationSampleCount
     };
   }
 
@@ -581,6 +608,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         frameIndex: liveFrame.sequence,
         deltaTimeMs,
         resetReasons: [],
+        runtimeCoreProfiling: this.runtimeCoreProfiling,
         ...(this.liveRuntimeState === null
           ? {}
           : { previousState: this.liveRuntimeState })

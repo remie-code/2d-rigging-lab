@@ -491,6 +491,49 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).not.toContain("liveMessageCount:");
   });
 
+  it("prints unknown deep runtime-core phase metrics when profiling is disabled", () => {
+    const report = createPerformanceDiagnosticsReport({
+      target: "native-stage",
+      startedAtIso: "2026-06-25T01:00:00.000Z",
+      endedAtIso: "2026-06-25T01:00:01.000Z",
+      durationMs: 1000,
+      requestedDurationMs: 1000,
+      samples: [
+        createSample({
+          nativeStageMetrics: createMetrics({
+            renderCount: 1,
+            lastRuntimeCoreEvaluationDurationMs: 3,
+            runtimeCoreEvaluationDurationSampleCount: 1
+          })
+        }),
+        createSample({
+          nativeStageMetrics: createMetrics({
+            renderCount: 2,
+            lastRuntimeCoreEvaluationDurationMs: 4,
+            runtimeCoreEvaluationDurationSampleCount: 2
+          })
+        })
+      ]
+    });
+    const reportText = formatPerformanceDiagnosticsReport(report);
+
+    expect(report.nativeStage.runtimeCoreEvaluationDurationMs)
+      .toMatchObject({
+        sampleCount: 1,
+        p50: 4
+      });
+    expect(report.nativeStage.runtimeCoreSnapshotCreationDurationMs)
+      .toMatchObject({
+        sampleCount: 0,
+        p50: null,
+        p95: null,
+        max: null
+      });
+    expect(reportText).toContain(
+      "runtimeCoreSnapshotCreationDurationMs: sampleCount=0 p50=unknown"
+    );
+  });
+
   it("supports capture start, sample, and completion lifecycle", () => {
     const firstSample = createSample({
       nativeStageMetrics: createMetrics({ renderCount: 10 })

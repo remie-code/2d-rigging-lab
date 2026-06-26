@@ -8,6 +8,7 @@ import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contra
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type { RuntimePlayerModelMappingApi } from "./model-mapping-bridge-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 import type { RuntimePlayerVariantControllerApi } from "./runtime-variant-bridge-contract";
@@ -195,6 +196,9 @@ export type RuntimePlayerStageViewApi = {
   readonly getViewTransform: () => Promise<RuntimePlayerStageViewTransform>;
   readonly getRenderMetrics:
     () => Promise<RuntimePlayerStageRenderMetricsSnapshot | null>;
+  readonly setRuntimeCoreProfiling: (
+    mode: RuntimePlayerRuntimeCoreProfilingMode
+  ) => Promise<RuntimePlayerRuntimeCoreProfilingMode>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerStageViewStatus) => void
   ) => () => void;

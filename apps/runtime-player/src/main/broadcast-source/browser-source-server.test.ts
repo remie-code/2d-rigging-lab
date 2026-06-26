@@ -150,6 +150,7 @@ describe("Runtime Player Browser Source server", () => {
     expect(emptyResponse).toStrictEqual({
       status: "not-loaded",
       runtimeExport: null,
+      runtimeCoreProfiling: "disabled",
       activeVariantSelection: createDisabledActiveVariantSelection(),
       stageDisplayState: {
         stageWindow: {
@@ -175,6 +176,7 @@ describe("Runtime Player Browser Source server", () => {
 
     expect(loadedResponse).toStrictEqual({
       status: "loaded",
+      runtimeCoreProfiling: "disabled",
       runtimeExportStatus: {
         state: "loaded",
         loaded: true,

@@ -276,7 +276,9 @@ export function createPerformanceDiagnosticsReport(input: {
         "calibration internals",
         "Browser Source token",
         "private file paths",
-        "full Runtime Export payload"
+        "full Runtime Export payload",
+        "Runtime Export textures",
+        "Runtime Export mesh data"
       ]
     }
   };

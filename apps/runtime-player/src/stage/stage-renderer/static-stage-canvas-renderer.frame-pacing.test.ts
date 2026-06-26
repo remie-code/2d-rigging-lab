@@ -329,21 +329,13 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
 
     windowStub.runAnimationFrame(1, 100);
 
-    expect(renderer.getRenderMetricsSnapshot()).toMatchObject({
+    const snapshot = renderer.getRenderMetricsSnapshot();
+
+    expect(snapshot).toMatchObject({
       lastLiveRenderInputEvaluationDurationMs: 3,
       liveRenderInputEvaluationDurationSampleCount: 1,
       lastRuntimeCoreEvaluationDurationMs: 2,
       runtimeCoreEvaluationDurationSampleCount: 1,
-      lastRuntimeCoreParameterResolutionDurationMs: 0.2,
-      runtimeCoreParameterResolutionDurationSampleCount: 1,
-      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
-      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1,
-      lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.8,
-      runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 1,
-      lastRuntimeCoreRotationDeformerVertexTransformDurationMs: 0.9,
-      runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 1,
-      lastRuntimeCoreMaskEvaluationDurationMs: 0.1,
-      runtimeCoreMaskEvaluationDurationSampleCount: 1,
       lastPoseEvaluationDurationMs: 3,
       poseEvaluationDurationSampleCount: 1,
       lastSnapshotToRenderDrawableDurationMs: 4,
@@ -359,6 +351,40 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
       lastScheduledFrameDurationMs: 32,
       scheduledFrameDurationSampleCount: 1
     });
+    expect(snapshot).not.toHaveProperty(
+      "lastRuntimeCoreParameterResolutionDurationMs"
+    );
+    expect(readLatestRuntimeCoreProfiling()).toBe("disabled");
+  });
+
+  it("reports deep runtime-core phase metrics only while deep profiling is active", () => {
+    const windowStub = installStageGlobals();
+    const renderer = createStaticStageCanvasRenderer(
+      createCanvasStub() as unknown as HTMLCanvasElement
+    );
+    renderer.setPayload(createPayload());
+    renderer.setRuntimeCoreProfiling("deep");
+
+    renderer.setLiveParameterFrame(createLiveParameterFrame(1));
+    windowStub.runAnimationFrame(1, 100);
+
+    expect(readLatestRuntimeCoreProfiling()).toBe("deep");
+    expect(renderer.getRenderMetricsSnapshot()).toMatchObject({
+      lastRuntimeCoreParameterResolutionDurationMs: 0.2,
+      runtimeCoreParameterResolutionDurationSampleCount: 1,
+      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
+      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1,
+      lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.8,
+      runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 1,
+      lastRuntimeCoreMaskEvaluationDurationMs: 0.1,
+      runtimeCoreMaskEvaluationDurationSampleCount: 1
+    });
+
+    renderer.setRuntimeCoreProfiling("disabled");
+
+    expect(renderer.getRenderMetricsSnapshot()).not.toHaveProperty(
+      "lastRuntimeCoreParameterResolutionDurationMs"
+    );
   });
 
   it("schedules renders for center and reset operations", () => {
@@ -709,4 +735,13 @@ function readLatestEvaluationCache(): { readonly clear: () => void } {
   }
 
   return cache;
+}
+
+function readLatestRuntimeCoreProfiling(): string | undefined {
+  const options = rendererMocks.createEvaluatedRuntimeExportStageRenderInput
+    .mock.calls.at(-1)?.[1] as
+      | { readonly runtimeCoreProfiling?: string }
+      | undefined;
+
+  return options?.runtimeCoreProfiling;
 }

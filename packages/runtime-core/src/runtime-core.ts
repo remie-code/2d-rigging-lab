@@ -14,7 +14,10 @@ import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeComparisonResult, SnapshotComparisonPolicyInput } from "./snapshot-comparison.js";
 import { compareRuntimeSnapshots } from "./snapshot-comparison.js";
-import type { RuntimeSnapshotDto } from "./snapshot.js";
+import type {
+  RuntimeSnapshotDto,
+  RuntimeSnapshotValidationMode
+} from "./snapshot.js";
 import { createRuntimeSnapshot } from "./snapshot.js";
 import { createCompatibleRuntimeState } from "./state-compatibility.js";
 import type { RuntimeEvaluationInputInput } from "./runtime-input.js";
@@ -34,6 +37,10 @@ export interface RuntimeFrameEvaluationResult {
   readonly snapshot: RuntimeSnapshotDto;
   readonly nextState: RuntimeStateDto;
   readonly profile?: RuntimeCoreEvaluationProfile;
+}
+
+export interface RuntimeFrameEvaluationControlOptions {
+  readonly snapshotValidation?: RuntimeSnapshotValidationMode;
 }
 
 export interface RuntimeSequenceEvaluationResult {
@@ -58,7 +65,8 @@ export const evaluateRuntimeFrame = (
   previousStateValue: RuntimeStateDto,
   optionsValue: RuntimeEvaluationOptionsInput,
   contextValue: RuntimeEvaluationContextInput,
-  profilingOptions?: RuntimeCoreEvaluationProfilingOptions
+  profilingOptions?: RuntimeCoreEvaluationProfilingOptions,
+  controlOptions: RuntimeFrameEvaluationControlOptions = {}
 ): RuntimeFrameEvaluationResult => {
   const profiler = createRuntimeCoreEvaluationProfiler(profilingOptions);
   const {
@@ -93,7 +101,8 @@ export const evaluateRuntimeFrame = (
       options,
       context,
       diagnostics: compatibility.diagnostics,
-      profiling: profiler
+      profiling: profiler,
+      snapshotValidationMode: controlOptions.snapshotValidation ?? "schema"
     }));
   const profile = profiler.finish();
 

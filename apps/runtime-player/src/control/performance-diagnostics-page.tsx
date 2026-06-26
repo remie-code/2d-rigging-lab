@@ -23,6 +23,7 @@ import type {
   RuntimePlayerInputStatus
 } from "../preload/input-bridge-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "../preload/performance-diagnostics-contract";
 import type {
@@ -78,13 +79,18 @@ export function PerformanceDiagnosticsPage({
   stageState,
   nativeStageMetrics,
   browserSourceStatus,
-  onCopyReport
+  onCopyReport,
+  onSetRuntimeCoreProfiling
 }: {
   readonly inputStatus: RuntimePlayerInputStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
   readonly nativeStageMetrics: RuntimePlayerStageRenderMetricsSnapshot | null;
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly onCopyReport: (reportText: string) => void;
+  readonly onSetRuntimeCoreProfiling?: (request: {
+    readonly target: PerformanceDiagnosticsTarget;
+    readonly mode: RuntimePlayerRuntimeCoreProfilingMode;
+  }) => void | Promise<void>;
 }): ReactElement {
   const [target, setTarget] =
     useState<PerformanceDiagnosticsTarget>("native-stage");
@@ -103,6 +109,8 @@ export function PerformanceDiagnosticsPage({
   }));
   const draftRef = useRef<CaptureDraft | null>(null);
   const timerRef = useRef<number | null>(null);
+  const profilingTargetRef = useRef<PerformanceDiagnosticsTarget | null>(null);
+  const setRuntimeCoreProfilingRef = useRef(onSetRuntimeCoreProfiling);
 
   latestSampleRef.current = createSafeCurrentSample({
     inputStatus,
@@ -110,6 +118,7 @@ export function PerformanceDiagnosticsPage({
     nativeStageMetrics,
     browserSourceStatus
   });
+  setRuntimeCoreProfilingRef.current = onSetRuntimeCoreProfiling;
 
   useEffect(() => {
     const draft = draftRef.current;
@@ -130,6 +139,7 @@ export function PerformanceDiagnosticsPage({
 
   useEffect(() => () => {
     clearCaptureTimer(timerRef);
+    disableCaptureRuntimeCoreProfiling();
   }, []);
 
   function startCapture(): void {
@@ -141,6 +151,8 @@ export function PerformanceDiagnosticsPage({
     const startedAtMs = Date.now();
     const startedAtIso = new Date(startedAtMs).toISOString();
     const requestedDurationMs = durationSeconds * 1000;
+    profilingTargetRef.current = target;
+    requestCaptureRuntimeCoreProfiling(target, "deep");
     const draft: CaptureDraft = {
       target,
       startedAtIso,
@@ -182,6 +194,7 @@ export function PerformanceDiagnosticsPage({
     });
     const reportText = formatPerformanceDiagnosticsReport(report);
 
+    disableCaptureRuntimeCoreProfiling();
     draftRef.current = null;
     setCapture({
       status: "complete",
@@ -194,6 +207,7 @@ export function PerformanceDiagnosticsPage({
   function clearCapture(): void {
     clearCaptureTimer(timerRef);
     draftRef.current = null;
+    disableCaptureRuntimeCoreProfiling();
     setCapture({
       status: "idle",
       sampleCount: 0,
@@ -204,6 +218,41 @@ export function PerformanceDiagnosticsPage({
 
   const currentReport = capture.report;
   const reportText = capture.reportText;
+
+  function requestCaptureRuntimeCoreProfiling(
+    captureTarget: PerformanceDiagnosticsTarget,
+    mode: RuntimePlayerRuntimeCoreProfilingMode
+  ): void {
+    try {
+      const result = setRuntimeCoreProfilingRef.current?.({
+        target: captureTarget,
+        mode
+      });
+      if (result !== undefined) {
+        void Promise.resolve(result).catch((error: unknown) => {
+          console.error(
+            "Performance Diagnostics profiling request failed.",
+            error
+          );
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Performance Diagnostics profiling request failed.",
+        error
+      );
+    }
+  }
+
+  function disableCaptureRuntimeCoreProfiling(): void {
+    const captureTarget = profilingTargetRef.current;
+    if (captureTarget === null) {
+      return;
+    }
+
+    profilingTargetRef.current = null;
+    requestCaptureRuntimeCoreProfiling(captureTarget, "disabled");
+  }
 
   return (
     <div className="grid gap-4">

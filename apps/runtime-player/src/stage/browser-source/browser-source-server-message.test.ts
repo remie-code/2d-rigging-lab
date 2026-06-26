@@ -178,6 +178,25 @@ describe("readBrowserSourceServerMessage", () => {
     });
     expect(JSON.stringify(message)).not.toContain("must-not-survive");
   });
+
+  it("reads sanitized runtime-core profiling control messages", () => {
+    const message = readBrowserSourceServerMessage(JSON.stringify({
+      type: "runtime-core-profiling-changed",
+      protocolVersion: 1,
+      runtimeCoreProfiling: "deep",
+      rawFrame: "must-not-survive",
+      token: "must-not-survive",
+      sentAtIso: "2026-06-23T01:00:04.000Z"
+    }));
+
+    expect(message).toStrictEqual({
+      type: "runtime-core-profiling-changed",
+      protocolVersion: 1,
+      runtimeCoreProfiling: "deep",
+      sentAtIso: "2026-06-23T01:00:04.000Z"
+    });
+    expect(JSON.stringify(message)).not.toContain("must-not-survive");
+  });
 });
 
 describe("readBrowserSourceRuntimeExportResponse", () => {
@@ -201,7 +220,8 @@ describe("readBrowserSourceRuntimeExportResponse", () => {
         },
         updatedAtIso: null
       },
-      activeVariantSelection: createDisabledActiveVariantSelection()
+      activeVariantSelection: createDisabledActiveVariantSelection(),
+      runtimeCoreProfiling: "disabled"
     })).toStrictEqual({
       status: "not-loaded",
       runtimeExport: null,
@@ -221,7 +241,8 @@ describe("readBrowserSourceRuntimeExportResponse", () => {
         },
         updatedAtIso: null
       },
-      activeVariantSelection: createDisabledActiveVariantSelection()
+      activeVariantSelection: createDisabledActiveVariantSelection(),
+      runtimeCoreProfiling: "disabled"
     });
   });
 });

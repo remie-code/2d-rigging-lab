@@ -120,6 +120,53 @@ describe("BrowserSourceStageClient", () => {
     );
   });
 
+  it("applies runtime-core profiling control and omits deep metrics when disabled", async () => {
+    const renderer = new FakeStageRenderer();
+    const sockets = createFakeWebSocketFactory();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: sockets.factory,
+      location: createLocation(),
+      timers: createManualTimers(),
+      heartbeatIntervalMs: 0
+    });
+
+    client.start();
+    sockets.instances[0]?.open();
+    await flushAsync();
+
+    expect(readLastDiagnostics(sockets.instances[0])?.renderMetrics)
+      .not.toHaveProperty("lastRuntimeCoreSnapshotCreationDurationMs");
+
+    sockets.instances[0]?.message(JSON.stringify({
+      type: "runtime-core-profiling-changed",
+      protocolVersion: 1,
+      runtimeCoreProfiling: "deep",
+      sentAtIso: "2026-06-23T01:00:02.000Z"
+    }));
+
+    expect(renderer.runtimeCoreProfilingModes.at(-1)).toBe("deep");
+    expect(readLastDiagnostics(sockets.instances[0])?.renderMetrics)
+      .toMatchObject({
+        lastRuntimeCoreSnapshotCreationDurationMs: 2,
+        runtimeCoreSnapshotCreationDurationSampleCount: 1
+      });
+
+    sockets.instances[0]?.message(JSON.stringify({
+      type: "runtime-core-profiling-changed",
+      protocolVersion: 1,
+      runtimeCoreProfiling: "disabled",
+      sentAtIso: "2026-06-23T01:00:03.000Z"
+    }));
+
+    expect(renderer.runtimeCoreProfilingModes.at(-1)).toBe("disabled");
+    expect(readLastDiagnostics(sockets.instances[0])?.renderMetrics)
+      .not.toHaveProperty("lastRuntimeCoreSnapshotCreationDurationMs");
+  });
+
   it("reports client start and WebSocket attempt before opening the socket", () => {
     const sockets = createFakeWebSocketFactory();
     const events: string[] = [];
@@ -467,6 +514,7 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
   readonly frames: RuntimePlayerLiveParameterFrame[] = [];
   readonly transforms: RuntimePlayerBrowserSourceStageViewTransform[] = [];
   readonly activeVariantSelections: Array<RuntimePlayerActiveVariantSelectionState | null> = [];
+  readonly runtimeCoreProfilingModes: string[] = [];
   clearCount = 0;
   clearFrameCount = 0;
   disposed = false;
@@ -498,8 +546,12 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
     this.clearFrameCount += 1;
   }
 
+  setRuntimeCoreProfiling(mode: "disabled" | "deep"): void {
+    this.runtimeCoreProfilingModes.push(mode);
+  }
+
   getRenderMetricsSnapshot() {
-    return {
+    const snapshot = {
       renderCount: 0,
       scheduledRenderCount: 0,
       immediateRenderCount: 0,
@@ -515,6 +567,16 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
       canvasWidth: 1280,
       canvasHeight: 720,
       devicePixelRatio: 1
+    };
+
+    if (this.runtimeCoreProfilingModes.at(-1) !== "deep") {
+      return snapshot;
+    }
+
+    return {
+      ...snapshot,
+      lastRuntimeCoreSnapshotCreationDurationMs: 2,
+      runtimeCoreSnapshotCreationDurationSampleCount: 1
     };
   }
 
@@ -690,6 +752,7 @@ function createLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportResponse
     runtimeExportStatus: createLoadedStatus(),
     stageDisplayState: createStageDisplayState(),
     activeVariantSelection: createActiveVariantSelection(),
+    runtimeCoreProfiling: "disabled",
     runtimeExport: createBrowserSourcePayload()
   };
 }
@@ -706,6 +769,7 @@ function createNotLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportRespo
     },
     stageDisplayState: createStageDisplayState(),
     activeVariantSelection: createDisabledActiveVariantSelection(),
+    runtimeCoreProfiling: "disabled",
     runtimeExport: null
   };
 }

@@ -211,6 +211,11 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(stageViewBridgeChannels.getViewTransform),
       getRenderMetrics: () =>
         ipcRenderer.invoke(stageViewBridgeChannels.getRenderMetrics),
+      setRuntimeCoreProfiling: (mode) =>
+        ipcRenderer.invoke(
+          stageViewBridgeChannels.setRuntimeCoreProfiling,
+          mode
+        ),
       onStatusChanged: (callback) =>
         subscribeToStageViewStatusEvent(
           stageViewBridgeChannels.statusChanged,
@@ -237,6 +242,11 @@ export function installRuntimePlayerBridge(): void {
     browserSource: {
       getStatus: () =>
         ipcRenderer.invoke(browserSourceBridgeChannels.getStatus),
+      setRuntimeCoreProfiling: (mode) =>
+        ipcRenderer.invoke(
+          browserSourceBridgeChannels.setRuntimeCoreProfiling,
+          mode
+        ),
       onStatusChanged: (callback) =>
         subscribeToBrowserSourceStatusEvent(
           browserSourceBridgeChannels.statusChanged,

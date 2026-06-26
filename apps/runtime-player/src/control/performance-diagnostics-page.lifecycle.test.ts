@@ -46,8 +46,10 @@ describe("PerformanceDiagnosticsPage lifecycle", () => {
 
     const { page, react, render } = await setupPageHarness();
     const onCopyReport = vi.fn();
+    const onSetRuntimeCoreProfiling = vi.fn();
     let props = createPageProps({
       onCopyReport,
+      onSetRuntimeCoreProfiling,
       nativeStageMetrics: createMetrics({ renderCount: 10 })
     });
     let tree = render(page, props);
@@ -55,6 +57,10 @@ describe("PerformanceDiagnosticsPage lifecycle", () => {
     findButton(react, tree, "Start Capture").onClick?.();
     tree = render(page, props);
 
+    expect(onSetRuntimeCoreProfiling).toHaveBeenCalledWith({
+      target: "native-stage",
+      mode: "deep"
+    });
     expect(findButton(react, tree, "Start Capture").disabled).toBe(true);
     expect(findButton(react, tree, "Stop Capture").disabled).toBe(false);
 
@@ -74,6 +80,10 @@ describe("PerformanceDiagnosticsPage lifecycle", () => {
     findButton(react, tree, "Stop Capture").onClick?.();
     tree = render(page, props);
 
+    expect(onSetRuntimeCoreProfiling).toHaveBeenLastCalledWith({
+      target: "native-stage",
+      mode: "disabled"
+    });
     const copyButton = findButton(react, tree, "Copy Report");
     expect(copyButton.disabled).toBe(false);
 
@@ -95,8 +105,10 @@ describe("PerformanceDiagnosticsPage lifecycle", () => {
 
     const { page, react, render } = await setupPageHarness();
     const onCopyReport = vi.fn();
+    const onSetRuntimeCoreProfiling = vi.fn();
     const props = createPageProps({
       onCopyReport,
+      onSetRuntimeCoreProfiling,
       nativeStageMetrics: createMetrics({ renderCount: 5 })
     });
     let tree = render(page, props);
@@ -105,6 +117,10 @@ describe("PerformanceDiagnosticsPage lifecycle", () => {
     vi.advanceTimersByTime(10_000);
     tree = render(page, props);
 
+    expect(onSetRuntimeCoreProfiling).toHaveBeenLastCalledWith({
+      target: "native-stage",
+      mode: "disabled"
+    });
     const copyButton = findButton(react, tree, "Copy Report");
     expect(copyButton.disabled).toBe(false);
 
@@ -281,6 +297,9 @@ function findElementWithLabel(
 
 function createPageProps(input: {
   readonly onCopyReport: (reportText: string) => void;
+  readonly onSetRuntimeCoreProfiling?: Parameters<
+    PerformanceDiagnosticsPageModule["PerformanceDiagnosticsPage"]
+  >[0]["onSetRuntimeCoreProfiling"];
   readonly nativeStageMetrics: RuntimePlayerStageRenderMetricsSnapshot | null;
 }): Parameters<PerformanceDiagnosticsPageModule["PerformanceDiagnosticsPage"]>[0] {
   return {
@@ -288,7 +307,8 @@ function createPageProps(input: {
     stageState: createStageState(),
     nativeStageMetrics: input.nativeStageMetrics,
     browserSourceStatus: createBrowserSourceStatus(),
-    onCopyReport: input.onCopyReport
+    onCopyReport: input.onCopyReport,
+    onSetRuntimeCoreProfiling: input.onSetRuntimeCoreProfiling
   };
 }
 

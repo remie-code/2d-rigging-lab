@@ -43,10 +43,17 @@ describe("installRuntimePlayerBridge browserSource", () => {
     });
 
     api.browserSource.getStatus();
+    api.browserSource.setRuntimeCoreProfiling("deep");
     const unsubscribe = api.browserSource.onStatusChanged(callback);
 
-    expect(electronMocks.invoke).toHaveBeenCalledWith(
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      1,
       browserSourceBridgeChannels.getStatus
+    );
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
+      2,
+      browserSourceBridgeChannels.setRuntimeCoreProfiling,
+      "deep"
     );
     expect(electronMocks.on).toHaveBeenCalledWith(
       browserSourceBridgeChannels.statusChanged,

@@ -1,6 +1,8 @@
 export const runtimePlayerPerformanceDiagnosticsVersion =
   "runtime-player-performance-diagnostics-v1" as const;
 
+export type RuntimePlayerRuntimeCoreProfilingMode = "disabled" | "deep";
+
 export type RuntimePlayerStageRenderMetricsSnapshot = {
   readonly renderCount: number;
   readonly scheduledRenderCount: number;

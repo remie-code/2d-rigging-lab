@@ -12,6 +12,7 @@ import type {
   RuntimePlayerStageViewTransform
 } from "./runtime-player-bridge-contract";
 import type {
+  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 
@@ -37,6 +38,8 @@ export type RuntimePlayerStageViewReporterApi = {
   readonly reportRenderMetrics: (
     snapshot: RuntimePlayerStageRenderMetricsSnapshot
   ) => Promise<void>;
+  readonly getRuntimeCoreProfiling:
+    () => Promise<RuntimePlayerRuntimeCoreProfilingMode>;
   readonly onApplyViewTransformRequested: (
     callback: (transform: RuntimePlayerStageViewTransform) => void
   ) => () => void;
@@ -45,6 +48,9 @@ export type RuntimePlayerStageViewReporterApi = {
   ) => () => void;
   readonly onArrangeStateChanged: (
     callback: (state: RuntimePlayerStageArrangeState) => void
+  ) => () => void;
+  readonly onRuntimeCoreProfilingChanged: (
+    callback: (mode: RuntimePlayerRuntimeCoreProfilingMode) => void
   ) => () => void;
 };
 
