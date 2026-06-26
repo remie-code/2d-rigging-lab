@@ -271,7 +271,7 @@ export function createEmptyRuntimePlayerStageRenderMetricsSnapshot():
 }
 
 function readCounter(value: unknown, key: string): number {
-  if (!Number.isInteger(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`Stage render metrics ${key} must be a non-negative integer.`);
   }
 

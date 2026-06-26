@@ -6,6 +6,7 @@ import {
   type RenderDrawable,
   type RenderDrawableClipping,
   type RenderMesh,
+  type RenderTriangle,
   type RenderRgba8TextureSource
 } from "@private-2d-rigging-lab/render-core";
 import type { DrawableId } from "@private-2d-rigging-lab/contracts";
@@ -210,9 +211,15 @@ export function createRuntimeExportEvaluationScaffold(input: {
       index
     ])
   );
-  const drawableTemplatesByDrawableId = new Map(
+  const drawableTemplatesByDrawableId = new Map<
+    DrawableId,
+    RuntimeExportDrawableRenderTemplate
+  >(
     [...adapter.renderResources.drawableRenderResources.entries()].map(
-      ([drawableId, renderResource]) => {
+      ([drawableId, renderResource]): [
+        DrawableId,
+        RuntimeExportDrawableRenderTemplate
+      ] => {
         const clipping = clippingByTargetDrawableId.get(drawableId);
         return [
           drawableId,
@@ -226,11 +233,13 @@ export function createRuntimeExportEvaluationScaffold(input: {
                 x: uv.x,
                 y: uv.y
               })),
-              triangles: renderResource.triangles.map((triangle) => [
-                triangle[0],
-                triangle[1],
-                triangle[2]
-              ])
+              triangles: renderResource.triangles.map(
+                (triangle): RenderTriangle => [
+                  triangle[0],
+                  triangle[1],
+                  triangle[2]
+                ]
+              )
             },
             stableIndex: stableIndexByDrawableId.get(drawableId) ?? 0,
             blendMode: DEFAULT_RENDER_BLEND_MODE,

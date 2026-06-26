@@ -379,14 +379,22 @@ function createBrowserSourceStatus(): RuntimePlayerBrowserSourceStatus {
     browserSourceUrl: "http://127.0.0.1:49200/stage?token=token_fixture",
     connectedClientCount: 0,
     runtimeExport: {
-      state: "not-loaded",
+      state: "empty",
       loaded: false,
       statusLabel: "Runtime Export not loaded",
       loadedAtIso: null,
       summary: null
     },
     latestFrame: null,
-    stageDisplayState: null,
+    stageDisplayState: {
+      stageWindow: {
+        bounds: null
+      },
+      stageView: {
+        transform: null
+      },
+      updatedAtIso: null
+    },
     lastClientConnectedAtIso: null,
     lastClientDisconnectedAtIso: null,
     lastClientHeartbeatAtIso: null,

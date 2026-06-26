@@ -84,7 +84,9 @@ export function createEvaluatedRuntimeExportStageRenderInput(
   const scaffoldAccess = createEvaluationScaffoldAccess({
     payload,
     activeVariantSelection,
-    evaluationCache: options.evaluationCache
+    ...(options.evaluationCache === undefined
+      ? {}
+      : { evaluationCache: options.evaluationCache })
   });
   const scaffold = scaffoldAccess.scaffold;
   const poseEvaluationInput = createPoseEvaluationInput(payload, {

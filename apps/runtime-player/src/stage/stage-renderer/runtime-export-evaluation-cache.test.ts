@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   DrawableId,
+  DynamicsGroupId,
   ParameterId
 } from "@private-2d-rigging-lab/contracts";
 import {
@@ -81,9 +82,13 @@ describe("Runtime Export evaluation cache", () => {
     expect(getSceneDrawable(firstFrame, "draw_mask").visible).toBe(false);
     expect(getSceneDrawable(secondFrame, "draw_mask").visible).toBe(false);
     expect(
-      secondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway?.tick
+      secondFrame.poseEvaluation.nextState.dynamicsGroups[
+        dynamicsGroupId("dyn_hair_sway")
+      ]?.tick
     ).toBeGreaterThan(
-      firstFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway?.tick ?? -1
+      firstFrame.poseEvaluation.nextState.dynamicsGroups[
+        dynamicsGroupId("dyn_hair_sway")
+      ]?.tick ?? -1
     );
   });
 
@@ -250,11 +255,13 @@ describe("Runtime Export evaluation cache", () => {
     expect(getRenderFrame(browserSecondFrame).drawables[1]?.vertices)
       .not.toBe(getRenderFrame(nativeSecondFrame).drawables[1]?.vertices);
     expect(
-      browserSecondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway
-        ?.tick
+      browserSecondFrame.poseEvaluation.nextState.dynamicsGroups[
+        dynamicsGroupId("dyn_hair_sway")
+      ]?.tick
     ).toBe(
-      nativeSecondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway
-        ?.tick
+      nativeSecondFrame.poseEvaluation.nextState.dynamicsGroups[
+        dynamicsGroupId("dyn_hair_sway")
+      ]?.tick
     );
   });
 
@@ -497,7 +504,9 @@ function createRuntimeExportPayload(input: {
   const textureBytes = input.textureBytes ?? new Uint8Array(16);
   const texturePage = createTexturePage({
     bytes: textureBytes,
-    digestHex: input.textureDigestHex
+    ...(input.textureDigestHex === undefined
+      ? {}
+      : { digestHex: input.textureDigestHex })
   });
   const sourcePackage = {
     packageId: "pkg_runtime_eval_cache",
@@ -948,6 +957,10 @@ function createTexturePage(input: {
     },
     binaryAssetId: "bin_atlas_page_0"
   } as unknown as RuntimeExportTexturePageMetadataDto;
+}
+
+function dynamicsGroupId(value: string): DynamicsGroupId {
+  return value as DynamicsGroupId;
 }
 
 function toTexturePageReference(page: RuntimeExportTexturePageMetadataDto) {

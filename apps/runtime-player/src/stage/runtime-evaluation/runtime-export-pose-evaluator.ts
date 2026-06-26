@@ -113,7 +113,9 @@ export function evaluateRuntimeExportPose(
     nextState: result.nextState,
     evaluationProfile: createRuntimeExportPoseEvaluationProfile({
       runtimeCoreEvaluationDurationMs,
-      runtimeCoreProfile: result.profile,
+      ...(result.profile === undefined
+        ? {}
+        : { runtimeCoreProfile: result.profile }),
       compiledRenderFrameCount: 0,
       publicSnapshotMaterializationCount: 1,
       transientCompileCount: runtime.transientCompileCount,
@@ -167,7 +169,9 @@ export function evaluateRuntimeExportRenderFrame(
     nextState: result.nextState,
     evaluationProfile: createRuntimeExportPoseEvaluationProfile({
       runtimeCoreEvaluationDurationMs,
-      runtimeCoreProfile: result.profile,
+      ...(result.profile === undefined
+        ? {}
+        : { runtimeCoreProfile: result.profile }),
       compiledRenderFrameCount: 1,
       publicSnapshotMaterializationCount: 0,
       transientCompileCount: runtime.transientCompileCount,
@@ -184,7 +188,7 @@ export function createRuntimeExportRuntimeModelInitialStateRequest(
   > = {}
 ): RuntimeModelInitialStateRequestInput {
   const frameResetReasons = createRuntimeExportPoseFrameResetReasons(options);
-  const initialResetReasons = frameResetReasons.length === 0
+  const initialResetReasons: RuntimeResetReason[] = frameResetReasons.length === 0
     ? ["packageLoad"]
     : frameResetReasons;
 
@@ -218,7 +222,7 @@ function createRuntimeExportPoseEvaluationRuntime(
 ): {
   readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
   readonly frameIndex: number;
-  readonly frameResetReasons: readonly RuntimeResetReason[];
+  readonly frameResetReasons: RuntimeResetReason[];
   readonly authoredParameterValues: Readonly<Record<string, number>>;
   readonly runtimeModelInstance: RuntimeModelInstance;
   readonly initialState: RuntimeStateDto;
