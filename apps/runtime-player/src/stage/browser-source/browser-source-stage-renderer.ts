@@ -2,9 +2,6 @@ import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-paramet
 import type {
   RuntimePlayerBrowserSourceStageViewTransform
 } from "../../preload/browser-source-status-contract";
-import type {
-  RuntimePlayerRuntimeCoreProfilingMode
-} from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
   RuntimePlayerActiveVariantSelectionState
@@ -38,9 +35,6 @@ export interface BrowserSourceStageRenderer {
   ): void;
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
   clearLiveParameterFrame(): void;
-  setRuntimeCoreProfiling(
-    mode: RuntimePlayerRuntimeCoreProfilingMode
-  ): void;
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot;
   clear(): void;
   dispose(): void;
@@ -94,12 +88,6 @@ class BrowserSourceStageRendererAdapter implements BrowserSourceStageRenderer {
 
   clearLiveParameterFrame(): void {
     this.renderer.clearLiveParameterFrame();
-  }
-
-  setRuntimeCoreProfiling(
-    mode: RuntimePlayerRuntimeCoreProfilingMode
-  ): void {
-    this.renderer.setRuntimeCoreProfiling(mode);
   }
 
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {

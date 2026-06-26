@@ -18,14 +18,8 @@ describe("stage view bridge channels", () => {
       copyWindowTitle: "runtime-player:stage-view:copy-window-title",
       getViewTransform: "runtime-player:stage-view:get-view-transform",
       getArrangeState: "runtime-player:stage-view:get-arrange-state",
-      getRuntimeCoreProfiling:
-        "runtime-player:stage-view:get-runtime-core-profiling",
-      setRuntimeCoreProfiling:
-        "runtime-player:stage-view:set-runtime-core-profiling",
       stateChanged: "runtime-player:stage-view:state-changed",
       arrangeStateChanged: "runtime-player:stage-view:arrange-state-changed",
-      runtimeCoreProfilingChanged:
-        "runtime-player:stage-view:runtime-core-profiling-changed",
       applyViewTransformRequested:
         "runtime-player:stage-view:apply-view-transform-requested",
       applyDisplayViewTransformRequested:

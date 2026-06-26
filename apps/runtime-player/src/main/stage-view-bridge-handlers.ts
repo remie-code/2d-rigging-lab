@@ -2,7 +2,6 @@ import { clipboard, ipcMain, type BrowserWindow } from "electron";
 
 import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
 import type {
-  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "../preload/performance-diagnostics-contract";
 import type {
@@ -54,8 +53,6 @@ export function registerStageViewBridgeHandlers(
     arrangeModeEnabled: false,
     clickThroughEnabled: false
   };
-  let runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode =
-    "disabled";
   let latestRenderMetrics: RuntimePlayerStageRenderMetricsSnapshot | null = null;
   const getState = (): RuntimePlayerStageStateSnapshot =>
     createStageStateSnapshot(input, statusState.getStatus(), mutableCaptureState);
@@ -100,21 +97,6 @@ export function registerStageViewBridgeHandlers(
   );
   ipcMain.handle(stageViewBridgeChannels.getRenderMetrics, () =>
     latestRenderMetrics
-  );
-  ipcMain.handle(stageViewBridgeChannels.getRuntimeCoreProfiling, () =>
-    runtimeCoreProfiling
-  );
-  ipcMain.handle(
-    stageViewBridgeChannels.setRuntimeCoreProfiling,
-    (_event, mode: unknown) => {
-      runtimeCoreProfiling = readRuntimeCoreProfilingMode(mode);
-      sendToWindow(
-        input.windows.stageWindow,
-        stageViewBridgeChannels.runtimeCoreProfilingChanged,
-        runtimeCoreProfiling
-      );
-      return runtimeCoreProfiling;
-    }
   );
   ipcMain.handle(stageViewBridgeChannels.reportStatus, (_event, report: unknown) => {
     const status = statusState.setReportedStatus(report);
@@ -258,7 +240,6 @@ function sendToWindow(
     RuntimePlayerStageStateSnapshot |
     RuntimePlayerStageRenderMetricsSnapshot |
     RuntimePlayerStageViewTransform |
-    RuntimePlayerRuntimeCoreProfilingMode |
     null |
     RuntimePlayerStageArrangeState
 ): void {
@@ -527,16 +508,6 @@ function readIpcBoolean(value: unknown): boolean {
   }
 
   return value;
-}
-
-function readRuntimeCoreProfilingMode(
-  value: unknown
-): RuntimePlayerRuntimeCoreProfilingMode {
-  if (value === "disabled" || value === "deep") {
-    return value;
-  }
-
-  throw new Error("Stage view runtime-core profiling mode is unsupported.");
 }
 
 function createStageViewActionResult(input: {

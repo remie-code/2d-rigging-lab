@@ -13,12 +13,19 @@ describe("performance diagnostics metrics validation", () => {
     const metrics = readRuntimePlayerStageRenderMetricsSnapshot({
       ...createMetrics(),
       privatePath: "C:/private/runtime-export.json",
-      token: "token_fixture"
+      token: "token_fixture",
+      lastRuntimeCoreEvaluationDurationMs: 2,
+      runtimeCoreEvaluationDurationSampleCount: 1,
+      lastRuntimeCoreParameterResolutionDurationMs: 0.3
     });
 
     expect(metrics).toEqual(createMetrics());
     expect(JSON.stringify(metrics)).not.toContain("private");
     expect(JSON.stringify(metrics)).not.toContain("token_fixture");
+    expect(metrics).not.toHaveProperty("lastRuntimeCoreEvaluationDurationMs");
+    expect(metrics).not.toHaveProperty(
+      "runtimeCoreEvaluationDurationSampleCount"
+    );
   });
 
   it("accepts older Stage render metrics without optional duration fields", () => {
@@ -38,38 +45,6 @@ describe("performance diagnostics metrics validation", () => {
     delete legacyMetrics.runtimeModelInstanceCacheInvalidationCount;
     delete legacyMetrics.lastRuntimeModelCompileDurationMs;
     delete legacyMetrics.runtimeModelCompileDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreEvaluationDurationMs;
-    delete legacyMetrics.runtimeCoreEvaluationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreInputValidationDurationMs;
-    delete legacyMetrics.runtimeCoreInputValidationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreStateCompatibilityDurationMs;
-    delete legacyMetrics.runtimeCoreStateCompatibilityDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreDynamicsEvaluationDurationMs;
-    delete legacyMetrics.runtimeCoreDynamicsEvaluationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreSnapshotCreationDurationMs;
-    delete legacyMetrics.runtimeCoreSnapshotCreationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreRenderFrameOutputDurationMs;
-    delete legacyMetrics.runtimeCoreRenderFrameOutputDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreParameterResolutionDurationMs;
-    delete legacyMetrics.runtimeCoreParameterResolutionDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreKeyformSamplingDurationMs;
-    delete legacyMetrics.runtimeCoreKeyformSamplingDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreKeyformApplicationDurationMs;
-    delete legacyMetrics.runtimeCoreKeyformApplicationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreDeformerHierarchyEvaluationDurationMs;
-    delete legacyMetrics.runtimeCoreDeformerHierarchyEvaluationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreWarpDeformerVertexTransformDurationMs;
-    delete legacyMetrics.runtimeCoreWarpDeformerVertexTransformDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreRotationDeformerVertexTransformDurationMs;
-    delete legacyMetrics.runtimeCoreRotationDeformerVertexTransformDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreDrawableSnapshotCreationDurationMs;
-    delete legacyMetrics.runtimeCoreDrawableSnapshotCreationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs;
-    delete legacyMetrics.runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreMaskEvaluationDurationMs;
-    delete legacyMetrics.runtimeCoreMaskEvaluationDurationSampleCount;
-    delete legacyMetrics.lastRuntimeCoreSnapshotValidationDurationMs;
-    delete legacyMetrics.runtimeCoreSnapshotValidationDurationSampleCount;
     delete legacyMetrics.lastPoseEvaluationDurationMs;
     delete legacyMetrics.poseEvaluationDurationSampleCount;
     delete legacyMetrics.lastSnapshotToRenderDrawableDurationMs;
@@ -101,38 +76,6 @@ describe("performance diagnostics metrics validation", () => {
       runtimeModelInstanceCacheInvalidationCount: 0,
       lastRuntimeModelCompileDurationMs: null,
       runtimeModelCompileDurationSampleCount: 0,
-      lastRuntimeCoreEvaluationDurationMs: null,
-      runtimeCoreEvaluationDurationSampleCount: 0,
-      lastRuntimeCoreInputValidationDurationMs: null,
-      runtimeCoreInputValidationDurationSampleCount: 0,
-      lastRuntimeCoreStateCompatibilityDurationMs: null,
-      runtimeCoreStateCompatibilityDurationSampleCount: 0,
-      lastRuntimeCoreDynamicsEvaluationDurationMs: null,
-      runtimeCoreDynamicsEvaluationDurationSampleCount: 0,
-      lastRuntimeCoreSnapshotCreationDurationMs: null,
-      runtimeCoreSnapshotCreationDurationSampleCount: 0,
-      lastRuntimeCoreRenderFrameOutputDurationMs: null,
-      runtimeCoreRenderFrameOutputDurationSampleCount: 0,
-      lastRuntimeCoreParameterResolutionDurationMs: null,
-      runtimeCoreParameterResolutionDurationSampleCount: 0,
-      lastRuntimeCoreKeyformSamplingDurationMs: null,
-      runtimeCoreKeyformSamplingDurationSampleCount: 0,
-      lastRuntimeCoreKeyformApplicationDurationMs: null,
-      runtimeCoreKeyformApplicationDurationSampleCount: 0,
-      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: null,
-      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 0,
-      lastRuntimeCoreWarpDeformerVertexTransformDurationMs: null,
-      runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 0,
-      lastRuntimeCoreRotationDeformerVertexTransformDurationMs: null,
-      runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 0,
-      lastRuntimeCoreDrawableSnapshotCreationDurationMs: null,
-      runtimeCoreDrawableSnapshotCreationDurationSampleCount: 0,
-      lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: null,
-      runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount: 0,
-      lastRuntimeCoreMaskEvaluationDurationMs: null,
-      runtimeCoreMaskEvaluationDurationSampleCount: 0,
-      lastRuntimeCoreSnapshotValidationDurationMs: null,
-      runtimeCoreSnapshotValidationDurationSampleCount: 0,
       lastPoseEvaluationDurationMs: null,
       poseEvaluationDurationSampleCount: 0,
       lastSnapshotToRenderDrawableDurationMs: null,
@@ -193,34 +136,6 @@ describe("performance diagnostics metrics validation", () => {
     [
       "negative runtime model compile sample count",
       { runtimeModelCompileDurationSampleCount: -1 }
-    ],
-    [
-      "negative runtime core sample count",
-      { runtimeCoreEvaluationDurationSampleCount: -1 }
-    ],
-    [
-      "Infinity runtime core duration",
-      { lastRuntimeCoreEvaluationDurationMs: Infinity }
-    ],
-    [
-      "negative runtime core parameter duration",
-      { lastRuntimeCoreParameterResolutionDurationMs: -1 }
-    ],
-    [
-      "negative runtime core render frame output duration",
-      { lastRuntimeCoreRenderFrameOutputDurationMs: -1 }
-    ],
-    [
-      "non-integer runtime core render frame output sample count",
-      { runtimeCoreRenderFrameOutputDurationSampleCount: 1.25 }
-    ],
-    [
-      "non-integer runtime core deformer sample count",
-      { runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1.25 }
-    ],
-    [
-      "NaN runtime core warp transform duration",
-      { lastRuntimeCoreWarpDeformerVertexTransformDurationMs: Number.NaN }
     ],
     [
       "negative pose evaluation duration",
@@ -308,38 +223,6 @@ function createMetrics(
     runtimeModelInstanceCacheInvalidationCount: 0,
     lastRuntimeModelCompileDurationMs: 1.2,
     runtimeModelCompileDurationSampleCount: 1,
-    lastRuntimeCoreEvaluationDurationMs: 2,
-    runtimeCoreEvaluationDurationSampleCount: 5,
-    lastRuntimeCoreInputValidationDurationMs: 0.1,
-    runtimeCoreInputValidationDurationSampleCount: 5,
-    lastRuntimeCoreStateCompatibilityDurationMs: 0.1,
-    runtimeCoreStateCompatibilityDurationSampleCount: 5,
-    lastRuntimeCoreDynamicsEvaluationDurationMs: 0.2,
-    runtimeCoreDynamicsEvaluationDurationSampleCount: 5,
-    lastRuntimeCoreSnapshotCreationDurationMs: 1.8,
-    runtimeCoreSnapshotCreationDurationSampleCount: 5,
-    lastRuntimeCoreRenderFrameOutputDurationMs: 0.7,
-    runtimeCoreRenderFrameOutputDurationSampleCount: 4,
-    lastRuntimeCoreParameterResolutionDurationMs: 0.3,
-    runtimeCoreParameterResolutionDurationSampleCount: 5,
-    lastRuntimeCoreKeyformSamplingDurationMs: 0.4,
-    runtimeCoreKeyformSamplingDurationSampleCount: 5,
-    lastRuntimeCoreKeyformApplicationDurationMs: 0.5,
-    runtimeCoreKeyformApplicationDurationSampleCount: 5,
-    lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.6,
-    runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 5,
-    lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.7,
-    runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 5,
-    lastRuntimeCoreRotationDeformerVertexTransformDurationMs: 0.8,
-    runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 5,
-    lastRuntimeCoreDrawableSnapshotCreationDurationMs: 0.9,
-    runtimeCoreDrawableSnapshotCreationDurationSampleCount: 5,
-    lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: 0.1,
-    runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount: 5,
-    lastRuntimeCoreMaskEvaluationDurationMs: 0.1,
-    runtimeCoreMaskEvaluationDurationSampleCount: 5,
-    lastRuntimeCoreSnapshotValidationDurationMs: 0.2,
-    runtimeCoreSnapshotValidationDurationSampleCount: 5,
     lastPoseEvaluationDurationMs: 3,
     poseEvaluationDurationSampleCount: 5,
     lastSnapshotToRenderDrawableDurationMs: 1,

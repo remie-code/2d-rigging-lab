@@ -8,9 +8,6 @@ import type {
   RuntimePlayerBrowserSourceRuntimeExportStatus
 } from "../../preload/browser-source-status-contract";
 import type {
-  RuntimePlayerRuntimeCoreProfilingMode
-} from "../../preload/performance-diagnostics-contract";
-import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 
@@ -67,7 +64,6 @@ export function createBrowserSourceRuntimeExportResponse(input: {
   readonly runtimeExportStatus: RuntimePlayerBrowserSourceRuntimeExportStatus;
   readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
   readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
-  readonly runtimeCoreProfiling: RuntimePlayerRuntimeCoreProfilingMode;
   readonly runtimeExport:
     RuntimePlayerBrowserSourceRuntimeExportPayload
     | null;
@@ -78,7 +74,6 @@ export function createBrowserSourceRuntimeExportResponse(input: {
       runtimeExportStatus: input.runtimeExportStatus,
       stageDisplayState: input.stageDisplayState,
       activeVariantSelection: input.activeVariantSelection,
-      runtimeCoreProfiling: input.runtimeCoreProfiling,
       runtimeExport: input.runtimeExport
     };
   }
@@ -88,7 +83,6 @@ export function createBrowserSourceRuntimeExportResponse(input: {
     runtimeExportStatus: input.runtimeExportStatus,
     stageDisplayState: input.stageDisplayState,
     activeVariantSelection: input.activeVariantSelection,
-    runtimeCoreProfiling: input.runtimeCoreProfiling,
     runtimeExport: null
   };
 }

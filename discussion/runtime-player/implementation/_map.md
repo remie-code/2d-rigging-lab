@@ -37,7 +37,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave15-plan.md](orchestration/player-wave15-plan.md) | Completed / final pass | Runtime Player Wave15: Runtime Snapshot Hot-Path Cleanup |
 | [orchestration/player-wave16-plan.md](orchestration/player-wave16-plan.md) | Domain E final integration report complete; pending final clean review | Runtime Player Wave16: Runtime Core Compiled Evaluator v0 |
 | [orchestration/player-wave17-plan.md](orchestration/player-wave17-plan.md) | Completed / final pass; manual OBS performance pending | Runtime Player Wave17: Compiled Render Frame Fast Path |
-| [orchestration/player-wave18-plan.md](orchestration/player-wave18-plan.md) | Ready to launch | Runtime Player Wave18: Lightweight Performance Diagnostics Cleanup |
+| [orchestration/player-wave18-plan.md](orchestration/player-wave18-plan.md) | Completed / final pass; manual OBS smoothness pending | Runtime Player Wave18: Lightweight Performance Diagnostics Cleanup |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -105,6 +105,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave17/domain-c-runtime-player-fast-render-path-report.md](waves/wave17/domain-c-runtime-player-fast-render-path-report.md) | Pass | Runtime Player Wave17 Domain C Runtime Player fast render-frame path connection report |
 | [waves/wave17/domain-d-fast-path-diagnostics-report.md](waves/wave17/domain-d-fast-path-diagnostics-report.md) | Pass | Runtime Player Wave17 Domain D fast-path diagnostics/report semantics report |
 | [waves/wave17/wave17-final-integration-report.md](waves/wave17/wave17-final-integration-report.md) | Pass | Runtime Player Wave17 Domain E final integration docs/maps alignment, final review evidence, manual OBS diagnostics instructions, and residual risks |
+| [waves/wave18/_map.md](waves/wave18/_map.md) | Pass | Runtime Player Wave18 report map |
+| [waves/wave18/domain-a-product-diagnostics-simplification-report.md](waves/wave18/domain-a-product-diagnostics-simplification-report.md) | Pass | Runtime Player Wave18 Domain A product diagnostics simplification report |
+| [waves/wave18/domain-b-product-profiling-transport-removal-report.md](waves/wave18/domain-b-product-profiling-transport-removal-report.md) | Pass | Runtime Player Wave18 Domain B product profiling transport removal / cheap proof counters report |
+| [waves/wave18/wave18-final-integration-report.md](waves/wave18/wave18-final-integration-report.md) | Pass | Runtime Player Wave18 Domain C final integration docs/maps alignment, final review evidence, manual OBS diagnostics instructions, and residual risks |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -193,6 +197,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave17/wave17-final-spec-completion-review.md](reviews/wave17/wave17-final-spec-completion-review.md) | Pass | Runtime Player Wave17 final spec completion review |
 | [reviews/wave17/wave17-final-design-development-review.md](reviews/wave17/wave17-final-design-development-review.md) | Pass | Runtime Player Wave17 final design/development review |
 | [reviews/wave17/wave17-final-test-docs-review.md](reviews/wave17/wave17-final-test-docs-review.md) | Pass | Runtime Player Wave17 final test/docs review |
+| [reviews/wave18/_map.md](reviews/wave18/_map.md) | Pass | Runtime Player Wave18 review map |
+| [reviews/wave18/domain-a-spec-compliance-review.md](reviews/wave18/domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave18 Domain A spec compliance review |
+| [reviews/wave18/domain-a-design-development-compliance-review.md](reviews/wave18/domain-a-design-development-compliance-review.md) | Pass | Runtime Player Wave18 Domain A design/development compliance review |
+| [reviews/wave18/domain-a-test-adequacy-review.md](reviews/wave18/domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave18 Domain A test adequacy review |
+| [reviews/wave18/domain-b-spec-compliance-review.md](reviews/wave18/domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave18 Domain B spec compliance review |
+| [reviews/wave18/domain-b-design-development-compliance-review.md](reviews/wave18/domain-b-design-development-compliance-review.md) | Pass | Runtime Player Wave18 Domain B design/development compliance review |
+| [reviews/wave18/domain-b-test-adequacy-review.md](reviews/wave18/domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave18 Domain B test adequacy review |
+| [reviews/wave18/wave18-final-spec-completion-review.md](reviews/wave18/wave18-final-spec-completion-review.md) | Pass | Runtime Player Wave18 final spec/completion review |
+| [reviews/wave18/wave18-final-design-development-review.md](reviews/wave18/wave18-final-design-development-review.md) | Pass | Runtime Player Wave18 final design/development review |
+| [reviews/wave18/wave18-final-test-docs-review.md](reviews/wave18/wave18-final-test-docs-review.md) | Pass after docs-fix re-review | Runtime Player Wave18 final test/docs review |
 
 ## 4. Current Implementation State
 
@@ -247,8 +261,8 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Browser Source startup/resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
 - Runtime Player Wave11 adds Stage Motion / Head Position Follow: Input Profile near/far calibration, Stage page controls, composed display transform, and Browser Source parity without exposing raw tracking/head-position/calibration data.
 - Runtime Player Wave12 adds Live Controller Variant switching: session-only active Variant selection, `singleSelect` / `multiToggle`, `Reset to Model Default`, native Stage / Browser Source parity, and sanitized Browser Source Variant transport.
-- Runtime Player Wave13 final integration and clean review passed. Shared Stage renderer frame pacing converges live frames and Stage view/display transform invalidation on scheduled rAF rendering where practical; duplicate unchanged Stage view/display transforms are skipped and counted.
-- Wave13 metrics include render count, scheduled/immediate render count, live frame message count, Stage view/display transform counts, duplicate transform skip count, coalesced live frame count, rAF delta, render duration, canvas size, and devicePixelRatio.
+- Runtime Player Wave13 final integration and clean review passed. Shared Stage renderer frame pacing converges live frames and Stage view/display transform invalidation on a single render loop where practical; duplicate unchanged Stage view/display transforms are skipped and counted.
+- Wave13 metrics include render count, scheduled/immediate render count, live frame message count, Stage view/display transform counts, duplicate transform skip count, coalesced live frame count, canvas size, and devicePixelRatio.
 - Wave13 Native Stage metrics report through Stage view IPC; Browser Source reports sanitized renderer diagnostics/metrics through the Browser Source diagnostics path.
 - Wave13 Control Window includes low-priority `Performance Diagnostics` with target Native Stage / Browser Source / Both, duration 10s / 30s, Start/Stop Capture, Copy Report, Clear Report, report preview, target availability, and comparison guidance.
 - Wave13 reports established separation between input/source indicators and render metrics, and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
@@ -260,8 +274,8 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Wave14 preserves Browser Source/report privacy boundaries and the Wave10 local preview suspension, Wave11 Stage Motion, and Wave12 Variant switching behavior.
 - Runtime Player Wave15 Domain A/B implementation and clean reviews are complete with `pass`; Domain C docs/maps final integration and final clean Review-Sylph integration review are complete with `pass`: [waves/wave15/wave15-final-integration-report.md](waves/wave15/wave15-final-integration-report.md), [reviews/wave15/wave15-final-clean-integration-review.md](reviews/wave15/wave15-final-clean-integration-review.md).
 - Wave15 makes runtime snapshot validation explicit and keeps Runtime Player normal Stage / Browser Source pose evaluation on `snapshotValidation: "skip"`, while runtime-core remains conservative by default unless a caller requests skip.
-- Wave15 gates deep runtime-core profiling behind Performance Diagnostics capture. Normal live rendering keeps deep profiling disabled, and normal Browser Source diagnostics omit expanded runtime-core phase fields unless capture/deep profiling is active.
-- Wave15 Performance Diagnostics can intentionally request deep details for the selected target while capture is active; if no live render evaluation happens during that window, runtime-core phase summaries can legitimately be `unknown` / `sampleCount=0`.
+- Wave15 historically gated deep runtime-core profiling behind Performance Diagnostics capture. That product behavior is superseded by Wave18: current product Start Capture no longer requests deep runtime-core profiling.
+- Wave15 deep capture measurement-overhead notes are historical. After Wave18, product Performance Diagnostics is lightweight Live Health / FPS / connection / fast-path proof, while runtime-core internal developer/test profiling may remain outside product reach.
 - Wave15 preserves Browser Source/report privacy boundaries, the Wave10 local preview suspension, Wave11 Stage Motion, Wave12 Variant switching, and Wave14 runtime evaluation cache behavior.
 - Real-model manual Electron/OBS diagnostics after Wave15 confirmed validation/profiling target improvements, but Browser Source FPS remains insufficient because runtime-core evaluation still dominates.
 - Runtime Player Wave16 Domains A-D implementation and clean reviews are complete with `pass`; Domain E docs/maps final integration recommends `pass`, pending final clean Review-Sylph integration review: [waves/wave16/wave16-final-integration-report.md](waves/wave16/wave16-final-integration-report.md), [waves/wave16/_map.md](waves/wave16/_map.md), [reviews/wave16/_map.md](reviews/wave16/_map.md).
@@ -274,9 +288,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Runtime Player live evaluated Stage render input now defaults to render-frame mode and combines dynamic render-frame output with cached scaffold/static templates. Snapshot mode remains explicit for initial/static diagnostic/default-pose paths that need public snapshot diagnostics.
 - Browser Source and Native Stage remain target-local for mutable runtime instances and render-frame output. Runtime Export format, Editor export regeneration, package-format schema, dependencies, lockfile, and `pnpm install` remain unchanged/out of scope.
 - Wave17 Performance Diagnostics surfaces `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, and `runtimeCoreRenderFrameOutputDurationMs`; copied reports scope render-frame metrics separately from public snapshot path metrics and print `renderInputDrawableMappingDurationMs` for the compatibility source field `snapshotToRenderDrawableDurationMs`.
-- Real OBS Browser Source performance improvement remains manually unverified until the user saves an updated deep Performance Diagnostics report to `tmp/report.log`.
+- Runtime Player Wave18 Domains A-B implementation, Domain C docs/maps final integration, and three final Review-Sylph lanes are complete with `pass`: [waves/wave18/wave18-final-integration-report.md](waves/wave18/wave18-final-integration-report.md), [waves/wave18/_map.md](waves/wave18/_map.md), [reviews/wave18/_map.md](reviews/wave18/_map.md).
+- Wave18 changes Performance Diagnostics into lightweight Live Health / FPS / connection / fast-path proof rather than a product deep profiler.
+- Wave18 product Start Capture no longer enables runtime-core deep profiling, copied product reports omit deep runtime-core phase timings and `runtimeModelCompileDurationMs` as product-facing timing, and product Stage / Browser Source profiling transport is removed.
+- Runtime-core internal developer/test profiling may remain, but it is not product-reachable through Control, Stage IPC, Browser Source HTTP/WS, or Browser Source client handling.
+- `publicSnapshotMaterializationCount` is now a cheap Runtime Player evaluation-profile counter independent of runtime-core deep profiling while Wave17 fast render-frame proof counters remain available.
+- Real OBS Browser Source smoothness under lightweight Performance Diagnostics remains manually unverified until the user runs Browser Source Performance Diagnostics and saves the copied report to `tmp/report.log` if follow-up is needed.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, WebGL cache redesign, Runtime Export format changes, and Editor changes remain out of scope.
 
 ## 5. Next Action
 
-Run the real-model OBS Browser Source deep Performance Diagnostics capture and save the copied report to `tmp/report.log`. Wave17 final integration and final Review-Sylph lanes are complete with `pass`; real-model OBS Browser Source performance remains pending until `tmp/report.log` is captured.
+Run the real-model OBS Browser Source Performance Diagnostics capture, confirm capture no longer visibly degrades Browser Source smoothness, and save the copied report to `tmp/report.log` if follow-up is needed. Wave18 final review lanes are complete with `pass`.

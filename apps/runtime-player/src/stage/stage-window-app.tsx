@@ -59,7 +59,6 @@ export function StageWindowApp(): ReactElement {
 
     applyStoredStageViewTransform(renderer);
     applyActiveVariantSelection(renderer);
-    applyRuntimeCoreProfiling(renderer);
     reportStageViewStatus(createStageEmptyStatusReport());
 
     const applyArrangeState = (state: RuntimePlayerStageArrangeState): void => {
@@ -189,16 +188,6 @@ export function StageWindowApp(): ReactElement {
       window.runtimePlayerStage.stageView.onArrangeStateChanged(
         applyArrangeState
       );
-    const unsubscribeRuntimeCoreProfiling =
-      window.runtimePlayerStage.stageView.onRuntimeCoreProfilingChanged(
-        (mode) => {
-          if (!active) {
-            return;
-          }
-
-          renderer.setRuntimeCoreProfiling(mode);
-        }
-      );
     const unsubscribeLiveParameters =
       window.runtimePlayerStage.liveParameters.onFrame((frame) => {
         if (!active) {
@@ -224,7 +213,6 @@ export function StageWindowApp(): ReactElement {
       unsubscribeStageViewTransform();
       unsubscribeStageDisplayViewTransform();
       unsubscribeArrangeState();
-      unsubscribeRuntimeCoreProfiling();
       unsubscribeLiveParameters();
       unsubscribeLiveParameterClear();
       renderer.dispose();
@@ -256,18 +244,6 @@ function applyActiveVariantSelection(
     })
     .catch((error: unknown) => {
       console.error("Stage Variant selection read failed.", error);
-    });
-}
-
-function applyRuntimeCoreProfiling(
-  renderer: StaticStageCanvasRenderer
-): void {
-  window.runtimePlayerStage.stageView.getRuntimeCoreProfiling()
-    .then((mode) => {
-      renderer.setRuntimeCoreProfiling(mode);
-    })
-    .catch((error: unknown) => {
-      console.error("Stage runtime-core profiling mode read failed.", error);
     });
 }
 

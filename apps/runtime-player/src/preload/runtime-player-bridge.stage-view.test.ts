@@ -47,7 +47,6 @@ describe("installRuntimePlayerBridge stageView", () => {
     api.stageView.getState();
     api.stageView.getViewTransform();
     api.stageView.getRenderMetrics();
-    api.stageView.setRuntimeCoreProfiling("deep");
     api.stageView.reportViewTransform(transform);
     api.stageView.focusStage();
     api.stageView.resetView();
@@ -74,56 +73,51 @@ describe("installRuntimePlayerBridge stageView", () => {
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       4,
-      stageViewBridgeChannels.setRuntimeCoreProfiling,
-      "deep"
-    );
-    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      5,
       stageViewBridgeChannels.reportViewTransform,
       transform
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      6,
+      5,
       stageViewBridgeChannels.focusStage
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      7,
+      6,
       stageViewBridgeChannels.resetView
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      8,
+      7,
       stageViewBridgeChannels.centerModel
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      9,
+      8,
       stageViewBridgeChannels.setArrangeMode,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      10,
+      9,
       stageViewBridgeChannels.setClickThrough,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      11,
+      10,
       stageViewBridgeChannels.setAlwaysOnTop,
       true
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      12,
+      11,
       stageViewBridgeChannels.updateStageMotionSettings,
       { enabled: true }
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      13,
+      12,
       stageViewBridgeChannels.copyWindowTitle
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      14,
+      13,
       stageViewBridgeChannels.focusStage
     );
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      15,
+      14,
       stageViewBridgeChannels.resetView
     );
   });

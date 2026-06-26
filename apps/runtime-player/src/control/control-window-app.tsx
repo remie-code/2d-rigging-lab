@@ -869,21 +869,6 @@ function renderActivePage(input: {
         onCopyReport={(reportText) =>
           void input.copyPerformanceDiagnosticsReport(reportText)
         }
-        onSetRuntimeCoreProfiling={({ target, mode }) => {
-          const requests: Promise<unknown>[] = [];
-          if (target === "native-stage" || target === "both") {
-            requests.push(
-              window.runtimePlayer.stageView.setRuntimeCoreProfiling(mode)
-            );
-          }
-          if (target === "browser-source" || target === "both") {
-            requests.push(
-              window.runtimePlayer.browserSource.setRuntimeCoreProfiling(mode)
-            );
-          }
-
-          void Promise.allSettled(requests);
-        }}
       />
     );
   }

@@ -1,8 +1,6 @@
 export const runtimePlayerPerformanceDiagnosticsVersion =
   "runtime-player-performance-diagnostics-v1" as const;
 
-export type RuntimePlayerRuntimeCoreProfilingMode = "disabled" | "deep";
-
 export type RuntimePlayerStageRenderMetricsSnapshot = {
   readonly renderCount: number;
   readonly scheduledRenderCount: number;
@@ -31,38 +29,6 @@ export type RuntimePlayerStageRenderMetricsSnapshot = {
   readonly runtimeModelInstanceCacheInvalidationCount?: number;
   readonly lastRuntimeModelCompileDurationMs?: number | null;
   readonly runtimeModelCompileDurationSampleCount?: number;
-  readonly lastRuntimeCoreEvaluationDurationMs?: number | null;
-  readonly runtimeCoreEvaluationDurationSampleCount?: number;
-  readonly lastRuntimeCoreInputValidationDurationMs?: number | null;
-  readonly runtimeCoreInputValidationDurationSampleCount?: number;
-  readonly lastRuntimeCoreStateCompatibilityDurationMs?: number | null;
-  readonly runtimeCoreStateCompatibilityDurationSampleCount?: number;
-  readonly lastRuntimeCoreDynamicsEvaluationDurationMs?: number | null;
-  readonly runtimeCoreDynamicsEvaluationDurationSampleCount?: number;
-  readonly lastRuntimeCoreSnapshotCreationDurationMs?: number | null;
-  readonly runtimeCoreSnapshotCreationDurationSampleCount?: number;
-  readonly lastRuntimeCoreRenderFrameOutputDurationMs?: number | null;
-  readonly runtimeCoreRenderFrameOutputDurationSampleCount?: number;
-  readonly lastRuntimeCoreParameterResolutionDurationMs?: number | null;
-  readonly runtimeCoreParameterResolutionDurationSampleCount?: number;
-  readonly lastRuntimeCoreKeyformSamplingDurationMs?: number | null;
-  readonly runtimeCoreKeyformSamplingDurationSampleCount?: number;
-  readonly lastRuntimeCoreKeyformApplicationDurationMs?: number | null;
-  readonly runtimeCoreKeyformApplicationDurationSampleCount?: number;
-  readonly lastRuntimeCoreDeformerHierarchyEvaluationDurationMs?: number | null;
-  readonly runtimeCoreDeformerHierarchyEvaluationDurationSampleCount?: number;
-  readonly lastRuntimeCoreWarpDeformerVertexTransformDurationMs?: number | null;
-  readonly runtimeCoreWarpDeformerVertexTransformDurationSampleCount?: number;
-  readonly lastRuntimeCoreRotationDeformerVertexTransformDurationMs?: number | null;
-  readonly runtimeCoreRotationDeformerVertexTransformDurationSampleCount?: number;
-  readonly lastRuntimeCoreDrawableSnapshotCreationDurationMs?: number | null;
-  readonly runtimeCoreDrawableSnapshotCreationDurationSampleCount?: number;
-  readonly lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs?: number | null;
-  readonly runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount?: number;
-  readonly lastRuntimeCoreMaskEvaluationDurationMs?: number | null;
-  readonly runtimeCoreMaskEvaluationDurationSampleCount?: number;
-  readonly lastRuntimeCoreSnapshotValidationDurationMs?: number | null;
-  readonly runtimeCoreSnapshotValidationDurationSampleCount?: number;
   readonly lastPoseEvaluationDurationMs?: number | null;
   readonly poseEvaluationDurationSampleCount?: number;
   readonly lastSnapshotToRenderDrawableDurationMs?: number | null;

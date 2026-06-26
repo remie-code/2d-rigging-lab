@@ -20,9 +20,6 @@ import {
   type RuntimeExportRuntimeGraphAdapterResult
 } from "./runtime-export-runtime-graph-adapter";
 import type {
-  RuntimePlayerRuntimeCoreProfilingMode
-} from "../../preload/performance-diagnostics-contract";
-import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 
@@ -47,9 +44,12 @@ export interface RuntimeExportPoseEvaluationProfile {
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
   readonly compiledEvaluatorFrameCount: number;
   readonly compiledRenderFrameCount: number;
+  readonly publicSnapshotMaterializationCount: number;
   readonly transientCompileCount: number;
   readonly transientInstanceCount: number;
 }
+
+type RuntimeExportRuntimeCoreProfilingMode = "disabled" | "deep";
 
 export type RuntimeExportPoseEvaluationOptions = {
   readonly authoredParameterValues?: Readonly<Record<string, number>>;
@@ -62,7 +62,7 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly compiledRuntimeModel?: CompiledRuntimeModel;
   readonly runtimeModelInstance?: RuntimeModelInstance;
   readonly snapshotValidation?: RuntimeSnapshotValidationMode;
-  readonly runtimeCoreProfiling?: RuntimePlayerRuntimeCoreProfilingMode;
+  readonly runtimeCoreProfiling?: RuntimeExportRuntimeCoreProfilingMode;
 };
 
 export function evaluateRuntimeExportPose(
@@ -115,6 +115,7 @@ export function evaluateRuntimeExportPose(
       runtimeCoreEvaluationDurationMs,
       runtimeCoreProfile: result.profile,
       compiledRenderFrameCount: 0,
+      publicSnapshotMaterializationCount: 1,
       transientCompileCount: runtime.transientCompileCount,
       transientInstanceCount: runtime.transientInstanceCount
     })
@@ -168,6 +169,7 @@ export function evaluateRuntimeExportRenderFrame(
       runtimeCoreEvaluationDurationMs,
       runtimeCoreProfile: result.profile,
       compiledRenderFrameCount: 1,
+      publicSnapshotMaterializationCount: 0,
       transientCompileCount: runtime.transientCompileCount,
       transientInstanceCount: runtime.transientInstanceCount
     })
@@ -263,6 +265,7 @@ function createRuntimeExportPoseEvaluationProfile(input: {
   readonly runtimeCoreEvaluationDurationMs: number;
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
   readonly compiledRenderFrameCount: number;
+  readonly publicSnapshotMaterializationCount: number;
   readonly transientCompileCount: number;
   readonly transientInstanceCount: number;
 }): RuntimeExportPoseEvaluationProfile {
@@ -270,6 +273,8 @@ function createRuntimeExportPoseEvaluationProfile(input: {
     runtimeCoreEvaluationDurationMs: input.runtimeCoreEvaluationDurationMs,
     compiledEvaluatorFrameCount: 1,
     compiledRenderFrameCount: input.compiledRenderFrameCount,
+    publicSnapshotMaterializationCount:
+      input.publicSnapshotMaterializationCount,
     transientCompileCount: input.transientCompileCount,
     transientInstanceCount: input.transientInstanceCount,
     ...(input.runtimeCoreProfile === undefined

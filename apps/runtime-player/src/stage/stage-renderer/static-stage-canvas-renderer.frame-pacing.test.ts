@@ -334,8 +334,6 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
     expect(snapshot).toMatchObject({
       lastLiveRenderInputEvaluationDurationMs: 3,
       liveRenderInputEvaluationDurationSampleCount: 1,
-      lastRuntimeCoreEvaluationDurationMs: 2,
-      runtimeCoreEvaluationDurationSampleCount: 1,
       compiledRenderFrameCount: 1,
       publicSnapshotMaterializationCount: 0,
       lastPoseEvaluationDurationMs: 3,
@@ -356,36 +354,34 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
     expect(snapshot).not.toHaveProperty(
       "lastRuntimeCoreParameterResolutionDurationMs"
     );
-    expect(readLatestRuntimeCoreProfiling()).toBe("disabled");
+    expect(readLatestRuntimeCoreProfiling()).toBeUndefined();
   });
 
-  it("reports deep runtime-core phase metrics only while deep profiling is active", () => {
+  it("counts public snapshot materialization from the cheap render-input profile", () => {
     const windowStub = installStageGlobals();
     const renderer = createStaticStageCanvasRenderer(
       createCanvasStub() as unknown as HTMLCanvasElement
     );
     renderer.setPayload(createPayload());
-    renderer.setRuntimeCoreProfiling("deep");
+    rendererMocks.createEvaluatedRuntimeExportStageRenderInput
+      .mockImplementationOnce(
+        (_payload: RuntimeExportLoadedPayload, liveInput?: { frameIndex?: number }) =>
+          createRenderInput(liveInput?.frameIndex ?? 0, {
+            compiledRenderFrameCount: 0,
+            publicSnapshotMaterializationCount: 1,
+            runtimeCoreProfile: undefined
+          })
+      );
 
     renderer.setLiveParameterFrame(createLiveParameterFrame(1));
     windowStub.runAnimationFrame(1, 100);
 
-    expect(readLatestRuntimeCoreProfiling()).toBe("deep");
     expect(renderer.getRenderMetricsSnapshot()).toMatchObject({
-      lastRuntimeCoreRenderFrameOutputDurationMs: 0.6,
-      runtimeCoreRenderFrameOutputDurationSampleCount: 1,
-      lastRuntimeCoreParameterResolutionDurationMs: 0.2,
-      runtimeCoreParameterResolutionDurationSampleCount: 1,
-      lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
-      runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1,
-      lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.8,
-      runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 1,
-      lastRuntimeCoreMaskEvaluationDurationMs: 0.1,
-      runtimeCoreMaskEvaluationDurationSampleCount: 1
+      compiledRenderFrameCount: 0,
+      publicSnapshotMaterializationCount: 1,
+      transientCompileCount: 0,
+      transientInstanceCount: 0
     });
-
-    renderer.setRuntimeCoreProfiling("disabled");
-
     expect(renderer.getRenderMetricsSnapshot()).not.toHaveProperty(
       "lastRuntimeCoreParameterResolutionDurationMs"
     );
@@ -611,7 +607,21 @@ function createCanvasStub(): {
   };
 }
 
-function createRenderInput(frameIndex: number) {
+function createRenderInput(
+  frameIndex: number,
+  profilePatch: {
+    readonly compiledRenderFrameCount?: number;
+    readonly publicSnapshotMaterializationCount?: number;
+    readonly runtimeCoreProfile?: ReturnType<typeof createRuntimeCoreProfile> | undefined;
+  } = {}
+) {
+  const compiledRenderFrameCount = profilePatch.compiledRenderFrameCount ?? 1;
+  const publicSnapshotMaterializationCount =
+    profilePatch.publicSnapshotMaterializationCount ?? 0;
+  const runtimeCoreProfile = "runtimeCoreProfile" in profilePatch
+    ? profilePatch.runtimeCoreProfile
+    : createRuntimeCoreProfile();
+
   return {
     scene: {
       frameIndex,
@@ -634,18 +644,20 @@ function createRenderInput(frameIndex: number) {
       evaluationProfile: {
         runtimeCoreEvaluationDurationMs: 2,
         compiledEvaluatorFrameCount: 1,
-        compiledRenderFrameCount: 1,
+        compiledRenderFrameCount,
+        publicSnapshotMaterializationCount,
         transientCompileCount: 0,
         transientInstanceCount: 0,
-        runtimeCoreProfile: createRuntimeCoreProfile()
+        ...(runtimeCoreProfile === undefined ? {} : { runtimeCoreProfile })
       }
     },
     evaluationProfile: {
       evaluationCacheStatus: frameIndex === 0 ? "miss" : "hit",
       runtimeCoreEvaluationDurationMs: 2,
-      runtimeCoreProfile: createRuntimeCoreProfile(),
+      ...(runtimeCoreProfile === undefined ? {} : { runtimeCoreProfile }),
       compiledEvaluatorFrameCount: 1,
-      compiledRenderFrameCount: 1,
+      compiledRenderFrameCount,
+      publicSnapshotMaterializationCount,
       transientCompileCount: 0,
       transientInstanceCount: 0,
       poseEvaluationDurationMs: 3,

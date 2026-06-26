@@ -27,6 +27,26 @@ import {
   type RuntimePlayerStageStateSnapshot
 } from "../preload/runtime-player-bridge-contract";
 
+const omittedRuntimeCoreReportFieldNames = [
+  "runtimeCoreEvaluationDurationMs",
+  "runtimeCoreInputValidationDurationMs",
+  "runtimeCoreStateCompatibilityDurationMs",
+  "runtimeCoreDynamicsEvaluationDurationMs",
+  "runtimeCoreSnapshotCreationDurationMs",
+  "runtimeCoreRenderFrameOutputDurationMs",
+  "runtimeCoreParameterResolutionDurationMs",
+  "runtimeCoreKeyformSamplingDurationMs",
+  "runtimeCoreKeyformApplicationDurationMs",
+  "runtimeCoreDeformerHierarchyEvaluationDurationMs",
+  "runtimeCoreWarpDeformerVertexTransformDurationMs",
+  "runtimeCoreRotationDeformerVertexTransformDurationMs",
+  "runtimeCoreDrawableSnapshotCreationDurationMs",
+  "runtimeCoreVisibilityDrawOrderEvaluationDurationMs",
+  "runtimeCoreMaskEvaluationDurationMs",
+  "runtimeCoreSnapshotValidationDurationMs",
+  "runtimeModelCompileDurationMs"
+] as const;
+
 describe("Performance Diagnostics report", () => {
   it("aggregates native Stage metrics with distinct source and render FPS", () => {
     const report = createPerformanceDiagnosticsReport({
@@ -82,38 +102,6 @@ describe("Performance Diagnostics report", () => {
             transientCompileCount: 0,
             transientInstanceCount: 0,
             publicSnapshotMaterializationCount: 0,
-            lastRuntimeCoreEvaluationDurationMs: 2,
-            runtimeCoreEvaluationDurationSampleCount: 1,
-            lastRuntimeCoreInputValidationDurationMs: 0.1,
-            runtimeCoreInputValidationDurationSampleCount: 1,
-            lastRuntimeCoreStateCompatibilityDurationMs: 0.2,
-            runtimeCoreStateCompatibilityDurationSampleCount: 1,
-            lastRuntimeCoreDynamicsEvaluationDurationMs: 0.3,
-            runtimeCoreDynamicsEvaluationDurationSampleCount: 1,
-            lastRuntimeCoreSnapshotCreationDurationMs: 1.5,
-            runtimeCoreSnapshotCreationDurationSampleCount: 1,
-            lastRuntimeCoreRenderFrameOutputDurationMs: 0.9,
-            runtimeCoreRenderFrameOutputDurationSampleCount: 1,
-            lastRuntimeCoreParameterResolutionDurationMs: 0.4,
-            runtimeCoreParameterResolutionDurationSampleCount: 1,
-            lastRuntimeCoreKeyformSamplingDurationMs: 0.5,
-            runtimeCoreKeyformSamplingDurationSampleCount: 1,
-            lastRuntimeCoreKeyformApplicationDurationMs: 0.6,
-            runtimeCoreKeyformApplicationDurationSampleCount: 1,
-            lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
-            runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 1,
-            lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 0.8,
-            runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 1,
-            lastRuntimeCoreRotationDeformerVertexTransformDurationMs: 0.9,
-            runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 1,
-            lastRuntimeCoreDrawableSnapshotCreationDurationMs: 1,
-            runtimeCoreDrawableSnapshotCreationDurationSampleCount: 1,
-            lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: 1.1,
-            runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount: 1,
-            lastRuntimeCoreMaskEvaluationDurationMs: 1.2,
-            runtimeCoreMaskEvaluationDurationSampleCount: 1,
-            lastRuntimeCoreSnapshotValidationDurationMs: 1.3,
-            runtimeCoreSnapshotValidationDurationSampleCount: 1,
             lastPoseEvaluationDurationMs: 3,
             poseEvaluationDurationSampleCount: 1,
             lastSnapshotToRenderDrawableDurationMs: 1,
@@ -156,38 +144,6 @@ describe("Performance Diagnostics report", () => {
             transientCompileCount: 0,
             transientInstanceCount: 0,
             publicSnapshotMaterializationCount: 0,
-            lastRuntimeCoreEvaluationDurationMs: 4,
-            runtimeCoreEvaluationDurationSampleCount: 2,
-            lastRuntimeCoreInputValidationDurationMs: 0.2,
-            runtimeCoreInputValidationDurationSampleCount: 2,
-            lastRuntimeCoreStateCompatibilityDurationMs: 0.4,
-            runtimeCoreStateCompatibilityDurationSampleCount: 2,
-            lastRuntimeCoreDynamicsEvaluationDurationMs: 0.6,
-            runtimeCoreDynamicsEvaluationDurationSampleCount: 2,
-            lastRuntimeCoreSnapshotCreationDurationMs: 3,
-            runtimeCoreSnapshotCreationDurationSampleCount: 2,
-            lastRuntimeCoreRenderFrameOutputDurationMs: 1.8,
-            runtimeCoreRenderFrameOutputDurationSampleCount: 2,
-            lastRuntimeCoreParameterResolutionDurationMs: 0.8,
-            runtimeCoreParameterResolutionDurationSampleCount: 2,
-            lastRuntimeCoreKeyformSamplingDurationMs: 1,
-            runtimeCoreKeyformSamplingDurationSampleCount: 2,
-            lastRuntimeCoreKeyformApplicationDurationMs: 1.2,
-            runtimeCoreKeyformApplicationDurationSampleCount: 2,
-            lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 1.4,
-            runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 2,
-            lastRuntimeCoreWarpDeformerVertexTransformDurationMs: 1.6,
-            runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 2,
-            lastRuntimeCoreRotationDeformerVertexTransformDurationMs: 1.8,
-            runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 2,
-            lastRuntimeCoreDrawableSnapshotCreationDurationMs: 2,
-            runtimeCoreDrawableSnapshotCreationDurationSampleCount: 2,
-            lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: 2.2,
-            runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount: 2,
-            lastRuntimeCoreMaskEvaluationDurationMs: 2.4,
-            runtimeCoreMaskEvaluationDurationSampleCount: 2,
-            lastRuntimeCoreSnapshotValidationDurationMs: 2.6,
-            runtimeCoreSnapshotValidationDurationSampleCount: 2,
             lastPoseEvaluationDurationMs: 6,
             poseEvaluationDurationSampleCount: 2,
             lastSnapshotToRenderDrawableDurationMs: 2,
@@ -259,54 +215,6 @@ describe("Performance Diagnostics report", () => {
         p95: 8,
         max: 8
       });
-    expect(report.nativeStage.runtimeCoreEvaluationDurationMs).toMatchObject({
-      sampleCount: 2,
-      p50: 2,
-      p95: 4,
-      max: 4
-    });
-    expect(report.nativeStage.runtimeCoreRenderFrameOutputDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 0.9,
-        p95: 1.8,
-        max: 1.8
-      });
-    expect(report.nativeStage.runtimeCoreParameterResolutionDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 0.4,
-        p95: 0.8,
-        max: 0.8
-      });
-    expect(report.nativeStage.runtimeCoreDeformerHierarchyEvaluationDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 0.7,
-        p95: 1.4,
-        max: 1.4
-      });
-    expect(report.nativeStage.runtimeCoreWarpDeformerVertexTransformDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 0.8,
-        p95: 1.6,
-        max: 1.6
-      });
-    expect(report.nativeStage.runtimeCoreMaskEvaluationDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 1.2,
-        p95: 2.4,
-        max: 2.4
-      });
-    expect(report.nativeStage.runtimeCoreSnapshotValidationDurationMs)
-      .toMatchObject({
-        sampleCount: 2,
-        p50: 1.3,
-        p95: 2.6,
-        max: 2.6
-      });
     expect(report.nativeStage.poseEvaluationDurationMs).toMatchObject({
       sampleCount: 2,
       p50: 3,
@@ -351,32 +259,28 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).toContain("liveFrameMessageFps: 60");
     expect(reportText).toContain("appliedLiveFrameFps: 2");
     expect(reportText).toContain("renderFps: 60");
-    expect(reportText).toContain("liveRenderInputEvaluationDurationMs:");
-    expect(reportText).toContain("evaluationCacheHitCount: 2");
-    expect(reportText).toContain("evaluationCacheMissCount: 1");
+    expect(reportText).toContain(
+      "diagnosticScope: live-health-fps-connection-fast-path"
+    );
+    expect(reportText).toContain("scaffoldEvaluationCacheHitCount: 2");
+    expect(reportText).toContain("scaffoldEvaluationCacheMissCount: 1");
     expect(reportText).toContain(
       "compiledRenderFrameCount: 2 scope=render-frame-fast-path"
     );
     expect(reportText).toContain(
-      "publicSnapshotMaterializationCount: 0 scope=public-snapshot-path/deep-runtime-core-profile"
+      "publicSnapshotMaterializationCount: 0 scope=fast-path-proof-public-snapshot-avoidance"
     );
-    expect(reportText).toContain("runtimeCoreEvaluationDurationMs:");
-    expect(reportText).toContain(
-      "runtimeCoreRenderFrameOutputDurationMs: sampleCount=2 p50=0.9"
-    );
-    expect(reportText).toContain("runtimeCoreParameterResolutionDurationMs:");
-    expect(reportText).toContain("runtimeCoreDeformerHierarchyEvaluationDurationMs:");
-    expect(reportText).toContain("runtimeCoreWarpDeformerVertexTransformDurationMs:");
-    expect(reportText).toContain("runtimeCoreMaskEvaluationDurationMs:");
-    expect(reportText).toContain("runtimeCoreSnapshotValidationDurationMs:");
-    expect(reportText).toContain("renderInputDrawableMappingDurationMs:");
-    expect(reportText).toContain(
-      "sourceField=snapshotToRenderDrawableDurationMs scope=renderer-input-mapping-not-public-snapshot-materialization"
-    );
+    expect(reportText).toContain("runtimeModelInstanceCacheHitCount: 0");
+    expect(reportText).toContain("browserSourceClientCount: 0");
+    for (const fieldName of omittedRuntimeCoreReportFieldNames) {
+      expect(reportText).not.toContain(`${fieldName}:`);
+    }
+    expect(reportText).not.toContain("deep-runtime-core-profile");
+    expect(reportText).not.toContain("renderInputDrawableMappingDurationMs:");
     expect(reportText).not.toContain("\nsnapshotToRenderDrawableDurationMs:");
-    expect(reportText).toContain("renderInputSceneBuildDurationMs:");
-    expect(reportText).toContain("renderInputClippingBuildDurationMs:");
-    expect(reportText).toContain("scheduledFrameDurationMs:");
+    expect(reportText).not.toContain("renderInputSceneBuildDurationMs:");
+    expect(reportText).not.toContain("renderInputClippingBuildDurationMs:");
+    expect(reportText).not.toContain("scheduledFrameDurationMs:");
   });
 
   it("aggregates Browser Source renderer metrics when a client reports them", () => {
@@ -469,11 +373,6 @@ describe("Performance Diagnostics report", () => {
       stageTransformMessageCount: 3,
       browserSourceClientCount: 1
     });
-    expect(report.browserSource.runtimeModelCompileDurationMs)
-      .toMatchObject({
-        sampleCount: 1,
-        latest: 5
-      });
     expect(report.browserSource.liveRenderInputEvaluationDurationMs)
       .toMatchObject({
         sampleCount: 1,
@@ -487,24 +386,27 @@ describe("Performance Diagnostics report", () => {
       p95: 14,
       max: 14
     });
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
-      "compiledEvaluatorFrameCount: 30"
-    );
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+    const reportText = formatPerformanceDiagnosticsReport(report);
+
+    expect(reportText).toContain("compiledEvaluatorFrameCount: 30");
+    expect(reportText).toContain(
       "compiledRenderFrameCount: 30 scope=render-frame-fast-path"
     );
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
-      "transientCompileCount: 0"
+    expect(reportText).toContain("transientCompileCount: 0");
+    expect(reportText).toContain("transientInstanceCount: 0");
+    expect(reportText).toContain(
+      "publicSnapshotMaterializationCount: 0 scope=fast-path-proof-public-snapshot-avoidance"
     );
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
-      "publicSnapshotMaterializationCount: 0 scope=public-snapshot-path/deep-runtime-core-profile"
+    expect(reportText).toContain("scaffoldEvaluationCacheInvalidationCount: 0");
+    expect(reportText).toContain("runtimeModelInstanceCacheHitCount: 30");
+    expect(reportText).toContain("runtimeModelInstanceCacheMissCount: 0");
+    expect(reportText).toContain(
+      "runtimeModelInstanceCacheInvalidationCount: 0"
     );
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
-      "runtimeModelInstanceCacheHitCount: 30"
-    );
-    expect(formatPerformanceDiagnosticsReport(report)).toContain(
-      "runtimeModelCompileDurationMs: scaffoldBuildSampleCount=1 latest=5 scope=scaffold-build-cold-path"
-    );
+    expect(reportText).toContain("browserSourceClientCount: 1");
+    for (const fieldName of omittedRuntimeCoreReportFieldNames) {
+      expect(reportText).not.toContain(`${fieldName}:`);
+    }
   });
 
   it("separates Browser Source input delivery, applied frames, rendering, and source timestamp FPS", () => {
@@ -584,7 +486,7 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).not.toContain("liveMessageCount:");
   });
 
-  it("prints unknown deep runtime-core phase metrics when profiling is disabled", () => {
+  it("omits deep runtime-core phase metrics from copied reports", () => {
     const report = createPerformanceDiagnosticsReport({
       target: "native-stage",
       startedAtIso: "2026-06-25T01:00:00.000Z",
@@ -593,14 +495,14 @@ describe("Performance Diagnostics report", () => {
       requestedDurationMs: 1000,
       samples: [
         createSample({
-          nativeStageMetrics: createMetrics({
+          nativeStageMetrics: createMetricsWithLegacyRuntimeCoreFields({
             renderCount: 1,
             lastRuntimeCoreEvaluationDurationMs: 3,
             runtimeCoreEvaluationDurationSampleCount: 1
           })
         }),
         createSample({
-          nativeStageMetrics: createMetrics({
+          nativeStageMetrics: createMetricsWithLegacyRuntimeCoreFields({
             renderCount: 2,
             lastRuntimeCoreEvaluationDurationMs: 4,
             runtimeCoreEvaluationDurationSampleCount: 2
@@ -610,31 +512,61 @@ describe("Performance Diagnostics report", () => {
     });
     const reportText = formatPerformanceDiagnosticsReport(report);
 
-    expect(report.nativeStage.runtimeCoreEvaluationDurationMs)
-      .toMatchObject({
-        sampleCount: 1,
-        p50: 4
-      });
-    expect(report.nativeStage.runtimeCoreSnapshotCreationDurationMs)
-      .toMatchObject({
-        sampleCount: 0,
-        p50: null,
-        p95: null,
-        max: null
-      });
-    expect(report.nativeStage.runtimeCoreRenderFrameOutputDurationMs)
-      .toMatchObject({
-        sampleCount: 0,
-        p50: null,
-        p95: null,
-        max: null
-      });
+    expect(report.nativeStage.availability).toBe("available");
+    expect(report.nativeStage.renderCount).toBe(1);
+    for (const fieldName of omittedRuntimeCoreReportFieldNames) {
+      expect(report.nativeStage).not.toHaveProperty(fieldName);
+      expect(reportText).not.toContain(`${fieldName}:`);
+    }
+    expect(reportText).not.toContain("deep-runtime-core-profile");
+  });
+
+  it("formats missing lightweight metrics safely as unknown", () => {
+    const report = createPerformanceDiagnosticsReport({
+      target: "both",
+      startedAtIso: "2026-06-25T01:00:00.000Z",
+      endedAtIso: "2026-06-25T01:00:01.000Z",
+      durationMs: 1000,
+      requestedDurationMs: 1000,
+      samples: [
+        createSample({
+          inputStatus: null,
+          nativeStageMetrics: null,
+          browserSourceStatus: createBrowserSourceStatus({
+            connectedClientCount: 1,
+            renderMetrics: null,
+            sourceFps: null
+          })
+        })
+      ]
+    });
+    const reportText = formatPerformanceDiagnosticsReport(report);
+
+    expect(report.input).toMatchObject({
+      inputReceiveFpsLatest: null,
+      inputPacketCount: null
+    });
+    expect(report.nativeStage.availability).toBe("metrics-unavailable");
+    expect(report.browserSource.availability).toBe("metrics-unavailable");
+    expect(reportText).toContain("inputReceiveFpsLatest: unknown");
+    expect(reportText).toContain("inputPacketCount: unknown");
     expect(reportText).toContain(
-      "runtimeCoreSnapshotCreationDurationMs: sampleCount=0 p50=unknown p95=unknown max=unknown scope=public-snapshot-path/deep-runtime-core-profile"
+      "[Native Stage]\navailability: metrics-unavailable"
     );
     expect(reportText).toContain(
-      "runtimeCoreRenderFrameOutputDurationMs: sampleCount=0 p50=unknown p95=unknown max=unknown scope=render-frame-fast-path/deep-runtime-core-profile"
+      "[Browser Source]\navailability: metrics-unavailable"
     );
+    expect(reportText).toContain("liveFrameMessageFps: unknown");
+    expect(reportText).toContain("renderFps: unknown");
+    expect(reportText).toContain("compiledRenderFrameCount: unknown");
+    expect(reportText).toContain(
+      "publicSnapshotMaterializationCount: unknown scope=fast-path-proof-public-snapshot-avoidance"
+    );
+    expect(reportText).toContain("browserSourceClientCount: 1");
+    expect(reportText).toContain("canvas: unknown");
+    for (const fieldName of omittedRuntimeCoreReportFieldNames) {
+      expect(reportText).not.toContain(`${fieldName}:`);
+    }
   });
 
   it("supports capture start, sample, and completion lifecycle", () => {
@@ -774,10 +706,16 @@ function createSample(
 ): PerformanceDiagnosticsCaptureSample {
   return createPerformanceDiagnosticsCaptureSample({
     capturedAtMs: input.capturedAtMs ?? 0,
-    inputStatus: input.inputStatus ?? createInputStatus(),
-    stageState: input.stageState ?? createStageState(),
+    inputStatus: input.inputStatus === undefined
+      ? createInputStatus()
+      : input.inputStatus,
+    stageState: input.stageState === undefined
+      ? createStageState()
+      : input.stageState,
     nativeStageMetrics: input.nativeStageMetrics ?? null,
-    browserSourceStatus: input.browserSourceStatus ?? createBrowserSourceStatus()
+    browserSourceStatus: input.browserSourceStatus === undefined
+      ? createBrowserSourceStatus()
+      : input.browserSourceStatus
   });
 }
 
@@ -979,8 +917,6 @@ function createMetrics(
     evaluationCacheHitCount: 0,
     evaluationCacheMissCount: 0,
     evaluationCacheInvalidationCount: 0,
-    lastRuntimeCoreEvaluationDurationMs: null,
-    runtimeCoreEvaluationDurationSampleCount: 0,
     lastPoseEvaluationDurationMs: null,
     poseEvaluationDurationSampleCount: 0,
     lastSnapshotToRenderDrawableDurationMs: null,
@@ -998,4 +934,13 @@ function createMetrics(
     devicePixelRatio: 1,
     ...patch
   };
+}
+
+function createMetricsWithLegacyRuntimeCoreFields(
+  patch: Record<string, unknown>
+): RuntimePlayerStageRenderMetricsSnapshot {
+  return {
+    ...createMetrics(),
+    ...patch
+  } as RuntimePlayerStageRenderMetricsSnapshot;
 }

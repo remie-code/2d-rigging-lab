@@ -324,6 +324,10 @@ describe("Runtime Export default pose evaluation", () => {
     expect(
       renderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
     ).toBeUndefined();
+    expect(
+      renderInput.poseEvaluation.evaluationProfile
+        .publicSnapshotMaterializationCount
+    ).toBe(0);
 
     const profiledRenderInput = createEvaluatedRuntimeExportStageRenderInput(
       payload,
@@ -340,6 +344,10 @@ describe("Runtime Export default pose evaluation", () => {
     expect(
       profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
         ?.publicSnapshotMaterializationCount
+    ).toBe(0);
+    expect(
+      profiledRenderInput.poseEvaluation.evaluationProfile
+        .publicSnapshotMaterializationCount
     ).toBe(0);
     expect(
       profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile

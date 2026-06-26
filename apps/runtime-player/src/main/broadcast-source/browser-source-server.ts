@@ -9,9 +9,6 @@ import type { AddressInfo, Socket } from "node:net";
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
-  RuntimePlayerRuntimeCoreProfilingMode
-} from "../../preload/performance-diagnostics-contract";
-import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import type {
@@ -239,12 +236,6 @@ export class RuntimePlayerBrowserSourceServer {
     this.#session.publishActiveVariantSelection(activeVariantSelection);
   }
 
-  setRuntimeCoreProfiling(
-    mode: RuntimePlayerRuntimeCoreProfilingMode
-  ): RuntimePlayerRuntimeCoreProfilingMode {
-    return this.#session.publishRuntimeCoreProfiling(mode);
-  }
-
   async #handleHttpRequest(
     request: IncomingMessage,
     response: ServerResponse
@@ -380,7 +371,6 @@ export class RuntimePlayerBrowserSourceServer {
         runtimeExportStatus: this.#session.getStatus().runtimeExport,
         stageDisplayState: this.#session.getStageDisplayState(),
         activeVariantSelection: this.#session.getActiveVariantSelection(),
-        runtimeCoreProfiling: this.#session.getRuntimeCoreProfiling(),
         runtimeExport: this.#session.getRuntimeExportPayload()
       }));
       return;

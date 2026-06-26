@@ -56,7 +56,6 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     api.stageView.reportStatus(status);
     api.stageView.reportViewTransform(transform);
     api.stageView.reportRenderMetrics(metrics);
-    api.stageView.getRuntimeCoreProfiling();
 
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(
       1,
@@ -80,10 +79,6 @@ describe("installRuntimePlayerStageBridge stageView", () => {
       5,
       stageViewBridgeChannels.reportRenderMetrics,
       metrics
-    );
-    expect(electronMocks.invoke).toHaveBeenNthCalledWith(
-      6,
-      stageViewBridgeChannels.getRuntimeCoreProfiling
     );
   });
 
@@ -176,30 +171,6 @@ describe("installRuntimePlayerStageBridge stageView", () => {
     );
   });
 
-  it("delivers runtime-core profiling mode payloads and cleans up subscriptions", () => {
-    const api = installAndReadRuntimePlayerStageApi();
-    const callback = vi.fn();
-
-    const unsubscribe = api.stageView.onRuntimeCoreProfilingChanged(callback);
-
-    expect(electronMocks.on).toHaveBeenCalledWith(
-      stageViewBridgeChannels.runtimeCoreProfilingChanged,
-      expect.any(Function)
-    );
-    const listener = electronMocks.on.mock.calls[0]?.[1] as
-      | ((event: unknown, payload: "disabled" | "deep") => void)
-      | undefined;
-    expect(listener).toBeTypeOf("function");
-
-    listener?.({}, "deep");
-    unsubscribe();
-
-    expect(callback).toHaveBeenCalledWith("deep");
-    expect(electronMocks.removeListener).toHaveBeenCalledWith(
-      stageViewBridgeChannels.runtimeCoreProfilingChanged,
-      listener
-    );
-  });
 });
 
 function installAndReadRuntimePlayerStageApi(): RuntimePlayerStageApi {

@@ -58,6 +58,7 @@ export interface RuntimeExportRenderInputEvaluationProfile {
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
   readonly compiledEvaluatorFrameCount: number;
   readonly compiledRenderFrameCount: number;
+  readonly publicSnapshotMaterializationCount: number;
   readonly transientCompileCount: number;
   readonly transientInstanceCount: number;
   readonly poseEvaluationDurationMs: number;
@@ -145,6 +146,8 @@ export function createEvaluatedRuntimeExportStageRenderInput(
         poseEvaluation.evaluationProfile.compiledEvaluatorFrameCount,
       compiledRenderFrameCount:
         poseEvaluation.evaluationProfile.compiledRenderFrameCount,
+      publicSnapshotMaterializationCount:
+        poseEvaluation.evaluationProfile.publicSnapshotMaterializationCount,
       transientCompileCount:
         poseEvaluation.evaluationProfile.transientCompileCount,
       transientInstanceCount:

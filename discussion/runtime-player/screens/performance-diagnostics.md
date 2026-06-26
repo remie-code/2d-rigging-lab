@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: Wave17 source/test facts, Domain E final integration, and final Wave17 integration reviews are reflected; manual real-model OBS Browser Source diagnostics are still pending.
+- Status: Wave18 source/test facts, Domain C documentation alignment, and Domain A/B reviews are reflected; manual real-model OBS Browser Source diagnostics are still pending.
 - Scope owner: Control Window page plus renderer metrics surfaces.
 - Related docs:
   - [control-window-screen-structure.md](control-window-screen-structure.md)
@@ -19,8 +19,10 @@
   - [../implementation/waves/wave16/wave16-final-integration-report.md](../implementation/waves/wave16/wave16-final-integration-report.md)
   - [../implementation/orchestration/player-wave17-plan.md](../implementation/orchestration/player-wave17-plan.md)
   - [../implementation/waves/wave17/wave17-final-integration-report.md](../implementation/waves/wave17/wave17-final-integration-report.md)
+  - [../implementation/orchestration/player-wave18-plan.md](../implementation/orchestration/player-wave18-plan.md)
+  - [../implementation/waves/wave18/wave18-final-integration-report.md](../implementation/waves/wave18/wave18-final-integration-report.md)
 
-This page is not the old raw/input diagnostics surface. It is for render pacing evidence that can be shared back to agents without exposing private or high-volume data.
+This page is not the old raw/input diagnostics surface and is not a product deep profiler. It is for lightweight Live Health, FPS, connection, and fast-path proof evidence that can be shared back to agents without exposing private or high-volume data.
 
 ## 2. Responsibility
 
@@ -29,7 +31,7 @@ Performance Diagnostics is responsible for:
 - selecting capture target: `Native Stage`, `Browser Source`, or `Both`;
 - selecting capture duration: `10s` or `30s`;
 - starting and stopping a timed capture;
-- requesting deep runtime-core profiling for the selected capture target while capture is active, so runtime-core phase summaries can be measured intentionally;
+- sampling lightweight input, connection, renderer pacing, and fast-path proof metrics during the capture window;
 - copying a compact report;
 - clearing the current report;
 - previewing the report inside Control Window;
@@ -42,10 +44,12 @@ It is not responsible for:
 - calibration internals;
 - Runtime Export artifact inspection;
 - OBS automation or OBS source creation;
-- changing normal live renderer defaults outside the capture window;
+- product runtime-core deep profiling;
+- product runtime-core phase timing report output;
+- changing Browser Source behavior except lightweight metrics sampling;
 - replacing Stage page Browser Source setup controls.
 
-Wave15 intentionally makes the capture window observable: Performance Diagnostics can request deep runtime-core profiling for the selected target, and that may add measurement overhead while capture is active. This is the exception to normal live behavior, not a new default for Runtime Player rendering.
+Wave18 intentionally removes product deep runtime-core profiling from this page. Product Start Capture no longer enables runtime-core deep profiling, product reports omit deep runtime-core phase timing fields and `runtimeModelCompileDurationMs` as product-facing timing, and product Stage / Browser Source profiling transport is removed. Runtime-core internal developer/test profiling may remain, but it is not product-reachable through Control, Stage IPC, Browser Source HTTP/WS, or Browser Source client handling.
 
 ## 3. Screen Shape
 
@@ -65,7 +69,7 @@ Wave15 intentionally makes the capture window observable: Performance Diagnostic
 |   Native Stage: liveFrameMessageFps, appliedLiveFrameFps, renderFps             |
 |   Browser Source: liveFrameSourceTimestampFpsLatest, live/apply/render FPS      |
 |   Counters: liveFrameMessageCount, appliedLiveFrameCount, renderCount           |
-|   Pacing: rAF delta, render duration, live input evaluation, scheduled frame    |
+|   Proof: Browser Source clients, fast-path counters, cache counters             |
 |--------------------------------------------------------------------------------|
 | Comparison Guidance                                                            |
 |   Native Stage only -> Browser Source connected -> Stage Motion off/on          |
@@ -76,7 +80,7 @@ The page is intentionally lower priority than Overview / Live Controller / Input
 
 ## 4. Metrics
 
-Reports should include enough aggregate counters for future agents to reason about low FPS, frame pacing jitter, input jitter, duplicate renders, and render time spikes:
+Reports should include enough aggregate counters for future agents to reason about live health, connection state, FPS flow, frame pacing, and Wave17 fast-path proof without turning capture into a product deep profiler:
 
 - capture timestamp and requested/actual duration;
 - target availability;
@@ -94,18 +98,10 @@ Reports should include enough aggregate counters for future agents to reason abo
 - Stage view/display transform counts;
 - duplicate transform skip count;
 - coalesced live frame count;
-- rAF delta p50 / p95 / max;
-- render duration p50 / p95 / max;
-- `liveRenderInputEvaluationDurationMs` p50 / p95 / max;
 - `compiledEvaluatorFrameCount`, `transientCompileCount`, and `transientInstanceCount` so Browser Source live frames can prove whether they used the compiled evaluator without transient fallback;
-- `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, and `runtimeCoreRenderFrameOutputDurationMs` so Browser Source live frames can prove whether they used the Wave17 render-frame fast path without public snapshot materialization;
+- `compiledRenderFrameCount` and `publicSnapshotMaterializationCount` so Browser Source live frames can prove whether they used the Wave17 render-frame fast path without public snapshot materialization;
 - `scaffoldEvaluationCacheHitCount` / `scaffoldEvaluationCacheMissCount` / `scaffoldEvaluationCacheInvalidationCount` as explicit scaffold cache counters, alongside the legacy `evaluationCache*` names;
 - `runtimeModelInstanceCacheHitCount` / `runtimeModelInstanceCacheMissCount` / `runtimeModelInstanceCacheInvalidationCount` so each renderer target can prove target-local `RuntimeModelInstance` reuse;
-- `runtimeModelCompileDurationMs` as a scaffold-build/cold-path latest metric sampled only when Runtime Player builds a scaffold on cache miss;
-- `runtimeCoreEvaluationDurationMs` p50 / p95 / max;
-- runtime-core phase summaries when deep profiling is active, including `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, and `runtimeCoreSnapshotValidationDurationMs`;
-- `renderInputDrawableMappingDurationMs` for the compatibility source field `snapshotToRenderDrawableDurationMs`, scoped as render input mapping rather than public snapshot materialization;
-- `scheduledFrameDurationMs` p50 / p95 / max;
 - canvas size;
 - devicePixelRatio;
 - Browser Source client count when available;
@@ -114,27 +110,16 @@ Reports should include enough aggregate counters for future agents to reason abo
 
 Input receive FPS, live-frame message FPS/count, applied/evaluated live-frame FPS/count, and render FPS/count must remain separate fields. Browser Source source timestamp interval diagnostics must use `liveFrameSourceTimestampFpsLatest`; it must not be labeled or interpreted as raw input receive FPS. Existing ambiguous transport values such as `fps` or `sourceFps` should not be used as the only performance signal.
 
-Runtime Player normal live rendering keeps snapshot validation skipped for Stage / Browser Source pose evaluation and keeps deep runtime-core profiling disabled. Coarse render and evaluation metrics remain available in that default state. Deep runtime-core phase details are intentionally enabled only while Performance Diagnostics capture requests them for the selected target.
-
-If no live render evaluation happens during a deep capture window, runtime-core phase summaries can legitimately show `sampleCount=0` and `p50=unknown`, `p95=unknown`, or `max=unknown`. That means no deep-profiled runtime-core samples were observed, not necessarily that the renderer failed.
-
-Wave16 changed the runtime-core phase interpretation when Runtime Player uses the compiled evaluator:
-
-- `runtimeCoreSnapshotCreationDurationMs` remains the outer per-frame snapshot creation phase.
-- `runtimeCoreDrawableSnapshotCreationDurationMs` now measures per-frame public drawable DTO materialization/finalization from compiled templates on the compiled path; one-time graph-derived drawable, texture/UV, reference vertex, and mask template construction is outside the cached frame hot path.
-- `runtimeCoreDeformerHierarchyEvaluationDurationMs` now measures per-frame rig-control samples, evaluated state, frame-dependent parent selection, opacity/effect-chain application, and drawable transforms on the compiled path; one-time hierarchy/topology lookup construction is outside the cached frame hot path.
-- `runtimeCoreWarpDeformerVertexTransformDurationMs` remains a per-frame vertex transform measurement.
+Runtime Player normal live rendering keeps snapshot validation skipped for Stage / Browser Source pose evaluation and keeps runtime-core deep profiling disabled. Coarse renderer metrics and lightweight evaluation proof counters remain available in that default state. Product Performance Diagnostics no longer enables deep runtime-core phase sampling.
 
 Wave17 adds a separate render-frame fast path for live Stage / Browser Source rendering:
 
 - Live render-frame evaluation should show `compiledRenderFrameCount > 0`.
 - Stable live render-frame evaluation should show `publicSnapshotMaterializationCount: 0`.
-- `runtimeCoreRenderFrameOutputDurationMs` measures render-frame output construction.
-- `runtimeCoreSnapshotCreationDurationMs` and `runtimeCoreDrawableSnapshotCreationDurationMs` are public snapshot path/deep-profile metrics. For live render-frame frames they should be absent, zero, unknown, not sampled, or clearly marked as public-snapshot-path-only.
-- Copied reports scope render-frame fast-path metrics separately from public snapshot path metrics.
-- Copied reports print `renderInputDrawableMappingDurationMs` for the compatibility source field `snapshotToRenderDrawableDurationMs`.
+- Wave18 makes `publicSnapshotMaterializationCount` a cheap Runtime Player evaluation-profile counter independent of runtime-core deep profiling.
+- Copied reports scope render-frame fast-path evidence as lightweight counters, not runtime-core phase timings.
 
-`runtimeModelCompileDurationMs` is a Runtime Player scaffold build profile field exposed in copied reports as `scaffoldBuildSampleCount`, `latest`, and `scope=scaffold-build-cold-path`. This is a cache-miss/scaffold-build fact, not a per-frame runtime-core phase. A stable live Browser Source capture can therefore show `runtimeModelCompileDurationMs` from the latest scaffold build while still showing per-frame `renderInputScaffoldBuildDurationMs` near zero on scaffold cache hits.
+`runtimeModelCompileDurationMs` can remain an internal sanitized renderer metric/sample count where the implementation needs it, but it is not a product-facing timing in copied Performance Diagnostics reports after Wave18.
 
 Healthy Browser Source render-frame fast-path proof after Wave17 should show:
 
@@ -159,7 +144,9 @@ Reports and Browser Source messages must exclude:
 - full Runtime Export payload;
 - Runtime Export texture or mesh contents.
 
-Native Stage metrics travel through the Stage view IPC boundary. Browser Source metrics travel through the Browser Source diagnostics path as sanitized renderer diagnostics/metrics. The report boundary should keep compact aggregate DTOs rather than retaining broad status objects or renderer payloads. Wave15 runtime-core profiling control messages carry only sanitized detail state such as `disabled` / `deep`, not raw model, tracking, calibration, token, path, texture, or mesh data.
+Native Stage metrics travel through the Stage view IPC boundary. Browser Source metrics travel through the Browser Source diagnostics path as sanitized renderer diagnostics/metrics. The report boundary should keep compact aggregate DTOs rather than retaining broad status objects or renderer payloads.
+
+Wave18 removes the Runtime Player product runtime-core profiling control / transport surface. Control Start Capture does not request deep profiling, Stage IPC no longer exposes product profiling mode APIs, Browser Source HTTP/WS no longer sends product profiling mode state, and Browser Source client handling ignores stale product profiling messages. Runtime-core internal developer/test profiling may remain outside this product boundary.
 
 ## 6. Relationship To Stage Page
 
@@ -178,19 +165,16 @@ Performance Diagnostics reads renderer diagnostics from those systems but does n
 Manual checks still need a real Runtime Export, real iFacialMocap input, and OBS Browser Source where applicable:
 
 - run a 10s native Stage capture and copy the report;
-- connect OBS Browser Source and run target `Both`;
-- run a normal/default Performance Diagnostics capture if that mode is exposed by the build, and run a deep Performance Diagnostics capture; in the current Wave17 implementation, Start Capture intentionally requests deep runtime-core profiling for the selected target;
-- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `compiledEvaluatorFrameCount`, `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, `transientCompileCount`, `transientInstanceCount`, `runtimeModelInstanceCacheHitCount`, `runtimeModelInstanceCacheMissCount`, `runtimeModelInstanceCacheInvalidationCount`, `runtimeModelCompileDurationMs`, `liveRenderInputEvaluationDurationMs`, `runtimeCoreRenderFrameOutputDurationMs`, `runtimeCoreEvaluationDurationMs`, `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, `renderInputDrawableMappingDurationMs`, `renderDurationMs`, `scheduledFrameDurationMs`, and other runtime-core phase fields;
-- for the Wave17 fast-path comparison, specifically compare before/after `renderFps`, `appliedLiveFrameFps`, `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, `runtimeCoreRenderFrameOutputDurationMs`, `runtimeCoreEvaluationDurationMs`, `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, and `renderDurationMs`;
-- compare normal live/default behavior before and after capture to confirm deep profiling is disabled when capture stops;
-- confirm `runtimeCoreSnapshotValidationDurationMs` is zero, unknown, or near-zero outside intentional deep/schema diagnostics;
-- confirm deep captures include runtime-core phase summaries when live render evaluation happens, and treat `unknown` / `sampleCount=0` as valid when no deep-profiled live frame is observed;
+- connect OBS Browser Source and run Browser Source Performance Diagnostics or target `Both`;
+- confirm the act of Performance Diagnostics capture no longer visibly degrades Browser Source smoothness;
+- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `browserSourceClientCount`, `compiledEvaluatorFrameCount`, `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, `transientCompileCount`, `transientInstanceCount`, `runtimeModelInstanceCacheHitCount`, `runtimeModelInstanceCacheMissCount`, and `runtimeModelInstanceCacheInvalidationCount`;
+- confirm copied product reports omit deep runtime-core phase timings and `runtimeModelCompileDurationMs` as product-facing timing;
 - confirm `liveFrameSourceTimestampFpsLatest` is treated only as Browser Source source timestamp interval diagnostics, not raw input receive FPS;
-- confirm report includes rAF delta, render duration, render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio;
+- confirm report includes render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio when those fields are present in the copied product report;
 - toggle Stage Motion off/on and compare reports;
 - compare OBS Browser Source custom FPS off/30/60 as a manual observation;
 - confirm native Stage and Browser Source still render normally after capture;
 - confirm copied report does not include raw tracking frames, calibration internals, Browser Source token, private paths, full Runtime Export payload, Runtime Export textures, or Runtime Export mesh data;
-- save the copied report to `tmp/report.log` for follow-up comparison.
+- save the copied report to `tmp/report.log` if follow-up discussion is needed.
 
 These checks should not be recorded as passed until manually executed.

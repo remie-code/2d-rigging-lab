@@ -1,5 +1,4 @@
 import type {
-  RuntimePlayerRuntimeCoreProfilingMode,
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 
@@ -163,9 +162,6 @@ export type RuntimePlayerBrowserSourceStatus = {
 
 export type RuntimePlayerBrowserSourceApi = {
   readonly getStatus: () => Promise<RuntimePlayerBrowserSourceStatus>;
-  readonly setRuntimeCoreProfiling: (
-    mode: RuntimePlayerRuntimeCoreProfilingMode
-  ) => Promise<RuntimePlayerRuntimeCoreProfilingMode>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerBrowserSourceStatus) => void
   ) => () => void;

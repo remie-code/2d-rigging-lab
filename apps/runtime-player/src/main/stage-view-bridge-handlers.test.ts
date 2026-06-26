@@ -159,27 +159,6 @@ describe("registerStageViewBridgeHandlers", () => {
     );
   });
 
-  it("stores runtime-core profiling mode and publishes it to the Stage window", () => {
-    const { stageWindow } = createHarness();
-
-    expect(
-      invokeHandler(stageViewBridgeChannels.getRuntimeCoreProfiling)
-    ).toBe("disabled");
-    expect(
-      invokeHandler(stageViewBridgeChannels.setRuntimeCoreProfiling, "deep")
-    ).toBe("deep");
-    expect(
-      invokeHandler(stageViewBridgeChannels.getRuntimeCoreProfiling)
-    ).toBe("deep");
-    expect(stageWindow.webContents.send).toHaveBeenCalledWith(
-      stageViewBridgeChannels.runtimeCoreProfilingChanged,
-      "deep"
-    );
-    expect(() =>
-      invokeHandler(stageViewBridgeChannels.setRuntimeCoreProfiling, "full")
-    ).toThrow("profiling mode");
-  });
-
   it.each([
     ["negative count", { ...createRenderMetrics(), renderCount: -1 }],
     ["non-integer count", { ...createRenderMetrics(), renderCount: 1.5 }],
@@ -702,38 +681,6 @@ function createRenderMetrics(): RuntimePlayerStageRenderMetricsSnapshot {
     runtimeModelInstanceCacheInvalidationCount: 0,
     lastRuntimeModelCompileDurationMs: null,
     runtimeModelCompileDurationSampleCount: 0,
-    lastRuntimeCoreEvaluationDurationMs: null,
-    runtimeCoreEvaluationDurationSampleCount: 0,
-    lastRuntimeCoreInputValidationDurationMs: null,
-    runtimeCoreInputValidationDurationSampleCount: 0,
-    lastRuntimeCoreStateCompatibilityDurationMs: null,
-    runtimeCoreStateCompatibilityDurationSampleCount: 0,
-    lastRuntimeCoreDynamicsEvaluationDurationMs: null,
-    runtimeCoreDynamicsEvaluationDurationSampleCount: 0,
-    lastRuntimeCoreSnapshotCreationDurationMs: null,
-    runtimeCoreSnapshotCreationDurationSampleCount: 0,
-    lastRuntimeCoreRenderFrameOutputDurationMs: null,
-    runtimeCoreRenderFrameOutputDurationSampleCount: 0,
-    lastRuntimeCoreParameterResolutionDurationMs: null,
-    runtimeCoreParameterResolutionDurationSampleCount: 0,
-    lastRuntimeCoreKeyformSamplingDurationMs: null,
-    runtimeCoreKeyformSamplingDurationSampleCount: 0,
-    lastRuntimeCoreKeyformApplicationDurationMs: null,
-    runtimeCoreKeyformApplicationDurationSampleCount: 0,
-    lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: null,
-    runtimeCoreDeformerHierarchyEvaluationDurationSampleCount: 0,
-    lastRuntimeCoreWarpDeformerVertexTransformDurationMs: null,
-    runtimeCoreWarpDeformerVertexTransformDurationSampleCount: 0,
-    lastRuntimeCoreRotationDeformerVertexTransformDurationMs: null,
-    runtimeCoreRotationDeformerVertexTransformDurationSampleCount: 0,
-    lastRuntimeCoreDrawableSnapshotCreationDurationMs: null,
-    runtimeCoreDrawableSnapshotCreationDurationSampleCount: 0,
-    lastRuntimeCoreVisibilityDrawOrderEvaluationDurationMs: null,
-    runtimeCoreVisibilityDrawOrderEvaluationDurationSampleCount: 0,
-    lastRuntimeCoreMaskEvaluationDurationMs: null,
-    runtimeCoreMaskEvaluationDurationSampleCount: 0,
-    lastRuntimeCoreSnapshotValidationDurationMs: null,
-    runtimeCoreSnapshotValidationDurationSampleCount: 0,
     lastPoseEvaluationDurationMs: null,
     poseEvaluationDurationSampleCount: 0,
     lastSnapshotToRenderDrawableDurationMs: null,
