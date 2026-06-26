@@ -77,6 +77,11 @@ describe("Performance Diagnostics report", () => {
             evaluationCacheHitCount: 1,
             evaluationCacheMissCount: 1,
             evaluationCacheInvalidationCount: 0,
+            compiledEvaluatorFrameCount: 1,
+            compiledRenderFrameCount: 1,
+            transientCompileCount: 0,
+            transientInstanceCount: 0,
+            publicSnapshotMaterializationCount: 0,
             lastRuntimeCoreEvaluationDurationMs: 2,
             runtimeCoreEvaluationDurationSampleCount: 1,
             lastRuntimeCoreInputValidationDurationMs: 0.1,
@@ -87,6 +92,8 @@ describe("Performance Diagnostics report", () => {
             runtimeCoreDynamicsEvaluationDurationSampleCount: 1,
             lastRuntimeCoreSnapshotCreationDurationMs: 1.5,
             runtimeCoreSnapshotCreationDurationSampleCount: 1,
+            lastRuntimeCoreRenderFrameOutputDurationMs: 0.9,
+            runtimeCoreRenderFrameOutputDurationSampleCount: 1,
             lastRuntimeCoreParameterResolutionDurationMs: 0.4,
             runtimeCoreParameterResolutionDurationSampleCount: 1,
             lastRuntimeCoreKeyformSamplingDurationMs: 0.5,
@@ -144,6 +151,11 @@ describe("Performance Diagnostics report", () => {
             evaluationCacheHitCount: 2,
             evaluationCacheMissCount: 1,
             evaluationCacheInvalidationCount: 0,
+            compiledEvaluatorFrameCount: 2,
+            compiledRenderFrameCount: 2,
+            transientCompileCount: 0,
+            transientInstanceCount: 0,
+            publicSnapshotMaterializationCount: 0,
             lastRuntimeCoreEvaluationDurationMs: 4,
             runtimeCoreEvaluationDurationSampleCount: 2,
             lastRuntimeCoreInputValidationDurationMs: 0.2,
@@ -154,6 +166,8 @@ describe("Performance Diagnostics report", () => {
             runtimeCoreDynamicsEvaluationDurationSampleCount: 2,
             lastRuntimeCoreSnapshotCreationDurationMs: 3,
             runtimeCoreSnapshotCreationDurationSampleCount: 2,
+            lastRuntimeCoreRenderFrameOutputDurationMs: 1.8,
+            runtimeCoreRenderFrameOutputDurationSampleCount: 2,
             lastRuntimeCoreParameterResolutionDurationMs: 0.8,
             runtimeCoreParameterResolutionDurationSampleCount: 2,
             lastRuntimeCoreKeyformSamplingDurationMs: 1,
@@ -210,6 +224,11 @@ describe("Performance Diagnostics report", () => {
       evaluationCacheHitCount: 2,
       evaluationCacheMissCount: 1,
       evaluationCacheInvalidationCount: 0,
+      compiledEvaluatorFrameCount: 2,
+      compiledRenderFrameCount: 2,
+      transientCompileCount: 0,
+      transientInstanceCount: 0,
+      publicSnapshotMaterializationCount: 0,
       stageTransformMessageCount: 12,
       duplicateTransformSkipCount: 3,
       coalescedLiveFrameCount: 5,
@@ -246,6 +265,13 @@ describe("Performance Diagnostics report", () => {
       p95: 4,
       max: 4
     });
+    expect(report.nativeStage.runtimeCoreRenderFrameOutputDurationMs)
+      .toMatchObject({
+        sampleCount: 2,
+        p50: 0.9,
+        p95: 1.8,
+        max: 1.8
+      });
     expect(report.nativeStage.runtimeCoreParameterResolutionDurationMs)
       .toMatchObject({
         sampleCount: 2,
@@ -328,13 +354,26 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).toContain("liveRenderInputEvaluationDurationMs:");
     expect(reportText).toContain("evaluationCacheHitCount: 2");
     expect(reportText).toContain("evaluationCacheMissCount: 1");
+    expect(reportText).toContain(
+      "compiledRenderFrameCount: 2 scope=render-frame-fast-path"
+    );
+    expect(reportText).toContain(
+      "publicSnapshotMaterializationCount: 0 scope=public-snapshot-path/deep-runtime-core-profile"
+    );
     expect(reportText).toContain("runtimeCoreEvaluationDurationMs:");
+    expect(reportText).toContain(
+      "runtimeCoreRenderFrameOutputDurationMs: sampleCount=2 p50=0.9"
+    );
     expect(reportText).toContain("runtimeCoreParameterResolutionDurationMs:");
     expect(reportText).toContain("runtimeCoreDeformerHierarchyEvaluationDurationMs:");
     expect(reportText).toContain("runtimeCoreWarpDeformerVertexTransformDurationMs:");
     expect(reportText).toContain("runtimeCoreMaskEvaluationDurationMs:");
     expect(reportText).toContain("runtimeCoreSnapshotValidationDurationMs:");
-    expect(reportText).toContain("snapshotToRenderDrawableDurationMs:");
+    expect(reportText).toContain("renderInputDrawableMappingDurationMs:");
+    expect(reportText).toContain(
+      "sourceField=snapshotToRenderDrawableDurationMs scope=renderer-input-mapping-not-public-snapshot-materialization"
+    );
+    expect(reportText).not.toContain("\nsnapshotToRenderDrawableDurationMs:");
     expect(reportText).toContain("renderInputSceneBuildDurationMs:");
     expect(reportText).toContain("renderInputClippingBuildDurationMs:");
     expect(reportText).toContain("scheduledFrameDurationMs:");
@@ -350,8 +389,10 @@ describe("Performance Diagnostics report", () => {
         rafDeltaSampleCount: 2,
         renderDurationSampleCount: 4,
         compiledEvaluatorFrameCount: 4,
+        compiledRenderFrameCount: 4,
         transientCompileCount: 0,
         transientInstanceCount: 0,
+        publicSnapshotMaterializationCount: 0,
         runtimeModelInstanceCacheHitCount: 3,
         runtimeModelInstanceCacheMissCount: 1,
         runtimeModelInstanceCacheInvalidationCount: 0,
@@ -378,8 +419,10 @@ describe("Performance Diagnostics report", () => {
         renderDurationSampleCount: 34,
         lastLiveRenderInputEvaluationDurationMs: 4,
         compiledEvaluatorFrameCount: 34,
+        compiledRenderFrameCount: 34,
         transientCompileCount: 0,
         transientInstanceCount: 0,
+        publicSnapshotMaterializationCount: 0,
         runtimeModelInstanceCacheHitCount: 33,
         runtimeModelInstanceCacheMissCount: 1,
         runtimeModelInstanceCacheInvalidationCount: 0,
@@ -416,8 +459,10 @@ describe("Performance Diagnostics report", () => {
       scaffoldEvaluationCacheMissCount: 0,
       scaffoldEvaluationCacheInvalidationCount: 0,
       compiledEvaluatorFrameCount: 30,
+      compiledRenderFrameCount: 30,
       transientCompileCount: 0,
       transientInstanceCount: 0,
+      publicSnapshotMaterializationCount: 0,
       runtimeModelInstanceCacheHitCount: 30,
       runtimeModelInstanceCacheMissCount: 0,
       runtimeModelInstanceCacheInvalidationCount: 0,
@@ -446,7 +491,13 @@ describe("Performance Diagnostics report", () => {
       "compiledEvaluatorFrameCount: 30"
     );
     expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "compiledRenderFrameCount: 30 scope=render-frame-fast-path"
+    );
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
       "transientCompileCount: 0"
+    );
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "publicSnapshotMaterializationCount: 0 scope=public-snapshot-path/deep-runtime-core-profile"
     );
     expect(formatPerformanceDiagnosticsReport(report)).toContain(
       "runtimeModelInstanceCacheHitCount: 30"
@@ -571,8 +622,18 @@ describe("Performance Diagnostics report", () => {
         p95: null,
         max: null
       });
+    expect(report.nativeStage.runtimeCoreRenderFrameOutputDurationMs)
+      .toMatchObject({
+        sampleCount: 0,
+        p50: null,
+        p95: null,
+        max: null
+      });
     expect(reportText).toContain(
-      "runtimeCoreSnapshotCreationDurationMs: sampleCount=0 p50=unknown"
+      "runtimeCoreSnapshotCreationDurationMs: sampleCount=0 p50=unknown p95=unknown max=unknown scope=public-snapshot-path/deep-runtime-core-profile"
+    );
+    expect(reportText).toContain(
+      "runtimeCoreRenderFrameOutputDurationMs: sampleCount=0 p50=unknown p95=unknown max=unknown scope=render-frame-fast-path/deep-runtime-core-profile"
     );
   });
 

@@ -9,6 +9,7 @@ import {
   type RuntimeCoreEvaluationProfile,
   type RuntimeModelInitialStateRequestInput,
   type RuntimeModelInstance,
+  type RuntimeRenderFrame,
   type RuntimeSnapshotDto,
   type RuntimeSnapshotValidationMode
 } from "@private-2d-rigging-lab/runtime-core";
@@ -33,10 +34,19 @@ export interface RuntimeExportPoseEvaluation {
   readonly evaluationProfile: RuntimeExportPoseEvaluationProfile;
 }
 
+export interface RuntimeExportRenderFrameEvaluation {
+  readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
+  readonly initialState: RuntimeStateDto;
+  readonly renderFrame: RuntimeRenderFrame;
+  readonly nextState: RuntimeStateDto;
+  readonly evaluationProfile: RuntimeExportPoseEvaluationProfile;
+}
+
 export interface RuntimeExportPoseEvaluationProfile {
   readonly runtimeCoreEvaluationDurationMs: number;
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
   readonly compiledEvaluatorFrameCount: number;
+  readonly compiledRenderFrameCount: number;
   readonly transientCompileCount: number;
   readonly transientInstanceCount: number;
 }
@@ -59,41 +69,15 @@ export function evaluateRuntimeExportPose(
   input: RuntimeExportRuntimeGraphAdapterInput,
   options: RuntimeExportPoseEvaluationOptions = {}
 ): RuntimeExportPoseEvaluation {
-  const adapter = options.adapter ?? createRuntimeExportRuntimeGraph({
-    ...input,
-    activeVariantSelection: options.activeVariantSelection ?? null
-  });
-  const frameIndex = options.frameIndex ?? 0;
-  const frameResetReasons = createRuntimeExportPoseFrameResetReasons(options);
-  const authoredParameterValues = { ...(options.authoredParameterValues ?? {}) };
-  const transientCompileCount =
-    options.runtimeModelInstance === undefined &&
-      options.compiledRuntimeModel === undefined
-      ? 1
-      : 0;
-  const transientInstanceCount =
-    options.runtimeModelInstance === undefined ? 1 : 0;
-  const runtimeModelInstance = options.runtimeModelInstance ??
-    createRuntimeModelInstance({
-      compiledRuntimeModel: options.compiledRuntimeModel ??
-        compileRuntimeModel(adapter.graph),
-      ...(options.previousState === undefined
-        ? {}
-        : { previousState: options.previousState }),
-      initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
-        input,
-        options
-      )
-    });
-  const initialState = runtimeModelInstance.getState();
+  const runtime = createRuntimeExportPoseEvaluationRuntime(input, options);
   const runtimeCoreStartedAtMs = readCurrentTimeMs();
-  const result = runtimeModelInstance.evaluateFrame(
+  const result = runtime.runtimeModelInstance.evaluateFrame(
     {
       schemaVersion: "runtime-evaluation-input-v1",
-      frameIndex,
+      frameIndex: runtime.frameIndex,
       deltaTimeMs: options.deltaTimeMs ?? 0,
-      resetReasons: frameResetReasons,
-      authoredParameterValues,
+      resetReasons: runtime.frameResetReasons,
+      authoredParameterValues: runtime.authoredParameterValues,
       targetIds: []
     },
     {
@@ -123,24 +107,70 @@ export function evaluateRuntimeExportPose(
   );
 
   return {
-    adapter,
-    initialState,
+    adapter: runtime.adapter,
+    initialState: runtime.initialState,
     snapshot: result.snapshot,
     nextState: result.nextState,
-    evaluationProfile: {
+    evaluationProfile: createRuntimeExportPoseEvaluationProfile({
       runtimeCoreEvaluationDurationMs,
-      compiledEvaluatorFrameCount: 1,
-      transientCompileCount,
-      transientInstanceCount,
-      ...(result.profile === undefined
-        ? {}
-        : {
-            runtimeCoreProfile: {
-              ...result.profile,
-              runtimeCoreEvaluationDurationMs
-            }
-          })
+      runtimeCoreProfile: result.profile,
+      compiledRenderFrameCount: 0,
+      transientCompileCount: runtime.transientCompileCount,
+      transientInstanceCount: runtime.transientInstanceCount
+    })
+  };
+}
+
+export function evaluateRuntimeExportRenderFrame(
+  input: RuntimeExportRuntimeGraphAdapterInput,
+  options: RuntimeExportPoseEvaluationOptions = {}
+): RuntimeExportRenderFrameEvaluation {
+  const runtime = createRuntimeExportPoseEvaluationRuntime(input, options);
+  const runtimeCoreStartedAtMs = readCurrentTimeMs();
+  const result = runtime.runtimeModelInstance.evaluateRenderFrame(
+    {
+      schemaVersion: "runtime-evaluation-input-v1",
+      frameIndex: runtime.frameIndex,
+      deltaTimeMs: options.deltaTimeMs ?? 0,
+      resetReasons: runtime.frameResetReasons,
+      authoredParameterValues: runtime.authoredParameterValues,
+      targetIds: []
+    },
+    {
+      evaluationOptions: defaultRuntimeEvaluationOptions(),
+      context: {
+        source: {
+          surface: "viewer"
+        },
+        policy: {
+          strictness: "interactive"
+        }
+      },
+      ...(options.runtimeCoreProfiling === "deep"
+        ? { profilingOptions: { enabled: true } }
+        : {}),
+      controlOptions: {
+        snapshotValidation: options.snapshotValidation ?? "skip"
+      }
     }
+  );
+  const runtimeCoreEvaluationDurationMs = Math.max(
+    0,
+    readCurrentTimeMs() - runtimeCoreStartedAtMs
+  );
+
+  return {
+    adapter: runtime.adapter,
+    initialState: runtime.initialState,
+    renderFrame: result.frame,
+    nextState: result.nextState,
+    evaluationProfile: createRuntimeExportPoseEvaluationProfile({
+      runtimeCoreEvaluationDurationMs,
+      runtimeCoreProfile: result.profile,
+      compiledRenderFrameCount: 1,
+      transientCompileCount: runtime.transientCompileCount,
+      transientInstanceCount: runtime.transientInstanceCount
+    })
   };
 }
 
@@ -178,6 +208,80 @@ function createRuntimeModelInstance(input: {
   return input.compiledRuntimeModel.createInstance({
     initialStateRequest: input.initialStateRequest
   });
+}
+
+function createRuntimeExportPoseEvaluationRuntime(
+  input: RuntimeExportRuntimeGraphAdapterInput,
+  options: RuntimeExportPoseEvaluationOptions
+): {
+  readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
+  readonly frameIndex: number;
+  readonly frameResetReasons: readonly RuntimeResetReason[];
+  readonly authoredParameterValues: Readonly<Record<string, number>>;
+  readonly runtimeModelInstance: RuntimeModelInstance;
+  readonly initialState: RuntimeStateDto;
+  readonly transientCompileCount: number;
+  readonly transientInstanceCount: number;
+} {
+  const adapter = options.adapter ?? createRuntimeExportRuntimeGraph({
+    ...input,
+    activeVariantSelection: options.activeVariantSelection ?? null
+  });
+  const transientCompileCount =
+    options.runtimeModelInstance === undefined &&
+      options.compiledRuntimeModel === undefined
+      ? 1
+      : 0;
+  const transientInstanceCount =
+    options.runtimeModelInstance === undefined ? 1 : 0;
+  const runtimeModelInstance = options.runtimeModelInstance ??
+    createRuntimeModelInstance({
+      compiledRuntimeModel: options.compiledRuntimeModel ??
+        compileRuntimeModel(adapter.graph),
+      ...(options.previousState === undefined
+        ? {}
+        : { previousState: options.previousState }),
+      initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+        input,
+        options
+      )
+    });
+
+  return {
+    adapter,
+    frameIndex: options.frameIndex ?? 0,
+    frameResetReasons: createRuntimeExportPoseFrameResetReasons(options),
+    authoredParameterValues: { ...(options.authoredParameterValues ?? {}) },
+    runtimeModelInstance,
+    initialState: runtimeModelInstance.getState(),
+    transientCompileCount,
+    transientInstanceCount
+  };
+}
+
+function createRuntimeExportPoseEvaluationProfile(input: {
+  readonly runtimeCoreEvaluationDurationMs: number;
+  readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
+  readonly compiledRenderFrameCount: number;
+  readonly transientCompileCount: number;
+  readonly transientInstanceCount: number;
+}): RuntimeExportPoseEvaluationProfile {
+  return {
+    runtimeCoreEvaluationDurationMs: input.runtimeCoreEvaluationDurationMs,
+    compiledEvaluatorFrameCount: 1,
+    compiledRenderFrameCount: input.compiledRenderFrameCount,
+    transientCompileCount: input.transientCompileCount,
+    transientInstanceCount: input.transientInstanceCount,
+    ...(input.runtimeCoreProfile === undefined
+      ? {}
+      : {
+          runtimeCoreProfile: {
+            ...input.runtimeCoreProfile,
+            runtimeCoreEvaluationDurationMs:
+              input.runtimeCoreEvaluationDurationMs
+          }
+        })
+  };
 }
 
 function createRuntimeExportPoseFrameResetReasons(

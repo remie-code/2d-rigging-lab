@@ -14,7 +14,7 @@ import type {
   NormalizedRuntimeGraph,
   NormalizedWarpLattice2dRigControl
 } from "./normalized-runtime-graph.js";
-import { evaluateRuntimeFrame } from "./runtime-core.js";
+import { compileRuntimeModel, evaluateRuntimeFrame } from "./runtime-core.js";
 import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
 import type {
@@ -41,6 +41,55 @@ describe("runtime nested warp rest/bind semantics", () => {
 
     expect(expectDrawableVertices(snapshot)).toEqual([{ x: 26, y: 7 }]);
     expect(snapshot.diagnostics.filter((diagnostic) => diagnostic.phase === "rigControl_evaluation")).toEqual([]);
+  });
+
+  it("matches full snapshot render vertices for the nested warp rest/bind fast path", () => {
+    const graph = createNestedWarpGraph({
+      baseVertex: { x: 5, y: 5 },
+      childOffset: { x: 20, y: 0 },
+      childDomainBounds: { x: 5, y: 5, width: 1, height: 1 },
+      parentDomainBounds: { x: 0, y: 0, width: 10, height: 10 },
+      parentControlPointOffsets: createConstantControlPointOffsets({ x: 1, y: 2 })
+    });
+    const publicResult = evaluateFullFrameResult(graph);
+    const input = RuntimeEvaluationInputSchema.parse({
+      schemaVersion: "runtime-evaluation-input-v1",
+      frameIndex: 1,
+      deltaTimeMs: 0,
+      resetReasons: [],
+      authoredParameterValues: { [PARAMETER_ID]: 1 },
+      targetIds: [PARENT_RIG_ID, CHILD_RIG_ID, DRAWABLE_ID]
+    });
+    const state = createInitialRuntimeState(graph, {
+      packageId: graph.packageId,
+      packageRevision: graph.packageRevision,
+      frameIndex: 0,
+      authoredParameterValues: input.authoredParameterValues,
+      resetReasons: ["packageLoad"]
+    });
+    let nowMs = 0;
+    const renderResult = compileRuntimeModel(graph)
+      .createInstance({ initialState: state })
+      .evaluateRenderFrame(input, {
+        evaluationOptions: defaultRuntimeEvaluationOptions(),
+        context: RuntimeEvaluationContextSchema.parse({
+          source: { surface: "preview" },
+          policy: { strictness: "interactive" }
+        }),
+        profilingOptions: {
+          enabled: true,
+          now: () => {
+            nowMs += 1;
+            return nowMs;
+          }
+        }
+      });
+
+    expect(renderResult.frame.drawables[0]?.vertices).toEqual(
+      expectDrawableVertices(publicResult.snapshot)
+    );
+    expect(renderResult.profile?.publicSnapshotMaterializationCount).toBe(0);
+    expect(renderResult.profile?.runtimeSnapshotCreationDurationMs).toBe(0);
   });
 
   it("keeps a rest-outside vertex outside the parent warp even when child warp moves current inside", () => {

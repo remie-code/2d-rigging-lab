@@ -18,8 +18,10 @@ const counterKeys = [
   "evaluationCacheMissCount",
   "evaluationCacheInvalidationCount",
   "compiledEvaluatorFrameCount",
+  "compiledRenderFrameCount",
   "transientCompileCount",
   "transientInstanceCount",
+  "publicSnapshotMaterializationCount",
   "runtimeModelInstanceCacheHitCount",
   "runtimeModelInstanceCacheMissCount",
   "runtimeModelInstanceCacheInvalidationCount",
@@ -29,6 +31,7 @@ const counterKeys = [
   "runtimeCoreStateCompatibilityDurationSampleCount",
   "runtimeCoreDynamicsEvaluationDurationSampleCount",
   "runtimeCoreSnapshotCreationDurationSampleCount",
+  "runtimeCoreRenderFrameOutputDurationSampleCount",
   "runtimeCoreParameterResolutionDurationSampleCount",
   "runtimeCoreKeyformSamplingDurationSampleCount",
   "runtimeCoreKeyformApplicationDurationSampleCount",
@@ -127,6 +130,10 @@ export function readRuntimePlayerStageRenderMetricsSnapshot(
       value.compiledEvaluatorFrameCount,
       "compiledEvaluatorFrameCount"
     ),
+    compiledRenderFrameCount: readOptionalCounter(
+      value.compiledRenderFrameCount,
+      "compiledRenderFrameCount"
+    ),
     transientCompileCount: readOptionalCounter(
       value.transientCompileCount,
       "transientCompileCount"
@@ -134,6 +141,10 @@ export function readRuntimePlayerStageRenderMetricsSnapshot(
     transientInstanceCount: readOptionalCounter(
       value.transientInstanceCount,
       "transientInstanceCount"
+    ),
+    publicSnapshotMaterializationCount: readOptionalCounter(
+      value.publicSnapshotMaterializationCount,
+      "publicSnapshotMaterializationCount"
     ),
     runtimeModelInstanceCacheHitCount: readOptionalCounter(
       value.runtimeModelInstanceCacheHitCount,
@@ -200,6 +211,15 @@ export function readRuntimePlayerStageRenderMetricsSnapshot(
     runtimeCoreSnapshotCreationDurationSampleCount: readOptionalCounter(
       value.runtimeCoreSnapshotCreationDurationSampleCount,
       "runtimeCoreSnapshotCreationDurationSampleCount"
+    ),
+    lastRuntimeCoreRenderFrameOutputDurationMs:
+      readOptionalNullableNonNegativeFiniteNumber(
+        value.lastRuntimeCoreRenderFrameOutputDurationMs,
+        "lastRuntimeCoreRenderFrameOutputDurationMs"
+      ),
+    runtimeCoreRenderFrameOutputDurationSampleCount: readOptionalCounter(
+      value.runtimeCoreRenderFrameOutputDurationSampleCount,
+      "runtimeCoreRenderFrameOutputDurationSampleCount"
     ),
     lastRuntimeCoreParameterResolutionDurationMs:
       readOptionalNullableNonNegativeFiniteNumber(
@@ -386,6 +406,7 @@ export function createEmptyRuntimePlayerStageRenderMetricsSnapshot():
     lastRuntimeCoreStateCompatibilityDurationMs: null,
     lastRuntimeCoreDynamicsEvaluationDurationMs: null,
     lastRuntimeCoreSnapshotCreationDurationMs: null,
+    lastRuntimeCoreRenderFrameOutputDurationMs: null,
     lastRuntimeCoreParameterResolutionDurationMs: null,
     lastRuntimeCoreKeyformSamplingDurationMs: null,
     lastRuntimeCoreKeyformApplicationDurationMs: null,

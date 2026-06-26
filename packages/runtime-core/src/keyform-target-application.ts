@@ -1,9 +1,16 @@
-import type { DiagnosticDto, DrawableId, TargetRefDto, Vec2Dto } from "@private-2d-rigging-lab/contracts";
+import type {
+  DiagnosticDto,
+  DrawableId,
+  RectDto,
+  TargetRefDto,
+  Vec2Dto
+} from "@private-2d-rigging-lab/contracts";
 
 import { createRuntimeDiagnostic } from "./diagnostics.js";
 import { computeBoundsFromVertices, createStableVertexHash } from "./drawable-geometry.js";
-import type { EvaluatedDrawableDto } from "./snapshot.js";
+import type { RuntimeDrawableEvaluationBase } from "./runtime-drawable-evaluation.js";
 import { reconcileTextureProjectionWithVertexCount } from "./texture-projection.js";
+import type { EvaluatedDrawableTextureDto } from "./texture-projection.js";
 
 export interface SampledKeyformTargetPatch {
   readonly keyformSetId: string;
@@ -33,26 +40,26 @@ interface ResolvedSampledKeyformTargetPatch {
   readonly patch?: unknown;
 }
 
-export interface KeyformTargetApplicationResult {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+export interface KeyformTargetApplicationResult<
+  TDrawable extends RuntimeDrawableEvaluationBase = RuntimeDrawableEvaluationBase
+> {
+  readonly drawables: readonly TDrawable[];
   readonly drawList: readonly DrawableId[];
   readonly diagnostics: readonly DiagnosticDto[];
 }
 
-export const applyKeyformTargetPatches = (input: {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+export const applyKeyformTargetPatches = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawables: readonly TDrawable[];
   readonly patches: readonly SampledKeyformTargetPatch[];
   readonly hashPrecisionDecimals?: number;
-}): KeyformTargetApplicationResult => {
+}): KeyformTargetApplicationResult<TDrawable> => {
   const diagnostics: DiagnosticDto[] = [];
-  const drawablesById = new Map<DrawableId, EvaluatedDrawableDto>(
+  const drawablesById = new Map<DrawableId, TDrawable>(
     input.drawables.map((drawable) => [
       drawable.drawableId,
-      {
-        ...drawable,
-        ...(drawable.vertices === undefined ? {} : { vertices: cloneVertices(drawable.vertices) }),
-        diagnostics: [...drawable.diagnostics]
-      }
+      cloneDrawableForKeyformApplication(drawable)
     ])
   );
 
@@ -111,9 +118,9 @@ export const applyKeyformTargetPatches = (input: {
   };
 };
 
-const applyMeshPatch = (input: {
+const applyMeshPatch = <TDrawable extends RuntimeDrawableEvaluationBase>(input: {
   readonly patch: ResolvedSampledKeyformTargetPatch;
-  readonly drawablesById: Map<DrawableId, EvaluatedDrawableDto>;
+  readonly drawablesById: Map<DrawableId, TDrawable>;
   readonly diagnostics: DiagnosticDto[];
   readonly hashPrecisionDecimals: number | undefined;
 }): void => {
@@ -154,7 +161,11 @@ const applyMeshPatch = (input: {
   if (patch.compositionMode === "replace") {
     input.drawablesById.set(
       drawable.drawableId,
-      withUpdatedVertices(drawable, parsedPatchVertices.vertices, input.hashPrecisionDecimals)
+      withUpdatedVertices(
+        drawable,
+        parsedPatchVertices.vertices,
+        input.hashPrecisionDecimals
+      ) as TDrawable
     );
     return;
   }
@@ -194,7 +205,14 @@ const applyMeshPatch = (input: {
         y: vertex.y + delta.y
       };
     });
-    input.drawablesById.set(drawable.drawableId, withUpdatedVertices(drawable, nextVertices, input.hashPrecisionDecimals));
+    input.drawablesById.set(
+      drawable.drawableId,
+      withUpdatedVertices(
+        drawable,
+        nextVertices,
+        input.hashPrecisionDecimals
+      ) as TDrawable
+    );
     return;
   }
 
@@ -206,9 +224,9 @@ const applyMeshPatch = (input: {
   );
 };
 
-const applyDrawablePatch = (input: {
+const applyDrawablePatch = <TDrawable extends RuntimeDrawableEvaluationBase>(input: {
   readonly patch: ResolvedSampledKeyformTargetPatch;
-  readonly drawablesById: Map<DrawableId, EvaluatedDrawableDto>;
+  readonly drawablesById: Map<DrawableId, TDrawable>;
   readonly diagnostics: DiagnosticDto[];
 }): void => {
   const { patch } = input;
@@ -298,27 +316,38 @@ const applyDrawablePatch = (input: {
 };
 
 const withUpdatedVertices = (
-  drawable: EvaluatedDrawableDto,
+  drawable: RuntimeDrawableEvaluationBase,
   vertices: readonly Vec2Dto[],
   hashPrecisionDecimals: number | undefined
-): EvaluatedDrawableDto => ({
-  ...drawable,
-  vertices: cloneVertices(vertices),
-  bounds: computeBoundsFromVertices(vertices),
-  vertexCount: vertices.length,
-  vertexHash: createStableVertexHash(
-    vertices,
-    hashPrecisionDecimals === undefined ? {} : { hashPrecisionDecimals }
-  ),
-  ...(drawable.texture === undefined
-    ? {}
-    : {
-        texture: reconcileTextureProjectionWithVertexCount({
-          texture: drawable.texture,
-          vertexCount: vertices.length
-        })
-      })
-});
+): RuntimeDrawableEvaluationBase => {
+  const clonedVertices = cloneVertices(vertices);
+  const withVertices = {
+    ...drawable,
+    vertices: clonedVertices
+  };
+
+  if (!hasPublicGeometryFields(drawable)) {
+    return withVertices;
+  }
+
+  return {
+    ...withVertices,
+    bounds: computeBoundsFromVertices(clonedVertices),
+    vertexCount: clonedVertices.length,
+    vertexHash: createStableVertexHash(
+      clonedVertices,
+      hashPrecisionDecimals === undefined ? {} : { hashPrecisionDecimals }
+    ),
+    ...(hasEvaluatedTexture(drawable)
+      ? {
+          texture: reconcileTextureProjectionWithVertexCount({
+            texture: drawable.texture,
+            vertexCount: clonedVertices.length
+          })
+        }
+      : {})
+  } as RuntimeDrawableEvaluationBase;
+};
 
 const applyNumericPatch = (
   currentValue: number,
@@ -411,9 +440,9 @@ const parseVec2Array = (
 };
 
 const findDrawableByMeshId = (
-  drawablesById: ReadonlyMap<DrawableId, EvaluatedDrawableDto>,
+  drawablesById: ReadonlyMap<DrawableId, RuntimeDrawableEvaluationBase>,
   meshId: string
-): EvaluatedDrawableDto | undefined =>
+): RuntimeDrawableEvaluationBase | undefined =>
   [...drawablesById.values()]
     .filter((drawable) => drawable.meshId === meshId)
     .sort((left, right) => left.drawableId.localeCompare(right.drawableId))[0];
@@ -494,7 +523,9 @@ const sortPatches = (patches: readonly SampledKeyformTargetPatch[]): readonly Sa
       getSortableTargetProperty(left).localeCompare(getSortableTargetProperty(right))
   );
 
-const sortDrawables = (drawables: readonly EvaluatedDrawableDto[]): readonly EvaluatedDrawableDto[] =>
+const sortDrawables = <TDrawable extends RuntimeDrawableEvaluationBase>(
+  drawables: readonly TDrawable[]
+): readonly TDrawable[] =>
   [...drawables].sort(
     (left, right) => left.evaluatedDrawOrder - right.evaluatedDrawOrder || left.drawableId.localeCompare(right.drawableId)
   );
@@ -594,5 +625,46 @@ const createPatchDiagnosticMessage = (checkId: string, patch: ResolvedSampledKey
 };
 
 const cloneVertices = (vertices: readonly Vec2Dto[]): Vec2Dto[] => vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }));
+
+const cloneDrawableForKeyformApplication = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(
+  drawable: TDrawable
+): TDrawable => ({
+  ...drawable,
+  ...(drawable.vertices === undefined ? {} : { vertices: cloneVertices(drawable.vertices) }),
+  ...(hasDiagnostics(drawable) ? { diagnostics: [...drawable.diagnostics] } : {})
+} as TDrawable);
+
+interface RuntimeDrawableWithDiagnostics {
+  readonly diagnostics: readonly DiagnosticDto[];
+}
+
+const hasDiagnostics = (
+  drawable: RuntimeDrawableEvaluationBase
+): drawable is RuntimeDrawableEvaluationBase & RuntimeDrawableWithDiagnostics =>
+  Array.isArray((drawable as { readonly diagnostics?: unknown }).diagnostics);
+
+interface RuntimeDrawableWithPublicGeometry {
+  readonly bounds: RectDto;
+  readonly vertexCount: number;
+  readonly vertexHash: string;
+}
+
+const hasPublicGeometryFields = (
+  drawable: RuntimeDrawableEvaluationBase
+): drawable is RuntimeDrawableEvaluationBase & RuntimeDrawableWithPublicGeometry =>
+  typeof (drawable as { readonly bounds?: unknown }).bounds === "object" &&
+  typeof (drawable as { readonly vertexCount?: unknown }).vertexCount === "number" &&
+  typeof (drawable as { readonly vertexHash?: unknown }).vertexHash === "string";
+
+interface RuntimeDrawableWithTexture {
+  readonly texture: EvaluatedDrawableTextureDto;
+}
+
+const hasEvaluatedTexture = (
+  drawable: RuntimeDrawableEvaluationBase
+): drawable is RuntimeDrawableEvaluationBase & RuntimeDrawableWithTexture =>
+  (drawable as { readonly texture?: unknown }).texture !== undefined;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);

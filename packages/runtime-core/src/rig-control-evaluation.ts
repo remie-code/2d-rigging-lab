@@ -6,6 +6,7 @@ import {
 import type {
   DiagnosticDto,
   DrawableId,
+  RectDto,
   RigControlId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
@@ -19,7 +20,7 @@ import type {
   NormalizedRuntimeGraph,
   NormalizedWarpLattice2dRigControl
 } from "./normalized-runtime-graph.js";
-import type { EvaluatedDrawableDto } from "./snapshot.js";
+import type { RuntimeDrawableEvaluationBase } from "./runtime-drawable-evaluation.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { applyRigControlOpacityMultiplierSamples } from "./rig-control-opacity-keyform-state.js";
 import { applyRotation2dSamples } from "./rig-control-keyform-state.js";
@@ -67,8 +68,10 @@ export const EvaluatedRigControlSchema = z.object({
 });
 export type EvaluatedRigControlDto = z.infer<typeof EvaluatedRigControlSchema>;
 
-export interface RigControlEvaluationResult {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+export interface RigControlEvaluationResult<
+  TDrawable extends RuntimeDrawableEvaluationBase = RuntimeDrawableEvaluationBase
+> {
+  readonly drawables: readonly TDrawable[];
   readonly rigControls: readonly EvaluatedRigControlDto[];
   readonly diagnostics: readonly DiagnosticDto[];
 }
@@ -84,15 +87,18 @@ interface RigControlEffect {
   readonly evaluated: EvaluatedRigControlInternal;
 }
 
-export const evaluateRigControlHierarchy = (input: {
+export const evaluateRigControlHierarchy = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
   readonly graph: NormalizedRuntimeGraph;
-  readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly drawables: readonly TDrawable[];
   readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
   readonly topology?: RigControlTopologyEvaluation;
   readonly profiling?: RuntimeCoreEvaluationProfiler;
-}): RigControlEvaluationResult => {
+  readonly includeRigControls?: boolean;
+}): RigControlEvaluationResult<TDrawable> => {
   const diagnostics: DiagnosticDto[] = [];
   const patchesByRigControlId = groupRigControlSamples(input.samples);
   const topology = input.topology ?? createRigControlTopologyEvaluation(input.graph);
@@ -147,9 +153,11 @@ export const evaluateRigControlHierarchy = (input: {
 
   return {
     drawables: transformedDrawables,
-    rigControls: orderedRigControlIds
-      .map((rigControlId) => evaluatedById.get(rigControlId)?.dto)
-      .filter((rigControl): rigControl is EvaluatedRigControlDto => rigControl !== undefined),
+    rigControls: input.includeRigControls === false
+      ? []
+      : orderedRigControlIds
+        .map((rigControlId) => evaluatedById.get(rigControlId)?.dto)
+        .filter((rigControl): rigControl is EvaluatedRigControlDto => rigControl !== undefined),
     diagnostics
   };
 };
@@ -326,8 +334,10 @@ const evaluateWarpLatticeRigControl = (input: {
   };
 };
 
-const applyRigControlTransformsToDrawables = (input: {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+const applyRigControlTransformsToDrawables = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawables: readonly TDrawable[];
   readonly graph: NormalizedRuntimeGraph;
   readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly topology: RigControlTopologyEvaluation;
@@ -335,7 +345,7 @@ const applyRigControlTransformsToDrawables = (input: {
   readonly hashPrecisionDecimals: number;
   readonly diagnostics: DiagnosticDto[];
   readonly profiling?: RuntimeCoreEvaluationProfiler;
-}): readonly EvaluatedDrawableDto[] => {
+}): readonly TDrawable[] => {
   const directRigControlByDrawableId = createDirectRigControlByDrawableId({
     graph: input.graph,
     candidates: input.topology.directDrawableParentCandidates,
@@ -393,17 +403,52 @@ const applyRigControlTransformsToDrawables = (input: {
       effects,
       ...(input.profiling === undefined ? {} : { profiling: input.profiling })
     });
-    return {
-      ...drawable,
+    return withRigControlTransformedVertices({
+      drawable,
       opacity,
       vertices: transformedVertices,
-      bounds: computeBoundsFromVertices(transformedVertices),
-      vertexHash: createStableVertexHash(transformedVertices, {
-        hashPrecisionDecimals: input.hashPrecisionDecimals
-      })
-    };
+      hashPrecisionDecimals: input.hashPrecisionDecimals
+    });
   });
 };
+
+const withRigControlTransformedVertices = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawable: TDrawable;
+  readonly opacity: number;
+  readonly vertices: readonly Vec2Dto[];
+  readonly hashPrecisionDecimals: number;
+}): TDrawable => {
+  const nextDrawable = {
+    ...input.drawable,
+    opacity: input.opacity,
+    vertices: input.vertices
+  };
+
+  if (!hasPublicGeometryFields(input.drawable)) {
+    return nextDrawable as TDrawable;
+  }
+
+  return {
+    ...nextDrawable,
+    bounds: computeBoundsFromVertices(input.vertices),
+    vertexHash: createStableVertexHash(input.vertices, {
+      hashPrecisionDecimals: input.hashPrecisionDecimals
+    })
+  } as TDrawable;
+};
+
+interface RuntimeDrawableWithPublicGeometry {
+  readonly bounds: RectDto;
+  readonly vertexHash: string;
+}
+
+const hasPublicGeometryFields = (
+  drawable: RuntimeDrawableEvaluationBase
+): drawable is RuntimeDrawableEvaluationBase & RuntimeDrawableWithPublicGeometry =>
+  typeof (drawable as { readonly bounds?: unknown }).bounds === "object" &&
+  typeof (drawable as { readonly vertexHash?: unknown }).vertexHash === "string";
 
 const applyRigControlOpacityMultiplier = (
   opacity: number,

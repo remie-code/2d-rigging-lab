@@ -59,8 +59,8 @@ describe("Runtime Export evaluation cache", () => {
 
     expect(secondFrame.poseEvaluation.adapter)
       .toBe(firstFrame.poseEvaluation.adapter);
-    expect(secondFrame.poseEvaluation.snapshot)
-      .not.toBe(firstFrame.poseEvaluation.snapshot);
+    expect(getRenderFrame(secondFrame))
+      .not.toBe(getRenderFrame(firstFrame));
     expect(secondFrame.poseEvaluation.nextState)
       .not.toBe(firstFrame.poseEvaluation.nextState);
     expect(cache.size).toBe(1);
@@ -245,8 +245,10 @@ describe("Runtime Export evaluation cache", () => {
       .toEqual(nativeFirstFrame.scene.drawables);
     expect(browserSecondFrame.scene.drawables)
       .toEqual(nativeSecondFrame.scene.drawables);
-    expect(browserSecondFrame.poseEvaluation.snapshot.parameters)
-      .toEqual(nativeSecondFrame.poseEvaluation.snapshot.parameters);
+    expect(getRenderFrame(browserSecondFrame))
+      .not.toBe(getRenderFrame(nativeSecondFrame));
+    expect(getRenderFrame(browserSecondFrame).drawables[1]?.vertices)
+      .not.toBe(getRenderFrame(nativeSecondFrame).drawables[1]?.vertices);
     expect(
       browserSecondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway
         ?.tick
@@ -463,6 +465,16 @@ function getSceneDrawable(
   }
 
   return drawable;
+}
+
+function getRenderFrame(
+  input: EvaluatedInput
+): Extract<EvaluatedInput["poseEvaluation"], { readonly renderFrame: unknown }>["renderFrame"] {
+  if (!("renderFrame" in input.poseEvaluation)) {
+    throw new Error("Expected render-frame pose evaluation.");
+  }
+
+  return input.poseEvaluation.renderFrame;
 }
 
 function createAdapterInput(

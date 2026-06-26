@@ -7,6 +7,7 @@ import {
 import type { DrawableId } from "@private-2d-rigging-lab/contracts";
 import type {
   RuntimeCoreEvaluationProfile,
+  RuntimeRenderFrame,
   RuntimeSnapshotDto
 } from "@private-2d-rigging-lab/runtime-core";
 
@@ -16,7 +17,9 @@ import type {
 } from "../../preload/runtime-variant-bridge-contract";
 import {
   createRuntimeExportRuntimeModelInitialStateRequest,
+  evaluateRuntimeExportRenderFrame,
   evaluateRuntimeExportPose,
+  type RuntimeExportRenderFrameEvaluation,
   type RuntimeExportPoseEvaluation,
   type RuntimeExportPoseEvaluationOptions
 } from "../runtime-evaluation/runtime-export-pose-evaluator";
@@ -37,15 +40,24 @@ import type {
 } from "./runtime-export-runtime-model-instance-cache";
 
 export interface EvaluatedRuntimeExportStageRenderInput extends RuntimeExportStageRenderInput {
-  readonly poseEvaluation: RuntimeExportPoseEvaluation;
+  readonly poseEvaluation: RuntimeExportStagePoseEvaluation;
   readonly evaluationProfile: RuntimeExportRenderInputEvaluationProfile;
 }
+
+export type RuntimeExportStagePoseEvaluation =
+  | RuntimeExportPoseEvaluation
+  | RuntimeExportRenderFrameEvaluation;
+
+export type RuntimeExportStagePoseEvaluationMode =
+  | "render-frame"
+  | "snapshot";
 
 export interface RuntimeExportRenderInputEvaluationProfile {
   readonly evaluationCacheStatus: "hit" | "miss" | "not-used";
   readonly runtimeCoreEvaluationDurationMs: number;
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
   readonly compiledEvaluatorFrameCount: number;
+  readonly compiledRenderFrameCount: number;
   readonly transientCompileCount: number;
   readonly transientInstanceCount: number;
   readonly poseEvaluationDurationMs: number;
@@ -60,6 +72,7 @@ export type EvaluatedRuntimeExportStageRenderInputOptions =
   RuntimeExportPoseEvaluationOptions & {
     readonly evaluationCache?: RuntimeExportEvaluationCache;
     readonly runtimeModelInstanceCache?: RuntimeExportRuntimeModelInstanceCache;
+    readonly poseEvaluationMode?: RuntimeExportStagePoseEvaluationMode;
   };
 
 export function createEvaluatedRuntimeExportStageRenderInput(
@@ -85,25 +98,25 @@ export function createEvaluatedRuntimeExportStageRenderInput(
       )
     });
   const poseEvaluationStartedAtMs = readCurrentTimeMs();
-  const poseEvaluation = evaluateRuntimeExportPose(
-    poseEvaluationInput,
-    {
-      ...options,
-      activeVariantSelection,
-      adapter: scaffold.adapter,
-      compiledRuntimeModel: scaffold.compiledRuntimeModel,
-      ...(runtimeModelInstance === undefined
-        ? {}
-        : { runtimeModelInstance })
-    }
-  );
+  const poseEvaluationOptions = {
+    ...options,
+    activeVariantSelection,
+    adapter: scaffold.adapter,
+    compiledRuntimeModel: scaffold.compiledRuntimeModel,
+    ...(runtimeModelInstance === undefined
+      ? {}
+      : { runtimeModelInstance })
+  };
+  const poseEvaluation = (options.poseEvaluationMode ?? "render-frame") === "snapshot"
+    ? evaluateRuntimeExportPose(poseEvaluationInput, poseEvaluationOptions)
+    : evaluateRuntimeExportRenderFrame(poseEvaluationInput, poseEvaluationOptions);
   const poseEvaluationDurationMs = Math.max(
     0,
     readCurrentTimeMs() - poseEvaluationStartedAtMs
   );
   const snapshotToRenderDrawableStartedAtMs = readCurrentTimeMs();
   const drawables = createEvaluatedRenderDrawables({
-    snapshot: poseEvaluation.snapshot,
+    poseEvaluation,
     scaffold
   });
   const snapshotToRenderDrawableDurationMs = Math.max(
@@ -130,6 +143,8 @@ export function createEvaluatedRuntimeExportStageRenderInput(
         poseEvaluation.evaluationProfile.runtimeCoreEvaluationDurationMs,
       compiledEvaluatorFrameCount:
         poseEvaluation.evaluationProfile.compiledEvaluatorFrameCount,
+      compiledRenderFrameCount:
+        poseEvaluation.evaluationProfile.compiledRenderFrameCount,
       transientCompileCount:
         poseEvaluation.evaluationProfile.transientCompileCount,
       transientInstanceCount:
@@ -195,18 +210,15 @@ function createPoseEvaluationInput(
 }
 
 function createEvaluatedRenderDrawables(input: {
-  readonly snapshot: RuntimeSnapshotDto;
+  readonly poseEvaluation: RuntimeExportStagePoseEvaluation;
   readonly scaffold: RuntimeExportEvaluationScaffold;
 }): readonly RenderDrawable[] {
-  return input.snapshot.drawables.map((drawable) => {
+  return createEvaluatedRenderDrawableInputs(input.poseEvaluation).map((drawable) => {
     const template = input.scaffold.drawableTemplatesByDrawableId.get(
       drawable.drawableId
     );
     if (template === undefined) {
       throw new Error(`Evaluated drawable "${drawable.drawableId}" is missing render template data.`);
-    }
-    if (drawable.vertices === undefined) {
-      throw new Error(`Evaluated drawable "${drawable.drawableId}" is missing full snapshot vertices.`);
     }
 
     return {
@@ -223,13 +235,74 @@ function createEvaluatedRenderDrawables(input: {
         triangles: template.mesh.triangles
       } satisfies RenderMesh,
       opacity: drawable.opacity,
-      drawOrder: drawable.evaluatedDrawOrder,
+      drawOrder: drawable.drawOrder,
       stableIndex: template.stableIndex,
       visible: drawable.visible,
       blendMode: template.blendMode,
       ...(template.clipping === undefined ? {} : { clipping: template.clipping })
     };
   });
+}
+
+function createEvaluatedRenderDrawableInputs(
+  poseEvaluation: RuntimeExportStagePoseEvaluation
+): readonly EvaluatedRenderDrawableInput[] {
+  if ("renderFrame" in poseEvaluation) {
+    return createEvaluatedRenderDrawableInputsFromRenderFrame(
+      poseEvaluation.renderFrame
+    );
+  }
+
+  return createEvaluatedRenderDrawableInputsFromSnapshot(
+    poseEvaluation.snapshot
+  );
+}
+
+function createEvaluatedRenderDrawableInputsFromRenderFrame(
+  frame: RuntimeRenderFrame
+): readonly EvaluatedRenderDrawableInput[] {
+  return frame.drawables.map((drawable) => ({
+    drawableId: drawable.drawableId,
+    vertices: drawable.vertices.map((vertex) => ({
+      x: vertex.x,
+      y: vertex.y
+    })),
+    opacity: drawable.opacity,
+    drawOrder: drawable.drawOrder,
+    visible: drawable.visible
+  }));
+}
+
+function createEvaluatedRenderDrawableInputsFromSnapshot(
+  snapshot: RuntimeSnapshotDto
+): readonly EvaluatedRenderDrawableInput[] {
+  return snapshot.drawables.map((drawable) => {
+    if (drawable.vertices === undefined) {
+      throw new Error(`Evaluated drawable "${drawable.drawableId}" is missing full snapshot vertices.`);
+    }
+
+    return {
+      drawableId: drawable.drawableId,
+      vertices: drawable.vertices.map((vertex) => ({
+        x: vertex.x,
+        y: vertex.y
+      })),
+      opacity: drawable.opacity,
+      drawOrder: drawable.evaluatedDrawOrder,
+      visible: drawable.visible
+    };
+  });
+}
+
+interface EvaluatedRenderDrawableInput {
+  readonly drawableId: DrawableId;
+  readonly vertices: readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
+  readonly opacity: number;
+  readonly drawOrder: number;
+  readonly visible: boolean;
 }
 
 function readCurrentTimeMs(): number {

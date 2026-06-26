@@ -78,8 +78,10 @@ export type PerformanceDiagnosticsTargetReport = {
   readonly scaffoldEvaluationCacheMissCount: number | null;
   readonly scaffoldEvaluationCacheInvalidationCount: number | null;
   readonly compiledEvaluatorFrameCount: number | null;
+  readonly compiledRenderFrameCount: number | null;
   readonly transientCompileCount: number | null;
   readonly transientInstanceCount: number | null;
+  readonly publicSnapshotMaterializationCount: number | null;
   readonly runtimeModelInstanceCacheHitCount: number | null;
   readonly runtimeModelInstanceCacheMissCount: number | null;
   readonly runtimeModelInstanceCacheInvalidationCount: number | null;
@@ -94,6 +96,8 @@ export type PerformanceDiagnosticsTargetReport = {
   readonly runtimeCoreDynamicsEvaluationDurationMs:
     PerformanceDiagnosticsMetricSummary;
   readonly runtimeCoreSnapshotCreationDurationMs:
+    PerformanceDiagnosticsMetricSummary;
+  readonly runtimeCoreRenderFrameOutputDurationMs:
     PerformanceDiagnosticsMetricSummary;
   readonly runtimeCoreParameterResolutionDurationMs:
     PerformanceDiagnosticsMetricSummary;
@@ -509,6 +513,11 @@ function createMetricsTargetReport(input: {
       end,
       "compiledEvaluatorFrameCount"
     ),
+    compiledRenderFrameCount: readMetricDelta(
+      start,
+      end,
+      "compiledRenderFrameCount"
+    ),
     transientCompileCount: readMetricDelta(
       start,
       end,
@@ -518,6 +527,11 @@ function createMetricsTargetReport(input: {
       start,
       end,
       "transientInstanceCount"
+    ),
+    publicSnapshotMaterializationCount: readMetricDelta(
+      start,
+      end,
+      "publicSnapshotMaterializationCount"
     ),
     runtimeModelInstanceCacheHitCount: readMetricDelta(
       start,
@@ -563,6 +577,11 @@ function createMetricsTargetReport(input: {
       metrics: input.metrics,
       sampleCountKey: "runtimeCoreSnapshotCreationDurationSampleCount",
       valueKey: "lastRuntimeCoreSnapshotCreationDurationMs"
+    }),
+    runtimeCoreRenderFrameOutputDurationMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeCoreRenderFrameOutputDurationSampleCount",
+      valueKey: "lastRuntimeCoreRenderFrameOutputDurationMs"
     }),
     runtimeCoreParameterResolutionDurationMs: summarizeMetricSamples({
       metrics: input.metrics,
@@ -715,8 +734,10 @@ function createUnavailableTargetReport(
     scaffoldEvaluationCacheMissCount: null,
     scaffoldEvaluationCacheInvalidationCount: null,
     compiledEvaluatorFrameCount: null,
+    compiledRenderFrameCount: null,
     transientCompileCount: null,
     transientInstanceCount: null,
+    publicSnapshotMaterializationCount: null,
     runtimeModelInstanceCacheHitCount: null,
     runtimeModelInstanceCacheMissCount: null,
     runtimeModelInstanceCacheInvalidationCount: null,
@@ -726,6 +747,7 @@ function createUnavailableTargetReport(
     runtimeCoreStateCompatibilityDurationMs: createEmptyMetricSummary(),
     runtimeCoreDynamicsEvaluationDurationMs: createEmptyMetricSummary(),
     runtimeCoreSnapshotCreationDurationMs: createEmptyMetricSummary(),
+    runtimeCoreRenderFrameOutputDurationMs: createEmptyMetricSummary(),
     runtimeCoreParameterResolutionDurationMs: createEmptyMetricSummary(),
     runtimeCoreKeyformSamplingDurationMs: createEmptyMetricSummary(),
     runtimeCoreKeyformApplicationDurationMs: createEmptyMetricSummary(),
@@ -773,6 +795,7 @@ function summarizeMetricSamples(input: {
     | "runtimeCoreStateCompatibilityDurationSampleCount"
     | "runtimeCoreDynamicsEvaluationDurationSampleCount"
     | "runtimeCoreSnapshotCreationDurationSampleCount"
+    | "runtimeCoreRenderFrameOutputDurationSampleCount"
     | "runtimeCoreParameterResolutionDurationSampleCount"
     | "runtimeCoreKeyformSamplingDurationSampleCount"
     | "runtimeCoreKeyformApplicationDurationSampleCount"
@@ -798,6 +821,7 @@ function summarizeMetricSamples(input: {
     | "lastRuntimeCoreStateCompatibilityDurationMs"
     | "lastRuntimeCoreDynamicsEvaluationDurationMs"
     | "lastRuntimeCoreSnapshotCreationDurationMs"
+    | "lastRuntimeCoreRenderFrameOutputDurationMs"
     | "lastRuntimeCoreParameterResolutionDurationMs"
     | "lastRuntimeCoreKeyformSamplingDurationMs"
     | "lastRuntimeCoreKeyformApplicationDurationMs"
@@ -1003,8 +1027,12 @@ function copyRenderMetricsSnapshot(
       snapshot.evaluationCacheInvalidationCount ?? 0,
     compiledEvaluatorFrameCount:
       snapshot.compiledEvaluatorFrameCount ?? 0,
+    compiledRenderFrameCount:
+      snapshot.compiledRenderFrameCount ?? 0,
     transientCompileCount: snapshot.transientCompileCount ?? 0,
     transientInstanceCount: snapshot.transientInstanceCount ?? 0,
+    publicSnapshotMaterializationCount:
+      snapshot.publicSnapshotMaterializationCount ?? 0,
     runtimeModelInstanceCacheHitCount:
       snapshot.runtimeModelInstanceCacheHitCount ?? 0,
     runtimeModelInstanceCacheMissCount:
@@ -1035,6 +1063,10 @@ function copyRenderMetricsSnapshot(
       snapshot.lastRuntimeCoreSnapshotCreationDurationMs ?? null,
     runtimeCoreSnapshotCreationDurationSampleCount:
       snapshot.runtimeCoreSnapshotCreationDurationSampleCount ?? 0,
+    lastRuntimeCoreRenderFrameOutputDurationMs:
+      snapshot.lastRuntimeCoreRenderFrameOutputDurationMs ?? null,
+    runtimeCoreRenderFrameOutputDurationSampleCount:
+      snapshot.runtimeCoreRenderFrameOutputDurationSampleCount ?? 0,
     lastRuntimeCoreParameterResolutionDurationMs:
       snapshot.lastRuntimeCoreParameterResolutionDurationMs ?? null,
     runtimeCoreParameterResolutionDurationSampleCount:
@@ -1158,12 +1190,18 @@ function formatTargetReport(
     `compiledEvaluatorFrameCount: ${
       formatNullableInteger(report.compiledEvaluatorFrameCount)
     }`,
+    `compiledRenderFrameCount: ${
+      formatNullableInteger(report.compiledRenderFrameCount)
+    } scope=render-frame-fast-path`,
     `transientCompileCount: ${
       formatNullableInteger(report.transientCompileCount)
     }`,
     `transientInstanceCount: ${
       formatNullableInteger(report.transientInstanceCount)
     }`,
+    `publicSnapshotMaterializationCount: ${
+      formatNullableInteger(report.publicSnapshotMaterializationCount)
+    } scope=public-snapshot-path/deep-runtime-core-profile`,
     `runtimeModelInstanceCacheHitCount: ${
       formatNullableInteger(report.runtimeModelInstanceCacheHitCount)
     }`,
@@ -1192,7 +1230,10 @@ function formatTargetReport(
     }`,
     `runtimeCoreSnapshotCreationDurationMs: ${
       formatMetricSummary(report.runtimeCoreSnapshotCreationDurationMs)
-    }`,
+    } scope=public-snapshot-path/deep-runtime-core-profile`,
+    `runtimeCoreRenderFrameOutputDurationMs: ${
+      formatMetricSummary(report.runtimeCoreRenderFrameOutputDurationMs)
+    } scope=render-frame-fast-path/deep-runtime-core-profile`,
     `runtimeCoreParameterResolutionDurationMs: ${
       formatMetricSummary(report.runtimeCoreParameterResolutionDurationMs)
     }`,
@@ -1215,7 +1256,7 @@ function formatTargetReport(
     }`,
     `runtimeCoreDrawableSnapshotCreationDurationMs: ${
       formatMetricSummary(report.runtimeCoreDrawableSnapshotCreationDurationMs)
-    }`,
+    } scope=public-snapshot-drawable-dto-path/deep-runtime-core-profile`,
     `runtimeCoreVisibilityDrawOrderEvaluationDurationMs: ${
       formatMetricSummary(
         report.runtimeCoreVisibilityDrawOrderEvaluationDurationMs
@@ -1230,9 +1271,9 @@ function formatTargetReport(
     `poseEvaluationDurationMs: ${
       formatMetricSummary(report.poseEvaluationDurationMs)
     }`,
-    `snapshotToRenderDrawableDurationMs: ${
+    `renderInputDrawableMappingDurationMs: ${
       formatMetricSummary(report.snapshotToRenderDrawableDurationMs)
-    }`,
+    } sourceField=snapshotToRenderDrawableDurationMs scope=renderer-input-mapping-not-public-snapshot-materialization`,
     `renderInputSceneBuildDurationMs: ${
       formatMetricSummary(report.renderInputSceneBuildDurationMs)
     }`,

@@ -29,8 +29,10 @@ describe("performance diagnostics metrics validation", () => {
     delete legacyMetrics.evaluationCacheMissCount;
     delete legacyMetrics.evaluationCacheInvalidationCount;
     delete legacyMetrics.compiledEvaluatorFrameCount;
+    delete legacyMetrics.compiledRenderFrameCount;
     delete legacyMetrics.transientCompileCount;
     delete legacyMetrics.transientInstanceCount;
+    delete legacyMetrics.publicSnapshotMaterializationCount;
     delete legacyMetrics.runtimeModelInstanceCacheHitCount;
     delete legacyMetrics.runtimeModelInstanceCacheMissCount;
     delete legacyMetrics.runtimeModelInstanceCacheInvalidationCount;
@@ -46,6 +48,8 @@ describe("performance diagnostics metrics validation", () => {
     delete legacyMetrics.runtimeCoreDynamicsEvaluationDurationSampleCount;
     delete legacyMetrics.lastRuntimeCoreSnapshotCreationDurationMs;
     delete legacyMetrics.runtimeCoreSnapshotCreationDurationSampleCount;
+    delete legacyMetrics.lastRuntimeCoreRenderFrameOutputDurationMs;
+    delete legacyMetrics.runtimeCoreRenderFrameOutputDurationSampleCount;
     delete legacyMetrics.lastRuntimeCoreParameterResolutionDurationMs;
     delete legacyMetrics.runtimeCoreParameterResolutionDurationSampleCount;
     delete legacyMetrics.lastRuntimeCoreKeyformSamplingDurationMs;
@@ -88,8 +92,10 @@ describe("performance diagnostics metrics validation", () => {
       evaluationCacheMissCount: 0,
       evaluationCacheInvalidationCount: 0,
       compiledEvaluatorFrameCount: 0,
+      compiledRenderFrameCount: 0,
       transientCompileCount: 0,
       transientInstanceCount: 0,
+      publicSnapshotMaterializationCount: 0,
       runtimeModelInstanceCacheHitCount: 0,
       runtimeModelInstanceCacheMissCount: 0,
       runtimeModelInstanceCacheInvalidationCount: 0,
@@ -105,6 +111,8 @@ describe("performance diagnostics metrics validation", () => {
       runtimeCoreDynamicsEvaluationDurationSampleCount: 0,
       lastRuntimeCoreSnapshotCreationDurationMs: null,
       runtimeCoreSnapshotCreationDurationSampleCount: 0,
+      lastRuntimeCoreRenderFrameOutputDurationMs: null,
+      runtimeCoreRenderFrameOutputDurationSampleCount: 0,
       lastRuntimeCoreParameterResolutionDurationMs: null,
       runtimeCoreParameterResolutionDurationSampleCount: 0,
       lastRuntimeCoreKeyformSamplingDurationMs: null,
@@ -165,7 +173,15 @@ describe("performance diagnostics metrics validation", () => {
       "negative compiled evaluator frame count",
       { compiledEvaluatorFrameCount: -1 }
     ],
+    [
+      "non-integer compiled render frame count",
+      { compiledRenderFrameCount: 1.5 }
+    ],
     ["non-integer transient compile count", { transientCompileCount: 1.5 }],
+    [
+      "negative public snapshot materialization count",
+      { publicSnapshotMaterializationCount: -1 }
+    ],
     [
       "negative runtime model instance cache hit count",
       { runtimeModelInstanceCacheHitCount: -1 }
@@ -189,6 +205,14 @@ describe("performance diagnostics metrics validation", () => {
     [
       "negative runtime core parameter duration",
       { lastRuntimeCoreParameterResolutionDurationMs: -1 }
+    ],
+    [
+      "negative runtime core render frame output duration",
+      { lastRuntimeCoreRenderFrameOutputDurationMs: -1 }
+    ],
+    [
+      "non-integer runtime core render frame output sample count",
+      { runtimeCoreRenderFrameOutputDurationSampleCount: 1.25 }
     ],
     [
       "non-integer runtime core deformer sample count",
@@ -275,8 +299,10 @@ function createMetrics(
     evaluationCacheMissCount: 2,
     evaluationCacheInvalidationCount: 1,
     compiledEvaluatorFrameCount: 5,
+    compiledRenderFrameCount: 4,
     transientCompileCount: 0,
     transientInstanceCount: 0,
+    publicSnapshotMaterializationCount: 0,
     runtimeModelInstanceCacheHitCount: 4,
     runtimeModelInstanceCacheMissCount: 1,
     runtimeModelInstanceCacheInvalidationCount: 0,
@@ -292,6 +318,8 @@ function createMetrics(
     runtimeCoreDynamicsEvaluationDurationSampleCount: 5,
     lastRuntimeCoreSnapshotCreationDurationMs: 1.8,
     runtimeCoreSnapshotCreationDurationSampleCount: 5,
+    lastRuntimeCoreRenderFrameOutputDurationMs: 0.7,
+    runtimeCoreRenderFrameOutputDurationSampleCount: 4,
     lastRuntimeCoreParameterResolutionDurationMs: 0.3,
     runtimeCoreParameterResolutionDurationSampleCount: 5,
     lastRuntimeCoreKeyformSamplingDurationMs: 0.4,

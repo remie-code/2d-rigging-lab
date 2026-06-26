@@ -14,9 +14,11 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DiagnosticDto,
+  DrawableId,
   ParameterId,
   RuntimeEvaluationContextDto,
-  RuntimeStateDto
+  RuntimeStateDto,
+  Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
@@ -43,7 +45,11 @@ import {
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
-import { EvaluatedRigControlSchema, evaluateRigControlHierarchy } from "./rig-control-evaluation.js";
+import {
+  EvaluatedRigControlSchema,
+  evaluateRigControlHierarchy,
+  type RigControlEvaluationResult
+} from "./rig-control-evaluation.js";
 import type { RigControlTopologyEvaluation } from "./rig-control-hierarchy.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
@@ -60,9 +66,11 @@ import {
   compileRuntimeMaskRelationTemplates,
   compileRuntimeReferenceVerticesByDrawableId,
   materializeRuntimeDrawableSnapshots,
+  materializeRuntimeRenderFrameDrawables,
   materializeRuntimeMaskRelations,
   type RuntimeSnapshotStaticTemplates
 } from "./snapshot-static-templates.js";
+import type { RuntimeDrawableEvaluationBase } from "./runtime-drawable-evaluation.js";
 
 export {
   EvaluatedMaskRelationSchema
@@ -174,6 +182,14 @@ export const RuntimeSnapshotSchema = z.object({
 export type RuntimeSnapshotDto = z.infer<typeof RuntimeSnapshotSchema>;
 export type RuntimeSnapshotValidationMode = "schema" | "skip";
 
+export interface RuntimeRenderDrawableEvaluationDto {
+  readonly drawableId: DrawableId;
+  readonly vertices?: readonly Vec2Dto[];
+  readonly opacity: number;
+  readonly evaluatedDrawOrder: number;
+  readonly visible: boolean;
+}
+
 export const createRuntimeSnapshot = (input: {
   readonly graph: NormalizedRuntimeGraph;
   readonly evaluationInput: RuntimeEvaluationInputDto;
@@ -193,68 +209,32 @@ export const createRuntimeSnapshot = (input: {
     input.profiling === undefined
       ? evaluate()
       : input.profiling.measure(phase, evaluate);
-  const parameterResolution = measure(
-    "parameterResolutionDurationMs",
-    () => resolveEffectiveParameterValues({
-      graph: input.graph,
-      authoredParameterValues: input.evaluationInput.authoredParameterValues,
-      state: input.state
-    })
-  );
-  const keyformSampling = measure(
-    "keyformSamplingDurationMs",
-    () => sampleRuntimeKeyformsInEvaluationOrder({
-      graph: input.graph,
-      effectiveParameterValues: parameterResolution.effectiveParameterValues
-    })
-  );
-  const drawableTemplates =
-    input.snapshotStaticTemplates?.drawables ??
-    measure(
-      "drawableSnapshotCreationDurationMs",
-      () => compileRuntimeDrawableSnapshotTemplates(input.graph)
-    );
-  const baseDrawables = measure(
-    "drawableSnapshotCreationDurationMs",
-    () => materializeRuntimeDrawableSnapshots({
-      templates: drawableTemplates,
-      options: input.options,
-      includeVertices:
-        keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
-    })
-  );
-  const referenceVerticesByDrawableId =
-    input.snapshotStaticTemplates?.referenceVerticesByDrawableId ??
-    measure(
-      "drawableSnapshotCreationDurationMs",
-      () => compileRuntimeReferenceVerticesByDrawableId(input.graph)
-    );
-  const appliedKeyforms = measure(
-    "keyformApplicationDurationMs",
-    () => applySamplesInEvaluationOrder({
-      drawables: baseDrawables,
-      samples: keyformSampling.samples.filter(
-        (sample) => sample.targetMetadata.targetKind !== "rigControl"
-      ),
-      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
-    })
-  );
-  const rigControlEvaluation = measure(
-    "deformerHierarchyEvaluationDurationMs",
-    () => evaluateRigControlHierarchy({
-      graph: input.graph,
-      drawables: appliedKeyforms.drawables,
-      referenceVerticesByDrawableId,
-      samples: keyformSampling.samples.filter(
-        (sample) => sample.targetMetadata.targetKind === "rigControl"
-      ),
-      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals,
-      ...(input.rigControlTopology === undefined
-        ? {}
-        : { topology: input.rigControlTopology }),
-      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
-    })
-  );
+  input.profiling?.recordPublicSnapshotMaterialization();
+  const drawableEvaluation = evaluateRuntimeDrawableFrame<EvaluatedDrawableDto>({
+    graph: input.graph,
+    evaluationInput: input.evaluationInput,
+    state: input.state,
+    options: input.options,
+    ...(input.snapshotStaticTemplates === undefined
+      ? {}
+      : { snapshotStaticTemplates: input.snapshotStaticTemplates }),
+    ...(input.rigControlTopology === undefined
+      ? {}
+      : { rigControlTopology: input.rigControlTopology }),
+    ...(input.profiling === undefined ? {} : { profiling: input.profiling }),
+    includeRigControls: true,
+    createBaseDrawables: ({ drawableTemplates, keyformSampling }) =>
+      materializeRuntimeDrawableSnapshots({
+        templates: drawableTemplates,
+        options: input.options,
+        includeVertices:
+          keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
+      })
+  });
+  const parameterResolution = drawableEvaluation.parameterResolution;
+  const keyformSampling = drawableEvaluation.keyformSampling;
+  const appliedKeyforms = drawableEvaluation.appliedKeyforms;
+  const rigControlEvaluation = drawableEvaluation.rigControlEvaluation;
   const drawables = measure(
     "drawableSnapshotCreationDurationMs",
     () => finalizeDrawablesForDetail(
@@ -340,6 +320,150 @@ export const createRuntimeSnapshot = (input: {
 
   return measure("snapshotValidationDurationMs", () =>
     RuntimeSnapshotSchema.parse(snapshot));
+};
+
+export const evaluateRuntimeRenderDrawables = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly evaluationInput: RuntimeEvaluationInputDto;
+  readonly state: RuntimeStateDto;
+  readonly options: RuntimeEvaluationOptionsDto;
+  readonly snapshotStaticTemplates?: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology?: RigControlTopologyEvaluation;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+}): readonly RuntimeRenderDrawableEvaluationDto[] => {
+  const evaluation = evaluateRuntimeDrawableFrame<RuntimeDrawableEvaluationBase>({
+    graph: input.graph,
+    evaluationInput: input.evaluationInput,
+    state: input.state,
+    options: input.options,
+    ...(input.snapshotStaticTemplates === undefined
+      ? {}
+      : { snapshotStaticTemplates: input.snapshotStaticTemplates }),
+    ...(input.rigControlTopology === undefined
+      ? {}
+      : { rigControlTopology: input.rigControlTopology }),
+    ...(input.profiling === undefined ? {} : { profiling: input.profiling }),
+    includeRigControls: false,
+    createBaseDrawables: ({ drawableTemplates }) =>
+      materializeRuntimeRenderFrameDrawables({
+        templates: drawableTemplates
+      })
+  });
+
+  return evaluation.rigControlEvaluation.drawables.map((drawable) => ({
+    drawableId: drawable.drawableId,
+    ...(drawable.vertices === undefined ? {} : { vertices: drawable.vertices }),
+    opacity: drawable.opacity,
+    evaluatedDrawOrder: drawable.evaluatedDrawOrder,
+    visible: drawable.visible
+  }));
+};
+
+const evaluateRuntimeDrawableFrame = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly evaluationInput: RuntimeEvaluationInputDto;
+  readonly state: RuntimeStateDto;
+  readonly options: RuntimeEvaluationOptionsDto;
+  readonly snapshotStaticTemplates?: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology?: RigControlTopologyEvaluation;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+  readonly includeRigControls: boolean;
+  readonly createBaseDrawables: (input: {
+    readonly drawableTemplates: readonly RuntimeSnapshotStaticTemplates["drawables"][number][];
+    readonly keyformSampling: {
+      readonly samples: readonly RuntimeKeyformSample[];
+      readonly diagnostics: readonly DiagnosticDto[];
+    };
+  }) => readonly TDrawable[];
+}): {
+  readonly parameterResolution: EffectiveParameterResolution;
+  readonly keyformSampling: {
+    readonly samples: readonly RuntimeKeyformSample[];
+    readonly diagnostics: readonly DiagnosticDto[];
+  };
+  readonly appliedKeyforms: {
+    readonly drawables: readonly TDrawable[];
+    readonly diagnostics: readonly DiagnosticDto[];
+  };
+  readonly rigControlEvaluation: RigControlEvaluationResult<TDrawable>;
+} => {
+  const measure = <TValue>(
+    phase: RuntimeCoreEvaluationProfilePhaseKey,
+    evaluate: () => TValue
+  ): TValue =>
+    input.profiling === undefined
+      ? evaluate()
+      : input.profiling.measure(phase, evaluate);
+  const parameterResolution = measure(
+    "parameterResolutionDurationMs",
+    () => resolveEffectiveParameterValues({
+      graph: input.graph,
+      authoredParameterValues: input.evaluationInput.authoredParameterValues,
+      state: input.state
+    })
+  );
+  const keyformSampling = measure(
+    "keyformSamplingDurationMs",
+    () => sampleRuntimeKeyformsInEvaluationOrder({
+      graph: input.graph,
+      effectiveParameterValues: parameterResolution.effectiveParameterValues
+    })
+  );
+  const drawableTemplates =
+    input.snapshotStaticTemplates?.drawables ??
+    measure(
+      "drawableSnapshotCreationDurationMs",
+      () => compileRuntimeDrawableSnapshotTemplates(input.graph)
+    );
+  const baseDrawables = measure(
+    "drawableSnapshotCreationDurationMs",
+    () => input.createBaseDrawables({
+      drawableTemplates,
+      keyformSampling
+    })
+  );
+  const referenceVerticesByDrawableId =
+    input.snapshotStaticTemplates?.referenceVerticesByDrawableId ??
+    measure(
+      "drawableSnapshotCreationDurationMs",
+      () => compileRuntimeReferenceVerticesByDrawableId(input.graph)
+    );
+  const appliedKeyforms = measure(
+    "keyformApplicationDurationMs",
+    () => applySamplesInEvaluationOrder({
+      drawables: baseDrawables,
+      samples: keyformSampling.samples.filter(
+        (sample) => sample.targetMetadata.targetKind !== "rigControl"
+      ),
+      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals
+    })
+  );
+  const rigControlEvaluation = measure(
+    "deformerHierarchyEvaluationDurationMs",
+    () => evaluateRigControlHierarchy({
+      graph: input.graph,
+      drawables: appliedKeyforms.drawables,
+      referenceVerticesByDrawableId,
+      samples: keyformSampling.samples.filter(
+        (sample) => sample.targetMetadata.targetKind === "rigControl"
+      ),
+      hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals,
+      ...(input.rigControlTopology === undefined
+        ? {}
+        : { topology: input.rigControlTopology }),
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling }),
+      includeRigControls: input.includeRigControls
+    })
+  );
+
+  return {
+    parameterResolution,
+    keyformSampling,
+    appliedKeyforms,
+    rigControlEvaluation
+  };
 };
 
 const createEvaluatedParameters = (resolution: EffectiveParameterResolution): EvaluatedParameterDto[] =>
@@ -435,12 +559,14 @@ const sampleRuntimeKeyformsInEvaluationOrder = (input: {
   };
 };
 
-const applySamplesInEvaluationOrder = (input: {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+const applySamplesInEvaluationOrder = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawables: readonly TDrawable[];
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
 }): {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly drawables: readonly TDrawable[];
   readonly diagnostics: readonly DiagnosticDto[];
 } => {
   let drawables = input.drawables;

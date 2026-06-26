@@ -16,6 +16,7 @@ import {
 } from "./mask-relation-evidence.js";
 import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
+import type { RuntimeDrawableEvaluationBase } from "./runtime-drawable-evaluation.js";
 import type { EvaluatedDrawableDto } from "./snapshot.js";
 import {
   createEvaluatedDrawableTexture,
@@ -143,6 +144,19 @@ export const materializeRuntimeDrawableSnapshots = (input: {
       ? { vertices: cloneVec2Array(template.vertices) }
       : {}),
     diagnostics: []
+  }));
+
+export const materializeRuntimeRenderFrameDrawables = (input: {
+  readonly templates: readonly RuntimeDrawableSnapshotTemplate[];
+}): RuntimeDrawableEvaluationBase[] =>
+  input.templates.map((template) => ({
+    drawableId: template.drawableId,
+    meshId: template.meshId,
+    visible: template.visible,
+    opacity: template.opacity,
+    baseDrawOrder: template.baseDrawOrder,
+    evaluatedDrawOrder: template.evaluatedDrawOrder,
+    ...(template.vertices === undefined ? {} : { vertices: cloneVec2Array(template.vertices) })
   }));
 
 export const materializeRuntimeMaskRelations = (

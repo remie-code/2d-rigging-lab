@@ -25,6 +25,7 @@ import {
 } from "./runtime-export-stage-scene";
 import {
   createEvaluatedRuntimeExportStageRenderInput,
+  type RuntimeExportStagePoseEvaluation,
   type RuntimeExportRenderInputEvaluationProfile
 } from "./evaluated-runtime-export-stage-scene";
 import {
@@ -144,8 +145,10 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private lastLiveRenderInputEvaluationDurationMs: number | null = null;
   private liveRenderInputEvaluationDurationSampleCount = 0;
   private compiledEvaluatorFrameCount = 0;
+  private compiledRenderFrameCount = 0;
   private transientCompileCount = 0;
   private transientInstanceCount = 0;
+  private publicSnapshotMaterializationCount = 0;
   private lastRuntimeCoreEvaluationDurationMs: number | null = null;
   private runtimeCoreEvaluationDurationSampleCount = 0;
   private lastRuntimeCoreInputValidationDurationMs: number | null = null;
@@ -156,6 +159,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private runtimeCoreDynamicsEvaluationDurationSampleCount = 0;
   private lastRuntimeCoreSnapshotCreationDurationMs: number | null = null;
   private runtimeCoreSnapshotCreationDurationSampleCount = 0;
+  private lastRuntimeCoreRenderFrameOutputDurationMs: number | null = null;
+  private runtimeCoreRenderFrameOutputDurationSampleCount = 0;
   private lastRuntimeCoreParameterResolutionDurationMs: number | null = null;
   private runtimeCoreParameterResolutionDurationSampleCount = 0;
   private lastRuntimeCoreKeyformSamplingDurationMs: number | null = null;
@@ -238,6 +243,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       activeVariantSelection: this.activeVariantSelection,
       evaluationCache: this.evaluationCache,
       runtimeModelInstanceCache: this.runtimeModelInstances,
+      poseEvaluationMode: "snapshot",
       runtimeCoreProfiling: this.runtimeCoreProfiling
     });
 
@@ -251,8 +257,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.renderCurrentImmediate();
 
     return {
-      runtimeDiagnosticDetails: createStageRuntimeDiagnosticDetails(
-        renderInput.poseEvaluation.snapshot.diagnostics
+      runtimeDiagnosticDetails: createRuntimeDiagnosticDetails(
+        renderInput.poseEvaluation
       )
     };
   }
@@ -454,8 +460,11 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       evaluationCacheInvalidationCount:
         evaluationCacheMetrics.evaluationCacheInvalidationCount,
       compiledEvaluatorFrameCount: this.compiledEvaluatorFrameCount,
+      compiledRenderFrameCount: this.compiledRenderFrameCount,
       transientCompileCount: this.transientCompileCount,
       transientInstanceCount: this.transientInstanceCount,
+      publicSnapshotMaterializationCount:
+        this.publicSnapshotMaterializationCount,
       runtimeModelInstanceCacheHitCount:
         runtimeModelInstanceCacheMetrics.runtimeModelInstanceCacheHitCount,
       runtimeModelInstanceCacheMissCount:
@@ -520,6 +529,10 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         this.lastRuntimeCoreSnapshotCreationDurationMs,
       runtimeCoreSnapshotCreationDurationSampleCount:
         this.runtimeCoreSnapshotCreationDurationSampleCount,
+      lastRuntimeCoreRenderFrameOutputDurationMs:
+        this.lastRuntimeCoreRenderFrameOutputDurationMs,
+      runtimeCoreRenderFrameOutputDurationSampleCount:
+        this.runtimeCoreRenderFrameOutputDurationSampleCount,
       lastRuntimeCoreParameterResolutionDurationMs:
         this.lastRuntimeCoreParameterResolutionDurationMs,
       runtimeCoreParameterResolutionDurationSampleCount:
@@ -888,9 +901,12 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       profile.runtimeCoreEvaluationDurationMs;
     this.runtimeCoreEvaluationDurationSampleCount += 1;
     this.compiledEvaluatorFrameCount += profile.compiledEvaluatorFrameCount;
+    this.compiledRenderFrameCount += profile.compiledRenderFrameCount;
     this.transientCompileCount += profile.transientCompileCount;
     this.transientInstanceCount += profile.transientInstanceCount;
     if (profile.runtimeCoreProfile !== undefined) {
+      this.publicSnapshotMaterializationCount +=
+        profile.runtimeCoreProfile.publicSnapshotMaterializationCount ?? 0;
       this.lastRuntimeCoreInputValidationDurationMs =
         profile.runtimeCoreProfile.inputValidationDurationMs;
       this.runtimeCoreInputValidationDurationSampleCount += 1;
@@ -903,6 +919,15 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       this.lastRuntimeCoreSnapshotCreationDurationMs =
         profile.runtimeCoreProfile.runtimeSnapshotCreationDurationMs;
       this.runtimeCoreSnapshotCreationDurationSampleCount += 1;
+      if (
+        profile.compiledRenderFrameCount > 0 &&
+        profile.runtimeCoreProfile.runtimeCoreRenderFrameOutputDurationMs !==
+          undefined
+      ) {
+        this.lastRuntimeCoreRenderFrameOutputDurationMs =
+          profile.runtimeCoreProfile.runtimeCoreRenderFrameOutputDurationMs;
+        this.runtimeCoreRenderFrameOutputDurationSampleCount += 1;
+      }
       this.lastRuntimeCoreParameterResolutionDurationMs =
         profile.runtimeCoreProfile.parameterResolutionDurationMs;
       this.runtimeCoreParameterResolutionDurationSampleCount += 1;
@@ -957,6 +982,18 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
     this.options.onRenderMetricsChanged(this.getRenderMetricsSnapshot());
   }
+}
+
+function createRuntimeDiagnosticDetails(
+  poseEvaluation: RuntimeExportStagePoseEvaluation
+): readonly string[] {
+  if (!("snapshot" in poseEvaluation)) {
+    return [];
+  }
+
+  return createStageRuntimeDiagnosticDetails(
+    poseEvaluation.snapshot.diagnostics
+  );
 }
 
 export function shouldHandleStageViewInteraction(input: {

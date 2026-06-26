@@ -259,7 +259,7 @@ describe("stage scene adapter", () => {
       width: 64,
       height: 64
     });
-    expect(evaluatedRenderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
+    expect("renderFrame" in evaluatedRenderInput.poseEvaluation).toBe(true);
   });
 
   it("fits and centers model bounds in the stage viewport", () => {

@@ -286,7 +286,7 @@ describe("Runtime Export default pose evaluation", () => {
     expect(result.snapshot.diagnostics).toEqual([]);
   });
 
-  it("evaluates a live pose snapshot from authored parameter values", () => {
+  it("evaluates a live render input from fast render frame output", () => {
     const payload = createRuntimeExportPayload({
       modelOverrides: {
         parameters: [
@@ -311,18 +311,16 @@ describe("Runtime Export default pose evaluation", () => {
     const body = renderInput.scene.drawables.find((drawable) =>
       drawable.drawableId === "draw_body"
     );
+    const renderFrame = getRenderFrame(renderInput);
 
-    expect(renderInput.poseEvaluation.snapshot.parameters).toContainEqual({
-      parameterId: "param_face_angle_x",
-      valueSource: "authoredInput",
-      authoredValue: 1,
-      baseValue: 1,
-      effectiveValue: 1,
-      clamped: false,
-      source: "viewerOverride"
+    expect("snapshot" in renderInput.poseEvaluation).toBe(false);
+    expect(renderFrame.drawables.find((drawable) =>
+      drawable.drawableId === "draw_body"
+    )).toMatchObject({
+      vertices: createDeformedVertices(),
+      opacity: 1
     });
     expect(body?.mesh.vertices).toEqual(createDeformedVertices());
-    expect(renderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
     expect(
       renderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
     ).toBeUndefined();
@@ -339,6 +337,14 @@ describe("Runtime Export default pose evaluation", () => {
       }
     );
 
+    expect(
+      profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
+        ?.publicSnapshotMaterializationCount
+    ).toBe(0);
+    expect(
+      profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
+        ?.runtimeCoreRenderFrameOutputDurationMs
+    ).toBeGreaterThanOrEqual(0);
     expect(
       profiledRenderInput.poseEvaluation.evaluationProfile.runtimeCoreProfile
         ?.snapshotValidationDurationMs
@@ -541,9 +547,31 @@ describe("Runtime Export default pose evaluation", () => {
       width: 64,
       height: 64
     });
-    expect(renderInput.poseEvaluation.snapshot.diagnostics).toEqual([]);
+    expect(getRenderFrame(renderInput).drawables.find((drawable) =>
+      drawable.drawableId === "draw_body"
+    )).toMatchObject({
+      drawOrder: 12,
+      visible: true
+    });
   });
 });
+
+type EvaluatedRuntimeExportStageRenderInput = ReturnType<
+  typeof createEvaluatedRuntimeExportStageRenderInput
+>;
+
+function getRenderFrame(
+  input: EvaluatedRuntimeExportStageRenderInput
+): Extract<
+  EvaluatedRuntimeExportStageRenderInput["poseEvaluation"],
+  { readonly renderFrame: unknown }
+>["renderFrame"] {
+  if (!("renderFrame" in input.poseEvaluation)) {
+    throw new Error("Expected render-frame pose evaluation.");
+  }
+
+  return input.poseEvaluation.renderFrame;
+}
 
 function createRuntimeExportPayload(input: {
   readonly textureBytes?: Uint8Array;

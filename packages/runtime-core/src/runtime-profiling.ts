@@ -4,6 +4,7 @@ export interface RuntimeCoreEvaluationProfile {
   readonly stateCompatibilityDurationMs: number;
   readonly dynamicsEvaluationDurationMs: number;
   readonly runtimeSnapshotCreationDurationMs: number;
+  readonly runtimeCoreRenderFrameOutputDurationMs?: number;
   readonly parameterResolutionDurationMs: number;
   readonly keyformSamplingDurationMs: number;
   readonly keyformApplicationDurationMs: number;
@@ -14,10 +15,14 @@ export interface RuntimeCoreEvaluationProfile {
   readonly visibilityDrawOrderEvaluationDurationMs: number;
   readonly maskEvaluationDurationMs: number;
   readonly snapshotValidationDurationMs: number;
+  readonly publicSnapshotMaterializationCount?: number;
 }
 
 export type RuntimeCoreEvaluationProfilePhaseKey =
-  Exclude<keyof RuntimeCoreEvaluationProfile, "runtimeCoreEvaluationDurationMs">;
+  Exclude<
+    keyof RuntimeCoreEvaluationProfile,
+    "runtimeCoreEvaluationDurationMs" | "publicSnapshotMaterializationCount"
+  >;
 
 export interface RuntimeCoreEvaluationProfilingOptions {
   readonly enabled?: boolean;
@@ -34,6 +39,7 @@ export interface RuntimeCoreEvaluationProfiler {
     phase: RuntimeCoreEvaluationProfilePhaseKey,
     durationMs: number
   ): void;
+  recordPublicSnapshotMaterialization(): void;
   finish(): RuntimeCoreEvaluationProfile | undefined;
 }
 
@@ -44,6 +50,7 @@ export const createRuntimeCoreEvaluationProfiler = (
   const now = options?.now ?? readCurrentTimeMs;
   const startedAtMs = enabled ? now() : 0;
   const durations = createEmptyRuntimeCoreEvaluationProfileDurations();
+  let publicSnapshotMaterializationCount = 0;
 
   return {
     enabled,
@@ -72,6 +79,13 @@ export const createRuntimeCoreEvaluationProfiler = (
 
       durations[phase] += Math.max(0, durationMs);
     },
+    recordPublicSnapshotMaterialization(): void {
+      if (!enabled) {
+        return;
+      }
+
+      publicSnapshotMaterializationCount += 1;
+    },
     finish(): RuntimeCoreEvaluationProfile | undefined {
       if (!enabled) {
         return undefined;
@@ -79,7 +93,8 @@ export const createRuntimeCoreEvaluationProfiler = (
 
       return {
         runtimeCoreEvaluationDurationMs: Math.max(0, now() - startedAtMs),
-        ...durations
+        ...durations,
+        publicSnapshotMaterializationCount
       };
     }
   };
@@ -91,6 +106,7 @@ const createEmptyRuntimeCoreEvaluationProfileDurations = ():
     stateCompatibilityDurationMs: 0,
     dynamicsEvaluationDurationMs: 0,
     runtimeSnapshotCreationDurationMs: 0,
+    runtimeCoreRenderFrameOutputDurationMs: 0,
     parameterResolutionDurationMs: 0,
     keyformSamplingDurationMs: 0,
     keyformApplicationDurationMs: 0,

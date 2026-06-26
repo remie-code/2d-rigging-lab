@@ -336,6 +336,8 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
       liveRenderInputEvaluationDurationSampleCount: 1,
       lastRuntimeCoreEvaluationDurationMs: 2,
       runtimeCoreEvaluationDurationSampleCount: 1,
+      compiledRenderFrameCount: 1,
+      publicSnapshotMaterializationCount: 0,
       lastPoseEvaluationDurationMs: 3,
       poseEvaluationDurationSampleCount: 1,
       lastSnapshotToRenderDrawableDurationMs: 4,
@@ -370,6 +372,8 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
 
     expect(readLatestRuntimeCoreProfiling()).toBe("deep");
     expect(renderer.getRenderMetricsSnapshot()).toMatchObject({
+      lastRuntimeCoreRenderFrameOutputDurationMs: 0.6,
+      runtimeCoreRenderFrameOutputDurationSampleCount: 1,
       lastRuntimeCoreParameterResolutionDurationMs: 0.2,
       runtimeCoreParameterResolutionDurationSampleCount: 1,
       lastRuntimeCoreDeformerHierarchyEvaluationDurationMs: 0.7,
@@ -384,6 +388,9 @@ describe("StaticStageCanvasRenderer frame pacing", () => {
 
     expect(renderer.getRenderMetricsSnapshot()).not.toHaveProperty(
       "lastRuntimeCoreParameterResolutionDurationMs"
+    );
+    expect(renderer.getRenderMetricsSnapshot()).not.toHaveProperty(
+      "lastRuntimeCoreRenderFrameOutputDurationMs"
     );
   });
 
@@ -627,6 +634,7 @@ function createRenderInput(frameIndex: number) {
       evaluationProfile: {
         runtimeCoreEvaluationDurationMs: 2,
         compiledEvaluatorFrameCount: 1,
+        compiledRenderFrameCount: 1,
         transientCompileCount: 0,
         transientInstanceCount: 0,
         runtimeCoreProfile: createRuntimeCoreProfile()
@@ -637,6 +645,7 @@ function createRenderInput(frameIndex: number) {
       runtimeCoreEvaluationDurationMs: 2,
       runtimeCoreProfile: createRuntimeCoreProfile(),
       compiledEvaluatorFrameCount: 1,
+      compiledRenderFrameCount: 1,
       transientCompileCount: 0,
       transientInstanceCount: 0,
       poseEvaluationDurationMs: 3,
@@ -656,6 +665,7 @@ function createRuntimeCoreProfile() {
     stateCompatibilityDurationMs: 0.1,
     dynamicsEvaluationDurationMs: 0.1,
     runtimeSnapshotCreationDurationMs: 1.5,
+    runtimeCoreRenderFrameOutputDurationMs: 0.6,
     parameterResolutionDurationMs: 0.2,
     keyformSamplingDurationMs: 0.3,
     keyformApplicationDurationMs: 0.4,
@@ -665,7 +675,8 @@ function createRuntimeCoreProfile() {
     drawableSnapshotCreationDurationMs: 0.5,
     visibilityDrawOrderEvaluationDurationMs: 0.1,
     maskEvaluationDurationMs: 0.1,
-    snapshotValidationDurationMs: 0.6
+    snapshotValidationDurationMs: 0.6,
+    publicSnapshotMaterializationCount: 0
   };
 }
 

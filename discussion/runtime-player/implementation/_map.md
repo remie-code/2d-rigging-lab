@@ -36,6 +36,8 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave14-plan.md](orchestration/player-wave14-plan.md) | Completed / final pass | Runtime Player Wave14: Runtime Evaluation Cache / Diagnostics Semantics |
 | [orchestration/player-wave15-plan.md](orchestration/player-wave15-plan.md) | Completed / final pass | Runtime Player Wave15: Runtime Snapshot Hot-Path Cleanup |
 | [orchestration/player-wave16-plan.md](orchestration/player-wave16-plan.md) | Domain E final integration report complete; pending final clean review | Runtime Player Wave16: Runtime Core Compiled Evaluator v0 |
+| [orchestration/player-wave17-plan.md](orchestration/player-wave17-plan.md) | Completed / final pass; manual OBS performance pending | Runtime Player Wave17: Compiled Render Frame Fast Path |
+| [orchestration/player-wave18-plan.md](orchestration/player-wave18-plan.md) | Ready to launch | Runtime Player Wave18: Lightweight Performance Diagnostics Cleanup |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -97,6 +99,12 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave16/domain-c-compiled-rig-deformer-topology-report.md](waves/wave16/domain-c-compiled-rig-deformer-topology-report.md) | Pass | Runtime Player Wave16 Domain C compiled rig/deformer topology report |
 | [waves/wave16/domain-d-runtime-player-compiled-evaluator-connection-report.md](waves/wave16/domain-d-runtime-player-compiled-evaluator-connection-report.md) | Pass | Runtime Player Wave16 Domain D Runtime Player compiled evaluator connection report |
 | [waves/wave16/wave16-final-integration-report.md](waves/wave16/wave16-final-integration-report.md) | Pass recommendation / pending final clean review | Runtime Player Wave16 Domain E final integration docs/maps alignment and performance interpretation report |
+| [waves/wave17/_map.md](waves/wave17/_map.md) | Pass | Runtime Player Wave17 report map |
+| [waves/wave17/domain-a-runtime-core-render-frame-api-report.md](waves/wave17/domain-a-runtime-core-render-frame-api-report.md) | Pass | Runtime Player Wave17 Domain A runtime-core render frame API shell report |
+| [waves/wave17/domain-b-runtime-core-fast-output-internals-report.md](waves/wave17/domain-b-runtime-core-fast-output-internals-report.md) | Pass | Runtime Player Wave17 Domain B runtime-core fast output internals / public snapshot bypass report |
+| [waves/wave17/domain-c-runtime-player-fast-render-path-report.md](waves/wave17/domain-c-runtime-player-fast-render-path-report.md) | Pass | Runtime Player Wave17 Domain C Runtime Player fast render-frame path connection report |
+| [waves/wave17/domain-d-fast-path-diagnostics-report.md](waves/wave17/domain-d-fast-path-diagnostics-report.md) | Pass | Runtime Player Wave17 Domain D fast-path diagnostics/report semantics report |
+| [waves/wave17/wave17-final-integration-report.md](waves/wave17/wave17-final-integration-report.md) | Pass | Runtime Player Wave17 Domain E final integration docs/maps alignment, final review evidence, manual OBS diagnostics instructions, and residual risks |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -181,6 +189,10 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave16/domain-b-compiled-snapshot-static-templates-clean-review.md](reviews/wave16/domain-b-compiled-snapshot-static-templates-clean-review.md) | Pass | Runtime Player Wave16 Domain B compiled snapshot/static templates clean review |
 | [reviews/wave16/domain-c-compiled-rig-deformer-topology-clean-review.md](reviews/wave16/domain-c-compiled-rig-deformer-topology-clean-review.md) | Pass | Runtime Player Wave16 Domain C compiled rig/deformer topology clean review |
 | [reviews/wave16/domain-d-runtime-player-compiled-evaluator-connection-clean-review.md](reviews/wave16/domain-d-runtime-player-compiled-evaluator-connection-clean-review.md) | Pass | Runtime Player Wave16 Domain D Runtime Player compiled evaluator connection clean review |
+| [reviews/wave17/_map.md](reviews/wave17/_map.md) | Pass | Runtime Player Wave17 review map |
+| [reviews/wave17/wave17-final-spec-completion-review.md](reviews/wave17/wave17-final-spec-completion-review.md) | Pass | Runtime Player Wave17 final spec completion review |
+| [reviews/wave17/wave17-final-design-development-review.md](reviews/wave17/wave17-final-design-development-review.md) | Pass | Runtime Player Wave17 final design/development review |
+| [reviews/wave17/wave17-final-test-docs-review.md](reviews/wave17/wave17-final-test-docs-review.md) | Pass | Runtime Player Wave17 final test/docs review |
 
 ## 4. Current Implementation State
 
@@ -255,10 +267,16 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Runtime Player Wave16 Domains A-D implementation and clean reviews are complete with `pass`; Domain E docs/maps final integration recommends `pass`, pending final clean Review-Sylph integration review: [waves/wave16/wave16-final-integration-report.md](waves/wave16/wave16-final-integration-report.md), [waves/wave16/_map.md](waves/wave16/_map.md), [reviews/wave16/_map.md](reviews/wave16/_map.md).
 - Wave16 introduces first-class runtime-core `compileRuntimeModel(graph)` / `CompiledRuntimeModel` / target-local `RuntimeModelInstance` architecture while preserving existing snapshot output compatibility.
 - Runtime Player now stores immutable `CompiledRuntimeModel` on the Runtime Export scaffold and uses renderer-target-local mutable runtime instances for Native Stage and Browser Source evaluation.
-- Wave16 compiled-path Performance Diagnostics interpretation: `runtimeCoreDrawableSnapshotCreationDurationMs` and `runtimeCoreDeformerHierarchyEvaluationDurationMs` exclude safe one-time compiled template/topology work but still include per-frame public DTO materialization and frame-local rig/deformer work. `runtimeModelCompileDurationMs` is internal scaffold build profiling, not a copied report line.
+- Wave16 compiled-path Performance Diagnostics interpretation: `runtimeCoreDrawableSnapshotCreationDurationMs` and `runtimeCoreDeformerHierarchyEvaluationDurationMs` exclude safe one-time compiled template/topology work but still include per-frame public DTO materialization and frame-local rig/deformer work. `runtimeModelCompileDurationMs` is copied as scaffold-build/cold-path profiling, not a per-frame runtime-core phase.
+- Runtime Player Wave17 Domains A-D implementation, Domain E docs/maps final integration, and three final Review-Sylph lanes are complete with `pass`: [waves/wave17/wave17-final-integration-report.md](waves/wave17/wave17-final-integration-report.md), [waves/wave17/_map.md](waves/wave17/_map.md), [reviews/wave17/_map.md](reviews/wave17/_map.md).
+- Wave17 adds additive runtime-core `RuntimeModelInstance#evaluateRenderFrame(...)` / render-frame result types while preserving `evaluateFrame(...)`, `evaluateRuntimeFrame(...)`, public snapshot DTO shape, and public snapshot freshness behavior.
+- Wave17 render-frame evaluation bypasses public snapshot/public drawable DTO materialization and records `publicSnapshotMaterializationCount` plus `runtimeCoreRenderFrameOutputDurationMs` for proof.
+- Runtime Player live evaluated Stage render input now defaults to render-frame mode and combines dynamic render-frame output with cached scaffold/static templates. Snapshot mode remains explicit for initial/static diagnostic/default-pose paths that need public snapshot diagnostics.
+- Browser Source and Native Stage remain target-local for mutable runtime instances and render-frame output. Runtime Export format, Editor export regeneration, package-format schema, dependencies, lockfile, and `pnpm install` remain unchanged/out of scope.
+- Wave17 Performance Diagnostics surfaces `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, and `runtimeCoreRenderFrameOutputDurationMs`; copied reports scope render-frame metrics separately from public snapshot path metrics and print `renderInputDrawableMappingDurationMs` for the compatibility source field `snapshotToRenderDrawableDurationMs`.
 - Real OBS Browser Source performance improvement remains manually unverified until the user saves an updated deep Performance Diagnostics report to `tmp/report.log`.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, WebGL cache redesign, Runtime Export format changes, and Editor changes remain out of scope.
 
 ## 5. Next Action
 
-Run the final clean Review-Sylph integration review for Wave16 and write `discussion/runtime-player/implementation/reviews/wave16/wave16-final-clean-integration-review.md`. Until that review passes, Wave15 remains the latest fully reviewed final-pass Runtime Player implementation baseline, while Wave16 has Domain E `pass` recommendation and awaits clean integration review.
+Run the real-model OBS Browser Source deep Performance Diagnostics capture and save the copied report to `tmp/report.log`. Wave17 final integration and final Review-Sylph lanes are complete with `pass`; real-model OBS Browser Source performance remains pending until `tmp/report.log` is captured.
