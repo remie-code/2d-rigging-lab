@@ -62,6 +62,8 @@ export type PerformanceDiagnosticsTargetReport = {
   readonly appliedLiveFrameFps: number | null;
   readonly appliedLiveFrameCount: number | null;
   readonly renderFps: number | null;
+  readonly browserRafProbeFps: number | null;
+  readonly browserRafProbeDeltaMs: PerformanceDiagnosticsMetricSummary;
   readonly rafDeltaMs: PerformanceDiagnosticsMetricSummary;
   readonly renderDurationMs: PerformanceDiagnosticsMetricSummary;
   readonly liveRenderInputEvaluationDurationMs:
@@ -94,6 +96,8 @@ export type PerformanceDiagnosticsTargetReport = {
   readonly stageViewTransformMessageCount: number | null;
   readonly stageDisplayTransformMessageCount: number | null;
   readonly duplicateTransformSkipCount: number | null;
+  readonly liveFramesPerAppliedFrame: number | null;
+  readonly coalescedLiveFramesPerAppliedFrame: number | null;
   readonly coalescedLiveFrameCount: number | null;
   readonly renderCount: number | null;
   readonly scheduledRenderCount: number | null;
@@ -398,6 +402,11 @@ function createMetricsTargetReport(input: {
   const start = input.metrics[0] ?? null;
   const end = input.metrics.at(-1) ?? null;
   const renderCount = readMetricDelta(start, end, "renderCount");
+  const browserRafProbeFrameCount = readMetricDelta(
+    start,
+    end,
+    "browserRafProbeFrameCount"
+  );
   const liveFrameMessageCount = readMetricDelta(
     start,
     end,
@@ -433,6 +442,11 @@ function createMetricsTargetReport(input: {
     end,
     "evaluationCacheInvalidationCount"
   );
+  const coalescedLiveFrameCount = readMetricDelta(
+    start,
+    end,
+    "coalescedLiveFrameCount"
+  );
 
   return {
     availability: input.availability,
@@ -449,6 +463,14 @@ function createMetricsTargetReport(input: {
     renderFps: renderCount === null
       ? null
       : calculateFps(renderCount, input.durationMs),
+    browserRafProbeFps: browserRafProbeFrameCount === null
+      ? null
+      : calculateFps(browserRafProbeFrameCount, input.durationMs),
+    browserRafProbeDeltaMs: summarizeMetricSamples({
+      metrics: input.metrics,
+      sampleCountKey: "browserRafProbeDeltaSampleCount",
+      valueKey: "lastBrowserRafProbeDeltaMs"
+    }),
     rafDeltaMs: summarizeMetricSamples({
       metrics: input.metrics,
       sampleCountKey: "rafDeltaSampleCount",
@@ -551,11 +573,15 @@ function createMetricsTargetReport(input: {
       end,
       "duplicateTransformSkipCount"
     ),
-    coalescedLiveFrameCount: readMetricDelta(
-      start,
-      end,
-      "coalescedLiveFrameCount"
+    liveFramesPerAppliedFrame: calculateRatio(
+      liveFrameMessageCount,
+      appliedLiveFrameCount
     ),
+    coalescedLiveFramesPerAppliedFrame: calculateRatio(
+      coalescedLiveFrameCount,
+      appliedLiveFrameCount
+    ),
+    coalescedLiveFrameCount,
     renderCount,
     scheduledRenderCount: readMetricDelta(
       start,
@@ -591,6 +617,8 @@ function createUnavailableTargetReport(
     appliedLiveFrameFps: null,
     appliedLiveFrameCount: null,
     renderFps: null,
+    browserRafProbeFps: null,
+    browserRafProbeDeltaMs: createEmptyMetricSummary(),
     rafDeltaMs: createEmptyMetricSummary(),
     renderDurationMs: createEmptyMetricSummary(),
     liveRenderInputEvaluationDurationMs: createEmptyMetricSummary(),
@@ -618,6 +646,8 @@ function createUnavailableTargetReport(
     stageViewTransformMessageCount: null,
     stageDisplayTransformMessageCount: null,
     duplicateTransformSkipCount: null,
+    liveFramesPerAppliedFrame: null,
+    coalescedLiveFramesPerAppliedFrame: null,
     coalescedLiveFrameCount: null,
     renderCount: null,
     scheduledRenderCount: null,
@@ -633,6 +663,7 @@ function summarizeMetricSamples(input: {
   readonly metrics: readonly RuntimePlayerStageRenderMetricsSnapshot[];
   readonly sampleCountKey:
     | "rafDeltaSampleCount"
+    | "browserRafProbeDeltaSampleCount"
     | "renderDurationSampleCount"
     | "liveRenderInputEvaluationDurationSampleCount"
     | "poseEvaluationDurationSampleCount"
@@ -643,6 +674,7 @@ function summarizeMetricSamples(input: {
     | "scheduledFrameDurationSampleCount";
   readonly valueKey:
     | "lastRafDeltaMs"
+    | "lastBrowserRafProbeDeltaMs"
     | "lastRenderDurationMs"
     | "lastLiveRenderInputEvaluationDurationMs"
     | "lastPoseEvaluationDurationMs"
@@ -734,6 +766,17 @@ function calculateFps(count: number, durationMs: number): number | null {
   return Math.round((count / (durationMs / 1000)) * 10) / 10;
 }
 
+function calculateRatio(
+  numerator: number | null,
+  denominator: number | null
+): number | null {
+  if (numerator === null || denominator === null || denominator <= 0) {
+    return null;
+  }
+
+  return Math.round((numerator / denominator) * 10) / 10;
+}
+
 function readPercentile(
   sortedValues: readonly number[],
   percentile: number
@@ -801,6 +844,23 @@ function copyRenderMetricsSnapshot(
     coalescedLiveFrameCount: snapshot.coalescedLiveFrameCount,
     lastRafDeltaMs: snapshot.lastRafDeltaMs,
     rafDeltaSampleCount: snapshot.rafDeltaSampleCount,
+    ...(snapshot.browserRafProbeFrameCount === undefined
+      ? {}
+      : {
+          browserRafProbeFrameCount: snapshot.browserRafProbeFrameCount
+        }),
+    ...(snapshot.lastBrowserRafProbeDeltaMs === undefined
+      ? {}
+      : {
+          lastBrowserRafProbeDeltaMs:
+            snapshot.lastBrowserRafProbeDeltaMs
+        }),
+    ...(snapshot.browserRafProbeDeltaSampleCount === undefined
+      ? {}
+      : {
+          browserRafProbeDeltaSampleCount:
+            snapshot.browserRafProbeDeltaSampleCount
+        }),
     lastRenderDurationMs: snapshot.lastRenderDurationMs,
     renderDurationSampleCount: snapshot.renderDurationSampleCount,
     lastLiveRenderInputEvaluationDurationMs:
@@ -882,6 +942,21 @@ function formatTargetReport(
       formatNullableInteger(report.appliedLiveFrameCount)
     }`,
     `renderFps: ${formatNullableNumber(report.renderFps)}`,
+    ...(label === "Browser Source"
+      ? [
+          `browserRafProbeFps: ${
+            formatNullableNumber(report.browserRafProbeFps)
+          }`,
+          `browserRafProbeDeltaMs: ${
+            formatMetricSummary(report.browserRafProbeDeltaMs)
+          }`
+        ]
+      : []),
+    `scheduledRafDeltaMs: ${formatMetricSummary(report.rafDeltaMs)}`,
+    `renderDurationMs: ${formatMetricSummary(report.renderDurationMs)}`,
+    `scheduledFrameDurationMs: ${
+      formatMetricSummary(report.scheduledFrameDurationMs)
+    }`,
     `renderCount: ${formatNullableInteger(report.renderCount)}`,
     `scheduledRenderCount: ${formatNullableInteger(report.scheduledRenderCount)}`,
     `immediateRenderCount: ${formatNullableInteger(report.immediateRenderCount)}`,
@@ -941,6 +1016,12 @@ function formatTargetReport(
     `duplicateTransformSkipCount: ${
       formatNullableInteger(report.duplicateTransformSkipCount)
     }`,
+    `liveFramesPerAppliedFrame: ${
+      formatNullableNumber(report.liveFramesPerAppliedFrame)
+    }`,
+    `coalescedLiveFramesPerAppliedFrame: ${
+      formatNullableNumber(report.coalescedLiveFramesPerAppliedFrame)
+    }`,
     `coalescedLiveFrameCount: ${
       formatNullableInteger(report.coalescedLiveFrameCount)
     }`
@@ -969,6 +1050,17 @@ function formatNullableNumber(value: number | null): string {
   }
 
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatMetricSummary(
+  summary: PerformanceDiagnosticsMetricSummary
+): string {
+  return [
+    `samples=${summary.sampleCount}`,
+    `p50=${formatNullableNumber(summary.p50)}`,
+    `p95=${formatNullableNumber(summary.p95)}`,
+    `max=${formatNullableNumber(summary.max)}`
+  ].join(" ");
 }
 
 function isNonNull<TValue>(value: TValue | null): value is TValue {

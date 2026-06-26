@@ -28,6 +28,21 @@ describe("performance diagnostics metrics validation", () => {
     );
   });
 
+  it("accepts optional Browser Source rAF probe metrics", () => {
+    expect(
+      readRuntimePlayerStageRenderMetricsSnapshot({
+        ...createMetrics(),
+        browserRafProbeFrameCount: 24,
+        lastBrowserRafProbeDeltaMs: 16.7,
+        browserRafProbeDeltaSampleCount: 23
+      })
+    ).toMatchObject({
+      browserRafProbeFrameCount: 24,
+      lastBrowserRafProbeDeltaMs: 16.7,
+      browserRafProbeDeltaSampleCount: 23
+    });
+  });
+
   it("accepts older Stage render metrics without optional duration fields", () => {
     const legacyMetrics: Record<string, unknown> = { ...createMetrics() };
     delete legacyMetrics.lastLiveRenderInputEvaluationDurationMs;
@@ -103,6 +118,18 @@ describe("performance diagnostics metrics validation", () => {
     [
       "non-integer scheduled frame sample count",
       { scheduledFrameDurationSampleCount: 1.25 }
+    ],
+    [
+      "negative Browser Source rAF probe count",
+      { browserRafProbeFrameCount: -1 }
+    ],
+    [
+      "NaN Browser Source rAF probe delta",
+      { lastBrowserRafProbeDeltaMs: Number.NaN }
+    ],
+    [
+      "non-integer Browser Source rAF probe sample count",
+      { browserRafProbeDeltaSampleCount: 2.25 }
     ],
     ["NaN rAF delta", { lastRafDeltaMs: Number.NaN }],
     ["Infinity render duration", { lastRenderDurationMs: Infinity }],

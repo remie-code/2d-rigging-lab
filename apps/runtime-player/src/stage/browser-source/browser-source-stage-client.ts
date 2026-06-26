@@ -109,6 +109,17 @@ export type BrowserSourceStageClientTimers = {
   readonly clearInterval: (handle: BrowserSourceTimerHandle) => void;
 };
 
+export type BrowserSourceAnimationFrameHandle = number;
+
+export type BrowserSourceAnimationFrames = {
+  readonly requestAnimationFrame: (
+    callback: (timestampMs: number) => void
+  ) => BrowserSourceAnimationFrameHandle;
+  readonly cancelAnimationFrame: (
+    handle: BrowserSourceAnimationFrameHandle
+  ) => void;
+};
+
 export type BrowserSourceStageClientOptions = {
   readonly config: BrowserSourcePageConfig;
   readonly renderer: BrowserSourceStageRenderer | null;
@@ -118,6 +129,7 @@ export type BrowserSourceStageClientOptions = {
   readonly webSocketFactory?: BrowserSourceWebSocketFactory;
   readonly location?: BrowserSourceLocation;
   readonly timers?: BrowserSourceStageClientTimers;
+  readonly animationFrames?: BrowserSourceAnimationFrames | null;
   readonly diagnosticReporter?: BrowserSourceClientDiagnosticReporter;
   readonly nowIso?: () => string;
   readonly nowMs?: () => number;
@@ -137,6 +149,7 @@ export class BrowserSourceStageClient {
   readonly #webSocketFactory: BrowserSourceWebSocketFactory;
   readonly #location: BrowserSourceLocation;
   readonly #timers: BrowserSourceStageClientTimers;
+  readonly #animationFrames: BrowserSourceAnimationFrames | null;
   readonly #diagnosticReporter: BrowserSourceClientDiagnosticReporter;
   readonly #nowIso: () => string;
   readonly #nowMs: () => number;
@@ -149,6 +162,12 @@ export class BrowserSourceStageClient {
   #reconnectTimer: BrowserSourceTimerHandle | null = null;
   #heartbeatTimer: BrowserSourceTimerHandle | null = null;
   #diagnosticsTimer: BrowserSourceTimerHandle | null = null;
+  #browserRafProbeAnimationFrameId: BrowserSourceAnimationFrameHandle | null =
+    null;
+  #browserRafProbeFrameCount = 0;
+  #lastBrowserRafProbeTimestampMs: number | null = null;
+  #lastBrowserRafProbeDeltaMs: number | null = null;
+  #browserRafProbeDeltaSampleCount = 0;
   #lastDiagnosticsSentAtMs: number | null = null;
   #runtimeExportPayloadKey: string | null = null;
   #activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
@@ -164,6 +183,9 @@ export class BrowserSourceStageClient {
     this.#webSocketFactory = options.webSocketFactory ?? defaultWebSocketFactory;
     this.#location = options.location ?? globalThis.location;
     this.#timers = options.timers ?? defaultTimers;
+    this.#animationFrames = options.animationFrames === undefined
+      ? createDefaultAnimationFrames()
+      : options.animationFrames;
     this.#diagnosticReporter =
       options.diagnosticReporter ?? reportBrowserSourceClientDiagnostic;
     this.#nowIso = options.nowIso ?? (() => new Date().toISOString());
@@ -208,6 +230,8 @@ export class BrowserSourceStageClient {
 
     this.#started = true;
     this.#reportDiagnostic("client-start-called");
+    this.#resetBrowserRafProbe();
+    this.#scheduleBrowserRafProbe();
     this.#connectWebSocket();
     this.#startHeartbeat();
     void this.#loadCurrentRuntimeExport();
@@ -218,6 +242,7 @@ export class BrowserSourceStageClient {
     this.#clearReconnectTimer();
     this.#clearHeartbeatTimer();
     this.#clearDiagnosticsTimer();
+    this.#cancelBrowserRafProbe();
 
     const socket = this.#socket;
     this.#socket = null;
@@ -427,7 +452,7 @@ export class BrowserSourceStageClient {
         fps: null,
         sourceFps: null,
         frameAgeMs: null,
-        renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
+        renderMetrics: this.#getRenderMetricsSnapshot()
       });
       this.#sendDiagnostics();
       return;
@@ -601,7 +626,7 @@ export class BrowserSourceStageClient {
       fps: metrics.fps,
       sourceFps: metrics.sourceFps,
       frameAgeMs: metrics.frameAgeMs,
-      renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
+      renderMetrics: this.#getRenderMetricsSnapshot()
     });
   }
 
@@ -632,7 +657,7 @@ export class BrowserSourceStageClient {
     return {
       ...patch,
       ...this.#metrics.snapshot(this.#nowMs()),
-      renderMetrics: this.#renderer?.getRenderMetricsSnapshot() ?? null
+      renderMetrics: this.#getRenderMetricsSnapshot()
     };
   }
 
@@ -645,6 +670,77 @@ export class BrowserSourceStageClient {
     for (const listener of this.#listeners) {
       listener(this.#snapshot);
     }
+  }
+
+  #resetBrowserRafProbe(): void {
+    this.#browserRafProbeFrameCount = 0;
+    this.#lastBrowserRafProbeTimestampMs = null;
+    this.#lastBrowserRafProbeDeltaMs = null;
+    this.#browserRafProbeDeltaSampleCount = 0;
+  }
+
+  #scheduleBrowserRafProbe(): void {
+    if (
+      !this.#started ||
+      this.#animationFrames === null ||
+      this.#browserRafProbeAnimationFrameId !== null
+    ) {
+      return;
+    }
+
+    this.#browserRafProbeAnimationFrameId =
+      this.#animationFrames.requestAnimationFrame((timestampMs) => {
+        this.#browserRafProbeAnimationFrameId = null;
+        this.#recordBrowserRafProbeFrame(timestampMs);
+        this.#scheduleBrowserRafProbe();
+      });
+  }
+
+  #cancelBrowserRafProbe(): void {
+    if (
+      this.#animationFrames === null ||
+      this.#browserRafProbeAnimationFrameId === null
+    ) {
+      return;
+    }
+
+    this.#animationFrames.cancelAnimationFrame(
+      this.#browserRafProbeAnimationFrameId
+    );
+    this.#browserRafProbeAnimationFrameId = null;
+  }
+
+  #recordBrowserRafProbeFrame(timestampMs: number): void {
+    const resolvedTimestampMs = Number.isFinite(timestampMs)
+      ? timestampMs
+      : this.#nowMs();
+
+    this.#browserRafProbeFrameCount += 1;
+    if (this.#lastBrowserRafProbeTimestampMs !== null) {
+      this.#lastBrowserRafProbeDeltaMs = Math.max(
+        0,
+        resolvedTimestampMs - this.#lastBrowserRafProbeTimestampMs
+      );
+      this.#browserRafProbeDeltaSampleCount += 1;
+    }
+
+    this.#lastBrowserRafProbeTimestampMs = resolvedTimestampMs;
+  }
+
+  #getRenderMetricsSnapshot():
+    RuntimePlayerStageRenderMetricsSnapshot | null {
+    const renderMetrics = this.#renderer?.getRenderMetricsSnapshot() ?? null;
+    if (renderMetrics === null) {
+      return null;
+    }
+
+    return {
+      ...renderMetrics,
+      browserRafProbeFrameCount: this.#browserRafProbeFrameCount,
+      lastBrowserRafProbeDeltaMs: this.#lastBrowserRafProbeDeltaMs,
+      browserRafProbeDeltaSampleCount:
+        this.#browserRafProbeDeltaSampleCount
+    };
   }
 }
 
@@ -676,6 +772,23 @@ function defaultWebSocketFactory(url: string): BrowserSourceWebSocketLike {
   }
 
   return new globalThis.WebSocket(url);
+}
+
+function createDefaultAnimationFrames(): BrowserSourceAnimationFrames | null {
+  if (
+    typeof globalThis.requestAnimationFrame !== "function" ||
+    typeof globalThis.cancelAnimationFrame !== "function"
+  ) {
+    return null;
+  }
+
+  return {
+    requestAnimationFrame: (callback) =>
+      globalThis.requestAnimationFrame(callback),
+    cancelAnimationFrame: (handle) => {
+      globalThis.cancelAnimationFrame(handle);
+    }
+  };
 }
 
 function toClientMessage(error: unknown): string {

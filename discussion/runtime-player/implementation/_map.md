@@ -38,6 +38,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave16-plan.md](orchestration/player-wave16-plan.md) | Domain E final integration report complete; pending final clean review | Runtime Player Wave16: Runtime Core Compiled Evaluator v0 |
 | [orchestration/player-wave17-plan.md](orchestration/player-wave17-plan.md) | Completed / final pass; manual OBS performance pending | Runtime Player Wave17: Compiled Render Frame Fast Path |
 | [orchestration/player-wave18-plan.md](orchestration/player-wave18-plan.md) | Completed / final pass; manual OBS smoothness pending | Runtime Player Wave18: Lightweight Performance Diagnostics Cleanup |
+| [orchestration/player-wave19-plan.md](orchestration/player-wave19-plan.md) | Completed / final pass; manual OBS cadence confirmation pending | Runtime Player Wave19: Browser Source rAF cadence diagnostics to distinguish OBS/CEF half-rate rAF from renderer/scheduler backlog |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -109,6 +110,9 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave18/domain-a-product-diagnostics-simplification-report.md](waves/wave18/domain-a-product-diagnostics-simplification-report.md) | Pass | Runtime Player Wave18 Domain A product diagnostics simplification report |
 | [waves/wave18/domain-b-product-profiling-transport-removal-report.md](waves/wave18/domain-b-product-profiling-transport-removal-report.md) | Pass | Runtime Player Wave18 Domain B product profiling transport removal / cheap proof counters report |
 | [waves/wave18/wave18-final-integration-report.md](waves/wave18/wave18-final-integration-report.md) | Pass | Runtime Player Wave18 Domain C final integration docs/maps alignment, final review evidence, manual OBS diagnostics instructions, and residual risks |
+| [waves/wave19/_map.md](waves/wave19/_map.md) | Pass; manual OBS cadence confirmation pending | Runtime Player Wave19 report map |
+| [waves/wave19/domain-a-browser-source-raf-cadence-metrics-report.md](waves/wave19/domain-a-browser-source-raf-cadence-metrics-report.md) | Pass | Runtime Player Wave19 Domain A Browser Source rAF cadence metrics implementation report |
+| [waves/wave19/wave19-final-integration-report.md](waves/wave19/wave19-final-integration-report.md) | Pass | Runtime Player Wave19 final integration docs/maps alignment, final review evidence, residual risks, and manual OBS cadence instructions |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -204,6 +208,13 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave18/domain-b-spec-compliance-review.md](reviews/wave18/domain-b-spec-compliance-review.md) | Pass | Runtime Player Wave18 Domain B spec compliance review |
 | [reviews/wave18/domain-b-design-development-compliance-review.md](reviews/wave18/domain-b-design-development-compliance-review.md) | Pass | Runtime Player Wave18 Domain B design/development compliance review |
 | [reviews/wave18/domain-b-test-adequacy-review.md](reviews/wave18/domain-b-test-adequacy-review.md) | Pass | Runtime Player Wave18 Domain B test adequacy review |
+| [reviews/wave19/_map.md](reviews/wave19/_map.md) | Pass; manual OBS cadence confirmation pending | Runtime Player Wave19 review map |
+| [reviews/wave19/domain-a-spec-compliance-review.md](reviews/wave19/domain-a-spec-compliance-review.md) | Pass | Runtime Player Wave19 Domain A spec compliance review |
+| [reviews/wave19/domain-a-design-development-compliance-review.md](reviews/wave19/domain-a-design-development-compliance-review.md) | Pass | Runtime Player Wave19 Domain A design/development compliance review |
+| [reviews/wave19/domain-a-test-adequacy-review.md](reviews/wave19/domain-a-test-adequacy-review.md) | Pass | Runtime Player Wave19 Domain A test adequacy review |
+| [reviews/wave19/wave19-final-spec-completion-review.md](reviews/wave19/wave19-final-spec-completion-review.md) | Pass | Runtime Player Wave19 final spec/completion review |
+| [reviews/wave19/wave19-final-design-development-review.md](reviews/wave19/wave19-final-design-development-review.md) | Pass | Runtime Player Wave19 final design/development review |
+| [reviews/wave19/wave19-final-test-docs-review.md](reviews/wave19/wave19-final-test-docs-review.md) | Pass | Runtime Player Wave19 final test/docs review |
 | [reviews/wave18/wave18-final-spec-completion-review.md](reviews/wave18/wave18-final-spec-completion-review.md) | Pass | Runtime Player Wave18 final spec/completion review |
 | [reviews/wave18/wave18-final-design-development-review.md](reviews/wave18/wave18-final-design-development-review.md) | Pass | Runtime Player Wave18 final design/development review |
 | [reviews/wave18/wave18-final-test-docs-review.md](reviews/wave18/wave18-final-test-docs-review.md) | Pass after docs-fix re-review | Runtime Player Wave18 final test/docs review |
@@ -293,9 +304,15 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Wave18 product Start Capture no longer enables runtime-core deep profiling, copied product reports omit deep runtime-core phase timings and `runtimeModelCompileDurationMs` as product-facing timing, and product Stage / Browser Source profiling transport is removed.
 - Runtime-core internal developer/test profiling may remain, but it is not product-reachable through Control, Stage IPC, Browser Source HTTP/WS, or Browser Source client handling.
 - `publicSnapshotMaterializationCount` is now a cheap Runtime Player evaluation-profile counter independent of runtime-core deep profiling while Wave17 fast render-frame proof counters remain available.
-- Real OBS Browser Source smoothness under lightweight Performance Diagnostics remains manually unverified until the user runs Browser Source Performance Diagnostics and saves the copied report to `tmp/report.log` if follow-up is needed.
+- Real OBS Browser Source smoothness under lightweight Performance Diagnostics was manually confirmed by the user after Wave17/Wave18 performance work.
+- Remaining performance investigation: Browser Source receives live frames near 60fps but applies/renders about half that cadence, including intermediate cases such as roughly 56fps input producing roughly 28fps output. Current investigation points to OBS/CEF Browser Source rAF cadence plus intentional latest-wins coalescing, not an explicit 30fps throttle in Runtime Player code.
+- Runtime Player Wave19 Domain A and Domain B final integration/docs/review closeout are complete with `pass`: [waves/wave19/wave19-final-integration-report.md](waves/wave19/wave19-final-integration-report.md), [reviews/wave19/wave19-final-spec-completion-review.md](reviews/wave19/wave19-final-spec-completion-review.md), [reviews/wave19/wave19-final-design-development-review.md](reviews/wave19/wave19-final-design-development-review.md), and [reviews/wave19/wave19-final-test-docs-review.md](reviews/wave19/wave19-final-test-docs-review.md).
+- Wave19 copied Performance Diagnostics reports now include lightweight Browser Source independent rAF probe FPS/delta, scheduled rAF delta summary, render duration summary, scheduled frame duration summary, live/apply/render FPS, coalesced live frame count, and live/coalesced frames per applied frame interpretation fields.
+- Wave19 diagnostics remain lightweight sampled/counter summaries, not runtime-core deep profiling or raw trace exposure. Browser Source latest-wins coalescing remains intentional.
+- Runtime Player Wave19 Domain B final integration applied this policy: `実装事実に合わせて関連ドキュメントを更新する。`
+- Manual real OBS / CEF Browser Source cadence confirmation remains pending. Open Runtime Player with a real Runtime Export, connect iFacialMocap, connect OBS Browser Source, set OBS video FPS and Browser Source custom FPS to 60, run Browser Source Performance Diagnostics, save the copied report to `tmp/report.log`, and compare Browser Source rAF probe FPS, Browser Source rAF delta p50/p95/max, render duration p50/p95/max, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `coalescedLiveFrameCount`, and sequence/counter gap evidence if present.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, WebGL cache redesign, Runtime Export format changes, and Editor changes remain out of scope.
 
 ## 5. Next Action
 
-Run the real-model OBS Browser Source Performance Diagnostics capture, confirm capture no longer visibly degrades Browser Source smoothness, and save the copied report to `tmp/report.log` if follow-up is needed. Wave18 final review lanes are complete with `pass`.
+Run the manual real OBS / CEF Browser Source cadence confirmation for Wave19 and save the copied Browser Source Performance Diagnostics report to `tmp/report.log` for interpretation.

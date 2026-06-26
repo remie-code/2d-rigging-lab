@@ -272,6 +272,15 @@ describe("Performance Diagnostics report", () => {
     );
     expect(reportText).toContain("runtimeModelInstanceCacheHitCount: 0");
     expect(reportText).toContain("browserSourceClientCount: 0");
+    expect(reportText).toContain(
+      "scheduledRafDeltaMs: samples=2 p50=16 p95=20 max=20"
+    );
+    expect(reportText).toContain(
+      "renderDurationMs: samples=2 p50=4 p95=7 max=7"
+    );
+    expect(reportText).toContain(
+      "scheduledFrameDurationMs: samples=2 p50=10 p95=18 max=18"
+    );
     for (const fieldName of omittedRuntimeCoreReportFieldNames) {
       expect(reportText).not.toContain(`${fieldName}:`);
     }
@@ -280,7 +289,6 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).not.toContain("\nsnapshotToRenderDrawableDurationMs:");
     expect(reportText).not.toContain("renderInputSceneBuildDurationMs:");
     expect(reportText).not.toContain("renderInputClippingBuildDurationMs:");
-    expect(reportText).not.toContain("scheduledFrameDurationMs:");
   });
 
   it("aggregates Browser Source renderer metrics when a client reports them", () => {
@@ -291,6 +299,9 @@ describe("Performance Diagnostics report", () => {
         liveFrameMessageCount: 4,
         liveRenderInputEvaluationDurationSampleCount: 4,
         rafDeltaSampleCount: 2,
+        browserRafProbeFrameCount: 10,
+        lastBrowserRafProbeDeltaMs: 16,
+        browserRafProbeDeltaSampleCount: 9,
         renderDurationSampleCount: 4,
         compiledEvaluatorFrameCount: 4,
         compiledRenderFrameCount: 4,
@@ -319,6 +330,9 @@ describe("Performance Diagnostics report", () => {
         coalescedLiveFrameCount: 3,
         lastRafDeltaMs: 33,
         rafDeltaSampleCount: 32,
+        browserRafProbeFrameCount: 40,
+        lastBrowserRafProbeDeltaMs: 33,
+        browserRafProbeDeltaSampleCount: 39,
         lastRenderDurationMs: 6,
         renderDurationSampleCount: 34,
         lastLiveRenderInputEvaluationDurationMs: 4,
@@ -359,6 +373,7 @@ describe("Performance Diagnostics report", () => {
       appliedLiveFrameFps: 30,
       appliedLiveFrameCount: 30,
       renderFps: 30,
+      browserRafProbeFps: 30,
       scaffoldEvaluationCacheHitCount: 0,
       scaffoldEvaluationCacheMissCount: 0,
       scaffoldEvaluationCacheInvalidationCount: 0,
@@ -371,7 +386,15 @@ describe("Performance Diagnostics report", () => {
       runtimeModelInstanceCacheMissCount: 0,
       runtimeModelInstanceCacheInvalidationCount: 0,
       stageTransformMessageCount: 3,
+      liveFramesPerAppliedFrame: 1,
+      coalescedLiveFramesPerAppliedFrame: 0.1,
       browserSourceClientCount: 1
+    });
+    expect(report.browserSource.browserRafProbeDeltaMs).toMatchObject({
+      sampleCount: 1,
+      p50: 33,
+      p95: 33,
+      max: 33
     });
     expect(report.browserSource.liveRenderInputEvaluationDurationMs)
       .toMatchObject({
@@ -388,6 +411,21 @@ describe("Performance Diagnostics report", () => {
     });
     const reportText = formatPerformanceDiagnosticsReport(report);
 
+    expect(reportText).toContain("browserRafProbeFps: 30");
+    expect(reportText).toContain(
+      "browserRafProbeDeltaMs: samples=1 p50=33 p95=33 max=33"
+    );
+    expect(reportText).toContain(
+      "scheduledRafDeltaMs: samples=1 p50=33 p95=33 max=33"
+    );
+    expect(reportText).toContain(
+      "renderDurationMs: samples=1 p50=6 p95=6 max=6"
+    );
+    expect(reportText).toContain(
+      "scheduledFrameDurationMs: samples=1 p50=14 p95=14 max=14"
+    );
+    expect(reportText).toContain("liveFramesPerAppliedFrame: 1");
+    expect(reportText).toContain("coalescedLiveFramesPerAppliedFrame: 0.1");
     expect(reportText).toContain("compiledEvaluatorFrameCount: 30");
     expect(reportText).toContain(
       "compiledRenderFrameCount: 30 scope=render-frame-fast-path"
@@ -481,6 +519,8 @@ describe("Performance Diagnostics report", () => {
     expect(reportText).toContain("appliedLiveFrameCount: 96");
     expect(reportText).toContain("renderFps: 9.6");
     expect(reportText).toContain("renderCount: 96");
+    expect(reportText).toContain("liveFramesPerAppliedFrame: 6.2");
+    expect(reportText).toContain("coalescedLiveFramesPerAppliedFrame: 5.2");
     expect(reportText).toContain("coalescedLiveFrameCount: 500");
     expect(reportText).not.toContain("sourceInputFps");
     expect(reportText).not.toContain("liveMessageCount:");
@@ -558,6 +598,23 @@ describe("Performance Diagnostics report", () => {
     );
     expect(reportText).toContain("liveFrameMessageFps: unknown");
     expect(reportText).toContain("renderFps: unknown");
+    expect(reportText).toContain("browserRafProbeFps: unknown");
+    expect(reportText).toContain(
+      "browserRafProbeDeltaMs: samples=0 p50=unknown p95=unknown max=unknown"
+    );
+    expect(reportText).toContain(
+      "scheduledRafDeltaMs: samples=0 p50=unknown p95=unknown max=unknown"
+    );
+    expect(reportText).toContain(
+      "renderDurationMs: samples=0 p50=unknown p95=unknown max=unknown"
+    );
+    expect(reportText).toContain(
+      "scheduledFrameDurationMs: samples=0 p50=unknown p95=unknown max=unknown"
+    );
+    expect(reportText).toContain("liveFramesPerAppliedFrame: unknown");
+    expect(reportText).toContain(
+      "coalescedLiveFramesPerAppliedFrame: unknown"
+    );
     expect(reportText).toContain("compiledRenderFrameCount: unknown");
     expect(reportText).toContain(
       "publicSnapshotMaterializationCount: unknown scope=fast-path-proof-public-snapshot-avoidance"

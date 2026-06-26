@@ -14,6 +14,7 @@ import type {
 } from "../../preload/runtime-variant-bridge-contract";
 import {
   BrowserSourceStageClient,
+  type BrowserSourceAnimationFrames,
   type BrowserSourceStageClientFetch,
   type BrowserSourceStageClientTimers,
   type BrowserSourceWebSocketEventMap,
@@ -376,6 +377,46 @@ describe("BrowserSourceStageClient", () => {
     });
   });
 
+  it("reports independent rAF probe metrics without live frames", async () => {
+    const timers = createManualTimers();
+    const animationFrames = createManualAnimationFrames();
+    const sockets = createFakeWebSocketFactory();
+    const renderer = new FakeStageRenderer();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: sockets.factory,
+      location: createLocation(),
+      timers,
+      animationFrames,
+      heartbeatIntervalMs: 1000
+    });
+
+    client.start();
+    sockets.instances[0]?.open();
+    await flushAsync();
+
+    animationFrames.runNext(100);
+    animationFrames.runNext(116);
+    animationFrames.runNext(132);
+    timers.runIntervals();
+
+    expect(renderer.frames).toHaveLength(0);
+    expect(readLastDiagnostics(sockets.instances[0])).toMatchObject({
+      renderMetrics: {
+        browserRafProbeFrameCount: 3,
+        lastBrowserRafProbeDeltaMs: 16,
+        browserRafProbeDeltaSampleCount: 2
+      }
+    });
+
+    client.stop();
+
+    expect(animationFrames.pendingCount()).toBe(0);
+  });
+
   it("deduplicates identical Runtime Export payload application but applies replacement identities", () => {
     const renderer = new FakeStageRenderer();
     const client = new BrowserSourceStageClient({
@@ -626,6 +667,37 @@ function createManualTimers(): BrowserSourceStageClientTimers & {
         callback();
       }
     }
+  };
+}
+
+function createManualAnimationFrames(): BrowserSourceAnimationFrames & {
+  readonly runNext: (timestampMs: number) => void;
+  readonly pendingCount: () => number;
+} {
+  let nextHandle = 1;
+  const callbacks = new Map<number, (timestampMs: number) => void>();
+
+  return {
+    requestAnimationFrame: (callback) => {
+      const handle = nextHandle;
+      nextHandle += 1;
+      callbacks.set(handle, callback);
+      return handle;
+    },
+    cancelAnimationFrame: (handle) => {
+      callbacks.delete(handle);
+    },
+    runNext: (timestampMs) => {
+      const entry = callbacks.entries().next().value;
+      if (entry === undefined) {
+        throw new Error("Expected a pending rAF probe callback.");
+      }
+
+      const [handle, callback] = entry;
+      callbacks.delete(handle);
+      callback(timestampMs);
+    },
+    pendingCount: () => callbacks.size
   };
 }
 

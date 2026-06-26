@@ -81,6 +81,30 @@ export function readRuntimePlayerStageRenderMetricsSnapshot(
       value.rafDeltaSampleCount,
       "rafDeltaSampleCount"
     ),
+    ...(value.browserRafProbeFrameCount === undefined
+      ? {}
+      : {
+          browserRafProbeFrameCount: readCounter(
+            value.browserRafProbeFrameCount,
+            "browserRafProbeFrameCount"
+          )
+        }),
+    ...(value.lastBrowserRafProbeDeltaMs === undefined
+      ? {}
+      : {
+          lastBrowserRafProbeDeltaMs: readNullableNonNegativeFiniteNumber(
+            value.lastBrowserRafProbeDeltaMs,
+            "lastBrowserRafProbeDeltaMs"
+          )
+        }),
+    ...(value.browserRafProbeDeltaSampleCount === undefined
+      ? {}
+      : {
+          browserRafProbeDeltaSampleCount: readCounter(
+            value.browserRafProbeDeltaSampleCount,
+            "browserRafProbeDeltaSampleCount"
+          )
+        }),
     lastRenderDurationMs: readNullableNonNegativeFiniteNumber(
       value.lastRenderDurationMs,
       "lastRenderDurationMs"

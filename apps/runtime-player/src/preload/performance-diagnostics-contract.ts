@@ -12,6 +12,9 @@ export type RuntimePlayerStageRenderMetricsSnapshot = {
   readonly coalescedLiveFrameCount: number;
   readonly lastRafDeltaMs: number | null;
   readonly rafDeltaSampleCount: number;
+  readonly browserRafProbeFrameCount?: number;
+  readonly lastBrowserRafProbeDeltaMs?: number | null;
+  readonly browserRafProbeDeltaSampleCount?: number;
   readonly lastRenderDurationMs: number | null;
   readonly renderDurationSampleCount: number;
   readonly lastLiveRenderInputEvaluationDurationMs?: number | null;
