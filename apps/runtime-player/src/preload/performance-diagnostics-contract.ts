@@ -21,6 +21,14 @@ export type RuntimePlayerStageRenderMetricsSnapshot = {
   readonly evaluationCacheHitCount?: number;
   readonly evaluationCacheMissCount?: number;
   readonly evaluationCacheInvalidationCount?: number;
+  readonly compiledEvaluatorFrameCount?: number;
+  readonly transientCompileCount?: number;
+  readonly transientInstanceCount?: number;
+  readonly runtimeModelInstanceCacheHitCount?: number;
+  readonly runtimeModelInstanceCacheMissCount?: number;
+  readonly runtimeModelInstanceCacheInvalidationCount?: number;
+  readonly lastRuntimeModelCompileDurationMs?: number | null;
+  readonly runtimeModelCompileDurationSampleCount?: number;
   readonly lastRuntimeCoreEvaluationDurationMs?: number | null;
   readonly runtimeCoreEvaluationDurationSampleCount?: number;
   readonly lastRuntimeCoreInputValidationDurationMs?: number | null;

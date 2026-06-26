@@ -27,7 +27,13 @@ import {
   createEvaluatedRuntimeExportStageRenderInput,
   type RuntimeExportRenderInputEvaluationProfile
 } from "./evaluated-runtime-export-stage-scene";
-import { RuntimeExportEvaluationCache } from "./runtime-export-evaluation-cache";
+import {
+  RuntimeExportEvaluationCache,
+  createRuntimeExportEvaluationCacheKey
+} from "./runtime-export-evaluation-cache";
+import {
+  RuntimeExportRuntimeModelInstanceCache
+} from "./runtime-export-runtime-model-instance-cache";
 import { createStageRuntimeDiagnosticDetails } from "./stage-render-diagnostics";
 import { createStageViewport } from "./stage-viewport";
 import {
@@ -110,6 +116,8 @@ export function createStaticStageCanvasRenderer(
 class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private payload: RuntimeExportLoadedPayload | null = null;
   private readonly evaluationCache = new RuntimeExportEvaluationCache();
+  private readonly runtimeModelInstances =
+    new RuntimeExportRuntimeModelInstanceCache();
   private renderInput: RuntimeExportStageRenderInput | null = null;
   private liveRuntimeState: RuntimeStateDto | null = null;
   private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
@@ -135,6 +143,9 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private renderDurationSampleCount = 0;
   private lastLiveRenderInputEvaluationDurationMs: number | null = null;
   private liveRenderInputEvaluationDurationSampleCount = 0;
+  private compiledEvaluatorFrameCount = 0;
+  private transientCompileCount = 0;
+  private transientInstanceCount = 0;
   private lastRuntimeCoreEvaluationDurationMs: number | null = null;
   private runtimeCoreEvaluationDurationSampleCount = 0;
   private lastRuntimeCoreInputValidationDurationMs: number | null = null;
@@ -222,9 +233,11 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       );
     }
     this.evaluationCache.clear();
+    this.runtimeModelInstances.clear();
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload, {
       activeVariantSelection: this.activeVariantSelection,
       evaluationCache: this.evaluationCache,
+      runtimeModelInstanceCache: this.runtimeModelInstances,
       runtimeCoreProfiling: this.runtimeCoreProfiling
     });
 
@@ -247,17 +260,35 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   setActiveVariantSelection(
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
   ): void {
+    const payload = this.payload;
+    const previousEvaluationCacheKey = payload === null
+      ? null
+      : createRuntimeExportEvaluationCacheKey({
+          payload,
+          activeVariantSelection: this.activeVariantSelection
+        });
     this.activeVariantSelection = cloneActiveVariantSelectionState(
       activeVariantSelection
     );
+    const nextEvaluationCacheKey = payload === null
+      ? null
+      : createRuntimeExportEvaluationCacheKey({
+          payload,
+          activeVariantSelection: this.activeVariantSelection
+        });
 
-    if (this.payload === null || this.disposed) {
+    if (payload === null || this.disposed) {
       return;
+    }
+
+    if (previousEvaluationCacheKey !== nextEvaluationCacheKey) {
+      this.runtimeModelInstances.clear();
+      this.liveRuntimeState = null;
     }
 
     if (
       this.latestLiveParameterFrame !== null &&
-      canApplyLiveParameterFrame(this.latestLiveParameterFrame, this.payload)
+      canApplyLiveParameterFrame(this.latestLiveParameterFrame, payload)
     ) {
       this.hasPendingLiveParameterFrame = false;
       this.cancelScheduledRender();
@@ -267,10 +298,11 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     }
 
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(
-      this.payload,
+      payload,
       {
         activeVariantSelection: this.activeVariantSelection,
         evaluationCache: this.evaluationCache,
+        runtimeModelInstanceCache: this.runtimeModelInstances,
         runtimeCoreProfiling: this.runtimeCoreProfiling
       }
     );
@@ -303,6 +335,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.latestLiveParameterFrame = null;
     this.hasPendingLiveParameterFrame = false;
     this.lastLiveSourceTimestampMs = null;
+    this.runtimeModelInstances.clear();
+    this.liveRuntimeState = null;
     this.cancelScheduledRender();
 
     if (this.payload === null || this.disposed) {
@@ -314,6 +348,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       {
         activeVariantSelection: this.activeVariantSelection,
         evaluationCache: this.evaluationCache,
+        runtimeModelInstanceCache: this.runtimeModelInstances,
         runtimeCoreProfiling: this.runtimeCoreProfiling
       }
     );
@@ -393,6 +428,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
 
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot {
     const evaluationCacheMetrics = this.evaluationCache.getMetricsSnapshot();
+    const runtimeModelInstanceCacheMetrics =
+      this.runtimeModelInstances.getMetricsSnapshot();
     const snapshot: StaticStageRenderMetricsSnapshot = {
       renderCount: this.renderCount,
       scheduledRenderCount: this.scheduledRenderCount,
@@ -416,6 +453,20 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
         evaluationCacheMetrics.evaluationCacheMissCount,
       evaluationCacheInvalidationCount:
         evaluationCacheMetrics.evaluationCacheInvalidationCount,
+      compiledEvaluatorFrameCount: this.compiledEvaluatorFrameCount,
+      transientCompileCount: this.transientCompileCount,
+      transientInstanceCount: this.transientInstanceCount,
+      runtimeModelInstanceCacheHitCount:
+        runtimeModelInstanceCacheMetrics.runtimeModelInstanceCacheHitCount,
+      runtimeModelInstanceCacheMissCount:
+        runtimeModelInstanceCacheMetrics.runtimeModelInstanceCacheMissCount,
+      runtimeModelInstanceCacheInvalidationCount:
+        runtimeModelInstanceCacheMetrics
+          .runtimeModelInstanceCacheInvalidationCount,
+      lastRuntimeModelCompileDurationMs:
+        evaluationCacheMetrics.lastRuntimeModelCompileDurationMs,
+      runtimeModelCompileDurationSampleCount:
+        evaluationCacheMetrics.runtimeModelCompileDurationSampleCount,
       lastRuntimeCoreEvaluationDurationMs:
         this.lastRuntimeCoreEvaluationDurationMs,
       runtimeCoreEvaluationDurationSampleCount:
@@ -520,6 +571,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.hasPendingLiveParameterFrame = false;
     this.lastLiveSourceTimestampMs = null;
     this.evaluationCache.clear();
+    this.runtimeModelInstances.clear();
     this.cancelScheduledRender();
     this.renderCurrentImmediate();
   }
@@ -540,6 +592,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.canvas.removeEventListener("lostpointercapture", this.handlePointerUp);
     this.cancelScheduledRender();
     this.evaluationCache.clear();
+    this.runtimeModelInstances.clear();
     this.renderer.dispose();
   }
 
@@ -604,14 +657,12 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       {
         activeVariantSelection: this.activeVariantSelection,
         evaluationCache: this.evaluationCache,
+        runtimeModelInstanceCache: this.runtimeModelInstances,
         authoredParameterValues: liveFrame.parameterValues,
         frameIndex: liveFrame.sequence,
         deltaTimeMs,
         resetReasons: [],
-        runtimeCoreProfiling: this.runtimeCoreProfiling,
-        ...(this.liveRuntimeState === null
-          ? {}
-          : { previousState: this.liveRuntimeState })
+        runtimeCoreProfiling: this.runtimeCoreProfiling
       }
     );
     const evaluationDurationMs = Math.max(
@@ -836,6 +887,9 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.lastRuntimeCoreEvaluationDurationMs =
       profile.runtimeCoreEvaluationDurationMs;
     this.runtimeCoreEvaluationDurationSampleCount += 1;
+    this.compiledEvaluatorFrameCount += profile.compiledEvaluatorFrameCount;
+    this.transientCompileCount += profile.transientCompileCount;
+    this.transientInstanceCount += profile.transientInstanceCount;
     if (profile.runtimeCoreProfile !== undefined) {
       this.lastRuntimeCoreInputValidationDurationMs =
         profile.runtimeCoreProfile.inputValidationDurationMs;

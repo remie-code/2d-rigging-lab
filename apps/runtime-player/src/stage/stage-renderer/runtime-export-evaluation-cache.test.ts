@@ -20,11 +20,17 @@ import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-br
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import {
+  createRuntimeExportRuntimeModelInitialStateRequest
+} from "../runtime-evaluation/runtime-export-pose-evaluator";
 import { createEvaluatedRuntimeExportStageRenderInput } from "./evaluated-runtime-export-stage-scene";
 import {
   RuntimeExportEvaluationCache,
   createRuntimeExportEvaluationCacheKey
 } from "./runtime-export-evaluation-cache";
+import {
+  RuntimeExportRuntimeModelInstanceCache
+} from "./runtime-export-runtime-model-instance-cache";
 
 describe("Runtime Export evaluation cache", () => {
   it("reuses invariant scaffold while live parameters, dynamics, and outputs update", () => {
@@ -78,6 +84,175 @@ describe("Runtime Export evaluation cache", () => {
       secondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway?.tick
     ).toBeGreaterThan(
       firstFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway?.tick ?? -1
+    );
+  });
+
+  it("stores compiled models on scaffolds while keeping runtime instances target-local", () => {
+    const payload = createRuntimeExportPayload();
+    const cache = new RuntimeExportEvaluationCache();
+    const defaultSelection = createActiveSelection({
+      expression: "var_expression_default",
+      updatedAtIso: "2026-06-24T00:00:00.000Z"
+    });
+    const sameDefaultSelection = createActiveSelection({
+      expression: "var_expression_default",
+      updatedAtIso: "2026-06-24T00:00:01.000Z"
+    });
+    const smileSelection = createActiveSelection({
+      expression: "var_smile",
+      updatedAtIso: "2026-06-24T00:00:02.000Z"
+    });
+    const defaultAccess = cache.getOrCreateWithDiagnostics({
+      payload,
+      activeVariantSelection: defaultSelection
+    });
+    const sameDefaultAccess = cache.getOrCreateWithDiagnostics({
+      payload,
+      activeVariantSelection: sameDefaultSelection
+    });
+    const nativeInstances = new RuntimeExportRuntimeModelInstanceCache();
+    const browserSourceInstances = new RuntimeExportRuntimeModelInstanceCache();
+    const initialStateRequest = createRuntimeExportRuntimeModelInitialStateRequest(
+      createAdapterInput(payload, defaultSelection),
+      {
+        frameIndex: 1,
+        resetReasons: [],
+        authoredParameterValues: {
+          param_face_angle_x: 0
+        }
+      }
+    );
+
+    const nativeInstance = nativeInstances.getOrCreate(
+      defaultAccess.scaffold,
+      { initialStateRequest }
+    );
+    const browserSourceInstance = browserSourceInstances.getOrCreate(
+      defaultAccess.scaffold,
+      { initialStateRequest }
+    );
+
+    expect(sameDefaultAccess.cacheStatus).toBe("hit");
+    expect(sameDefaultAccess.scaffold.compiledRuntimeModel)
+      .toBe(defaultAccess.scaffold.compiledRuntimeModel);
+    expect(nativeInstance).not.toBe(browserSourceInstance);
+
+    const smileAccess = cache.getOrCreateWithDiagnostics({
+      payload,
+      activeVariantSelection: smileSelection
+    });
+    const smileInstance = nativeInstances.getOrCreate(
+      smileAccess.scaffold,
+      {
+        initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+          createAdapterInput(payload, smileSelection),
+          {
+            frameIndex: 2,
+            resetReasons: [],
+            authoredParameterValues: {
+              param_face_angle_x: 1
+            }
+          }
+        )
+      }
+    );
+    const reloadedPayload = createRuntimeExportPayload({
+      loadedAtIso: "2026-06-22T00:01:00.000Z"
+    });
+    const reloadedAccess = cache.getOrCreateWithDiagnostics({
+      payload: reloadedPayload,
+      activeVariantSelection: smileSelection
+    });
+    const reloadedInstance = nativeInstances.getOrCreate(
+      reloadedAccess.scaffold,
+      {
+        initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+          createAdapterInput(reloadedPayload, smileSelection),
+          { frameIndex: 3, resetReasons: [] }
+        )
+      }
+    );
+
+    expect(smileAccess.cacheStatus).toBe("miss");
+    expect(smileAccess.scaffold.compiledRuntimeModel)
+      .not.toBe(defaultAccess.scaffold.compiledRuntimeModel);
+    expect(smileInstance).not.toBe(nativeInstance);
+    expect(reloadedAccess.scaffold.compiledRuntimeModel)
+      .not.toBe(smileAccess.scaffold.compiledRuntimeModel);
+    expect(reloadedInstance).not.toBe(smileInstance);
+  });
+
+  it("keeps separate target instances visually consistent for the same live frame sequence", () => {
+    const payload = createRuntimeExportPayload();
+    const cache = new RuntimeExportEvaluationCache();
+    const nativeInstances = new RuntimeExportRuntimeModelInstanceCache();
+    const browserSourceInstances = new RuntimeExportRuntimeModelInstanceCache();
+
+    const nativeFirstFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        runtimeModelInstanceCache: nativeInstances,
+        authoredParameterValues: {
+          param_face_angle_x: 0
+        },
+        frameIndex: 1,
+        deltaTimeMs: 0,
+        resetReasons: []
+      }
+    );
+    const browserFirstFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        runtimeModelInstanceCache: browserSourceInstances,
+        authoredParameterValues: {
+          param_face_angle_x: 0
+        },
+        frameIndex: 1,
+        deltaTimeMs: 0,
+        resetReasons: []
+      }
+    );
+    const nativeSecondFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        runtimeModelInstanceCache: nativeInstances,
+        authoredParameterValues: {
+          param_face_angle_x: 1
+        },
+        frameIndex: 2,
+        deltaTimeMs: 100,
+        resetReasons: []
+      }
+    );
+    const browserSecondFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        runtimeModelInstanceCache: browserSourceInstances,
+        authoredParameterValues: {
+          param_face_angle_x: 1
+        },
+        frameIndex: 2,
+        deltaTimeMs: 100,
+        resetReasons: []
+      }
+    );
+
+    expect(browserFirstFrame.scene.drawables)
+      .toEqual(nativeFirstFrame.scene.drawables);
+    expect(browserSecondFrame.scene.drawables)
+      .toEqual(nativeSecondFrame.scene.drawables);
+    expect(browserSecondFrame.poseEvaluation.snapshot.parameters)
+      .toEqual(nativeSecondFrame.poseEvaluation.snapshot.parameters);
+    expect(
+      browserSecondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway
+        ?.tick
+    ).toBe(
+      nativeSecondFrame.poseEvaluation.nextState.dynamicsGroups.dyn_hair_sway
+        ?.tick
     );
   });
 
@@ -142,7 +317,9 @@ describe("Runtime Export evaluation cache", () => {
     expect(cache.getMetricsSnapshot()).toEqual({
       evaluationCacheHitCount: 0,
       evaluationCacheMissCount: 0,
-      evaluationCacheInvalidationCount: 0
+      evaluationCacheInvalidationCount: 0,
+      lastRuntimeModelCompileDurationMs: null,
+      runtimeModelCompileDurationSampleCount: 0
     });
 
     const firstAccess = cache.getOrCreateWithDiagnostics({
@@ -164,7 +341,10 @@ describe("Runtime Export evaluation cache", () => {
     expect(cache.getMetricsSnapshot()).toEqual({
       evaluationCacheHitCount: 1,
       evaluationCacheMissCount: 1,
-      evaluationCacheInvalidationCount: 0
+      evaluationCacheInvalidationCount: 0,
+      lastRuntimeModelCompileDurationMs:
+        firstAccess.scaffoldBuildProfile.runtimeModelCompileDurationMs,
+      runtimeModelCompileDurationSampleCount: 1
     });
 
     cache.clear();
@@ -178,7 +358,8 @@ describe("Runtime Export evaluation cache", () => {
     expect(cache.getMetricsSnapshot()).toMatchObject({
       evaluationCacheHitCount: 1,
       evaluationCacheMissCount: 2,
-      evaluationCacheInvalidationCount: 1
+      evaluationCacheInvalidationCount: 1,
+      runtimeModelCompileDurationSampleCount: 2
     });
     expect(createRuntimeExportEvaluationCacheKey({
       payload,
@@ -194,6 +375,77 @@ describe("Runtime Export evaluation cache", () => {
       payload: textureChangedPayload,
       activeVariantSelection: null
     }));
+  });
+
+  it("tracks target-local runtime model instance cache metrics", () => {
+    const payload = createRuntimeExportPayload();
+    const scaffoldCache = new RuntimeExportEvaluationCache();
+    const instanceCache = new RuntimeExportRuntimeModelInstanceCache();
+    const defaultAccess = scaffoldCache.getOrCreateWithDiagnostics({
+      payload,
+      activeVariantSelection: null
+    });
+    const defaultInitialStateRequest =
+      createRuntimeExportRuntimeModelInitialStateRequest(
+        createAdapterInput(payload, null),
+        { frameIndex: 1, resetReasons: [] }
+      );
+
+    expect(instanceCache.getMetricsSnapshot()).toEqual({
+      runtimeModelInstanceCacheHitCount: 0,
+      runtimeModelInstanceCacheMissCount: 0,
+      runtimeModelInstanceCacheInvalidationCount: 0
+    });
+
+    const firstInstance = instanceCache.getOrCreate(
+      defaultAccess.scaffold,
+      { initialStateRequest: defaultInitialStateRequest }
+    );
+    const reusedInstance = instanceCache.getOrCreate(
+      defaultAccess.scaffold,
+      { initialStateRequest: defaultInitialStateRequest }
+    );
+
+    expect(reusedInstance).toBe(firstInstance);
+    expect(instanceCache.getMetricsSnapshot()).toEqual({
+      runtimeModelInstanceCacheHitCount: 1,
+      runtimeModelInstanceCacheMissCount: 1,
+      runtimeModelInstanceCacheInvalidationCount: 0
+    });
+
+    const smileSelection = createActiveSelection({
+      expression: "var_smile",
+      updatedAtIso: "2026-06-24T00:00:02.000Z"
+    });
+    const smileAccess = scaffoldCache.getOrCreateWithDiagnostics({
+      payload,
+      activeVariantSelection: smileSelection
+    });
+    const smileInstance = instanceCache.getOrCreate(
+      smileAccess.scaffold,
+      {
+        initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+          createAdapterInput(payload, smileSelection),
+          { frameIndex: 2, resetReasons: [] }
+        )
+      }
+    );
+
+    expect(smileInstance).not.toBe(firstInstance);
+    expect(instanceCache.getMetricsSnapshot()).toEqual({
+      runtimeModelInstanceCacheHitCount: 1,
+      runtimeModelInstanceCacheMissCount: 2,
+      runtimeModelInstanceCacheInvalidationCount: 1
+    });
+
+    instanceCache.clear();
+    instanceCache.clear();
+
+    expect(instanceCache.getMetricsSnapshot()).toEqual({
+      runtimeModelInstanceCacheHitCount: 1,
+      runtimeModelInstanceCacheMissCount: 2,
+      runtimeModelInstanceCacheInvalidationCount: 2
+    });
   });
 });
 
@@ -211,6 +463,18 @@ function getSceneDrawable(
   }
 
   return drawable;
+}
+
+function createAdapterInput(
+  payload: RuntimeExportLoadedPayload,
+  activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+) {
+  return {
+    model: payload.artifacts.model,
+    atlas: payload.artifacts.atlas,
+    texturePages: payload.artifacts.manifest.texturePages,
+    activeVariantSelection
+  };
 }
 
 function createRuntimeExportPayload(input: {

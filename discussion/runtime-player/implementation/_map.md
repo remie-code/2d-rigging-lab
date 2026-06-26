@@ -35,6 +35,7 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [orchestration/player-wave13-plan.md](orchestration/player-wave13-plan.md) | Completed / final pass | Runtime Player Wave13: Stage Frame Pacing Diagnostics |
 | [orchestration/player-wave14-plan.md](orchestration/player-wave14-plan.md) | Completed / final pass | Runtime Player Wave14: Runtime Evaluation Cache / Diagnostics Semantics |
 | [orchestration/player-wave15-plan.md](orchestration/player-wave15-plan.md) | Completed / final pass | Runtime Player Wave15: Runtime Snapshot Hot-Path Cleanup |
+| [orchestration/player-wave16-plan.md](orchestration/player-wave16-plan.md) | Domain E final integration report complete; pending final clean review | Runtime Player Wave16: Runtime Core Compiled Evaluator v0 |
 | [orchestration/runtime-player-wave-planning-conventions.md](orchestration/runtime-player-wave-planning-conventions.md) | Active convention | Runtime Player wave final integration documentation alignment convention |
 | [waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md](waves/wave1/runtime-player-wave1-domain-a-electron-shell-placeholder-ui-report.md) | Pass | Domain A Electron shell + placeholder UI completion report |
 | [waves/wave1/runtime-player-wave1-final-integration-report.md](waves/wave1/runtime-player-wave1-final-integration-report.md) | Pass | Runtime Player Wave1 final integration report |
@@ -90,6 +91,12 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [waves/wave15/domain-a-snapshot-validation-hot-path-report.md](waves/wave15/domain-a-snapshot-validation-hot-path-report.md) | Pass | Runtime Player Wave15 Domain A snapshot validation hot-path report |
 | [waves/wave15/domain-b-deep-profiling-gating-report.md](waves/wave15/domain-b-deep-profiling-gating-report.md) | Pass | Runtime Player Wave15 Domain B deep runtime-core profiling gating report |
 | [waves/wave15/wave15-final-integration-report.md](waves/wave15/wave15-final-integration-report.md) | Pass | Runtime Player Wave15 Domain C docs/maps alignment, final clean review evidence, and integration report |
+| [waves/wave16/_map.md](waves/wave16/_map.md) | Pass recommendation / pending final clean review | Runtime Player Wave16 report map |
+| [waves/wave16/domain-a-runtime-core-compiled-api-shell-report.md](waves/wave16/domain-a-runtime-core-compiled-api-shell-report.md) | Pass | Runtime Player Wave16 Domain A runtime-core compiled evaluator API shell report |
+| [waves/wave16/domain-b-compiled-snapshot-static-templates-report.md](waves/wave16/domain-b-compiled-snapshot-static-templates-report.md) | Pass | Runtime Player Wave16 Domain B compiled snapshot/static templates report |
+| [waves/wave16/domain-c-compiled-rig-deformer-topology-report.md](waves/wave16/domain-c-compiled-rig-deformer-topology-report.md) | Pass | Runtime Player Wave16 Domain C compiled rig/deformer topology report |
+| [waves/wave16/domain-d-runtime-player-compiled-evaluator-connection-report.md](waves/wave16/domain-d-runtime-player-compiled-evaluator-connection-report.md) | Pass | Runtime Player Wave16 Domain D Runtime Player compiled evaluator connection report |
+| [waves/wave16/wave16-final-integration-report.md](waves/wave16/wave16-final-integration-report.md) | Pass recommendation / pending final clean review | Runtime Player Wave16 Domain E final integration docs/maps alignment and performance interpretation report |
 | [reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md](reviews/wave1/runtime-player-wave1-domain-a-spec-compliance-review.md) | Pass | Domain A spec compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md](reviews/wave1/runtime-player-wave1-domain-a-design-development-review.md) | Pass | Domain A design / development compliance review |
 | [reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md](reviews/wave1/runtime-player-wave1-domain-a-test-adequacy-review.md) | Pass | Domain A test adequacy review |
@@ -169,6 +176,11 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 | [reviews/wave15/domain-a-snapshot-validation-hot-path-clean-review.md](reviews/wave15/domain-a-snapshot-validation-hot-path-clean-review.md) | Pass | Runtime Player Wave15 Domain A snapshot validation hot-path clean review |
 | [reviews/wave15/domain-b-deep-profiling-gating-clean-review.md](reviews/wave15/domain-b-deep-profiling-gating-clean-review.md) | Pass | Runtime Player Wave15 Domain B deep profiling gating clean re-review |
 | [reviews/wave15/wave15-final-clean-integration-review.md](reviews/wave15/wave15-final-clean-integration-review.md) | Pass | Runtime Player Wave15 final clean integration review |
+| [reviews/wave16/_map.md](reviews/wave16/_map.md) | Domain A-D pass; final clean review pending | Runtime Player Wave16 review map |
+| [reviews/wave16/domain-a-runtime-core-compiled-api-shell-clean-review.md](reviews/wave16/domain-a-runtime-core-compiled-api-shell-clean-review.md) | Pass | Runtime Player Wave16 Domain A runtime-core compiled evaluator API shell clean review |
+| [reviews/wave16/domain-b-compiled-snapshot-static-templates-clean-review.md](reviews/wave16/domain-b-compiled-snapshot-static-templates-clean-review.md) | Pass | Runtime Player Wave16 Domain B compiled snapshot/static templates clean review |
+| [reviews/wave16/domain-c-compiled-rig-deformer-topology-clean-review.md](reviews/wave16/domain-c-compiled-rig-deformer-topology-clean-review.md) | Pass | Runtime Player Wave16 Domain C compiled rig/deformer topology clean review |
+| [reviews/wave16/domain-d-runtime-player-compiled-evaluator-connection-clean-review.md](reviews/wave16/domain-d-runtime-player-compiled-evaluator-connection-clean-review.md) | Pass | Runtime Player Wave16 Domain D Runtime Player compiled evaluator connection clean review |
 
 ## 4. Current Implementation State
 
@@ -239,9 +251,14 @@ Editor本体の実装waveは `discussion/implementation/` に残し、Runtime Pl
 - Wave15 gates deep runtime-core profiling behind Performance Diagnostics capture. Normal live rendering keeps deep profiling disabled, and normal Browser Source diagnostics omit expanded runtime-core phase fields unless capture/deep profiling is active.
 - Wave15 Performance Diagnostics can intentionally request deep details for the selected target while capture is active; if no live render evaluation happens during that window, runtime-core phase summaries can legitimately be `unknown` / `sampleCount=0`.
 - Wave15 preserves Browser Source/report privacy boundaries, the Wave10 local preview suspension, Wave11 Stage Motion, Wave12 Variant switching, and Wave14 runtime evaluation cache behavior.
-- Real-model manual Electron/OBS diagnostics still need user confirmation after Wave15; run Performance Diagnostics normal/default and deep capture with OBS connected and compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, `runtimeCoreEvaluationDurationMs`, runtime-core phase fields, and `scheduledFrameDurationMs`; save the copied report to `tmp/report.log`.
+- Real-model manual Electron/OBS diagnostics after Wave15 confirmed validation/profiling target improvements, but Browser Source FPS remains insufficient because runtime-core evaluation still dominates.
+- Runtime Player Wave16 Domains A-D implementation and clean reviews are complete with `pass`; Domain E docs/maps final integration recommends `pass`, pending final clean Review-Sylph integration review: [waves/wave16/wave16-final-integration-report.md](waves/wave16/wave16-final-integration-report.md), [waves/wave16/_map.md](waves/wave16/_map.md), [reviews/wave16/_map.md](reviews/wave16/_map.md).
+- Wave16 introduces first-class runtime-core `compileRuntimeModel(graph)` / `CompiledRuntimeModel` / target-local `RuntimeModelInstance` architecture while preserving existing snapshot output compatibility.
+- Runtime Player now stores immutable `CompiledRuntimeModel` on the Runtime Export scaffold and uses renderer-target-local mutable runtime instances for Native Stage and Browser Source evaluation.
+- Wave16 compiled-path Performance Diagnostics interpretation: `runtimeCoreDrawableSnapshotCreationDurationMs` and `runtimeCoreDeformerHierarchyEvaluationDurationMs` exclude safe one-time compiled template/topology work but still include per-frame public DTO materialization and frame-local rig/deformer work. `runtimeModelCompileDurationMs` is internal scaffold build profiling, not a copied report line.
+- Real OBS Browser Source performance improvement remains manually unverified until the user saves an updated deep Performance Diagnostics report to `tmp/report.log`.
 - Spout2 sender, OBS automation/source creation, Input Source auto-connect, WebGL cache redesign, Runtime Export format changes, and Editor changes remain out of scope.
 
 ## 5. Next Action
 
-Use [waves/wave15/wave15-final-integration-report.md](waves/wave15/wave15-final-integration-report.md), [waves/wave15/_map.md](waves/wave15/_map.md), [reviews/wave15/_map.md](reviews/wave15/_map.md), and [reviews/wave15/wave15-final-clean-integration-review.md](reviews/wave15/wave15-final-clean-integration-review.md) as the latest fully reviewed final-pass Runtime Player implementation baseline.
+Run the final clean Review-Sylph integration review for Wave16 and write `discussion/runtime-player/implementation/reviews/wave16/wave16-final-clean-integration-review.md`. Until that review passes, Wave15 remains the latest fully reviewed final-pass Runtime Player implementation baseline, while Wave16 has Domain E `pass` recommendation and awaits clean integration review.

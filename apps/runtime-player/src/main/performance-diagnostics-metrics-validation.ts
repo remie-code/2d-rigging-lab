@@ -17,6 +17,13 @@ const counterKeys = [
   "evaluationCacheHitCount",
   "evaluationCacheMissCount",
   "evaluationCacheInvalidationCount",
+  "compiledEvaluatorFrameCount",
+  "transientCompileCount",
+  "transientInstanceCount",
+  "runtimeModelInstanceCacheHitCount",
+  "runtimeModelInstanceCacheMissCount",
+  "runtimeModelInstanceCacheInvalidationCount",
+  "runtimeModelCompileDurationSampleCount",
   "runtimeCoreEvaluationDurationSampleCount",
   "runtimeCoreInputValidationDurationSampleCount",
   "runtimeCoreStateCompatibilityDurationSampleCount",
@@ -115,6 +122,39 @@ export function readRuntimePlayerStageRenderMetricsSnapshot(
     evaluationCacheInvalidationCount: readOptionalCounter(
       value.evaluationCacheInvalidationCount,
       "evaluationCacheInvalidationCount"
+    ),
+    compiledEvaluatorFrameCount: readOptionalCounter(
+      value.compiledEvaluatorFrameCount,
+      "compiledEvaluatorFrameCount"
+    ),
+    transientCompileCount: readOptionalCounter(
+      value.transientCompileCount,
+      "transientCompileCount"
+    ),
+    transientInstanceCount: readOptionalCounter(
+      value.transientInstanceCount,
+      "transientInstanceCount"
+    ),
+    runtimeModelInstanceCacheHitCount: readOptionalCounter(
+      value.runtimeModelInstanceCacheHitCount,
+      "runtimeModelInstanceCacheHitCount"
+    ),
+    runtimeModelInstanceCacheMissCount: readOptionalCounter(
+      value.runtimeModelInstanceCacheMissCount,
+      "runtimeModelInstanceCacheMissCount"
+    ),
+    runtimeModelInstanceCacheInvalidationCount: readOptionalCounter(
+      value.runtimeModelInstanceCacheInvalidationCount,
+      "runtimeModelInstanceCacheInvalidationCount"
+    ),
+    lastRuntimeModelCompileDurationMs:
+      readOptionalNullableNonNegativeFiniteNumber(
+        value.lastRuntimeModelCompileDurationMs,
+        "lastRuntimeModelCompileDurationMs"
+      ),
+    runtimeModelCompileDurationSampleCount: readOptionalCounter(
+      value.runtimeModelCompileDurationSampleCount,
+      "runtimeModelCompileDurationSampleCount"
     ),
     lastRuntimeCoreEvaluationDurationMs:
       readOptionalNullableNonNegativeFiniteNumber(
@@ -340,6 +380,7 @@ export function createEmptyRuntimePlayerStageRenderMetricsSnapshot():
     lastRafDeltaMs: null,
     lastRenderDurationMs: null,
     lastLiveRenderInputEvaluationDurationMs: null,
+    lastRuntimeModelCompileDurationMs: null,
     lastRuntimeCoreEvaluationDurationMs: null,
     lastRuntimeCoreInputValidationDurationMs: null,
     lastRuntimeCoreStateCompatibilityDurationMs: null,

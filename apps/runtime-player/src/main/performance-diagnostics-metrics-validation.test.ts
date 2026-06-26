@@ -28,6 +28,14 @@ describe("performance diagnostics metrics validation", () => {
     delete legacyMetrics.evaluationCacheHitCount;
     delete legacyMetrics.evaluationCacheMissCount;
     delete legacyMetrics.evaluationCacheInvalidationCount;
+    delete legacyMetrics.compiledEvaluatorFrameCount;
+    delete legacyMetrics.transientCompileCount;
+    delete legacyMetrics.transientInstanceCount;
+    delete legacyMetrics.runtimeModelInstanceCacheHitCount;
+    delete legacyMetrics.runtimeModelInstanceCacheMissCount;
+    delete legacyMetrics.runtimeModelInstanceCacheInvalidationCount;
+    delete legacyMetrics.lastRuntimeModelCompileDurationMs;
+    delete legacyMetrics.runtimeModelCompileDurationSampleCount;
     delete legacyMetrics.lastRuntimeCoreEvaluationDurationMs;
     delete legacyMetrics.runtimeCoreEvaluationDurationSampleCount;
     delete legacyMetrics.lastRuntimeCoreInputValidationDurationMs;
@@ -79,6 +87,14 @@ describe("performance diagnostics metrics validation", () => {
       evaluationCacheHitCount: 0,
       evaluationCacheMissCount: 0,
       evaluationCacheInvalidationCount: 0,
+      compiledEvaluatorFrameCount: 0,
+      transientCompileCount: 0,
+      transientInstanceCount: 0,
+      runtimeModelInstanceCacheHitCount: 0,
+      runtimeModelInstanceCacheMissCount: 0,
+      runtimeModelInstanceCacheInvalidationCount: 0,
+      lastRuntimeModelCompileDurationMs: null,
+      runtimeModelCompileDurationSampleCount: 0,
       lastRuntimeCoreEvaluationDurationMs: null,
       runtimeCoreEvaluationDurationSampleCount: 0,
       lastRuntimeCoreInputValidationDurationMs: null,
@@ -145,6 +161,23 @@ describe("performance diagnostics metrics validation", () => {
     ],
     ["negative cache hit count", { evaluationCacheHitCount: -1 }],
     ["non-integer cache miss count", { evaluationCacheMissCount: 1.5 }],
+    [
+      "negative compiled evaluator frame count",
+      { compiledEvaluatorFrameCount: -1 }
+    ],
+    ["non-integer transient compile count", { transientCompileCount: 1.5 }],
+    [
+      "negative runtime model instance cache hit count",
+      { runtimeModelInstanceCacheHitCount: -1 }
+    ],
+    [
+      "Infinity runtime model compile duration",
+      { lastRuntimeModelCompileDurationMs: Infinity }
+    ],
+    [
+      "negative runtime model compile sample count",
+      { runtimeModelCompileDurationSampleCount: -1 }
+    ],
     [
       "negative runtime core sample count",
       { runtimeCoreEvaluationDurationSampleCount: -1 }
@@ -241,6 +274,14 @@ function createMetrics(
     evaluationCacheHitCount: 10,
     evaluationCacheMissCount: 2,
     evaluationCacheInvalidationCount: 1,
+    compiledEvaluatorFrameCount: 5,
+    transientCompileCount: 0,
+    transientInstanceCount: 0,
+    runtimeModelInstanceCacheHitCount: 4,
+    runtimeModelInstanceCacheMissCount: 1,
+    runtimeModelInstanceCacheInvalidationCount: 0,
+    lastRuntimeModelCompileDurationMs: 1.2,
+    runtimeModelCompileDurationSampleCount: 1,
     lastRuntimeCoreEvaluationDurationMs: 2,
     runtimeCoreEvaluationDurationSampleCount: 5,
     lastRuntimeCoreInputValidationDurationMs: 0.1,

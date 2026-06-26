@@ -9,7 +9,11 @@ import {
   type RenderRgba8TextureSource
 } from "@private-2d-rigging-lab/render-core";
 import type { DrawableId } from "@private-2d-rigging-lab/contracts";
-import type { NormalizedMaskRelation } from "@private-2d-rigging-lab/runtime-core";
+import {
+  compileRuntimeModel,
+  type CompiledRuntimeModel,
+  type NormalizedMaskRelation
+} from "@private-2d-rigging-lab/runtime-core";
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
@@ -33,6 +37,7 @@ export interface RuntimeExportDrawableRenderTemplate {
 export interface RuntimeExportEvaluationScaffoldBuildProfile {
   readonly totalDurationMs: number;
   readonly runtimeGraphAdapterBuildDurationMs: number;
+  readonly runtimeModelCompileDurationMs: number;
   readonly textureSourceBuildDurationMs: number;
   readonly clippingBuildDurationMs: number;
   readonly drawableTemplateBuildDurationMs: number;
@@ -42,6 +47,7 @@ export interface RuntimeExportEvaluationScaffoldBuildProfile {
 export interface RuntimeExportEvaluationScaffold {
   readonly cacheKey: string;
   readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
+  readonly compiledRuntimeModel: CompiledRuntimeModel;
   readonly textureSource: RenderRgba8TextureSource;
   readonly modelBounds: StageModelBounds;
   readonly drawableTemplatesByDrawableId: ReadonlyMap<
@@ -61,6 +67,8 @@ export interface RuntimeExportEvaluationCacheMetricsSnapshot {
   readonly evaluationCacheHitCount: number;
   readonly evaluationCacheMissCount: number;
   readonly evaluationCacheInvalidationCount: number;
+  readonly lastRuntimeModelCompileDurationMs: number | null;
+  readonly runtimeModelCompileDurationSampleCount: number;
 }
 
 export class RuntimeExportEvaluationCache {
@@ -68,6 +76,8 @@ export class RuntimeExportEvaluationCache {
   #hitCount = 0;
   #missCount = 0;
   #invalidationCount = 0;
+  #lastRuntimeModelCompileDurationMs: number | null = null;
+  #runtimeModelCompileDurationSampleCount = 0;
 
   get size(): number {
     return this.#scaffoldsByKey.size;
@@ -101,6 +111,9 @@ export class RuntimeExportEvaluationCache {
     });
     this.#scaffoldsByKey.set(cacheKey, scaffold);
     this.#missCount += 1;
+    this.#lastRuntimeModelCompileDurationMs =
+      scaffold.buildProfile.runtimeModelCompileDurationMs;
+    this.#runtimeModelCompileDurationSampleCount += 1;
 
     return {
       scaffold,
@@ -120,7 +133,11 @@ export class RuntimeExportEvaluationCache {
     return {
       evaluationCacheHitCount: this.#hitCount,
       evaluationCacheMissCount: this.#missCount,
-      evaluationCacheInvalidationCount: this.#invalidationCount
+      evaluationCacheInvalidationCount: this.#invalidationCount,
+      lastRuntimeModelCompileDurationMs:
+        this.#lastRuntimeModelCompileDurationMs,
+      runtimeModelCompileDurationSampleCount:
+        this.#runtimeModelCompileDurationSampleCount
     };
   }
 }
@@ -175,7 +192,10 @@ export function createRuntimeExportEvaluationScaffold(input: {
     activeVariantSelection: input.activeVariantSelection
   });
   const adapterEndedAtMs = readCurrentTimeMs();
-  const textureSourceStartedAtMs = adapterEndedAtMs;
+  const runtimeModelCompileStartedAtMs = adapterEndedAtMs;
+  const compiledRuntimeModel = compileRuntimeModel(adapter.graph);
+  const runtimeModelCompileEndedAtMs = readCurrentTimeMs();
+  const textureSourceStartedAtMs = runtimeModelCompileEndedAtMs;
   const textureSource = createTextureSource(input.payload);
   const textureSourceEndedAtMs = readCurrentTimeMs();
   const clippingStartedAtMs = textureSourceEndedAtMs;
@@ -229,6 +249,7 @@ export function createRuntimeExportEvaluationScaffold(input: {
     cacheKey: input.cacheKey ??
       createRuntimeExportEvaluationCacheKey(input),
     adapter,
+    compiledRuntimeModel,
     textureSource,
     modelBounds,
     drawableTemplatesByDrawableId,
@@ -237,6 +258,10 @@ export function createRuntimeExportEvaluationScaffold(input: {
       runtimeGraphAdapterBuildDurationMs: readDurationMs(
         adapterStartedAtMs,
         adapterEndedAtMs
+      ),
+      runtimeModelCompileDurationMs: readDurationMs(
+        runtimeModelCompileStartedAtMs,
+        runtimeModelCompileEndedAtMs
       ),
       textureSourceBuildDurationMs: readDurationMs(
         textureSourceStartedAtMs,
@@ -377,6 +402,7 @@ function createZeroScaffoldBuildProfile():
   return {
     totalDurationMs: 0,
     runtimeGraphAdapterBuildDurationMs: 0,
+    runtimeModelCompileDurationMs: 0,
     textureSourceBuildDurationMs: 0,
     clippingBuildDurationMs: 0,
     drawableTemplateBuildDurationMs: 0,

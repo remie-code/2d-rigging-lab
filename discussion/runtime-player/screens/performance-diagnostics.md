@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: Wave15 source/test facts and final clean integration review pass reflected; manual real-model native/OBS diagnostics are still pending.
+- Status: Wave16 source/test facts and A-D clean reviews reflected; final clean Wave16 integration review and manual real-model native/OBS diagnostics are still pending.
 - Scope owner: Control Window page plus renderer metrics surfaces.
 - Related docs:
   - [control-window-screen-structure.md](control-window-screen-structure.md)
@@ -15,6 +15,8 @@
   - [../implementation/waves/wave14/wave14-final-integration-report.md](../implementation/waves/wave14/wave14-final-integration-report.md)
   - [../implementation/orchestration/player-wave15-plan.md](../implementation/orchestration/player-wave15-plan.md)
   - [../implementation/waves/wave15/wave15-final-integration-report.md](../implementation/waves/wave15/wave15-final-integration-report.md)
+  - [../implementation/orchestration/player-wave16-plan.md](../implementation/orchestration/player-wave16-plan.md)
+  - [../implementation/waves/wave16/wave16-final-integration-report.md](../implementation/waves/wave16/wave16-final-integration-report.md)
 
 This page is not the old raw/input diagnostics surface. It is for render pacing evidence that can be shared back to agents without exposing private or high-volume data.
 
@@ -93,6 +95,10 @@ Reports should include enough aggregate counters for future agents to reason abo
 - rAF delta p50 / p95 / max;
 - render duration p50 / p95 / max;
 - `liveRenderInputEvaluationDurationMs` p50 / p95 / max;
+- `compiledEvaluatorFrameCount`, `transientCompileCount`, and `transientInstanceCount` so Browser Source live frames can prove whether they used the compiled evaluator without transient fallback;
+- `scaffoldEvaluationCacheHitCount` / `scaffoldEvaluationCacheMissCount` / `scaffoldEvaluationCacheInvalidationCount` as explicit scaffold cache counters, alongside the legacy `evaluationCache*` names;
+- `runtimeModelInstanceCacheHitCount` / `runtimeModelInstanceCacheMissCount` / `runtimeModelInstanceCacheInvalidationCount` so each renderer target can prove target-local `RuntimeModelInstance` reuse;
+- `runtimeModelCompileDurationMs` as a scaffold-build/cold-path latest metric sampled only when Runtime Player builds a scaffold on cache miss;
 - `runtimeCoreEvaluationDurationMs` p50 / p95 / max;
 - runtime-core phase summaries when deep profiling is active, including `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, and `runtimeCoreSnapshotValidationDurationMs`;
 - `scheduledFrameDurationMs` p50 / p95 / max;
@@ -107,6 +113,24 @@ Input receive FPS, live-frame message FPS/count, applied/evaluated live-frame FP
 Runtime Player normal live rendering keeps snapshot validation skipped for Stage / Browser Source pose evaluation and keeps deep runtime-core profiling disabled. Coarse render and evaluation metrics remain available in that default state. Deep runtime-core phase details are intentionally enabled only while Performance Diagnostics capture requests them for the selected target.
 
 If no live render evaluation happens during a deep capture window, runtime-core phase summaries can legitimately show `sampleCount=0` and `p50=unknown`, `p95=unknown`, or `max=unknown`. That means no deep-profiled runtime-core samples were observed, not necessarily that the renderer failed.
+
+Wave16 changes the interpretation of several runtime-core phase summaries when Runtime Player is using the compiled evaluator:
+
+- `runtimeCoreSnapshotCreationDurationMs` remains the outer per-frame snapshot creation phase.
+- `runtimeCoreDrawableSnapshotCreationDurationMs` now measures per-frame public drawable DTO materialization/finalization from compiled templates on the compiled path; one-time graph-derived drawable, texture/UV, reference vertex, and mask template construction is outside the cached frame hot path.
+- `runtimeCoreDeformerHierarchyEvaluationDurationMs` now measures per-frame rig-control samples, evaluated state, frame-dependent parent selection, opacity/effect-chain application, and drawable transforms on the compiled path; one-time hierarchy/topology lookup construction is outside the cached frame hot path.
+- `runtimeCoreWarpDeformerVertexTransformDurationMs` remains a per-frame vertex transform measurement.
+
+`runtimeModelCompileDurationMs` is a Runtime Player scaffold build profile field exposed in copied reports as `scaffoldBuildSampleCount`, `latest`, and `scope=scaffold-build-cold-path`. This is a cache-miss/scaffold-build fact, not a per-frame runtime-core phase. A stable live Browser Source capture can therefore show `runtimeModelCompileDurationMs` from the latest scaffold build while still showing per-frame `renderInputScaffoldBuildDurationMs` near zero on scaffold cache hits.
+
+Healthy Browser Source compiled-path proof after the Wave16 follow-up should show:
+
+- `compiledEvaluatorFrameCount` increasing with applied live frames;
+- `transientCompileCount: 0`;
+- `transientInstanceCount: 0`;
+- `runtimeModelInstanceCacheHitCount` increasing after the target-local instance is created;
+- `runtimeModelInstanceCacheMissCount` and `runtimeModelInstanceCacheInvalidationCount` staying at zero during a stable capture unless the capture window includes payload/Variant changes or renderer reset;
+- `scaffoldEvaluationCacheHitCount` increasing on stable scaffold reuse.
 
 ## 5. Data Boundaries
 
@@ -140,8 +164,8 @@ Manual checks still need a real Runtime Export, real iFacialMocap input, and OBS
 
 - run a 10s native Stage capture and copy the report;
 - connect OBS Browser Source and run target `Both`;
-- run a normal/default Performance Diagnostics capture if that mode is exposed by the build, and run a deep Performance Diagnostics capture; in the current Wave15 implementation, Start Capture intentionally requests deep runtime-core profiling for the selected target;
-- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `liveRenderInputEvaluationDurationMs`, `runtimeCoreEvaluationDurationMs`, `scheduledFrameDurationMs`, and runtime-core phase fields;
+- run a normal/default Performance Diagnostics capture if that mode is exposed by the build, and run a deep Performance Diagnostics capture; in the current Wave16 implementation, Start Capture intentionally requests deep runtime-core profiling for the selected target;
+- compare `inputReceiveFpsLatest`, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `compiledEvaluatorFrameCount`, `transientCompileCount`, `transientInstanceCount`, `runtimeModelInstanceCacheHitCount`, `runtimeModelInstanceCacheMissCount`, `runtimeModelInstanceCacheInvalidationCount`, `runtimeModelCompileDurationMs`, `liveRenderInputEvaluationDurationMs`, `runtimeCoreEvaluationDurationMs`, `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, `renderDurationMs`, `scheduledFrameDurationMs`, and other runtime-core phase fields;
 - compare normal live/default behavior before and after capture to confirm deep profiling is disabled when capture stops;
 - confirm `runtimeCoreSnapshotValidationDurationMs` is zero, unknown, or near-zero outside intentional deep/schema diagnostics;
 - confirm deep captures include runtime-core phase summaries when live render evaluation happens, and treat `unknown` / `sampleCount=0` as valid when no deep-profiled live frame is observed;

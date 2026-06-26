@@ -25,10 +25,29 @@ import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import type { RuntimeEvaluationOptionsInput } from "./runtime-options.js";
 import { RuntimeEvaluationOptionsSchema } from "./runtime-options.js";
 import {
+  createCompiledRuntimeModel,
+  type CompiledRuntimeModel,
+  type RuntimeFrameEvaluator,
+  type RuntimeModelFrameEvaluationOptions,
+  type RuntimeModelInitialStateRequestInput,
+  type RuntimeModelInstance,
+  type RuntimeModelInstanceOptions
+} from "./runtime-model.js";
+import {
   createRuntimeCoreEvaluationProfiler,
   type RuntimeCoreEvaluationProfile,
   type RuntimeCoreEvaluationProfilingOptions
 } from "./runtime-profiling.js";
+import type { RigControlTopologyEvaluation } from "./rig-control-hierarchy.js";
+import type { RuntimeSnapshotStaticTemplates } from "./snapshot-static-templates.js";
+
+export type {
+  CompiledRuntimeModel,
+  RuntimeModelFrameEvaluationOptions,
+  RuntimeModelInitialStateRequestInput,
+  RuntimeModelInstance,
+  RuntimeModelInstanceOptions
+} from "./runtime-model.js";
 
 export type RuntimeEvaluationContextInput = z.input<typeof RuntimeEvaluationContextSchema>;
 export type RuntimeSequenceFrameInput = z.input<typeof RuntimeSequenceFrameSchema>;
@@ -50,6 +69,7 @@ export interface RuntimeSequenceEvaluationResult {
 
 export interface RuntimeCore {
   readonly createInitialRuntimeState: typeof createInitialRuntimeState;
+  readonly compileRuntimeModel: typeof compileRuntimeModel;
   readonly evaluateRuntimeFrame: typeof evaluateRuntimeFrame;
   readonly evaluateRuntimeSequence: typeof evaluateRuntimeSequence;
   readonly compareRuntimeSnapshots: (
@@ -67,27 +87,74 @@ export const evaluateRuntimeFrame = (
   contextValue: RuntimeEvaluationContextInput,
   profilingOptions?: RuntimeCoreEvaluationProfilingOptions,
   controlOptions: RuntimeFrameEvaluationControlOptions = {}
-): RuntimeFrameEvaluationResult => {
-  const profiler = createRuntimeCoreEvaluationProfiler(profilingOptions);
+): RuntimeFrameEvaluationResult =>
+  evaluateRuntimeFrameInternal({
+    graph,
+    inputValue,
+    previousStateValue,
+    optionsValue,
+    contextValue,
+    ...(profilingOptions === undefined ? {} : { profilingOptions }),
+    controlOptions
+  });
+
+const evaluateCompiledRuntimeFrame: RuntimeFrameEvaluator = (
+  graph,
+  inputValue,
+  previousStateValue,
+  optionsValue,
+  contextValue,
+  profilingOptions,
+  controlOptions = {},
+  compiledArtifacts
+): RuntimeFrameEvaluationResult =>
+  evaluateRuntimeFrameInternal({
+    graph,
+    inputValue,
+    previousStateValue,
+    optionsValue,
+    contextValue,
+    ...(profilingOptions === undefined ? {} : { profilingOptions }),
+    controlOptions,
+    ...(compiledArtifacts === undefined
+      ? {}
+      : {
+          snapshotStaticTemplates: compiledArtifacts.snapshotStaticTemplates,
+          rigControlTopology: compiledArtifacts.rigControlTopology
+        })
+  });
+
+const evaluateRuntimeFrameInternal = (request: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly inputValue: RuntimeEvaluationInputInput;
+  readonly previousStateValue: RuntimeStateDto;
+  readonly optionsValue: RuntimeEvaluationOptionsInput;
+  readonly contextValue: RuntimeEvaluationContextInput;
+  readonly profilingOptions?: RuntimeCoreEvaluationProfilingOptions;
+  readonly controlOptions: RuntimeFrameEvaluationControlOptions;
+  readonly snapshotStaticTemplates?: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology?: RigControlTopologyEvaluation;
+}): RuntimeFrameEvaluationResult => {
+  const profiler = createRuntimeCoreEvaluationProfiler(request.profilingOptions);
   const {
     input,
     previousState,
     options,
     context
   } = profiler.measure("inputValidationDurationMs", () => ({
-    input: RuntimeEvaluationInputSchema.parse(inputValue),
-    previousState: RuntimeStateDtoSchema.parse(previousStateValue),
-    options: RuntimeEvaluationOptionsSchema.parse(optionsValue),
-    context: RuntimeEvaluationContextSchema.parse(contextValue)
+    input: RuntimeEvaluationInputSchema.parse(request.inputValue),
+    previousState: RuntimeStateDtoSchema.parse(request.previousStateValue),
+    options: RuntimeEvaluationOptionsSchema.parse(request.optionsValue),
+    context: RuntimeEvaluationContextSchema.parse(request.contextValue)
   }));
   const compatibility = profiler.measure(
     "stateCompatibilityDurationMs",
-    () => createCompatibleRuntimeState(graph, previousState, input)
+    () => createCompatibleRuntimeState(request.graph, previousState, input)
   );
   const nextState = profiler.measure(
     "dynamicsEvaluationDurationMs",
     () => advanceRuntimeState(
-      graph,
+      request.graph,
       compatibility.state,
       input,
       options.maxSubSteps
@@ -95,14 +162,20 @@ export const evaluateRuntimeFrame = (
   );
   const snapshot = profiler.measure("runtimeSnapshotCreationDurationMs", () =>
     createRuntimeSnapshot({
-      graph,
+      graph: request.graph,
       evaluationInput: input,
       state: nextState,
       options,
       context,
       diagnostics: compatibility.diagnostics,
+      ...(request.snapshotStaticTemplates === undefined
+        ? {}
+        : { snapshotStaticTemplates: request.snapshotStaticTemplates }),
+      ...(request.rigControlTopology === undefined
+        ? {}
+        : { rigControlTopology: request.rigControlTopology }),
       profiling: profiler,
-      snapshotValidationMode: controlOptions.snapshotValidation ?? "schema"
+      snapshotValidationMode: request.controlOptions.snapshotValidation ?? "schema"
     }));
   const profile = profiler.finish();
 
@@ -112,6 +185,10 @@ export const evaluateRuntimeFrame = (
     ...(profile === undefined ? {} : { profile })
   };
 };
+
+export const compileRuntimeModel = (
+  graph: NormalizedRuntimeGraph
+): CompiledRuntimeModel => createCompiledRuntimeModel(graph, evaluateCompiledRuntimeFrame);
 
 export const evaluateRuntimeSequence = (
   graph: NormalizedRuntimeGraph,
@@ -151,6 +228,7 @@ export const evaluateRuntimeSequence = (
 
 export const runtimeCore: RuntimeCore = {
   createInitialRuntimeState,
+  compileRuntimeModel,
   evaluateRuntimeFrame,
   evaluateRuntimeSequence,
   compareRuntimeSnapshots

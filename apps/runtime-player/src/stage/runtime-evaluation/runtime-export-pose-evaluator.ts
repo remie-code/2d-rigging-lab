@@ -3,10 +3,12 @@ import type {
   RuntimeStateDto
 } from "@private-2d-rigging-lab/contracts";
 import {
-  createInitialRuntimeState,
+  compileRuntimeModel,
   defaultRuntimeEvaluationOptions,
-  evaluateRuntimeFrame,
+  type CompiledRuntimeModel,
   type RuntimeCoreEvaluationProfile,
+  type RuntimeModelInitialStateRequestInput,
+  type RuntimeModelInstance,
   type RuntimeSnapshotDto,
   type RuntimeSnapshotValidationMode
 } from "@private-2d-rigging-lab/runtime-core";
@@ -34,6 +36,9 @@ export interface RuntimeExportPoseEvaluation {
 export interface RuntimeExportPoseEvaluationProfile {
   readonly runtimeCoreEvaluationDurationMs: number;
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
+  readonly compiledEvaluatorFrameCount: number;
+  readonly transientCompileCount: number;
+  readonly transientInstanceCount: number;
 }
 
 export type RuntimeExportPoseEvaluationOptions = {
@@ -44,6 +49,8 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly resetReasons?: readonly RuntimeResetReason[];
   readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
   readonly adapter?: RuntimeExportRuntimeGraphAdapterResult;
+  readonly compiledRuntimeModel?: CompiledRuntimeModel;
+  readonly runtimeModelInstance?: RuntimeModelInstance;
   readonly snapshotValidation?: RuntimeSnapshotValidationMode;
   readonly runtimeCoreProfiling?: RuntimePlayerRuntimeCoreProfilingMode;
 };
@@ -57,28 +64,30 @@ export function evaluateRuntimeExportPose(
     activeVariantSelection: options.activeVariantSelection ?? null
   });
   const frameIndex = options.frameIndex ?? 0;
-  const frameResetReasons: RuntimeResetReason[] = options.resetReasons === undefined
-    ? ["packageLoad"]
-    : [...options.resetReasons];
-  const initialResetReasons: RuntimeResetReason[] = frameResetReasons.length === 0
-    ? ["packageLoad"]
-    : frameResetReasons;
+  const frameResetReasons = createRuntimeExportPoseFrameResetReasons(options);
   const authoredParameterValues = { ...(options.authoredParameterValues ?? {}) };
-  const initialState = options.previousState ?? createInitialRuntimeState(
-    adapter.graph,
-    {
-      packageId: adapter.graph.packageId,
-      packageRevision: adapter.graph.packageRevision,
-      ...(adapter.graph.packageHash === undefined ? {} : { packageHash: adapter.graph.packageHash }),
-      frameIndex,
-      fixedStepMs: input.model.dynamicsSolver.fixedStepMs,
-      authoredParameterValues,
-      resetReasons: initialResetReasons
-    }
-  );
+  const transientCompileCount =
+    options.runtimeModelInstance === undefined &&
+      options.compiledRuntimeModel === undefined
+      ? 1
+      : 0;
+  const transientInstanceCount =
+    options.runtimeModelInstance === undefined ? 1 : 0;
+  const runtimeModelInstance = options.runtimeModelInstance ??
+    createRuntimeModelInstance({
+      compiledRuntimeModel: options.compiledRuntimeModel ??
+        compileRuntimeModel(adapter.graph),
+      ...(options.previousState === undefined
+        ? {}
+        : { previousState: options.previousState }),
+      initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+        input,
+        options
+      )
+    });
+  const initialState = runtimeModelInstance.getState();
   const runtimeCoreStartedAtMs = readCurrentTimeMs();
-  const result = evaluateRuntimeFrame(
-    adapter.graph,
+  const result = runtimeModelInstance.evaluateFrame(
     {
       schemaVersion: "runtime-evaluation-input-v1",
       frameIndex,
@@ -87,22 +96,25 @@ export function evaluateRuntimeExportPose(
       authoredParameterValues,
       targetIds: []
     },
-    initialState,
     {
-      ...defaultRuntimeEvaluationOptions(),
-      snapshotDetail: "full"
-    },
-    {
-      source: {
-        surface: "viewer"
+      evaluationOptions: {
+        ...defaultRuntimeEvaluationOptions(),
+        snapshotDetail: "full"
       },
-      policy: {
-        strictness: "interactive"
+      context: {
+        source: {
+          surface: "viewer"
+        },
+        policy: {
+          strictness: "interactive"
+        }
+      },
+      ...(options.runtimeCoreProfiling === "deep"
+        ? { profilingOptions: { enabled: true } }
+        : {}),
+      controlOptions: {
+        snapshotValidation: options.snapshotValidation ?? "skip"
       }
-    },
-    options.runtimeCoreProfiling === "deep" ? { enabled: true } : undefined,
-    {
-      snapshotValidation: options.snapshotValidation ?? "skip"
     }
   );
   const runtimeCoreEvaluationDurationMs = Math.max(
@@ -117,6 +129,9 @@ export function evaluateRuntimeExportPose(
     nextState: result.nextState,
     evaluationProfile: {
       runtimeCoreEvaluationDurationMs,
+      compiledEvaluatorFrameCount: 1,
+      transientCompileCount,
+      transientInstanceCount,
       ...(result.profile === undefined
         ? {}
         : {
@@ -127,6 +142,50 @@ export function evaluateRuntimeExportPose(
           })
     }
   };
+}
+
+export function createRuntimeExportRuntimeModelInitialStateRequest(
+  input: RuntimeExportRuntimeGraphAdapterInput,
+  options: Pick<
+    RuntimeExportPoseEvaluationOptions,
+    "authoredParameterValues" | "frameIndex" | "resetReasons"
+  > = {}
+): RuntimeModelInitialStateRequestInput {
+  const frameResetReasons = createRuntimeExportPoseFrameResetReasons(options);
+  const initialResetReasons = frameResetReasons.length === 0
+    ? ["packageLoad"]
+    : frameResetReasons;
+
+  return {
+    frameIndex: options.frameIndex ?? 0,
+    fixedStepMs: input.model.dynamicsSolver.fixedStepMs,
+    authoredParameterValues: { ...(options.authoredParameterValues ?? {}) },
+    resetReasons: initialResetReasons
+  };
+}
+
+function createRuntimeModelInstance(input: {
+  readonly compiledRuntimeModel: CompiledRuntimeModel;
+  readonly previousState?: RuntimeStateDto;
+  readonly initialStateRequest: RuntimeModelInitialStateRequestInput;
+}): RuntimeModelInstance {
+  if (input.previousState !== undefined) {
+    return input.compiledRuntimeModel.createInstance({
+      initialState: input.previousState
+    });
+  }
+
+  return input.compiledRuntimeModel.createInstance({
+    initialStateRequest: input.initialStateRequest
+  });
+}
+
+function createRuntimeExportPoseFrameResetReasons(
+  options: Pick<RuntimeExportPoseEvaluationOptions, "resetReasons">
+): RuntimeResetReason[] {
+  return options.resetReasons === undefined
+    ? ["packageLoad"]
+    : [...options.resetReasons];
 }
 
 function readCurrentTimeMs(): number {

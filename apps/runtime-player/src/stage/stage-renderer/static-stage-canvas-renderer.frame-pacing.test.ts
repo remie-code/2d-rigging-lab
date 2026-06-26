@@ -626,6 +626,9 @@ function createRenderInput(frameIndex: number) {
       },
       evaluationProfile: {
         runtimeCoreEvaluationDurationMs: 2,
+        compiledEvaluatorFrameCount: 1,
+        transientCompileCount: 0,
+        transientInstanceCount: 0,
         runtimeCoreProfile: createRuntimeCoreProfile()
       }
     },
@@ -633,10 +636,14 @@ function createRenderInput(frameIndex: number) {
       evaluationCacheStatus: frameIndex === 0 ? "miss" : "hit",
       runtimeCoreEvaluationDurationMs: 2,
       runtimeCoreProfile: createRuntimeCoreProfile(),
+      compiledEvaluatorFrameCount: 1,
+      transientCompileCount: 0,
+      transientInstanceCount: 0,
       poseEvaluationDurationMs: 3,
       snapshotToRenderDrawableDurationMs: 4,
       renderInputSceneBuildDurationMs: 5,
       renderInputScaffoldBuildDurationMs: 0,
+      runtimeModelCompileDurationMs: 0,
       renderInputClippingBuildDurationMs: 0
     }
   };

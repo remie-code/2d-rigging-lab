@@ -24,10 +24,11 @@ import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { applyRigControlOpacityMultiplierSamples } from "./rig-control-opacity-keyform-state.js";
 import { applyRotation2dSamples } from "./rig-control-keyform-state.js";
 import {
-  createAffectedDrawableIds,
-  createRigControlHierarchyEvaluation,
+  createRigControlTopologyEvaluation,
   sortDrawableIds,
-  sortRigControlIds
+  sortRigControlIds,
+  type RigControlDrawableParentCandidate,
+  type RigControlTopologyEvaluation
 } from "./rig-control-hierarchy.js";
 import {
   applyAffine2dToVertices,
@@ -89,12 +90,14 @@ export const evaluateRigControlHierarchy = (input: {
   readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
+  readonly topology?: RigControlTopologyEvaluation;
   readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): RigControlEvaluationResult => {
   const diagnostics: DiagnosticDto[] = [];
   const patchesByRigControlId = groupRigControlSamples(input.samples);
-  const hierarchy = createRigControlHierarchyEvaluation(input.graph);
-  diagnostics.push(...hierarchy.diagnostics);
+  const topology = input.topology ?? createRigControlTopologyEvaluation(input.graph);
+  const hierarchy = topology.hierarchy;
+  diagnostics.push(...cloneDiagnostics(hierarchy.diagnostics));
   const orderedRigControlIds = hierarchy.orderedRigControlIds;
   const evaluatedById = new Map<RigControlId, EvaluatedRigControlInternal>();
 
@@ -109,11 +112,7 @@ export const evaluateRigControlHierarchy = (input: {
         ? identityAffine2d()
         : evaluatedById.get(rigControl.parentId)?.worldMatrix ?? identityAffine2d();
     const descendantRigControlIds = hierarchy.descendantRigControlIdsById.get(rigControl.rigControlId) ?? [];
-    const affectedDrawableIds = createAffectedDrawableIds(
-      rigControl,
-      hierarchy.descendantRigControlIdsById,
-      hierarchy.declaredChildDrawableIdsById
-    );
+    const affectedDrawableIds = topology.affectedDrawableIdsByRigControlId.get(rigControl.rigControlId) ?? [];
     const blockedReasons = hierarchy.blockedRigControlIds.get(rigControl.rigControlId) ?? [];
     const evaluated =
       blockedReasons.length > 0
@@ -139,7 +138,7 @@ export const evaluateRigControlHierarchy = (input: {
     drawables: input.drawables,
     graph: input.graph,
     referenceVerticesByDrawableId: input.referenceVerticesByDrawableId,
-    orderedRigControlIds,
+    topology,
     evaluatedById,
     hashPrecisionDecimals: input.hashPrecisionDecimals,
     diagnostics,
@@ -331,38 +330,18 @@ const applyRigControlTransformsToDrawables = (input: {
   readonly drawables: readonly EvaluatedDrawableDto[];
   readonly graph: NormalizedRuntimeGraph;
   readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
-  readonly orderedRigControlIds: readonly RigControlId[];
+  readonly topology: RigControlTopologyEvaluation;
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
   readonly hashPrecisionDecimals: number;
   readonly diagnostics: DiagnosticDto[];
   readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): readonly EvaluatedDrawableDto[] => {
-  const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
-
-  for (const rigControlId of input.orderedRigControlIds) {
-    const rigControl = input.graph.rigControls.get(rigControlId);
-    const evaluated = input.evaluatedById.get(rigControlId);
-    if (rigControl === undefined || evaluated === undefined) {
-      continue;
-    }
-    if (evaluated.dto.evaluationStatus === "blocked") {
-      continue;
-    }
-
-    for (const drawableId of sortDrawableIds(rigControl.childDrawableIds)) {
-      if (!input.drawables.some((drawable) => drawable.drawableId === drawableId)) {
-        input.diagnostics.push(createMissingDrawableDiagnostic(drawableId, rigControlId));
-        continue;
-      }
-
-      if (directRigControlByDrawableId.has(drawableId)) {
-        input.diagnostics.push(createDuplicateDrawableParentDiagnostic(drawableId, rigControlId));
-        continue;
-      }
-
-      directRigControlByDrawableId.set(drawableId, { rigControl, evaluated });
-    }
-  }
+  const directRigControlByDrawableId = createDirectRigControlByDrawableId({
+    graph: input.graph,
+    candidates: input.topology.directDrawableParentCandidates,
+    evaluatedById: input.evaluatedById,
+    diagnostics: input.diagnostics
+  });
 
   return input.drawables.map((drawable) => {
     const directRigControl = directRigControlByDrawableId.get(drawable.drawableId);
@@ -373,7 +352,9 @@ const applyRigControlTransformsToDrawables = (input: {
     const effects = createRigControlEffectChain({
       graph: input.graph,
       directRigControl,
-      evaluatedById: input.evaluatedById
+      evaluatedById: input.evaluatedById,
+      effectChainRigControlIds:
+        input.topology.effectChainRigControlIdsByRigControlId.get(directRigControl.rigControl.rigControlId) ?? []
     });
     const opacity = applyRigControlOpacityMultiplier(drawable.opacity, effects);
     if (drawable.vertices === undefined) {
@@ -443,17 +424,54 @@ const applyRigControlOpacityMultiplier = (
 const isOpacityMultiplierSample = (sample: RuntimeKeyformSample): boolean =>
   sample.targetMetadata.targetProperty === "opacityMultiplier";
 
+const createDirectRigControlByDrawableId = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly candidates: readonly RigControlDrawableParentCandidate[];
+  readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
+  readonly diagnostics: DiagnosticDto[];
+}): ReadonlyMap<DrawableId, RigControlEffect> => {
+  const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
+
+  for (const candidate of input.candidates) {
+    const rigControl = input.graph.rigControls.get(candidate.rigControlId);
+    const evaluated = input.evaluatedById.get(candidate.rigControlId);
+    if (rigControl === undefined || evaluated === undefined) {
+      continue;
+    }
+    if (evaluated.dto.evaluationStatus === "blocked") {
+      continue;
+    }
+
+    if (!candidate.drawableExists) {
+      input.diagnostics.push(createMissingDrawableDiagnostic(candidate.drawableId, candidate.rigControlId));
+      continue;
+    }
+
+    if (directRigControlByDrawableId.has(candidate.drawableId)) {
+      input.diagnostics.push(createDuplicateDrawableParentDiagnostic(candidate.drawableId, candidate.rigControlId));
+      continue;
+    }
+
+    directRigControlByDrawableId.set(candidate.drawableId, { rigControl, evaluated });
+  }
+
+  return directRigControlByDrawableId;
+};
+
 const createRigControlEffectChain = (input: {
   readonly graph: NormalizedRuntimeGraph;
   readonly directRigControl: RigControlEffect;
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
+  readonly effectChainRigControlIds: readonly RigControlId[];
 }): readonly RigControlEffect[] => {
   const effects: RigControlEffect[] = [];
-  const visited = new Set<RigControlId>();
-  let currentRigControl: NormalizedRigControlNode | undefined = input.directRigControl.rigControl;
 
-  while (currentRigControl !== undefined && !visited.has(currentRigControl.rigControlId)) {
-    visited.add(currentRigControl.rigControlId);
+  for (const rigControlId of input.effectChainRigControlIds) {
+    const currentRigControl = input.graph.rigControls.get(rigControlId);
+    if (currentRigControl === undefined) {
+      break;
+    }
+
     const evaluated =
       currentRigControl.rigControlId === input.directRigControl.rigControl.rigControlId
         ? input.directRigControl.evaluated
@@ -463,8 +481,6 @@ const createRigControlEffectChain = (input: {
     }
 
     effects.push({ rigControl: currentRigControl, evaluated });
-    currentRigControl =
-      currentRigControl.parentId === undefined ? undefined : input.graph.rigControls.get(currentRigControl.parentId);
   }
 
   return effects;
@@ -614,6 +630,16 @@ const extractScale = (matrix: Affine2dMatrixDto): Vec2Dto => ({
   x: Number(Math.hypot(matrix.a, matrix.b).toFixed(12)),
   y: Number(Math.hypot(matrix.c, matrix.d).toFixed(12))
 });
+
+const cloneDiagnostics = (diagnostics: readonly DiagnosticDto[]): DiagnosticDto[] =>
+  diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    target: { ...diagnostic.target },
+    evidence: [...diagnostic.evidence],
+    relatedAC: [...diagnostic.relatedAC],
+    relatedScenarios: [...diagnostic.relatedScenarios],
+    repairCandidateIds: [...diagnostic.repairCandidateIds]
+  }));
 
 const cloneVertices = (vertices: readonly Vec2Dto[]): Vec2Dto[] =>
   vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }));

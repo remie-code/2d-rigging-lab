@@ -18,6 +18,19 @@ export interface RigControlHierarchyEvaluation {
   readonly diagnostics: readonly DiagnosticDto[];
 }
 
+export interface RigControlTopologyEvaluation {
+  readonly hierarchy: RigControlHierarchyEvaluation;
+  readonly affectedDrawableIdsByRigControlId: ReadonlyMap<RigControlId, readonly DrawableId[]>;
+  readonly directDrawableParentCandidates: readonly RigControlDrawableParentCandidate[];
+  readonly effectChainRigControlIdsByRigControlId: ReadonlyMap<RigControlId, readonly RigControlId[]>;
+}
+
+export interface RigControlDrawableParentCandidate {
+  readonly rigControlId: RigControlId;
+  readonly drawableId: DrawableId;
+  readonly drawableExists: boolean;
+}
+
 export type RigControlHierarchyBlockReason =
   | "blockedAncestor"
   | "cycle"
@@ -37,6 +50,19 @@ export const createRigControlHierarchyEvaluation = (
     blockedRigControlIds: hierarchyOrder.blockedRigControlIds,
     diagnostics
   };
+};
+
+export const createRigControlTopologyEvaluation = (
+  graph: NormalizedRuntimeGraph
+): RigControlTopologyEvaluation => {
+  const hierarchy = createRigControlHierarchyEvaluation(graph);
+
+  return Object.freeze({
+    hierarchy,
+    affectedDrawableIdsByRigControlId: createAffectedDrawableIdsByRigControlId(graph, hierarchy),
+    directDrawableParentCandidates: createDirectDrawableParentCandidates(graph, hierarchy),
+    effectChainRigControlIdsByRigControlId: createEffectChainRigControlIdsByRigControlId(graph)
+  });
 };
 
 export const createAffectedDrawableIds = (
@@ -59,6 +85,75 @@ export const sortRigControlIds = (rigControlIds: Iterable<RigControlId>): RigCon
 
 export const sortDrawableIds = (drawableIds: Iterable<DrawableId>): DrawableId[] =>
   [...drawableIds].sort((left, right) => left.localeCompare(right));
+
+const createAffectedDrawableIdsByRigControlId = (
+  graph: NormalizedRuntimeGraph,
+  hierarchy: RigControlHierarchyEvaluation
+): ReadonlyMap<RigControlId, readonly DrawableId[]> =>
+  new Map(
+    [...graph.rigControls.values()].map((rigControl) => [
+      rigControl.rigControlId,
+      freezeArray(createAffectedDrawableIds(
+        rigControl,
+        hierarchy.descendantRigControlIdsById,
+        hierarchy.declaredChildDrawableIdsById
+      ))
+    ])
+  );
+
+const createDirectDrawableParentCandidates = (
+  graph: NormalizedRuntimeGraph,
+  hierarchy: RigControlHierarchyEvaluation
+): readonly RigControlDrawableParentCandidate[] =>
+  freezeArray(
+    hierarchy.orderedRigControlIds.flatMap((rigControlId) => {
+      if (hierarchy.blockedRigControlIds.has(rigControlId)) {
+        return [];
+      }
+
+      const rigControl = graph.rigControls.get(rigControlId);
+      if (rigControl === undefined) {
+        return [];
+      }
+
+      return (hierarchy.declaredChildDrawableIdsById.get(rigControlId) ?? [])
+        .map((drawableId) => Object.freeze({
+          rigControlId,
+          drawableId,
+          drawableExists: graph.drawables.has(drawableId)
+        }));
+    })
+  );
+
+const createEffectChainRigControlIdsByRigControlId = (
+  graph: NormalizedRuntimeGraph
+): ReadonlyMap<RigControlId, readonly RigControlId[]> =>
+  new Map(
+    [...graph.rigControls.keys()].map((rigControlId) => [
+      rigControlId,
+      collectEffectChainRigControlIds(graph, rigControlId)
+    ])
+  );
+
+const collectEffectChainRigControlIds = (
+  graph: NormalizedRuntimeGraph,
+  rigControlId: RigControlId
+): readonly RigControlId[] => {
+  const effectChainRigControlIds: RigControlId[] = [];
+  const visited = new Set<RigControlId>();
+  let currentRigControl = graph.rigControls.get(rigControlId);
+
+  while (currentRigControl !== undefined && !visited.has(currentRigControl.rigControlId)) {
+    visited.add(currentRigControl.rigControlId);
+    effectChainRigControlIds.push(currentRigControl.rigControlId);
+    currentRigControl =
+      currentRigControl.parentId === undefined
+        ? undefined
+        : graph.rigControls.get(currentRigControl.parentId);
+  }
+
+  return freezeArray(effectChainRigControlIds);
+};
 
 const createParentBeforeChildOrder = (
   graph: NormalizedRuntimeGraph,
@@ -289,3 +384,6 @@ const freezeBlockedRigControlIds = (
   );
 
 const unique = <T>(values: readonly T[]): readonly T[] => [...new Set(values)];
+
+const freezeArray = <TValue>(values: readonly TValue[]): readonly TValue[] =>
+  Object.freeze([...values]);

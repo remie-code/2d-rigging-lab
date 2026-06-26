@@ -49,6 +49,11 @@ export type PerformanceDiagnosticsMetricSummary = {
   readonly max: number | null;
 };
 
+export type PerformanceDiagnosticsLatestMetricSummary = {
+  readonly sampleCount: number | null;
+  readonly latest: number | null;
+};
+
 export type PerformanceDiagnosticsTargetReport = {
   readonly availability:
     | "available"
@@ -69,6 +74,17 @@ export type PerformanceDiagnosticsTargetReport = {
   readonly evaluationCacheHitCount: number | null;
   readonly evaluationCacheMissCount: number | null;
   readonly evaluationCacheInvalidationCount: number | null;
+  readonly scaffoldEvaluationCacheHitCount: number | null;
+  readonly scaffoldEvaluationCacheMissCount: number | null;
+  readonly scaffoldEvaluationCacheInvalidationCount: number | null;
+  readonly compiledEvaluatorFrameCount: number | null;
+  readonly transientCompileCount: number | null;
+  readonly transientInstanceCount: number | null;
+  readonly runtimeModelInstanceCacheHitCount: number | null;
+  readonly runtimeModelInstanceCacheMissCount: number | null;
+  readonly runtimeModelInstanceCacheInvalidationCount: number | null;
+  readonly runtimeModelCompileDurationMs:
+    PerformanceDiagnosticsLatestMetricSummary;
   readonly runtimeCoreEvaluationDurationMs:
     PerformanceDiagnosticsMetricSummary;
   readonly runtimeCoreInputValidationDurationMs:
@@ -436,6 +452,21 @@ function createMetricsTargetReport(input: {
     end,
     "stageDisplayTransformMessageCount"
   );
+  const scaffoldEvaluationCacheHitCount = readMetricDelta(
+    start,
+    end,
+    "evaluationCacheHitCount"
+  );
+  const scaffoldEvaluationCacheMissCount = readMetricDelta(
+    start,
+    end,
+    "evaluationCacheMissCount"
+  );
+  const scaffoldEvaluationCacheInvalidationCount = readMetricDelta(
+    start,
+    end,
+    "evaluationCacheInvalidationCount"
+  );
 
   return {
     availability: input.availability,
@@ -467,21 +498,47 @@ function createMetricsTargetReport(input: {
       sampleCountKey: "liveRenderInputEvaluationDurationSampleCount",
       valueKey: "lastLiveRenderInputEvaluationDurationMs"
     }),
-    evaluationCacheHitCount: readMetricDelta(
+    evaluationCacheHitCount: scaffoldEvaluationCacheHitCount,
+    evaluationCacheMissCount: scaffoldEvaluationCacheMissCount,
+    evaluationCacheInvalidationCount: scaffoldEvaluationCacheInvalidationCount,
+    scaffoldEvaluationCacheHitCount,
+    scaffoldEvaluationCacheMissCount,
+    scaffoldEvaluationCacheInvalidationCount,
+    compiledEvaluatorFrameCount: readMetricDelta(
       start,
       end,
-      "evaluationCacheHitCount"
+      "compiledEvaluatorFrameCount"
     ),
-    evaluationCacheMissCount: readMetricDelta(
+    transientCompileCount: readMetricDelta(
       start,
       end,
-      "evaluationCacheMissCount"
+      "transientCompileCount"
     ),
-    evaluationCacheInvalidationCount: readMetricDelta(
+    transientInstanceCount: readMetricDelta(
       start,
       end,
-      "evaluationCacheInvalidationCount"
+      "transientInstanceCount"
     ),
+    runtimeModelInstanceCacheHitCount: readMetricDelta(
+      start,
+      end,
+      "runtimeModelInstanceCacheHitCount"
+    ),
+    runtimeModelInstanceCacheMissCount: readMetricDelta(
+      start,
+      end,
+      "runtimeModelInstanceCacheMissCount"
+    ),
+    runtimeModelInstanceCacheInvalidationCount: readMetricDelta(
+      start,
+      end,
+      "runtimeModelInstanceCacheInvalidationCount"
+    ),
+    runtimeModelCompileDurationMs: readLatestMetricSummary({
+      metrics: input.metrics,
+      sampleCountKey: "runtimeModelCompileDurationSampleCount",
+      valueKey: "lastRuntimeModelCompileDurationMs"
+    }),
     runtimeCoreEvaluationDurationMs: summarizeMetricSamples({
       metrics: input.metrics,
       sampleCountKey: "runtimeCoreEvaluationDurationSampleCount",
@@ -654,6 +711,16 @@ function createUnavailableTargetReport(
     evaluationCacheHitCount: null,
     evaluationCacheMissCount: null,
     evaluationCacheInvalidationCount: null,
+    scaffoldEvaluationCacheHitCount: null,
+    scaffoldEvaluationCacheMissCount: null,
+    scaffoldEvaluationCacheInvalidationCount: null,
+    compiledEvaluatorFrameCount: null,
+    transientCompileCount: null,
+    transientInstanceCount: null,
+    runtimeModelInstanceCacheHitCount: null,
+    runtimeModelInstanceCacheMissCount: null,
+    runtimeModelInstanceCacheInvalidationCount: null,
+    runtimeModelCompileDurationMs: createEmptyLatestMetricSummary(),
     runtimeCoreEvaluationDurationMs: createEmptyMetricSummary(),
     runtimeCoreInputValidationDurationMs: createEmptyMetricSummary(),
     runtimeCoreStateCompatibilityDurationMs: createEmptyMetricSummary(),
@@ -774,6 +841,25 @@ function summarizeMetricSamples(input: {
   };
 }
 
+function readLatestMetricSummary(input: {
+  readonly metrics: readonly RuntimePlayerStageRenderMetricsSnapshot[];
+  readonly sampleCountKey: "runtimeModelCompileDurationSampleCount";
+  readonly valueKey: "lastRuntimeModelCompileDurationMs";
+}): PerformanceDiagnosticsLatestMetricSummary {
+  const end = input.metrics.at(-1) ?? null;
+  if (end === null) {
+    return createEmptyLatestMetricSummary();
+  }
+
+  const sampleCount = end[input.sampleCountKey] ?? 0;
+  const latest = end[input.valueKey] ?? null;
+
+  return {
+    sampleCount,
+    latest
+  };
+}
+
 function readMetricDelta(
   start: RuntimePlayerStageRenderMetricsSnapshot | null,
   end: RuntimePlayerStageRenderMetricsSnapshot | null,
@@ -879,6 +965,14 @@ function createEmptyMetricSummary(): PerformanceDiagnosticsMetricSummary {
   };
 }
 
+function createEmptyLatestMetricSummary():
+  PerformanceDiagnosticsLatestMetricSummary {
+  return {
+    sampleCount: null,
+    latest: null
+  };
+}
+
 function copyRenderMetricsSnapshot(
   snapshot: RuntimePlayerStageRenderMetricsSnapshot | null
 ): RuntimePlayerStageRenderMetricsSnapshot | null {
@@ -907,6 +1001,20 @@ function copyRenderMetricsSnapshot(
     evaluationCacheMissCount: snapshot.evaluationCacheMissCount ?? 0,
     evaluationCacheInvalidationCount:
       snapshot.evaluationCacheInvalidationCount ?? 0,
+    compiledEvaluatorFrameCount:
+      snapshot.compiledEvaluatorFrameCount ?? 0,
+    transientCompileCount: snapshot.transientCompileCount ?? 0,
+    transientInstanceCount: snapshot.transientInstanceCount ?? 0,
+    runtimeModelInstanceCacheHitCount:
+      snapshot.runtimeModelInstanceCacheHitCount ?? 0,
+    runtimeModelInstanceCacheMissCount:
+      snapshot.runtimeModelInstanceCacheMissCount ?? 0,
+    runtimeModelInstanceCacheInvalidationCount:
+      snapshot.runtimeModelInstanceCacheInvalidationCount ?? 0,
+    lastRuntimeModelCompileDurationMs:
+      snapshot.lastRuntimeModelCompileDurationMs ?? null,
+    runtimeModelCompileDurationSampleCount:
+      snapshot.runtimeModelCompileDurationSampleCount ?? 0,
     lastRuntimeCoreEvaluationDurationMs:
       snapshot.lastRuntimeCoreEvaluationDurationMs ?? null,
     runtimeCoreEvaluationDurationSampleCount:
@@ -1038,6 +1146,38 @@ function formatTargetReport(
     `evaluationCacheInvalidationCount: ${
       formatNullableInteger(report.evaluationCacheInvalidationCount)
     }`,
+    `scaffoldEvaluationCacheHitCount: ${
+      formatNullableInteger(report.scaffoldEvaluationCacheHitCount)
+    }`,
+    `scaffoldEvaluationCacheMissCount: ${
+      formatNullableInteger(report.scaffoldEvaluationCacheMissCount)
+    }`,
+    `scaffoldEvaluationCacheInvalidationCount: ${
+      formatNullableInteger(report.scaffoldEvaluationCacheInvalidationCount)
+    }`,
+    `compiledEvaluatorFrameCount: ${
+      formatNullableInteger(report.compiledEvaluatorFrameCount)
+    }`,
+    `transientCompileCount: ${
+      formatNullableInteger(report.transientCompileCount)
+    }`,
+    `transientInstanceCount: ${
+      formatNullableInteger(report.transientInstanceCount)
+    }`,
+    `runtimeModelInstanceCacheHitCount: ${
+      formatNullableInteger(report.runtimeModelInstanceCacheHitCount)
+    }`,
+    `runtimeModelInstanceCacheMissCount: ${
+      formatNullableInteger(report.runtimeModelInstanceCacheMissCount)
+    }`,
+    `runtimeModelInstanceCacheInvalidationCount: ${
+      formatNullableInteger(
+        report.runtimeModelInstanceCacheInvalidationCount
+      )
+    }`,
+    `runtimeModelCompileDurationMs: ${
+      formatLatestMetricSummary(report.runtimeModelCompileDurationMs)
+    }`,
     `runtimeCoreEvaluationDurationMs: ${
       formatMetricSummary(report.runtimeCoreEvaluationDurationMs)
     }`,
@@ -1142,6 +1282,16 @@ function formatMetricSummary(
     `p50=${formatNullableNumber(summary.p50)}`,
     `p95=${formatNullableNumber(summary.p95)}`,
     `max=${formatNullableNumber(summary.max)}`
+  ].join(" ");
+}
+
+function formatLatestMetricSummary(
+  summary: PerformanceDiagnosticsLatestMetricSummary
+): string {
+  return [
+    `scaffoldBuildSampleCount=${formatNullableInteger(summary.sampleCount)}`,
+    `latest=${formatNullableNumber(summary.latest)}`,
+    "scope=scaffold-build-cold-path"
   ].join(" ");
 }
 

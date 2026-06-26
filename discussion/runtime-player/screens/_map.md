@@ -13,7 +13,7 @@
 | [browser-source-output-probe-v0.md](browser-source-output-probe-v0.md) | Implemented through Wave10 source/tests; manual OBS product-confidence checks pending | Browser Source Output screen, loopback URL, token/diagnostics boundaries, model-only Browser Source Stage client, Wave10 suspension/sampling/resync facts, and post-Wave10 manual OBS checklist |
 | [stage-motion-head-position-follow.md](stage-motion-head-position-follow.md) | Implemented through Wave11 source/tests/review; manual tuning pending | Head position由来のStage-level horizontal offset / explicit near/far depth scale offset、dead zone、reaction、limit、Window State auto-save、Browser Source composed transform境界 |
 | [live-controller-page.md](live-controller-page.md) | Implemented through Wave12 source/domain level; manual broadcast verification pending | 配信中の即時操作を集めるControl Window page。Variant切替、Reset to Model Default、Look Forward、Stage Motion quick toggle、Center Modelを扱い、native Stage / Browser Sourceへ同じsanitized active Variant selectionを反映する |
-| [performance-diagnostics.md](performance-diagnostics.md) | Updated / Wave15 final clean review pass; manual native/OBS checks pending | Native Stage / Browser Source / Both のtimed capture、source/input FPSとrender FPSの分離、renderer frame pacing metrics、runtime-core deep profiling capture boundary、Copy Report、privacy boundary、manual comparison guidance |
+| [performance-diagnostics.md](performance-diagnostics.md) | Updated / Wave16 source/test facts reflected; final clean review and manual native/OBS checks pending | Native Stage / Browser Source / Both のtimed capture、source/input FPSとrender FPSの分離、renderer frame pacing metrics、runtime-core deep profiling capture boundary、compiled-path phase interpretation、Copy Report、privacy boundary、manual comparison guidance |
 
 ## Current Screen Principles
 
@@ -41,15 +41,16 @@
 - Performance Diagnostics reports must separate source/input FPS from render FPS and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, full Runtime Export payload, Runtime Export textures, and Runtime Export mesh data.
 - Wave15 keeps normal live Runtime Player evaluation on the hot-path defaults: snapshot validation is skipped for Stage / Browser Source pose evaluation, and deep runtime-core profiling is disabled unless Performance Diagnostics capture intentionally requests it for the selected target.
 - During a Performance Diagnostics deep capture, runtime-core phase fields may add measurement overhead while capture is active. If no live render evaluation happens during that window, phase summaries can legitimately be `unknown` / `sampleCount=0`.
+- Wave16 connects Runtime Player to runtime-core's compiled evaluator. In copied reports, compare `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, and `runtimeCoreWarpDeformerVertexTransformDurationMs` as compiled-path frame costs; `runtimeModelCompileDurationMs` is internal scaffold profiling and is not currently a copied report line.
 - Spout2、obs-websocket、automatic OBS source creation、automatic OBS capture verificationはout of scope: [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)。
 - Startup時の前回Runtime Export自動復元はWave8で実装済み。Input Source auto-connectはしない。
 - click-throughは起動時Offで、永続保存しない。always-on-topはdefault OffでWindow Stateへ保存する。
 
 ## Next Questions
 
-1. Wave15 Performance Diagnosticsでreal Runtime Export + iFacialMocap + OBS Browser Sourceを使い、normal/default captureとdeep captureを確認する。現行Wave15 captureは選択targetにdeep runtime-core profilingを要求する。
+1. Wave16 Performance Diagnosticsでreal Runtime Export + iFacialMocap + OBS Browser Sourceを使い、normal/default captureとdeep captureを確認する。現行Wave16 captureは選択targetにdeep runtime-core profilingを要求する。
 2. OBS Browser Source接続中にBrowser SourceまたはBoth captureを実行し、native StageとBrowser Sourceのmetricsを比較できるか確認する。
-3. `inputReceiveFpsLatest`、`liveFrameMessageFps`、`appliedLiveFrameFps`、`renderFps`、`liveRenderInputEvaluationDurationMs`、`runtimeCoreEvaluationDurationMs`、runtime-core phase fieldsを比較し、copied reportを`tmp/report.log`へ保存する。
+3. `inputReceiveFpsLatest`、`liveFrameMessageFps`、`appliedLiveFrameFps`、`renderFps`、`liveRenderInputEvaluationDurationMs`、`runtimeCoreEvaluationDurationMs`、`runtimeCoreSnapshotCreationDurationMs`、`runtimeCoreDrawableSnapshotCreationDurationMs`、`runtimeCoreDeformerHierarchyEvaluationDurationMs`、`runtimeCoreWarpDeformerVertexTransformDurationMs`、`renderDurationMs`、runtime-core phase fieldsを比較し、copied reportを`tmp/report.log`へ保存する。
 4. Copy Reportがraw tracking frames、calibration internals、Browser Source token、private file paths、full Runtime Export payload、Runtime Export textures、Runtime Export mesh dataを含まないことを確認する。
 5. Stage Motion off/on、OBS custom FPS off/30/60、Variant switching parity、Wave10 local preview suspension/resumeをPerformance Diagnostics capture中にも確認する。
 6. Native Stage Windowのmanual Electron verificationをlocal preview/fallback観点で実行する。

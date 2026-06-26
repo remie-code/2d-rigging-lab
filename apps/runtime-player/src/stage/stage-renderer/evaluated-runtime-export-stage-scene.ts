@@ -15,6 +15,7 @@ import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import {
+  createRuntimeExportRuntimeModelInitialStateRequest,
   evaluateRuntimeExportPose,
   type RuntimeExportPoseEvaluation,
   type RuntimeExportPoseEvaluationOptions
@@ -31,6 +32,9 @@ import {
   type RuntimeExportEvaluationScaffoldBuildProfile,
   type RuntimeExportEvaluationScaffold
 } from "./runtime-export-evaluation-cache";
+import type {
+  RuntimeExportRuntimeModelInstanceCache
+} from "./runtime-export-runtime-model-instance-cache";
 
 export interface EvaluatedRuntimeExportStageRenderInput extends RuntimeExportStageRenderInput {
   readonly poseEvaluation: RuntimeExportPoseEvaluation;
@@ -41,16 +45,21 @@ export interface RuntimeExportRenderInputEvaluationProfile {
   readonly evaluationCacheStatus: "hit" | "miss" | "not-used";
   readonly runtimeCoreEvaluationDurationMs: number;
   readonly runtimeCoreProfile?: RuntimeCoreEvaluationProfile;
+  readonly compiledEvaluatorFrameCount: number;
+  readonly transientCompileCount: number;
+  readonly transientInstanceCount: number;
   readonly poseEvaluationDurationMs: number;
   readonly snapshotToRenderDrawableDurationMs: number;
   readonly renderInputSceneBuildDurationMs: number;
   readonly renderInputScaffoldBuildDurationMs: number;
+  readonly runtimeModelCompileDurationMs: number;
   readonly renderInputClippingBuildDurationMs: number;
 }
 
 export type EvaluatedRuntimeExportStageRenderInputOptions =
   RuntimeExportPoseEvaluationOptions & {
     readonly evaluationCache?: RuntimeExportEvaluationCache;
+    readonly runtimeModelInstanceCache?: RuntimeExportRuntimeModelInstanceCache;
   };
 
 export function createEvaluatedRuntimeExportStageRenderInput(
@@ -64,13 +73,28 @@ export function createEvaluatedRuntimeExportStageRenderInput(
     evaluationCache: options.evaluationCache
   });
   const scaffold = scaffoldAccess.scaffold;
+  const poseEvaluationInput = createPoseEvaluationInput(payload, {
+    ...options,
+    activeVariantSelection
+  });
+  const runtimeModelInstance = options.runtimeModelInstance ??
+    options.runtimeModelInstanceCache?.getOrCreate(scaffold, {
+      initialStateRequest: createRuntimeExportRuntimeModelInitialStateRequest(
+        poseEvaluationInput,
+        options
+      )
+    });
   const poseEvaluationStartedAtMs = readCurrentTimeMs();
   const poseEvaluation = evaluateRuntimeExportPose(
-    createPoseEvaluationInput(payload, options),
+    poseEvaluationInput,
     {
       ...options,
       activeVariantSelection,
-      adapter: scaffold.adapter
+      adapter: scaffold.adapter,
+      compiledRuntimeModel: scaffold.compiledRuntimeModel,
+      ...(runtimeModelInstance === undefined
+        ? {}
+        : { runtimeModelInstance })
     }
   );
   const poseEvaluationDurationMs = Math.max(
@@ -104,6 +128,12 @@ export function createEvaluatedRuntimeExportStageRenderInput(
       evaluationCacheStatus: scaffoldAccess.cacheStatus,
       runtimeCoreEvaluationDurationMs:
         poseEvaluation.evaluationProfile.runtimeCoreEvaluationDurationMs,
+      compiledEvaluatorFrameCount:
+        poseEvaluation.evaluationProfile.compiledEvaluatorFrameCount,
+      transientCompileCount:
+        poseEvaluation.evaluationProfile.transientCompileCount,
+      transientInstanceCount:
+        poseEvaluation.evaluationProfile.transientInstanceCount,
       ...(poseEvaluation.evaluationProfile.runtimeCoreProfile === undefined
         ? {}
         : {
@@ -115,6 +145,8 @@ export function createEvaluatedRuntimeExportStageRenderInput(
       renderInputSceneBuildDurationMs,
       renderInputScaffoldBuildDurationMs:
         scaffoldAccess.scaffoldBuildProfile.totalDurationMs,
+      runtimeModelCompileDurationMs:
+        scaffoldAccess.scaffoldBuildProfile.runtimeModelCompileDurationMs,
       renderInputClippingBuildDurationMs:
         scaffoldAccess.scaffoldBuildProfile.clippingBuildDurationMs
     }

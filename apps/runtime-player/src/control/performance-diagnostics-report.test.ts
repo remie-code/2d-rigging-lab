@@ -348,7 +348,15 @@ describe("Performance Diagnostics report", () => {
         liveFrameMessageCount: 4,
         liveRenderInputEvaluationDurationSampleCount: 4,
         rafDeltaSampleCount: 2,
-        renderDurationSampleCount: 4
+        renderDurationSampleCount: 4,
+        compiledEvaluatorFrameCount: 4,
+        transientCompileCount: 0,
+        transientInstanceCount: 0,
+        runtimeModelInstanceCacheHitCount: 3,
+        runtimeModelInstanceCacheMissCount: 1,
+        runtimeModelInstanceCacheInvalidationCount: 0,
+        lastRuntimeModelCompileDurationMs: 5,
+        runtimeModelCompileDurationSampleCount: 1
       }),
       sourceFps: 30
     });
@@ -369,6 +377,14 @@ describe("Performance Diagnostics report", () => {
         lastRenderDurationMs: 6,
         renderDurationSampleCount: 34,
         lastLiveRenderInputEvaluationDurationMs: 4,
+        compiledEvaluatorFrameCount: 34,
+        transientCompileCount: 0,
+        transientInstanceCount: 0,
+        runtimeModelInstanceCacheHitCount: 33,
+        runtimeModelInstanceCacheMissCount: 1,
+        runtimeModelInstanceCacheInvalidationCount: 0,
+        lastRuntimeModelCompileDurationMs: 5,
+        runtimeModelCompileDurationSampleCount: 1,
         lastScheduledFrameDurationMs: 14,
         scheduledFrameDurationSampleCount: 1
       }),
@@ -396,9 +412,23 @@ describe("Performance Diagnostics report", () => {
       appliedLiveFrameFps: 30,
       appliedLiveFrameCount: 30,
       renderFps: 30,
+      scaffoldEvaluationCacheHitCount: 0,
+      scaffoldEvaluationCacheMissCount: 0,
+      scaffoldEvaluationCacheInvalidationCount: 0,
+      compiledEvaluatorFrameCount: 30,
+      transientCompileCount: 0,
+      transientInstanceCount: 0,
+      runtimeModelInstanceCacheHitCount: 30,
+      runtimeModelInstanceCacheMissCount: 0,
+      runtimeModelInstanceCacheInvalidationCount: 0,
       stageTransformMessageCount: 3,
       browserSourceClientCount: 1
     });
+    expect(report.browserSource.runtimeModelCompileDurationMs)
+      .toMatchObject({
+        sampleCount: 1,
+        latest: 5
+      });
     expect(report.browserSource.liveRenderInputEvaluationDurationMs)
       .toMatchObject({
         sampleCount: 1,
@@ -412,6 +442,18 @@ describe("Performance Diagnostics report", () => {
       p95: 14,
       max: 14
     });
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "compiledEvaluatorFrameCount: 30"
+    );
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "transientCompileCount: 0"
+    );
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "runtimeModelInstanceCacheHitCount: 30"
+    );
+    expect(formatPerformanceDiagnosticsReport(report)).toContain(
+      "runtimeModelCompileDurationMs: scaffoldBuildSampleCount=1 latest=5 scope=scaffold-build-cold-path"
+    );
   });
 
   it("separates Browser Source input delivery, applied frames, rendering, and source timestamp FPS", () => {

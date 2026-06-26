@@ -9,7 +9,12 @@ import { describe, expect, it } from "vitest";
 import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
-import { evaluateRuntimeFrame, evaluateRuntimeSequence } from "./runtime-core.js";
+import {
+  compileRuntimeModel,
+  evaluateRuntimeFrame,
+  evaluateRuntimeSequence,
+  runtimeCore
+} from "./runtime-core.js";
 import { createRuntimeSnapshot } from "./snapshot.js";
 
 describe("runtime-core foundation evaluation", () => {
@@ -358,6 +363,116 @@ describe("runtime-core foundation evaluation", () => {
         snapshotValidationMode: "schema"
       })
     ).toThrow();
+  });
+
+  it("exposes a compiled runtime model API that matches legacy frame evaluation", () => {
+    const packageId = PackageIdSchema.parse("pkg_compiled_api");
+    const drawableId = DrawableIdSchema.parse("draw_compiled_api");
+    const meshId = MeshIdSchema.parse("mesh_compiled_api");
+    const graph = createGraph({
+      packageId,
+      drawables: new Map([
+        [
+          drawableId,
+          {
+            drawableId,
+            meshId,
+            visible: true,
+            opacity: 0.8,
+            baseDrawOrder: 4,
+            bounds: { x: 1, y: 2, width: 32, height: 48 },
+            vertexCount: 4
+          }
+        ]
+      ])
+    });
+    const initialState = createInitialRuntimeState(graph, {
+      packageId,
+      packageRevision: 0,
+      resetReasons: ["packageLoad"]
+    });
+    const input = {
+      schemaVersion: "runtime-evaluation-input-v1" as const,
+      frameIndex: 1,
+      deltaTimeMs: 0,
+      authoredParameterValues: {}
+    };
+    const evaluationOptions = defaultRuntimeEvaluationOptions();
+    const context = { source: { surface: "preview" as const } };
+
+    const legacy = evaluateRuntimeFrame(
+      graph,
+      input,
+      initialState,
+      evaluationOptions,
+      context
+    );
+    const compiled = compileRuntimeModel(graph);
+    const instance = compiled.createInstance({ initialState });
+    const compiledResult = instance.evaluateFrame(input, {
+      evaluationOptions,
+      context
+    });
+
+    expect(runtimeCore.compileRuntimeModel).toBe(compileRuntimeModel);
+    expect(compiledResult).toEqual(legacy);
+  });
+
+  it("advances compiled runtime model instance state without reusing snapshots", () => {
+    const packageId = PackageIdSchema.parse("pkg_compiled_state");
+    const drawableId = DrawableIdSchema.parse("draw_compiled_state");
+    const meshId = MeshIdSchema.parse("mesh_compiled_state");
+    const graph = createGraph({
+      packageId,
+      drawables: new Map([
+        [
+          drawableId,
+          {
+            drawableId,
+            meshId,
+            visible: true,
+            opacity: 1,
+            baseDrawOrder: 2,
+            bounds: { x: 0, y: 0, width: 16, height: 16 },
+            vertexCount: 4
+          }
+        ]
+      ])
+    });
+    const instance = compileRuntimeModel(graph).createInstance();
+    const evaluationOptions = defaultRuntimeEvaluationOptions();
+    const context = { source: { surface: "preview" as const } };
+
+    const first = instance.evaluateFrame(
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex: 1,
+        deltaTimeMs: 0
+      },
+      {
+        evaluationOptions,
+        context
+      }
+    );
+    const firstSnapshotBefore = JSON.parse(JSON.stringify(first.snapshot));
+    const second = instance.evaluateFrame(
+      {
+        schemaVersion: "runtime-evaluation-input-v1",
+        frameIndex: 2,
+        deltaTimeMs: 0
+      },
+      {
+        evaluationOptions,
+        context
+      }
+    );
+
+    expect(first.snapshot).not.toBe(second.snapshot);
+    expect(first.snapshot.drawables[0]).not.toBe(second.snapshot.drawables[0]);
+    expect(first.snapshot).toEqual(firstSnapshotBefore);
+    expect(first.nextState.frameIndex).toBe(1);
+    expect(second.nextState.frameIndex).toBe(2);
+    expect(instance.getState().frameIndex).toBe(2);
   });
 });
 

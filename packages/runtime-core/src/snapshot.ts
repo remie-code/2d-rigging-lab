@@ -13,12 +13,10 @@ import {
   Vec2DtoSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
-  DrawableId,
   DiagnosticDto,
   ParameterId,
   RuntimeEvaluationContextDto,
-  RuntimeStateDto,
-  Vec2Dto
+  RuntimeStateDto
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
@@ -28,7 +26,6 @@ import {
 } from "./layer-tree-evidence.js";
 import { KeyformSampleSchema } from "./keyform-evaluation-types.js";
 import {
-  createEvaluatedMaskRelations,
   EvaluatedMaskRelationSchema
 } from "./mask-relation-evidence.js";
 import {
@@ -43,22 +40,29 @@ import {
   computeDynamicsOutputOffsets,
   computeDynamicsSourceSample
 } from "./dynamics-evaluation.js";
-import type { NormalizedDrawable, NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
+import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import type { EffectiveParameterResolution } from "./parameter-resolution.js";
 import { EvaluatedRigControlSchema, evaluateRigControlHierarchy } from "./rig-control-evaluation.js";
+import type { RigControlTopologyEvaluation } from "./rig-control-hierarchy.js";
 import type { RuntimeEvaluationOptionsDto } from "./runtime-options.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 import type {
   RuntimeCoreEvaluationProfiler,
   RuntimeCoreEvaluationProfilePhaseKey
 } from "./runtime-profiling.js";
-import { createStableVertexHash as createStableGeometryVertexHash } from "./drawable-geometry.js";
 import {
-  createEvaluatedDrawableTexture,
   EvaluatedDrawableTextureSchema,
   omitTextureProjectionCoordinates
 } from "./texture-projection.js";
+import {
+  compileRuntimeDrawableSnapshotTemplates,
+  compileRuntimeMaskRelationTemplates,
+  compileRuntimeReferenceVerticesByDrawableId,
+  materializeRuntimeDrawableSnapshots,
+  materializeRuntimeMaskRelations,
+  type RuntimeSnapshotStaticTemplates
+} from "./snapshot-static-templates.js";
 
 export {
   EvaluatedMaskRelationSchema
@@ -177,6 +181,8 @@ export const createRuntimeSnapshot = (input: {
   readonly options: RuntimeEvaluationOptionsDto;
   readonly context: RuntimeEvaluationContextDto;
   readonly diagnostics: readonly DiagnosticDto[];
+  readonly snapshotStaticTemplates?: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology?: RigControlTopologyEvaluation;
   readonly profiling?: RuntimeCoreEvaluationProfiler;
   readonly snapshotValidationMode?: RuntimeSnapshotValidationMode;
 }): RuntimeSnapshotDto => {
@@ -202,19 +208,27 @@ export const createRuntimeSnapshot = (input: {
       effectiveParameterValues: parameterResolution.effectiveParameterValues
     })
   );
+  const drawableTemplates =
+    input.snapshotStaticTemplates?.drawables ??
+    measure(
+      "drawableSnapshotCreationDurationMs",
+      () => compileRuntimeDrawableSnapshotTemplates(input.graph)
+    );
   const baseDrawables = measure(
     "drawableSnapshotCreationDurationMs",
-    () => createEvaluatedDrawables({
-      graph: input.graph,
+    () => materializeRuntimeDrawableSnapshots({
+      templates: drawableTemplates,
       options: input.options,
       includeVertices:
         keyformSampling.samples.length > 0 || input.graph.rigControls.size > 0
     })
   );
-  const referenceVerticesByDrawableId = measure(
-    "drawableSnapshotCreationDurationMs",
-    () => createReferenceVerticesByDrawableId(input.graph)
-  );
+  const referenceVerticesByDrawableId =
+    input.snapshotStaticTemplates?.referenceVerticesByDrawableId ??
+    measure(
+      "drawableSnapshotCreationDurationMs",
+      () => compileRuntimeReferenceVerticesByDrawableId(input.graph)
+    );
   const appliedKeyforms = measure(
     "keyformApplicationDurationMs",
     () => applySamplesInEvaluationOrder({
@@ -235,6 +249,9 @@ export const createRuntimeSnapshot = (input: {
         (sample) => sample.targetMetadata.targetKind === "rigControl"
       ),
       hashPrecisionDecimals: input.options.epsilonPolicy.hashPrecisionDecimals,
+      ...(input.rigControlTopology === undefined
+        ? {}
+        : { topology: input.rigControlTopology }),
       ...(input.profiling === undefined ? {} : { profiling: input.profiling })
     })
   );
@@ -246,9 +263,15 @@ export const createRuntimeSnapshot = (input: {
       input.graph
     )
   );
+  const maskTemplates =
+    input.snapshotStaticTemplates?.masks ??
+    measure(
+      "maskEvaluationDurationMs",
+      () => compileRuntimeMaskRelationTemplates(input.graph)
+    );
   const masks = measure(
     "maskEvaluationDurationMs",
-    () => createEvaluatedMaskRelations(input.graph)
+    () => materializeRuntimeMaskRelations(maskTemplates)
   );
   const drawList = measure(
     "visibilityDrawOrderEvaluationDurationMs",
@@ -382,56 +405,6 @@ const createEvaluatedDynamics = (
       });
     });
 
-const createEvaluatedDrawables = (input: {
-  readonly graph: NormalizedRuntimeGraph;
-  readonly options: RuntimeEvaluationOptionsDto;
-  readonly includeVertices: boolean;
-}): EvaluatedDrawableDto[] => {
-  const { graph, options } = input;
-  const explicitOrder = new Map(graph.drawOrder.map((entry) => [entry.drawableId, entry.drawOrder]));
-  return [...graph.drawables.values()]
-    .map((drawable) =>
-      EvaluatedDrawableSchema.parse({
-        drawableId: drawable.drawableId,
-        meshId: drawable.meshId,
-        ...(drawable.partId === undefined ? {} : { partId: drawable.partId }),
-        ...(drawable.texture === undefined
-          ? {}
-          : {
-              texture: createEvaluatedDrawableTexture({
-                texture: drawable.texture,
-                vertexCount: drawable.vertexCount,
-                includeUvCoordinates: options.snapshotDetail === "full"
-              })
-            }),
-        visible: drawable.visible,
-        opacity: clamp(drawable.opacity, 0, 1),
-        baseDrawOrder: drawable.baseDrawOrder,
-        evaluatedDrawOrder: explicitOrder.get(drawable.drawableId) ?? drawable.baseDrawOrder,
-        bounds: drawable.bounds,
-        vertexCount: drawable.vertexCount,
-        vertexHash: drawable.vertexHash ?? createDrawableVertexHash(drawable, options.epsilonPolicy.hashPrecisionDecimals),
-        ...((options.snapshotDetail === "full" || input.includeVertices) && drawable.vertices !== undefined
-          ? { vertices: drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y })) }
-          : {}),
-        diagnostics: []
-      })
-    )
-    .sort((left, right) => left.evaluatedDrawOrder - right.evaluatedDrawOrder || left.drawableId.localeCompare(right.drawableId));
-};
-
-const createReferenceVerticesByDrawableId = (
-  graph: NormalizedRuntimeGraph
-): ReadonlyMap<DrawableId, readonly Vec2Dto[]> =>
-  new Map(
-    [...graph.drawables.values()]
-      .filter((drawable): drawable is NormalizedDrawable & { readonly vertices: readonly Vec2Dto[] } => drawable.vertices !== undefined)
-      .map((drawable) => [
-        drawable.drawableId,
-        drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }))
-      ] as const)
-  );
-
 const sampleRuntimeKeyformsInEvaluationOrder = (input: {
   readonly graph: NormalizedRuntimeGraph;
   readonly effectiveParameterValues: ReadonlyMap<ParameterId, number>;
@@ -528,16 +501,3 @@ const finalizeDrawablesForDetail = (
     };
   });
 };
-
-const createDrawableVertexHash = (
-  drawable: NormalizedDrawable,
-  hashPrecisionDecimals: number
-): string => {
-  if (drawable.vertices === undefined) {
-    return `hash_${drawable.drawableId}_${drawable.vertexCount}`;
-  }
-
-  return createStableGeometryVertexHash(drawable.vertices, { hashPrecisionDecimals });
-};
-
-const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
