@@ -41,7 +41,6 @@ import {
 import {
   RuntimePlayerQuitController,
   attachRuntimePlayerControlWindowRecovery,
-  focusRuntimePlayerStageWindow,
   showRuntimePlayerControlWindow
 } from "./window-management/control-window-recovery";
 import { registerRuntimePlayerTrayMenu } from "./window-management/runtime-player-tray-menu";
@@ -63,7 +62,8 @@ export function startRuntimePlayerMain(): void {
       snapshot: windowStateSnapshot
     });
     const windows = createRuntimePlayerWindows({
-      windowState: windowState.getDocument()
+      windowState: windowState.getDocument(),
+      getWindowStateDocument: () => windowState.getDocument()
     });
     attachRuntimePlayerWindowStateTracking({ windows, windowState });
     registerPlaceholderBridgeHandlers({ windows });
@@ -170,15 +170,25 @@ export function startRuntimePlayerMain(): void {
         void publishLatestStageMotionDisplayState({
           notify: "immediate"
         });
-      });
+    });
     clearStageMotionDisplayTransform({ notify: "immediate" });
     await browserSourceServer.start().catch(() => undefined);
+    const stageLiveParameters = registerLiveParameterBridgeHandlers({ windows });
     let trayMenu: RuntimePlayerTrayMenuRegistration | null = null;
     stageViewBridge = registerStageViewBridgeHandlers({
       windows,
       windowState,
       onCaptureStateChanged: () => {
         trayMenu?.refresh();
+      },
+      onStageWindowReopened: () => {
+        runtimeVariantBridge.publishStatus();
+        if (!isLocalPreviewLiveRenderSuspended) {
+          stageLiveParameters.publishLatestFrameToStageWindow({
+            resetBeforePublish: true
+          });
+        }
+        publishNativeStageDisplayTransform();
       },
       onStageMotionSettingsChanged: () => {
         stageMotionRuntime.reset();
@@ -187,7 +197,6 @@ export function startRuntimePlayerMain(): void {
         });
       }
     });
-    const stageLiveParameters = registerLiveParameterBridgeHandlers({ windows });
     const localPreviewLiveRenderPolicy =
       new LocalPreviewLiveRenderSuspensionPolicy({
         onStateChanged: (state) => {
@@ -352,13 +361,26 @@ export function startRuntimePlayerMain(): void {
     });
     attachRuntimePlayerControlWindowRecovery({
       controlWindow: windows.controlWindow,
-      isExplicitQuitInProgress: () => quitController.isQuitInProgress()
+      isExplicitQuitInProgress: () => quitController.isQuitInProgress(),
+      requestQuit: () => {
+        quitController.requestQuit();
+      },
+      closeStageWindow: () => {
+        windows.stageWindowLifecycle.closeStageWindow();
+      }
     });
     trayMenu = registerRuntimePlayerTrayMenu({
       actions: {
         showControl: () =>
           showRuntimePlayerControlWindow(windows.controlWindow),
-        focusStage: () => focusRuntimePlayerStageWindow(windows.stageWindow),
+        focusStage: () => {
+          if (stageViewBridge === null) {
+            return false;
+          }
+
+          void stageViewBridge.focusStage();
+          return true;
+        },
         disableClickThrough: () => stageViewBridge?.disableClickThrough() ??
           false,
         quit: () => {

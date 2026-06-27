@@ -80,17 +80,16 @@ export class RuntimePlayerQuitController {
 export function attachRuntimePlayerControlWindowRecovery(input: {
   readonly controlWindow: RuntimePlayerWindowLike;
   readonly isExplicitQuitInProgress: () => boolean;
+  readonly requestQuit: () => void;
+  readonly closeStageWindow?: () => void;
 }): void {
-  input.controlWindow.on("close", (event: RuntimePlayerCloseEvent) => {
+  input.controlWindow.on("close", () => {
     if (input.isExplicitQuitInProgress()) {
       return;
     }
 
-    event.preventDefault();
-
-    if (!input.controlWindow.isDestroyed()) {
-      input.controlWindow.hide();
-    }
+    input.requestQuit();
+    input.closeStageWindow?.();
   });
 }
 

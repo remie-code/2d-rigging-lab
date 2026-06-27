@@ -54,6 +54,18 @@ describe("StagePage Stage Motion", () => {
     expect(fallbackIndex).toBeGreaterThan(browserSourceIndex);
   });
 
+  it("renders a closed Stage as unavailable without stale ready or visible model state", () => {
+    const markup = renderStagePageMarkup({
+      stageState: createClosedStageState()
+    });
+
+    expect(markup).toContain("Unavailable");
+    expect(markup).toContain("Stage unavailable");
+    expect(markup).toContain("Not visible");
+    expect(markup).not.toContain("Stage ready");
+    expect(markup).not.toContain(">Visible</");
+  });
+
   it("calls the Stage Motion update handler with partial setting updates", () => {
     const onUpdate = vi.fn();
     const tree = createStagePageTree({
@@ -305,6 +317,29 @@ function createStageState(): RuntimePlayerStageStateSnapshot {
       windowTitle: runtimePlayerStageWindowTitle,
       background: "transparent",
       stageUi: "hidden"
+    }
+  };
+}
+
+function createClosedStageState(): RuntimePlayerStageStateSnapshot {
+  const state = createStageState();
+
+  return {
+    ...state,
+    stageWindow: {
+      windowState: "destroyed",
+      bounds: null
+    },
+    stageView: {
+      ...state.stageView,
+      renderStatus: {
+        status: "empty",
+        statusLabel: "Stage unavailable",
+        message: "Stage Window is closed. Use Focus Stage to reopen it.",
+        details: [],
+        tone: "neutral",
+        updatedAtIso: "2026-06-27T00:00:00.000Z"
+      }
     }
   };
 }

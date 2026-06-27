@@ -20,13 +20,18 @@ import type {
 import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
+  RuntimePlayerStageViewStatus,
   RuntimePlayerStageViewTransform,
   RuntimePlayerWindowBounds
 } from "../preload/runtime-player-bridge-contract";
 import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
 import { registerStageViewBridgeHandlers } from "./stage-view-bridge-handlers";
 import { runtimePlayerDefaultStageMotionSettings } from "./window-state/window-state-stage-motion-settings";
-import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-windows";
+import type {
+  RuntimePlayerStageWindowLifecycle,
+  RuntimePlayerStageWindowLifecycleChangedEvent,
+  RuntimePlayerWindowSet
+} from "./window-management/runtime-player-windows";
 import type { RuntimePlayerWindowStateController } from "./window-state/window-state-controller";
 import {
   createResetRuntimePlayerStageViewTransform,
@@ -49,7 +54,7 @@ beforeEach(() => {
 });
 
 describe("registerStageViewBridgeHandlers", () => {
-  it("focusStage restores, shows, and focuses the Stage window before returning current state", () => {
+  it("focusStage restores, shows, and focuses the Stage window before returning current state", async () => {
     const initialTransform = createTransform({
       zoomScale: 1.25,
       pan: { x: 10, y: -12 }
@@ -63,7 +68,7 @@ describe("registerStageViewBridgeHandlers", () => {
       }
     });
 
-    const result = invokeHandler<RuntimePlayerStageViewActionResult>(
+    const result = await invokeHandler<Promise<RuntimePlayerStageViewActionResult>>(
       stageViewBridgeChannels.focusStage
     );
 
@@ -87,6 +92,167 @@ describe("registerStageViewBridgeHandlers", () => {
         }
       }
     });
+  });
+
+  it("focusStage reopens a destroyed Stage window before focusing it", async () => {
+    const reopenedStageWindow = createFakeWindow({
+      bounds: reopenedStageBounds,
+      minimized: true
+    });
+    const { stageLifecycle } = createHarness({
+      stageWindow: {
+        destroyed: true
+      },
+      stageLifecycle: {
+        reopenedWindow: reopenedStageWindow
+      },
+      windowState: {
+        alwaysOnTop: true
+      }
+    });
+
+    const result = await invokeHandler<Promise<RuntimePlayerStageViewActionResult>>(
+      stageViewBridgeChannels.focusStage
+    );
+
+    expect(stageLifecycle?.reopenStageWindow).toHaveBeenCalledTimes(1);
+    expect(reopenedStageWindow.restore).toHaveBeenCalledTimes(1);
+    expect(reopenedStageWindow.show).toHaveBeenCalledTimes(1);
+    expect(reopenedStageWindow.focus).toHaveBeenCalledTimes(1);
+    expect(reopenedStageWindow.setIgnoreMouseEvents).toHaveBeenLastCalledWith(
+      false
+    );
+    expect(reopenedStageWindow.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    expect(result).toMatchObject({
+      result: "ok",
+      message: "Stage Window focused.",
+      status: {
+        stageWindow: {
+          windowState: "created",
+          bounds: reopenedStageBounds
+        },
+        capture: {
+          arrangeModeEnabled: false,
+          clickThroughEnabled: false,
+          alwaysOnTopEnabled: true
+        }
+      }
+    });
+  });
+
+  it("focusStage reports an action error when destroyed Stage reopen fails", async () => {
+    createHarness({
+      stageWindow: {
+        destroyed: true
+      },
+      stageLifecycle: {
+        reopenError: new Error("renderer entry failed")
+      }
+    });
+
+    const result = await invokeHandler<Promise<RuntimePlayerStageViewActionResult>>(
+      stageViewBridgeChannels.focusStage
+    );
+
+    expect(result).toMatchObject({
+      result: "error",
+      message: "Stage Window could not be reopened: renderer entry failed",
+      status: {
+        stageWindow: {
+          windowState: "destroyed",
+          bounds: null
+        }
+      }
+    });
+  });
+
+  it("Stage window close marks Stage unavailable and clears transient capture flags", () => {
+    const { controlWindow, stageLifecycle, registration } = createHarness({
+      stageLifecycle: {}
+    });
+
+    invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setArrangeMode,
+      true
+    );
+    invokeHandler<RuntimePlayerStageViewActionResult>(
+      stageViewBridgeChannels.setClickThrough,
+      true
+    );
+    invokeHandler<RuntimePlayerStageViewStatus>(
+      stageViewBridgeChannels.reportStatus,
+      {
+        status: "ready",
+        statusLabel: "Stage ready",
+        message: "Stage is rendering the model.",
+        details: []
+      }
+    );
+    controlWindow.webContents.send.mockClear();
+
+    stageLifecycle?.emitClosed();
+
+    expect(registration.getCaptureState()).toMatchObject({
+      arrangeModeEnabled: false,
+      clickThroughEnabled: false
+    });
+    expect(
+      invokeHandler<RuntimePlayerStageStateSnapshot>(
+        stageViewBridgeChannels.getState
+      )
+    ).toMatchObject({
+      stageWindow: {
+        windowState: "destroyed",
+        bounds: null
+      },
+      stageView: {
+        renderStatus: {
+          status: "empty",
+          statusLabel: "Stage unavailable",
+          message: "Stage Window is closed. Use Focus Stage to reopen it."
+        }
+      },
+      capture: {
+        arrangeModeEnabled: false,
+        clickThroughEnabled: false,
+        stageUi: "hidden"
+      }
+    });
+    expect(
+      invokeHandler<RuntimePlayerStageViewStatus>(
+        stageViewBridgeChannels.getStatus
+      )
+    ).toMatchObject({
+      status: "empty",
+      tone: "neutral",
+      statusLabel: "Stage unavailable"
+    });
+    expect(controlWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.statusChanged,
+      expect.objectContaining({
+        status: "empty",
+        statusLabel: "Stage unavailable"
+      })
+    );
+    expect(controlWindow.webContents.send).toHaveBeenCalledWith(
+      stageViewBridgeChannels.stateChanged,
+      expect.objectContaining({
+        stageWindow: {
+          windowState: "destroyed",
+          bounds: null
+        },
+        stageView: expect.objectContaining({
+          renderStatus: expect.objectContaining({
+            status: "empty",
+            statusLabel: "Stage unavailable"
+          })
+        }),
+        capture: expect.objectContaining({
+          arrangeModeEnabled: false,
+          clickThroughEnabled: false
+        })
+      })
+    );
   });
 
   it("getState and getViewTransform return the controller snapshot and transform", () => {
@@ -467,6 +633,7 @@ function invokeHandler<TResult>(
 function createHarness(options: {
   readonly controlWindow?: FakeWindowOptions;
   readonly stageWindow?: FakeWindowOptions;
+  readonly stageLifecycle?: FakeStageLifecycleOptions;
   readonly windowState?: {
     readonly transform?: RuntimePlayerStageViewTransform;
     readonly alwaysOnTop?: boolean;
@@ -478,6 +645,7 @@ function createHarness(options: {
   readonly onCaptureStateChanged: ReturnType<typeof vi.fn>;
   readonly onStageMotionSettingsChanged: ReturnType<typeof vi.fn>;
   readonly registration: ReturnType<typeof registerStageViewBridgeHandlers>;
+  readonly stageLifecycle?: ReturnType<typeof createFakeStageWindowLifecycle>;
 } {
   const controlWindow = createFakeWindow({
     bounds: defaultControlBounds,
@@ -487,17 +655,31 @@ function createHarness(options: {
     bounds: defaultStageBounds,
     ...options.stageWindow
   });
+  const stageLifecycle = options.stageLifecycle === undefined
+    ? undefined
+    : createFakeStageWindowLifecycle(stageWindow, options.stageLifecycle);
   const windowState = createFakeWindowState(
     options.windowState?.transform ?? createResetRuntimePlayerStageViewTransform(),
     options.windowState?.alwaysOnTop ?? false
   );
   const onCaptureStateChanged = vi.fn();
   const onStageMotionSettingsChanged = vi.fn();
-  const windows: RuntimePlayerWindowSet = {
+  const windows = {
     controlWindow:
       controlWindow as unknown as RuntimePlayerWindowSet["controlWindow"],
-    stageWindow: stageWindow as unknown as RuntimePlayerWindowSet["stageWindow"]
-  };
+    get stageWindow() {
+      return (
+        stageLifecycle?.getStageWindow() ??
+        stageWindow
+      ) as unknown as RuntimePlayerWindowSet["stageWindow"];
+    },
+    ...(stageLifecycle === undefined
+      ? {}
+      : {
+          stageWindowLifecycle:
+            stageLifecycle.lifecycle as RuntimePlayerStageWindowLifecycle
+        })
+  } as RuntimePlayerWindowSet;
 
   const registration = registerStageViewBridgeHandlers({
     windows,
@@ -512,7 +694,8 @@ function createHarness(options: {
     windowState,
     onCaptureStateChanged,
     onStageMotionSettingsChanged,
-    registration
+    registration,
+    ...(stageLifecycle === undefined ? {} : { stageLifecycle })
   };
 }
 
@@ -521,6 +704,11 @@ type FakeWindowOptions = {
   readonly destroyed?: boolean;
   readonly minimized?: boolean;
   readonly webContentsDestroyed?: boolean;
+};
+
+type FakeStageLifecycleOptions = {
+  readonly reopenedWindow?: ReturnType<typeof createFakeWindow>;
+  readonly reopenError?: Error;
 };
 
 function createFakeWindow(options: FakeWindowOptions = {}) {
@@ -547,6 +735,73 @@ function createFakeWindow(options: FakeWindowOptions = {}) {
     setAlwaysOnTop: vi.fn(),
     destroy: () => {
       destroyed = true;
+    }
+  };
+}
+
+function createFakeStageWindowLifecycle(
+  initialWindow: ReturnType<typeof createFakeWindow>,
+  options: FakeStageLifecycleOptions = {}
+) {
+  let currentWindow = initialWindow;
+  const listeners =
+    new Set<(event: RuntimePlayerStageWindowLifecycleChangedEvent) => void>();
+  const reopenedWindow = options.reopenedWindow ?? createFakeWindow({
+    bounds: reopenedStageBounds
+  });
+
+  const emit = (
+    event: RuntimePlayerStageWindowLifecycleChangedEvent
+  ): void => {
+    for (const listener of listeners) {
+      listener(event);
+    }
+  };
+  const lifecycle: RuntimePlayerStageWindowLifecycle = {
+    getStageWindow: () =>
+      currentWindow as unknown as RuntimePlayerWindowSet["stageWindow"],
+    reopenStageWindow: vi.fn(async () => {
+      if (options.reopenError !== undefined) {
+        throw options.reopenError;
+      }
+
+      currentWindow = reopenedWindow;
+      emit({
+        reason: "created",
+        window:
+          currentWindow as unknown as RuntimePlayerWindowSet["stageWindow"]
+      });
+      return currentWindow as unknown as RuntimePlayerWindowSet["stageWindow"];
+    }),
+    closeStageWindow: vi.fn(() => {
+      currentWindow.destroy();
+      emit({
+        reason: "closed",
+        window:
+          currentWindow as unknown as RuntimePlayerWindowSet["stageWindow"]
+      });
+    }),
+    onStageWindowChanged: vi.fn((listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    })
+  };
+
+  return {
+    lifecycle,
+    getStageWindow: lifecycle.getStageWindow,
+    reopenStageWindow: lifecycle.reopenStageWindow,
+    closeStageWindow: lifecycle.closeStageWindow,
+    onStageWindowChanged: lifecycle.onStageWindowChanged,
+    emitClosed: () => {
+      currentWindow.destroy();
+      emit({
+        reason: "closed",
+        window:
+          currentWindow as unknown as RuntimePlayerWindowSet["stageWindow"]
+      });
     }
   };
 }
@@ -711,4 +966,11 @@ const defaultStageBounds: RuntimePlayerWindowBounds = {
   y: 80,
   width: 720,
   height: 900
+};
+
+const reopenedStageBounds: RuntimePlayerWindowBounds = {
+  x: 800,
+  y: 60,
+  width: 960,
+  height: 720
 };

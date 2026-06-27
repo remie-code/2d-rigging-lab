@@ -10,18 +10,24 @@ import {
 } from "./control-window-recovery";
 
 describe("Runtime Player Control Window recovery", () => {
-  it("hides the Control Window on close when explicit quit is not in progress", () => {
+  it("requests app quit and closes Stage on Control Window close", () => {
     const controlWindow = createFakeWindow();
+    const requestQuit = vi.fn();
+    const closeStageWindow = vi.fn();
 
     attachRuntimePlayerControlWindowRecovery({
       controlWindow: controlWindow.window,
-      isExplicitQuitInProgress: () => false
+      isExplicitQuitInProgress: () => false,
+      requestQuit,
+      closeStageWindow
     });
 
     const closeEvent = controlWindow.emitClose();
 
-    expect(closeEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(controlWindow.hide).toHaveBeenCalledTimes(1);
+    expect(closeEvent.preventDefault).not.toHaveBeenCalled();
+    expect(controlWindow.hide).not.toHaveBeenCalled();
+    expect(requestQuit).toHaveBeenCalledTimes(1);
+    expect(closeStageWindow).toHaveBeenCalledTimes(1);
   });
 
   it("allows Control Window close during explicit quit", () => {
@@ -32,10 +38,14 @@ describe("Runtime Player Control Window recovery", () => {
       flushWindowState: vi.fn(async () => undefined)
     });
     const controlWindow = createFakeWindow();
+    const requestQuit = vi.fn();
+    const closeStageWindow = vi.fn();
 
     attachRuntimePlayerControlWindowRecovery({
       controlWindow: controlWindow.window,
-      isExplicitQuitInProgress: () => quitController.isQuitInProgress()
+      isExplicitQuitInProgress: () => quitController.isQuitInProgress(),
+      requestQuit,
+      closeStageWindow
     });
 
     quitController.requestQuit();
@@ -43,6 +53,8 @@ describe("Runtime Player Control Window recovery", () => {
 
     expect(closeEvent.preventDefault).not.toHaveBeenCalled();
     expect(controlWindow.hide).not.toHaveBeenCalled();
+    expect(requestQuit).not.toHaveBeenCalled();
+    expect(closeStageWindow).not.toHaveBeenCalled();
   });
 
   it("show Control restores minimized windows before showing and focusing", () => {

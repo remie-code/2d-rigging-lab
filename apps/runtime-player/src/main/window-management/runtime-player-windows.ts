@@ -19,13 +19,36 @@ export type RuntimePlayerWindowSet = {
   readonly stageWindow: BrowserWindow;
 };
 
+export type RuntimePlayerStageWindowLifecycleChangedEvent = {
+  readonly reason: "created" | "closed";
+  readonly window: BrowserWindow;
+};
+
+export type RuntimePlayerStageWindowLifecycleChangedListener = (
+  event: RuntimePlayerStageWindowLifecycleChangedEvent
+) => void;
+
+export type RuntimePlayerStageWindowLifecycle = {
+  getStageWindow(): BrowserWindow;
+  reopenStageWindow(): Promise<BrowserWindow>;
+  closeStageWindow(): void;
+  onStageWindowChanged(
+    listener: RuntimePlayerStageWindowLifecycleChangedListener
+  ): () => void;
+};
+
+export type RuntimePlayerWindowSetWithLifecycle = RuntimePlayerWindowSet & {
+  readonly stageWindowLifecycle: RuntimePlayerStageWindowLifecycle;
+};
+
 export type CreateRuntimePlayerWindowsOptions = {
   readonly windowState?: RuntimePlayerWindowStateDocument;
+  readonly getWindowStateDocument?: () => RuntimePlayerWindowStateDocument;
 };
 
 export function createRuntimePlayerWindows(
   options: CreateRuntimePlayerWindowsOptions = {}
-): RuntimePlayerWindowSet {
+): RuntimePlayerWindowSetWithLifecycle {
   const controlPreloadFilePath = getControlPreloadFilePath();
   const stagePreloadFilePath = getStagePreloadFilePath();
   const controlWindow = new BrowserWindow(
@@ -34,28 +57,22 @@ export function createRuntimePlayerWindows(
       options.windowState?.windows.control?.bounds
     )
   );
-  const stageWindow = new BrowserWindow(
-    createStageWindowOptions(
-      stagePreloadFilePath,
-      options.windowState?.windows.stage?.bounds,
-      {
-        alwaysOnTop:
-          options.windowState?.stageEnvironment.alwaysOnTop ?? false
-      }
-    )
-  );
+  const stageWindowLifecycle = createStageWindowLifecycle({
+    stagePreloadFilePath,
+    getWindowStateDocument: () =>
+      options.getWindowStateDocument?.() ?? options.windowState
+  });
 
   controlWindow.once("ready-to-show", () => {
     controlWindow.show();
   });
 
-  stageWindow.once("ready-to-show", () => {
-    stageWindow.showInactive();
-  });
-
   return {
     controlWindow,
-    stageWindow
+    get stageWindow() {
+      return stageWindowLifecycle.getStageWindow();
+    },
+    stageWindowLifecycle
   };
 }
 
@@ -65,6 +82,12 @@ export function attachRuntimePlayerWindowStateTracking(input: {
 }): void {
   attachWindowBoundsTracking(input.windows.controlWindow, "control", input);
   attachWindowBoundsTracking(input.windows.stageWindow, "stage", input);
+  getRuntimePlayerStageWindowLifecycle(input.windows)
+    ?.onStageWindowChanged((event) => {
+      if (event.reason === "created") {
+        attachWindowBoundsTracking(event.window, "stage", input);
+      }
+    });
 }
 
 export async function loadRuntimePlayerWindows(
@@ -88,6 +111,128 @@ async function loadRendererEntry(
   }
 
   await window.loadFile(getRendererHtmlFilePath(entry));
+}
+
+export function getRuntimePlayerStageWindowLifecycle(
+  windows: RuntimePlayerWindowSet
+): RuntimePlayerStageWindowLifecycle | null {
+  const maybeLifecycle = (
+    windows as Partial<RuntimePlayerWindowSetWithLifecycle>
+  ).stageWindowLifecycle;
+
+  return maybeLifecycle ?? null;
+}
+
+function createStageWindowLifecycle(input: {
+  readonly stagePreloadFilePath: string;
+  readonly getWindowStateDocument: () =>
+    RuntimePlayerWindowStateDocument | undefined;
+}): RuntimePlayerStageWindowLifecycle {
+  const listeners = new Set<RuntimePlayerStageWindowLifecycleChangedListener>();
+  let stageWindow = createStageWindow({
+    stagePreloadFilePath: input.stagePreloadFilePath,
+    getWindowStateDocument: input.getWindowStateDocument,
+    onClosed: (window) => {
+      notifyStageWindowLifecycleChanged({
+        listeners,
+        event: {
+          reason: "closed",
+          window
+        }
+      });
+    }
+  });
+
+  return {
+    getStageWindow: () => stageWindow,
+    reopenStageWindow: async () => {
+      if (!stageWindow.isDestroyed()) {
+        return stageWindow;
+      }
+
+      stageWindow = createStageWindow({
+        stagePreloadFilePath: input.stagePreloadFilePath,
+        getWindowStateDocument: input.getWindowStateDocument,
+        onClosed: (window) => {
+          notifyStageWindowLifecycleChanged({
+            listeners,
+            event: {
+              reason: "closed",
+              window
+            }
+          });
+        }
+      });
+      notifyStageWindowLifecycleChanged({
+        listeners,
+        event: {
+          reason: "created",
+          window: stageWindow
+        }
+      });
+
+      try {
+        await loadRendererEntry(stageWindow, "stage");
+      } catch (error) {
+        if (!stageWindow.isDestroyed()) {
+          stageWindow.close();
+        }
+        throw error;
+      }
+
+      return stageWindow;
+    },
+    closeStageWindow: () => {
+      if (!stageWindow.isDestroyed()) {
+        stageWindow.close();
+      }
+    },
+    onStageWindowChanged: (listener) => {
+      listeners.add(listener);
+
+      return () => {
+        listeners.delete(listener);
+      };
+    }
+  };
+}
+
+function createStageWindow(input: {
+  readonly stagePreloadFilePath: string;
+  readonly getWindowStateDocument: () =>
+    RuntimePlayerWindowStateDocument | undefined;
+  readonly onClosed: (window: BrowserWindow) => void;
+}): BrowserWindow {
+  const windowState = input.getWindowStateDocument();
+  const stageWindow = new BrowserWindow(
+    createStageWindowOptions(
+      input.stagePreloadFilePath,
+      windowState?.windows.stage?.bounds,
+      {
+        alwaysOnTop: windowState?.stageEnvironment.alwaysOnTop ?? false
+      }
+    )
+  );
+
+  stageWindow.once("ready-to-show", () => {
+    if (!stageWindow.isDestroyed()) {
+      stageWindow.showInactive();
+    }
+  });
+  stageWindow.once("closed", () => {
+    input.onClosed(stageWindow);
+  });
+
+  return stageWindow;
+}
+
+function notifyStageWindowLifecycleChanged(input: {
+  readonly listeners: Set<RuntimePlayerStageWindowLifecycleChangedListener>;
+  readonly event: RuntimePlayerStageWindowLifecycleChangedEvent;
+}): void {
+  for (const listener of input.listeners) {
+    listener(input.event);
+  }
 }
 
 function attachWindowBoundsTracking(

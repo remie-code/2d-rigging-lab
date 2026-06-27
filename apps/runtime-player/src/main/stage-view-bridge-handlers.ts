@@ -11,10 +11,14 @@ import type {
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
   RuntimePlayerStageViewStatus,
+  RuntimePlayerStageViewStatusReport,
   RuntimePlayerStageViewTransform
 } from "../preload/runtime-player-bridge-contract";
 import { runtimePlayerStageWindowTitle } from "../preload/runtime-player-bridge-contract";
-import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-windows";
+import {
+  getRuntimePlayerStageWindowLifecycle,
+  type RuntimePlayerWindowSet
+} from "./window-management/runtime-player-windows";
 import { RuntimePlayerStageViewStatusState } from "./stage-view-status-state";
 import type { RuntimePlayerWindowStateController } from "./window-state/window-state-controller";
 import {
@@ -34,11 +38,13 @@ export interface RegisterStageViewBridgeHandlersInput {
   readonly onStageMotionSettingsChanged?: (
     settings: RuntimePlayerStageMotionSettings
   ) => void;
+  readonly onStageWindowReopened?: () => void | Promise<void>;
 }
 
 export interface RuntimePlayerStageViewBridgeRegistration {
   readonly statusState: RuntimePlayerStageViewStatusState;
   getCaptureState(): RuntimePlayerStageCaptureState;
+  focusStage(): Promise<RuntimePlayerStageViewActionResult>;
   publishDisplayViewTransform(
     transform: RuntimePlayerStageViewTransform | null
   ): void;
@@ -78,12 +84,43 @@ export function registerStageViewBridgeHandlers(
     publishArrangeState();
     input.onCaptureStateChanged?.();
   };
+  const applyCurrentStageWindowEnvironment = (): void => {
+    const stageWindow = input.windows.stageWindow;
+
+    if (stageWindow.isDestroyed()) {
+      return;
+    }
+
+    applyStageClickThrough(stageWindow, mutableCaptureState.clickThroughEnabled);
+    applyStageAlwaysOnTop(stageWindow, input.windowState.getStageAlwaysOnTop());
+  };
 
   applyStageClickThrough(input.windows.stageWindow, false);
   applyStageAlwaysOnTop(
     input.windows.stageWindow,
     input.windowState.getStageAlwaysOnTop()
   );
+  getRuntimePlayerStageWindowLifecycle(input.windows)
+    ?.onStageWindowChanged((event) => {
+      if (event.reason === "closed") {
+        mutableCaptureState.arrangeModeEnabled = false;
+        mutableCaptureState.clickThroughEnabled = false;
+        const status = statusState.setReportedStatus(
+          createStageWindowUnavailableStatusReport()
+        );
+        sendToWindow(
+          input.windows.controlWindow,
+          stageViewBridgeChannels.statusChanged,
+          status
+        );
+      }
+
+      if (event.reason === "created") {
+        applyCurrentStageWindowEnvironment();
+      }
+
+      publishCaptureState();
+    });
 
   input.windowState.subscribe(publishState);
 
@@ -128,9 +165,14 @@ export function registerStageViewBridgeHandlers(
       return latestRenderMetrics;
     }
   );
-  ipcMain.handle(stageViewBridgeChannels.focusStage, () =>
-    focusStageWindow(input, getState)
-  );
+  const focusStage = () =>
+    focusStageWindow({
+      input,
+      mutableCaptureState,
+      getState,
+      publishCaptureState
+    });
+  ipcMain.handle(stageViewBridgeChannels.focusStage, () => focusStage());
   ipcMain.handle(stageViewBridgeChannels.setArrangeMode, (_event, enabled) =>
     setArrangeModeEnabled({
       input,
@@ -208,6 +250,7 @@ export function registerStageViewBridgeHandlers(
     statusState,
     getCaptureState: () =>
       createRuntimePlayerStageCaptureState(input, mutableCaptureState),
+    focusStage,
     publishDisplayViewTransform: (transform) => {
       sendToWindow(
         input.windows.stageWindow,
@@ -301,18 +344,60 @@ function createRuntimePlayerStageCaptureState(
   };
 }
 
-function focusStageWindow(
-  input: RegisterStageViewBridgeHandlersInput,
-  getState: () => RuntimePlayerStageStateSnapshot
-): RuntimePlayerStageViewActionResult {
-  const stageWindow = input.windows.stageWindow;
+function createStageWindowUnavailableStatusReport(): RuntimePlayerStageViewStatusReport {
+  return {
+    status: "empty",
+    statusLabel: "Stage unavailable",
+    message: "Stage Window is closed. Use Focus Stage to reopen it.",
+    details: []
+  };
+}
+
+async function focusStageWindow(input: {
+  readonly input: RegisterStageViewBridgeHandlersInput;
+  readonly mutableCaptureState: {
+    arrangeModeEnabled: boolean;
+    clickThroughEnabled: boolean;
+  };
+  readonly getState: () => RuntimePlayerStageStateSnapshot;
+  readonly publishCaptureState: () => void;
+}): Promise<RuntimePlayerStageViewActionResult> {
+  let stageWindow = input.input.windows.stageWindow;
 
   if (stageWindow.isDestroyed()) {
-    return createStageViewActionResult({
-      result: "error",
-      message: "Stage Window is not available.",
-      status: getState()
-    });
+    const stageWindowLifecycle = getRuntimePlayerStageWindowLifecycle(
+      input.input.windows
+    );
+
+    if (stageWindowLifecycle === null) {
+      return createStageViewActionResult({
+        result: "error",
+        message: "Stage Window is not available.",
+        status: input.getState()
+      });
+    }
+
+    input.mutableCaptureState.arrangeModeEnabled = false;
+    input.mutableCaptureState.clickThroughEnabled = false;
+
+    try {
+      stageWindow = await stageWindowLifecycle.reopenStageWindow();
+    } catch (error) {
+      input.publishCaptureState();
+      return createStageViewActionResult({
+        result: "error",
+        message: `Stage Window could not be reopened: ${toErrorMessage(error)}`,
+        status: input.getState()
+      });
+    }
+
+    applyStageClickThrough(stageWindow, false);
+    applyStageAlwaysOnTop(
+      stageWindow,
+      input.input.windowState.getStageAlwaysOnTop()
+    );
+    input.publishCaptureState();
+    await input.input.onStageWindowReopened?.();
   }
 
   if (stageWindow.isMinimized()) {
@@ -324,7 +409,7 @@ function focusStageWindow(
 
   return createStageViewActionResult({
     message: "Stage Window focused.",
-    status: getState()
+    status: input.getState()
   });
 }
 
@@ -508,6 +593,10 @@ function readIpcBoolean(value: unknown): boolean {
   }
 
   return value;
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function createStageViewActionResult(input: {
