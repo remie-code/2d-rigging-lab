@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planning Gate"
+  short_description: "Choose readiness mode before large-task plans"
+  default_prompt: "Use $planning-gate to decide whether to plan, inventory, or discuss before the next work unit."
