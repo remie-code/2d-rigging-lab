@@ -6,6 +6,8 @@ export interface AuthoringHostCliArguments {
   readonly humanApprovalOperationTypes: readonly string[];
 }
 
+import { isStateDirectoryInsidePackageDirectory } from "./state-directory-guard.js";
+
 export class AuthoringHostCliArgumentError extends Error {
   constructor(message: string) {
     super(message);
@@ -69,6 +71,13 @@ export const parseAuthoringHostCliArguments = (
 
   if (stateDirectory === undefined) {
     throw new AuthoringHostCliArgumentError("--state-dir is required.");
+  }
+
+  if (isStateDirectoryInsidePackageDirectory(packageDirectory, stateDirectory)) {
+    throw new AuthoringHostCliArgumentError(
+      `--state-dir (${stateDirectory}) must live outside --package-dir (${packageDirectory}); ` +
+        "writing approval/transcript state inside the package directory would corrupt the package."
+    );
   }
 
   return {

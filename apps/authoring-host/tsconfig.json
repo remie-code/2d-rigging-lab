@@ -20,6 +20,10 @@
       "@private-2d-rigging-lab/contracts": ["../../packages/contracts/src/index.ts"],
       "@private-2d-rigging-lab/operation-core": ["../../packages/operation-core/src/index.ts"],
       "@private-2d-rigging-lab/package-format": ["../../packages/package-format/src/index.ts"],
+      "@private-2d-rigging-lab/render-core": ["../../packages/render-core/src/index.ts"],
+      "@private-2d-rigging-lab/render-software": ["../../packages/render-software/src/index.ts"],
+      "@private-2d-rigging-lab/runtime-core": ["../../packages/runtime-core/src/index.ts"],
+      "@private-2d-rigging-lab/validator-core": ["../../packages/validator-core/src/index.ts"],
       "zod": ["../../node_modules/.pnpm/zod@4.4.3/node_modules/zod"]
     }
   },

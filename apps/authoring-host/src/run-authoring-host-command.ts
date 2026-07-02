@@ -22,6 +22,18 @@ import {
   loadAuthoringPackageDirectory,
   saveAuthoringPackageDirectory
 } from "./package-directory-io.js";
+import {
+  isRenderViewCommand,
+  runRenderViewCommand
+} from "./run-render-view-command.js";
+import { isStateDirectoryInsidePackageDirectory } from "./state-directory-guard.js";
+
+export class AuthoringHostStateDirectoryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthoringHostStateDirectoryError";
+  }
+}
 
 export interface RunAuthoringHostCommandInput {
   readonly packageDirectory: string;
@@ -40,9 +52,37 @@ export const runAuthoringHostCommand = async (
   input: RunAuthoringHostCommandInput
 ): Promise<AuthoringHostCommandResponse> => {
   const now = input.now ?? (() => new Date(DEFAULT_HOST_TIMESTAMP));
+
+  // Guard against writing approval/transcript state inside the package directory even on
+  // the direct (non-CLI) entry path. The CLI argument parser also rejects this earlier,
+  // so this is defense-in-depth for callers that bypass argument parsing. A custom
+  // state store is exempt: it manages its own location.
+  if (
+    input.stateStore === undefined &&
+    isStateDirectoryInsidePackageDirectory(input.packageDirectory, input.stateDirectory)
+  ) {
+    throw new AuthoringHostStateDirectoryError(
+      `stateDirectory (${input.stateDirectory}) must live outside packageDirectory (${input.packageDirectory}); ` +
+        "writing approval/transcript state inside the package directory would corrupt the package."
+    );
+  }
+
   const stateStore = input.stateStore ?? createHostStateStore(input.stateDirectory);
 
   const loaded = await loadAuthoringPackageDirectory(input.packageDirectory);
+
+  // renderView is a non-mutating perception command handled entirely in the
+  // authoring-host (the ai-interface executor is renderer/filesystem-free). It
+  // renders against the loaded session and writes PNG + sidecar files; it never
+  // advances the package revision or touches the approval transcript.
+  if (isRenderViewCommand(input.command)) {
+    return runRenderViewCommand({
+      command: input.command,
+      session: loaded.session,
+      packageDirectory: input.packageDirectory
+    });
+  }
+
   const hostState = await stateStore.load();
 
   const autoApprovalPolicy = new DiagnosticGatedAutoApprovalPolicy({
@@ -55,11 +95,15 @@ export const runAuthoringHostCommand = async (
   const host = new AuthoringHostCommandHost({
     session: loaded.session,
     now,
-    initialOperationLogEntries: loaded.operationLogEntries
+    initialOperationLogEntries: loaded.operationLogEntries,
+    packageDocument: loaded.packageDocument
   });
 
   const executor = new AiCommandExecutor({
     host,
+    // The same host serves both operation (dry-run/commit) and read (validatePackage)
+    // dispatch. Read commands flow through the shared read mechanism via readHost.
+    readHost: host,
     approvalPolicy: autoApprovalPolicy,
     transcript: hostState.transcript
   });

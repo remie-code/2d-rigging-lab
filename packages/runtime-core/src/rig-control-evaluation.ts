@@ -1,7 +1,8 @@
 import {
   DrawableIdSchema,
   RectDtoSchema,
-  RigControlIdSchema
+  RigControlIdSchema,
+  Vec2DtoSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DiagnosticDto,
@@ -64,6 +65,21 @@ export const EvaluatedRigControlSchema = z.object({
   bounds: RectDtoSchema.optional(),
   localTransform: Rotation2dTransformStateSchema.optional(),
   worldTransform: Rotation2dTransformStateSchema.optional(),
+  /**
+   * Evaluated absolute lattice control-point coordinates for warpLattice2d rig
+   * controls (Wave104 Domain C, §3.3). Each entry is
+   * `restControlPoints[i] + evaluated controlPointOffsets[i]` in the rig
+   * control's rest/domain space, in the same index order as
+   * `restControlPoints`. Present only for `kind === "warpLattice2d"` rig
+   * controls; omitted for rotation2d and when the warp evaluation produced no
+   * offsets (e.g. blocked configuration). This is a NARROW, additive export of a
+   * value already computed internally during warp evaluation
+   * (`WarpLattice2dLocalState.controlPointOffsets`); it does not change any
+   * evaluation behavior. At rest (no keyform samples) the offsets are zero, so
+   * these coordinates equal `restControlPoints`; keyform-driven offsets move
+   * them off rest.
+   */
+  evaluatedControlPoints: z.array(Vec2DtoSchema).optional(),
   unsupportedReason: z.string().optional()
 });
 export type EvaluatedRigControlDto = z.infer<typeof EvaluatedRigControlSchema>;
@@ -310,6 +326,10 @@ const evaluateWarpLatticeRigControl = (input: {
     samples: input.samples.filter((sample) => !isOpacityMultiplierSample(sample)),
     diagnostics: input.diagnostics
   });
+  const evaluatedControlPoints = computeEvaluatedWarpControlPoints(
+    input.rigControl.restControlPoints,
+    latticeEvaluation.localState.controlPointOffsets
+  );
 
   return {
     worldMatrix: input.parentWorldMatrix,
@@ -327,11 +347,39 @@ const evaluateWarpLatticeRigControl = (input: {
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       bounds: input.rigControl.domainBounds,
+      ...(evaluatedControlPoints === undefined ? {} : { evaluatedControlPoints }),
       ...(latticeEvaluation.evaluationStatus === "unsupported"
         ? { unsupportedReason: latticeEvaluation.unsupportedReason }
         : {})
     })
   };
+};
+
+/**
+ * Absolute evaluated lattice control points = rest control points + evaluated
+ * offsets, element-wise. Returns undefined when the offsets do not line up with
+ * the rest points (defensive; a blocked/invalid config can yield mismatched
+ * lengths) so the additive export never emits partially-aligned coordinates.
+ * Pure and deterministic; introduces no new evaluation behavior.
+ */
+const computeEvaluatedWarpControlPoints = (
+  restControlPoints: readonly Vec2Dto[],
+  controlPointOffsets: readonly Vec2Dto[]
+): readonly Vec2Dto[] | undefined => {
+  if (
+    restControlPoints.length === 0 ||
+    restControlPoints.length !== controlPointOffsets.length
+  ) {
+    return undefined;
+  }
+
+  return restControlPoints.map((restPoint, index) => {
+    const offset = controlPointOffsets[index] ?? { x: 0, y: 0 };
+    return {
+      x: restPoint.x + offset.x,
+      y: restPoint.y + offset.y
+    };
+  });
 };
 
 const applyRigControlTransformsToDrawables = <

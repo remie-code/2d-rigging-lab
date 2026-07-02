@@ -17,6 +17,10 @@
     "@private-2d-rigging-lab/contracts": "workspace:*",
     "@private-2d-rigging-lab/operation-core": "workspace:*",
     "@private-2d-rigging-lab/package-format": "workspace:*",
+    "@private-2d-rigging-lab/render-core": "workspace:*",
+    "@private-2d-rigging-lab/render-software": "workspace:*",
+    "@private-2d-rigging-lab/runtime-core": "workspace:*",
+    "@private-2d-rigging-lab/validator-core": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

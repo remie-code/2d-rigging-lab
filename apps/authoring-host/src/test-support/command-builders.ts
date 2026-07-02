@@ -58,6 +58,26 @@ export const buildCommitCommand = (input: {
   }
 });
 
+export const buildValidatePackageCommand = (input: {
+  readonly commandId: string;
+  readonly profile: string;
+  readonly packageRevision?: number;
+  readonly capabilities?: readonly string[];
+}): unknown => ({
+  schemaVersion: "ai-command-request-v1",
+  commandId: input.commandId,
+  session: {
+    agentId: HEADLESS_AGENT_ID,
+    capabilities: input.capabilities ?? ["validate"]
+  },
+  basis: { relatedAC: [], relatedScenarios: [] },
+  command: "validatePackage",
+  payload: {
+    profile: input.profile,
+    ...(input.packageRevision === undefined ? {} : { packageRevision: input.packageRevision })
+  }
+});
+
 export const createParameterPayload = (input: {
   readonly parameterId: string;
   readonly displayName: string;

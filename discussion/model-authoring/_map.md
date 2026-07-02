@@ -37,15 +37,16 @@
 ## 現在の状態サマリ
 
 - 2026-07-02: 前提 5 文書合意、第一閉問題（眼球 X）定義、API 調査完了（6 操作すべて既存 operation で対応可能）。
-- 2026-07-02: **Wave103 `headless-authoring-host-foundation` final complete / pass**（[計画](../implementation/orchestration/wave103-plan.md) / [最終報告](../implementation/waves/wave103/wave103-final-integration-report.md)）。武器の第 1 陣が完成:
-  - **手**: `apps/authoring-host` — ワンショット CLI。load → dry-run → 自動承認 → commit → save。閉問題 01 の 5 操作スモーク全 committed、`createEndsCenter` 単独新規作成も実証済み
-  - **網膜**: `packages/render-software` — 依存ゼロ・完全決定論の RenderScene → RGBA8 → PNG。ビュー変換順逆 API 公開済み（サイドカー用）
-- Wave103 からの引き継ぎリスク（非ブロッキング）: state-dir パッケージ内誤用ガード無し / 実 WebGL2 とのピクセル同値性未検証（ref e2e で扱う）/ 依存ガード偽陽性（別タスク化済み）
+- 2026-07-02: **Wave103 final complete / pass**（[計画](../implementation/orchestration/wave103-plan.md) / [最終報告](../implementation/waves/wave103/wave103-final-integration-report.md)）: **手** `apps/authoring-host`（ワンショット CLI、dry-run 自動承認、01 の 5 操作スモーク全 committed、`createEndsCenter` 単独実証）+ **網膜** `packages/render-software`（依存ゼロ決定論 RenderScene → PNG）。
+- 2026-07-03: **Wave104 final complete / pass**（[計画](../implementation/orchestration/wave104-plan.md) / [最終報告](../implementation/waves/wave104/wave104-final-integration-report.md)）: **目** `renderView`（フレーミング / drawableFocus / コンタクトシート / ビュー変換サイドカー、生きた session から直接描画・Atlas 非前提）+ **巻尺** `inspectEvaluatedGeometry`（評価済み bbox / 頂点 / warp 格子制御点）+ **健診** `validatePackage` 実働（孤立 read 機構の正式接続）+ **ref/ e2e**（126 テクスチャ全件検証付き導出、決定論バイト一致、ref 無変更）。
+- **武器製造フェーズ完了。** 三位一体（目・測量・変換器）+ 手 + 健診が全装備。
+- 途中の L0 裁定: §3.4 テクスチャ寸法の検証付き導出への改訂（明示 dimensions or byteLength 厳密一致の導出のみ。無検証推定は引き続き禁止）。
+- 記録済みの将来課題: ref validate strict = error 97 件の内訳分類 / サイドカー絶対パスのポータビリティ / 実 WebGL2 とのピクセル同値性（目視 gate が実質の確認）。
 
 ## 次の行動
 
-1. Wave104 計画（planning-gate から）: 知覚コマンド面 renderView / コンタクトシート / ビュー変換サイドカー + 測量コマンド + validatePackage 接続 + ref/ e2e スモーク
-2. Wave104 完了後、閉問題 01 の実験実行（B の検証 = Fable の視覚弁別力の初実測）
+1. **ユーザー目視 gate**: [experiments/ref-render-gate/](experiments/ref-render-gate/README.md) の PNG 3 枚（全身 / 顔 / 両目）をユーザーが確認。注意書き: マスクソース drawable は通常描画もされる仕様（wave103 承認済み）のため、白目層らしきものが見えても renderer 疑義とは限らない。
+2. gate 通過後、**閉問題 01 の実験実行**（B の検証 = Fable の視覚弁別力の初実測）。craft 蒸留候補が既に 4 点蓄積済み（wave104 最終報告書に記録。例: `addKeyform` 単キー set の罠 → `editKeyformKey(createEnds)` が正道）。
 
 ## 決着済みの元・未決事項（2026-07-02 ユーザー決定）
 

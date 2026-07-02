@@ -5,7 +5,9 @@ import {
   InspectModelResultSchema,
   InspectTargetResultSchema
 } from "./ai-inspection-command.js";
+import { InspectEvaluatedGeometryResultSchema } from "./ai-measurement-command.js";
 import { AiPsdImportPlanCommandResultSchema } from "./ai-psd-import-plan-command.js";
+import { RenderViewResultSchema } from "./ai-render-view-command.js";
 import { ValidatePackageResultSchema } from "./ai-validation-command.js";
 
 export const EditorStatePayloadSchema = z
@@ -32,6 +34,10 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
     payload: InspectTargetResultSchema
   }),
   z.object({
+    command: z.literal("inspectEvaluatedGeometry"),
+    payload: InspectEvaluatedGeometryResultSchema
+  }),
+  z.object({
     command: z.literal("validatePackage"),
     payload: ValidatePackageResultSchema
   }),
@@ -52,6 +58,10 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
     payload: z.object({
       entries: z.array(OperationLogEntrySchema)
     })
+  }),
+  z.object({
+    command: z.literal("renderView"),
+    payload: RenderViewResultSchema
   }),
   z.object({
     command: z.literal("getPsdImportPlanState"),
